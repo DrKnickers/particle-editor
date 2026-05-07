@@ -185,6 +185,15 @@ public:
 		return pTexture;
 	}
 
+	void Clear()
+	{
+		for (TextureMap::iterator p = textures.begin(); p != textures.end(); p++)
+		{
+			SAFE_RELEASE(p->second);
+		}
+		textures.clear();
+	}
+
 	TextureManager(IFileManager* fileManager, const std::string& basePath)
 	{
 		this->basePath		  = basePath;
@@ -195,10 +204,7 @@ public:
 	~TextureManager()
 	{
 		SAFE_RELEASE(pDefaultTexture);
-		for (TextureMap::iterator p = textures.begin(); p != textures.end(); p++)
-		{
-			SAFE_RELEASE(p->second);
-		}
+		Clear();
 	}
 };
 
@@ -318,6 +324,15 @@ public:
 		return pShader;
 	}
 
+	void Clear()
+	{
+		for (ShaderMap::iterator p = shaders.begin(); p != shaders.end(); p++)
+		{
+			SAFE_RELEASE(p->second);
+		}
+		shaders.clear();
+	}
+
 	ShaderManager(IFileManager* fileManager, const std::string& basePath)
 	{
 		this->basePath		 = basePath;
@@ -328,10 +343,7 @@ public:
 	~ShaderManager()
 	{
 		SAFE_RELEASE(pDefaultShader);
-		for (ShaderMap::iterator p = shaders.begin(); p != shaders.end(); p++)
-		{
-			SAFE_RELEASE(p->second);
-		}
+		Clear();
 	}
 };
 
@@ -412,6 +424,32 @@ void ShowAboutDialog(HWND hWndParent)
     DialogBox(NULL, MAKEINTRESOURCE(IDD_ABOUT), hWndParent, AboutProc);
 }
 
+// Mod selection
+struct ModEntry
+{
+	wstring path;          // full path, e.g. D:\...\corruption\Mods\Mod
+	wstring folderName;    // "Mod"
+	wstring nickname;      // user-set, may be empty
+	bool    isFoC;         // true if under corruption\Mods, false if under GameData\Mods
+};
+
+// Reserved WM_COMMAND IDs for the dynamically-built Mods menu.
+// Picked above the standard MFC range (0xE100+) and below 0xF000.
+static const UINT ID_MOD_NONE     = 0xA000;
+static const UINT ID_MOD_REFRESH  = 0xA001;
+static const UINT ID_MOD_FIRST    = 0xA100;
+static const UINT ID_MOD_LAST     = 0xAFFF;
+
+// Forward declarations for the Mods support code (defined later).
+struct APPLICATION_INFO;
+static vector<ModEntry> DiscoverMods(const vector<wstring>& gameRoots);
+static void             RebuildModsMenu(APPLICATION_INFO* info);
+static void             SelectMod(APPLICATION_INFO* info, const wstring& modPath);
+static ModEntry*        FindModById(APPLICATION_INFO* info, UINT id);
+static void             WriteModNickname(const wstring& modPath, const wstring& nickname);
+static bool             ShowNicknameDialog(HWND hParent, const ModEntry& mod, wstring& outNickname);
+static const wstring&   ModDisplayLabel(const ModEntry& m);
+
 struct APPLICATION_INFO
 {
 	HINSTANCE hInstance;
@@ -441,6 +479,15 @@ struct APPLICATION_INFO
 
 	wstring   filename;
 	bool      changed;
+
+	// Mod state — set up after createFileManager and used by the Mods menu
+	FileManager*    fileManager;     // non-owning; owned by main()
+	TextureManager* textureManager;  // non-owning; owned by main()
+	ShaderManager*  shaderManager;   // non-owning; owned by main()
+	vector<wstring> gameRoots;       // the EmpireAtWarPaths used to construct fileManager
+	vector<ModEntry> mods;
+	wstring         selectedModPath; // empty = unmodded
+	HMENU           hModsMenu;       // top-level "Mods" submenu (HMENU of the popup)
 
 	// Dragging
 	enum { NONE, ROTATE, MOVE, ZOOM, OBJECT_Z } dragmode;
@@ -1114,6 +1161,31 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			DoMenuInit((HMENU)wParam, info);
 			break;
 
+		case WM_MENURBUTTONUP:
+		{
+			// Right-click on a menu item — only handle on a Mods entry
+			HMENU hMenu = (HMENU)lParam;
+			UINT  pos   = (UINT)wParam;
+			UINT  id    = GetMenuItemID(hMenu, pos);
+			ModEntry* m = FindModById(info, id);
+			if (m != NULL)
+			{
+				wstring nickname;
+				if (ShowNicknameDialog(hWnd, *m, nickname))
+				{
+					m->nickname = nickname;
+					WriteModNickname(m->path, nickname);
+					// Re-sort and rebuild so new label takes effect (and order updates)
+					std::sort(info->mods.begin(), info->mods.end(), [](const ModEntry& a, const ModEntry& b) {
+						if (a.isFoC != b.isFoC) return a.isFoC && !b.isFoC;
+						return _wcsicmp(ModDisplayLabel(a).c_str(), ModDisplayLabel(b).c_str()) < 0;
+					});
+					RebuildModsMenu(info);
+				}
+			}
+			return 0;
+		}
+
 		case WM_COMMAND:
 			if (info != NULL)
 			{
@@ -1133,6 +1205,31 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			                OpenHistoryFile(info, id - ID_FILE_HISTORY_0);
                         }
 		            }
+                    else if (id == ID_MOD_NONE)
+                    {
+                        SelectMod(info, L"");
+                    }
+                    else if (id == ID_MOD_REFRESH)
+                    {
+                        info->mods = DiscoverMods(info->gameRoots);
+                        // If our currently-selected mod no longer exists, fall back to Unmodded
+                        bool stillExists = info->selectedModPath.empty();
+                        for (const ModEntry& m : info->mods)
+                        {
+                            if (_wcsicmp(m.path.c_str(), info->selectedModPath.c_str()) == 0)
+                            {
+                                stillExists = true;
+                                break;
+                            }
+                        }
+                        if (!stillExists) SelectMod(info, L"");
+                        else RebuildModsMenu(info);
+                    }
+                    else if (id >= ID_MOD_FIRST && id <= ID_MOD_LAST)
+                    {
+                        ModEntry* m = FindModById(info, id);
+                        if (m != NULL) SelectMod(info, m->path);
+                    }
     		        else DoMenuItem(info, id);
                 }
 				else if (code == CBN_CHANGE)
@@ -1604,7 +1701,419 @@ static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 	}
 }
 
-static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
+//
+// Mods support
+//
+
+// Read the user-set nickname for a given mod path from the registry.
+// Returns empty string if no nickname is set.
+static wstring ReadModNickname(const wstring& modPath)
+{
+	wstring nickname;
+	HKEY hKey;
+	if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor\\ModNicknames", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+	{
+		TCHAR  buf[256] = {0};
+		DWORD  type;
+		DWORD  size = sizeof(buf);
+		if (RegQueryValueEx(hKey, modPath.c_str(), NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ)
+		{
+			nickname = buf;
+		}
+		RegCloseKey(hKey);
+	}
+	return nickname;
+}
+
+static void WriteModNickname(const wstring& modPath, const wstring& nickname)
+{
+	HKEY hKey;
+	if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor\\ModNicknames", 0, NULL,
+	                   REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+	{
+		if (nickname.empty())
+		{
+			RegDeleteValue(hKey, modPath.c_str());
+		}
+		else
+		{
+			RegSetValueEx(hKey, modPath.c_str(), 0, REG_SZ,
+			              (const BYTE*)nickname.c_str(),
+			              (DWORD)((nickname.size() + 1) * sizeof(TCHAR)));
+		}
+		RegCloseKey(hKey);
+	}
+}
+
+static wstring ReadLastMod()
+{
+	wstring path;
+	HKEY hKey;
+	if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+	{
+		TCHAR  buf[MAX_PATH] = {0};
+		DWORD  type;
+		DWORD  size = sizeof(buf);
+		if (RegQueryValueEx(hKey, L"LastMod", NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ)
+		{
+			path = buf;
+		}
+		RegCloseKey(hKey);
+	}
+	return path;
+}
+
+static void WriteLastMod(const wstring& modPath)
+{
+	HKEY hKey;
+	if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+	                   REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+	{
+		RegSetValueEx(hKey, L"LastMod", 0, REG_SZ,
+		              (const BYTE*)modPath.c_str(),
+		              (DWORD)((modPath.size() + 1) * sizeof(TCHAR)));
+		RegCloseKey(hKey);
+	}
+}
+
+// Returns the display label for a mod (nickname if set, else folder name).
+static const wstring& ModDisplayLabel(const ModEntry& m)
+{
+	return m.nickname.empty() ? m.folderName : m.nickname;
+}
+
+// Scan a single Mods\ directory for subfolders and append entries.
+static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& out)
+{
+	wstring search = modsRoot;
+	if (!search.empty() && search.back() != L'\\') search += L'\\';
+	search += L"*";
+
+	WIN32_FIND_DATA fd;
+	HANDLE hFind = FindFirstFile(search.c_str(), &fd);
+	if (hFind == INVALID_HANDLE_VALUE) return;
+
+	do
+	{
+		if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+		if (fd.cFileName[0] == L'.') continue;
+		if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) continue;
+
+		ModEntry e;
+		e.folderName = fd.cFileName;
+		e.path       = modsRoot;
+		if (!e.path.empty() && e.path.back() != L'\\') e.path += L'\\';
+		e.path      += e.folderName;
+		e.isFoC      = isFoC;
+		e.nickname   = ReadModNickname(e.path);
+		out.push_back(e);
+	}
+	while (FindNextFile(hFind, &fd));
+
+	FindClose(hFind);
+}
+
+// Discover mods under the given game roots (corruption\Mods and GameData\Mods),
+// sorted alphabetically by display label within each category (FoC first, then base).
+static vector<ModEntry> DiscoverMods(const vector<wstring>& gameRoots)
+{
+	vector<ModEntry> mods;
+	for (const wstring& root : gameRoots)
+	{
+		wstring trimmed = root;
+		while (!trimmed.empty() && (trimmed.back() == L'\\' || trimmed.back() == L'/')) trimmed.pop_back();
+
+		// Determine flavor by leaf folder name
+		size_t sep  = trimmed.find_last_of(L"\\/");
+		wstring leaf = (sep == wstring::npos) ? trimmed : trimmed.substr(sep + 1);
+
+		bool isFoC;
+		if (_wcsicmp(leaf.c_str(), L"corruption") == 0) isFoC = true;
+		else if (_wcsicmp(leaf.c_str(), L"GameData") == 0) isFoC = false;
+		else continue;
+
+		wstring modsDir = trimmed + L"\\Mods";
+		if (PathIsDirectory(modsDir.c_str()))
+		{
+			ScanModsDir(modsDir, isFoC, mods);
+		}
+	}
+
+	// Sort: FoC mods first, then base game; within each, alphabetical by display label
+	std::sort(mods.begin(), mods.end(), [](const ModEntry& a, const ModEntry& b) {
+		if (a.isFoC != b.isFoC) return a.isFoC && !b.isFoC;
+		return _wcsicmp(ModDisplayLabel(a).c_str(), ModDisplayLabel(b).c_str()) < 0;
+	});
+
+	printf("[Mods] DiscoverMods: scanned %zu game roots, found %zu mods\n",
+	       gameRoots.size(), mods.size()); fflush(stdout);
+	return mods;
+}
+
+// Build (or rebuild) the dynamically-populated Mods popup. The HMENU returned
+// is owned by the caller; we pass it back so we can re-tick on selection
+// changes. The submenus are owned by the parent menu and freed with it.
+static void RebuildModsMenu(APPLICATION_INFO* info)
+{
+	// Empty out the current menu by deleting all items
+	if (info->hModsMenu != NULL)
+	{
+		while (GetMenuItemCount(info->hModsMenu) > 0)
+		{
+			DeleteMenu(info->hModsMenu, 0, MF_BYPOSITION);
+		}
+	}
+	else
+	{
+		info->hModsMenu = CreatePopupMenu();
+		// Insert into the main menu bar before "Help"
+		HMENU hMenuBar = GetMenu(info->hMainWnd);
+		int   helpPos  = -1;
+		for (int i = 0; i < GetMenuItemCount(hMenuBar); i++)
+		{
+			TCHAR buf[64] = {0};
+			MENUITEMINFO mii = {};
+			mii.cbSize     = sizeof(mii);
+			mii.fMask      = MIIM_STRING;
+			mii.dwTypeData = buf;
+			mii.cch        = 63;
+			if (GetMenuItemInfo(hMenuBar, i, TRUE, &mii) && wcsstr(buf, L"Help") != NULL)
+			{
+				helpPos = i;
+				break;
+			}
+		}
+		MENUITEMINFO mii = {};
+		mii.cbSize     = sizeof(mii);
+		mii.fMask      = MIIM_STRING | MIIM_SUBMENU | MIIM_ID;
+		mii.wID        = 0;  // not used, has submenu
+		mii.hSubMenu   = info->hModsMenu;
+		mii.dwTypeData = (LPWSTR)L"&Mods";
+		InsertMenuItem(hMenuBar, helpPos >= 0 ? helpPos : GetMenuItemCount(hMenuBar), TRUE, &mii);
+	}
+
+	// Top: Unmodded radio item
+	UINT noneFlags = MF_STRING | (info->selectedModPath.empty() ? MF_CHECKED : MF_UNCHECKED);
+	AppendMenu(info->hModsMenu, noneFlags, ID_MOD_NONE, L"&Unmodded");
+	AppendMenu(info->hModsMenu, MF_SEPARATOR, 0, NULL);
+
+	// Build FoC submenu and Base Game submenu
+	HMENU hFoCMenu  = CreatePopupMenu();
+	HMENU hBaseMenu = CreatePopupMenu();
+	int   nFoC = 0, nBase = 0;
+	for (size_t i = 0; i < info->mods.size(); i++)
+	{
+		const ModEntry& m = info->mods[i];
+		UINT id    = ID_MOD_FIRST + (UINT)i;
+		UINT flags = MF_STRING;
+		if (_wcsicmp(m.path.c_str(), info->selectedModPath.c_str()) == 0)
+		{
+			flags |= MF_CHECKED;
+		}
+		if (m.isFoC) { AppendMenu(hFoCMenu,  flags, id, ModDisplayLabel(m).c_str()); nFoC++;  }
+		else         { AppendMenu(hBaseMenu, flags, id, ModDisplayLabel(m).c_str()); nBase++; }
+	}
+
+	if (nFoC > 0)
+	{
+		AppendMenu(info->hModsMenu, MF_POPUP | MF_STRING, (UINT_PTR)hFoCMenu, L"&Forces of Corruption");
+	}
+	else
+	{
+		DestroyMenu(hFoCMenu);
+	}
+	if (nBase > 0)
+	{
+		AppendMenu(info->hModsMenu, MF_POPUP | MF_STRING, (UINT_PTR)hBaseMenu, L"&Base Game");
+	}
+	else
+	{
+		DestroyMenu(hBaseMenu);
+	}
+
+	if (nFoC > 0 || nBase > 0)
+	{
+		AppendMenu(info->hModsMenu, MF_SEPARATOR, 0, NULL);
+	}
+	AppendMenu(info->hModsMenu, MF_STRING, ID_MOD_REFRESH, L"&Refresh Mod List");
+
+	DrawMenuBar(info->hMainWnd);
+}
+
+// Apply a mod selection: update FileManager, clear caches, persist,
+// rebuild menu, redraw render area.
+static void SelectMod(APPLICATION_INFO* info, const wstring& modPath)
+{
+	info->selectedModPath = modPath;
+
+	if (info->fileManager) info->fileManager->SetModPath(modPath);
+	if (info->textureManager) info->textureManager->Clear();
+	if (info->shaderManager)  info->shaderManager->Clear();
+
+	WriteLastMod(modPath);
+	RebuildModsMenu(info);
+
+	printf("[Mods] Selected: %S\n", modPath.empty() ? L"(unmodded)" : modPath.c_str()); fflush(stdout);
+
+	// Reattach textures on currently-rendered emitter instances
+	if (info->engine != NULL)
+	{
+		info->engine->OnParticleSystemChanged(-1);
+	}
+	if (info->hRenderWnd != NULL)
+	{
+		InvalidateRect(info->hRenderWnd, NULL, TRUE);
+	}
+}
+
+// Find the mod entry corresponding to a given menu command ID, or NULL.
+static ModEntry* FindModById(APPLICATION_INFO* info, UINT id)
+{
+	if (id < ID_MOD_FIRST || id > ID_MOD_LAST) return NULL;
+	UINT idx = id - ID_MOD_FIRST;
+	if (idx >= info->mods.size()) return NULL;
+	return &info->mods[idx];
+}
+
+// Modal dialog template (built at runtime so we don't have to add resources
+// to both .en.rc and .de.rc): single edit box + OK/Cancel.
+struct NicknameDialogState
+{
+	const ModEntry* mod;
+	wstring         result;
+	bool            committed;
+};
+
+static INT_PTR CALLBACK NicknameDialogProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	NicknameDialogState* state = (NicknameDialogState*)(LONG_PTR)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+	switch (msg)
+	{
+	case WM_INITDIALOG:
+		state = (NicknameDialogState*)lParam;
+		SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)state);
+		{
+			wstring title = L"Nickname for " + state->mod->folderName;
+			SetWindowText(hDlg, title.c_str());
+			SetDlgItemText(hDlg, 1001, state->mod->nickname.c_str());
+			SendDlgItemMessage(hDlg, 1001, EM_SETSEL, 0, -1);
+			SetFocus(GetDlgItem(hDlg, 1001));
+		}
+		return FALSE; // we set focus ourselves
+
+	case WM_COMMAND:
+		switch (LOWORD(wParam))
+		{
+		case IDOK:
+			{
+				TCHAR buf[256] = {0};
+				GetDlgItemText(hDlg, 1001, buf, 255);
+				state->result    = buf;
+				state->committed = true;
+				EndDialog(hDlg, IDOK);
+			}
+			return TRUE;
+		case IDCANCEL:
+			state->committed = false;
+			EndDialog(hDlg, IDCANCEL);
+			return TRUE;
+		}
+		break;
+	}
+	return FALSE;
+}
+
+// Build a small in-memory dialog template (DLGTEMPLATE + items) and run it.
+// One static label, one edit box, OK + Cancel. Avoids editing the .rc files.
+static bool ShowNicknameDialog(HWND hParent, const ModEntry& mod, wstring& outNickname)
+{
+	// Allocate a buffer big enough for the template
+	BYTE buffer[1024] = {0};
+	BYTE* p = buffer;
+
+	auto alignDword = [&]() {
+		while ((p - buffer) & 3) p++;
+	};
+	auto writeWord = [&](WORD v) { *(WORD*)p = v; p += sizeof(WORD); };
+	auto writeDword = [&](DWORD v) { *(DWORD*)p = v; p += sizeof(DWORD); };
+	auto writeWStr = [&](const wchar_t* s) {
+		size_t len = wcslen(s) + 1;
+		memcpy(p, s, len * sizeof(wchar_t));
+		p += len * sizeof(wchar_t);
+	};
+
+	// DLGTEMPLATE
+	writeDword(WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_CENTER | DS_SETFONT); // style
+	writeDword(0); // dwExtendedStyle
+	writeWord(4); // cdit (number of items)
+	writeWord(0); writeWord(0); // x, y
+	writeWord(220); writeWord(70); // cx, cy (DLU)
+	writeWord(0); // menu (none)
+	writeWord(0); // class (default)
+	writeWStr(L"Set Nickname"); // title
+	// font
+	writeWord(8); // pointsize
+	writeWStr(L"MS Shell Dlg");
+
+	// Item 1: STATIC label
+	alignDword();
+	writeDword(WS_CHILD | WS_VISIBLE | SS_LEFT); // style
+	writeDword(0); // exStyle
+	writeWord(8); writeWord(8); // x, y
+	writeWord(204); writeWord(10); // cx, cy
+	writeWord(0xFFFF); writeWord(0); // id (0=label)
+	writeWord(0xFFFF); writeWord(0x0082); // class atom: STATIC
+	writeWStr(L"Nickname (leave empty to clear):"); // title
+	writeWord(0); // creation data length
+
+	// Item 2: EDIT
+	alignDword();
+	writeDword(WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL); // style
+	writeDword(WS_EX_CLIENTEDGE);
+	writeWord(8); writeWord(22); // x, y
+	writeWord(204); writeWord(14); // cx, cy
+	writeWord(0x03E9); writeWord(0); // id 1001
+	writeWord(0xFFFF); writeWord(0x0081); // class atom: EDIT
+	writeWStr(L""); // title
+	writeWord(0); // creation data length
+
+	// Item 3: OK button
+	alignDword();
+	writeDword(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON); // style
+	writeDword(0);
+	writeWord(106); writeWord(46); // x, y
+	writeWord(50); writeWord(14); // cx, cy
+	writeWord(IDOK); writeWord(0);
+	writeWord(0xFFFF); writeWord(0x0080); // class atom: BUTTON
+	writeWStr(L"OK");
+	writeWord(0);
+
+	// Item 4: Cancel button
+	alignDword();
+	writeDword(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON); // style
+	writeDword(0);
+	writeWord(162); writeWord(46);
+	writeWord(50); writeWord(14);
+	writeWord(IDCANCEL); writeWord(0);
+	writeWord(0xFFFF); writeWord(0x0080);
+	writeWStr(L"Cancel");
+	writeWord(0);
+
+	NicknameDialogState state = { &mod, L"", false };
+	INT_PTR rv = DialogBoxIndirectParam(GetModuleHandle(NULL),
+	                                    (LPCDLGTEMPLATE)buffer,
+	                                    hParent,
+	                                    NicknameDialogProc,
+	                                    (LPARAM)&state);
+	if (rv == IDOK && state.committed)
+	{
+		outNickname = state.result;
+		return true;
+	}
+	return false;
+}
+
+static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, vector<wstring>* outGameRoots = NULL )
 {
 	// Search for the Empire at War path
 	vector<wstring> EmpireAtWarPaths;
@@ -1696,12 +2205,17 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
 			RegCloseKey(hKey);
 		}
 	}
+	if (outGameRoots != NULL && fileManager != NULL)
+	{
+		*outGameRoots = EmpireAtWarPaths;
+	}
 	return fileManager;
 }
 
 void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 {
-	FileManager* fileManager = createFileManager( info->hMainWnd, argv );
+	vector<wstring> gameRoots;
+	FileManager* fileManager = createFileManager( info->hMainWnd, argv, &gameRoots );
 	if (fileManager == NULL)
 	{
 		// No file manager, no play
@@ -1713,6 +2227,31 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 		// Initialize the other managers and engine
 		TextureManager textureManager(fileManager, "Data\\Art\\Textures\\");
         ShaderManager  shaderManager (fileManager, "Data\\Art\\Shaders\\");
+
+		// Wire up mod-state pointers so the UI can hot-swap textures
+		info->fileManager    = fileManager;
+		info->textureManager = &textureManager;
+		info->shaderManager  = &shaderManager;
+		info->gameRoots      = gameRoots;
+		info->mods           = DiscoverMods(gameRoots);
+
+		// Restore the previously-selected mod, if any (and it still exists)
+		wstring savedMod = ReadLastMod();
+		if (!savedMod.empty() && PathIsDirectory(savedMod.c_str()))
+		{
+			info->selectedModPath = savedMod;
+			fileManager->SetModPath(savedMod);
+			printf("[Mods] Restored from registry: %S\n", savedMod.c_str()); fflush(stdout);
+		}
+		else
+		{
+			info->selectedModPath = L"";
+			if (!savedMod.empty())
+			{
+				printf("[Mods] Saved mod path no longer exists, falling back to unmodded: %S\n", savedMod.c_str()); fflush(stdout);
+			}
+		}
+		RebuildModsMenu(info);
 
 		// Create the rendering engine
         try
@@ -1877,6 +2416,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	info.engine					= NULL;
 	info.dragmode				= APPLICATION_INFO::NONE;
 	info.isMinimized			= false;
+	info.fileManager			= NULL;
+	info.textureManager			= NULL;
+	info.shaderManager			= NULL;
+	info.hModsMenu				= NULL;
 
 #ifdef NDEBUG
  	try

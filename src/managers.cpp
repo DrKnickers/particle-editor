@@ -12,6 +12,21 @@ using namespace std;
 //
 IFile* FileManager::getFile(const string& path)
 {
+	// If a mod is selected, try the mod folder first so its loose files
+	// shadow the base game's.
+	if (!modpath.empty())
+	{
+		try
+		{
+			wstring wpath = AnsiToWide(path);
+			wstring filename = (path[1] != ':' && path[0] != '\\') ? modpath + wpath : wpath;
+			return new PhysicalFile(filename);
+		}
+		catch (IOException&)
+		{
+		}
+	}
+
 	// First see if we can open it physically
 	for (vector<wstring>::const_iterator base = basepaths.begin(); base != basepaths.end(); base++)
 	{
@@ -107,6 +122,15 @@ FileManager::~FileManager()
 	for (vector<MegaFile*>::iterator i = megafiles.begin(); i != megafiles.end(); i++)
 	{
 		delete (*i);
+	}
+}
+
+void FileManager::SetModPath(const wstring& path)
+{
+	modpath = path;
+	if (!modpath.empty() && modpath.back() != L'\\' && modpath.back() != L'/')
+	{
+		modpath += L'\\';
 	}
 }
 
