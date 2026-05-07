@@ -440,6 +440,11 @@ static const UINT ID_MOD_REFRESH  = 0xA001;
 static const UINT ID_MOD_FIRST    = 0xA100;
 static const UINT ID_MOD_LAST     = 0xAFFF;
 
+// Posted to the main window from WM_MENURBUTTONUP to defer the nickname
+// dialog until after the menu's modal loop has finished tearing down.
+// wParam = WM_COMMAND ID of the moused-over mod entry.
+static const UINT WM_APP_SHOW_NICKNAME = WM_APP + 1;
+
 // Forward declarations for the Mods support code (defined later).
 struct APPLICATION_INFO;
 static vector<ModEntry> DiscoverMods(const vector<wstring>& gameRoots);
@@ -449,6 +454,7 @@ static ModEntry*        FindModById(APPLICATION_INFO* info, UINT id);
 static void             WriteModNickname(const wstring& modPath, const wstring& nickname);
 static bool             ShowNicknameDialog(HWND hParent, const ModEntry& mod, wstring& outNickname);
 static const wstring&   ModDisplayLabel(const ModEntry& m);
+static void             EnsureMenuFonts(APPLICATION_INFO* info);
 
 struct APPLICATION_INFO
 {
@@ -488,6 +494,8 @@ struct APPLICATION_INFO
 	vector<ModEntry> mods;
 	wstring         selectedModPath; // empty = unmodded
 	HMENU           hModsMenu;       // top-level "Mods" submenu (HMENU of the popup)
+	HFONT           hMenuFont;       // cached for owner-drawn mod entries
+	HFONT           hMenuItalicFont; // italic variant for the nickname parenthetical
 
 	// Dragging
 	enum { NONE, ROTATE, MOVE, ZOOM, OBJECT_Z } dragmode;
@@ -1161,13 +1169,121 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			DoMenuInit((HMENU)wParam, info);
 			break;
 
+		case WM_MEASUREITEM:
+		{
+			MEASUREITEMSTRUCT* mis = (MEASUREITEMSTRUCT*)lParam;
+			if (mis->CtlType != ODT_MENU) break;
+			if (mis->itemID < ID_MOD_FIRST || mis->itemID > ID_MOD_LAST) break;
+
+			size_t idx = (size_t)mis->itemData;
+			if (idx >= info->mods.size()) break;
+			const ModEntry& m = info->mods[idx];
+
+			EnsureMenuFonts(info);
+			HDC hdc = GetDC(hWnd);
+			HFONT hOld = (HFONT)SelectObject(hdc, info->hMenuFont);
+
+			SIZE szFolder;
+			GetTextExtentPoint32(hdc, m.folderName.c_str(), (int)m.folderName.size(), &szFolder);
+
+			SIZE szNick = {0, 0};
+			if (!m.nickname.empty())
+			{
+				SelectObject(hdc, info->hMenuItalicFont);
+				wstring nick = L" (" + m.nickname + L")";
+				GetTextExtentPoint32(hdc, nick.c_str(), (int)nick.size(), &szNick);
+			}
+
+			SelectObject(hdc, hOld);
+			ReleaseDC(hWnd, hdc);
+
+			int checkW = GetSystemMetrics(SM_CXMENUCHECK);
+			int padding = 16;
+			mis->itemWidth  = checkW + szFolder.cx + szNick.cx + padding;
+			mis->itemHeight = max(GetSystemMetrics(SM_CYMENU), max(szFolder.cy, szNick.cy) + 4);
+			return TRUE;
+		}
+
+		case WM_DRAWITEM:
+		{
+			DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
+			if (dis->CtlType != ODT_MENU) break;
+			if (dis->itemID < ID_MOD_FIRST || dis->itemID > ID_MOD_LAST) break;
+
+			size_t idx = (size_t)dis->itemData;
+			if (idx >= info->mods.size()) break;
+			const ModEntry& m = info->mods[idx];
+
+			EnsureMenuFonts(info);
+
+			bool selected = (dis->itemState & ODS_SELECTED) != 0;
+			bool checked  = (dis->itemState & ODS_CHECKED)  != 0;
+			bool grayed   = (dis->itemState & (ODS_GRAYED | ODS_DISABLED)) != 0;
+
+			// Background
+			FillRect(dis->hDC, &dis->rcItem, GetSysColorBrush(selected ? COLOR_HIGHLIGHT : COLOR_MENU));
+			SetBkMode(dis->hDC, TRANSPARENT);
+			COLORREF textColor = grayed   ? GetSysColor(COLOR_GRAYTEXT)
+			                   : selected ? GetSysColor(COLOR_HIGHLIGHTTEXT)
+			                              : GetSysColor(COLOR_MENUTEXT);
+			SetTextColor(dis->hDC, textColor);
+
+			int checkW = GetSystemMetrics(SM_CXMENUCHECK);
+
+			// Checkmark on the left if this is the selected mod
+			if (checked)
+			{
+				RECT cr = { dis->rcItem.left, dis->rcItem.top,
+				            dis->rcItem.left + checkW, dis->rcItem.bottom };
+				DrawFrameControl(dis->hDC, &cr, DFC_MENU, DFCS_MENUCHECK);
+			}
+
+			// Folder name in regular weight
+			HFONT hOld = (HFONT)SelectObject(dis->hDC, info->hMenuFont);
+			RECT tr = { dis->rcItem.left + checkW, dis->rcItem.top,
+			            dis->rcItem.right, dis->rcItem.bottom };
+			DrawText(dis->hDC, m.folderName.c_str(), (int)m.folderName.size(), &tr,
+			         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+			// "(Nickname)" in italics, if present
+			if (!m.nickname.empty())
+			{
+				SIZE szFolder;
+				GetTextExtentPoint32(dis->hDC, m.folderName.c_str(), (int)m.folderName.size(), &szFolder);
+				tr.left += szFolder.cx;
+
+				SelectObject(dis->hDC, info->hMenuItalicFont);
+				wstring nick = L" (" + m.nickname + L")";
+				DrawText(dis->hDC, nick.c_str(), (int)nick.size(), &tr,
+				         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			}
+
+			SelectObject(dis->hDC, hOld);
+			return TRUE;
+		}
+
 		case WM_MENURBUTTONUP:
 		{
-			// Right-click on a menu item — only handle on a Mods entry
+			// Right-click on a menu item. We can't show a modal dialog from
+			// here — the menu's modal tracking loop is still running and a
+			// dialog would either fail to appear or briefly flicker before
+			// being dismissed alongside the menu. Stash the ID, dismiss the
+			// menu, and queue ourselves a deferred message to show the
+			// dialog after the menu finishes closing.
 			HMENU hMenu = (HMENU)lParam;
 			UINT  pos   = (UINT)wParam;
 			UINT  id    = GetMenuItemID(hMenu, pos);
-			ModEntry* m = FindModById(info, id);
+			if (FindModById(info, id) != NULL)
+			{
+				EndMenu();
+				PostMessage(hWnd, WM_APP_SHOW_NICKNAME, id, 0);
+			}
+			return 0;
+		}
+
+		case WM_APP_SHOW_NICKNAME:
+		{
+			ModEntry* m = FindModById(info, (UINT)wParam);
 			if (m != NULL)
 			{
 				wstring nickname;
@@ -1175,11 +1291,8 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 				{
 					m->nickname = nickname;
 					WriteModNickname(m->path, nickname);
-					// Re-sort and rebuild so new label takes effect (and order updates)
-					std::sort(info->mods.begin(), info->mods.end(), [](const ModEntry& a, const ModEntry& b) {
-						if (a.isFoC != b.isFoC) return a.isFoC && !b.isFoC;
-						return _wcsicmp(ModDisplayLabel(a).c_str(), ModDisplayLabel(b).c_str()) < 0;
-					});
+					// Sort order is by folder name and doesn't change, but
+					// rebuild so the new (nickname) label is rendered.
 					RebuildModsMenu(info);
 				}
 			}
@@ -1839,15 +1952,39 @@ static vector<ModEntry> DiscoverMods(const vector<wstring>& gameRoots)
 		}
 	}
 
-	// Sort: FoC mods first, then base game; within each, alphabetical by display label
+	// Sort: FoC mods first, then base game; within each, alphabetical by folder
+	// name (which is what's displayed first; nicknames are a parenthetical).
 	std::sort(mods.begin(), mods.end(), [](const ModEntry& a, const ModEntry& b) {
 		if (a.isFoC != b.isFoC) return a.isFoC && !b.isFoC;
-		return _wcsicmp(ModDisplayLabel(a).c_str(), ModDisplayLabel(b).c_str()) < 0;
+		return _wcsicmp(a.folderName.c_str(), b.folderName.c_str()) < 0;
 	});
 
 	printf("[Mods] DiscoverMods: scanned %zu game roots, found %zu mods\n",
 	       gameRoots.size(), mods.size()); fflush(stdout);
 	return mods;
+}
+
+// Lazily create (and cache) the menu fonts used to draw mod entries.
+// Owner-drawn items need to know which font to render with — we use the system
+// menu font for the folder name and an italic variant for "(nickname)".
+static void EnsureMenuFonts(APPLICATION_INFO* info)
+{
+	if (info->hMenuFont != NULL) return;
+
+	NONCLIENTMETRICS ncm = {};
+	ncm.cbSize = sizeof(ncm);
+	if (!SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0))
+	{
+		// Fallback to the default GUI font if SPI fails
+		info->hMenuFont       = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+		info->hMenuItalicFont = info->hMenuFont;
+		return;
+	}
+
+	info->hMenuFont = CreateFontIndirect(&ncm.lfMenuFont);
+	LOGFONT lf = ncm.lfMenuFont;
+	lf.lfItalic = TRUE;
+	info->hMenuItalicFont = CreateFontIndirect(&lf);
 }
 
 // Build (or rebuild) the dynamically-populated Mods popup. The HMENU returned
@@ -1897,21 +2034,32 @@ static void RebuildModsMenu(APPLICATION_INFO* info)
 	AppendMenu(info->hModsMenu, noneFlags, ID_MOD_NONE, L"&Unmodded");
 	AppendMenu(info->hModsMenu, MF_SEPARATOR, 0, NULL);
 
-	// Build FoC submenu and Base Game submenu
+	EnsureMenuFonts(info);
+
+	// Build FoC submenu and Base Game submenu. Mod entries are owner-drawn so
+	// we can render the folder name in regular weight followed by " (nickname)"
+	// in italics. The mod's index is stashed in dwItemData for the
+	// WM_MEASUREITEM / WM_DRAWITEM handlers to look up.
 	HMENU hFoCMenu  = CreatePopupMenu();
 	HMENU hBaseMenu = CreatePopupMenu();
 	int   nFoC = 0, nBase = 0;
 	for (size_t i = 0; i < info->mods.size(); i++)
 	{
 		const ModEntry& m = info->mods[i];
-		UINT id    = ID_MOD_FIRST + (UINT)i;
-		UINT flags = MF_STRING;
-		if (_wcsicmp(m.path.c_str(), info->selectedModPath.c_str()) == 0)
-		{
-			flags |= MF_CHECKED;
-		}
-		if (m.isFoC) { AppendMenu(hFoCMenu,  flags, id, ModDisplayLabel(m).c_str()); nFoC++;  }
-		else         { AppendMenu(hBaseMenu, flags, id, ModDisplayLabel(m).c_str()); nBase++; }
+		UINT id      = ID_MOD_FIRST + (UINT)i;
+		bool checked = (_wcsicmp(m.path.c_str(), info->selectedModPath.c_str()) == 0);
+
+		MENUITEMINFO mii = {};
+		mii.cbSize     = sizeof(mii);
+		mii.fMask      = MIIM_FTYPE | MIIM_ID | MIIM_STATE | MIIM_DATA;
+		mii.fType      = MFT_OWNERDRAW;
+		mii.fState     = checked ? MFS_CHECKED : MFS_UNCHECKED;
+		mii.wID        = id;
+		mii.dwItemData = (ULONG_PTR)i;
+
+		HMENU hTarget = m.isFoC ? hFoCMenu : hBaseMenu;
+		InsertMenuItem(hTarget, GetMenuItemCount(hTarget), TRUE, &mii);
+		if (m.isFoC) nFoC++; else nBase++;
 	}
 
 	if (nFoC > 0)
@@ -1936,6 +2084,17 @@ static void RebuildModsMenu(APPLICATION_INFO* info)
 		AppendMenu(info->hModsMenu, MF_SEPARATOR, 0, NULL);
 	}
 	AppendMenu(info->hModsMenu, MF_STRING, ID_MOD_REFRESH, L"&Refresh Mod List");
+
+	// Enable WM_MENURBUTTONUP delivery for right-click context (set-nickname).
+	// Without MNS_DRAGDROP, Windows silently dismisses on right-click instead
+	// of notifying us. Apply to the parent and the FoC/Base submenus.
+	MENUINFO mi = {};
+	mi.cbSize  = sizeof(mi);
+	mi.fMask   = MIM_STYLE;
+	mi.dwStyle = MNS_DRAGDROP;
+	SetMenuInfo(info->hModsMenu, &mi);
+	if (nFoC > 0)  SetMenuInfo(hFoCMenu,  &mi);
+	if (nBase > 0) SetMenuInfo(hBaseMenu, &mi);
 
 	DrawMenuBar(info->hMainWnd);
 }
@@ -1975,8 +2134,7 @@ static ModEntry* FindModById(APPLICATION_INFO* info, UINT id)
 	return &info->mods[idx];
 }
 
-// Modal dialog template (built at runtime so we don't have to add resources
-// to both .en.rc and .de.rc): single edit box + OK/Cancel.
+// Backing data for the IDD_MOD_NICKNAME dialog
 struct NicknameDialogState
 {
 	const ModEntry* mod;
@@ -1995,9 +2153,9 @@ static INT_PTR CALLBACK NicknameDialogProc(HWND hDlg, UINT msg, WPARAM wParam, L
 		{
 			wstring title = L"Nickname for " + state->mod->folderName;
 			SetWindowText(hDlg, title.c_str());
-			SetDlgItemText(hDlg, 1001, state->mod->nickname.c_str());
-			SendDlgItemMessage(hDlg, 1001, EM_SETSEL, 0, -1);
-			SetFocus(GetDlgItem(hDlg, 1001));
+			SetDlgItemText(hDlg, IDC_MOD_NICKNAME_EDIT, state->mod->nickname.c_str());
+			SendDlgItemMessage(hDlg, IDC_MOD_NICKNAME_EDIT, EM_SETSEL, 0, -1);
+			SetFocus(GetDlgItem(hDlg, IDC_MOD_NICKNAME_EDIT));
 		}
 		return FALSE; // we set focus ourselves
 
@@ -2007,7 +2165,7 @@ static INT_PTR CALLBACK NicknameDialogProc(HWND hDlg, UINT msg, WPARAM wParam, L
 		case IDOK:
 			{
 				TCHAR buf[256] = {0};
-				GetDlgItemText(hDlg, 1001, buf, 255);
+				GetDlgItemText(hDlg, IDC_MOD_NICKNAME_EDIT, buf, 255);
 				state->result    = buf;
 				state->committed = true;
 				EndDialog(hDlg, IDOK);
@@ -2023,88 +2181,14 @@ static INT_PTR CALLBACK NicknameDialogProc(HWND hDlg, UINT msg, WPARAM wParam, L
 	return FALSE;
 }
 
-// Build a small in-memory dialog template (DLGTEMPLATE + items) and run it.
-// One static label, one edit box, OK + Cancel. Avoids editing the .rc files.
 static bool ShowNicknameDialog(HWND hParent, const ModEntry& mod, wstring& outNickname)
 {
-	// Allocate a buffer big enough for the template
-	BYTE buffer[1024] = {0};
-	BYTE* p = buffer;
-
-	auto alignDword = [&]() {
-		while ((p - buffer) & 3) p++;
-	};
-	auto writeWord = [&](WORD v) { *(WORD*)p = v; p += sizeof(WORD); };
-	auto writeDword = [&](DWORD v) { *(DWORD*)p = v; p += sizeof(DWORD); };
-	auto writeWStr = [&](const wchar_t* s) {
-		size_t len = wcslen(s) + 1;
-		memcpy(p, s, len * sizeof(wchar_t));
-		p += len * sizeof(wchar_t);
-	};
-
-	// DLGTEMPLATE
-	writeDword(WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_CENTER | DS_SETFONT); // style
-	writeDword(0); // dwExtendedStyle
-	writeWord(4); // cdit (number of items)
-	writeWord(0); writeWord(0); // x, y
-	writeWord(220); writeWord(70); // cx, cy (DLU)
-	writeWord(0); // menu (none)
-	writeWord(0); // class (default)
-	writeWStr(L"Set Nickname"); // title
-	// font
-	writeWord(8); // pointsize
-	writeWStr(L"MS Shell Dlg");
-
-	// Item 1: STATIC label
-	alignDword();
-	writeDword(WS_CHILD | WS_VISIBLE | SS_LEFT); // style
-	writeDword(0); // exStyle
-	writeWord(8); writeWord(8); // x, y
-	writeWord(204); writeWord(10); // cx, cy
-	writeWord(0xFFFF); writeWord(0); // id (0=label)
-	writeWord(0xFFFF); writeWord(0x0082); // class atom: STATIC
-	writeWStr(L"Nickname (leave empty to clear):"); // title
-	writeWord(0); // creation data length
-
-	// Item 2: EDIT
-	alignDword();
-	writeDword(WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL); // style
-	writeDword(WS_EX_CLIENTEDGE);
-	writeWord(8); writeWord(22); // x, y
-	writeWord(204); writeWord(14); // cx, cy
-	writeWord(0x03E9); writeWord(0); // id 1001
-	writeWord(0xFFFF); writeWord(0x0081); // class atom: EDIT
-	writeWStr(L""); // title
-	writeWord(0); // creation data length
-
-	// Item 3: OK button
-	alignDword();
-	writeDword(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON); // style
-	writeDword(0);
-	writeWord(106); writeWord(46); // x, y
-	writeWord(50); writeWord(14); // cx, cy
-	writeWord(IDOK); writeWord(0);
-	writeWord(0xFFFF); writeWord(0x0080); // class atom: BUTTON
-	writeWStr(L"OK");
-	writeWord(0);
-
-	// Item 4: Cancel button
-	alignDword();
-	writeDword(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON); // style
-	writeDword(0);
-	writeWord(162); writeWord(46);
-	writeWord(50); writeWord(14);
-	writeWord(IDCANCEL); writeWord(0);
-	writeWord(0xFFFF); writeWord(0x0080);
-	writeWStr(L"Cancel");
-	writeWord(0);
-
 	NicknameDialogState state = { &mod, L"", false };
-	INT_PTR rv = DialogBoxIndirectParam(GetModuleHandle(NULL),
-	                                    (LPCDLGTEMPLATE)buffer,
-	                                    hParent,
-	                                    NicknameDialogProc,
-	                                    (LPARAM)&state);
+	INT_PTR rv = DialogBoxParam(GetModuleHandle(NULL),
+	                            MAKEINTRESOURCE(IDD_MOD_NICKNAME),
+	                            hParent,
+	                            NicknameDialogProc,
+	                            (LPARAM)&state);
 	if (rv == IDOK && state.committed)
 	{
 		outNickname = state.result;
@@ -2420,6 +2504,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	info.textureManager			= NULL;
 	info.shaderManager			= NULL;
 	info.hModsMenu				= NULL;
+	info.hMenuFont				= NULL;
+	info.hMenuItalicFont		= NULL;
 
 #ifdef NDEBUG
  	try

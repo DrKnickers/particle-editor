@@ -194,6 +194,10 @@
 #define ID_SHOW_ALL_EMITTERS            40084
 #define ID_HIDE_ALL_EMITTERS            40085
 
+#define IDD_MOD_NICKNAME                145
+#define IDC_MOD_NICKNAME_EDIT           1200
+#define IDC_MOD_NICKNAME_LABEL          1201
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
