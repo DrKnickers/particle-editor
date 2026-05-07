@@ -191,6 +191,11 @@ bool Engine::Render()
 		m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, ground, sizeof(EmitterInstance::Vertex));
 	}
 
+    // Particles never write to the depth buffer — let painter's-order
+    // (the order each emitter is drawn) decide stacking when emitters
+    // overlap, matching the in-game behaviour.
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+
     for (auto& instance : m_instances)
     {
         instance->RenderNormal(m_pDevice);
