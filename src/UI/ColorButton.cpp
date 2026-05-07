@@ -60,7 +60,7 @@ static LRESULT CALLBACK ColorButtonWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 			control->msgColorOkString = RegisterWindowMessage(COLOROKSTRING);
 			control->hWnd  = hWnd;
 			control->color = RGB(0,0,0);
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 			break;
 		}
 

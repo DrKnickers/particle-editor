@@ -197,28 +197,35 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
 		case WM_INITDIALOG:
 		{
 			control = (EmitterListControl*)lParam;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 
             HINSTANCE hInstance = (HINSTANCE)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_HINSTANCE);
-            
+
             //
             // Initialize treeview
             //
             control->hTree     = GetDlgItem(hWnd, IDC_TREE1);
-            HIMAGELIST hImgList = ImageList_LoadImage(hInstance, MAKEINTRESOURCE(IDB_EMITTER_LIST), 12, 0, RGB(0,128,128), IMAGE_BITMAP, 0);
+            HBITMAP hBmpTree = LoadBitmap(hInstance, MAKEINTRESOURCE(IDB_EMITTER_LIST));
+            HIMAGELIST hImgList = ImageList_Create(12, 10, ILC_COLOR24 | ILC_MASK, 8, 0);
+            ImageList_AddMasked(hImgList, hBmpTree, RGB(0,128,128));
+            DeleteObject(hBmpTree);
     		TreeView_SetImageList(control->hTree, hImgList, TVSIL_NORMAL);
 
             // Subclass window proc for Cut/Copy/Paste operations
             WNDPROC wndProc = (WNDPROC)(LONG_PTR)GetWindowLongPtr(control->hTree, GWLP_WNDPROC);
             SetProp(control->hTree, L"Old_WindowProc", (HANDLE)wndProc);
-            SetWindowLongPtr(control->hTree, GWLP_USERDATA, (LONG)(LONG_PTR)control);
-            SetWindowLongPtr(control->hTree, GWLP_WNDPROC,  (LONG)(LONG_PTR)EmitterTreeViewWindowProc);
+            SetWindowLongPtr(control->hTree, GWLP_USERDATA, (LONG_PTR)control);
+            SetWindowLongPtr(control->hTree, GWLP_WNDPROC,  (LONG_PTR)EmitterTreeViewWindowProc);
 
 			//
 			// Initialize toolbar
 			//
 			control->hToolbar = GetDlgItem(hWnd, IDC_TOOLBAR1);
-			hImgList = ImageList_LoadImage(hInstance, MAKEINTRESOURCE(IDR_EMITTER_TOOLBAR), 16, 0, RGB(0,128,128), IMAGE_BITMAP, 0);
+			SendMessage(control->hToolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
+			HBITMAP hBmpTb = LoadBitmap(hInstance, MAKEINTRESOURCE(IDR_EMITTER_TOOLBAR));
+			hImgList = ImageList_Create(16, 15, ILC_COLOR24 | ILC_MASK, 5, 0);
+			ImageList_AddMasked(hImgList, hBmpTb, RGB(0,128,128));
+			DeleteObject(hBmpTb);
             SendMessage(control->hToolbar, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_DRAWDDARROWS);
 			SendMessage(control->hToolbar, TB_SETIMAGELIST, 0, (LPARAM)hImgList);
 
@@ -438,7 +445,7 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                     HWND hEdit = TreeView_GetEditControl(control->hTree);
                     WNDPROC wndProc = (WNDPROC)(LONG_PTR)GetWindowLongPtr(hEdit, GWLP_WNDPROC);
                     SetProp(hEdit, L"Old_WindowProc", (HANDLE)wndProc);
-                    SetWindowLongPtr(hEdit, GWLP_WNDPROC, (LONG)(LONG_PTR)LabelEditProc);
+                    SetWindowLongPtr(hEdit, GWLP_WNDPROC, (LONG_PTR)LabelEditProc);
                     break;
                 }
 
@@ -515,9 +522,9 @@ static LRESULT CALLBACK EmitterListWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 			control = CreateEmitterListControl(hWnd, pcs->hInstance);
 			if (control == NULL)
 			{
-				return FALSE;
+				return -1;
 			}
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 			break;
 		}
 
@@ -530,7 +537,10 @@ static LRESULT CALLBACK EmitterListWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 			break;
 
 		case WM_SIZE:
-            MoveWindow(control->hDialog, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
+            if (control != NULL)
+            {
+                MoveWindow(control->hDialog, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
+            }
 			break;
 
 		case WM_SETFONT:

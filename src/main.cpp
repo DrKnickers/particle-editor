@@ -946,7 +946,7 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 		{
 			CREATESTRUCT* pcs = (CREATESTRUCT*)lParam;
 			info = (APPLICATION_INFO*)pcs->lpCreateParams;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)info);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)info);
 
 			HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 
@@ -979,7 +979,12 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 				return -1;
 			}
 
-			HIMAGELIST hImgList = ImageList_LoadImage(pcs->hInstance, MAKEINTRESOURCE(IDR_TOOLBAR1), 16, 0, RGB(0,128,128), IMAGE_BITMAP, 0);
+			SendMessage(info->hToolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
+
+			HBITMAP hBmpToolbar = LoadBitmap(pcs->hInstance, MAKEINTRESOURCE(IDR_TOOLBAR1));
+			HIMAGELIST hImgList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 5, 0);
+			ImageList_AddMasked(hImgList, hBmpToolbar, RGB(0,128,128));
+			DeleteObject(hBmpToolbar);
 			SendMessage(info->hToolbar, TB_SETIMAGELIST, 0, (LPARAM)hImgList);
 
 			TBBUTTON buttons[] = {
@@ -1332,7 +1337,7 @@ static LRESULT CALLBACK RenderWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
 		{
 			CREATESTRUCT* pcs = (CREATESTRUCT*)lParam;
 			info = (APPLICATION_INFO*)pcs->lpCreateParams;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)info);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)info);
 			break;
 		}
 
@@ -1575,6 +1580,30 @@ static void getGamePath_Shell(vector<wstring>& strings)
 	}
 }
 
+// EaW Gold Pack on Steam splits assets across "GameData" (base EaW) and
+// "corruption" (FoC). Pointing the editor at one means missing textures from
+// the other. If we detect either, also include the sibling.
+static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
+{
+	wstring trimmed = picked;
+	while (!trimmed.empty() && (trimmed.back() == L'\\' || trimmed.back() == L'/')) trimmed.pop_back();
+
+	size_t sep = trimmed.find_last_of(L"\\/");
+	if (sep == wstring::npos) return;
+
+	wstring parent = trimmed.substr(0, sep);
+	wstring leaf   = trimmed.substr(sep + 1);
+	wstring sibling;
+	if (_wcsicmp(leaf.c_str(), L"corruption") == 0) sibling = parent + L"\\GameData";
+	else if (_wcsicmp(leaf.c_str(), L"GameData") == 0) sibling = parent + L"\\corruption";
+	else return;
+
+	if (PathIsDirectory(sibling.c_str()))
+	{
+		paths.push_back(sibling);
+	}
+}
+
 static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
 {
 	// Search for the Empire at War path
@@ -1593,22 +1622,27 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
 
 	if (EmpireAtWarPaths.empty())
 	{
-		// First try the registry
-        TCHAR buffer[MAX_PATH];
-        GetCurrentDirectory(MAX_PATH, buffer);
-        EmpireAtWarPaths.push_back(buffer);
-
-        #if 0
-        getGamePath_Reg(EmpireAtWarPaths);
-		if (EmpireAtWarPaths.empty())
+		// Try the previously-saved game path
+		HKEY hKey;
+		if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
 		{
-			// Then try the shell
-			getGamePath_Shell(EmpireAtWarPaths);
+			TCHAR savedPath[MAX_PATH] = {0};
+			DWORD type, size = sizeof(savedPath);
+			if (RegQueryValueEx(hKey, L"GameDataPath", NULL, &type, (LPBYTE)savedPath, &size) == ERROR_SUCCESS && type == REG_SZ && savedPath[0] != L'\0')
+			{
+				EmpireAtWarPaths.push_back(savedPath);
+				AddSiblingGamePath(EmpireAtWarPaths, savedPath);
+			}
+			RegCloseKey(hKey);
 		}
-        #endif
-		
+
+		// Fall back to the current directory
+		TCHAR buffer[MAX_PATH];
+		GetCurrentDirectory(MAX_PATH, buffer);
+		EmpireAtWarPaths.push_back(buffer);
 	}
 	FileManager* fileManager = NULL;
+	wstring pickedPath;
 
 	while (fileManager == NULL)
 	{
@@ -1645,8 +1679,21 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
 			if (SHGetPathFromIDList( pidl, path ))
 			{
 				EmpireAtWarPaths.push_back(path);
+				AddSiblingGamePath(EmpireAtWarPaths, path);
+				pickedPath = path;
 			}
 			CoTaskMemFree(pidl);
+		}
+	}
+
+	// If the user picked a path that worked, persist it for next launch
+	if (fileManager != NULL && !pickedPath.empty())
+	{
+		HKEY hKey;
+		if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+		{
+			RegSetValueEx(hKey, L"GameDataPath", 0, REG_SZ, (const BYTE*)pickedPath.c_str(), (DWORD)((pickedPath.size() + 1) * sizeof(TCHAR)));
+			RegCloseKey(hKey);
 		}
 	}
 	return fileManager;
@@ -1818,7 +1865,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 {
 #ifndef NDEBUG
 	AllocConsole();
-	freopen("conout$", "wb", stdout);
+	freopen("CONOUT$", "w", stdout);
 #endif
 	int result = -1;
 

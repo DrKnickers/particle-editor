@@ -18,7 +18,7 @@ static INT_PTR CALLBACK RescaleDialogFunc(HWND hWnd, UINT uMsg, WPARAM wParam, L
     case WM_INITDIALOG:
     {
 		options = (RESCALE_OPTIONS*)lParam;
-		SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)options);
+		SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)options);
         SPINNER_INFO si;
         si.IsFloat = true;
         si.Mask       = SPIF_VALUE | SPIF_RANGE;

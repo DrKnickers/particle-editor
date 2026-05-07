@@ -472,8 +472,8 @@ ParticleSystem::Emitter::Emitter(ChunkReader& reader)
 	ChunkType type = reader.next();
 	if (type == 0x36)
 	{
-		Verify(reader.nextMini() == 0x37); spawnOnDeath    = readInteger(reader);
-		Verify(reader.nextMini() == 0x39); spawnDuringLife = readInteger(reader);
+		Verify(reader.nextMini() == 0x37); spawnOnDeath    = readInteger(reader); if (spawnOnDeath    == 0xFFFFFFFF) spawnOnDeath    = (size_t)-1;
+		Verify(reader.nextMini() == 0x39); spawnDuringLife = readInteger(reader); if (spawnDuringLife == 0xFFFFFFFF) spawnDuringLife = (size_t)-1;
 		Verify(reader.nextMini() == -1);
 		type = reader.next();
 	}

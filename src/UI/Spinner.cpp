@@ -176,9 +176,9 @@ static LRESULT CALLBACK SpinnerWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
 			// We hijack the edit control's message window because we need to trap certain messages.
 			control->EditWindowProc = (WNDPROC)(LONG_PTR)GetWindowLongPtr(control->hEdit, GWLP_WNDPROC);
-			SetWindowLongPtr(control->hEdit, GWLP_USERDATA, (LONG)(LONG_PTR)control);
-			SetWindowLongPtr(control->hEdit, GWLP_WNDPROC,  (LONG)(LONG_PTR)SpinnerEditWindowProc);
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(control->hEdit, GWLP_USERDATA, (LONG_PTR)control);
+			SetWindowLongPtr(control->hEdit, GWLP_WNDPROC,  (LONG_PTR)SpinnerEditWindowProc);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 			break;
 		}
 

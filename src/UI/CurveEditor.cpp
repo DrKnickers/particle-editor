@@ -477,7 +477,7 @@ LRESULT CALLBACK CurveWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		case WM_CREATE:
 		{
 			control = new CurveControl;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 
 			control->editable    = false;
 			control->track       = NULL;

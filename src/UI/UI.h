@@ -4,7 +4,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commctrl.h>
-#include <afxres.h>
 #include <string>
 #include "exceptions.h"
 #include "resource.h"

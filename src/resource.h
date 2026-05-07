@@ -3,5 +3,6 @@
 
 #include "Resources\resource.en.h"
 #include "Resources\resource.h"
+#include "mfc_ids.h"
 
 #endif

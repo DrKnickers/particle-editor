@@ -54,7 +54,7 @@ static INT_PTR CALLBACK RandomParamDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, 
 		case WM_INITDIALOG:
 		{
 			control = (RandomParamControl*)lParam;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 
 			SPINNER_INFO si;
 			si.Mask        = SPIF_ALL;
@@ -173,7 +173,7 @@ static LRESULT CALLBACK RandomParamWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 		{
 			control = new RandomParamControl;
 			control->group = NULL;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 
 			CREATESTRUCT* pcs = (CREATESTRUCT*)lParam;
 			if ((control->hDialog = CreateDialogParam(pcs->hInstance, MAKEINTRESOURCE(IDD_RANDOM_PARAMETERS), hWnd, RandomParamDlgProc, (LPARAM)control)) == NULL)

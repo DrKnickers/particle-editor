@@ -40,7 +40,7 @@ INT_PTR CALLBACK TrackDialogProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		case WM_INITDIALOG:
 		{
 			control = (TrackControl*)lParam;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 
 			//
 			// Set spinner properties
@@ -113,6 +113,7 @@ INT_PTR CALLBACK TrackDialogProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			// Initialize toolbar
 			//
 			HWND hToolbar = GetDlgItem(hWnd, IDC_TOOLBAR1);
+			SendMessage(hToolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 			HINSTANCE hInstance = GetModuleHandle(NULL);
 			HIMAGELIST hList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 0, 32);
 			ImageList_AddIcon(hList, LoadIcon(hInstance, MAKEINTRESOURCE(IDI_EDITOR_SELECT)));
@@ -362,12 +363,12 @@ LRESULT CALLBACK TrackWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
             control->trackContents = NULL;
             control->tracks        = NULL;
             control->editable = false;
-			control->iTrack   = (LONG)(LONG_PTR)pcs->lpCreateParams;
+			control->iTrack   = (int)(LONG_PTR)pcs->lpCreateParams;
 			control->hWnd     = hWnd;
 			control->hDialog  = CreateDialogParam(pcs->hInstance, MAKEINTRESOURCE(IDD_TRACK_EDITOR), hWnd, TrackDialogProc, (LPARAM)control);
 			ShowWindow(control->hDialog, SW_SHOW);
 
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 			break;
 		}
 

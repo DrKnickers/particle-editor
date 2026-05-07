@@ -83,7 +83,7 @@ IFile* MegaFile::getFile(std::string path) const
 		transform(path.begin(), path.end(), path.begin(), toupper);
 		unsigned long crc = crc32(path.c_str(), path.size());
 
-		// Do a binary search
+		// Do a binary search (entries are sorted by CRC32)
 		int last = (int)files.size() - 1;
 		int low = 0, high = last;
 		while (high >= low)

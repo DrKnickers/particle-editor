@@ -182,7 +182,7 @@ static INT_PTR WINAPI DlgEmitterPropsProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 		case WM_INITDIALOG:
 		{
 			control = (EmitterPropsControl*)lParam;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 
 			SPINNER_INFO si;
 			si.Mask        = SPIF_ALL;
@@ -524,7 +524,7 @@ static LRESULT CALLBACK EmitterPropsWindowProc(HWND hWnd, UINT uMsg, WPARAM wPar
 			{
 				return FALSE;
 			}
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)control);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)control);
 			break;
 		}
 
