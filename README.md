@@ -3,3 +3,6 @@
 
 # About
 Editor for GlyphX's particle systems
+
+
+Note: This is entirely based off of Mike.NL's work, with edits made by Claude for quality of life features and attempts to fix bugs.
