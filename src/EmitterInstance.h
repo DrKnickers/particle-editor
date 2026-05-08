@@ -86,6 +86,7 @@ public:
 	void  StopSpawning();
 	bool  IsHeatEmitter() const   { return !m_engine.GetHeatDebug() && m_emitter.isHeatParticle; }
 	bool  IsRoot()        const   { return m_emitter.parent == NULL; }
+	ParticleSystemInstance& GetSystem() { return m_system; }
 
 	EmitterInstance(TimeF currentTime, ParticleSystemInstance& system, Engine& engine, ParticleSystem::Emitter& emitter, Object3D* parent, int* numParticles);
 	~EmitterInstance();

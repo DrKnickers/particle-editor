@@ -96,6 +96,22 @@ EmitterInstance* ParticleSystemInstance::SpawnEmitter(TimeF currentTime, size_t 
 	return m_emitters.back().get();
 }
 
+void ParticleSystemInstance::RemoveEmitter(EmitterInstance* instance)
+{
+	for (auto it = m_emitters.begin(); it != m_emitters.end(); ++it)
+	{
+		if (it->get() == instance)
+		{
+			// erase() destroys the unique_ptr, which calls ~EmitterInstance.
+			// That dtor unregisters from its Emitter::m_instances, so the
+			// caller's iteration over m_instances stays consistent.
+			m_emitters.erase(it);
+			m_engine.OnEmitterDestroyed();
+			return;
+		}
+	}
+}
+
 ParticleSystemInstance::ParticleSystemInstance(Engine& engine, const ParticleSystem& system, Object3D* parent)
 	: Object3D(parent), m_engine(engine), m_system(system)
 {		

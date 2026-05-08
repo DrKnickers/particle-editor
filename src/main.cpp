@@ -2529,6 +2529,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	info.hInstance				= hInstance;
 	info.hMainWnd				= NULL;
 	info.particleSystem			= NULL;
+	info.selectedEmitter		= NULL;
 	info.attachedParticleSystem = NULL;
 	info.engine					= NULL;
 	info.dragmode				= APPLICATION_INFO::NONE;

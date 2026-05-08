@@ -32,6 +32,12 @@ public:
 	void StopSpawning();
 	EmitterInstance* SpawnEmitter(TimeF currentTime, size_t idxEmitter, Object3D* parent);
 
+	// Remove a specific emitter instance, deleting it via the owning unique_ptr.
+	// Used by ParticleSystem::Emitter::~Emitter so an Emitter being deleted
+	// doesn't leave a dangling pointer in m_emitters (raw `delete` of a
+	// pointer owned elsewhere = use-after-free on next render/update).
+	void RemoveEmitter(EmitterInstance* instance);
+
 	ParticleSystemInstance(Engine& engine, const ParticleSystem& system, Object3D* parent);
 	~ParticleSystemInstance();
 };

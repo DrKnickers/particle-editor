@@ -1,6 +1,7 @@
 #include <iostream>
 #include "ParticleSystem.h"
 #include "EmitterInstance.h"
+#include "ParticleSystemInstance.h"
 #include "exceptions.h"
 using namespace std;
 
@@ -516,11 +517,17 @@ ParticleSystem::Emitter::Emitter(const Emitter& emitter)
 
 ParticleSystem::Emitter::~Emitter()
 {
-    // Remove all instances of this emitter type
+    // Remove all instances of this emitter type. The instances are owned by
+    // unique_ptr's in their respective ParticleSystemInstance::m_emitters
+    // lists, so we route the deletion through the owning PSI rather than
+    // raw-deleting them here (which would leave a dangling unique_ptr —
+    // crash on the next render/update).
     while (!m_instances.empty())
     {
-        // The instance's destructor will unregister itself, removing it from m_instances
-        delete *m_instances.begin();
+        EmitterInstance* inst = *m_instances.begin();
+        // RemoveEmitter erases the owning unique_ptr -> ~EmitterInstance ->
+        // unregisterEmitterInstance(this), which removes inst from m_instances.
+        inst->GetSystem().RemoveEmitter(inst);
     }
 }
 
@@ -773,7 +780,7 @@ void ParticleSystem::deleteEmitter(Emitter* emitter)
             emitter->parent->spawnOnDeath = -1;
         }
     }
-	
+
     // Delete its children
     if (emitter->spawnDuringLife != -1) deleteEmitter(m_emitters[emitter->spawnDuringLife]);
     if (emitter->spawnOnDeath    != -1) deleteEmitter(m_emitters[emitter->spawnOnDeath]);
@@ -792,7 +799,9 @@ void ParticleSystem::deleteEmitter(Emitter* emitter)
         e->index = i;
     }
 
-    // Remove emitter from list
+    // Remove emitter from list. The Emitter destructor walks m_instances and
+    // routes deletion through the owning ParticleSystemInstance, so live
+    // EmitterInstance objects don't leave a dangling unique_ptr behind.
     m_emitters.erase( m_emitters.begin() + emitter->index );
     delete emitter;
 }
