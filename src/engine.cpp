@@ -75,6 +75,89 @@ void Engine::Clear()
     m_numEmitters  = 0;
 }
 
+// Helper: scan a freshly-loaded effect for parameters annotated with
+// "texture_filename" and bind the named textures from the texture manager.
+// Same logic that used to live inline in the constructor's load loop.
+void Engine::BindShaderTextures(Effect* shader)
+{
+	if (shader == NULL) return;
+	ID3DXEffect* pEffect = shader->getD3DEffect();
+	if (pEffect == NULL) return;
+
+	D3DXEFFECT_DESC effectDesc;
+	pEffect->GetDesc(&effectDesc);
+	for (UINT i = 0; i < effectDesc.Parameters; i++)
+	{
+		D3DXHANDLE hParam = pEffect->GetParameter(NULL, i);
+		D3DXPARAMETER_DESC paramDesc;
+		pEffect->GetParameterDesc(hParam, &paramDesc);
+		if (paramDesc.Type == D3DXPT_TEXTURE)
+		{
+			D3DXHANDLE hAnnon = pEffect->GetAnnotationByName(hParam, "texture_filename");
+			D3DXPARAMETER_DESC annonDesc;
+			pEffect->GetParameterDesc(hAnnon, &annonDesc);
+			LPCSTR value = NULL;
+			if (SUCCEEDED(pEffect->GetString(hAnnon, &value)) && value != NULL)
+			{
+				IDirect3DTexture9* pTexture = m_textureManager.getTexture(m_pDevice, value);
+				pEffect->SetTexture(hParam, pTexture);
+				SAFE_RELEASE(pTexture);
+			}
+		}
+	}
+	SAFE_RELEASE(pEffect);
+}
+
+// Hot-reload all 14 entries from ShaderNames[]. All-or-nothing: load every
+// new shader into a temporary array first, only swap into m_pShaders[] once
+// every one succeeds. On failure the previous set stays alive untouched, so
+// a busted mod shader can't brick a running session.
+bool Engine::ReloadShaders()
+{
+	printf("[Shaders] Reload begin\n"); fflush(stdout);
+
+	// Flush the shader manager's cache so getShader() re-resolves from disk
+	// (otherwise it just hands back the same Effect* we already have).
+	m_shaderManager.Clear();
+
+	Effect* tmp[NUM_SHADERS] = { NULL };
+
+	for (int i = 0; i < NUM_SHADERS; i++)
+	{
+		tmp[i] = m_shaderManager.getShader(m_pDevice, ShaderNames[i]);
+		if (tmp[i] == NULL)
+		{
+			printf("[Shaders] FAILED at %s — keeping previous shader set\n",
+			       ShaderNames[i]); fflush(stdout);
+			for (int j = 0; j < i; j++) SAFE_RELEASE(tmp[j]);
+			return false;
+		}
+	}
+
+	// Commit: release old, install new, re-bind annotated textures.
+	for (int i = 0; i < NUM_SHADERS; i++)
+	{
+		SAFE_RELEASE(m_pShaders[i]);
+		m_pShaders[i] = tmp[i];
+		BindShaderTextures(m_pShaders[i]);
+	}
+
+	printf("[Shaders] Reload complete: %d ok\n", NUM_SHADERS); fflush(stdout);
+	return true;
+}
+
+// Hot-reload textures: flush the texture manager's cache so the next lookup
+// re-resolves from disk, then notify every active emitter instance to drop
+// its current texture handles and re-fetch. Cheap & safe — texture loads
+// can't really fail (missing files fall through to the placeholder).
+void Engine::ReloadTextures()
+{
+	m_textureManager.Clear();
+	int n = (int)m_instances.size();
+	OnParticleSystemChanged(-1);
+	printf("[Textures] Reload: cache cleared, %d instance(s) notified\n", n); fflush(stdout);
+}
+
 void Engine::Update()
 {
 	TimeF currentTime = GetTimeF();
@@ -467,8 +550,12 @@ D3DMULTISAMPLE_TYPE Engine::GetMultiSampleType(DWORD* MultiSampleQuality, D3DFOR
 }
 
 Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager)
-    : m_textureManager(textureManager)
+    : m_textureManager(textureManager), m_shaderManager(shaderManager)
 {
+	// Zero shader pointers up front so partial-failure cleanup is safe
+	m_pDistortShader = NULL;
+	for (int i = 0; i < NUM_SHADERS; i++) m_pShaders[i] = NULL;
+
 	// Initialize members
 	m_showGround     = true;
 	m_debugHeat      = false;
@@ -540,7 +627,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 		throw runtime_error("Unable to load ground texture");
 	}
 
-	// Create shaders
+	// Distortion shader (built-in resource, not part of the hot-reloadable set)
     ID3DXEffect* pDistortEffect = NULL;
 	if (FAILED(D3DXCreateEffectFromResource(m_pDevice, NULL, MAKEINTRESOURCE(IDS_SCENEHEAT), NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pDistortEffect, NULL)))
 	{
@@ -554,45 +641,16 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
     pDistortEffect->SetFloat("DistortionAmount", 0.50f);
     SAFE_RELEASE(pDistortEffect);
 
-    for (int i = 0; i < NUM_SHADERS; i++)
+	// Initial shader load — same all-or-nothing semantics as ReloadShaders().
+	// On failure we tear the device down and throw, just like before.
+	if (!ReloadShaders())
 	{
-        m_pShaders[i] = shaderManager.getShader(m_pDevice, ShaderNames[i]);
-        if (m_pShaders[i] == NULL)
-        {
-            for (int j = 0; j < i; j++)
-            {
-                SAFE_RELEASE(m_pShaders[j]);
-            }
-            SAFE_RELEASE(m_pDistortShader);
-		    SAFE_RELEASE(m_pGroundTexture);
-		    SAFE_RELEASE(m_pDeclaration);
-		    SAFE_RELEASE(m_pDevice);
-		    SAFE_RELEASE(m_pDirect3D);
-		    throw runtime_error("Unable to a shader");
-        }
-
-        ID3DXEffect* pEffect = m_pShaders[i]->getD3DEffect();
-        D3DXEFFECT_DESC desc;
-        pEffect->GetDesc(&desc);
-        for (UINT i = 0; i < desc.Parameters; i++)
-        {
-            D3DXHANDLE hParam = pEffect->GetParameter(NULL, i);
-            D3DXPARAMETER_DESC desc;
-            pEffect->GetParameterDesc(hParam, &desc);
-            if (desc.Type == D3DXPT_TEXTURE)
-            {
-                D3DXHANDLE hAnnon = pEffect->GetAnnotationByName(hParam, "texture_filename");
-                pEffect->GetParameterDesc(hAnnon, &desc);
-                LPCSTR value = NULL;
-                if (SUCCEEDED(pEffect->GetString(hAnnon, &value)) && value != NULL)
-                {
-                    IDirect3DTexture9* pTexture = textureManager.getTexture(m_pDevice, value);
-                    pEffect->SetTexture(hParam, pTexture);
-                    SAFE_RELEASE(pTexture);
-                }
-            }
-        }
-        SAFE_RELEASE(pEffect);
+		SAFE_RELEASE(m_pDistortShader);
+		SAFE_RELEASE(m_pGroundTexture);
+		SAFE_RELEASE(m_pDeclaration);
+		SAFE_RELEASE(m_pDevice);
+		SAFE_RELEASE(m_pDirect3D);
+		throw runtime_error("Unable to load a shader");
 	}
 
     Light sun = {

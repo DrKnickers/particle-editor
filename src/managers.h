@@ -20,12 +20,14 @@ class ITextureManager
 {
 public:
 	virtual IDirect3DTexture9* getTexture(IDirect3DDevice9* pDevice, std::string name) = 0;
+	virtual void Clear() = 0;
 };
 
 class IShaderManager
 {
 public:
 	virtual Effect* getShader(IDirect3DDevice9* pDevice, std::string name) = 0;
+	virtual void Clear() = 0;
 };
 
 //

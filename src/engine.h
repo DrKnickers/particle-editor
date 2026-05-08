@@ -111,6 +111,15 @@ public:
 	const D3DXVECTOR3& GetWind() const    { return m_wind; }
     Effect* GetShader(int i) const        { return m_pShaders[i]; }
 
+	// Hot-reload all shaders (the 14-element ShaderNames[] array plus the
+	// distortion shader). All-or-nothing: if any of the new shaders fails to
+	// load, the old set is kept alive and the call returns false.
+	bool ReloadShaders();
+
+	// Hot-reload textures by flushing the TextureManager's cache and
+	// notifying every active emitter instance to re-fetch.
+	void ReloadTextures();
+
     int GetNumEmitters()  const { return m_numEmitters;  }
     int GetNumParticles() const { return m_numParticles; }
     int GetNumInstances() const { return (int)m_instances.size(); }
@@ -135,6 +144,11 @@ private:
 	D3DMULTISAMPLE_TYPE GetMultiSampleType(DWORD* MultiSampleQuality, D3DFORMAT DisplayFormat, D3DFORMAT DepthStencilFormat, BOOL Windowed);
 	D3DFORMAT           GetDepthStencilFormat(D3DFORMAT AdapterFormat, bool withStencilBuffer);
 	void				ResetParameters();
+
+	// Helper used by both the constructor and ReloadShaders(): scans the
+	// freshly-loaded shader's parameters for "texture_filename" annotations
+	// and binds the named textures.
+	void				BindShaderTextures(Effect* shader);
 
 	//
 	// Data members
@@ -173,6 +187,7 @@ private:
     Effect*             m_pShaders[NUM_SHADERS];
 
 	ITextureManager&				m_textureManager;
+	IShaderManager&					m_shaderManager;
 	IDirect3D9*						m_pDirect3D;
 	D3DPRESENT_PARAMETERS			m_presentationParameters;
 	IDirect3DDevice9*				m_pDevice;

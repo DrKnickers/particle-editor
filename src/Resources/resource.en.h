@@ -197,6 +197,9 @@
 #define IDC_MOD_NICKNAME_EDIT           1200
 #define IDC_MOD_NICKNAME_LABEL          1201
 
+#define ID_VIEW_RELOAD_TEXTURES         40090
+#define ID_VIEW_RELOAD_SHADERS          40091
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED

@@ -887,6 +887,9 @@ static void DoMenuInit(HMENU hMenu, APPLICATION_INFO* info)
 
     CheckMenuItem (hMenu, ID_VIEW_SHOWGROUND, MF_BYCOMMAND | (info->engine != NULL && info->engine->GetGround()     ? MF_CHECKED : MF_UNCHECKED));
     CheckMenuItem (hMenu, ID_VIEW_DEBUGHEAT,  MF_BYCOMMAND | (info->engine != NULL && info->engine->GetHeatDebug()  ? MF_CHECKED : MF_UNCHECKED));
+
+    EnableMenuItem(hMenu, ID_VIEW_RELOAD_SHADERS,  MF_BYCOMMAND | (info->engine != NULL ? MF_ENABLED : MF_GRAYED));
+    EnableMenuItem(hMenu, ID_VIEW_RELOAD_TEXTURES, MF_BYCOMMAND | (info->engine != NULL ? MF_ENABLED : MF_GRAYED));
 }
 
 static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
@@ -955,13 +958,38 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
         case ID_VIEW_RESETCAMERA:
             if (info->engine != NULL)
             {
-                Engine::Camera camera = 
+                Engine::Camera camera =
                 {
                     D3DXVECTOR3(0,-250,125),
                     D3DXVECTOR3(0,0,0),
                     D3DXVECTOR3(0,0,1)
                 };
                 info->engine->SetCamera(camera);
+            }
+            break;
+
+        case ID_VIEW_RELOAD_SHADERS:
+            if (info->engine != NULL)
+            {
+                if (info->engine->ReloadShaders())
+                {
+                    SendMessage(info->hStatusBar, SB_SETTEXT, 4, (LPARAM)L"Shaders reloaded");
+                }
+                else
+                {
+                    SendMessage(info->hStatusBar, SB_SETTEXT, 4,
+                                (LPARAM)L"Shader reload failed — keeping previous shaders");
+                }
+                if (info->hRenderWnd != NULL) InvalidateRect(info->hRenderWnd, NULL, TRUE);
+            }
+            break;
+
+        case ID_VIEW_RELOAD_TEXTURES:
+            if (info->engine != NULL)
+            {
+                info->engine->ReloadTextures();
+                SendMessage(info->hStatusBar, SB_SETTEXT, 4, (LPARAM)L"Textures reloaded");
+                if (info->hRenderWnd != NULL) InvalidateRect(info->hRenderWnd, NULL, TRUE);
             }
             break;
 
@@ -2106,18 +2134,23 @@ static void SelectMod(APPLICATION_INFO* info, const wstring& modPath)
 	info->selectedModPath = modPath;
 
 	if (info->fileManager) info->fileManager->SetModPath(modPath);
-	if (info->textureManager) info->textureManager->Clear();
-	if (info->shaderManager)  info->shaderManager->Clear();
 
 	WriteLastMod(modPath);
 	RebuildModsMenu(info);
 
 	printf("[Mods] Selected: %S\n", modPath.empty() ? L"(unmodded)" : modPath.c_str()); fflush(stdout);
 
-	// Reattach textures on currently-rendered emitter instances
+	// Hot-swap shaders + textures so the new mod folder takes effect without
+	// restart. Shader reload may fail on a malformed mod shader; in that case
+	// we keep the previous set and surface the failure on the status bar.
 	if (info->engine != NULL)
 	{
-		info->engine->OnParticleSystemChanged(-1);
+		if (!info->engine->ReloadShaders())
+		{
+			SendMessage(info->hStatusBar, SB_SETTEXT, 4,
+			            (LPARAM)L"Mod shader reload failed — keeping previous shaders");
+		}
+		info->engine->ReloadTextures();
 	}
 	if (info->hRenderWnd != NULL)
 	{
