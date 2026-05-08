@@ -712,12 +712,32 @@ ParticleSystem::ParticleSystem(IFile* file)
 	    // End of 0900h chunk
 	    Verify(type == -1);
 
-	    // Post-process
+	    // Post-process. Validate spawn-field indices first: malformed files
+	    // (saved by external tools or by an old version of the editor that
+	    // didn't update cross-references on delete) can store an index that
+	    // points past the end of the emitter list. The "!= -1" guard alone
+	    // doesn't catch that — m_emitters[badIndex] then trips the debug
+	    // assertion "vector subscript out of range" before the file finishes
+	    // loading. Treat any out-of-range value as "no spawn".
 	    for (unsigned int i = 0; i < m_emitters.size(); i++)
 	    {
             Emitter* emitter = m_emitters[i];
-		    if (emitter->spawnOnDeath    != -1) m_emitters[emitter->spawnOnDeath]   ->parent = emitter;
-		    if (emitter->spawnDuringLife != -1) m_emitters[emitter->spawnDuringLife]->parent = emitter;
+
+            if (emitter->spawnOnDeath != (size_t)-1 && emitter->spawnOnDeath >= m_emitters.size())
+            {
+                printf("[Load] emitter %u '%s' has spawnOnDeath=%zu out of range (%zu emitters); clearing\n",
+                       i, emitter->name.c_str(), emitter->spawnOnDeath, m_emitters.size()); fflush(stdout);
+                emitter->spawnOnDeath = (size_t)-1;
+            }
+            if (emitter->spawnDuringLife != (size_t)-1 && emitter->spawnDuringLife >= m_emitters.size())
+            {
+                printf("[Load] emitter %u '%s' has spawnDuringLife=%zu out of range (%zu emitters); clearing\n",
+                       i, emitter->name.c_str(), emitter->spawnDuringLife, m_emitters.size()); fflush(stdout);
+                emitter->spawnDuringLife = (size_t)-1;
+            }
+
+		    if (emitter->spawnOnDeath    != (size_t)-1) m_emitters[emitter->spawnOnDeath]   ->parent = emitter;
+		    if (emitter->spawnDuringLife != (size_t)-1) m_emitters[emitter->spawnDuringLife]->parent = emitter;
 	    }
     }
     catch (...)
