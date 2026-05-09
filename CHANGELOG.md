@@ -289,6 +289,16 @@ Workflow at `.github/workflows/build.yml`. Builds `Debug` and `Release` × `Win3
 
 ---
 
+## Spinner mouse-wheel input
+
+`Spinner` controls accept `WM_MOUSEWHEEL` to nudge the value by their already-defined `Increment`. Modifiers: `Shift` ⇒ 10× step, `Ctrl` ⇒ 0.1× step on float spinners (integer spinners keep 1× to avoid rounding the step to a no-op).
+
+The Win32 nuance worth recording: hover-wheel (the Win10/11 *"Scroll inactive windows when I hover over them"* setting, on by default) delivers `WM_MOUSEWHEEL` to whichever child window the cursor is over — so a single handler on the parent isn't enough. The `Spinner` registers `WM_MOUSEWHEEL` on **both** the parent (`SpinnerWindowProc` — cursor over the up/down arrows) and the subclassed Edit child (`SpinnerEditWindowProc` — cursor over the editable field, the common case). Both call into one helper that routes through the existing range-clamping path so wheel input respects `MinValue` / `MaxValue` identically to keyboard `VK_UP` / `VK_DOWN`.
+
+If you ever add another scroll-wheel-aware native control with child windows, repeat this pattern.
+
+---
+
 ## Tolerating malformed `.alo` data
 
 Some `.alo` files in the wild store a `spawnOnDeath` or `spawnDuringLife` index that points past the end of the emitter list — usually the residue of a delete operation in an external tool / older editor build that didn't update cross-references. Pre-fix, the `!= -1` guard in `ParticleSystem::ParticleSystem`'s post-process loop didn't catch this, and `m_emitters[badIndex]` tripped *vector subscript out of range* before the file finished loading.
