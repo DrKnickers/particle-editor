@@ -82,6 +82,35 @@ static void Spinner_Redraw(HWND hWnd, SpinnerControl* control)
 	RedrawWindow(hWnd, &size, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
 }
 
+// Mouse-wheel nudge. Direction follows the sign of wheelDelta. The base step is
+// the spinner's already-configured Increment (same value VK_UP/VK_DOWN use).
+// Modifiers:
+//   - Shift  -> 10x the increment (coarse)
+//   - Ctrl   -> 0.1x the increment (fine), float spinners only; integers fall
+//               back to a 1x step so the wheel always does something.
+static void Spinner_WheelStep(SpinnerControl* control, int wheelDelta, WORD modKeys)
+{
+	if (control == NULL || wheelDelta == 0) return;
+	int direction = (wheelDelta > 0) ? 1 : -1;
+
+	if (control->info.IsFloat)
+	{
+		float step = control->info.f.Increment;
+		if      (modKeys & MK_SHIFT)   step *= 10.0f;
+		else if (modKeys & MK_CONTROL) step *= 0.1f;
+		control->info.f.Value += direction * step;
+	}
+	else
+	{
+		long step = control->info.i.Increment;
+		if (modKeys & MK_SHIFT) step *= 10;
+		// MK_CONTROL on integer spinners: keep 1x step; rounding 0.1 to 0 would no-op
+		control->info.i.Value += direction * step;
+	}
+
+	Spinner_Update(control);
+}
+
 static LRESULT CALLBACK SpinnerEditWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	SpinnerControl* control = (SpinnerControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
@@ -138,6 +167,13 @@ static LRESULT CALLBACK SpinnerEditWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 				Spinner_Update(control);
 				return 0;
 			}
+			break;
+
+		case WM_MOUSEWHEEL:
+			Spinner_WheelStep(control,
+			                  GET_WHEEL_DELTA_WPARAM(wParam),
+			                  GET_KEYSTATE_WPARAM(wParam));
+			return 0;
 	}
 
 	// Pass message on to edit control
@@ -280,6 +316,12 @@ static LRESULT CALLBACK SpinnerWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 			}
 			break;
 		}
+
+		case WM_MOUSEWHEEL:
+			Spinner_WheelStep(control,
+			                  GET_WHEEL_DELTA_WPARAM(wParam),
+			                  GET_KEYSTATE_WPARAM(wParam));
+			return 0;
 
 		case WM_LBUTTONDOWN:
 		{
