@@ -352,6 +352,16 @@ If a future user hits the inverse confusion ("I want my tailed particles to also
 
 ---
 
+## Duplicate / paste auto-rename
+
+Duplicating an emitter or pasting one from the clipboard now appends a `_<n>` suffix where `<n>` is one greater than the highest numeric suffix already in use for that base name. So duplicating an emitter named `Fire Small` yields `Fire Small_1`; the next duplicate (whether of `Fire Small` or `Fire Small_1`) yields `Fire Small_2`, and so on. The same rule applies to `Ctrl+V` paste, *Paste as Lifetime Child*, and *Paste as Death Child*. Replaces the earlier `_ (copy)` suffix that PR #19 shipped — `_<n>` is collision-free, monotonic, and reads cleanly when several duplicates exist side-by-side.
+
+The increment scans every emitter currently in the system, including any whose name was already manually edited to end in `_<digits>`, so the new emitter never collides with an existing name. If the source name itself ends in `_<digits>`, that suffix is stripped before scanning — duplicating `Foo_3` while `Foo_5` exists yields `Foo_6`, not `Foo_3_1`.
+
+**How we tackled it.** Single static helper [`GenerateDuplicateName`](src/UI/EmitterList.cpp) at the top of [`src/UI/EmitterList.cpp`](src/UI/EmitterList.cpp) takes the system pointer and the source name; the rule lives in one place rather than being open-coded at each call site. Wired into both `EmitterList_DuplicateEmitter` (replacing the `(copy)` line) and `PasteEmitter` (new rename right before the construction-time clipboard emitter is handed off to the add-emitter functor). No file-format change; pure UI behavior.
+
+---
+
 ## Open Issues
 
 - **Mod-bundled megafiles** (`Mods\<name>\Data\MegaFiles.xml`) are not loaded. Most particle-overriding mods ship loose files, which the loose-file path covers. Total conversions like Mod's Revenge or Awakening of the Rebellion that package assets in their own `.meg` would need a follow-up: extend `FileManager` with a `m_modMegafiles` vector that's searched before `m_megafiles`, populated/cleared on `SetModPath`.

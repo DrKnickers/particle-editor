@@ -6,6 +6,52 @@ using namespace std;
 // Registered clipboard format
 static UINT CF_PARTICLE_EMITTER = 0;
 
+// Returns "<base>_<n>" where <n> is one more than the highest numeric suffix
+// already in use among emitters in `system` whose name matches `<base>` or
+// `<base>_<digits>`. If `sourceName` itself ends in `_<digits>` that suffix
+// is stripped first, so duplicating "Foo_3" repeatedly yields Foo_4, Foo_5
+// rather than Foo_3_1, Foo_3_1_1. An emitter named exactly `<base>` counts
+// as n=0 for the purpose of picking the next free slot.
+static std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName)
+{
+    auto trailingDigitCount = [](const std::string& s, size_t startAfter) -> size_t {
+        size_t n = 0;
+        for (size_t i = startAfter; i < s.size(); ++i)
+        {
+            if (!isdigit((unsigned char)s[i])) return 0;
+            ++n;
+        }
+        return n;
+    };
+
+    std::string base = sourceName;
+    size_t underscore = base.rfind('_');
+    if (underscore != std::string::npos && trailingDigitCount(base, underscore + 1) > 0)
+    {
+        base.resize(underscore);
+    }
+
+    int maxN = 0;
+    const std::vector<ParticleSystem::Emitter*>& emitters = system->getEmitters();
+    for (size_t i = 0; i < emitters.size(); ++i)
+    {
+        const std::string& name = emitters[i]->name;
+        if (name == base) continue;  // n=0; maxN already starts there
+        if (name.size() > base.size() + 1 &&
+            name.compare(0, base.size(), base) == 0 &&
+            name[base.size()] == '_' &&
+            trailingDigitCount(name, base.size() + 1) > 0)
+        {
+            int n = atoi(name.c_str() + base.size() + 1);
+            if (n > maxN) maxN = n;
+        }
+    }
+
+    char suffix[32];
+    sprintf_s(suffix, sizeof(suffix), "_%d", maxN + 1);
+    return base + suffix;
+}
+
 struct EmitterListControl
 {
 	HWND			hDialog;
@@ -95,6 +141,9 @@ static bool PasteEmitter(HWND hWnd, EmitterListControl* control, void (*func)(HW
         // Create the emitter
         ChunkReader reader(memfile);
         ParticleSystem::Emitter emitter(reader);
+        // Suffix the name so paste — like duplicate — never collides with an
+        // existing emitter, including the source if it's still present.
+        emitter.name = GenerateDuplicateName(control->system, emitter.name);
         (*func)(hWnd, emitter);
         memfile->Release();
         CloseClipboard();
@@ -740,8 +789,10 @@ void EmitterList_DuplicateEmitter(HWND hWnd)
         ChunkReader reader(memfile);
         ParticleSystem::Emitter cleanCopy(reader);
 
-        // Suffix the name so the duplicate is visually distinct in the tree.
-        cleanCopy.name = control->selection->name + " (copy)";
+        // Suffix the name with the next free _<n> so the duplicate is
+        // visually distinct in the tree and never collides with an existing
+        // emitter. See GenerateDuplicateName for the increment rule.
+        cleanCopy.name = GenerateDuplicateName(control->system, control->selection->name);
 
         pEmitter = control->system->insertEmitterAfter(control->selection, cleanCopy);
         memfile->Release();
