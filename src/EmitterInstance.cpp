@@ -532,6 +532,13 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
 
 	if (m_emitter.hasTail)
 	{
+		// Match in-game behavior: the EaW tail render path orients the
+		// quad along velocity and ignores the rotation track entirely.
+		// Discovered via P_hp_imperial_damage.alo "Fire Small": rotation
+		// values were set, the editor preview rotated, but the game did
+		// not. Override the previously-computed angle here.
+		angle = 0;
+
 		float length = D3DXVec3Length(&velocity);
 
         if (length > 0)
@@ -543,7 +550,7 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
     		    // Transform world-velocity into screen-velocity
 		        D3DXVec3TransformCoord(&velocity, &velocity, &m_engine.GetViewRotationMatrix());
             }
-		    angle += atan2f(velocity.y, velocity.x) + PI / 4;
+		    angle = atan2f(velocity.y, velocity.x) + PI / 4;
 		    velocity.z = 0.0f;
 		    length = m_emitter.tailSize * mult * D3DXVec3Length(&velocity) / length ;
         }

@@ -342,6 +342,16 @@ If a future edit ever re-introduces `EF BF BD` triplets, run `tasks/fix_rc_encod
 
 ---
 
+## Tailed particles ignore rotation track (preview parity with game)
+
+The EaW runtime's tail render path orients the quad along velocity and **ignores** the rotation-speed track entirely — even when the emitter's rotation fields are set. The editor preview previously *added* the rotation-track contribution on top of the velocity-orientation term, so a tailed emitter with a non-trivial rotation track would spin in the preview but stand still in-game. Discovered while debugging `Mods/Mod/.../P_hp_imperial_damage.alo` "Fire Small": rotation values populated, preview rotated, in-game did not.
+
+**Fix.** [`src/EmitterInstance.cpp`](src/EmitterInstance.cpp:533) — inside the `if (m_emitter.hasTail)` branch, reset `angle = 0` before the velocity-direction term and switch the velocity-orientation assignment from `+=` to `=`. The rotation-track integration above the branch still runs (cheap; could be skipped under `hasTail`, but the result is now thrown away regardless), and the BUMP-blend tangent at line 596 now encodes velocity direction for tailed particles, which matches what the engine does for tail+bump.
+
+If a future user hits the inverse confusion ("I want my tailed particles to also spin"), the answer is the engine doesn't allow it — disable `hasTail` and accept that velocity-facing goes away. Don't add a preview-only "spin tailed particles" mode; preview parity beats convenience.
+
+---
+
 ## Open Issues
 
 - **Mod-bundled megafiles** (`Mods\<name>\Data\MegaFiles.xml`) are not loaded. Most particle-overriding mods ship loose files, which the loose-file path covers. Total conversions like Mod's Revenge or Awakening of the Rebellion that package assets in their own `.meg` would need a follow-up: extend `FileManager` with a `m_modMegafiles` vector that's searched before `m_megafiles`, populated/cleared on `SetModPath`.
