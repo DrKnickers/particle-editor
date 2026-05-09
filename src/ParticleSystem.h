@@ -230,6 +230,14 @@ public:
 	Emitter*       addRootEmitter(const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
     Emitter*       addLifetimeEmitter(Emitter* parent, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
     Emitter*       addDeathEmitter(Emitter* parent, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
+
+    // Insert a copy of `source` directly after `reference` in m_emitters.
+    // The new emitter becomes a root (parent=NULL, no spawn-children); existing
+    // emitters at index >= reference->index + 1 shift up by one slot, with
+    // their parent's spawn-field references updated to match. Used by the
+    // "Duplicate Emitter" UI flow.
+    Emitter*       insertEmitterAfter(const Emitter* reference, const ParticleSystem::Emitter& source);
+
     Emitter&       getEmitter(size_t index)       { return *m_emitters[index]; }
     const Emitter& getEmitter(size_t index) const { return *m_emitters[index]; }
 	void           deleteEmitter(Emitter* emitter);

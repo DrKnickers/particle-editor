@@ -200,6 +200,7 @@
 
 #define ID_VIEW_RELOAD_TEXTURES         40090
 #define ID_VIEW_RELOAD_SHADERS          40091
+#define ID_EMITTER_DUPLICATE            40092
 
 // Next default values for new objects
 // 

@@ -789,6 +789,38 @@ ParticleSystem::Emitter* ParticleSystem::addDeathEmitter(Emitter* parent, const 
     return pEmitter;
 }
 
+ParticleSystem::Emitter* ParticleSystem::insertEmitterAfter(const Emitter* reference, const Emitter& source)
+{
+    if (reference == NULL) return NULL;
+
+    Emitter* pEmitter = new Emitter(source);
+    // The duplicate is independent: not yet a child of anything, no children
+    // of its own. The user can re-link via the existing UI later.
+    pEmitter->parent          = NULL;
+    pEmitter->spawnOnDeath    = (size_t)-1;
+    pEmitter->spawnDuringLife = (size_t)-1;
+
+    const size_t insertAt = reference->index + 1;
+
+    // Shift indices of every emitter at insertAt and above up by one. Walk
+    // back-to-front so each emitter's parent spawn-field is checked against
+    // its current (pre-shift) index — mirrors deleteEmitter's forward shift.
+    for (size_t i = m_emitters.size(); i > insertAt; i--)
+    {
+        Emitter* e = m_emitters[i - 1];
+        if (e->parent != NULL)
+        {
+            if      (e->parent->spawnDuringLife == e->index) e->parent->spawnDuringLife = e->index + 1;
+            else if (e->parent->spawnOnDeath    == e->index) e->parent->spawnOnDeath    = e->index + 1;
+        }
+        e->index = e->index + 1;
+    }
+
+    pEmitter->index = insertAt;
+    m_emitters.insert(m_emitters.begin() + insertAt, pEmitter);
+    return pEmitter;
+}
+
 void ParticleSystem::deleteEmitter(Emitter* emitter)
 {
     // Invalidate its parent references to it

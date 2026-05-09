@@ -289,6 +289,19 @@ Workflow at `.github/workflows/build.yml`. Builds `Debug` and `Release` × `Win3
 
 ---
 
+## Right-click → Duplicate Emitter
+
+**What ships.** Right-clicking an emitter in the tree now offers a *Duplicate* item between Copy and Paste. Selecting it creates a copy of the emitter directly below the original in the tree (and at `original.index + 1` in the underlying `m_emitters` vector), suffixes the name with ` (copy)`, and selects the new emitter. Faster than Copy → Paste because it skips the clipboard round-trip and the duplicate ends up positioned next to its source rather than at the end of the list.
+
+**How we tackled it.** Two new pieces. (1) `ParticleSystem::insertEmitterAfter(reference, source)` mirrors `deleteEmitter`'s index-shift logic in reverse: the new emitter takes index `reference->index + 1`, every existing emitter at that slot or above gets bumped by one, and any parent's `spawnDuringLife` / `spawnOnDeath` reference that pointed at a shifted emitter is updated to its new index. The duplicate itself is reset to be a root (no parent, no spawn-children) — spawn-field slots are exclusive on each parent and a duplicate of a child literally can't share its source's slot. (2) `EmitterList_DuplicateEmitter` in `src/UI/EmitterList.cpp` rounds the source through the same chunk-serializer/-reader flow the clipboard-Copy path already uses, so the new `Emitter` starts with a clean (empty) `m_instances`. The tree gets a new `HTREEITEM` inserted at root level after the source's tree item.
+
+**Issues encountered and resolutions.**
+
+- **`Emitter`'s copy constructor shallow-copies `m_instances`.** The `*this = emitter;` in `Emitter::Emitter(const Emitter&)` propagates the source's `std::set<EmitterInstance*>` to the duplicate. With live particles spawned, that means two `Emitter` objects claim ownership of the same `EmitterInstance` pointers — when either is later deleted, `~Emitter` calls `RemoveEmitter` for each instance and the second destructor double-frees. The fix is to never construct duplicates directly with the copy constructor on a live emitter: instead, serialize through `ChunkWriter`, deserialize through `ChunkReader`, and let the `Emitter(reader)` ctor produce a clean object with empty `m_instances`. The Copy/Paste path already does this safely; we reuse it.
+- **Tree placement when the source is a child emitter.** The duplicate is a tree-root (`parent=NULL`), but `TreeView_InsertItem` requires `hInsertAfter` to be a sibling at the same level as `hParent`. If the source itself is a tree-child, `hInsertAfter = source's tree item` would mix levels. We fall back to `TVI_LAST` (append at end of root list) in that case; "right below the original" only fully applies when source is itself a root. Documented in the function comment.
+
+---
+
 ## Spinner mouse-wheel input
 
 `Spinner` controls accept `WM_MOUSEWHEEL` to nudge the value by their already-defined `Increment`. Modifiers: `Shift` ⇒ 10× step, `Ctrl` ⇒ 0.1× step on float spinners (integer spinners keep 1× to avoid rounding the step to a no-op).

@@ -369,6 +369,7 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                             case ID_EDIT_COPY:   SendMessage(control->hTree, WM_COPY,  0, 0); break;
                             case ID_EDIT_DELETE: SendMessage(control->hTree, WM_CLEAR, 0, 0); break;
                             case ID_EDIT_PASTE:  SendMessage(control->hTree, WM_PASTE, 0, 0); break;
+                            case ID_EMITTER_DUPLICATE: EmitterList_DuplicateEmitter(hWnd); break;
                             case ID_PASTEAS_LIFETIME: PasteEmitter(hWnd, control, &EmitterList_AddLifetimeEmitter); break;
                             case ID_PASTEAS_DEATH:    PasteEmitter(hWnd, control, &EmitterList_AddDeathEmitter); break;
                             case ID_EMITTER_RENAME:   TreeView_EditLabel(control->hTree, tvht.hItem); break;
@@ -408,7 +409,7 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                 {
 					NMTREEVIEW* nmtv   = (NMTREEVIEW*)lParam;
                     control->selection = (nmtv->itemNew.hItem != NULL) ? (ParticleSystem::Emitter*)nmtv->itemNew.lParam : NULL;
-                    
+
                 	NotifyParent(control, ELN_SELCHANGED);
 					break;
                 }
@@ -716,6 +717,72 @@ void EmitterList_DeleteEmitter(HWND hWnd)
         NotifyParent(control, ELN_LISTCHANGED);
         NotifyParent(control, ELN_SELCHANGED);
     }
+}
+
+void EmitterList_DuplicateEmitter(HWND hWnd)
+{
+    EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+    if (control == NULL || control->selection == NULL) return;
+
+    // Round-trip the source through the chunk serializer so the duplicate
+    // starts with empty m_instances. A direct copy-construct would shallow-
+    // copy that std::set and we'd end up double-freeing live EmitterInstance
+    // pointers when either the original or the duplicate is later deleted.
+    // Same trick the Copy / Paste flow already uses safely.
+    MemoryFile* memfile = new MemoryFile;
+    ParticleSystem::Emitter* pEmitter = NULL;
+    try
+    {
+        ChunkWriter writer(memfile);
+        control->selection->copy(writer);
+
+        memfile->seek(0);
+        ChunkReader reader(memfile);
+        ParticleSystem::Emitter cleanCopy(reader);
+
+        // Suffix the name so the duplicate is visually distinct in the tree.
+        cleanCopy.name = control->selection->name + " (copy)";
+
+        pEmitter = control->system->insertEmitterAfter(control->selection, cleanCopy);
+        memfile->Release();
+    }
+    catch (...)
+    {
+        memfile->Release();
+        MessageBox(NULL, LoadString(IDS_ERROR_EMITTER_COPY).c_str(), NULL, MB_OK | MB_ICONHAND);
+        return;
+    }
+
+    if (pEmitter == NULL) return;
+
+    // Tree insertion. The duplicate is always a tree-root (parent=NULL was
+    // set by insertEmitterAfter). If the source is also a root, we can place
+    // the new tree item directly after the source's tree item — that's the
+    // "right below the original" UX the roadmap describes. If the source is
+    // a child emitter (its tree item lives under a parent), `hInsertAfter`
+    // would be at a different tree level than `hParent=NULL`; the only
+    // legal placement at root level in that case is TVI_LAST.
+    HTREEITEM hAfter = TVI_LAST;
+    if (control->selection->parent == NULL)
+    {
+        hAfter = TreeView_GetSelection(control->hTree);
+    }
+
+    wstring name = AnsiToWide(pEmitter->name);
+    TVINSERTSTRUCT tvis;
+    tvis.hParent             = NULL;
+    tvis.hInsertAfter        = hAfter;
+    tvis.item.mask           = TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE | TVIF_CHILDREN | TVIF_TEXT;
+    tvis.item.pszText        = (LPWSTR)name.c_str();
+    tvis.item.lParam         = (LPARAM)pEmitter;
+    tvis.item.cChildren      = 1;
+    tvis.item.iImage         = GetTreeNodeIcon(control->system, pEmitter->index);
+    tvis.item.iSelectedImage = tvis.item.iImage;
+    HTREEITEM hItem = TreeView_InsertItem(control->hTree, &tvis);
+
+    control->selection = pEmitter;
+    NotifyParent(control, ELN_LISTCHANGED);
+    TreeView_SelectItem(control->hTree, hItem);
 }
 
 void EmitterList_RenameEmitter(HWND hWnd)
