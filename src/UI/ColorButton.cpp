@@ -10,6 +10,15 @@ struct ColorButtonControl
 
 static ColorButtonControl* activeDialog = NULL;
 
+// 16 user-customizable color slots in the system ChooseColor dialog.
+// Process-lifetime; persisted across sessions by main.cpp via the
+// ColorButton_GetCustomColors / ColorButton_SetCustomColors accessors.
+// File-static (was function-local in the WM_LBUTTONUP handler) so that
+// (a) all ColorButton instances share one palette, matching the user's
+// expectation that custom colors carry between any color-picker invocation,
+// and (b) main.cpp can read/write it for persistence.
+static COLORREF g_customColors[16] = {0};
+
 static UINT_PTR APIENTRY CustomHookProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	if (activeDialog != NULL)
@@ -75,13 +84,12 @@ static LRESULT CALLBACK ColorButtonWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 		case WM_LBUTTONUP:
 		{
 			ReleaseCapture();
-			static COLORREF CustomColors[16] = {0};
 
 			// Show the color chooser
 			CHOOSECOLOR cc;
 			ZeroMemory(&cc, sizeof(CHOOSECOLOR));
 			cc.lStructSize  = sizeof(CHOOSECOLOR);
-			cc.lpCustColors = CustomColors;
+			cc.lpCustColors = g_customColors;
 			cc.hwndOwner    = hWnd;
 			cc.rgbResult    = control->color;
 			cc.lpfnHook     = CustomHookProc;
@@ -144,6 +152,16 @@ COLORREF ColorButton_GetColor(HWND hWnd)
 		return control->color;
 	}
 	return RGB(0,0,0);
+}
+
+void ColorButton_GetCustomColors(COLORREF out[16])
+{
+	for (int i = 0; i < 16; i++) out[i] = g_customColors[i];
+}
+
+void ColorButton_SetCustomColors(const COLORREF in[16])
+{
+	for (int i = 0; i < 16; i++) g_customColors[i] = in[i];
 }
 
 bool ColorButton_Initialize(HINSTANCE hInstance)

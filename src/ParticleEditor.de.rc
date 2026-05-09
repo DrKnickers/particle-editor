@@ -382,6 +382,8 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Texturen neu laden\tF5",     ID_VIEW_RELOAD_TEXTURES
         MENUITEM "&Shader neu laden\tF6",       ID_VIEW_RELOAD_SHADERS
+        MENUITEM SEPARATOR
+        MENUITEM "Ansicht &zurücksetzen",       ID_VIEW_RESET_VIEW_SETTINGS
     END
     POPUP "&Hilfe"
     BEGIN

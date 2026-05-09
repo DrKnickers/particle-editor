@@ -16,6 +16,30 @@ Conventions:
 
 ## Changelog
 
+### Persist view settings across sessions (background color, ground toggle, custom colors) + Reset View Settings
+*2026-05-09 · #27*
+
+Three view-state values now round-trip across launches via the existing `HKCU\Software\AloParticleEditor\` registry key:
+
+- **`BackgroundColor`** (REG_DWORD) — `Engine::m_background`. Persisted on every `CBN_CHANGE` from the swatch button.
+- **`ShowGround`** (REG_DWORD, 0/1) — `Engine::m_showGround`. Persisted on every `Ctrl+G` / View → Show Ground toggle.
+- **`CustomColors`** (REG_BINARY, 64 bytes) — the 16 user-customizable slots in the system `ChooseColor` dialog. Same write window as the background color, since `CBN_CHANGE` fires *after* the dialog modifies the palette.
+
+Plus a new **View → Reset View Settings** menu item. Confirmation dialog → deletes all three registry values → restores the engine to its constructor defaults (`RGB(0x14,0x08,0x34)` background, ground on) and clears the custom-colors palette to all zeros. Camera reset is intentionally NOT bundled in — it has its own command above and isn't a persisted setting. Same handler on both `en.rc` and `de.rc` ("Reset View Settings" / "Ansicht zurücksetzen").
+
+**How we tackled it.** Six static helpers in [`src/main.cpp`](src/main.cpp) following the existing `ReadLastMod` / `WriteLastMod` pattern — one `Read*` + one `Write*` per setting, plus `ResetViewSettings()` for the bulk delete. Each `Read*` takes a `defaultValue` so callers can pass the engine's existing default and a fresh registry behaves identically to before this feature. Writes happen on every change (matches the existing convention; no exit-path bugs). Reads happen once, immediately after `new Engine(...)` in [`main.cpp`](src/main.cpp).
+
+The 16-slot `ChooseColor` palette was a function-local `static COLORREF CustomColors[16] = {0}` inside [`ColorButton.cpp`'s `WM_LBUTTONUP`](src/UI/ColorButton.cpp). Promoted to a file-static `g_customColors` so all `ColorButton` instances share one palette (matching what the user expects from any color picker), and exposed via two accessors `ColorButton_GetCustomColors` / `ColorButton_SetCustomColors` so `main.cpp` can drive the persistence without leaking the internal array.
+
+**Issues encountered and resolutions.**
+
+- **First launch after toggling ground off looked broken even though it wasn't.** The `Show Ground` toolbar button is added with hardcoded `TBSTATE_ENABLED | TBSTATE_CHECKED` ([`main.cpp:1116`](src/main.cpp:1116)). Reading `ShowGround=0` and calling `SetGround(false)` correctly suppressed the ground render, but the toolbar button still painted as pressed — and the next click would `SetGround(!GetGround())` = `true`, the opposite of what the user expected. Fix: explicit `TB_CHECKBUTTON` re-sync immediately after the registry-restored `SetGround`, mirroring what the toggle handler already does.
+- **Forward-declare the helpers near the existing `static` block at the top of `main.cpp`.** The `Read*` / `Write*` definitions sit alongside `ReadLastMod` / `WriteLastMod` (~line 1976) but they're called much earlier (CBN_CHANGE handler, ground toggle handler). Without the forward decls, the compiler refused to find them. Same pattern the existing `WriteModNickname` already uses.
+
+If you want to inspect/change the persisted values manually, they're under `HKEY_CURRENT_USER\Software\AloParticleEditor`. Bad / wrong-type values are silently dropped by the helpers and the engine default is used instead — no crash, no migration code needed.
+
+---
+
 ### Move Up / Move Down buttons for root emitters
 *2026-05-09 · #25*
 

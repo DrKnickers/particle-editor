@@ -204,6 +204,7 @@
 #define ID_EMITTER_DUPLICATE            40092
 #define ID_MOVE_EMITTER_UP              40093
 #define ID_MOVE_EMITTER_DOWN            40094
+#define ID_VIEW_RESET_VIEW_SETTINGS     40095
 
 // Next default values for new objects
 // 

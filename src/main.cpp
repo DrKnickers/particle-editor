@@ -455,6 +455,14 @@ static void             WriteModNickname(const wstring& modPath, const wstring& 
 static bool             ShowNicknameDialog(HWND hParent, const ModEntry& mod, wstring& outNickname);
 static const wstring&   ModDisplayLabel(const ModEntry& m);
 static void             EnsureMenuFonts(APPLICATION_INFO* info);
+// View-state persistence (defined later, near the other Read/Write helpers).
+static COLORREF         ReadBackgroundColor(COLORREF defaultValue);
+static void             WriteBackgroundColor(COLORREF color);
+static bool             ReadShowGround(bool defaultValue);
+static void             WriteShowGround(bool show);
+static bool             ReadCustomColors(COLORREF out[16]);
+static void             WriteCustomColors(const COLORREF in[16]);
+static void             ResetViewSettings();
 
 struct APPLICATION_INFO
 {
@@ -944,6 +952,7 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             {
 			    info->engine->SetGround(!info->engine->GetGround());
 			    SendMessage(info->hToolbar, TB_CHECKBUTTON, id, MAKELONG(info->engine->GetGround(), 0));
+                WriteShowGround(info->engine->GetGround());
             }
 			break;
 
@@ -954,6 +963,34 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
 			    SendMessage(info->hToolbar, TB_CHECKBUTTON, id, MAKELONG(info->engine->GetHeatDebug(), 0));
             }
 			break;
+
+        case ID_VIEW_RESET_VIEW_SETTINGS:
+            // Confirm — destructive: clears persisted background color,
+            // ground-plane visibility, and the ChooseColor custom-color
+            // palette. Camera is intentionally NOT included; it has its
+            // own Reset Camera command above.
+            if (MessageBox(info->hMainWnd,
+                           L"Reset background color, ground plane visibility, and the color picker's custom colors to defaults?",
+                           L"Reset View Settings",
+                           MB_YESNO | MB_ICONQUESTION) == IDYES)
+            {
+                ResetViewSettings();
+                if (info->engine != NULL)
+                {
+                    // Defaults match Engine's constructor (engine.cpp). Kept
+                    // in sync by hand — there's only one default each, and
+                    // they rarely change.
+                    info->engine->SetBackground(RGB(0x14, 0x08, 0x34));
+                    info->engine->SetGround(true);
+                    ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
+                    SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_SHOWGROUND,
+                                MAKELONG(info->engine->GetGround(), 0));
+                    RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                }
+                COLORREF zero[16] = {0};
+                ColorButton_SetCustomColors(zero);
+            }
+            break;
 
         case ID_VIEW_RESETCAMERA:
             if (info->engine != NULL)
@@ -1380,6 +1417,15 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 						// The background color has changed
 						info->engine->SetBackground(ColorButton_GetColor(hControl));
                         RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                        // Persist. Also save the ChooseColor palette: even on
+                        // Cancel the user may have defined custom slots, and
+                        // CBN_CHANGE fires for every interim value during the
+                        // dialog — by the time we land here the palette is
+                        // final. Cheap (~64-byte write).
+                        WriteBackgroundColor(info->engine->GetBackground());
+                        COLORREF currentCustom[16];
+                        ColorButton_GetCustomColors(currentCustom);
+                        WriteCustomColors(currentCustom);
 					}
 				}
                 else if (code == BN_CLICKED)
@@ -1917,6 +1963,117 @@ static void WriteLastMod(const wstring& modPath)
 	}
 }
 
+// View-state persistence. Registry layout under
+// HKCU\Software\AloParticleEditor:
+//   BackgroundColor (REG_DWORD)         — Engine::m_background COLORREF
+//   ShowGround      (REG_DWORD, 0/1)    — Engine::m_showGround
+//   CustomColors    (REG_BINARY, 64 b)  — ChooseColor's 16-slot palette
+//
+// Each helper takes a default that's returned when the value is absent
+// or has the wrong type, so a fresh registry preserves today's behavior.
+// Writes happen on every change; matches LastMod / ModNickname.
+
+static COLORREF ReadBackgroundColor(COLORREF defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD value, type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, L"BackgroundColor", NULL, &type, (LPBYTE)&value, &size) == ERROR_SUCCESS && type == REG_DWORD)
+        {
+            RegCloseKey(hKey);
+            return (COLORREF)value;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteBackgroundColor(COLORREF color)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        DWORD value = (DWORD)color;
+        RegSetValueEx(hKey, L"BackgroundColor", 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
+        RegCloseKey(hKey);
+    }
+}
+
+static bool ReadShowGround(bool defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD value, type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, L"ShowGround", NULL, &type, (LPBYTE)&value, &size) == ERROR_SUCCESS && type == REG_DWORD)
+        {
+            RegCloseKey(hKey);
+            return value != 0;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteShowGround(bool show)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        DWORD value = show ? 1 : 0;
+        RegSetValueEx(hKey, L"ShowGround", 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
+        RegCloseKey(hKey);
+    }
+}
+
+// `out` must point to a 16-element COLORREF buffer. On miss, leaves the
+// buffer untouched and returns false so the caller can decide whether
+// to seed defaults.
+static bool ReadCustomColors(COLORREF out[16])
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD type, size = 16 * sizeof(COLORREF);
+        if (RegQueryValueEx(hKey, L"CustomColors", NULL, &type, (LPBYTE)out, &size) == ERROR_SUCCESS
+            && type == REG_BINARY && size == 16 * sizeof(COLORREF))
+        {
+            RegCloseKey(hKey);
+            return true;
+        }
+        RegCloseKey(hKey);
+    }
+    return false;
+}
+
+static void WriteCustomColors(const COLORREF in[16])
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        RegSetValueEx(hKey, L"CustomColors", 0, REG_BINARY, (const BYTE*)in, 16 * sizeof(COLORREF));
+        RegCloseKey(hKey);
+    }
+}
+
+// Drops all three persisted view-settings keys. Used by View → Reset
+// View Settings. Missing values are not an error — silently skipped.
+static void ResetViewSettings()
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        RegDeleteValue(hKey, L"BackgroundColor");
+        RegDeleteValue(hKey, L"ShowGround");
+        RegDeleteValue(hKey, L"CustomColors");
+        RegCloseKey(hKey);
+    }
+}
+
 // Returns the display label for a mod (nickname if set, else folder name).
 static const wstring& ModDisplayLabel(const ModEntry& m)
 {
@@ -2374,7 +2531,26 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
         try
         {
 		    info->engine = new Engine(info->hMainWnd, info->hRenderWnd, textureManager, shaderManager);
+
+            // View settings persisted across sessions: pull from registry,
+            // fall back to engine defaults when no value stored. Defaults
+            // are passed to the helpers so a fresh registry behaves
+            // identically to before this feature.
+            info->engine->SetBackground(ReadBackgroundColor(info->engine->GetBackground()));
+            info->engine->SetGround    (ReadShowGround    (info->engine->GetGround()));
+            COLORREF persistedCustom[16];
+            if (ReadCustomColors(persistedCustom)) ColorButton_SetCustomColors(persistedCustom);
+
             ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
+
+            // Sync the ground-toggle toolbar button to the (possibly
+            // restored-from-registry) engine state. The TBBUTTON definition
+            // hardcodes TBSTATE_CHECKED at init time; without this re-sync
+            // a persisted "ground off" looks like the toolbar lying — render
+            // is correct but the button still shows pressed, and the next
+            // click does the wrong thing.
+            SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_SHOWGROUND,
+                        MAKELONG(info->engine->GetGround() ? TRUE : FALSE, 0));
         }
         catch (exception&)
         {

@@ -174,6 +174,10 @@ ParticleSystem::Emitter* EmitterList_GetSelection(HWND hWnd);
 bool ColorButton_Initialize(HINSTANCE hInstance);
 void ColorButton_SetColor(HWND hWnd, COLORREF color);
 COLORREF ColorButton_GetColor(HWND hWnd);
+// Process-wide ChooseColor custom-colors palette (16 slots). Shared
+// across all ColorButton instances; persisted across sessions by main.cpp.
+void ColorButton_GetCustomColors(COLORREF out[16]);
+void ColorButton_SetCustomColors(const COLORREF in[16]);
 
 /* 
  * Global UI functions
