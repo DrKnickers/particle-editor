@@ -301,6 +301,8 @@ BEGIN
     "G",            ID_VIEW_SHOWGROUND,     VIRTKEY, CONTROL, NOINVERT
     VK_F5,          ID_VIEW_RELOAD_TEXTURES, VIRTKEY, NOINVERT
     VK_F6,          ID_VIEW_RELOAD_SHADERS,  VIRTKEY, NOINVERT
+    VK_UP,          ID_MOVE_EMITTER_UP,     VIRTKEY, ALT, NOINVERT
+    VK_DOWN,        ID_MOVE_EMITTER_DOWN,   VIRTKEY, ALT, NOINVERT
 END
 
 
@@ -407,6 +409,9 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Rename",                     ID_EMITTER_RENAME
         MENUITEM "Re&scale",                    ID_EMITTER_RESCALE
+        MENUITEM SEPARATOR
+        MENUITEM "Move &Up\tAlt+Up",            ID_MOVE_EMITTER_UP
+        MENUITEM "Move D&own\tAlt+Down",        ID_MOVE_EMITTER_DOWN
         MENUITEM SEPARATOR
         MENUITEM "Toggle &Visibility",          ID_TOGGLE_EMITTER_VISIBILITY
         MENUITEM SEPARATOR
@@ -571,6 +576,8 @@ BEGIN
     IDS_TOOLTIP_EMITTER_TOGGLE "Toggle emitter visibility"
     IDS_TOOLTIP_EMITTERS_SHOW "Show all emitters"
     IDS_TOOLTIP_EMITTERS_HIDE "Hide all emitters"
+    IDS_TOOLTIP_EMITTER_MOVE_UP "Move emitter up\tAlt+Up"
+    IDS_TOOLTIP_EMITTER_MOVE_DOWN "Move emitter down\tAlt+Down"
     IDS_PARAMTYPE_EXACT     "Exact"
     IDS_PARAMTYPE_BOX       "Random: Box"
     IDS_PARAMTYPE_SPHERE    "Random: Sphere"

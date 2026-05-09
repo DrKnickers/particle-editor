@@ -16,6 +16,25 @@ Conventions:
 
 ## Changelog
 
+### Move Up / Move Down buttons for root emitters
+*2026-05-09 · #25*
+
+Two new buttons on the emitter-list toolbar — **▲** (Move Up) and **▼** (Move Down) — that reorder the selected root emitter past its previous / next root sibling. Same actions are available via the right-click context menu (**Move Up** / **Move Down**, between *Rescale* and *Toggle Visibility*) and the `Alt+Up` / `Alt+Down` keyboard shortcuts. The whole subtree of the selected root moves with it as a block — children, grandchildren, everything reachable via spawn-field traversal. Buttons grey out when the selection is a child emitter (children fill named slots `spawnDuringLife` / `spawnOnDeath` on their parent — they don't form an ordered sibling list, so reordering them isn't meaningful), or when the selection is the topmost / bottommost root in that direction.
+
+Toolbar layout: the new buttons sit in their own group between Delete and the visibility eye — `[New ▾] | [Delete] | [▲][▼] | [👁] | [Show All][Hide All]`. Adjacent to Delete because both target the current selection; not at the far right with the bulk-action buttons.
+
+**How we tackled it.** New backend method [`ParticleSystem::moveEmitter(emitter, direction)`](src/ParticleSystem.cpp) — direction is `-1` (up) or `+1` (down). Identifies the neighbor root by walking `m_emitters` filtered to `parent == NULL`, collects both subtrees by spawn-field DFS, then rearranges so that the union of occupied positions is filled in the swapped order while emitters belonging to neither subtree stay where they are. All `index` fields and parent spawn-field references are rewritten in a single pass.
+
+**Issues encountered and resolutions.**
+
+- **Auto-selected first emitter loaded with Move Down greyed out.** [`EmitterList_SetParticleSystem`](src/UI/EmitterList.cpp) calls `OnParticleSystemChange` *before* assigning `control->system`. Inside that path, `TreeView_SelectItem` fires `TVN_SELCHANGED`, which calls `NotifyParent(ELN_SELCHANGED)` and recomputes toolbar enable state — but at that moment `control->system` is still `NULL`, so the new Up/Down enable check (which scans the emitter list to find a neighbor root) saw no neighbor and disabled both buttons. The pre-existing Delete / Visibility checks only test `control->selection`, so they were unaffected. Fix: re-fire `ELN_SELCHANGED` once after `control->system = system` to reconcile state.
+- **Toolbar bitmap was 4bpp paletted, not 24bpp.** [`src/Resources/toolbar2.bmp`](src/Resources/toolbar2.bmp) lives in the format that `LoadBitmap` + `ImageList_AddMasked` expect (per the icon-loading work in the original x64 port). Generating new icons in 24bpp would have broken the chroma-key match. Wrote [`tasks/extend_toolbar_bitmap.ps1`](tasks/extend_toolbar_bitmap.ps1) to extend the existing 80×15 bitmap to 112×15 in-place by appending two 16×15 arrow glyphs at palette index 0 (black) on a chroma-key background of palette index 6 (`RGB(0,128,128)`). Same script is the reproducible source of truth — re-run if the icons need to change.
+- **Reorder doesn't fire `TVN_SELCHANGED`.** Tree rebuild via `OnParticleSystemChange` clears and reselects the moved emitter, but the move itself doesn't change *which* emitter is selected — only its position. Without an explicit notification, the Up/Down enable state would be stale (e.g., after moving down, Down might still appear enabled even if the moved emitter is now at the bottom). Fix: extend the `NotifyParent` enable-update branch to also fire on `ELN_LISTCHANGED`, and have `EmitterList_MoveEmitter` send both `ELN_LISTCHANGED` and `ELN_SELCHANGED`.
+
+Foundation for the upcoming drag-and-drop reordering roadmap item — same backend method, same tree-rebuild path; only the UI input changes.
+
+---
+
 ### Duplicate / paste auto-rename
 *2026-05-09 · [`33e0913`](https://github.com/DrKnickers/particle-editor/commit/33e0913) · #23*
 

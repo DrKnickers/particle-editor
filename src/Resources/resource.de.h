@@ -86,6 +86,8 @@
 #define IDS_TOOLTIP_EMITTER_TOGGLE      168
 #define IDS_TOOLTIP_EMITTERS_SHOW       169
 #define IDS_TOOLTIP_EMITTERS_HIDE       170
+#define IDS_TOOLTIP_EMITTER_MOVE_UP     180
+#define IDS_TOOLTIP_EMITTER_MOVE_DOWN   181
 #define IDS_PARAMTYPE_EXACT             171
 #define IDS_PARAMTYPE_BOX               172
 #define IDS_PARAMTYPE_SPHERE            173
@@ -201,6 +203,8 @@
 #define ID_VIEW_RELOAD_TEXTURES         40090
 #define ID_VIEW_RELOAD_SHADERS          40091
 #define ID_EMITTER_DUPLICATE            40092
+#define ID_MOVE_EMITTER_UP              40093
+#define ID_MOVE_EMITTER_DOWN            40094
 
 // Next default values for new objects
 // 

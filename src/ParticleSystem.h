@@ -238,6 +238,21 @@ public:
     // "Duplicate Emitter" UI flow.
     Emitter*       insertEmitterAfter(const Emitter* reference, const ParticleSystem::Emitter& source);
 
+    // Reorder a root emitter (and its full subtree) past the adjacent root
+    // in the indicated direction. direction = -1 moves up (toward index 0),
+    // +1 moves down. The emitter must be a root (parent == NULL); children
+    // can't be reordered because each parent has fixed-role child slots
+    // (spawnDuringLife / spawnOnDeath), not a sibling list.
+    //
+    // The whole subtree moves as a block: descendants reachable via
+    // spawn-field traversal swap positions with the neighbor's subtree.
+    // Emitters belonging to neither subtree stay where they are. All
+    // spawn-field index references are updated to match the new layout.
+    //
+    // Returns true on success, false if the emitter isn't a root or there's
+    // no neighboring root in the requested direction.
+    bool           moveEmitter(Emitter* emitter, int direction);
+
     Emitter&       getEmitter(size_t index)       { return *m_emitters[index]; }
     const Emitter& getEmitter(size_t index) const { return *m_emitters[index]; }
 	void           deleteEmitter(Emitter* emitter);

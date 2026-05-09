@@ -1,4 +1,5 @@
 #include <iostream>
+#include <algorithm>
 #include "ParticleSystem.h"
 #include "EmitterInstance.h"
 #include "ParticleSystemInstance.h"
@@ -819,6 +820,110 @@ ParticleSystem::Emitter* ParticleSystem::insertEmitterAfter(const Emitter* refer
     pEmitter->index = insertAt;
     m_emitters.insert(m_emitters.begin() + insertAt, pEmitter);
     return pEmitter;
+}
+
+bool ParticleSystem::moveEmitter(Emitter* emitter, int direction)
+{
+    if (emitter == NULL || emitter->parent != NULL) return false;
+    if (direction != -1 && direction != 1) return false;
+
+    // Walk m_emitters once to find the neighbor root in the requested
+    // direction. Tracks `prev` only across roots so a non-root child sitting
+    // between two roots in vector order doesn't get mistaken for a neighbor.
+    Emitter* neighbor = NULL;
+    Emitter* prevRoot = NULL;
+    bool sawSelf = false;
+    for (size_t i = 0; i < m_emitters.size(); i++)
+    {
+        Emitter* e = m_emitters[i];
+        if (e->parent != NULL) continue;
+        if (e == emitter)
+        {
+            sawSelf = true;
+            if (direction == -1) { neighbor = prevRoot; break; }
+        }
+        else if (sawSelf && direction == 1)
+        {
+            neighbor = e;
+            break;
+        }
+        prevRoot = e;
+    }
+    if (neighbor == NULL) return false;
+
+    // Collect each subtree in vector order. Pre-order via spawn-field
+    // traversal would also work, but iterating m_emitters preserves the
+    // current intra-subtree ordering — important when a subtree isn't
+    // contiguous and the user has implicitly chosen which order siblings
+    // appear by some earlier reorder step.
+    auto markSubtree = [&](Emitter* root, std::vector<bool>& mark) {
+        // Iterative DFS to avoid recursion stack worries on large systems.
+        std::vector<Emitter*> stack;
+        stack.push_back(root);
+        while (!stack.empty())
+        {
+            Emitter* e = stack.back(); stack.pop_back();
+            mark[e->index] = true;
+            if (e->spawnDuringLife != (size_t)-1) stack.push_back(m_emitters[e->spawnDuringLife]);
+            if (e->spawnOnDeath    != (size_t)-1) stack.push_back(m_emitters[e->spawnOnDeath]);
+        }
+    };
+
+    std::vector<bool> inA(m_emitters.size(), false);
+    std::vector<bool> inB(m_emitters.size(), false);
+    markSubtree(emitter,  inA);
+    markSubtree(neighbor, inB);
+
+    // Vector-ordered member lists, plus combined occupied positions.
+    std::vector<Emitter*> subtreeA, subtreeB;
+    std::vector<size_t>   occupied;
+    for (size_t i = 0; i < m_emitters.size(); i++)
+    {
+        if (inA[i]) { subtreeA.push_back(m_emitters[i]); occupied.push_back(i); }
+        if (inB[i]) { subtreeB.push_back(m_emitters[i]); occupied.push_back(i); }
+    }
+    std::sort(occupied.begin(), occupied.end());
+
+    // direction = +1 (down):  B-subtree fills the lower positions, A-subtree the upper.
+    // direction = -1 (up):    A-subtree fills the lower, B-subtree the upper.
+    std::vector<Emitter*> reorder;
+    reorder.reserve(occupied.size());
+    if (direction == 1)
+    {
+        for (Emitter* e : subtreeB) reorder.push_back(e);
+        for (Emitter* e : subtreeA) reorder.push_back(e);
+    }
+    else
+    {
+        for (Emitter* e : subtreeA) reorder.push_back(e);
+        for (Emitter* e : subtreeB) reorder.push_back(e);
+    }
+
+    // Capture old indices before overwriting m_emitters slots, so we can
+    // identify which spawn-field on each parent referenced this child.
+    std::vector<size_t> oldIndices(reorder.size());
+    for (size_t k = 0; k < reorder.size(); k++) oldIndices[k] = reorder[k]->index;
+
+    // Place each moved emitter at its new occupied slot and update the
+    // emitter's own index field.
+    for (size_t k = 0; k < occupied.size(); k++)
+    {
+        m_emitters[occupied[k]] = reorder[k];
+        reorder[k]->index       = occupied[k];
+    }
+
+    // Rewrite parent spawn-field indices that referenced any moved emitter.
+    // The parent pointer is stable across this operation; only the integer
+    // index it stored has shifted.
+    for (size_t k = 0; k < reorder.size(); k++)
+    {
+        Emitter* e = reorder[k];
+        if (e->parent == NULL) continue;
+        if      (e->parent->spawnDuringLife == oldIndices[k]) e->parent->spawnDuringLife = e->index;
+        else if (e->parent->spawnOnDeath    == oldIndices[k]) e->parent->spawnOnDeath    = e->index;
+    }
+
+    return true;
 }
 
 void ParticleSystem::deleteEmitter(Emitter* emitter)

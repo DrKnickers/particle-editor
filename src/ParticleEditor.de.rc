@@ -38,6 +38,8 @@ BEGIN
     "G",            ID_VIEW_SHOWGROUND,     VIRTKEY, CONTROL, NOINVERT
     VK_F5,          ID_VIEW_RELOAD_TEXTURES, VIRTKEY, NOINVERT
     VK_F6,          ID_VIEW_RELOAD_SHADERS,  VIRTKEY, NOINVERT
+    VK_UP,          ID_MOVE_EMITTER_UP,     VIRTKEY, ALT, NOINVERT
+    VK_DOWN,        ID_MOVE_EMITTER_DOWN,   VIRTKEY, ALT, NOINVERT
 END
 
 
@@ -408,6 +410,9 @@ BEGIN
         MENUITEM "&Umbenennen",                 ID_EMITTER_RENAME
         MENUITEM "Größenänderung",              ID_EMITTER_RESCALE
         MENUITEM SEPARATOR
+        MENUITEM "Nach &oben verschieben\tAlt+Auf",   ID_MOVE_EMITTER_UP
+        MENUITEM "Nach &unten verschieben\tAlt+Ab",   ID_MOVE_EMITTER_DOWN
+        MENUITEM SEPARATOR
         MENUITEM "Sichtbarkeit einstellen",     ID_TOGGLE_EMITTER_VISIBILITY
         MENUITEM SEPARATOR
         MENUITEM "Löschen",                     ID_EDIT_DELETE
@@ -571,6 +576,8 @@ BEGIN
     IDS_TOOLTIP_EMITTER_TOGGLE "Emitter Sichtbarkeit"
     IDS_TOOLTIP_EMITTERS_SHOW "Alle Emitter zeigen"
     IDS_TOOLTIP_EMITTERS_HIDE "Alle Emitter verbergen"
+    IDS_TOOLTIP_EMITTER_MOVE_UP "Emitter nach oben verschieben\tAlt+Auf"
+    IDS_TOOLTIP_EMITTER_MOVE_DOWN "Emitter nach unten verschieben\tAlt+Ab"
     IDS_PARAMTYPE_EXACT     "Exakt"
     IDS_PARAMTYPE_BOX       "Zufall: Box"
     IDS_PARAMTYPE_SPHERE    "Zufall: Kugel"

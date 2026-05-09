@@ -160,6 +160,7 @@ void EmitterList_ToggleEmitterVisibility(HWND hWnd, HTREEITEM hItem = NULL);
 void EmitterList_SetAllEmitterVisibility(HWND hWnd, bool visible);
 void EmitterList_DeleteEmitter(HWND hWnd);
 void EmitterList_DuplicateEmitter(HWND hWnd);
+void EmitterList_MoveEmitter(HWND hWnd, int direction);  // -1 = up, +1 = down; root-only
 void EmitterList_RenameEmitter(HWND hWnd);
 bool EmitterList_HasFocus(HWND hWnd);
 ParticleSystem::Emitter* EmitterList_GetSelection(HWND hWnd);

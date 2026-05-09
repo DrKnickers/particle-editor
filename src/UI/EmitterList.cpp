@@ -65,11 +65,31 @@ struct EmitterListControl
 
 static void NotifyParent(EmitterListControl* control, UINT code)
 {
-    if (code == ELN_SELCHANGED)
+    if (code == ELN_SELCHANGED || code == ELN_LISTCHANGED)
     {
         // Enable buttons on toolbar
         SendMessage(control->hToolbar, TB_ENABLEBUTTON, ID_DELETE_EMITTER,            control->selection != NULL);
         SendMessage(control->hToolbar, TB_ENABLEBUTTON, ID_TOGGLE_EMITTER_VISIBILITY, control->selection != NULL);
+
+        // Move Up/Down: only meaningful for a root emitter with a neighboring
+        // root in that direction. Recomputed on both SELCHANGED and
+        // LISTCHANGED because a reorder doesn't fire SELCHANGED but does
+        // change which neighbors exist.
+        bool canUp = false, canDown = false;
+        if (control->system != NULL && control->selection != NULL && control->selection->parent == NULL)
+        {
+            const std::vector<ParticleSystem::Emitter*>& emitters = control->system->getEmitters();
+            bool seenSelf = false;
+            for (size_t i = 0; i < emitters.size(); i++)
+            {
+                if (emitters[i]->parent != NULL) continue;
+                if (emitters[i] == control->selection) { seenSelf = true; continue; }
+                if (seenSelf) { canDown = true; break; }
+                canUp = true;
+            }
+        }
+        SendMessage(control->hToolbar, TB_ENABLEBUTTON, ID_MOVE_EMITTER_UP,   canUp);
+        SendMessage(control->hToolbar, TB_ENABLEBUTTON, ID_MOVE_EMITTER_DOWN, canDown);
     }
 
 	NMHDR hdr;
@@ -272,22 +292,31 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
 			control->hToolbar = GetDlgItem(hWnd, IDC_TOOLBAR1);
 			SendMessage(control->hToolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 			HBITMAP hBmpTb = LoadBitmap(hInstance, MAKEINTRESOURCE(IDR_EMITTER_TOOLBAR));
-			hImgList = ImageList_Create(16, 15, ILC_COLOR24 | ILC_MASK, 5, 0);
+			hImgList = ImageList_Create(16, 15, ILC_COLOR24 | ILC_MASK, 7, 0);
 			ImageList_AddMasked(hImgList, hBmpTb, RGB(0,128,128));
 			DeleteObject(hBmpTb);
             SendMessage(control->hToolbar, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_DRAWDDARROWS);
 			SendMessage(control->hToolbar, TB_SETIMAGELIST, 0, (LPARAM)hImgList);
 
-			TBBUTTON buttons[10] = {
+			// Layout: [New ▾] | [Delete] | [▲][▼] | [👁] | [Show All][Hide All]
+			// Move Up / Move Down sit in their own group, separated from the
+			// destructive cluster on the left and the visibility cluster on
+			// the right. They operate on the selected emitter, so they belong
+			// near Delete; not at the far end with the bulk-action buttons.
+			TBBUTTON buttons[11] = {
 				{0, ID_NEW_EMITTER_ROOT,          TBSTATE_ENABLED, BTNS_DROPDOWN},
 				{0, 0,                            TBSTATE_ENABLED, BTNS_SEP},
 				{1, ID_DELETE_EMITTER,            TBSTATE_ENABLED, BTNS_BUTTON},
+				{0, 0,                            TBSTATE_ENABLED, BTNS_SEP},
+				{5, ID_MOVE_EMITTER_UP,           TBSTATE_ENABLED, BTNS_BUTTON},
+				{6, ID_MOVE_EMITTER_DOWN,         TBSTATE_ENABLED, BTNS_BUTTON},
+				{0, 0,                            TBSTATE_ENABLED, BTNS_SEP},
 				{2, ID_TOGGLE_EMITTER_VISIBILITY, TBSTATE_ENABLED, BTNS_BUTTON},
 				{0, 0,                            TBSTATE_ENABLED, BTNS_SEP},
                 {3, ID_SHOW_ALL_EMITTERS, TBSTATE_ENABLED, BTNS_BUTTON},
                 {4, ID_HIDE_ALL_EMITTERS, TBSTATE_ENABLED, BTNS_BUTTON},
 			};
-			SendMessage(control->hToolbar, TB_ADDBUTTONS, 7, (LPARAM)buttons);
+			SendMessage(control->hToolbar, TB_ADDBUTTONS, 11, (LPARAM)buttons);
 
             // Load resources
             control->hNewEmitterMenu     = LoadMenu(hInstance, MAKEINTRESOURCE(IDR_NEW_EMITTER_MENU));
@@ -317,6 +346,8 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                 case ID_NEW_EMITTER_DEATH:         EmitterList_AddDeathEmitter(hWnd); break;
                                 case ID_TOGGLE_EMITTER_VISIBILITY: EmitterList_ToggleEmitterVisibility(hWnd); break;
                                 case ID_DELETE_EMITTER:            EmitterList_DeleteEmitter(hWnd); break;
+                                case ID_MOVE_EMITTER_UP:           EmitterList_MoveEmitter(hWnd, -1); break;
+                                case ID_MOVE_EMITTER_DOWN:         EmitterList_MoveEmitter(hWnd, +1); break;
                                 case ID_SHOW_ALL_EMITTERS:         EmitterList_SetAllEmitterVisibility(hWnd, true);  break;
                                 case ID_HIDE_ALL_EMITTERS:         EmitterList_SetAllEmitterVisibility(hWnd, false); break;
                             }
@@ -346,6 +377,8 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                         {ID_TOGGLE_EMITTER_VISIBILITY, IDS_TOOLTIP_EMITTER_TOGGLE},
                         {ID_SHOW_ALL_EMITTERS,         IDS_TOOLTIP_EMITTERS_SHOW},
                         {ID_HIDE_ALL_EMITTERS,         IDS_TOOLTIP_EMITTERS_HIDE},
+                        {ID_MOVE_EMITTER_UP,           IDS_TOOLTIP_EMITTER_MOVE_UP},
+                        {ID_MOVE_EMITTER_DOWN,         IDS_TOOLTIP_EMITTER_MOVE_DOWN},
                         {0, NULL}
 					};
 
@@ -405,6 +438,26 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                         EnableMenuItem(hPopupMenu, ID_PASTEAS_DEATH,    MF_BYCOMMAND | (control->selection != NULL && control->selection->spawnOnDeath    == -1 ? MF_ENABLED : MF_GRAYED));
                         EnableMenuItem(hPopupMenu, ID_TOGGLE_EMITTER_VISIBILITY, MF_BYCOMMAND | (control->selection != NULL ? MF_ENABLED : MF_GRAYED));
 
+                        // Move Up/Down: enabled only when a root emitter is
+                        // selected and a neighboring root exists in that
+                        // direction. Children can't be reordered (each parent
+                        // has named slots, not a sibling list).
+                        bool canUp = false, canDown = false;
+                        if (control->selection != NULL && control->selection->parent == NULL)
+                        {
+                            const std::vector<ParticleSystem::Emitter*>& emitters = control->system->getEmitters();
+                            bool seenSelf = false;
+                            for (size_t i = 0; i < emitters.size(); i++)
+                            {
+                                if (emitters[i]->parent != NULL) continue;
+                                if (emitters[i] == control->selection) { seenSelf = true; continue; }
+                                if (seenSelf) { canDown = true; break; }
+                                canUp = true;  // some root preceded us
+                            }
+                        }
+                        EnableMenuItem(hPopupMenu, ID_MOVE_EMITTER_UP,   MF_BYCOMMAND | (canUp   ? MF_ENABLED : MF_GRAYED));
+                        EnableMenuItem(hPopupMenu, ID_MOVE_EMITTER_DOWN, MF_BYCOMMAND | (canDown ? MF_ENABLED : MF_GRAYED));
+
                         INT id = TrackPopupMenuEx(hPopupMenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD, cursor.x, cursor.y, hWnd, NULL);
                         switch (id)
                         {
@@ -419,6 +472,8 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                             case ID_EDIT_DELETE: SendMessage(control->hTree, WM_CLEAR, 0, 0); break;
                             case ID_EDIT_PASTE:  SendMessage(control->hTree, WM_PASTE, 0, 0); break;
                             case ID_EMITTER_DUPLICATE: EmitterList_DuplicateEmitter(hWnd); break;
+                            case ID_MOVE_EMITTER_UP:   EmitterList_MoveEmitter(hWnd, -1); break;
+                            case ID_MOVE_EMITTER_DOWN: EmitterList_MoveEmitter(hWnd, +1); break;
                             case ID_PASTEAS_LIFETIME: PasteEmitter(hWnd, control, &EmitterList_AddLifetimeEmitter); break;
                             case ID_PASTEAS_DEATH:    PasteEmitter(hWnd, control, &EmitterList_AddDeathEmitter); break;
                             case ID_EMITTER_RENAME:   TreeView_EditLabel(control->hTree, tvht.hItem); break;
@@ -701,6 +756,13 @@ void EmitterList_SetParticleSystem(HWND hWnd, ParticleSystem* system)
         control->system = NULL;
         OnParticleSystemChange(control, system);
         control->system = system;
+        // OnParticleSystemChange auto-selects the first root via TreeView_
+        // SelectItem, which fires TVN_SELCHANGED while control->system is
+        // still NULL. The toolbar Move Up / Down enable logic depends on
+        // control->system, so it needs a re-fire now that the system is in
+        // place. (Delete / Visibility don't care; they only look at
+        // control->selection, which was correct on the first fire.)
+        NotifyParent(control, ELN_SELCHANGED);
     }
 }
 
@@ -834,6 +896,40 @@ void EmitterList_DuplicateEmitter(HWND hWnd)
     control->selection = pEmitter;
     NotifyParent(control, ELN_LISTCHANGED);
     TreeView_SelectItem(control->hTree, hItem);
+}
+
+void EmitterList_MoveEmitter(HWND hWnd, int direction)
+{
+    EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+    if (control == NULL || control->system == NULL || control->selection == NULL) return;
+
+    ParticleSystem::Emitter* moved = control->selection;
+    if (!control->system->moveEmitter(moved, direction)) return;
+
+    // The vector reordered; rebuild the tree. OnParticleSystemChange clears
+    // selection along the way, so we restore it by walking the tree for the
+    // HTREEITEM whose lParam matches `moved`. The moved emitter is always a
+    // root after a successful moveEmitter (children can't be reordered), so
+    // searching the top level is sufficient.
+    OnParticleSystemChange(control, control->system);
+
+    HTREEITEM hItem = TreeView_GetRoot(control->hTree);
+    while (hItem != NULL)
+    {
+        TVITEM item;
+        item.mask  = TVIF_PARAM;
+        item.hItem = hItem;
+        if (TreeView_GetItem(control->hTree, &item) && (ParticleSystem::Emitter*)item.lParam == moved)
+        {
+            control->selection = moved;
+            TreeView_SelectItem(control->hTree, hItem);
+            break;
+        }
+        hItem = TreeView_GetNextSibling(control->hTree, hItem);
+    }
+
+    NotifyParent(control, ELN_LISTCHANGED);
+    NotifyParent(control, ELN_SELCHANGED);
 }
 
 void EmitterList_RenameEmitter(HWND hWnd)
