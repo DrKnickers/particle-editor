@@ -16,6 +16,17 @@ Conventions:
 
 ## Changelog
 
+### Shaders load from the mod folder
+*2026-05-09*
+
+When a mod is active, the editor resolves all 14 engine shaders through the mod folder before falling back to the base game. Concretely: if a mod ships `Data\Art\Shaders\Engine\PrimModulate.fx` (or any of the other shader files in `ShaderNames[]`), the editor renders with that shader instead of the base game's. The swap happens immediately when a mod is selected — `SelectMod` calls `ReloadShaders()`, which does an all-or-nothing flush and reload of all 14 slots, so any mod-local `.fx` files are picked up in that single call. If a mod shader fails to compile, the previous set is kept alive and a status-bar message reports the failure; a bad mod shader cannot brick a running session.
+
+**How we tackled it.** No new code was required — two existing pieces compose to produce the behaviour. `FileManager::getFile` ([`src/managers.cpp`](src/managers.cpp:13)) prepends `modpath` to any relative path lookup when a mod is active, checking that physical file before iterating base-game paths and megafiles. `ShaderManager::load` ([`src/main.cpp`](src/main.cpp:251)) always resolves shader filenames through that same `FileManager`, so the `ReloadShaders` → `getShader` → `load` → `getFile` chain picks up mod-local shaders automatically once `SetModPath` has been called. This entry was written because the connection between the two was non-obvious: the Mods menu entry (PR #5) describes file-resolution priority, and the Hot-reload entry (PR #8) describes the reload trigger, but neither made the end-to-end shader-override capability explicit.
+
+**Issues encountered and resolutions.** None — the composition works correctly as-is. The all-or-nothing semantics of `ReloadShaders()` already guard against partial failure: new shaders are loaded into a temporary array first and only swapped into `m_pShaders[]` if all 14 succeed.
+
+---
+
 ### Persist view settings across sessions (background color, ground toggle, custom colors) + Reset View Settings
 *2026-05-09 · #27*
 
