@@ -17,7 +17,7 @@ Conventions:
 ## Changelog
 
 ### Shaders load from the mod folder
-*2026-05-09*
+*2026-05-09 · [`4942747`](https://github.com/DrKnickers/particle-editor/commit/4942747) · #28*
 
 When a mod is active, the editor resolves all 14 engine shaders through the mod folder before falling back to the base game. Concretely: if a mod ships `Data\Art\Shaders\Engine\PrimModulate.fx` (or any of the other shader files in `ShaderNames[]`), the editor renders with that shader instead of the base game's. The swap happens immediately when a mod is selected — `SelectMod` calls `ReloadShaders()`, which does an all-or-nothing flush and reload of all 14 slots, so any mod-local `.fx` files are picked up in that single call. If a mod shader fails to compile, the previous set is kept alive and a status-bar message reports the failure; a bad mod shader cannot brick a running session.
 
