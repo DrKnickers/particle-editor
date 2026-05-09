@@ -1,4 +1,4 @@
-// Microsoft Visual C++ generated resource script.
+﻿// Microsoft Visual C++ generated resource script.
 //
 #include "Resources\resource.en.h"
 
@@ -19,7 +19,7 @@
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 #ifdef _WIN32
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
-#pragma code_page(1252)
+#pragma code_page(65001)
 #endif //_WIN32
 
 /////////////////////////////////////////////////////////////////////////////
@@ -141,10 +141,10 @@ BEGIN
     CONTROL         "",IDC_SPINNER12,"Spinner",WS_TABSTOP,4,190,47,12,WS_EX_CLIENTEDGE
     CONTROL         "",IDC_SPINNER22,"Spinner",WS_TABSTOP,52,190,47,12,WS_EX_CLIENTEDGE
     CONTROL         "",IDC_SPINNER23,"Spinner",WS_TABSTOP,100,190,47,12,WS_EX_CLIENTEDGE
-    LTEXT           "units/s�",IDC_STATIC,150,192,26,8
+    LTEXT           "units/s²",IDC_STATIC,150,192,26,8
     LTEXT           "Gravity acceleration:",IDC_STATIC,6,205,68,8
     CONTROL         "",IDC_SPINNER4,"Spinner",WS_TABSTOP,100,203,47,12,WS_EX_CLIENTEDGE
-    LTEXT           "units/s�",IDC_STATIC,150,205,26,8
+    LTEXT           "units/s²",IDC_STATIC,150,205,26,8
     CONTROL         "Object space acceleration",IDC_CHECK9,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,231,99,10
     GROUPBOX        "Ground interaction",IDC_STATIC,0,248,197,43
     LTEXT           "Behavior:",IDC_STATIC,6,260,32,8
@@ -156,7 +156,7 @@ BEGIN
     LTEXT           "%",IDC_STATIC,150,145,8,8
     LTEXT           "Inward acceleration:",IDC_STATIC,6,218,67,8
     CONTROL         "",IDC_SPINNER9,"Spinner",WS_TABSTOP,100,216,47,12,WS_EX_CLIENTEDGE
-    LTEXT           "units/s�",IDC_STATIC,150,218,26,8
+    LTEXT           "units/s²",IDC_STATIC,150,218,26,8
 END
 
 IDD_EMITTER_PROPS2 DIALOGEX 0, 0, 197, 294
@@ -197,15 +197,15 @@ BEGIN
     LTEXT           "Minimum scale:",-1,6,57,48,8
     LTEXT           "Tail length:",-1,18,148,36,8
     LTEXT           "%",-1,180,57,8,8
-    LTEXT           "�",-1,57,198,8,8
+    LTEXT           "°",-1,57,198,8,8
     LTEXT           "%",-1,180,96,8,8
     LTEXT           "Red",-1,23,84,14,8
     LTEXT           "Green",-1,64,84,20,8
     LTEXT           "Blue",-1,110,84,14,8
     LTEXT           "Alpha",-1,150,84,19,8
     LTEXT           "x",-1,148,149,8,8
-    LTEXT           "�",-1,113,198,8,8
-    LTEXT           "�",-1,64,198,8,8
+    LTEXT           "°",-1,113,198,8,8
+    LTEXT           "±",-1,64,198,8,8
 END
 
 IDD_EMITTER_PROPS1 DIALOGEX 0, 0, 197, 294
@@ -596,7 +596,7 @@ END
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_NLD)
 #ifdef _WIN32
 LANGUAGE LANG_DUTCH, SUBLANG_DUTCH
-#pragma code_page(1252)
+#pragma code_page(65001)
 #endif //_WIN32
 
 #ifdef APSTUDIO_INVOKED

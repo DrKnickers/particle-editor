@@ -324,6 +324,24 @@ If you ever add another place that indexes into `m_emitters` from a value that c
 
 ---
 
+## Resource-file encoding: UTF-8 with BOM
+
+Both [`src/ParticleEditor.en.rc`](src/ParticleEditor.en.rc) and [`src/ParticleEditor.de.rc`](src/ParticleEditor.de.rc) are now stored as **UTF-8 with BOM** and declare `#pragma code_page(65001)`. Previously they declared cp1252 with no BOM, which any editor defaulting to UTF-8 would silently corrupt: high bytes (`°`, `±`, `²`, `ä`, `ö`, `ü`, `ß`) decoded as invalid UTF-8 → got substituted with `U+FFFD` → were saved back as the three-byte sequence `EF BF BD`. The RC compiler then read those three bytes per the `cp1252` pragma as `ï¿½`, which is what the user saw on dialog labels.
+
+A previous commit (`ef30981`) hand-fixed three specific positions on the Appearance tab but didn't address the underlying encoding mismatch — so the same class of mojibake remained in 3 other `units/s²` labels in `en.rc` and 70 sites in `de.rc` (every umlaut, plus the same `s²`). This change repairs all of them in one pass and prevents regressions: any modern editor will correctly round-trip the BOM-tagged UTF-8 file.
+
+**How we tackled it.** A one-shot PowerShell script ([`tasks/fix_rc_encoding.ps1`](tasks/fix_rc_encoding.ps1)) reads each file as cp1252 (so legitimate `0xB0`/`0xB1`/`0xB2` decode correctly while `EF BF BD` becomes the 3-char string `"ï¿½"`), applies an ordered list of word-level substitutions (longest / most-specific first, e.g. `Größenänderung` before `Größe`), swaps the pragma, and writes UTF-8 with BOM via `Encoding.UTF8` constructor with `encoderShouldEmitUTF8Identifier = true`. Replacement table is a list of `(pattern, replacement)` pairs rather than a hashtable — see issues below.
+
+**Issues encountered and resolutions.**
+1. **PowerShell hashtables are case-insensitive** — `[ordered]@{}` collapsed `"Einfügen"` and `"einfügen"` (and `"Löschen"` / `"löschen"`) into one entry, so the uppercase variants silently dropped, leaving 6 mojibake sites un-replaced. Fix: switch the replacement table to an ordered array of `@(pattern, replacement)` pairs and iterate explicitly.
+2. **PowerShell 5.1 reads `.ps1` files as ANSI without a BOM**, so the script's own German source-string literals were misinterpreted on first run (parse errors at `Änderungen`, `&` characters mis-tokenized). Fix: ensure the script file itself is saved as UTF-8 *with* BOM. Worth knowing for any future repair scripts touching non-ASCII source.
+3. **One mnemonic placement was off-pattern**: the German "Edit / Paste" menu item is `"E&infügen"` — the `&` mnemonic underline sits between `E` and `inf`, not before the leading letter as in `"&Einfügen"`. The generic pattern `Einfügen` therefore didn't match it. Added an explicit `E&infügen` entry alongside the regular one.
+4. **The label at `IDC_STATIC11` reads `Stößverzögerung`, not `Stoßverzögerung`.** The mojibake byte count forces three umlauts between `St` and `gerung`, which only fits the (nonstandard) `Stöß…` form — most likely a typo in the original German translation. Restored verbatim rather than "fixing" it; out of scope for an encoding-repair change.
+
+If a future edit ever re-introduces `EF BF BD` triplets, run `tasks/fix_rc_encoding.ps1` (or just grep both `.rc` files for those bytes) to catch it.
+
+---
+
 ## Open Issues
 
 - **Mod-bundled megafiles** (`Mods\<name>\Data\MegaFiles.xml`) are not loaded. Most particle-overriding mods ship loose files, which the loose-file path covers. Total conversions like Mod's Revenge or Awakening of the Rebellion that package assets in their own `.meg` would need a follow-up: extend `FileManager` with a `m_modMegafiles` vector that's searched before `m_megafiles`, populated/cleared on `SetModPath`.
