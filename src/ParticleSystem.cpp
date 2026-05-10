@@ -1026,6 +1026,72 @@ bool ParticleSystem::moveEmitterToRootIndex(Emitter* emitter, size_t targetRootI
     return true;
 }
 
+// Walk `candidate`'s parent chain looking for `ancestor`. Returns true
+// if candidate IS ancestor or appears anywhere in ancestor's subtree.
+//
+// Used by reparentEmitter for cycle detection: dropping source onto
+// target is a cycle iff target is in source's subtree, which by the
+// equivalence above is the same as "ancestor=source is reachable
+// from candidate=target by walking up parent pointers."
+//
+// Bottom-up walk (via parent pointers) rather than top-down (via
+// spawn fields) so this function itself can't recurse into a
+// malformed cycle. Bounded by tree depth, which in practice is in
+// the single digits.
+static bool IsInSubtreeOf(const ParticleSystem::Emitter* candidate,
+                          const ParticleSystem::Emitter* ancestor)
+{
+    if (candidate == NULL || ancestor == NULL) return false;
+    const ParticleSystem::Emitter* p = candidate;
+    while (p != NULL)
+    {
+        if (p == ancestor) return true;
+        p = p->parent;
+    }
+    return false;
+}
+
+bool ParticleSystem::reparentEmitter(Emitter* source, Emitter* target, bool useSpawnDuringLife)
+{
+    // Validation. Bail before any mutation if any check fails — the
+    // system stays untouched on a refused reparent.
+    if (source == NULL || target == NULL || source == target) return false;
+
+    // Slot-switching under the same parent is out of scope for the v1
+    // reparent gesture; refuse so the drag-drop UX doesn't confuse
+    // users with a "what just happened?" no-op visual.
+    if (source->parent == target) return false;
+
+    // Cycle: target must not be in source's subtree. If it were,
+    // putting source under target would make source a descendant of
+    // itself.
+    if (IsInSubtreeOf(target, source)) return false;
+
+    size_t& targetSlot = useSpawnDuringLife ? target->spawnDuringLife
+                                            : target->spawnOnDeath;
+    if (targetSlot != (size_t)-1) return false;     // chosen slot occupied
+
+    // Detach from old parent (if any). Compare each slot to source's
+    // index explicitly — don't assume Lifetime vs Death; a malformed
+    // file or a future bug elsewhere could leave only one of the two
+    // referencing source.
+    if (source->parent != NULL)
+    {
+        if      (source->parent->spawnDuringLife == source->index) source->parent->spawnDuringLife = (size_t)-1;
+        else if (source->parent->spawnOnDeath    == source->index) source->parent->spawnOnDeath    = (size_t)-1;
+    }
+
+    // Attach to new parent. m_emitters position and source's index
+    // are unchanged — addLifetimeEmitter / addDeathEmitter establish
+    // that vector layout doesn't follow tree layout, so leaving
+    // source in place avoids unrelated index churn (and the index
+    // itself is what the new spawn slot has to store).
+    targetSlot     = source->index;
+    source->parent = target;
+
+    return true;
+}
+
 void ParticleSystem::deleteEmitter(Emitter* emitter)
 {
     // Invalidate its parent references to it

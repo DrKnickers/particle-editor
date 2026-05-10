@@ -210,9 +210,13 @@
 #define ID_SPAWNER_TRIGGER              40097
 #define ID_EDIT_UNDO                    40098
 #define ID_EDIT_REDO                    40099
+#define ID_REPARENT_AS_LIFETIME         40110
+#define ID_REPARENT_AS_DEATH            40111
 
 #define IDS_TOOLTIP_EDIT_UNDO           182
 #define IDS_TOOLTIP_EDIT_REDO           183
+#define IDS_MENU_REPARENT_LIFETIME      184
+#define IDS_MENU_REPARENT_DEATH         185
 
 // Spawner dialog
 #define IDD_SPAWNER                      150

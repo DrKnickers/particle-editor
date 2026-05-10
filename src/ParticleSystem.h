@@ -268,6 +268,27 @@ public:
     // would be a no-op (target position equals current position).
     bool           moveEmitterToRootIndex(Emitter* emitter, size_t targetRootIndex);
 
+    // Reparent `source` so it becomes a child of `target` via target's
+    // spawnDuringLife (when useSpawnDuringLife is true) or spawnOnDeath
+    // (when false). The full subtree under source is preserved — its
+    // children stay attached to source, and source's spawn-field
+    // indices are unchanged. If source had a parent before, that
+    // parent's spawn-slot reference to source is cleared to -1.
+    //
+    // Used by the drag-and-drop reparent gesture (drop emitter S onto
+    // emitter T in the tree). Distinct from addLifetimeEmitter /
+    // addDeathEmitter, which allocate a brand-new Emitter; this just
+    // re-wires linkage on existing emitters.
+    //
+    // Returns true on success. Returns false (and leaves the system
+    // untouched) if any of:
+    //   - source or target is NULL, or source == target
+    //   - target's chosen slot is currently occupied (not -1)
+    //   - target is in source's subtree (would create a cycle)
+    //   - source's current parent is target (slot-switching is out
+    //     of scope; refused for the v1 reparent gesture)
+    bool           reparentEmitter(Emitter* source, Emitter* target, bool useSpawnDuringLife);
+
     Emitter&       getEmitter(size_t index)       { return *m_emitters[index]; }
     const Emitter& getEmitter(size_t index) const { return *m_emitters[index]; }
 	void           deleteEmitter(Emitter* emitter);
