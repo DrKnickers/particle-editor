@@ -16,6 +16,20 @@ Conventions:
 
 ## Changelog
 
+### Bump-mapped particles inherit curve-editor color tracks
+*2026-05-10 · TODO · TODO*
+
+The Red / Green / Blue tracks in the curve editor now tint bump-mapped particles (`BLEND_BUMP`, `BLEND_DECAL_BUMP`) the same way they tint every other blend mode. Previously, the editor silently dropped those tracks for bump particles — the alpha track flowed through but RGB was overwritten with a rotation-tangent encoding `(0.5+0.5·cos(angle), 0.5+0.5·sin(angle), 0)`, which produced an apparent green/yellow/red hue cycle that depended on each particle's spawn rotation and bore no relation to anything the user had authored. The override didn't match what the EaW engine actually writes in-game, so the editor's render diverged from the in-game appearance for any bump particle the user attempted to colorize.
+
+**How we tackled it.** One delete in [`src/EmitterInstance.cpp`](src/EmitterInstance.cpp:597). The conditional that branched on `m_emitter.blendMode == BLEND_BUMP || BLEND_DECAL_BUMP` and overwrote `color.x/y/z` with the rotation tangent is gone; both branches now fall through to the same `color.{x,y,z} += SampleTrack(...)` path that non-bump modes already used. The pre-existing comment "the RGB components of the vertex color contain the tangent vector" was a Petroglyph-shader-design note that the editor had picked up as a literal CPU contract, but the in-game engine never honored it that way — it just writes curve-editor color for every blend mode.
+
+**Issues encountered and resolutions.**
+
+- **Took an in-game diagnostic to confirm the engine's actual behaviour.** The shader header comment in `PrimParticleBumpAlpha.fx` documented the design contract as "vertex color RGB = tangent for bump particles," and the editor faithfully implemented it. Reasoning from the comment alone, the natural conclusion was that the engine did the same and the special case must stay. To verify, a temporary diagnostic build of `PrimParticleBumpAlpha.fxo` was deployed to the Mod folder that simply returned `In.Diff.rgb` as the pixel color; in-game testing showed bump particles rendering with the curve-editor color, proving the engine does not honor the documented contract for bump-mode vertex color. The editor's special case was the only divergent actor. Trust shader comments as design intent, not engine behaviour.
+- **Bump shader's tangent dependency.** The original bump shader (`PrimParticleBumpAlpha.fx`) reads vertex color RGB to construct the tangent space, so freeing that channel for color tinting depends on the bump shader sourcing its tangent elsewhere. The shader-side change — deriving tangent from `ddx/ddy` of UV in the pixel shader — lives in the Mod mod folder for now (`Data/Art/SHADERS/Source/Engine/PrimParticleBumpAlpha.fx`) and will be re-homed when this work moves to the appropriate shader repository. Without that shader change, the editor change still works in isolation — bump particles just have garbage tangent data, which only matters if you also use the bump shader.
+
+---
+
 ### Undo / redo for the particle editor (`Ctrl+Z` / `Ctrl+Y`)
 *2026-05-10 · [`a0be64a`](https://github.com/DrKnickers/particle-editor/commit/a0be64a) · #31*
 

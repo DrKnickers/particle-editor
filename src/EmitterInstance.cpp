@@ -594,22 +594,17 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
 	verts[1].TexCoord1 = verts[1].TexCoord0 = D3DXVECTOR2(u + d, v + d);
 	verts[0].TexCoord1 = verts[0].TexCoord0 = D3DXVECTOR2(u,     v + d);
 
-	// Color
+	// Color — per-particle tint from curve-editor tracks. Verified against the
+	// game (in-game vertex-color diagnostic, 2026): the engine writes the
+	// curve-editor color into COLOR0 for bump blend modes too, so the previous
+	// editor-only override that wrote a rotation-tangent encoding here was
+	// diverging the editor from in-game appearance. The bump shader derives
+	// its tangent from ddx/ddy of UV in the PS, so it doesn't need vertex
+	// color for that purpose.
     D3DXVECTOR4 color = particle.m_baseColor;
-    if (m_emitter.blendMode == ParticleSystem::BLEND_BUMP || m_emitter.blendMode == ParticleSystem::BLEND_DECAL_BUMP)
-    {
-        // For these blend modes, the RGB components of the vertex color contain
-        // the tangent vector, which rotates along with the particle
-        color.x = 0.5f * cosf(angle) + 0.5f;
-	    color.y = 0.5f * sinf(angle) + 0.5f;
-        color.z = 0;
-    }
-    else
-    {
-    	color.x += SampleTrack(particle, ParticleSystem::TRACK_RED_CHANNEL,   relTime);
-    	color.y += SampleTrack(particle, ParticleSystem::TRACK_GREEN_CHANNEL, relTime);
-    	color.z += SampleTrack(particle, ParticleSystem::TRACK_BLUE_CHANNEL,  relTime);
-    }
+    color.x += SampleTrack(particle, ParticleSystem::TRACK_RED_CHANNEL,   relTime);
+    color.y += SampleTrack(particle, ParticleSystem::TRACK_GREEN_CHANNEL, relTime);
+    color.z += SampleTrack(particle, ParticleSystem::TRACK_BLUE_CHANNEL,  relTime);
 	color.w += SampleTrack(particle, ParticleSystem::TRACK_ALPHA_CHANNEL, relTime);
 	verts[3].Color = verts[2].Color = verts[1].Color = verts[0].Color = D3DCOLOR_COLORVALUE(color.x, color.y, color.z, color.w);
 }
