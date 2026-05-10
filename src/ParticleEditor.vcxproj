@@ -172,6 +172,7 @@
     <ClInclude Include="ParticleSystem.h" />
     <ClInclude Include="ParticleSystemInstance.h" />
     <ClInclude Include="Rescale.h" />
+    <ClInclude Include="Autosave.h" />
     <ClInclude Include="SpawnerDriver.h" />
     <ClInclude Include="UndoStack.h" />
     <ClInclude Include="resource.h" />
@@ -198,6 +199,7 @@
     <ClCompile Include="ParticleSystem.cpp" />
     <ClCompile Include="ParticleSystemInstance.cpp" />
     <ClCompile Include="Rescale.cpp" />
+    <ClCompile Include="Autosave.cpp" />
     <ClCompile Include="SpawnerDriver.cpp" />
     <ClCompile Include="UndoStack.cpp" />
     <ClCompile Include="SphericalHarmonics.cpp" />

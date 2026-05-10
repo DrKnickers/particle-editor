@@ -12,6 +12,7 @@
 #include "UI/UI.h"
 #include "SpawnerDriver.h"
 #include "UndoStack.h"
+#include "Autosave.h"
 #include "utils.h"
 #include "engine.h"
 #include "ParticleSystemInstance.h"
@@ -955,6 +956,115 @@ static void OnFileChange(APPLICATION_INFO* info, ParticleSystem* system)
     UpdateUndoRedoUI(info);
 }
 
+// Format a FILETIME's age (now - ft) into "X seconds" or "X minutes"
+// for the recovery prompt. Coarse units only — the user doesn't need
+// "3 minutes 42 seconds" precision.
+static wstring FormatAge(const FILETIME& ft)
+{
+    FILETIME now;
+    GetSystemTimeAsFileTime(&now);
+    ULARGE_INTEGER a, b;
+    a.LowPart = ft.dwLowDateTime;  a.HighPart = ft.dwHighDateTime;
+    b.LowPart = now.dwLowDateTime; b.HighPart = now.dwHighDateTime;
+    if (b.QuadPart <= a.QuadPart) return L"just now";
+    ULONGLONG diffSec = (b.QuadPart - a.QuadPart) / 10000000ULL;
+    wchar_t buf[64];
+    if (diffSec < 60)        swprintf_s(buf, 64, L"%llu seconds ago", diffSec);
+    else if (diffSec < 3600) swprintf_s(buf, 64, L"%llu minutes ago", diffSec / 60);
+    else                     swprintf_s(buf, 64, L"%llu hours ago",   diffSec / 3600);
+    return buf;
+}
+
+// Build and show the recovery prompt. Returns IDYES / IDNO / IDCANCEL
+// per the MessageBox conventions; the caller maps these to restore-
+// recent / restore-stable / discard.
+//
+// Button mapping varies depending on which tiers are available:
+//   - Both:        MB_YESNOCANCEL — Yes=recent, No=stable, Cancel=discard
+//   - Recent only: MB_YESNO       — Yes=recent, No=discard
+//   - Stable only: MB_YESNO       — Yes=stable, No=discard
+//
+// Callers interpret the return separately for each case (see startup
+// flow below).
+static int ShowRecoveryPrompt(APPLICATION_INFO* info, const Autosave::OrphanSession& s)
+{
+    wstring originalLabel = s.originalFilename.empty()
+                          ? L"Unsaved new file"
+                          : s.originalFilename;
+
+    wstring msg = L"Unsaved changes detected from a previous session.\n\nOriginal: ";
+    msg += originalLabel;
+    msg += L"\n\n";
+
+    UINT flags = MB_ICONQUESTION;
+    bool hasRecent = !s.recentPath.empty();
+    bool hasStable = !s.stablePath.empty();
+
+    if (hasRecent && hasStable)
+    {
+        flags |= MB_YESNOCANCEL;
+        msg += L"[Yes]    Restore most recent autosave from "  + FormatAge(s.recentMtime) + L"\n";
+        msg += L"[No]     Restore stable backup from "         + FormatAge(s.stableMtime) + L"\n";
+        msg += L"[Cancel] Discard and start fresh";
+    }
+    else if (hasRecent)
+    {
+        flags |= MB_YESNO;
+        msg += L"[Yes] Restore autosave from "        + FormatAge(s.recentMtime) + L"\n";
+        msg += L"[No]  Discard and start fresh";
+    }
+    else  // stable-only
+    {
+        flags |= MB_YESNO;
+        msg += L"[Yes] Restore stable backup from " + FormatAge(s.stableMtime) + L"\n";
+        msg += L"[No]  Discard and start fresh";
+    }
+
+    return MessageBoxW(info->hMainWnd, msg.c_str(),
+                      L"Particle Editor — Recover unsaved changes?", flags);
+}
+
+// Load `restorePath` as the current particle system but display it as
+// if it were `originalFilename`. Sets info->changed = true so the
+// title-bar asterisk shows and Ctrl+S targets the original. Unlike
+// LoadFile, doesn't push the temp path into the file-history menu —
+// the user shouldn't see %TEMP%\...\autosave-1234-recent.alo as a
+// recent file.
+static bool RestoreFromAutosave(APPLICATION_INFO* info,
+                                const wstring& restorePath,
+                                const wstring& originalFilename)
+{
+    if (info->engine != NULL) info->engine->Clear();
+    delete info->particleSystem;
+    info->particleSystem = NULL;
+
+    PhysicalFile* file = new PhysicalFile(restorePath);
+    ParticleSystem* system = NULL;
+    try
+    {
+        system = new ParticleSystem(file);
+        file->Release();
+    }
+    catch (wexception& e)
+    {
+        system = NULL;
+        file->Release();
+        MessageBox(info->hMainWnd, LoadString(IDS_ERROR_FILE_OPEN, e.what()).c_str(),
+                   NULL, MB_OK | MB_ICONERROR);
+    }
+    if (system == NULL) return false;
+
+    // Pretend we loaded the original — info->filename drives the
+    // title bar and the Ctrl+S target. OnFileChange would normally
+    // SetFileChanged(false); override afterwards so the title shows
+    // the asterisk (the recovered content is still unsaved relative
+    // to the on-disk original).
+    info->filename = originalFilename;
+    OnFileChange(info, system);
+    SetFileChanged(info, true);
+    return true;
+}
+
 static bool LoadFile(APPLICATION_INFO* info, const wstring& filename)
 {
 	// Delete old particle system
@@ -1009,6 +1119,10 @@ static void DoNewFile(APPLICATION_INFO* info)
     ParticleSystem* system = new ParticleSystem();
     system->addRootEmitter();
     OnFileChange(info, system);
+    // Discarding in-progress work — the brand-new file has nothing
+    // worth recovering, and any leftover autosave from the previous
+    // session here would be confusing.
+    Autosave::DeleteOurSession();
 }
 
 static bool DoOpenFile(APPLICATION_INFO* info)
@@ -1096,6 +1210,11 @@ static bool DoSaveFile(APPLICATION_INFO* info, bool saveas = false)
     SetFileChanged(info, false);
     info->undoStack.MarkSaved();
     UpdateUndoRedoUI(info);
+    // User just saved — the on-disk file is now authoritative; the
+    // autosave is no longer needed for recovery. Delete both tiers
+    // so we don't leave orphans that would prompt for recovery on
+    // next launch.
+    Autosave::DeleteOurSession();
 	return true;
 }
 
@@ -1135,6 +1254,11 @@ static bool DoCloseFile(APPLICATION_INFO* info)
 	info->filename   = L"";
 	info->selectedEmitter = NULL;
     OnFileChange(info, NULL);
+    // Closing means the in-memory work is being discarded (with the
+    // user's consent via DoCheckChanges if it was dirty). The
+    // autosave from this session is no longer meaningful — clear it
+    // so it doesn't surface as orphan-from-crash on next launch.
+    Autosave::DeleteOurSession();
 	return true;
 }
 
@@ -1527,8 +1651,34 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
             AppendHistory(info, hWnd);
 			ShowWindow(info->hTrackEditors[0], SW_SHOW);
             SetFocus(info->hEmitterList);
+
+			// Start the two autosave timers. They fire whether or not
+			// a file is loaded; the WM_TIMER handler bails when the
+			// model is unchanged or absent. See src/Autosave.h.
+			SetTimer(hWnd, Autosave::RECENT_TIMER_ID, Autosave::RECENT_INTERVAL_MS, NULL);
+			SetTimer(hWnd, Autosave::STABLE_TIMER_ID, Autosave::STABLE_INTERVAL_MS, NULL);
 			break;
 		}
+
+        case WM_TIMER:
+            // Two autosave tiers — see src/Autosave.h. Both gated on
+            // particleSystem != NULL && info->changed so we don't
+            // write identical bytes when nothing has changed since
+            // the last tick. Write() is best-effort; IO errors are
+            // swallowed so a disk-full / permission-denied condition
+            // doesn't spam the user every 30 seconds.
+            if (wParam == Autosave::RECENT_TIMER_ID || wParam == Autosave::STABLE_TIMER_ID)
+            {
+                if (info->particleSystem != NULL && info->changed)
+                {
+                    Autosave::Tier tier = (wParam == Autosave::RECENT_TIMER_ID)
+                                        ? Autosave::Tier::Recent
+                                        : Autosave::Tier::Stable;
+                    Autosave::Write(*info->particleSystem, info->filename, tier);
+                }
+                return 0;
+            }
+            break;
 
         case WM_CLOSE:
             if (DoCloseFile(info))
@@ -1538,6 +1688,12 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
             return 0;
 
 		case WM_DESTROY:
+            // Clean shutdown — kill the autosave timers and remove
+            // this session's recovery files. Any leftover here would
+            // be misinterpreted as orphan-from-crash on next launch.
+            KillTimer(hWnd, Autosave::RECENT_TIMER_ID);
+            KillTimer(hWnd, Autosave::STABLE_TIMER_ID);
+            Autosave::DeleteOurSession();
             if (info->engine != NULL)
             {
 			    info->engine->Clear();
@@ -3204,7 +3360,13 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
         bool loaded = false;
         if (info->engine != NULL)
         {
-			// See if a file was specified
+			// See if a file was specified on the command line. CLI
+			// arg wins over autosave recovery — if the user double-
+			// clicked a .alo in Explorer, they want THAT file, not
+			// a recovery prompt that interrupts their gesture. Any
+			// orphan autosave stays untouched in TEMP for next
+			// launch (the next plain-launch without a CLI arg will
+			// see and prompt for it).
 			for (size_t i = 1; i < argv.size(); i++)
 			{
 				if (PathFileExists(argv[i].c_str()) && !PathIsDirectory(argv[i].c_str()))
@@ -3213,6 +3375,47 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 					break;
 				}
 			}
+        }
+
+        // Recovery flow — only if no CLI file was loaded. Scans
+        // %TEMP%\AloParticleEditor\ for autosave files left behind by
+        // a crashed prior editor session (PID no longer matches a
+        // live ParticleEditor.exe). Prompts the user; on Yes/No
+        // restores the chosen tier; on Cancel discards. The orphan
+        // session is consumed (files deleted) in all three cases.
+        if (!loaded && info->engine != NULL)
+        {
+            Autosave::OrphanSession recover;
+            if (Autosave::ScanForOrphan(&recover))
+            {
+                int choice = ShowRecoveryPrompt(info, recover);
+                wstring restorePath;
+                if (choice == IDYES && !recover.recentPath.empty())
+                {
+                    restorePath = recover.recentPath;
+                }
+                else if ((choice == IDYES && recover.recentPath.empty()
+                       && !recover.stablePath.empty())
+                      || (choice == IDNO  && !recover.stablePath.empty()
+                       && !recover.recentPath.empty()))
+                {
+                    // YES on stable-only prompt, or NO on a both-tiers prompt
+                    restorePath = recover.stablePath;
+                }
+                // Any other case (Cancel, or NO on a recent-only / stable-only
+                // prompt) leaves restorePath empty → no restore.
+
+                if (!restorePath.empty())
+                {
+                    loaded = RestoreFromAutosave(info, restorePath, recover.originalFilename);
+                }
+
+                // Orphan files are consumed regardless of the user's
+                // choice. If we leave them, they'd surface again on
+                // the next launch — confusing if the user just
+                // chose "Discard."
+                Autosave::DeleteOrphan(recover);
+            }
         }
 
         if (!loaded)

@@ -60,6 +60,9 @@
     <ClInclude Include="SpawnerDriver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Autosave.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="UndoStack.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -123,6 +126,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SpawnerDriver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Autosave.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="UndoStack.cpp">
