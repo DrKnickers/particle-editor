@@ -17,7 +17,7 @@ Conventions:
 ## Changelog
 
 ### Drag-and-drop reordering in the emitter tree
-*2026-05-10 · TODO*
+*2026-05-10 · [`df725b3`](https://github.com/DrKnickers/particle-editor/commit/df725b3) · #35*
 
 Click-and-drag a root emitter in the tree to reorder it past one or more sibling roots. The whole subtree (children, grandchildren, anything reachable via spawn-field traversal) moves with the source as a block; spawn-field indices on every affected parent are rewritten in one shot via the new `ParticleSystem::moveEmitterToRootIndex`. Visual feedback while dragging combines a translucent drag-image ghost (`ImageList_BeginDrag` / `…DragMove`) under the cursor with an insertion-mark line (`TVM_SETINSERTMARK`) showing where the drop will land. `IDC_NO` cursor over invalid drop targets — children, the source's own current gap, and outside the tree's client area — so the user gets unambiguous feedback before committing. Esc cancels mid-drag with no change to the file. One Ctrl+Z reverts a successful drop; the existing undo capture treats `ELN_LISTCHANGED` as a structural op (coalesce-key 0, never coalesced into adjacent edits).
 
