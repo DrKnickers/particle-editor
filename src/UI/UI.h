@@ -158,6 +158,11 @@ void EmitterList_SetParticleSystem(HWND hWnd, ParticleSystem* system);
 // rather than the flat m_emitters index. Used by undo/redo to
 // re-select the emitter that was active at capture time.
 void EmitterList_SelectEmitter(HWND hWnd, ParticleSystem::Emitter* emitter);
+// True while a drag-drop reorder is in progress. The main message pump
+// gates TranslateAccelerator on this so destructive accelerators
+// (Ctrl+Z, Ctrl+S, Ctrl+N, F5, ...) can't fire mid-drag and pull the
+// ParticleSystem out from under the drag's stale Emitter* pointers.
+bool EmitterList_IsDragging(HWND hWnd);
 void EmitterList_SelectionChanged(HWND hWnd);
 void EmitterList_AddRootEmitter    (HWND hWnd, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
 void EmitterList_AddLifetimeEmitter(HWND hWnd, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());

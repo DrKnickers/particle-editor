@@ -1,6 +1,7 @@
 #include "UI/UI.h"
 #include "utils.h"
 #include "Rescale.h"
+#include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
 using namespace std;
 
 // Registered clipboard format
@@ -61,6 +62,17 @@ struct EmitterListControl
     HWND            hToolbar;
 	ParticleSystem* system;
     ParticleSystem::Emitter* selection;
+
+    // Drag-drop reorder state. dragSource non-NULL means a drag is in
+    // progress; the public EmitterList_IsDragging accessor reads from
+    // this. All drag-drop teardown goes through EndDrag so each field
+    // gets cleared in one place — see Risks 1-3 in tasks/todo.md.
+    ParticleSystem::Emitter* dragSource;
+    HIMAGELIST               dragImageList;
+    HTREEITEM                dragInsertTarget;  // current insertion-mark target
+    bool                     dragInsertAfter;   // false = above, true = below
+    UINT_PTR                 dragScrollTimer;   // 0 = no autoscroll, else timer id
+    int                      dragScrollDir;     // -1 up, +1 down (only valid when timer set)
 };
 
 static void NotifyParent(EmitterListControl* control, UINT code)
@@ -231,6 +243,248 @@ static LRESULT WINAPI LabelEditProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
     return CallWindowProc(wndProc, hWnd, uMsg, wParam, lParam);
 }
 
+// Forward decls — defined further down. Used by the drop-commit path
+// to rebuild the tree post-move and re-select the moved emitter
+// (OnParticleSystemChange auto-selects the first root and would
+// otherwise lose the user's drag target).
+static HTREEITEM FindTreeItemByEmitter(HWND hTree, HTREEITEM hItem,
+                                        const ParticleSystem::Emitter* target);
+static void      OnParticleSystemChange(EmitterListControl* control, ParticleSystem* system);
+static void      NotifyParent(EmitterListControl* control, UINT code);
+
+//
+// Drag-and-drop reorder for the emitter tree
+//
+// State lives on EmitterListControl::dragSource and friends. The tree's
+// subclassed wndproc (EmitterTreeViewWindowProc, below) handles the
+// per-message updates while a drag is in progress; TVN_BEGINDRAG lives
+// in DlgEmitterListProc's WM_NOTIFY handler. All teardown — capture
+// release, image-list destroy, timer kill, insertion-mark clear —
+// goes through EndDrag so each step happens in exactly one place.
+// See tasks/todo.md for the full plan and risk mitigations.
+
+static const UINT_PTR AUTOSCROLL_TIMER_ID    = 1;
+static const UINT     AUTOSCROLL_INTERVAL_MS = 50;
+static const int      AUTOSCROLL_HOT_ZONE_PX = 16;
+
+// Position of `root` in the root-only sequence (Nth emitter with
+// parent==NULL, counting from 0). SIZE_MAX if not a root in `sys`.
+// Use this — not the flat m_emitters index — when comparing against
+// drop-target gap indices, since children sit between roots in the
+// flat vector and would skew the count.
+static size_t RootIndexOf(const ParticleSystem* sys, const ParticleSystem::Emitter* root)
+{
+    if (sys == NULL || root == NULL) return (size_t)-1;
+    const std::vector<ParticleSystem::Emitter*>& emitters = sys->getEmitters();
+    size_t k = 0;
+    for (size_t i = 0; i < emitters.size(); i++)
+    {
+        if (emitters[i]->parent != NULL) continue;
+        if (emitters[i] == root) return k;
+        k++;
+    }
+    return (size_t)-1;
+}
+
+// "Gap index" 0..numRoots:
+//   gap 0          = above first root
+//   gap numRoots   = below last root
+//   gap K (0<K<N)  = between root K-1 and root K
+struct DropTarget
+{
+    size_t    gap;        // valid range [0, numRoots]
+    HTREEITEM hTarget;    // tree item the insertion mark anchors to (NULL when above first / below last)
+    bool      after;      // false = insertion-mark above hTarget, true = below
+    bool      valid;
+};
+
+// Compute the drop target for cursor `pt` (in tree client coords).
+// Walks up from the hovered item to its root ancestor, then picks
+// above/below based on the item-rect midpoint. Cursor outside the
+// tree client area or below the last item gets the
+// above-first / below-last special cases. Children-as-target are
+// detected by the caller (we still walk to the root ancestor, but
+// the caller refuses the drop if the cursor was hovering a child
+// — see RowInDeepZone below) per the locked-in scope.
+static DropTarget ComputeDropTarget(HWND hTree, POINT pt, size_t numRoots)
+{
+    DropTarget out = { 0, NULL, false, false };
+    if (numRoots == 0) return out;
+
+    // Cursor outside the tree's client area entirely → invalid.
+    RECT clientRect;
+    GetClientRect(hTree, &clientRect);
+    if (pt.x < clientRect.left || pt.x >= clientRect.right
+        || pt.y < clientRect.top || pt.y >= clientRect.bottom)
+    {
+        return out;
+    }
+
+    TVHITTESTINFO tvht;
+    tvht.pt = pt;
+    HTREEITEM hHit = TreeView_HitTest(hTree, &tvht);
+
+    if (hHit == NULL)
+    {
+        // Empty area inside the tree. If above the first item → gap 0,
+        // anchored above first root. If below the last → gap numRoots,
+        // anchored below last root.
+        HTREEITEM hFirst = TreeView_GetRoot(hTree);
+        if (hFirst == NULL) return out;
+        RECT firstRect;
+        TreeView_GetItemRect(hTree, hFirst, &firstRect, TRUE);
+        if (pt.y < firstRect.top)
+        {
+            out.gap = 0; out.hTarget = hFirst; out.after = false; out.valid = true;
+            return out;
+        }
+        // Walk to the last root in the tree (visible last sibling).
+        HTREEITEM hLast = hFirst;
+        while (HTREEITEM h = TreeView_GetNextSibling(hTree, hLast)) hLast = h;
+        RECT lastRect;
+        TreeView_GetItemRect(hTree, hLast, &lastRect, TRUE);
+        if (pt.y >= lastRect.bottom)
+        {
+            out.gap = numRoots; out.hTarget = hLast; out.after = true; out.valid = true;
+            return out;
+        }
+        return out;  // somewhere weird (between collapsed-children gap?) — invalid
+    }
+
+    // Walk up to the root ancestor of the hovered item.
+    HTREEITEM hRoot = hHit;
+    while (HTREEITEM hParent = TreeView_GetParent(hTree, hRoot)) hRoot = hParent;
+    bool hoverIsChild = (hHit != hRoot);
+
+    // Find the root's position in the root-sibling list of the tree
+    // (this matches the data-model root index because OnParticleSystemChange
+    // iterates m_emitters in order when populating root siblings).
+    size_t rootIdx = 0;
+    for (HTREEITEM h = TreeView_GetRoot(hTree); h != NULL && h != hRoot;
+         h = TreeView_GetNextSibling(hTree, h))
+    {
+        rootIdx++;
+    }
+
+    RECT itemRect;
+    TreeView_GetItemRect(hTree, hRoot, &itemRect, TRUE);
+    int midY = (itemRect.top + itemRect.bottom) / 2;
+
+    if (hoverIsChild)
+    {
+        // Cursor is over a child node — invalid drop target per the
+        // locked-in scope (reparenting is the next ROADMAP entry, not
+        // this PR). Caller shows IDC_NO and clears the insertion mark.
+        return out;
+    }
+
+    out.hTarget = hRoot;
+    if (pt.y < midY)
+    {
+        out.gap   = rootIdx;
+        out.after = false;
+    }
+    else
+    {
+        out.gap   = rootIdx + 1;
+        out.after = true;
+    }
+    out.valid = true;
+    return out;
+}
+
+static void EndDrag(EmitterListControl* control)
+{
+#ifndef NDEBUG
+    // Only emit the END diagnostic if there was actually a drag to end —
+    // EndDrag is called defensively from OnParticleSystemChange / WM_DESTROY
+    // and we don't want spurious "[DnD] END" prints in the common no-op case.
+    bool wasActive = (control->dragSource != NULL
+                   || control->dragImageList != NULL
+                   || control->dragScrollTimer != 0);
+#endif
+
+    // Clear dragSource FIRST so the WM_CAPTURECHANGED that ReleaseCapture
+    // fires synchronously below sees dragSource == NULL and short-circuits
+    // its own EndDrag call (preventing harmless-but-confusing re-entry).
+    control->dragSource       = NULL;
+    control->dragInsertTarget = NULL;
+    control->dragInsertAfter  = false;
+
+    if (control->dragScrollTimer != 0)
+    {
+        KillTimer(control->hTree, control->dragScrollTimer);
+        control->dragScrollTimer = 0;
+        control->dragScrollDir   = 0;
+    }
+    if (control->dragImageList != NULL)
+    {
+        ImageList_DragLeave(control->hTree);
+        ImageList_EndDrag();
+        ImageList_Destroy(control->dragImageList);
+        control->dragImageList = NULL;
+    }
+    TreeView_SetInsertMark(control->hTree, NULL, FALSE);
+    if (GetCapture() == control->hTree) ReleaseCapture();
+
+#ifndef NDEBUG
+    if (wasActive)
+    {
+        DWORD gdiAfter = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+        printf("[DnD] END   gdi=%lu\n", gdiAfter); fflush(stdout);
+    }
+#endif
+}
+
+// Update insertion mark + cursor based on the cursor's current
+// position. Call from WM_MOUSEMOVE and from the autoscroll WM_TIMER
+// handler. Returns the computed DropTarget so callers can reuse it
+// (e.g. WM_LBUTTONUP commits the move based on the same target).
+static DropTarget UpdateInsertMark(EmitterListControl* control, POINT pt)
+{
+    size_t numRoots = 0;
+    if (control->system != NULL)
+    {
+        const std::vector<ParticleSystem::Emitter*>& emitters = control->system->getEmitters();
+        for (size_t i = 0; i < emitters.size(); i++) if (emitters[i]->parent == NULL) numRoots++;
+    }
+
+    DropTarget t = ComputeDropTarget(control->hTree, pt, numRoots);
+
+    // No-op detection: dropping on the source's own gap doesn't change
+    // anything; show IDC_NO and clear the insertion mark so the user
+    // gets unambiguous feedback.
+    if (t.valid && control->dragSource != NULL)
+    {
+        size_t srcIdx = RootIndexOf(control->system, control->dragSource);
+        if (srcIdx != (size_t)-1 && (t.gap == srcIdx || t.gap == srcIdx + 1))
+        {
+            t.valid = false;
+        }
+    }
+
+    if (t.valid)
+    {
+        TreeView_SetInsertMark(control->hTree, t.hTarget, t.after ? TRUE : FALSE);
+        SetCursor(LoadCursor(NULL, IDC_ARROW));
+        control->dragInsertTarget = t.hTarget;
+        control->dragInsertAfter  = t.after;
+    }
+    else
+    {
+        TreeView_SetInsertMark(control->hTree, NULL, FALSE);
+        SetCursor(LoadCursor(NULL, IDC_NO));
+        control->dragInsertTarget = NULL;
+    }
+    return t;
+}
+
+bool EmitterList_IsDragging(HWND hWnd)
+{
+    EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+    return control != NULL && control->dragSource != NULL;
+}
+
 static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
@@ -253,6 +507,115 @@ static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM w
         case WM_CUT:   if (!CopyEmitter(hWnd, control))  break;
         case WM_CLEAR: EmitterList_DeleteEmitter(hWnd);  break;
         case WM_PASTE: PasteEmitter(hWnd, control);      break;
+
+        case WM_MOUSEMOVE:
+            if (control != NULL && control->dragSource != NULL)
+            {
+                POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+
+                // Auto-scroll: cursor in top/bottom hot zone starts (or
+                // continues) the timer. The timer-handler does the actual
+                // scroll + insert-mark + ghost re-anchor atomically; the
+                // mousemove just keeps the timer alive while the cursor
+                // sits in the zone (mousemoves stop firing when the
+                // cursor is stationary, so per-mousemove scroll alone
+                // would stall).
+                RECT cr;
+                GetClientRect(hWnd, &cr);
+                int dir = 0;
+                if (pt.y < cr.top    + AUTOSCROLL_HOT_ZONE_PX) dir = -1;
+                if (pt.y > cr.bottom - AUTOSCROLL_HOT_ZONE_PX) dir = +1;
+                if (dir != 0 && control->dragScrollTimer == 0)
+                {
+                    control->dragScrollDir   = dir;
+                    control->dragScrollTimer = SetTimer(hWnd, AUTOSCROLL_TIMER_ID, AUTOSCROLL_INTERVAL_MS, NULL);
+                }
+                else if (dir == 0 && control->dragScrollTimer != 0)
+                {
+                    KillTimer(hWnd, control->dragScrollTimer);
+                    control->dragScrollTimer = 0;
+                }
+                else if (dir != 0)
+                {
+                    control->dragScrollDir = dir;
+                }
+
+                ImageList_DragMove(pt.x, pt.y);
+                UpdateInsertMark(control, pt);
+                return 0;
+            }
+            break;
+
+        case WM_TIMER:
+            if (control != NULL && control->dragSource != NULL
+                && wParam == AUTOSCROLL_TIMER_ID)
+            {
+                // Atomic scroll + recompute. The cursor hasn't moved
+                // (no WM_MOUSEMOVE fired) but visible items shift, so
+                // we re-anchor the ghost to absolute screen coords and
+                // recompute the insertion mark against the new layout.
+                SendMessage(hWnd, WM_VSCROLL,
+                            control->dragScrollDir < 0 ? SB_LINEUP : SB_LINEDOWN, 0);
+                POINT pt; GetCursorPos(&pt); ScreenToClient(hWnd, &pt);
+                ImageList_DragMove(pt.x, pt.y);
+                UpdateInsertMark(control, pt);
+                return 0;
+            }
+            break;
+
+        case WM_LBUTTONUP:
+            if (control != NULL && control->dragSource != NULL)
+            {
+                POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                DropTarget t = UpdateInsertMark(control, pt);
+                ParticleSystem::Emitter* moved = control->dragSource;
+                bool committed = false;
+                if (t.valid && control->system != NULL)
+                {
+                    committed = control->system->moveEmitterToRootIndex(moved, t.gap);
+                }
+
+                EndDrag(control);
+
+                if (committed)
+                {
+                    // Tree shape may have changed — rebuild and re-select
+                    // the moved emitter (OnParticleSystemChange auto-selects
+                    // first root, which is wrong if the user moved a
+                    // different root). Then notify so the editor flags the
+                    // file as changed and the undo system captures.
+                    OnParticleSystemChange(control, control->system);
+                    HTREEITEM hMoved = FindTreeItemByEmitter(
+                        control->hTree, TreeView_GetRoot(control->hTree), moved);
+                    if (hMoved != NULL)
+                    {
+                        control->selection = moved;
+                        TreeView_SelectItem(control->hTree, hMoved);
+                    }
+                    NotifyParent(control, ELN_LISTCHANGED);
+                }
+                return 0;
+            }
+            break;
+
+        case WM_KEYDOWN:
+            if (control != NULL && control->dragSource != NULL && wParam == VK_ESCAPE)
+            {
+                EndDrag(control);
+                return 0;
+            }
+            break;
+
+        case WM_CAPTURECHANGED:
+            // Capture stolen (Alt+Tab, focus theft, our own ReleaseCapture
+            // call). EndDrag is idempotent — null-checks every step — so
+            // this safely no-ops when capture was already released by us.
+            if (control != NULL && control->dragSource != NULL
+                && (HWND)lParam != hWnd)
+            {
+                EndDrag(control);
+            }
+            break;
     }
     WNDPROC wndProc = (WNDPROC)GetProp(hWnd, L"Old_WindowProc");
     return CallWindowProc(wndProc, hWnd, uMsg, wParam, lParam);
@@ -325,6 +688,10 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
         }
 
         case WM_DESTROY:
+            // Defensive: if the user Alt+F4'd mid-drag, tear down the
+            // drag image list and timer so we don't leak GDI handles
+            // until process exit. EndDrag is idempotent.
+            EndDrag(control);
             DestroyMenu(control->hEmitterContextMenu);
             DestroyMenu(control->hNewEmitterMenu);
             break;
@@ -544,6 +911,67 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                     return TBDDRET_DEFAULT;
                 }
 
+                case TVN_BEGINDRAG:
+                {
+                    // Initiate a drag-drop reorder. Win32's drag-threshold
+                    // gate (SM_CXDRAG / SM_CYDRAG) already prevents this
+                    // from firing on a click-without-movement, so a
+                    // simple selection click never reaches here.
+                    NMTREEVIEW* nmtv = (NMTREEVIEW*)lParam;
+                    ParticleSystem::Emitter* src =
+                        (ParticleSystem::Emitter*)nmtv->itemNew.lParam;
+
+                    // Refuse if (a) not a root — children fill named
+                    // parent slots and aren't reorderable, (b) only one
+                    // root — nowhere to drop, (c) a label edit is in
+                    // progress — drag mid-rename would be confusing.
+                    if (src == NULL || src->parent != NULL) break;
+                    if (TreeView_GetEditControl(control->hTree) != NULL) break;
+                    if (control->system != NULL)
+                    {
+                        size_t numRoots = 0;
+                        const std::vector<ParticleSystem::Emitter*>& v = control->system->getEmitters();
+                        for (size_t i = 0; i < v.size(); i++) if (v[i]->parent == NULL) numRoots++;
+                        if (numRoots < 2) break;
+                    }
+
+                    HIMAGELIST hDragList = TreeView_CreateDragImage(control->hTree, nmtv->itemNew.hItem);
+                    if (hDragList == NULL) break;
+
+#ifndef NDEBUG
+                    // Snapshot GDI handle count at drag start. Compared in
+                    // EndDrag — a positive delta points at a leak in the
+                    // drag-image / insertion-mark / timer cleanup. Cheap
+                    // to leave on in Debug; prints once per drag.
+                    DWORD gdiBefore = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+                    printf("[DnD] BEGIN src='%s' gdi=%lu\n", src->name.c_str(), gdiBefore);
+                    fflush(stdout);
+#endif
+
+                    control->dragSource    = src;
+                    control->dragImageList = hDragList;
+
+                    // Compute hotspot relative to the dragged item so the
+                    // ghost tracks the cursor at the same offset where it
+                    // was picked up. ImageList_BeginDrag's hotspot is the
+                    // pixel within the image that anchors to the cursor.
+                    RECT itemRect;
+                    if (TreeView_GetItemRect(control->hTree, nmtv->itemNew.hItem, &itemRect, TRUE))
+                    {
+                        ImageList_BeginDrag(hDragList, 0,
+                            nmtv->ptDrag.x - itemRect.left,
+                            nmtv->ptDrag.y - itemRect.top);
+                    }
+                    else
+                    {
+                        ImageList_BeginDrag(hDragList, 0, 0, 0);
+                    }
+                    ImageList_DragEnter(control->hTree, nmtv->ptDrag.x, nmtv->ptDrag.y);
+
+                    SetCapture(control->hTree);
+                    break;
+                }
+
                 case TVN_BEGINLABELEDIT:
                 {
                     // Workaround for bug in Knowledge Base item Q130691; subclass the edit control
@@ -603,8 +1031,14 @@ static EmitterListControl* CreateEmitterListControl(HWND hOwner, HINSTANCE hInst
 	EmitterListControl* control = new EmitterListControl;
 	if (control != NULL)
 	{
-        control->selection = NULL;
-		control->system    = NULL;
+        control->selection         = NULL;
+		control->system            = NULL;
+        control->dragSource        = NULL;
+        control->dragImageList     = NULL;
+        control->dragInsertTarget  = NULL;
+        control->dragInsertAfter   = false;
+        control->dragScrollTimer   = 0;
+        control->dragScrollDir     = 0;
         control->hDialog   = CreateDialogParam(hInstance, MAKEINTRESOURCE(IDD_EMITTER_LIST), hOwner, DlgEmitterListProc, (LPARAM)control);
         if (control->hDialog == NULL)
         {
@@ -702,6 +1136,13 @@ static void OnParticleSystemChange_AddChildren(HWND hTree, ParticleSystem* syste
 
 static void OnParticleSystemChange(EmitterListControl* control, ParticleSystem* system)
 {
+    // Defensive teardown: if a drag is somehow still active when the
+    // particle system is being swapped (e.g. file open / new fired
+    // mid-drag despite the accelerator gate), the drag's
+    // dragSource pointer would dangle into the old system. EndDrag is
+    // idempotent so a no-op when the common case (no drag) holds.
+    EndDrag(control);
+
 	// Fill the emitter list
 	TreeView_DeleteAllItems(control->hTree);
     control->selection = NULL;

@@ -837,6 +837,13 @@ static void UpdateUndoRedoUI(APPLICATION_INFO* info)
 
 static void DoUndo(APPLICATION_INFO* info)
 {
+    // Belt-and-braces guard against the accelerator gate at main.cpp's
+    // pump regressing — a Restore mid-drag would free the Emitter the
+    // drag holds a pointer to. The pump should already block this,
+    // but the cost is two lines and the value is "we don't crash even
+    // if the pump regresses."
+    if (EmitterList_IsDragging(info->hEmitterList)) return;
+
     const std::vector<char>* buf = NULL;
     size_t selIdx = SIZE_MAX;
     if (info->undoStack.Undo(&buf, &selIdx) && buf != NULL)
@@ -860,6 +867,8 @@ static void DoUndo(APPLICATION_INFO* info)
 
 static void DoRedo(APPLICATION_INFO* info)
 {
+    if (EmitterList_IsDragging(info->hEmitterList)) return;  // see DoUndo above
+
     const std::vector<char>* buf = NULL;
     size_t selIdx = SIZE_MAX;
     if (info->undoStack.Redo(&buf, &selIdx) && buf != NULL)
@@ -3229,7 +3238,18 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 				{
 					consumed = true;
 				}
-				if (!consumed && !TranslateAccelerator(info->hMainWnd, hAccel, &msg) && !IsDialogMessage(info->hMainWnd, &msg))
+				// Skip TranslateAccelerator while a tree drag-drop is in
+				// progress: a stray Ctrl+Z mid-drag would call DoUndo →
+				// RestoreFromSnapshot → delete info->particleSystem while
+				// EmitterListControl::dragSource still points into the freed
+				// system, producing a use-after-free on the next mouse
+				// message. The drag's WM_KEYDOWN handler still receives Esc
+				// because dispatch falls through to TranslateMessage /
+				// DispatchMessage when accelerators are skipped.
+				bool dragging = EmitterList_IsDragging(info->hEmitterList);
+				if (!consumed
+				    && (dragging || !TranslateAccelerator(info->hMainWnd, hAccel, &msg))
+				    && !IsDialogMessage(info->hMainWnd, &msg))
 				{
 					TranslateMessage(&msg);
 					DispatchMessage(&msg);

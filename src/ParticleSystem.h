@@ -253,6 +253,21 @@ public:
     // no neighboring root in the requested direction.
     bool           moveEmitter(Emitter* emitter, int direction);
 
+    // Move `emitter` (must be a root) so its position in the root sequence
+    // becomes `targetRootIndex` — i.e., the K-th emitter with parent==NULL,
+    // counting from 0. The whole subtree moves as a block; spawn-field
+    // indices on every affected parent are rewritten to match the new
+    // layout, the same way moveEmitter does for adjacent swaps.
+    //
+    // Distinct from moveEmitter (which is a single neighbor-swap) so the
+    // drag-and-drop reorder path can land at any target root index in one
+    // shot rather than looping ±1 swaps and emitting intermediate states.
+    //
+    // Returns true on success. Returns false if the emitter isn't a root,
+    // the target index is out of range (> count of roots), or the move
+    // would be a no-op (target position equals current position).
+    bool           moveEmitterToRootIndex(Emitter* emitter, size_t targetRootIndex);
+
     Emitter&       getEmitter(size_t index)       { return *m_emitters[index]; }
     const Emitter& getEmitter(size_t index) const { return *m_emitters[index]; }
 	void           deleteEmitter(Emitter* emitter);

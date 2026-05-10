@@ -926,6 +926,106 @@ bool ParticleSystem::moveEmitter(Emitter* emitter, int direction)
     return true;
 }
 
+bool ParticleSystem::moveEmitterToRootIndex(Emitter* emitter, size_t targetRootIndex)
+{
+    if (emitter == NULL || emitter->parent != NULL) return false;
+
+    // Build the current root order. Root index = position in this list.
+    std::vector<Emitter*> roots;
+    roots.reserve(m_emitters.size());
+    size_t sourceRootIdx = (size_t)-1;
+    for (size_t i = 0; i < m_emitters.size(); i++)
+    {
+        if (m_emitters[i]->parent == NULL)
+        {
+            if (m_emitters[i] == emitter) sourceRootIdx = roots.size();
+            roots.push_back(m_emitters[i]);
+        }
+    }
+    if (sourceRootIdx == (size_t)-1) return false;     // not actually a root in this system
+    if (targetRootIndex > roots.size()) return false;  // out of range
+
+    // No-op detection: dropping at gap [sourceRootIdx, sourceRootIdx+1]
+    // leaves the layout unchanged. (Gap K means "before root K"; gap == N
+    // means "below last root".)
+    if (targetRootIndex == sourceRootIdx || targetRootIndex == sourceRootIdx + 1) return false;
+
+    // Compute the new root order. Remove the source first, then re-insert
+    // at the target index, adjusting for the removal-shift if the target
+    // is below the source.
+    std::vector<Emitter*> newRoots;
+    newRoots.reserve(roots.size());
+    for (size_t i = 0; i < roots.size(); i++)
+    {
+        if (i != sourceRootIdx) newRoots.push_back(roots[i]);
+    }
+    size_t insertAt = (targetRootIndex > sourceRootIdx) ? targetRootIndex - 1 : targetRootIndex;
+    newRoots.insert(newRoots.begin() + insertAt, emitter);
+
+    // Collect each root's subtree in m_emitters vector order. Iterating
+    // m_emitters preserves intra-subtree ordering (matches the convention
+    // moveEmitter already established for adjacent swaps); pre-order via
+    // spawn-field traversal would also work but produces a different
+    // ordering when a subtree's emitters aren't contiguous in m_emitters.
+    auto rootOf = [this](Emitter* e) -> Emitter* {
+        while (e->parent != NULL) e = e->parent;
+        return e;
+    };
+
+    std::vector<std::vector<Emitter*>> subtrees(roots.size());
+    std::vector<size_t> rootOrderIdx(m_emitters.size(), (size_t)-1);
+    for (size_t i = 0; i < roots.size(); i++) rootOrderIdx[roots[i]->index] = i;
+
+    for (size_t i = 0; i < m_emitters.size(); i++)
+    {
+        Emitter* e = m_emitters[i];
+        Emitter* r = rootOf(e);
+        size_t   k = rootOrderIdx[r->index];
+        subtrees[k].push_back(e);
+    }
+
+    // Reassemble m_emitters by walking the new root order and concatenating
+    // each root's subtree.
+    std::vector<Emitter*> reordered;
+    reordered.reserve(m_emitters.size());
+    std::vector<size_t>   oldIndices;
+    oldIndices.reserve(m_emitters.size());
+    for (Emitter* r : newRoots)
+    {
+        // Find the original index of this root in `roots` so we can copy
+        // its already-collected subtree.
+        for (size_t k = 0; k < roots.size(); k++)
+        {
+            if (roots[k] == r)
+            {
+                for (Emitter* e : subtrees[k])
+                {
+                    oldIndices.push_back(e->index);
+                    reordered.push_back(e);
+                }
+                break;
+            }
+        }
+    }
+
+    // Install the new layout and reassign indices.
+    m_emitters = reordered;
+    for (size_t i = 0; i < m_emitters.size(); i++) m_emitters[i]->index = i;
+
+    // Rewrite parent spawn-field indices that referenced any moved emitter.
+    // The parent pointer is stable across this operation; only the integer
+    // index it stored has shifted.
+    for (size_t k = 0; k < reordered.size(); k++)
+    {
+        Emitter* e = reordered[k];
+        if (e->parent == NULL) continue;
+        if      (e->parent->spawnDuringLife == oldIndices[k]) e->parent->spawnDuringLife = e->index;
+        else if (e->parent->spawnOnDeath    == oldIndices[k]) e->parent->spawnOnDeath    = e->index;
+    }
+
+    return true;
+}
+
 void ParticleSystem::deleteEmitter(Emitter* emitter)
 {
     // Invalidate its parent references to it
