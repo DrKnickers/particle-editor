@@ -17,7 +17,7 @@ Conventions:
 ## Changelog
 
 ### Bump-mapped particles inherit curve-editor color tracks
-*2026-05-10 · TODO · TODO*
+*2026-05-10 · [`06c6452`](https://github.com/DrKnickers/particle-editor/commit/06c6452) · #33*
 
 The Red / Green / Blue tracks in the curve editor now tint bump-mapped particles (`BLEND_BUMP`, `BLEND_DECAL_BUMP`) the same way they tint every other blend mode. Previously, the editor silently dropped those tracks for bump particles — the alpha track flowed through but RGB was overwritten with a rotation-tangent encoding `(0.5+0.5·cos(angle), 0.5+0.5·sin(angle), 0)`, which produced an apparent green/yellow/red hue cycle that depended on each particle's spawn rotation and bore no relation to anything the user had authored. The override didn't match what the EaW engine actually writes in-game, so the editor's render diverged from the in-game appearance for any bump particle the user attempted to colorize.
 
