@@ -11,9 +11,41 @@ class ParticleSystemInstance : public Object3D
 	const ParticleSystem&    m_system;
 	std::list<std::unique_ptr<EmitterInstance>> m_emitters;
     float                    m_zDistance;
+    bool                     m_spawnerOwned   = false;
+
+    // Spawner-owned motion + lifetime. Active iff m_spawnerOwned is true
+    // AND m_spawnTime >= 0 (set on first Update so we have a real
+    // currentTime baseline). On each Update tick, position advances by
+    // velocity·dt; once (currentTime - spawnTime) >= maxLifetime,
+    // StopSpawning is called (existing particles fade rather than pop).
+    float                    m_maxLifetime    = 0.0f;   // 0 = no spawner-imposed cap
+    TimeF                    m_spawnTime      = -1.0f;
+    TimeF                    m_lastUpdateTime = -1.0f;
+    bool                     m_lifetimeExpired = false;
 
 public:
     const ParticleSystem& GetParticleSystem() { return m_system; }
+
+    // Tag set by the SpawnerDriver after a spawn so the engine can
+    // count just spawner-emitted instances toward the 50-instance cap
+    // without including Shift+click spawns or other future sources.
+    //
+    // Also captures the parent-inherited velocity (anchor.velocity +
+    // self) into the instance's own m_velocity so it survives the
+    // subsequent Detach() — Object3D::Detach captures absolute
+    // position but not velocity, since the legacy mouseCursor flow
+    // intentionally drops velocity on Shift-release. Spawner-owned
+    // instances need to keep moving, so we capture eagerly here.
+    void MarkSpawnerOwned()
+    {
+        m_spawnerOwned = true;
+        m_velocity     = GetVelocity();
+    }
+    bool IsSpawnerOwned() const     { return m_spawnerOwned; }
+
+    // Set by the SpawnerDriver after spawn. 0 means "no cap"; > 0 means
+    // call StopSpawning when (currentTime - spawnTime) reaches it.
+    void SetMaxLifetime(float seconds) { m_maxLifetime = seconds; }
 
     void SetPosition(const D3DXVECTOR3& position);
 

@@ -12,6 +12,43 @@ void ParticleSystemInstance::onParticleSystemChanged(const Engine& engine, int t
 
 int ParticleSystemInstance::Update(TimeF currentTime)
 {
+    // Spawner-owned: advance position by velocity·dt and enforce the
+    // optional max-lifetime cap. Non-spawner-owned instances skip this
+    // and behave as before (parent-tracked or static-after-detach).
+    if (m_spawnerOwned)
+    {
+        if (m_spawnTime < 0.0f)
+        {
+            // First Update after spawn — establish the time baseline.
+            m_spawnTime      = currentTime;
+            m_lastUpdateTime = currentTime;
+        }
+        else
+        {
+            float dt = (float)(currentTime - m_lastUpdateTime);
+            if (dt > 0.0f)
+            {
+                // m_position is the absolute world position post-Detach;
+                // m_velocity was stamped at spawn time. Drive ballistic
+                // motion at constant velocity (no acceleration in v1.5).
+                m_position += m_velocity * dt;
+                m_lastUpdateTime = currentTime;
+            }
+        }
+
+        if (!m_lifetimeExpired
+            && m_maxLifetime > 0.0f
+            && (currentTime - m_spawnTime) >= m_maxLifetime)
+        {
+            // Stop new particles from being emitted; existing particles
+            // fade out naturally over their own track lifetimes. Soft
+            // cap rather than a hard Kill — looks better for typical
+            // testing (tail puffs / smoke decay rather than pop-out).
+            StopSpawning();
+            m_lifetimeExpired = true;
+        }
+    }
+
     // Calculate Z-Distance
     const D3DXMATRIX& view = m_engine.GetViewMatrix();
     D3DXVECTOR3 pos = GetPosition();

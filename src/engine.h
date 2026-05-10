@@ -124,6 +124,18 @@ public:
     int GetNumParticles() const { return m_numParticles; }
     int GetNumInstances() const { return (int)m_instances.size(); }
 
+    // Count of currently-alive instances that were emitted by the
+    // SpawnerDriver (vs. Shift-click spawns or future sources). Used
+    // to enforce the spawner's MAX_ACTIVE_INSTANCES cap.
+    //
+    // Note: spawner-owned instances are NOT killed when the user opens
+    // a different .alo. They live until their particles die naturally,
+    // and continue to count toward the cap. Same lifetime rules as
+    // Shift+click spawns. If a user cranks the rate then loads a
+    // different file, expect a brief throttle while the old instances
+    // expire.
+    int ActiveSpawnerInstanceCount() const;
+
     void OnEmitterCreated(int numParticles)   { m_numEmitters++; m_numParticles += numParticles; }
     void OnEmitterDestroyed() { m_numEmitters--; }
 

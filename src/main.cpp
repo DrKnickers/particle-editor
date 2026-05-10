@@ -10,6 +10,7 @@
 
 #include "exceptions.h"
 #include "UI/UI.h"
+#include "SpawnerDriver.h"
 #include "utils.h"
 #include "engine.h"
 #include "ParticleSystemInstance.h"
@@ -463,6 +464,11 @@ static void             WriteShowGround(bool show);
 static bool             ReadCustomColors(COLORREF out[16]);
 static void             WriteCustomColors(const COLORREF in[16]);
 static void             ResetViewSettings();
+static bool             ReadSpawnerDialogPos(RECT& out);
+static void             WriteSpawnerDialogPos(const RECT& in);
+static void             ToggleSpawnerDialog(APPLICATION_INFO* info);
+static INT_PTR CALLBACK SpawnerDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+static void             SpawnerDlg_LoadFromConfig(HWND hDlg, const SpawnerConfig& cfg);
 
 struct APPLICATION_INFO
 {
@@ -504,6 +510,12 @@ struct APPLICATION_INFO
 	HMENU           hModsMenu;       // top-level "Mods" submenu (HMENU of the popup)
 	HFONT           hMenuFont;       // cached for owner-drawn mod entries
 	HFONT           hMenuItalicFont; // italic variant for the nickname parenthetical
+
+	// Programmable particle spawner (View → Spawner… / F7)
+	SpawnerDriver*  spawner;            // owned; created in WinMain init
+	HWND            hSpawnerDlg;        // NULL until first show; lazy-created
+	bool            spawnerVisible;     // tracks visibility for menu check-mark
+	RECT            spawnerWindowRect;  // last-known position (session + registry)
 
 	// Dragging
 	enum { NONE, ROTATE, MOVE, ZOOM, OBJECT_Z } dragmode;
@@ -964,11 +976,28 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             }
 			break;
 
+        case ID_EMITTER_SPAWNER:
+            ToggleSpawnerDialog(info);
+            break;
+
+        case ID_SPAWNER_TRIGGER:
+            // Shift+Space global hotkey. In Manual mode, fires a single
+            // burst from the current path-anchor with the configured
+            // velocity / jitter. In Auto mode, no-op (the schedule is
+            // already running).
+            if (info->spawner != NULL)
+            {
+                info->spawner->Trigger(info->particleSystem, info->engine);
+            }
+            break;
+
         case ID_VIEW_RESET_VIEW_SETTINGS:
             // Confirm — destructive: clears persisted background color,
             // ground-plane visibility, and the ChooseColor custom-color
             // palette. Camera is intentionally NOT included; it has its
-            // own Reset Camera command above.
+            // own Reset Camera command above. Spawner config is
+            // session-only and resets each launch; we still reset the
+            // in-memory spawner state here for parity.
             if (MessageBox(info->hMainWnd,
                            L"Reset background color, ground plane visibility, and the color picker's custom colors to defaults?",
                            L"Reset View Settings",
@@ -989,6 +1018,15 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
                 }
                 COLORREF zero[16] = {0};
                 ColorButton_SetCustomColors(zero);
+                if (info->spawner != NULL)
+                {
+                    info->spawner->SetConfig(SpawnerConfig());
+                    if (info->hSpawnerDlg != NULL)
+                    {
+                        SpawnerDlg_LoadFromConfig(info->hSpawnerDlg, info->spawner->GetConfig());
+                    }
+                }
+                memset(&info->spawnerWindowRect, 0, sizeof(info->spawnerWindowRect));
             }
             break;
 
@@ -1040,6 +1078,19 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
 static void Render(APPLICATION_INFO* info)
 {
     static FPSMeasurer measurer;
+    static TimeF       lastFrameTime = 0.0f;
+
+    // Drive the programmable spawner first so any new instances it
+    // creates are visible to the engine update + render this frame.
+    {
+        TimeF now = GetTimeF();
+        float dt = (lastFrameTime > 0.0f) ? (float)(now - lastFrameTime) : 0.0f;
+        lastFrameTime = now;
+        if (info->spawner != NULL)
+        {
+            info->spawner->Tick(dt, info->particleSystem, info->engine);
+        }
+    }
 
 	// Update and Render!
 	info->engine->Update();
@@ -1053,6 +1104,18 @@ static void Render(APPLICATION_INFO* info)
     SendMessage(info->hStatusBar, SB_SETTEXT, 0, (LPARAM)LoadString(IDS_STATUS_INSTANCES, info->engine->GetNumInstances(), info->engine->GetNumEmitters()).c_str());
     SendMessage(info->hStatusBar, SB_SETTEXT, 1, (LPARAM)LoadString(IDS_STATUS_PARTICLES, info->engine->GetNumParticles()).c_str());
     SendMessage(info->hStatusBar, SB_SETTEXT, 2, (LPARAM)LoadString(IDS_STATUS_FPS,       (int)measurer.getFPS()).c_str());
+
+    // If the spawner dialog is open, refresh its status counter.
+    if (info->spawner != NULL && info->engine != NULL && info->hSpawnerDlg != NULL && info->spawnerVisible)
+    {
+        wchar_t buf[64];
+        int active = info->engine->ActiveSpawnerInstanceCount();
+        bool capped = active >= SpawnerDriver::MAX_ACTIVE_INSTANCES;
+        swprintf_s(buf, 64,
+                   capped ? L"Status: %d / %d active (limited)" : L"Status: %d / %d active",
+                   active, SpawnerDriver::MAX_ACTIVE_INSTANCES);
+        SetDlgItemText(info->hSpawnerDlg, IDC_SPAWNER_STATUS, buf);
+    }
 }
 
 static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -2060,8 +2123,8 @@ static void WriteCustomColors(const COLORREF in[16])
     }
 }
 
-// Drops all three persisted view-settings keys. Used by View → Reset
-// View Settings. Missing values are not an error — silently skipped.
+// Drops all view-settings keys. Used by View → Reset View Settings.
+// Missing values are not an error — silently skipped.
 static void ResetViewSettings()
 {
     HKEY hKey;
@@ -2070,8 +2133,295 @@ static void ResetViewSettings()
         RegDeleteValue(hKey, L"BackgroundColor");
         RegDeleteValue(hKey, L"ShowGround");
         RegDeleteValue(hKey, L"CustomColors");
+        RegDeleteValue(hKey, L"SpawnerConfig");
+        RegDeleteValue(hKey, L"SpawnerDialogPos");
         RegCloseKey(hKey);
     }
+}
+
+// Spawner config is intentionally session-only (defaults restored on
+// every launch). Only the dialog window position survives across
+// sessions — see Read/WriteSpawnerDialogPos. ResetViewSettings still
+// drops a stale SpawnerConfig REG_BINARY value left behind by an
+// earlier build that did persist it.
+static bool ReadSpawnerDialogPos(RECT& out)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD type, size = sizeof(out);
+        if (RegQueryValueEx(hKey, L"SpawnerDialogPos", NULL, &type, (LPBYTE)&out, &size) == ERROR_SUCCESS
+            && type == REG_BINARY && size == sizeof(out))
+        {
+            RegCloseKey(hKey);
+            return true;
+        }
+        RegCloseKey(hKey);
+    }
+    return false;
+}
+
+static void WriteSpawnerDialogPos(const RECT& in)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        RegSetValueEx(hKey, L"SpawnerDialogPos", 0, REG_BINARY, (const BYTE*)&in, sizeof(in));
+        RegCloseKey(hKey);
+    }
+}
+
+// ============================================================================
+// Spawner dialog
+// ============================================================================
+
+// Helper to configure a Spinner control with float range / value.
+static void ConfigureFloatSpinner(HWND hDlg, int ctrlId, float minV, float maxV, float incr, float value)
+{
+    SPINNER_INFO si = {0};
+    si.IsFloat = true;
+    si.Mask    = SPIF_ALL;
+    si.f.MinValue  = minV;
+    si.f.MaxValue  = maxV;
+    si.f.Increment = incr;
+    si.f.Value     = value;
+    Spinner_SetInfo(GetDlgItem(hDlg, ctrlId), &si);
+}
+
+static float GetFloatSpinner(HWND hDlg, int ctrlId)
+{
+    SPINNER_INFO si = {0};
+    si.Mask = SPIF_VALUE;
+    Spinner_GetInfo(GetDlgItem(hDlg, ctrlId), &si);
+    return si.f.Value;
+}
+
+// Show / hide the controls that are mutually exclusive between Manual
+// and Auto modes. Called whenever the mode changes (and once at
+// dialog init).
+static void SpawnerDlg_SyncModeVisibility(HWND hDlg, SpawnerConfig::Mode mode)
+{
+    bool isManual = (mode == SpawnerConfig::Mode::Manual);
+
+    // Manual-only controls.
+    ShowWindow(GetDlgItem(hDlg, IDC_SPAWNER_TRIGGER_BTN), isManual ? SW_SHOW : SW_HIDE);
+
+    // Auto-only controls.
+    int autoShow = isManual ? SW_HIDE : SW_SHOW;
+    ShowWindow(GetDlgItem(hDlg, IDC_SPAWNER_ENABLE),         autoShow);
+    ShowWindow(GetDlgItem(hDlg, IDC_SPAWNER_INTERVAL),       autoShow);
+    ShowWindow(GetDlgItem(hDlg, IDC_SPAWNER_INTERVAL_LABEL), autoShow);
+    ShowWindow(GetDlgItem(hDlg, IDC_SPAWNER_BURSTS_PER_SEC), autoShow);
+}
+
+// Update the read-only "Bursts/s: X.X" label in Auto mode.
+// Update the read-only "Bursts/s: X.X" label in Auto mode. Math lives
+// in SpawnerDriver::ComputeBurstsPerSec — single source of truth.
+static void SpawnerDlg_UpdateBurstsPerSec(HWND hDlg, const SpawnerConfig& cfg)
+{
+    if (cfg.mode != SpawnerConfig::Mode::Auto) return;
+    wchar_t buf[64];
+    swprintf_s(buf, 64, L"Bursts/s: %.2f", SpawnerDriver::ComputeBurstsPerSec(cfg));
+    SetDlgItemText(hDlg, IDC_SPAWNER_BURSTS_PER_SEC, buf);
+}
+
+// Push a SpawnerConfig into all the dialog controls.
+static void SpawnerDlg_LoadFromConfig(HWND hDlg, const SpawnerConfig& cfg)
+{
+    CheckDlgButton(hDlg, IDC_SPAWNER_MODE_MANUAL, cfg.mode == SpawnerConfig::Mode::Manual ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(hDlg, IDC_SPAWNER_MODE_AUTO,   cfg.mode == SpawnerConfig::Mode::Auto   ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(hDlg, IDC_SPAWNER_ENABLE,      cfg.enabled                              ? BST_CHECKED : BST_UNCHECKED);
+
+    // Burst spinners.
+    {
+        SPINNER_INFO si = {0};
+        si.IsFloat     = false;
+        si.Mask        = SPIF_ALL;
+        si.i.MinValue  = 1;
+        si.i.MaxValue  = SpawnerDriver::MAX_BURST_SIZE;
+        si.i.Increment = 1;
+        si.i.Value     = cfg.burstSize;
+        Spinner_SetInfo(GetDlgItem(hDlg, IDC_SPAWNER_BURST_SIZE), &si);
+    }
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_SPACING,  0.0f, SpawnerDriver::MAX_SPACING_SEC,  0.05f, cfg.spacingSec);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_INTERVAL, 0.0f, SpawnerDriver::MAX_INTERVAL_SEC, 0.1f,  cfg.intervalSec);
+
+    const float posLim = SpawnerDriver::JITTER_MAX;
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_POS_X, -posLim, posLim, 1.0f, cfg.position.x);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_POS_Y, -posLim, posLim, 1.0f, cfg.position.y);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_POS_Z, -posLim, posLim, 1.0f, cfg.position.z);
+
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_VEL_X, -posLim, posLim, 1.0f, cfg.velocity.x);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_VEL_Y, -posLim, posLim, 1.0f, cfg.velocity.y);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_VEL_Z, -posLim, posLim, 1.0f, cfg.velocity.z);
+
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_LIFETIME, 0.0f, SpawnerDriver::MAX_LIFETIME_SEC, 0.5f, cfg.maxLifetimeSec);
+
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_X, 0.0f, posLim, 0.5f, cfg.jitterPosition.x);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_Y, 0.0f, posLim, 0.5f, cfg.jitterPosition.y);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_Z, 0.0f, posLim, 0.5f, cfg.jitterPosition.z);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_X, 0.0f, posLim, 0.5f, cfg.jitterVelocity.x);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_Y, 0.0f, posLim, 0.5f, cfg.jitterVelocity.y);
+    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_Z, 0.0f, posLim, 0.5f, cfg.jitterVelocity.z);
+
+    SpawnerDlg_SyncModeVisibility(hDlg, cfg.mode);
+    SpawnerDlg_UpdateBurstsPerSec(hDlg, cfg);
+}
+
+// Pull the current dialog control values into a SpawnerConfig.
+static SpawnerConfig SpawnerDlg_ReadIntoConfig(HWND hDlg)
+{
+    SpawnerConfig cfg;
+    cfg.mode    = (IsDlgButtonChecked(hDlg, IDC_SPAWNER_MODE_MANUAL) == BST_CHECKED)
+                  ? SpawnerConfig::Mode::Manual
+                  : SpawnerConfig::Mode::Auto;
+    cfg.enabled = (IsDlgButtonChecked(hDlg, IDC_SPAWNER_ENABLE) == BST_CHECKED);
+
+    {
+        SPINNER_INFO si = {0};
+        si.Mask = SPIF_VALUE;
+        Spinner_GetInfo(GetDlgItem(hDlg, IDC_SPAWNER_BURST_SIZE), &si);
+        cfg.burstSize = si.i.Value;
+    }
+    cfg.spacingSec  = GetFloatSpinner(hDlg, IDC_SPAWNER_SPACING);
+    cfg.intervalSec = GetFloatSpinner(hDlg, IDC_SPAWNER_INTERVAL);
+
+    cfg.position     = D3DXVECTOR3(GetFloatSpinner(hDlg, IDC_SPAWNER_POS_X),
+                                   GetFloatSpinner(hDlg, IDC_SPAWNER_POS_Y),
+                                   GetFloatSpinner(hDlg, IDC_SPAWNER_POS_Z));
+    cfg.velocity     = D3DXVECTOR3(GetFloatSpinner(hDlg, IDC_SPAWNER_VEL_X),
+                                   GetFloatSpinner(hDlg, IDC_SPAWNER_VEL_Y),
+                                   GetFloatSpinner(hDlg, IDC_SPAWNER_VEL_Z));
+    cfg.maxLifetimeSec = GetFloatSpinner(hDlg, IDC_SPAWNER_LIFETIME);
+    cfg.jitterPosition = D3DXVECTOR3(GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_X),
+                                     GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_Y),
+                                     GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_Z));
+    cfg.jitterVelocity = D3DXVECTOR3(GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_X),
+                                     GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_Y),
+                                     GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_Z));
+    ClampSpawnerConfig(cfg);
+    return cfg;
+}
+
+static INT_PTR CALLBACK SpawnerDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    APPLICATION_INFO* info = (APPLICATION_INFO*)(LONG_PTR)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+
+    switch (uMsg)
+    {
+        case WM_INITDIALOG:
+        {
+            info = (APPLICATION_INFO*)lParam;
+            SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)info);
+            if (info != NULL && info->spawner != NULL)
+            {
+                SpawnerDlg_LoadFromConfig(hDlg, info->spawner->GetConfig());
+            }
+            return TRUE;
+        }
+
+        case WM_COMMAND:
+        case WM_NOTIFY:
+        {
+            // Spawn-now button → fire a manual burst without re-reading
+            // the whole config (the button click isn't itself a config
+            // change).
+            if (uMsg == WM_COMMAND && LOWORD(wParam) == IDC_SPAWNER_TRIGGER_BTN
+                && info != NULL && info->spawner != NULL)
+            {
+                info->spawner->Trigger(info->particleSystem, info->engine);
+                return TRUE;
+            }
+
+            // Any other control change → re-read all values, push to
+            // driver. Spawner config is session-only; not written to
+            // registry. SN_CHANGE comes through as WM_COMMAND from
+            // the Spinner control; checkboxes / radios fire BN_CLICKED.
+            if (info != NULL && info->spawner != NULL)
+            {
+                SpawnerConfig cfg = SpawnerDlg_ReadIntoConfig(hDlg);
+                info->spawner->SetConfig(cfg);
+
+                // Mode-radio toggles need a visibility sync because the
+                // Manual / Auto control sets are mutually exclusive.
+                if (uMsg == WM_COMMAND
+                    && (LOWORD(wParam) == IDC_SPAWNER_MODE_MANUAL
+                        || LOWORD(wParam) == IDC_SPAWNER_MODE_AUTO))
+                {
+                    SpawnerDlg_SyncModeVisibility(hDlg, cfg.mode);
+                }
+                SpawnerDlg_UpdateBurstsPerSec(hDlg, cfg);
+            }
+            return FALSE;
+        }
+
+        case WM_CLOSE:
+        {
+            // Hide rather than destroy. State (focus, in-progress edits)
+            // survives a hide/show cycle.
+            if (info != NULL)
+            {
+                GetWindowRect(hDlg, &info->spawnerWindowRect);
+                WriteSpawnerDialogPos(info->spawnerWindowRect);
+                ShowWindow(hDlg, SW_HIDE);
+                info->spawnerVisible = false;
+                CheckMenuItem(GetMenu(info->hMainWnd), ID_EMITTER_SPAWNER, MF_BYCOMMAND | MF_UNCHECKED);
+            }
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static void ToggleSpawnerDialog(APPLICATION_INFO* info)
+{
+    if (info == NULL || info->hMainWnd == NULL) return;
+
+    if (info->hSpawnerDlg == NULL)
+    {
+        // Lazy create on first request.
+        info->hSpawnerDlg = CreateDialogParam(
+            info->hInstance,
+            MAKEINTRESOURCE(IDD_SPAWNER),
+            info->hMainWnd,
+            SpawnerDlgProc,
+            (LPARAM)info);
+
+        if (info->hSpawnerDlg == NULL) return;
+
+        // Try to restore prior position. Validate against virtual screen
+        // bounds — if the saved RECT is fully off-screen (e.g. monitor
+        // disconnected), fall back to system default placement.
+        if (info->spawnerWindowRect.right > info->spawnerWindowRect.left)
+        {
+            RECT r = info->spawnerWindowRect;
+            HMONITOR hm = MonitorFromRect(&r, MONITOR_DEFAULTTONULL);
+            if (hm != NULL)
+            {
+                SetWindowPos(info->hSpawnerDlg, NULL, r.left, r.top, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+
+    if (info->spawnerVisible)
+    {
+        // Visible → hide. Capture position first so re-show restores it.
+        GetWindowRect(info->hSpawnerDlg, &info->spawnerWindowRect);
+        WriteSpawnerDialogPos(info->spawnerWindowRect);
+        ShowWindow(info->hSpawnerDlg, SW_HIDE);
+        info->spawnerVisible = false;
+    }
+    else
+    {
+        ShowWindow(info->hSpawnerDlg, SW_SHOW);
+        SetForegroundWindow(info->hSpawnerDlg);
+        info->spawnerVisible = true;
+    }
+
+    CheckMenuItem(GetMenu(info->hMainWnd), ID_EMITTER_SPAWNER,
+                  MF_BYCOMMAND | (info->spawnerVisible ? MF_CHECKED : MF_UNCHECKED));
 }
 
 // Returns the display label for a mod (nickname if set, else folder name).
@@ -2541,6 +2891,12 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             COLORREF persistedCustom[16];
             if (ReadCustomColors(persistedCustom)) ColorButton_SetCustomColors(persistedCustom);
 
+            // Spawner config is intentionally NOT restored from registry —
+            // it resets to defaults at the start of each session per
+            // user preference. Dialog position is still restored so the
+            // window doesn't bounce around between launches.
+            ReadSpawnerDialogPos(info->spawnerWindowRect);
+
             ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
 
             // Sync the ground-toggle toolbar button to the (possibly
@@ -2585,7 +2941,18 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 			MSG msg;
 			while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
 			{
-				if (!TranslateAccelerator(info->hMainWnd, hAccel, &msg) && !IsDialogMessage(info->hMainWnd, &msg))
+				// Route keyboard input to the modeless spawner dialog when
+				// it owns focus. IsDialogMessage handles Tab navigation /
+				// arrow keys / etc. Order matters: try the spawner dialog
+				// before the main window so spawner-focused keys aren't
+				// stolen by the main accelerator table.
+				bool consumed = false;
+				if (info->hSpawnerDlg != NULL && info->spawnerVisible
+				    && IsDialogMessage(info->hSpawnerDlg, &msg))
+				{
+					consumed = true;
+				}
+				if (!consumed && !TranslateAccelerator(info->hMainWnd, hAccel, &msg) && !IsDialogMessage(info->hMainWnd, &msg))
 				{
 					TranslateMessage(&msg);
 					DispatchMessage(&msg);
@@ -2716,6 +3083,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	info.hModsMenu				= NULL;
 	info.hMenuFont				= NULL;
 	info.hMenuItalicFont		= NULL;
+	info.spawner                = new SpawnerDriver();
+	info.hSpawnerDlg            = NULL;
+	info.spawnerVisible         = false;
+	memset(&info.spawnerWindowRect, 0, sizeof(info.spawnerWindowRect));
 
 #ifdef NDEBUG
  	try
@@ -2731,18 +3102,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		result = main( &info, parseCommandLine() );
         DestroyWindow(info.hMainWnd);
         delete info.engine;
+        delete info.spawner;
+        info.spawner = NULL;
 	}
 #ifdef NDEBUG
 	catch (wexception& e)
 	{
         DestroyWindow(info.hMainWnd);
         delete info.engine;
+        delete info.spawner;
+        info.spawner = NULL;
 		MessageBox(NULL, e.what(), NULL, MB_OK | MB_ICONHAND);
 	}
 	catch (exception& e)
 	{
         DestroyWindow(info.hMainWnd);
         delete info.engine;
+        delete info.spawner;
+        info.spawner = NULL;
 		MessageBoxA(NULL, e.what(), NULL, MB_OK | MB_ICONHAND);
 	}
 #endif

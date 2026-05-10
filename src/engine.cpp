@@ -75,6 +75,16 @@ void Engine::Clear()
     m_numEmitters  = 0;
 }
 
+int Engine::ActiveSpawnerInstanceCount() const
+{
+    int n = 0;
+    for (const auto& inst : m_instances)
+    {
+        if (inst && inst->IsSpawnerOwned()) ++n;
+    }
+    return n;
+}
+
 // Helper: scan a freshly-loaded effect for parameters annotated with
 // "texture_filename" and bind the named textures from the texture manager.
 // Same logic that used to live inline in the constructor's load loop.

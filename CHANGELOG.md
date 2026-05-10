@@ -16,6 +16,47 @@ Conventions:
 
 ## Changelog
 
+### Programmable particle spawner (v1) — `Emitters → Spawner…` / `F7`
+*2026-05-10 · #30*
+
+Replaces the "hold Shift, click in viewport, spawn one instance" preview flow with a modeless **Spawner** dialog hosting a configurable test driver. Two modes:
+
+- **Manual** — fires a single burst on "Spawn now" or `Shift+Space`.
+- **Auto** — fires bursts on a recurring schedule when Enabled.
+
+Each *burst* emits up to 10 `ParticleSystemInstance` objects spaced `(c)` seconds apart; in Auto mode bursts repeat with `(d)` seconds between the end of one burst and the start of the next (the skip rule: bursts don't overlap). Each spawned instance starts at a configurable world position with a configurable initial velocity, moves at constant velocity for at most `maxLifetime` seconds, then `StopSpawning()`s so existing particles fade naturally.
+
+UI: dialog opens via `Emitters → Spawner…` (Alt+M, S) or `F7`; close via the `X`, `F7`, or the same menu (toggles). Window position persists across sessions; spawner config does not (resets to defaults each launch — burst size 1, spacing 0, interval 10 s, position (0,0,0), velocity (0,0,0), lifetime 5 s, mode Auto, disabled).
+
+Hard caps:
+
+| Limit | Value |
+|---|---|
+| Max simultaneous spawner instances | **50** |
+| Per-frame emission cap | **≤ 5** |
+| Burst size | **1–10** |
+| Spacing within burst | **0–10 s** |
+| Interval between bursts | **0–60 s** |
+| Max lifetime per instance | **0–600 s** (0 = unlimited) |
+| Position / velocity / jitter range | **±10 000 world units** |
+
+The 50-cap counts only spawner-owned instances; Shift+click spawns aren't included. When at the cap, the status counter reads `Status: 50/50 active (limited)` and new spawns are dropped silently until live ones expire.
+
+**How we tackled it.** The driver lives in [`src/SpawnerDriver.{h,cpp}`](src/SpawnerDriver.h), called once per frame from `Render(info)` before `engine->Update()`. State machine is two phases (Waiting / BurstFiring) tracking `m_burstRemaining`, `m_timeUntilNextInstance`, `m_timeUntilNextBurst`. Each spawn stamps a transient `SpawnerAnchor` (an `Object3D` subclass with public position/velocity setters) with the configured position+velocity (plus jitter), calls `engine->SpawnParticleSystem(*sys, &anchor)`, then `MarkSpawnerOwned` + `SetMaxLifetime` + `Detach` on the resulting instance. Per-instance ballistic motion runs inside `ParticleSystemInstance::Update`: `m_position += m_velocity·dt` for spawner-owned instances, plus a lifetime check that triggers `StopSpawning()` on expiry.
+
+**Issues encountered and resolutions.**
+
+- **`Object3D::Detach` doesn't capture velocity.** It captures absolute position so the instance stays put when reparented, but leaves `m_velocity` at the constructor default of `(0,0,0)` — the legacy `mouseCursor` Shift-click flow intentionally drops velocity on Shift-release. After the first build, spawned instances had the right initial position but didn't move. **Fix**: capture velocity eagerly in `MarkSpawnerOwned` (`m_velocity = GetVelocity()`), which runs while the parent anchor is still set, before `Detach`. Doesn't affect Shift+click since that path never calls `MarkSpawnerOwned`.
+- **`SetConfig` reset state on every keystroke.** The dialog calls `SetConfig` on every spinner `SN_CHANGE`. Original implementation reset the entire burst-state machine including `m_timeUntilNextBurst = 0`, which (a) aborted in-flight bursts and (b) triggered an immediate burst on the next Tick because the timer was zero. So typing `10` into the interval spinner generated two unintended bursts. **Fix**: only reset state on *transitions* — mode change or enable toggle. Parameter tweaks within the same mode preserve the timer; in-flight bursts continue with `m_burstRemaining`'s captured value, while spacing changes apply mid-burst.
+- **First Auto enable fired immediately.** With the new 10 s default interval, an immediate first burst was surprising. **Fix**: when `enabled` transitions false→true while in `Phase::Waiting`, set `m_timeUntilNextBurst = intervalSec` so the user sees the first burst after one full interval.
+- **Dialog visibility tracking.** The dialog is created lazily on first show via `CreateDialogParam`, then hidden/shown via `ShowWindow(SW_HIDE/SW_SHOW)` rather than destroyed. Window position is captured to `info->spawnerWindowRect` on hide and restored on show, validated against virtual-screen bounds (fallback to system default when the saved RECT is fully off-screen, e.g. monitor disconnected).
+
+**Limits design rationale**: 50 active instances bounds every downstream cost — particles, draw calls, CPU update cost. 5 emissions/frame survives stutter without storming. Burst size 10 keeps a single burst small relative to the 50-cap so a maxed burst still leaves headroom. See `tasks/todo.md` for the full reasoning.
+
+**Deferred to a v2 roadmap entry**: arc paths, velocity shorthand (magnitude + azimuth + elevation), named presets, and path visualization in the preview. User-drawn curve paths and "draw-in-viewport" interactive mode were dropped as too much UX complexity for the value.
+
+---
+
 ### Shaders load from the mod folder
 *2026-05-09 · [`4942747`](https://github.com/DrKnickers/particle-editor/commit/4942747) · #28*
 

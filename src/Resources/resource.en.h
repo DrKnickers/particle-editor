@@ -205,6 +205,34 @@
 #define ID_MOVE_EMITTER_UP              40093
 #define ID_MOVE_EMITTER_DOWN            40094
 #define ID_VIEW_RESET_VIEW_SETTINGS     40095
+#define ID_EMITTER_SPAWNER              40096
+#define ID_SPAWNER_TRIGGER              40097
+
+// Spawner dialog
+#define IDD_SPAWNER                      150
+#define IDC_SPAWNER_MODE_MANUAL         1300
+#define IDC_SPAWNER_MODE_AUTO           1301
+#define IDC_SPAWNER_ENABLE              1302
+#define IDC_SPAWNER_BURST_SIZE          1303
+#define IDC_SPAWNER_SPACING             1304
+#define IDC_SPAWNER_INTERVAL            1305
+#define IDC_SPAWNER_BURSTS_PER_SEC      1306
+#define IDC_SPAWNER_TRIGGER_BTN         1307
+#define IDC_SPAWNER_POS_X               1308
+#define IDC_SPAWNER_POS_Y               1309
+#define IDC_SPAWNER_POS_Z               1310
+#define IDC_SPAWNER_VEL_X               1311
+#define IDC_SPAWNER_VEL_Y               1312
+#define IDC_SPAWNER_VEL_Z               1313
+#define IDC_SPAWNER_LIFETIME            1314
+#define IDC_SPAWNER_JIT_POS_X           1315
+#define IDC_SPAWNER_JIT_POS_Y           1316
+#define IDC_SPAWNER_JIT_POS_Z           1317
+#define IDC_SPAWNER_JIT_VEL_X           1318
+#define IDC_SPAWNER_JIT_VEL_Y           1319
+#define IDC_SPAWNER_JIT_VEL_Z           1320
+#define IDC_SPAWNER_STATUS              1321
+#define IDC_SPAWNER_INTERVAL_LABEL      1322
 
 // Next default values for new objects
 // 
