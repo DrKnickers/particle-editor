@@ -17,7 +17,7 @@ Conventions:
 ## Changelog
 
 ### Autosave for in-progress particles (two-tier)
-*2026-05-10 · TODO*
+*2026-05-10 · [`eb0a183`](https://github.com/DrKnickers/particle-editor/commit/eb0a183) · #41*
 
 The editor now writes a recovery snapshot of the current particle system to `%TEMP%\AloParticleEditor\` on a periodic schedule. **Two tiers** run side-by-side: a **recent** tier on a 30-second cadence (freshest state, frequent overwrite — for the "crashed 10 seconds ago" case) and a **stable** tier on a 5-minute cadence (older known-good state — for the "the recent file is corrupt" or "I made a bad edit two minutes ago" cases). Both write only when there's an in-memory particle system AND the dirty flag is set, so an idle editor doesn't generate disk churn.
 
