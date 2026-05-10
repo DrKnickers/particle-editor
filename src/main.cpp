@@ -11,6 +11,7 @@
 #include "exceptions.h"
 #include "UI/UI.h"
 #include "SpawnerDriver.h"
+#include "UndoStack.h"
 #include "utils.h"
 #include "engine.h"
 #include "ParticleSystemInstance.h"
@@ -468,6 +469,15 @@ static bool             ReadSpawnerDialogPos(RECT& out);
 static void             WriteSpawnerDialogPos(const RECT& in);
 static void             ToggleSpawnerDialog(APPLICATION_INFO* info);
 static INT_PTR CALLBACK SpawnerDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+// Undo / redo helpers (defined alongside the WM_NOTIFY handlers).
+static void             SetFileChanged(APPLICATION_INFO* info, bool changed);
+static size_t           IndexOfEmitter(const ParticleSystem* sys, const ParticleSystem::Emitter* e);
+static void             CaptureUndo(APPLICATION_INFO* info, DWORD coalesceKey);
+static void             RestoreFromSnapshot(APPLICATION_INFO* info, const std::vector<char>& buf, size_t selIdx);
+static void             UpdateUndoRedoUI(APPLICATION_INFO* info);
+static void             DoUndo(APPLICATION_INFO* info);
+static void             DoRedo(APPLICATION_INFO* info);
 static void             SpawnerDlg_LoadFromConfig(HWND hDlg, const SpawnerConfig& cfg);
 
 struct APPLICATION_INFO
@@ -516,6 +526,10 @@ struct APPLICATION_INFO
 	HWND            hSpawnerDlg;        // NULL until first show; lazy-created
 	bool            spawnerVisible;     // tracks visibility for menu check-mark
 	RECT            spawnerWindowRect;  // last-known position (session + registry)
+
+	// Undo / redo stack. Holds whole-system byte snapshots; cleared on
+	// file open / new. See src/UndoStack.h for the rationale.
+	UndoStack       undoStack;
 
 	// Dragging
 	enum { NONE, ROTATE, MOVE, ZOOM, OBJECT_Z } dragmode;
@@ -670,6 +684,203 @@ static void SetEmitterInfo(APPLICATION_INFO* info)
 	}
 }
 
+//
+// Undo / redo
+//
+// Edit boundaries: every change to the live ParticleSystem funnels
+// through one of three notifications (EP_CHANGE, TE_CHANGE,
+// ELN_LISTCHANGED) handled below in WM_NOTIFY, plus the system-wide
+// hLeaveParticles checkbox. After the change has landed in the model
+// we call CaptureUndo with a coalesce key that decides whether the
+// new state replaces the previous entry (rapid-fire spinner ticks,
+// curve-key drag) or starts a fresh one (structural ops). The Undo /
+// Redo paths swap the entire ParticleSystem out from under the editor
+// and re-resolve the selected emitter by index.
+
+static size_t IndexOfEmitter(const ParticleSystem* sys,
+                             const ParticleSystem::Emitter* e)
+{
+    if (sys == NULL || e == NULL) return SIZE_MAX;
+    const std::vector<ParticleSystem::Emitter*>& v = sys->getEmitters();
+    for (size_t i = 0; i < v.size(); i++)
+    {
+        if (v[i] == e) return i;
+    }
+    return SIZE_MAX;
+}
+
+#ifndef NDEBUG
+#define UNDO_LOG(...) do { printf(__VA_ARGS__); fflush(stdout); } while (0)
+static void DumpSystem(const char* tag, const ParticleSystem* sys)
+{
+    if (sys == NULL) { UNDO_LOG("[Undo] %s sys=NULL\n", tag); fflush(stdout); return; }
+    const std::vector<ParticleSystem::Emitter*>& v = sys->getEmitters();
+    UNDO_LOG("[Undo] %s emitters=%zu\n", tag, v.size());
+    for (size_t i = 0; i < v.size(); i++)
+    {
+        const ParticleSystem::Emitter* e = v[i];
+        // %zd works for size_t-as-signed; -1 prints as -1 with %zd.
+        long sd = (e->spawnDuringLife == (size_t)-1) ? -1 : (long)e->spawnDuringLife;
+        long sd2 = (e->spawnOnDeath    == (size_t)-1) ? -1 : (long)e->spawnOnDeath;
+        long parentIdx = -1;
+        if (e->parent != NULL)
+        {
+            for (size_t j = 0; j < v.size(); j++) if (v[j] == e->parent) { parentIdx = (long)j; break; }
+        }
+        UNDO_LOG("[Undo]   [%zu] '%s' tex='%s' size=%lu sDL=%ld sOD=%ld parent=%ld vis=%d\n",
+               i, e->name.c_str(), e->colorTexture.c_str(),
+               (unsigned long)e->textureSize, sd, sd2, parentIdx, e->visible ? 1 : 0);
+    }
+    fflush(stdout); fflush(stderr);
+}
+#else
+#define DumpSystem(tag, sys) ((void)0)
+#endif
+
+static void CaptureUndo(APPLICATION_INFO* info, DWORD coalesceKey)
+{
+    if (info == NULL || info->particleSystem == NULL) return;
+    if (info->undoStack.IsApplying()) return;
+    size_t selIdx = IndexOfEmitter(info->particleSystem, info->selectedEmitter);
+    bool pushed = info->undoStack.Capture(*info->particleSystem, selIdx, coalesceKey);
+#ifndef NDEBUG
+    UNDO_LOG("[Undo] capture key=0x%08lx sel=%zu emitters=%zu -> %s, depth=%zu cursor=%zu\n",
+           (unsigned long)coalesceKey, selIdx,
+           info->particleSystem->getEmitters().size(),
+           pushed ? "pushed" : "coalesced",
+           info->undoStack.Depth(), info->undoStack.Cursor());
+    fflush(stdout); fflush(stderr);
+#else
+    (void)pushed;
+#endif
+    UpdateUndoRedoUI(info);
+}
+
+static void RestoreFromSnapshot(APPLICATION_INFO* info,
+                                 const std::vector<char>& buf,
+                                 size_t selIdx)
+{
+    info->undoStack.BeginApplying();
+
+    ParticleSystem* sys = NULL;
+    try
+    {
+        sys = UndoStack::Deserialize(buf);
+    }
+    catch (...)
+    {
+        info->undoStack.EndApplying();
+        return;
+    }
+    if (sys == NULL)
+    {
+        info->undoStack.EndApplying();
+        return;
+    }
+
+    // Order matches LoadFile + OnFileChange so the safety guarantees
+    // line up: while EmitterList_SetParticleSystem is mid-rebuild,
+    // TreeView_DeleteAllItems can fire TVN_SELCHANGED with item.lParam
+    // pointing at a now-freed Emitter from the old system. The handler
+    // bubbles ELN_SELCHANGED to main.cpp's pump, which only reads from
+    // the model when info->particleSystem != NULL. Keep it NULL across
+    // the rebuild and SetEmitterInfo will safely bail.
+    //
+    // Bug history: an earlier draft installed sys / selectedEmitter
+    // BEFORE the rebuild, which let SetEmitterInfo dereference the
+    // stale tree-item lParam → "child emitter vanished and the editor
+    // crashed" (PR self-test feedback).
+    if (info->engine != NULL) info->engine->Clear();
+    info->attachedParticleSystem = NULL;  // engine->Clear() invalidated it
+    delete info->particleSystem;
+    info->particleSystem  = NULL;
+    info->selectedEmitter = NULL;
+
+    EmitterList_SetParticleSystem(info->hEmitterList, sys);
+
+    // Install the new system, then re-select the emitter that was
+    // active at capture time. EmitterList_SetParticleSystem auto-
+    // selects the first root; if the user was editing a child, that
+    // would jump them off it — call EmitterList_SelectEmitter to
+    // override. TreeView_SelectItem fires TVN_SELCHANGED →
+    // ELN_SELCHANGED → main.cpp's pump sets info->selectedEmitter.
+    info->particleSystem = sys;
+    if (selIdx < sys->getEmitters().size())
+    {
+        EmitterList_SelectEmitter(info->hEmitterList, &sys->getEmitter(selIdx));
+    }
+    info->selectedEmitter = EmitterList_GetSelection(info->hEmitterList);
+
+    SendMessage(info->hLeaveParticles, BM_SETCHECK,
+                sys->getLeaveParticles() ? BST_CHECKED : BST_UNCHECKED, 0);
+    SetEmitterInfo(info);
+
+    if (info->engine != NULL) info->engine->OnParticleSystemChanged(-1);
+
+    SetFileChanged(info, !info->undoStack.IsAtSavedState());
+    UpdateUndoRedoUI(info);
+
+    info->undoStack.EndApplying();
+}
+
+static void UpdateUndoRedoUI(APPLICATION_INFO* info)
+{
+    if (info == NULL) return;
+    bool canUndo = info->undoStack.CanUndo();
+    bool canRedo = info->undoStack.CanRedo();
+    if (info->hToolbar != NULL)
+    {
+        SendMessage(info->hToolbar, TB_ENABLEBUTTON, ID_EDIT_UNDO, MAKELONG(canUndo, 0));
+        SendMessage(info->hToolbar, TB_ENABLEBUTTON, ID_EDIT_REDO, MAKELONG(canRedo, 0));
+    }
+}
+
+static void DoUndo(APPLICATION_INFO* info)
+{
+    const std::vector<char>* buf = NULL;
+    size_t selIdx = SIZE_MAX;
+    if (info->undoStack.Undo(&buf, &selIdx) && buf != NULL)
+    {
+#ifndef NDEBUG
+        UNDO_LOG("[Undo] UNDO bufBytes=%zu selIdx=%zu cursor=%zu\n",
+               buf->size(), selIdx, info->undoStack.Cursor());
+        fflush(stdout); fflush(stderr);
+#endif
+        RestoreFromSnapshot(info, *buf, selIdx);
+#ifndef NDEBUG
+        if (info->particleSystem != NULL)
+        {
+            UNDO_LOG("[Undo]   restored emitters=%zu\n",
+                   info->particleSystem->getEmitters().size());
+            fflush(stdout); fflush(stderr);
+        }
+#endif
+    }
+}
+
+static void DoRedo(APPLICATION_INFO* info)
+{
+    const std::vector<char>* buf = NULL;
+    size_t selIdx = SIZE_MAX;
+    if (info->undoStack.Redo(&buf, &selIdx) && buf != NULL)
+    {
+#ifndef NDEBUG
+        UNDO_LOG("[Undo] REDO bufBytes=%zu selIdx=%zu cursor=%zu\n",
+               buf->size(), selIdx, info->undoStack.Cursor());
+        fflush(stdout); fflush(stderr);
+#endif
+        RestoreFromSnapshot(info, *buf, selIdx);
+#ifndef NDEBUG
+        if (info->particleSystem != NULL)
+        {
+            UNDO_LOG("[Undo]   restored emitters=%zu\n",
+                   info->particleSystem->getEmitters().size());
+            fflush(stdout); fflush(stderr);
+        }
+#endif
+    }
+}
+
 static void SetFileChanged(APPLICATION_INFO* info, bool changed)
 {
     info->changed = changed;
@@ -696,8 +907,14 @@ static void SetFileChanged(APPLICATION_INFO* info, bool changed)
 
 static void OnFileChange(APPLICATION_INFO* info, ParticleSystem* system)
 {
+    // Suppress capture for the duration of the file-change handler.
+    // EmitterList_SetParticleSystem and SetEmitterInfo dispatch
+    // notifications during their setup; without the guard those would
+    // push spurious entries into the stack we're about to reset.
+    info->undoStack.BeginApplying();
+
     SetFileChanged(info, false);
-    
+
     // Update the emitter list
     EmitterList_SetParticleSystem(info->hEmitterList, system);
 
@@ -712,6 +929,21 @@ static void OnFileChange(APPLICATION_INFO* info, ParticleSystem* system)
 
     // Set the selected emitter info
     SetEmitterInfo(info);
+
+    // Reset the undo stack and seed it with the load-time baseline so
+    // the first Ctrl+Z after opening a file rewinds back to the loaded
+    // state, not into nothing. Mark this snapshot as "saved" so the
+    // title-bar asterisk clears when the user undoes back to it.
+    info->undoStack.Clear();
+    info->undoStack.EndApplying();   // re-enable Capture for the seed
+
+    if (system != NULL)
+    {
+        size_t selIdx = IndexOfEmitter(system, info->selectedEmitter);
+        info->undoStack.Capture(*system, selIdx, 0);
+        info->undoStack.MarkSaved();
+    }
+    UpdateUndoRedoUI(info);
 }
 
 static bool LoadFile(APPLICATION_INFO* info, const wstring& filename)
@@ -853,6 +1085,8 @@ static bool DoSaveFile(APPLICATION_INFO* info, bool saveas = false)
 		MessageBox(info->hMainWnd, LoadString(IDS_ERROR_FILE_SAVE, e.what()).c_str(), NULL, MB_OK | MB_ICONERROR );
 	}
     SetFileChanged(info, false);
+    info->undoStack.MarkSaved();
+    UpdateUndoRedoUI(info);
 	return true;
 }
 
@@ -897,6 +1131,9 @@ static bool DoCloseFile(APPLICATION_INFO* info)
 
 static void DoMenuInit(HMENU hMenu, APPLICATION_INFO* info)
 {
+    EnableMenuItem(hMenu, ID_EDIT_UNDO, MF_BYCOMMAND | (info->undoStack.CanUndo() ? MF_ENABLED : MF_GRAYED));
+    EnableMenuItem(hMenu, ID_EDIT_REDO, MF_BYCOMMAND | (info->undoStack.CanRedo() ? MF_ENABLED : MF_GRAYED));
+
     EnableMenuItem(hMenu, ID_EDIT_CLEARALLPARTICLES, MF_BYCOMMAND | (info->engine == NULL || info->engine->GetNumInstances() > 0 ? MF_ENABLED : MF_GRAYED ));
 
     EnableMenuItem(hMenu, ID_NEW_EMITTER_LIFETIME,      MF_BYCOMMAND | (info->selectedEmitter != NULL && info->selectedEmitter->spawnDuringLife == -1 ? MF_ENABLED : MF_GRAYED ));
@@ -922,6 +1159,8 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
 		case ID_FILE_SAVE:    DoSaveFile(info); break;
 		case ID_FILE_SAVE_AS: DoSaveFile(info, true); break;
 
+        case ID_EDIT_UNDO:    DoUndo(info); break;
+        case ID_EDIT_REDO:    DoRedo(info); break;
         case ID_EDIT_COPY:    SendMessage(GetFocus(), WM_COPY,  0, 0); break;
         case ID_EDIT_CUT:     SendMessage(GetFocus(), WM_CUT,   0, 0); break;
         case ID_EDIT_PASTE:   SendMessage(GetFocus(), WM_PASTE, 0, 0); break;
@@ -1165,7 +1404,10 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			SendMessage(info->hToolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 
 			HBITMAP hBmpToolbar = LoadBitmap(pcs->hInstance, MAKEINTRESOURCE(IDR_TOOLBAR1));
-			HIMAGELIST hImgList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 5, 0);
+			// 7 cells now: file new/open/save (0..2), ground/heat (3..4),
+			// undo/redo (5..6). See tasks/extend_toolbar1_bmp.ps1 for the
+			// bitmap-extension pattern.
+			HIMAGELIST hImgList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 7, 0);
 			ImageList_AddMasked(hImgList, hBmpToolbar, RGB(0,128,128));
 			DeleteObject(hBmpToolbar);
 			SendMessage(info->hToolbar, TB_SETIMAGELIST, 0, (LPARAM)hImgList);
@@ -1176,10 +1418,13 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 				{1, ID_FILE_OPEN, TBSTATE_ENABLED, BTNS_BUTTON},
 				{2, ID_FILE_SAVE, TBSTATE_ENABLED, BTNS_BUTTON},
 				{0, 0, 0, BTNS_SEP},
+				{5, ID_EDIT_UNDO, 0,                BTNS_BUTTON},
+				{6, ID_EDIT_REDO, 0,                BTNS_BUTTON},
+				{0, 0, 0, BTNS_SEP},
 				{3, ID_VIEW_SHOWGROUND, TBSTATE_ENABLED | TBSTATE_CHECKED, BTNS_CHECK},
 				{4, ID_VIEW_DEBUGHEAT,  TBSTATE_ENABLED, BTNS_CHECK},
 			};
-			SendMessage(info->hToolbar, TB_ADDBUTTONS, 7, (LPARAM)&buttons);
+			SendMessage(info->hToolbar, TB_ADDBUTTONS, 10, (LPARAM)&buttons);
 			
 			if ((info->hRebar = CreateWindow(REBARCLASSNAME, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN,
 				0, 0, 0, 0, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
@@ -1496,6 +1741,10 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     if (hControl == info->hLeaveParticles && info->particleSystem != NULL)
                     {
                         info->particleSystem->setLeaveParticles(SendMessage(hControl, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                        // Single-bool toggle: never coalesce — a "click,
+                        // think, click again" sequence shouldn't collapse.
+                        CaptureUndo(info, UndoStack::MakeCoalesceKey(0xFFFE, 0));
+                        SetFileChanged(info, true);
                     }
                     else if (hControl == info->hToolbar)
                     {
@@ -1524,6 +1773,8 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                         {ID_FILE_NEW,        IDS_TOOLTIP_FILE_NEW},
                         {ID_FILE_OPEN,       IDS_TOOLTIP_FILE_OPEN},
                         {ID_FILE_SAVE,       IDS_TOOLTIP_FILE_SAVE},
+                        {ID_EDIT_UNDO,       IDS_TOOLTIP_EDIT_UNDO},
+                        {ID_EDIT_REDO,       IDS_TOOLTIP_EDIT_REDO},
                         {ID_VIEW_SHOWGROUND, IDS_TOOLTIP_TOGGLE_GROUND},
                         {ID_VIEW_DEBUGHEAT,  IDS_TOOLTIP_DEBUG_HEAT},
                         {0}
@@ -1552,6 +1803,10 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 
 				case ELN_LISTCHANGED:
 					SetFileChanged(info, true);
+					// Structural ops (add / delete / duplicate / move /
+					// rename / paste / rescale) — coalesceKey 0 = never
+					// fold into the previous entry.
+					CaptureUndo(info, 0);
 					break;
 
 				case ELN_SELCHANGED:
@@ -1566,6 +1821,13 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     if (info->engine != NULL)
                     {
                         info->engine->OnParticleSystemChanged(-1);
+                    }
+                    // Coalesce repeated EP_CHANGE on the same emitter
+                    // within the time window (e.g. spinner being held).
+                    {
+                        size_t selIdx = IndexOfEmitter(info->particleSystem, info->selectedEmitter);
+                        WORD discriminator = (selIdx < 0xFFFF) ? (WORD)selIdx : (WORD)0xFFFF;
+                        CaptureUndo(info, UndoStack::MakeCoalesceKey(EP_CHANGE, discriminator));
                     }
 					break;
 
@@ -1583,6 +1845,21 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 					    }
                     }
                     SetFileChanged(info, true);
+                    // Coalesce per (emitter, track). Drag-edits in the
+                    // CurveEditor fire many TE_CHANGEs; the window
+                    // collapses them into one undo step.
+                    {
+                        NMTECHANGE* nmtec = (NMTECHANGE*)lParam;
+                        size_t selIdx = IndexOfEmitter(info->particleSystem, info->selectedEmitter);
+                        // Pack track index (low 4 bits) and emitter index
+                        // (next 12 bits) into a 16-bit discriminator. With
+                        // NUM_TRACKS == 7 we have plenty of room for track,
+                        // and 12 bits = 4096 emitters is far past any real
+                        // particle system.
+                        WORD eIdx = (selIdx < 0x0FFF) ? (WORD)selIdx : (WORD)0x0FFF;
+                        WORD discriminator = (WORD)((eIdx << 4) | (nmtec->track & 0x0F));
+                        CaptureUndo(info, UndoStack::MakeCoalesceKey(TE_CHANGE, discriminator));
+                    }
 					break;
 			}
 			break;

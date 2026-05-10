@@ -42,6 +42,9 @@ BEGIN
     VK_DOWN,        ID_MOVE_EMITTER_DOWN,   VIRTKEY, ALT, NOINVERT
     VK_F7,          ID_EMITTER_SPAWNER,     VIRTKEY, NOINVERT
     VK_SPACE,       ID_SPAWNER_TRIGGER,     VIRTKEY, SHIFT, NOINVERT
+    "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL, NOINVERT
+    "Y",            ID_EDIT_REDO,           VIRTKEY, CONTROL, NOINVERT
+    "Z",            ID_EDIT_REDO,           VIRTKEY, CONTROL, SHIFT, NOINVERT
 END
 
 
@@ -408,6 +411,9 @@ BEGIN
     END
     POPUP "&Edit"
     BEGIN
+        MENUITEM "&Rückgängig\tStrg+Z",         ID_EDIT_UNDO
+        MENUITEM "&Wiederholen\tStrg+Y",        ID_EDIT_REDO
+        MENUITEM SEPARATOR
         MENUITEM "&Ausschneiden\tStrg+X",       ID_EDIT_CUT
         MENUITEM "&Kopieren\tStrg+C",           ID_EDIT_COPY
         MENUITEM "E&infügen\tStrg+V",           ID_EDIT_PASTE
@@ -641,6 +647,8 @@ BEGIN
     IDS_TOOLTIP_EMITTERS_HIDE "Alle Emitter verbergen"
     IDS_TOOLTIP_EMITTER_MOVE_UP "Emitter nach oben verschieben\tAlt+Auf"
     IDS_TOOLTIP_EMITTER_MOVE_DOWN "Emitter nach unten verschieben\tAlt+Ab"
+    IDS_TOOLTIP_EDIT_UNDO   "Rückgängig\tStrg+Z"
+    IDS_TOOLTIP_EDIT_REDO   "Wiederholen\tStrg+Y"
     IDS_PARAMTYPE_EXACT     "Exakt"
     IDS_PARAMTYPE_BOX       "Zufall: Box"
     IDS_PARAMTYPE_SPHERE    "Zufall: Kugel"

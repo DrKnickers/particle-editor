@@ -208,6 +208,11 @@
 #define ID_VIEW_RESET_VIEW_SETTINGS     40095
 #define ID_EMITTER_SPAWNER              40096
 #define ID_SPAWNER_TRIGGER              40097
+#define ID_EDIT_UNDO                    40098
+#define ID_EDIT_REDO                    40099
+
+#define IDS_TOOLTIP_EDIT_UNDO           182
+#define IDS_TOOLTIP_EDIT_REDO           183
 
 // Spawner dialog
 #define IDD_SPAWNER                      150

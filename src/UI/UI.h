@@ -152,6 +152,12 @@ void  EmitterProps_SetEmitter(HWND hWnd, ParticleSystem::Emitter* emitter);
 
 bool EmitterList_Initialize(HINSTANCE hInstance);
 void EmitterList_SetParticleSystem(HWND hWnd, ParticleSystem* system);
+// Select the tree item whose lParam matches `emitter`. No-op if NULL or
+// not found. Walks the tree (depth-first across spawn-field children)
+// because the tree's structural shape mirrors the emitter hierarchy
+// rather than the flat m_emitters index. Used by undo/redo to
+// re-select the emitter that was active at capture time.
+void EmitterList_SelectEmitter(HWND hWnd, ParticleSystem::Emitter* emitter);
 void EmitterList_SelectionChanged(HWND hWnd);
 void EmitterList_AddRootEmitter    (HWND hWnd, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
 void EmitterList_AddLifetimeEmitter(HWND hWnd, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());

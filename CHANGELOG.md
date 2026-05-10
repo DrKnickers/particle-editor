@@ -16,6 +16,41 @@ Conventions:
 
 ## Changelog
 
+### Undo / redo for the particle editor (`Ctrl+Z` / `Ctrl+Y`)
+*2026-05-10 · TODO*
+
+`Ctrl+Z` undoes and `Ctrl+Y` (or `Ctrl+Shift+Z`) redoes any edit that survives a `.alo` save/load: every property field on the three Emitter tabs, every track key, every random-parameter group, structural emitter ops (add / delete / duplicate / move / rename / paste), and the `Leave Particles` system toggle. Editor-only state is intentionally excluded — visibility toggles, selection, expand/collapse, viewport / camera / background / ground / Spawner config, and mod selection do not enter the stack.
+
+UI lives in three places, all wired in both `en.rc` and `de.rc`:
+
+- **Edit menu** — `Undo Ctrl+Z` and `Redo Ctrl+Y` at the top of the existing Edit popup, before Cut/Copy/Paste, with a separator. Greyed when the stack ends are reached.
+- **Toolbar** — two new buttons between the File group and the View toggles, with tooltips. Toolbar1 went from 5 to 7 cells.
+- **Accelerators** — `Ctrl+Z`, `Ctrl+Y`, plus `Ctrl+Shift+Z` as a redo synonym.
+
+Stack is depth-capped at **100 entries**; oldest fall off when full. File ops (New / Open) clear the stack and re-seed it with a load-time baseline so the very first `Ctrl+Z` rewinds back into the loaded file rather than into nothing. Save marks the current entry as "matches disk" so undoing back to a saved state clears the title-bar asterisk and redoing past it restores the asterisk.
+
+Edits within ~1.5 s on the same emitter coalesce into one undo step. That window is wide enough to fold "edit a text field, click into a spinner, edit it" into a single step (which is how users describe an "edit session" on a property panel) but tight enough that a deliberate "tweak A, pause, tweak B" produces two distinct undo entries.
+
+After undo / redo, selection is restored to the emitter that was active at capture time — including child emitters. Live engine instances (Shift-spawned previews, Spawner-driven instances) are killed on undo because they hold C++ references to Emitter objects we're about to delete; the user re-spawns to see the reverted state.
+
+**How we tackled it.** Whole-system snapshot stack rather than a command pattern. Each entry is the byte buffer produced by `ParticleSystem::write` into a `MemoryFile`, plus the selected-emitter index. Restore deserializes via `ParticleSystem(IFile*)` and swaps the new system in. The save/load round-trip is already battle-tested by file open / save and clipboard paste, `.alo` files are tiny (single-digit KB to <100 KB), and snapshot-and-swap sidesteps the hardest part of the command approach — re-creating an `Emitter*` after a delete-undo with the right pointer-equality for live `EmitterInstance` references. New code lives in [`src/UndoStack.{h,cpp}`](src/UndoStack.h).
+
+Three notification sites in [`main.cpp`](src/main.cpp)'s `WM_NOTIFY` handler (`EP_CHANGE`, `TE_CHANGE`, `ELN_LISTCHANGED`) plus the `BN_CLICKED` for the `Leave Particles` checkbox are the capture points. Coalesce key is composed from `(notify-code, emitter-index-or-track)`; structural ops pass key 0 to disable coalescing across an add/delete. A `m_applying` re-entrancy flag in [`UndoStack`](src/UndoStack.h:74) guards against capturing during restore (the rebuild fires its own `EP_CHANGE` / `ELN_SELCHANGED` notifications during `EmitterProps_SetEmitter` / `EmitterList_SetParticleSystem`).
+
+Selection restoration uses a new `EmitterList_SelectEmitter(HWND, Emitter*)` helper in [`src/UI/EmitterList.cpp`](src/UI/EmitterList.cpp) that walks the tree depth-first looking for the item whose `lParam` matches the captured emitter, then `TreeView_SelectItem`s it. The walk is necessary because the tree's structural shape mirrors the spawn-field hierarchy rather than the flat `m_emitters` index.
+
+Toolbar bitmap was extended from 80×16 (5 cells) to 112×16 (7 cells) using the same 4bpp BMP-rewrite pattern as the earlier Move Up / Move Down work; the script is at [`tasks/extend_toolbar1_bmp.ps1`](tasks/extend_toolbar1_bmp.ps1) for reference.
+
+**Issues encountered and resolutions.**
+
+- **Initial draft crashed on undo with "child emitter vanished".** First version of `RestoreFromSnapshot` set `info->particleSystem = sys` and `info->selectedEmitter = &sys->getEmitter(selIdx)` *before* calling `EmitterList_SetParticleSystem`. `TreeView_DeleteAllItems` inside the tree rebuild fires `TVN_SELCHANGED` while items still hold `lParam` pointers to the just-`delete`d old `Emitter` objects. The handler bubbled `ELN_SELCHANGED` up to `main.cpp`, which read `EmitterList_GetSelection()` (a stale pointer) into `info->selectedEmitter`, and `SetEmitterInfo` → `EmitterProps_SetEmitter` then dereferenced it for `emitter->name` etc. on freed memory. **Fix**: mirror `LoadFile` + `OnFileChange`'s safe order — set `info->particleSystem = NULL` and `info->selectedEmitter = NULL` *before* the rebuild, install the new system *after*. `SetEmitterInfo` early-bails when `particleSystem == NULL`. Comment-block at [`main.cpp`](src/main.cpp) explains the trap so the next contributor doesn't re-introduce it.
+- **750 ms coalesce window felt twitchy.** First version split "edit color texture, click into the textureSize spinner, edit that" into two undo entries because the gap between leaving the text field and clicking the spinner exceeded 750 ms. **Fix**: bumped [`UndoStack::COALESCE_WINDOW_MS`](src/UndoStack.h:42) to 1500 ms, which folds natural back-to-back tweaks on the same emitter into one step. Below 1500 ms, switching control type (text → spinner → combo) reliably lost the coalesce.
+- **Whole-system swap kills live preview instances.** `engine->Clear()` is unavoidable on undo because `EmitterInstance` holds a C++ reference (`Emitter& m_emitter`) to its source emitter — references can't be re-bound, so when the source `ParticleSystem` is replaced the instances must die. Re-pointing them via reflection isn't possible in C++. The user-visible effect is "Ctrl+Z killed my Shift-spawned preview"; a follow-up could re-spawn an instance at the original position after restore, but bundling it here would have grown scope.
+- **`Leave Particles` toggle pre-dated `SetFileChanged`.** Pre-existing code mutated `info->particleSystem->setLeaveParticles(...)` on the checkbox click without dirtying the file (no asterisk, no save-on-close prompt). Adding undo capture for it without `SetFileChanged(true)` would have produced an inconsistent state — undoable model change, but title bar said "clean". Added `SetFileChanged(true)` next to the capture call as a small adjacent fix.
+- **`MemoryFile` doesn't expose its buffer directly.** The class is `RefCounted` and lacks a `data()` accessor, so `Serialize` writes into a `MemoryFile`, then `seek(0)` + `read` to copy the bytes back into a `std::vector<char>`. One extra copy per snapshot, irrelevant at the file sizes involved (a few KB). Considered adding `MemoryFile::data()` but the round-trip pattern is also what `Deserialize` needs and keeping the class surface untouched felt cleaner than a one-caller accessor.
+
+---
+
 ### Programmable particle spawner (v1) — `Emitters → Spawner…` / `F7`
 *2026-05-10 · #30*
 

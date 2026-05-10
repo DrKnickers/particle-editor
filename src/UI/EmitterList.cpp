@@ -748,6 +748,44 @@ static void OnParticleSystemChange(EmitterListControl* control, ParticleSystem* 
 }
 
 
+// Walk the tree depth-first looking for an item whose lParam == target.
+// Returns NULL if not found.
+static HTREEITEM FindTreeItemByEmitter(HWND hTree, HTREEITEM hItem,
+                                        const ParticleSystem::Emitter* target)
+{
+    while (hItem != NULL)
+    {
+        TVITEM item;
+        item.hItem = hItem;
+        item.mask  = TVIF_PARAM;
+        if (TreeView_GetItem(hTree, &item) && (ParticleSystem::Emitter*)item.lParam == target)
+        {
+            return hItem;
+        }
+        HTREEITEM hChild = TreeView_GetChild(hTree, hItem);
+        if (hChild != NULL)
+        {
+            HTREEITEM found = FindTreeItemByEmitter(hTree, hChild, target);
+            if (found != NULL) return found;
+        }
+        hItem = TreeView_GetNextSibling(hTree, hItem);
+    }
+    return NULL;
+}
+
+void EmitterList_SelectEmitter(HWND hWnd, ParticleSystem::Emitter* emitter)
+{
+    EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+    if (control == NULL || emitter == NULL) return;
+
+    HTREEITEM hRoot = TreeView_GetRoot(control->hTree);
+    HTREEITEM hFound = FindTreeItemByEmitter(control->hTree, hRoot, emitter);
+    if (hFound != NULL)
+    {
+        TreeView_SelectItem(control->hTree, hFound);
+    }
+}
+
 void EmitterList_SetParticleSystem(HWND hWnd, ParticleSystem* system)
 {
 	EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd,GWLP_USERDATA);
