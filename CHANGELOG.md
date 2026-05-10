@@ -17,7 +17,7 @@ Conventions:
 ## Changelog
 
 ### Undo / redo for the particle editor (`Ctrl+Z` / `Ctrl+Y`)
-*2026-05-10 · TODO*
+*2026-05-10 · [`a0be64a`](https://github.com/DrKnickers/particle-editor/commit/a0be64a) · #31*
 
 `Ctrl+Z` undoes and `Ctrl+Y` (or `Ctrl+Shift+Z`) redoes any edit that survives a `.alo` save/load: every property field on the three Emitter tabs, every track key, every random-parameter group, structural emitter ops (add / delete / duplicate / move / rename / paste), and the `Leave Particles` system toggle. Editor-only state is intentionally excluded — visibility toggles, selection, expand/collapse, viewport / camera / background / ground / Spawner config, and mod selection do not enter the stack.
 
