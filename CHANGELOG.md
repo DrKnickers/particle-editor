@@ -17,7 +17,7 @@ Conventions:
 ## Changelog
 
 ### Drag-and-drop reparenting in the emitter tree
-*2026-05-10 · TODO*
+*2026-05-10 · [`03da959`](https://github.com/DrKnickers/particle-editor/commit/03da959) · #37*
 
 Drop emitter S onto emitter T (mid-row hover) to make S a child of T. The full subtree under S moves with it as a block — children stay attached, source's spawn-field references unchanged. If S was a root, S is no longer a root. If S was already a child of some other emitter P, S is detached from P (P's spawn slot that referenced S becomes -1) and reattached to T.
 
