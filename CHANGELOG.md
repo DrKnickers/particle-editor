@@ -17,7 +17,7 @@ Conventions:
 ## Changelog
 
 ### Bloom in the preview renderer
-*TODO-DATE · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-11 · [`0a172eb`](https://github.com/DrKnickers/particle-editor/commit/0a172eb) · #47*
 
 Particles that bloom in-game now bloom in the editor preview. A new **View → Bloom… / Ctrl+B** dialog exposes the three canonical knobs — *Strength*, *Cutoff*, *Size* — plus a master enable, mirroring the bloom panel from the EAW Terrain Editor that ships with the game. A new toolbar button (sunburst icon, right of Heat Debug) toggles bloom on/off in a single click and stays in sync with the dialog and the persisted state. All four values survive across sessions in the registry; **View → Reset View Settings** drops them back to the canonical new-map defaults (`Cutoff = 0.90`, `Strength = 0.00`, `Size = 0.10`). When the shader can't be loaded (no game path configured, file missing, parameter surface doesn't match), the toolbar button and dialog controls grey out — no crash and no garbage rendering.
 
