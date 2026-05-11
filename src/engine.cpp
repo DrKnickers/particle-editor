@@ -34,10 +34,81 @@ D3DVERTEXELEMENT9 Engine::ParticleElements[] = {
 	D3DDECL_END()
 };
 
-TimeF GetTimeF()
+// Preview clock with pause / frame-step support.
+//
+// Every consumer of "simulation now" — emitter spawn time, particle
+// Update dt, the shader hTime uniform, the spawner driver dt — funnels
+// through GetTimeF(). Freezing time at this single site freezes the
+// whole simulation while Engine::Render() keeps drawing, which is the
+// analysis behaviour we want.
+//
+// Two statics maintain a continuous simulation clock across pause
+// boundaries:
+//
+//   wall          = monotonic seconds since process start
+//   g_pauseOffset = wall seconds "lost" to pause / step (subtracted
+//                   from wall to produce simulation time)
+//   simTime       = wall - g_pauseOffset           when running
+//                 = g_pauseAnchor                  when paused
+//
+// On pause:  anchor = current simTime; clock freezes there.
+// On step:   anchor advances by (n / 60.0f) seconds while still paused.
+//            Stepping persists past resume because offset is re-derived
+//            from the (possibly bumped) anchor at resume time.
+// On resume: offset = wall - anchor; simTime continues exactly where
+//            the anchor pointed, with no time-warp pop.
+//
+// All state is process-local and resets to "not paused" at startup;
+// no persistence by design.
+static bool   g_previewPaused      = false;
+static TimeF  g_previewPauseAnchor = 0.0f;   // simTime while paused
+static TimeF  g_pauseOffset        = 0.0f;   // wall - simTime when running
+
+static TimeF WallTimeF()
 {
     static auto start = GetTickCount();
     return (GetTickCount() - start) / 1000.0f;
+}
+
+TimeF GetTimeF()
+{
+    if (g_previewPaused) return g_previewPauseAnchor;
+    return WallTimeF() - g_pauseOffset;
+}
+
+void SetPreviewPaused(bool paused)
+{
+    if (paused == g_previewPaused) return;
+    if (paused)
+    {
+        // Freeze at the current simulation time.
+        g_previewPauseAnchor = WallTimeF() - g_pauseOffset;
+    }
+    else
+    {
+        // Re-derive offset from the (possibly stepped) anchor so the
+        // running clock resumes from exactly the anchor's value. This
+        // correctly accounts for any StepPreviewFrames calls made
+        // during the pause.
+        g_pauseOffset = WallTimeF() - g_previewPauseAnchor;
+    }
+    g_previewPaused = paused;
+}
+
+bool IsPreviewPaused()
+{
+    return g_previewPaused;
+}
+
+void StepPreviewFrames(int frames)
+{
+    if (!g_previewPaused || frames <= 0) return;
+    // Advance the frozen anchor by N notional 60 Hz frames. The next
+    // Update() call sees a single dt of (frames / 60.0f) seconds — for
+    // the engine's forward-Euler / track-cursor integration that's
+    // visually indistinguishable from N small dts at the granularities
+    // we care about.
+    g_previewPauseAnchor += frames / 60.0f;
 }
 
 ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem& system, Object3D* parent)

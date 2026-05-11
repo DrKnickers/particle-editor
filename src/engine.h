@@ -51,6 +51,12 @@ public:
 typedef float TimeF;
 TimeF GetTimeF();
 
+// Preview pause / frame-step controls. See engine.cpp for the clock-
+// offset model. State is process-local and never persisted.
+void  SetPreviewPaused(bool paused);
+bool  IsPreviewPaused();
+void  StepPreviewFrames(int frames);  // no-op when not paused
+
 class ParticleSystemInstance;
 class EmitterInstance;
 

@@ -103,7 +103,7 @@ BEGIN
     LTEXT           "Interval (s):",IDC_SPAWNER_INTERVAL_LABEL,10,49,42,8
     CONTROL         "",IDC_SPAWNER_INTERVAL,"Spinner",WS_TABSTOP,52,46,47,12,WS_EX_CLIENTEDGE
     LTEXT           "Bursts/s: 0.0",IDC_SPAWNER_BURSTS_PER_SEC,108,49,80,8
-    PUSHBUTTON      "Spawn now (Shift+Space)",IDC_SPAWNER_TRIGGER_BTN,52,46,140,14
+    PUSHBUTTON      "Spawn now (Ctrl+Space)",IDC_SPAWNER_TRIGGER_BTN,52,46,140,14
 
     GROUPBOX        "Spawn position (world units)",-1,4,68,232,28
     LTEXT           "X",-1,10,81,8,8
@@ -377,11 +377,14 @@ BEGIN
     VK_UP,          ID_MOVE_EMITTER_UP,     VIRTKEY, ALT, NOINVERT
     VK_DOWN,        ID_MOVE_EMITTER_DOWN,   VIRTKEY, ALT, NOINVERT
     VK_F7,          ID_EMITTER_SPAWNER,     VIRTKEY, NOINVERT
-    VK_SPACE,       ID_SPAWNER_TRIGGER,     VIRTKEY, SHIFT, NOINVERT
+    VK_SPACE,       ID_SPAWNER_TRIGGER,     VIRTKEY, CONTROL, NOINVERT
     "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL, NOINVERT
     "Y",            ID_EDIT_REDO,           VIRTKEY, CONTROL, NOINVERT
     "Z",            ID_EDIT_REDO,           VIRTKEY, CONTROL, SHIFT, NOINVERT
     "B",            ID_VIEW_BLOOM,          VIRTKEY, CONTROL, NOINVERT
+    VK_F8,          ID_VIEW_PAUSE_PREVIEW,  VIRTKEY, NOINVERT
+    VK_F9,          ID_VIEW_STEP_1_FRAME,   VIRTKEY, NOINVERT
+    VK_F10,         ID_VIEW_STEP_10_FRAMES, VIRTKEY, NOINVERT
 END
 
 
@@ -462,6 +465,10 @@ BEGIN
         MENUITEM "Show &Ground\tCtrl+G",        ID_VIEW_SHOWGROUND
         MENUITEM "Debug &Heat\tCtrl+H",         ID_VIEW_DEBUGHEAT
         MENUITEM "&Bloom...\tCtrl+B",           ID_VIEW_BLOOM
+        MENUITEM SEPARATOR
+        MENUITEM "&Pause Preview\tF8",          ID_VIEW_PAUSE_PREVIEW
+        MENUITEM "Step &1 Frame\tF9",           ID_VIEW_STEP_1_FRAME
+        MENUITEM "Step 1&0 Frames\tF10",        ID_VIEW_STEP_10_FRAMES
         MENUITEM SEPARATOR
         MENUITEM "Reset &Camera\tCtrl+Home",    ID_VIEW_RESETCAMERA
         MENUITEM SEPARATOR

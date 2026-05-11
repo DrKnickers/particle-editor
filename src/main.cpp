@@ -1303,6 +1303,54 @@ static void DoMenuInit(HMENU hMenu, APPLICATION_INFO* info)
 
     EnableMenuItem(hMenu, ID_VIEW_RELOAD_SHADERS,  MF_BYCOMMAND | (info->engine != NULL ? MF_ENABLED : MF_GRAYED));
     EnableMenuItem(hMenu, ID_VIEW_RELOAD_TEXTURES, MF_BYCOMMAND | (info->engine != NULL ? MF_ENABLED : MF_GRAYED));
+
+    // Pause / frame-step preview. The step entries are meaningful only
+    // while paused; greying them communicates "press Pause first".
+    bool paused = IsPreviewPaused();
+    CheckMenuItem (hMenu, ID_VIEW_PAUSE_PREVIEW,  MF_BYCOMMAND | (paused ? MF_CHECKED : MF_UNCHECKED));
+    EnableMenuItem(hMenu, ID_VIEW_STEP_1_FRAME,   MF_BYCOMMAND | (paused ? MF_ENABLED : MF_GRAYED));
+    EnableMenuItem(hMenu, ID_VIEW_STEP_10_FRAMES, MF_BYCOMMAND | (paused ? MF_ENABLED : MF_GRAYED));
+}
+
+// Spawner dt accumulator. Lives at file scope (rather than as a static
+// inside Render) so the frame-step path in DoStepFrames can update it
+// after manually ticking the spawner — otherwise the next natural
+// Render would re-apply the elapsed step time and double-tick.
+static TimeF g_spawnerLastFrameTime = 0.0f;
+
+// Frame-step the preview by N notional 60 Hz frames. Implemented as a
+// loop of N small (1/60 s) integrations rather than one big (N/60 s)
+// integration so spawner-owned moving instances interpolate cleanly:
+// the projectile's position advances in N small hops, and the smoke
+// emitters spawn a particle at each intermediate position, producing
+// a continuous trail. A single big dt would jump the projectile by
+// N×Δp in one shot and leave a visible gap in the trail (since the
+// smoke emitter only gets one spawn opportunity at the post-jump
+// position).
+//
+// `g_spawnerLastFrameTime` is reset after the loop so the natural
+// Render-loop doesn't re-apply the elapsed step time and double-tick
+// the spawner. No-op when not paused.
+static void DoStepFrames(APPLICATION_INFO* info, int frames)
+{
+    if (!IsPreviewPaused() || info->engine == NULL || frames <= 0) return;
+
+    const float dtPerFrame = 1.0f / 60.0f;
+    for (int i = 0; i < frames; i++)
+    {
+        StepPreviewFrames(1);
+        if (info->spawner != NULL)
+        {
+            info->spawner->Tick(dtPerFrame, info->particleSystem, info->engine);
+        }
+        info->engine->Update();
+    }
+    g_spawnerLastFrameTime = GetTimeF();
+
+    if (info->hRenderWnd != NULL)
+    {
+        InvalidateRect(info->hRenderWnd, NULL, FALSE);
+    }
 }
 
 static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
@@ -1404,14 +1452,43 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             break;
 
         case ID_SPAWNER_TRIGGER:
-            // Shift+Space global hotkey. In Manual mode, fires a single
+            // Ctrl+Space global hotkey. In Manual mode, fires a single
             // burst from the current path-anchor with the configured
             // velocity / jitter. In Auto mode, no-op (the schedule is
-            // already running).
+            // already running). The chord moved from Shift+Space in
+            // so that Shift is reserved for "modify gesture"
+            // semantics; Ctrl is the idiomatic "trigger discrete
+            // action" modifier.
             if (info->spawner != NULL)
             {
                 info->spawner->Trigger(info->particleSystem, info->engine);
             }
+            break;
+
+        case ID_VIEW_PAUSE_PREVIEW:
+        {
+            // Pause / resume the preview simulation. GetTimeF() is
+            // frozen while paused; Engine::Render() continues so the
+            // last frame stays drawn for inspection.
+            bool newState = !IsPreviewPaused();
+            SetPreviewPaused(newState);
+            SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_PAUSE_PREVIEW,
+                        MAKELONG(newState ? TRUE : FALSE, 0));
+            // Step buttons are only meaningful while paused; grey them
+            // out otherwise so the disabled state matches the menu.
+            SendMessage(info->hToolbar, TB_SETSTATE, ID_VIEW_STEP_1_FRAME,
+                        MAKELONG(newState ? TBSTATE_ENABLED : 0, 0));
+            SendMessage(info->hToolbar, TB_SETSTATE, ID_VIEW_STEP_10_FRAMES,
+                        MAKELONG(newState ? TBSTATE_ENABLED : 0, 0));
+            break;
+        }
+
+        case ID_VIEW_STEP_1_FRAME:
+            DoStepFrames(info, 1);
+            break;
+
+        case ID_VIEW_STEP_10_FRAMES:
+            DoStepFrames(info, 10);
             break;
 
         case ID_VIEW_RESET_VIEW_SETTINGS:
@@ -1524,14 +1601,13 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
 static void Render(APPLICATION_INFO* info)
 {
     static FPSMeasurer measurer;
-    static TimeF       lastFrameTime = 0.0f;
 
     // Drive the programmable spawner first so any new instances it
     // creates are visible to the engine update + render this frame.
     {
         TimeF now = GetTimeF();
-        float dt = (lastFrameTime > 0.0f) ? (float)(now - lastFrameTime) : 0.0f;
-        lastFrameTime = now;
+        float dt = (g_spawnerLastFrameTime > 0.0f) ? (float)(now - g_spawnerLastFrameTime) : 0.0f;
+        g_spawnerLastFrameTime = now;
         if (info->spawner != NULL)
         {
             info->spawner->Tick(dt, info->particleSystem, info->engine);
@@ -1549,7 +1625,13 @@ static void Render(APPLICATION_INFO* info)
     // Update status bar
     SendMessage(info->hStatusBar, SB_SETTEXT, 0, (LPARAM)LoadString(IDS_STATUS_INSTANCES, info->engine->GetNumInstances(), info->engine->GetNumEmitters()).c_str());
     SendMessage(info->hStatusBar, SB_SETTEXT, 1, (LPARAM)LoadString(IDS_STATUS_PARTICLES, info->engine->GetNumParticles()).c_str());
-    SendMessage(info->hStatusBar, SB_SETTEXT, 2, (LPARAM)LoadString(IDS_STATUS_FPS,       (int)measurer.getFPS()).c_str());
+    {
+        // Append " · PAUSED" so the pause state is glanceable without
+        // adding a sixth status-bar pane.
+        std::wstring fps = LoadString(IDS_STATUS_FPS, (int)measurer.getFPS());
+        if (IsPreviewPaused()) fps += L" · PAUSED";
+        SendMessage(info->hStatusBar, SB_SETTEXT, 2, (LPARAM)fps.c_str());
+    }
 
     // If the spawner dialog is open, refresh its status counter.
     if (info->spawner != NULL && info->engine != NULL && info->hSpawnerDlg != NULL && info->spawnerVisible)
@@ -1611,15 +1693,18 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			SendMessage(info->hToolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 
 			HBITMAP hBmpToolbar = LoadBitmap(pcs->hInstance, MAKEINTRESOURCE(IDR_TOOLBAR1));
-			// 8 cells now: file new/open/save (0..2), ground/heat (3..4),
-			// undo/redo (5..6), bloom (7). See tasks/extend_toolbar1_bmp.ps1
-			// and tasks/extend_toolbar1_bmp_bloom.ps1 for the
-			// bitmap-extension pattern.
-			HIMAGELIST hImgList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 8, 0);
+			// 11 cells now: file new/open/save (0..2), ground/heat (3..4),
+			// undo/redo (5..6), bloom (7), pause/step1/step10 (8..10).
+			// See tasks/extend_toolbar1_bmp.ps1, _bloom.ps1, _pause.ps1,
+			// and _step.ps1 for the bitmap-extension pattern.
+			HIMAGELIST hImgList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 11, 0);
 			ImageList_AddMasked(hImgList, hBmpToolbar, RGB(0,128,128));
 			DeleteObject(hBmpToolbar);
 			SendMessage(info->hToolbar, TB_SETIMAGELIST, 0, (LPARAM)hImgList);
 
+			// Step buttons start disabled (pause is off at launch); the
+			// pause WM_COMMAND handler toggles their TBSTATE_ENABLED bit
+			// to mirror IsPreviewPaused().
 			TBBUTTON buttons[] = {
 				{0, 0, 0, BTNS_SEP},
 				{0, ID_FILE_NEW,  TBSTATE_ENABLED, BTNS_BUTTON},
@@ -1632,8 +1717,11 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 				{3, ID_VIEW_SHOWGROUND,     TBSTATE_ENABLED | TBSTATE_CHECKED, BTNS_CHECK},
 				{4, ID_VIEW_DEBUGHEAT,      TBSTATE_ENABLED,                   BTNS_CHECK},
 				{7, ID_VIEW_BLOOM_TOGGLE,   TBSTATE_ENABLED,                   BTNS_CHECK},
+				{8, ID_VIEW_PAUSE_PREVIEW,  TBSTATE_ENABLED,                   BTNS_CHECK},
+				{9, ID_VIEW_STEP_1_FRAME,   0,                                 BTNS_BUTTON},
+				{10,ID_VIEW_STEP_10_FRAMES, 0,                                 BTNS_BUTTON},
 			};
-			SendMessage(info->hToolbar, TB_ADDBUTTONS, 11, (LPARAM)&buttons);
+			SendMessage(info->hToolbar, TB_ADDBUTTONS, 14, (LPARAM)&buttons);
 			
 			if ((info->hRebar = CreateWindow(REBARCLASSNAME, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN,
 				0, 0, 0, 0, hWnd, NULL, pcs->hInstance, NULL)) == NULL)

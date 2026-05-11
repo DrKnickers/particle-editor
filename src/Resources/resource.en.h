@@ -254,6 +254,11 @@
 #define IDC_BLOOM_SIZE                  1403
 #define IDS_TOOLTIP_TOGGLE_BLOOM        187
 
+// Preview pause / frame-step ()
+#define ID_VIEW_PAUSE_PREVIEW           40114
+#define ID_VIEW_STEP_1_FRAME            40115
+#define ID_VIEW_STEP_10_FRAMES          40116
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
