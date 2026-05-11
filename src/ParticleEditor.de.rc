@@ -45,6 +45,7 @@ BEGIN
     "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL, NOINVERT
     "Y",            ID_EDIT_REDO,           VIRTKEY, CONTROL, NOINVERT
     "Z",            ID_EDIT_REDO,           VIRTKEY, CONTROL, SHIFT, NOINVERT
+    "B",            ID_VIEW_BLOOM,          VIRTKEY, CONTROL, NOINVERT
 END
 
 
@@ -165,6 +166,22 @@ BEGIN
     CONTROL         "",IDC_SPAWNER_JIT_VEL_Z,"Spinner",WS_TABSTOP,130,206,47,12,WS_EX_CLIENTEDGE
 
     LTEXT           "Status: 0 / 50 aktiv",IDC_SPAWNER_STATUS,8,228,224,10
+END
+
+IDD_BLOOM DIALOGEX 0, 0, 180, 95
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_TOOLWINDOW
+CAPTION "Bloom"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    CONTROL         "Bloom aktivieren",IDC_BLOOM_ENABLE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,8,120,10
+    LTEXT           "Stärke:",-1,8,28,40,8
+    CONTROL         "",IDC_BLOOM_STRENGTH,"Spinner",WS_TABSTOP,55,26,50,12,WS_EX_CLIENTEDGE
+    LTEXT           "Schwelle:",-1,8,44,40,8
+    CONTROL         "",IDC_BLOOM_CUTOFF,"Spinner",WS_TABSTOP,55,42,50,12,WS_EX_CLIENTEDGE
+    LTEXT           "Größe:",-1,8,60,40,8
+    CONTROL         "",IDC_BLOOM_SIZE,"Spinner",WS_TABSTOP,55,58,50,12,WS_EX_CLIENTEDGE
+    LTEXT           "Verwendet SceneBloom.fx aus dem Spiel — Mods überschreiben.",-1,8,80,164,10
 END
 
 IDD_RANDOM_PARAMETERS DIALOGEX 0, 0, 177, 51
@@ -444,6 +461,7 @@ BEGIN
     BEGIN
         MENUITEM "Zeige &Boden\tStrg+G",        ID_VIEW_SHOWGROUND
         MENUITEM "Teste &Hitze\tStrg+H",        ID_VIEW_DEBUGHEAT
+        MENUITEM "&Bloom...\tStrg+B",           ID_VIEW_BLOOM
         MENUITEM SEPARATOR
         MENUITEM "&Kamera zurücksetzen\tStrg+Pos 1", ID_VIEW_RESETCAMERA
         MENUITEM SEPARATOR
@@ -578,6 +596,7 @@ BEGIN
     IDS_TOOLTIP_FILE_SAVE   "Partikelsystem speichern"
     IDS_TOOLTIP_TOGGLE_GROUND "Boden feststellen"
     IDS_TOOLTIP_DEBUG_HEAT  "Hitze testen"
+    IDS_TOOLTIP_TOGGLE_BLOOM "Bloom umschalten"
     IDS_LABEL_BACKGROUND    "Hintergrund:"
     IDS_LABEL_GROUND_Z      "Bodenhöhe:"
     IDS_LABEL_LEAVE_PARTICLES "Partikel nach Instanzende bestehen lassen"

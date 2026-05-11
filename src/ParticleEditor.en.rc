@@ -141,6 +141,22 @@ BEGIN
     LTEXT           "Status: 0 / 50 active",IDC_SPAWNER_STATUS,8,228,224,10
 END
 
+IDD_BLOOM DIALOGEX 0, 0, 180, 95
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_TOOLWINDOW
+CAPTION "Bloom"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    CONTROL         "Enable bloom",IDC_BLOOM_ENABLE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,8,100,10
+    LTEXT           "Strength:",-1,8,28,40,8
+    CONTROL         "",IDC_BLOOM_STRENGTH,"Spinner",WS_TABSTOP,55,26,50,12,WS_EX_CLIENTEDGE
+    LTEXT           "Cutoff:",-1,8,44,40,8
+    CONTROL         "",IDC_BLOOM_CUTOFF,"Spinner",WS_TABSTOP,55,42,50,12,WS_EX_CLIENTEDGE
+    LTEXT           "Size:",-1,8,60,40,8
+    CONTROL         "",IDC_BLOOM_SIZE,"Spinner",WS_TABSTOP,55,58,50,12,WS_EX_CLIENTEDGE
+    LTEXT           "Uses the game's SceneBloom.fx — mods override automatically.",-1,8,80,164,10
+END
+
 IDD_RANDOM_PARAMETERS DIALOGEX 0, 0, 177, 51
 STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD | WS_CLIPCHILDREN
 EXSTYLE WS_EX_CONTROLPARENT
@@ -365,6 +381,7 @@ BEGIN
     "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL, NOINVERT
     "Y",            ID_EDIT_REDO,           VIRTKEY, CONTROL, NOINVERT
     "Z",            ID_EDIT_REDO,           VIRTKEY, CONTROL, SHIFT, NOINVERT
+    "B",            ID_VIEW_BLOOM,          VIRTKEY, CONTROL, NOINVERT
 END
 
 
@@ -444,6 +461,7 @@ BEGIN
     BEGIN
         MENUITEM "Show &Ground\tCtrl+G",        ID_VIEW_SHOWGROUND
         MENUITEM "Debug &Heat\tCtrl+H",         ID_VIEW_DEBUGHEAT
+        MENUITEM "&Bloom...\tCtrl+B",           ID_VIEW_BLOOM
         MENUITEM SEPARATOR
         MENUITEM "Reset &Camera\tCtrl+Home",    ID_VIEW_RESETCAMERA
         MENUITEM SEPARATOR
@@ -578,6 +596,7 @@ BEGIN
     IDS_TOOLTIP_FILE_SAVE   "Save particle system"
     IDS_TOOLTIP_TOGGLE_GROUND "Toggle ground"
     IDS_TOOLTIP_DEBUG_HEAT  "Debug Heat"
+    IDS_TOOLTIP_TOGGLE_BLOOM "Toggle bloom"
     IDS_LABEL_BACKGROUND    "Background:"
     IDS_LABEL_GROUND_Z      "Ground Height:"
     IDS_LABEL_LEAVE_PARTICLES "Leave particles after instance death"

@@ -471,6 +471,10 @@ static void             WriteBackgroundColor(COLORREF color);
 static bool             ReadShowGround(bool defaultValue);
 static float            ReadGroundZ(float defaultValue);
 static void             WriteGroundZ(float z);
+static bool             ReadBloomEnabled(bool defaultValue);
+static void             WriteBloomEnabled(bool enabled);
+static float            ReadBloomFloat(const wchar_t* name, float defaultValue);
+static void             WriteBloomFloat(const wchar_t* name, float value);
 static void             WriteShowGround(bool show);
 static bool             ReadCustomColors(COLORREF out[16]);
 static void             WriteCustomColors(const COLORREF in[16]);
@@ -478,6 +482,7 @@ static void             ResetViewSettings();
 static bool             ReadSpawnerDialogPos(RECT& out);
 static void             WriteSpawnerDialogPos(const RECT& in);
 static void             ToggleSpawnerDialog(APPLICATION_INFO* info);
+static void             ToggleBloomDialog(APPLICATION_INFO* info);
 static INT_PTR CALLBACK SpawnerDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // Undo / redo helpers (defined alongside the WM_NOTIFY handlers).
@@ -538,6 +543,13 @@ struct APPLICATION_INFO
 	HWND            hSpawnerDlg;        // NULL until first show; lazy-created
 	bool            spawnerVisible;     // tracks visibility for menu check-mark
 	RECT            spawnerWindowRect;  // last-known position (session + registry)
+
+	// Bloom config dialog (View → Bloom… / Ctrl+B). Same modeless
+	// toggle pattern as the spawner. Engine owns the bloom state
+	// itself; this dialog is just a UI surface over it.
+	HWND            hBloomDlg;
+	bool            bloomDlgVisible;
+	RECT            bloomDlgRect;
 
 	// Undo / redo stack. Holds whole-system byte snapshots; cleared on
 	// file open / new. See src/UndoStack.h for the rationale.
@@ -1368,6 +1380,29 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             ToggleSpawnerDialog(info);
             break;
 
+        case ID_VIEW_BLOOM:
+            ToggleBloomDialog(info);
+            break;
+
+        case ID_VIEW_BLOOM_TOGGLE:
+            if (info->engine != NULL && info->engine->IsBloomAvailable())
+            {
+                bool newState = !info->engine->GetBloom();
+                info->engine->SetBloom(newState);
+                WriteBloomEnabled(newState);
+                SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_BLOOM_TOGGLE,
+                            MAKELONG(newState ? TRUE : FALSE, 0));
+                // Keep the dialog's "Enable bloom" checkbox in lockstep
+                // so a user with the dialog open isn't confused by a
+                // toolbar toggle. WM_USER re-seeds all bloom controls.
+                if (info->hBloomDlg != NULL)
+                {
+                    SendMessage(info->hBloomDlg, WM_USER, 0, 0);
+                }
+                RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+            }
+            break;
+
         case ID_SPAWNER_TRIGGER:
             // Shift+Space global hotkey. In Manual mode, fires a single
             // burst from the current path-anchor with the configured
@@ -1387,7 +1422,7 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             // session-only and resets each launch; we still reset the
             // in-memory spawner state here for parity.
             if (MessageBox(info->hMainWnd,
-                           L"Reset background color, ground plane visibility, ground Z offset, and the color picker's custom colors to defaults?",
+                           L"Reset background color, ground plane visibility, ground Z offset, bloom, and the color picker's custom colors to defaults?",
                            L"Reset View Settings",
                            MB_YESNO | MB_ICONQUESTION) == IDYES)
             {
@@ -1400,6 +1435,10 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
                     info->engine->SetBackground(RGB(0x14, 0x08, 0x34));
                     info->engine->SetGround(true);
                     info->engine->SetGroundZ(0.0f);
+                    info->engine->SetBloom(false);
+                    info->engine->SetBloomStrength(0.0f);
+                    info->engine->SetBloomCutoff(0.90f);
+                    info->engine->SetBloomSize(0.10f);
                     ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
                     SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_SHOWGROUND,
                                 MAKELONG(info->engine->GetGround(), 0));
@@ -1412,6 +1451,15 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
                     }
                     EnableWindow(info->hGroundZLabel,   TRUE);
                     EnableWindow(info->hGroundZSpinner, TRUE);
+                    // If the bloom dialog is open, re-seed its controls
+                    // from the freshly-reset engine values.
+                    if (info->hBloomDlg != NULL)
+                    {
+                        SendMessage(info->hBloomDlg, WM_USER, 0, 0);
+                    }
+                    // Sync the bloom-toggle toolbar button.
+                    SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_BLOOM_TOGGLE,
+                                MAKELONG(FALSE, 0));
                     RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
                 }
                 COLORREF zero[16] = {0};
@@ -1563,10 +1611,11 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			SendMessage(info->hToolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 
 			HBITMAP hBmpToolbar = LoadBitmap(pcs->hInstance, MAKEINTRESOURCE(IDR_TOOLBAR1));
-			// 7 cells now: file new/open/save (0..2), ground/heat (3..4),
-			// undo/redo (5..6). See tasks/extend_toolbar1_bmp.ps1 for the
+			// 8 cells now: file new/open/save (0..2), ground/heat (3..4),
+			// undo/redo (5..6), bloom (7). See tasks/extend_toolbar1_bmp.ps1
+			// and tasks/extend_toolbar1_bmp_bloom.ps1 for the
 			// bitmap-extension pattern.
-			HIMAGELIST hImgList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 7, 0);
+			HIMAGELIST hImgList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 8, 0);
 			ImageList_AddMasked(hImgList, hBmpToolbar, RGB(0,128,128));
 			DeleteObject(hBmpToolbar);
 			SendMessage(info->hToolbar, TB_SETIMAGELIST, 0, (LPARAM)hImgList);
@@ -1580,10 +1629,11 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 				{5, ID_EDIT_UNDO, 0,                BTNS_BUTTON},
 				{6, ID_EDIT_REDO, 0,                BTNS_BUTTON},
 				{0, 0, 0, BTNS_SEP},
-				{3, ID_VIEW_SHOWGROUND, TBSTATE_ENABLED | TBSTATE_CHECKED, BTNS_CHECK},
-				{4, ID_VIEW_DEBUGHEAT,  TBSTATE_ENABLED, BTNS_CHECK},
+				{3, ID_VIEW_SHOWGROUND,     TBSTATE_ENABLED | TBSTATE_CHECKED, BTNS_CHECK},
+				{4, ID_VIEW_DEBUGHEAT,      TBSTATE_ENABLED,                   BTNS_CHECK},
+				{7, ID_VIEW_BLOOM_TOGGLE,   TBSTATE_ENABLED,                   BTNS_CHECK},
 			};
-			SendMessage(info->hToolbar, TB_ADDBUTTONS, 10, (LPARAM)&buttons);
+			SendMessage(info->hToolbar, TB_ADDBUTTONS, 11, (LPARAM)&buttons);
 			
 			if ((info->hRebar = CreateWindow(REBARCLASSNAME, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN,
 				0, 0, 0, 0, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
@@ -2016,6 +2066,7 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                         {ID_EDIT_REDO,       IDS_TOOLTIP_EDIT_REDO},
                         {ID_VIEW_SHOWGROUND, IDS_TOOLTIP_TOGGLE_GROUND},
                         {ID_VIEW_DEBUGHEAT,  IDS_TOOLTIP_DEBUG_HEAT},
+                        {ID_VIEW_BLOOM_TOGGLE, IDS_TOOLTIP_TOGGLE_BLOOM},
                         {0}
 					};
 
@@ -2655,6 +2706,67 @@ static void WriteGroundZ(float z)
     }
 }
 
+// Bloom config persistence. Master enable as DWORD (matches ShowGround
+// pattern); strength / cutoff / size as REG_BINARY floats sharing a
+// single helper since they all behave the same. NaN / Inf rejected
+// so a corrupt blob can't drive bloom into a silly state.
+static bool ReadBloomEnabled(bool defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD value, type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, L"BloomEnabled", NULL, &type, (LPBYTE)&value, &size) == ERROR_SUCCESS && type == REG_DWORD)
+        {
+            RegCloseKey(hKey);
+            return value != 0;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteBloomEnabled(bool enabled)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        DWORD value = enabled ? 1 : 0;
+        RegSetValueEx(hKey, L"BloomEnabled", 0, REG_DWORD, (const BYTE*)&value, sizeof(value));
+        RegCloseKey(hKey);
+    }
+}
+
+static float ReadBloomFloat(const wchar_t* name, float defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        float value;
+        DWORD type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, name, NULL, &type, (LPBYTE)&value, &size) == ERROR_SUCCESS
+            && type == REG_BINARY && size == sizeof(value) && std::isfinite(value))
+        {
+            RegCloseKey(hKey);
+            return value;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteBloomFloat(const wchar_t* name, float value)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        RegSetValueEx(hKey, name, 0, REG_BINARY, (const BYTE*)&value, sizeof(value));
+        RegCloseKey(hKey);
+    }
+}
+
 // `out` must point to a 16-element COLORREF buffer. On miss, leaves the
 // buffer untouched and returns false so the caller can decide whether
 // to seed defaults.
@@ -2696,6 +2808,11 @@ static void ResetViewSettings()
         RegDeleteValue(hKey, L"BackgroundColor");
         RegDeleteValue(hKey, L"ShowGround");
         RegDeleteValue(hKey, L"GroundZ");
+        RegDeleteValue(hKey, L"BloomEnabled");
+        RegDeleteValue(hKey, L"BloomStrength");
+        RegDeleteValue(hKey, L"BloomCutoff");
+        RegDeleteValue(hKey, L"BloomSize");
+        RegDeleteValue(hKey, L"BloomDialogPos");
         RegDeleteValue(hKey, L"CustomColors");
         RegDeleteValue(hKey, L"SpawnerConfig");
         RegDeleteValue(hKey, L"SpawnerDialogPos");
@@ -2734,6 +2851,23 @@ static void WriteSpawnerDialogPos(const RECT& in)
         RegSetValueEx(hKey, L"SpawnerDialogPos", 0, REG_BINARY, (const BYTE*)&in, sizeof(in));
         RegCloseKey(hKey);
     }
+}
+
+static bool ReadBloomDialogPos(RECT& out)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD type, size = sizeof(out);
+        if (RegQueryValueEx(hKey, L"BloomDialogPos", NULL, &type, (LPBYTE)&out, &size) == ERROR_SUCCESS
+            && type == REG_BINARY && size == sizeof(out))
+        {
+            RegCloseKey(hKey);
+            return true;
+        }
+        RegCloseKey(hKey);
+    }
+    return false;
 }
 
 // ============================================================================
@@ -2986,6 +3120,196 @@ static void ToggleSpawnerDialog(APPLICATION_INFO* info)
 
     CheckMenuItem(GetMenu(info->hMainWnd), ID_EMITTER_SPAWNER,
                   MF_BYCOMMAND | (info->spawnerVisible ? MF_CHECKED : MF_UNCHECKED));
+}
+
+//
+// Bloom config dialog. Modeless toggle pattern, same skeleton as the
+// Spawner dialog. The dialog reads engine state on open and pushes
+// every control change live; values persist to the registry on each
+// edit so closing the editor mid-drag never loses configuration.
+//
+
+// Configure a bloom spinner with the standard 0.05 step.
+static void ConfigureBloomSpinner(HWND hDlg, int id, float lo, float hi, float value)
+{
+    SPINNER_INFO si = {0};
+    si.Mask        = SPIF_ALL;
+    si.IsFloat     = true;
+    si.f.MinValue  = lo;
+    si.f.MaxValue  = hi;
+    si.f.Increment = 0.05f;
+    si.f.Value     = value;
+    Spinner_SetInfo(GetDlgItem(hDlg, id), &si);
+}
+
+// Re-seed all bloom dialog controls from the engine's current state.
+// Used at WM_INITDIALOG and after Reset View Settings via a WM_USER
+// nudge from the main window.
+static void BloomDlg_Load(HWND hDlg, APPLICATION_INFO* info)
+{
+    if (info == NULL || info->engine == NULL) return;
+
+    CheckDlgButton(hDlg, IDC_BLOOM_ENABLE,
+                   info->engine->GetBloom() ? BST_CHECKED : BST_UNCHECKED);
+    ConfigureBloomSpinner(hDlg, IDC_BLOOM_STRENGTH, 0.0f, 1.0f, info->engine->GetBloomStrength());
+    ConfigureBloomSpinner(hDlg, IDC_BLOOM_CUTOFF,   0.0f, 2.0f, info->engine->GetBloomCutoff());
+    ConfigureBloomSpinner(hDlg, IDC_BLOOM_SIZE,     0.0f, 2.0f, info->engine->GetBloomSize());
+
+    // Disable controls when the bloom shader isn't actually usable
+    // (file missing / parameters don't match). The dialog still
+    // opens so the user can see *why* nothing's happening.
+    BOOL avail = info->engine->IsBloomAvailable() ? TRUE : FALSE;
+    EnableWindow(GetDlgItem(hDlg, IDC_BLOOM_ENABLE),   avail);
+    EnableWindow(GetDlgItem(hDlg, IDC_BLOOM_STRENGTH), avail);
+    EnableWindow(GetDlgItem(hDlg, IDC_BLOOM_CUTOFF),   avail);
+    EnableWindow(GetDlgItem(hDlg, IDC_BLOOM_SIZE),     avail);
+}
+
+static INT_PTR CALLBACK BloomDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    APPLICATION_INFO* info = (APPLICATION_INFO*)(LONG_PTR)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+
+    switch (uMsg)
+    {
+        case WM_INITDIALOG:
+        {
+            info = (APPLICATION_INFO*)lParam;
+            SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)info);
+            BloomDlg_Load(hDlg, info);
+            return TRUE;
+        }
+
+        // Reset View Settings posts WM_USER to re-seed our controls
+        // from the engine after the engine values have changed.
+        case WM_USER:
+            BloomDlg_Load(hDlg, info);
+            return TRUE;
+
+        case WM_COMMAND:
+        {
+            if (info == NULL || info->engine == NULL) return FALSE;
+            const WORD code = HIWORD(wParam);
+            const WORD id   = LOWORD(wParam);
+
+            if (code == BN_CLICKED && id == IDC_BLOOM_ENABLE)
+            {
+                bool enabled = (IsDlgButtonChecked(hDlg, IDC_BLOOM_ENABLE) == BST_CHECKED);
+                info->engine->SetBloom(enabled);
+                WriteBloomEnabled(enabled);
+                // Sync the toolbar's bloom-toggle button so all three
+                // entry points (toolbar button, dialog checkbox, menu)
+                // agree on the current state.
+                SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_BLOOM_TOGGLE,
+                            MAKELONG(enabled ? TRUE : FALSE, 0));
+                RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                return TRUE;
+            }
+
+            if (code == SN_CHANGE)
+            {
+                SPINNER_INFO si = {0};
+                si.Mask    = SPIF_VALUE;
+                si.IsFloat = true;
+                Spinner_GetInfo(GetDlgItem(hDlg, id), &si);
+                const float v = si.f.Value;
+
+                switch (id)
+                {
+                    case IDC_BLOOM_STRENGTH:
+                        info->engine->SetBloomStrength(v);
+                        WriteBloomFloat(L"BloomStrength", v);
+                        break;
+                    case IDC_BLOOM_CUTOFF:
+                        info->engine->SetBloomCutoff(v);
+                        WriteBloomFloat(L"BloomCutoff", v);
+                        break;
+                    case IDC_BLOOM_SIZE:
+                        info->engine->SetBloomSize(v);
+                        WriteBloomFloat(L"BloomSize", v);
+                        break;
+                    default:
+                        return FALSE;
+                }
+                RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                return TRUE;
+            }
+            return FALSE;
+        }
+
+        case WM_CLOSE:
+        {
+            if (info != NULL)
+            {
+                GetWindowRect(hDlg, &info->bloomDlgRect);
+                HKEY hKey;
+                if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                                   REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+                {
+                    RegSetValueEx(hKey, L"BloomDialogPos", 0, REG_BINARY,
+                                  (const BYTE*)&info->bloomDlgRect, sizeof(info->bloomDlgRect));
+                    RegCloseKey(hKey);
+                }
+                ShowWindow(hDlg, SW_HIDE);
+                info->bloomDlgVisible = false;
+                CheckMenuItem(GetMenu(info->hMainWnd), ID_VIEW_BLOOM, MF_BYCOMMAND | MF_UNCHECKED);
+            }
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static void ToggleBloomDialog(APPLICATION_INFO* info)
+{
+    if (info == NULL || info->hMainWnd == NULL) return;
+
+    if (info->hBloomDlg == NULL)
+    {
+        info->hBloomDlg = CreateDialogParam(
+            info->hInstance,
+            MAKEINTRESOURCE(IDD_BLOOM),
+            info->hMainWnd,
+            BloomDlgProc,
+            (LPARAM)info);
+
+        if (info->hBloomDlg == NULL) return;
+
+        // Try to restore prior position; ignore stale off-screen rects.
+        if (info->bloomDlgRect.right > info->bloomDlgRect.left)
+        {
+            RECT r = info->bloomDlgRect;
+            HMONITOR hm = MonitorFromRect(&r, MONITOR_DEFAULTTONULL);
+            if (hm != NULL)
+            {
+                SetWindowPos(info->hBloomDlg, NULL, r.left, r.top, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+
+    if (info->bloomDlgVisible)
+    {
+        GetWindowRect(info->hBloomDlg, &info->bloomDlgRect);
+        HKEY hKey;
+        if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                           REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+        {
+            RegSetValueEx(hKey, L"BloomDialogPos", 0, REG_BINARY,
+                          (const BYTE*)&info->bloomDlgRect, sizeof(info->bloomDlgRect));
+            RegCloseKey(hKey);
+        }
+        ShowWindow(info->hBloomDlg, SW_HIDE);
+        info->bloomDlgVisible = false;
+    }
+    else
+    {
+        ShowWindow(info->hBloomDlg, SW_SHOW);
+        SetForegroundWindow(info->hBloomDlg);
+        info->bloomDlgVisible = true;
+    }
+
+    CheckMenuItem(GetMenu(info->hMainWnd), ID_VIEW_BLOOM,
+                  MF_BYCOMMAND | (info->bloomDlgVisible ? MF_CHECKED : MF_UNCHECKED));
 }
 
 // Returns the display label for a mod (nickname if set, else folder name).
@@ -3453,6 +3777,12 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             info->engine->SetBackground(ReadBackgroundColor(info->engine->GetBackground()));
             info->engine->SetGround    (ReadShowGround    (info->engine->GetGround()));
             info->engine->SetGroundZ   (ReadGroundZ       (info->engine->GetGroundZ()));
+            // Bloom: defaults off; tunables default to game-spec values
+            // baked into Engine's constructor (0.1 / 1.0 / 0.25).
+            info->engine->SetBloom        (ReadBloomEnabled(false));
+            info->engine->SetBloomStrength(ReadBloomFloat(L"BloomStrength", info->engine->GetBloomStrength()));
+            info->engine->SetBloomCutoff  (ReadBloomFloat(L"BloomCutoff",   info->engine->GetBloomCutoff()));
+            info->engine->SetBloomSize    (ReadBloomFloat(L"BloomSize",     info->engine->GetBloomSize()));
             COLORREF persistedCustom[16];
             if (ReadCustomColors(persistedCustom)) ColorButton_SetCustomColors(persistedCustom);
 
@@ -3461,6 +3791,7 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             // user preference. Dialog position is still restored so the
             // window doesn't bounce around between launches.
             ReadSpawnerDialogPos(info->spawnerWindowRect);
+            ReadBloomDialogPos(info->bloomDlgRect);
 
             ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
 
@@ -3485,6 +3816,15 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             }
             EnableWindow(info->hGroundZLabel,   info->engine->GetGround());
             EnableWindow(info->hGroundZSpinner, info->engine->GetGround());
+
+            // Sync the bloom-toggle toolbar button to engine state.
+            // Grey out the button when bloom can't run (shader missing
+            // / unsupported); otherwise reflect the persisted enable.
+            const bool bloomAvail = info->engine->IsBloomAvailable();
+            SendMessage(info->hToolbar, TB_ENABLEBUTTON, ID_VIEW_BLOOM_TOGGLE,
+                        MAKELONG(bloomAvail ? TRUE : FALSE, 0));
+            SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_BLOOM_TOGGLE,
+                        MAKELONG(info->engine->GetBloom() ? TRUE : FALSE, 0));
         }
         catch (exception&)
         {
@@ -3723,6 +4063,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	info.hSpawnerDlg            = NULL;
 	info.spawnerVisible         = false;
 	memset(&info.spawnerWindowRect, 0, sizeof(info.spawnerWindowRect));
+	info.hBloomDlg              = NULL;
+	info.bloomDlgVisible        = false;
+	memset(&info.bloomDlgRect, 0, sizeof(info.bloomDlgRect));
 
 #ifdef NDEBUG
  	try
