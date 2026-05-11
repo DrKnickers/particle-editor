@@ -116,7 +116,12 @@ public:
 		};
 		#pragma pack()
 
-		// Emitter hierarchy
+		// Emitter hierarchy. Exactly one child of each type per emitter,
+		// not a list — the engine's runtime struct has a single 8-byte
+		// pointer slot for each (`+0x1108` deathChild, `+0x1110` lifeChild,
+		// proved from `StarWarsG.exe::FUN_14015ed60` and `EAW Terrain
+		// Editor.exe::FUN_140134b50`, both 2968-byte writer functions).
+		// See `tasks/multi_child_emitter_investigation.md`.
 		size_t   spawnOnDeath;
 		size_t   spawnDuringLife;
 		Emitter* parent;
