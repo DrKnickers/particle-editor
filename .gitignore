@@ -250,3 +250,8 @@ paket-files/
 # JetBrains Rider
 .idea/
 *.sln.iml
+
+# Ghidra: project database is rebuildable from binaries + scripts.
+# Hundreds of MB per analyzed exe; never commit. Scripts under
+# tasks/ghidra_scripts/ ARE committed -- they're the reproducer.
+tasks/ghidra_project/

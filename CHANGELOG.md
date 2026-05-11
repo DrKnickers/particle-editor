@@ -16,6 +16,26 @@ Conventions:
 
 ## Changelog
 
+### Bloom blur-iteration count proven canonical
+
+*2026-05-11 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+`BLOOM_BLUR_ITERATIONS = 4` in [`src/engine.cpp`](src/engine.cpp:551) is now provably the canonical engine value, not the educated guess it was when shipped. Comment-only change next to the constant — no behavioural diff, no UI surface, no perf change. Visual A/B against the canonical Terrain Editor is no longer needed for *this* specific question (the value is proven from the binary), though it remains worth doing once as a sanity check on the broader bloom pipeline.
+
+**How we tackled it.** Static reverse-engineering of `EAW Terrain Editor.exe` (Petroglyph 2025 64-bit patch, x64 PE, stripped). Imported into Ghidra 12.0.4 + Adoptium Temurin JDK 21 — both kept persistently under `C:\Tools\` for future RE work. A handful of Jython scripts under [`tasks/ghidra_scripts/`](tasks/ghidra_scripts) drive the analysis: [`FindBloomLoop.py`](tasks/ghidra_scripts/FindBloomLoop.py) anchors on the `BloomStrength`/`BloomCutoff`/`BloomSize`/`BloomIteration`/`Engine\SceneBloom` strings (all confirmed present in `.rdata` via raw byte scan), collects xref-source functions, and decompiles them; [`InspectIterGlobal.py`](tasks/ghidra_scripts/InspectIterGlobal.py) inspects the loop-bound global Ghidra surfaced and searches the entire program for any other reference to that address. Scripts are committed; the Ghidra project database itself is gitignored (888 MB, rebuildable by re-running `analyzeHeadless -import` on either binary). The full investigation log + provenance lives in [`tasks/find_bloom_iterations.md`](tasks/find_bloom_iterations.md).
+
+**The actual finding.** The bloom render path is `FUN_1400effc0` (anchors on all four `Bloom*` parameter names). Its blur loop reads its bound from `DAT_140f09244`, a runtime global — not an immediate. That global lives in the binary's `.data` section (`140f08000–14105adb7`) and is initialized to `04 00 00 00` (little-endian int32 = `4`) at compile time. A QWORD- and DWORD-LE search across the entire program for the address `0x140f09244` returns **zero hits** — meaning no code path writes the value via any pointer, table, or vtable. The constant is hardcoded for the lifetime of the process; there is no graphics-quality dispatch that would scale it.
+
+**Cross-validation against `StarWarsG.exe`.** Same engine source, different PE. Bloom render is `FUN_140183a30` — byte-identical body size (833 bytes) to the Terrain Editor's `FUN_1400effc0`, identical call sequence. Loop bound at `DAT_140a129f4` (different absolute address — different binary), same `.data`-baked int32 value `4`, same zero-writers property. Both binaries agree, removing any ambiguity about whether the Terrain Editor's value differs from the in-game value.
+
+**Issues encountered and resolutions.**
+
+- **PIX legacy unusable on x64 binaries.** The pre-installed DX SDK June 2010 PIX only attaches to 32-bit D3D9 processes; the modern Petroglyph build is x64 across the board (`swfoc.exe`, `StarWarsG.exe`, `EAW Terrain Editor.exe` — all built 2025-08-08). **Resolution**: skipped capture-based approaches (PIX dead, RenderDoc dropped D3D9 in 1.x, apitrace would have worked but wasn't needed) and went straight to static RE. Lesson recorded as `` in [`tasks/lessons.md`](tasks/lessons.md): don't infer "community recompile" from bitness + recent timestamp. The 64-bit binaries are a first-party Petroglyph patch ([IGN coverage](https://www.ign.com/articles/rts-star-wars-empire-at-war-still-getting-updates-17-years-after-launch)), so RE results from them ARE canonical engine values, not third-party reproductions to be hedged.
+- **Loop bound was a runtime global, not an immediate.** Risk #3 in the plan ("loop count could scale with graphics quality") materialized: Ghidra surfaced `DAT_140f09244` as the upper bound rather than a hardcoded `4` immediate. **Resolution**: the broader-search script proved zero writers anywhere in the binary, so the runtime indirection is cosmetic — equivalent to a hardcoded constant from our perspective. No quality-tier dispatch to chase.
+- **Jython gotchas in headless scripts.** Ghidra 12.0.4 still defaults Jython 2.7 for headless `-postScript`. Three fixes needed: (1) PEP 263 encoding declaration on top of the script (otherwise non-ASCII chars in the source break the loader), (2) `try/except UnicodeEncodeError` around `str(data.getValue())` because some defined-data entries in `EAW Terrain Editor.exe` contain non-ASCII bytes that Jython's default ASCII encoder rejects, (3) `Memory.getInt(addr)` instead of `Memory.getBytes(addr, length)` for reading a value (the latter expects a Java `byte[]` buffer, not a Python int length). Recorded inline in [`tasks/ghidra_scripts/`](tasks/ghidra_scripts) as comments — same trip-hazards apply to any future RE script in this project.
+
+---
+
 ### Bloom in the preview renderer
 *2026-05-11 · [`0a172eb`](https://github.com/DrKnickers/particle-editor/commit/0a172eb) · #47*
 
@@ -653,6 +673,83 @@ Resource IDs are split across:
 The debug build calls `AllocConsole()` for a console window on launch. Exceptions are **not** caught at the WinMain level in debug builds (the try/catch is `#ifdef NDEBUG` only) — any unhandled exception will crash rather than showing a message box.
 
 The app requires a game data path (Empire at War / Forces of Corruption installation) on first run. If the current directory doesn't contain `Data\MegaFiles.xml`, a folder browser dialog will appear asking for the game data location.
+
+### Reverse-engineering the canonical engine binaries
+
+We sometimes need to recover a "magic number" that the engine bakes into its binary but doesn't expose through any shader source or canonical editor UI — for example, the bloom blur iteration count (proven to be `4` via the [investigation in PR #TODO](#bloom-blur-iteration-count-proven-canonical), full plan + review at [`tasks/find_bloom_iterations.md`](tasks/find_bloom_iterations.md)). This section is the kit for doing it again.
+
+#### What you're working with
+
+- **Petroglyph 2025 64-bit patch** binaries at `<path> Wars Empire at War\` (path discovered via `HKLM\SOFTWARE\WOW6432Node\LucasArts\Star Wars Empire at War Forces of Corruption\1.0\exepath` — see [src/main.cpp:2467](src/main.cpp:2467) for the full key list the editor itself uses).
+- **`StarWarsG.exe`** (12.4 MB, x64 PE, stripped) — the actual game engine. `swfoc.exe` is a thin launcher; ignore it.
+- **`EAW Terrain Editor.exe`** (17.1 MB, x64 PE, stripped) at `…\corruption\Mods\Mod\` — same engine code as `StarWarsG.exe`, used as the canonical reference for editor-tool behaviour. Bloom function bodies are byte-identical in size between the two; only addresses differ.
+- **No `.pdb`** — both binaries are stripped. Symbol names will be `FUN_140xxxxxxx` / `DAT_140xxxxxxx`.
+- **PIX legacy is unusable** — the DX SDK June 2010 PIX only attaches to 32-bit D3D9; these binaries are x64. RenderDoc dropped D3D9 support in 1.x. apitrace would work for *capture-based* analysis but isn't needed for static answers.
+
+#### Toolchain (already installed; not part of the editor build)
+
+- **`C:\Tools\jdk-21.0.11+10`** — Adoptium Temurin JDK 21 (Ghidra 12.x dependency).
+- **`C:\Tools\ghidra_12.0.4_PUBLIC`** — Ghidra 12.0.4 reverse-engineering suite.
+
+To re-install or upgrade:
+```powershell
+# JDK 21 latest GA from Adoptium GitHub releases
+gh api repos/adoptium/temurin21-binaries/releases/latest | python -c "import json,sys; r=json.load(sys.stdin); print([a['browser_download_url'] for a in r['assets'] if 'jdk_x64_windows_hotspot' in a['name'] and a['name'].endswith('.zip')][0])"
+# Ghidra latest from NSA GitHub releases
+gh api repos/NationalSecurityAgency/ghidra/releases/latest --jq '.assets[0].browser_download_url'
+```
+Verify SHA-256 against the `.sha256.txt` published next to the JDK zip, and against the SHA-256 line in the Ghidra release notes (`gh api ... --jq '.body'`). Extract both into `C:\Tools\`.
+
+#### The reproducer
+
+The four committed scripts under [`tasks/ghidra_scripts/`](tasks/ghidra_scripts) are general-purpose enough that each new investigation is roughly: *(1) clone-edit one of them with new anchor strings, (2) run via `analyzeHeadless`, (3) read the decompiled output.*
+
+| Script | Purpose |
+|---|---|
+| [`FindBloomLoop.py`](tasks/ghidra_scripts/FindBloomLoop.py) | Anchors on a list of strings (`ANCHORS = [...]`), finds defined-data hits, collects xref-source functions, walks one level up the call graph, decompiles every candidate. Edit the `ANCHORS` list for a different feature. |
+| [`FindBloomIterGlobal.py`](tasks/ghidra_scripts/FindBloomIterGlobal.py) | Once the loop function is identified and the bound is a global, this finds all readers/writers of that global address (`TARGET = 0x…`) and decompiles every writer function. |
+| [`InspectIterGlobal.py`](tasks/ghidra_scripts/InspectIterGlobal.py) | Reads the initial bytes (`mem.getInt`) at a `.data` address and brute-force-searches the entire program for the address as a QWORD-LE / DWORD-LE byte pattern (catches references the auto-analyzer's xref builder missed). |
+| [`InspectIterGlobalSWG.py`](tasks/ghidra_scripts/InspectIterGlobalSWG.py) | The same inspector with the `StarWarsG.exe` address constant. Pattern for cross-validation: clone the script with the cross-binary address. |
+
+First-time import + auto-analysis on a 12–17 MB binary takes ~8–11 minutes. Subsequent script runs on the saved project use `-process` + `-noanalysis` and finish in seconds.
+
+```powershell
+# Set up the JDK Ghidra needs
+$env:JAVA_HOME = 'C:\Tools\jdk-21.0.11+10'
+$env:PATH      = "$env:JAVA_HOME\bin;$env:PATH"
+$gh            = 'C:\Tools\ghidra_12.0.4_PUBLIC\support\analyzeHeadless.bat'
+$proj          = 'tasks\ghidra_project'   # gitignored; rebuildable
+$scripts       = 'tasks\ghidra_scripts'
+
+# First time: import + auto-analyze a binary (slow, ~10 min)
+& $gh $proj BloomRE -import 'D:\…\corruption\Mods\Mod\EAW Terrain Editor.exe' `
+    -scriptPath $scripts -postScript FindBloomLoop.py -overwrite -loader PeLoader 2>&1 |
+    ForEach-Object { "$_" } | Out-File log.txt -Encoding utf8
+
+# Subsequent runs on the saved project (fast, seconds)
+& $gh $proj BloomRE -process 'EAW Terrain Editor.exe' `
+    -scriptPath $scripts -postScript FindBloomLoop.py -noanalysis 2>&1 |
+    ForEach-Object { "$_" } | Out-File log.txt -Encoding utf8
+```
+
+#### Jython gotchas (Ghidra 12.0.4 still defaults to Jython 2.7 for `-postScript`)
+
+- **PEP 263 encoding declaration required.** Top of every script: `# -*- coding: utf-8 -*-`. Without it, any non-ASCII byte in the source file (em-dash, arrow, etc.) breaks the script loader before line 1 runs.
+- **Wrap `str(data.getValue())` in `try/except UnicodeEncodeError`.** Some defined-data entries in the EaW binaries contain non-ASCII bytes; Jython's default ASCII string encoder rejects them and crashes the iteration.
+- **Use `Memory.getInt(addr)` to read an int**, not `Memory.getBytes(addr, length)`. The latter expects a Java `byte[]` buffer, not a Python int length, and the coercion error message is unhelpful (`2nd arg can't be coerced to byte[]`).
+- **For `Memory.findBytes`**, the pattern must be a Java `byte[]`. Build it from a Python int list via `jarray.array([...], 'b')` with values mapped from `0..255` to `-128..127` because Java bytes are signed.
+
+#### PowerShell-on-Win11 pitfalls when driving Ghidra
+
+- **`Tee-Object` and `Out-File` default to UTF-16 LE in PS5.1.** This is harmless for human reading but breaks `rg`/`grep` (they expect UTF-8). Always pass `-Encoding utf8` explicitly when capturing analyzeHeadless output for later grepping.
+- **`Invoke-WebRequest`'s `.Content` is a `byte[]`, not a string** in PS5.1 (changed in PS Core). Calling `.Trim()` on it throws `MethodNotFound`. Either use the SHA-256 published via the Adoptium GitHub Releases API instead of the `.sha256.txt` sidecar, or decode bytes via `[System.Text.Encoding]::ASCII.GetString(...)`.
+- **Native exe stderr lines get wrapped in `RemoteException` PowerShell errors** when the call uses the call operator (`& exe`). The exit code is still correct; the stderr text is preserved in the captured output. Don't be alarmed by red console text from `java -version` or `analyzeHeadless.bat` — exit codes are authoritative.
+
+#### Cross-validation pattern
+
+When recovering a constant from one binary, **always re-run on the other one too.** Both `EAW Terrain Editor.exe` and `StarWarsG.exe` are compiled from the same engine source — bloom render function bodies are byte-identical in size, the call graph is identical in shape, but absolute addresses differ. If the constant *doesn't* match across both binaries, that's load-bearing information (the editor and game disagree about something), and the canonical reference for editor-tool behaviour is the Terrain Editor's value.
+
+The Ghidra project at `tasks/ghidra_project/` is gitignored (~888 MB) — it's a rebuildable artifact. The committed scripts under `tasks/ghidra_scripts/` are the durable reproducer.
 
 ---
 

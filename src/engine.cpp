@@ -543,11 +543,13 @@ bool Engine::Render()
 	// Skipped entirely when bloom is off, unavailable, or RTs
 	// failed to alloc — no perf cost in those cases.
 	//
-	// BLOOM_BLUR_ITERATIONS is the count we don't know from the
-	// shader source or the canonical editor UI. Start at 4 and
-	// tune empirically against the canonical look. The shader's
-	// header comment talks about "a series of bloom passes" but
-	// the count is engine-side hardcoded in the game's binary.
+	// BLOOM_BLUR_ITERATIONS = 4 -- canonical engine value, proven by
+	// static RE of the Petroglyph 2025 64-bit patch:
+	//   EAW Terrain Editor.exe: bound at .data:0x140f09244 = 4, 0 writers
+	//   StarWarsG.exe:          bound at .data:0x140a129f4 = 4, 0 writers
+	// Both binaries store the loop bound as a `.data`-baked int32 with
+	// no runtime write site anywhere in the program -- equivalent to a
+	// hardcoded constant. See tasks/find_bloom_iterations.md.
 	static const UINT BLOOM_BLUR_ITERATIONS = 4;
 	if (m_bloomEnabled && m_bloomReady && m_pBloomEffect != NULL
 	    && m_pBloomPing != NULL && m_pBloomPong != NULL)
