@@ -18,7 +18,7 @@ Conventions:
 
 ### Bloom blur-iteration count proven canonical
 
-*2026-05-11 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-11 · [`d8f5794`](https://github.com/DrKnickers/particle-editor/commit/d8f5794) · #49*
 
 `BLOOM_BLUR_ITERATIONS = 4` in [`src/engine.cpp`](src/engine.cpp:551) is now provably the canonical engine value, not the educated guess it was when shipped. Comment-only change next to the constant — no behavioural diff, no UI surface, no perf change. Visual A/B against the canonical Terrain Editor is no longer needed for *this* specific question (the value is proven from the binary), though it remains worth doing once as a sanity check on the broader bloom pipeline.
 
@@ -676,7 +676,7 @@ The app requires a game data path (Empire at War / Forces of Corruption installa
 
 ### Reverse-engineering the canonical engine binaries
 
-We sometimes need to recover a "magic number" that the engine bakes into its binary but doesn't expose through any shader source or canonical editor UI — for example, the bloom blur iteration count (proven to be `4` via the [investigation in PR #TODO](#bloom-blur-iteration-count-proven-canonical), full plan + review at [`tasks/find_bloom_iterations.md`](tasks/find_bloom_iterations.md)). This section is the kit for doing it again.
+We sometimes need to recover a "magic number" that the engine bakes into its binary but doesn't expose through any shader source or canonical editor UI — for example, the bloom blur iteration count (proven to be `4` via the [investigation in PR #49](#bloom-blur-iteration-count-proven-canonical), full plan + review at [`tasks/find_bloom_iterations.md`](tasks/find_bloom_iterations.md)). This section is the kit for doing it again.
 
 #### What you're working with
 
