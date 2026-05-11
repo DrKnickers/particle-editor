@@ -17,7 +17,7 @@ Conventions:
 ## Changelog
 
 ### Adjustable ground-plane height in the preview
-*TODO-DATE · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-10 · [`b2b2533`](https://github.com/DrKnickers/particle-editor/commit/b2b2533) · #45*
 
 The preview ground plane is no longer locked to `Z = 0`. A "Ground Height:" spinner sits in the header strip just left of the Background color picker, with a working range of −100 to +100 units and a 0.1-unit step. Scroll-wheel adjusts (Shift = ×10, Ctrl = ×0.1) like every other Spinner in the editor. The value persists across sessions in `HKCU\Software\AloParticleEditor\GroundZ`. When the "Show Ground" toolbar toggle is off, the label and spinner grey out (still visible — disabled, not hidden — so the spatial layout doesn't shift); flipping ground back on re-enables them and the ground returns to the user's last Z, not 0. **View → Reset View Settings** drops the persisted Z back to 0 alongside the existing reset of background color, ground visibility, and the color-picker custom palette.
 
