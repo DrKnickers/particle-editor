@@ -18,7 +18,7 @@ Conventions:
 
 ### Two-child emitter support: investigation, not extension
 
-*2026-05-11 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-11 · [`2e1b17a`](https://github.com/DrKnickers/particle-editor/commit/2e1b17a) · #51*
 
 closes as an investigation, not a feature change. The question — whether the engine supports more than one on-lifetime child per emitter — is now answered authoritatively from the canonical game binaries: **it does not**. Every emitter holds exactly one death-child pointer and one life-child pointer in its runtime struct; the format-level "could we just stuff a second `0x39` mini-chunk in there?" question is moot because the runtime has nowhere to put a second pointer. The original sub-question (can the existing two slots — one death, one life — be set on a single emitter simultaneously) was already supported end-to-end by our editor; no UI change was needed. Workarounds for the "I want a second life child" case live in [`tasks/multi_child_emitter_investigation.md`](tasks/multi_child_emitter_investigation.md): chain emitters (parent → life-child → life-child → …), duplicate the parent block, or rely on the standard death-channel-plus-life-channel pair.
 
