@@ -268,11 +268,14 @@ bool Engine::Render()
 		static const float TEXTURE_SCALE  = 256;
 		static const float MAP_SIZE       = 80;
 		static const float UNITS_PER_CELL = 20;
-		static const EmitterInstance::Vertex ground[4] = {
-			{D3DXVECTOR3(-UNITS_PER_CELL*MAP_SIZE/2,-UNITS_PER_CELL*MAP_SIZE/2,0), D3DXVECTOR3(0,0,1), D3DXVECTOR2(                                    0,                                     0), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
-			{D3DXVECTOR3( UNITS_PER_CELL*MAP_SIZE/2,-UNITS_PER_CELL*MAP_SIZE/2,0), D3DXVECTOR3(0,0,1), D3DXVECTOR2(MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE,                                     0), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
-			{D3DXVECTOR3(-UNITS_PER_CELL*MAP_SIZE/2, UNITS_PER_CELL*MAP_SIZE/2,0), D3DXVECTOR3(0,0,1), D3DXVECTOR2(                                    0, MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
-			{D3DXVECTOR3( UNITS_PER_CELL*MAP_SIZE/2, UNITS_PER_CELL*MAP_SIZE/2,0), D3DXVECTOR3(0,0,1), D3DXVECTOR2(MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE, MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)}
+		// Per-frame init so m_groundZ is picked up live; cost is 4
+		// vertices × ~80 bytes, negligible against the surrounding draw.
+		const float z = m_groundZ;
+		const EmitterInstance::Vertex ground[4] = {
+			{D3DXVECTOR3(-UNITS_PER_CELL*MAP_SIZE/2,-UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(                                    0,                                     0), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
+			{D3DXVECTOR3( UNITS_PER_CELL*MAP_SIZE/2,-UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE,                                     0), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
+			{D3DXVECTOR3(-UNITS_PER_CELL*MAP_SIZE/2, UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(                                    0, MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
+			{D3DXVECTOR3( UNITS_PER_CELL*MAP_SIZE/2, UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE, MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)}
 		};
 
 		m_pDevice->SetTexture(0, m_pGroundTexture);
@@ -386,6 +389,7 @@ void Engine::SetCamera( const Camera& camera )
 }
 
 void Engine::SetGround(bool enable)			        { m_showGround = enable; }
+void Engine::SetGroundZ(float z)			        { m_groundZ    = z;      }
 void Engine::SetBackground(COLORREF color)		    { m_background = color; }
 void Engine::SetHeatDebug(bool debug)		        { m_debugHeat  = debug;  }
 void Engine::SetWind(const D3DXVECTOR3& wind)       { m_wind = wind; }
@@ -568,6 +572,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 
 	// Initialize members
 	m_showGround     = true;
+	m_groundZ        = 0.0f;
 	m_debugHeat      = false;
 	m_gravity        = D3DXVECTOR3(0,0,-1);
 	m_wind           = D3DXVECTOR3(0,0,0);

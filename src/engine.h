@@ -105,6 +105,7 @@ public:
 	void  SetCamera(const Camera& camera);
 
 	bool     GetGround() const		{ return m_showGround; }
+	float    GetGroundZ() const		{ return m_groundZ; }
 	bool     GetHeatDebug() const   { return m_debugHeat; }
     COLORREF GetBackground() const  { return m_background; }
 	const D3DXVECTOR3& GetGravity() const { return m_gravity; }
@@ -146,6 +147,7 @@ public:
 	void SetWind(const D3DXVECTOR3& wind);
 	void SetGravity(const D3DXVECTOR3& gravity);
 	void SetGround(bool enable);
+	void SetGroundZ(float z);
 	void SetHeatDebug(bool debug);
 
 	void				Reset();
@@ -182,6 +184,7 @@ private:
 
     COLORREF    m_background;
 	bool		m_showGround;
+	float		m_groundZ;
 	bool		m_debugHeat;
 	D3DXVECTOR3 m_wind;
 	D3DXVECTOR3	m_gravity;

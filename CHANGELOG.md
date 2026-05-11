@@ -16,6 +16,22 @@ Conventions:
 
 ## Changelog
 
+### Adjustable ground-plane height in the preview
+*TODO-DATE · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+The preview ground plane is no longer locked to `Z = 0`. A "Ground Height:" spinner sits in the header strip just left of the Background color picker, with a working range of −100 to +100 units and a 0.1-unit step. Scroll-wheel adjusts (Shift = ×10, Ctrl = ×0.1) like every other Spinner in the editor. The value persists across sessions in `HKCU\Software\AloParticleEditor\GroundZ`. When the "Show Ground" toolbar toggle is off, the label and spinner grey out (still visible — disabled, not hidden — so the spatial layout doesn't shift); flipping ground back on re-enables them and the ground returns to the user's last Z, not 0. **View → Reset View Settings** drops the persisted Z back to 0 alongside the existing reset of background color, ground visibility, and the color-picker custom palette.
+
+**How we tackled it.** The engine surface is three lines: a `float m_groundZ` member next to `m_showGround` in [`src/engine.h`](src/engine.h), a one-liner `Engine::SetGroundZ` setter in [`src/engine.cpp`](src/engine.cpp), and the four `Vertex` records in the ground-quad block now pick up the live `m_groundZ` instead of literal zeros. The `static const` ground vertex array becomes a per-frame initializer — four vertices × ~80 bytes of init cost is negligible against the surrounding state changes and `DrawPrimitiveUP`. Persistence in [`src/main.cpp`](src/main.cpp) follows the existing `ReadShowGround` / `WriteShowGround` pair: `GroundZ` is stored as REG_BINARY (4 bytes of `float`) which sidesteps the "is REG_DWORD interpreting these bits as a signed integer" ambiguity that REG_DWORD would invite for a value that goes negative. `ReadGroundZ` validates length and rejects `NaN` / `Inf` via `std::isfinite` so a corrupted blob falls back to 0.0f rather than putting the plane in some surprise location.
+
+The UI side: a "Ground Z:" label (`STATIC`) and a `Spinner` are direct children of the main window, created next to the existing `hLeaveParticles` checkbox and positioned in the same WM_SIZE row as the other header-strip controls. The spinner gets a fresh local control ID `ID_GROUNDZ_SPINNER = 0x5000` — above the `IDC_*` dialog-ID range and below `ID_MOD_NONE`. SN_CHANGE flows naturally to the main window's WM_COMMAND (the spinner forwards via `GetParent(hWnd)` → main window) where a new `else if (code == SN_CHANGE)` branch reads the float, pushes it to the engine, persists it, and forces a viewport redraw. The "Show Ground" toggle's existing WM_COMMAND handler now also calls `EnableWindow` on both label and spinner so the disabled state matches the toggle's; startup applies the same gating after restoring the persisted state.
+
+**Issues encountered and resolutions.**
+
+- **Rebar wouldn't carry the spinner cleanly.** The natural-feeling spot is inside the rebar next to the Show Ground button itself, but the rebar control doesn't forward `WM_COMMAND` from its child windows out of the box — making the spinner a rebar child would have routed SN_CHANGE into the rebar's WNDPROC, where it would die. The two-line fix would have been a custom container window or a subclassed rebar WNDPROC; either added more surface area than the feature warranted. **Resolution**: the label + spinner live in the header strip below the rebar (same row as `hLeaveParticles` / background label), positioned next to the existing controls. Visually they're still in the editor's top-of-window UI band, and the wiring is plain Win32 — spinner is a child of the main window, SN_CHANGE goes to the main WNDPROC directly.
+- **Spurious `SN_CHANGE` during startup seeding would have re-written the registry.** `Spinner_SetInfo` updates the edit control's text, which would normally fire EN_CHANGE → SN_CHANGE. **Resolution**: none needed — `Spinner_SetInfo` already sets `allowNotify = false` around the update and restores it after (see [`src/UI/Spinner.cpp`](src/UI/Spinner.cpp)). Confirmed by inspection of the spinner control rather than by patching.
+
+---
+
 ### Autosave for in-progress particles (two-tier)
 *2026-05-10 · [`eb0a183`](https://github.com/DrKnickers/particle-editor/commit/eb0a183) · #41*
 

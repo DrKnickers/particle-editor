@@ -25,6 +25,7 @@
 #define IDS_TOOLTIP_DEBUG_HEAT          115
 #define IDD_EMITTER_PROPS1              116
 #define IDS_LABEL_BACKGROUND            116
+#define IDS_LABEL_GROUND_Z              186
 #define IDD_EMITTER_PROPS2              117
 #define IDS_LABEL_LEAVE_PARTICLES       117
 #define IDD_EMITTER_PROPS3              118

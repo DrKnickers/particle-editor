@@ -443,6 +443,13 @@ static const UINT ID_MOD_REFRESH  = 0xA001;
 static const UINT ID_MOD_FIRST    = 0xA100;
 static const UINT ID_MOD_LAST     = 0xAFFF;
 
+// Header-strip spinner for the ground-plane Z offset. Lives on the
+// row below the rebar alongside hLeaveParticles / hBackgroundLabel,
+// since the rebar control doesn't forward WM_COMMAND from children
+// out of the box. Above the IDC_* dialog-ID range (max ~1322) and
+// below ID_MOD_NONE to avoid collisions in WM_COMMAND.
+static const UINT ID_GROUNDZ_SPINNER = 0x5000;
+
 // Posted to the main window from WM_MENURBUTTONUP to defer the nickname
 // dialog until after the menu's modal loop has finished tearing down.
 // wParam = WM_COMMAND ID of the moused-over mod entry.
@@ -462,6 +469,8 @@ static void             EnsureMenuFonts(APPLICATION_INFO* info);
 static COLORREF         ReadBackgroundColor(COLORREF defaultValue);
 static void             WriteBackgroundColor(COLORREF color);
 static bool             ReadShowGround(bool defaultValue);
+static float            ReadGroundZ(float defaultValue);
+static void             WriteGroundZ(float z);
 static void             WriteShowGround(bool show);
 static bool             ReadCustomColors(COLORREF out[16]);
 static void             WriteCustomColors(const COLORREF in[16]);
@@ -493,6 +502,8 @@ struct APPLICATION_INFO
     HWND      hLeaveParticles;
     HWND      hBackgroundLabel;
     HWND      hBackgroundBtn;
+    HWND      hGroundZLabel;
+    HWND      hGroundZSpinner;
     HWND      hEmitterList;
 	HWND      hPropertyTabs;
 	HWND      hRebar;
@@ -1337,6 +1348,11 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
 			    info->engine->SetGround(!info->engine->GetGround());
 			    SendMessage(info->hToolbar, TB_CHECKBUTTON, id, MAKELONG(info->engine->GetGround(), 0));
                 WriteShowGround(info->engine->GetGround());
+                // Grey the Ground Z label + spinner in lockstep with the
+                // toggle so the disabled state communicates "this knob
+                // doesn't do anything right now."
+                EnableWindow(info->hGroundZLabel,   info->engine->GetGround());
+                EnableWindow(info->hGroundZSpinner, info->engine->GetGround());
             }
 			break;
 
@@ -1371,7 +1387,7 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             // session-only and resets each launch; we still reset the
             // in-memory spawner state here for parity.
             if (MessageBox(info->hMainWnd,
-                           L"Reset background color, ground plane visibility, and the color picker's custom colors to defaults?",
+                           L"Reset background color, ground plane visibility, ground Z offset, and the color picker's custom colors to defaults?",
                            L"Reset View Settings",
                            MB_YESNO | MB_ICONQUESTION) == IDYES)
             {
@@ -1383,9 +1399,19 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
                     // they rarely change.
                     info->engine->SetBackground(RGB(0x14, 0x08, 0x34));
                     info->engine->SetGround(true);
+                    info->engine->SetGroundZ(0.0f);
                     ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
                     SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_SHOWGROUND,
                                 MAKELONG(info->engine->GetGround(), 0));
+                    {
+                        SPINNER_INFO si;
+                        si.Mask = SPIF_VALUE;
+                        si.IsFloat = true;
+                        si.f.Value = 0.0f;
+                        Spinner_SetInfo(info->hGroundZSpinner, &si);
+                    }
+                    EnableWindow(info->hGroundZLabel,   TRUE);
+                    EnableWindow(info->hGroundZSpinner, TRUE);
                     RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
                 }
                 COLORREF zero[16] = {0};
@@ -1647,6 +1673,44 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
             }
             SendMessage(info->hLeaveParticles, WM_SETFONT, (WPARAM)hFont, FALSE);
 
+            // Ground Z spinner + label. Final position is set in WM_SIZE
+            // alongside the other header-strip controls.
+            if ((info->hGroundZLabel = CreateWindowEx(0, L"STATIC", LoadString(IDS_LABEL_GROUND_Z).c_str(), WS_CHILD | WS_VISIBLE,
+                0, 0, 90, 16, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
+            {
+                return -1;
+            }
+            SendMessage(info->hGroundZLabel, WM_SETFONT, (WPARAM)hFont, FALSE);
+
+            if ((info->hGroundZSpinner = CreateWindowEx(WS_EX_CLIENTEDGE, L"Spinner", NULL, WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+                0, 0, 80, 20, hWnd, (HMENU)(UINT_PTR)ID_GROUNDZ_SPINNER, pcs->hInstance, NULL)) == NULL)
+            {
+                return -1;
+            }
+            SendMessage(info->hGroundZSpinner, WM_SETFONT, (WPARAM)hFont, FALSE);
+            // Add 4 px right margin on the edit child so the digits don't
+            // crowd the spinner chevrons. EM_SETMARGINS sets a text-inset;
+            // ES_RIGHT then flushes the number to that inset edge instead
+            // of all the way to the buttons. The first child of a Spinner
+            // is its EDIT (see Spinner.cpp WM_CREATE).
+            {
+                HWND hEdit = GetWindow(info->hGroundZSpinner, GW_CHILD);
+                if (hEdit != NULL)
+                {
+                    SendMessage(hEdit, EM_SETMARGINS, EC_RIGHTMARGIN, MAKELPARAM(0, 4));
+                }
+            }
+            {
+                SPINNER_INFO si;
+                si.Mask        = SPIF_ALL;
+                si.IsFloat     = true;
+                si.f.Value     = 0.0f;
+                si.f.MinValue  = -100.0f;
+                si.f.MaxValue  =  100.0f;
+                si.f.Increment = 0.1f;
+                Spinner_SetInfo(info->hGroundZSpinner, &si);
+            }
+
 			SetEmitterInfo(info);
             AppendHistory(info, hWnd);
 			ShowWindow(info->hTrackEditors[0], SW_SHOW);
@@ -1901,6 +1965,16 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                         WriteCustomColors(currentCustom);
 					}
 				}
+                else if (code == SN_CHANGE)
+                {
+                    if (hControl == info->hGroundZSpinner && info->engine != NULL)
+                    {
+                        float z = GetUIFloat(hWnd, ID_GROUNDZ_SPINNER);
+                        info->engine->SetGroundZ(z);
+                        WriteGroundZ(z);
+                        RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                    }
+                }
                 else if (code == BN_CLICKED)
                 {
                     if (hControl == info->hLeaveParticles && info->particleSystem != NULL)
@@ -2073,15 +2147,29 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 				MoveWindow(info->hEmitterList,  4, top + 4, props.right, HIWORD(lParam) - props.bottom - 8, TRUE);
 				MoveWindow(info->hPropertyTabs, 4, top + HIWORD(lParam) - props.bottom, props.right, props.bottom, TRUE);
 
-                // Move top bar 
+                // Move top bar
                 RECT checkbox;
                 RECT label;
+                RECT groundLabel;
                 GetClientRect(info->hLeaveParticles, &checkbox);
                 GetClientRect(info->hBackgroundLabel, &label);
+                GetClientRect(info->hGroundZLabel, &groundLabel);
                 int height = max(max(24, checkbox.bottom), label.bottom);
+                const int GROUND_SPINNER_W = 80;
+                const int GROUND_SPINNER_H = 20;
                 MoveWindow(info->hLeaveParticles, props.right + 8, top + 4 + (height - checkbox.bottom) / 2, checkbox.right, label.bottom, TRUE);
+                // Right side of the header strip, from right to left:
+                //   [Ground Z label] [Ground Z spinner]  · · ·  [Background label] [Background btn]
+                // Background button is anchored 4 px from the right edge; the
+                // Ground Z group sits 16 px to the left of the background
+                // label so the two groups read as distinct.
+                int bgLabelX = LOWORD(lParam) - 32 - label.right;
+                int gzSpinnerX = bgLabelX - 16 - GROUND_SPINNER_W;
+                int gzLabelX   = gzSpinnerX - 4 - groundLabel.right;
 				MoveWindow(info->hBackgroundBtn,   LOWORD(lParam) - 28, top + 4 + (height - 24) / 2, 24, 24, TRUE);
-				MoveWindow(info->hBackgroundLabel, LOWORD(lParam) - 32 - label.right, top + 4 + (height - label.bottom) / 2, label.right, label.bottom, TRUE);
+				MoveWindow(info->hBackgroundLabel, bgLabelX, top + 4 + (height - label.bottom) / 2, label.right, label.bottom, TRUE);
+                MoveWindow(info->hGroundZSpinner,  gzSpinnerX, top + 4 + (height - GROUND_SPINNER_H) / 2, GROUND_SPINNER_W,  GROUND_SPINNER_H,   TRUE);
+                MoveWindow(info->hGroundZLabel,    gzLabelX,   top + 4 + (height - groundLabel.bottom) / 2, groundLabel.right, groundLabel.bottom, TRUE);
 
 				// Move render window
 				MoveWindow(info->hRenderWnd, props.right + 8, top + 32, LOWORD(lParam) - (props.right + 8), HIWORD(lParam) - tabs.bottom - 36, TRUE);
@@ -2534,6 +2622,39 @@ static void WriteShowGround(bool show)
     }
 }
 
+// Ground-plane Z offset. REG_BINARY of sizeof(float) — sidesteps the
+// DWORD-bit-pattern ambiguity and stays readable in regedit's Modify
+// Binary Data view. NaN / Inf round-trip rejected so a corrupt blob
+// can't push the plane into "where did my ground go" territory.
+static float ReadGroundZ(float defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        float value;
+        DWORD type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, L"GroundZ", NULL, &type, (LPBYTE)&value, &size) == ERROR_SUCCESS
+            && type == REG_BINARY && size == sizeof(value) && std::isfinite(value))
+        {
+            RegCloseKey(hKey);
+            return value;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteGroundZ(float z)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        RegSetValueEx(hKey, L"GroundZ", 0, REG_BINARY, (const BYTE*)&z, sizeof(z));
+        RegCloseKey(hKey);
+    }
+}
+
 // `out` must point to a 16-element COLORREF buffer. On miss, leaves the
 // buffer untouched and returns false so the caller can decide whether
 // to seed defaults.
@@ -2574,6 +2695,7 @@ static void ResetViewSettings()
     {
         RegDeleteValue(hKey, L"BackgroundColor");
         RegDeleteValue(hKey, L"ShowGround");
+        RegDeleteValue(hKey, L"GroundZ");
         RegDeleteValue(hKey, L"CustomColors");
         RegDeleteValue(hKey, L"SpawnerConfig");
         RegDeleteValue(hKey, L"SpawnerDialogPos");
@@ -3330,6 +3452,7 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             // identically to before this feature.
             info->engine->SetBackground(ReadBackgroundColor(info->engine->GetBackground()));
             info->engine->SetGround    (ReadShowGround    (info->engine->GetGround()));
+            info->engine->SetGroundZ   (ReadGroundZ       (info->engine->GetGroundZ()));
             COLORREF persistedCustom[16];
             if (ReadCustomColors(persistedCustom)) ColorButton_SetCustomColors(persistedCustom);
 
@@ -3349,6 +3472,19 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             // click does the wrong thing.
             SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_SHOWGROUND,
                         MAKELONG(info->engine->GetGround() ? TRUE : FALSE, 0));
+
+            // Seed the Ground Z spinner with the restored engine value
+            // and grey it out if ground is hidden. SPIF_VALUE only —
+            // range and increment were set at create time.
+            {
+                SPINNER_INFO si;
+                si.Mask    = SPIF_VALUE;
+                si.IsFloat = true;
+                si.f.Value = info->engine->GetGroundZ();
+                Spinner_SetInfo(info->hGroundZSpinner, &si);
+            }
+            EnableWindow(info->hGroundZLabel,   info->engine->GetGround());
+            EnableWindow(info->hGroundZSpinner, info->engine->GetGround());
         }
         catch (exception&)
         {
