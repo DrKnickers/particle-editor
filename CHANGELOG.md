@@ -18,7 +18,7 @@ Conventions:
 
 ### Pause / frame-step the preview
 
-*2026-05-11 · TODO · TODO*
+*2026-05-11 · [`2899f5b`](https://github.com/DrKnickers/particle-editor/commit/2899f5b) · #53*
 
 Press **F8** to freeze the preview at the current simulation tick; press it again to resume from exactly where time left off (no time-warp pop, no synthetic catch-up burst). While paused, **F9** steps the simulation forward by one notional 60 Hz frame; **F10** steps ten frames (≈167 ms — enough to traverse a one-second particle lifetime in six presses). All three actions also live under *View → Pause Preview / Step 1 Frame / Step 10 Frames*, and as three new toolbar buttons next to the existing Bloom toggle: a pause check-button (cell 8, two-vertical-bars glyph), step-1 (cell 9, ▷|), step-10 (cell 10, ▷▷|). The two step buttons and the corresponding menu entries grey out when not paused. The FPS pane in the status bar suffixes ` · PAUSED` while frozen so the state is glanceable. The clock is process-local — pause always starts off on launch, by design.
 
