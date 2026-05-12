@@ -1,11 +1,112 @@
 #include "UI/UI.h"
 #include "utils.h"
 #include "Rescale.h"
+#include "LinkGroup.h"
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
+#include <cwchar>       // swprintf
 using namespace std;
 
 // Registered clipboard format
 static UINT CF_PARTICLE_EMITTER = 0;
+
+// Compose the display name shown in the tree for a given emitter. When
+// the emitter belongs to a link group, the name is prefixed with
+// `[L<n>] ` so the user can identify group membership from the row
+// text alone (independent of any custom-draw bracket affordance).
+//
+// Group ID is one-based and shown as displayed; the data-model ID is
+// the same value (link-group IDs are stable across save/load and
+// unique within a particle system).
+static std::wstring FormatEmitterDisplayName(const ParticleSystem::Emitter* emitter)
+{
+    if (emitter == NULL) return L"";
+    std::wstring name = AnsiToWide(emitter->name);
+    if (emitter->linkGroup == 0) return name;
+    wchar_t prefix[32];
+    swprintf(prefix, 32, L"[L%u] ", emitter->linkGroup);
+    return std::wstring(prefix) + name;
+}
+
+// Strip a leading "[L<digits>] " from a wide string in-place. Used by
+// the TVN_ENDLABELEDIT handler so the edit box's apparent text (which
+// may include the display prefix) doesn't get persisted back into the
+// emitter's actual name.
+static void StripLinkGroupPrefix(std::wstring& text)
+{
+    if (text.size() < 4 || text[0] != L'[' || text[1] != L'L') return;
+    size_t i = 2;
+    while (i < text.size() && text[i] >= L'0' && text[i] <= L'9') i++;
+    if (i == 2 || i + 1 >= text.size()) return;       // no digits, or no room for ']'
+    if (text[i] != L']' || text[i + 1] != L' ') return;
+    text.erase(0, i + 2);
+}
+
+// Repaint a single tree item's text to reflect the current link-group
+// state. Used after any link-group operation so the [L<n>] prefix
+// matches the data model without rebuilding the whole tree (which
+// would lose expansion state).
+static void RefreshEmitterTreeText(HWND                            hTree,
+                                    HTREEITEM                       hItem,
+                                    const ParticleSystem::Emitter*  emitter)
+{
+    if (hTree == NULL || hItem == NULL || emitter == NULL) return;
+    std::wstring text = FormatEmitterDisplayName(emitter);
+    TVITEM item;
+    item.hItem   = hItem;
+    item.mask    = TVIF_TEXT;
+    item.pszText = (LPWSTR)text.c_str();
+    TreeView_SetItem(hTree, &item);
+}
+
+// Confirmation dialog shown when a link operation will overwrite one
+// emitter's parameters with another's. Spells out the direction
+// explicitly ("X will be overwritten to match Y"), names the source
+// of the surviving values, and lists the affected fields.
+//
+// `victim` is the emitter whose values will be lost. `source` is
+// either the other emitter (for Create) or a textual description of
+// the surviving values (for Join, where the "source" is the group's
+// canonical member). Caller passes an empty `diffs` to suppress the
+// dialog entirely.
+//
+// Returns true to proceed, false to cancel.
+static bool ConfirmLinkOverwrite(HWND                            hOwner,
+                                  const std::wstring&             title,
+                                  const std::wstring&             victimName,
+                                  const std::wstring&             sourceDescription,
+                                  const std::vector<std::string>& diffs)
+{
+    if (diffs.empty()) return true;
+
+    std::wstring msg;
+    msg += L"\"" + victimName + L"\" will be overwritten to match ";
+    msg += sourceDescription;
+    msg += L".\n\nAffected fields (";
+    wchar_t nbuf[16];
+    swprintf(nbuf, 16, L"%zu", diffs.size());
+    msg += nbuf;
+    msg += L"):\n";
+
+    size_t shown = 0;
+    for (size_t d = 0; d < diffs.size() && shown < 8; d++, shown++)
+    {
+        msg += L"  - ";
+        msg += AnsiToWide(diffs[d]);
+        msg += L"\n";
+    }
+    if (diffs.size() > 8)
+    {
+        wchar_t mbuf[32];
+        swprintf(mbuf, 32, L"  ... and %zu more\n", diffs.size() - 8);
+        msg += mbuf;
+    }
+
+    msg += L"\nThe textures, atlas index curve, and name are kept "
+           L"per-emitter and will not be overwritten.\n\nContinue?";
+
+    return MessageBoxW(hOwner, msg.c_str(), title.c_str(),
+                       MB_YESNO | MB_ICONQUESTION) == IDYES;
+}
 
 // Returns "<base>_<n>" where <n> is one more than the highest numeric suffix
 // already in use among emitters in `system` whose name matches `<base>` or
@@ -220,7 +321,7 @@ static int GetTreeNodeIcon(const ParticleSystem* system, size_t iEmitter)
 
 static HTREEITEM InsertTreeItem(EmitterListControl* control, HTREEITEM hParent, ParticleSystem::Emitter* emitter)
 {
-    wstring name = AnsiToWide(emitter->name);
+    wstring name = FormatEmitterDisplayName(emitter);
     TVINSERTSTRUCT tvis;
     tvis.hParent        = hParent;
     tvis.hInsertAfter   = TVI_LAST;
@@ -1185,6 +1286,139 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                         EnableMenuItem(hPopupMenu, ID_MOVE_EMITTER_UP,   MF_BYCOMMAND | (canUp   ? MF_ENABLED : MF_GRAYED));
                         EnableMenuItem(hPopupMenu, ID_MOVE_EMITTER_DOWN, MF_BYCOMMAND | (canDown ? MF_ENABLED : MF_GRAYED));
 
+                        // Link-group menu items (). Built dynamically:
+                        //   - "Link with..." popup, listing other unlinked emitters
+                        //     (visible only when the selection is unlinked)
+                        //   - "Add to link group..." popup, listing existing groups
+                        //     (visible only when ≥1 group exists and selection is unlinked)
+                        //   - "Remove from link group" + "Dissolve link group"
+                        //     (visible only when selection is linked)
+                        //
+                        // `linkMenuCandidates` and `linkMenuGroups` carry the
+                        // ID → emitter / ID → group mapping for the action
+                        // dispatch below; they're sized to the lookup ranges
+                        // reserved in resource.en.h.
+                        std::vector<ParticleSystem::Emitter*> linkMenuCandidates;
+                        std::vector<uint32_t>                 linkMenuGroups;
+                        HMENU hLinkWithSub = NULL;
+                        HMENU hLinkAddSub  = NULL;
+
+                        if (control->selection != NULL)
+                        {
+                            const std::vector<ParticleSystem::Emitter*>& emitters
+                                = control->system->getEmitters();
+                            std::vector<uint32_t> existingGroups
+                                = GetAllLinkGroupIds(*control->system);
+
+                            if (control->selection->linkGroup == 0)
+                            {
+                                // Build "Link with..." submenu listing other
+                                // unlinked emitters (cap at the reserved range).
+                                for (size_t i = 0; i < emitters.size(); i++)
+                                {
+                                    ParticleSystem::Emitter* e = emitters[i];
+                                    if (e == control->selection)  continue;
+                                    if (e->linkGroup != 0)        continue;
+                                    if (linkMenuCandidates.size() >=
+                                        (size_t)(ID_EMITTER_LINK_WITH_LAST -
+                                                 ID_EMITTER_LINK_WITH_FIRST + 1)) break;
+                                    linkMenuCandidates.push_back(e);
+                                }
+                                if (!linkMenuCandidates.empty())
+                                {
+                                    hLinkWithSub = CreatePopupMenu();
+                                    for (size_t i = 0; i < linkMenuCandidates.size(); i++)
+                                    {
+                                        std::wstring label
+                                            = AnsiToWide(linkMenuCandidates[i]->name);
+                                        AppendMenuW(hLinkWithSub, MF_STRING,
+                                                    ID_EMITTER_LINK_WITH_FIRST + i,
+                                                    label.c_str());
+                                    }
+                                }
+
+                                // Build "Add to link group..." submenu listing
+                                // existing groups (cap at the reserved range).
+                                for (size_t i = 0; i < existingGroups.size(); i++)
+                                {
+                                    if (linkMenuGroups.size() >=
+                                        (size_t)(ID_EMITTER_LINK_ADD_LAST -
+                                                 ID_EMITTER_LINK_ADD_FIRST + 1)) break;
+                                    linkMenuGroups.push_back(existingGroups[i]);
+                                }
+                                if (!linkMenuGroups.empty())
+                                {
+                                    hLinkAddSub = CreatePopupMenu();
+                                    for (size_t i = 0; i < linkMenuGroups.size(); i++)
+                                    {
+                                        std::vector<ParticleSystem::Emitter*> mems
+                                            = GetLinkGroupMembers(*control->system,
+                                                                   linkMenuGroups[i]);
+                                        wchar_t buf[128];
+                                        swprintf(buf, 128, L"Group %u  (%s + %zu more)",
+                                                 linkMenuGroups[i],
+                                                 mems.empty() ? L""
+                                                  : AnsiToWide(mems[0]->name).c_str(),
+                                                 mems.size() > 1 ? mems.size() - 1 : 0);
+                                        AppendMenuW(hLinkAddSub, MF_STRING,
+                                                    ID_EMITTER_LINK_ADD_FIRST + i,
+                                                    buf);
+                                    }
+                                }
+                            }
+
+                            // Stitch the link-group section onto the bottom of
+                            // the popup. Order: separator, then submenus (when
+                            // populated), then Remove / Dissolve (when linked).
+                            bool addedSeparator = false;
+                            auto ensureSeparator = [&]() {
+                                if (!addedSeparator) {
+                                    AppendMenuW(hPopupMenu, MF_SEPARATOR, 0, NULL);
+                                    addedSeparator = true;
+                                }
+                            };
+
+                            if (hLinkWithSub != NULL)
+                            {
+                                ensureSeparator();
+                                AppendMenuW(hPopupMenu, MF_POPUP,
+                                            (UINT_PTR)hLinkWithSub,
+                                            L"Link &with...");
+                            }
+                            if (hLinkAddSub != NULL)
+                            {
+                                ensureSeparator();
+                                AppendMenuW(hPopupMenu, MF_POPUP,
+                                            (UINT_PTR)hLinkAddSub,
+                                            L"&Add to link group...");
+                            }
+                            if (control->selection->linkGroup != 0)
+                            {
+                                ensureSeparator();
+                                // "Remove" label conveys auto-dissolve when
+                                // the group would be reduced to 1 member.
+                                std::vector<ParticleSystem::Emitter*> grp
+                                    = GetLinkGroupMembers(*control->system,
+                                                           control->selection->linkGroup);
+                                wchar_t removeLabel[80];
+                                if (grp.size() == 2)
+                                {
+                                    swprintf(removeLabel, 80,
+                                             L"&Remove from link group (dissolves Group %u)",
+                                             control->selection->linkGroup);
+                                }
+                                else
+                                {
+                                    wcscpy_s(removeLabel, 80, L"&Remove from link group");
+                                }
+                                AppendMenuW(hPopupMenu, MF_STRING,
+                                            ID_EMITTER_LINK_REMOVE, removeLabel);
+                                AppendMenuW(hPopupMenu, MF_STRING,
+                                            ID_EMITTER_LINK_DISSOLVE,
+                                            L"&Dissolve link group");
+                            }
+                        }
+
                         INT id = TrackPopupMenuEx(hPopupMenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD, cursor.x, cursor.y, hWnd, NULL);
                         switch (id)
                         {
@@ -1218,6 +1452,174 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                     NotifyParent(control, ELN_LISTCHANGED);
                                 }
                                 break;
+
+                            case ID_EMITTER_LINK_REMOVE:
+                                if (control->selection != NULL &&
+                                    control->selection->linkGroup != 0)
+                                {
+                                    // Capture members of the soon-to-be-modified
+                                    // group BEFORE the leave so the refresh pass
+                                    // hits exactly the right rows (LeaveLinkGroup
+                                    // may auto-dissolve a second member).
+                                    std::vector<ParticleSystem::Emitter*> affected
+                                        = GetLinkGroupMembers(*control->system,
+                                                               control->selection->linkGroup);
+                                    LeaveLinkGroup(*control->system, control->selection);
+                                    for (size_t i = 0; i < affected.size(); i++)
+                                    {
+                                        HTREEITEM hi = FindTreeItemByEmitter(
+                                            control->hTree,
+                                            TreeView_GetRoot(control->hTree),
+                                            affected[i]);
+                                        RefreshEmitterTreeText(control->hTree, hi, affected[i]);
+                                    }
+                                    NotifyParent(control, ELN_LISTCHANGED);
+                                }
+                                break;
+
+                            case ID_EMITTER_LINK_DISSOLVE:
+                                if (control->selection != NULL &&
+                                    control->selection->linkGroup != 0)
+                                {
+                                    uint32_t gid = control->selection->linkGroup;
+                                    std::vector<ParticleSystem::Emitter*> mems
+                                        = GetLinkGroupMembers(*control->system, gid);
+                                    DissolveLinkGroup(*control->system, gid);
+                                    for (size_t i = 0; i < mems.size(); i++)
+                                    {
+                                        HTREEITEM hi = FindTreeItemByEmitter(
+                                            control->hTree,
+                                            TreeView_GetRoot(control->hTree),
+                                            mems[i]);
+                                        RefreshEmitterTreeText(control->hTree, hi, mems[i]);
+                                    }
+                                    NotifyParent(control, ELN_LISTCHANGED);
+                                }
+                                break;
+
+                            default:
+                                // Dynamic menu-ID dispatch for the "Link with..."
+                                // and "Add to link group..." submenus.
+                                if (id >= ID_EMITTER_LINK_WITH_FIRST &&
+                                    id <= ID_EMITTER_LINK_WITH_LAST)
+                                {
+                                    size_t idx = (size_t)(id - ID_EMITTER_LINK_WITH_FIRST);
+                                    if (idx < linkMenuCandidates.size() &&
+                                        control->selection != NULL)
+                                    {
+                                        ParticleSystem::Emitter* partner
+                                            = linkMenuCandidates[idx];
+
+                                        // Pre-diff. CreateLinkGroup always
+                                        // anchors on members[0] (the
+                                        // right-clicked emitter), so the
+                                        // partner is the one whose values
+                                        // get overwritten. Spell that out.
+                                        std::vector<std::string> diffs
+                                            = DiffNonExemptParams(*control->selection,
+                                                                   *partner);
+                                        std::wstring victimName
+                                            = AnsiToWide(partner->name);
+                                        std::wstring sourceDesc = L"\"";
+                                        sourceDesc += AnsiToWide(control->selection->name);
+                                        sourceDesc += L"\"";
+                                        bool proceed = ConfirmLinkOverwrite(
+                                            hWnd, L"Link with...",
+                                            victimName, sourceDesc, diffs);
+
+                                        if (proceed)
+                                        {
+                                            std::vector<ParticleSystem::Emitter*> mems;
+                                            mems.push_back(control->selection);
+                                            mems.push_back(partner);
+                                            uint32_t newId
+                                                = CreateLinkGroup(*control->system, mems);
+                                            if (newId != 0)
+                                            {
+                                                for (size_t k = 0; k < mems.size(); k++)
+                                                {
+                                                    HTREEITEM hi = FindTreeItemByEmitter(
+                                                        control->hTree,
+                                                        TreeView_GetRoot(control->hTree),
+                                                        mems[k]);
+                                                    RefreshEmitterTreeText(control->hTree,
+                                                                            hi, mems[k]);
+                                                }
+                                                NotifyParent(control, ELN_LISTCHANGED);
+                                            }
+                                        }
+                                    }
+                                }
+                                else if (id >= ID_EMITTER_LINK_ADD_FIRST &&
+                                         id <= ID_EMITTER_LINK_ADD_LAST)
+                                {
+                                    size_t idx = (size_t)(id - ID_EMITTER_LINK_ADD_FIRST);
+                                    if (idx < linkMenuGroups.size() &&
+                                        control->selection != NULL)
+                                    {
+                                        uint32_t target = linkMenuGroups[idx];
+
+                                        // JoinLinkGroup anchors on the
+                                        // group's canonical member (the
+                                        // first in tree order), so the
+                                        // joiner is the one whose values
+                                        // get overwritten. Spell that out.
+                                        std::vector<ParticleSystem::Emitter*> grp
+                                            = GetLinkGroupMembers(*control->system, target);
+                                        bool proceed = true;
+                                        if (!grp.empty())
+                                        {
+                                            std::vector<std::string> diffs
+                                                = DiffNonExemptParams(*control->selection,
+                                                                       *grp[0]);
+                                            std::wstring victimName
+                                                = AnsiToWide(control->selection->name);
+                                            wchar_t gbuf[64];
+                                            swprintf(gbuf, 64,
+                                                     L"Group %u's existing values (currently set by \"",
+                                                     target);
+                                            std::wstring sourceDesc = gbuf;
+                                            sourceDesc += AnsiToWide(grp[0]->name);
+                                            sourceDesc += L"\")";
+                                            proceed = ConfirmLinkOverwrite(
+                                                hWnd, L"Add to link group",
+                                                victimName, sourceDesc, diffs);
+                                        }
+                                        if (proceed &&
+                                            JoinLinkGroup(*control->system,
+                                                           control->selection, target))
+                                        {
+                                            HTREEITEM hi = FindTreeItemByEmitter(
+                                                control->hTree,
+                                                TreeView_GetRoot(control->hTree),
+                                                control->selection);
+                                            RefreshEmitterTreeText(control->hTree, hi,
+                                                                    control->selection);
+                                            NotifyParent(control, ELN_LISTCHANGED);
+                                        }
+                                    }
+                                }
+                                break;
+                        }
+
+                        // The static menu is LoadMenu'd once and reused across
+                        // right-clicks, so we must remove every dynamic item
+                        // (link entries + the separator) before returning,
+                        // otherwise they pile up on the next popup. DeleteMenu
+                        // also destroys any attached submenu (per MSDN), so no
+                        // explicit DestroyMenu on the popups — that would be
+                        // a double-free. Walk from end, stop at the original
+                        // Delete item which is always the last static entry.
+                        (void)hLinkWithSub; (void)hLinkAddSub;
+                        {
+                            int n = GetMenuItemCount(hPopupMenu);
+                            while (n > 0)
+                            {
+                                UINT mid = GetMenuItemID(hPopupMenu, n - 1);
+                                if (mid == (UINT)ID_EDIT_DELETE) break;
+                                DeleteMenu(hPopupMenu, n - 1, MF_BYPOSITION);
+                                n--;
+                            }
                         }
                     }
                     break;
@@ -1344,6 +1746,16 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                     WNDPROC wndProc = (WNDPROC)(LONG_PTR)GetWindowLongPtr(hEdit, GWLP_WNDPROC);
                     SetProp(hEdit, L"Old_WindowProc", (HANDLE)wndProc);
                     SetWindowLongPtr(hEdit, GWLP_WNDPROC, (LONG_PTR)LabelEditProc);
+
+                    // The tree's display text may carry a `[L<n>] ` link-
+                    // group prefix; the edit control inherits that prefix
+                    // by default. Replace its content with the bare name
+                    // so the user edits just the identifier they own.
+                    if (control->selection != NULL && control->selection->linkGroup != 0)
+                    {
+                        std::wstring bare = AnsiToWide(control->selection->name);
+                        SetWindowText(hEdit, bare.c_str());
+                    }
                     break;
                 }
 
@@ -1352,7 +1764,18 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                     NMTVDISPINFO* nmtvdi = (NMTVDISPINFO*)lParam;
                     if (nmtvdi->item.pszText != NULL)
                     {
-                        control->selection->name = WideToAnsi(nmtvdi->item.pszText);
+                        // Defensive: if the user managed to type a `[L<n>] `
+                        // prefix manually (or paste from the displayed text
+                        // elsewhere), strip it before persisting.
+                        std::wstring edited = nmtvdi->item.pszText;
+                        StripLinkGroupPrefix(edited);
+                        control->selection->name = WideToAnsi(edited.c_str());
+
+                        // Rebuild the display text with the (possibly
+                        // restored) link-group prefix so the tree row
+                        // reflects current group state after rename.
+                        std::wstring display = FormatEmitterDisplayName(control->selection);
+                        nmtvdi->item.pszText = (LPWSTR)display.c_str();
                         TreeView_SetItem(control->hTree, &nmtvdi->item);
                         NotifyParent(control, ELN_LISTCHANGED);
                         NotifyParent(control, ELN_SELCHANGED);
@@ -1470,7 +1893,7 @@ static void OnParticleSystemChange_AddChildren(HWND hTree, ParticleSystem* syste
 		{
 			index.erase(emitter->spawnDuringLife);
 			const ParticleSystem::Emitter& onLife  = system->getEmitter(emitter->spawnDuringLife);
-			wstring text = AnsiToWide(onLife.name);
+			wstring text = FormatEmitterDisplayName(&onLife);
 
             tvis.item.iImage  = GetTreeNodeIcon(system, onLife.index);
 			tvis.item.pszText = (LPWSTR)text.c_str();
@@ -1486,7 +1909,7 @@ static void OnParticleSystemChange_AddChildren(HWND hTree, ParticleSystem* syste
 		{
 			index.erase(emitter->spawnOnDeath);
 			const ParticleSystem::Emitter& onDeath = system->getEmitter(emitter->spawnOnDeath);
-			wstring text = AnsiToWide(onDeath.name);
+			wstring text = FormatEmitterDisplayName(&onDeath);
 
             tvis.item.iImage  = GetTreeNodeIcon(system, onDeath.index);
 			tvis.item.pszText = (LPWSTR)text.c_str();
@@ -1531,7 +1954,7 @@ static void OnParticleSystemChange(EmitterListControl* control, ParticleSystem* 
 			size_t i = *index.begin();
             if (emitters[i]->parent == NULL)
             {
-			    wstring name = AnsiToWide(emitters[i]->name);
+			    wstring name = FormatEmitterDisplayName(emitters[i]);
                 tvis.item.iImage    = GetTreeNodeIcon(system, i);
 			    tvis.item.cChildren = 1;
 			    tvis.item.pszText   = (LPWSTR)name.c_str();
@@ -1865,7 +2288,7 @@ void EmitterList_SelectionChanged(HWND hWnd)
 	EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd,GWLP_USERDATA);
 	if (control != NULL)
 	{
-        wstring name = AnsiToWide(control->system->getEmitter(control->selection->index).name);
+        wstring name = FormatEmitterDisplayName(&control->system->getEmitter(control->selection->index));
 
 		TVITEM item;
         item.hItem   = TreeView_GetSelection(control->hTree);

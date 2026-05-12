@@ -3,6 +3,7 @@
 #include "ParticleSystem.h"
 #include "EmitterInstance.h"
 #include "ParticleSystemInstance.h"
+#include "LinkGroup.h"
 #include "exceptions.h"
 using namespace std;
 
@@ -285,6 +286,21 @@ void ParticleSystem::Emitter::write(ChunkWriter& writer, bool copy)
 		writer.writeString(normalTexture);
 		writer.endChunk();
 	}
+
+	// Editor-only link-group chunk (). Game engine readers skip
+	// unknown chunks at the emitter level (the existing optional
+	// 0x36 / 0x45 chunks rely on the same behaviour). Only emitted
+	// when this emitter actually belongs to a group, so files
+	// without link groups remain byte-identical to pre-feature
+	// output. Also suppressed when serialising for clipboard copy —
+	// link-group IDs are local to a particle system, so cross-file
+	// paste arrives unlinked by design.
+	if (!copy && linkGroup != 0)
+	{
+		writer.beginChunk(0x0100);
+		writeInteger(writer, linkGroup);
+		writer.endChunk();
+	}
 }
 
 //
@@ -486,6 +502,14 @@ ParticleSystem::Emitter::Emitter(ChunkReader& reader)
 		type = reader.next();
 	}
 
+	// Editor-only link-group chunk (). Optional; absent in
+	// pre-feature files and in files where this emitter is unlinked.
+	if (type == 0x100)
+	{
+		linkGroup = readInteger(reader);
+		type = reader.next();
+	}
+
 	Verify(type == -1);
 }
 
@@ -516,6 +540,84 @@ ParticleSystem::Emitter::Emitter(const Emitter& emitter)
     }
 }
 
+void ParticleSystem::Emitter::detachFromLinkGroup()
+{
+#ifndef NDEBUG
+    if (linkGroup != 0)
+    {
+        printf("[Link] detach '%s' (was group=%u)\n", name.c_str(), linkGroup);
+        fflush(stdout);
+    }
+#endif
+    linkGroup = 0;
+}
+
+void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
+                                                    const LinkExemptFlags& exempt)
+{
+    if (&src == this) return;
+
+    // 1) Snapshot every field on `*this` that the propagation must
+    //    not touch. This is the union of:
+    //      - private bookkeeping (m_instances)
+    //      - structural fields (parent, spawn*, index, linkGroup, visible)
+    //      - exempt fields per the flags
+    std::set<EmitterInstance*> savedInstances = m_instances;
+    Emitter*                   savedParent    = parent;
+    size_t                     savedSpawnOD   = spawnOnDeath;
+    size_t                     savedSpawnDL   = spawnDuringLife;
+    size_t                     savedIndex     = index;
+    uint32_t                   savedLinkGrp   = linkGroup;
+    bool                       savedVisible   = visible;
+
+    std::string savedName          = name;
+    std::string savedColorTexture  = colorTexture;
+    std::string savedNormalTexture = normalTexture;
+
+    // Save TRACK_INDEX's keymap and interpolation (and its aliasing
+    // identity) so we can restore exactly the per-emitter atlas
+    // index curve after the bulk copy.
+    Track savedIndexTrack;
+    if (exempt.trackIndex)
+    {
+        savedIndexTrack = trackContents[TRACK_INDEX];
+    }
+
+    // 2) Bulk-copy via default operator=. This clobbers m_instances
+    //    and the tracks[] pointers, which we restore below.
+    *this = src;
+
+    // 3) Repoint tracks[] into our own trackContents[], mirroring
+    //    src's aliasing structure (same pattern as Emitter(const
+    //    Emitter&) at the file's existing copy constructor).
+    for (int i = 0; i < NUM_TRACKS; i++)
+    {
+        tracks[i] = trackContents + (src.tracks[i] - src.trackContents);
+    }
+
+    // 4) Restore private + structural fields.
+    m_instances     = savedInstances;
+    parent          = savedParent;
+    spawnOnDeath    = savedSpawnOD;
+    spawnDuringLife = savedSpawnDL;
+    index           = savedIndex;
+    linkGroup       = savedLinkGrp;
+    visible         = savedVisible;
+
+    // 5) Restore exempt fields.
+    if (exempt.name)          name          = savedName;
+    if (exempt.colorTexture)  colorTexture  = savedColorTexture;
+    if (exempt.normalTexture) normalTexture = savedNormalTexture;
+    if (exempt.trackIndex)
+    {
+        trackContents[TRACK_INDEX] = savedIndexTrack;
+        // TRACK_INDEX is treated as intrinsically per-emitter; break
+        // any aliasing src may have had so future edits to OUR index
+        // curve don't accidentally write into a shared slot.
+        tracks[TRACK_INDEX] = &trackContents[TRACK_INDEX];
+    }
+}
+
 ParticleSystem::Emitter::~Emitter()
 {
     // Remove all instances of this emitter type. The instances are owned by
@@ -538,6 +640,7 @@ void ParticleSystem::Emitter::setDefaults()
 	spawnDuringLife = -1;
 	parent          = NULL;
     visible         = true;
+    linkGroup       = 0;
 
 	name          = "default";
 	colorTexture  = "p_particle_master.tga";
@@ -796,10 +899,13 @@ ParticleSystem::Emitter* ParticleSystem::insertEmitterAfter(const Emitter* refer
 
     Emitter* pEmitter = new Emitter(source);
     // The duplicate is independent: not yet a child of anything, no children
-    // of its own. The user can re-link via the existing UI later.
+    // of its own. The user can re-link via the existing UI later. The
+    // duplicate is also detached from any link group the source belongs
+    // to — copy makes a fresh emitter, consistent with "Duplicate" semantics.
     pEmitter->parent          = NULL;
     pEmitter->spawnOnDeath    = (size_t)-1;
     pEmitter->spawnDuringLife = (size_t)-1;
+    pEmitter->detachFromLinkGroup();
 
     const size_t insertAt = reference->index + 1;
 

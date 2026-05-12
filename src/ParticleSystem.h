@@ -127,6 +127,13 @@ public:
 		Emitter* parent;
         bool     visible;   // Not stored, for use in editor only
 
+        // Link-group membership (). 0 = unlinked; non-zero IDs are
+        // unique within a ParticleSystem and stable across save/load.
+        // Persisted in an editor-only optional chunk (0x0100); ignored
+        // by the game engine. Minimum group size is 2 — single-member
+        // groups are not produced by any user-visible operation.
+        uint32_t linkGroup;
+
 		std::string name;
 		std::string colorTexture;
 		std::string normalTexture;
@@ -200,6 +207,34 @@ public:
 
         void write(ChunkWriter& writer) { write(writer, false); }
         void copy (ChunkWriter& writer) { write(writer, true); }
+
+        // Detach this emitter from its link group (sets linkGroup = 0).
+        // Caller is responsible for any group-bookkeeping side effects
+        // (e.g. auto-dissolving a group that would otherwise have one
+        // remaining member). See `LinkGroup.h` for the higher-level
+        // helpers that handle that.
+        void detachFromLinkGroup();
+
+        // Overwrite this emitter's non-exempt parameters with `src`'s.
+        // Used by the link-group propagation hook in `CaptureUndo`
+        // (see src/main.cpp) and by the LinkGroup join helpers. The
+        // exempt-flags struct lives in `LinkGroup.h`. Forward-declared
+        // here to avoid pulling LinkGroup.h into ParticleSystem.h.
+        //
+        // Preserves on `*this`: m_instances, parent, spawnOnDeath,
+        // spawnDuringLife, index, linkGroup, visible, plus every
+        // exempt field (name, colorTexture, normalTexture, the
+        // TRACK_INDEX keymap, depending on the flags supplied).
+        //
+        // Track aliasing is preserved: if `src` has multiple tracks
+        // aliased to the same `trackContents[]` slot, `*this` will
+        // end up with the same aliasing structure pointing into its
+        // own `trackContents[]`. Note that TRACK_INDEX, when exempt,
+        // is restored as a standalone (non-aliased) track on `*this`
+        // — this matches the v1 expectation that the atlas-index
+        // curve is intrinsically per-emitter.
+        void copySharedParamsFrom(const Emitter& src,
+                                   const struct LinkExemptFlags& exempt);
 
         Emitter(const Emitter& emitter);
 		Emitter(ChunkReader& reader);

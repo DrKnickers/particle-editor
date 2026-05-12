@@ -267,6 +267,14 @@
 #define IDC_INCREMENT_EDIT                1500
 #define IDC_INCREMENT_SPIN                1501
 
+// Linked emitters (). See resource.en.h for layout details.
+#define ID_EMITTER_LINK_REMOVE            40119
+#define ID_EMITTER_LINK_DISSOLVE          40120
+#define ID_EMITTER_LINK_WITH_FIRST        40130
+#define ID_EMITTER_LINK_WITH_LAST         40144
+#define ID_EMITTER_LINK_ADD_FIRST         40145
+#define ID_EMITTER_LINK_ADD_LAST          40159
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED

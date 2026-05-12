@@ -266,6 +266,20 @@
 #define IDC_INCREMENT_EDIT                1500
 #define IDC_INCREMENT_SPIN                1501
 
+// Linked emitters ().
+// The submenu items 40130..40159 are reserved for dynamically-built
+// "Link with..." and "Add to group..." entries: 40130..40144 for
+// the 15 nearest unlinked emitters to pair with, 40145..40159 for
+// up to 15 existing groups. If a system has more than that, the
+// extras get the ASCII [L<n>] prefix only and the user must use
+// the multi-select workflow (future feature) to reach them.
+#define ID_EMITTER_LINK_REMOVE            40119
+#define ID_EMITTER_LINK_DISSOLVE          40120
+#define ID_EMITTER_LINK_WITH_FIRST        40130
+#define ID_EMITTER_LINK_WITH_LAST         40144
+#define ID_EMITTER_LINK_ADD_FIRST         40145
+#define ID_EMITTER_LINK_ADD_LAST          40159
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED

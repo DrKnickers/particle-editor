@@ -167,6 +167,7 @@
     <ClInclude Include="engine.h" />
     <ClInclude Include="exceptions.h" />
     <ClInclude Include="files.h" />
+    <ClInclude Include="LinkGroup.h" />
     <ClInclude Include="managers.h" />
     <ClInclude Include="MegaFiles.h" />
     <ClInclude Include="ParticleSystem.h" />
@@ -193,6 +194,7 @@
     <ClCompile Include="EmitterInstance.cpp" />
     <ClCompile Include="engine.cpp" />
     <ClCompile Include="files.cpp" />
+    <ClCompile Include="LinkGroup.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="managers.cpp" />
     <ClCompile Include="MegaFiles.cpp" />

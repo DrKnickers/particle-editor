@@ -12,6 +12,7 @@
 #include "UI/UI.h"
 #include "SpawnerDriver.h"
 #include "UndoStack.h"
+#include "LinkGroup.h"
 #include "Autosave.h"
 #include "utils.h"
 #include "engine.h"
@@ -765,6 +766,34 @@ static void CaptureUndo(APPLICATION_INFO* info, DWORD coalesceKey)
 {
     if (info == NULL || info->particleSystem == NULL) return;
     if (info->undoStack.IsApplying()) return;
+
+    // Link-group propagation (). If the edited emitter is in a
+    // link group, copy its non-exempt parameters to every sibling
+    // before snapshotting, so one user action produces one undo step
+    // that covers the whole group's new state. The snapshot below
+    // captures the whole system, so no special multi-emitter undo
+    // machinery is required.
+    if (info->selectedEmitter != NULL && info->selectedEmitter->linkGroup != 0)
+    {
+        std::vector<ParticleSystem::Emitter*> siblings
+            = GetLinkGroupMembers(*info->particleSystem,
+                                    info->selectedEmitter->linkGroup);
+        const LinkExemptFlags& exempt = GetLinkExemptFlags();
+        for (size_t i = 0; i < siblings.size(); i++)
+        {
+            if (siblings[i] != info->selectedEmitter)
+            {
+                siblings[i]->copySharedParamsFrom(*info->selectedEmitter, exempt);
+            }
+        }
+#ifndef NDEBUG
+        UNDO_LOG("[Link] propagate group=%u members=%zu edited='%s'\n",
+                 info->selectedEmitter->linkGroup,
+                 siblings.size(),
+                 info->selectedEmitter->name.c_str());
+#endif
+    }
+
     size_t selIdx = IndexOfEmitter(info->particleSystem, info->selectedEmitter);
     bool pushed = info->undoStack.Capture(*info->particleSystem, selIdx, coalesceKey);
 #ifndef NDEBUG
