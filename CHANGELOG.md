@@ -18,7 +18,7 @@ Conventions:
 
 ### Duplicate with index increment
 
-*2026-05-12 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-12 · [`c60cb2e`](https://github.com/DrKnickers/particle-editor/commit/c60cb2e) · #56*
 
 Two new entries appear in the emitter right-click context menu directly below *Duplicate*: **Duplicate (increment index)** shifts every keyframe on the atlas index track (`TRACK_INDEX`) by +1 in one click; **Duplicate (increment index...)** prompts for an integer increment N (1–999) first, making larger atlas jumps equally fast. The motivating workflow: build one base emitter aimed at atlas frame 0, right-click-duplicate 15 more times, and each copy automatically targets the next sprite-sheet cell — no track editor required.
 
