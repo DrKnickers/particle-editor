@@ -18,7 +18,7 @@ Conventions:
 
 ### Linked emitters (share parameters across a group)
 
-*2026-05-12 · TODO-hash · TODO-PR*
+*2026-05-12 · [`6a9c7ab`](https://github.com/DrKnickers/particle-editor/commit/6a9c7ab) · #58*
 
 Two or more emitters in a particle system can now be linked into a **link group** whose non-textural parameters stay in lock-step: edit any field on a linked emitter and every sibling in its group instantly updates to match. The motivating workflow is the *"5 emitters, 5 textures, identical motion"* case — atlas variants, fire/smoke colour pairs, layered weather effects — where today each parameter change requires N parallel edits. With link groups, edit one, the rest follow.
 
