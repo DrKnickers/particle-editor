@@ -924,6 +924,63 @@ static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM w
     return CallWindowProc(wndProc, hWnd, uMsg, wParam, lParam);
 }
 
+// Adds delta to every keyframe value on the TRACK_INDEX track of emitter.
+// If the track has no keyframes (default value 0), inserts one at t=0 with value delta.
+// Rebuilds the multiset rather than modifying keys in-place since std::multiset elements
+// are const-qualified through their iterators.
+static void ShiftIndexTrack(ParticleSystem::Emitter* emitter, float delta)
+{
+    ParticleSystem::Emitter::Track* track = emitter->tracks[ParticleSystem::TRACK_INDEX];
+    if (track->keys.empty())
+    {
+        track->keys.insert(ParticleSystem::Emitter::Track::Key(0.0f, delta));
+        return;
+    }
+    std::vector<ParticleSystem::Emitter::Track::Key> tmp(track->keys.begin(), track->keys.end());
+    track->keys.clear();
+    for (size_t i = 0; i < tmp.size(); ++i)
+        track->keys.insert(ParticleSystem::Emitter::Track::Key(tmp[i].time, tmp[i].value + delta));
+}
+
+static INT_PTR CALLBACK IncrementIndexDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM /*lParam*/)
+{
+    switch (uMsg)
+    {
+        case WM_INITDIALOG:
+        {
+            HWND hSpin = GetDlgItem(hDlg, IDC_INCREMENT_SPIN);
+            SendMessage(hSpin, UDM_SETRANGE32, 1, 999);
+            SendMessage(hSpin, UDM_SETPOS32, 0, 1);
+            return TRUE;
+        }
+        case WM_COMMAND:
+            switch (LOWORD(wParam))
+            {
+                case IDOK:
+                {
+                    BOOL bOk;
+                    int n = GetDlgItemInt(hDlg, IDC_INCREMENT_EDIT, &bOk, FALSE);
+                    if (!bOk || n < 1) n = 1;
+                    if (n > 999)      n = 999;
+                    EndDialog(hDlg, n);
+                    return TRUE;
+                }
+                case IDCANCEL:
+                    EndDialog(hDlg, 0);
+                    return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+
+// Returns the user-chosen increment (≥1) or 0 if they cancelled.
+static int ShowIncrementDialog(HWND hParent)
+{
+    return (int)DialogBoxParam(GetModuleHandle(NULL),
+        MAKEINTRESOURCE(IDD_INCREMENT_INDEX), hParent, IncrementIndexDlgProc, 0);
+}
+
 static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
@@ -1141,7 +1198,14 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                             case ID_EDIT_COPY:   SendMessage(control->hTree, WM_COPY,  0, 0); break;
                             case ID_EDIT_DELETE: SendMessage(control->hTree, WM_CLEAR, 0, 0); break;
                             case ID_EDIT_PASTE:  SendMessage(control->hTree, WM_PASTE, 0, 0); break;
-                            case ID_EMITTER_DUPLICATE: EmitterList_DuplicateEmitter(hWnd); break;
+                            case ID_EMITTER_DUPLICATE:           EmitterList_DuplicateEmitter(hWnd); break;
+                            case ID_EMITTER_DUPLICATE_INC_INDEX: EmitterList_DuplicateEmitter(hWnd, 1.0f); break;
+                            case ID_EMITTER_DUPLICATE_INC_INDEX_N:
+                            {
+                                int n = ShowIncrementDialog(hWnd);
+                                if (n > 0) EmitterList_DuplicateEmitter(hWnd, (float)n);
+                                break;
+                            }
                             case ID_MOVE_EMITTER_UP:   EmitterList_MoveEmitter(hWnd, -1); break;
                             case ID_MOVE_EMITTER_DOWN: EmitterList_MoveEmitter(hWnd, +1); break;
                             case ID_PASTEAS_LIFETIME: PasteEmitter(hWnd, control, &EmitterList_AddLifetimeEmitter); break;
@@ -1611,7 +1675,7 @@ void EmitterList_DeleteEmitter(HWND hWnd)
     }
 }
 
-void EmitterList_DuplicateEmitter(HWND hWnd)
+void EmitterList_DuplicateEmitter(HWND hWnd, float indexDelta)
 {
     EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
     if (control == NULL || control->selection == NULL) return;
@@ -1648,6 +1712,11 @@ void EmitterList_DuplicateEmitter(HWND hWnd)
     }
 
     if (pEmitter == NULL) return;
+
+    // Shift the atlas index track before NotifyParent fires the undo snapshot,
+    // so the increment and the duplicate land in the same undo step.
+    if (indexDelta != 0.0f)
+        ShiftIndexTrack(pEmitter, indexDelta);
 
     // Tree insertion. The duplicate is always a tree-root (parent=NULL was
     // set by insertEmitterAfter). If the source is also a root, we can place

@@ -16,6 +16,18 @@ Conventions:
 
 ## Changelog
 
+### Duplicate with index increment
+
+*2026-05-12 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Two new entries appear in the emitter right-click context menu directly below *Duplicate*: **Duplicate (increment index)** shifts every keyframe on the atlas index track (`TRACK_INDEX`) by +1 in one click; **Duplicate (increment index...)** prompts for an integer increment N (1–999) first, making larger atlas jumps equally fast. The motivating workflow: build one base emitter aimed at atlas frame 0, right-click-duplicate 15 more times, and each copy automatically targets the next sprite-sheet cell — no track editor required.
+
+**How we tackled it.** Three additions to [`src/UI/EmitterList.cpp`](src/UI/EmitterList.cpp): a `ShiftIndexTrack` helper that rebuilds the `std::multiset<Key>` with all values offset by the delta (multiset elements are const-qualified through iterators, so in-place mutation is blocked; rebuild is the correct pattern), an `IncrementIndexDlgProc` / `ShowIncrementDialog` pair for the prompt variant, and two new `case` branches in the right-click dispatch. `EmitterList_DuplicateEmitter` gained a `float indexDelta = 0.0f` parameter; the shift fires on the newly-inserted emitter *before* `NotifyParent(ELN_LISTCHANGED)` so the duplicate and the index change land in a single undo step. Menu items were added to both `.en.rc` and `.de.rc`; a minimal `IDD_INCREMENT_INDEX` dialog (EDIT + `msctls_updown32` spin + OK/Cancel) was added to both RC files. Resource IDs `40117–40118` and dialog `152` were allocated in both resource headers.
+
+**Issues encountered and resolutions.** No surprises — the multiset const-element constraint and the undo ordering risk were both identified in the plan (§4 risks 1 and 3) and their mitigations were baked in from the start. Undo ordering was confirmed safe by tracing `ELN_LISTCHANGED → CaptureUndo` in [`src/main.cpp`](src/main.cpp); the snapshot fires inside `CaptureUndo` called from the `ELN_LISTCHANGED` handler, which is after `NotifyParent`, so placing `ShiftIndexTrack` before that call requires no extra coordination.
+
+---
+
 ### Pause / frame-step the preview
 
 *2026-05-11 · [`2899f5b`](https://github.com/DrKnickers/particle-editor/commit/2899f5b) · #53*

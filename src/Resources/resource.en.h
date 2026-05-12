@@ -259,6 +259,13 @@
 #define ID_VIEW_STEP_1_FRAME            40115
 #define ID_VIEW_STEP_10_FRAMES          40116
 
+// Duplicate with index increment ()
+#define ID_EMITTER_DUPLICATE_INC_INDEX    40117
+#define ID_EMITTER_DUPLICATE_INC_INDEX_N  40118
+#define IDD_INCREMENT_INDEX               152
+#define IDC_INCREMENT_EDIT                1500
+#define IDC_INCREMENT_SPIN                1501
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
