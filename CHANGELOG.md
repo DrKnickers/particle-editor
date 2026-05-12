@@ -18,7 +18,7 @@ Conventions:
 
 ### Multi-select for the emitter list
 
-*2026-05-12 · TODO-hash · TODO-PR*
+*2026-05-12 · [`ff000c4`](https://github.com/DrKnickers/particle-editor/commit/ff000c4) · #60*
 
 The emitter tree now supports multi-emitter selection: **Ctrl-click** toggles individual emitters in and out of the selection, **Shift-click** selects a tree-order range from the anchor to the clicked row, and **click-and-drag from an empty area** draws a marquee that sweeps up every row whose stripe it crosses. Once two or more emitters are selected, the right-click menu surfaces **`Link selected (N emitters)`** (with the canonical-source `ConfirmLinkOverwrite` dialog from) and **`Add selected to link group →`** for fold-into-existing-group workflows; with a mixed selection (one group represented plus some unlinked rows) the menu offers **`Add unlinked to Group N`** so the joiners merge in one click without dissolving the existing group. The "canonical" emitter that governs a Link-selected operation is now whatever you most recently plain- or Ctrl-clicked, so the rule is *"the emitter you clicked last governs the group"* — not always the topmost.
 
