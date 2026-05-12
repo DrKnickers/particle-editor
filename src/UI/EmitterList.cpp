@@ -4,6 +4,7 @@
 #include "LinkGroup.h"
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
 #include <cwchar>       // swprintf
+#include <algorithm>    // std::find
 using namespace std;
 
 // Registered clipboard format
@@ -57,6 +58,37 @@ static void RefreshEmitterTreeText(HWND                            hTree,
     item.pszText = (LPWSTR)text.c_str();
     TreeView_SetItem(hTree, &item);
 }
+
+// Multi-select state update (). Modifier-aware: reads
+// GetKeyState(VK_CONTROL) / VK_SHIFT at call time. Updates the
+// control's multi-set and selection anchor per the click semantics.
+// Does NOT update the primary `selection` field or call
+// TreeView_SelectItem — caller decides whether to forward the event
+// to the tree's default proc (which fires TVN_SELCHANGED and updates
+// primary) or to update the primary manually.
+//
+// Caller is responsible for invalidating the tree afterward so
+// secondary-select paint reflects the new state.
+//
+// Modifier matrix:
+//   Plain click   : multi = {clicked}, anchor = clicked
+//   Ctrl-click    : toggle clicked in multi, anchor = clicked
+//   Shift-click   : multi = pre-order range(anchor, clicked),
+//                   anchor unchanged
+struct EmitterListControl;  // forward decl
+static void UpdateMultiSelectionFromClick(EmitterListControl*       control,
+                                           ParticleSystem::Emitter*  clicked,
+                                           bool                      ctrlDown,
+                                           bool                      shiftDown);
+
+// Walk the visible tree in pre-order, collecting every emitter
+// between (and including) `from` and `to`. Used by Shift-click to
+// resolve a range against the tree's current visible order — not
+// the underlying emitter vector, which can include hidden children.
+static std::vector<ParticleSystem::Emitter*> CollectTreeRange(
+    HWND                            hTree,
+    const ParticleSystem::Emitter*  from,
+    const ParticleSystem::Emitter*  to);
 
 // Confirmation dialog shown when a link operation will overwrite one
 // emitter's parameters with another's. Spells out the direction
@@ -182,6 +214,41 @@ struct EmitterListControl
     HTREEITEM                dragDropHighlight;  // currently TVIS_DROPHILITED'd item (OntoEmitter)
     UINT_PTR                 dragScrollTimer;    // 0 = no autoscroll, else timer id
     int                      dragScrollDir;      // -1 up, +1 down (only valid when timer set)
+
+    // Multi-select state (). `selection` above remains the
+    // "primary" — the single emitter the inspector pane reflects.
+    // `multiSelection` is a superset that always includes the primary
+    // (invariant). Right-click menu handlers consult this set for
+    // batch operations like "Link selected". `selectionAnchor` marks
+    // the most recent plain or Ctrl-click target — Shift-click selects
+    // the tree-order range from anchor to the new click.
+    //
+    // Multi-set is cleared on particle-system swap; drag-drop reorder
+    // acts on `selection` only (multi-set untouched) so the user can
+    // reposition linked emitters independently for interleaved layering.
+    std::set<ParticleSystem::Emitter*> multiSelection;
+    ParticleSystem::Emitter*            selectionAnchor;
+
+    // Marquee (rubber-band) selection state (). Active between
+    // WM_LBUTTONDOWN on tree empty space and the matching WM_LBUTTONUP
+    // (or WM_CAPTURECHANGED on cancel). Coordinates are in tree client
+    // space. `marqueeAdditive` is true when Ctrl was held at drag
+    // start — items inside the rect get ADDED to the existing
+    // selection rather than replacing it.
+    //
+    // Sticky semantics: `marqueeSweptHits` accumulates every emitter
+    // the rect has ever touched during the current drag. Multi-set
+    // each move = preCtrl ∪ sweptHits. The user can sweep rows in any
+    // order without later mouse positions deselecting earlier hits,
+    // and rows at the edge of the rect (where IntersectRect returns
+    // zero on shared borders) still get captured once briefly
+    // overlapped.
+    bool                                marqueeActive;
+    bool                                marqueeAdditive;
+    POINT                               marqueeStart;
+    POINT                               marqueeCurrent;
+    std::set<ParticleSystem::Emitter*>  marqueePreCtrl;  // selection at drag start (additive case)
+    std::set<ParticleSystem::Emitter*>  marqueeSweptHits;
 };
 
 static void NotifyParent(EmitterListControl* control, UINT code)
@@ -218,6 +285,131 @@ static void NotifyParent(EmitterListControl* control, UINT code)
     hdr.hwndFrom = control->hDialog;
     hdr.idFrom   = GetDlgCtrlID(hdr.hwndFrom);
     SendMessage(GetParent(hdr.hwndFrom), WM_NOTIFY, (WPARAM)hdr.idFrom, (LPARAM)&hdr );
+}
+
+// Walk the visible tree in pre-order. Helper used by Shift-click
+// range resolution. Returns NULL when neither endpoint matches a
+// visible item.
+static void CollectTreeRangeWalk(HWND                                    hTree,
+                                  HTREEITEM                               hItem,
+                                  const ParticleSystem::Emitter*          from,
+                                  const ParticleSystem::Emitter*          to,
+                                  bool&                                   inRange,
+                                  bool&                                   done,
+                                  std::vector<ParticleSystem::Emitter*>&  out)
+{
+    while (hItem != NULL && !done)
+    {
+        TVITEM ti = { 0 };
+        ti.hItem = hItem;
+        ti.mask  = TVIF_PARAM;
+        if (TreeView_GetItem(hTree, &ti))
+        {
+            ParticleSystem::Emitter* e = (ParticleSystem::Emitter*)ti.lParam;
+            bool isEndpoint = (e == from || e == to);
+            if (isEndpoint && !inRange)
+            {
+                inRange = true;
+                out.push_back(e);
+                if (from == to) { done = true; return; }
+            }
+            else if (isEndpoint && inRange)
+            {
+                out.push_back(e);
+                done = true;
+                return;
+            }
+            else if (inRange)
+            {
+                out.push_back(e);
+            }
+        }
+        HTREEITEM hChild = TreeView_GetChild(hTree, hItem);
+        if (hChild != NULL)
+        {
+            CollectTreeRangeWalk(hTree, hChild, from, to, inRange, done, out);
+            if (done) return;
+        }
+        hItem = TreeView_GetNextSibling(hTree, hItem);
+    }
+}
+
+static std::vector<ParticleSystem::Emitter*> CollectTreeRange(
+    HWND                            hTree,
+    const ParticleSystem::Emitter*  from,
+    const ParticleSystem::Emitter*  to)
+{
+    std::vector<ParticleSystem::Emitter*> out;
+    if (hTree == NULL || from == NULL || to == NULL) return out;
+    bool inRange = false, done = false;
+    CollectTreeRangeWalk(hTree, TreeView_GetRoot(hTree),
+                          from, to, inRange, done, out);
+    return out;
+}
+
+static void UpdateMultiSelectionFromClick(EmitterListControl*       control,
+                                           ParticleSystem::Emitter*  clicked,
+                                           bool                      ctrlDown,
+                                           bool                      shiftDown)
+{
+    if (control == NULL || clicked == NULL) return;
+
+    if (ctrlDown && !shiftDown)
+    {
+        // Toggle. Refuses to remove the only remaining member —
+        // the multi-set is never empty when a click lands on an
+        // emitter row, so the user always has at least one
+        // selection. Removing the last member would also force
+        // the primary to become NULL, which the tree's selection
+        // model doesn't represent cleanly.
+        if (control->multiSelection.count(clicked) > 0)
+        {
+            if (control->multiSelection.size() > 1)
+                control->multiSelection.erase(clicked);
+            // else: keep clicked (no-op)
+        }
+        else
+        {
+            control->multiSelection.insert(clicked);
+        }
+        control->selectionAnchor = clicked;
+    }
+    else if (shiftDown)
+    {
+        ParticleSystem::Emitter* anchor = control->selectionAnchor;
+        if (anchor == NULL) anchor = clicked;
+        std::vector<ParticleSystem::Emitter*> range
+            = CollectTreeRange(control->hTree, anchor, clicked);
+        // Defensive: if the walk failed to find both endpoints
+        // (shouldn't happen in normal usage), fall back to
+        // {anchor, clicked}.
+        if (range.empty())
+        {
+            range.push_back(anchor);
+            if (anchor != clicked) range.push_back(clicked);
+        }
+        control->multiSelection.clear();
+        for (size_t i = 0; i < range.size(); i++)
+        {
+            control->multiSelection.insert(range[i]);
+        }
+        // Anchor unchanged.
+    }
+    else
+    {
+        // Plain click resets the set to {clicked}.
+        control->multiSelection.clear();
+        control->multiSelection.insert(clicked);
+        control->selectionAnchor = clicked;
+    }
+
+#ifndef NDEBUG
+    printf("[MultiSel] size=%zu primary='%s' anchor='%s'\n",
+           control->multiSelection.size(),
+           clicked ? clicked->name.c_str() : "(null)",
+           control->selectionAnchor ? control->selectionAnchor->name.c_str() : "(null)");
+    fflush(stdout);
+#endif
 }
 
 static bool CopyEmitter(HWND hWnd, EmitterListControl* control)
@@ -841,7 +1033,271 @@ static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM w
         case WM_CLEAR: EmitterList_DeleteEmitter(hWnd);  break;
         case WM_PASTE: PasteEmitter(hWnd, control);      break;
 
+        case WM_LBUTTONDOWN:
+            // Multi-select (). Read Ctrl/Shift state BEFORE the
+            // tree's default selection runs so we can update
+            // multiSelection / selectionAnchor with the modifier
+            // semantics. For Ctrl/Shift clicks we eat the message
+            // (because the tree's default would reset selection to
+            // just the clicked item, fighting multi-select); we set
+            // primary via TreeView_SelectItem instead. For plain
+            // clicks we forward to the default so label-edit timer
+            // and drag-prep still work. For clicks on empty tree
+            // space (no item under cursor), we start a marquee
+            // rubber-band selection.
+            if (control != NULL && control->system != NULL)
+            {
+                TVHITTESTINFO ht = { 0 };
+                ht.pt.x = GET_X_LPARAM(lParam);
+                ht.pt.y = GET_Y_LPARAM(lParam);
+                HTREEITEM hHit = TreeView_HitTest(hWnd, &ht);
+
+                // Marquee branch fires ONLY when the click is truly
+                // outside any row (hHit == NULL). If the hit-test
+                // returned an item — even if the cursor is in the
+                // row's indent, right-of-label, or stateicon area —
+                // we treat it as a click on that row. Expand/collapse
+                // button (TVHT_ONITEMBUTTON) and visibility icon
+                // (TVHT_ONITEMICON) clicks pass through to the
+                // default proc / existing NM_CLICK handler.
+                if (hHit == NULL)
+                {
+                    bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                    // Only start a marquee when the click is in the
+                    // tree's "labels area" — the left half of the
+                    // client width where the emitter names live. A
+                    // click in the empty right-side area shouldn't
+                    // begin a marquee at all (avoids accidentally
+                    // selecting rows whose Y stripe is crossed by a
+                    // mostly-empty right-side drag).
+                    RECT cr;
+                    GetClientRect(hWnd, &cr);
+                    int clickX = GET_X_LPARAM(lParam);
+                    bool inLabelsArea = (clickX < (cr.right / 2));
+                    if (!inLabelsArea)
+                    {
+                        // Pass through to default proc; no marquee.
+                        break;
+                    }
+                    control->marqueeActive   = true;
+                    control->marqueeAdditive = ctrl;
+                    control->marqueeStart.x  = clickX;
+                    control->marqueeStart.y  = GET_Y_LPARAM(lParam);
+                    control->marqueeCurrent  = control->marqueeStart;
+                    control->marqueeSweptHits.clear();
+                    if (ctrl)
+                    {
+                        // Additive: snapshot current selection so
+                        // mousemove can recompute (preStart ∪ hits)
+                        // without losing pre-existing members.
+                        control->marqueePreCtrl = control->multiSelection;
+                    }
+                    else
+                    {
+                        // Replacement: clear selection up front; the
+                        // marquee will fill it as items are swept.
+                        control->marqueePreCtrl.clear();
+                    }
+                    SetCapture(hWnd);
+                    return 0;  // eat the message
+                }
+
+                if (hHit != NULL)
+                {
+                    // Skip our handling for icon clicks (they toggle
+                    // visibility via the existing NM_CLICK path; the
+                    // TVN_SELCHANGING handler already refuses the
+                    // selection change in that case) and expand-
+                    // button clicks (default proc toggles).
+                    if (!(ht.flags & (TVHT_ONITEMICON | TVHT_ONITEMBUTTON)))
+                    {
+                        TVITEM ti = { 0 };
+                        ti.hItem = hHit;
+                        ti.mask  = TVIF_PARAM;
+                        if (TreeView_GetItem(hWnd, &ti))
+                        {
+                            ParticleSystem::Emitter* clicked
+                                = (ParticleSystem::Emitter*)ti.lParam;
+                            bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                            bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+
+                            // Capture pre-state so we can decide what
+                            // to use as the new primary after a
+                            // Ctrl-click that removes the clicked
+                            // item from the multi-set.
+                            bool wasInMulti
+                                = control->multiSelection.count(clicked) > 0;
+                            ParticleSystem::Emitter* oldPrimary
+                                = control->selection;
+
+                            UpdateMultiSelectionFromClick(control, clicked,
+                                                           ctrl, shift);
+
+                            if (ctrl || shift)
+                            {
+                                // Decide new primary:
+                                //   Shift / add-via-Ctrl: clicked
+                                //   Ctrl-removing-non-primary: oldPrimary
+                                //     stays (clicked dropped from multi)
+                                //   Ctrl-removing-primary: pick another
+                                //     member from the remaining multi-set
+                                ParticleSystem::Emitter* newPrimary = clicked;
+                                bool nowInMulti
+                                    = control->multiSelection.count(clicked) > 0;
+                                if (ctrl && wasInMulti && !nowInMulti)
+                                {
+                                    // Removed clicked from set.
+                                    if (clicked == oldPrimary &&
+                                        !control->multiSelection.empty())
+                                    {
+                                        newPrimary = *control->multiSelection.begin();
+                                    }
+                                    else
+                                    {
+                                        newPrimary = oldPrimary;  // unchanged
+                                    }
+                                }
+
+                                HTREEITEM hNew = (newPrimary == clicked)
+                                    ? hHit
+                                    : FindTreeItemByEmitter(hWnd,
+                                                            TreeView_GetRoot(hWnd),
+                                                            newPrimary);
+                                if (hNew != NULL)
+                                {
+                                    TreeView_SelectItem(hWnd, hNew);
+                                }
+                                InvalidateRect(hWnd, NULL, FALSE);
+                                // Always notify even if primary didn't
+                                // change — the multi-set may have
+                                // grown/shrunk and the inspector needs
+                                // to grey or ungrey accordingly.
+                                NotifyParent(control, ELN_SELCHANGED);
+                                return 0;  // eat the message
+                            }
+                            // Plain click: fall through to default
+                            // (which selects the clicked item and
+                            // arms label-edit / drag-prep state).
+                            InvalidateRect(hWnd, NULL, FALSE);
+                        }
+                    }
+                }
+            }
+            break;
+
         case WM_MOUSEMOVE:
+            // Marquee selection (): track the cursor while the
+            // marquee is active, invalidate the union of the old and
+            // new rect so both sides repaint cleanly, and recompute
+            // the multi-selection from items that intersect the rect.
+            if (control != NULL && control->marqueeActive)
+            {
+                POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+
+                auto marqueeRectFor = [&](POINT s, POINT e) -> RECT {
+                    // Parens around std::min/max suppress the
+                    // Windows.h min/max macro expansion.
+                    RECT r;
+                    r.left   = (std::min)(s.x, e.x);
+                    r.top    = (std::min)(s.y, e.y);
+                    r.right  = (std::max)(s.x, e.x);
+                    r.bottom = (std::max)(s.y, e.y);
+                    return r;
+                };
+                RECT oldR = marqueeRectFor(control->marqueeStart,
+                                            control->marqueeCurrent);
+                control->marqueeCurrent = pt;
+                RECT newR = marqueeRectFor(control->marqueeStart,
+                                            control->marqueeCurrent);
+
+                // Invalidate the entire tree (not just the marquee
+                // rect) so rows OUTSIDE the rect repaint when their
+                // multi-set membership changes. Otherwise rows that
+                // were secondary-highlighted before the marquee keep
+                // their stale paint cache even after multi-set is
+                // reset, making them look "still selected" while the
+                // inspector / overlay correctly reflect the new
+                // (smaller / empty) set. bErase=TRUE forces
+                // WM_ERASEBKGND so the prior marquee frame is
+                // cleared in empty inter-row space. Double-buffered
+                // tree (TVS_EX_DOUBLEBUFFER) suppresses flicker.
+                (void)oldR; (void)newR;
+                InvalidateRect(hWnd, NULL, TRUE);
+
+                // Sticky semantics: any emitter the rect has ever
+                // touched during this drag stays in marqueeSweptHits.
+                // multi-set each frame = preCtrl ∪ sweptHits — no
+                // later mouse position can deselect an emitter the
+                // user already swept over.
+                //
+                // 1 px inflation on the hit-test rect forgives the
+                // shared-border case where IntersectRect would return
+                // zero when the marquee's edge falls exactly on a
+                // row boundary.
+                RECT hitR = newR;
+                InflateRect(&hitR, 1, 1);
+                HTREEITEM hVis = TreeView_GetFirstVisible(hWnd);
+                ParticleSystem::Emitter* primary = NULL;
+                while (hVis != NULL)
+                {
+                    // Marquee start was gated to the labels-area, so
+                    // we can safely use the full row rect for the
+                    // hit-test here — that gives generous Y coverage
+                    // and prevents off-by-a-few-pixel misses on the
+                    // last row's label-only bounds.
+                    RECT rowR;
+                    if (TreeView_GetItemRect(hWnd, hVis, &rowR, FALSE))
+                    {
+                        RECT hit;
+                        if (IntersectRect(&hit, &hitR, &rowR))
+                        {
+                            TVITEM ti = { 0 };
+                            ti.hItem = hVis;
+                            ti.mask  = TVIF_PARAM;
+                            if (TreeView_GetItem(hWnd, &ti))
+                            {
+                                ParticleSystem::Emitter* e
+                                    = (ParticleSystem::Emitter*)ti.lParam;
+                                if (e != NULL)
+                                {
+                                    control->marqueeSweptHits.insert(e);
+                                    primary = e;  // last hit in tree order
+                                }
+                            }
+                        }
+                    }
+                    hVis = TreeView_GetNextVisible(hWnd, hVis);
+                }
+                // Compose final multi-set from pre-drag selection
+                // plus the cumulative swept set.
+                std::set<ParticleSystem::Emitter*> next
+                    = control->marqueePreCtrl;
+                for (auto* e : control->marqueeSweptHits) next.insert(e);
+                size_t prevSize = control->multiSelection.size();
+                control->multiSelection = next;
+                // Set primary to a member of the set so the invariant
+                // holds and the inspector reflects something
+                // meaningful. Prefer the last marquee-hit emitter
+                // (lowest in the tree, matches drag direction). If
+                // the marquee swept nothing yet, leave primary alone.
+                if (primary != NULL && primary != control->selection)
+                {
+                    HTREEITEM hi = FindTreeItemByEmitter(
+                        hWnd, TreeView_GetRoot(hWnd), primary);
+                    if (hi != NULL) TreeView_SelectItem(hWnd, hi);
+                }
+                // If the multi-set size crossed the 1↔2 boundary
+                // without primary changing (e.g. the marquee just
+                // added/removed a row but the topmost hit is still
+                // the same), fire ELN_SELCHANGED so the overlay /
+                // disabled-state tracks live during the drag.
+                size_t newSize = control->multiSelection.size();
+                if ((prevSize < 2) != (newSize < 2))
+                {
+                    NotifyParent(control, ELN_SELCHANGED);
+                }
+                return 0;
+            }
             if (control != NULL && control->dragSource != NULL)
             {
                 POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
@@ -942,6 +1398,145 @@ static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM w
             break;
 
         case WM_LBUTTONUP:
+            if (control != NULL && control->marqueeActive)
+            {
+                // One final hit-test using the release coordinates.
+                // WM_MOUSEMOVE doesn't necessarily fire for the
+                // exact pixel where the user releases — the last
+                // mouse-move could be several pixels short of the
+                // actual release point, leaving the bottom-most
+                // swept row unselected. This pass catches anything
+                // between the previous marqueeCurrent and the
+                // release point.
+                {
+                    POINT releasePt = { GET_X_LPARAM(lParam),
+                                         GET_Y_LPARAM(lParam) };
+                    control->marqueeCurrent = releasePt;
+                    RECT finalR;
+                    finalR.left   = (std::min)(control->marqueeStart.x,
+                                                releasePt.x);
+                    finalR.top    = (std::min)(control->marqueeStart.y,
+                                                releasePt.y);
+                    finalR.right  = (std::max)(control->marqueeStart.x,
+                                                releasePt.x);
+                    finalR.bottom = (std::max)(control->marqueeStart.y,
+                                                releasePt.y);
+                    InflateRect(&finalR, 1, 1);
+
+                    HTREEITEM hVis = TreeView_GetFirstVisible(hWnd);
+                    while (hVis != NULL)
+                    {
+                        RECT rowR;
+                        if (TreeView_GetItemRect(hWnd, hVis, &rowR, FALSE))
+                        {
+                            RECT hit;
+                            if (IntersectRect(&hit, &finalR, &rowR))
+                            {
+                                TVITEM ti = { 0 };
+                                ti.hItem = hVis;
+                                ti.mask  = TVIF_PARAM;
+                                if (TreeView_GetItem(hWnd, &ti))
+                                {
+                                    ParticleSystem::Emitter* e
+                                        = (ParticleSystem::Emitter*)ti.lParam;
+                                    if (e != NULL)
+                                        control->marqueeSweptHits.insert(e);
+                                }
+                            }
+                        }
+                        hVis = TreeView_GetNextVisible(hWnd, hVis);
+                    }
+
+                    // Refresh multi-set from preCtrl ∪ sweptHits
+                    // after the final pass.
+                    std::set<ParticleSystem::Emitter*> finalMulti
+                        = control->marqueePreCtrl;
+                    for (auto* e : control->marqueeSweptHits)
+                        finalMulti.insert(e);
+                    control->multiSelection = finalMulti;
+
+#ifndef NDEBUG
+                    // Marquee debug: dump every visible row's rect
+                    // and which side of the hit-test it landed on.
+                    printf("[Marquee] start=(%ld,%ld) release=(%ld,%ld) finalR=(%ld,%ld,%ld,%ld)\n",
+                           control->marqueeStart.x, control->marqueeStart.y,
+                           releasePt.x, releasePt.y,
+                           finalR.left, finalR.top, finalR.right, finalR.bottom);
+                    HTREEITEM hDbg = TreeView_GetFirstVisible(hWnd);
+                    int idx = 0;
+                    while (hDbg != NULL)
+                    {
+                        RECT rowR2, labelR2;
+                        TreeView_GetItemRect(hWnd, hDbg, &rowR2,   FALSE);
+                        TreeView_GetItemRect(hWnd, hDbg, &labelR2, TRUE);
+                        bool yH = (finalR.top    <= rowR2.bottom &&
+                                   finalR.bottom >= rowR2.top);
+                        bool xH = (finalR.left   <= labelR2.right &&
+                                   finalR.right  >= labelR2.left);
+                        TVITEM tiDbg = { 0 };
+                        tiDbg.hItem = hDbg;
+                        tiDbg.mask  = TVIF_PARAM;
+                        ParticleSystem::Emitter* eDbg = NULL;
+                        if (TreeView_GetItem(hWnd, &tiDbg))
+                            eDbg = (ParticleSystem::Emitter*)tiDbg.lParam;
+                        const char* name = (eDbg != NULL) ? eDbg->name.c_str() : "?";
+                        bool inMulti = (eDbg != NULL &&
+                                        control->multiSelection.count(eDbg) > 0);
+                        printf("  row %d '%s' rowR=(%ld,%ld,%ld,%ld) labelR=(%ld,%ld,%ld,%ld) yHit=%d xHit=%d inMulti=%d\n",
+                               idx, name,
+                               rowR2.left, rowR2.top, rowR2.right, rowR2.bottom,
+                               labelR2.left, labelR2.top, labelR2.right, labelR2.bottom,
+                               yH, xH, inMulti);
+                        idx++;
+                        hDbg = TreeView_GetNextVisible(hWnd, hDbg);
+                    }
+                    fflush(stdout);
+#endif
+                }
+
+                // Finalise marquee. Release capture, invalidate the
+                // marquee rect so the frame erases, and reset anchor
+                // to the primary if the selection ended up non-empty.
+                //
+                // IMPORTANT: set marqueeActive=false BEFORE
+                // ReleaseCapture. ReleaseCapture fires
+                // WM_CAPTURECHANGED synchronously; if marqueeActive
+                // is still true at that moment, the cancellation
+                // branch in WM_CAPTURECHANGED rolls multi-set back
+                // to marqueePreCtrl (which is empty for non-Ctrl
+                // marquee) — undoing the selection the user just
+                // made.
+                control->marqueeActive = false;
+                ReleaseCapture();
+
+                // Full-tree invalidate so the final marquee state's
+                // secondary highlights (or lack thereof) repaint
+                // every row, not just the marquee rect.
+                InvalidateRect(hWnd, NULL, TRUE);
+
+                control->marqueePreCtrl.clear();
+                control->marqueeSweptHits.clear();
+
+                if (control->selection != NULL &&
+                    control->multiSelection.count(control->selection) > 0)
+                {
+                    control->selectionAnchor = control->selection;
+                }
+                else if (!control->multiSelection.empty())
+                {
+                    control->selectionAnchor = *control->multiSelection.begin();
+                }
+
+#ifndef NDEBUG
+                printf("[Marquee] commit: %zu selected\n",
+                       control->multiSelection.size());
+                fflush(stdout);
+#endif
+                // Notify so the inspector reflects the final state
+                // (greys when multi >= 2, ungreys when back to 1).
+                NotifyParent(control, ELN_SELCHANGED);
+                return 0;
+            }
             if (control != NULL && control->dragSource != NULL)
             {
                 POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
@@ -1018,6 +1613,19 @@ static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM w
                 && (HWND)lParam != hWnd)
             {
                 EndDragVisual(control);
+            }
+            // Marquee cancellation: capture stolen mid-marquee means
+            // the user can't release-to-commit. Roll back to the
+            // pre-drag selection (for additive case) or clear (for
+            // replacement case).
+            if (control != NULL && control->marqueeActive
+                && (HWND)lParam != hWnd)
+            {
+                control->marqueeActive = false;
+                control->multiSelection = control->marqueePreCtrl;
+                control->marqueePreCtrl.clear();
+                control->marqueeSweptHits.clear();
+                InvalidateRect(hWnd, NULL, FALSE);
             }
             break;
     }
@@ -1109,6 +1717,13 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
             SetProp(control->hTree, L"Old_WindowProc", (HANDLE)wndProc);
             SetWindowLongPtr(control->hTree, GWLP_USERDATA, (LONG_PTR)control);
             SetWindowLongPtr(control->hTree, GWLP_WNDPROC,  (LONG_PTR)EmitterTreeViewWindowProc);
+
+            // Enable double-buffered painting on the tree ().
+            // Our NM_CUSTOMDRAW handler paints the secondary-select
+            // background for multi-selected rows; double-buffering
+            // suppresses flicker on scroll and selection changes.
+            SendMessage(control->hTree, TVM_SETEXTENDEDSTYLE,
+                        TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
 
 			//
 			// Initialize toolbar
@@ -1223,6 +1838,77 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                     break;
 				}
 
+                case NM_CUSTOMDRAW:
+                    // Multi-select secondary-row paint + marquee
+                    // overlay (). The tree's primary selection is
+                    // painted by the default proc; we additionally
+                    // fill the background of rows that are in
+                    // multiSelection but NOT the primary, and overlay
+                    // the marquee rectangle at CDDS_POSTPAINT when
+                    // active.
+                    if (hdr->hwndFrom == control->hTree)
+                    {
+                        NMTVCUSTOMDRAW* cd = (NMTVCUSTOMDRAW*)lParam;
+                        switch (cd->nmcd.dwDrawStage)
+                        {
+                            case CDDS_PREPAINT:
+                                SetWindowLongPtr(hWnd, DWLP_MSGRESULT,
+                                                  CDRF_NOTIFYITEMDRAW |
+                                                  CDRF_NOTIFYPOSTPAINT);
+                                return TRUE;
+                            case CDDS_ITEMPREPAINT:
+                            {
+                                ParticleSystem::Emitter* e
+                                    = (ParticleSystem::Emitter*)cd->nmcd.lItemlParam;
+                                if (e != NULL &&
+                                    control->multiSelection.size() >= 2 &&
+                                    control->multiSelection.find(e)
+                                        != control->multiSelection.end())
+                                {
+                                    // Multi-select mode: paint EVERY
+                                    // member (including the primary)
+                                    // with the bright highlight. The
+                                    // tree's default paint for the
+                                    // primary greys out when the tree
+                                    // doesn't have focus — visually
+                                    // hiding it from the multi-set
+                                    // after a marquee release. For
+                                    // single-emitter selection the
+                                    // condition above (size>=2) keeps
+                                    // the default focus-aware paint.
+                                    cd->clrTextBk = GetSysColor(COLOR_HIGHLIGHT);
+                                    cd->clrText   = GetSysColor(COLOR_HIGHLIGHTTEXT);
+                                    SetWindowLongPtr(hWnd, DWLP_MSGRESULT,
+                                                      CDRF_NEWFONT);
+                                    return TRUE;
+                                }
+                                break;
+                            }
+                            case CDDS_POSTPAINT:
+                                if (control->marqueeActive)
+                                {
+                                    RECT mr;
+                                    mr.left   = (std::min)(control->marqueeStart.x,
+                                                          control->marqueeCurrent.x);
+                                    mr.top    = (std::min)(control->marqueeStart.y,
+                                                          control->marqueeCurrent.y);
+                                    mr.right  = (std::max)(control->marqueeStart.x,
+                                                          control->marqueeCurrent.x);
+                                    mr.bottom = (std::max)(control->marqueeStart.y,
+                                                          control->marqueeCurrent.y);
+                                    // Frame in system-highlight colour;
+                                    // 1 px border is plenty against a
+                                    // double-buffered tree.
+                                    HBRUSH br = CreateSolidBrush(
+                                        GetSysColor(COLOR_HIGHLIGHT));
+                                    FrameRect(cd->nmcd.hdc, &mr, br);
+                                    DeleteObject(br);
+                                }
+                                break;
+                        }
+                    }
+                    break;
+
                 case NM_CLICK:
                     if (hdr->hwndFrom == control->hTree)
                     {
@@ -1251,6 +1937,40 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                         tvht.pt = cursor;
                         ScreenToClient(control->hTree, &tvht.pt);
                         TreeView_HitTest(control->hTree, &tvht);
+
+                        // Multi-select bookkeeping (): right-click
+                        // OUTSIDE the current multi-set resets the set
+                        // to a single-item set on the clicked emitter
+                        // (Explorer convention). Right-click INSIDE the
+                        // multi-set preserves the set — the user is
+                        // about to run a batch action on it.
+                        if (tvht.hItem != NULL)
+                        {
+                            TVITEM ti = { 0 };
+                            ti.hItem = tvht.hItem;
+                            ti.mask  = TVIF_PARAM;
+                            if (TreeView_GetItem(control->hTree, &ti))
+                            {
+                                ParticleSystem::Emitter* rc
+                                    = (ParticleSystem::Emitter*)ti.lParam;
+                                if (rc != NULL &&
+                                    control->multiSelection.find(rc)
+                                        == control->multiSelection.end())
+                                {
+                                    control->multiSelection.clear();
+                                    control->multiSelection.insert(rc);
+                                    control->selectionAnchor = rc;
+                                    InvalidateRect(control->hTree, NULL, FALSE);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Right-click on empty area clears.
+                            control->multiSelection.clear();
+                            control->selectionAnchor = NULL;
+                            InvalidateRect(control->hTree, NULL, FALSE);
+                        }
                         TreeView_SelectItem(control->hTree, tvht.hItem);
 
                         HMENU hPopupMenu = GetSubMenu(control->hEmitterContextMenu, 0);
@@ -1286,22 +2006,72 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                         EnableMenuItem(hPopupMenu, ID_MOVE_EMITTER_UP,   MF_BYCOMMAND | (canUp   ? MF_ENABLED : MF_GRAYED));
                         EnableMenuItem(hPopupMenu, ID_MOVE_EMITTER_DOWN, MF_BYCOMMAND | (canDown ? MF_ENABLED : MF_GRAYED));
 
-                        // Link-group menu items (). Built dynamically:
-                        //   - "Link with..." popup, listing other unlinked emitters
-                        //     (visible only when the selection is unlinked)
-                        //   - "Add to link group..." popup, listing existing groups
-                        //     (visible only when ≥1 group exists and selection is unlinked)
-                        //   - "Remove from link group" + "Dissolve link group"
-                        //     (visible only when selection is linked)
+                        // Link-group menu items (+). Built
+                        // dynamically based on selection size and link state.
+                        //
+                        // Single-emitter (multiSelection.size() <= 1):
+                        //   selection unlinked:
+                        //     - "Link with..." popup (other unlinked emitters)
+                        //     - "Add to link group..." popup (existing groups)
+                        //   selection linked:
+                        //     - "Remove from link group"
+                        //     - "Dissolve link group"
+                        //
+                        // Multi-emitter (multiSelection.size() >= 2):
+                        //   all unlinked:
+                        //     - "Link selected" (creates a new group)
+                        //     - "Add selected to link group..." popup
+                        //   all in same group:
+                        //     - "Dissolve link group"
+                        //   mixed: no multi action (right-click individual
+                        //     emitters one at a time)
                         //
                         // `linkMenuCandidates` and `linkMenuGroups` carry the
                         // ID → emitter / ID → group mapping for the action
-                        // dispatch below; they're sized to the lookup ranges
-                        // reserved in resource.en.h.
+                        // dispatch below.
                         std::vector<ParticleSystem::Emitter*> linkMenuCandidates;
                         std::vector<uint32_t>                 linkMenuGroups;
                         HMENU hLinkWithSub = NULL;
                         HMENU hLinkAddSub  = NULL;
+
+                        // Snapshot multi-set state for menu gating below.
+                        //   multiAllUnlinked: every member has linkGroup == 0
+                        //   multiOneGroup:    every member is in the SAME non-zero group
+                        //   multiSingleGroupPlusUnlinked: exactly one group is
+                        //                                 represented, AND ≥1 member
+                        //                                 is unlinked. Enables
+                        //                                 "Add unlinked to Group N".
+                        //   multiGroupId:     the represented group's id (when valid)
+                        size_t multiSize        = control->multiSelection.size();
+                        bool   multiAllUnlinked = (multiSize >= 2);
+                        bool   multiOneGroup    = (multiSize >= 2);
+                        uint32_t multiGroupId   = 0;
+                        size_t numUnlinkedInMulti = 0;
+                        std::set<uint32_t> groupsInMulti;
+                        for (auto* e : control->multiSelection)
+                        {
+                            if (e->linkGroup == 0)
+                            {
+                                multiOneGroup = false;
+                                numUnlinkedInMulti++;
+                            }
+                            else
+                            {
+                                multiAllUnlinked = false;
+                                groupsInMulti.insert(e->linkGroup);
+                            }
+                            if (multiGroupId == 0)        multiGroupId = e->linkGroup;
+                            else if (e->linkGroup != multiGroupId) multiOneGroup = false;
+                        }
+                        if (multiGroupId == 0) multiOneGroup = false;
+                        bool multiSingleGroupPlusUnlinked
+                            = (multiSize >= 2 &&
+                               groupsInMulti.size() == 1 &&
+                               numUnlinkedInMulti > 0);
+                        uint32_t singleRepresentedGroup
+                            = multiSingleGroupPlusUnlinked
+                              ? *groupsInMulti.begin()
+                              : 0;
 
                         if (control->selection != NULL)
                         {
@@ -1310,10 +2080,11 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                             std::vector<uint32_t> existingGroups
                                 = GetAllLinkGroupIds(*control->system);
 
-                            if (control->selection->linkGroup == 0)
+                            if (multiSize <= 1 && control->selection->linkGroup == 0)
                             {
-                                // Build "Link with..." submenu listing other
-                                // unlinked emitters (cap at the reserved range).
+                                // Single-emitter unlinked: build "Link with..."
+                                // listing other unlinked emitters (cap at the
+                                // reserved range).
                                 for (size_t i = 0; i < emitters.size(); i++)
                                 {
                                     ParticleSystem::Emitter* e = emitters[i];
@@ -1346,30 +2117,56 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                                  ID_EMITTER_LINK_ADD_FIRST + 1)) break;
                                     linkMenuGroups.push_back(existingGroups[i]);
                                 }
-                                if (!linkMenuGroups.empty())
+                            }
+                            else if (multiSize >= 2 && multiAllUnlinked)
+                            {
+                                // Multi-emitter all-unlinked: build the
+                                // "Add selected to link group..." submenu
+                                // from existing groups (same source as
+                                // single case; just operated on the
+                                // multi-set at dispatch time).
+                                for (size_t i = 0; i < existingGroups.size(); i++)
                                 {
-                                    hLinkAddSub = CreatePopupMenu();
-                                    for (size_t i = 0; i < linkMenuGroups.size(); i++)
-                                    {
-                                        std::vector<ParticleSystem::Emitter*> mems
-                                            = GetLinkGroupMembers(*control->system,
-                                                                   linkMenuGroups[i]);
-                                        wchar_t buf[128];
-                                        swprintf(buf, 128, L"Group %u  (%s + %zu more)",
-                                                 linkMenuGroups[i],
-                                                 mems.empty() ? L""
-                                                  : AnsiToWide(mems[0]->name).c_str(),
-                                                 mems.size() > 1 ? mems.size() - 1 : 0);
-                                        AppendMenuW(hLinkAddSub, MF_STRING,
-                                                    ID_EMITTER_LINK_ADD_FIRST + i,
-                                                    buf);
-                                    }
+                                    if (linkMenuGroups.size() >=
+                                        (size_t)(ID_EMITTER_LINK_ADD_LAST -
+                                                 ID_EMITTER_LINK_ADD_FIRST + 1)) break;
+                                    linkMenuGroups.push_back(existingGroups[i]);
+                                }
+                            }
+                            else if (multiSingleGroupPlusUnlinked)
+                            {
+                                // Mixed selection but only ONE group is
+                                // represented + some unlinked emitters.
+                                // Offer "Add unlinked to Group N" — the
+                                // already-linked members stay where
+                                // they are, the unlinked ones join.
+                                linkMenuGroups.push_back(singleRepresentedGroup);
+                            }
+
+                            // Realise the linkMenuGroups list into a popup
+                            // (shared between single and multi cases).
+                            if (!linkMenuGroups.empty())
+                            {
+                                hLinkAddSub = CreatePopupMenu();
+                                for (size_t i = 0; i < linkMenuGroups.size(); i++)
+                                {
+                                    std::vector<ParticleSystem::Emitter*> mems
+                                        = GetLinkGroupMembers(*control->system,
+                                                               linkMenuGroups[i]);
+                                    wchar_t buf[128];
+                                    swprintf(buf, 128, L"Group %u  (%s + %zu more)",
+                                             linkMenuGroups[i],
+                                             mems.empty() ? L""
+                                              : AnsiToWide(mems[0]->name).c_str(),
+                                             mems.size() > 1 ? mems.size() - 1 : 0);
+                                    AppendMenuW(hLinkAddSub, MF_STRING,
+                                                ID_EMITTER_LINK_ADD_FIRST + i,
+                                                buf);
                                 }
                             }
 
                             // Stitch the link-group section onto the bottom of
-                            // the popup. Order: separator, then submenus (when
-                            // populated), then Remove / Dissolve (when linked).
+                            // the popup.
                             bool addedSeparator = false;
                             auto ensureSeparator = [&]() {
                                 if (!addedSeparator) {
@@ -1378,45 +2175,99 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                 }
                             };
 
-                            if (hLinkWithSub != NULL)
+                            if (multiSize >= 2 && multiAllUnlinked)
                             {
+                                // Multi-emitter, all unlinked: "Link selected"
+                                // creates one new group containing all members
+                                // of the multi-set.
                                 ensureSeparator();
-                                AppendMenuW(hPopupMenu, MF_POPUP,
-                                            (UINT_PTR)hLinkWithSub,
-                                            L"Link &with...");
-                            }
-                            if (hLinkAddSub != NULL)
-                            {
-                                ensureSeparator();
-                                AppendMenuW(hPopupMenu, MF_POPUP,
-                                            (UINT_PTR)hLinkAddSub,
-                                            L"&Add to link group...");
-                            }
-                            if (control->selection->linkGroup != 0)
-                            {
-                                ensureSeparator();
-                                // "Remove" label conveys auto-dissolve when
-                                // the group would be reduced to 1 member.
-                                std::vector<ParticleSystem::Emitter*> grp
-                                    = GetLinkGroupMembers(*control->system,
-                                                           control->selection->linkGroup);
-                                wchar_t removeLabel[80];
-                                if (grp.size() == 2)
-                                {
-                                    swprintf(removeLabel, 80,
-                                             L"&Remove from link group (dissolves Group %u)",
-                                             control->selection->linkGroup);
-                                }
-                                else
-                                {
-                                    wcscpy_s(removeLabel, 80, L"&Remove from link group");
-                                }
+                                wchar_t selLabel[80];
+                                swprintf(selLabel, 80,
+                                         L"&Link selected (%zu emitters)",
+                                         multiSize);
                                 AppendMenuW(hPopupMenu, MF_STRING,
-                                            ID_EMITTER_LINK_REMOVE, removeLabel);
+                                            ID_EMITTER_LINK_SELECTED, selLabel);
+                                if (hLinkAddSub != NULL)
+                                {
+                                    AppendMenuW(hPopupMenu, MF_POPUP,
+                                                (UINT_PTR)hLinkAddSub,
+                                                L"&Add selected to link group...");
+                                }
+                            }
+                            else if (multiSize >= 2 && multiOneGroup)
+                            {
+                                // Multi-emitter, all in the same group:
+                                // offer Dissolve directly.
+                                ensureSeparator();
                                 AppendMenuW(hPopupMenu, MF_STRING,
                                             ID_EMITTER_LINK_DISSOLVE,
                                             L"&Dissolve link group");
                             }
+                            else if (multiSingleGroupPlusUnlinked)
+                            {
+                                // Mixed selection: some unlinked + some
+                                // in a single group. Direct menu item
+                                // (no submenu — only one target makes
+                                // sense). Dispatch via ID_..._ADD_FIRST,
+                                // which already filters joiners to
+                                // currently-unlinked at dispatch time.
+                                ensureSeparator();
+                                wchar_t addLabel[160];
+                                swprintf(addLabel, 160,
+                                         L"Add &unlinked to Group %u (%zu emitter%s)",
+                                         singleRepresentedGroup,
+                                         numUnlinkedInMulti,
+                                         numUnlinkedInMulti == 1 ? L"" : L"s");
+                                AppendMenuW(hPopupMenu, MF_STRING,
+                                            ID_EMITTER_LINK_ADD_FIRST,
+                                            addLabel);
+                            }
+                            else if (multiSize <= 1)
+                            {
+                                // Single-emitter path.
+                                if (hLinkWithSub != NULL)
+                                {
+                                    ensureSeparator();
+                                    AppendMenuW(hPopupMenu, MF_POPUP,
+                                                (UINT_PTR)hLinkWithSub,
+                                                L"Link &with...");
+                                }
+                                if (hLinkAddSub != NULL)
+                                {
+                                    ensureSeparator();
+                                    AppendMenuW(hPopupMenu, MF_POPUP,
+                                                (UINT_PTR)hLinkAddSub,
+                                                L"&Add to link group...");
+                                }
+                                if (control->selection->linkGroup != 0)
+                                {
+                                    ensureSeparator();
+                                    // "Remove" label conveys auto-dissolve when
+                                    // the group would be reduced to 1 member.
+                                    std::vector<ParticleSystem::Emitter*> grp
+                                        = GetLinkGroupMembers(*control->system,
+                                                               control->selection->linkGroup);
+                                    wchar_t removeLabel[80];
+                                    if (grp.size() == 2)
+                                    {
+                                        swprintf(removeLabel, 80,
+                                                 L"&Remove from link group (dissolves Group %u)",
+                                                 control->selection->linkGroup);
+                                    }
+                                    else
+                                    {
+                                        wcscpy_s(removeLabel, 80, L"&Remove from link group");
+                                    }
+                                    AppendMenuW(hPopupMenu, MF_STRING,
+                                                ID_EMITTER_LINK_REMOVE, removeLabel);
+                                    AppendMenuW(hPopupMenu, MF_STRING,
+                                                ID_EMITTER_LINK_DISSOLVE,
+                                                L"&Dissolve link group");
+                                }
+                            }
+                            // (multiSize >= 2 mixed: no menu items added;
+                            //  user must right-click individual emitters
+                            //  one at a time.)
                         }
 
                         INT id = TrackPopupMenuEx(hPopupMenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD, cursor.x, cursor.y, hWnd, NULL);
@@ -1497,6 +2348,98 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                 }
                                 break;
 
+                            case ID_EMITTER_LINK_SELECTED:
+                                // Multi-emitter: create a new group from
+                                // every member of the multi-selection set.
+                                // Menu gating guarantees all members are
+                                // currently unlinked.
+                                if (control->multiSelection.size() >= 2)
+                                {
+                                    // Flatten multi-set into a vector
+                                    // with the selectionAnchor first
+                                    // (canonical) when available, else
+                                    // topmost in tree order. The
+                                    // anchor is the most recently
+                                    // plain- or Ctrl-clicked emitter,
+                                    // so the natural rule is "the
+                                    // emitter you most recently
+                                    // clicked governs the group."
+                                    std::vector<ParticleSystem::Emitter*> mems;
+                                    bool anchorIsCanonical = false;
+                                    if (control->selectionAnchor != NULL &&
+                                        control->multiSelection.count(
+                                            control->selectionAnchor) > 0)
+                                    {
+                                        mems.push_back(control->selectionAnchor);
+                                        anchorIsCanonical = true;
+                                    }
+                                    const std::vector<ParticleSystem::Emitter*>& all
+                                        = control->system->getEmitters();
+                                    for (size_t i = 0; i < all.size(); i++)
+                                    {
+                                        if (control->multiSelection.count(all[i]) > 0 &&
+                                            all[i] != control->selectionAnchor)
+                                            mems.push_back(all[i]);
+                                    }
+                                    if (mems.size() >= 2)
+                                    {
+                                        // Pre-diff each follower against
+                                        // the canonical. If ANY follower
+                                        // would have non-empty diff, show
+                                        // a confirmation listing all
+                                        // affected fields across the set.
+                                        std::vector<std::string> combined;
+                                        for (size_t i = 1; i < mems.size(); i++)
+                                        {
+                                            std::vector<std::string> d
+                                                = DiffNonExemptParams(*mems[0], *mems[i]);
+                                            for (size_t j = 0; j < d.size(); j++)
+                                            {
+                                                if (std::find(combined.begin(),
+                                                              combined.end(), d[j])
+                                                        == combined.end())
+                                                    combined.push_back(d[j]);
+                                            }
+                                        }
+                                        wchar_t srcDesc[160];
+                                        swprintf(srcDesc, 160,
+                                                 L"\"%s\" (%s)",
+                                                 AnsiToWide(mems[0]->name).c_str(),
+                                                 anchorIsCanonical
+                                                  ? L"your most recently clicked emitter"
+                                                  : L"the topmost selected emitter");
+                                        wchar_t victimDesc[128];
+                                        swprintf(victimDesc, 128,
+                                                 L"%zu other emitter(s)",
+                                                 mems.size() - 1);
+                                        bool proceed = ConfirmLinkOverwrite(
+                                            hWnd, L"Link selected",
+                                            victimDesc, srcDesc, combined);
+
+                                        if (proceed)
+                                        {
+                                            uint32_t newId
+                                                = CreateLinkGroup(*control->system,
+                                                                   mems);
+                                            if (newId != 0)
+                                            {
+                                                for (size_t i = 0; i < mems.size(); i++)
+                                                {
+                                                    HTREEITEM hi
+                                                        = FindTreeItemByEmitter(
+                                                            control->hTree,
+                                                            TreeView_GetRoot(control->hTree),
+                                                            mems[i]);
+                                                    RefreshEmitterTreeText(
+                                                        control->hTree, hi, mems[i]);
+                                                }
+                                                NotifyParent(control, ELN_LISTCHANGED);
+                                            }
+                                        }
+                                    }
+                                }
+                                break;
+
                             default:
                                 // Dynamic menu-ID dispatch for the "Link with..."
                                 // and "Add to link group..." submenus.
@@ -1562,40 +2505,92 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                         // JoinLinkGroup anchors on the
                                         // group's canonical member (the
                                         // first in tree order), so the
-                                        // joiner is the one whose values
-                                        // get overwritten. Spell that out.
+                                        // joiner(s) are the ones whose
+                                        // values get overwritten. Spell
+                                        // that out.
                                         std::vector<ParticleSystem::Emitter*> grp
                                             = GetLinkGroupMembers(*control->system, target);
-                                        bool proceed = true;
-                                        if (!grp.empty())
+                                        if (grp.empty()) break;
+
+                                        // Decide which set of emitters
+                                        // joins: the multi-set (when
+                                        // 2+ selected and gating put us
+                                        // here) or just the primary.
+                                        std::vector<ParticleSystem::Emitter*> joiners;
+                                        if (control->multiSelection.size() >= 2)
                                         {
-                                            std::vector<std::string> diffs
-                                                = DiffNonExemptParams(*control->selection,
-                                                                       *grp[0]);
-                                            std::wstring victimName
-                                                = AnsiToWide(control->selection->name);
-                                            wchar_t gbuf[64];
-                                            swprintf(gbuf, 64,
-                                                     L"Group %u's existing values (currently set by \"",
-                                                     target);
-                                            std::wstring sourceDesc = gbuf;
-                                            sourceDesc += AnsiToWide(grp[0]->name);
-                                            sourceDesc += L"\")";
-                                            proceed = ConfirmLinkOverwrite(
-                                                hWnd, L"Add to link group",
-                                                victimName, sourceDesc, diffs);
+                                            const std::vector<ParticleSystem::Emitter*>& all
+                                                = control->system->getEmitters();
+                                            for (size_t i = 0; i < all.size(); i++)
+                                            {
+                                                if (control->multiSelection.count(all[i]) > 0
+                                                    && all[i]->linkGroup == 0)
+                                                    joiners.push_back(all[i]);
+                                            }
                                         }
-                                        if (proceed &&
-                                            JoinLinkGroup(*control->system,
-                                                           control->selection, target))
+                                        else
                                         {
-                                            HTREEITEM hi = FindTreeItemByEmitter(
-                                                control->hTree,
-                                                TreeView_GetRoot(control->hTree),
-                                                control->selection);
-                                            RefreshEmitterTreeText(control->hTree, hi,
-                                                                    control->selection);
-                                            NotifyParent(control, ELN_LISTCHANGED);
+                                            joiners.push_back(control->selection);
+                                        }
+
+                                        // Combined diff across all joiners
+                                        // vs the canonical member.
+                                        std::vector<std::string> combined;
+                                        for (size_t i = 0; i < joiners.size(); i++)
+                                        {
+                                            std::vector<std::string> d
+                                                = DiffNonExemptParams(*joiners[i], *grp[0]);
+                                            for (size_t j = 0; j < d.size(); j++)
+                                            {
+                                                if (std::find(combined.begin(),
+                                                              combined.end(), d[j])
+                                                        == combined.end())
+                                                    combined.push_back(d[j]);
+                                            }
+                                        }
+
+                                        wchar_t victimDesc[128];
+                                        if (joiners.size() == 1)
+                                        {
+                                            swprintf(victimDesc, 128, L"\"%s\"",
+                                                     AnsiToWide(joiners[0]->name).c_str());
+                                        }
+                                        else
+                                        {
+                                            swprintf(victimDesc, 128,
+                                                     L"%zu selected emitter(s)",
+                                                     joiners.size());
+                                        }
+                                        wchar_t gbuf[96];
+                                        swprintf(gbuf, 96,
+                                                 L"Group %u's existing values (currently set by \"",
+                                                 target);
+                                        std::wstring sourceDesc = gbuf;
+                                        sourceDesc += AnsiToWide(grp[0]->name);
+                                        sourceDesc += L"\")";
+                                        bool proceed = ConfirmLinkOverwrite(
+                                            hWnd, L"Add to link group",
+                                            victimDesc, sourceDesc, combined);
+
+                                        if (proceed)
+                                        {
+                                            size_t joined = 0;
+                                            for (size_t i = 0; i < joiners.size(); i++)
+                                            {
+                                                if (JoinLinkGroup(*control->system,
+                                                                   joiners[i], target))
+                                                {
+                                                    HTREEITEM hi = FindTreeItemByEmitter(
+                                                        control->hTree,
+                                                        TreeView_GetRoot(control->hTree),
+                                                        joiners[i]);
+                                                    RefreshEmitterTreeText(
+                                                        control->hTree, hi, joiners[i]);
+                                                    joined++;
+                                                }
+                                            }
+                                            if (joined > 0)
+                                                NotifyParent(control, ELN_LISTCHANGED);
                                         }
                                     }
                                 }
@@ -1649,6 +2644,38 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                 {
 					NMTREEVIEW* nmtv   = (NMTREEVIEW*)lParam;
                     control->selection = (nmtv->itemNew.hItem != NULL) ? (ParticleSystem::Emitter*)nmtv->itemNew.lParam : NULL;
+
+                    // Multi-select bookkeeping (). Mouse clicks
+                    // already updated the set via WM_LBUTTONDOWN in
+                    // EmitterTreeViewWindowProc. Keyboard nav resets
+                    // the multi-set to {newPrimary}. Programmatic
+                    // selection (e.g. tree rebuild after load, drag-
+                    // drop completion) re-seeds the multi-set only
+                    // when it would otherwise drift out of invariant
+                    // (empty set or set not containing the new
+                    // primary).
+                    if (nmtv->action == TVC_BYKEYBOARD)
+                    {
+                        control->multiSelection.clear();
+                        if (control->selection != NULL)
+                            control->multiSelection.insert(control->selection);
+                        control->selectionAnchor = control->selection;
+                        InvalidateRect(control->hTree, NULL, FALSE);
+                    }
+                    else if (control->selection != NULL &&
+                             (control->multiSelection.empty() ||
+                              control->multiSelection.find(control->selection)
+                                  == control->multiSelection.end()))
+                    {
+                        // Invariant repair: multi-set must contain
+                        // the primary. Drag-drop completion and
+                        // initial-load TreeView_SelectItem both reach
+                        // here with TVC_UNKNOWN.
+                        control->multiSelection.clear();
+                        control->multiSelection.insert(control->selection);
+                        control->selectionAnchor = control->selection;
+                        InvalidateRect(control->hTree, NULL, FALSE);
+                    }
 
                 	NotifyParent(control, ELN_SELCHANGED);
 					break;
@@ -1828,6 +2855,13 @@ static EmitterListControl* CreateEmitterListControl(HWND hOwner, HINSTANCE hInst
         control->dragDropHighlight = NULL;
         control->dragScrollTimer   = 0;
         control->dragScrollDir     = 0;
+        control->selectionAnchor   = NULL;
+        control->marqueeActive     = false;
+        control->marqueeAdditive   = false;
+        control->marqueeStart.x    = 0;
+        control->marqueeStart.y    = 0;
+        control->marqueeCurrent    = control->marqueeStart;
+        // multiSelection and marqueePreCtrl are default-constructed
         control->hDialog   = CreateDialogParam(hInstance, MAKEINTRESOURCE(IDD_EMITTER_LIST), hOwner, DlgEmitterListProc, (LPARAM)control);
         if (control->hDialog == NULL)
         {
@@ -1935,6 +2969,8 @@ static void OnParticleSystemChange(EmitterListControl* control, ParticleSystem* 
 	// Fill the emitter list
 	TreeView_DeleteAllItems(control->hTree);
     control->selection = NULL;
+    control->selectionAnchor = NULL;
+    control->multiSelection.clear();
     if (system != NULL)
 	{
 		TVINSERTSTRUCT tvis;
@@ -2222,6 +3258,17 @@ ParticleSystem::Emitter* EmitterList_GetSelection(HWND hWnd)
         return control->selection;
     }
     return NULL;
+}
+
+size_t EmitterList_GetMultiSelectionSize(HWND hWnd)
+{
+    EmitterListControl* control
+        = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+    if (control != NULL)
+    {
+        return control->multiSelection.size();
+    }
+    return 0;
 }
 
 static void EmitterList_SetAllEmitterVisibility(HWND hWnd, HTREEITEM hItem, bool visible)

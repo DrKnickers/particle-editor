@@ -175,6 +175,13 @@ void EmitterList_MoveEmitter(HWND hWnd, int direction);  // -1 = up, +1 = down; 
 void EmitterList_RenameEmitter(HWND hWnd);
 bool EmitterList_HasFocus(HWND hWnd);
 ParticleSystem::Emitter* EmitterList_GetSelection(HWND hWnd);
+
+// Size of the multi-selection set (). Always >= 1 when the
+// primary is non-NULL (the primary is in the multi-set by
+// invariant). The inspector greys itself out when this returns >= 2
+// — multi-emitter editing isn't supported, only the primary's values
+// are shown.
+size_t EmitterList_GetMultiSelectionSize(HWND hWnd);
 /*
  * ColorButton control
  */

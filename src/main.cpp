@@ -518,6 +518,13 @@ struct APPLICATION_INFO
 	HWND	  hTrackTabs;
 	HWND      hTrackEditors[N_TRACKS];
 
+    // Semi-transparent black overlay shown over the property tabs +
+    // track editor when 2+ emitters are multi-selected (). Layered
+    // child window (WS_EX_LAYERED + LWA_ALPHA). Created once in the
+    // main window's WM_CREATE, repositioned in WM_SIZE, and shown /
+    // hidden by SetEmitterInfo based on multi-select state.
+    HWND      hMultiSelectOverlay;
+
 	Engine*         engine;
 	MouseCursor		mouseCursor;
 
@@ -707,6 +714,36 @@ static void SetEmitterInfo(APPLICATION_INFO* info)
 	{
 		ShowWindow(info->hTrackEditors[i], (show && TabCtrl_GetCurSel(info->hTrackTabs) == i) ? SW_SHOW : SW_HIDE);
 	}
+
+    // Multi-select indicator (). When 2+ emitters are selected,
+    // disable the inspector controls (so any clicks / spinner drags
+    // don't mutate the primary unexpectedly) AND show a 50%-alpha
+    // black overlay over the panels so the disabled state is
+    // unambiguous regardless of whether the custom controls paint
+    // themselves greyed.
+    bool multiEditing = (info->hEmitterList != NULL &&
+                          EmitterList_GetMultiSelectionSize(info->hEmitterList) >= 2);
+    BOOL canEdit = (show && !multiEditing) ? TRUE : FALSE;
+    EnableWindow(info->hPropertyTabs, canEdit);
+    EnableWindow(info->hTrackTabs,    canEdit);
+    for (int i = 0; i < N_TRACKS; i++)
+    {
+        EnableWindow(info->hTrackEditors[i], canEdit);
+    }
+    if (info->hMultiSelectOverlay != NULL)
+    {
+        BOOL showOverlay = (show && multiEditing);
+        if (showOverlay)
+        {
+            SetWindowPos(info->hMultiSelectOverlay, HWND_TOP,
+                          0, 0, 0, 0,
+                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+        else
+        {
+            ShowWindow(info->hMultiSelectOverlay, SW_HIDE);
+        }
+    }
 }
 
 //
@@ -1878,6 +1915,57 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                 Spinner_SetInfo(info->hGroundZSpinner, &si);
             }
 
+            // Multi-select overlay (). A WS_EX_LAYERED child window
+            // with a solid black brush + 50% alpha gives a semi-
+            // transparent dark veil over the inspector + curve
+            // editor when 2+ emitters are selected. Created hidden;
+            // shown / repositioned by SetEmitterInfo and WM_SIZE.
+            //
+            // Register a one-off WNDCLASS so we get a guaranteed
+            // black-painted background. The STATIC + SS_BLACKRECT
+            // combo doesn't reliably paint under WS_EX_LAYERED.
+            {
+                static bool s_overlayClassRegistered = false;
+                if (!s_overlayClassRegistered)
+                {
+                    WNDCLASSEX wc = { sizeof(wc) };
+                    wc.lpfnWndProc   = DefWindowProc;
+                    wc.hInstance     = pcs->hInstance;
+                    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+                    wc.lpszClassName = L"MultiSelOverlay";
+                    RegisterClassEx(&wc);
+                    s_overlayClassRegistered = true;
+                }
+            }
+            // Multi-select overlay as a top-level popup, owned by the
+            // main window (). A child-window overlay loses the
+            // paint race against custom controls that schedule their
+            // own WM_PAINT (Spinner, ColorButton, etc. inside the
+            // EmitterProps tabs) — they repaint over the overlay
+            // because their paint cycle is independent of the
+            // sibling Z-order. Top-level layered windows are
+            // composited by the DWM on top of any child controls of
+            // any window underneath, so this is reliable.
+            //
+            // WS_EX_TOOLWINDOW: keeps it out of the taskbar / Alt-Tab.
+            // WS_EX_NOACTIVATE: clicks on it don't steal focus from
+            // the main window.
+            info->hMultiSelectOverlay = CreateWindowEx(
+                WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+                              | WS_EX_TRANSPARENT,
+                L"MultiSelOverlay", NULL,
+                WS_POPUP,
+                0, 0, 0, 0,
+                hWnd, NULL, pcs->hInstance, NULL);
+            if (info->hMultiSelectOverlay != NULL)
+            {
+                // Alpha 48/255 ≈ 19% — very subtle veil. Bump to
+                // 64 (25%) / 96 (38%) / 128 (50%) for progressively
+                // heavier dim.
+                SetLayeredWindowAttributes(info->hMultiSelectOverlay,
+                                            0, 48, LWA_ALPHA);
+            }
+
 			SetEmitterInfo(info);
             AppendHistory(info, hWnd);
 			ShowWindow(info->hTrackEditors[0], SW_SHOW);
@@ -2350,9 +2438,66 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 				{
 					MoveWindow(info->hTrackEditors[i], tabs.left, tabs.top, tabs.right - tabs.left, tabs.bottom - tabs.top, TRUE);
 				}
+
+                // Multi-select overlay (). Top-level layered popup
+                // sized to the bounding rect of the property tabs +
+                // track tabs, then shaped with SetWindowRgn so it
+                // ONLY covers those two panels — the gap between
+                // them (where the 3D viewport lives) stays clear.
+                if (info->hMultiSelectOverlay != NULL)
+                {
+                    RECT pr, tr;
+                    GetWindowRect(info->hPropertyTabs, &pr);
+                    GetWindowRect(info->hTrackTabs,    &tr);
+                    int x = pr.left;
+                    int y = (pr.top < tr.top) ? pr.top : tr.top;
+                    int w = tr.right - pr.left;
+                    int h = ((pr.bottom > tr.bottom) ? pr.bottom : tr.bottom) - y;
+                    SetWindowPos(info->hMultiSelectOverlay, HWND_TOP,
+                                  x, y, w, h,
+                                  SWP_NOACTIVATE);
+
+                    // Shape the overlay as the union of the two panel
+                    // rects (in overlay-local coords). Viewport gap
+                    // between them is excluded from the region, so
+                    // the overlay window doesn't paint there at all.
+                    HRGN rgnProps  = CreateRectRgn(pr.left - x, pr.top - y,
+                                                    pr.right - x, pr.bottom - y);
+                    HRGN rgnTracks = CreateRectRgn(tr.left - x, tr.top - y,
+                                                    tr.right - x, tr.bottom - y);
+                    CombineRgn(rgnProps, rgnProps, rgnTracks, RGN_OR);
+                    DeleteObject(rgnTracks);
+                    // SetWindowRgn takes ownership of rgnProps.
+                    SetWindowRgn(info->hMultiSelectOverlay, rgnProps, TRUE);
+                }
 			}
+            else if (info->hMultiSelectOverlay != NULL)
+            {
+                // Main window minimised — hide overlay too.
+                ShowWindow(info->hMultiSelectOverlay, SW_HIDE);
+            }
 			return 0;
         }
+
+        case WM_MOVE:
+            // Top-level overlay sits in screen coords, so when the
+            // main window moves we have to follow. Recompute from
+            // the (now-moved) property/track tab positions.
+            if (info != NULL && info->hMultiSelectOverlay != NULL
+                && IsWindowVisible(info->hMultiSelectOverlay))
+            {
+                RECT pr, tr;
+                GetWindowRect(info->hPropertyTabs, &pr);
+                GetWindowRect(info->hTrackTabs,    &tr);
+                int x = pr.left;
+                int y = (pr.top < tr.top) ? pr.top : tr.top;
+                int w = tr.right - pr.left;
+                int h = ((pr.bottom > tr.bottom) ? pr.bottom : tr.bottom) - y;
+                SetWindowPos(info->hMultiSelectOverlay, HWND_TOP,
+                              x, y, w, h,
+                              SWP_NOACTIVATE);
+            }
+            break;
 	}
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }

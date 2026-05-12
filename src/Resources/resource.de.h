@@ -270,6 +270,7 @@
 // Linked emitters (). See resource.en.h for layout details.
 #define ID_EMITTER_LINK_REMOVE            40119
 #define ID_EMITTER_LINK_DISSOLVE          40120
+#define ID_EMITTER_LINK_SELECTED          40121
 #define ID_EMITTER_LINK_WITH_FIRST        40130
 #define ID_EMITTER_LINK_WITH_LAST         40144
 #define ID_EMITTER_LINK_ADD_FIRST         40145
