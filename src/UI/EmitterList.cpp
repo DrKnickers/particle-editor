@@ -4,8 +4,167 @@
 #include "LinkGroup.h"
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
 #include <cwchar>       // swprintf
-#include <algorithm>    // std::find
+#include <algorithm>    // std::find, std::sort
+#include <cmath>        // pow (palette contrast metric)
+#include <map>          // BracketLayout group accumulator
+
+//: AlphaBlend for hover-row tinting at 15%. msimg32 is part of the
+// Windows SDK; pragma-link here keeps the .vcxproj input list unchanged.
+#pragma comment(lib, "msimg32.lib")
+
 using namespace std;
+
+// ----------------------------------------------------------------------------
+// link-group visual bracket — layout cache + palette + helpers
+//
+// Bracket painting (lane lines, member dots, hover tint, click-to-select-group)
+// is rendered by the existing NM_CUSTOMDRAW handler. The layout is computed
+// once per paint at CDDS_PREPAINT, cached on the EmitterListControl, and
+// reused by hit-tests for hover (WM_MOUSEMOVE) and click (WM_LBUTTONDOWN).
+//
+// Lane allocation: greedy interval scheduling sorted by minY ascending —
+// each group takes the lowest-index lane whose previous occupant ended
+// above this group's first member.
+//
+// Palette: Tableau-derived 12-colour categorical palette, luminance-shifted
+// where raw Tableau values failed thin-line contrast on COLOR_WINDOW (white).
+// First 6 entries are perceptually-distinct hues for the common case
+// (realistic systems mostly use <= 6 link groups). Entries 7-12 cover the
+// tail. Group N uses palette[N % 12]; group 13 reuses group 1's colour and
+// is differentiated by lane position.
+//
+// High-Contrast theme: when SystemParametersInfo(SPI_GETHIGHCONTRAST)
+// reports active, every bracket paints in COLOR_HIGHLIGHT instead. Lane
+// position + the [L<n>] text prefix carry group identity in HC mode.
+
+struct BracketLayout
+{
+    struct Member
+    {
+        LONG                              centreY;   // tree-client coords
+        ParticleSystem::Emitter*          emitter;
+    };
+    struct Group
+    {
+        uint32_t                          groupId;
+        int                               lane;       // 0..numLanes-1
+        COLORREF                          colour;
+        std::vector<Member>               members;    // built in tree pre-order
+        LONG                              minY;
+        LONG                              maxY;
+    };
+    std::vector<Group>                    groups;
+    int                                   numLanes;
+    int                                   laneWidth;        // px, DPI-aware
+    int                                   dotRadius;        // px
+    int                                   stubLength;       // px
+    int                                   strokeWidth;      // px (hover thickens to *2)
+    int                                   rightEdgeOffset;  // px from tree client.left to lane-0 dotX (lanes extend RIGHTWARD)
+    int                                   scrollOriginY;    // SB_VERT pos at rebuild — for stale detection
+    bool                                  hcMode;           // built under High-Contrast theme
+    bool                                  valid;            // false = needs rebuild at next CDDS_PREPAINT
+
+    // Previous-paint snapshot, used to detect bracket geometry shifts
+    // between paints (typically caused by rename / link mutation / tree
+    // resize). When any of these changes, RebuildBracketLayout queues a
+    // full-tree invalidate so partial repaints (e.g. after the tree
+    // invalidates only the renamed row) can't leave stale bracket
+    // pixels at the previous X position.
+    int                                   prevRightEdgeOffset;
+    int                                   prevLaneWidth;
+    int                                   prevNumLanes;
+};
+
+// 12-colour palette. Sources noted per entry — see contrast verification
+// at startup (DebugVerifyBracketPalette below). All values target >= 3:1
+// against COLOR_WINDOW (WCAG 2.1 SC 1.4.11 non-text contrast).
+static const COLORREF kBracketPalette[12] =
+{
+    RGB(0x1F, 0x4E, 0x79),   //  0  blue       (Tableau blue, darkened)
+    RGB(0xC7, 0x57, 0x0A),   //  1  orange     (Tableau orange, darkened)
+    RGB(0x2E, 0x7D, 0x32),   //  2  green      (Material 700 green)
+    RGB(0xC6, 0x28, 0x28),   //  3  red        (Material 700 red)
+    RGB(0x6A, 0x1B, 0x9A),   //  4  purple     (Material 700 purple)
+    RGB(0x5D, 0x40, 0x37),   //  5  brown      (Material 700 brown)
+    RGB(0xAD, 0x14, 0x57),   //  6  magenta    (Material 700 pink)
+    RGB(0x00, 0x69, 0x5C),   //  7  teal       (Material 800 teal)
+    RGB(0x82, 0x77, 0x17),   //  8  olive      (Material 800 lime)
+    RGB(0x28, 0x35, 0x93),   //  9  indigo     (Material 800 indigo)
+    RGB(0x00, 0x83, 0x8F),   // 10  cyan       (Material 800 cyan)
+    RGB(0x88, 0x0E, 0x4F),   // 11  rose       (Material 900 pink)
+};
+
+// True if the user has the Windows High-Contrast accessibility theme
+// active. Read live (cheap; pure registry lookup behind SPI).
+// re-evaluates on WM_THEMECHANGED / WM_SETTINGCHANGE by setting
+// BracketLayout::valid = false; the next paint rebuilds with the
+// fresh hcMode flag.
+static bool IsHighContrastActive()
+{
+    HIGHCONTRAST hc;
+    hc.cbSize = sizeof(hc);
+    hc.dwFlags = 0;
+    hc.lpszDefaultScheme = NULL;
+    if (SystemParametersInfo(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0))
+        return (hc.dwFlags & HCF_HIGHCONTRASTON) != 0;
+    return false;
+}
+
+#ifndef NDEBUG
+// WCAG 2.1 relative-luminance computation. Used by the startup palette
+// verifier to confirm every kBracketPalette entry hits >= 3:1 contrast
+// against COLOR_WINDOW (the default-theme bracket background). Failing
+// entries print with a LOW_CONTRAST tag — that's a signal to revisit
+// the palette, not an assert (the build still ships).
+static double SrgbToLinear(double c)
+{
+    return (c <= 0.03928) ? (c / 12.92) : pow((c + 0.055) / 1.055, 2.4);
+}
+
+static double RelLuminance(COLORREF c)
+{
+    double r = SrgbToLinear(GetRValue(c) / 255.0);
+    double g = SrgbToLinear(GetGValue(c) / 255.0);
+    double b = SrgbToLinear(GetBValue(c) / 255.0);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+static double WcagContrastRatio(COLORREF a, COLORREF b)
+{
+    double la = RelLuminance(a);
+    double lb = RelLuminance(b);
+    double brighter = (la > lb) ? la : lb;
+    double dimmer   = (la > lb) ? lb : la;
+    return (brighter + 0.05) / (dimmer + 0.05);
+}
+
+// One-shot palette contrast check. Called from CreateEmitterListControl
+// the first time it runs (guarded by a static bool). Prints one line per
+// palette entry plus the HC mode at startup.
+static void DebugVerifyBracketPalette()
+{
+    static bool done = false;
+    if (done) return;
+    done = true;
+
+    const COLORREF background = GetSysColor(COLOR_WINDOW);
+    printf("[Link] HC mode active=%s\n", IsHighContrastActive() ? "true" : "false");
+    for (int i = 0; i < 12; ++i)
+    {
+        COLORREF c = kBracketPalette[i];
+        double ratio = WcagContrastRatio(c, background);
+        const char* tag = (ratio >= 3.0) ? "OK" : "LOW_CONTRAST";
+        printf("[Link] palette contrast: i=%-2d rgb=#%02X%02X%02X ratio=%.2f %s\n",
+               i,
+               GetRValue(c), GetGValue(c), GetBValue(c),
+               ratio,
+               tag);
+    }
+    fflush(stdout);
+}
+#endif
+
+// ----------------------------------------------------------------------------
 
 // Registered clipboard format
 static UINT CF_PARTICLE_EMITTER = 0;
@@ -249,6 +408,17 @@ struct EmitterListControl
     POINT                               marqueeCurrent;
     std::set<ParticleSystem::Emitter*>  marqueePreCtrl;  // selection at drag start (additive case)
     std::set<ParticleSystem::Emitter*>  marqueeSweptHits;
+
+    // link-group visual bracket — layout cache + hover state.
+    // bracketLayout is rebuilt at CDDS_PREPAINT when `valid` is false;
+    // invalidated by any operation that affects tree Y order, group
+    // membership, tree width, or theme. hoveredGroupId is mutated by
+    // WM_MOUSEMOVE in the tree subclass and cleared on cursor exit /
+    // focus loss / capture change. mouseTrackingArmed gates the
+    // TrackMouseEvent re-arm cycle for WM_MOUSELEAVE delivery.
+    BracketLayout                       bracketLayout;
+    uint32_t                            hoveredGroupId;     // 0 = none
+    bool                                mouseTrackingArmed;
 };
 
 static void NotifyParent(EmitterListControl* control, UINT code)
@@ -286,6 +456,302 @@ static void NotifyParent(EmitterListControl* control, UINT code)
     hdr.idFrom   = GetDlgCtrlID(hdr.hwndFrom);
     SendMessage(GetParent(hdr.hwndFrom), WM_NOTIFY, (WPARAM)hdr.idFrom, (LPARAM)&hdr );
 }
+
+// ----------------------------------------------------------------------------
+// — layout cache rebuild
+//
+// Walks the expanded tree (not just the viewport-visible portion) and
+// collects every linked emitter's row centre Y into a per-group bucket.
+// Groups with < 2 visible members are discarded — no bracket needed.
+// Remaining groups are lane-allocated via greedy interval scheduling
+// (sort by minY ascending; each group takes the lowest-index lane
+// whose previous occupant ended before this group's first member).
+//
+// Cost is O(N log N) where N is the count of expanded linked emitters.
+// Called from CDDS_PREPAINT when `bracketLayout.valid` is false.
+
+static void BracketLayout_WalkExpanded(HWND                            hTree,
+                                       HTREEITEM                       hItem,
+                                       std::map<uint32_t, BracketLayout::Group>& byId,
+                                       LONG&                           maxLabelRight)
+{
+    while (hItem != NULL)
+    {
+        TVITEM ti = { 0 };
+        ti.mask  = TVIF_PARAM;
+        ti.hItem = hItem;
+        if (TreeView_GetItem(hTree, &ti))
+        {
+            ParticleSystem::Emitter* e = (ParticleSystem::Emitter*)ti.lParam;
+            if (e != NULL)
+            {
+                // Track the max label.right across ALL expanded items
+                // (linked or not) so the bracket can position itself
+                // right of every visible name, not just right of group
+                // members. A long unlinked row between two linked rows
+                // would otherwise have its text overlap the bracket.
+                // TRUE = label rect (the box around the emitter name),
+                // not the full row rect.
+                RECT labelR;
+                if (TreeView_GetItemRect(hTree, hItem, &labelR, TRUE))
+                {
+                    if (labelR.right > maxLabelRight) maxLabelRight = labelR.right;
+                }
+                if (e->linkGroup != 0)
+                {
+                    RECT r;
+                    if (TreeView_GetItemRect(hTree, hItem, &r, FALSE))
+                    {
+                        LONG centreY = (r.top + r.bottom) / 2;
+                        BracketLayout::Group& g = byId[e->linkGroup];
+                        if (g.members.empty())
+                        {
+                            g.groupId = e->linkGroup;
+                            g.minY    = centreY;
+                            g.maxY    = centreY;
+                        }
+                        else
+                        {
+                            if (centreY < g.minY) g.minY = centreY;
+                            if (centreY > g.maxY) g.maxY = centreY;
+                        }
+                        BracketLayout::Member m;
+                        m.centreY = centreY;
+                        m.emitter = e;
+                        g.members.push_back(m);
+                    }
+                }
+            }
+        }
+        // Recurse only into expanded children — collapsed branches
+        // contribute no rect.
+        if ((TreeView_GetItemState(hTree, hItem, TVIS_EXPANDED) & TVIS_EXPANDED) != 0)
+        {
+            HTREEITEM hChild = TreeView_GetChild(hTree, hItem);
+            if (hChild != NULL)
+                BracketLayout_WalkExpanded(hTree, hChild, byId, maxLabelRight);
+        }
+        hItem = TreeView_GetNextSibling(hTree, hItem);
+    }
+}
+
+static void RebuildBracketLayout(EmitterListControl* control)
+{
+    BracketLayout& L = control->bracketLayout;
+    L.groups.clear();
+    L.numLanes = 0;
+    L.valid = true;
+
+    if (control->hTree == NULL || control->system == NULL) return;
+
+    // 1. Walk + bucket by linkGroup. Also pick up the widest label
+    //    rect across the whole expanded tree so the bracket can sit
+    //    just right of every visible name (adapts to renames and
+    //    differing label widths).
+    std::map<uint32_t, BracketLayout::Group> byId;
+    LONG maxLabelRight = 0;
+    HTREEITEM hRoot = TreeView_GetRoot(control->hTree);
+    BracketLayout_WalkExpanded(control->hTree, hRoot, byId, maxLabelRight);
+
+    // 2. Keep only groups with >= 2 visible (expanded) members.
+    for (std::map<uint32_t, BracketLayout::Group>::iterator it = byId.begin();
+         it != byId.end(); ++it)
+    {
+        if (it->second.members.size() >= 2)
+            L.groups.push_back(it->second);
+    }
+
+    // 3. Greedy interval scheduling by minY.
+    std::sort(L.groups.begin(), L.groups.end(),
+              [](const BracketLayout::Group& a, const BracketLayout::Group& b)
+              { return a.minY < b.minY; });
+    std::vector<LONG> laneEnd;
+    L.hcMode = IsHighContrastActive();
+    for (size_t i = 0; i < L.groups.size(); ++i)
+    {
+        BracketLayout::Group& g = L.groups[i];
+        int lane = -1;
+        for (size_t k = 0; k < laneEnd.size(); ++k)
+        {
+            if (laneEnd[k] < g.minY) { lane = (int)k; laneEnd[k] = g.maxY; break; }
+        }
+        if (lane < 0) { lane = (int)laneEnd.size(); laneEnd.push_back(g.maxY); }
+        g.lane   = lane;
+        g.colour = L.hcMode ? GetSysColor(COLOR_HIGHLIGHT)
+                            : kBracketPalette[g.groupId % 12];
+    }
+    L.numLanes = (int)laneEnd.size();
+
+    // 4. DPI-aware sizing. Lane 0's dot sits just right of the longest
+    //    visible label (with padding); higher lanes extend RIGHTWARD
+    //    from there. If the bracket would overflow the tree client,
+    //    clamp the start position so the rightmost lane stays inside
+    //    the gutter — this happens for narrow trees with many lanes,
+    //    and the lane-width floor (2 px) protects against the
+    //    pathological case.
+    int dpi = GetDpiForWindow(control->hTree);
+    if (dpi <= 0) dpi = 96;
+    int baseLaneWidth = MulDiv(6, dpi, 96);
+    int padFromLabel  = MulDiv(12, dpi, 96);
+    int rightGutter   = MulDiv(4, dpi, 96);
+    RECT cr;
+    GetClientRect(control->hTree, &cr);
+    int availableForBracket
+        = cr.right - rightGutter - (int)maxLabelRight - padFromLabel;
+    if (L.numLanes > 0 && L.numLanes * baseLaneWidth > availableForBracket)
+    {
+        int floored = (availableForBracket > 0)
+                    ? (availableForBracket / L.numLanes)
+                    : 2;
+        L.laneWidth = (floored < 2) ? 2 : floored;
+    }
+    else
+    {
+        L.laneWidth = baseLaneWidth;
+    }
+    L.dotRadius       = MulDiv(3, dpi, 96);
+    L.stubLength      = MulDiv(5, dpi, 96);
+    L.strokeWidth     = MulDiv(1, dpi, 96);
+    if (L.strokeWidth < 1) L.strokeWidth = 1;
+    // Lane-0 dotX = label.right + 12 px padding. Higher lanes go right.
+    L.rightEdgeOffset = (int)maxLabelRight + padFromLabel;
+    // Clamp: if labels are unusually long for the tree width, push the
+    // bracket back so the rightmost lane fits inside the client gutter.
+    int maxStart = cr.right - rightGutter - L.numLanes * L.laneWidth;
+    if (L.rightEdgeOffset > maxStart) L.rightEdgeOffset = maxStart;
+    if (L.rightEdgeOffset < MulDiv(50, dpi, 96))
+        L.rightEdgeOffset = MulDiv(50, dpi, 96);
+    L.scrollOriginY   = GetScrollPos(control->hTree, SB_VERT);
+
+    // Detect bracket geometry shift between paints. If the bracket's X
+    // position, lane width, or lane count changed since the last paint,
+    // partial repaints (e.g. the tree invalidating only the renamed
+    // row after a label-edit commit) would leave stale bracket pixels
+    // at the previous X on rows that weren't invalidated — visible as
+    // a "duplicated" bracket. Queue a full-tree invalidate so the next
+    // paint cycle redraws everything at the new geometry. The shift
+    // is rare (rename / link mutation / system swap / tree resize),
+    // so the extra paint is cheap.
+    bool layoutShifted =
+        (L.prevRightEdgeOffset >= 0) &&
+        ((L.prevRightEdgeOffset != L.rightEdgeOffset) ||
+         (L.prevLaneWidth       != L.laneWidth)       ||
+         (L.prevNumLanes        != L.numLanes));
+    L.prevRightEdgeOffset = L.rightEdgeOffset;
+    L.prevLaneWidth       = L.laneWidth;
+    L.prevNumLanes        = L.numLanes;
+    if (layoutShifted)
+    {
+#ifndef NDEBUG
+        printf("[Link] layout shifted — forcing full-tree invalidate\n");
+        fflush(stdout);
+#endif
+        InvalidateRect(control->hTree, NULL, TRUE);
+    }
+
+#ifndef NDEBUG
+    int visibleLinkedEmitters = 0;
+    for (size_t i = 0; i < L.groups.size(); ++i)
+        visibleLinkedEmitters += (int)L.groups[i].members.size();
+    printf("[Link] layout groups=%zu lanes=%d visibleLinkedEmitters=%d hc=%d rightEdge=%d\n",
+           L.groups.size(), L.numLanes, visibleLinkedEmitters, L.hcMode ? 1 : 0,
+           L.rightEdgeOffset);
+    fflush(stdout);
+#endif
+}
+
+// Mark the bracket layout cache stale. Called from every code path that
+// can change tree Y order, group membership, tree dimensions, or theme.
+// Cheap — just a flag set; next CDDS_PREPAINT will rebuild.
+//
+// In milestone 2 the painting loop unconditionally rebuilds the cache
+// every paint, so this is currently a no-op-with-future-purpose. Kept
+// in the API in case milestone 5 re-introduces validity gating.
+static void InvalidateBracketLayout(EmitterListControl* control)
+{
+    if (control != NULL) control->bracketLayout.valid = false;
+}
+
+// hit-test: classify a tree-client-space point against the cached
+// bracket layout. Returns the group hit (Dot is more specific than Line)
+// or { None, 0 } if no hit. Hit slop is +/- (dotRadius + 2) px for dots
+// and +/- max(2, strokeWidth + 1) px for lines. The line span is the
+// group's full minY..maxY (so the user can click anywhere between two
+// member dots and select the group).
+//
+// Stale-paint guard: if the tree's scroll position has changed since the
+// cache was built (paint races, mid-frame scroll), returns None so the
+// click is harmlessly ignored. The next paint rebuilds with current Y;
+// the user clicks again.
+struct BracketHit
+{
+    enum Kind { None, Dot, Line };
+    Kind     kind;
+    uint32_t groupId;
+};
+
+static BracketHit HitTestBracket(HWND                  hTree,
+                                  const BracketLayout&  L,
+                                  POINT                 pt)
+{
+    BracketHit none = { BracketHit::None, 0 };
+    if (L.groups.empty()) return none;
+    if (hTree != NULL && GetScrollPos(hTree, SB_VERT) != L.scrollOriginY)
+        return none;
+    const int dotSlop  = L.dotRadius + 2;
+    const int lineSlop = (L.strokeWidth + 1 > 2) ? (L.strokeWidth + 1) : 2;
+    for (size_t gi = 0; gi < L.groups.size(); ++gi)
+    {
+        const BracketLayout::Group& g = L.groups[gi];
+        // Lane 0 sits at rightEdgeOffset (just right of labels);
+        // higher lanes extend RIGHTWARD into the gutter toward the
+        // tree's client right edge.
+        int dotX = L.rightEdgeOffset + g.lane * L.laneWidth;
+        // Dots first — more specific than line.
+        for (size_t mi = 0; mi < g.members.size(); ++mi)
+        {
+            LONG y = g.members[mi].centreY;
+            if (abs(pt.x - dotX) <= dotSlop && abs(pt.y - y) <= dotSlop)
+            {
+                BracketHit h = { BracketHit::Dot, g.groupId };
+                return h;
+            }
+        }
+        // Line span: lane column between topmost and bottommost member Y.
+        if (abs(pt.x - dotX) <= lineSlop
+            && pt.y >= g.minY && pt.y <= g.maxY)
+        {
+            BracketHit h = { BracketHit::Line, g.groupId };
+            return h;
+        }
+    }
+    return none;
+}
+
+// hover-state clear. Idempotent — safe to call from any path that
+// loses hover (mouse exits tree client, focus loss, capture change,
+// modal dialog activation, etc.). Invalidates the tree if there was
+// hover to clear so the previously-tinted rows repaint clean.
+static void ClearBracketHover(HWND hTree, EmitterListControl* control)
+{
+    if (control == NULL) return;
+    if (control->hoveredGroupId != 0)
+    {
+#ifndef NDEBUG
+        printf("[Link] hover clear (was %u)\n", control->hoveredGroupId);
+        fflush(stdout);
+#endif
+        control->hoveredGroupId = 0;
+        // bErase=TRUE forces WM_ERASEBKGND so the prior AlphaBlend tint
+        // is cleared from the tree's TVS_EX_DOUBLEBUFFER back surface.
+        // bErase=FALSE was leaving the previous frame's tint visible
+        // because the buffered paint reused stale pixels.
+        if (hTree != NULL) InvalidateRect(hTree, NULL, TRUE);
+    }
+    control->mouseTrackingArmed = false;
+}
+
+// ----------------------------------------------------------------------------
 
 // Walk the visible tree in pre-order. Helper used by Shift-click
 // range resolution. Returns NULL when neither endpoint matches a
@@ -1052,6 +1518,120 @@ static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM w
                 ht.pt.y = GET_Y_LPARAM(lParam);
                 HTREEITEM hHit = TreeView_HitTest(hWnd, &ht);
 
+                // bracket-click intercept. Runs BEFORE the marquee
+                // / tree-row dispatch — clicking a bracket dot or line
+                // is a group-select gesture independent of which row
+                // the cursor lands on. The bracket lives in the right
+                // margin gutter, so for non-pathological tree widths
+                // it cannot overlap label text (R3 mitigation; D4/D5).
+                //
+                // Modifier semantics (Q1 resolution):
+                //   plain        : replace multi-set with group members
+                //   Ctrl         : union — add members to existing set
+                //   Shift, Alt   : treat as plain (no useful "range"
+                //                  semantic when the gesture is "this
+                //                  whole group")
+                {
+                    POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                    BracketHit bh = HitTestBracket(hWnd,
+                                                    control->bracketLayout,
+                                                    pt);
+                    if (bh.kind != BracketHit::None)
+                    {
+                        std::vector<ParticleSystem::Emitter*> members
+                            = GetLinkGroupMembers(*control->system,
+                                                   bh.groupId);
+                        if (members.empty())
+                        {
+                            // Defensive — shouldn't happen because the
+                            // bracket only paints for groups with >= 2
+                            // members. Treat as a click in empty space.
+                            break;
+                        }
+                        bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                        ParticleSystem::Emitter* topmostVisible = NULL;
+                        RECT crv; GetClientRect(hWnd, &crv);
+                        // Search the bracket layout for the group's
+                        // member list (tree pre-order) and pick the
+                        // first member whose centreY is in the viewport.
+                        // The layout walker collects members in tree
+                        // order, so members[0] is topmost-in-tree;
+                        // we want topmost-in-viewport for the inspector
+                        // to focus on something the user can see.
+                        const BracketLayout& L = control->bracketLayout;
+                        for (size_t gi = 0; gi < L.groups.size(); ++gi)
+                        {
+                            if (L.groups[gi].groupId != bh.groupId) continue;
+                            for (size_t mi = 0; mi < L.groups[gi].members.size(); ++mi)
+                            {
+                                LONG y = L.groups[gi].members[mi].centreY;
+                                if (y >= crv.top && y <= crv.bottom)
+                                {
+                                    topmostVisible
+                                        = L.groups[gi].members[mi].emitter;
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                        if (topmostVisible == NULL)
+                            topmostVisible = members[0];
+
+                        if (ctrl)
+                        {
+                            // Union: add every group member into the
+                            // existing multi-set without disturbing
+                            // non-member members. selectionAnchor
+                            // moves to topmostVisible so subsequent
+                            // Shift-range starts there.
+                            for (size_t i = 0; i < members.size(); ++i)
+                                control->multiSelection.insert(members[i]);
+                            // Primary stays where it was unless the
+                            // current primary isn't in the multi-set
+                            // (defensive — shouldn't happen).
+                            if (control->selection == NULL ||
+                                control->multiSelection.find(control->selection)
+                                  == control->multiSelection.end())
+                            {
+                                control->selection = topmostVisible;
+                            }
+                            control->selectionAnchor = topmostVisible;
+                        }
+                        else
+                        {
+                            // Plain / Shift / Alt: replace with group.
+                            control->multiSelection.clear();
+                            for (size_t i = 0; i < members.size(); ++i)
+                                control->multiSelection.insert(members[i]);
+                            control->selection       = topmostVisible;
+                            control->selectionAnchor = topmostVisible;
+                        }
+                        // Sync the tree's idea of primary so its own
+                        // selection bookkeeping (focus rect, default
+                        // paint colour) tracks. eats the click — the
+                        // tree's default WM_LBUTTONDOWN proc would
+                        // otherwise hit-test the bracket gutter as
+                        // TVHT_ONITEMRIGHT and select the row under
+                        // cursor, fighting us.
+                        HTREEITEM hPrimary = FindTreeItemByEmitter(
+                            hWnd,
+                            TreeView_GetRoot(hWnd),
+                            control->selection);
+                        if (hPrimary != NULL)
+                            TreeView_SelectItem(hWnd, hPrimary);
+                        InvalidateRect(hWnd, NULL, FALSE);
+                        NotifyParent(control, ELN_SELCHANGED);
+#ifndef NDEBUG
+                        printf("[Link] click select group=%u members=%zu anchor='%s' ctrl=%d\n",
+                               bh.groupId, members.size(),
+                               topmostVisible ? topmostVisible->name.c_str() : "(null)",
+                               ctrl ? 1 : 0);
+                        fflush(stdout);
+#endif
+                        return 0;   // eat
+                    }
+                }
+
                 // Marquee branch fires ONLY when the click is truly
                 // outside any row (hHit == NULL). If the hit-test
                 // returned an item — even if the cursor is in the
@@ -1346,6 +1926,49 @@ static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM w
                 if (ghostActive) ImageList_DragShowNolock(TRUE);
                 return 0;
             }
+            // hover. Only fires when neither marquee nor drag-drop
+            // is active (both early-return above). Tracks the cursor's
+            // position against the bracket layout; transitions between
+            // groups (or to no-group) trigger a tree invalidate so old
+            // and new hover-row tints + line-thickness repaint.
+            //
+            // TrackMouseEvent with TME_LEAVE arms the WM_MOUSELEAVE we
+            // depend on to clear hover when the cursor exits the tree.
+            // The flag must be re-armed each leave; we set
+            // mouseTrackingArmed once and clear it in the leave handler.
+            if (control != NULL)
+            {
+                POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                BracketHit hit = HitTestBracket(hWnd,
+                                                 control->bracketLayout,
+                                                 pt);
+                uint32_t newHover = (hit.kind != BracketHit::None)
+                                  ? hit.groupId : 0;
+                if (newHover != control->hoveredGroupId)
+                {
+#ifndef NDEBUG
+                    printf("[Link] hover group=%u (was %u)\n",
+                           newHover, control->hoveredGroupId);
+                    fflush(stdout);
+#endif
+                    control->hoveredGroupId = newHover;
+                    // bErase=TRUE so the AlphaBlend tint from the
+                    // previous hovered group is cleared via WM_ERASEBKGND
+                    // before the next paint. bErase=FALSE was letting
+                    // the double-buffer keep stale tinted pixels.
+                    InvalidateRect(hWnd, NULL, TRUE);
+                }
+                if (!control->mouseTrackingArmed)
+                {
+                    TRACKMOUSEEVENT tme;
+                    tme.cbSize      = sizeof(tme);
+                    tme.dwFlags     = TME_LEAVE;
+                    tme.hwndTrack   = hWnd;
+                    tme.dwHoverTime = 0;
+                    if (TrackMouseEvent(&tme))
+                        control->mouseTrackingArmed = true;
+                }
+            }
             break;
 
         case WM_MOUSEWHEEL:
@@ -1394,6 +2017,45 @@ static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM w
                 UpdateDropFeedback(control, pt);
                 if (ghostActive) ImageList_DragShowNolock(TRUE);
                 return 0;
+            }
+            break;
+
+        case WM_MOUSELEAVE:
+            //: cursor left the tree client. Clear hover tint and
+            // line-thickening. Re-armed on next WM_MOUSEMOVE.
+#ifndef NDEBUG
+            printf("[Link] WM_MOUSELEAVE\n"); fflush(stdout);
+#endif
+            ClearBracketHover(hWnd, control);
+            break;
+
+        case WM_KILLFOCUS:
+            //: focus lost (Alt-Tab, modal dialog, other window).
+            // Hover state should not survive a focus change.
+            ClearBracketHover(hWnd, control);
+            break;
+
+        case WM_THEMECHANGED:
+            //: Windows theme switched (default <-> dark <-> high-
+            // contrast). RebuildBracketLayout consults IsHighContrastActive()
+            // every paint, so the only thing missing is forcing a paint.
+            // Hover state also clears because the palette colour may
+            // have changed underneath us.
+            ClearBracketHover(hWnd, control);
+            InvalidateRect(hWnd, NULL, TRUE);
+            break;
+
+        case WM_SETTINGCHANGE:
+            //: SPI_SETHIGHCONTRAST is broadcast as WM_SETTINGCHANGE
+            // with wParam == SPI_SETHIGHCONTRAST (0x0043). Some systems
+            // also broadcast it via "WindowMetrics" or similar string
+            // payloads — repaint on any setting change is cheap and
+            // safe; the bracket layout rebuild every paint handles
+            // whatever changed.
+            if (wParam == SPI_SETHIGHCONTRAST)
+            {
+                ClearBracketHover(hWnd, control);
+                InvalidateRect(hWnd, NULL, TRUE);
             }
             break;
 
@@ -1627,6 +2289,10 @@ static LRESULT CALLBACK EmitterTreeViewWindowProc(HWND hWnd, UINT uMsg, WPARAM w
                 control->marqueeSweptHits.clear();
                 InvalidateRect(hWnd, NULL, FALSE);
             }
+            //: capture stolen with hover active. R4 mitigation —
+            // clear hover defensively so it doesn't survive a drag /
+            // modal that ate our WM_MOUSELEAVE.
+            if (control != NULL) ClearBracketHover(hWnd, control);
             break;
     }
     WNDPROC wndProc = (WNDPROC)GetProp(hWnd, L"Old_WindowProc");
@@ -1852,39 +2518,199 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                         switch (cd->nmcd.dwDrawStage)
                         {
                             case CDDS_PREPAINT:
+                                //: rebuild the bracket layout cache
+                                // every paint. The walk is O(N log N)
+                                // and N is bounded by visible-tree
+                                // expanded-emitter count — under 1 ms
+                                // for realistic systems. Always rebuilding
+                                // sidesteps the entire cache-staleness
+                                // problem class (scroll, expand/collapse,
+                                // window resize, group mutation, theme).
+                                // The `valid` flag stays in the struct
+                                // for future optimization if profiling
+                                // surfaces a need.
+                                RebuildBracketLayout(control);
                                 SetWindowLongPtr(hWnd, DWLP_MSGRESULT,
                                                   CDRF_NOTIFYITEMDRAW |
                                                   CDRF_NOTIFYPOSTPAINT);
                                 return TRUE;
                             case CDDS_ITEMPREPAINT:
                             {
+                                // Two effects can stack on a single row:
+                                //   - multi-select highlight
+                                //     (clrTextBk override + CDRF_NEWFONT)
+                                //   - hover-group tint (15% alpha
+                                //     fill in CDDS_ITEMPOSTPAINT,
+                                //     gated by CDRF_NOTIFYPOSTPAINT)
+                                // Combine into a single return value
+                                // bitwise; CDRF_NEWFONT == 0x02,
+                                // CDRF_NOTIFYPOSTPAINT == 0x10, so the
+                                // OR carries both flags through to
+                                // the default proc cleanly.
                                 ParticleSystem::Emitter* e
                                     = (ParticleSystem::Emitter*)cd->nmcd.lItemlParam;
-                                if (e != NULL &&
-                                    control->multiSelection.size() >= 2 &&
-                                    control->multiSelection.find(e)
-                                        != control->multiSelection.end())
+                                DWORD ret = CDRF_DODEFAULT;
+                                bool isMultiHighlight =
+                                    (e != NULL &&
+                                     control->multiSelection.size() >= 2 &&
+                                     control->multiSelection.find(e)
+                                        != control->multiSelection.end());
+                                bool isHoverMember =
+                                    (e != NULL &&
+                                     control->hoveredGroupId != 0 &&
+                                     e->linkGroup == control->hoveredGroupId);
+                                if (isMultiHighlight)
                                 {
                                     // Multi-select mode: paint EVERY
                                     // member (including the primary)
                                     // with the bright highlight. The
                                     // tree's default paint for the
                                     // primary greys out when the tree
-                                    // doesn't have focus — visually
-                                    // hiding it from the multi-set
-                                    // after a marquee release. For
-                                    // single-emitter selection the
-                                    // condition above (size>=2) keeps
-                                    // the default focus-aware paint.
+                                    // doesn't have focus.
                                     cd->clrTextBk = GetSysColor(COLOR_HIGHLIGHT);
                                     cd->clrText   = GetSysColor(COLOR_HIGHLIGHTTEXT);
-                                    SetWindowLongPtr(hWnd, DWLP_MSGRESULT,
-                                                      CDRF_NEWFONT);
+                                    ret |= CDRF_NEWFONT;
+                                }
+                                if (isHoverMember)
+                                {
+                                    ret |= CDRF_NOTIFYPOSTPAINT;
+                                }
+                                if (ret != CDRF_DODEFAULT)
+                                {
+                                    SetWindowLongPtr(hWnd, DWLP_MSGRESULT, ret);
                                     return TRUE;
                                 }
                                 break;
                             }
+                            case CDDS_ITEMPOSTPAINT:
+                            {
+                                // hover-group tint. Painted AFTER
+                                // the row's default paint (and after
+                                // any multi-select COLOR_HIGHLIGHT
+                                // background) so the tint composes via
+                                // AlphaBlend over whatever the row is
+                                // currently showing.
+                                ParticleSystem::Emitter* e
+                                    = (ParticleSystem::Emitter*)cd->nmcd.lItemlParam;
+                                if (e == NULL ||
+                                    control->hoveredGroupId == 0 ||
+                                    e->linkGroup != control->hoveredGroupId)
+                                    break;
+                                COLORREF tint = 0;
+                                const BracketLayout& L = control->bracketLayout;
+                                for (size_t gi = 0; gi < L.groups.size(); ++gi)
+                                {
+                                    if (L.groups[gi].groupId
+                                        == control->hoveredGroupId)
+                                    {
+                                        tint = L.groups[gi].colour;
+                                        break;
+                                    }
+                                }
+                                // 1x1 source DDB stretched across the
+                                // row rect with sourceConstantAlpha=38
+                                // (~15%). AlphaFormat=0 → source treated
+                                // opaque; blend reduces to
+                                //   dst = src * 0.15 + dst * 0.85
+                                // which is exactly the linear tint
+                                // we want.
+                                HDC hdc = cd->nmcd.hdc;
+                                HDC hdcMem = CreateCompatibleDC(hdc);
+                                HBITMAP hbm = CreateCompatibleBitmap(hdc, 1, 1);
+                                HGDIOBJ oldBm = SelectObject(hdcMem, hbm);
+                                SetPixel(hdcMem, 0, 0, tint);
+                                BLENDFUNCTION bf;
+                                bf.BlendOp             = AC_SRC_OVER;
+                                bf.BlendFlags          = 0;
+                                bf.SourceConstantAlpha = 38;
+                                bf.AlphaFormat         = 0;
+                                RECT rr = cd->nmcd.rc;
+                                AlphaBlend(hdc,
+                                            rr.left, rr.top,
+                                            rr.right - rr.left,
+                                            rr.bottom - rr.top,
+                                            hdcMem, 0, 0, 1, 1,
+                                            bf);
+                                SelectObject(hdcMem, oldBm);
+                                DeleteObject(hbm);
+                                DeleteDC(hdcMem);
+                                break;
+                            }
                             case CDDS_POSTPAINT:
+                            {
+                                //: paint link-group brackets first
+                                // (lane lines, then per-member dots +
+                                // stubs), then the marquee frame
+                                // on top so an active marquee is always
+                                // visible over brackets.
+                                const BracketLayout& L = control->bracketLayout;
+                                if (!L.groups.empty())
+                                {
+                                    HDC hdc = cd->nmcd.hdc;
+                                    RECT clientR;
+                                    GetClientRect(hWnd, &clientR);
+                                    // Clip to tree client so lines never
+                                    // bleed past the bottom or top edges.
+                                    HRGN hClip = CreateRectRgn(
+                                        clientR.left,  clientR.top,
+                                        clientR.right, clientR.bottom);
+                                    SelectClipRgn(hdc, hClip);
+                                    for (size_t gi = 0; gi < L.groups.size(); ++gi)
+                                    {
+                                        const BracketLayout::Group& g = L.groups[gi];
+                                        // Lane 0 sits just right of
+                                        // the longest label; higher
+                                        // lanes extend rightward into
+                                        // the gutter toward client.right.
+                                        const int dotX   = L.rightEdgeOffset
+                                                         + g.lane * L.laneWidth;
+                                        // hover: thicken the line
+                                        // to 2x stroke when this group
+                                        // is hovered. The dot stays its
+                                        // base size — the user's eye
+                                        // tracks the line thickness as
+                                        // the primary hover cue.
+                                        const bool hovered =
+                                            (g.groupId == control->hoveredGroupId);
+                                        const int stroke = hovered
+                                                         ? L.strokeWidth * 2
+                                                         : L.strokeWidth;
+                                        HPEN    pen      = CreatePen(PS_SOLID,
+                                                                      stroke,
+                                                                      g.colour);
+                                        HGDIOBJ oldPen   = SelectObject(hdc, pen);
+                                        // Lane line connects topmost to
+                                        // bottommost dot. LineTo is
+                                        // half-open at the endpoint, so
+                                        // step one past maxY to ensure
+                                        // the bottom pixel paints.
+                                        MoveToEx(hdc, dotX, g.minY, NULL);
+                                        LineTo  (hdc, dotX, g.maxY + 1);
+                                        HBRUSH  brush    = CreateSolidBrush(g.colour);
+                                        HGDIOBJ oldBrush = SelectObject(hdc, brush);
+                                        for (size_t mi = 0; mi < g.members.size(); ++mi)
+                                        {
+                                            LONG y = g.members[mi].centreY;
+                                            // Stub pointing leftward
+                                            // toward the row text.
+                                            MoveToEx(hdc, dotX - L.stubLength, y, NULL);
+                                            LineTo  (hdc, dotX, y);
+                                            // Filled dot at member row.
+                                            Ellipse(hdc,
+                                                    dotX - L.dotRadius,
+                                                    y    - L.dotRadius,
+                                                    dotX + L.dotRadius + 1,
+                                                    y    + L.dotRadius + 1);
+                                        }
+                                        SelectObject(hdc, oldBrush);
+                                        SelectObject(hdc, oldPen);
+                                        DeleteObject(brush);
+                                        DeleteObject(pen);
+                                    }
+                                    SelectClipRgn(hdc, NULL);
+                                    DeleteObject(hClip);
+                                }
+
                                 if (control->marqueeActive)
                                 {
                                     RECT mr;
@@ -1905,6 +2731,7 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                     DeleteObject(br);
                                 }
                                 break;
+                            }
                         }
                     }
                     break;
@@ -2862,6 +3689,27 @@ static EmitterListControl* CreateEmitterListControl(HWND hOwner, HINSTANCE hInst
         control->marqueeStart.y    = 0;
         control->marqueeCurrent    = control->marqueeStart;
         // multiSelection and marqueePreCtrl are default-constructed
+
+        // bracket layout cache + hover state.
+        control->bracketLayout.numLanes       = 0;
+        control->bracketLayout.laneWidth      = 0;
+        control->bracketLayout.dotRadius      = 0;
+        control->bracketLayout.stubLength     = 0;
+        control->bracketLayout.strokeWidth    = 0;
+        control->bracketLayout.rightEdgeOffset = 0;
+        control->bracketLayout.scrollOriginY  = 0;
+        control->bracketLayout.hcMode         = false;
+        control->bracketLayout.valid          = false;
+        control->bracketLayout.prevRightEdgeOffset = -1;   // first paint forces no-op shift
+        control->bracketLayout.prevLaneWidth       = -1;
+        control->bracketLayout.prevNumLanes        = -1;
+        control->hoveredGroupId               = 0;
+        control->mouseTrackingArmed           = false;
+
+#ifndef NDEBUG
+        DebugVerifyBracketPalette();
+#endif
+
         control->hDialog   = CreateDialogParam(hInstance, MAKEINTRESOURCE(IDD_EMITTER_LIST), hOwner, DlgEmitterListProc, (LPARAM)control);
         if (control->hDialog == NULL)
         {
@@ -3060,6 +3908,10 @@ void EmitterList_SetParticleSystem(HWND hWnd, ParticleSystem* system)
         control->system = NULL;
         OnParticleSystemChange(control, system);
         control->system = system;
+        //: any prior system's bracket layout + hover state is now
+        // stale. Invalidate cache and clear hover; next paint rebuilds.
+        InvalidateBracketLayout(control);
+        control->hoveredGroupId = 0;
         // OnParticleSystemChange auto-selects the first root via TreeView_
         // SelectItem, which fires TVN_SELCHANGED while control->system is
         // still NULL. The toolbar Move Up / Down enable logic depends on
@@ -3121,17 +3973,57 @@ void EmitterList_AddDeathEmitter(HWND hWnd, const ParticleSystem::Emitter& emitt
 void EmitterList_DeleteEmitter(HWND hWnd)
 {
 	EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd,GWLP_USERDATA);
-	if (control != NULL && control->selection != NULL)
+    if (control == NULL || control->system == NULL) return;
+    if (control->selection == NULL && control->multiSelection.empty()) return;
+
+    // (Q4 follow-up): delete every emitter in multiSelection,
+    // not just the primary. Single-select case is the multi-set
+    // of size 1 — same code path.
+    //
+    // multiSelection contains the primary by invariant. We snapshot
+    // before iterating because deleteEmitter recursively deletes a
+    // subtree, so a target later in the list may already be gone
+    // (parent was deleted in an earlier iteration, child cascaded).
+    // Re-querying the system's emitter vector each iteration filters
+    // out cascade-deleted targets without touching dangling pointers.
+    //
+    // ParticleSystem::deleteEmitter doesn't fire any notification;
+    // the single ELN_LISTCHANGED at the end groups all N deletions
+    // into one undo step (main.cpp's ELN_LISTCHANGED handler calls
+    // CaptureUndo with coalesceKey=0, which never folds). So a
+    // single Ctrl-Z after bracket-select-then-Delete restores all
+    // N emitters together — matches Q5: undo restores the data,
+    // multi-set stays empty (user re-selects).
+    std::vector<ParticleSystem::Emitter*> targets;
+    if (!control->multiSelection.empty())
     {
-        control->system->deleteEmitter(control->selection);
-        TreeView_DeleteItem(control->hTree, TreeView_GetSelection(control->hTree));
-        if (control->system->getEmitters().empty())
-        {
-            control->selection = NULL;
-        }
-        NotifyParent(control, ELN_LISTCHANGED);
-        NotifyParent(control, ELN_SELCHANGED);
+        targets.assign(control->multiSelection.begin(),
+                       control->multiSelection.end());
     }
+    else
+    {
+        targets.push_back(control->selection);
+    }
+    for (size_t i = 0; i < targets.size(); ++i)
+    {
+        ParticleSystem::Emitter* e = targets[i];
+        if (e == NULL) continue;
+        const std::vector<ParticleSystem::Emitter*>& list
+            = control->system->getEmitters();
+        if (std::find(list.begin(), list.end(), e) == list.end())
+            continue;   // cascade-deleted by an earlier parent
+        control->system->deleteEmitter(e);
+    }
+
+    // Tree rebuild + state reset. OnParticleSystemChange clears
+    // multiSelection / selection / selectionAnchor and re-auto-selects
+    // the first root (if any remain), so we don't need to touch them
+    // ourselves.
+    OnParticleSystemChange(control, control->system);
+    InvalidateBracketLayout(control);
+    control->hoveredGroupId = 0;
+    NotifyParent(control, ELN_LISTCHANGED);
+    NotifyParent(control, ELN_SELCHANGED);
 }
 
 void EmitterList_DuplicateEmitter(HWND hWnd, float indexDelta)
