@@ -18,7 +18,7 @@ Conventions:
 
 ### Configurable exempt set per link group
 
-*2026-05-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-14 · [`238c0a1`](https://github.com/DrKnickers/particle-editor/commit/238c0a1) · #65*
 
 The v1 hard-coded exempt set (textures + atlas-index curve + name) becomes the default for new and pre-existing groups, and is now overridable per group through a new **Group settings…** dialog reached from the right-click menu when a linked emitter is selected. The dialog lists ~50 emitter fields grouped by category (Textures / Curves / Lifetime / Physics / Appearance / Weather / Rotation / Misc). **Checked** rows are *shared* — the field propagates across all group members on edit. **Unchecked** rows are *per-emitter* — each member keeps its own value. A *Reset to defaults* button restores the v1 set (textures + atlas index unchecked = per-emitter; everything else checked = shared) without leaving the dialog.
 
