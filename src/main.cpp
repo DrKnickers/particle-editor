@@ -815,7 +815,12 @@ static void CaptureUndo(APPLICATION_INFO* info, DWORD coalesceKey)
         std::vector<ParticleSystem::Emitter*> siblings
             = GetLinkGroupMembers(*info->particleSystem,
                                     info->selectedEmitter->linkGroup);
-        const LinkExemptFlags& exempt = GetLinkExemptFlags();
+        //: consult the group's per-group exempt set instead of
+        // the static v1 defaults. Groups without a custom entry fall
+        // back to GetDefaultLinkExemptFlags() inside the accessor.
+        const LinkExemptFlags& exempt
+            = info->particleSystem->getLinkExemptFlags(
+                info->selectedEmitter->linkGroup);
         for (size_t i = 0; i < siblings.size(); i++)
         {
             if (siblings[i] != info->selectedEmitter)

@@ -2356,6 +2356,615 @@ static int ShowIncrementDialog(HWND hParent)
         MAKEINTRESOURCE(IDD_INCREMENT_INDEX), hParent, IncrementIndexDlgProc, 0);
 }
 
+// ----------------------------------------------------------------------------
+// — Link group settings dialog
+//
+// Lets the user toggle, per group, which emitter fields are exempt from
+// propagation. Opened from the right-click menu's `Group settings...`
+// item when the selected emitter is in a link group.
+
+// Field table — every flag surfaced in the dialog UI. `name` and the
+// `unknownXX` flags are intentionally NOT here: name is always exempt
+// (intrinsic per-emitter identity), and the unknowns have no inspector
+// representation so toggling them would be opaque. Their data-model
+// flags still exist on LinkExemptFlags; the on-disk blob preserves
+// them; copySharedParamsFrom honours them — they're just not user-
+// configurable in v1.
+struct LinkSettingsFieldEntry
+{
+    const wchar_t*           label;
+    const wchar_t*           category;
+    bool LinkExemptFlags::*  flag;
+};
+
+static const LinkSettingsFieldEntry kLinkSettingsFields[] =
+{
+    // Textures.
+    { L"Color texture",              L"Textures",   &LinkExemptFlags::colorTexture },
+    { L"Normal texture",             L"Textures",   &LinkExemptFlags::normalTexture },
+    // Curves.
+    { L"Atlas index curve",          L"Curves",     &LinkExemptFlags::trackIndex },
+    { L"Red curve",                  L"Curves",     &LinkExemptFlags::trackRed },
+    { L"Green curve",                L"Curves",     &LinkExemptFlags::trackGreen },
+    { L"Blue curve",                 L"Curves",     &LinkExemptFlags::trackBlue },
+    { L"Alpha curve",                L"Curves",     &LinkExemptFlags::trackAlpha },
+    { L"Scale curve",                L"Curves",     &LinkExemptFlags::trackScale },
+    { L"Rotation speed curve",       L"Curves",     &LinkExemptFlags::trackRotationSpeed },
+    // Lifetime / spawning.
+    { L"Lifetime",                   L"Lifetime",   &LinkExemptFlags::lifetime },
+    { L"Initial delay",              L"Lifetime",   &LinkExemptFlags::initialDelay },
+    { L"Burst delay",                L"Lifetime",   &LinkExemptFlags::burstDelay },
+    { L"Number of bursts",           L"Lifetime",   &LinkExemptFlags::nBursts },
+    { L"Particles per burst",        L"Lifetime",   &LinkExemptFlags::nParticlesPerBurst },
+    { L"Particles per second",       L"Lifetime",   &LinkExemptFlags::nParticlesPerSecond },
+    { L"Use bursts",                 L"Lifetime",   &LinkExemptFlags::useBursts },
+    // Physics.
+    { L"Gravity",                    L"Physics",    &LinkExemptFlags::gravity },
+    { L"Acceleration",               L"Physics",    &LinkExemptFlags::acceleration },
+    { L"Inward speed",               L"Physics",    &LinkExemptFlags::inwardSpeed },
+    { L"Inward acceleration",        L"Physics",    &LinkExemptFlags::inwardAcceleration },
+    { L"Bounciness",                 L"Physics",    &LinkExemptFlags::bounciness },
+    { L"Ground behavior",            L"Physics",    &LinkExemptFlags::groundBehavior },
+    { L"Object-space acceleration",  L"Physics",    &LinkExemptFlags::objectSpaceAcceleration },
+    { L"Affected by wind",           L"Physics",    &LinkExemptFlags::affectedByWind },
+    // Appearance.
+    { L"Blend mode",                 L"Appearance", &LinkExemptFlags::blendMode },
+    { L"Texture size",               L"Appearance", &LinkExemptFlags::textureSize },
+    { L"Triangles per particle",     L"Appearance", &LinkExemptFlags::nTriangles },
+    { L"Random scale %",             L"Appearance", &LinkExemptFlags::randomScalePerc },
+    { L"Random lifetime %",          L"Appearance", &LinkExemptFlags::randomLifetimePerc },
+    { L"Has tail",                   L"Appearance", &LinkExemptFlags::hasTail },
+    { L"Tail size",                  L"Appearance", &LinkExemptFlags::tailSize },
+    { L"No depth test",              L"Appearance", &LinkExemptFlags::noDepthTest },
+    { L"Random colors",              L"Appearance", &LinkExemptFlags::randomColors },
+    // Weather.
+    { L"Weather particle",           L"Weather",    &LinkExemptFlags::isWeatherParticle },
+    { L"Weather cube size",          L"Weather",    &LinkExemptFlags::weatherCubeSize },
+    { L"Weather cube distance",      L"Weather",    &LinkExemptFlags::weatherCubeDistance },
+    { L"Weather fadeout distance",   L"Weather",    &LinkExemptFlags::weatherFadeoutDistance },
+    // Rotation.
+    { L"Random rotation",            L"Rotation",   &LinkExemptFlags::randomRotation },
+    { L"Random rotation direction",  L"Rotation",   &LinkExemptFlags::randomRotationDirection },
+    { L"Random rotation average",    L"Rotation",   &LinkExemptFlags::randomRotationAverage },
+    { L"Random rotation variance",   L"Rotation",   &LinkExemptFlags::randomRotationVariance },
+    // Misc.
+    { L"Link to system",             L"Misc",       &LinkExemptFlags::linkToSystem },
+    { L"Parent link strength",       L"Misc",       &LinkExemptFlags::parentLinkStrength },
+    { L"Color-add grayscale",        L"Misc",       &LinkExemptFlags::doColorAddGrayscale },
+    { L"Heat particle",              L"Misc",       &LinkExemptFlags::isHeatParticle },
+    { L"World-oriented",             L"Misc",       &LinkExemptFlags::isWorldOriented },
+    { L"Freeze time",                L"Misc",       &LinkExemptFlags::freezeTime },
+    { L"Skip time",                  L"Misc",       &LinkExemptFlags::skipTime },
+    { L"Emit from mesh",             L"Misc",       &LinkExemptFlags::emitFromMesh },
+    { L"Emit from mesh offset",      L"Misc",       &LinkExemptFlags::emitFromMeshOffset },
+    { L"Speed params (random box)",  L"Misc",       &LinkExemptFlags::groupSpeed },
+    { L"Lifetime params (random box)", L"Misc",     &LinkExemptFlags::groupLifetime },
+    { L"Position params (random box)", L"Misc",     &LinkExemptFlags::groupPosition },
+};
+static const int kLinkSettingsFieldCount =
+    (int)(sizeof(kLinkSettingsFields) / sizeof(kLinkSettingsFields[0]));
+
+// Dialog state. Passed via lParam at DialogBoxParam; stored via
+// GetWindowLongPtr(hDlg, DWLP_USER) for subsequent message handlers.
+struct LinkGroupSettingsDialogData
+{
+    ParticleSystem*    system;
+    uint32_t           groupId;
+    LinkExemptFlags    currentFlags;   // local working copy; applied on OK
+};
+
+// Re-checkmark every row in the ListView from `currentFlags`. Used by
+// init and Reset.
+//
+// UI convention (post-revision): a CHECKED checkbox means the field is
+// SHARED across the group (propagates on edit). An UNCHECKED checkbox
+// means the field is PER-EMITTER (exempt from propagation). This is
+// the opposite of the underlying `LinkExemptFlags` data model — the
+// bool is named "exempt" so `true` = per-emitter — so the populate /
+// read helpers invert before crossing the data/UI boundary.
+static void LinkGroupSettings_PopulateChecks(HWND hList,
+                                              const LinkExemptFlags& flags)
+{
+    for (int i = 0; i < kLinkSettingsFieldCount; ++i)
+    {
+        bool isExempt = flags.*(kLinkSettingsFields[i].flag);
+        // Checked = shared = !exempt.
+        ListView_SetCheckState(hList, i, isExempt ? FALSE : TRUE);
+    }
+}
+
+// Read every row's check state back into `flags`.
+static void LinkGroupSettings_ReadChecks(HWND hList, LinkExemptFlags& flags)
+{
+    for (int i = 0; i < kLinkSettingsFieldCount; ++i)
+    {
+        // Unchecked = exempt = true. Checked = shared = false.
+        flags.*(kLinkSettingsFields[i].flag) =
+            (ListView_GetCheckState(hList, i) == 0);
+    }
+}
+
+// Field-disagreement descriptor for the OK-time check. Built only when
+// an exempt flag transitioned true → false (was per-emitter, now shared)
+// AND the group's members hold divergent values for that field.
+struct LinkSettingsDisagreement
+{
+    std::wstring     fieldLabel;
+    std::wstring     canonicalValue;       // pretty-printed
+    std::wstring     canonicalMember;      // name of the first-in-tree-order member
+    int              dissentingCount;      // members holding a different value
+};
+
+// Pretty-print a field's value on a given member. Used by the
+// disagreement summary so the user sees what's about to be applied.
+static std::wstring FormatFieldValue(const ParticleSystem::Emitter& e,
+                                       bool LinkExemptFlags::*       flag)
+{
+    wchar_t buf[64];
+    // Bool fields — print true/false. Float/int — printf the value.
+    // For non-trivial fields (acceleration, randomColors, tracks,
+    // groups), print a compact summary token. The summary doesn't
+    // need to be precise — it's just a label for the user to recognise.
+    if (flag == &LinkExemptFlags::lifetime)            { swprintf(buf, 64, L"%.3f", e.lifetime); return buf; }
+    if (flag == &LinkExemptFlags::initialDelay)        { swprintf(buf, 64, L"%.3f", e.initialDelay); return buf; }
+    if (flag == &LinkExemptFlags::burstDelay)          { swprintf(buf, 64, L"%.3f", e.burstDelay); return buf; }
+    if (flag == &LinkExemptFlags::gravity)             { swprintf(buf, 64, L"%.3f", e.gravity); return buf; }
+    if (flag == &LinkExemptFlags::inwardSpeed)         { swprintf(buf, 64, L"%.3f", e.inwardSpeed); return buf; }
+    if (flag == &LinkExemptFlags::inwardAcceleration)  { swprintf(buf, 64, L"%.3f", e.inwardAcceleration); return buf; }
+    if (flag == &LinkExemptFlags::bounciness)          { swprintf(buf, 64, L"%.3f", e.bounciness); return buf; }
+    if (flag == &LinkExemptFlags::randomScalePerc)     { swprintf(buf, 64, L"%.3f", e.randomScalePerc); return buf; }
+    if (flag == &LinkExemptFlags::randomLifetimePerc)  { swprintf(buf, 64, L"%.3f", e.randomLifetimePerc); return buf; }
+    if (flag == &LinkExemptFlags::tailSize)            { swprintf(buf, 64, L"%.3f", e.tailSize); return buf; }
+    if (flag == &LinkExemptFlags::parentLinkStrength)  { swprintf(buf, 64, L"%.3f", e.parentLinkStrength); return buf; }
+    if (flag == &LinkExemptFlags::weatherCubeSize)     { swprintf(buf, 64, L"%.3f", e.weatherCubeSize); return buf; }
+    if (flag == &LinkExemptFlags::weatherCubeDistance) { swprintf(buf, 64, L"%.3f", e.weatherCubeDistance); return buf; }
+    if (flag == &LinkExemptFlags::weatherFadeoutDistance) { swprintf(buf, 64, L"%.3f", e.weatherFadeoutDistance); return buf; }
+    if (flag == &LinkExemptFlags::randomRotationAverage)  { swprintf(buf, 64, L"%.3f", e.randomRotationAverage); return buf; }
+    if (flag == &LinkExemptFlags::randomRotationVariance) { swprintf(buf, 64, L"%.3f", e.randomRotationVariance); return buf; }
+    if (flag == &LinkExemptFlags::freezeTime)          { swprintf(buf, 64, L"%.3f", e.freezeTime); return buf; }
+    if (flag == &LinkExemptFlags::skipTime)            { swprintf(buf, 64, L"%.3f", e.skipTime); return buf; }
+    if (flag == &LinkExemptFlags::emitFromMeshOffset)  { swprintf(buf, 64, L"%.3f", e.emitFromMeshOffset); return buf; }
+    if (flag == &LinkExemptFlags::nBursts)             { swprintf(buf, 64, L"%lu", e.nBursts); return buf; }
+    if (flag == &LinkExemptFlags::blendMode)           { swprintf(buf, 64, L"%lu", e.blendMode); return buf; }
+    if (flag == &LinkExemptFlags::textureSize)         { swprintf(buf, 64, L"%lu", e.textureSize); return buf; }
+    if (flag == &LinkExemptFlags::nParticlesPerSecond) { swprintf(buf, 64, L"%lu", e.nParticlesPerSecond); return buf; }
+    if (flag == &LinkExemptFlags::nTriangles)          { swprintf(buf, 64, L"%lu", e.nTriangles); return buf; }
+    if (flag == &LinkExemptFlags::nParticlesPerBurst)  { swprintf(buf, 64, L"%lu", e.nParticlesPerBurst); return buf; }
+    if (flag == &LinkExemptFlags::groundBehavior)      { swprintf(buf, 64, L"%lu", e.groundBehavior); return buf; }
+    if (flag == &LinkExemptFlags::emitFromMesh)        { swprintf(buf, 64, L"%d", e.emitFromMesh); return buf; }
+    if (flag == &LinkExemptFlags::colorTexture)        { return AnsiToWide(e.colorTexture); }
+    if (flag == &LinkExemptFlags::normalTexture)       { return AnsiToWide(e.normalTexture); }
+    // Bools.
+    if (flag == &LinkExemptFlags::linkToSystem)            return e.linkToSystem            ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::objectSpaceAcceleration) return e.objectSpaceAcceleration ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::doColorAddGrayscale)     return e.doColorAddGrayscale     ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::affectedByWind)          return e.affectedByWind          ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::isHeatParticle)          return e.isHeatParticle          ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::isWeatherParticle)       return e.isWeatherParticle       ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::hasTail)                 return e.hasTail                 ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::noDepthTest)             return e.noDepthTest             ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::randomRotation)          return e.randomRotation          ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::randomRotationDirection) return e.randomRotationDirection ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::isWorldOriented)         return e.isWorldOriented         ? L"true" : L"false";
+    if (flag == &LinkExemptFlags::useBursts)               return e.useBursts               ? L"true" : L"false";
+    // Compound fields — print a single-token summary.
+    if (flag == &LinkExemptFlags::acceleration)        { swprintf(buf, 64, L"(%.2f, %.2f, %.2f)", e.acceleration[0], e.acceleration[1], e.acceleration[2]); return buf; }
+    if (flag == &LinkExemptFlags::randomColors)        { swprintf(buf, 64, L"(%.2f, %.2f, %.2f, %.2f)", e.randomColors[0], e.randomColors[1], e.randomColors[2], e.randomColors[3]); return buf; }
+    return L"(complex field — see inspector)";
+}
+
+// Check whether all members of `groupId` hold the same value for the
+// field described by `flag`. The "same" comparison uses operator== /
+// memcmp depending on the field type.
+static bool MembersAgreeOnField(const std::vector<ParticleSystem::Emitter*>& members,
+                                 bool LinkExemptFlags::*                      flag)
+{
+    if (members.size() < 2) return true;
+    const ParticleSystem::Emitter& a = *members[0];
+    // Scalar / bool path.
+    #define EQUAL_FIELD(f) \
+        if (flag == &LinkExemptFlags::f) { \
+            for (size_t i = 1; i < members.size(); ++i) \
+                if (members[i]->f != a.f) return false; \
+            return true; \
+        }
+    EQUAL_FIELD(linkToSystem)
+    EQUAL_FIELD(objectSpaceAcceleration)
+    EQUAL_FIELD(doColorAddGrayscale)
+    EQUAL_FIELD(affectedByWind)
+    EQUAL_FIELD(isHeatParticle)
+    EQUAL_FIELD(isWeatherParticle)
+    EQUAL_FIELD(hasTail)
+    EQUAL_FIELD(noDepthTest)
+    EQUAL_FIELD(randomRotation)
+    EQUAL_FIELD(randomRotationDirection)
+    EQUAL_FIELD(isWorldOriented)
+    EQUAL_FIELD(useBursts)
+    EQUAL_FIELD(emitFromMesh)
+    EQUAL_FIELD(gravity)
+    EQUAL_FIELD(lifetime)
+    EQUAL_FIELD(initialDelay)
+    EQUAL_FIELD(burstDelay)
+    EQUAL_FIELD(inwardSpeed)
+    EQUAL_FIELD(inwardAcceleration)
+    EQUAL_FIELD(randomScalePerc)
+    EQUAL_FIELD(randomLifetimePerc)
+    EQUAL_FIELD(weatherCubeSize)
+    EQUAL_FIELD(tailSize)
+    EQUAL_FIELD(parentLinkStrength)
+    EQUAL_FIELD(weatherCubeDistance)
+    EQUAL_FIELD(randomRotationAverage)
+    EQUAL_FIELD(randomRotationVariance)
+    EQUAL_FIELD(bounciness)
+    EQUAL_FIELD(freezeTime)
+    EQUAL_FIELD(skipTime)
+    EQUAL_FIELD(emitFromMeshOffset)
+    EQUAL_FIELD(weatherFadeoutDistance)
+    EQUAL_FIELD(nBursts)
+    EQUAL_FIELD(blendMode)
+    EQUAL_FIELD(textureSize)
+    EQUAL_FIELD(nParticlesPerSecond)
+    EQUAL_FIELD(nTriangles)
+    EQUAL_FIELD(nParticlesPerBurst)
+    EQUAL_FIELD(groundBehavior)
+    EQUAL_FIELD(colorTexture)
+    EQUAL_FIELD(normalTexture)
+    #undef EQUAL_FIELD
+    // Arrays.
+    if (flag == &LinkExemptFlags::acceleration)
+    {
+        for (size_t i = 1; i < members.size(); ++i)
+            if (memcmp(members[i]->acceleration, a.acceleration, sizeof(a.acceleration)) != 0) return false;
+        return true;
+    }
+    if (flag == &LinkExemptFlags::randomColors)
+    {
+        for (size_t i = 1; i < members.size(); ++i)
+            if (memcmp(members[i]->randomColors, a.randomColors, sizeof(a.randomColors)) != 0) return false;
+        return true;
+    }
+    // Groups.
+    if (flag == &LinkExemptFlags::groupSpeed)
+    {
+        for (size_t i = 1; i < members.size(); ++i)
+            if (memcmp(&members[i]->groups[0], &a.groups[0], sizeof(ParticleSystem::Emitter::Group)) != 0) return false;
+        return true;
+    }
+    if (flag == &LinkExemptFlags::groupLifetime)
+    {
+        for (size_t i = 1; i < members.size(); ++i)
+            if (memcmp(&members[i]->groups[1], &a.groups[1], sizeof(ParticleSystem::Emitter::Group)) != 0) return false;
+        return true;
+    }
+    if (flag == &LinkExemptFlags::groupPosition)
+    {
+        for (size_t i = 1; i < members.size(); ++i)
+            if (memcmp(&members[i]->groups[2], &a.groups[2], sizeof(ParticleSystem::Emitter::Group)) != 0) return false;
+        return true;
+    }
+    // Tracks — compare keymap + interpolation. Use the existing
+    // TracksEqual helper indirectly via memcmp won't work (KeyMap is
+    // a std::multiset). Fall back to count + per-key comparison.
+    auto trackFor = [&a](bool LinkExemptFlags::* fl) -> int {
+        if (fl == &LinkExemptFlags::trackRed)            return 0;
+        if (fl == &LinkExemptFlags::trackGreen)          return 1;
+        if (fl == &LinkExemptFlags::trackBlue)           return 2;
+        if (fl == &LinkExemptFlags::trackAlpha)          return 3;
+        if (fl == &LinkExemptFlags::trackScale)          return 4;
+        if (fl == &LinkExemptFlags::trackIndex)          return 5;
+        if (fl == &LinkExemptFlags::trackRotationSpeed)  return 6;
+        return -1;
+    };
+    int trackIdx = trackFor(flag);
+    if (trackIdx >= 0)
+    {
+        for (size_t i = 1; i < members.size(); ++i)
+        {
+            const ParticleSystem::Emitter::Track& t1 = *members[i]->tracks[trackIdx];
+            const ParticleSystem::Emitter::Track& t0 = *a.tracks[trackIdx];
+            if (t1.interpolation != t0.interpolation) return false;
+            if (t1.keys.size()   != t0.keys.size())   return false;
+            if (!std::equal(t1.keys.begin(), t1.keys.end(), t0.keys.begin()))
+                return false;
+        }
+        return true;
+    }
+    return true;   // unknown field — treat as agreeing
+}
+
+// Force every non-canonical member's `field` to match the canonical
+// (first-in-tree-order) member's value. Called after the user confirms
+// the disagreement-resolution summary.
+static void ApplyCanonicalValueToField(std::vector<ParticleSystem::Emitter*>& members,
+                                        bool LinkExemptFlags::*                 flag)
+{
+    if (members.size() < 2) return;
+    ParticleSystem::Emitter& a = *members[0];
+    #define COPY_FIELD(f) \
+        if (flag == &LinkExemptFlags::f) { \
+            for (size_t i = 1; i < members.size(); ++i) members[i]->f = a.f; \
+            return; \
+        }
+    COPY_FIELD(linkToSystem)
+    COPY_FIELD(objectSpaceAcceleration)
+    COPY_FIELD(doColorAddGrayscale)
+    COPY_FIELD(affectedByWind)
+    COPY_FIELD(isHeatParticle)
+    COPY_FIELD(isWeatherParticle)
+    COPY_FIELD(hasTail)
+    COPY_FIELD(noDepthTest)
+    COPY_FIELD(randomRotation)
+    COPY_FIELD(randomRotationDirection)
+    COPY_FIELD(isWorldOriented)
+    COPY_FIELD(useBursts)
+    COPY_FIELD(emitFromMesh)
+    COPY_FIELD(gravity)
+    COPY_FIELD(lifetime)
+    COPY_FIELD(initialDelay)
+    COPY_FIELD(burstDelay)
+    COPY_FIELD(inwardSpeed)
+    COPY_FIELD(inwardAcceleration)
+    COPY_FIELD(randomScalePerc)
+    COPY_FIELD(randomLifetimePerc)
+    COPY_FIELD(weatherCubeSize)
+    COPY_FIELD(tailSize)
+    COPY_FIELD(parentLinkStrength)
+    COPY_FIELD(weatherCubeDistance)
+    COPY_FIELD(randomRotationAverage)
+    COPY_FIELD(randomRotationVariance)
+    COPY_FIELD(bounciness)
+    COPY_FIELD(freezeTime)
+    COPY_FIELD(skipTime)
+    COPY_FIELD(emitFromMeshOffset)
+    COPY_FIELD(weatherFadeoutDistance)
+    COPY_FIELD(nBursts)
+    COPY_FIELD(blendMode)
+    COPY_FIELD(textureSize)
+    COPY_FIELD(nParticlesPerSecond)
+    COPY_FIELD(nTriangles)
+    COPY_FIELD(nParticlesPerBurst)
+    COPY_FIELD(groundBehavior)
+    COPY_FIELD(colorTexture)
+    COPY_FIELD(normalTexture)
+    #undef COPY_FIELD
+    if (flag == &LinkExemptFlags::acceleration)
+    {
+        for (size_t i = 1; i < members.size(); ++i)
+            memcpy(members[i]->acceleration, a.acceleration, sizeof(a.acceleration));
+        return;
+    }
+    if (flag == &LinkExemptFlags::randomColors)
+    {
+        for (size_t i = 1; i < members.size(); ++i)
+            memcpy(members[i]->randomColors, a.randomColors, sizeof(a.randomColors));
+        return;
+    }
+    if (flag == &LinkExemptFlags::groupSpeed)
+    {
+        for (size_t i = 1; i < members.size(); ++i) members[i]->groups[0] = a.groups[0];
+        return;
+    }
+    if (flag == &LinkExemptFlags::groupLifetime)
+    {
+        for (size_t i = 1; i < members.size(); ++i) members[i]->groups[1] = a.groups[1];
+        return;
+    }
+    if (flag == &LinkExemptFlags::groupPosition)
+    {
+        for (size_t i = 1; i < members.size(); ++i) members[i]->groups[2] = a.groups[2];
+        return;
+    }
+    // Tracks.
+    auto trackFor = [](bool LinkExemptFlags::* fl) -> int {
+        if (fl == &LinkExemptFlags::trackRed)            return 0;
+        if (fl == &LinkExemptFlags::trackGreen)          return 1;
+        if (fl == &LinkExemptFlags::trackBlue)           return 2;
+        if (fl == &LinkExemptFlags::trackAlpha)          return 3;
+        if (fl == &LinkExemptFlags::trackScale)          return 4;
+        if (fl == &LinkExemptFlags::trackIndex)          return 5;
+        if (fl == &LinkExemptFlags::trackRotationSpeed)  return 6;
+        return -1;
+    };
+    int trackIdx = trackFor(flag);
+    if (trackIdx >= 0)
+    {
+        for (size_t i = 1; i < members.size(); ++i)
+        {
+            members[i]->trackContents[trackIdx] = a.trackContents[trackIdx];
+            members[i]->tracks[trackIdx]        = &members[i]->trackContents[trackIdx];
+        }
+        return;
+    }
+}
+
+static INT_PTR CALLBACK LinkGroupSettingsProc(HWND hDlg, UINT uMsg,
+                                               WPARAM wParam, LPARAM lParam)
+{
+    LinkGroupSettingsDialogData* data =
+        (LinkGroupSettingsDialogData*)(LONG_PTR)GetWindowLongPtr(hDlg, DWLP_USER);
+    switch (uMsg)
+    {
+    case WM_INITDIALOG:
+    {
+        data = (LinkGroupSettingsDialogData*)lParam;
+        SetWindowLongPtr(hDlg, DWLP_USER, (LONG_PTR)data);
+
+        // Title carries the group ID so the user knows which group
+        // they're editing.
+        wchar_t title[64];
+        swprintf(title, 64, L"Link group %u settings", data->groupId);
+        SetWindowText(hDlg, title);
+
+        HWND hList = GetDlgItem(hDlg, IDC_LINK_EXEMPT_LIST);
+        ListView_SetExtendedListViewStyle(hList,
+            LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+
+        // Columns: Field name, Category.
+        LVCOLUMN col = { 0 };
+        col.mask     = LVCF_TEXT | LVCF_WIDTH;
+        col.cx       = 200;
+        col.pszText  = (LPWSTR)L"Field";
+        ListView_InsertColumn(hList, 0, &col);
+        col.cx       = 90;
+        col.pszText  = (LPWSTR)L"Category";
+        ListView_InsertColumn(hList, 1, &col);
+
+        // Populate rows.
+        for (int i = 0; i < kLinkSettingsFieldCount; ++i)
+        {
+            LVITEM item = { 0 };
+            item.mask    = LVIF_TEXT;
+            item.iItem   = i;
+            item.iSubItem = 0;
+            item.pszText = (LPWSTR)kLinkSettingsFields[i].label;
+            ListView_InsertItem(hList, &item);
+            ListView_SetItemText(hList, i, 1,
+                (LPWSTR)kLinkSettingsFields[i].category);
+        }
+        LinkGroupSettings_PopulateChecks(hList, data->currentFlags);
+        return TRUE;
+    }
+    case WM_COMMAND:
+        switch (LOWORD(wParam))
+        {
+        case IDC_LINK_EXEMPT_RESET:
+        {
+            // Restore the v1 defaults to the local working copy, then
+            // refresh the visible checkboxes. The disagreement check at
+            // OK time will fire normally against the reset state.
+            data->currentFlags = GetDefaultLinkExemptFlags();
+            HWND hList = GetDlgItem(hDlg, IDC_LINK_EXEMPT_LIST);
+            LinkGroupSettings_PopulateChecks(hList, data->currentFlags);
+            return TRUE;
+        }
+        case IDOK:
+        {
+            HWND hList = GetDlgItem(hDlg, IDC_LINK_EXEMPT_LIST);
+            LinkExemptFlags newFlags = data->currentFlags;
+            LinkGroupSettings_ReadChecks(hList, newFlags);
+            LinkExemptFlags oldFlags
+                = data->system->getLinkExemptFlags(data->groupId);
+
+            // Sync-when-unexempting: detect flags that transitioned
+            // from true (exempt) to false (shared) AND have members
+            // currently disagreeing on the field.
+            std::vector<ParticleSystem::Emitter*> members
+                = GetLinkGroupMembers(*data->system, data->groupId);
+            std::vector<LinkSettingsDisagreement> disagreements;
+            for (int i = 0; i < kLinkSettingsFieldCount; ++i)
+            {
+                bool LinkExemptFlags::* flag = kLinkSettingsFields[i].flag;
+                bool wasExempt = oldFlags.*flag;
+                bool nowExempt = newFlags.*flag;
+                if (wasExempt && !nowExempt && !MembersAgreeOnField(members, flag))
+                {
+                    LinkSettingsDisagreement d;
+                    d.fieldLabel       = kLinkSettingsFields[i].label;
+                    d.canonicalValue   = FormatFieldValue(*members[0], flag);
+                    d.canonicalMember  = AnsiToWide(members[0]->name);
+                    d.dissentingCount  = 0;
+                    for (size_t m = 1; m < members.size(); ++m)
+                    {
+                        if (FormatFieldValue(*members[m], flag) != d.canonicalValue)
+                            ++d.dissentingCount;
+                    }
+                    disagreements.push_back(d);
+                }
+            }
+
+            // If disagreements exist, show a confirm summary listing
+            // the per-field overwrites. Yes = apply canonical values;
+            // Cancel = abort the whole OK. (Q4 default: canonical =
+            // first-in-tree-order, matching CreateLinkGroup.)
+            if (!disagreements.empty())
+            {
+                std::wstring body =
+                    L"Sharing the following fields will overwrite member values to match the canonical (first-in-tree-order) emitter's value:\n\n";
+                for (size_t i = 0; i < disagreements.size(); ++i)
+                {
+                    const LinkSettingsDisagreement& d = disagreements[i];
+                    wchar_t line[512];
+                    swprintf(line, 512,
+                             L"  - %s: use %s's value \"%s\" (overwrites %d other member%s)\n",
+                             d.fieldLabel.c_str(),
+                             d.canonicalMember.c_str(),
+                             d.canonicalValue.c_str(),
+                             d.dissentingCount,
+                             d.dissentingCount == 1 ? L"" : L"s");
+                    body += line;
+                }
+                body += L"\nProceed?";
+                int rv = MessageBox(hDlg, body.c_str(),
+                                     L"Resolve field disagreements",
+                                     MB_YESNO | MB_ICONQUESTION);
+                if (rv != IDYES)
+                {
+                    // User aborted the share. Settings dialog stays open
+                    // so they can adjust flags and retry, or cancel.
+                    return TRUE;
+                }
+                // Apply canonical values to every disagreeing field.
+                for (size_t i = 0; i < disagreements.size(); ++i)
+                {
+                    for (int k = 0; k < kLinkSettingsFieldCount; ++k)
+                    {
+                        if (kLinkSettingsFields[k].label == disagreements[i].fieldLabel)
+                        {
+                            ApplyCanonicalValueToField(members,
+                                kLinkSettingsFields[k].flag);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Commit the new flags. setLinkExemptFlags normalizes
+            // entries that equal the defaults out of the map.
+            data->system->setLinkExemptFlags(data->groupId, newFlags);
+
+#ifndef NDEBUG
+            // Hex-dump of the flag bytes; useful for verifying the
+            // settings-dialog → on-disk pipeline.
+            printf("[Link] exempt set group=%u flags=", data->groupId);
+            const uint8_t* bytes = (const uint8_t*)&newFlags;
+            for (size_t i = 0; i < sizeof(LinkExemptFlags); ++i)
+                printf("%02X", bytes[i]);
+            printf(" disagreements=%zu\n", disagreements.size());
+            fflush(stdout);
+#endif
+
+            EndDialog(hDlg, IDOK);
+            return TRUE;
+        }
+        case IDCANCEL:
+            EndDialog(hDlg, IDCANCEL);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+// Returns IDOK if the user committed, IDCANCEL otherwise. Caller fires
+// ELN_LISTCHANGED on IDOK so the parent's CaptureUndo path snapshots
+// the flag change (and any disagreement-resolved member values) in a
+// single undo entry.
+static INT_PTR ShowLinkGroupSettings(HWND              hParent,
+                                       ParticleSystem*   system,
+                                       uint32_t          groupId)
+{
+    if (system == NULL || groupId == 0) return IDCANCEL;
+    LinkGroupSettingsDialogData data;
+    data.system       = system;
+    data.groupId      = groupId;
+    data.currentFlags = system->getLinkExemptFlags(groupId);
+    return DialogBoxParam(GetModuleHandle(NULL),
+                           MAKEINTRESOURCE(IDD_LINK_GROUP_SETTINGS),
+                           hParent,
+                           LinkGroupSettingsProc,
+                           (LPARAM)&data);
+}
+
 static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	EmitterListControl* control = (EmitterListControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
@@ -3024,11 +3633,18 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                             else if (multiSize >= 2 && multiOneGroup)
                             {
                                 // Multi-emitter, all in the same group:
-                                // offer Dissolve directly.
+                                // offer Dissolve directly. adds
+                                // Group settings for parity with the
+                                // single-selection path — particularly
+                                // useful when the multi-set was built
+                                // by clicking the bracket.
                                 ensureSeparator();
                                 AppendMenuW(hPopupMenu, MF_STRING,
                                             ID_EMITTER_LINK_DISSOLVE,
                                             L"&Dissolve link group");
+                                AppendMenuW(hPopupMenu, MF_STRING,
+                                            ID_EMITTER_LINK_GROUP_SETTINGS,
+                                            L"Group &settings...");
                             }
                             else if (multiSingleGroupPlusUnlinked)
                             {
@@ -3090,6 +3706,13 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                     AppendMenuW(hPopupMenu, MF_STRING,
                                                 ID_EMITTER_LINK_DISSOLVE,
                                                 L"&Dissolve link group");
+                                    //: open the per-group exempt
+                                    // configuration dialog. Visible
+                                    // alongside Remove / Dissolve when
+                                    // the selected emitter is linked.
+                                    AppendMenuW(hPopupMenu, MF_STRING,
+                                                ID_EMITTER_LINK_GROUP_SETTINGS,
+                                                L"Group &settings...");
                                 }
                             }
                             // (multiSize >= 2 mixed: no menu items added;
@@ -3163,6 +3786,12 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                     std::vector<ParticleSystem::Emitter*> mems
                                         = GetLinkGroupMembers(*control->system, gid);
                                     DissolveLinkGroup(*control->system, gid);
+                                    //: clear any per-group exempt
+                                    // entry — the group no longer exists,
+                                    // so its entry is orphaned. Setting
+                                    // to defaults normalizes it out.
+                                    control->system->setLinkExemptFlags(gid,
+                                        GetDefaultLinkExemptFlags());
                                     for (size_t i = 0; i < mems.size(); i++)
                                     {
                                         HTREEITEM hi = FindTreeItemByEmitter(
@@ -3172,6 +3801,32 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                         RefreshEmitterTreeText(control->hTree, hi, mems[i]);
                                     }
                                     NotifyParent(control, ELN_LISTCHANGED);
+                                }
+                                break;
+
+                            case ID_EMITTER_LINK_GROUP_SETTINGS:
+                                //: open the per-group exempt
+                                // settings dialog. Visible only when the
+                                // selected emitter (single-select) or
+                                // the multi-set's primary is in a link
+                                // group, so dispatch on the primary's
+                                // linkGroup.
+                                if (control->selection != NULL &&
+                                    control->selection->linkGroup != 0)
+                                {
+                                    uint32_t gid = control->selection->linkGroup;
+                                    INT_PTR rv = ShowLinkGroupSettings(
+                                        hWnd, control->system, gid);
+                                    if (rv == IDOK)
+                                    {
+                                        // Flags + any disagreement-
+                                        // resolved member values are
+                                        // committed. Fire ELN_LISTCHANGED
+                                        // so main.cpp's CaptureUndo
+                                        // snapshots the whole change as
+                                        // one undo entry.
+                                        NotifyParent(control, ELN_LISTCHANGED);
+                                    }
                                 }
                                 break;
 
@@ -3215,11 +3870,21 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                         // would have non-empty diff, show
                                         // a confirmation listing all
                                         // affected fields across the set.
+                                        //: the group is brand-new
+                                        // so the v1 defaults apply.
+                                        // CreateLinkGroup also uses
+                                        // defaults; the diff here must
+                                        // match that exempt set so the
+                                        // confirmation dialog lists
+                                        // exactly the fields that will
+                                        // be overwritten.
+                                        const LinkExemptFlags& exempt
+                                            = GetDefaultLinkExemptFlags();
                                         std::vector<std::string> combined;
                                         for (size_t i = 1; i < mems.size(); i++)
                                         {
                                             std::vector<std::string> d
-                                                = DiffNonExemptParams(*mems[0], *mems[i]);
+                                                = DiffNonExemptParams(*mems[0], *mems[i], exempt);
                                             for (size_t j = 0; j < d.size(); j++)
                                             {
                                                 if (std::find(combined.begin(),
@@ -3285,9 +3950,13 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
                                         // right-clicked emitter), so the
                                         // partner is the one whose values
                                         // get overwritten. Spell that out.
+                                        //: brand-new group; v1
+                                        // defaults apply (same set
+                                        // CreateLinkGroup will use).
                                         std::vector<std::string> diffs
                                             = DiffNonExemptParams(*control->selection,
-                                                                   *partner);
+                                                                   *partner,
+                                                                   GetDefaultLinkExemptFlags());
                                         std::wstring victimName
                                             = AnsiToWide(partner->name);
                                         std::wstring sourceDesc = L"\"";
@@ -3362,11 +4031,19 @@ static INT_PTR WINAPI DlgEmitterListProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
 
                                         // Combined diff across all joiners
                                         // vs the canonical member.
+                                        //: the target group may
+                                        // have a custom exempt set; the
+                                        // confirm dialog must reflect
+                                        // exactly the fields JoinLinkGroup
+                                        // will overwrite, so use the
+                                        // group's current flags.
+                                        const LinkExemptFlags& joinExempt
+                                            = control->system->getLinkExemptFlags(target);
                                         std::vector<std::string> combined;
                                         for (size_t i = 0; i < joiners.size(); i++)
                                         {
                                             std::vector<std::string> d
-                                                = DiffNonExemptParams(*joiners[i], *grp[0]);
+                                                = DiffNonExemptParams(*joiners[i], *grp[0], joinExempt);
                                             for (size_t j = 0; j < d.size(); j++)
                                             {
                                                 if (std::find(combined.begin(),

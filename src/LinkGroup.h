@@ -29,23 +29,115 @@
 // invariant (e.g. LeaveLinkGroup auto-dissolves the group when
 // removal would leave only one member).
 
-// Hard-coded v1 exempt set. Future work: make this user-configurable.
+// Per-group exempt set (). Each bool toggles whether the
+// corresponding emitter field is per-emitter (true = exempt = each
+// member keeps its own) or shared (false = propagated). The default
+// constructor restores the v1 hard-coded set: textures + atlas-index
+// curve + name. `name` is always-exempt — surfaced in the struct for
+// completeness, but the settings dialog doesn't display it (no sane
+// workflow shares a name across linked emitters).
+//
+// Layout is POD so the whole struct can be serialized as a raw byte
+// blob with a length prefix. Adding fields in the future is safe:
+// older readers see a smaller blob and default the missing tail;
+// newer readers tolerate larger blobs by reading what they know.
 struct LinkExemptFlags
 {
-    bool colorTexture;   // p_*.tga filename
-    bool normalTexture;  // depth/normal filename
-    bool trackIndex;     // TRACK_INDEX keymap (atlas sub-frame curve)
-    bool name;           // each emitter keeps its own identifier
+    // Textures + identity (default exempt).
+    bool colorTexture;
+    bool normalTexture;
+    bool name;
+    bool trackIndex;             // TRACK_INDEX curve (atlas sub-frame); default exempt
 
-    LinkExemptFlags()
-        : colorTexture(true)
-        , normalTexture(true)
-        , trackIndex(true)
-        , name(true)
-    {}
+    // Curves (default shared except trackIndex above).
+    bool trackRed;
+    bool trackGreen;
+    bool trackBlue;
+    bool trackAlpha;
+    bool trackScale;
+    bool trackRotationSpeed;
+
+    // Lifetime / spawning.
+    bool lifetime;
+    bool initialDelay;
+    bool burstDelay;
+    bool nBursts;
+    bool nParticlesPerBurst;
+    bool nParticlesPerSecond;
+    bool useBursts;
+
+    // Physics.
+    bool gravity;
+    bool acceleration;
+    bool inwardSpeed;
+    bool inwardAcceleration;
+    bool bounciness;
+    bool groundBehavior;
+    bool objectSpaceAcceleration;
+    bool affectedByWind;
+
+    // Appearance.
+    bool blendMode;
+    bool textureSize;
+    bool nTriangles;
+    bool randomScalePerc;
+    bool randomLifetimePerc;
+    bool hasTail;
+    bool tailSize;
+    bool noDepthTest;
+    bool randomColors;
+
+    // Weather.
+    bool isWeatherParticle;
+    bool weatherCubeSize;
+    bool weatherCubeDistance;
+    bool weatherFadeoutDistance;
+
+    // Rotation.
+    bool randomRotation;
+    bool randomRotationDirection;
+    bool randomRotationAverage;
+    bool randomRotationVariance;
+
+    // Misc.
+    bool linkToSystem;
+    bool parentLinkStrength;
+    bool doColorAddGrayscale;
+    bool isHeatParticle;
+    bool isWorldOriented;
+    bool freezeTime;
+    bool skipTime;
+    bool emitFromMesh;
+    bool emitFromMeshOffset;
+    bool groupSpeed;             // groups[0]
+    bool groupLifetime;          // groups[1]
+    bool groupPosition;          // groups[2]
+
+    // Unknown fields — data-model complete so save/restore is symmetric,
+    // but the settings dialog doesn't surface them (the editor's
+    // inspector doesn't either).
+    bool unknown06;
+    bool unknown11;
+    bool unknown15;
+    bool unknown2b;
+    bool unknown3f;
+    bool unknown44;
+    bool unknown49;
+
+    LinkExemptFlags();           // sets v1 defaults; see LinkGroup.cpp
+
+    // Bytewise equality. Used by ParticleSystem::setLinkExemptFlags
+    // to normalize on-default entries out of the map.
+    bool operator == (const LinkExemptFlags& other) const;
+    bool operator != (const LinkExemptFlags& other) const
+    { return !(*this == other); }
 };
 
-const LinkExemptFlags& GetLinkExemptFlags();
+// v1 defaults — what new groups (and groups without a per-group entry
+// in m_linkExempts) use. Kept as a static const so the const reference
+// returned by ParticleSystem::getLinkExemptFlags has a stable address
+// to point at when the group has no map entry.
+const LinkExemptFlags& GetDefaultLinkExemptFlags();
 
 // The "shared params" copy is a member of `ParticleSystem::Emitter`
 // (see ParticleSystem.h `copySharedParamsFrom`). Declared there
@@ -97,11 +189,15 @@ std::vector<ParticleSystem::Emitter*> GetLinkGroupMembers(
 std::vector<uint32_t> GetAllLinkGroupIds(const ParticleSystem& system);
 
 // Return field names that differ between `a` and `b` (considering
-// only non-exempt fields). Used by the Join confirmation dialog:
-// when the diff is empty, the join is silent; otherwise the dialog
-// lists the affected fields so the user can give informed consent.
+// only non-exempt fields per `exempt`). Used by the Join confirmation
+// dialog: when the diff is empty, the join is silent; otherwise the
+// dialog lists the affected fields so the user can give informed
+// consent. Pre-callers passed no flags (implicit v1 defaults);
+// post-callers pass the group's specific flags to get the right
+// answer for groups with custom exempt sets.
 std::vector<std::string> DiffNonExemptParams(
     const ParticleSystem::Emitter& a,
-    const ParticleSystem::Emitter& b);
+    const ParticleSystem::Emitter& b,
+    const LinkExemptFlags&         exempt);
 
 #endif // LINKGROUP_H

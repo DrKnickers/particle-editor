@@ -4,11 +4,14 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <map>
+#include <cstdint>
 #include "ChunkFile.h"
 
 #include "files.h"
 
 class EmitterInstance;
+struct LinkExemptFlags;   // defined in LinkGroup.h; forward-declared to avoid pulling that header in
 
 class ParticleSystem
 {
@@ -338,14 +341,34 @@ public:
 	      std::vector<Emitter*>& getEmitters()             { return m_emitters; }
 	const std::string&           getName()           const { return m_name; }
 	bool					 	 getLeaveParticles() const { return m_leaveParticles;  }
-	
+
 	// Setters
 	void setName(const std::string& name) { m_name = name; }
 	void setLeaveParticles(bool leave)    { m_leaveParticles = leave; }
 
+    //: per-group exempt-set storage. Groups not present in the
+    // map use the v1 default exempt set (textures + atlas-index curve +
+    // name) returned by GetDefaultLinkExemptFlags() in LinkGroup.cpp.
+    // Persisted via the new system-body chunk 0x0003. Storage is sparse:
+    // setLinkExemptFlags removes the entry if `flags` equals the v1
+    // defaults, so files without per-group customization remain
+    // byte-identical to pre-output.
+    const LinkExemptFlags& getLinkExemptFlags(uint32_t groupId) const;
+    void                   setLinkExemptFlags(uint32_t                groupId,
+                                              const LinkExemptFlags&  flags);
+
+    // Access to the raw map for the chunk writer / reader and the
+    // settings dialog (which needs to iterate over per-group entries
+    // for the disagreement-resolver). Const overload only — mutation
+    // goes through setLinkExemptFlags so the normalize-on-default
+    // behaviour is enforced.
+    const std::map<uint32_t, LinkExemptFlags>& getAllLinkExemptFlags() const
+    { return m_linkExempts; }
+
 private:
-	bool			 	  m_leaveParticles;
-	std::string           m_name;
-	std::vector<Emitter*> m_emitters;
+	bool			 	                       m_leaveParticles;
+	std::string                                m_name;
+	std::vector<Emitter*>                      m_emitters;
+    std::map<uint32_t, LinkExemptFlags>        m_linkExempts;
 };
 #endif

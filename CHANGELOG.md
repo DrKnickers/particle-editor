@@ -16,6 +16,42 @@ Conventions:
 
 ## Changelog
 
+### Configurable exempt set per link group
+
+*2026-05-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+The v1 hard-coded exempt set (textures + atlas-index curve + name) becomes the default for new and pre-existing groups, and is now overridable per group through a new **Group settings…** dialog reached from the right-click menu when a linked emitter is selected. The dialog lists ~50 emitter fields grouped by category (Textures / Curves / Lifetime / Physics / Appearance / Weather / Rotation / Misc). **Checked** rows are *shared* — the field propagates across all group members on edit. **Unchecked** rows are *per-emitter* — each member keeps its own value. A *Reset to defaults* button restores the v1 set (textures + atlas index unchecked = per-emitter; everything else checked = shared) without leaving the dialog.
+
+If the user clears an exempt flag on a field where group members currently hold divergent values, a confirmation summary appears at OK time listing each affected field and the canonical (first-in-tree-order) member's value that will overwrite the others. **Yes** applies the overwrites and the new flag set; **No** keeps the settings dialog open so the user can adjust before retrying or cancelling. The disagreement check skips entirely when every cleared flag's field already agrees across members.
+
+Per-group flags persist in a new editor-only system-body chunk **`0x0003`** sibling to the existing `0x0002` leaveParticles chunk. The chunk is emitted only when at least one group has a non-default exempt set — files without customization remain byte-identical to pre-output. The per-entry `flagsByteCount` prefix is forward-compatible: older editors load files saved by newer versions and tolerate extra trailing bytes; newer editors load older files and default the missing tail. The game engine ignores unknown system-level chunks (established by the existing `0x0002` chunk), so files render unchanged in EaW/FoC.
+
+The propagation hook in `CaptureUndo` consults `ParticleSystem::getLinkExemptFlags(linkGroup)` instead of the static defaults, and `JoinLinkGroup` honours the target group's *current* exempt set when adding new members — a joiner inherits the group's customization rather than being silently overwritten by the v1 defaults.
+
+**How we tackled it.** `LinkExemptFlags` ([src/LinkGroup.h](src/LinkGroup.h)) grows from 4 bools to ~58 (one per exempt-eligible emitter field, including the 7 documented `unknownXX` placeholders that no UI surfaces but the data model preserves). The struct stays POD; the `operator==` uses `memcmp` so `ParticleSystem::setLinkExemptFlags` can normalize default-equal entries out of the map (`m_linkExempts`), keeping the on-disk representation minimal.
+
+`ParticleSystem::getLinkExemptFlags(groupId)` returns a const reference: the map entry if present, otherwise the static `GetDefaultLinkExemptFlags()` (renamed from the pre-`GetLinkExemptFlags()`). Storage is a `std::map<uint32_t, LinkExemptFlags>` on `ParticleSystem`, with the system writer emitting chunk `0x0003` only when non-empty.
+
+`Emitter::copySharedParamsFrom` ([src/ParticleSystem.cpp](src/ParticleSystem.cpp)) expands from 4 hand-restored fields to ~58, organized as an if-ladder mirroring the existing structure (`if (exempt.field) field = saved;` × N). The saves happen unconditionally before the bulk `*this = src`; the conditional restores after pick which fields stay per-emitter. A `#ifndef NDEBUG`-only assertion at the function tail spot-checks four representative fields against their saved values — fires if a future contributor adds a flag to `LinkExemptFlags` without adding the matching restore line.
+
+`DiffNonExemptParams` ([src/LinkGroup.cpp](src/LinkGroup.cpp)) gains a `const LinkExemptFlags&` parameter so the three confirm-dialog call sites in `EmitterList.cpp` can pass the right group's flags (or the v1 defaults for not-yet-existing groups in the Link / Link-with paths).
+
+The settings dialog lives in [src/UI/EmitterList.cpp](src/UI/EmitterList.cpp) along with the other link-group menu logic. The field table `kLinkSettingsFields` pairs each visible flag with a display label, a category, and a `bool LinkExemptFlags::*` pointer-to-member; the dialog proc walks the table to populate the `SysListView32` and to read checkbox state back into a working copy at OK time. The disagreement check at OK iterates the same table, calling `MembersAgreeOnField` / `FormatFieldValue` / `ApplyCanonicalValueToField` (also table-driven via the same pointer-to-member). The hex-dump of the final flag bytes is printed under `#ifndef NDEBUG` for verifying the dialog → on-disk pipeline.
+
+The disagreement UX is intentionally simpler than the original plan's per-field radio picker: a single `MessageBox` lists all disagreeing fields and the canonical values that will overwrite the others, with Yes / No to apply or cancel. Q4's accepted default ("first-in-tree-order's value wins") removes the need for an interactive picker — users wanting a different canonical value re-order emitters before opening the dialog. A richer picker can land later if usage shows the auto-pick is too restrictive.
+
+Resource IDs in the 40160 / 1600 / 170 ranges; resource pairs `IDD_LINK_GROUP_SETTINGS` and `IDD_LINK_GROUP_DISAGREEMENT` declared in both [src/ParticleEditor.en.rc](src/ParticleEditor.en.rc) and [src/ParticleEditor.de.rc](src/ParticleEditor.de.rc) with English labels per the existing convention (the German `.rc` carries English strings for new editor features; translation is a future docs item). `IDD_LINK_GROUP_DISAGREEMENT` is declared but not currently shown — the `MessageBox` flow replaced it. The resource is kept so a richer picker can land without re-touching the `.rc` files.
+
+**Issues encountered and resolutions.**
+
+- **`LinkExemptFlags` forward declaration into `ParticleSystem.h` without dragging in `LinkGroup.h`.** The header needed `LinkExemptFlags` for the accessor signatures but couldn't include `LinkGroup.h` because `LinkGroup.h` itself includes `ParticleSystem.h` (circular). **Fix**: forward-declare `struct LinkExemptFlags;` in `ParticleSystem.h` and include `LinkGroup.h` in `ParticleSystem.cpp` for the implementation.
+- **Forgotten restore in `copySharedParamsFrom` would be silently miscalibrating.** A new flag added to `LinkExemptFlags` without an `if (exempt.X) X = sav_X;` restore line would compile fine but silently propagate the field anyway. **Fix**: `#ifndef NDEBUG` spot-check assertion at the function tail (lifetime / gravity / colorTexture / acceleration). Catches the bug pre-ship on the first propagation in a debug build.
+- **`Reset to defaults` had to apply the disagreement check too.** Original draft made Reset bypass the OK-time disagreement flow, which would silently overwrite values when defaults re-shared a field that had drifted. **Fix**: Reset only mutates the local working copy of the flags; the OK button still runs the disagreement check against `oldFlags vs newFlags`, just with `newFlags == defaults`. Consistent semantics across all flag-change paths.
+- **`Dissolve link group` orphan exempt entries.** Dissolving a group removed the membership but left the group's `m_linkExempts` entry in place — harmless but bloats files. **Fix**: the dissolve handler now also calls `setLinkExemptFlags(gid, GetDefaultLinkExemptFlags())` which (via the normalize-on-default behaviour) erases the entry from the map.
+- **`JoinLinkGroup` was using v1 defaults for newcomers.** Adding an emitter to a custom-exempt group would silently overwrite the joiner's `lifetime` (if `lifetime` was exempt in the group) because `JoinLinkGroup` called `GetLinkExemptFlags()` (v1 defaults) instead of the group's actual flags. **Fix**: pass `system.getLinkExemptFlags(groupId)` instead. Joiners now inherit the group's customization correctly.
+
+---
+
 ### Visual link-group bracket for linked emitters
 
 *2026-05-14 · [`075ccbe`](https://github.com/DrKnickers/particle-editor/commit/075ccbe) · #63*

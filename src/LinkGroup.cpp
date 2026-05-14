@@ -4,7 +4,87 @@
 #include <cstdio>
 #include <cstring>
 
-const LinkExemptFlags& GetLinkExemptFlags()
+// LinkExemptFlags constructor: v1 default exempt set. Textures and
+// per-emitter identifiers are exempt; the atlas-index curve (TRACK_INDEX)
+// is exempt by convention; every other field defaults to shared (false).
+// All "unknownXX" fields default to shared too, since the only known
+// use case for them is propagation along with the rest of the data.
+LinkExemptFlags::LinkExemptFlags()
+    : colorTexture(true)
+    , normalTexture(true)
+    , name(true)
+    , trackIndex(true)
+    , trackRed(false)
+    , trackGreen(false)
+    , trackBlue(false)
+    , trackAlpha(false)
+    , trackScale(false)
+    , trackRotationSpeed(false)
+    , lifetime(false)
+    , initialDelay(false)
+    , burstDelay(false)
+    , nBursts(false)
+    , nParticlesPerBurst(false)
+    , nParticlesPerSecond(false)
+    , useBursts(false)
+    , gravity(false)
+    , acceleration(false)
+    , inwardSpeed(false)
+    , inwardAcceleration(false)
+    , bounciness(false)
+    , groundBehavior(false)
+    , objectSpaceAcceleration(false)
+    , affectedByWind(false)
+    , blendMode(false)
+    , textureSize(false)
+    , nTriangles(false)
+    , randomScalePerc(false)
+    , randomLifetimePerc(false)
+    , hasTail(false)
+    , tailSize(false)
+    , noDepthTest(false)
+    , randomColors(false)
+    , isWeatherParticle(false)
+    , weatherCubeSize(false)
+    , weatherCubeDistance(false)
+    , weatherFadeoutDistance(false)
+    , randomRotation(false)
+    , randomRotationDirection(false)
+    , randomRotationAverage(false)
+    , randomRotationVariance(false)
+    , linkToSystem(false)
+    , parentLinkStrength(false)
+    , doColorAddGrayscale(false)
+    , isHeatParticle(false)
+    , isWorldOriented(false)
+    , freezeTime(false)
+    , skipTime(false)
+    , emitFromMesh(false)
+    , emitFromMeshOffset(false)
+    , groupSpeed(false)
+    , groupLifetime(false)
+    , groupPosition(false)
+    , unknown06(false)
+    , unknown11(false)
+    , unknown15(false)
+    , unknown2b(false)
+    , unknown3f(false)
+    , unknown44(false)
+    , unknown49(false)
+{}
+
+bool LinkExemptFlags::operator == (const LinkExemptFlags& o) const
+{
+    // memcmp is safe here because LinkExemptFlags is POD with no
+    // padding between bool members in practice (booleans are sizeof(1)
+    // on every supported toolchain). If a future field of a different
+    // type is added, this needs revisiting — but the debug assertion
+    // in copySharedParamsFrom (R4 mitigation) will catch a forgotten
+    // restore, which is the same signal as a forgotten equality term.
+    return memcmp(this, &o, sizeof(LinkExemptFlags)) == 0;
+}
+
+const LinkExemptFlags& GetDefaultLinkExemptFlags()
 {
     static const LinkExemptFlags k;
     return k;
@@ -62,7 +142,12 @@ uint32_t CreateLinkGroup(ParticleSystem&                              system,
     }
 
     const uint32_t newId = AllocateLinkGroupId(system);
-    const LinkExemptFlags& exempt = GetLinkExemptFlags();
+    //: brand-new group uses the v1 default exempt set. There's
+    // no map entry for newId yet (the dialog gets opened only after
+    // the group exists), so getLinkExemptFlags returns the static
+    // defaults. We can short-circuit to GetDefaultLinkExemptFlags
+    // here since we KNOW the group is brand-new.
+    const LinkExemptFlags& exempt = GetDefaultLinkExemptFlags();
 
     // Members[0] is canonical; everyone else's non-exempt fields are
     // overwritten to match. We assign linkGroup BEFORE the bulk copy
@@ -91,7 +176,15 @@ bool JoinLinkGroup(ParticleSystem&          system,
     std::vector<ParticleSystem::Emitter*> members = GetLinkGroupMembers(system, groupId);
     if (members.empty())                     return false;
 
-    joiner->copySharedParamsFrom(*members[0], GetLinkExemptFlags());
+    //: use the group's current exempt set, not the v1 defaults.
+    // A group with custom exempts (e.g. `lifetime` exempt) joining a
+    // fresh emitter must preserve the joiner's lifetime per the
+    // group's exempt rule — otherwise the join would silently overwrite
+    // the joiner's lifetime with the canonical member's value, which
+    // is what the user explicitly opted OUT of when they set the
+    // exempt flag.
+    joiner->copySharedParamsFrom(*members[0],
+                                  system.getLinkExemptFlags(groupId));
     joiner->linkGroup = groupId;
 
 #ifndef NDEBUG
@@ -173,14 +266,15 @@ static bool TracksEqual(const ParticleSystem::Emitter::Track& a,
 
 std::vector<std::string> DiffNonExemptParams(
     const ParticleSystem::Emitter& a,
-    const ParticleSystem::Emitter& b)
+    const ParticleSystem::Emitter& b,
+    const LinkExemptFlags&         exempt)
 {
     std::vector<std::string> diffs;
-    const LinkExemptFlags& exempt = GetLinkExemptFlags();
 
-    // Scalars
+    // Scalars and bools — only report the diff when the field is NOT
+    // exempt (i.e., the field is supposed to be shared and disagrees).
     #define CHECK_FIELD(field, label) \
-        do { if (a.field != b.field) diffs.push_back(label); } while (0)
+        do { if (!exempt.field && a.field != b.field) diffs.push_back(label); } while (0)
 
     CHECK_FIELD(linkToSystem,            "linkToSystem");
     CHECK_FIELD(objectSpaceAcceleration, "objectSpaceAcceleration");
@@ -222,38 +316,55 @@ std::vector<std::string> DiffNonExemptParams(
     CHECK_FIELD(nParticlesPerBurst,      "nParticlesPerBurst");
     CHECK_FIELD(groundBehavior,          "groundBehavior");
 
+    // Textures + name (newly per-flag in).
+    CHECK_FIELD(colorTexture,            "colorTexture");
+    CHECK_FIELD(normalTexture,           "normalTexture");
+    // name is checked separately — the inspector exposes it through F2
+    // rename rather than the property pane, but for completeness:
+    CHECK_FIELD(name,                    "name");
+
     #undef CHECK_FIELD
 
-    if (memcmp(a.acceleration, b.acceleration, sizeof(a.acceleration)) != 0)
+    // Arrays.
+    if (!exempt.acceleration &&
+        memcmp(a.acceleration, b.acceleration, sizeof(a.acceleration)) != 0)
         diffs.push_back("acceleration");
-    if (memcmp(a.randomColors, b.randomColors, sizeof(a.randomColors)) != 0)
+    if (!exempt.randomColors &&
+        memcmp(a.randomColors, b.randomColors, sizeof(a.randomColors)) != 0)
         diffs.push_back("randomColors");
 
-    // Random param groups
+    // Random param groups — three flags, one per group index.
+    const bool groupExempt[ParticleSystem::NUM_GROUPS] =
+        { exempt.groupSpeed, exempt.groupLifetime, exempt.groupPosition };
+    static const char* groupLabels[ParticleSystem::NUM_GROUPS] =
+        { "groups[SPEED]", "groups[LIFETIME]", "groups[POSITION]" };
     for (int i = 0; i < ParticleSystem::NUM_GROUPS; i++)
     {
+        if (groupExempt[i]) continue;
         if (memcmp(&a.groups[i], &b.groups[i],
                    sizeof(ParticleSystem::Emitter::Group)) != 0)
-        {
-            const char* label = (i == 0) ? "groups[SPEED]"
-                              : (i == 1) ? "groups[LIFETIME]"
-                                         : "groups[POSITION]";
-            diffs.push_back(label);
-        }
+            diffs.push_back(groupLabels[i]);
     }
 
-    // Tracks — skip TRACK_INDEX (exempt) and check the rest
+    // Tracks — one flag per channel.
+    const bool trackExempt[ParticleSystem::NUM_TRACKS] = {
+        exempt.trackRed,
+        exempt.trackGreen,
+        exempt.trackBlue,
+        exempt.trackAlpha,
+        exempt.trackScale,
+        exempt.trackIndex,
+        exempt.trackRotationSpeed,
+    };
     static const char* trackLabels[ParticleSystem::NUM_TRACKS] = {
         "red curve", "green curve", "blue curve", "alpha curve",
         "scale curve", "index curve", "rotation curve"
     };
     for (int i = 0; i < ParticleSystem::NUM_TRACKS; i++)
     {
-        if (i == ParticleSystem::TRACK_INDEX && exempt.trackIndex) continue;
+        if (trackExempt[i]) continue;
         if (!TracksEqual(*a.tracks[i], *b.tracks[i]))
-        {
             diffs.push_back(trackLabels[i]);
-        }
     }
 
     return diffs;

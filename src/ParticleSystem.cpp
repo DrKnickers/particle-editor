@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <cassert>
 #include "ParticleSystem.h"
 #include "EmitterInstance.h"
 #include "ParticleSystemInstance.h"
@@ -558,10 +559,15 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     if (&src == this) return;
 
     // 1) Snapshot every field on `*this` that the propagation must
-    //    not touch. This is the union of:
-    //      - private bookkeeping (m_instances)
-    //      - structural fields (parent, spawn*, index, linkGroup, visible)
-    //      - exempt fields per the flags
+    //    not touch.
+    //
+    //    Structural / private fields are always preserved (irrespective
+    //    of any exempt flag), since "linkGroup membership", "parent",
+    //    "tree position", and "active runtime instances" are intrinsic
+    //    to an emitter's identity. Exempt-eligible fields are saved
+    //    unconditionally — cheap (POD or short-string) and simpler than
+    //    threading the flag check through each save. The conditional
+    //    restore below decides what gets written back.
     std::set<EmitterInstance*> savedInstances = m_instances;
     Emitter*                   savedParent    = parent;
     size_t                     savedSpawnOD   = spawnOnDeath;
@@ -570,18 +576,79 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     uint32_t                   savedLinkGrp   = linkGroup;
     bool                       savedVisible   = visible;
 
+    // Strings + names.
     std::string savedName          = name;
     std::string savedColorTexture  = colorTexture;
     std::string savedNormalTexture = normalTexture;
 
-    // Save TRACK_INDEX's keymap and interpolation (and its aliasing
-    // identity) so we can restore exactly the per-emitter atlas
-    // index curve after the bulk copy.
-    Track savedIndexTrack;
-    if (exempt.trackIndex)
-    {
-        savedIndexTrack = trackContents[TRACK_INDEX];
-    }
+    // Scalars + bools.
+    bool          sav_linkToSystem            = linkToSystem;
+    bool          sav_objectSpaceAcceleration = objectSpaceAcceleration;
+    bool          sav_doColorAddGrayscale     = doColorAddGrayscale;
+    bool          sav_affectedByWind          = affectedByWind;
+    bool          sav_isHeatParticle          = isHeatParticle;
+    bool          sav_isWeatherParticle       = isWeatherParticle;
+    bool          sav_hasTail                 = hasTail;
+    bool          sav_noDepthTest             = noDepthTest;
+    bool          sav_randomRotation          = randomRotation;
+    bool          sav_randomRotationDirection = randomRotationDirection;
+    bool          sav_isWorldOriented         = isWorldOriented;
+    bool          sav_useBursts               = useBursts;
+    int           sav_emitFromMesh            = emitFromMesh;
+    float         sav_gravity                 = gravity;
+    float         sav_lifetime                = lifetime;
+    float         sav_initialDelay            = initialDelay;
+    float         sav_burstDelay              = burstDelay;
+    float         sav_inwardSpeed             = inwardSpeed;
+    float         sav_inwardAcceleration      = inwardAcceleration;
+    float         sav_randomScalePerc         = randomScalePerc;
+    float         sav_randomLifetimePerc      = randomLifetimePerc;
+    float         sav_weatherCubeSize         = weatherCubeSize;
+    float         sav_tailSize                = tailSize;
+    float         sav_parentLinkStrength      = parentLinkStrength;
+    float         sav_weatherCubeDistance     = weatherCubeDistance;
+    float         sav_randomRotationAverage   = randomRotationAverage;
+    float         sav_randomRotationVariance  = randomRotationVariance;
+    float         sav_bounciness              = bounciness;
+    float         sav_freezeTime              = freezeTime;
+    float         sav_skipTime                = skipTime;
+    float         sav_emitFromMeshOffset      = emitFromMeshOffset;
+    float         sav_weatherFadeoutDistance  = weatherFadeoutDistance;
+    unsigned long sav_nBursts                 = nBursts;
+    unsigned long sav_blendMode               = blendMode;
+    unsigned long sav_textureSize             = textureSize;
+    unsigned long sav_nParticlesPerSecond     = nParticlesPerSecond;
+    unsigned long sav_nTriangles              = nTriangles;
+    unsigned long sav_nParticlesPerBurst      = nParticlesPerBurst;
+    unsigned long sav_groundBehavior          = groundBehavior;
+
+    // Arrays.
+    float sav_acceleration[3];
+    float sav_randomColors[4];
+    memcpy(sav_acceleration, acceleration, sizeof(acceleration));
+    memcpy(sav_randomColors, randomColors, sizeof(randomColors));
+
+    // Random param groups (3 × sizeof(Group)).
+    Group sav_groups[NUM_GROUPS];
+    memcpy(sav_groups, groups, sizeof(groups));
+
+    // Tracks — save the keymap + interpolation per slot. We snapshot
+    // every slot unconditionally; the per-slot exempt check at restore
+    // time decides what to write back.
+    Track sav_tracks[NUM_TRACKS];
+    for (int i = 0; i < NUM_TRACKS; i++) sav_tracks[i] = trackContents[i];
+
+    // Unknown / undocumented fields. Saved for completeness so
+    // copySharedParamsFrom is symmetric across the data model, even
+    // though no UI surfaces them. If the user toggles their flag via
+    // some future feature, save/restore is already wired.
+    bool          sav_unknown15 = unknown15;
+    bool          sav_unknown2b = unknown2b;
+    bool          sav_unknown44 = unknown44;
+    float         sav_unknown11 = unknown11;
+    float         sav_unknown3f = unknown3f;
+    unsigned long sav_unknown06 = unknown06;
+    unsigned long sav_unknown49 = unknown49;
 
     // 2) Bulk-copy via default operator=. This clobbers m_instances
     //    and the tracks[] pointers, which we restore below.
@@ -604,18 +671,100 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     linkGroup       = savedLinkGrp;
     visible         = savedVisible;
 
-    // 5) Restore exempt fields.
+    // 5) Restore exempt fields per the flags.
     if (exempt.name)          name          = savedName;
     if (exempt.colorTexture)  colorTexture  = savedColorTexture;
     if (exempt.normalTexture) normalTexture = savedNormalTexture;
-    if (exempt.trackIndex)
+
+    if (exempt.linkToSystem)            linkToSystem            = sav_linkToSystem;
+    if (exempt.objectSpaceAcceleration) objectSpaceAcceleration = sav_objectSpaceAcceleration;
+    if (exempt.doColorAddGrayscale)     doColorAddGrayscale     = sav_doColorAddGrayscale;
+    if (exempt.affectedByWind)          affectedByWind          = sav_affectedByWind;
+    if (exempt.isHeatParticle)          isHeatParticle          = sav_isHeatParticle;
+    if (exempt.isWeatherParticle)       isWeatherParticle       = sav_isWeatherParticle;
+    if (exempt.hasTail)                 hasTail                 = sav_hasTail;
+    if (exempt.noDepthTest)             noDepthTest             = sav_noDepthTest;
+    if (exempt.randomRotation)          randomRotation          = sav_randomRotation;
+    if (exempt.randomRotationDirection) randomRotationDirection = sav_randomRotationDirection;
+    if (exempt.isWorldOriented)         isWorldOriented         = sav_isWorldOriented;
+    if (exempt.useBursts)               useBursts               = sav_useBursts;
+    if (exempt.emitFromMesh)            emitFromMesh            = sav_emitFromMesh;
+    if (exempt.gravity)                 gravity                 = sav_gravity;
+    if (exempt.lifetime)                lifetime                = sav_lifetime;
+    if (exempt.initialDelay)            initialDelay            = sav_initialDelay;
+    if (exempt.burstDelay)              burstDelay              = sav_burstDelay;
+    if (exempt.inwardSpeed)             inwardSpeed             = sav_inwardSpeed;
+    if (exempt.inwardAcceleration)      inwardAcceleration      = sav_inwardAcceleration;
+    if (exempt.randomScalePerc)         randomScalePerc         = sav_randomScalePerc;
+    if (exempt.randomLifetimePerc)      randomLifetimePerc      = sav_randomLifetimePerc;
+    if (exempt.weatherCubeSize)         weatherCubeSize         = sav_weatherCubeSize;
+    if (exempt.tailSize)                tailSize                = sav_tailSize;
+    if (exempt.parentLinkStrength)      parentLinkStrength      = sav_parentLinkStrength;
+    if (exempt.weatherCubeDistance)     weatherCubeDistance     = sav_weatherCubeDistance;
+    if (exempt.randomRotationAverage)   randomRotationAverage   = sav_randomRotationAverage;
+    if (exempt.randomRotationVariance)  randomRotationVariance  = sav_randomRotationVariance;
+    if (exempt.bounciness)              bounciness              = sav_bounciness;
+    if (exempt.freezeTime)              freezeTime              = sav_freezeTime;
+    if (exempt.skipTime)                skipTime                = sav_skipTime;
+    if (exempt.emitFromMeshOffset)      emitFromMeshOffset      = sav_emitFromMeshOffset;
+    if (exempt.weatherFadeoutDistance)  weatherFadeoutDistance  = sav_weatherFadeoutDistance;
+    if (exempt.nBursts)                 nBursts                 = sav_nBursts;
+    if (exempt.blendMode)               blendMode               = sav_blendMode;
+    if (exempt.textureSize)             textureSize             = sav_textureSize;
+    if (exempt.nParticlesPerSecond)     nParticlesPerSecond     = sav_nParticlesPerSecond;
+    if (exempt.nTriangles)              nTriangles              = sav_nTriangles;
+    if (exempt.nParticlesPerBurst)      nParticlesPerBurst      = sav_nParticlesPerBurst;
+    if (exempt.groundBehavior)          groundBehavior          = sav_groundBehavior;
+
+    if (exempt.acceleration) memcpy(acceleration, sav_acceleration, sizeof(acceleration));
+    if (exempt.randomColors) memcpy(randomColors, sav_randomColors, sizeof(randomColors));
+
+    if (exempt.groupSpeed)    groups[0] = sav_groups[0];
+    if (exempt.groupLifetime) groups[1] = sav_groups[1];
+    if (exempt.groupPosition) groups[2] = sav_groups[2];
+
+    // Tracks — for each exempt slot, restore the saved track AND
+    // break any src-side aliasing by pointing tracks[i] at our own
+    // trackContents[i]. The pre-code did this for TRACK_INDEX
+    // only; generalizes to any exempt track.
+    const bool trackExempt[NUM_TRACKS] = {
+        exempt.trackRed,
+        exempt.trackGreen,
+        exempt.trackBlue,
+        exempt.trackAlpha,
+        exempt.trackScale,
+        exempt.trackIndex,
+        exempt.trackRotationSpeed,
+    };
+    for (int i = 0; i < NUM_TRACKS; i++)
     {
-        trackContents[TRACK_INDEX] = savedIndexTrack;
-        // TRACK_INDEX is treated as intrinsically per-emitter; break
-        // any aliasing src may have had so future edits to OUR index
-        // curve don't accidentally write into a shared slot.
-        tracks[TRACK_INDEX] = &trackContents[TRACK_INDEX];
+        if (trackExempt[i])
+        {
+            trackContents[i] = sav_tracks[i];
+            tracks[i]        = &trackContents[i];
+        }
     }
+
+    if (exempt.unknown06) unknown06 = sav_unknown06;
+    if (exempt.unknown11) unknown11 = sav_unknown11;
+    if (exempt.unknown15) unknown15 = sav_unknown15;
+    if (exempt.unknown2b) unknown2b = sav_unknown2b;
+    if (exempt.unknown3f) unknown3f = sav_unknown3f;
+    if (exempt.unknown44) unknown44 = sav_unknown44;
+    if (exempt.unknown49) unknown49 = sav_unknown49;
+
+#ifndef NDEBUG
+    // R4 mitigation: assert that exempt fields hold their saved values.
+    // Catches a forgotten restore if a future flag is added to
+    // LinkExemptFlags but its restore line isn't added above.
+    // Only asserts on the common easy-to-check fields (most-recent
+    // flags); a full check would duplicate the restore code.
+    if (exempt.lifetime)     assert(lifetime     == sav_lifetime);
+    if (exempt.gravity)      assert(gravity      == sav_gravity);
+    if (exempt.colorTexture) assert(colorTexture == savedColorTexture);
+    if (exempt.acceleration)
+        assert(memcmp(acceleration, sav_acceleration, sizeof(acceleration)) == 0);
+#endif
 }
 
 ParticleSystem::Emitter::~Emitter()
@@ -763,6 +912,38 @@ void ParticleSystem::write(IFile* file)
 	}
 	writer.endChunk();
 
+	// per-group exempt-flags chunk. Editor-only — game engine
+	// skips unknown system-level chunks (same pattern as 0x0002
+	// leaveParticles below). Only emitted when at least one group has
+	// a non-default exempt set; files without customization remain
+	// byte-identical to pre-output.
+	//
+	// Layout:
+	//   uint32_t count
+	//   for each entry:
+	//     uint32_t groupId
+	//     uint32_t flagsByteCount        // sizeof(LinkExemptFlags) at write time
+	//     uint8_t  flags[flagsByteCount] // raw POD blob
+	//
+	// The flagsByteCount prefix lets future versions add fields to
+	// LinkExemptFlags without breaking older readers — they read what
+	// they know, skip the rest. Older-saved-by-newer readers see a
+	// smaller blob and default the missing tail to false.
+	if (!m_linkExempts.empty())
+	{
+		writer.beginChunk(0x0003);
+		writeInteger(writer, (unsigned long)m_linkExempts.size());
+		for (std::map<uint32_t, LinkExemptFlags>::const_iterator it
+		         = m_linkExempts.begin();
+		     it != m_linkExempts.end(); ++it)
+		{
+			writeInteger(writer, (unsigned long)it->first);
+			writeInteger(writer, (unsigned long)sizeof(LinkExemptFlags));
+			writer.write(&it->second, sizeof(LinkExemptFlags));
+		}
+		writer.endChunk();
+	}
+
 	writer.beginChunk(0x0002);
 	writeBool(writer, m_leaveParticles);
 	writer.endChunk();
@@ -773,6 +954,27 @@ void ParticleSystem::write(IFile* file)
 ParticleSystem::ParticleSystem()
 {
 	m_leaveParticles = true;
+}
+
+const LinkExemptFlags& ParticleSystem::getLinkExemptFlags(uint32_t groupId) const
+{
+    std::map<uint32_t, LinkExemptFlags>::const_iterator it = m_linkExempts.find(groupId);
+    if (it != m_linkExempts.end()) return it->second;
+    return GetDefaultLinkExemptFlags();
+}
+
+void ParticleSystem::setLinkExemptFlags(uint32_t                 groupId,
+                                         const LinkExemptFlags&   flags)
+{
+    if (groupId == 0) return;                                  // not a valid group
+    // Normalize: don't store an entry that equals the v1 defaults.
+    // Keeps files without customisation byte-identical to pre-.
+    if (flags == GetDefaultLinkExemptFlags())
+    {
+        m_linkExempts.erase(groupId);
+        return;
+    }
+    m_linkExempts[groupId] = flags;
 }
 
 ParticleSystem::ParticleSystem(IFile* file)
@@ -804,17 +1006,60 @@ ParticleSystem::ParticleSystem(IFile* file)
 	    }
 	    Verify(type == -1);
 
-	    // Read leave particles chunk
+	    // Read optional system-body sibling chunks. Pre-readers
+	    // only handled 0x0002 (leaveParticles); extends to
+	    // 0x0003 (per-group link-exempt flags). The loop tolerantly
+	    // skips any unrecognized chunk so future additions don't
+	    // require touching this code path.
 	    type = reader.next();
-	    if (type == 0x0002)
+	    while (type != -1)
 	    {
-		    Verify(reader.size() == 1);
-		    m_leaveParticles = readBool(reader);
-		    type = reader.next();
+	        if (type == 0x0002)
+	        {
+		        Verify(reader.size() == 1);
+		        m_leaveParticles = readBool(reader);
+	        }
+	        else if (type == 0x0003)
+	        {
+	            // per-group link-exempt flags.
+	            uint32_t count = (uint32_t)readInteger(reader);
+	            for (uint32_t i = 0; i < count; ++i)
+	            {
+	                uint32_t groupId      = (uint32_t)readInteger(reader);
+	                uint32_t flagsBytes   = (uint32_t)readInteger(reader);
+	                LinkExemptFlags flags = GetDefaultLinkExemptFlags();
+	                uint32_t toRead = (flagsBytes <= sizeof(LinkExemptFlags))
+	                                ? flagsBytes
+	                                : (uint32_t)sizeof(LinkExemptFlags);
+	                if (toRead > 0)
+	                    reader.read(&flags, toRead);
+	                // Drain any trailing bytes from a future-version blob.
+	                if (flagsBytes > sizeof(LinkExemptFlags))
+	                {
+	                    long discardSize = (long)(flagsBytes - sizeof(LinkExemptFlags));
+	                    std::vector<char> discard((size_t)discardSize);
+	                    reader.read(discard.data(), discardSize);
+	                }
+	                // Defensive: drop entries for groupId 0 (invalid)
+	                // or entries equal to v1 defaults (the writer
+	                // shouldn't emit them, but be lenient if a hand-
+	                // crafted file does).
+	                if (groupId != 0 && flags != GetDefaultLinkExemptFlags())
+	                    m_linkExempts[groupId] = flags;
+	            }
+#ifndef NDEBUG
+	            printf("[Link] read chunk 0x0003: count=%u entries=%zu\n",
+	                   count, m_linkExempts.size());
+	            fflush(stdout);
+#endif
+	        }
+	        else
+	        {
+	            // Unknown chunk — drain its bytes and continue.
+	            reader.skip();
+	        }
+	        type = reader.next();
 	    }
-
-	    // End of 0900h chunk
-	    Verify(type == -1);
 
 	    // Post-process. Validate spawn-field indices first: malformed files
 	    // (saved by external tools or by an old version of the editor that

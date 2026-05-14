@@ -169,6 +169,30 @@ BEGIN
     PUSHBUTTON      "Cancel",IDCANCEL,80,33,50,14
 END
 
+// per-group exempt configuration dialogs.
+IDD_LINK_GROUP_SETTINGS DIALOGEX 0, 0, 320, 360
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Link group settings"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "Checked fields are shared (propagated across all group members). Unchecked fields are per-emitter (exempt from propagation).",IDC_LINK_EXEMPT_HEADER,8,6,304,20
+    CONTROL         "",IDC_LINK_EXEMPT_LIST,"SysListView32",LVS_REPORT | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP,8,28,304,302,WS_EX_CLIENTEDGE
+    PUSHBUTTON      "Reset to defaults",IDC_LINK_EXEMPT_RESET,8,338,80,16
+    DEFPUSHBUTTON   "OK",IDOK,200,338,52,16
+    PUSHBUTTON      "Cancel",IDCANCEL,256,338,52,16
+END
+
+IDD_LINK_GROUP_DISAGREEMENT DIALOGEX 0, 0, 380, 280
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Resolve field disagreements"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "Members of this link group hold different values for fields you just un-exempted. Pick which value should govern each field — the chosen value will overwrite the others when you click OK.",IDC_LINK_DISAGREEMENT_HEADER,8,6,364,32
+    CONTROL         "",IDC_LINK_DISAGREEMENT_LIST,"SysListView32",LVS_REPORT | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP,8,42,364,212,WS_EX_CLIENTEDGE
+    DEFPUSHBUTTON   "Apply",IDOK,266,260,52,16
+    PUSHBUTTON      "Cancel",IDCANCEL,322,260,52,16
+END
+
 IDD_RANDOM_PARAMETERS DIALOGEX 0, 0, 177, 51
 STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD | WS_CLIPCHILDREN
 EXSTYLE WS_EX_CONTROLPARENT
@@ -759,4 +783,3 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
-

@@ -281,6 +281,16 @@
 #define ID_EMITTER_LINK_ADD_FIRST         40145
 #define ID_EMITTER_LINK_ADD_LAST          40159
 
+// Per-group exempt configuration ().
+#define ID_EMITTER_LINK_GROUP_SETTINGS    40160
+#define IDD_LINK_GROUP_SETTINGS             170
+#define IDD_LINK_GROUP_DISAGREEMENT         171
+#define IDC_LINK_EXEMPT_LIST              1600
+#define IDC_LINK_EXEMPT_RESET             1601
+#define IDC_LINK_DISAGREEMENT_LIST        1602
+#define IDC_LINK_DISAGREEMENT_HEADER      1603
+#define IDC_LINK_EXEMPT_HEADER            1604
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
