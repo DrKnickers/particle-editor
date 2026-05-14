@@ -29,7 +29,6 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 
 IDB_MISSING             BITMAP                  "resources/missing.bmp"
 IDR_TOOLBAR1            BITMAP                  "resources/toolbar1.bmp"
-IDB_GROUND              BITMAP                  "Resources\\dirt.bmp"
 IDB_EMITTER_LIST        BITMAP                  "Resources\\emitter_list.bmp"
 IDR_EMITTER_TOOLBAR     BITMAP                  "resources/toolbar2.bmp"
 
@@ -79,6 +78,19 @@ END
 
 IDS_SCENEHEAT           RCDATA                  "Resources\\SceneHeat.fx"
 IDR_DEFAULT_SHADER      RCDATA                  "resources\\DefaultShader.fx"
+
+// ground textures. Declared RCDATA (not BITMAP) so the source
+// file format isn't restricted to .bmp — D3DXCreateTextureFromFileInMemory
+// in engine.cpp sniffs the actual bytes and handles BMP / DDS / TGA /
+// PNG / JPG / HDR identically.
+//
+// Grass / Sand / Snow are vanilla EaW textures bundled by permission.
+// Slot 4 ("Solid Color") is procedurally generated from a user-picked
+// COLORREF — no resource needed.
+IDB_GROUND              RCDATA                  "Resources\\dirt.bmp"
+IDB_GROUND_GRASS        RCDATA                  "Resources\\grass.dds"
+IDB_GROUND_SAND         RCDATA                  "Resources\\sand.dds"
+IDB_GROUND_SNOW         RCDATA                  "Resources\\snow.dds"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -170,4 +182,3 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
-

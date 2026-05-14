@@ -229,8 +229,11 @@
     <Image Include="Resources\curve_mode_select.ico" />
     <Image Include="Resources\dirt.bmp" />
     <Image Include="Resources\emitter_list.bmp" />
+    <Image Include="Resources\grass.dds" />
     <Image Include="Resources\logo.ico" />
     <Image Include="Resources\missing.bmp" />
+    <Image Include="Resources\sand.dds" />
+    <Image Include="Resources\snow.dds" />
     <Image Include="Resources\toolbar1.bmp" />
     <Image Include="Resources\toolbar2.bmp" />
   </ItemGroup>

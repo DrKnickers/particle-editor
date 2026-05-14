@@ -216,10 +216,19 @@
     <Image Include="Resources\emitter_list.bmp">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="Resources\grass.dds">
+      <Filter>Resource Files</Filter>
+    </Image>
     <Image Include="Resources\logo.ico">
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="Resources\missing.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="Resources\sand.dds">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="Resources\snow.dds">
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="Resources\toolbar1.bmp">

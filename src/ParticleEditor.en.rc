@@ -182,6 +182,22 @@ BEGIN
     PUSHBUTTON      "Cancel",IDCANCEL,256,338,52,16
 END
 
+// ground texture picker. ListView in icon mode shows 12 slots
+// (4 columns × 3 rows of 64×64 thumbnails). Single-click a slot to
+// select it and close; right-click a slot for context-menu actions
+// (set custom file, reset to bundled, clear custom).
+IDD_GROUND_TEXTURE_PICKER DIALOGEX 0, 0, 320, 200
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Ground Texture"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    CONTROL         "",IDC_GROUND_TEXTURE_LIST,"SysListView32",LVS_ICON | LVS_SHOWSELALWAYS | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP,8,8,304,140,WS_EX_CLIENTEDGE
+    LTEXT           "",IDC_GROUND_TEXTURE_PATH_LABEL,8,154,304,10,SS_LEFT | SS_PATHELLIPSIS | SS_NOTIFY | WS_GROUP
+    PUSHBUTTON      "Reset all slots to defaults",IDC_GROUND_TEXTURE_RESET_ALL,8,178,120,16
+    DEFPUSHBUTTON   "OK",IDOK,208,178,52,16
+    PUSHBUTTON      "Cancel",IDCANCEL,264,178,52,16
+END
+
 IDD_LINK_GROUP_DISAGREEMENT DIALOGEX 0, 0, 380, 280
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Resolve field disagreements"
@@ -644,6 +660,19 @@ BEGIN
     IDS_TOOLTIP_TOGGLE_BLOOM "Toggle bloom"
     IDS_LABEL_BACKGROUND    "Background:"
     IDS_LABEL_GROUND_Z      "Ground Height:"
+    IDS_LABEL_GROUND_TEXTURE "Ground Texture:"
+    IDS_GROUND_DIRT         "Dirt"
+    IDS_GROUND_GRASS        "Grass"
+    IDS_GROUND_SAND         "Sand"
+    IDS_GROUND_SNOW         "Snow"
+    IDS_GROUND_METAL        ""
+    IDS_GROUND_GREY         "Solid Color"
+    IDS_GROUND_CUSTOM_BASE      "Custom 1"
+    IDS_GROUND_CUSTOM_BASE + 1  "Custom 2"
+    IDS_GROUND_CUSTOM_BASE + 2  "Custom 3"
+    IDS_GROUND_CUSTOM_BASE + 3  "Custom 4"
+    IDS_GROUND_CUSTOM_BASE + 4  "Custom 5"
+    IDS_GROUND_CUSTOM_BASE + 5  "Custom 6"
     IDS_LABEL_LEAVE_PARTICLES "Leave particles after instance death"
     IDS_LABEL_TRACK_RED     "Red"
     IDS_LABEL_TRACK_GREEN   "Green"

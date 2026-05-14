@@ -281,6 +281,26 @@
 #define ID_EMITTER_LINK_ADD_FIRST         40145
 #define ID_EMITTER_LINK_ADD_LAST          40159
 
+// ground texture picker — label + 6 entry names + 6 custom slots.
+#define IDS_LABEL_GROUND_TEXTURE        188
+#define IDS_GROUND_DIRT                 200
+#define IDS_GROUND_GRASS                201
+#define IDS_GROUND_SAND                 202
+#define IDS_GROUND_SNOW                 203
+#define IDS_GROUND_METAL                204
+#define IDS_GROUND_GREY                 205
+#define IDS_GROUND_CUSTOM_BASE          206   // Custom 1..6 via offset
+
+// Picker dialog
+#define IDD_GROUND_TEXTURE_PICKER       180
+#define IDC_GROUND_TEXTURE_LIST         1610
+#define IDC_GROUND_TEXTURE_RESET_ALL    1611
+#define IDC_GROUND_TEXTURE_PATH_LABEL   1612
+// Context-menu IDs for right-click on a slot.
+#define ID_GROUND_SLOT_SET_CUSTOM       40180
+#define ID_GROUND_SLOT_RESET_BUNDLED    40181
+#define ID_GROUND_SLOT_CLEAR_CUSTOM     40182
+
 // Per-group exempt configuration ().
 #define ID_EMITTER_LINK_GROUP_SETTINGS    40160
 #define IDD_LINK_GROUP_SETTINGS             170

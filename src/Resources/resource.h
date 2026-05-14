@@ -68,11 +68,22 @@
 #define ID_EMITTERS_HIDEALLEMITTERS     40083
 #define ID_FILE_HISTORY_0               40100
 
+// — alternate ground textures, declared as RCDATA in
+// ParticleEditor.rc so the file format isn't restricted to .bmp
+// (loader uses D3DXCreateTextureFromFileInMemory which sniffs the
+// byte content for BMP / DDS / TGA / PNG / JPG / HDR). Placed above
+// _APS_NEXT_RESOURCE_VALUE so existing IDs don't need renumbering.
+#define IDB_GROUND_GRASS                142
+#define IDB_GROUND_SAND                 143
+#define IDB_GROUND_SNOW                 144
+#define IDB_GROUND_METAL                145
+#define IDB_GROUND_GREY                 146
+
 // Next default values for new objects
-// 
+//
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        142
+#define _APS_NEXT_RESOURCE_VALUE        147
 #define _APS_NEXT_COMMAND_VALUE         40086
 #define _APS_NEXT_CONTROL_VALUE         1098
 #define _APS_NEXT_SYMED_VALUE           101

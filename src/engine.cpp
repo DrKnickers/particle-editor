@@ -837,6 +837,222 @@ void Engine::SetGround(bool enable)			        { m_showGround = enable; }
 void Engine::SetGroundZ(float z)			        { m_groundZ    = z;      }
 void Engine::SetBackground(COLORREF color)		    { m_background = color; }
 void Engine::SetHeatDebug(bool debug)		        { m_debugHeat  = debug;  }
+
+// ground-texture bundled-resource lookup table. Indices 0..5 map
+// to resource IDs in resource.h. Indices 6..11 have no bundled default
+// (0 = "no resource"); they're populated entirely from user-supplied
+// custom paths. Kept in this .cpp (rather than the header) so the
+// .rc IDs don't need to be visible to every includer of engine.h.
+//
+// Index 0 is the historical default (dirt.bmp shipped pre-);
+// keeping it at index 0 preserves the pre-visual for users who
+// haven't picked a custom texture.
+static const UINT kGroundTextureResourceIds[Engine::kGroundTextureCount] = {
+    IDB_GROUND,         // 0 dirt (default; preserves pre-visual)
+    IDB_GROUND_GRASS,   // 1 grass (vanilla EaW W_TEMPGRND00.DDS)
+    IDB_GROUND_SAND,    // 2 sand  (vanilla EaW W_SAND00.DDS)
+    IDB_GROUND_SNOW,    // 3 snow  (vanilla EaW W_SNOW_RGH.DDS)
+    0,                  // 4 solid color (procedural — see m_groundSolidColor)
+    0, 0, 0,            // 5..7 — empty bundled, user-supplied only
+};
+
+// Internal: load a texture from a custom file path. Returns true and
+// writes *ppOut on success; false leaves *ppOut untouched.
+static bool LoadGroundTextureFromFile(IDirect3DDevice9*       pDevice,
+                                       const std::wstring&     path,
+                                       IDirect3DTexture9**     ppOut)
+{
+    if (pDevice == NULL || path.empty() || ppOut == NULL) return false;
+    IDirect3DTexture9* pNew = NULL;
+    if (FAILED(D3DXCreateTextureFromFileW(pDevice, path.c_str(), &pNew)))
+        return false;
+    *ppOut = pNew;
+    return true;
+}
+
+// Internal: load a bundled texture from the .exe's RCDATA resource.
+// Returns true and writes *ppOut on success; false leaves *ppOut
+// untouched. resourceId == 0 means "no bundled default" (e.g. an
+// empty user-only slot) and is treated as failure.
+static bool LoadGroundTextureFromResource(IDirect3DDevice9*    pDevice,
+                                           UINT                 resourceId,
+                                           IDirect3DTexture9**  ppOut)
+{
+    if (pDevice == NULL || resourceId == 0 || ppOut == NULL) return false;
+    HMODULE  hMod  = GetModuleHandle(NULL);
+    HRSRC    hRes  = FindResource(hMod, MAKEINTRESOURCE(resourceId), RT_RCDATA);
+    HGLOBAL  hData = (hRes != NULL) ? LoadResource(hMod, hRes) : NULL;
+    void*    pData = (hData != NULL) ? LockResource(hData)     : NULL;
+    DWORD    dwSize = (hRes != NULL) ? SizeofResource(hMod, hRes) : 0;
+    if (pData == NULL || dwSize == 0) return false;
+    IDirect3DTexture9* pNew = NULL;
+    if (FAILED(D3DXCreateTextureFromFileInMemory(pDevice, pData, dwSize, &pNew)))
+        return false;
+    *ppOut = pNew;
+    return true;
+}
+
+//: build a 1×1 procedural texture filled with the given COLORREF.
+// Used by the "Solid Color" slot (kGroundSolidColorSlot). One-pixel
+// tile is enough because the ground is sampled with WRAP wrap-mode —
+// every texel across the entire ground reads back the same colour.
+static bool CreateSolidColorTexture(IDirect3DDevice9*    pDevice,
+                                     COLORREF             color,
+                                     IDirect3DTexture9**  ppOut)
+{
+    if (pDevice == NULL || ppOut == NULL) return false;
+    IDirect3DTexture9* pNew = NULL;
+    if (FAILED(pDevice->CreateTexture(1, 1, 1, 0, D3DFMT_A8R8G8B8,
+                                       D3DPOOL_MANAGED, &pNew, NULL)))
+        return false;
+    D3DLOCKED_RECT lr;
+    if (FAILED(pNew->LockRect(0, &lr, NULL, 0)))
+    {
+        pNew->Release();
+        return false;
+    }
+    DWORD argb = (DWORD)(0xFFu) << 24
+               | (DWORD)GetRValue(color) << 16
+               | (DWORD)GetGValue(color) <<  8
+               | (DWORD)GetBValue(color);
+    *(DWORD*)lr.pBits = argb;
+    pNew->UnlockRect(0);
+    *ppOut = pNew;
+    return true;
+}
+
+bool Engine::ReloadGroundTexture()
+{
+    if (m_pDevice == NULL) return false;   // pre-init guard
+
+    // Solid-color slot — procedural texture from m_groundSolidColor.
+    if (m_groundTextureIndex == kGroundSolidColorSlot)
+    {
+        IDirect3DTexture9* pNew = NULL;
+        if (!CreateSolidColorTexture(m_pDevice, m_groundSolidColor, &pNew))
+            return false;
+        SAFE_RELEASE(m_pGroundTexture);
+        m_pGroundTexture = pNew;
+#ifndef NDEBUG
+        printf("[Ground] solid-color slot=%d color=#%02X%02X%02X\n",
+               m_groundTextureIndex,
+               GetRValue(m_groundSolidColor),
+               GetGValue(m_groundSolidColor),
+               GetBValue(m_groundSolidColor));
+        fflush(stdout);
+#endif
+        return true;
+    }
+
+    // Try the current slot's custom path first; fall back to the
+    // slot's bundled default if the custom path doesn't load (file
+    // moved, drive disconnected, unsupported format). On all-failure,
+    // fall back to slot 0 (dirt, always loadable from RCDATA).
+    IDirect3DTexture9* pNew = NULL;
+    const std::wstring& path = m_groundSlotCustomPaths[m_groundTextureIndex];
+    if (!path.empty())
+    {
+        if (!LoadGroundTextureFromFile(m_pDevice, path, &pNew))
+        {
+#ifndef NDEBUG
+            printf("[Ground] custom path failed for slot=%d; trying bundled\n",
+                   m_groundTextureIndex);
+            fflush(stdout);
+#endif
+        }
+    }
+    if (pNew == NULL)
+    {
+        UINT bundledId = kGroundTextureResourceIds[m_groundTextureIndex];
+        if (bundledId != 0)
+            LoadGroundTextureFromResource(m_pDevice, bundledId, &pNew);
+    }
+    if (pNew == NULL)
+    {
+#ifndef NDEBUG
+        printf("[Ground] slot=%d empty/failed; falling back to default\n",
+               m_groundTextureIndex);
+        fflush(stdout);
+#endif
+        if (m_groundTextureIndex != 0)
+        {
+            m_groundTextureIndex = 0;
+            return ReloadGroundTexture();
+        }
+        return false;                       // dirt itself failed → engine is in trouble
+    }
+    // Release the prior texture only after the new one is in hand —
+    // ensures we don't have a transient null window where a paint
+    // could race against us.
+    SAFE_RELEASE(m_pGroundTexture);
+    m_pGroundTexture = pNew;
+#ifndef NDEBUG
+    printf("[Ground] texture set slot=%d source=%s\n",
+           m_groundTextureIndex,
+           !m_groundSlotCustomPaths[m_groundTextureIndex].empty() ? "custom" : "bundled");
+    fflush(stdout);
+#endif
+    return true;
+}
+
+bool Engine::SetGroundTexture(int index)
+{
+    if (index < 0 || index >= kGroundTextureCount) return false;
+    // Refuse selection of an empty slot (no bundled default AND no
+    // user-supplied path). UI layer should never offer this; defensive
+    // check here in case a stale registry value or programmatic call
+    // tries it.
+    if (IsGroundSlotEmpty(index)) return false;
+    // Fast-path: already at this slot AND we have a valid texture.
+    if (index == m_groundTextureIndex && m_pGroundTexture != NULL) return true;
+    m_groundTextureIndex = index;
+    return ReloadGroundTexture();
+}
+
+bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
+{
+    if (slot < 0 || slot >= kGroundTextureCount) return false;
+    m_groundSlotCustomPaths[slot] = path;
+    // If the mutated slot is currently selected, reload the engine's
+    // ground texture so the preview reflects the change immediately.
+    if (slot == m_groundTextureIndex)
+    {
+        // If the slot just became empty (cleared user-supplied path
+        // on a higher slot), bounce the selection back to dirt rather
+        // than leaving the engine pointing at nothing.
+        if (IsGroundSlotEmpty(slot))
+        {
+            m_groundTextureIndex = 0;
+        }
+        return ReloadGroundTexture();
+    }
+    return true;
+}
+
+const std::wstring& Engine::GetGroundSlotCustomPath(int slot) const
+{
+    static const std::wstring empty;
+    if (slot < 0 || slot >= kGroundTextureCount) return empty;
+    return m_groundSlotCustomPaths[slot];
+}
+
+bool Engine::IsGroundSlotEmpty(int slot) const
+{
+    if (slot < 0 || slot >= kGroundTextureCount) return true;
+    if (slot == kGroundSolidColorSlot) return false;   // always populated procedurally
+    if (!m_groundSlotCustomPaths[slot].empty()) return false;
+    return kGroundTextureResourceIds[slot] == 0;
+}
+
+bool Engine::SetGroundSolidColor(COLORREF color)
+{
+    m_groundSolidColor = color;
+    // If the solid-colour slot is currently selected, regenerate the
+    // texture so the colour change shows immediately.
+    if (m_groundTextureIndex == kGroundSolidColorSlot)
+        return ReloadGroundTexture();
+    return true;
+}
 void Engine::SetBloom(bool enable)                  { m_bloomEnabled  = enable; }
 void Engine::SetBloomStrength(float v)              { m_bloomStrength = v; }
 void Engine::SetBloomCutoff(float v)                { m_bloomCutoff   = v; }
@@ -1051,6 +1267,9 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	// Initialize members
 	m_showGround     = true;
 	m_groundZ        = 0.0f;
+	m_groundTextureIndex = 0;                 //: dirt by default
+	m_groundSolidColor   = RGB(128, 128, 128); //: flat grey default
+	m_pGroundTexture = NULL;      //: must be NULL before first ReloadGroundTexture()
 	m_debugHeat      = false;
 	m_bloomEnabled   = false;
 	m_bloomReady     = false;
@@ -1122,8 +1341,13 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 		throw runtime_error("Unable to create vertex declaration");
 	}
 
-	// Create ground texture
-	if (FAILED(D3DXCreateTextureFromResource(m_pDevice, NULL, MAKEINTRESOURCE(IDB_GROUND), &m_pGroundTexture)))
+	// Create ground texture.: routed through ReloadGroundTexture
+	// so the same code path is shared with SetGroundTexture and the
+	// lost-device recovery branches below. m_groundTextureIndex was
+	// initialized to 0 (dirt) in the constructor; main.cpp's startup
+	// flow may call SetGroundTexture(savedIndex) shortly after engine
+	// construction to swap in the user's persisted choice.
+	if (!ReloadGroundTexture())
 	{
 		SAFE_RELEASE(m_pDeclaration);
 		SAFE_RELEASE(m_pDevice);

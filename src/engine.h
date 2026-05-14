@@ -1,6 +1,8 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
+#include <string>
+
 #include "managers.h"
 #include "ParticleSystem.h"
 #include "utils.h"
@@ -112,6 +114,28 @@ public:
 
 	bool     GetGround() const		{ return m_showGround; }
 	float    GetGroundZ() const		{ return m_groundZ; }
+	int      GetGroundTexture() const { return m_groundTextureIndex; }
+	//: main.cpp's thumbnail generator needs the D3D9 device to
+	// create scratch textures via D3DXCreateTextureFromFile*Ex with
+	// width/height clamped to 64×64. Exposed read-only.
+	IDirect3DDevice9* GetDevice() const { return m_pDevice; }
+	const std::wstring& GetGroundSlotCustomPath(int slot) const;
+	// Does the slot currently have a loadable texture (either bundled
+	// default or user-supplied custom path)? Used by the picker dialog
+	// to decide whether single-click selects vs. opens the file picker
+	// and whether the toolbar preview button is enabled.
+	bool     IsGroundSlotEmpty(int slot) const;
+
+	//: number of ground texture slots — 5 bundled defaults
+	// (Dirt, Grass, Sand, Snow, Solid Color) + 3 user-customisable
+	// slots. Total 8, laid out as a 4×2 grid in the picker dialog.
+	// Slot 4 is the procedural solid-colour ground driven by
+	// m_groundSolidColor, with a colour picker as its "edit" gesture
+	// instead of a file picker. Slot index 0 is the v1 dirt default.
+	static const int kGroundTextureCount        = 8;
+	static const int kGroundTextureBundledCount = 5;
+	static const int kGroundSolidColorSlot      = 4;   // 0-based; "Solid Color" slot
+	static const int kGroundThumbnailSize       = 64;
 	bool     GetHeatDebug() const   { return m_debugHeat; }
 	bool     GetBloom()         const { return m_bloomEnabled;  }
 	float    GetBloomStrength() const { return m_bloomStrength; }
@@ -163,6 +187,33 @@ public:
 	void SetGravity(const D3DXVECTOR3& gravity);
 	void SetGround(bool enable);
 	void SetGroundZ(float z);
+	//: pick one of the ground texture slots (0..kGroundTextureCount-1).
+	// Returns true on success; false if index is out of range, the slot
+	// is empty (no bundled default AND no user-supplied path), or the
+	// texture failed to load. On failure of a non-default index, the
+	// engine retries with index 0 (dirt) once; UI should call
+	// GetGroundTexture() afterward to re-sync visuals to the
+	// actually-loaded slot.
+	bool SetGroundTexture(int index);
+
+	//: the procedural solid-colour ground (slot kGroundSolidColorSlot).
+	// SetGroundSolidColor regenerates a 1×1 D3D texture at the new
+	// colour and, if that slot is currently selected, refreshes the
+	// engine's m_pGroundTexture. Persisted by main.cpp via
+	// HKCU\Software\AloParticleEditor\GroundSolidColor (REG_DWORD).
+	COLORREF GetGroundSolidColor() const { return m_groundSolidColor; }
+	bool     SetGroundSolidColor(COLORREF color);
+
+	//: assign a user-supplied texture file to the given slot.
+	// Slots 0-5 already have bundled defaults; setting a custom path
+	// on them overrides the default. Slots 6-11 start empty; a custom
+	// path is what populates them. Setting an empty path reverts to
+	// the bundled default (slots 0-5) or empties the slot (slots 6-11).
+	// If the slot is currently selected, the engine re-loads the
+	// texture immediately so the preview reflects the new content.
+	// Returns true on success (or success of the fallback if the new
+	// path failed to load); false on out-of-range slot index.
+	bool SetGroundSlotCustomPath(int slot, const std::wstring& path);
 	void SetHeatDebug(bool debug);
 	void SetBloom(bool enable);
 	void SetBloomStrength(float v);
@@ -182,6 +233,13 @@ private:
 	// freshly-loaded shader's parameters for "texture_filename" annotations
 	// and binds the named textures.
 	void				BindShaderTextures(Effect* shader);
+
+	//: shared loader used by the constructor, lost-device recovery,
+	// and SetGroundTexture. Releases m_pGroundTexture (if any) and
+	// re-creates from the resource ID at kResourceIds[m_groundTextureIndex].
+	// On non-default-index failure, retries with index 0 once. Returns
+	// false only if the default also fails (engine is in trouble).
+	bool				ReloadGroundTexture();
 
 	// Introspects the freshly-loaded SceneBloom effect to (a) verify it
 	// isn't the ShaderManager default fallback, (b) cache D3DXHANDLEs
@@ -214,6 +272,14 @@ private:
     COLORREF    m_background;
 	bool		m_showGround;
 	float		m_groundZ;
+	int			m_groundTextureIndex;   //: 0..kGroundTextureCount-1
+	// Per-slot user-supplied texture file path. Empty string means
+	// "use bundled default" (for slots 0..kGroundTextureBundledCount-1
+	// except slot kGroundSolidColorSlot which has no file source) or
+	// "slot is empty" (for higher slots). Persisted by main.cpp via
+	// HKCU\Software\AloParticleEditor\GroundTextureSlot{0..11}.
+	std::wstring m_groundSlotCustomPaths[kGroundTextureCount];
+	COLORREF     m_groundSolidColor;   // slot kGroundSolidColorSlot
 	bool		m_debugHeat;
 	// Bloom post-process state. Shader, RTs, and parameter handles
 	// live in the Resources block below. Master enable + three

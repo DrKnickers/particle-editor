@@ -449,7 +449,8 @@ static const UINT ID_MOD_LAST     = 0xAFFF;
 // since the rebar control doesn't forward WM_COMMAND from children
 // out of the box. Above the IDC_* dialog-ID range (max ~1322) and
 // below ID_MOD_NONE to avoid collisions in WM_COMMAND.
-static const UINT ID_GROUNDZ_SPINNER = 0x5000;
+static const UINT ID_GROUNDZ_SPINNER          = 0x5000;
+static const UINT ID_GROUND_TEXTURE_PREVIEW   = 0x5001;   // toolbar preview button
 
 // Posted to the main window from WM_MENURBUTTONUP to defer the nickname
 // dialog until after the menu's modal loop has finished tearing down.
@@ -472,6 +473,19 @@ static void             WriteBackgroundColor(COLORREF color);
 static bool             ReadShowGround(bool defaultValue);
 static float            ReadGroundZ(float defaultValue);
 static void             WriteGroundZ(float z);
+static int              ReadGroundTexture(int defaultValue);
+static void             WriteGroundTexture(int index);
+static std::wstring     ReadGroundSlotPath(int slot);
+static void             WriteGroundSlotPath(int slot, const std::wstring& path);
+static void             DeleteAllGroundSlotPaths();
+static COLORREF         ReadGroundSolidColor(COLORREF defaultValue);
+static void             WriteGroundSolidColor(COLORREF color);
+static HBITMAP          MakeGroundSlotThumbnail(IDirect3DDevice9* pDevice,
+                                                  int slot, int size,
+                                                  const std::wstring& customPath,
+                                                  COLORREF solidColor);
+static void             RebuildGroundTexturePreviewBitmap(APPLICATION_INFO* info);
+static void             ShowGroundTexturePicker(HWND hParent, APPLICATION_INFO* info);
 static bool             ReadBloomEnabled(bool defaultValue);
 static void             WriteBloomEnabled(bool enabled);
 static float            ReadBloomFloat(const wchar_t* name, float defaultValue);
@@ -510,6 +524,12 @@ struct APPLICATION_INFO
     HWND      hBackgroundBtn;
     HWND      hGroundZLabel;
     HWND      hGroundZSpinner;
+    HWND      hGroundTextureLabel;       // "Ground Texture:" caption
+    HWND      hGroundTexturePreview;     // owner-drawn mini preview; click opens picker dialog
+    // Thumbnail bitmap for the toolbar preview button. Regenerated
+    // whenever the active slot or its texture changes; freed when
+    // the editor exits.
+    HBITMAP   hGroundTexturePreviewBitmap;
     HWND      hEmitterList;
 	HWND      hPropertyTabs;
 	HWND      hRebar;
@@ -1570,7 +1590,7 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             // session-only and resets each launch; we still reset the
             // in-memory spawner state here for parity.
             if (MessageBox(info->hMainWnd,
-                           L"Reset background color, ground plane visibility, ground Z offset, bloom, and the color picker's custom colors to defaults?",
+                           L"Reset background color, ground plane visibility, ground texture, ground Z offset, bloom, and the color picker's custom colors to defaults?",
                            L"Reset View Settings",
                            MB_YESNO | MB_ICONQUESTION) == IDYES)
             {
@@ -1583,6 +1603,7 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
                     info->engine->SetBackground(RGB(0x14, 0x08, 0x34));
                     info->engine->SetGround(true);
                     info->engine->SetGroundZ(0.0f);
+                    info->engine->SetGroundTexture(0);   //: dirt default
                     info->engine->SetBloom(false);
                     info->engine->SetBloomStrength(0.0f);
                     info->engine->SetBloomCutoff(0.90f);
@@ -1590,6 +1611,13 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
                     ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
                     SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_SHOWGROUND,
                                 MAKELONG(info->engine->GetGround(), 0));
+                    //: Reset View Settings returns selection to
+                    // slot 0 (dirt) but does NOT clear per-slot custom
+                    // paths — those are "user data" not "view
+                    // settings". A separate "Reset all slots" button
+                    // in the picker dialog handles that.
+                    RebuildGroundTexturePreviewBitmap(info);
+                    InvalidateRect(info->hGroundTexturePreview, NULL, TRUE);
                     {
                         SPINNER_INFO si;
                         si.Mask = SPIF_VALUE;
@@ -1891,6 +1919,31 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
             }
             SendMessage(info->hGroundZLabel, WM_SETFONT, (WPARAM)hFont, FALSE);
 
+            // ground texture picker. Label + owner-drawn mini
+            // preview button. Click opens the picker dialog
+            // (IDD_GROUND_TEXTURE_PICKER) which shows all 12 slots
+            // as a grid; selecting one closes the picker and updates
+            // the engine + this preview.
+            if ((info->hGroundTextureLabel = CreateWindowEx(0, L"STATIC",
+                LoadString(IDS_LABEL_GROUND_TEXTURE).c_str(),
+                WS_CHILD | WS_VISIBLE,
+                0, 0, 80, 16, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
+            {
+                return -1;
+            }
+            SendMessage(info->hGroundTextureLabel, WM_SETFONT, (WPARAM)hFont, FALSE);
+
+            if ((info->hGroundTexturePreview = CreateWindowEx(0, L"BUTTON", NULL,
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+                0, 0, 24, 24, hWnd, (HMENU)(UINT_PTR)ID_GROUND_TEXTURE_PREVIEW,
+                pcs->hInstance, NULL)) == NULL)
+            {
+                return -1;
+            }
+            info->hGroundTexturePreviewBitmap = NULL;
+            // Thumbnail is built later (after engine init + registry
+            // load) by RebuildGroundTexturePreviewBitmap().
+
             if ((info->hGroundZSpinner = CreateWindowEx(WS_EX_CLIENTEDGE, L"Spinner", NULL, WS_CHILD | WS_VISIBLE | WS_TABSTOP,
                 0, 0, 80, 20, hWnd, (HMENU)(UINT_PTR)ID_GROUNDZ_SPINNER, pcs->hInstance, NULL)) == NULL)
             {
@@ -2069,6 +2122,54 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 		case WM_DRAWITEM:
 		{
 			DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
+			// ground texture preview button. Owner-drawn so we
+			// can stretch a 24×24 thumbnail bitmap into it with a
+			// 1 px border and focus/highlight feedback. The bitmap
+			// is generated by RebuildGroundTexturePreviewBitmap()
+			// whenever the active slot changes.
+			if (dis->CtlType == ODT_BUTTON &&
+			    dis->CtlID   == ID_GROUND_TEXTURE_PREVIEW &&
+			    info != NULL)
+			{
+				RECT rc = dis->rcItem;
+				HBITMAP hbm = info->hGroundTexturePreviewBitmap;
+				if (hbm != NULL)
+				{
+					HDC hMem = CreateCompatibleDC(dis->hDC);
+					HGDIOBJ old = SelectObject(hMem, hbm);
+					BITMAP bm = {};
+					GetObject(hbm, sizeof(bm), &bm);
+					int w = rc.right - rc.left;
+					int h = rc.bottom - rc.top;
+					SetStretchBltMode(dis->hDC, HALFTONE);
+					StretchBlt(dis->hDC, rc.left, rc.top, w, h,
+					           hMem, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
+					SelectObject(hMem, old);
+					DeleteDC(hMem);
+				}
+				else
+				{
+					FillRect(dis->hDC, &rc,
+					         (HBRUSH)(COLOR_BTNFACE + 1));
+				}
+				// Border + focus / pressed indication.
+				HPEN pen = CreatePen(PS_SOLID, 1,
+				    (dis->itemState & ODS_SELECTED) ? GetSysColor(COLOR_HIGHLIGHT)
+				                                    : RGB(0x60, 0x60, 0x60));
+				HGDIOBJ oldPen = SelectObject(dis->hDC, pen);
+				HGDIOBJ oldBrush = SelectObject(dis->hDC, GetStockObject(NULL_BRUSH));
+				Rectangle(dis->hDC, rc.left, rc.top, rc.right, rc.bottom);
+				SelectObject(dis->hDC, oldBrush);
+				SelectObject(dis->hDC, oldPen);
+				DeleteObject(pen);
+				if (dis->itemState & ODS_FOCUS)
+				{
+					RECT fr = rc;
+					InflateRect(&fr, -2, -2);
+					DrawFocusRect(dis->hDC, &fr);
+				}
+				return TRUE;
+			}
 			if (dis->CtlType != ODT_MENU) break;
 			if (dis->itemID < ID_MOD_FIRST || dis->itemID > ID_MOD_LAST) break;
 
@@ -2237,6 +2338,14 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                 }
                 else if (code == BN_CLICKED)
                 {
+                    //: user clicked the toolbar texture-preview button.
+                    // Open the picker dialog; on commit, swap engine state,
+                    // persist new selection + slot paths, refresh preview.
+                    if (hControl == info->hGroundTexturePreview && info->engine != NULL)
+                    {
+                        ShowGroundTexturePicker(hWnd, info);
+                        break;
+                    }
                     if (hControl == info->hLeaveParticles && info->particleSystem != NULL)
                     {
                         info->particleSystem->setLeaveParticles(SendMessage(hControl, BM_GETCHECK, 0, 0) == BST_CHECKED);
@@ -2412,25 +2521,37 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                 RECT checkbox;
                 RECT label;
                 RECT groundLabel;
+                RECT groundTexLabel;
                 GetClientRect(info->hLeaveParticles, &checkbox);
                 GetClientRect(info->hBackgroundLabel, &label);
                 GetClientRect(info->hGroundZLabel, &groundLabel);
+                GetClientRect(info->hGroundTextureLabel, &groundTexLabel);
                 int height = max(max(24, checkbox.bottom), label.bottom);
                 const int GROUND_SPINNER_W = 80;
                 const int GROUND_SPINNER_H = 20;
+                const int GROUND_COMBO_W   = 80;
+                const int GROUND_COMBO_H   = 20;
                 MoveWindow(info->hLeaveParticles, props.right + 8, top + 4 + (height - checkbox.bottom) / 2, checkbox.right, label.bottom, TRUE);
-                // Right side of the header strip, from right to left:
-                //   [Ground Z label] [Ground Z spinner]  · · ·  [Background label] [Background btn]
-                // Background button is anchored 4 px from the right edge; the
-                // Ground Z group sits 16 px to the left of the background
-                // label so the two groups read as distinct.
-                int bgLabelX = LOWORD(lParam) - 32 - label.right;
+                // Right side of the header strip, anchored from the right edge:
+                //   [Ground tex label] [Ground tex combo]  [Ground Z label] [Ground Z spinner]  [Background label] [Background btn]
+                // Background button is 4 px from the right edge; the
+                // Ground Z group sits 16 px to its left; the Ground
+                // texture group sits 16 px to the left of that. Same
+                // anchoring pattern across all three; narrow-window
+                // overflow degrades gracefully (combo + spinner widths
+                // are fixed; labels truncate via Win32 default).
+                const int GT_PREVIEW_SIZE = 24;
+                int bgLabelX  = LOWORD(lParam) - 32 - label.right;
                 int gzSpinnerX = bgLabelX - 16 - GROUND_SPINNER_W;
                 int gzLabelX   = gzSpinnerX - 4 - groundLabel.right;
+                int gtPreviewX = gzLabelX - 16 - GT_PREVIEW_SIZE;
+                int gtLabelX   = gtPreviewX - 4 - groundTexLabel.right;
 				MoveWindow(info->hBackgroundBtn,   LOWORD(lParam) - 28, top + 4 + (height - 24) / 2, 24, 24, TRUE);
 				MoveWindow(info->hBackgroundLabel, bgLabelX, top + 4 + (height - label.bottom) / 2, label.right, label.bottom, TRUE);
                 MoveWindow(info->hGroundZSpinner,  gzSpinnerX, top + 4 + (height - GROUND_SPINNER_H) / 2, GROUND_SPINNER_W,  GROUND_SPINNER_H,   TRUE);
                 MoveWindow(info->hGroundZLabel,    gzLabelX,   top + 4 + (height - groundLabel.bottom) / 2, groundLabel.right, groundLabel.bottom, TRUE);
+                MoveWindow(info->hGroundTexturePreview, gtPreviewX, top + 4 + (height - GT_PREVIEW_SIZE) / 2, GT_PREVIEW_SIZE, GT_PREVIEW_SIZE, TRUE);
+                MoveWindow(info->hGroundTextureLabel,   gtLabelX,   top + 4 + (height - groundTexLabel.bottom) / 2, groundTexLabel.right, groundTexLabel.bottom, TRUE);
 
 				// Move render window
 				MoveWindow(info->hRenderWnd, props.right + 8, top + 32, LOWORD(lParam) - (props.right + 8), HIWORD(lParam) - tabs.bottom - 36, TRUE);
@@ -2973,6 +3094,809 @@ static void WriteGroundZ(float z)
     }
 }
 
+// ground-texture index (0..kGroundTextureCount-1). REG_DWORD;
+// out-of-range or wrong-type values silently fall back to default
+// so a hand-edited or corrupted registry can't crash the editor.
+static int ReadGroundTexture(int defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0,
+                     KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD value;
+        DWORD type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, L"GroundTexture", NULL, &type,
+                            (LPBYTE)&value, &size) == ERROR_SUCCESS
+            && type == REG_DWORD && size == sizeof(value)
+            && value < (DWORD)Engine::kGroundTextureCount)
+        {
+            RegCloseKey(hKey);
+            return (int)value;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteGroundTexture(int index)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL)
+        == ERROR_SUCCESS)
+    {
+        DWORD value = (DWORD)index;
+        RegSetValueEx(hKey, L"GroundTexture", 0, REG_DWORD,
+                      (const BYTE*)&value, sizeof(value));
+        RegCloseKey(hKey);
+    }
+}
+
+// per-slot custom texture file path. REG_SZ; empty / missing
+// values are treated as "use bundled default" (slots 0-5) or
+// "slot is empty" (slots 6-11).
+static std::wstring ReadGroundSlotPath(int slot)
+{
+    if (slot < 0 || slot >= Engine::kGroundTextureCount) return L"";
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0,
+                     KEY_READ, &hKey) != ERROR_SUCCESS)
+        return L"";
+    wchar_t valueName[32];
+    swprintf(valueName, 32, L"GroundTextureSlot%d", slot);
+    // Two-pass read: first query size, then allocate, then read.
+    DWORD type = 0, cbData = 0;
+    LSTATUS s = RegQueryValueEx(hKey, valueName, NULL, &type, NULL, &cbData);
+    if (s != ERROR_SUCCESS || type != REG_SZ || cbData < sizeof(wchar_t))
+    {
+        RegCloseKey(hKey);
+        return L"";
+    }
+    std::vector<wchar_t> buf(cbData / sizeof(wchar_t) + 1, 0);
+    s = RegQueryValueEx(hKey, valueName, NULL, &type, (LPBYTE)buf.data(), &cbData);
+    RegCloseKey(hKey);
+    if (s != ERROR_SUCCESS) return L"";
+    // Ensure NUL termination (registry may or may not include it).
+    buf.back() = 0;
+    return std::wstring(buf.data());
+}
+
+static void WriteGroundSlotPath(int slot, const std::wstring& path)
+{
+    if (slot < 0 || slot >= Engine::kGroundTextureCount) return;
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL)
+        != ERROR_SUCCESS) return;
+    wchar_t valueName[32];
+    swprintf(valueName, 32, L"GroundTextureSlot%d", slot);
+    if (path.empty())
+    {
+        RegDeleteValue(hKey, valueName);
+    }
+    else
+    {
+        // Length in bytes includes trailing NUL.
+        DWORD cbData = (DWORD)((path.size() + 1) * sizeof(wchar_t));
+        RegSetValueEx(hKey, valueName, 0, REG_SZ, (const BYTE*)path.c_str(), cbData);
+    }
+    RegCloseKey(hKey);
+}
+
+static void DeleteAllGroundSlotPaths()
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0,
+                     KEY_WRITE, &hKey) != ERROR_SUCCESS) return;
+    // Iterate one wider than the current slot count so a user who
+    // saved paths under a previous (12-slot) build doesn't end up
+    // with orphan entries after a Reset. Pure over-cleanup; harmless
+    // when those keys don't exist.
+    const int kCleanupBound = 16;
+    for (int slot = 0; slot < kCleanupBound; ++slot)
+    {
+        wchar_t valueName[32];
+        swprintf(valueName, 32, L"GroundTextureSlot%d", slot);
+        RegDeleteValue(hKey, valueName);
+    }
+    // Reset-all also wipes the solid-colour value so slot 4 reverts
+    // to the flat-grey default on next read.
+    RegDeleteValue(hKey, L"GroundSolidColor");
+    RegCloseKey(hKey);
+}
+
+// solid-colour slot (slot 4). REG_DWORD storing the COLORREF
+// directly. Default is RGB(128,128,128) — flat grey.
+static COLORREF ReadGroundSolidColor(COLORREF defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0,
+                     KEY_READ, &hKey) != ERROR_SUCCESS)
+        return defaultValue;
+    DWORD value, type, size = sizeof(value);
+    LSTATUS s = RegQueryValueEx(hKey, L"GroundSolidColor", NULL, &type,
+                                  (LPBYTE)&value, &size);
+    RegCloseKey(hKey);
+    if (s != ERROR_SUCCESS || type != REG_DWORD || size != sizeof(value))
+        return defaultValue;
+    return (COLORREF)value;
+}
+
+static void WriteGroundSolidColor(COLORREF color)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL)
+        != ERROR_SUCCESS) return;
+    DWORD value = (DWORD)color;
+    RegSetValueEx(hKey, L"GroundSolidColor", 0, REG_DWORD,
+                  (const BYTE*)&value, sizeof(value));
+    RegCloseKey(hKey);
+}
+
+// thumbnail generation. Returns a fresh 32-bit HBITMAP of the
+// given size showing the slot's content. Caller owns the bitmap and
+// must DeleteObject() it when done.
+//
+// Resolution order:
+//   1. customPath (if non-empty): D3DXCreateTextureFromFileEx
+//   2. bundled RCDATA resource for the slot: D3DXCreateTextureFromFileInMemoryEx
+//   3. fallback: a light-grey square with an outline (placeholder for
+//      empty slots, or for slots whose source failed to load)
+//
+// Both D3DX paths downsample to (size×size) directly during creation,
+// so no separate scale step is needed.
+static HBITMAP MakeGroundSlotThumbnail(IDirect3DDevice9*    pDevice,
+                                        int                  slot,
+                                        int                  size,
+                                        const std::wstring&  customPath,
+                                        COLORREF             solidColor)
+{
+    // Helper lambda to construct an empty/error placeholder HBITMAP.
+    auto MakePlaceholder = [&](bool empty) -> HBITMAP {
+        HDC     hScreen = GetDC(NULL);
+        BITMAPINFO bmi   = {};
+        bmi.bmiHeader.biSize        = sizeof(bmi.bmiHeader);
+        bmi.bmiHeader.biWidth       = size;
+        bmi.bmiHeader.biHeight      = -size;  // top-down
+        bmi.bmiHeader.biPlanes      = 1;
+        bmi.bmiHeader.biBitCount    = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        void* pBits = NULL;
+        HBITMAP hbm = CreateDIBSection(hScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+        ReleaseDC(NULL, hScreen);
+        if (hbm == NULL) return NULL;
+        // Fill with a light grey, then put a "+" or "?" depending on
+        // whether this is an empty (legal) slot vs a load-failed one.
+        HDC hMem = CreateCompatibleDC(NULL);
+        HGDIOBJ old = SelectObject(hMem, hbm);
+        RECT r = { 0, 0, size, size };
+        HBRUSH bg = CreateSolidBrush(empty ? RGB(0xE8, 0xE8, 0xE8) : RGB(0xC8, 0xA0, 0xA0));
+        FillRect(hMem, &r, bg);
+        DeleteObject(bg);
+        // Border.
+        HPEN pen = CreatePen(PS_SOLID, 1, RGB(0x80, 0x80, 0x80));
+        HGDIOBJ oldPen = SelectObject(hMem, pen);
+        HGDIOBJ oldBrush = SelectObject(hMem, GetStockObject(NULL_BRUSH));
+        Rectangle(hMem, 0, 0, size, size);
+        SelectObject(hMem, oldBrush);
+        SelectObject(hMem, oldPen);
+        DeleteObject(pen);
+        // Glyph: "+" for empty, "?" for failure.
+        HFONT hFont = CreateFont(size / 2, 0, 0, 0, FW_NORMAL,
+                                  FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                                  OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                  CLEARTYPE_QUALITY, DEFAULT_PITCH,
+                                  L"Segoe UI");
+        HGDIOBJ oldFont = SelectObject(hMem, hFont);
+        SetBkMode(hMem, TRANSPARENT);
+        SetTextColor(hMem, RGB(0x80, 0x80, 0x80));
+        DrawText(hMem, empty ? L"+" : L"?", -1, &r,
+                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        SelectObject(hMem, oldFont);
+        DeleteObject(hFont);
+        SelectObject(hMem, old);
+        DeleteDC(hMem);
+        return hbm;
+    };
+
+    // Solid-color slot — short-circuit the D3D path entirely and
+    // paint a flat-coloured square via GDI. `solidColor` is the
+    // engine's m_groundSolidColor passed in by the caller.
+    if (slot == Engine::kGroundSolidColorSlot)
+    {
+        COLORREF c = solidColor;
+        (void)customPath;   // unused for this slot
+        HDC hScreen = GetDC(NULL);
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize        = sizeof(bmi.bmiHeader);
+        bmi.bmiHeader.biWidth       = size;
+        bmi.bmiHeader.biHeight      = -size;
+        bmi.bmiHeader.biPlanes      = 1;
+        bmi.bmiHeader.biBitCount    = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        void* pBits = NULL;
+        HBITMAP hbm = CreateDIBSection(hScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+        ReleaseDC(NULL, hScreen);
+        if (hbm == NULL) return MakePlaceholder(false);
+        HDC hMem = CreateCompatibleDC(NULL);
+        HGDIOBJ old = SelectObject(hMem, hbm);
+        RECT r = { 0, 0, size, size };
+        HBRUSH br = CreateSolidBrush(c);
+        FillRect(hMem, &r, br);
+        DeleteObject(br);
+        // 1px outline so a near-white colour still has a visible
+        // boundary on the white dialog background.
+        HPEN pen = CreatePen(PS_SOLID, 1, RGB(0x60, 0x60, 0x60));
+        HGDIOBJ oldPen = SelectObject(hMem, pen);
+        HGDIOBJ oldBrush = SelectObject(hMem, GetStockObject(NULL_BRUSH));
+        Rectangle(hMem, 0, 0, size, size);
+        SelectObject(hMem, oldBrush);
+        SelectObject(hMem, oldPen);
+        DeleteObject(pen);
+        SelectObject(hMem, old);
+        DeleteDC(hMem);
+        return hbm;
+    }
+
+    // Without a valid D3D device, we can only produce a placeholder.
+    if (pDevice == NULL) return MakePlaceholder(true);
+
+    // Helper lambda to read a D3D texture's level 0 surface into a
+    // newly-allocated HBITMAP. Used by both the file and resource paths.
+    auto TextureToHBitmap = [&](IDirect3DTexture9* pTex) -> HBITMAP {
+        if (pTex == NULL) return NULL;
+        IDirect3DSurface9* pSurf = NULL;
+        if (FAILED(pTex->GetSurfaceLevel(0, &pSurf))) return NULL;
+        D3DLOCKED_RECT lr;
+        if (FAILED(pSurf->LockRect(&lr, NULL, D3DLOCK_READONLY)))
+        {
+            pSurf->Release();
+            return NULL;
+        }
+        BITMAPINFO bmi   = {};
+        bmi.bmiHeader.biSize        = sizeof(bmi.bmiHeader);
+        bmi.bmiHeader.biWidth       = size;
+        bmi.bmiHeader.biHeight      = -size;
+        bmi.bmiHeader.biPlanes      = 1;
+        bmi.bmiHeader.biBitCount    = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        HDC hScreen = GetDC(NULL);
+        void* pBits = NULL;
+        HBITMAP hbm = CreateDIBSection(hScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+        ReleaseDC(NULL, hScreen);
+        if (hbm != NULL && pBits != NULL)
+        {
+            // D3DFMT_A8R8G8B8 row stride may differ from
+            // size*4 — copy row-by-row using lr.Pitch.
+            const uint8_t* src = (const uint8_t*)lr.pBits;
+            uint8_t*       dst = (uint8_t*)pBits;
+            const int rowBytes = size * 4;
+            for (int y = 0; y < size; ++y)
+                memcpy(dst + y * rowBytes, src + y * lr.Pitch, rowBytes);
+        }
+        pSurf->UnlockRect();
+        pSurf->Release();
+        return hbm;
+    };
+
+    IDirect3DTexture9* pTex = NULL;
+    HRESULT hr = E_FAIL;
+
+    // 1. Custom path.
+    if (!customPath.empty())
+    {
+        hr = D3DXCreateTextureFromFileExW(
+            pDevice, customPath.c_str(),
+            size, size, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
+            D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex);
+    }
+    // 2. Bundled fallback.
+    if (FAILED(hr))
+    {
+        // Mirror the engine's bundled-resource lookup table. Slot
+        // values of 0 mean "no bundled default" (slot 4 — solid
+        // color, handled specially above — and slots 5..7 which
+        // are user-customisable only).
+        static const UINT kIds[Engine::kGroundTextureCount] = {
+            IDB_GROUND, IDB_GROUND_GRASS, IDB_GROUND_SAND,
+            IDB_GROUND_SNOW, 0, 0, 0, 0,
+        };
+        if (slot >= 0 && slot < Engine::kGroundTextureCount && kIds[slot] != 0)
+        {
+            HMODULE  hMod  = GetModuleHandle(NULL);
+            HRSRC    hRes  = FindResource(hMod, MAKEINTRESOURCE(kIds[slot]), RT_RCDATA);
+            HGLOBAL  hData = (hRes != NULL) ? LoadResource(hMod, hRes) : NULL;
+            void*    pData = (hData != NULL) ? LockResource(hData)     : NULL;
+            DWORD    dwSize = (hRes != NULL) ? SizeofResource(hMod, hRes) : 0;
+            if (pData != NULL && dwSize > 0)
+            {
+                hr = D3DXCreateTextureFromFileInMemoryEx(
+                    pDevice, pData, dwSize,
+                    size, size, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
+                    D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex);
+            }
+        }
+    }
+
+    HBITMAP hbm = NULL;
+    if (SUCCEEDED(hr) && pTex != NULL)
+        hbm = TextureToHBitmap(pTex);
+    if (pTex != NULL) pTex->Release();
+    if (hbm == NULL)
+    {
+        // Couldn't produce a thumbnail. If the slot has any source
+        // (custom path or bundled RCDATA), this is a load failure
+        // → show "?"; if no source, this is a legitimately empty
+        // slot → show "+".
+        //
+        // "Has bundled" = slot is in the bundled range AND has a
+        // non-zero resource ID (slot 4 = Solid Color has bundled
+        // index but no RCDATA — handled earlier as an early return,
+        // so it shouldn't reach this branch, but check defensively).
+        const bool slotHasBundled =
+            (slot >= 0 &&
+             slot < Engine::kGroundTextureBundledCount &&
+             slot != Engine::kGroundSolidColorSlot);
+        const bool slotHasSource = (!customPath.empty()) || slotHasBundled;
+        hbm = MakePlaceholder(!slotHasSource);
+    }
+    return hbm;
+}
+
+static void RebuildGroundTexturePreviewBitmap(APPLICATION_INFO* info)
+{
+    if (info == NULL || info->engine == NULL) return;
+    HBITMAP hbmOld = info->hGroundTexturePreviewBitmap;
+    int slot = info->engine->GetGroundTexture();
+    // Toolbar preview is 24×24; build at that size for sharp paint
+    // (no GDI stretchblt cost at draw time).
+    info->hGroundTexturePreviewBitmap = MakeGroundSlotThumbnail(
+        info->engine->GetDevice(), slot, 24,
+        info->engine->GetGroundSlotCustomPath(slot),
+        info->engine->GetGroundSolidColor());
+    if (hbmOld != NULL) DeleteObject(hbmOld);
+}
+
+// picker dialog state. Passed via DialogBoxParam's lParam at open,
+// stored on the dialog via DWLP_USER, and freed at WM_DESTROY.
+struct GroundTexturePickerData
+{
+    APPLICATION_INFO* info;
+    HIMAGELIST        hImageList;
+    HWND              hToolTip;        // attached to IDC_GROUND_TEXTURE_PATH_LABEL; shows full path on hover
+    int               originalSlot;    // engine selection at dialog open; for Cancel revert
+};
+
+// Build the display label for a slot in the picker dialog. Bundled
+// slots get the localised name (Dirt / Grass / ...). Custom slots get
+// the filename basename if a path is set, else the "Custom N" label.
+static std::wstring GroundSlotDisplayName(int slot, const std::wstring& customPath)
+{
+    if (slot < 0 || slot >= Engine::kGroundTextureCount) return L"";
+    if (slot < Engine::kGroundTextureBundledCount)
+    {
+        if (!customPath.empty() && slot != Engine::kGroundSolidColorSlot)
+        {
+            // Bundled slot with custom override — show filename.
+            // Excludes the solid-color slot (slot 4) which never has
+            // a customPath; user changes its colour via colour picker.
+            size_t sep = customPath.find_last_of(L"\\/");
+            return (sep == std::wstring::npos)
+                ? customPath : customPath.substr(sep + 1);
+        }
+        // Bundled default name.  IDS_GROUND_GREY now reads
+        // "Solid Color" — slot 4 uses it.
+        static const int kIds[Engine::kGroundTextureBundledCount] = {
+            IDS_GROUND_DIRT, IDS_GROUND_GRASS, IDS_GROUND_SAND,
+            IDS_GROUND_SNOW, IDS_GROUND_GREY,
+        };
+        return LoadString(kIds[slot]);
+    }
+    // User slot (6..11).
+    if (!customPath.empty())
+    {
+        size_t sep = customPath.find_last_of(L"\\/");
+        return (sep == std::wstring::npos)
+            ? customPath : customPath.substr(sep + 1);
+    }
+    return LoadString(IDS_GROUND_CUSTOM_BASE + (slot - Engine::kGroundTextureBundledCount));
+}
+
+// Rebuild the picker dialog's ListView entirely — image list, item
+// labels, selection. Called after any slot-path mutation (set custom,
+// reset bundled, clear custom, reset-all).
+static void GroundTexturePicker_RefreshList(HWND hDlg, GroundTexturePickerData* data)
+{
+    HWND hList = GetDlgItem(hDlg, IDC_GROUND_TEXTURE_LIST);
+    int  prevSel = ListView_GetNextItem(hList, -1, LVNI_SELECTED);
+    ListView_DeleteAllItems(hList);
+    if (data->hImageList != NULL) ImageList_Destroy(data->hImageList);
+    // Create a 64×64 imagelist; build one thumbnail per slot.
+    data->hImageList = ImageList_Create(Engine::kGroundThumbnailSize,
+                                         Engine::kGroundThumbnailSize,
+                                         ILC_COLOR32, Engine::kGroundTextureCount, 0);
+    ListView_SetImageList(hList, data->hImageList, LVSIL_NORMAL);
+    for (int slot = 0; slot < Engine::kGroundTextureCount; ++slot)
+    {
+        const std::wstring& path = data->info->engine->GetGroundSlotCustomPath(slot);
+        HBITMAP hThumb = MakeGroundSlotThumbnail(
+            data->info->engine->GetDevice(),
+            slot, Engine::kGroundThumbnailSize, path,
+            data->info->engine->GetGroundSolidColor());
+        int imgIdx = ImageList_Add(data->hImageList, hThumb, NULL);
+        if (hThumb != NULL) DeleteObject(hThumb);
+        std::wstring label = GroundSlotDisplayName(slot, path);
+        LVITEM item = {};
+        item.mask     = LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
+        item.iItem    = slot;
+        item.iSubItem = 0;
+        item.iImage   = imgIdx;
+        item.lParam   = slot;
+        item.pszText  = const_cast<LPWSTR>(label.c_str());
+        ListView_InsertItem(hList, &item);
+    }
+    // Restore selection: prefer prevSel (if any), else the engine's
+    // current slot.
+    int sel = (prevSel >= 0) ? prevSel : data->info->engine->GetGroundTexture();
+    if (sel >= 0 && sel < Engine::kGroundTextureCount)
+    {
+        ListView_SetItemState(hList, sel, LVIS_SELECTED | LVIS_FOCUSED,
+                              LVIS_SELECTED | LVIS_FOCUSED);
+        ListView_EnsureVisible(hList, sel, FALSE);
+    }
+}
+
+// Update the dialog's path label + tooltip to reflect `path`. Tooltip
+// shows the path verbatim; label shows the SS_PATHELLIPSIS-truncated
+// form. When `path` is empty, both clear (the label becomes blank and
+// the tooltip becomes hidden because TOOLINFO's text is empty).
+static void GroundTexturePicker_SetPathDisplay(HWND hDlg,
+                                                 GroundTexturePickerData* data,
+                                                 const std::wstring& path)
+{
+    SetDlgItemText(hDlg, IDC_GROUND_TEXTURE_PATH_LABEL,
+                    path.empty() ? L"" : path.c_str());
+    if (data->hToolTip != NULL)
+    {
+        TOOLINFOW ti = {};
+        // Match the V2 size used at TTM_ADDTOOL time — ComCtl32 v5
+        // matches tools by the (hwnd, uId) pair and rejects update
+        // calls whose cbSize doesn't match the registered tool.
+        ti.cbSize   = TTTOOLINFOW_V2_SIZE;
+        ti.uFlags   = TTF_IDISHWND;
+        ti.hwnd     = hDlg;
+        ti.uId      = (UINT_PTR)GetDlgItem(hDlg, IDC_GROUND_TEXTURE_PATH_LABEL);
+        // Empty text suppresses the tooltip popup entirely.
+        ti.lpszText = (LPWSTR)path.c_str();
+        SendMessage(data->hToolTip, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
+    }
+}
+
+// Helper: open ChooseColor for the solid-colour slot. Returns true if
+// the user picked a colour; engine + registry + ListView refreshed in
+// either case (no-op on cancel, update on OK).
+static bool GroundTexturePicker_PickSolidColor(HWND hDlg,
+                                                 GroundTexturePickerData* data)
+{
+    static COLORREF s_custom[16] = {0};
+    CHOOSECOLOR cc = {};
+    cc.lStructSize  = sizeof(cc);
+    cc.hwndOwner    = hDlg;
+    cc.lpCustColors = s_custom;
+    cc.rgbResult    = data->info->engine->GetGroundSolidColor();
+    cc.Flags        = CC_ANYCOLOR | CC_FULLOPEN | CC_RGBINIT;
+    if (!ChooseColor(&cc)) return false;
+    data->info->engine->SetGroundSolidColor(cc.rgbResult);
+    WriteGroundSolidColor(cc.rgbResult);
+    // Refresh the list (thumbnail will pick up the new colour) and
+    // the toolbar preview if this slot is currently selected.
+    GroundTexturePicker_RefreshList(hDlg, data);
+    if (data->info->engine->GetGroundTexture() == Engine::kGroundSolidColorSlot)
+    {
+        RebuildGroundTexturePreviewBitmap(data->info);
+        InvalidateRect(data->info->hGroundTexturePreview, NULL, TRUE);
+        RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                     RDW_INVALIDATE | RDW_UPDATENOW);
+    }
+    return true;
+}
+
+// Helper: open a file-picker dialog and assign the result (if any) to
+// `slot`'s custom path. Updates engine + registry + ListView. Returns
+// true if a file was assigned.
+static bool GroundTexturePicker_PickCustomFile(HWND hDlg,
+                                                 GroundTexturePickerData* data,
+                                                 int slot)
+{
+    if (slot < 0 || slot >= Engine::kGroundTextureCount) return false;
+    wchar_t buf[1024] = {};
+    OPENFILENAMEW ofn = {};
+    ofn.lStructSize  = sizeof(ofn);
+    ofn.hwndOwner    = hDlg;
+    ofn.lpstrFilter  = L"Texture Files (*.bmp;*.dds;*.tga;*.png;*.jpg;*.jpeg)\0*.bmp;*.dds;*.tga;*.png;*.jpg;*.jpeg\0All Files (*.*)\0*.*\0\0";
+    ofn.lpstrFile    = buf;
+    ofn.nMaxFile     = (DWORD)(sizeof(buf) / sizeof(buf[0]));
+    ofn.lpstrTitle   = L"Choose Ground Texture File";
+    ofn.Flags        = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
+    if (!GetOpenFileNameW(&ofn)) return false;
+    std::wstring path = buf;
+    data->info->engine->SetGroundSlotCustomPath(slot, path);
+    WriteGroundSlotPath(slot, path);
+    // Refresh the dialog list to reflect the new thumbnail.
+    GroundTexturePicker_RefreshList(hDlg, data);
+    // Also refresh the toolbar preview if this slot is currently selected.
+    if (data->info->engine->GetGroundTexture() == slot)
+    {
+        RebuildGroundTexturePreviewBitmap(data->info);
+        InvalidateRect(data->info->hGroundTexturePreview, NULL, TRUE);
+        RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                     RDW_INVALIDATE | RDW_UPDATENOW);
+    }
+    return true;
+}
+
+static INT_PTR CALLBACK GroundTexturePickerProc(HWND hDlg, UINT uMsg,
+                                                  WPARAM wParam, LPARAM lParam)
+{
+    GroundTexturePickerData* data =
+        (GroundTexturePickerData*)(LONG_PTR)GetWindowLongPtr(hDlg, DWLP_USER);
+    switch (uMsg)
+    {
+    case WM_INITDIALOG:
+    {
+        data = (GroundTexturePickerData*)lParam;
+        SetWindowLongPtr(hDlg, DWLP_USER, (LONG_PTR)data);
+        data->hImageList = NULL;
+        data->hToolTip   = NULL;
+        // Build the list — populates thumbnails, labels, selection.
+        GroundTexturePicker_RefreshList(hDlg, data);
+        // Attach a tooltip to the path label so the user can see
+        // the full path verbatim when the SS_PATHELLIPSIS-truncated
+        // label is hovered. TTF_SUBCLASS routes the label's mouse
+        // events to the tooltip control automatically.
+        HWND hLabel = GetDlgItem(hDlg, IDC_GROUND_TEXTURE_PATH_LABEL);
+        data->hToolTip = CreateWindowExW(0, TOOLTIPS_CLASS, NULL,
+            WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+            hDlg, NULL, GetModuleHandle(NULL), NULL);
+        if (data->hToolTip != NULL && hLabel != NULL)
+        {
+            // ComCtl32 v5 (the editor has no manifest opting into v6)
+            // rejects the modern sizeof(TOOLINFOW) which includes
+            // lpReserved — TTM_ADDTOOL returns FALSE and no tooltip
+            // appears. Use the V2 size (60 bytes) which is the
+            // largest tooltip-struct size v5 accepts. Fields past
+            // V2 aren't used here, so this is a pure compatibility
+            // downgrade with no functional cost.
+            TOOLINFOW ti = {};
+            ti.cbSize   = TTTOOLINFOW_V2_SIZE;
+            ti.uFlags   = TTF_IDISHWND | TTF_SUBCLASS;
+            ti.hwnd     = hDlg;
+            ti.uId      = (UINT_PTR)hLabel;
+            ti.lpszText = (LPWSTR)L"";   // populated when selection changes
+            SendMessage(data->hToolTip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+            // Allow long paths and multi-line wrapping if needed.
+            SendMessage(data->hToolTip, TTM_SETMAXTIPWIDTH, 0, 600);
+            // Shorten initial hover delay so the tooltip feels
+            // responsive — default is ~500 ms.
+            SendMessage(data->hToolTip, TTM_SETDELAYTIME, TTDT_INITIAL, 250);
+        }
+        // Initial LVN_ITEMCHANGED fired before the tooltip existed,
+        // so the tooltip text wasn't populated yet. Sync once now
+        // with the currently-selected slot's path.
+        {
+            int slot = data->info->engine->GetGroundTexture();
+            const std::wstring& path =
+                data->info->engine->GetGroundSlotCustomPath(slot);
+            GroundTexturePicker_SetPathDisplay(hDlg, data, path);
+        }
+        return TRUE;
+    }
+    case WM_NOTIFY:
+    {
+        NMHDR* hdr = (NMHDR*)lParam;
+        if (hdr->idFrom != IDC_GROUND_TEXTURE_LIST) break;
+        if (hdr->code == LVN_ITEMCHANGED)
+        {
+            NMLISTVIEW* nlv = (NMLISTVIEW*)lParam;
+            if ((nlv->uNewState & LVIS_SELECTED) && !(nlv->uOldState & LVIS_SELECTED))
+            {
+                int slot = nlv->iItem;
+                // Live-select: switch engine + persist + refresh
+                // toolbar. Skip if slot is empty — the user gets
+                // a file picker on click instead (handled below).
+                if (slot >= 0 && slot < Engine::kGroundTextureCount &&
+                    !data->info->engine->IsGroundSlotEmpty(slot))
+                {
+                    data->info->engine->SetGroundTexture(slot);
+                    int actual = data->info->engine->GetGroundTexture();
+                    WriteGroundTexture(actual);
+                    RebuildGroundTexturePreviewBitmap(data->info);
+                    InvalidateRect(data->info->hGroundTexturePreview, NULL, TRUE);
+                    RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                                 RDW_INVALIDATE | RDW_UPDATENOW);
+                    // Update bottom label + tooltip with the file
+                    // path (or empty for non-custom slots).
+                    const std::wstring& path =
+                        data->info->engine->GetGroundSlotCustomPath(slot);
+                    GroundTexturePicker_SetPathDisplay(hDlg, data, path);
+                }
+            }
+        }
+        else if (hdr->code == NM_CLICK || hdr->code == NM_DBLCLK)
+        {
+            NMITEMACTIVATE* nia = (NMITEMACTIVATE*)lParam;
+            int slot = nia->iItem;
+            if (slot < 0 || slot >= Engine::kGroundTextureCount) break;
+            // Solid-colour slot: any click opens the colour picker.
+            // Select-first so the engine swap happens before the
+            // modal so the user can see the current colour on
+            // the ground while ChooseColor is open.
+            if (slot == Engine::kGroundSolidColorSlot)
+            {
+                HWND hList = GetDlgItem(hDlg, IDC_GROUND_TEXTURE_LIST);
+                ListView_SetItemState(hList, slot,
+                    LVIS_SELECTED | LVIS_FOCUSED,
+                    LVIS_SELECTED | LVIS_FOCUSED);
+                GroundTexturePicker_PickSolidColor(hDlg, data);
+            }
+            // Single-click on empty slot opens the file picker.
+            else if (data->info->engine->IsGroundSlotEmpty(slot))
+            {
+                GroundTexturePicker_PickCustomFile(hDlg, data, slot);
+                // After assignment, select the slot so the engine
+                // switches to the freshly-loaded texture.
+                if (!data->info->engine->IsGroundSlotEmpty(slot))
+                {
+                    HWND hList = GetDlgItem(hDlg, IDC_GROUND_TEXTURE_LIST);
+                    ListView_SetItemState(hList, slot,
+                        LVIS_SELECTED | LVIS_FOCUSED,
+                        LVIS_SELECTED | LVIS_FOCUSED);
+                }
+            }
+            else if (hdr->code == NM_DBLCLK)
+            {
+                // Double-click confirms selection and closes.
+                EndDialog(hDlg, IDOK);
+            }
+        }
+        else if (hdr->code == NM_RCLICK)
+        {
+            NMITEMACTIVATE* nia = (NMITEMACTIVATE*)lParam;
+            int slot = nia->iItem;
+            if (slot < 0 || slot >= Engine::kGroundTextureCount) break;
+            // Build context menu in-place.
+            HMENU hMenu = CreatePopupMenu();
+            const bool isBundled = (slot < Engine::kGroundTextureBundledCount);
+            const bool isSolidColor = (slot == Engine::kGroundSolidColorSlot);
+            const std::wstring& path =
+                data->info->engine->GetGroundSlotCustomPath(slot);
+            const bool hasCustom = !path.empty();
+            if (isSolidColor)
+            {
+                // Solid-colour slot has only one menu action.
+                AppendMenuW(hMenu, MF_STRING, ID_GROUND_SLOT_SET_CUSTOM,
+                            L"Change color...");
+            }
+            else
+            {
+                AppendMenuW(hMenu, MF_STRING, ID_GROUND_SLOT_SET_CUSTOM,
+                            L"Set custom texture...");
+                if (isBundled && hasCustom)
+                {
+                    AppendMenuW(hMenu, MF_STRING, ID_GROUND_SLOT_RESET_BUNDLED,
+                                L"Reset to bundled default");
+                }
+                if (!isBundled && hasCustom)
+                {
+                    AppendMenuW(hMenu, MF_STRING, ID_GROUND_SLOT_CLEAR_CUSTOM,
+                                L"Clear slot");
+                }
+            }
+            POINT pt;
+            GetCursorPos(&pt);
+            INT cmd = TrackPopupMenu(hMenu,
+                                      TPM_LEFTALIGN | TPM_TOPALIGN |
+                                      TPM_RETURNCMD | TPM_NONOTIFY,
+                                      pt.x, pt.y, 0, hDlg, NULL);
+            DestroyMenu(hMenu);
+            if (cmd == ID_GROUND_SLOT_SET_CUSTOM)
+            {
+                if (isSolidColor)
+                    GroundTexturePicker_PickSolidColor(hDlg, data);
+                else
+                    GroundTexturePicker_PickCustomFile(hDlg, data, slot);
+            }
+            else if (cmd == ID_GROUND_SLOT_RESET_BUNDLED ||
+                     cmd == ID_GROUND_SLOT_CLEAR_CUSTOM)
+            {
+                // Both commands wipe the slot's custom path. Engine
+                // re-derives the slot's source (bundled for 0-5,
+                // empty for 6-11).
+                data->info->engine->SetGroundSlotCustomPath(slot, L"");
+                WriteGroundSlotPath(slot, L"");
+                GroundTexturePicker_RefreshList(hDlg, data);
+                if (data->info->engine->GetGroundTexture() == slot)
+                {
+                    RebuildGroundTexturePreviewBitmap(data->info);
+                    InvalidateRect(data->info->hGroundTexturePreview, NULL, TRUE);
+                    RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                                 RDW_INVALIDATE | RDW_UPDATENOW);
+                }
+            }
+        }
+        break;
+    }
+    case WM_COMMAND:
+        switch (LOWORD(wParam))
+        {
+        case IDC_GROUND_TEXTURE_RESET_ALL:
+        {
+            if (MessageBox(hDlg,
+                           L"Reset every ground texture slot to defaults? "
+                           L"Slots 1-6 (Dirt..Grey) revert to their bundled "
+                           L"defaults. Slots 7-12 become empty. Custom file "
+                           L"assignments will be lost — but the files "
+                           L"themselves are not deleted.",
+                           L"Reset All Slots",
+                           MB_YESNO | MB_ICONQUESTION) != IDYES) return TRUE;
+            // Clear every slot's custom path.
+            for (int slot = 0; slot < Engine::kGroundTextureCount; ++slot)
+            {
+                data->info->engine->SetGroundSlotCustomPath(slot, L"");
+            }
+            DeleteAllGroundSlotPaths();
+            GroundTexturePicker_RefreshList(hDlg, data);
+            RebuildGroundTexturePreviewBitmap(data->info);
+            InvalidateRect(data->info->hGroundTexturePreview, NULL, TRUE);
+            RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                         RDW_INVALIDATE | RDW_UPDATENOW);
+            return TRUE;
+        }
+        case IDOK:
+            // Live selection has already been committed; just close.
+            EndDialog(hDlg, IDOK);
+            return TRUE;
+        case IDCANCEL:
+            // Revert engine selection to whatever was active when the
+            // dialog opened. Slot-path mutations stay (they're "data").
+            if (data->info->engine->GetGroundTexture() != data->originalSlot)
+            {
+                data->info->engine->SetGroundTexture(data->originalSlot);
+                WriteGroundTexture(data->info->engine->GetGroundTexture());
+                RebuildGroundTexturePreviewBitmap(data->info);
+                InvalidateRect(data->info->hGroundTexturePreview, NULL, TRUE);
+                RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                             RDW_INVALIDATE | RDW_UPDATENOW);
+            }
+            EndDialog(hDlg, IDCANCEL);
+            return TRUE;
+        }
+        break;
+    case WM_DESTROY:
+        if (data != NULL && data->hImageList != NULL)
+        {
+            ImageList_Destroy(data->hImageList);
+            data->hImageList = NULL;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+static void ShowGroundTexturePicker(HWND hParent, APPLICATION_INFO* info)
+{
+    if (info == NULL || info->engine == NULL) return;
+    GroundTexturePickerData data;
+    data.info         = info;
+    data.hImageList   = NULL;
+    data.originalSlot = info->engine->GetGroundTexture();
+    DialogBoxParam(GetModuleHandle(NULL),
+                    MAKEINTRESOURCE(IDD_GROUND_TEXTURE_PICKER),
+                    hParent, GroundTexturePickerProc, (LPARAM)&data);
+}
+
 // Bloom config persistence. Master enable as DWORD (matches ShowGround
 // pattern); strength / cutoff / size as REG_BINARY floats sharing a
 // single helper since they all behave the same. NaN / Inf rejected
@@ -3075,6 +3999,7 @@ static void ResetViewSettings()
         RegDeleteValue(hKey, L"BackgroundColor");
         RegDeleteValue(hKey, L"ShowGround");
         RegDeleteValue(hKey, L"GroundZ");
+        RegDeleteValue(hKey, L"GroundTexture");   //
         RegDeleteValue(hKey, L"BloomEnabled");
         RegDeleteValue(hKey, L"BloomStrength");
         RegDeleteValue(hKey, L"BloomCutoff");
@@ -4044,6 +4969,24 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             info->engine->SetBackground(ReadBackgroundColor(info->engine->GetBackground()));
             info->engine->SetGround    (ReadShowGround    (info->engine->GetGround()));
             info->engine->SetGroundZ   (ReadGroundZ       (info->engine->GetGroundZ()));
+            //: restore per-slot custom file paths BEFORE the
+            // selected-slot load, so SetGroundTexture can find the
+            // right source. Each slot's path persists independently
+            // of the current selection (they're "user data"; the
+            // selected slot is a "view setting"). Reset View Settings
+            // does NOT touch these — only the picker dialog's
+            // "Reset all slots" button does.
+            for (int slot = 0; slot < Engine::kGroundTextureCount; ++slot)
+            {
+                std::wstring path = ReadGroundSlotPath(slot);
+                if (!path.empty())
+                    info->engine->SetGroundSlotCustomPath(slot, path);
+            }
+            //: load persisted solid-colour for the special slot 4.
+            info->engine->SetGroundSolidColor(
+                ReadGroundSolidColor(info->engine->GetGroundSolidColor()));
+            info->engine->SetGroundTexture(
+                ReadGroundTexture(info->engine->GetGroundTexture()));
             // Bloom: defaults off; tunables default to game-spec values
             // baked into Engine's constructor (0.1 / 1.0 / 0.25).
             info->engine->SetBloom        (ReadBloomEnabled(false));
@@ -4061,6 +5004,14 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             ReadBloomDialogPos(info->bloomDlgRect);
 
             ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
+
+            //: build the toolbar preview thumbnail for whatever
+            // slot the engine actually loaded. May differ from the
+            // persisted index if that slot's texture failed to load
+            // (we fell back to dirt). Built once now; refreshed on
+            // any subsequent selection change.
+            RebuildGroundTexturePreviewBitmap(info);
+            InvalidateRect(info->hGroundTexturePreview, NULL, TRUE);
 
             // Sync the ground-toggle toolbar button to the (possibly
             // restored-from-registry) engine state. The TBBUTTON definition

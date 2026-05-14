@@ -16,6 +16,38 @@ Conventions:
 
 ## Changelog
 
+### Selectable ground texture
+
+*2026-05-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+The preview's ground plane is no longer hardcoded to `dirt.bmp`. A new **`Ground Texture:`** label + 24×24 owner-drawn preview button in the top toolbar (next to the existing Ground Height spinner and Background colour button) shows a thumbnail of the currently-selected ground texture. Clicking the preview opens a modal **Ground Texture** picker with a 4×2 grid of 64×64 slot thumbnails. Bundled slots are **Dirt** (preserved from pre-), **Grass**, **Sand**, **Snow** (vanilla EaW textures `W_TEMPGRND00.DDS`, `W_SAND00.DDS`, `W_SNOW_RGH.DDS` bundled via RCDATA), and a special **Solid Color** slot driven by a user-picked `COLORREF` (default flat grey RGB(128,128,128)). Three more slots — Custom 1, Custom 2, Custom 3 — start empty.
+
+**Slot interactions in the picker:**
+- *Single-click any populated slot* — engine swaps live, toolbar preview updates, selection persists.
+- *Single-click the Solid Color slot* — selects + opens `ChooseColor` immediately. Pick a colour → engine regenerates a 1×1 D3D texture at that colour; wrap-mode sampling tiles it across the entire ground.
+- *Single-click an empty Custom slot* — opens `GetOpenFileName` filtered to `.bmp;.dds;.tga;.png;.jpg`. On selection, slot is populated, thumbnail rebuilds, slot becomes selected.
+- *Right-click any slot* — context menu with the actions appropriate to that slot's current state (Set custom texture… / Change color… / Reset to bundled default / Clear slot).
+- *Reset all slots to defaults* button — confirm dialog, then wipes every slot's customisation. **Reset View Settings deliberately does NOT touch slot assignments** (per user request: slot customisations are user data, not view settings).
+
+**Path display:** a label below the grid shows the currently-selected slot's file path. Long paths render with `SS_PATHELLIPSIS` (drive letter and filename visible, middle elided as `…`); hovering the label pops a tooltip showing the full path verbatim (max 600 px wide; wraps onto multiple lines for very long paths). For bundled-default slots and the Solid Color slot, the label is empty and the tooltip is suppressed.
+
+**Persistence** lives in `HKCU\Software\AloParticleEditor`: `GroundTexture` (REG_DWORD, current slot index 0–7), `GroundTextureSlot{0..7}` (REG_SZ, per-slot custom file path), `GroundSolidColor` (REG_DWORD, current solid colour). Out-of-range / wrong-type / corrupt values silently fall back to defaults. Stale paths (e.g. file moved between sessions) cause the slot to revert to its bundled default if it has one, or become empty if not. Lost-device recovery routes through the same `Engine::ReloadGroundTexture` helper that handles init, so the user's selection survives Alt-Tab and fullscreen transitions.
+
+**How we tackled it.** `Engine` ([src/engine.h](src/engine.h), [src/engine.cpp](src/engine.cpp)) gains `m_groundTextureIndex` + `m_groundSlotCustomPaths[kGroundTextureCount]` + `m_groundSolidColor`, plus three public setters (`SetGroundTexture` / `SetGroundSlotCustomPath` / `SetGroundSolidColor`) and an `IsGroundSlotEmpty` query. A single private `ReloadGroundTexture()` helper handles the priority cascade (custom path → bundled RCDATA → fallback to slot 0); the solid-colour slot short-circuits to a procedural 1×1 texture built via `IDirect3DDevice9::CreateTexture` + `LockRect`. The existing `IDB_GROUND` resource migrated from `BITMAP` to `RCDATA` so `D3DXCreateTextureFromFileInMemory` handles every supported format identically.
+
+UI lives in [src/main.cpp](src/main.cpp). The toolbar preview is a plain `BUTTON` with `BS_OWNERDRAW` style; the main wndproc's `WM_DRAWITEM` handler stretch-blits the cached 24×24 thumbnail with a 1 px border and focus / pressed feedback. Thumbnail generation (`MakeGroundSlotThumbnail`) takes a slot index, target size, custom path, and the current solid colour; loads the source via `D3DXCreateTextureFromFileEx` or `D3DXCreateTextureFromFileInMemoryEx` into a `D3DPOOL_SCRATCH` surface, then `LockRect` + `CreateDIBSection` to build a 32-bit HBITMAP. The solid-colour slot short-circuits to a `FillRect` + outline; empty slots get a light-grey "+" placeholder via GDI.
+
+The picker dialog (`IDD_GROUND_TEXTURE_PICKER`) uses a `SysListView32` in icon mode with a 12-entry `HIMAGELIST`. Selection-change live-updates the engine + persists the selection to the registry. The dialog's Cancel button reverts the engine to whatever slot was selected when the dialog opened (slot mutations stay, since those are intentional user data). The picker's bottom-of-dialog path label is a STATIC with `SS_PATHELLIPSIS | SS_NOTIFY`; an attached `TOOLTIPS_CLASS` control gives the full path on hover.
+
+**Issues encountered and resolutions.**
+
+- **First-launch access violation on `SAFE_RELEASE(m_pGroundTexture)`.** The pre-code never NULL-initialised `m_pGroundTexture` because `D3DXCreateTextureFromResource(..., &m_pGroundTexture)` writes the pointer directly without reading it. My new `ReloadGroundTexture` calls `SAFE_RELEASE` before assigning, dereferencing a garbage pointer on the very first init. **Fix**: explicitly `m_pGroundTexture = NULL` in the constructor's early-init block, before the first `ReloadGroundTexture` call.
+- **"Custom 1" slot showed a pink load-failure placeholder.** The placeholder-decision logic in `MakeGroundSlotThumbnail` used a hardcoded `slot < 6` check (the old bundled count). With the bundled count reduced to 5 and the Solid Color slot at index 4, slot 5 (Custom 1) was the only slot where `slot < 6` was true but no bundled resource existed. **Fix**: replace the hardcoded `6` with `Engine::kGroundTextureBundledCount`, AND additionally exclude `Engine::kGroundSolidColorSlot` from the "has bundled" predicate.
+- **Tooltip on the path label didn't appear.** The static control was returning `HTTRANSPARENT` from `WM_NCHITTEST` (default for STATIC without `SS_NOTIFY`), so the tooltip's `TTF_SUBCLASS` hook never received mouse-move events. **Fix**: add `SS_NOTIFY` to the .rc declaration. Additionally found that `TTM_ADDTOOL` was returning FALSE silently — the editor has no application manifest opting into ComCtl32 v6, so the modern `sizeof(TOOLINFOW)` (68 bytes including `lpReserved`) is rejected by ComCtl32 v5. **Fix**: use `TTTOOLINFOW_V2_SIZE` (60 bytes) for both `TTM_ADDTOOL` and `TTM_UPDATETIPTEXT`.
+- **Initial tooltip text was lost.** The first `LVN_ITEMCHANGED` (fired during `RefreshList` inside `WM_INITDIALOG`) ran BEFORE the tooltip was created, so the initial slot's path never reached the tooltip. **Fix**: explicit `GroundTexturePicker_SetPathDisplay` call after tooltip creation at the end of `WM_INITDIALOG`, syncing both the label and tooltip to the current slot's state.
+
+---
+
 ### Configurable exempt set per link group
 
 *2026-05-14 · [`238c0a1`](https://github.com/DrKnickers/particle-editor/commit/238c0a1) · #65*
