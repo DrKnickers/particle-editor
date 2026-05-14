@@ -18,7 +18,7 @@ Conventions:
 
 ### Visual link-group bracket for linked emitters
 
-*2026-05-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-14 · [`075ccbe`](https://github.com/DrKnickers/particle-editor/commit/075ccbe) · #63*
 
 The emitter tree's right margin now carries a coloured bracket per link group, so group membership is legible at scroll-speed. Each group claims a lane (greedy interval scheduling sorted by topmost member's Y; non-overlapping groups share a lane). A 12-entry Tableau-derived palette (luminance-shifted to hit WCAG 2.1 non-text contrast against `COLOR_WINDOW`) is mapped via `groupId % 12`, with the first 6 entries ordered for maximum perceptual distance because realistic particle systems mostly use ≤ 6 simultaneous link groups. Dots mark each member row at `(laneX, rowCentreY)` with a 5 px horizontal stub pointing toward the row text; a vertical lane line connects topmost-to-bottommost dot. Lane width is DPI-aware (6 px at 96 DPI) and floors at 2 px when the system is packed with many overlapping groups.
 
