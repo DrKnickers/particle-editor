@@ -18,7 +18,7 @@ Conventions:
 
 ### Selectable ground texture
 
-*2026-05-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-14 · [`c545711`](https://github.com/DrKnickers/particle-editor/commit/c545711) · #67*
 
 The preview's ground plane is no longer hardcoded to `dirt.bmp`. A new **`Ground Texture:`** label + 24×24 owner-drawn preview button in the top toolbar (next to the existing Ground Height spinner and Background colour button) shows a thumbnail of the currently-selected ground texture. Clicking the preview opens a modal **Ground Texture** picker with a 4×2 grid of 64×64 slot thumbnails. Bundled slots are **Dirt** (preserved from pre-), **Grass**, **Sand**, **Snow** (vanilla EaW textures `W_TEMPGRND00.DDS`, `W_SAND00.DDS`, `W_SNOW_RGH.DDS` bundled via RCDATA), and a special **Solid Color** slot driven by a user-picked `COLORREF` (default flat grey RGB(128,128,128)). Three more slots — Custom 1, Custom 2, Custom 3 — start empty.
 
