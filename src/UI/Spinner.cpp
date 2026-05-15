@@ -26,6 +26,7 @@ struct SpinnerControl
 	HWND     hSpinner;
 	HWND     hEdit;
     bool     allowNotify;
+	bool     readOnly;       // input blocked but value still visible
 	UINT_PTR hTimer;
 	WNDPROC  EditWindowProc;
 
@@ -46,7 +47,15 @@ static void Spinner_Paint(HWND hWnd, SpinnerControl* control)
 
 	int styleUp = (control->dragType == HOLDING_UP   || control->dragType == DRAGGING) ? DFCS_PUSHED : 0;
 	int styleDn = (control->dragType == HOLDING_DOWN || control->dragType == DRAGGING) ? DFCS_PUSHED : 0;
-	
+	// Show the up/down buttons as inactive when the spinner is in
+	// read-only mode — gives the same visual cue as a disabled
+	// control without losing text legibility in the edit.
+	if (control->readOnly)
+	{
+		styleUp |= DFCS_INACTIVE;
+		styleDn |= DFCS_INACTIVE;
+	}
+
 	// Render up-down buttons
 	rect.left = max(0, rect.right - SystemInfo::spinnerWidth);
 	rect.top  = rect.bottom - rect.bottom / 2;
@@ -114,7 +123,46 @@ static void Spinner_WheelStep(SpinnerControl* control, int wheelDelta, WORD modK
 static LRESULT CALLBACK SpinnerEditWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	SpinnerControl* control = (SpinnerControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-	
+
+	// When the spinner is read-only we paint the EDIT ourselves so the
+	// value text gets a clear "auto / disabled" grey colour. Overriding
+	// WM_CTLCOLOREDIT in the parent didn't work — Win11 themes ignore
+	// the colour we hand them — so we bypass the EDIT's default paint
+	// entirely for the read-only state.
+	if (uMsg == WM_PAINT && control != NULL && control->readOnly)
+	{
+		PAINTSTRUCT ps;
+		HDC hdc = BeginPaint(hWnd, &ps);
+
+		RECT rc;
+		GetClientRect(hWnd, &rc);
+
+		// Slightly-greyed background + grey text reads as "read-only"
+		// without losing the value. Matches the visual language of a
+		// disabled-but-rendered Windows control. Use hardcoded
+		// RGB values rather than COLOR_3DFACE / COLOR_GRAYTEXT — those
+		// system colours can collapse to the same hue on some Win11
+		// themes and make text invisible.
+		HBRUSH bg = CreateSolidBrush(RGB(232, 232, 232));
+		FillRect(hdc, &rc, bg);
+		DeleteObject(bg);
+
+		HFONT hFont = (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0);
+		HFONT old   = hFont ? (HFONT)SelectObject(hdc, hFont) : NULL;
+		SetTextColor(hdc, RGB(60, 60, 60));
+		SetBkMode   (hdc, TRANSPARENT);
+
+		wchar_t text[64];
+		int len = GetWindowText(hWnd, text, _countof(text));
+		// ES_RIGHT default: right-justify with 2 px margin.
+		rc.right -= 2;
+		DrawText(hdc, text, len, &rc, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+		if (old) SelectObject(hdc, old);
+		EndPaint(hWnd, &ps);
+		return 0;
+	}
+
 	// Here we can trap certain message, otherwise sent to the edit control
 	switch (uMsg)
 	{
@@ -150,6 +198,7 @@ static LRESULT CALLBACK SpinnerEditWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 		case WM_KEYDOWN:
 			if (wParam == VK_UP)
 			{
+				if (control->readOnly) return 0;
 				if (control->info.IsFloat)
 					control->info.f.Value += control->info.f.Increment;
 				else
@@ -160,6 +209,7 @@ static LRESULT CALLBACK SpinnerEditWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 
 			if (wParam == VK_DOWN)
 			{
+				if (control->readOnly) return 0;
 				if (control->info.IsFloat)
 					control->info.f.Value -= control->info.f.Increment;
 				else
@@ -170,6 +220,7 @@ static LRESULT CALLBACK SpinnerEditWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 			break;
 
 		case WM_MOUSEWHEEL:
+			if (control->readOnly) return 0;
 			Spinner_WheelStep(control,
 			                  GET_WHEEL_DELTA_WPARAM(wParam),
 			                  GET_KEYSTATE_WPARAM(wParam));
@@ -194,6 +245,7 @@ static LRESULT CALLBACK SpinnerWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 			control = new SpinnerControl;
 			control->hSpinner = hWnd;
             control->allowNotify = true;
+            control->readOnly    = false;
 			control->info.IsFloat = false;
 			control->info.i.Value     = 0;
 			control->info.i.MinValue  = 0;
@@ -230,7 +282,7 @@ static LRESULT CALLBACK SpinnerWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 				switch (HIWORD(wParam))
 				{
 					case EN_CHANGE:
-                        if (control->allowNotify)
+                        if (control->allowNotify && !control->readOnly)
     					{
 	    					// Forward to parent
 		    				SendMessage(GetParent(hWnd), WM_COMMAND, (WPARAM)MAKELONG(GetDlgCtrlID(hWnd), SN_CHANGE), (LPARAM)hWnd );
@@ -239,6 +291,13 @@ static LRESULT CALLBACK SpinnerWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
 					case EN_UPDATE:
 					{
+						// Don't accept typed-text into the model when the
+						// spinner is read-only — the value belongs to a
+						// caller that's driving it externally (e.g. a
+						// force-aligned fill light). The edit may still
+						// have intermediate text the user typed; the
+						// EN_KILLFOCUS handler below resets it.
+						if (control->readOnly) break;
 						// Check new text to make sure
 						TCHAR text[256];
 						GetWindowText(control->hEdit, text, 256);
@@ -264,6 +323,10 @@ static LRESULT CALLBACK SpinnerWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 					case EN_KILLFOCUS:
 						// Forward to parent
 						SendMessage(GetParent(hWnd), WM_COMMAND, (WPARAM)MAKELONG(GetDlgCtrlID(hWnd), SN_KILLFOCUS), (LPARAM)hWnd );
+						// Spinner_Update reformats the edit from the
+						// authoritative control->info.X.Value, which
+						// also restores read-only spinners that the
+						// user typed garbage into.
 						Spinner_Update(control);
 						break;
 				}
@@ -272,7 +335,40 @@ static LRESULT CALLBACK SpinnerWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 		
 		case WM_ENABLE:
 			EnableWindow(control->hEdit, (BOOL)wParam);
+			// Force a redraw of the up/down buttons so they reflect the
+			// new state, and invalidate the edit so the disabled-text
+			// colour we set in WM_CTLCOLORSTATIC takes effect.
+			InvalidateRect(hWnd, NULL, TRUE);
+			if (control->hEdit != NULL) InvalidateRect(control->hEdit, NULL, TRUE);
 			break;
+
+		// When the inner edit is disabled it sends WM_CTLCOLORSTATIC to
+		// its parent (us). DefWindowProc's default returns
+		// COLOR_GRAYTEXT which on modern Windows themes is so light
+		// against COLOR_3DFACE that the value becomes essentially
+		// invisible. We override with a darker grey so values like a
+		// force-aligned fill light's Z angle stay readable while still
+		// looking unmistakably disabled.
+		case WM_CTLCOLORSTATIC:
+		{
+			// Disabled EDIT children paint via WM_CTLCOLORSTATIC. Some
+			// Windows themes refuse to draw the text at all when this
+			// returns the default colors. We force a readable
+			// foreground/background pair here so values stay visible
+			// when the spinner is e.g. greyed by a force-align checkbox.
+			HDC hdc = (HDC)wParam;
+			SetTextColor(hdc, RGB(96, 96, 96));
+			SetBkColor  (hdc, GetSysColor(COLOR_3DFACE));
+			return (LRESULT)GetSysColorBrush(COLOR_3DFACE);
+		}
+
+		// Note: we deliberately don't override WM_CTLCOLOREDIT here.
+		// Tried setting COLOR_GRAYTEXT for read-only spinners; on
+		// Win11 themes returning a brush from this message reliably
+		// causes the EDIT control to skip drawing its text entirely.
+		// The DFCS_INACTIVE styling on the up/down buttons
+		// (Spinner_Paint above) is the visual "this is read-only"
+		// cue; the value text itself stays in the normal colour.
 
 		case WM_LBUTTONUP:
 		{
@@ -318,6 +414,7 @@ static LRESULT CALLBACK SpinnerWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 		}
 
 		case WM_MOUSEWHEEL:
+			if (control->readOnly) return 0;
 			Spinner_WheelStep(control,
 			                  GET_WHEEL_DELTA_WPARAM(wParam),
 			                  GET_KEYSTATE_WPARAM(wParam));
@@ -325,6 +422,7 @@ static LRESULT CALLBACK SpinnerWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
 		case WM_LBUTTONDOWN:
 		{
+			if (control->readOnly) return 0;
 			SetFocus(control->hEdit);
 			SetCapture(hWnd);
 
@@ -397,6 +495,37 @@ void Spinner_SetInfo(HWND hWnd, const SPINNER_INFO* psi)
 
 		Spinner_Redraw(hWnd, control);
 	}
+}
+
+// Read-only short-circuits the spinner's up/down buttons, mouse wheel,
+// and arrow-key increments. Visually the control still renders its
+// value clearly (enabled-edit colours), unlike EnableWindow(FALSE)
+// which on modern Windows themes suppresses the text entirely. The
+// EDIT remains writable; callers that want strict input blocking
+// should also discard SN_CHANGE for read-only spinners.
+void Spinner_SetReadOnly(HWND hWnd, bool readOnly)
+{
+	SpinnerControl* control = (SpinnerControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	if (control == NULL) return;
+	if (control->readOnly == readOnly) return;
+	control->readOnly = readOnly;
+	// Redraw the up/down buttons (Spinner_Paint reads readOnly).
+	Spinner_Redraw(hWnd, control);
+	// Re-trigger the edit's paint so WM_CTLCOLOREDIT picks the new
+	// text colour. bErase=FALSE keeps Win11's themed edit happy —
+	// invalidating with erase causes some themes to skip text draw.
+	if (control->hEdit != NULL)
+	{
+		InvalidateRect(control->hEdit, NULL, FALSE);
+		UpdateWindow(control->hEdit);
+	}
+}
+
+// Returns the read-only flag set via Spinner_SetReadOnly.
+bool Spinner_IsReadOnly(HWND hWnd)
+{
+	const SpinnerControl* control = (const SpinnerControl*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	return control != NULL && control->readOnly;
 }
 
 void Spinner_GetInfo(HWND hWnd, SPINNER_INFO* psi)

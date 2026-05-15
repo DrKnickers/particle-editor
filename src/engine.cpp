@@ -1089,6 +1089,30 @@ void Engine::SetAmbient(const D3DXVECTOR4& color)
 	SPH_Calculate_Matrices(m_sphLightAll,  &m_lights[0], 3, m_ambient);
 }
 
+//: scene-global shadow tint setter. The declaration has lived in
+// engine.h since the original codebase shipped but never had a body —
+// no shader effect handle currently consumes the value. We store it
+// here so the API is no longer linker-dangling and the Lighting
+// dialog's value round-trips correctly. When a future shader binds a
+// SHADOW_COLOR semantic this will Just Work; until then it's a no-op
+// visually.
+void Engine::SetShadow(const D3DXVECTOR4& color)
+{
+	m_shadow = color;
+}
+
+const Engine::Light& Engine::GetLight(LightType which) const
+{
+	int index = 0;
+	switch (which)
+	{
+		case LT_SUN:	index = 0; break;
+		case LT_FILL1:	index = 1; break;
+		case LT_FILL2:	index = 2; break;
+	}
+	return m_lights[index];
+}
+
 void Engine::Reset()
 {
 	ReleaseBloomTargets();
@@ -1290,6 +1314,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
     m_numEmitters    = 0;
     m_numParticles   = 0;
     m_ambient        = D3DXVECTOR4(0,0,0,0);
+    m_shadow         = D3DXVECTOR4(0,0,0,0);
     m_background     = RGB(0x14,0x08,0x34);
 
 	//

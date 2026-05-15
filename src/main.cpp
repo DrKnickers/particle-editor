@@ -501,6 +501,10 @@ static bool             ReadSpawnerDialogPos(RECT& out);
 static void             WriteSpawnerDialogPos(const RECT& in);
 static void             ToggleSpawnerDialog(APPLICATION_INFO* info);
 static void             ToggleBloomDialog(APPLICATION_INFO* info);
+static void             ToggleLightingDialog(APPLICATION_INFO* info);
+static void             PushLightingToEngine(Engine* engine);
+static void             ApplyLightingDefaults(APPLICATION_INFO* info);
+static bool             ReadLightingDialogPos(RECT& out);
 static INT_PTR CALLBACK SpawnerDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // Undo / redo helpers (defined alongside the WM_NOTIFY handlers).
@@ -586,6 +590,15 @@ struct APPLICATION_INFO
 	HWND            hBloomDlg;
 	bool            bloomDlgVisible;
 	RECT            bloomDlgRect;
+
+	//: Lighting dialog (View → Lighting…). Modeless, lifecycle
+	// matches the Bloom dialog above. Engine owns the lighting state;
+	// the dialog is a UI surface plus the source of truth for the
+	// per-light az/tilt/intensity/color decomposition (the engine only
+	// stores the resulting vec4s).
+	HWND            hLightingDlg;
+	bool            lightingDlgVisible;
+	RECT            lightingDlgRect;
 
 	// Undo / redo stack. Holds whole-system byte snapshots; cleared on
 	// file open / new. See src/UndoStack.h for the rationale.
@@ -1531,6 +1544,10 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             ToggleBloomDialog(info);
             break;
 
+        case ID_VIEW_LIGHTING:
+            ToggleLightingDialog(info);
+            break;
+
         case ID_VIEW_BLOOM_TOGGLE:
             if (info->engine != NULL && info->engine->IsBloomAvailable())
             {
@@ -1598,11 +1615,16 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             // session-only and resets each launch; we still reset the
             // in-memory spawner state here for parity.
             if (MessageBox(info->hMainWnd,
-                           L"Reset background color, ground plane visibility, ground texture, ground Z offset, bloom, and the color picker's custom colors to defaults?",
+                           L"Reset background color, ground plane visibility, ground texture, ground Z offset, bloom, lighting, and the color picker's custom colors to defaults?",
                            L"Reset View Settings",
                            MB_YESNO | MB_ICONQUESTION) == IDYES)
             {
                 ResetViewSettings();
+                //: wipe lighting keys + push defaults to engine +
+                // re-seed the open Lighting dialog if any. Done before
+                // the bloom block so the lighting visual snaps cleanly
+                // along with everything else.
+                ApplyLightingDefaults(info);
                 if (info->engine != NULL)
                 {
                     // Defaults match Engine's constructor (engine.cpp). Kept
@@ -5011,6 +5033,673 @@ static void ToggleBloomDialog(APPLICATION_INFO* info)
                   MF_BYCOMMAND | (info->bloomDlgVisible ? MF_CHECKED : MF_UNCHECKED));
 }
 
+// ============================================================================
+// — Lighting dialog (View → Lighting…)
+// ============================================================================
+//
+// Mirrors the Petroglyph map editor's Sun / Fill panel: per-light
+// intensity + Z angle + tilt angle, four sun-only color pickers
+// (Ambient, Specular, Diffuse, Shadow), Force Fill Light Alignment
+// checkbox, Mirror Sun one-shot button. Same modeless lifecycle as
+// BloomDlg above.
+//
+// The dialog owns the UI representation (R,G,B + intensity + degrees);
+// the engine owns the rendering representation (D3DXVECTOR4 Diffuse /
+// Specular / Position). Conversion happens here on every write.
+// Registry holds the UI representation so re-opening the dialog after
+// a restart round-trips losslessly.
+
+// Defaults — eyeballed from the supplied map-editor screenshot. The
+// table is the single source of truth for "what does the editor look
+// like on a fresh install", referenced by both InitializeLightingFromRegistry
+// (default-on-miss) and ApplyLightingDefaults (Reset to defaults).
+static const float    kLightSunIntensityDefault   = 0.50f;
+static const float    kLightSunZAngleDefault      = 0.0f;
+static const float    kLightSunTiltDefault        = 45.0f;
+static const COLORREF kLightSunAmbientDefault     = RGB( 40,  40,  50);
+static const COLORREF kLightSunSpecularDefault    = RGB(190, 190, 200);
+static const COLORREF kLightSunDiffuseDefault     = RGB(180, 180, 190);
+static const COLORREF kLightSunShadowDefault      = RGB(100, 100, 110);
+static const bool     kLightForceAlignDefault     = true;
+static const float    kLightFill1IntensityDefault = 0.50f;
+static const float    kLightFill1ZAngleDefault    = 120.0f;
+static const float    kLightFill1TiltDefault      = -10.0f;
+static const COLORREF kLightFill1DiffuseDefault   = RGB( 60,  80, 160);
+static const float    kLightFill2IntensityDefault = 0.50f;
+static const float    kLightFill2ZAngleDefault    = 210.0f;
+static const float    kLightFill2TiltDefault      = -10.0f;
+static const COLORREF kLightFill2DiffuseDefault   = RGB( 60,  80, 160);
+
+// Force-align computes fill angles from Sun Z. Tilt is fixed regardless
+// of sun position — classic 3-light setup where the fills come from
+// below-flanks to wash shadows from a top-down key light.
+static const float kForceAlignFillTilt    = -10.0f;
+static const float kForceAlignFill1Offset = 120.0f;
+static const float kForceAlignFill2Offset = 210.0f;
+
+// (Z angle, tilt) → unit direction vector. Convention: Z=azimuth in the
+// XY plane measured from +X, tilt=elevation above the XY plane. This
+// engine's "up" axis is +Z (see Engine::m_eye.Up = (0,0,1)). The
+// resulting vector is fed into Light.Position; Engine::SetLight
+// normalizes and derives Direction internally.
+static D3DXVECTOR4 DirectionFromZTilt(float z_deg, float tilt_deg)
+{
+    const float zRad    = D3DXToRadian(z_deg);
+    const float tiltRad = D3DXToRadian(tilt_deg);
+    const float c       = cosf(tiltRad);
+    return D3DXVECTOR4(c * cosf(zRad), c * sinf(zRad), sinf(tiltRad), 0.0f);
+}
+
+// Build an Engine::Light from UI values. intensity scales both diffuse
+// and specular (the screenshot's panel has only one intensity per
+// light). Fills pass specularColor = RGB(0,0,0) so their Specular vec4
+// comes out zero, matching the map editor's "fills are diffuse-only"
+// behavior.
+static Engine::Light MakeLight(float z_deg, float tilt_deg,
+                               COLORREF diffuseColor, COLORREF specularColor,
+                               float intensity)
+{
+    Engine::Light L = {};
+    L.Position = DirectionFromZTilt(z_deg, tilt_deg);
+    L.Direction = D3DXVECTOR4(0,0,0,0); // SetLight overwrites this
+
+    const float dR = GetRValue(diffuseColor)  / 255.0f * intensity;
+    const float dG = GetGValue(diffuseColor)  / 255.0f * intensity;
+    const float dB = GetBValue(diffuseColor)  / 255.0f * intensity;
+    L.Diffuse = D3DXVECTOR4(dR, dG, dB, 1.0f);
+
+    const float sR = GetRValue(specularColor) / 255.0f * intensity;
+    const float sG = GetGValue(specularColor) / 255.0f * intensity;
+    const float sB = GetBValue(specularColor) / 255.0f * intensity;
+    L.Specular = D3DXVECTOR4(sR, sG, sB, 1.0f);
+
+    return L;
+}
+
+// COLORREF → (R/255, G/255, B/255, 0) for scene-global ambient / shadow.
+static D3DXVECTOR4 ColorToVec4(COLORREF c)
+{
+    return D3DXVECTOR4(GetRValue(c) / 255.0f,
+                       GetGValue(c) / 255.0f,
+                       GetBValue(c) / 255.0f,
+                       0.0f);
+}
+
+// Registry helpers — same shape as ReadBloomFloat / WriteBloomFloat,
+// scoped to the lighting key space. All under
+// HKCU\Software\AloParticleEditor.
+static float ReadLightingFloat(const wchar_t* name, float defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        float value;
+        DWORD type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, name, NULL, &type, (LPBYTE)&value, &size) == ERROR_SUCCESS
+            && type == REG_BINARY && size == sizeof(value) && std::isfinite(value))
+        {
+            RegCloseKey(hKey);
+            return value;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteLightingFloat(const wchar_t* name, float value)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        RegSetValueEx(hKey, name, 0, REG_BINARY, (const BYTE*)&value, sizeof(value));
+        RegCloseKey(hKey);
+    }
+}
+
+static COLORREF ReadLightingColor(const wchar_t* name, COLORREF defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD value, type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, name, NULL, &type, (LPBYTE)&value, &size) == ERROR_SUCCESS && type == REG_DWORD)
+        {
+            RegCloseKey(hKey);
+            return (COLORREF)value;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteLightingColor(const wchar_t* name, COLORREF value)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        DWORD v = (DWORD)value;
+        RegSetValueEx(hKey, name, 0, REG_DWORD, (const BYTE*)&v, sizeof(v));
+        RegCloseKey(hKey);
+    }
+}
+
+static bool ReadLightingBool(const wchar_t* name, bool defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD value, type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, name, NULL, &type, (LPBYTE)&value, &size) == ERROR_SUCCESS && type == REG_DWORD)
+        {
+            RegCloseKey(hKey);
+            return value != 0;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteLightingBool(const wchar_t* name, bool value)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        DWORD v = value ? 1 : 0;
+        RegSetValueEx(hKey, name, 0, REG_DWORD, (const BYTE*)&v, sizeof(v));
+        RegCloseKey(hKey);
+    }
+}
+
+static bool ReadLightingDialogPos(RECT& out)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD type, size = sizeof(out);
+        if (RegQueryValueEx(hKey, L"LightingDialogPos", NULL, &type, (LPBYTE)&out, &size) == ERROR_SUCCESS
+            && type == REG_BINARY && size == sizeof(out))
+        {
+            RegCloseKey(hKey);
+            return true;
+        }
+        RegCloseKey(hKey);
+    }
+    return false;
+}
+
+// Names of all 17 lighting registry keys, in one place so the Reset
+// View Settings handler can sweep them with a single loop.
+static const wchar_t* const kLightingRegistryKeys[] = {
+    L"LightSunIntensity",     L"LightSunZAngle",         L"LightSunTilt",
+    L"LightSunAmbientColor",  L"LightSunSpecularColor",  L"LightSunDiffuseColor",
+    L"LightSunShadowColor",
+    L"LightingForceFillAlignment",
+    L"LightFill1Intensity",   L"LightFill1ZAngle",       L"LightFill1Tilt",
+    L"LightFill1DiffuseColor",
+    L"LightFill2Intensity",   L"LightFill2ZAngle",       L"LightFill2Tilt",
+    L"LightFill2DiffuseColor",
+    L"LightingDialogPos",
+};
+
+// Apply the persisted (or default-on-miss) UI values to the engine.
+// Called once at startup and after every Reset to defaults. The
+// dialog's WM_INITDIALOG / WM_USER handler re-reads the same registry
+// values directly into the controls — both flows agree on the values
+// because both go through Read*().
+static void PushLightingToEngine(Engine* engine)
+{
+    if (engine == NULL) return;
+
+    const float sunIntensity     = ReadLightingFloat(L"LightSunIntensity",     kLightSunIntensityDefault);
+    const float sunZ             = ReadLightingFloat(L"LightSunZAngle",        kLightSunZAngleDefault);
+    const float sunTilt          = ReadLightingFloat(L"LightSunTilt",          kLightSunTiltDefault);
+    const COLORREF sunAmbient    = ReadLightingColor(L"LightSunAmbientColor",  kLightSunAmbientDefault);
+    const COLORREF sunSpecular   = ReadLightingColor(L"LightSunSpecularColor", kLightSunSpecularDefault);
+    const COLORREF sunDiffuse    = ReadLightingColor(L"LightSunDiffuseColor",  kLightSunDiffuseDefault);
+    const COLORREF sunShadow     = ReadLightingColor(L"LightSunShadowColor",   kLightSunShadowDefault);
+    const bool  forceAlign       = ReadLightingBool (L"LightingForceFillAlignment", kLightForceAlignDefault);
+    const float fill1Intensity   = ReadLightingFloat(L"LightFill1Intensity",   kLightFill1IntensityDefault);
+    const float fill1Z_persisted = ReadLightingFloat(L"LightFill1ZAngle",      kLightFill1ZAngleDefault);
+    const float fill1Tilt_persisted = ReadLightingFloat(L"LightFill1Tilt",     kLightFill1TiltDefault);
+    const COLORREF fill1Diffuse  = ReadLightingColor(L"LightFill1DiffuseColor", kLightFill1DiffuseDefault);
+    const float fill2Intensity   = ReadLightingFloat(L"LightFill2Intensity",   kLightFill2IntensityDefault);
+    const float fill2Z_persisted = ReadLightingFloat(L"LightFill2ZAngle",      kLightFill2ZAngleDefault);
+    const float fill2Tilt_persisted = ReadLightingFloat(L"LightFill2Tilt",     kLightFill2TiltDefault);
+    const COLORREF fill2Diffuse  = ReadLightingColor(L"LightFill2DiffuseColor", kLightFill2DiffuseDefault);
+
+    // Force-align: when ON, fill angles are computed from sun and the
+    // persisted free-edit values are NOT used. When OFF, persisted
+    // values feed the engine directly.
+    const float fill1Z    = forceAlign ? (sunZ + kForceAlignFill1Offset) : fill1Z_persisted;
+    const float fill1Tilt = forceAlign ?  kForceAlignFillTilt            : fill1Tilt_persisted;
+    const float fill2Z    = forceAlign ? (sunZ + kForceAlignFill2Offset) : fill2Z_persisted;
+    const float fill2Tilt = forceAlign ?  kForceAlignFillTilt            : fill2Tilt_persisted;
+
+    engine->SetLight(Engine::LT_SUN,   MakeLight(sunZ,    sunTilt,    sunDiffuse,  sunSpecular,        sunIntensity));
+    engine->SetLight(Engine::LT_FILL1, MakeLight(fill1Z,  fill1Tilt,  fill1Diffuse, RGB(0,0,0),         fill1Intensity));
+    engine->SetLight(Engine::LT_FILL2, MakeLight(fill2Z,  fill2Tilt,  fill2Diffuse, RGB(0,0,0),         fill2Intensity));
+    engine->SetAmbient(ColorToVec4(sunAmbient));
+    engine->SetShadow (ColorToVec4(sunShadow));
+}
+
+// One-stop entry point used by both the in-panel Reset button and View
+// → Reset View Settings. Wipes all 17 keys, then pushes defaults into
+// the engine (PushLightingToEngine re-reads with default-on-miss).
+// Sends WM_USER to the dialog if open so its controls reseed.
+static void ApplyLightingDefaults(APPLICATION_INFO* info)
+{
+    if (info == NULL) return;
+
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        for (size_t i = 0; i < _countof(kLightingRegistryKeys); ++i)
+        {
+            RegDeleteValue(hKey, kLightingRegistryKeys[i]);
+        }
+        RegCloseKey(hKey);
+    }
+
+    PushLightingToEngine(info->engine);
+
+    if (info->hLightingDlg != NULL)
+    {
+        SendMessage(info->hLightingDlg, WM_USER, 0, 0);
+    }
+    if (info->hRenderWnd != NULL)
+    {
+        RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+    }
+}
+
+// Configure a spinner for one of the lighting numeric fields.
+static void ConfigureLightingSpinner(HWND hDlg, int id, float lo, float hi, float incr, float value)
+{
+    SPINNER_INFO si = {0};
+    si.Mask        = SPIF_ALL;
+    si.IsFloat     = true;
+    si.f.MinValue  = lo;
+    si.f.MaxValue  = hi;
+    si.f.Increment = incr;
+    si.f.Value     = value;
+    Spinner_SetInfo(GetDlgItem(hDlg, id), &si);
+}
+
+// Reflect the Force Fill Light Alignment checkbox state in the UI:
+// fill-angle spinners go read-only (values stay readable, input is
+// blocked) and the Mirror Sun button greys out (Mirror Sun is
+// undefined while alignment is enforced — keep the controls
+// orthogonal). Called from WM_INITDIALOG / WM_USER reseed and from
+// the checkbox click handler.
+static void UpdateForceAlignEnableState(HWND hDlg, bool forceAlignOn)
+{
+    Spinner_SetReadOnly(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_ZANGLE), forceAlignOn);
+    Spinner_SetReadOnly(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_TILT),   forceAlignOn);
+    Spinner_SetReadOnly(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_ZANGLE), forceAlignOn);
+    Spinner_SetReadOnly(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_TILT),   forceAlignOn);
+    EnableWindow(GetDlgItem(hDlg, IDC_LIGHTING_MIRROR_SUN), forceAlignOn ? FALSE : TRUE);
+}
+
+// Re-seed every control in the dialog from the registry. Used at
+// WM_INITDIALOG and after Reset View Settings via WM_USER. We read
+// from registry rather than from the engine because the dialog is the
+// authoritative source for the UI representation (R,G,B + intensity +
+// degrees), which the engine doesn't preserve losslessly.
+static void LightingDlg_Load(HWND hDlg, APPLICATION_INFO* info)
+{
+    if (info == NULL) return;
+
+    const float    sunIntensity   = ReadLightingFloat(L"LightSunIntensity",     kLightSunIntensityDefault);
+    const float    sunZ           = ReadLightingFloat(L"LightSunZAngle",        kLightSunZAngleDefault);
+    const float    sunTilt        = ReadLightingFloat(L"LightSunTilt",          kLightSunTiltDefault);
+    const COLORREF sunAmbient     = ReadLightingColor(L"LightSunAmbientColor",  kLightSunAmbientDefault);
+    const COLORREF sunSpecular    = ReadLightingColor(L"LightSunSpecularColor", kLightSunSpecularDefault);
+    const COLORREF sunDiffuse     = ReadLightingColor(L"LightSunDiffuseColor",  kLightSunDiffuseDefault);
+    const COLORREF sunShadow      = ReadLightingColor(L"LightSunShadowColor",   kLightSunShadowDefault);
+    const bool     forceAlign     = ReadLightingBool (L"LightingForceFillAlignment", kLightForceAlignDefault);
+    const float    fill1Intensity = ReadLightingFloat(L"LightFill1Intensity",   kLightFill1IntensityDefault);
+    const float    fill1Z         = ReadLightingFloat(L"LightFill1ZAngle",      kLightFill1ZAngleDefault);
+    const float    fill1Tilt      = ReadLightingFloat(L"LightFill1Tilt",        kLightFill1TiltDefault);
+    const COLORREF fill1Diffuse   = ReadLightingColor(L"LightFill1DiffuseColor", kLightFill1DiffuseDefault);
+    const float    fill2Intensity = ReadLightingFloat(L"LightFill2Intensity",   kLightFill2IntensityDefault);
+    const float    fill2Z         = ReadLightingFloat(L"LightFill2ZAngle",      kLightFill2ZAngleDefault);
+    const float    fill2Tilt      = ReadLightingFloat(L"LightFill2Tilt",        kLightFill2TiltDefault);
+    const COLORREF fill2Diffuse   = ReadLightingColor(L"LightFill2DiffuseColor", kLightFill2DiffuseDefault);
+
+    // When force-align is ON, the fill-angle spinners show computed
+    // values rather than the persisted "last free-edit" values. This
+    // way the visible numbers match what's actually being rendered.
+    const float fill1Z_shown    = forceAlign ? (sunZ + kForceAlignFill1Offset) : fill1Z;
+    const float fill1Tilt_shown = forceAlign ?  kForceAlignFillTilt            : fill1Tilt;
+    const float fill2Z_shown    = forceAlign ? (sunZ + kForceAlignFill2Offset) : fill2Z;
+    const float fill2Tilt_shown = forceAlign ?  kForceAlignFillTilt            : fill2Tilt;
+
+    ConfigureLightingSpinner(hDlg, IDC_LIGHTING_SUN_INTENSITY,   0.0f, 3.0f,  0.05f, sunIntensity);
+    ConfigureLightingSpinner(hDlg, IDC_LIGHTING_SUN_ZANGLE,      0.0f, 360.0f, 1.0f, sunZ);
+    ConfigureLightingSpinner(hDlg, IDC_LIGHTING_SUN_TILT,      -90.0f, 90.0f,  1.0f, sunTilt);
+    ColorButton_SetColor(GetDlgItem(hDlg, IDC_LIGHTING_SUN_AMBIENT),  sunAmbient);
+    ColorButton_SetColor(GetDlgItem(hDlg, IDC_LIGHTING_SUN_SPECULAR), sunSpecular);
+    ColorButton_SetColor(GetDlgItem(hDlg, IDC_LIGHTING_SUN_DIFFUSE),  sunDiffuse);
+    ColorButton_SetColor(GetDlgItem(hDlg, IDC_LIGHTING_SUN_SHADOW),   sunShadow);
+    CheckDlgButton(hDlg, IDC_LIGHTING_FORCE_ALIGN, forceAlign ? BST_CHECKED : BST_UNCHECKED);
+
+    ConfigureLightingSpinner(hDlg, IDC_LIGHTING_FILL1_INTENSITY, 0.0f, 3.0f,   0.05f, fill1Intensity);
+    ConfigureLightingSpinner(hDlg, IDC_LIGHTING_FILL1_ZANGLE,    0.0f, 360.0f, 1.0f,  fill1Z_shown);
+    ConfigureLightingSpinner(hDlg, IDC_LIGHTING_FILL1_TILT,    -90.0f, 90.0f,  1.0f,  fill1Tilt_shown);
+    ColorButton_SetColor(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_DIFFUSE), fill1Diffuse);
+
+    ConfigureLightingSpinner(hDlg, IDC_LIGHTING_FILL2_INTENSITY, 0.0f, 3.0f,   0.05f, fill2Intensity);
+    ConfigureLightingSpinner(hDlg, IDC_LIGHTING_FILL2_ZANGLE,    0.0f, 360.0f, 1.0f,  fill2Z_shown);
+    ConfigureLightingSpinner(hDlg, IDC_LIGHTING_FILL2_TILT,    -90.0f, 90.0f,  1.0f,  fill2Tilt_shown);
+    ColorButton_SetColor(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_DIFFUSE), fill2Diffuse);
+
+    UpdateForceAlignEnableState(hDlg, forceAlign);
+}
+
+// Recompute and push to the engine when any UI value changes. Same
+// shape as PushLightingToEngine but reads from the dialog's current
+// control values rather than from registry. Writes the engine; the
+// per-change WM_COMMAND case writes the specific changed registry key.
+static void LightingDlg_PushAll(HWND hDlg, Engine* engine)
+{
+    if (engine == NULL) return;
+
+    SPINNER_INFO si = {0};
+    si.Mask = SPIF_VALUE;
+    si.IsFloat = true;
+
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_SUN_INTENSITY), &si); const float sunIntensity = si.f.Value;
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_SUN_ZANGLE),    &si); const float sunZ         = si.f.Value;
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_SUN_TILT),      &si); const float sunTilt      = si.f.Value;
+    const COLORREF sunAmbient  = ColorButton_GetColor(GetDlgItem(hDlg, IDC_LIGHTING_SUN_AMBIENT));
+    const COLORREF sunSpecular = ColorButton_GetColor(GetDlgItem(hDlg, IDC_LIGHTING_SUN_SPECULAR));
+    const COLORREF sunDiffuse  = ColorButton_GetColor(GetDlgItem(hDlg, IDC_LIGHTING_SUN_DIFFUSE));
+    const COLORREF sunShadow   = ColorButton_GetColor(GetDlgItem(hDlg, IDC_LIGHTING_SUN_SHADOW));
+
+    const bool forceAlign = (IsDlgButtonChecked(hDlg, IDC_LIGHTING_FORCE_ALIGN) == BST_CHECKED);
+
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_INTENSITY), &si); const float fill1Intensity = si.f.Value;
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_ZANGLE),    &si); const float fill1Z_shown   = si.f.Value;
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_TILT),      &si); const float fill1Tilt_shown = si.f.Value;
+    const COLORREF fill1Diffuse = ColorButton_GetColor(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_DIFFUSE));
+
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_INTENSITY), &si); const float fill2Intensity = si.f.Value;
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_ZANGLE),    &si); const float fill2Z_shown   = si.f.Value;
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_TILT),      &si); const float fill2Tilt_shown = si.f.Value;
+    const COLORREF fill2Diffuse = ColorButton_GetColor(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_DIFFUSE));
+
+    // When force-align is on, the fill spinner values are themselves
+    // computed; use them directly (they were just set by the Sun-Z
+    // change handler) rather than recomputing.
+    engine->SetLight(Engine::LT_SUN,   MakeLight(sunZ,         sunTilt,         sunDiffuse,  sunSpecular,  sunIntensity));
+    engine->SetLight(Engine::LT_FILL1, MakeLight(fill1Z_shown, fill1Tilt_shown, fill1Diffuse, RGB(0,0,0),  fill1Intensity));
+    engine->SetLight(Engine::LT_FILL2, MakeLight(fill2Z_shown, fill2Tilt_shown, fill2Diffuse, RGB(0,0,0),  fill2Intensity));
+    engine->SetAmbient(ColorToVec4(sunAmbient));
+    engine->SetShadow (ColorToVec4(sunShadow));
+}
+
+// When Sun Z changes and force-align is ON, update the fill spinners
+// (visible values) to track. Pushes the new fill positions to the
+// engine but does NOT touch the persisted fill Z/Tilt registry values
+// (those represent the user's last free-edit state, restored when
+// alignment is unchecked).
+static void LightingDlg_RealignFills(HWND hDlg, Engine* engine)
+{
+    SPINNER_INFO si = {0};
+    si.Mask = SPIF_VALUE;
+    si.IsFloat = true;
+    Spinner_GetInfo(GetDlgItem(hDlg, IDC_LIGHTING_SUN_ZANGLE), &si);
+    const float sunZ = si.f.Value;
+
+    si.Mask = SPIF_ALL;
+    si.IsFloat = true;
+    si.f.MinValue  = 0.0f;
+    si.f.MaxValue  = 360.0f;
+    si.f.Increment = 1.0f;
+    si.f.Value     = sunZ + kForceAlignFill1Offset;
+    Spinner_SetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_ZANGLE), &si);
+    si.f.Value     = sunZ + kForceAlignFill2Offset;
+    Spinner_SetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_ZANGLE), &si);
+
+    si.f.MinValue  = -90.0f;
+    si.f.MaxValue  =  90.0f;
+    si.f.Value     = kForceAlignFillTilt;
+    Spinner_SetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_TILT), &si);
+    Spinner_SetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_TILT), &si);
+
+    LightingDlg_PushAll(hDlg, engine);
+}
+
+static INT_PTR CALLBACK LightingDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    APPLICATION_INFO* info = (APPLICATION_INFO*)(LONG_PTR)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+
+    switch (uMsg)
+    {
+        case WM_INITDIALOG:
+        {
+            info = (APPLICATION_INFO*)lParam;
+            SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)info);
+            LightingDlg_Load(hDlg, info);
+            return TRUE;
+        }
+
+        case WM_USER:
+            // Reseed-from-registry after Reset View Settings / Reset
+            // to defaults. The caller has already updated the engine
+            // and registry; we just refresh the visible controls.
+            LightingDlg_Load(hDlg, info);
+            return TRUE;
+
+        case WM_COMMAND:
+        {
+            if (info == NULL || info->engine == NULL) return FALSE;
+            const WORD code = HIWORD(wParam);
+            const WORD id   = LOWORD(wParam);
+
+            // Esc / Cancel route.
+            if (id == IDCANCEL && code == BN_CLICKED)
+            {
+                SendMessage(hDlg, WM_CLOSE, 0, 0);
+                return TRUE;
+            }
+
+            // Force Fill Light Alignment toggle.
+            if (id == IDC_LIGHTING_FORCE_ALIGN && code == BN_CLICKED)
+            {
+                const bool nowOn = (IsDlgButtonChecked(hDlg, IDC_LIGHTING_FORCE_ALIGN) == BST_CHECKED);
+                WriteLightingBool(L"LightingForceFillAlignment", nowOn);
+                if (nowOn)
+                {
+                    // Snap fill spinners to computed values; push to
+                    // engine. Persisted fill Z/Tilt registry keys are
+                    // left untouched (they hold the user's last
+                    // free-edit values for when alignment turns off).
+                    LightingDlg_RealignFills(hDlg, info->engine);
+                }
+                else
+                {
+                    // Restore persisted free-edit values into the
+                    // spinners and re-push to engine.
+                    const float fill1Z    = ReadLightingFloat(L"LightFill1ZAngle", kLightFill1ZAngleDefault);
+                    const float fill1Tilt = ReadLightingFloat(L"LightFill1Tilt",   kLightFill1TiltDefault);
+                    const float fill2Z    = ReadLightingFloat(L"LightFill2ZAngle", kLightFill2ZAngleDefault);
+                    const float fill2Tilt = ReadLightingFloat(L"LightFill2Tilt",   kLightFill2TiltDefault);
+                    SPINNER_INFO si = {0};
+                    si.Mask = SPIF_VALUE;
+                    si.IsFloat = true;
+                    si.f.Value = fill1Z;    Spinner_SetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_ZANGLE), &si);
+                    si.f.Value = fill1Tilt; Spinner_SetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_TILT),   &si);
+                    si.f.Value = fill2Z;    Spinner_SetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_ZANGLE), &si);
+                    si.f.Value = fill2Tilt; Spinner_SetInfo(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_TILT),   &si);
+                    LightingDlg_PushAll(hDlg, info->engine);
+                }
+                UpdateForceAlignEnableState(hDlg, nowOn);
+                RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                return TRUE;
+            }
+
+            // Mirror Sun: copy sun diffuse to both fills' diffuse.
+            if (id == IDC_LIGHTING_MIRROR_SUN && code == BN_CLICKED)
+            {
+                const COLORREF sunDiffuse = ColorButton_GetColor(GetDlgItem(hDlg, IDC_LIGHTING_SUN_DIFFUSE));
+                ColorButton_SetColor(GetDlgItem(hDlg, IDC_LIGHTING_FILL1_DIFFUSE), sunDiffuse);
+                ColorButton_SetColor(GetDlgItem(hDlg, IDC_LIGHTING_FILL2_DIFFUSE), sunDiffuse);
+                WriteLightingColor(L"LightFill1DiffuseColor", sunDiffuse);
+                WriteLightingColor(L"LightFill2DiffuseColor", sunDiffuse);
+                LightingDlg_PushAll(hDlg, info->engine);
+                RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                return TRUE;
+            }
+
+            // Reset to defaults.
+            if (id == IDC_LIGHTING_RESET && code == BN_CLICKED)
+            {
+                if (MessageBox(hDlg, L"Reset all lighting to defaults?", L"Reset Lighting",
+                               MB_YESNO | MB_ICONQUESTION) == IDYES)
+                {
+                    ApplyLightingDefaults(info);
+                }
+                return TRUE;
+            }
+
+            // Spinner change.
+            if (code == SN_CHANGE)
+            {
+                SPINNER_INFO si = {0};
+                si.Mask    = SPIF_VALUE;
+                si.IsFloat = true;
+                Spinner_GetInfo(GetDlgItem(hDlg, id), &si);
+                const float v = si.f.Value;
+
+                switch (id)
+                {
+                    case IDC_LIGHTING_SUN_INTENSITY: WriteLightingFloat(L"LightSunIntensity", v); break;
+                    case IDC_LIGHTING_SUN_ZANGLE:
+                        WriteLightingFloat(L"LightSunZAngle", v);
+                        // Sun-Z change with force-align ON cascades to
+                        // the fill spinners + engine.
+                        if (IsDlgButtonChecked(hDlg, IDC_LIGHTING_FORCE_ALIGN) == BST_CHECKED)
+                        {
+                            LightingDlg_RealignFills(hDlg, info->engine);
+                            RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                            return TRUE;
+                        }
+                        break;
+                    case IDC_LIGHTING_SUN_TILT:        WriteLightingFloat(L"LightSunTilt",        v); break;
+                    case IDC_LIGHTING_FILL1_INTENSITY: WriteLightingFloat(L"LightFill1Intensity", v); break;
+                    case IDC_LIGHTING_FILL1_ZANGLE:    WriteLightingFloat(L"LightFill1ZAngle",    v); break;
+                    case IDC_LIGHTING_FILL1_TILT:      WriteLightingFloat(L"LightFill1Tilt",      v); break;
+                    case IDC_LIGHTING_FILL2_INTENSITY: WriteLightingFloat(L"LightFill2Intensity", v); break;
+                    case IDC_LIGHTING_FILL2_ZANGLE:    WriteLightingFloat(L"LightFill2ZAngle",    v); break;
+                    case IDC_LIGHTING_FILL2_TILT:      WriteLightingFloat(L"LightFill2Tilt",      v); break;
+                    default: return FALSE;
+                }
+                LightingDlg_PushAll(hDlg, info->engine);
+                RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                return TRUE;
+            }
+
+            // ColorButton change.
+            if (code == CBN_CHANGE)
+            {
+                const COLORREF c = ColorButton_GetColor(GetDlgItem(hDlg, id));
+                switch (id)
+                {
+                    case IDC_LIGHTING_SUN_AMBIENT:    WriteLightingColor(L"LightSunAmbientColor",   c); break;
+                    case IDC_LIGHTING_SUN_SPECULAR:   WriteLightingColor(L"LightSunSpecularColor",  c); break;
+                    case IDC_LIGHTING_SUN_DIFFUSE:    WriteLightingColor(L"LightSunDiffuseColor",   c); break;
+                    case IDC_LIGHTING_SUN_SHADOW:     WriteLightingColor(L"LightSunShadowColor",    c); break;
+                    case IDC_LIGHTING_FILL1_DIFFUSE:  WriteLightingColor(L"LightFill1DiffuseColor", c); break;
+                    case IDC_LIGHTING_FILL2_DIFFUSE:  WriteLightingColor(L"LightFill2DiffuseColor", c); break;
+                    default: return FALSE;
+                }
+                LightingDlg_PushAll(hDlg, info->engine);
+                RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
+                return TRUE;
+            }
+            return FALSE;
+        }
+
+        case WM_CLOSE:
+        {
+            if (info != NULL)
+            {
+                GetWindowRect(hDlg, &info->lightingDlgRect);
+                HKEY hKey;
+                if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                                   REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+                {
+                    RegSetValueEx(hKey, L"LightingDialogPos", 0, REG_BINARY,
+                                  (const BYTE*)&info->lightingDlgRect, sizeof(info->lightingDlgRect));
+                    RegCloseKey(hKey);
+                }
+                ShowWindow(hDlg, SW_HIDE);
+                info->lightingDlgVisible = false;
+                CheckMenuItem(GetMenu(info->hMainWnd), ID_VIEW_LIGHTING, MF_BYCOMMAND | MF_UNCHECKED);
+            }
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static void ToggleLightingDialog(APPLICATION_INFO* info)
+{
+    if (info == NULL || info->hMainWnd == NULL) return;
+
+    if (info->hLightingDlg == NULL)
+    {
+        info->hLightingDlg = CreateDialogParam(
+            info->hInstance,
+            MAKEINTRESOURCE(IDD_LIGHTING),
+            info->hMainWnd,
+            LightingDlgProc,
+            (LPARAM)info);
+
+        if (info->hLightingDlg == NULL) return;
+
+        // Restore prior position; ignore stale off-screen rects.
+        if (info->lightingDlgRect.right > info->lightingDlgRect.left)
+        {
+            RECT r = info->lightingDlgRect;
+            HMONITOR hm = MonitorFromRect(&r, MONITOR_DEFAULTTONULL);
+            if (hm != NULL)
+            {
+                SetWindowPos(info->hLightingDlg, NULL, r.left, r.top, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+
+    if (info->lightingDlgVisible)
+    {
+        GetWindowRect(info->hLightingDlg, &info->lightingDlgRect);
+        HKEY hKey;
+        if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                           REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+        {
+            RegSetValueEx(hKey, L"LightingDialogPos", 0, REG_BINARY,
+                          (const BYTE*)&info->lightingDlgRect, sizeof(info->lightingDlgRect));
+            RegCloseKey(hKey);
+        }
+        ShowWindow(info->hLightingDlg, SW_HIDE);
+        info->lightingDlgVisible = false;
+    }
+    else
+    {
+        ShowWindow(info->hLightingDlg, SW_SHOW);
+        SetForegroundWindow(info->hLightingDlg);
+        info->lightingDlgVisible = true;
+    }
+
+    CheckMenuItem(GetMenu(info->hMainWnd), ID_VIEW_LIGHTING,
+                  MF_BYCOMMAND | (info->lightingDlgVisible ? MF_CHECKED : MF_UNCHECKED));
+}
+
 // Returns the display label for a mod (nickname if set, else folder name).
 static const wstring& ModDisplayLabel(const ModEntry& m)
 {
@@ -5531,6 +6220,17 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             ReadSpawnerDialogPos(info->spawnerWindowRect);
             ReadBloomDialogPos(info->bloomDlgRect);
 
+            //: push the persisted (or default) lighting values
+            // into the engine before the first frame renders, so the
+            // viewport opens with whatever lighting the user last
+            // configured. Default-on-miss yields the map-editor's
+            // canonical Sun/Fill setup (intensity 0.5, sun tilt 45°,
+            // force-aligned fills) which differs from Engine's
+            // built-in hardcoded defaults (sun white along +X, fills
+            // off, ambient black).
+            PushLightingToEngine(info->engine);
+            ReadLightingDialogPos(info->lightingDlgRect);
+
             ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
 
             //: build the toolbar preview thumbnail for whatever
@@ -5672,6 +6372,14 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 				{
 					consumed = true;
 				}
+				//: lighting dialog. Tab between its 18 controls,
+				// Esc to dismiss (routed to IDCANCEL → WM_CLOSE).
+				if (!consumed && info->hLightingDlg != NULL
+				    && info->lightingDlgVisible
+				    && IsDialogMessage(info->hLightingDlg, &msg))
+				{
+					consumed = true;
+				}
 				// Skip TranslateAccelerator while a tree drag-drop is in
 				// progress: a stray Ctrl+Z mid-drag would call DoUndo →
 				// RestoreFromSnapshot → delete info->particleSystem while
@@ -5723,12 +6431,27 @@ static bool InitializeWindows( APPLICATION_INFO* info )
 	wcx.cbClsExtra    = 0;
 	wcx.cbWndExtra    = 0;
 	wcx.hInstance     = info->hInstance;
-	wcx.hIcon         = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_LOGO));
+	// LoadIcon returns the 32×32 system-size icon; for hIconSm we
+	// want the 16×16 variant explicitly. Leaving hIconSm = NULL lets
+	// Windows downscale hIcon, but on some Win10/11 builds that scaler
+	// falls back to a generic blank icon, which shows up as a plain
+	// window glyph in the taskbar. LoadImage with explicit 16×16
+	// picks the matching frame from logo.ico (which ships both 32×32
+	// and 16×16 frames). Cached in locals because wcx.hIcon gets
+	// overwritten when we register the renderer class below.
+	HICON hIconBig   = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_LOGO), IMAGE_ICON, 32, 32, LR_DEFAULTCOLOR);
+	HICON hIconSmall = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_LOGO), IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR);
+	// LoadImage can return NULL on certain configurations where the
+	// RT_GROUP_ICON lookup fails to match the requested size — fall
+	// back to LoadIcon which always returns the system-default size.
+	if (hIconBig   == NULL) hIconBig   = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_LOGO));
+	if (hIconSmall == NULL) hIconSmall = hIconBig;
+	wcx.hIcon         = hIconBig;
 	wcx.hCursor       = LoadCursor(NULL, IDC_ARROW);
 	wcx.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
 	wcx.lpszMenuName  = MAKEINTRESOURCE(IDR_MENU1);
 	wcx.lpszClassName = L"ParticleEditor";
-	wcx.hIconSm       = NULL;
+	wcx.hIconSm       = hIconSmall;
 
 	if (!RegisterClassEx(&wcx))
 	{
@@ -5754,6 +6477,22 @@ static bool InitializeWindows( APPLICATION_INFO* info )
 		UnregisterClass(L"ParticleEditor", info->hInstance);
 		return false;
 	}
+
+	// Modern Windows derives the taskbar icon from WM_SETICON on the
+	// top-level window rather than from the WNDCLASS alone, so set
+	// both icons explicitly. Without this the taskbar can fall back
+	// to the generic "plain window" glyph even when the WNDCLASS has
+	// a valid hIcon. We use the cached HICONs because wcx.hIcon was
+	// cleared to NULL when we registered the renderer class.
+	SendMessage(info->hMainWnd, WM_SETICON, ICON_BIG,   (LPARAM)hIconBig);
+	SendMessage(info->hMainWnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
+	// Belt-and-suspenders: also set the class icon. RegisterClassEx
+	// took the hIcon at the time we built wcx, but its hIconSm slot
+	// might have been overwritten on the second RegisterClassEx call
+	// for the renderer class on some compilers / runtimes. Re-asserting
+	// both at runtime makes the class-level lookup consistent.
+	SetClassLongPtr(info->hMainWnd, GCLP_HICON,   (LONG_PTR)hIconBig);
+	SetClassLongPtr(info->hMainWnd, GCLP_HICONSM, (LONG_PTR)hIconSmall);
 
 	if ((info->hRenderWnd = CreateWindowEx(WS_EX_CLIENTEDGE | WS_EX_ACCEPTFILES
         , L"ParticleEditorRenderer", NULL, WS_CHILD | WS_VISIBLE | WS_GROUP,
@@ -5797,6 +6536,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	AllocConsole();
 	freopen("CONOUT$", "w", stdout);
 #endif
+
+	// Stable AppUserModelID. Without one, Windows derives a taskbar
+	// identity from the .exe path; if the same path was previously
+	// run with a different (or missing) icon, the taskbar caches a
+	// generic glyph and stubbornly reuses it. Pinning an explicit ID
+	// here gives the editor its own slot keyed off this name, so the
+	// taskbar pulls the current WM_SETICON / WNDCLASS icon instead.
+	// Loaded dynamically because the prototype lives in shell32 from
+	// Windows 7 onwards and the project's _WIN32_WINNT is set to XP.
+	if (HMODULE hShell32 = GetModuleHandleW(L"shell32.dll"))
+	{
+		typedef HRESULT (WINAPI *PFN_SetAppId)(PCWSTR);
+		PFN_SetAppId pSet = (PFN_SetAppId)GetProcAddress(hShell32, "SetCurrentProcessExplicitAppUserModelID");
+		if (pSet) pSet(L"DrKnickers.AloParticleEditor");
+	}
+
 	int result = -1;
 
     APPLICATION_INFO info;
@@ -5822,6 +6577,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	info.hBloomDlg              = NULL;
 	info.bloomDlgVisible        = false;
 	memset(&info.bloomDlgRect, 0, sizeof(info.bloomDlgRect));
+	info.hLightingDlg           = NULL;
+	info.lightingDlgVisible     = false;
+	memset(&info.lightingDlgRect, 0, sizeof(info.lightingDlgRect));
 
 #ifdef NDEBUG
  	try

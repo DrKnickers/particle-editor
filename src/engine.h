@@ -151,6 +151,15 @@ public:
 	const D3DXVECTOR3& GetWind() const    { return m_wind; }
     Effect* GetShader(int i) const        { return m_pShaders[i]; }
 
+	//: read-only access to lighting state for the Lighting dialog's
+	// startup seed and WM_USER reseed-from-engine path after Reset View
+	// Settings. The dialog itself owns the UI representation (RGB +
+	// intensity + angles); these getters are used only to read back what
+	// was last pushed.
+	const Light&       GetLight(LightType which) const;
+	const D3DXVECTOR4& GetAmbient() const { return m_ambient; }
+	const D3DXVECTOR4& GetShadow()  const { return m_shadow;  }
+
 	// Hot-reload all shaders (the 14-element ShaderNames[] array plus the
 	// distortion shader). All-or-nothing: if any of the new shaders fails to
 	// load, the old set is kept alive and the call returns false.
@@ -292,6 +301,11 @@ private:
 	D3DXVECTOR3 m_wind;
 	D3DXVECTOR3	m_gravity;
     D3DXVECTOR4 m_ambient;
+    //: scene-global shadow tint. Stored only — no shader handle
+    // currently consumes it. Exposed in the Lighting dialog for parity
+    // with the Petroglyph map editor's panel and forward-compatibility
+    // with shader changes.
+    D3DXVECTOR4 m_shadow;
     Light       m_lights[3];
     D3DXMATRIX  m_sphLightFill[3];
     D3DXMATRIX  m_sphLightAll[3];

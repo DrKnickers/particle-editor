@@ -327,6 +327,31 @@
 #define IDS_PALETTE_PINS_FULL              214
 #define IDS_TOOLTIP_PALETTE                215
 
+// — Lighting dialog (View → Lighting…). Sun group + Fill1 + Fill2,
+// with Ambient/Specular/Diffuse/Shadow color pickers (Sun only),
+// Diffuse-only colors for the fills, and a Force Fill Light Alignment
+// checkbox + Mirror Sun one-shot button.
+#define IDD_LIGHTING                      153
+#define ID_VIEW_LIGHTING                40183
+#define IDC_LIGHTING_SUN_INTENSITY       1700
+#define IDC_LIGHTING_SUN_ZANGLE          1701
+#define IDC_LIGHTING_SUN_TILT            1702
+#define IDC_LIGHTING_SUN_AMBIENT         1703
+#define IDC_LIGHTING_SUN_SPECULAR        1704
+#define IDC_LIGHTING_SUN_DIFFUSE         1705
+#define IDC_LIGHTING_SUN_SHADOW          1706
+#define IDC_LIGHTING_FORCE_ALIGN         1707
+#define IDC_LIGHTING_FILL1_INTENSITY     1708
+#define IDC_LIGHTING_FILL1_ZANGLE        1709
+#define IDC_LIGHTING_FILL1_TILT          1710
+#define IDC_LIGHTING_FILL1_DIFFUSE       1711
+#define IDC_LIGHTING_MIRROR_SUN          1712
+#define IDC_LIGHTING_FILL2_INTENSITY     1713
+#define IDC_LIGHTING_FILL2_ZANGLE        1714
+#define IDC_LIGHTING_FILL2_TILT          1715
+#define IDC_LIGHTING_FILL2_DIFFUSE       1716
+#define IDC_LIGHTING_RESET               1717
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED

@@ -157,6 +157,59 @@ BEGIN
     LTEXT           "Uses the game's SceneBloom.fx — mods override automatically.",-1,8,80,164,10
 END
 
+IDD_LIGHTING DIALOGEX 0, 0, 240, 308
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_TOOLWINDOW
+CAPTION "Lighting"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    GROUPBOX        "Sun Settings",-1,4,4,232,140
+
+    LTEXT           "Intensity",-1,12,18,40,8
+    CONTROL         "",IDC_LIGHTING_SUN_INTENSITY,"Spinner",WS_TABSTOP,12,28,52,12,WS_EX_CLIENTEDGE
+    LTEXT           "Z Angle",-1,82,18,40,8
+    CONTROL         "",IDC_LIGHTING_SUN_ZANGLE,"Spinner",WS_TABSTOP,82,28,52,12,WS_EX_CLIENTEDGE
+    LTEXT           "Tilt Angle",-1,152,18,52,8
+    CONTROL         "",IDC_LIGHTING_SUN_TILT,"Spinner",WS_TABSTOP,152,28,52,12,WS_EX_CLIENTEDGE
+
+    LTEXT           "Ambient Color",-1,12,52,60,8
+    CONTROL         "",IDC_LIGHTING_SUN_AMBIENT,"ColorButton",WS_TABSTOP | WS_BORDER,12,62,52,14
+    LTEXT           "Specular Color",-1,82,52,60,8
+    CONTROL         "",IDC_LIGHTING_SUN_SPECULAR,"ColorButton",WS_TABSTOP | WS_BORDER,82,62,52,14
+
+    LTEXT           "Diffuse Color",-1,12,82,60,8
+    CONTROL         "",IDC_LIGHTING_SUN_DIFFUSE,"ColorButton",WS_TABSTOP | WS_BORDER,12,92,52,14
+    LTEXT           "Shadow Color",-1,82,82,60,8
+    CONTROL         "",IDC_LIGHTING_SUN_SHADOW,"ColorButton",WS_TABSTOP | WS_BORDER,82,92,52,14
+
+    AUTOCHECKBOX    "Force Fill Light Alignment",IDC_LIGHTING_FORCE_ALIGN,12,120,160,10
+
+    GROUPBOX        "Fill Light Settings",-1,4,150,232,132
+
+    LTEXT           "Intensity 1",-1,12,164,52,8
+    CONTROL         "",IDC_LIGHTING_FILL1_INTENSITY,"Spinner",WS_TABSTOP,12,174,52,12,WS_EX_CLIENTEDGE
+    LTEXT           "Z Angle 1",-1,82,164,52,8
+    CONTROL         "",IDC_LIGHTING_FILL1_ZANGLE,"Spinner",WS_TABSTOP,82,174,52,12,WS_EX_CLIENTEDGE
+    LTEXT           "Tilt Angle 1",-1,152,164,52,8
+    CONTROL         "",IDC_LIGHTING_FILL1_TILT,"Spinner",WS_TABSTOP,152,174,52,12,WS_EX_CLIENTEDGE
+
+    LTEXT           "Diffuse Color",-1,12,196,60,8
+    CONTROL         "",IDC_LIGHTING_FILL1_DIFFUSE,"ColorButton",WS_TABSTOP | WS_BORDER,12,206,52,14
+    PUSHBUTTON      "Mirror Sun",IDC_LIGHTING_MIRROR_SUN,152,206,52,14
+
+    LTEXT           "Intensity 2",-1,12,228,52,8
+    CONTROL         "",IDC_LIGHTING_FILL2_INTENSITY,"Spinner",WS_TABSTOP,12,238,52,12,WS_EX_CLIENTEDGE
+    LTEXT           "Z Angle 2",-1,82,228,52,8
+    CONTROL         "",IDC_LIGHTING_FILL2_ZANGLE,"Spinner",WS_TABSTOP,82,238,52,12,WS_EX_CLIENTEDGE
+    LTEXT           "Tilt Angle 2",-1,152,228,52,8
+    CONTROL         "",IDC_LIGHTING_FILL2_TILT,"Spinner",WS_TABSTOP,152,238,52,12,WS_EX_CLIENTEDGE
+
+    LTEXT           "Diffuse Color",-1,12,256,60,8
+    CONTROL         "",IDC_LIGHTING_FILL2_DIFFUSE,"ColorButton",WS_TABSTOP | WS_BORDER,12,266,52,14
+
+    PUSHBUTTON      "Reset to defaults",IDC_LIGHTING_RESET,84,290,72,14
+END
+
 IDD_INCREMENT_INDEX DIALOGEX 0, 0, 160, 55
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Duplicate with Index Increment"
@@ -518,6 +571,7 @@ BEGIN
         MENUITEM "Show &Ground\tCtrl+G",        ID_VIEW_SHOWGROUND
         MENUITEM "Debug &Heat\tCtrl+H",         ID_VIEW_DEBUGHEAT
         MENUITEM "&Bloom...\tCtrl+B",           ID_VIEW_BLOOM
+        MENUITEM "&Lighting...",                ID_VIEW_LIGHTING
         MENUITEM SEPARATOR
         MENUITEM "&Pause Preview\tF8",          ID_VIEW_PAUSE_PREVIEW
         MENUITEM "Step &1 Frame\tF9",           ID_VIEW_STEP_1_FRAME

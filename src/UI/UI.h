@@ -51,6 +51,8 @@ struct SPINNER_INFO
 bool Spinner_Initialize(HINSTANCE hInstance);
 void Spinner_SetInfo(HWND hWnd, const SPINNER_INFO* psi);
 void Spinner_GetInfo(HWND hWnd, SPINNER_INFO* psi);
+void Spinner_SetReadOnly(HWND hWnd, bool readOnly);
+bool Spinner_IsReadOnly(HWND hWnd);
 
 /*
  * Curve Editor control
