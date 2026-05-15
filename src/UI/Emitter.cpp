@@ -1,5 +1,6 @@
 #include <windows.h>
 #include "UI.h"
+#include "TexturePalette.h"
 #include "utils.h"
 using namespace std;
 
@@ -63,6 +64,21 @@ struct EmitterPropsControl
 	HWND				  	 hTabs;
 	HWND					 hPages[N_PROPERTY_PAGES];
 };
+
+// — captured at WM_INITDIALOG of the Appearance page so the
+// global palette-popup visibility callback can keep the button's
+// pressed state in sync regardless of which path triggered the
+// popup hide (button click, X button, Esc).
+static HWND s_paletteBtn = NULL;
+
+static void PaletteVisibilityChanged(bool visible)
+{
+    if (s_paletteBtn != NULL)
+    {
+        SendMessage(s_paletteBtn, BM_SETCHECK,
+                    visible ? BST_CHECKED : BST_UNCHECKED, 0);
+    }
+}
 
 static void LoadTexture(HWND hWnd, string& texture)
 {
@@ -284,6 +300,49 @@ static INT_PTR WINAPI DlgEmitterPropsProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 				}
 				SendMessage(hEmitModes, CB_SETCURSEL, 0, 0);
 			}
+
+            // — set up the texture-palette button (only present on
+            // the Appearance page; GetDlgItem returns NULL on the others).
+            // Loads the IDB_PALETTE_GLYPH bitmap onto the BS_BITMAP button
+            // and attaches a tooltip. The button click is wired further
+            // down in WM_COMMAND; the popup window itself is created
+            // lazily on first click.
+            HWND hPaletteBtn = GetDlgItem(hWnd, IDC_BUTTON_PALETTE);
+            if (hPaletteBtn != NULL)
+            {
+                // Stash for the visibility callback (PaletteVisibilityChanged).
+                s_paletteBtn = hPaletteBtn;
+                TexturePalette::SetVisibilityCallback(PaletteVisibilityChanged);
+
+                HINSTANCE hInst = (HINSTANCE)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_HINSTANCE);
+                HBITMAP hGlyph  = (HBITMAP)LoadImage(hInst, MAKEINTRESOURCE(IDB_PALETTE_GLYPH),
+                                                    IMAGE_BITMAP, 0, 0, LR_DEFAULTCOLOR);
+                if (hGlyph != NULL)
+                {
+                    SendMessage(hPaletteBtn, BM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hGlyph);
+                }
+
+                // Attach a tooltip — same V2-size compatibility pattern as
+                // the ground-texture picker's path-label tooltip in
+                // main.cpp (ComCtl32 v5 rejects the modern TOOLINFOW size).
+                HWND hToolTip = CreateWindowExW(0, TOOLTIPS_CLASS, NULL,
+                    WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
+                    CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                    hWnd, NULL, hInst, NULL);
+                if (hToolTip != NULL)
+                {
+                    static wstring s_paletteTip;  // must outlive the SendMessage
+                    s_paletteTip = LoadString(IDS_TOOLTIP_PALETTE);
+                    TOOLINFOW ti = {};
+                    ti.cbSize   = TTTOOLINFOW_V2_SIZE;
+                    ti.uFlags   = TTF_IDISHWND | TTF_SUBCLASS;
+                    ti.hwnd     = hWnd;
+                    ti.uId      = (UINT_PTR)hPaletteBtn;
+                    ti.lpszText = (LPWSTR)s_paletteTip.c_str();
+                    SendMessage(hToolTip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+                    SendMessage(hToolTip, TTM_SETDELAYTIME, TTDT_INITIAL, 250);
+                }
+            }
             break;
 		}
 		
@@ -328,12 +387,40 @@ static INT_PTR WINAPI DlgEmitterPropsProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
 							case IDC_BUTTON1:
                                 LoadTexture(hWnd, emitter.colorTexture);
                                 SetWindowText(GetDlgItem(hWnd, IDC_EDIT2), AnsiToWide(emitter.colorTexture).c_str());
+                                if (!emitter.colorTexture.empty())
+                                {
+                                    TexturePalette::Store::Instance().TouchRecent(
+                                        AnsiToWide(emitter.colorTexture), TexturePalette::SLOT_COLOR);
+                                }
                                 break;
 
 							case IDC_BUTTON2:
                                 LoadTexture(hWnd, emitter.normalTexture);
                                 SetWindowText(GetDlgItem(hWnd, IDC_EDIT3), AnsiToWide(emitter.normalTexture).c_str());
+                                if (!emitter.normalTexture.empty())
+                                {
+                                    TexturePalette::Store::Instance().TouchRecent(
+                                        AnsiToWide(emitter.normalTexture), TexturePalette::SLOT_BUMP);
+                                }
                                 break;
+
+                            // — palette-button click toggles the
+                            // modeless popup. Pass the button's screen
+                            // rect so the first-show position can anchor
+                            // just below the button.
+                            case IDC_BUTTON_PALETTE:
+                            {
+                                HWND hPaletteBtn = GetDlgItem(hWnd, IDC_BUTTON_PALETTE);
+                                RECT btnRect;
+                                GetWindowRect(hPaletteBtn, &btnRect);
+                                // Find the top-level editor window
+                                // (popup's owner — popup must outlive
+                                // the EmitterProps tab page).
+                                HWND owner = GetAncestor(hWnd, GA_ROOT);
+                                TexturePalette::TogglePopup(owner, btnRect);
+                                enable = false;  // no emitter-state mutation
+                                break;
+                            }
 
 							default:
 								enable = false;
@@ -363,6 +450,26 @@ static INT_PTR WINAPI DlgEmitterPropsProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
                         {
 						    NotifyParent(hWnd, EP_CHANGE);
                         }
+						break;
+
+					// — touch the texture-palette recents only when the
+					// user actually finishes editing the field (tab away or
+					// click elsewhere). Touching on EN_CHANGE would create a
+					// recent entry per keystroke, polluting the list with
+					// in-progress filename fragments. The picker-button paths
+					// (IDC_BUTTON1/2 above) trigger TouchRecent directly on
+					// successful pick.
+					case EN_KILLFOCUS:
+						if ((uCtrlID == IDC_EDIT2 || uCtrlID == IDC_EDIT3) && control->allowNotify)
+						{
+							const string& tex  = (uCtrlID == IDC_EDIT2) ? emitter.colorTexture : emitter.normalTexture;
+							const TexturePalette::SlotMask slot =
+								(uCtrlID == IDC_EDIT2) ? TexturePalette::SLOT_COLOR : TexturePalette::SLOT_BUMP;
+							if (!tex.empty())
+							{
+								TexturePalette::Store::Instance().TouchRecent(AnsiToWide(tex), slot);
+							}
+						}
 						break;
 
 					case SN_CHANGE:
@@ -474,8 +581,12 @@ static EmitterPropsControl* CreateEmitterPropsControl(HWND hOwner, HINSTANCE hIn
 		//
 		// Create the property tab window
 		//
+		// Initial size; the WM_SIZE handler in EmitterPropsWindowProc resizes
+		// to fit the parent. Height bumped from 514→537 (+23 px) for to
+		// give the Appearance tab the extra 14 du needed for the palette
+		// button row above the texture fields.
 		if ((control->hTabs = CreateWindowEx(WS_EX_CONTROLPARENT, WC_TABCONTROL, NULL, WS_CHILD | WS_CLIPCHILDREN | WS_VISIBLE | TCS_FOCUSNEVER | WS_TABSTOP,
-			4, 4, 286, 514, hOwner, NULL, hInstance, NULL)) == NULL)
+			4, 4, 286, 537, hOwner, NULL, hInstance, NULL)) == NULL)
 		{
 			delete control;
 			return NULL;
@@ -573,6 +684,52 @@ static LRESULT CALLBACK EmitterPropsWindowProc(HWND hWnd, UINT uMsg, WPARAM wPar
 		case WM_SETFONT:
 			SendMessage(control->hTabs, WM_SETFONT, wParam, lParam);
 			break;
+
+		// — texture palette double-click commits a texture choice.
+		// Routed from the popup via SendMessage. WPARAM is the slot
+		// (Color or Bump); LPARAM is the filename (valid for the
+		// duration of the synchronous send).
+		case WM_PALETTE_COMMIT:
+			if (control != NULL && control->emitter != NULL)
+			{
+				const wchar_t* filename = (const wchar_t*)lParam;
+				const TexturePalette::SlotMask slot =
+					(TexturePalette::SlotMask)wParam;
+				if (filename != NULL && filename[0] != L'\0')
+				{
+					const string ansiName = WideToAnsi(filename);
+					if (slot == TexturePalette::SLOT_COLOR)
+						control->emitter->colorTexture = ansiName;
+					else if (slot == TexturePalette::SLOT_BUMP)
+						control->emitter->normalTexture = ansiName;
+					// Update the matching edit field on the
+					// Appearance page (index 1). The EN_CHANGE
+					// fired by SetWindowText would normally re-write
+					// the field's value back to emitter — that's a
+					// no-op since we just set it.
+					const int editId = (slot == TexturePalette::SLOT_COLOR)
+									 ? IDC_EDIT2 : IDC_EDIT3;
+					HWND hPage = control->hPages[1];
+					HWND hEdit = GetDlgItem(hPage, editId);
+					if (hEdit != NULL) SetWindowText(hEdit, filename);
+					// Touch the recents — palette double-click is a
+					// "use" too (sorts the entry to position 0).
+					TexturePalette::Store::Instance().TouchRecent(filename, slot);
+					// The TouchRecent above re-orders entries. Refresh
+					// the popup so the user sees the entry move to
+					// position 0 immediately (without this the popup
+					// would show stale order until next interaction).
+					TexturePalette::RefreshPopup();
+					// Notify the parent so the change persists / the
+					// undo stack records this as a single edit.
+					NMHDR hdr;
+					hdr.code     = EP_CHANGE;
+					hdr.hwndFrom = hWnd;
+					hdr.idFrom   = (UINT_PTR)GetDlgCtrlID(hWnd);
+					SendMessage(GetParent(hWnd), WM_NOTIFY, hdr.idFrom, (LPARAM)&hdr);
+				}
+			}
+			return 0;
 	}
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }

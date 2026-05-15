@@ -79,11 +79,21 @@
 #define IDB_GROUND_METAL                145
 #define IDB_GROUND_GREY                 146
 
+// — texture-palette button glyph (16x16 24-bit BMP, painter's
+// palette icon). Used as the BS_BITMAP image for IDC_BUTTON_PALETTE
+// in the Textures groupbox header on the Appearance tab.
+#define IDB_PALETTE_GLYPH               147
+
+// — hover-pin badge (24x48 24-bit BMP, vertical strip).
+// Top half (y=0..23) = empty/hover state; bottom half (y=24..47) =
+// filled/pinned state. Blitted onto each cell when the user hovers.
+#define IDB_PIN_BADGE                   148
+
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        147
+#define _APS_NEXT_RESOURCE_VALUE        149
 #define _APS_NEXT_COMMAND_VALUE         40086
 #define _APS_NEXT_CONTROL_VALUE         1098
 #define _APS_NEXT_SYMED_VALUE           101

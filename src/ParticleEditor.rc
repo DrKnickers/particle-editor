@@ -31,6 +31,8 @@ IDB_MISSING             BITMAP                  "resources/missing.bmp"
 IDR_TOOLBAR1            BITMAP                  "resources/toolbar1.bmp"
 IDB_EMITTER_LIST        BITMAP                  "Resources\\emitter_list.bmp"
 IDR_EMITTER_TOOLBAR     BITMAP                  "resources/toolbar2.bmp"
+IDB_PALETTE_GLYPH       BITMAP                  "Resources\\palette_glyph.bmp"
+IDB_PIN_BADGE           BITMAP                  "Resources\\pin_badge.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
 //

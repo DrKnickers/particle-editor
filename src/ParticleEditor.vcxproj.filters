@@ -96,6 +96,9 @@
     <ClInclude Include="UI\UI.h">
       <Filter>Header Files\UI</Filter>
     </ClInclude>
+    <ClInclude Include="UI\TexturePalette.h">
+      <Filter>Header Files\UI</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ChunkReader.cpp">
@@ -176,6 +179,12 @@
     <ClCompile Include="UI\Spinner.cpp">
       <Filter>Source Files\UI</Filter>
     </ClCompile>
+    <ClCompile Include="UI\TexturePalette.cpp">
+      <Filter>Source Files\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\PaletteStore.cpp">
+      <Filter>Source Files\UI</Filter>
+    </ClCompile>
     <ClCompile Include="UI\TrackEditor.cpp">
       <Filter>Source Files\UI</Filter>
     </ClCompile>
@@ -223,6 +232,12 @@
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="Resources\missing.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="Resources\palette_glyph.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="Resources\pin_badge.bmp">
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="Resources\sand.dds">

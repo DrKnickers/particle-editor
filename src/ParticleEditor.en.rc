@@ -186,16 +186,16 @@ END
 // (4 columns × 3 rows of 64×64 thumbnails). Single-click a slot to
 // select it and close; right-click a slot for context-menu actions
 // (set custom file, reset to bundled, clear custom).
-IDD_GROUND_TEXTURE_PICKER DIALOGEX 0, 0, 320, 200
+IDD_GROUND_TEXTURE_PICKER DIALOGEX 0, 0, 576, 340
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Ground Texture"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    CONTROL         "",IDC_GROUND_TEXTURE_LIST,"SysListView32",LVS_ICON | LVS_SHOWSELALWAYS | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP,8,8,304,140,WS_EX_CLIENTEDGE
-    LTEXT           "",IDC_GROUND_TEXTURE_PATH_LABEL,8,154,304,10,SS_LEFT | SS_PATHELLIPSIS | SS_NOTIFY | WS_GROUP
-    PUSHBUTTON      "Reset all slots to defaults",IDC_GROUND_TEXTURE_RESET_ALL,8,178,120,16
-    DEFPUSHBUTTON   "OK",IDOK,208,178,52,16
-    PUSHBUTTON      "Cancel",IDCANCEL,264,178,52,16
+    CONTROL         "",IDC_GROUND_TEXTURE_LIST,"SysListView32",LVS_ICON | LVS_SHOWSELALWAYS | LVS_SINGLESEL | WS_TABSTOP,8,8,560,300
+    LTEXT           "",IDC_GROUND_TEXTURE_PATH_LABEL,8,312,560,10,SS_LEFT | SS_PATHELLIPSIS | SS_NOTIFY | WS_GROUP
+    PUSHBUTTON      "Reset all slots to defaults",IDC_GROUND_TEXTURE_RESET_ALL,8,320,120,16
+    DEFPUSHBUTTON   "OK",IDOK,460,320,52,16
+    PUSHBUTTON      "Cancel",IDCANCEL,516,320,52,16
 END
 
 IDD_LINK_GROUP_DISAGREEMENT DIALOGEX 0, 0, 380, 280
@@ -284,53 +284,54 @@ BEGIN
     LTEXT           "units/s²",IDC_STATIC,150,218,26,8
 END
 
-IDD_EMITTER_PROPS2 DIALOGEX 0, 0, 197, 294
+IDD_EMITTER_PROPS2 DIALOGEX 0, 0, 197, 308
 STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
 EXSTYLE WS_EX_CONTROLPARENT
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "Tail",-1,0,126,197,37
-    GROUPBOX        "Rotation",-1,0,165,197,46
-    GROUPBOX        "Rendering",-1,0,213,197,59
-    GROUPBOX        "Textures",-1,0,4,197,67
-    GROUPBOX        "Random color addition",-1,0,74,197,50
-    EDITTEXT        IDC_EDIT2,56,14,122,12,ES_AUTOHSCROLL
-    PUSHBUTTON      "...",IDC_BUTTON1,180,14,14,12,BS_FLAT | NOT WS_TABSTOP
-    EDITTEXT        IDC_EDIT3,56,27,122,12,ES_AUTOHSCROLL
-    PUSHBUTTON      "...",IDC_BUTTON2,180,27,14,12,BS_FLAT | NOT WS_TABSTOP
-    CONTROL         "",IDC_SPINNER2,"Spinner",WS_TABSTOP,140,41,37,12,WS_EX_CLIENTEDGE
-    CONTROL         "",IDC_SPINNER13,"Spinner",WS_TABSTOP,140,55,37,12,WS_EX_CLIENTEDGE
-    CONTROL         "",IDC_SPINNER19,"Spinner",WS_TABSTOP,10,94,37,12,WS_EX_CLIENTEDGE
-    CONTROL         "",IDC_SPINNER24,"Spinner",WS_TABSTOP,53,94,38,12,WS_EX_CLIENTEDGE
-    CONTROL         "",IDC_SPINNER25,"Spinner",WS_TABSTOP,97,94,38,12,WS_EX_CLIENTEDGE
-    CONTROL         "",IDC_SPINNER26,"Spinner",WS_TABSTOP,140,94,38,12,WS_EX_CLIENTEDGE
-    CONTROL         "Grayscale",IDC_CHECK7,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,12,110,47,10
-    CONTROL         "Has tail",IDC_CHECK12,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,136,39,10
-    CONTROL         "",IDC_SPINNER34,"Spinner",WS_TABSTOP,98,147,47,12,WS_EX_CLIENTEDGE
-    CONTROL         "Random rotation direction",IDC_CHECK5,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,176,99,10
-    CONTROL         "Fixed random rotation:",IDC_CHECK15,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,186,89,10
-    CONTROL         "",IDC_SPINNER16,"Spinner",WS_DISABLED | WS_TABSTOP,18,196,37,12,WS_EX_CLIENTEDGE
-    CONTROL         "", IDC_SPINNER17, "Spinner", WS_DISABLED | WS_TABSTOP, 73, 196, 37, 12, WS_EX_CLIENTEDGE
-    CONTROL         "Always face camera",IDC_CHECK16,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,224,80,10
-    CONTROL         "Heat particle",IDC_CHECK10,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,234,57,10
-    CONTROL         "No depth test",IDC_CHECK14,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,244,60,10
-    COMBOBOX        IDC_COMBO3,68,255,78,61,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Color texture:",-1,6,16,46,8
-    LTEXT           "Bump texture:",-1,6,29,47,8
-    LTEXT           "Texture elements:",-1,6,43,60,8
-    LTEXT           "Blend mode:",-1,8,257,40,8
-    LTEXT           "Minimum scale:",-1,6,57,48,8
-    LTEXT           "Tail length:",-1,18,148,36,8
-    LTEXT           "%",-1,180,57,8,8
-    LTEXT           "°",-1,57,198,8,8
-    LTEXT           "%",-1,180,96,8,8
-    LTEXT           "Red",-1,23,84,14,8
-    LTEXT           "Green",-1,64,84,20,8
-    LTEXT           "Blue",-1,110,84,14,8
-    LTEXT           "Alpha",-1,150,84,19,8
-    LTEXT           "x",-1,148,149,8,8
-    LTEXT           "°",-1,113,198,8,8
-    LTEXT           "±",-1,64,198,8,8
+    GROUPBOX        "Tail",-1,0,140,197,37
+    GROUPBOX        "Rotation",-1,0,179,197,46
+    GROUPBOX        "Rendering",-1,0,227,197,59
+    GROUPBOX        "Textures",-1,0,4,197,81
+    GROUPBOX        "Random color addition",-1,0,88,197,50
+    EDITTEXT        IDC_EDIT2,56,28,122,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",IDC_BUTTON1,180,28,14,12,BS_FLAT | NOT WS_TABSTOP
+    EDITTEXT        IDC_EDIT3,56,41,122,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",IDC_BUTTON2,180,41,14,12,BS_FLAT | NOT WS_TABSTOP
+    CONTROL         "",IDC_BUTTON_PALETTE,"Button",BS_AUTOCHECKBOX | BS_PUSHLIKE | BS_BITMAP | BS_FLAT,172,14,22,12
+    CONTROL         "",IDC_SPINNER2,"Spinner",WS_TABSTOP,140,55,37,12,WS_EX_CLIENTEDGE
+    CONTROL         "",IDC_SPINNER13,"Spinner",WS_TABSTOP,140,69,37,12,WS_EX_CLIENTEDGE
+    CONTROL         "",IDC_SPINNER19,"Spinner",WS_TABSTOP,10,108,37,12,WS_EX_CLIENTEDGE
+    CONTROL         "",IDC_SPINNER24,"Spinner",WS_TABSTOP,53,108,38,12,WS_EX_CLIENTEDGE
+    CONTROL         "",IDC_SPINNER25,"Spinner",WS_TABSTOP,97,108,38,12,WS_EX_CLIENTEDGE
+    CONTROL         "",IDC_SPINNER26,"Spinner",WS_TABSTOP,140,108,38,12,WS_EX_CLIENTEDGE
+    CONTROL         "Grayscale",IDC_CHECK7,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,12,124,47,10
+    CONTROL         "Has tail",IDC_CHECK12,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,150,39,10
+    CONTROL         "",IDC_SPINNER34,"Spinner",WS_TABSTOP,98,161,47,12,WS_EX_CLIENTEDGE
+    CONTROL         "Random rotation direction",IDC_CHECK5,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,190,99,10
+    CONTROL         "Fixed random rotation:",IDC_CHECK15,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,200,89,10
+    CONTROL         "",IDC_SPINNER16,"Spinner",WS_DISABLED | WS_TABSTOP,18,210,37,12,WS_EX_CLIENTEDGE
+    CONTROL         "", IDC_SPINNER17, "Spinner", WS_DISABLED | WS_TABSTOP, 73, 210, 37, 12, WS_EX_CLIENTEDGE
+    CONTROL         "Always face camera",IDC_CHECK16,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,238,80,10
+    CONTROL         "Heat particle",IDC_CHECK10,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,248,57,10
+    CONTROL         "No depth test",IDC_CHECK14,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,6,258,60,10
+    COMBOBOX        IDC_COMBO3,68,269,78,61,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Color texture:",-1,6,30,46,8
+    LTEXT           "Bump texture:",-1,6,43,47,8
+    LTEXT           "Texture elements:",-1,6,57,60,8
+    LTEXT           "Blend mode:",-1,8,271,40,8
+    LTEXT           "Minimum scale:",-1,6,71,48,8
+    LTEXT           "Tail length:",-1,18,162,36,8
+    LTEXT           "%",-1,180,71,8,8
+    LTEXT           "°",-1,57,212,8,8
+    LTEXT           "%",-1,180,110,8,8
+    LTEXT           "Red",-1,23,98,14,8
+    LTEXT           "Green",-1,64,98,20,8
+    LTEXT           "Blue",-1,110,98,14,8
+    LTEXT           "Alpha",-1,150,98,19,8
+    LTEXT           "x",-1,148,163,8,8
+    LTEXT           "°",-1,113,212,8,8
+    LTEXT           "±",-1,64,212,8,8
 END
 
 IDD_EMITTER_PROPS1 DIALOGEX 0, 0, 197, 294
@@ -607,7 +608,7 @@ BEGIN
     IDD_EMITTER_PROPS2, DIALOG
     BEGIN
         TOPMARGIN, 4
-        BOTTOMMARGIN, 291
+        BOTTOMMARGIN, 305
     END
 
     IDD_EMITTER_PROPS1, DIALOG
@@ -673,6 +674,10 @@ BEGIN
     IDS_GROUND_CUSTOM_BASE + 3  "Custom 4"
     IDS_GROUND_CUSTOM_BASE + 4  "Custom 5"
     IDS_GROUND_CUSTOM_BASE + 5  "Custom 6"
+    IDS_PALETTE_FILTER_COLOR    "Color"
+    IDS_PALETTE_FILTER_BUMP     "Bump"
+    IDS_PALETTE_PINS_FULL       "Pins full (12). Unpin one to make room."
+    IDS_TOOLTIP_PALETTE         "Recently-used and pinned textures"
     IDS_LABEL_LEAVE_PARTICLES "Leave particles after instance death"
     IDS_LABEL_TRACK_RED     "Red"
     IDS_LABEL_TRACK_GREEN   "Green"

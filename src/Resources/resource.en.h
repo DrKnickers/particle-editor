@@ -311,6 +311,22 @@
 #define IDC_LINK_DISAGREEMENT_HEADER      1603
 #define IDC_LINK_EXEMPT_HEADER            1604
 
+// — texture palette popup. IDC_BUTTON_PALETTE lives in the
+// IDD_EMITTER_PROPS2 Textures groupbox header; the rest live inside
+// the popup window's content control (created at runtime, not in a
+// dialog template — IDs are still useful for GetDlgItem and command
+// routing).
+#define IDC_BUTTON_PALETTE                1620
+#define IDC_RADIO_PALETTE_COLOR           1621
+#define IDC_RADIO_PALETTE_BUMP            1622
+#define IDC_PALETTE_STATUS                1623
+
+// IDs 207..211 are consumed by IDS_GROUND_CUSTOM_BASE+0..+5 (Custom 1..6).
+#define IDS_PALETTE_FILTER_COLOR           212
+#define IDS_PALETTE_FILTER_BUMP            213
+#define IDS_PALETTE_PINS_FULL              214
+#define IDS_TOOLTIP_PALETTE                215
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED

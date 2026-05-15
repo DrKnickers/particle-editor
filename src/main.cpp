@@ -10,6 +10,7 @@
 
 #include "exceptions.h"
 #include "UI/UI.h"
+#include "UI/TexturePalette.h"
 #include "SpawnerDriver.h"
 #include "UndoStack.h"
 #include "LinkGroup.h"
@@ -486,6 +487,8 @@ static HBITMAP          MakeGroundSlotThumbnail(IDirect3DDevice9* pDevice,
                                                   COLORREF solidColor);
 static void             RebuildGroundTexturePreviewBitmap(APPLICATION_INFO* info);
 static void             ShowGroundTexturePicker(HWND hParent, APPLICATION_INFO* info);
+struct GroundPickerPos;
+static void             WriteGroundPickerPos(int x, int y);
 static bool             ReadBloomEnabled(bool defaultValue);
 static void             WriteBloomEnabled(bool enabled);
 static float            ReadBloomFloat(const wchar_t* name, float defaultValue);
@@ -571,6 +574,11 @@ struct APPLICATION_INFO
 	HWND            hSpawnerDlg;        // NULL until first show; lazy-created
 	bool            spawnerVisible;     // tracks visibility for menu check-mark
 	RECT            spawnerWindowRect;  // last-known position (session + registry)
+
+	// Ground-texture picker (modeless). Set when ShowGroundTexturePicker
+	// creates the dialog; routed into the main message pump's
+	// IsDialogMessage chain so Tab / Esc / arrow-key navigation work.
+	HWND            hGroundPicker;
 
 	// Bloom config dialog (View → Bloom… / Ctrl+B). Same modeless
 	// toggle pattern as the spawner. Engine owns the bloom state
@@ -1773,8 +1781,13 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			//
 			// Create the property tab window
 			//
+			// Height bumped from 514→537 (+23 px) for — the Appearance
+			// tab grew 14 du for the palette button row above the texture
+			// fields. The WM_SIZE handler at line ~2518 resizes this to
+			// the actual layout dynamically; the initial size matters
+			// because GetClientRect on first paint reads it.
 			if ((info->hPropertyTabs = CreateWindowEx(WS_EX_CONTROLPARENT, L"EmitterProps", NULL, WS_CHILD | WS_CLIPCHILDREN | WS_VISIBLE | TCS_FOCUSNEVER | WS_TABSTOP,
-				4, 4, SIDEBAR_WIDTH, 514, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
+				4, 4, SIDEBAR_WIDTH, 537, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
 			{
 				return -1;
 			}
@@ -3506,15 +3519,32 @@ static std::wstring GroundSlotDisplayName(int slot, const std::wstring& customPa
 // Rebuild the picker dialog's ListView entirely — image list, item
 // labels, selection. Called after any slot-path mutation (set custom,
 // reset bundled, clear custom, reset-all).
+// Picker-specific thumbnail size — bigger than the toolbar's 64 px
+// preview thumbnail and matched to the per-cell tile width so the
+// thumbnail fills the cell edge-to-edge (no horizontal padding).
+static const int kGroundPickerThumbSize = 192;
+
+// Subclass plumbing — needed because the ListView's native paint
+// keeps bleeding through CDRF_SKIPDEFAULT in subtle ways (per-item
+// hot-track border with LVS_EX_TRACKSELECT, native-selection blue
+// label text). The cleanest fix is to take over WM_PAINT entirely
+// in a subclass: native paint never runs, so it can't leak.
+static WNDPROC s_groundLVOriginalProc = NULL;
+static int     s_groundLVHoverIdx     = -1;
+static LRESULT CALLBACK GroundLVSubclassProc(HWND hList, UINT msg,
+                                              WPARAM wParam, LPARAM lParam);
+
 static void GroundTexturePicker_RefreshList(HWND hDlg, GroundTexturePickerData* data)
 {
     HWND hList = GetDlgItem(hDlg, IDC_GROUND_TEXTURE_LIST);
     int  prevSel = ListView_GetNextItem(hList, -1, LVNI_SELECTED);
     ListView_DeleteAllItems(hList);
     if (data->hImageList != NULL) ImageList_Destroy(data->hImageList);
-    // Create a 64×64 imagelist; build one thumbnail per slot.
-    data->hImageList = ImageList_Create(Engine::kGroundThumbnailSize,
-                                         Engine::kGroundThumbnailSize,
+    // Create the picker's imagelist at the bigger size. MakeGroundSlotThumbnail
+    // accepts arbitrary sizes and re-renders the slot's source texture
+    // (or placeholder) at that resolution.
+    data->hImageList = ImageList_Create(kGroundPickerThumbSize,
+                                         kGroundPickerThumbSize,
                                          ILC_COLOR32, Engine::kGroundTextureCount, 0);
     ListView_SetImageList(hList, data->hImageList, LVSIL_NORMAL);
     for (int slot = 0; slot < Engine::kGroundTextureCount; ++slot)
@@ -3522,7 +3552,7 @@ static void GroundTexturePicker_RefreshList(HWND hDlg, GroundTexturePickerData* 
         const std::wstring& path = data->info->engine->GetGroundSlotCustomPath(slot);
         HBITMAP hThumb = MakeGroundSlotThumbnail(
             data->info->engine->GetDevice(),
-            slot, Engine::kGroundThumbnailSize, path,
+            slot, kGroundPickerThumbSize, path,
             data->info->engine->GetGroundSolidColor());
         int imgIdx = ImageList_Add(data->hImageList, hThumb, NULL);
         if (hThumb != NULL) DeleteObject(hThumb);
@@ -3649,6 +3679,38 @@ static INT_PTR CALLBACK GroundTexturePickerProc(HWND hDlg, UINT uMsg,
         SetWindowLongPtr(hDlg, DWLP_USER, (LONG_PTR)data);
         data->hImageList = NULL;
         data->hToolTip   = NULL;
+        HWND hList = GetDlgItem(hDlg, IDC_GROUND_TEXTURE_LIST);
+        // LVS_EX_DOUBLEBUFFER — flicker-free repaint on cursor motion.
+        // LVS_EX_TRACKSELECT deliberately NOT set: it draws hot-track
+        // chrome the per-item custom-draw can't cleanly suppress; my
+        // subclass paints hover state itself based on cursor hit-test.
+        ListView_SetExtendedListViewStyle(hList, LVS_EX_DOUBLEBUFFER);
+        // Layout: 192×192 thumb (matches kGroundPickerThumbSize).
+        // Spacing 208×232 keeps a 16 px gap between cells and ~40 px
+        // below the thumb for the filename label.
+        // 4 × 208 = 832 px fits in the widened ~840 px listview;
+        // 2 × 232 = 464 px fits in the ~470 px listview height.
+        ListView_SetIconSpacing(hList, 208, 232);
+        // Subclass the ListView so we own WM_PAINT entirely. The
+        // native ListView's selection / focus / hot-track painting
+        // can't bleed through if it never runs.
+        if (s_groundLVOriginalProc == NULL)
+        {
+            s_groundLVOriginalProc = (WNDPROC)SetWindowLongPtr(
+                hList, GWLP_WNDPROC, (LONG_PTR)GroundLVSubclassProc);
+        }
+        else
+        {
+            // Re-attach for subsequent show cycles (the modeless dialog
+            // keeps the same HWND, but defensively re-install in case).
+            SetWindowLongPtr(hList, GWLP_WNDPROC, (LONG_PTR)GroundLVSubclassProc);
+        }
+        s_groundLVHoverIdx = -1;
+        // Hide the bottom path label — slot labels (Dirt / Grass /
+        // filename basename for custom) already convey what each slot
+        // is. The full-path duplication isn't pulling its weight.
+        HWND hPath = GetDlgItem(hDlg, IDC_GROUND_TEXTURE_PATH_LABEL);
+        if (hPath != NULL) ShowWindow(hPath, SW_HIDE);
         // Build the list — populates thumbnails, labels, selection.
         GroundTexturePicker_RefreshList(hDlg, data);
         // Attach a tooltip to the path label so the user can see
@@ -3697,6 +3759,152 @@ static INT_PTR CALLBACK GroundTexturePickerProc(HWND hDlg, UINT uMsg,
     {
         NMHDR* hdr = (NMHDR*)lParam;
         if (hdr->idFrom != IDC_GROUND_TEXTURE_LIST) break;
+        // Match the texture-palette popup's blue hover/selection
+        // frame styling. The ListView's native LVS_EX_TRACKSELECT
+        // gives a theme-dependent hot-track highlight; this overlay
+        // adds a deliberate blue frame on top so the two popups
+        // read the same way.
+        if (hdr->code == NM_CUSTOMDRAW)
+        {
+            LPNMLVCUSTOMDRAW lpc = (LPNMLVCUSTOMDRAW)lParam;
+            switch (lpc->nmcd.dwDrawStage)
+            {
+            case CDDS_PREPAINT:
+                SetWindowLongPtr(hDlg, DWLP_MSGRESULT, CDRF_NOTIFYITEMDRAW);
+                return TRUE;
+            case CDDS_ITEMPREPAINT:
+            {
+                // Take over the entire item paint so the cell looks
+                // pixel-identical to the texture-palette popup's cells:
+                //   - blue cell bg on hover
+                //   - blue frame around the thumbnail (3 px hover,
+                //     2 px selected, 1 px default)
+                //   - pin badge in top-right on hover (filled if this
+                //     slot is currently active, hollow otherwise)
+                //   - filename label below the thumbnail, centred
+                // CDRF_SKIPDEFAULT at the end suppresses native paint.
+                HWND hList = lpc->nmcd.hdr.hwndFrom;
+                int  iItem = (int)lpc->nmcd.dwItemSpec;
+                HDC  hdc   = lpc->nmcd.hdc;
+
+                // Hover detection: prefer the cursor hit-test (works
+                // even if LVS_EX_TRACKSELECT's internal hot-item state
+                // isn't updated mid-paint). Falls back to GetHotItem.
+                POINT cursor;
+                GetCursorPos(&cursor);
+                ScreenToClient(hList, &cursor);
+                LVHITTESTINFO ht = {};
+                ht.pt = cursor;
+                int hotIdx = ListView_HitTest(hList, &ht);
+                if (hotIdx < 0) hotIdx = ListView_GetHotItem(hList);
+
+                const bool selected = (lpc->nmcd.uItemState & CDIS_SELECTED) != 0;
+                const bool hovered  = (hotIdx == iItem);
+
+                RECT bounds, iconRc, labelRc;
+                ListView_GetItemRect(hList, iItem, &bounds,  LVIR_BOUNDS);
+                ListView_GetItemRect(hList, iItem, &iconRc,  LVIR_ICON);
+                ListView_GetItemRect(hList, iItem, &labelRc, LVIR_LABEL);
+
+                // 1. Cell background — match the palette popup exactly:
+                //    blue on hover, light grey (button-face) otherwise.
+                const COLORREF bgCol = hovered
+                    ? RGB(160, 200, 250)
+                    : RGB(240, 240, 240);
+                HBRUSH bg = CreateSolidBrush(bgCol);
+                FillRect(hdc, &bounds, bg);
+                DeleteObject(bg);
+
+                // 2. Thumbnail centred in the icon rect.
+                HIMAGELIST hIL = ListView_GetImageList(hList, LVSIL_NORMAL);
+                LVITEMW item = {};
+                item.mask  = LVIF_IMAGE;
+                item.iItem = iItem;
+                ListView_GetItem(hList, &item);
+                if (hIL != NULL && item.iImage >= 0)
+                {
+                    IMAGEINFO ii = {};
+                    ImageList_GetImageInfo(hIL, item.iImage, &ii);
+                    const int imgW = ii.rcImage.right  - ii.rcImage.left;
+                    const int imgH = ii.rcImage.bottom - ii.rcImage.top;
+                    const int ix = iconRc.left
+                                 + (iconRc.right - iconRc.left - imgW) / 2;
+                    const int iy = iconRc.top
+                                 + (iconRc.bottom - iconRc.top - imgH) / 2;
+                    ImageList_Draw(hIL, item.iImage, hdc, ix, iy, ILD_NORMAL);
+                }
+
+                // 3. Frame.
+                HPEN pen;
+                if (selected)
+                    pen = CreatePen(PS_SOLID, 2, RGB(40, 100, 220));
+                else if (hovered)
+                    pen = CreatePen(PS_SOLID, 3, RGB(70, 150, 240));
+                else
+                    pen = CreatePen(PS_SOLID, 1, RGB(150, 150, 150));
+                HGDIOBJ oldP = SelectObject(hdc, pen);
+                HGDIOBJ oldB = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+                Rectangle(hdc,
+                          iconRc.left + 1, iconRc.top + 1,
+                          iconRc.right - 1, iconRc.bottom - 1);
+                SelectObject(hdc, oldP);
+                SelectObject(hdc, oldB);
+                DeleteObject(pen);
+
+                // 4. Pin badge in the top-right corner on hover.
+                //    Filled (red) if this slot is the engine's current
+                //    selection; hollow otherwise. Visual match with
+                //    the palette popup — for ground the badge has no
+                //    independent function (right-click is still the
+                //    slot-management entry point).
+                if (hovered)
+                {
+                    static HBITMAP s_pinBadge = NULL;
+                    if (s_pinBadge == NULL)
+                    {
+                        s_pinBadge = (HBITMAP)LoadImageW(GetModuleHandle(NULL),
+                            MAKEINTRESOURCEW(IDB_PIN_BADGE),
+                            IMAGE_BITMAP, 0, 0, LR_DEFAULTCOLOR);
+                    }
+                    if (s_pinBadge != NULL)
+                    {
+                        const int badgePx = 24;
+                        const int inset   = 4;
+                        const int bx = iconRc.right - inset - badgePx;
+                        const int by = iconRc.top   + inset;
+                        const bool isCurrent =
+                            (iItem == data->info->engine->GetGroundTexture());
+                        const int srcY = isCurrent ? badgePx : 0;
+                        HDC hMem = CreateCompatibleDC(hdc);
+                        HGDIOBJ oldBm = SelectObject(hMem, s_pinBadge);
+                        BitBlt(hdc, bx, by, badgePx, badgePx, hMem, 0, srcY, SRCCOPY);
+                        SelectObject(hMem, oldBm);
+                        DeleteDC(hMem);
+                    }
+                }
+
+                // 5. Filename label below the thumbnail.
+                HFONT hFont = (HFONT)SendMessage(hDlg, WM_GETFONT, 0, 0);
+                if (hFont == NULL) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+                HFONT oldFont = (HFONT)SelectObject(hdc, hFont);
+
+                WCHAR labelBuf[256] = L"";
+                ListView_GetItemText(hList, iItem, 0, labelBuf,
+                                     (int)_countof(labelBuf));
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, RGB(40, 40, 40));
+                DrawTextW(hdc, labelBuf, -1, &labelRc,
+                          DT_SINGLELINE | DT_CENTER | DT_VCENTER
+                          | DT_END_ELLIPSIS | DT_NOPREFIX);
+                SelectObject(hdc, oldFont);
+
+                SetWindowLongPtr(hDlg, DWLP_MSGRESULT, CDRF_SKIPDEFAULT);
+                return TRUE;
+            }
+            }
+            SetWindowLongPtr(hDlg, DWLP_MSGRESULT, CDRF_DODEFAULT);
+            return TRUE;
+        }
         if (hdr->code == LVN_ITEMCHANGED)
         {
             NMLISTVIEW* nlv = (NMLISTVIEW*)lParam;
@@ -3755,10 +3963,19 @@ static INT_PTR CALLBACK GroundTexturePickerProc(HWND hDlg, UINT uMsg,
                         LVIS_SELECTED | LVIS_FOCUSED);
                 }
             }
-            else if (hdr->code == NM_DBLCLK)
+            else
             {
-                // Double-click confirms selection and closes.
-                EndDialog(hDlg, IDOK);
+                // Populated, non-solid-colour slot: any click commits
+                // and closes. The LVN_ITEMCHANGED handler already
+                // swapped the engine texture as the user clicked
+                // (live-select), so closing here just dismisses the
+                // popup without an extra OK round-trip. Matches the
+                // texture-palette popup's commit-and-close behaviour.
+                {
+                    RECT r; GetWindowRect(hDlg, &r);
+                    WriteGroundPickerPos(r.left, r.top);
+                    ShowWindow(hDlg, SW_HIDE);
+                }
             }
         }
         else if (hdr->code == NM_RCLICK)
@@ -3855,12 +4072,20 @@ static INT_PTR CALLBACK GroundTexturePickerProc(HWND hDlg, UINT uMsg,
             return TRUE;
         }
         case IDOK:
-            // Live selection has already been committed; just close.
-            EndDialog(hDlg, IDOK);
+        {
+            // Live selection has already been committed; hide and
+            // persist position. (Modeless — the dialog instance is
+            // kept alive for the next ShowGroundTexturePicker call.)
+            RECT r; GetWindowRect(hDlg, &r);
+            WriteGroundPickerPos(r.left, r.top);
+            ShowWindow(hDlg, SW_HIDE);
             return TRUE;
+        }
         case IDCANCEL:
-            // Revert engine selection to whatever was active when the
-            // dialog opened. Slot-path mutations stay (they're "data").
+        {
+            // Revert engine selection to whatever was active at the
+            // start of this show session. Slot-path mutations stay
+            // (they're "data"). Then hide + persist position.
             if (data->info->engine->GetGroundTexture() != data->originalSlot)
             {
                 data->info->engine->SetGroundTexture(data->originalSlot);
@@ -3870,7 +4095,31 @@ static INT_PTR CALLBACK GroundTexturePickerProc(HWND hDlg, UINT uMsg,
                 RedrawWindow(data->info->hRenderWnd, NULL, NULL,
                              RDW_INVALIDATE | RDW_UPDATENOW);
             }
-            EndDialog(hDlg, IDCANCEL);
+            RECT r; GetWindowRect(hDlg, &r);
+            WriteGroundPickerPos(r.left, r.top);
+            ShowWindow(hDlg, SW_HIDE);
+            return TRUE;
+        }
+        }
+        break;
+    case WM_CLOSE:
+        // Title-bar X button. Treat as OK (live changes already
+        // committed) rather than Cancel — matches palette popup
+        // behaviour. The user has explicit Cancel button if they
+        // want to revert.
+        {
+            RECT r; GetWindowRect(hDlg, &r);
+            WriteGroundPickerPos(r.left, r.top);
+            ShowWindow(hDlg, SW_HIDE);
+        }
+        return TRUE;
+    case WM_KEYDOWN:
+        // Esc: dismiss without reverting (matches palette popup).
+        if (wParam == VK_ESCAPE)
+        {
+            RECT r; GetWindowRect(hDlg, &r);
+            WriteGroundPickerPos(r.left, r.top);
+            ShowWindow(hDlg, SW_HIDE);
             return TRUE;
         }
         break;
@@ -3885,16 +4134,274 @@ static INT_PTR CALLBACK GroundTexturePickerProc(HWND hDlg, UINT uMsg,
     return FALSE;
 }
 
+// Custom paint for the ground-texture picker's ListView. Mirrors the
+// texture-palette popup's DrawCell so the two popups look identical:
+// hover blue tint, blue frame (3 px hover / 2 px selected / 1 px
+// default), thumbnail centred in icon rect, pin badge top-right on
+// hover, filename below.
+//
+// Double-buffered. Pulls the engine's current ground slot from
+// GroundTexturePickerData stored in the parent dialog's DWLP_USER.
+static void GroundLV_PaintAll(HWND hList, HDC hdcScreen, const RECT& rcClient)
+{
+    HWND hDlg = GetParent(hList);
+    GroundTexturePickerData* data =
+        (GroundTexturePickerData*)(LONG_PTR)GetWindowLongPtr(hDlg, DWLP_USER);
+
+    // Off-screen buffer.
+    HDC     hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hbmMem = CreateCompatibleBitmap(hdcScreen,
+                                            rcClient.right, rcClient.bottom);
+    HGDIOBJ hOldBmp = SelectObject(hdcMem, hbmMem);
+    HDC     hdc    = hdcMem;
+
+    // Background — light grey, same constant as the palette popup's
+    // non-hovered cell colour.
+    HBRUSH bgBrush = CreateSolidBrush(RGB(240, 240, 240));
+    FillRect(hdc, &rcClient, bgBrush);
+    DeleteObject(bgBrush);
+
+    if (data == NULL || data->info == NULL || data->info->engine == NULL)
+    {
+        BitBlt(hdcScreen, 0, 0, rcClient.right, rcClient.bottom,
+               hdcMem, 0, 0, SRCCOPY);
+        SelectObject(hdcMem, hOldBmp);
+        DeleteObject(hbmMem);
+        DeleteDC(hdcMem);
+        return;
+    }
+
+    // Dialog font for the filename labels.
+    HFONT hFont = (HFONT)SendMessage(hDlg, WM_GETFONT, 0, 0);
+    if (hFont == NULL) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+
+    const int currentSlot = data->info->engine->GetGroundTexture();
+    const int itemCount   = ListView_GetItemCount(hList);
+    HIMAGELIST hIL        = ListView_GetImageList(hList, LVSIL_NORMAL);
+
+    for (int i = 0; i < itemCount; ++i)
+    {
+        RECT bounds, iconRc, labelRc;
+        ListView_GetItemRect(hList, i, &bounds,  LVIR_BOUNDS);
+        ListView_GetItemRect(hList, i, &iconRc,  LVIR_ICON);
+        ListView_GetItemRect(hList, i, &labelRc, LVIR_LABEL);
+
+        const bool hovered  = (s_groundLVHoverIdx == i);
+        const bool selected = (i == currentSlot);
+
+        // Cell background.
+        const COLORREF bgCol = hovered
+            ? RGB(160, 200, 250)
+            : RGB(240, 240, 240);
+        HBRUSH bg = CreateSolidBrush(bgCol);
+        FillRect(hdc, &bounds, bg);
+        DeleteObject(bg);
+
+        // Thumbnail.
+        if (hIL != NULL)
+        {
+            LVITEMW item = {};
+            item.mask  = LVIF_IMAGE;
+            item.iItem = i;
+            ListView_GetItem(hList, &item);
+            if (item.iImage >= 0)
+            {
+                IMAGEINFO ii = {};
+                ImageList_GetImageInfo(hIL, item.iImage, &ii);
+                const int imgW = ii.rcImage.right  - ii.rcImage.left;
+                const int imgH = ii.rcImage.bottom - ii.rcImage.top;
+                const int ix = iconRc.left
+                             + (iconRc.right - iconRc.left - imgW) / 2;
+                const int iy = iconRc.top
+                             + (iconRc.bottom - iconRc.top - imgH) / 2;
+                ImageList_Draw(hIL, item.iImage, hdc, ix, iy, ILD_NORMAL);
+            }
+        }
+
+        // Frame.
+        HPEN pen;
+        if (selected)
+            pen = CreatePen(PS_SOLID, 2, RGB(40, 100, 220));
+        else if (hovered)
+            pen = CreatePen(PS_SOLID, 3, RGB(70, 150, 240));
+        else
+            pen = CreatePen(PS_SOLID, 1, RGB(150, 150, 150));
+        HGDIOBJ oldP = SelectObject(hdc, pen);
+        HGDIOBJ oldB = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+        Rectangle(hdc,
+                  iconRc.left + 1, iconRc.top + 1,
+                  iconRc.right - 1, iconRc.bottom - 1);
+        SelectObject(hdc, oldP);
+        SelectObject(hdc, oldB);
+        DeleteObject(pen);
+
+        // (No pin badge for ground slots — they're fixed engine slots,
+        // not "pinnable"; the badge would be decorative-only and
+        // confused the workflow per user feedback.)
+
+        // Filename label.
+        WCHAR labelBuf[256] = L"";
+        ListView_GetItemText(hList, i, 0, labelBuf, (int)_countof(labelBuf));
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(40, 40, 40));
+        DrawTextW(hdc, labelBuf, -1, &labelRc,
+                  DT_SINGLELINE | DT_CENTER | DT_VCENTER
+                  | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+
+    SelectObject(hdc, hOldFont);
+
+    // Flush to screen.
+    BitBlt(hdcScreen, 0, 0, rcClient.right, rcClient.bottom,
+           hdcMem, 0, 0, SRCCOPY);
+    SelectObject(hdcMem, hOldBmp);
+    DeleteObject(hbmMem);
+    DeleteDC(hdcMem);
+}
+
+static LRESULT CALLBACK GroundLVSubclassProc(HWND hList, UINT msg,
+                                              WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+    case WM_ERASEBKGND:
+        return 1;   // we handle the entire bg in WM_PAINT
+    case WM_PAINT:
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hList, &ps);
+        RECT rcClient;
+        GetClientRect(hList, &rcClient);
+        GroundLV_PaintAll(hList, hdc, rcClient);
+        EndPaint(hList, &ps);
+        return 0;
+    }
+    case WM_MOUSEMOVE:
+    {
+        // Update hover via cursor hit-test. Same approach as the
+        // palette popup's WM_MOUSEMOVE.
+        POINT cur = { (LONG)(short)LOWORD(lParam),
+                      (LONG)(short)HIWORD(lParam) };
+        LVHITTESTINFO ht = {};
+        ht.pt = cur;
+        const int newHot = ListView_HitTest(hList, &ht);
+        if (newHot != s_groundLVHoverIdx)
+        {
+            s_groundLVHoverIdx = newHot;
+            InvalidateRect(hList, NULL, FALSE);
+            TRACKMOUSEEVENT tme = {};
+            tme.cbSize    = sizeof(tme);
+            tme.dwFlags   = TME_LEAVE;
+            tme.hwndTrack = hList;
+            TrackMouseEvent(&tme);
+        }
+        break;
+    }
+    case WM_MOUSELEAVE:
+        if (s_groundLVHoverIdx != -1)
+        {
+            s_groundLVHoverIdx = -1;
+            InvalidateRect(hList, NULL, FALSE);
+        }
+        break;
+    }
+    return CallWindowProc(s_groundLVOriginalProc, hList, msg, wParam, lParam);
+}
+
+// Position persistence for the modeless ground-texture picker.
+// Stored as two DWORDs to match the existing HKCU\Software\AloParticleEditor
+// pattern. Both keys must be present; otherwise the caller falls back
+// to the dialog's default centering.
+struct GroundPickerPos { int x; int y; bool valid; };
+static GroundPickerPos ReadGroundPickerPos()
+{
+    GroundPickerPos p = { 0, 0, false };
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD x = 0, y = 0, type = 0, size = sizeof(DWORD);
+        BOOL gotX = (RegQueryValueEx(hKey, L"GroundPickerX", NULL, &type, (LPBYTE)&x, &size) == ERROR_SUCCESS && type == REG_DWORD);
+        size = sizeof(DWORD);
+        BOOL gotY = (RegQueryValueEx(hKey, L"GroundPickerY", NULL, &type, (LPBYTE)&y, &size) == ERROR_SUCCESS && type == REG_DWORD);
+        RegCloseKey(hKey);
+        if (gotX && gotY) { p.x = (int)x; p.y = (int)y; p.valid = true; }
+    }
+    return p;
+}
+static void WriteGroundPickerPos(int x, int y)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        DWORD dx = (DWORD)x, dy = (DWORD)y;
+        RegSetValueEx(hKey, L"GroundPickerX", 0, REG_DWORD, (BYTE*)&dx, sizeof(dx));
+        RegSetValueEx(hKey, L"GroundPickerY", 0, REG_DWORD, (BYTE*)&dy, sizeof(dy));
+        RegCloseKey(hKey);
+    }
+}
+
+// Modeless ground-texture picker.
+//
+// Created lazily on first call; subsequent calls toggle visibility.
+// Carries WS_EX_TOOLWINDOW to get the slim tool-window title bar, and
+// the data struct is static so it survives across show/hide cycles.
+// First show after launch reads the saved window position from the
+// registry; hide writes it back.
+//
+// Cancel reverts to the slot active at the start of the most recent
+// show session (data->originalSlot is re-recorded on every show).
 static void ShowGroundTexturePicker(HWND hParent, APPLICATION_INFO* info)
 {
     if (info == NULL || info->engine == NULL) return;
-    GroundTexturePickerData data;
-    data.info         = info;
-    data.hImageList   = NULL;
-    data.originalSlot = info->engine->GetGroundTexture();
-    DialogBoxParam(GetModuleHandle(NULL),
-                    MAKEINTRESOURCE(IDD_GROUND_TEXTURE_PICKER),
-                    hParent, GroundTexturePickerProc, (LPARAM)&data);
+    static HWND s_hPicker = NULL;
+    static GroundTexturePickerData s_data;
+    s_data.info         = info;
+    s_data.hImageList   = NULL;
+    s_data.originalSlot = info->engine->GetGroundTexture();
+
+    if (s_hPicker != NULL && IsWindowVisible(s_hPicker))
+    {
+        // Already visible — toggle hide, persist position.
+        RECT r; GetWindowRect(s_hPicker, &r);
+        WriteGroundPickerPos(r.left, r.top);
+        ShowWindow(s_hPicker, SW_HIDE);
+        return;
+    }
+    if (s_hPicker == NULL)
+    {
+        s_hPicker = CreateDialogParamW(GetModuleHandle(NULL),
+                                        MAKEINTRESOURCEW(IDD_GROUND_TEXTURE_PICKER),
+                                        hParent, GroundTexturePickerProc,
+                                        (LPARAM)&s_data);
+        if (s_hPicker == NULL) return;
+        info->hGroundPicker = s_hPicker;
+        // Apply tool-window title bar styling. Has to be after creation
+        // because WS_EX_TOOLWINDOW isn't in the dialog template's
+        // EXSTYLE; SWP_FRAMECHANGED forces the non-client area to
+        // repaint with the new style.
+        LONG_PTR ex = GetWindowLongPtr(s_hPicker, GWL_EXSTYLE);
+        SetWindowLongPtr(s_hPicker, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW);
+        SetWindowPos(s_hPicker, NULL, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        // Restore saved position if any.
+        GroundPickerPos pos = ReadGroundPickerPos();
+        if (pos.valid)
+        {
+            SetWindowPos(s_hPicker, NULL, pos.x, pos.y, 0, 0,
+                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+    else
+    {
+        // Existing instance — refresh in case the engine state changed
+        // while hidden (custom paths added via the right-click menu in
+        // another popup, etc.).
+        GroundTexturePicker_RefreshList(s_hPicker, &s_data);
+    }
+    ShowWindow(s_hPicker, SW_SHOW);
+    SetForegroundWindow(s_hPicker);
 }
 
 // Bloom config persistence. Master enable as DWORD (matches ShowGround
@@ -4723,6 +5230,16 @@ static void SelectMod(APPLICATION_INFO* info, const wstring& modPath)
 	if (info->fileManager) info->fileManager->SetModPath(modPath);
 
 	WriteLastMod(modPath);
+	// — swap the texture-palette to the new mod. SetActiveMod
+	// flushes any dirty state from the previous mod and lazy-loads the
+	// new mod's INI section. Empty `modPath` (unmodded) clears.
+	// Then drop the in-memory thumbnail cache (cache is keyed by
+	// filename, so a same-named file in a different mod would
+	// otherwise show the old mod's thumbnail) and refresh the popup
+	// content if visible.
+	TexturePalette::Store::Instance().SetActiveMod(modPath);
+	TexturePalette::ClearThumbnailCache();
+	TexturePalette::RefreshPopup();
 	RebuildModsMenu(info);
 
 	printf("[Mods] Selected: %S\n", modPath.empty() ? L"(unmodded)" : modPath.c_str()); fflush(stdout);
@@ -4955,12 +5472,23 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 				printf("[Mods] Saved mod path no longer exists, falling back to unmodded: %S\n", savedMod.c_str()); fflush(stdout);
 			}
 		}
+		// — initialize the texture-palette to whichever mod we just
+		// settled on (may be empty if no mod is active). Must run after
+		// the LastMod restore so the palette and FileManager agree on
+		// which mod is current.
+		TexturePalette::Store::Instance().SetActiveMod(info->selectedModPath);
 		RebuildModsMenu(info);
 
 		// Create the rendering engine
         try
         {
 		    info->engine = new Engine(info->hMainWnd, info->hRenderWnd, textureManager, shaderManager);
+
+		    // — give the texture-palette its services now that the
+		    // engine has a D3D device. Both pointers must outlive the
+		    // editor window, which they do (engine and FileManager
+		    // both live in this enclosing scope until app exit).
+		    TexturePalette::SetServices(info->fileManager, info->engine->GetDevice());
 
             // View settings persisted across sessions: pull from registry,
             // fall back to engine defaults when no value stored. Defaults
@@ -5135,6 +5663,15 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 				{
 					consumed = true;
 				}
+				// Same routing for the ground-texture picker so its
+				// keyboard navigation (Tab between buttons, Esc to
+				// dismiss, etc.) works while modeless.
+				if (!consumed && info->hGroundPicker != NULL
+				    && IsWindowVisible(info->hGroundPicker)
+				    && IsDialogMessage(info->hGroundPicker, &msg))
+				{
+					consumed = true;
+				}
 				// Skip TranslateAccelerator while a tree drag-drop is in
 				// progress: a stray Ctrl+Z mid-drag would call DoUndo →
 				// RestoreFromSnapshot → delete info->particleSystem while
@@ -5280,6 +5817,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	info.spawner                = new SpawnerDriver();
 	info.hSpawnerDlg            = NULL;
 	info.spawnerVisible         = false;
+	info.hGroundPicker          = NULL;
 	memset(&info.spawnerWindowRect, 0, sizeof(info.spawnerWindowRect));
 	info.hBloomDlg              = NULL;
 	info.bloomDlgVisible        = false;
@@ -5290,10 +5828,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 #endif
     {
 		// Initialize UI classes and create windows
-		if (!UI_Initialize(hInstance) || !InitializeWindows(&info))
+		if (!UI_Initialize(hInstance) || !TexturePalette::Initialize(hInstance) || !InitializeWindows(&info))
 		{
 			//throw wruntime_error(LoadString(IDS_ERROR_UI_INITIALIZATION));
 		}
+		// — wire the EmitterProps HWND as the WM_PALETTE_COMMIT
+		// recipient now that windows are created. Done before Engine
+		// init because both the EmitterProps and the popup are created
+		// before any commits can fire.
+		TexturePalette::SetCommitTarget(info.hPropertyTabs);
 
 		// Run the program
 		result = main( &info, parseCommandLine() );

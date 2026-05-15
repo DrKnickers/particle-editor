@@ -182,6 +182,7 @@
     <ClInclude Include="Resources\resource.h" />
     <ClInclude Include="SphericalHarmonics.h" />
     <ClInclude Include="types.h" />
+    <ClInclude Include="UI\TexturePalette.h" />
     <ClInclude Include="UI\UI.h" />
     <ClInclude Include="utils.h" />
     <ClInclude Include="xml.h" />
@@ -210,7 +211,9 @@
     <ClCompile Include="UI\Emitter.cpp" />
     <ClCompile Include="UI\EmitterList.cpp" />
     <ClCompile Include="UI\RandomParam.cpp" />
+    <ClCompile Include="UI\PaletteStore.cpp" />
     <ClCompile Include="UI\Spinner.cpp" />
+    <ClCompile Include="UI\TexturePalette.cpp" />
     <ClCompile Include="UI\TrackEditor.cpp" />
     <ClCompile Include="utils.cpp" />
     <ClCompile Include="xml.cpp" />
@@ -232,6 +235,8 @@
     <Image Include="Resources\grass.dds" />
     <Image Include="Resources\logo.ico" />
     <Image Include="Resources\missing.bmp" />
+    <Image Include="Resources\palette_glyph.bmp" />
+    <Image Include="Resources\pin_badge.bmp" />
     <Image Include="Resources\sand.dds" />
     <Image Include="Resources\snow.dds" />
     <Image Include="Resources\toolbar1.bmp" />
