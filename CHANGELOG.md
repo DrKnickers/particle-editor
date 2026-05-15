@@ -18,7 +18,7 @@ Conventions:
 
 ### Adjustable environment lighting in the preview
 
-*2026-05-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #71*
+*2026-05-15 · [`d91857c`](https://github.com/DrKnickers/particle-editor/commit/d91857c) · #71*
 
 A new **View → Lighting…** modeless dialog exposes the engine's three directional lights (Sun + Fill 1 + Fill 2) and the scene-global ambient and shadow colours. Layout emulates the Petroglyph map editor's Sun / Fill panel: Sun gets Intensity, Z Angle, Tilt Angle, plus four ColorButtons (Ambient / Specular / Diffuse / Shadow); each Fill gets Intensity, Z Angle, Tilt Angle, and a single Diffuse ColorButton. **Force Fill Light Alignment** (Sun group, default on) drives `Fill1.Z = Sun.Z + 120°`, `Fill2.Z = Sun.Z + 210°`, both Tilts fixed at `−10°`, and greys out the fill-angle spinners + the Mirror Sun button. **Mirror Sun** (Fill group, disabled while alignment is enforced) copies the Sun's Diffuse colour to both Fills in one click. The bottom **Reset to defaults** button restores the canonical map-editor values after a confirmation prompt; View → Reset View Settings does the same, alongside its existing background / ground / bloom resets, and the confirm prompt's text was updated to mention lighting.
 
