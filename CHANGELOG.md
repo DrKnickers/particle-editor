@@ -18,7 +18,7 @@ Conventions:
 
 ### Ground Height resets to 0 on every launch
 
-*2026-05-16 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-16 · [`380380a`](https://github.com/DrKnickers/particle-editor/commit/380380a) · #79*
 
 Ground Z is now session-only — every editor launch starts with the ground plane at z=0 regardless of what value was in effect when you last closed. Adjusting the *Ground Height* spinner during a session still works as before; it just doesn't write to the registry anymore. Rationale: an anchored vertical reference makes "did I just open the editor, or is this a continued workflow?" unambiguous, and Reset View Settings can't surprise you with a stale offset from a previous tuning pass.
 
