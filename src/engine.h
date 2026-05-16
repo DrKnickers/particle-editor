@@ -242,6 +242,12 @@ public:
 	// Slot 0 entry is 0 (Off — no texture); slots 1-8 map to IDR_SKYDOME_* constants.
 	static const int* GetSkydomeBundledResources();
 
+	// follow-up: parallel table of in-archive paths for slots 1-8 — what
+	// the FileManager should look up first when restoring the slot's texture.
+	// Slot 0 entry is NULL (Solid colour — no asset). Used by the picker
+	// thumbnail builder so its resolution chain matches Engine's.
+	static const char* const* GetSkydomeBundledGamePaths();
+
 	void SetHeatDebug(bool debug);
 	void SetBloom(bool enable);
 	void SetBloomStrength(float v);
@@ -249,7 +255,7 @@ public:
 	void SetBloomSize(float v);
 
 	void				Reset();
-	Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager);
+	Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager, IFileManager& fileManager);
 	~Engine();
 
 private:
@@ -400,6 +406,9 @@ private:
 
 	ITextureManager&				m_textureManager;
 	IShaderManager&					m_shaderManager;
+	// follow-up: needed to resolve curated skydome textures from the
+	// base game / active mod via the MEG-archive + loose-file chain.
+	IFileManager&					m_fileManager;
 	IDirect3D9*						m_pDirect3D;
 	D3DPRESENT_PARAMETERS			m_presentationParameters;
 	IDirect3DDevice9*				m_pDevice;

@@ -8,6 +8,7 @@
 #include "ParticleSystemInstance.h"
 #include "EmitterInstance.h"
 #include "SphericalHarmonics.h"
+#include "utils.h"     // follow-up: WideToAnsi for custom-slot path bridging
 using namespace std;
 
 static const char* ShaderNames[Engine::NUM_SHADERS] = {
@@ -42,10 +43,54 @@ static const int kSkydomeBundledResources[Engine::kSkydomeBundledCount] = {
     IDR_SKYDOME_INDOOR,      // 8
 };
 
-// Public getter so main.cpp can build thumbnails without duplicating the table.
+// follow-up: parallel table of in-archive paths for slots 1-8. Routed
+// through FileManager so the mod-overlay → loose-file → MEG-archive chain
+// resolves them automatically (same path emitter textures take). Slot 0 has
+// no game asset (Solid colour). When FileManager can't resolve a path (no
+// base game installed, the active mod is missing the file), ReloadSkydomeTexture
+// falls back to the procedural RCDATA at kSkydomeBundledResources[slot] so
+// the slot still renders something useful.
+static const char* const kSkydomeBundledGamePaths[Engine::kSkydomeBundledCount] = {
+    NULL,                                              // 0: Solid colour
+    "DATA\\ART\\TEXTURES\\W_SKYSTORM01.DDS",           // 1: Storm
+    "DATA\\ART\\TEXTURES\\W_SKY_MURK_CLOUDS.DDS",      // 2: Murky Clouds
+    "DATA\\ART\\TEXTURES\\W_SKY_SMOG_CLOUDS.DDS",      // 3: Smog Clouds
+    "DATA\\ART\\TEXTURES\\W_SKYBLUE_HORIZON.DDS",      // 4: Blue Horizon
+    "DATA\\ART\\TEXTURES\\W_SKYBLUE01.DDS",            // 5: Blue Sky
+    "DATA\\ART\\TEXTURES\\W_SKYORANGE_HORIZON.DDS",    // 6: Orange Horizon
+    "DATA\\ART\\TEXTURES\\W_SKYORANGE00.DDS",          // 7: Orange Sky
+    "DATA\\ART\\TEXTURES\\W_SKYSTORM_VOLCANIC00.DDS",  // 8: Volcanic Storm
+};
+
+// Public getters so main.cpp can build thumbnails without duplicating the tables.
 const int* Engine::GetSkydomeBundledResources()
 {
     return kSkydomeBundledResources;
+}
+
+const char* const* Engine::GetSkydomeBundledGamePaths()
+{
+    return kSkydomeBundledGamePaths;
+}
+
+// Helper: try to load a texture from a file resolved via FileManager. Returns
+// the texture (caller owns one ref) on success, NULL on miss. Used by both
+// the curated slot path and the custom slot path.
+static IDirect3DTexture9* LoadTextureViaFileManager(IDirect3DDevice9* pDevice,
+                                                      IFileManager& fileManager,
+                                                      const std::string& path)
+{
+    IFile* file = fileManager.getFile(path);
+    if (file == NULL) return NULL;
+    const unsigned long size = file->size();
+    if (size == 0) { file->Release(); return NULL; }
+    char* data = new char[size];
+    file->read(data, size);
+    file->Release();
+    IDirect3DTexture9* pTex = NULL;
+    HRESULT hr = D3DXCreateTextureFromFileInMemory(pDevice, data, size, &pTex);
+    delete[] data;
+    return SUCCEEDED(hr) ? pTex : NULL;
 }
 
 D3DVERTEXELEMENT9 Engine::ParticleElements[] = {
@@ -488,6 +533,13 @@ void Engine::ReloadTextures()
 	m_textureManager.Clear();
 	int n = (int)m_instances.size();
 	OnParticleSystemChanged(-1);
+	// follow-up: re-resolve the active skydome texture too, so a mod
+	// override of (say) DATA\ART\TEXTURES\W_SKYBLUE01.DDS takes effect on
+	// the next render. No-op when the slot is Off.
+	if (m_skydomeIndex != kSkydomeOffSlot)
+	{
+		ReloadSkydomeTexture(m_skydomeIndex);
+	}
 	printf("[Textures] Reload: cache cleared, %d instance(s) notified\n", n); fflush(stdout);
 }
 
@@ -1320,6 +1372,12 @@ void Engine::InitSkydomeMesh()
 
     // Generate vertices: U wraps lon segments [0,1], V is lat segments [0,1].
     // Sphere radius is 1; the shader will push depth to the far plane.
+    //
+    // Axis convention: the engine is Z-up (m_eye.Up = (0,0,1)), so the
+    // sphere's poles are placed on ±Z — top pole at +Z, bottom pole at
+    // -Z, horizon ring on the XY plane. This matches how the game
+    // renders its skydomes and means an equirectangular texture's top
+    // edge (V=0) faces up and its bottom edge (V=1) faces down.
     std::vector<SkydomeVertex> verts(vertCount);
     for (int j = 0; j <= lat; ++j)
     {
@@ -1334,7 +1392,7 @@ void Engine::InitSkydomeMesh()
             const float sinPhi = sinf(phi);
             const float cosPhi = cosf(phi);
             SkydomeVertex& vx = verts[j * (lon + 1) + i];
-            vx.Position = D3DXVECTOR3(sinTheta * cosPhi, cosTheta, sinTheta * sinPhi);
+            vx.Position = D3DXVECTOR3(sinTheta * cosPhi, sinTheta * sinPhi, cosTheta);
             vx.Normal   = vx.Position;
             vx.TexCoord = D3DXVECTOR2(u, v);
         }
@@ -1428,6 +1486,17 @@ bool Engine::ReloadSkydomeTexture(int slot)
 
     if (slot > kSkydomeOffSlot && slot < kSkydomeBundledCount)
     {
+        // follow-up: try the curated in-archive path first so the
+        // skydome picks up real game textures (and mod overlays on top of
+        // them) wherever they exist. Fall back to the bundled RCDATA
+        // placeholder so the slot still renders something when the base
+        // game / mod doesn't ship the file.
+        const char* gamePath = kSkydomeBundledGamePaths[slot];
+        if (gamePath != NULL)
+        {
+            m_pSkydomeTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, gamePath);
+            if (m_pSkydomeTexture != NULL) return true;
+        }
         HMODULE hMod   = GetModuleHandle(NULL);
         HRSRC   hRes   = FindResource(hMod, MAKEINTRESOURCE(kSkydomeBundledResources[slot]), RT_RCDATA);
         if (!hRes) return false;
@@ -1442,6 +1511,15 @@ bool Engine::ReloadSkydomeTexture(int slot)
     {
         const std::wstring& path = m_skydomeCustomSlotPaths[slot - kSkydomeFirstCustomSlot];
         if (path.empty()) return false;
+        // Custom slots now route through FileManager first, so a path like
+        // "DATA\\ART\\TEXTURES\\foo.dds" resolves from the mod / base-game
+        // MEGs the same way the curated slots do. If FileManager can't
+        // resolve it (e.g. the user pasted an absolute path to a loose file
+        // outside the game roots), fall back to direct file I/O so legacy
+        // absolute-path custom slots keep working.
+        std::string narrowPath = WideToAnsi(path);
+        m_pSkydomeTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, narrowPath);
+        if (m_pSkydomeTexture != NULL) return true;
         return SUCCEEDED(D3DXCreateTextureFromFileEx(
             m_pDevice, path.c_str(),
             D3DX_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, D3DFMT_UNKNOWN,
@@ -1465,7 +1543,7 @@ void Engine::RenderSkydome()
     m_pDevice->GetRenderState(D3DRS_CULLMODE,     &oldCull);
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
     m_pDevice->SetRenderState(D3DRS_ZENABLE,      D3DZB_FALSE);
-    m_pDevice->SetRenderState(D3DRS_CULLMODE,     D3DCULL_CW); // we're inside the sphere
+    m_pDevice->SetRenderState(D3DRS_CULLMODE,     D3DCULL_CCW); // we're inside the sphere; Y↔Z swap in InitSkydomeMesh reversed handedness so the inside-facing triangles are now CCW
 
     m_pSkydomeEffect->SetMatrix (m_hSkydomeWVP, &wvp);
     m_pSkydomeEffect->SetTexture(m_hSkydomeTex, m_pSkydomeTexture);
@@ -1537,8 +1615,8 @@ bool Engine::IsSkydomeSlotEmpty(int slot) const
     return true;
 }
 
-Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager)
-    : m_textureManager(textureManager), m_shaderManager(shaderManager)
+Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager, IFileManager& fileManager)
+    : m_textureManager(textureManager), m_shaderManager(shaderManager), m_fileManager(fileManager)
 {
 	// Zero shader pointers up front so partial-failure cleanup is safe
 	m_pDistortShader = NULL;

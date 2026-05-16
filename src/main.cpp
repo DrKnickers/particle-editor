@@ -491,7 +491,8 @@ static void             ShowGroundTexturePicker(HWND hParent, APPLICATION_INFO* 
 static HBITMAP          MakeSkydomeSlotThumbnail(IDirect3DDevice9* pDevice,
                                                    int slot, int sizePx,
                                                    const std::wstring& customPath,
-                                                   COLORREF bgColor);
+                                                   COLORREF bgColor,
+                                                   IFileManager* fileManager);
 static void             RebuildBackgroundPreviewBitmap(APPLICATION_INFO* info);
 static void             ShowSkydomePicker(HWND hParent, APPLICATION_INFO* info);
 static void             WriteSkydomeIndex(int value);
@@ -4530,7 +4531,8 @@ static HBITMAP MakeSkydomeSlotThumbnail(IDirect3DDevice9*    pDevice,
                                          int                  slot,
                                          int                  sizePx,
                                          const std::wstring&  customPath,
-                                         COLORREF             bgColor)
+                                         COLORREF             bgColor,
+                                         IFileManager*        fileManager)
 {
     // Helper: create a placeholder HBITMAP. `empty`=true → "+" glyph on
     // light grey; `empty`=false → "?" on muted red (load failure).
@@ -4653,17 +4655,56 @@ static HBITMAP MakeSkydomeSlotThumbnail(IDirect3DDevice9*    pDevice,
     IDirect3DTexture9* pTex = NULL;
     HRESULT hr = E_FAIL;
 
-    // Custom path has highest priority (applies to all slot types,
-    // though in practice only slots 9-11 have custom paths in).
-    if (!customPath.empty())
-    {
-        hr = D3DXCreateTextureFromFileExW(
-            pDevice, customPath.c_str(),
+    // follow-up helper: load via FileManager bytes into a sized texture.
+    // Keeps the thumbnail builder's resolution chain in sync with the
+    // engine's ReloadSkydomeTexture so the picker thumbnail can't disagree
+    // with what the viewport will render.
+    auto LoadFromFileManagerBytes = [&](const std::string& path) -> HRESULT {
+        if (fileManager == NULL) return E_FAIL;
+        IFile* file = fileManager->getFile(path);
+        if (file == NULL) return E_FAIL;
+        const unsigned long sz = file->size();
+        if (sz == 0) { file->Release(); return E_FAIL; }
+        char* buf = new char[sz];
+        file->read(buf, sz);
+        file->Release();
+        HRESULT lr = D3DXCreateTextureFromFileInMemoryEx(
+            pDevice, buf, sz,
             sizePx, sizePx, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
             D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex);
+        delete[] buf;
+        return lr;
+    };
+
+    // Custom path has highest priority (applies to all slot types, though
+    // in practice only slots 9-11 carry custom paths). Try FileManager
+    // first so a path like "DATA\\ART\\TEXTURES\\foo.dds" resolves via the
+    // active mod / base-game chain; fall back to direct file I/O for
+    // legacy absolute-path custom slots.
+    if (!customPath.empty())
+    {
+        hr = LoadFromFileManagerBytes(WideToAnsi(customPath));
+        if (FAILED(hr))
+        {
+            hr = D3DXCreateTextureFromFileExW(
+                pDevice, customPath.c_str(),
+                sizePx, sizePx, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
+                D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex);
+        }
     }
 
-    // Bundled fallback: slots 1-8.
+    // Bundled slot 1-8: try the curated in-archive path first (so the
+    // picker thumbnail reflects the real game texture / mod override),
+    // then fall back to the RCDATA placeholder if FileManager can't
+    // resolve it.
+    if (FAILED(hr) && slot >= 1 && slot < Engine::kSkydomeBundledCount)
+    {
+        const char* const* gamePaths = Engine::GetSkydomeBundledGamePaths();
+        if (gamePaths != NULL && gamePaths[slot] != NULL)
+        {
+            hr = LoadFromFileManagerBytes(gamePaths[slot]);
+        }
+    }
     if (FAILED(hr) && slot >= 1 && slot < Engine::kSkydomeBundledCount)
     {
         const int* ids = Engine::GetSkydomeBundledResources();
@@ -4730,7 +4771,8 @@ static void RebuildBackgroundPreviewBitmap(APPLICATION_INFO* info)
         customPath = info->engine->GetSkydomeCustomPath(slot);
     info->hBackgroundPreviewBitmap = MakeSkydomeSlotThumbnail(
         info->engine->GetDevice(), slot, 24,
-        customPath, info->engine->GetBackground());
+        customPath, info->engine->GetBackground(),
+        info->fileManager);
     if (hbmOld != NULL) DeleteObject(hbmOld);
     if (info->hBackgroundBtn != NULL)
         InvalidateRect(info->hBackgroundBtn, NULL, TRUE);
@@ -4807,7 +4849,8 @@ static void SkydomePicker_RefreshList(HWND hDlg, SkydomePickerData* data)
         HBITMAP hThumb = MakeSkydomeSlotThumbnail(
             data->info->engine->GetDevice(),
             slot, kSkydomePickerThumbSize, path,
-            data->info->engine->GetBackground());
+            data->info->engine->GetBackground(),
+            data->info->fileManager);
         int imgIdx = ImageList_Add(data->hImageList, hThumb, NULL);
         if (hThumb != NULL) DeleteObject(hThumb);
 
@@ -6979,6 +7022,16 @@ static void SelectMod(APPLICATION_INFO* info, const wstring& modPath)
 			            (LPARAM)L"Mod shader reload failed — keeping previous shaders");
 		}
 		info->engine->ReloadTextures();
+		// follow-up: skydome texture was re-resolved inside
+		// ReloadTextures, but the toolbar preview's cached HBITMAP and the
+		// (possibly open) picker's image list still point at the previous
+		// mod's bytes. Rebuild both so the UI matches what the engine just
+		// loaded.
+		RebuildBackgroundPreviewBitmap(info);
+		if (info->hSkydomePicker != NULL && IsWindowVisible(info->hSkydomePicker))
+		{
+			SendMessage(info->hSkydomePicker, WM_USER, 0, 0);
+		}
 	}
 	if (info->hRenderWnd != NULL)
 	{
@@ -7206,7 +7259,7 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 		// Create the rendering engine
         try
         {
-		    info->engine = new Engine(info->hMainWnd, info->hRenderWnd, textureManager, shaderManager);
+		    info->engine = new Engine(info->hMainWnd, info->hRenderWnd, textureManager, shaderManager, *info->fileManager);
 
 		    // — give the texture-palette its services now that the
 		    // engine has a D3D device. Both pointers must outlive the

@@ -16,6 +16,24 @@ Conventions:
 
 ## Changelog
 
+### Skydome slots now load real base-game (and mod-overlay) textures
+
+*2026-05-16 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Follow-up to. The eight bundled skydome slots are no longer procedural-gradient placeholders — they point at curated base-game textures from `DATA\ART\TEXTURES\` and route through the existing `FileManager` resolution chain, so the active mod's overlay is picked up automatically the same way emitter textures are. New slot labels match what the textures actually look like: Storm, Murky Clouds, Smog Clouds, Blue Horizon, Blue Sky, Orange Horizon, Orange Sky, Volcanic Storm. Switching mods via the Mods menu now also refreshes the active skydome live — no editor restart needed to see a mod's `W_SKY*.DDS` override take effect. When `FileManager` can't resolve a slot's path (no base game installed, mod doesn't ship the file), the slot gracefully falls back to the same procedural RCDATA placeholder it shipped with, so the slot still renders something rather than going Off.
+
+The skydome sphere also got rotated to match the game's coordinate convention: its poles are now on ±Z instead of ±Y, so the texture's top edge faces up and its bottom edge faces down as the camera orbits. Custom slots 9–11 keep their existing absolute-path support but now try the FileManager chain first, so pasting `DATA\ART\TEXTURES\foo.dds` into a custom slot resolves it from the mod / base-game MEGs without needing the file to exist as a loose disk path.
+
+**How we tackled it.** Engine constructor now takes a `IFileManager&` alongside the existing `ITextureManager&` / `IShaderManager&` so `Engine::ReloadSkydomeTexture` can do the file resolution directly. New static table `kSkydomeBundledGamePaths[]` in [`src/engine.cpp`](src/engine.cpp:46) parallels `kSkydomeBundledResources[]` and gets exposed via `Engine::GetSkydomeBundledGamePaths()` so the picker's thumbnail builder (`MakeSkydomeSlotThumbnail` in [`src/main.cpp`](src/main.cpp:4529)) can share the same resolution order — `FileManager → RCDATA fallback` for slots 1–8, `FileManager → absolute file` for slots 9–11. `Engine::ReloadTextures()` was extended to re-resolve the active skydome alongside the emitter-texture cache clear, and `SelectMod` now calls `RebuildBackgroundPreviewBitmap` + reseeds any open picker so the toolbar preview and the picker thumbnails track the new mod's overrides without a restart. Pole rotation is a single Y↔Z swap in `Engine::InitSkydomeMesh` at [`src/engine.cpp`](src/engine.cpp:1389); the swap reflects handedness, so the skydome pass's `D3DRS_CULLMODE` flipped from `D3DCULL_CW` to `D3DCULL_CCW` to keep the inside-facing triangles visible.
+
+**Issues encountered and resolutions.** Two worth recording.
+
+1. **Pole-axis swap reversed triangle winding.** Swapping Y and Z in `vx.Position` is a reflection — orientation-reversing — so what were the inside-facing triangles (CCW from inside, kept by `D3DCULL_CW`) became outside-facing (CW from inside, culled). The sky disappeared entirely until the skydome pass's cull mode was flipped to `D3DCULL_CCW`. The render-state save/restore around the pass at [`src/engine.cpp`](src/engine.cpp:1463) keeps the change scoped to the skydome and doesn't leak into ground / particle rendering.
+
+2. **TextureManager's placeholder fallback would hide real failures.** The existing emitter-texture loader returns the magenta `IDB_MISSING` placeholder when a file isn't resolvable, which is right for emitters (the user can see something's broken) but wrong for the skydome — we'd rather fall back to the bundled RCDATA so the slot stays usable. Added a thin `LoadTextureViaFileManager` helper in [`src/engine.cpp`](src/engine.cpp:79) that goes straight through `IFileManager::getFile` (returns `NULL` on miss) and lets the caller decide what to do next. Also addresses a latent bug in's `GroundTexturePicker_PickSolidColor`-adjacent code where a similar pattern would silently swallow misses.
+
+---
+
 ### Selectable skydome backgrounds via the unified Background button
 
 *2026-05-16 · [`f83a26c`](https://github.com/DrKnickers/particle-editor/commit/f83a26c) · #73*
