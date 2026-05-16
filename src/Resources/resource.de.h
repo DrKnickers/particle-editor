@@ -337,6 +337,16 @@
 #define ID_SKYDOME_SLOT_CHANGE_CUSTOM   40201
 #define ID_SKYDOME_SLOT_CLEAR_CUSTOM    40202
 
+// — Import emitters from file.
+#define ID_FILE_IMPORT_EMITTERS         40122
+#define IDD_IMPORT_EMITTERS                190
+#define IDC_IMPORT_PATH_LABEL             1730
+#define IDC_IMPORT_BROWSE                 1731
+#define IDC_IMPORT_TREE                   1732
+#define IDC_IMPORT_AUTO_CHILDREN          1733
+#define IDC_IMPORT_SELECT_ALL             1734
+#define IDC_IMPORT_CLEAR                  1735
+
 // — Skydome picker string table entries (name labels).
 #define IDS_SKYDOME_OFF                 230
 #define IDS_SKYDOME_SPACE               231

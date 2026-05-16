@@ -1,4 +1,7 @@
 #define _WIN32_WINNT 0x0501
+// Pull comctl32 v6 declarations (TVN_ITEMCHANGED / NMTVITEMCHANGE) — needed
+// for's checkbox-tree cascade.
+#define _WIN32_IE 0x0600
 #include <cmath>
 #include <iostream>
 #include <iomanip>
@@ -1221,6 +1224,11 @@ static bool RestoreFromAutosave(APPLICATION_INFO* info,
     return true;
 }
 
+// forward decl (definition lives between NicknameDialog and createFileManager).
+static void DoImportEmittersFromFile(APPLICATION_INFO* info);
+// reuses the name-collision helper from EmitterList.cpp.
+extern std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName);
+
 static bool LoadFile(APPLICATION_INFO* info, const wstring& filename)
 {
 	// Delete old particle system
@@ -1494,6 +1502,7 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
 		case ID_FILE_OPEN:	  if (DoCheckChanges(info)) DoOpenFile(info); break;
 		case ID_FILE_EXIT:    if (DoCheckChanges(info)) DestroyWindow(info->hMainWnd); break;
 		case ID_FILE_SAVE:    DoSaveFile(info); break;
+		case ID_FILE_IMPORT_EMITTERS: DoImportEmittersFromFile(info); break;
 		case ID_FILE_SAVE_AS: DoSaveFile(info, true); break;
 
         case ID_EDIT_UNDO:    DoUndo(info); break;
@@ -7109,6 +7118,451 @@ static bool ShowNicknameDialog(HWND hParent, const ModEntry& mod, wstring& outNi
 		return true;
 	}
 	return false;
+}
+
+// =============================================================================
+//: Import emitters from another .alo file.
+//
+// File → Import Emitters from File… opens a .alo picker, then a modal dialog
+// showing the source file's emitter tree with TVS_CHECKBOXES. On OK the
+// ticked emitters are cloned into the active ParticleSystem via the
+// existing copy / paste serialiser (Emitter::copy + Emitter(ChunkReader&)),
+// with two extra passes:
+//
+//   * Spawn-field re-map. The clipboard serialiser writes -1 for spawn
+//     children. When the user kept the source emitter's child in the
+//     same import, we rewrite the destination's spawn field to point at
+//     the cloned child's destination index. Dropped children stay -1.
+//
+//   * Link-group re-create. Source linkGroup IDs aren't portable (they
+//     collide with unrelated destination IDs). For each source group
+//     where ≥2 members were imported, allocate a fresh destination ID
+//     via CreateLinkGroup. Single-member imports arrive unlinked.
+// =============================================================================
+struct ImportEmittersDialogState
+{
+    APPLICATION_INFO* info;
+    wstring           sourcePath;
+    ParticleSystem*   source;        // dialog owns this; deleted by caller
+    bool              autoChildren;  // mirrors IDC_IMPORT_AUTO_CHILDREN
+    bool              cascading;     // re-entry guard for parent/child cascade
+    vector<size_t>    picks;         // populated by OK handler from tree state
+};
+
+static ParticleSystem* ImportEmitters_LoadFile(HWND hParent, const wstring& path)
+{
+    PhysicalFile* file = NULL;
+    try { file = new PhysicalFile(path); }
+    catch (...)
+    {
+        MessageBox(hParent, L"Could not open the selected file.",
+                   L"Import Emitters from File", MB_OK | MB_ICONERROR);
+        return NULL;
+    }
+    ParticleSystem* sys = NULL;
+    try
+    {
+        sys = new ParticleSystem(file);
+    }
+    catch (wexception& e)
+    {
+        MessageBox(hParent, LoadString(IDS_ERROR_FILE_OPEN, e.what()).c_str(),
+                   L"Import Emitters from File", MB_OK | MB_ICONERROR);
+        sys = NULL;
+    }
+    catch (...)
+    {
+        MessageBox(hParent, L"The selected file is not a valid particle system.",
+                   L"Import Emitters from File", MB_OK | MB_ICONERROR);
+        sys = NULL;
+    }
+    file->Release();
+    return sys;
+}
+
+static HTREEITEM ImportEmitters_AddTreeItem(HWND hTree, HTREEITEM hParent,
+                                              const ParticleSystem* source,
+                                              size_t srcIdx)
+{
+    if (srcIdx >= source->getEmitters().size()) return NULL;
+    const ParticleSystem::Emitter& emit = source->getEmitter(srcIdx);
+    wstring label = AnsiToWide(emit.name);
+    if (emit.linkGroup != 0)
+    {
+        wchar_t suffix[32];
+        swprintf_s(suffix, L" [L%u]", (unsigned)emit.linkGroup);
+        label += suffix;
+    }
+    TVINSERTSTRUCTW tvis = {};
+    tvis.hParent      = hParent;
+    tvis.hInsertAfter = TVI_LAST;
+    tvis.item.mask    = TVIF_TEXT | TVIF_PARAM;
+    tvis.item.pszText = const_cast<LPWSTR>(label.c_str());
+    tvis.item.lParam  = (LPARAM)srcIdx;
+    HTREEITEM hItem = TreeView_InsertItem(hTree, &tvis);
+    if (emit.spawnDuringLife != (size_t)-1)
+        ImportEmitters_AddTreeItem(hTree, hItem, source, emit.spawnDuringLife);
+    if (emit.spawnOnDeath != (size_t)-1)
+        ImportEmitters_AddTreeItem(hTree, hItem, source, emit.spawnOnDeath);
+    return hItem;
+}
+
+static void ImportEmitters_PopulateTree(HWND hDlg, const ParticleSystem* source)
+{
+    HWND hTree = GetDlgItem(hDlg, IDC_IMPORT_TREE);
+    TreeView_DeleteAllItems(hTree);
+    if (source == NULL) return;
+    for (size_t i = 0; i < source->getEmitters().size(); ++i)
+    {
+        if (source->getEmitter(i).parent == NULL)
+        {
+            HTREEITEM hRoot = ImportEmitters_AddTreeItem(hTree, TVI_ROOT, source, i);
+            if (hRoot != NULL) TreeView_Expand(hTree, hRoot, TVE_EXPAND);
+        }
+    }
+}
+
+static bool ImportEmitters_IsChecked(HWND hTree, HTREEITEM hItem)
+{
+    TVITEM ti = {};
+    ti.mask      = TVIF_HANDLE | TVIF_STATE;
+    ti.hItem     = hItem;
+    ti.stateMask = TVIS_STATEIMAGEMASK;
+    TreeView_GetItem(hTree, &ti);
+    // TVS_CHECKBOXES: state-image index 2 = checked, 1 = unchecked.
+    return ((ti.state & TVIS_STATEIMAGEMASK) >> 12) == 2;
+}
+
+static void ImportEmitters_CollectTicked(HWND hTree, HTREEITEM hItem,
+                                           vector<size_t>& out)
+{
+    while (hItem != NULL)
+    {
+        TVITEM ti = {};
+        ti.mask      = TVIF_HANDLE | TVIF_PARAM | TVIF_STATE;
+        ti.hItem     = hItem;
+        ti.stateMask = TVIS_STATEIMAGEMASK;
+        TreeView_GetItem(hTree, &ti);
+        if (((ti.state & TVIS_STATEIMAGEMASK) >> 12) == 2)
+            out.push_back((size_t)ti.lParam);
+        ImportEmitters_CollectTicked(hTree, TreeView_GetChild(hTree, hItem), out);
+        hItem = TreeView_GetNextSibling(hTree, hItem);
+    }
+}
+
+static void ImportEmitters_SetCheckRecursive(HWND hTree, HTREEITEM hItem,
+                                               BOOL checked)
+{
+    while (hItem != NULL)
+    {
+        TreeView_SetCheckState(hTree, hItem, checked);
+        ImportEmitters_SetCheckRecursive(hTree, TreeView_GetChild(hTree, hItem),
+                                          checked);
+        hItem = TreeView_GetNextSibling(hTree, hItem);
+    }
+}
+
+static void ImportEmitters_UpdateOKEnable(HWND hDlg)
+{
+    HWND hTree = GetDlgItem(hDlg, IDC_IMPORT_TREE);
+    vector<size_t> picks;
+    ImportEmitters_CollectTicked(hTree, TreeView_GetRoot(hTree), picks);
+    EnableWindow(GetDlgItem(hDlg, IDOK), !picks.empty());
+}
+
+// Execute the import: clone picks into the destination, re-map spawn fields,
+// re-create link groups. Caller refreshes the tree + captures undo.
+static void ImportEmitters_Execute(APPLICATION_INFO* info,
+                                     ParticleSystem* source,
+                                     const vector<size_t>& picks)
+{
+    if (info == NULL || info->particleSystem == NULL ||
+        source == NULL || picks.empty()) return;
+
+    // Pass 1: clone each pick as a root in the destination. Build the
+    // source→destination index map for Pass 2.
+    map<size_t, size_t> srcToDest;
+    vector<ParticleSystem::Emitter*> destEmitters(picks.size(), NULL);
+    for (size_t i = 0; i < picks.size(); ++i)
+    {
+        size_t srcIdx = picks[i];
+        if (srcIdx >= source->getEmitters().size()) continue;
+        ParticleSystem::Emitter& srcEmit = source->getEmitter(srcIdx);
+
+        MemoryFile* mf = new MemoryFile;
+        ParticleSystem::Emitter* placed = NULL;
+        try
+        {
+            ChunkWriter w(mf);
+            srcEmit.copy(w);
+            mf->seek(0);
+            ChunkReader r(mf);
+            // Braced init avoids the most-vexing-parse on
+            // `Emitter clone(r);` which the parser would otherwise take as
+            // a function declaration of `clone(ChunkReader& r)`.
+            ParticleSystem::Emitter clone{r};
+            clone.name = GenerateDuplicateName(info->particleSystem, clone.name);
+            placed = info->particleSystem->addRootEmitter(clone);
+        }
+        catch (...)
+        {
+            placed = NULL;
+        }
+        mf->Release();
+
+        if (placed != NULL)
+        {
+            srcToDest[srcIdx] = placed->index;
+            destEmitters[i]   = placed;
+        }
+    }
+
+    // Pass 2: re-map spawn fields. Children whose source-index isn't in
+    // the picks set stay -1 (set by Emitter::copy's copy=true mode).
+    for (size_t i = 0; i < picks.size(); ++i)
+    {
+        ParticleSystem::Emitter* dst = destEmitters[i];
+        if (dst == NULL) continue;
+        const ParticleSystem::Emitter& src = source->getEmitter(picks[i]);
+        auto rebind = [&](size_t srcChildIdx) -> size_t {
+            if (srcChildIdx == (size_t)-1) return (size_t)-1;
+            auto it = srcToDest.find(srcChildIdx);
+            return (it != srcToDest.end()) ? it->second : (size_t)-1;
+        };
+        dst->spawnDuringLife = rebind(src.spawnDuringLife);
+        dst->spawnOnDeath    = rebind(src.spawnOnDeath);
+    }
+
+    // Rebuild parent pointers from the re-mapped spawn fields (mirrors
+    // ParticleSystem(IFile*) load-time logic). Walk every imported emitter;
+    // any child it points at gets its parent set to the imported parent.
+    for (ParticleSystem::Emitter* dst : destEmitters)
+    {
+        if (dst == NULL) continue;
+        if (dst->spawnDuringLife != (size_t)-1)
+            info->particleSystem->getEmitter(dst->spawnDuringLife).parent = dst;
+        if (dst->spawnOnDeath != (size_t)-1)
+            info->particleSystem->getEmitter(dst->spawnOnDeath).parent = dst;
+    }
+
+    // Pass 3: re-create source link groups in destination. Bucket imports
+    // by source linkGroup; ≥2-member buckets get a fresh destination group
+    // via CreateLinkGroup. Single-member buckets arrive unlinked (the
+    // copy=true serialiser already stripped linkGroup).
+    map<uint32_t, vector<ParticleSystem::Emitter*>> byGroup;
+    for (size_t i = 0; i < picks.size(); ++i)
+    {
+        if (destEmitters[i] == NULL) continue;
+        uint32_t srcGroup = source->getEmitter(picks[i]).linkGroup;
+        if (srcGroup != 0)
+            byGroup[srcGroup].push_back(destEmitters[i]);
+    }
+    for (auto& kv : byGroup)
+    {
+        if (kv.second.size() >= 2)
+            CreateLinkGroup(*info->particleSystem, kv.second);
+    }
+}
+
+static INT_PTR CALLBACK ImportEmittersDialogProc(HWND hDlg, UINT msg,
+                                                   WPARAM wParam, LPARAM lParam)
+{
+    ImportEmittersDialogState* state =
+        (ImportEmittersDialogState*)(LONG_PTR)GetWindowLongPtr(hDlg, DWLP_USER);
+
+    switch (msg)
+    {
+    case WM_INITDIALOG:
+        state = (ImportEmittersDialogState*)lParam;
+        SetWindowLongPtr(hDlg, DWLP_USER, (LONG_PTR)state);
+        SetDlgItemText(hDlg, IDC_IMPORT_PATH_LABEL, state->sourcePath.c_str());
+        CheckDlgButton(hDlg, IDC_IMPORT_AUTO_CHILDREN,
+                       state->autoChildren ? BST_CHECKED : BST_UNCHECKED);
+        ImportEmitters_PopulateTree(hDlg, state->source);
+        ImportEmitters_UpdateOKEnable(hDlg);
+        return TRUE;
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam))
+        {
+        case IDC_IMPORT_BROWSE:
+        {
+            wchar_t buf[1024] = {};
+            wcscpy_s(buf, state->sourcePath.c_str());
+            OPENFILENAMEW ofn = {};
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner   = hDlg;
+            ofn.lpstrFilter = L"Particle Files (*.alo)\0*.alo\0All Files (*.*)\0*.*\0\0";
+            ofn.lpstrFile   = buf;
+            ofn.nMaxFile    = (DWORD)(sizeof(buf) / sizeof(buf[0]));
+            ofn.lpstrTitle  = L"Import Emitters from File";
+            ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
+            if (GetOpenFileNameW(&ofn))
+            {
+                wstring newPath = buf;
+                ParticleSystem* newSrc = ImportEmitters_LoadFile(hDlg, newPath);
+                if (newSrc != NULL)
+                {
+                    delete state->source;
+                    state->source     = newSrc;
+                    state->sourcePath = newPath;
+                    SetDlgItemText(hDlg, IDC_IMPORT_PATH_LABEL, newPath.c_str());
+                    ImportEmitters_PopulateTree(hDlg, state->source);
+                    ImportEmitters_UpdateOKEnable(hDlg);
+                }
+            }
+            return TRUE;
+        }
+        case IDC_IMPORT_AUTO_CHILDREN:
+            state->autoChildren =
+                IsDlgButtonChecked(hDlg, IDC_IMPORT_AUTO_CHILDREN) == BST_CHECKED;
+            return TRUE;
+        case IDC_IMPORT_SELECT_ALL:
+        {
+            HWND hTree = GetDlgItem(hDlg, IDC_IMPORT_TREE);
+            state->cascading = true;
+            ImportEmitters_SetCheckRecursive(hTree, TreeView_GetRoot(hTree), TRUE);
+            state->cascading = false;
+            ImportEmitters_UpdateOKEnable(hDlg);
+            return TRUE;
+        }
+        case IDC_IMPORT_CLEAR:
+        {
+            HWND hTree = GetDlgItem(hDlg, IDC_IMPORT_TREE);
+            state->cascading = true;
+            ImportEmitters_SetCheckRecursive(hTree, TreeView_GetRoot(hTree), FALSE);
+            state->cascading = false;
+            ImportEmitters_UpdateOKEnable(hDlg);
+            return TRUE;
+        }
+        case IDOK:
+        {
+            HWND hTree = GetDlgItem(hDlg, IDC_IMPORT_TREE);
+            state->picks.clear();
+            ImportEmitters_CollectTicked(hTree, TreeView_GetRoot(hTree),
+                                          state->picks);
+            EndDialog(hDlg, IDOK);
+            return TRUE;
+        }
+        case IDCANCEL:
+            EndDialog(hDlg, IDCANCEL);
+            return TRUE;
+        }
+        break;
+
+    case WM_NOTIFY:
+    {
+        LPNMHDR hdr = (LPNMHDR)lParam;
+        if (hdr->idFrom == IDC_IMPORT_TREE)
+        {
+            HWND hTree = GetDlgItem(hDlg, IDC_IMPORT_TREE);
+            // NM_CLICK: hit-test for a checkbox toggle. We can't read the
+            // post-toggle state synchronously (the comctl32 toggle hasn't
+            // fired yet), so we defer via PostMessage and process it after
+            // the message pump runs.
+            if (hdr->code == NM_CLICK)
+            {
+                DWORD pos = GetMessagePos();
+                POINT pt = { (LONG)(SHORT)LOWORD(pos), (LONG)(SHORT)HIWORD(pos) };
+                ScreenToClient(hTree, &pt);
+                TVHITTESTINFO ht = {};
+                ht.pt = pt;
+                HTREEITEM hHit = TreeView_HitTest(hTree, &ht);
+                if (hHit != NULL && (ht.flags & TVHT_ONITEMSTATEICON))
+                {
+                    PostMessage(hDlg, WM_APP + 1, 0, (LPARAM)hHit);
+                }
+            }
+            // TVN_KEYDOWN: spacebar toggles the focused item's checkbox.
+            else if (hdr->code == TVN_KEYDOWN)
+            {
+                NMTVKEYDOWN* k = (NMTVKEYDOWN*)lParam;
+                if (k->wVKey == VK_SPACE)
+                {
+                    HTREEITEM hSel = TreeView_GetSelection(hTree);
+                    if (hSel != NULL)
+                        PostMessage(hDlg, WM_APP + 1, 0, (LPARAM)hSel);
+                }
+            }
+        }
+        break;
+    }
+
+    case WM_APP + 1:
+    {
+        // Deferred checkbox-toggle handler. By the time this fires the
+        // user's click/space has flipped the state, so we read the new
+        // state and (optionally) cascade descendants.
+        HTREEITEM hItem = (HTREEITEM)lParam;
+        HWND hTree = GetDlgItem(hDlg, IDC_IMPORT_TREE);
+        if (hItem != NULL && state != NULL &&
+            state->autoChildren && !state->cascading)
+        {
+            const bool checked = ImportEmitters_IsChecked(hTree, hItem);
+            state->cascading = true;
+            ImportEmitters_SetCheckRecursive(hTree, TreeView_GetChild(hTree, hItem),
+                                              checked ? TRUE : FALSE);
+            state->cascading = false;
+        }
+        ImportEmitters_UpdateOKEnable(hDlg);
+        return TRUE;
+    }
+    }
+    return FALSE;
+}
+
+static void DoImportEmittersFromFile(APPLICATION_INFO* info)
+{
+    if (info == NULL || info->particleSystem == NULL) return;
+
+    // Step 1: file picker.
+    wchar_t buf[1024] = {};
+    OPENFILENAMEW ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner   = info->hMainWnd;
+    ofn.lpstrFilter = L"Particle Files (*.alo)\0*.alo\0All Files (*.*)\0*.*\0\0";
+    ofn.lpstrFile   = buf;
+    ofn.nMaxFile    = (DWORD)(sizeof(buf) / sizeof(buf[0]));
+    ofn.lpstrTitle  = L"Import Emitters from File";
+    ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
+    if (!GetOpenFileNameW(&ofn)) return;
+    wstring path = buf;
+
+    // Step 2: load source ParticleSystem (no global state mutated).
+    ParticleSystem* source = ImportEmitters_LoadFile(info->hMainWnd, path);
+    if (source == NULL) return;
+
+    // Step 3: dialog.
+    ImportEmittersDialogState state;
+    state.info         = info;
+    state.sourcePath   = path;
+    state.source       = source;
+    state.autoChildren = true;
+    state.cascading    = false;
+
+    INT_PTR rv = DialogBoxParam(GetModuleHandle(NULL),
+                                MAKEINTRESOURCE(IDD_IMPORT_EMITTERS),
+                                info->hMainWnd,
+                                ImportEmittersDialogProc,
+                                (LPARAM)&state);
+
+    // Step 4: on OK with non-empty picks, do the import.
+    if (rv == IDOK && !state.picks.empty())
+    {
+        ImportEmitters_Execute(info, state.source, state.picks);
+        // Refresh the emitter list tree (rebuild from m_emitters) and emit
+        // one undo capture so Ctrl+Z rolls the whole batch back.
+        EmitterList_SetParticleSystem(info->hEmitterList, info->particleSystem);
+        CaptureUndo(info, 0);
+        SetFileChanged(info, true);
+#ifndef NDEBUG
+        fprintf(stdout, "[Import] %zu emitter(s) from %S\n",
+                state.picks.size(), path.c_str());
+        fflush(stdout);
+#endif
+    }
+
+    delete state.source;
 }
 
 static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, vector<wstring>* outGameRoots = NULL )

@@ -305,7 +305,8 @@ static bool ConfirmLinkOverwrite(HWND                            hOwner,
 // is stripped first, so duplicating "Foo_3" repeatedly yields Foo_4, Foo_5
 // rather than Foo_3_1, Foo_3_1_1. An emitter named exactly `<base>` counts
 // as n=0 for the purpose of picking the next free slot.
-static std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName)
+// Non-static so's import path in main.cpp can reuse it.
+std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName)
 {
     auto trailingDigitCount = [](const std::string& s, size_t startAfter) -> size_t {
         size_t n = 0;

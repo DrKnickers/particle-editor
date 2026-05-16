@@ -130,6 +130,18 @@ EmitterInstance* ParticleSystemInstance::SpawnEmitter(TimeF currentTime, size_t 
     auto instance = std::make_unique<EmitterInstance>(currentTime, *this, m_engine, *emitter, parent, &numParticles);
 	m_emitters.push_back(std::move(instance));
     m_engine.OnEmitterCreated(numParticles);
+#ifndef NDEBUG
+    fprintf(stdout,
+            "[Spawn] idx=%zu name='%s' parent=%p useBursts=%d nBursts=%lu pps=%lu particlesPerBurst=%lu lifetime=%.2f initialDelay=%.2f emitFromMesh=%d linkToSystem=%d -> numParticles=%d\n",
+            idxEmitter, emitter->name.c_str(), (void*)emitter->parent,
+            (int)emitter->useBursts, (unsigned long)emitter->nBursts,
+            (unsigned long)emitter->nParticlesPerSecond,
+            (unsigned long)emitter->nParticlesPerBurst,
+            emitter->lifetime, emitter->initialDelay,
+            (int)emitter->emitFromMesh, (int)emitter->linkToSystem,
+            numParticles);
+    fflush(stdout);
+#endif
 	return m_emitters.back().get();
 }
 

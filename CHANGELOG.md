@@ -16,6 +16,25 @@ Conventions:
 
 ## Changelog
 
+### Import emitters from another `.alo` file
+
+*2026-05-16 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+New **File → Import Emitters from File…** entry opens an `.alo` picker, then a modal dialog showing the source file's emitter tree as a `TVS_CHECKBOXES` TreeView. Tick whichever emitters you want — parent/child auto-include is on by default so ticking a parent picks up its descendants — hit OK, and the selected emitters land as new root emitters in the current particle system. The dialog has *Select all* / *Clear* / *Browse…* buttons; *Browse…* swaps the source file in place without cancelling. OK is disabled until at least one emitter is ticked. Imported emitters arrive with collision-free names (e.g. `smoke_1`), spawn-child cross-references re-mapped where both source and child were imported (dropped child → `-1`), and source link groups re-created as fresh destination groups when ≥2 members of the source group survived the import. The entire import is one undo step — Ctrl+Z atomically rolls back every newly-added emitter.
+
+Generalises the existing single-emitter clipboard copy/paste (which still works for one-at-a-time transfers via Ctrl+C / Ctrl+V on the emitter tree). Cuts the click count for assembling a complex effect from pieces of existing ones from "switch window, copy, switch back, paste, repeat per emitter" to "Import, tick, OK".
+
+**How we tackled it.** Routed the clone path through the existing `Emitter::write(writer, copy=true)` + `Emitter(ChunkReader&)` round-trip via a `MemoryFile` buffer, so the field-level serialisation logic stays in one place. The import engine in [`src/main.cpp`](src/main.cpp:7115) runs three passes: Pass 1 clones each pick into the destination's `m_emitters` as a root and records `src_idx → dst_idx`; Pass 2 walks the picks again and rewrites each clone's `spawnDuringLife` / `spawnOnDeath` using the map (or `-1` when the source child wasn't imported), then rebuilds parent pointers from the now-correct spawn fields mirroring `ParticleSystem(IFile*)`'s load-time logic at [`src/ParticleSystem.cpp:1075-1089`](src/ParticleSystem.cpp:1075); Pass 3 buckets picks by source `linkGroup`, and for each bucket with ≥2 imported members calls `CreateLinkGroup` to allocate a fresh destination ID and bind the members. Single-member buckets arrive unlinked. `EmitterList_SetParticleSystem` re-pointed at the existing system rebuilds the emitter-tree view after the batch insert, and the single `CaptureUndo(info, 0)` that follows gives Ctrl+Z atomic batch behaviour. Resource scaffolding: new `ID_FILE_IMPORT_EMITTERS` command, `IDD_IMPORT_EMITTERS` dialog template, plus `IDC_IMPORT_*` control IDs duplicated across `resource.en.h` / `resource.de.h` + the `.en.rc` / `.de.rc` pair.
+
+**Issues encountered and resolutions.** Four worth recording.
+
+1. **Static menu entry got swallowed by the dynamic recent-files rebuild.** The File menu's recent-files list is rebuilt at runtime by `AppendHistory` at [`src/main.cpp:700`](src/main.cpp:700), which walks the menu, finds the first `MFT_SEPARATOR`, and deletes everything between it and `ID_FILE_EXIT`. The original `IDD` placement put *Import Emitters…* *after* that separator, so the dynamic rebuild eat it on first File-menu open. Moved the entry to *before* the separator (between *Save as* and the recent-files block).
+2. **Most-vexing parse on `Emitter clone(r);`.** The C++ parser took `ParticleSystem::Emitter clone(r);` as a function declaration (`clone` returns Emitter, takes a `ChunkReader&` named `r`) rather than a variable definition. The cascade of "operator= ambiguous" errors went away once `clone{r}` (braced init) forced the variable-definition reading.
+3. **`NMTVITEMCHANGE` / `TVN_ITEMCHANGED` aren't pulled in by `_WIN32_IE 0x0600` in this SDK** — the gating differs across SDK versions. Switched the checkbox-state-change handler from `TVN_ITEMCHANGED` to a portable `NM_CLICK` + hit-test + `PostMessage(WM_APP+1)` pattern: when the user clicks the state icon area, we defer to a post-toggle message handler that reads the new check state and (when *Auto-include children* is on) cascades the state to descendants. Works on every Windows version, no SDK-version sniffing. The `TVN_KEYDOWN` + `VK_SPACE` path mirrors the same flow for keyboard users.
+4. **`GenerateDuplicateName` lived `static` in `EmitterList.cpp`** so the existing paste path could reuse it. Removed `static` + added an `extern` declaration in `main.cpp` so the import path can call the exact same function — no copy of the dup-name rule.
+
+---
+
 ### Skydome slots now load real base-game (and mod-overlay) textures
 
 *2026-05-16 · [`b4d2415`](https://github.com/DrKnickers/particle-editor/commit/b4d2415) · #75*
