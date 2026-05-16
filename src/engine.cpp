@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <assert.h>
+#include <vector>
+#include <cstdint>
 #include "engine.h"
 #include "exceptions.h"
 #include "resource.h"
@@ -24,6 +26,27 @@ static const char* ShaderNames[Engine::NUM_SHADERS] = {
     "Engine\\PrimDecalBumpAlpha.fx",
     "Engine\\PrimAlphaScanlines.fx",
 };
+
+//: slot 0 is Off (no resource); slots 1-8 map to bundled skydome textures.
+// RCDATA entries for IDR_SKYDOME_* are added in Task 5; until then,
+// FindResource for slots 1-8 returns NULL and ReloadSkydomeTexture returns false.
+static const int kSkydomeBundledResources[Engine::kSkydomeBundledCount] = {
+    0,                       // 0: Off
+    IDR_SKYDOME_SPACE,       // 1
+    IDR_SKYDOME_ATMOSPHERE,  // 2
+    IDR_SKYDOME_SUNSET,      // 3
+    IDR_SKYDOME_DAWN,        // 4
+    IDR_SKYDOME_NIGHT,       // 5
+    IDR_SKYDOME_OVERCAST,    // 6
+    IDR_SKYDOME_STUDIO,      // 7
+    IDR_SKYDOME_INDOOR,      // 8
+};
+
+// Public getter so main.cpp can build thumbnails without duplicating the table.
+const int* Engine::GetSkydomeBundledResources()
+{
+    return kSkydomeBundledResources;
+}
 
 D3DVERTEXELEMENT9 Engine::ParticleElements[] = {
 	{0, offsetof(EmitterInstance::Vertex, Position),  D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0}, 
@@ -563,6 +586,17 @@ bool Engine::Render()
 
     D3DCOLOR clearColor = D3DCOLOR_XRGB(GetRValue(m_background), GetGValue(m_background), GetBValue(m_background));
 	m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clearColor, 1.0f, 0);
+
+	//: optional skydome pass, after Clear, before ground.
+	// Skipped when slot 0 (Off) is active or when effect/texture isn't
+	// ready (e.g. effect compile failure during init).
+	if (m_skydomeIndex != kSkydomeOffSlot
+	    && m_pSkydomeTexture != NULL
+	    && m_pSkydomeEffect != NULL)
+	{
+	    RenderSkydome();
+	}
+
 	if (m_showGround)
 	{
 		static const float TEXTURE_SCALE  = 256;
@@ -1273,6 +1307,236 @@ D3DMULTISAMPLE_TYPE Engine::GetMultiSampleType(DWORD* MultiSampleQuality, D3DFOR
 	return D3DMULTISAMPLE_NONE;
 }
 
+//: Build the UV sphere vertex + index buffers used by the skydome render pass.
+// Called once from the Engine constructor after m_pDevice is created.
+// D3DPOOL_MANAGED means these survive device Reset and only need cleanup in ~Engine.
+void Engine::InitSkydomeMesh()
+{
+    const int lon = kSkydomeLongSegments;
+    const int lat = kSkydomeLatSegments;
+    const int vertCount = (lon + 1) * (lat + 1);
+    const int triCount  = lon * lat * 2;
+    m_skydomeIndexCount = triCount * 3;
+
+    // Generate vertices: U wraps lon segments [0,1], V is lat segments [0,1].
+    // Sphere radius is 1; the shader will push depth to the far plane.
+    std::vector<SkydomeVertex> verts(vertCount);
+    for (int j = 0; j <= lat; ++j)
+    {
+        const float v     = float(j) / float(lat);
+        const float theta = v * D3DX_PI;             // 0..pi (pole to pole)
+        const float sinTheta = sinf(theta);
+        const float cosTheta = cosf(theta);
+        for (int i = 0; i <= lon; ++i)
+        {
+            const float u   = float(i) / float(lon);
+            const float phi = u * 2.0f * D3DX_PI;   // 0..2pi
+            const float sinPhi = sinf(phi);
+            const float cosPhi = cosf(phi);
+            SkydomeVertex& vx = verts[j * (lon + 1) + i];
+            vx.Position = D3DXVECTOR3(sinTheta * cosPhi, cosTheta, sinTheta * sinPhi);
+            vx.Normal   = vx.Position;
+            vx.TexCoord = D3DXVECTOR2(u, v);
+        }
+    }
+
+    std::vector<uint16_t> idx(m_skydomeIndexCount);
+    int k = 0;
+    for (int j = 0; j < lat; ++j)
+    {
+        for (int i = 0; i < lon; ++i)
+        {
+            uint16_t a = uint16_t(j * (lon + 1) + i);
+            uint16_t b = a + 1;
+            uint16_t c = uint16_t((j + 1) * (lon + 1) + i);
+            uint16_t d = c + 1;
+            idx[k++] = a; idx[k++] = c; idx[k++] = b;
+            idx[k++] = b; idx[k++] = c; idx[k++] = d;
+        }
+    }
+
+    // Vertex declaration
+    D3DVERTEXELEMENT9 decl[] = {
+        {0, offsetof(SkydomeVertex, Position),  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+        {0, offsetof(SkydomeVertex, Normal),    D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0},
+        {0, offsetof(SkydomeVertex, TexCoord),  D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+        D3DDECL_END()
+    };
+    if (FAILED(m_pDevice->CreateVertexDeclaration(decl, &m_pSkydomeDecl)))
+        throw runtime_error("Unable to create skydome mesh");
+
+    // VB
+    if (FAILED(m_pDevice->CreateVertexBuffer(
+        UINT(verts.size() * sizeof(SkydomeVertex)),
+        D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &m_pSkydomeVB, NULL)))
+        throw runtime_error("Unable to create skydome mesh");
+    void* pVB = NULL;
+    if (FAILED(m_pSkydomeVB->Lock(0, 0, &pVB, 0)))
+        throw runtime_error("Unable to create skydome mesh");
+    memcpy(pVB, verts.data(), verts.size() * sizeof(SkydomeVertex));
+    m_pSkydomeVB->Unlock();
+
+    // IB
+    if (FAILED(m_pDevice->CreateIndexBuffer(
+        UINT(idx.size() * sizeof(uint16_t)),
+        D3DUSAGE_WRITEONLY, D3DFMT_INDEX16, D3DPOOL_MANAGED, &m_pSkydomeIB, NULL)))
+        throw runtime_error("Unable to create skydome mesh");
+    void* pIB = NULL;
+    if (FAILED(m_pSkydomeIB->Lock(0, 0, &pIB, 0)))
+        throw runtime_error("Unable to create skydome mesh");
+    memcpy(pIB, idx.data(), idx.size() * sizeof(uint16_t));
+    m_pSkydomeIB->Unlock();
+
+#ifndef NDEBUG
+    fprintf(stdout, "[Skydome] sphere mesh init verts=%d tris=%d\n", vertCount, triCount);
+#endif
+}
+
+void Engine::InitSkydomeEffect()
+{
+    HMODULE hMod  = GetModuleHandle(NULL);
+    HRSRC   hRes  = FindResource(hMod, MAKEINTRESOURCE(IDR_SHADER_SKYDOME), RT_RCDATA);
+    if (!hRes) return;
+    HGLOBAL hData  = LoadResource(hMod, hRes);
+    DWORD   dwSize = SizeofResource(hMod, hRes);
+    void*   pData  = hData ? LockResource(hData) : NULL;
+    if (!pData || !dwSize) return;
+
+    LPD3DXBUFFER pErrors = NULL;
+    HRESULT hr = D3DXCreateEffect(m_pDevice, pData, dwSize, NULL, NULL, 0, NULL,
+                                  &m_pSkydomeEffect, &pErrors);
+    if (FAILED(hr))
+    {
+#ifndef NDEBUG
+        if (pErrors) fprintf(stderr, "[Skydome] effect compile failed: %s\n",
+                             (const char*)pErrors->GetBufferPointer());
+#endif
+        SAFE_RELEASE(pErrors);
+        m_pSkydomeEffect = NULL;
+        return;
+    }
+    SAFE_RELEASE(pErrors);
+
+    m_hSkydomeWVP = m_pSkydomeEffect->GetParameterByName(NULL, "g_WorldViewProj");
+    m_hSkydomeTex = m_pSkydomeEffect->GetParameterByName(NULL, "g_Skydome");
+}
+
+bool Engine::ReloadSkydomeTexture(int slot)
+{
+    SAFE_RELEASE(m_pSkydomeTexture);
+    if (slot == kSkydomeOffSlot) return true;
+
+    if (slot > kSkydomeOffSlot && slot < kSkydomeBundledCount)
+    {
+        HMODULE hMod   = GetModuleHandle(NULL);
+        HRSRC   hRes   = FindResource(hMod, MAKEINTRESOURCE(kSkydomeBundledResources[slot]), RT_RCDATA);
+        if (!hRes) return false;
+        HGLOBAL hData  = LoadResource(hMod, hRes);
+        DWORD   dwSize = SizeofResource(hMod, hRes);
+        void*   pData  = hData ? LockResource(hData) : NULL;
+        if (!pData || !dwSize) return false;
+        return SUCCEEDED(D3DXCreateTextureFromFileInMemory(m_pDevice, pData, dwSize, &m_pSkydomeTexture));
+    }
+
+    if (slot >= kSkydomeFirstCustomSlot && slot < kSkydomeSlotCount)
+    {
+        const std::wstring& path = m_skydomeCustomSlotPaths[slot - kSkydomeFirstCustomSlot];
+        if (path.empty()) return false;
+        return SUCCEEDED(D3DXCreateTextureFromFileEx(
+            m_pDevice, path.c_str(),
+            D3DX_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, D3DFMT_UNKNOWN,
+            D3DPOOL_MANAGED, D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL,
+            &m_pSkydomeTexture));
+    }
+    return false;
+}
+
+void Engine::RenderSkydome()
+{
+    // World = Translation(camera.Position) — keeps the sphere camera-locked.
+    D3DXMATRIX world, wvp;
+    D3DXMatrixTranslation(&world, m_eye.Position.x, m_eye.Position.y, m_eye.Position.z);
+    wvp = world * m_view * m_projection;
+
+    // Save render state so the skydome pass doesn't pollute the rest of the frame.
+    DWORD oldZWrite, oldZEnable, oldCull;
+    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &oldZWrite);
+    m_pDevice->GetRenderState(D3DRS_ZENABLE,      &oldZEnable);
+    m_pDevice->GetRenderState(D3DRS_CULLMODE,     &oldCull);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE,      D3DZB_FALSE);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE,     D3DCULL_CW); // we're inside the sphere
+
+    m_pSkydomeEffect->SetMatrix (m_hSkydomeWVP, &wvp);
+    m_pSkydomeEffect->SetTexture(m_hSkydomeTex, m_pSkydomeTexture);
+
+    UINT passes = 0;
+    m_pSkydomeEffect->Begin(&passes, 0);
+    for (UINT i = 0; i < passes; ++i)
+    {
+        m_pSkydomeEffect->BeginPass(i);
+        m_pDevice->SetVertexDeclaration(m_pSkydomeDecl);
+        m_pDevice->SetStreamSource(0, m_pSkydomeVB, 0, sizeof(SkydomeVertex));
+        m_pDevice->SetIndices(m_pSkydomeIB);
+        const UINT vertCount = (kSkydomeLongSegments + 1) * (kSkydomeLatSegments + 1);
+        m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+                                        vertCount,
+                                        0,
+                                        m_skydomeIndexCount / 3);
+        m_pSkydomeEffect->EndPass();
+    }
+    m_pSkydomeEffect->End();
+
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, oldZWrite);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE,      oldZEnable);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE,     oldCull);
+}
+
+bool Engine::SetSkydomeSlot(int newIndex)
+{
+    if (newIndex < 0 || newIndex >= kSkydomeSlotCount) return false;
+    if (newIndex == m_skydomeIndex) return true;
+    if (!ReloadSkydomeTexture(newIndex))
+    {
+        // Fall back to Off on failure
+        m_skydomeIndex = kSkydomeOffSlot;
+        SAFE_RELEASE(m_pSkydomeTexture);
+        return false;
+    }
+    m_skydomeIndex = newIndex;
+#ifndef NDEBUG
+    fprintf(stdout, "[Skydome] select slot=%d\n", newIndex);
+#endif
+    return true;
+}
+
+bool Engine::SetSkydomeCustomPath(int slot, const std::wstring& path)
+{
+    if (slot < kSkydomeFirstCustomSlot || slot >= kSkydomeSlotCount) return false;
+    m_skydomeCustomSlotPaths[slot - kSkydomeFirstCustomSlot] = path;
+    if (m_skydomeIndex == slot)
+    {
+        return ReloadSkydomeTexture(slot);
+    }
+    return true;
+}
+
+const std::wstring& Engine::GetSkydomeCustomPath(int slot) const
+{
+    static const std::wstring empty;
+    if (slot < kSkydomeFirstCustomSlot || slot >= kSkydomeSlotCount) return empty;
+    return m_skydomeCustomSlotPaths[slot - kSkydomeFirstCustomSlot];
+}
+
+bool Engine::IsSkydomeSlotEmpty(int slot) const
+{
+    if (slot == kSkydomeOffSlot) return false;       // Off is "selectable", not empty
+    if (slot < kSkydomeBundledCount) return false;   // bundled always populated
+    if (slot < kSkydomeSlotCount)
+        return m_skydomeCustomSlotPaths[slot - kSkydomeFirstCustomSlot].empty();
+    return true;
+}
+
 Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager)
     : m_textureManager(textureManager), m_shaderManager(shaderManager)
 {
@@ -1282,6 +1546,17 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	m_pBloomEffect = NULL;
 	m_pBloomPing   = NULL;
 	m_pBloomPong   = NULL;
+	//: skydome geometry — pre-init so partial-failure cleanup is safe
+	m_pSkydomeVB        = NULL;
+	m_pSkydomeIB        = NULL;
+	m_pSkydomeDecl      = NULL;
+	m_skydomeIndexCount = 0;
+	//: skydome effect + texture state
+	m_pSkydomeEffect    = NULL;
+	m_hSkydomeWVP       = NULL;
+	m_hSkydomeTex       = NULL;
+	m_pSkydomeTexture   = NULL;
+	m_skydomeIndex      = kSkydomeOffSlot;
 	m_hBloomStrength = m_hBloomCutoff = m_hBloomSize = NULL;
 	m_hBloomIteration = m_hBloomSceneTextureParam = NULL;
 	m_hBloomResolutionConstants = NULL;
@@ -1424,6 +1699,14 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
     SetLight(LT_FILL1, fill);
     SetLight(LT_FILL2, fill);
 	ResetParameters();
+
+	//: build the UV sphere mesh used by the skydome render pass.
+	// m_pDevice is guaranteed valid at this point.
+	InitSkydomeMesh();
+	//: compile the skydome HLSL effect and cache its parameter handles.
+	// Graceful-degrade: if compile fails m_pSkydomeEffect stays NULL and the
+	// render pass (Task 4) will guard on it and skip skydome rendering.
+	InitSkydomeEffect();
 }
 
 Engine::~Engine()
@@ -1439,6 +1722,13 @@ Engine::~Engine()
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
 	SAFE_RELEASE(m_pGroundTexture);
+	//: skydome effect + texture (released before geometry for symmetry)
+	SAFE_RELEASE(m_pSkydomeEffect);
+	SAFE_RELEASE(m_pSkydomeTexture);
+	//: skydome geometry (D3DPOOL_MANAGED — only released here, not on Reset)
+	SAFE_RELEASE(m_pSkydomeVB);
+	SAFE_RELEASE(m_pSkydomeIB);
+	SAFE_RELEASE(m_pSkydomeDecl);
 	SAFE_RELEASE(m_pDeclaration);
 	SAFE_RELEASE(m_pDevice);
 	SAFE_RELEASE(m_pDirect3D);

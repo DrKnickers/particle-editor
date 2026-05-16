@@ -352,6 +352,29 @@
 #define IDC_LIGHTING_FILL2_DIFFUSE       1716
 #define IDC_LIGHTING_RESET               1717
 
+// — Skydome picker dialog. 4×3 grid (12 slots) for bundled + custom
+// skydome selections. Accessible via View menu or toolbar button.
+#define IDD_SKYDOME_PICKER              160
+#define IDC_SKYDOME_PICKER_LIST         1718
+#define IDC_SKYDOME_PICKER_RESET_CUSTOM 1719
+#define IDC_SKYDOME_PICKER_PATH_LABEL   1720
+// Context-menu IDs for right-click on a slot.
+#define ID_SKYDOME_SLOT_SET_CUSTOM      40200
+#define ID_SKYDOME_SLOT_CHANGE_CUSTOM   40201
+#define ID_SKYDOME_SLOT_CLEAR_CUSTOM    40202
+
+// — Skydome picker string table entries (name labels).
+#define IDS_SKYDOME_OFF                 230
+#define IDS_SKYDOME_SPACE               231
+#define IDS_SKYDOME_ATMOSPHERE          232
+#define IDS_SKYDOME_SUNSET              233
+#define IDS_SKYDOME_DAWN                234
+#define IDS_SKYDOME_NIGHT               235
+#define IDS_SKYDOME_OVERCAST            236
+#define IDS_SKYDOME_STUDIO              237
+#define IDS_SKYDOME_INDOOR              238
+#define IDS_SKYDOME_CUSTOM_BASE         239   // Custom 1..3 via offset (239, 240, 241)
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED

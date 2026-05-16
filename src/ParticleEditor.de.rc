@@ -281,6 +281,23 @@ BEGIN
     PUSHBUTTON      "Cancel",IDCANCEL,264,178,52,16
 END
 
+//: Skydome picker dialog. See ParticleEditor.en.rc for layout description.
+// English-only labels per the existing .de.rc convention.
+IDD_SKYDOME_PICKER DIALOGEX 0, 0, 432, 388
+STYLE DS_SETFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_TOOLWINDOW
+CAPTION "Background"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL         "",IDC_SKYDOME_PICKER_LIST,"SysListView32",
+                    LVS_ICON | LVS_SHOWSELALWAYS | LVS_SINGLESEL | WS_TABSTOP,
+                    8, 8, 416, 320
+    LTEXT           "",IDC_SKYDOME_PICKER_PATH_LABEL,8,335,416,12,
+                    SS_PATHELLIPSIS | SS_NOTIFY
+    PUSHBUTTON      "Reset custom slots",IDC_SKYDOME_PICKER_RESET_CUSTOM,
+                    300, 364, 124, 18
+END
+
 IDD_LINK_GROUP_DISAGREEMENT DIALOGEX 0, 0, 380, 280
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Resolve field disagreements"
@@ -738,6 +755,18 @@ BEGIN
     IDS_STATUS_SHIFT_TO_SPAWN "Drücke UMSCHALT um eine Instanz zu starten"
     IDS_STATUS_INSTANCES    "%d Instanzen (%d emitters)"
     IDS_STATUS_PARTICLES    "%d Partikel"
+    IDS_SKYDOME_OFF         "Solid colour"
+    IDS_SKYDOME_SPACE       "Space"
+    IDS_SKYDOME_ATMOSPHERE  "Atmosphere"
+    IDS_SKYDOME_SUNSET      "Sunset"
+    IDS_SKYDOME_DAWN        "Dawn"
+    IDS_SKYDOME_NIGHT       "Night"
+    IDS_SKYDOME_OVERCAST    "Overcast"
+    IDS_SKYDOME_STUDIO      "Studio"
+    IDS_SKYDOME_INDOOR      "Indoor"
+    IDS_SKYDOME_CUSTOM_BASE     "Custom 1"
+    IDS_SKYDOME_CUSTOM_BASE + 1 "Custom 2"
+    IDS_SKYDOME_CUSTOM_BASE + 2 "Custom 3"
 END
 
 STRINGTABLE 

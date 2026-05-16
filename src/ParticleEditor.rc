@@ -80,6 +80,7 @@ END
 
 IDS_SCENEHEAT           RCDATA                  "Resources\\SceneHeat.fx"
 IDR_DEFAULT_SHADER      RCDATA                  "resources\\DefaultShader.fx"
+IDR_SHADER_SKYDOME      RCDATA                  "Resources\\Engine\\Skydome.fx"
 
 // ground textures. Declared RCDATA (not BITMAP) so the source
 // file format isn't restricted to .bmp — D3DXCreateTextureFromFileInMemory
@@ -93,6 +94,19 @@ IDB_GROUND              RCDATA                  "Resources\\dirt.bmp"
 IDB_GROUND_GRASS        RCDATA                  "Resources\\grass.dds"
 IDB_GROUND_SAND         RCDATA                  "Resources\\sand.dds"
 IDB_GROUND_SNOW         RCDATA                  "Resources\\snow.dds"
+
+// skydome textures. Declared RCDATA so D3DXCreateTextureFromFileInMemory
+// can load them. Procedural-gradient TGA placeholders today; a follow-up
+// PR can replace with curated equirectangular DDS (BC1) assets without
+// touching the loader.
+IDR_SKYDOME_SPACE       RCDATA                  "Resources\\skydomes\\space.tga"
+IDR_SKYDOME_ATMOSPHERE  RCDATA                  "Resources\\skydomes\\atmosphere.tga"
+IDR_SKYDOME_SUNSET      RCDATA                  "Resources\\skydomes\\sunset.tga"
+IDR_SKYDOME_DAWN        RCDATA                  "Resources\\skydomes\\dawn.tga"
+IDR_SKYDOME_NIGHT       RCDATA                  "Resources\\skydomes\\night.tga"
+IDR_SKYDOME_OVERCAST    RCDATA                  "Resources\\skydomes\\overcast.tga"
+IDR_SKYDOME_STUDIO      RCDATA                  "Resources\\skydomes\\studio.tga"
+IDR_SKYDOME_INDOOR      RCDATA                  "Resources\\skydomes\\indoor.tga"
 
 /////////////////////////////////////////////////////////////////////////////
 //

@@ -89,6 +89,22 @@
 // filled/pinned state. Blitted onto each cell when the user hovers.
 #define IDB_PIN_BADGE                   148
 
+// — skydome equirectangular shader. Samples an environment texture
+// onto a UV sphere rendered from inside.
+#define IDR_SHADER_SKYDOME              150
+
+//: 8 bundled skydome textures (slots 1-8 in the picker dialog).
+// RCDATA entries added in Task 5 will point at src/Resources/skydomes/*.tga.
+#define IDR_SKYDOME_SPACE               151
+#define IDR_SKYDOME_ATMOSPHERE          152
+#define IDR_SKYDOME_SUNSET              153
+#define IDR_SKYDOME_DAWN                154
+#define IDR_SKYDOME_NIGHT               155
+#define IDR_SKYDOME_OVERCAST            156
+#define IDR_SKYDOME_STUDIO              157
+#define IDR_SKYDOME_INDOOR              158
+
+
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED

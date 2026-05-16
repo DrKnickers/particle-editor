@@ -452,6 +452,7 @@ static const UINT ID_MOD_LAST     = 0xAFFF;
 // below ID_MOD_NONE to avoid collisions in WM_COMMAND.
 static const UINT ID_GROUNDZ_SPINNER          = 0x5000;
 static const UINT ID_GROUND_TEXTURE_PREVIEW   = 0x5001;   // toolbar preview button
+static const UINT ID_BACKGROUND_PREVIEW       = 0x5002;   // unified background preview (colour swatch or skydome thumbnail)
 
 // Posted to the main window from WM_MENURBUTTONUP to defer the nickname
 // dialog until after the menu's modal loop has finished tearing down.
@@ -487,6 +488,16 @@ static HBITMAP          MakeGroundSlotThumbnail(IDirect3DDevice9* pDevice,
                                                   COLORREF solidColor);
 static void             RebuildGroundTexturePreviewBitmap(APPLICATION_INFO* info);
 static void             ShowGroundTexturePicker(HWND hParent, APPLICATION_INFO* info);
+static HBITMAP          MakeSkydomeSlotThumbnail(IDirect3DDevice9* pDevice,
+                                                   int slot, int sizePx,
+                                                   const std::wstring& customPath,
+                                                   COLORREF bgColor);
+static void             RebuildBackgroundPreviewBitmap(APPLICATION_INFO* info);
+static void             ShowSkydomePicker(HWND hParent, APPLICATION_INFO* info);
+static void             WriteSkydomeIndex(int value);
+static void             WriteSkydomeCustomPath(int slot, const std::wstring& path);
+static bool             ReadSkydomePickerPos(RECT& out);
+static void             WriteSkydomePickerPos(const RECT& in);
 struct GroundPickerPos;
 static void             WriteGroundPickerPos(int x, int y);
 static bool             ReadBloomEnabled(bool defaultValue);
@@ -529,6 +540,10 @@ struct APPLICATION_INFO
     HWND      hLeaveParticles;
     HWND      hBackgroundLabel;
     HWND      hBackgroundBtn;
+    // rework: thumbnail bitmap painted on hBackgroundBtn when a
+    // skydome slot is active. Stays NULL when SkydomeIndex == 0, in
+    // which case the owner-draw paints a flat colour swatch instead.
+    HBITMAP   hBackgroundPreviewBitmap;
     HWND      hGroundZLabel;
     HWND      hGroundZSpinner;
     HWND      hGroundTextureLabel;       // "Ground Texture:" caption
@@ -583,6 +598,11 @@ struct APPLICATION_INFO
 	// creates the dialog; routed into the main message pump's
 	// IsDialogMessage chain so Tab / Esc / arrow-key navigation work.
 	HWND            hGroundPicker;
+
+	//: skydome picker (modeless). Same lifecycle as hGroundPicker.
+	// Reached through the unified Background button (no standalone toolbar
+	// entry — slot 0 of the picker covers the flat-colour case).
+	HWND            hSkydomePicker;
 
 	// Bloom config dialog (View → Bloom… / Ctrl+B). Same modeless
 	// toggle pattern as the spawner. Engine owns the bloom state
@@ -1615,7 +1635,7 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
             // session-only and resets each launch; we still reset the
             // in-memory spawner state here for parity.
             if (MessageBox(info->hMainWnd,
-                           L"Reset background color, ground plane visibility, ground texture, ground Z offset, bloom, lighting, and the color picker's custom colors to defaults?",
+                           L"Reset background color, ground plane visibility, ground texture, ground Z offset, skydome, bloom, lighting, and the color picker's custom colors to defaults?",
                            L"Reset View Settings",
                            MB_YESNO | MB_ICONQUESTION) == IDYES)
             {
@@ -1638,7 +1658,6 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
                     info->engine->SetBloomStrength(0.0f);
                     info->engine->SetBloomCutoff(0.90f);
                     info->engine->SetBloomSize(0.10f);
-                    ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
                     SendMessage(info->hToolbar, TB_CHECKBUTTON, ID_VIEW_SHOWGROUND,
                                 MAKELONG(info->engine->GetGround(), 0));
                     //: Reset View Settings returns selection to
@@ -1648,6 +1667,17 @@ static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
                     // in the picker dialog handles that.
                     RebuildGroundTexturePreviewBitmap(info);
                     InvalidateRect(info->hGroundTexturePreview, NULL, TRUE);
+                    //: reset skydome to Off (slot 0). Background colour
+                    // is reset above (SetBackground); the unified Background
+                    // button repaints itself off engine state — no ColorButton
+                    // path remains since the rework.
+                    info->engine->SetSkydomeSlot(0);
+                    WriteSkydomeIndex(0);
+                    RebuildBackgroundPreviewBitmap(info);
+                    InvalidateRect(info->hBackgroundBtn, NULL, TRUE);
+                    // Reseed the picker if it's open.
+                    if (info->hSkydomePicker != NULL && IsWindowVisible(info->hSkydomePicker))
+                        SendMessage(info->hSkydomePicker, WM_USER, 0, 0);
                     {
                         SPINNER_INFO si;
                         si.Mask = SPIF_VALUE;
@@ -1931,11 +1961,22 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			}
 			SendMessage(info->hBackgroundLabel, WM_SETFONT, (WPARAM)hFont, FALSE);
 			
-			if ((info->hBackgroundBtn = CreateWindowEx(0, L"ColorButton", NULL, WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_OWNERDRAW,
-				0, 0, 24, 24, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
+			// rework: the Background button is the single entry point for
+			// background state. Owner-draw paints either a flat colour swatch
+			// (SkydomeIndex == 0) or the current skydome thumbnail (slots 1+).
+			// Click opens the picker dialog. Class changes from ColorButton to
+			// plain BUTTON so we own the paint path; ChooseColor is now reached
+			// through slot 0 of the picker, not through this button directly.
+			if ((info->hBackgroundBtn = CreateWindowEx(0, L"BUTTON", NULL,
+				WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+				0, 0, 24, 24, hWnd, (HMENU)(UINT_PTR)ID_BACKGROUND_PREVIEW,
+				pcs->hInstance, NULL)) == NULL)
 			{
 				return -1;
 			}
+			info->hBackgroundPreviewBitmap = NULL;
+			// Bitmap built later, after engine init + registry load, by
+			// RebuildBackgroundPreviewBitmap().
 
             // Create the "leave particles" check box
             if ((info->hLeaveParticles = CreateWindow(L"BUTTON", LoadString(IDS_LABEL_LEAVE_PARTICLES).c_str(), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
@@ -2205,6 +2246,57 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 				}
 				return TRUE;
 			}
+			// rework: unified Background button. Paints a flat colour
+			// swatch when no skydome is active, or the current skydome
+			// thumbnail otherwise. RebuildBackgroundPreviewBitmap keeps the
+			// bitmap NULL in solid-colour mode so a stale thumbnail can't
+			// shadow the swatch path.
+			if (dis->CtlType == ODT_BUTTON &&
+			    dis->CtlID   == ID_BACKGROUND_PREVIEW &&
+			    info != NULL && info->engine != NULL)
+			{
+				RECT rc = dis->rcItem;
+				const bool useSkydome =
+				    info->engine->GetSkydomeSlot() != Engine::kSkydomeOffSlot;
+				HBITMAP hbm = useSkydome ? info->hBackgroundPreviewBitmap : NULL;
+				if (hbm != NULL)
+				{
+					HDC hMem = CreateCompatibleDC(dis->hDC);
+					HGDIOBJ old = SelectObject(hMem, hbm);
+					BITMAP bm = {};
+					GetObject(hbm, sizeof(bm), &bm);
+					int w = rc.right - rc.left;
+					int h = rc.bottom - rc.top;
+					SetStretchBltMode(dis->hDC, HALFTONE);
+					StretchBlt(dis->hDC, rc.left, rc.top, w, h,
+					           hMem, 0, 0, bm.bmWidth, bm.bmHeight, SRCCOPY);
+					SelectObject(hMem, old);
+					DeleteDC(hMem);
+				}
+				else
+				{
+					HBRUSH brSwatch = CreateSolidBrush(info->engine->GetBackground());
+					FillRect(dis->hDC, &rc, brSwatch);
+					DeleteObject(brSwatch);
+				}
+				// Border + focus / pressed indication.
+				HPEN penSky = CreatePen(PS_SOLID, 1,
+				    (dis->itemState & ODS_SELECTED) ? GetSysColor(COLOR_HIGHLIGHT)
+				                                    : RGB(0x60, 0x60, 0x60));
+				HGDIOBJ oldPenSky   = SelectObject(dis->hDC, penSky);
+				HGDIOBJ oldBrushSky = SelectObject(dis->hDC, GetStockObject(NULL_BRUSH));
+				Rectangle(dis->hDC, rc.left, rc.top, rc.right, rc.bottom);
+				SelectObject(dis->hDC, oldBrushSky);
+				SelectObject(dis->hDC, oldPenSky);
+				DeleteObject(penSky);
+				if (dis->itemState & ODS_FOCUS)
+				{
+					RECT fr = rc;
+					InflateRect(&fr, -2, -2);
+					DrawFocusRect(dis->hDC, &fr);
+				}
+				return TRUE;
+			}
 			if (dis->CtlType != ODT_MENU) break;
 			if (dis->itemID < ID_MOD_FIRST || dis->itemID > ID_MOD_LAST) break;
 
@@ -2343,24 +2435,6 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     }
     		        else DoMenuItem(info, id);
                 }
-				else if (code == CBN_CHANGE)
-				{
-					if (hControl == info->hBackgroundBtn && info->engine != NULL)
-					{
-						// The background color has changed
-						info->engine->SetBackground(ColorButton_GetColor(hControl));
-                        RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
-                        // Persist. Also save the ChooseColor palette: even on
-                        // Cancel the user may have defined custom slots, and
-                        // CBN_CHANGE fires for every interim value during the
-                        // dialog — by the time we land here the palette is
-                        // final. Cheap (~64-byte write).
-                        WriteBackgroundColor(info->engine->GetBackground());
-                        COLORREF currentCustom[16];
-                        ColorButton_GetCustomColors(currentCustom);
-                        WriteCustomColors(currentCustom);
-					}
-				}
                 else if (code == SN_CHANGE)
                 {
                     if (hControl == info->hGroundZSpinner && info->engine != NULL)
@@ -2379,6 +2453,15 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     if (hControl == info->hGroundTexturePreview && info->engine != NULL)
                     {
                         ShowGroundTexturePicker(hWnd, info);
+                        break;
+                    }
+                    // rework: unified Background button. Click opens the
+                    // picker (slot 0 = solid colour, slots 1+ = skydomes). The
+                    // picker is sticky — clicking a slot commits but leaves
+                    // the dialog visible for further browsing.
+                    if (hControl == info->hBackgroundBtn && info->engine != NULL)
+                    {
+                        ShowSkydomePicker(hWnd, info);
                         break;
                     }
                     if (hControl == info->hLeaveParticles && info->particleSystem != NULL)
@@ -2568,19 +2651,23 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                 const int GROUND_COMBO_H   = 20;
                 MoveWindow(info->hLeaveParticles, props.right + 8, top + 4 + (height - checkbox.bottom) / 2, checkbox.right, label.bottom, TRUE);
                 // Right side of the header strip, anchored from the right edge:
-                //   [Ground tex label] [Ground tex combo]  [Ground Z label] [Ground Z spinner]  [Background label] [Background btn]
+                //   [Ground tex label] [Ground tex preview]  [Ground Z label] [Ground Z spinner]  [Background label] [Background btn]
                 // Background button is 4 px from the right edge; the
                 // Ground Z group sits 16 px to its left; the Ground
                 // texture group sits 16 px to the left of that. Same
-                // anchoring pattern across all three; narrow-window
-                // overflow degrades gracefully (combo + spinner widths
-                // are fixed; labels truncate via Win32 default).
-                const int GT_PREVIEW_SIZE = 24;
-                int bgLabelX  = LOWORD(lParam) - 32 - label.right;
-                int gzSpinnerX = bgLabelX - 16 - GROUND_SPINNER_W;
-                int gzLabelX   = gzSpinnerX - 4 - groundLabel.right;
-                int gtPreviewX = gzLabelX - 16 - GT_PREVIEW_SIZE;
-                int gtLabelX   = gtPreviewX - 4 - groundTexLabel.right;
+                // anchoring pattern; narrow-window overflow degrades
+                // gracefully (spinner widths are fixed; labels truncate
+                // via Win32 default).
+                //
+                // rework: removed the standalone skydome preview slot.
+                // Skydome selection is now reached through slot 0+ of the
+                // picker opened by the Background button.
+                const int GT_PREVIEW_SIZE  = 24;
+                int bgLabelX    = LOWORD(lParam) - 32 - label.right;
+                int gzSpinnerX  = bgLabelX - 16 - GROUND_SPINNER_W;
+                int gzLabelX    = gzSpinnerX - 4 - groundLabel.right;
+                int gtPreviewX  = gzLabelX - 16 - GT_PREVIEW_SIZE;
+                int gtLabelX    = gtPreviewX - 4 - groundTexLabel.right;
 				MoveWindow(info->hBackgroundBtn,   LOWORD(lParam) - 28, top + 4 + (height - 24) / 2, 24, 24, TRUE);
 				MoveWindow(info->hBackgroundLabel, bgLabelX, top + 4 + (height - label.bottom) / 2, label.right, label.bottom, TRUE);
                 MoveWindow(info->hGroundZSpinner,  gzSpinnerX, top + 4 + (height - GROUND_SPINNER_H) / 2, GROUND_SPINNER_W,  GROUND_SPINNER_H,   TRUE);
@@ -4426,6 +4513,848 @@ static void ShowGroundTexturePicker(HWND hParent, APPLICATION_INFO* info)
     SetForegroundWindow(s_hPicker);
 }
 
+// ---------------------------------------------------------------------------
+//  Skydome picker dialog + toolbar preview
+// ---------------------------------------------------------------------------
+
+// MakeSkydomeSlotThumbnail — produces a sizePx×sizePx HBITMAP for `slot`.
+//
+//  Slot 0        (Off)         flat bgColor square with centred "✕" glyph.
+//  Slots 1-8     (bundled)     decoded from RCDATA via D3DX into a DIB.
+//  Slots 9-11    (custom)      loaded from customPath if non-empty;
+//                              falls back to "+" placeholder if empty or
+//                              load fails.
+//
+// Mirrors MakeGroundSlotThumbnail's LockRect + CreateDIBSection pattern.
+static HBITMAP MakeSkydomeSlotThumbnail(IDirect3DDevice9*    pDevice,
+                                         int                  slot,
+                                         int                  sizePx,
+                                         const std::wstring&  customPath,
+                                         COLORREF             bgColor)
+{
+    // Helper: create a placeholder HBITMAP. `empty`=true → "+" glyph on
+    // light grey; `empty`=false → "?" on muted red (load failure).
+    auto MakePlaceholder = [&](bool empty) -> HBITMAP {
+        HDC hScreen = GetDC(NULL);
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize        = sizeof(bmi.bmiHeader);
+        bmi.bmiHeader.biWidth       = sizePx;
+        bmi.bmiHeader.biHeight      = -sizePx;
+        bmi.bmiHeader.biPlanes      = 1;
+        bmi.bmiHeader.biBitCount    = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        void* pBits = NULL;
+        HBITMAP hbm = CreateDIBSection(hScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+        ReleaseDC(NULL, hScreen);
+        if (hbm == NULL) return NULL;
+        HDC hMem = CreateCompatibleDC(NULL);
+        HGDIOBJ old = SelectObject(hMem, hbm);
+        RECT r = { 0, 0, sizePx, sizePx };
+        HBRUSH bg = CreateSolidBrush(empty ? RGB(0xE8, 0xE8, 0xE8) : RGB(0xC8, 0xA0, 0xA0));
+        FillRect(hMem, &r, bg);
+        DeleteObject(bg);
+        HPEN pen = CreatePen(PS_SOLID, 1, RGB(0x80, 0x80, 0x80));
+        HGDIOBJ oldPen   = SelectObject(hMem, pen);
+        HGDIOBJ oldBrush = SelectObject(hMem, GetStockObject(NULL_BRUSH));
+        Rectangle(hMem, 0, 0, sizePx, sizePx);
+        SelectObject(hMem, oldBrush);
+        SelectObject(hMem, oldPen);
+        DeleteObject(pen);
+        HFONT hFont = CreateFont(sizePx / 2, 0, 0, 0, FW_NORMAL,
+                                  FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                                  OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                  CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+        HGDIOBJ oldFont = SelectObject(hMem, hFont);
+        SetBkMode(hMem, TRANSPARENT);
+        SetTextColor(hMem, RGB(0x80, 0x80, 0x80));
+        DrawText(hMem, empty ? L"+" : L"?", -1, &r,
+                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        SelectObject(hMem, oldFont);
+        DeleteObject(hFont);
+        SelectObject(hMem, old);
+        DeleteDC(hMem);
+        return hbm;
+    };
+
+    // Slot 0 — Solid colour: flat fill of the user's background colour
+    // with a 1px outline. The swatch IS the affordance ("this is the
+    // colour the viewport will show"); no glyph needed after the
+    // rework that folded the Background button into the picker.
+    if (slot == Engine::kSkydomeOffSlot)
+    {
+        HDC hScreen = GetDC(NULL);
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize        = sizeof(bmi.bmiHeader);
+        bmi.bmiHeader.biWidth       = sizePx;
+        bmi.bmiHeader.biHeight      = -sizePx;
+        bmi.bmiHeader.biPlanes      = 1;
+        bmi.bmiHeader.biBitCount    = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        void* pBits = NULL;
+        HBITMAP hbm = CreateDIBSection(hScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+        ReleaseDC(NULL, hScreen);
+        if (hbm == NULL) return MakePlaceholder(true);
+        HDC hMem = CreateCompatibleDC(NULL);
+        HGDIOBJ old = SelectObject(hMem, hbm);
+        RECT r = { 0, 0, sizePx, sizePx };
+        HBRUSH br = CreateSolidBrush(bgColor);
+        FillRect(hMem, &r, br);
+        DeleteObject(br);
+        HPEN pen = CreatePen(PS_SOLID, 1, RGB(0x60, 0x60, 0x60));
+        HGDIOBJ oldPen   = SelectObject(hMem, pen);
+        HGDIOBJ oldBrush = SelectObject(hMem, GetStockObject(NULL_BRUSH));
+        Rectangle(hMem, 0, 0, sizePx, sizePx);
+        SelectObject(hMem, oldBrush);
+        SelectObject(hMem, oldPen);
+        DeleteObject(pen);
+        SelectObject(hMem, old);
+        DeleteDC(hMem);
+        return hbm;
+    }
+
+    // Without a D3D device we can only produce a placeholder.
+    if (pDevice == NULL) return MakePlaceholder(true);
+
+    // Helper: copy level-0 surface of a D3D texture into a new HBITMAP.
+    auto TextureToHBitmap = [&](IDirect3DTexture9* pTex) -> HBITMAP {
+        if (pTex == NULL) return NULL;
+        IDirect3DSurface9* pSurf = NULL;
+        if (FAILED(pTex->GetSurfaceLevel(0, &pSurf))) return NULL;
+        D3DLOCKED_RECT lr;
+        if (FAILED(pSurf->LockRect(&lr, NULL, D3DLOCK_READONLY)))
+        {
+            pSurf->Release();
+            return NULL;
+        }
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize        = sizeof(bmi.bmiHeader);
+        bmi.bmiHeader.biWidth       = sizePx;
+        bmi.bmiHeader.biHeight      = -sizePx;
+        bmi.bmiHeader.biPlanes      = 1;
+        bmi.bmiHeader.biBitCount    = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        HDC hScreen = GetDC(NULL);
+        void* pBits = NULL;
+        HBITMAP hbm = CreateDIBSection(hScreen, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+        ReleaseDC(NULL, hScreen);
+        if (hbm != NULL && pBits != NULL)
+        {
+            const uint8_t* src  = (const uint8_t*)lr.pBits;
+            uint8_t*       dst  = (uint8_t*)pBits;
+            const int      rowB = sizePx * 4;
+            for (int y = 0; y < sizePx; ++y)
+                memcpy(dst + y * rowB, src + y * lr.Pitch, rowB);
+        }
+        pSurf->UnlockRect();
+        pSurf->Release();
+        return hbm;
+    };
+
+    IDirect3DTexture9* pTex = NULL;
+    HRESULT hr = E_FAIL;
+
+    // Custom path has highest priority (applies to all slot types,
+    // though in practice only slots 9-11 have custom paths in).
+    if (!customPath.empty())
+    {
+        hr = D3DXCreateTextureFromFileExW(
+            pDevice, customPath.c_str(),
+            sizePx, sizePx, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
+            D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex);
+    }
+
+    // Bundled fallback: slots 1-8.
+    if (FAILED(hr) && slot >= 1 && slot < Engine::kSkydomeBundledCount)
+    {
+        const int* ids = Engine::GetSkydomeBundledResources();
+        int resId = ids[slot];
+        if (resId != 0)
+        {
+            HMODULE hMod  = GetModuleHandle(NULL);
+            HRSRC   hRes  = FindResource(hMod, MAKEINTRESOURCE(resId), RT_RCDATA);
+            HGLOBAL hData = (hRes != NULL) ? LoadResource(hMod, hRes) : NULL;
+            void*   pData = (hData != NULL) ? LockResource(hData)     : NULL;
+            DWORD   dwSz  = (hRes  != NULL) ? SizeofResource(hMod, hRes) : 0;
+            if (pData != NULL && dwSz > 0)
+            {
+                hr = D3DXCreateTextureFromFileInMemoryEx(
+                    pDevice, pData, dwSz,
+                    sizePx, sizePx, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
+                    D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex);
+            }
+        }
+    }
+
+    HBITMAP hbm = NULL;
+    if (SUCCEEDED(hr) && pTex != NULL)
+        hbm = TextureToHBitmap(pTex);
+    if (pTex != NULL) pTex->Release();
+
+    if (hbm == NULL)
+    {
+        // Determine whether the slot has ANY configured source.
+        const bool hasBundled =
+            (slot >= 1 && slot < Engine::kSkydomeBundledCount);
+        const bool slotHasSource = !customPath.empty() || hasBundled;
+        hbm = MakePlaceholder(!slotHasSource);
+    }
+    return hbm;
+}
+
+// RebuildBackgroundPreviewBitmap — regenerates the 24×24 toolbar thumbnail
+// from the current engine skydome slot and stores it in info->hBackgroundPreviewBitmap.
+// Releases the previous bitmap before replacing (no double-free).
+// Called at startup, after every slot change, and after Reset View Settings.
+static void RebuildBackgroundPreviewBitmap(APPLICATION_INFO* info)
+{
+    if (info == NULL || info->engine == NULL) return;
+    const int slot = info->engine->GetSkydomeSlot();
+    // rework: when no skydome is active, the owner-draw paints a flat
+    // colour swatch read directly from engine state. Keep the cached
+    // thumbnail NULL in that case so the owner-draw's NULL-check selects
+    // the swatch path and a stale thumbnail can't ghost through.
+    if (slot == Engine::kSkydomeOffSlot)
+    {
+        if (info->hBackgroundPreviewBitmap != NULL)
+        {
+            DeleteObject(info->hBackgroundPreviewBitmap);
+            info->hBackgroundPreviewBitmap = NULL;
+        }
+        if (info->hBackgroundBtn != NULL)
+            InvalidateRect(info->hBackgroundBtn, NULL, TRUE);
+        return;
+    }
+    HBITMAP hbmOld = info->hBackgroundPreviewBitmap;
+    std::wstring customPath;
+    if (slot >= Engine::kSkydomeFirstCustomSlot && slot < Engine::kSkydomeSlotCount)
+        customPath = info->engine->GetSkydomeCustomPath(slot);
+    info->hBackgroundPreviewBitmap = MakeSkydomeSlotThumbnail(
+        info->engine->GetDevice(), slot, 24,
+        customPath, info->engine->GetBackground());
+    if (hbmOld != NULL) DeleteObject(hbmOld);
+    if (info->hBackgroundBtn != NULL)
+        InvalidateRect(info->hBackgroundBtn, NULL, TRUE);
+}
+
+// ---------------------------------------------------------------------------
+// Skydome picker dialog state
+// ---------------------------------------------------------------------------
+struct SkydomePickerData
+{
+    APPLICATION_INFO* info;
+    HIMAGELIST        hImageList;
+    int               originalSlot;   // slot active at dialog open; for Cancel revert
+};
+
+// Slot display name — matches the ground picker's GroundSlotDisplayName pattern.
+static std::wstring SkydomeSlotDisplayName(int slot, const std::wstring& customPath)
+{
+    if (slot < 0 || slot >= Engine::kSkydomeSlotCount) return L"";
+    // Bundled range (0-8): use string table; Off and named skydomes.
+    if (slot < Engine::kSkydomeBundledCount)
+    {
+        static const int kIds[Engine::kSkydomeBundledCount] = {
+            IDS_SKYDOME_OFF,
+            IDS_SKYDOME_SPACE,
+            IDS_SKYDOME_ATMOSPHERE,
+            IDS_SKYDOME_SUNSET,
+            IDS_SKYDOME_DAWN,
+            IDS_SKYDOME_NIGHT,
+            IDS_SKYDOME_OVERCAST,
+            IDS_SKYDOME_STUDIO,
+            IDS_SKYDOME_INDOOR,
+        };
+        return LoadString(kIds[slot]);
+    }
+    // Custom slots (9-11).
+    if (!customPath.empty())
+    {
+        size_t sep = customPath.find_last_of(L"\\/");
+        return (sep == std::wstring::npos) ? customPath : customPath.substr(sep + 1);
+    }
+    return LoadString(IDS_SKYDOME_CUSTOM_BASE + (slot - Engine::kSkydomeFirstCustomSlot));
+}
+
+// Picker-specific thumbnail size — 192 px, matching the ground picker.
+static const int kSkydomePickerThumbSize = 192;
+
+// ListView subclass state for the skydome picker.
+static WNDPROC s_skyLVOriginalProc = NULL;
+static int     s_skyLVHoverIdx     = -1;
+
+static void SkydomeLV_PaintAll(HWND hList, HDC hdcScreen, const RECT& rcClient);
+static LRESULT CALLBACK SkydomeLVSubclassProc(HWND hList, UINT msg,
+                                               WPARAM wParam, LPARAM lParam);
+
+// Rebuild the skydome picker's ListView — image list, labels, selection.
+static void SkydomePicker_RefreshList(HWND hDlg, SkydomePickerData* data)
+{
+    HWND hList = GetDlgItem(hDlg, IDC_SKYDOME_PICKER_LIST);
+    int  prevSel = ListView_GetNextItem(hList, -1, LVNI_SELECTED);
+    ListView_DeleteAllItems(hList);
+    if (data->hImageList != NULL) ImageList_Destroy(data->hImageList);
+
+    data->hImageList = ImageList_Create(kSkydomePickerThumbSize,
+                                         kSkydomePickerThumbSize,
+                                         ILC_COLOR32, Engine::kSkydomeSlotCount, 0);
+    ListView_SetImageList(hList, data->hImageList, LVSIL_NORMAL);
+
+    for (int slot = 0; slot < Engine::kSkydomeSlotCount; ++slot)
+    {
+        std::wstring path;
+        if (slot >= Engine::kSkydomeFirstCustomSlot)
+            path = data->info->engine->GetSkydomeCustomPath(slot);
+        HBITMAP hThumb = MakeSkydomeSlotThumbnail(
+            data->info->engine->GetDevice(),
+            slot, kSkydomePickerThumbSize, path,
+            data->info->engine->GetBackground());
+        int imgIdx = ImageList_Add(data->hImageList, hThumb, NULL);
+        if (hThumb != NULL) DeleteObject(hThumb);
+
+        std::wstring label = SkydomeSlotDisplayName(slot, path);
+        LVITEM item = {};
+        item.mask     = LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
+        item.iItem    = slot;
+        item.iSubItem = 0;
+        item.iImage   = imgIdx;
+        item.lParam   = slot;
+        item.pszText  = const_cast<LPWSTR>(label.c_str());
+        ListView_InsertItem(hList, &item);
+    }
+
+    // Restore selection: prefer prevSel, else the engine's current slot.
+    int sel = (prevSel >= 0) ? prevSel : data->info->engine->GetSkydomeSlot();
+    if (sel >= 0 && sel < Engine::kSkydomeSlotCount)
+    {
+        ListView_SetItemState(hList, sel, LVIS_SELECTED | LVIS_FOCUSED,
+                              LVIS_SELECTED | LVIS_FOCUSED);
+        ListView_EnsureVisible(hList, sel, FALSE);
+    }
+}
+
+// rework: open ChooseColor for slot 0 (solid colour). Mirrors the
+// ground-picker analog (GroundTexturePicker_PickSolidColor) but seeds
+// the 16-slot custom palette from the ColorButton library's shared state
+// (used by the Lighting dialog) so palette additions made here propagate
+// to the other ColorButton instances and survive a restart via the
+// WriteCustomColors registry write. Returns true if a colour was picked.
+static bool BackgroundPicker_PickSolidColor(HWND hDlg, SkydomePickerData* data)
+{
+    COLORREF custom[16];
+    ColorButton_GetCustomColors(custom);
+    CHOOSECOLOR cc = {};
+    cc.lStructSize  = sizeof(cc);
+    cc.hwndOwner    = hDlg;
+    cc.lpCustColors = custom;
+    cc.rgbResult    = data->info->engine->GetBackground();
+    cc.Flags        = CC_ANYCOLOR | CC_FULLOPEN | CC_RGBINIT;
+    if (!ChooseColor(&cc)) return false;
+    data->info->engine->SetBackground(cc.rgbResult);
+    WriteBackgroundColor(cc.rgbResult);
+    // Push the (possibly enlarged) custom palette back into the ColorButton
+    // library so the Lighting dialog's colour fields see the new entries,
+    // then persist so it survives an editor restart.
+    ColorButton_SetCustomColors(custom);
+    WriteCustomColors(custom);
+    // Refresh the picker thumbnail for slot 0 (the swatch follows the
+    // background colour) and the toolbar preview if we're currently in
+    // solid-colour mode.
+    SkydomePicker_RefreshList(hDlg, data);
+    if (data->info->engine->GetSkydomeSlot() == Engine::kSkydomeOffSlot)
+    {
+        RebuildBackgroundPreviewBitmap(data->info);
+        RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                     RDW_INVALIDATE | RDW_UPDATENOW);
+    }
+    return true;
+}
+
+// File picker for a custom skydome slot. Returns true if a file was assigned.
+static bool SkydomePicker_PickCustomFile(HWND hDlg, SkydomePickerData* data, int slot)
+{
+    if (slot < Engine::kSkydomeFirstCustomSlot || slot >= Engine::kSkydomeSlotCount)
+        return false;
+    wchar_t buf[1024] = {};
+    OPENFILENAMEW ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner   = hDlg;
+    ofn.lpstrFilter = L"Texture Files (*.dds;*.tga;*.bmp;*.png;*.jpg;*.jpeg)\0*.dds;*.tga;*.bmp;*.png;*.jpg;*.jpeg\0All Files (*.*)\0*.*\0\0";
+    ofn.lpstrFile   = buf;
+    ofn.nMaxFile    = (DWORD)(sizeof(buf) / sizeof(buf[0]));
+    ofn.lpstrTitle  = L"Choose Skydome Texture File";
+    ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
+    if (!GetOpenFileNameW(&ofn)) return false;
+    std::wstring path = buf;
+    data->info->engine->SetSkydomeCustomPath(slot, path);
+    WriteSkydomeCustomPath(slot, path);
+    SkydomePicker_RefreshList(hDlg, data);
+    if (data->info->engine->GetSkydomeSlot() == slot)
+    {
+        RebuildBackgroundPreviewBitmap(data->info);
+        RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                     RDW_INVALIDATE | RDW_UPDATENOW);
+    }
+    return true;
+}
+
+static INT_PTR CALLBACK SkydomePickerProc(HWND hDlg, UINT uMsg,
+                                           WPARAM wParam, LPARAM lParam)
+{
+    SkydomePickerData* data =
+        (SkydomePickerData*)(LONG_PTR)GetWindowLongPtr(hDlg, DWLP_USER);
+    switch (uMsg)
+    {
+    case WM_INITDIALOG:
+    {
+        data = (SkydomePickerData*)lParam;
+        SetWindowLongPtr(hDlg, DWLP_USER, (LONG_PTR)data);
+        data->hImageList = NULL;
+        HWND hList = GetDlgItem(hDlg, IDC_SKYDOME_PICKER_LIST);
+        ListView_SetExtendedListViewStyle(hList, LVS_EX_DOUBLEBUFFER);
+        // 192×192 thumb, 208×232 spacing — matches the ground picker
+        // so the two dialogs look identical.
+        ListView_SetIconSpacing(hList, 208, 232);
+        // Subclass for full custom paint.
+        if (s_skyLVOriginalProc == NULL)
+        {
+            s_skyLVOriginalProc = (WNDPROC)SetWindowLongPtr(
+                hList, GWLP_WNDPROC, (LONG_PTR)SkydomeLVSubclassProc);
+        }
+        else
+        {
+            SetWindowLongPtr(hList, GWLP_WNDPROC, (LONG_PTR)SkydomeLVSubclassProc);
+        }
+        s_skyLVHoverIdx = -1;
+        // Hide the path label — slot labels already tell the story.
+        HWND hPath = GetDlgItem(hDlg, IDC_SKYDOME_PICKER_PATH_LABEL);
+        if (hPath != NULL) ShowWindow(hPath, SW_HIDE);
+        SkydomePicker_RefreshList(hDlg, data);
+        return TRUE;
+    }
+    case WM_USER:
+        // Re-seed from engine state (e.g. after Reset View Settings).
+        if (data != NULL)
+        {
+            HWND hList = GetDlgItem(hDlg, IDC_SKYDOME_PICKER_LIST);
+            int slot = data->info->engine->GetSkydomeSlot();
+            if (slot >= 0 && slot < Engine::kSkydomeSlotCount)
+            {
+                ListView_SetItemState(hList, slot,
+                    LVIS_SELECTED | LVIS_FOCUSED,
+                    LVIS_SELECTED | LVIS_FOCUSED);
+                ListView_EnsureVisible(hList, slot, FALSE);
+            }
+            SkydomePicker_RefreshList(hDlg, data);
+        }
+        return TRUE;
+    case WM_NOTIFY:
+    {
+        NMHDR* hdr = (NMHDR*)lParam;
+        if (hdr->idFrom != IDC_SKYDOME_PICKER_LIST) break;
+
+        if (hdr->code == NM_CUSTOMDRAW)
+        {
+            // Delegate to our subclassed WM_PAINT; suppress native draw.
+            LPNMLVCUSTOMDRAW lpc = (LPNMLVCUSTOMDRAW)lParam;
+            if (lpc->nmcd.dwDrawStage == CDDS_PREPAINT)
+            {
+                SetWindowLongPtr(hDlg, DWLP_MSGRESULT, CDRF_NOTIFYITEMDRAW);
+                return TRUE;
+            }
+            if (lpc->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
+            {
+                SetWindowLongPtr(hDlg, DWLP_MSGRESULT, CDRF_SKIPDEFAULT);
+                return TRUE;
+            }
+            SetWindowLongPtr(hDlg, DWLP_MSGRESULT, CDRF_DODEFAULT);
+            return TRUE;
+        }
+
+        if (hdr->code == LVN_ITEMCHANGED)
+        {
+            NMLISTVIEW* nlv = (NMLISTVIEW*)lParam;
+            if ((nlv->uNewState & LVIS_SELECTED) && !(nlv->uOldState & LVIS_SELECTED))
+            {
+                int slot = nlv->iItem;
+                if (slot >= 0 && slot < Engine::kSkydomeSlotCount &&
+                    !data->info->engine->IsSkydomeSlotEmpty(slot))
+                {
+                    data->info->engine->SetSkydomeSlot(slot);
+                    WriteSkydomeIndex(slot);
+                    RebuildBackgroundPreviewBitmap(data->info);
+                    RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                                 RDW_INVALIDATE | RDW_UPDATENOW);
+                }
+            }
+        }
+        else if (hdr->code == NM_CLICK || hdr->code == NM_DBLCLK)
+        {
+            NMITEMACTIVATE* nia = (NMITEMACTIVATE*)lParam;
+            int slot = nia->iItem;
+            if (slot < 0 || slot >= Engine::kSkydomeSlotCount) break;
+            // rework: slot 0 is the unified "Solid colour" entry.
+            // LVN_ITEMCHANGED already committed SkydomeSlot=0; clicking
+            // additionally opens ChooseColor. Cancel keeps the existing
+            // background colour (BackgroundPicker_PickSolidColor returns
+            // false without touching engine state).
+            if (slot == Engine::kSkydomeOffSlot)
+            {
+                BackgroundPicker_PickSolidColor(hDlg, data);
+                break;
+            }
+            // Empty custom slot: single click opens file picker.
+            if (data->info->engine->IsSkydomeSlotEmpty(slot))
+            {
+                SkydomePicker_PickCustomFile(hDlg, data, slot);
+                if (!data->info->engine->IsSkydomeSlotEmpty(slot))
+                {
+                    HWND hList = GetDlgItem(hDlg, IDC_SKYDOME_PICKER_LIST);
+                    ListView_SetItemState(hList, slot,
+                        LVIS_SELECTED | LVIS_FOCUSED,
+                        LVIS_SELECTED | LVIS_FOCUSED);
+                }
+            }
+            // rework: sticky picker. Populated slots commit via
+            // LVN_ITEMCHANGED above; the dialog stays open so the user
+            // can browse other skydomes interactively. Close via the
+            // window X button or by toggling the Background button.
+        }
+        else if (hdr->code == NM_RCLICK)
+        {
+            NMITEMACTIVATE* nia = (NMITEMACTIVATE*)lParam;
+            int slot = nia->iItem;
+            if (slot < 0 || slot >= Engine::kSkydomeSlotCount) break;
+            // Only custom slots get a context menu.
+            if (slot < Engine::kSkydomeFirstCustomSlot) break;
+            const std::wstring& path = data->info->engine->GetSkydomeCustomPath(slot);
+            const bool hasCustom = !path.empty();
+            HMENU hMenu = CreatePopupMenu();
+            if (hasCustom)
+            {
+                AppendMenuW(hMenu, MF_STRING, ID_SKYDOME_SLOT_CHANGE_CUSTOM,
+                            L"Change skydome...");
+                AppendMenuW(hMenu, MF_STRING, ID_SKYDOME_SLOT_CLEAR_CUSTOM,
+                            L"Clear slot");
+            }
+            else
+            {
+                AppendMenuW(hMenu, MF_STRING, ID_SKYDOME_SLOT_SET_CUSTOM,
+                            L"Set custom skydome...");
+            }
+            POINT pt; GetCursorPos(&pt);
+            INT cmd = TrackPopupMenu(hMenu,
+                                      TPM_LEFTALIGN | TPM_TOPALIGN |
+                                      TPM_RETURNCMD | TPM_NONOTIFY,
+                                      pt.x, pt.y, 0, hDlg, NULL);
+            DestroyMenu(hMenu);
+            if (cmd == ID_SKYDOME_SLOT_SET_CUSTOM ||
+                cmd == ID_SKYDOME_SLOT_CHANGE_CUSTOM)
+            {
+                SkydomePicker_PickCustomFile(hDlg, data, slot);
+            }
+            else if (cmd == ID_SKYDOME_SLOT_CLEAR_CUSTOM)
+            {
+                data->info->engine->SetSkydomeCustomPath(slot, L"");
+                WriteSkydomeCustomPath(slot, L"");
+                // If the active slot was cleared, fall back to Off.
+                if (data->info->engine->GetSkydomeSlot() == slot)
+                {
+                    data->info->engine->SetSkydomeSlot(Engine::kSkydomeOffSlot);
+                    WriteSkydomeIndex(Engine::kSkydomeOffSlot);
+                }
+                SkydomePicker_RefreshList(hDlg, data);
+                RebuildBackgroundPreviewBitmap(data->info);
+                RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                             RDW_INVALIDATE | RDW_UPDATENOW);
+            }
+        }
+        break;
+    }
+    case WM_COMMAND:
+        switch (LOWORD(wParam))
+        {
+        case IDC_SKYDOME_PICKER_RESET_CUSTOM:
+        {
+            if (MessageBox(hDlg,
+                           L"Reset all custom skydome slots to empty? "
+                           L"Custom file assignments will be lost — "
+                           L"but the files themselves are not deleted.",
+                           L"Reset Custom Slots",
+                           MB_YESNO | MB_ICONQUESTION) != IDYES) return TRUE;
+            // Wipe all 3 custom slots.
+            for (int s = Engine::kSkydomeFirstCustomSlot;
+                 s < Engine::kSkydomeSlotCount; ++s)
+            {
+                data->info->engine->SetSkydomeCustomPath(s, L"");
+                WriteSkydomeCustomPath(s, L"");
+            }
+            // If the active slot was a custom, fall back to Off.
+            int cur = data->info->engine->GetSkydomeSlot();
+            if (cur >= Engine::kSkydomeFirstCustomSlot)
+            {
+                data->info->engine->SetSkydomeSlot(Engine::kSkydomeOffSlot);
+                WriteSkydomeIndex(Engine::kSkydomeOffSlot);
+            }
+            SkydomePicker_RefreshList(hDlg, data);
+            RebuildBackgroundPreviewBitmap(data->info);
+            RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                         RDW_INVALIDATE | RDW_UPDATENOW);
+            return TRUE;
+        }
+        case IDOK:
+        {
+            RECT r; GetWindowRect(hDlg, &r);
+            WriteSkydomePickerPos(r);
+            ShowWindow(hDlg, SW_HIDE);
+            return TRUE;
+        }
+        case IDCANCEL:
+        {
+            // Revert slot selection; slot-path mutations stay.
+            if (data->info->engine->GetSkydomeSlot() != data->originalSlot)
+            {
+                data->info->engine->SetSkydomeSlot(data->originalSlot);
+                WriteSkydomeIndex(data->originalSlot);
+                RebuildBackgroundPreviewBitmap(data->info);
+                RedrawWindow(data->info->hRenderWnd, NULL, NULL,
+                             RDW_INVALIDATE | RDW_UPDATENOW);
+            }
+            RECT r; GetWindowRect(hDlg, &r);
+            WriteSkydomePickerPos(r);
+            ShowWindow(hDlg, SW_HIDE);
+            return TRUE;
+        }
+        }
+        break;
+    case WM_CLOSE:
+    {
+        RECT r; GetWindowRect(hDlg, &r);
+        WriteSkydomePickerPos(r);
+        ShowWindow(hDlg, SW_HIDE);
+        return TRUE;
+    }
+    case WM_KEYDOWN:
+        if (wParam == VK_ESCAPE)
+        {
+            RECT r; GetWindowRect(hDlg, &r);
+            WriteSkydomePickerPos(r);
+            ShowWindow(hDlg, SW_HIDE);
+            return TRUE;
+        }
+        break;
+    case WM_DESTROY:
+        if (data != NULL && data->hImageList != NULL)
+        {
+            ImageList_Destroy(data->hImageList);
+            data->hImageList = NULL;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+// Off-screen paint for the skydome picker's ListView — mirrors
+// GroundLV_PaintAll so the two dialogs look visually identical.
+static void SkydomeLV_PaintAll(HWND hList, HDC hdcScreen, const RECT& rcClient)
+{
+    HWND hDlg = GetParent(hList);
+    SkydomePickerData* data =
+        (SkydomePickerData*)(LONG_PTR)GetWindowLongPtr(hDlg, DWLP_USER);
+
+    HDC     hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hbmMem = CreateCompatibleBitmap(hdcScreen,
+                                            rcClient.right, rcClient.bottom);
+    HGDIOBJ hOldBmp = SelectObject(hdcMem, hbmMem);
+    HDC     hdc = hdcMem;
+
+    HBRUSH bgBrush = CreateSolidBrush(RGB(240, 240, 240));
+    FillRect(hdc, &rcClient, bgBrush);
+    DeleteObject(bgBrush);
+
+    if (data == NULL || data->info == NULL || data->info->engine == NULL)
+    {
+        BitBlt(hdcScreen, 0, 0, rcClient.right, rcClient.bottom,
+               hdcMem, 0, 0, SRCCOPY);
+        SelectObject(hdcMem, hOldBmp);
+        DeleteObject(hbmMem);
+        DeleteDC(hdcMem);
+        return;
+    }
+
+    HFONT hFont = (HFONT)SendMessage(hDlg, WM_GETFONT, 0, 0);
+    if (hFont == NULL) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+
+    const int currentSlot = data->info->engine->GetSkydomeSlot();
+    const int itemCount   = ListView_GetItemCount(hList);
+    HIMAGELIST hIL        = ListView_GetImageList(hList, LVSIL_NORMAL);
+
+    for (int i = 0; i < itemCount; ++i)
+    {
+        RECT bounds, iconRc, labelRc;
+        ListView_GetItemRect(hList, i, &bounds,  LVIR_BOUNDS);
+        ListView_GetItemRect(hList, i, &iconRc,  LVIR_ICON);
+        ListView_GetItemRect(hList, i, &labelRc, LVIR_LABEL);
+
+        const bool hovered  = (s_skyLVHoverIdx == i);
+        const bool selected = (i == currentSlot);
+
+        const COLORREF bgCol = hovered ? RGB(160, 200, 250) : RGB(240, 240, 240);
+        HBRUSH bg = CreateSolidBrush(bgCol);
+        FillRect(hdc, &bounds, bg);
+        DeleteObject(bg);
+
+        if (hIL != NULL)
+        {
+            LVITEMW item = {};
+            item.mask  = LVIF_IMAGE;
+            item.iItem = i;
+            ListView_GetItem(hList, &item);
+            if (item.iImage >= 0)
+            {
+                IMAGEINFO ii = {};
+                ImageList_GetImageInfo(hIL, item.iImage, &ii);
+                const int imgW = ii.rcImage.right  - ii.rcImage.left;
+                const int imgH = ii.rcImage.bottom - ii.rcImage.top;
+                const int ix = iconRc.left + (iconRc.right  - iconRc.left - imgW) / 2;
+                const int iy = iconRc.top  + (iconRc.bottom - iconRc.top  - imgH) / 2;
+                ImageList_Draw(hIL, item.iImage, hdc, ix, iy, ILD_NORMAL);
+            }
+        }
+
+        HPEN pen;
+        if (selected)
+            pen = CreatePen(PS_SOLID, 2, RGB(40, 100, 220));
+        else if (hovered)
+            pen = CreatePen(PS_SOLID, 3, RGB(70, 150, 240));
+        else
+            pen = CreatePen(PS_SOLID, 1, RGB(150, 150, 150));
+        HGDIOBJ oldP = SelectObject(hdc, pen);
+        HGDIOBJ oldB = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+        Rectangle(hdc,
+                  iconRc.left + 1, iconRc.top + 1,
+                  iconRc.right - 1, iconRc.bottom - 1);
+        SelectObject(hdc, oldP);
+        SelectObject(hdc, oldB);
+        DeleteObject(pen);
+
+        WCHAR labelBuf[256] = L"";
+        ListView_GetItemText(hList, i, 0, labelBuf, (int)_countof(labelBuf));
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(40, 40, 40));
+        DrawTextW(hdc, labelBuf, -1, &labelRc,
+                  DT_SINGLELINE | DT_CENTER | DT_VCENTER
+                  | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+
+    SelectObject(hdc, hOldFont);
+    BitBlt(hdcScreen, 0, 0, rcClient.right, rcClient.bottom, hdcMem, 0, 0, SRCCOPY);
+    SelectObject(hdcMem, hOldBmp);
+    DeleteObject(hbmMem);
+    DeleteDC(hdcMem);
+}
+
+static LRESULT CALLBACK SkydomeLVSubclassProc(HWND hList, UINT msg,
+                                               WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_PAINT:
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hList, &ps);
+        RECT rcClient;
+        GetClientRect(hList, &rcClient);
+        SkydomeLV_PaintAll(hList, hdc, rcClient);
+        EndPaint(hList, &ps);
+        return 0;
+    }
+    case WM_MOUSEMOVE:
+    {
+        POINT cur = { (LONG)(short)LOWORD(lParam), (LONG)(short)HIWORD(lParam) };
+        LVHITTESTINFO ht = {};
+        ht.pt = cur;
+        const int newHot = ListView_HitTest(hList, &ht);
+        if (newHot != s_skyLVHoverIdx)
+        {
+            s_skyLVHoverIdx = newHot;
+            InvalidateRect(hList, NULL, FALSE);
+            TRACKMOUSEEVENT tme = {};
+            tme.cbSize    = sizeof(tme);
+            tme.dwFlags   = TME_LEAVE;
+            tme.hwndTrack = hList;
+            TrackMouseEvent(&tme);
+        }
+        break;
+    }
+    case WM_MOUSELEAVE:
+        if (s_skyLVHoverIdx != -1)
+        {
+            s_skyLVHoverIdx = -1;
+            InvalidateRect(hList, NULL, FALSE);
+        }
+        break;
+    }
+    return CallWindowProc(s_skyLVOriginalProc, hList, msg, wParam, lParam);
+}
+
+// Modeless skydome picker. Lazy-create on first toggle; subsequent calls
+// show/hide. Restores saved window position from registry.
+static void ShowSkydomePicker(HWND hParent, APPLICATION_INFO* info)
+{
+    if (info == NULL || info->engine == NULL) return;
+    static HWND              s_hPicker = NULL;
+    static SkydomePickerData s_data;
+    s_data.info         = info;
+    s_data.hImageList   = NULL;
+    s_data.originalSlot = info->engine->GetSkydomeSlot();
+
+    if (s_hPicker != NULL && IsWindowVisible(s_hPicker))
+    {
+        // Already visible — toggle hide.
+        RECT r; GetWindowRect(s_hPicker, &r);
+        WriteSkydomePickerPos(r);
+        ShowWindow(s_hPicker, SW_HIDE);
+        return;
+    }
+
+    if (s_hPicker == NULL)
+    {
+        s_hPicker = CreateDialogParamW(GetModuleHandle(NULL),
+                                        MAKEINTRESOURCEW(IDD_SKYDOME_PICKER),
+                                        hParent, SkydomePickerProc,
+                                        (LPARAM)&s_data);
+        if (s_hPicker == NULL) return;
+        info->hSkydomePicker = s_hPicker;
+        // Slim tool-window title bar — applied after creation because
+        // WS_EX_TOOLWINDOW isn't in the dialog template EXSTYLE.
+        LONG_PTR ex = GetWindowLongPtr(s_hPicker, GWL_EXSTYLE);
+        SetWindowLongPtr(s_hPicker, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW);
+        SetWindowPos(s_hPicker, NULL, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        // Restore saved position if any; validate that it's on-screen.
+        RECT pos;
+        if (ReadSkydomePickerPos(pos))
+        {
+            POINT pt = { pos.left, pos.top };
+            if (MonitorFromPoint(pt, MONITOR_DEFAULTTONULL) != NULL)
+            {
+                SetWindowPos(s_hPicker, NULL, pos.left, pos.top, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+    else
+    {
+        // Existing hidden instance — refresh in case engine state changed.
+        SkydomePicker_RefreshList(s_hPicker, &s_data);
+    }
+    ShowWindow(s_hPicker, SW_SHOW);
+    SetForegroundWindow(s_hPicker);
+}
+
 // Bloom config persistence. Master enable as DWORD (matches ShowGround
 // pattern); strength / cutoff / size as REG_BINARY floats sharing a
 // single helper since they all behave the same. NaN / Inf rejected
@@ -4487,6 +5416,109 @@ static void WriteBloomFloat(const wchar_t* name, float value)
     }
 }
 
+// Skydome state persistence (). Index as DWORD, custom slot paths as
+// REG_SZ, picker dialog position as RECT (REG_BINARY).
+static int ReadSkydomeIndex(int defaultValue)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD value, type, size = sizeof(value);
+        if (RegQueryValueEx(hKey, L"SkydomeIndex", NULL, &type, (LPBYTE)&value, &size) == ERROR_SUCCESS
+            && type == REG_DWORD && (int)value >= 0 && (int)value < Engine::kSkydomeSlotCount)
+        {
+            RegCloseKey(hKey);
+            return (int)value;
+        }
+        RegCloseKey(hKey);
+    }
+    return defaultValue;
+}
+
+static void WriteSkydomeIndex(int value)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        DWORD v = (DWORD)value;
+        RegSetValueEx(hKey, L"SkydomeIndex", 0, REG_DWORD, (const BYTE*)&v, sizeof(v));
+        RegCloseKey(hKey);
+    }
+}
+
+// Custom slot paths use names SkydomeCustomSlot9, SkydomeCustomSlot10, SkydomeCustomSlot11
+static std::wstring ReadSkydomeCustomPath(int slot)
+{
+    if (slot < Engine::kSkydomeFirstCustomSlot || slot >= Engine::kSkydomeSlotCount) return L"";
+    HKEY hKey;
+    std::wstring out;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        wchar_t buf[MAX_PATH];
+        DWORD size = sizeof(buf);
+        DWORD type;
+        wchar_t name[64];
+        swprintf_s(name, L"SkydomeCustomSlot%d", slot);
+        if (RegQueryValueEx(hKey, name, NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ)
+        {
+            out = buf;
+        }
+        RegCloseKey(hKey);
+    }
+    return out;
+}
+
+static void WriteSkydomeCustomPath(int slot, const std::wstring& path)
+{
+    if (slot < Engine::kSkydomeFirstCustomSlot || slot >= Engine::kSkydomeSlotCount) return;
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        wchar_t name[64];
+        swprintf_s(name, L"SkydomeCustomSlot%d", slot);
+        if (path.empty())
+        {
+            RegDeleteValue(hKey, name);
+        }
+        else
+        {
+            RegSetValueEx(hKey, name, 0, REG_SZ, (const BYTE*)path.c_str(),
+                          DWORD((path.size() + 1) * sizeof(wchar_t)));
+        }
+        RegCloseKey(hKey);
+    }
+}
+
+static bool ReadSkydomePickerPos(RECT& out)
+{
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD type, size = sizeof(out);
+        if (RegQueryValueEx(hKey, L"SkydomePickerPos", NULL, &type, (LPBYTE)&out, &size) == ERROR_SUCCESS
+            && type == REG_BINARY && size == sizeof(out))
+        {
+            RegCloseKey(hKey);
+            return true;
+        }
+        RegCloseKey(hKey);
+    }
+    return false;
+}
+
+static void WriteSkydomePickerPos(const RECT& in)
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        RegSetValueEx(hKey, L"SkydomePickerPos", 0, REG_BINARY, (const BYTE*)&in, sizeof(in));
+        RegCloseKey(hKey);
+    }
+}
+
 // `out` must point to a 16-element COLORREF buffer. On miss, leaves the
 // buffer untouched and returns false so the caller can decide whether
 // to seed defaults.
@@ -4537,6 +5569,9 @@ static void ResetViewSettings()
         RegDeleteValue(hKey, L"CustomColors");
         RegDeleteValue(hKey, L"SpawnerConfig");
         RegDeleteValue(hKey, L"SpawnerDialogPos");
+        RegDeleteValue(hKey, L"SkydomeIndex");    //
+        RegDeleteValue(hKey, L"SkydomePickerPos");
+        // NOTE: SkydomeCustomSlot* paths are user data, not view settings — NOT cleared here.
         RegCloseKey(hKey);
     }
 }
@@ -6231,7 +7266,11 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             PushLightingToEngine(info->engine);
             ReadLightingDialogPos(info->lightingDlgRect);
 
-            ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
+            // rework: no ColorButton seed — the Background button is a
+            // plain owner-drawn BUTTON that reads engine state directly.
+            // RebuildBackgroundPreviewBitmap below paints the thumbnail if a
+            // skydome slot is active, otherwise the owner-draw falls through
+            // to the swatch path on first WM_DRAWITEM.
 
             //: build the toolbar preview thumbnail for whatever
             // slot the engine actually loaded. May differ from the
@@ -6240,6 +7279,17 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             // any subsequent selection change.
             RebuildGroundTexturePreviewBitmap(info);
             InvalidateRect(info->hGroundTexturePreview, NULL, TRUE);
+
+            //: skydome restore. Custom paths first so SetSkydomeSlot can
+            // reload a previously-active custom slot.
+            for (int s = Engine::kSkydomeFirstCustomSlot; s < Engine::kSkydomeSlotCount; ++s)
+            {
+                info->engine->SetSkydomeCustomPath(s, ReadSkydomeCustomPath(s));
+            }
+            info->engine->SetSkydomeSlot(ReadSkydomeIndex(0));
+
+            //: build the skydome toolbar preview thumbnail.
+            RebuildBackgroundPreviewBitmap(info);
 
             // Sync the ground-toggle toolbar button to the (possibly
             // restored-from-registry) engine state. The TBBUTTON definition
@@ -6369,6 +7419,13 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 				if (!consumed && info->hGroundPicker != NULL
 				    && IsWindowVisible(info->hGroundPicker)
 				    && IsDialogMessage(info->hGroundPicker, &msg))
+				{
+					consumed = true;
+				}
+				//: skydome picker — same modeless routing.
+				if (!consumed && info->hSkydomePicker != NULL
+				    && IsWindowVisible(info->hSkydomePicker)
+				    && IsDialogMessage(info->hSkydomePicker, &msg))
 				{
 					consumed = true;
 				}
@@ -6573,6 +7630,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	info.hSpawnerDlg            = NULL;
 	info.spawnerVisible         = false;
 	info.hGroundPicker          = NULL;
+	info.hSkydomePicker         = NULL;
+	info.hBackgroundPreviewBitmap = NULL;
 	memset(&info.spawnerWindowRect, 0, sizeof(info.spawnerWindowRect));
 	info.hBloomDlg              = NULL;
 	info.bloomDlgVisible        = false;
