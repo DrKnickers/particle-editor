@@ -18,7 +18,7 @@ Conventions:
 
 ### Selectable skydome backgrounds via the unified Background button
 
-*2026-05-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #73*
+*2026-05-16 · [`f83a26c`](https://github.com/DrKnickers/particle-editor/commit/f83a26c) · #73*
 
 The toolbar's existing **Background:** colour button is now the single entry point for everything background-related: click it once to open a modeless **Background** picker dialog — a 12-slot icon-mode `SysListView32` laid out as a 4×3 grid of 192×192 thumbnails. Slot 0 is **Solid colour**, slots 1–8 are bundled scenes (Space / Atmosphere / Sunset / Dawn / Night / Overcast / Studio / Indoor), and slots 9–11 are user-customisable. Clicking slot 0 opens the standard Win32 colour-picker dialog seeded with the current background colour and the editor's shared 16-slot custom palette; clicking any other slot loads the corresponding skydome.
 
