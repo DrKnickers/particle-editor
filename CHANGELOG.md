@@ -18,7 +18,7 @@ Conventions:
 
 ### Import emitters from another `.alo` file
 
-*2026-05-16 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-16 · [`7640798`](https://github.com/DrKnickers/particle-editor/commit/7640798) · #77*
 
 New **File → Import Emitters from File…** entry opens an `.alo` picker, then a modal dialog showing the source file's emitter tree as a `TVS_CHECKBOXES` TreeView. Tick whichever emitters you want — parent/child auto-include is on by default so ticking a parent picks up its descendants — hit OK, and the selected emitters land as new root emitters in the current particle system. The dialog has *Select all* / *Clear* / *Browse…* buttons; *Browse…* swaps the source file in place without cancelling. OK is disabled until at least one emitter is ticked. Imported emitters arrive with collision-free names (e.g. `smoke_1`), spawn-child cross-references re-mapped where both source and child were imported (dropped child → `-1`), and source link groups re-created as fresh destination groups when ≥2 members of the source group survived the import. The entire import is one undo step — Ctrl+Z atomically rolls back every newly-added emitter.
 
