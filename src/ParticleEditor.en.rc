@@ -490,13 +490,14 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSM
 CAPTION "About"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    DEFPUSHBUTTON   "OK",IDOK,191,184,50,14
-    LTEXT           "Particle Editor %d.%d",IDC_VERSION,7,7,137,8
-    LTEXT           "Build date: %hs",IDC_BUILDDATE,7,16,137,8
-    LTEXT           "Copyright (c) 2008 Mike Lankamp",IDC_STATIC,7,25,137,8
-    LTEXT           "<disclaimer>",IDC_DISCLAIMER,7,136,422,42
-    LTEXT           "<copyright>",IDC_EXPAT_COPYRIGHT,16,53,406,84
-    GROUPBOX        "Expat License",IDC_STATIC,7,41,422,89
+    DEFPUSHBUTTON   "OK",IDOK,191,189,50,14
+    LTEXT           "Particle Editor v%d.%d.%d",IDC_VERSION,7,7,300,8
+    LTEXT           "Forked from Mike.NL's GlyphX Particle Editor v1.5",IDC_FORK_INFO,7,16,300,8
+    LTEXT           "Build date: %hs",IDC_BUILDDATE,7,25,137,8
+    LTEXT           "(c) 2008 Mike Lankamp · (c) 2026 DrKnickers, with help from Claude",IDC_STATIC,7,34,422,8
+    LTEXT           "<disclaimer>",IDC_DISCLAIMER,7,141,422,42
+    LTEXT           "<copyright>",IDC_EXPAT_COPYRIGHT,16,58,406,84
+    GROUPBOX        "Expat License",IDC_STATIC,7,46,422,89
 END
 
 

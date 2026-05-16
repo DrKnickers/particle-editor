@@ -30,8 +30,14 @@
 #include <commdlg.h>
 using namespace std;
 
-static const int VERSION_MAJOR = 1;
-static const int VERSION_MINOR = 5;
+// DrKnickers fork version. Bumped per tagged release on
+// https://github.com/DrKnickers/particle-editor/releases.
+// The upstream version (Mike.NL's GlyphX Particle Editor v1.5) is shown as
+// a literal in the IDD_ABOUT dialog's IDC_FORK_INFO line; if upstream ever
+// cuts a 1.6, edit that string in the .rc files directly.
+static const int FORK_VERSION_MAJOR = 0;
+static const int FORK_VERSION_MINOR = 2;
+static const int FORK_VERSION_PATCH = 0;
 
 // Show up to this amount of files in the File menu
 static const int NUM_HISTORY_ITEMS = 9;
@@ -395,7 +401,7 @@ static INT_PTR CALLBACK AboutProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         {
             HWND hVersion = GetDlgItem(hWnd, IDC_VERSION);
             wstring text = GetWindowStr(hVersion);
-            text = FormatString(text.c_str(), VERSION_MAJOR, VERSION_MINOR);
+            text = FormatString(text.c_str(), FORK_VERSION_MAJOR, FORK_VERSION_MINOR, FORK_VERSION_PATCH);
             SetWindowText(hVersion, text.c_str());
             
             HWND hBuildDate = GetDlgItem(hWnd, IDC_BUILDDATE);
