@@ -16,6 +16,16 @@ Conventions:
 
 ## Changelog
 
+### Ground Height resets to 0 on every launch
+
+*2026-05-16 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Ground Z is now session-only — every editor launch starts with the ground plane at z=0 regardless of what value was in effect when you last closed. Adjusting the *Ground Height* spinner during a session still works as before; it just doesn't write to the registry anymore. Rationale: an anchored vertical reference makes "did I just open the editor, or is this a continued workflow?" unambiguous, and Reset View Settings can't surprise you with a stale offset from a previous tuning pass.
+
+**How we tackled it.** Two-line change in [`src/main.cpp`](src/main.cpp): replaced the `info->engine->SetGroundZ(ReadGroundZ(info->engine->GetGroundZ()))` call at startup with a hard-coded `SetGroundZ(0.0f)`, and dropped the `WriteGroundZ(z)` call from the spinner's `SN_CHANGE` handler. The `ReadGroundZ` / `WriteGroundZ` helpers themselves stay in place as legacy code — harmless, and re-introducing persistence later (if anyone asks) just needs the calls back, no new helpers to write. Reset View Settings still deletes the old `GroundZ` registry value, so stale data from pre-change builds gets cleaned up on the first Reset.
+
+---
+
 ### Import emitters from another `.alo` file
 
 *2026-05-16 · [`7640798`](https://github.com/DrKnickers/particle-editor/commit/7640798) · #77*

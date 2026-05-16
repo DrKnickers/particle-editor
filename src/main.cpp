@@ -2451,7 +2451,8 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     {
                         float z = GetUIFloat(hWnd, ID_GROUNDZ_SPINNER);
                         info->engine->SetGroundZ(z);
-                        WriteGroundZ(z);
+                        // No WriteGroundZ — Ground Z is session-only; see the
+                        // startup-init comment for the rationale.
                         RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
                     }
                 }
@@ -7727,7 +7728,13 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
             // identically to before this feature.
             info->engine->SetBackground(ReadBackgroundColor(info->engine->GetBackground()));
             info->engine->SetGround    (ReadShowGround    (info->engine->GetGround()));
-            info->engine->SetGroundZ   (ReadGroundZ       (info->engine->GetGroundZ()));
+            // Ground Z deliberately does NOT persist across sessions — every
+            // launch starts at 0. Anchoring the preview's vertical reference
+            // to a fixed point makes "did I just open the editor or is this
+            // a continued workflow?" unambiguous, and Reset View Settings
+            // can't accidentally surprise you with a stale offset that was
+            // tweaked in a previous session.
+            info->engine->SetGroundZ(0.0f);
             //: restore per-slot custom file paths BEFORE the
             // selected-slot load, so SetGroundTexture can find the
             // right source. Each slot's path persists independently
