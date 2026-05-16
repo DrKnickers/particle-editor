@@ -18,7 +18,7 @@ Conventions:
 
 ### Skydome slots now load real base-game (and mod-overlay) textures
 
-*2026-05-16 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-16 · [`b4d2415`](https://github.com/DrKnickers/particle-editor/commit/b4d2415) · #75*
 
 Follow-up to. The eight bundled skydome slots are no longer procedural-gradient placeholders — they point at curated base-game textures from `DATA\ART\TEXTURES\` and route through the existing `FileManager` resolution chain, so the active mod's overlay is picked up automatically the same way emitter textures are. New slot labels match what the textures actually look like: Storm, Murky Clouds, Smog Clouds, Blue Horizon, Blue Sky, Orange Horizon, Orange Sky, Volcanic Storm. Switching mods via the Mods menu now also refreshes the active skydome live — no editor restart needed to see a mod's `W_SKY*.DDS` override take effect. When `FileManager` can't resolve a slot's path (no base game installed, mod doesn't ship the file), the slot gracefully falls back to the same procedural RCDATA placeholder it shipped with, so the slot still renders something rather than going Off.
 
