@@ -6,7 +6,7 @@ Public-facing release history for the DrKnickers fork of the GlyphX particle edi
 
 ## v0.2.0 — 2026-05-16
 
-*Tag [`v0.2.0`](https://github.com/DrKnickers/particle-editor/releases/tag/v0.2.0) · Merge [`341add5`](https://github.com/DrKnickers/particle-editor/commit/341add5) · PR #82*
+*Tag [`v0.2.0`](https://github.com/DrKnickers/particle-editor/releases/tag/v0.2.0) · Merge [`e5e90cc`](https://github.com/DrKnickers/particle-editor/commit/e5e90cc) · PR #82*
 
 Quality-of-life features that speed up the particle workflow and preview work to bring the editor's render closer to what you see in-game.
 
