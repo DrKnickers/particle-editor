@@ -1,6 +1,23 @@
 #include "files.h"
 #include "exceptions.h"
+#include <vector>
 using namespace std;
+
+// Read every byte of `file` into a freshly-allocated buffer, Release
+// the file reference, return the bytes. Throws ReadException on
+// partial read or empty file (Releases before throwing). Takes
+// ownership of the IFile* reference. (F13+F14.)
+vector<unsigned char> ReadAndRelease(IFile* file)
+{
+	if (file == NULL) throw ReadException();
+	const unsigned long size = file->size();
+	if (size == 0) { file->Release(); throw ReadException(); }
+	vector<unsigned char> bytes(size);
+	const unsigned long got = file->read(bytes.data(), size);
+	file->Release();
+	if (got != size) throw ReadException();
+	return bytes;
+}
 
 //
 // PhysicalFile

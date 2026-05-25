@@ -82,14 +82,21 @@ static IDirect3DTexture9* LoadTextureViaFileManager(IDirect3DDevice9* pDevice,
 {
     IFile* file = fileManager.getFile(path);
     if (file == NULL) return NULL;
-    const unsigned long size = file->size();
-    if (size == 0) { file->Release(); return NULL; }
-    char* data = new char[size];
-    file->read(data, size);
-    file->Release();
+    // F13+F14: ReadAndRelease handles the exact-byte read
+    // (pre-fix this ignored the read's return value) and Releases the
+    // file reference. On empty or short read it throws ReadException,
+    // which we map to NULL for caller compatibility.
+    std::vector<unsigned char> bytes;
+    try
+    {
+        bytes = ReadAndRelease(file);
+    }
+    catch (ReadException&)
+    {
+        return NULL;
+    }
     IDirect3DTexture9* pTex = NULL;
-    HRESULT hr = D3DXCreateTextureFromFileInMemory(pDevice, data, size, &pTex);
-    delete[] data;
+    HRESULT hr = D3DXCreateTextureFromFileInMemory(pDevice, bytes.data(), (unsigned long)bytes.size(), &pTex);
     return SUCCEEDED(hr) ? pTex : NULL;
 }
 

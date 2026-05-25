@@ -539,6 +539,19 @@ ParticleSystem::Emitter::Emitter(const Emitter& emitter)
     {
         tracks[i] = trackContents + (emitter.tracks[i] - emitter.trackContents);
     }
+
+    // F15: the default operator= just shallow-copied
+    // m_instances (std::set<EmitterInstance*>), leaving the cloned
+    // Emitter pointing at the source's live runtime EmitterInstance
+    // objects. Subsequent destruction or mutation of the clone would
+    // then affect instances that logically belong to the source.
+    // Clear here so the clone starts with no runtime presence; clone
+    // callers (addRootEmitter, insertEmitterAfter, etc.) place the
+    // new Emitter into the spawn graph, and m_instances grows via
+    // registerEmitterInstance as the engine spawns new instances
+    // against it. copySharedParamsFrom uses an analogous snapshot-
+    // and-restore pattern in its own context.
+    m_instances.clear();
 }
 
 void ParticleSystem::Emitter::detachFromLinkGroup()

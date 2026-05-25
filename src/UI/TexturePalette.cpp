@@ -2,6 +2,7 @@
 #include "../crc32.h"
 #include "../utils.h"
 #include "../managers.h"
+#include "../exceptions.h"  // ReadException — F13+F14 ReadAndRelease catch
 #include "../Resources/resource.en.h"
 #include "../Resources/resource.h"
 
@@ -243,16 +244,24 @@ HBITMAP DecodeThumbnail(const std::wstring& filename)
         return GetMissingPlaceholder();
     }
 
-    unsigned long size = file->size();
-    if (size == 0) { delete file; return GetBrokenPlaceholder(); }
-
-    std::vector<char> bytes(size);
-    file->read(bytes.data(), size);
-    delete file;
+    // F13+F14/N4: ReadAndRelease handles the exact-byte
+    // read (pre-fix this ignored the read return) and Releases the
+    // file reference (pre-fix `delete file;` violated the refcounted
+    // IFile abstraction). On empty or short read, ReadException maps
+    // to the broken-placeholder fallback.
+    std::vector<unsigned char> bytes;
+    try
+    {
+        bytes = ReadAndRelease(file);
+    }
+    catch (ReadException&)
+    {
+        return GetBrokenPlaceholder();
+    }
 
     IDirect3DTexture9* pTex = nullptr;
     HRESULT hr = D3DXCreateTextureFromFileInMemoryEx(
-        g_device, bytes.data(), (UINT)size,
+        g_device, bytes.data(), (UINT)bytes.size(),
         THUMB_PX, THUMB_PX, 1, 0,
         D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
         D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &pTex);

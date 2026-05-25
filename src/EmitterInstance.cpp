@@ -724,6 +724,7 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
                 m_colorOp        = D3DTOP_ADD;
 				m_alphaSrcBlend  = D3DBLEND_ZERO;
 				m_alphaDestBlend = D3DBLEND_SRCCOLOR;
+                break;  // F16: was missing — mode 6 fell into 7.
 
             case 7:
                 m_colorOp        = D3DTOP_MODULATE2X;
