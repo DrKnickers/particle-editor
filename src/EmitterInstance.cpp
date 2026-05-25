@@ -1,4 +1,5 @@
 #include <cassert>
+#include <stdexcept>
 #include "EmitterInstance.h"
 #include "ParticleSystemInstance.h"
 using namespace std;
@@ -144,6 +145,23 @@ EmitterInstance::Particle& EmitterInstance::AllocateParticle()
 
     if (particle == NULL)
     {
+	    // Cap to keep uint16_t draw indices well-defined. The render
+	    // path uses D3DFMT_INDEX16 (see DrawIndexedPrimitiveUP below)
+	    // and SpawnParticle casts m_verticesIndex (= m_index *
+	    // NUM_VERTICES_PER_PARTICLE) to uint16_t. Once m_index * 4
+	    // exceeds 65535 the indices wrap and reference the wrong
+	    // vertices — wrong geometry rather than memory corruption.
+	    // (F5.) 4× 16384 = 65536 → cap at 16384.
+	    const size_t maxParticles = ((size_t)UINT16_MAX + 1) / NUM_VERTICES_PER_PARTICLE;
+	    if (m_primitives.capacity() >= maxParticles)
+	    {
+#ifndef NDEBUG
+		    printf("[EmitterInstance] particle cap (%zu) reached; refusing further spawns\n", maxParticles);
+		    fflush(stdout);
+#endif
+		    throw runtime_error("EmitterInstance: particle cap reached");
+	    }
+
 	    // We couldn't find a free spot, allocate new particles
         ParticleBlock* block = new ParticleBlock(m_primitives.capacity(), m_primitives.capacity());
         m_blocks.push_back(block);

@@ -366,6 +366,13 @@ public:
     { return m_linkExempts; }
 
 private:
+	// Reject self-links, multi-parent, and cycles in the spawn graph.
+	// Throws BadFileException if the graph is structurally invalid.
+	// Called from the file-load post-process before parent-pointer
+	// assignment, so downstream tree-walks can assume well-formed
+	// input. (F4.)
+	void validateEmitterGraph();
+
 	bool			 	                       m_leaveParticles;
 	std::string                                m_name;
 	std::vector<Emitter*>                      m_emitters;

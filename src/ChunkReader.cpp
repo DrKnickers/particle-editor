@@ -62,6 +62,11 @@ ChunkType ChunkReader::next()
 	}
 
 	unsigned long size = letohl(hdr.size);
+	// Depth guard. Pre-fix m_curDepth was incremented unchecked and the
+	// write to m_offsets[m_curDepth] could scribble past the fixed
+	// array — a crafted .alo with excessive nesting would corrupt
+	// adjacent memory during parse. (F3.)
+	if (m_curDepth + 1 >= MAX_CHUNK_DEPTH) throw ReadException();
 	m_offsets[ ++m_curDepth ] = m_file->tell() + (size & 0x7FFFFFFF);
 	m_size     = (~size & 0x80000000) ? size : -1;
 	m_miniSize = -1;
@@ -89,19 +94,23 @@ long ChunkReader::size()
 
 string ChunkReader::readString()
 {
-	string str;
-	char* data = new char[ size() ];
-	try
+	// Length-bounded read. Pre-fix this allocated `new char[size()]`,
+	// read exactly `size()` bytes, then did `str = data` — which
+	// invokes std::string::operator=(const char*) and walks past the
+	// allocation until it finds a zero byte if the chunk omits the
+	// terminator. (F2.) Size the std::string to the chunk
+	// byte count, read directly into its storage, then trim at the
+	// first NUL if present (chunk format may or may not include one).
+	long s = size();
+	if (s < 0) throw ReadException();
+	if (s == 0) return string();
+	string str((size_t)s, '\0');
+	read(&str[0], s);
+	size_t nulPos = str.find('\0');
+	if (nulPos != string::npos)
 	{
-		read(data, size());
+		str.resize(nulPos);
 	}
-	catch (...)
-	{
-		delete[] data;
-		throw;
-	}
-	str = data;
-	delete[] data;
 	return str;
 }
 

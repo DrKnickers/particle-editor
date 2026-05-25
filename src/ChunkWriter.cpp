@@ -5,6 +5,12 @@ using namespace std;
 
 void ChunkWriter::beginChunk(ChunkType type)
 {
+	// Depth guard. Pre-fix m_curDepth was incremented unchecked and
+	// the subsequent write to m_chunks[m_curDepth] could scribble
+	// past the fixed array. This shouldn't fire on well-formed editor
+	// data (typical .alo nests ~6-8 deep) but guards writer-bug cases.
+	// (F3.)
+	if (m_curDepth + 1 >= MAX_CHUNK_DEPTH) throw WriteException();
 	m_curDepth++;
 	m_chunks[m_curDepth].offset   = m_file->tell();
 	m_chunks[m_curDepth].hdr.type = type;
@@ -92,4 +98,3 @@ ChunkWriter::~ChunkWriter()
 {
 	m_file->Release();
 }
-

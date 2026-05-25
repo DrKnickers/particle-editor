@@ -1357,6 +1357,7 @@ static bool DoSaveFile(APPLICATION_INFO* info, bool saveas = false)
 	}
 
 	PhysicalFile* file = new PhysicalFile(info->filename, PhysicalFile::WRITE);
+	bool saved = false;
 	try
 	{
 		// Create particleSystem name from filename
@@ -1370,22 +1371,31 @@ static bool DoSaveFile(APPLICATION_INFO* info, bool saveas = false)
 
 		info->particleSystem->setName(WideToAnsi(name,"_"));
 		info->particleSystem->write(file);
-		file->Release();
+		saved = true;
 	}
 	catch (wexception& e)
 	{
-		file->Release();
 		MessageBox(info->hMainWnd, LoadString(IDS_ERROR_FILE_SAVE, e.what()).c_str(), NULL, MB_OK | MB_ICONERROR );
 	}
-    SetFileChanged(info, false);
-    info->undoStack.MarkSaved();
-    UpdateUndoRedoUI(info);
-    // User just saved — the on-disk file is now authoritative; the
-    // autosave is no longer needed for recovery. Delete both tiers
-    // so we don't leave orphans that would prompt for recovery on
-    // next launch.
-    Autosave::DeleteOurSession();
-	return true;
+	file->Release();
+
+	// Only commit dirty-state cleanup if the write actually succeeded.
+	// Pre-fix this block ran unconditionally — a failed save would
+	// clear the dirty marker AND delete the autosave, so the user
+	// could close without re-prompt and lose both the in-memory state
+	// and recovery. (F1.)
+	if (saved)
+	{
+		SetFileChanged(info, false);
+		info->undoStack.MarkSaved();
+		UpdateUndoRedoUI(info);
+		// User just saved — the on-disk file is now authoritative; the
+		// autosave is no longer needed for recovery. Delete both tiers
+		// so we don't leave orphans that would prompt for recovery on
+		// next launch.
+		Autosave::DeleteOurSession();
+	}
+	return saved;
 }
 
 static bool DoCheckChanges(APPLICATION_INFO* info)

@@ -1061,13 +1061,14 @@ ParticleSystem::ParticleSystem(IFile* file)
 	        type = reader.next();
 	    }
 
-	    // Post-process. Validate spawn-field indices first: malformed files
-	    // (saved by external tools or by an old version of the editor that
-	    // didn't update cross-references on delete) can store an index that
-	    // points past the end of the emitter list. The "!= -1" guard alone
-	    // doesn't catch that — m_emitters[badIndex] then trips the debug
-	    // assertion "vector subscript out of range" before the file finishes
-	    // loading. Treat any out-of-range value as "no spawn".
+	    // Post-process. Range-clear out-of-bounds spawn indices first:
+	    // malformed files (saved by external tools or by an old version
+	    // of the editor that didn't update cross-references on delete)
+	    // can store an index that points past the end of the emitter
+	    // list. The "!= -1" guard alone doesn't catch that —
+	    // m_emitters[badIndex] then trips the debug assertion "vector
+	    // subscript out of range" before the file finishes loading.
+	    // Treat any out-of-range value as "no spawn".
 	    for (unsigned int i = 0; i < m_emitters.size(); i++)
 	    {
             Emitter* emitter = m_emitters[i];
@@ -1084,7 +1085,17 @@ ParticleSystem::ParticleSystem(IFile* file)
                        i, emitter->name.c_str(), emitter->spawnDuringLife, m_emitters.size()); fflush(stdout);
                 emitter->spawnDuringLife = (size_t)-1;
             }
+	    }
 
+	    // Reject self-links, multi-parent, and cycles BEFORE assigning
+	    // parent pointers — otherwise downstream code (deleteEmitter
+	    // recursion, UI tree rebuild) can blow the stack or double-free
+	    // on cyclic input. (F4.)
+	    validateEmitterGraph();
+
+	    for (unsigned int i = 0; i < m_emitters.size(); i++)
+	    {
+            Emitter* emitter = m_emitters[i];
 		    if (emitter->spawnOnDeath    != (size_t)-1) m_emitters[emitter->spawnOnDeath]   ->parent = emitter;
 		    if (emitter->spawnDuringLife != (size_t)-1) m_emitters[emitter->spawnDuringLife]->parent = emitter;
 	    }
@@ -1096,6 +1107,70 @@ ParticleSystem::ParticleSystem(IFile* file)
             delete m_emitters[i];
         }
         throw;
+    }
+}
+
+// Reject self-links, multi-parent, and cycles in the spawn graph.
+// Called from the file-load post-process before parent-pointer
+// assignment, so downstream tree-walks (deleteEmitter recursion, UI
+// tree rebuild) can assume well-formed input. (F4.)
+//
+// With single-parent validated, a cycle is a closed loop disconnected
+// from any root — DFS from each root (parentCount == 0) and verify
+// every node was visited. Any unvisited node is part of a cycle.
+void ParticleSystem::validateEmitterGraph()
+{
+    const size_t n = m_emitters.size();
+
+    // (1) Reject self-links.
+    for (size_t i = 0; i < n; i++)
+    {
+        const Emitter* e = m_emitters[i];
+        if ((e->spawnOnDeath    != (size_t)-1 && e->spawnOnDeath    == i) ||
+            (e->spawnDuringLife != (size_t)-1 && e->spawnDuringLife == i))
+        {
+            throw BadFileException();
+        }
+    }
+
+    // (2) Reject any child claimed by more than one parent. The
+    // parent pointer is set unconditionally by the caller's loop;
+    // multi-parent input would leave parent inconsistent with the
+    // integer back-references.
+    std::vector<int> parentCount(n, 0);
+    for (size_t i = 0; i < n; i++)
+    {
+        const Emitter* e = m_emitters[i];
+        if (e->spawnOnDeath    != (size_t)-1) parentCount[e->spawnOnDeath]++;
+        if (e->spawnDuringLife != (size_t)-1) parentCount[e->spawnDuringLife]++;
+    }
+    for (size_t i = 0; i < n; i++)
+    {
+        if (parentCount[i] > 1) throw BadFileException();
+    }
+
+    // (3) Reject cycles. DFS from each root and confirm every node
+    // is visited.
+    std::vector<bool>   visited(n, false);
+    std::vector<size_t> stack;
+    for (size_t root = 0; root < n; root++)
+    {
+        if (parentCount[root] != 0) continue;  // not a root
+        stack.push_back(root);
+        while (!stack.empty())
+        {
+            size_t i = stack.back();
+            stack.pop_back();
+            if (visited[i]) continue;  // single-parent → unreachable but defensive
+            visited[i] = true;
+            const Emitter* e = m_emitters[i];
+            if (e->spawnOnDeath    != (size_t)-1) stack.push_back(e->spawnOnDeath);
+            if (e->spawnDuringLife != (size_t)-1) stack.push_back(e->spawnDuringLife);
+        }
+    }
+    for (size_t i = 0; i < n; i++)
+    {
+        if (!visited[i]) throw BadFileException();
     }
 }
 
