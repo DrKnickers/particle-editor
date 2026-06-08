@@ -4,9 +4,9 @@
 using namespace std;
 
 // Read every byte of `file` into a freshly-allocated buffer, Release
-// the file reference, return the bytes. Throws ReadException on
-// partial read or empty file (Releases before throwing). Takes
-// ownership of the IFile* reference. (F13+F14.)
+// the file reference, return the bytes. Throws ReadException on partial
+// read or empty file (Releases before throwing). Takes ownership of the
+// IFile* reference. (F13+F14.)
 vector<unsigned char> ReadAndRelease(IFile* file)
 {
 	if (file == NULL) throw ReadException();

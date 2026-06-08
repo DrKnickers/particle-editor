@@ -1,0 +1,10 @@
+- dialog "Duplicate with Index Increment":
+  - heading "Duplicate with Index Increment" [level=2]
+  - button "Close"
+  - text: Increment by
+  - textbox "Increment by": "1"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - paragraph: Duplicates the emitter and shifts every atlas-index keyframe on the duplicate by this delta. If the source has no index keys, a single key at t=0 is inserted with the chosen value.
+  - button "Cancel"
+  - button "OK"

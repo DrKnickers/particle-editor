@@ -1,5 +1,5 @@
 #include <cassert>
-#include <stdexcept>
+#include <cstdio>
 #include "EmitterInstance.h"
 #include "ParticleSystemInstance.h"
 using namespace std;
@@ -145,23 +145,6 @@ EmitterInstance::Particle& EmitterInstance::AllocateParticle()
 
     if (particle == NULL)
     {
-	    // Cap to keep uint16_t draw indices well-defined. The render
-	    // path uses D3DFMT_INDEX16 (see DrawIndexedPrimitiveUP below)
-	    // and SpawnParticle casts m_verticesIndex (= m_index *
-	    // NUM_VERTICES_PER_PARTICLE) to uint16_t. Once m_index * 4
-	    // exceeds 65535 the indices wrap and reference the wrong
-	    // vertices — wrong geometry rather than memory corruption.
-	    // (F5.) 4× 16384 = 65536 → cap at 16384.
-	    const size_t maxParticles = ((size_t)UINT16_MAX + 1) / NUM_VERTICES_PER_PARTICLE;
-	    if (m_primitives.capacity() >= maxParticles)
-	    {
-#ifndef NDEBUG
-		    printf("[EmitterInstance] particle cap (%zu) reached; refusing further spawns\n", maxParticles);
-		    fflush(stdout);
-#endif
-		    throw runtime_error("EmitterInstance: particle cap reached");
-	    }
-
 	    // We couldn't find a free spot, allocate new particles
         ParticleBlock* block = new ParticleBlock(m_primitives.capacity(), m_primitives.capacity());
         m_blocks.push_back(block);
@@ -276,6 +259,28 @@ void EmitterInstance::ResetParticle(Particle& particle, TimeF currentTime)
 void EmitterInstance::SpawnParticle(TimeF currentTime)
 {
 	Particle& particle = AllocateParticle();
+
+	// Hard index cap. Vertex indices are uint16 (the draw call uses
+	// D3DFMT_INDEX16) and m_verticesIndex = m_index * NUM_VERTICES_PER_PARTICLE
+	// feeds the (uint16_t) casts that build the index buffer below. Once
+	// m_index * NUM_VERTICES_PER_PARTICLE exceeds 0xFFFF those casts wrap and
+	// the triangles reference the wrong vertices -- silent render corruption.
+	// nParticlesPerBurst / nParticlesPerSecond are read from file without a
+	// clamp (weather emitters can instantiate a whole second's worth at once),
+	// so refuse to spawn past the ceiling: free the slot and bail. The real
+	// fix is 32-bit indexing; this keeps a pathological emitter from
+	// corrupting the frame in the meantime.
+	const size_t kMaxParticleIndex = 0xFFFF / NUM_VERTICES_PER_PARTICLE;
+	if (particle.m_index > kMaxParticleIndex)
+	{
+#ifndef NDEBUG
+		printf("[Particle] uint16 index cap reached at %zu live particles; refusing spawn\n",
+		       particle.m_index); fflush(stdout);
+#endif
+		FreeParticle(particle);
+		return;
+	}
+
 	particle.m_verticesIndex = particle.m_index * NUM_VERTICES_PER_PARTICLE;
 
     // Set and generate properties
@@ -737,20 +742,32 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 	{
 		TimeF currentTime = GetTimeF();
 
-		// Reload track cursors on all particles
+		// Reload track cursors on all particles. We must reseat not only the
+		// edited `track` but EVERY channel whose `tracks[j]` aliases the same
+		// `keys` container — i.e. lock-group members (a channel locked to an
+		// earlier one shares its multiset, ParticleSystem.h slot aliasing).
+		// An erase on the edited track orphans the cursors of all aliasing
+		// channels at once; reseating only `track` would leave the aliased
+		// channels' cursors dangling and crash on the next UpdateTrackCursors.
 		for (Particle* particle = m_particleList; particle != NULL; particle = particle->m_next)
 		{
 			float relTime = (float)(currentTime - particle->m_spawnTime) * 100 / (float)(particle->m_deathTime - particle->m_spawnTime);
-			
-			Particle::TrackCursor& cursor = particle->m_cursors[track];
-			cursor.prev = cursor.next = m_emitter.tracks[track]->keys.begin();
-			while (cursor.next->time < relTime)
+
+			for (int t = 0; t < ParticleSystem::NUM_TRACKS; t++)
 			{
-				cursor.prev = cursor.next;
-				if (++cursor.next == m_emitter.tracks[track]->keys.end())
+				// Process the edited track itself + any channel aliasing it.
+				if (t != track && m_emitter.tracks[t] != m_emitter.tracks[track]) continue;
+
+				Particle::TrackCursor& cursor = particle->m_cursors[t];
+				cursor.prev = cursor.next = m_emitter.tracks[t]->keys.begin();
+				while (cursor.next->time < relTime)
 				{
-					cursor.next = cursor.prev;
-					break;
+					cursor.prev = cursor.next;
+					if (++cursor.next == m_emitter.tracks[t]->keys.end())
+					{
+						cursor.next = cursor.prev;
+						break;
+					}
 				}
 			}
 		}

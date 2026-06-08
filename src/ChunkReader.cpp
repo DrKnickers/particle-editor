@@ -1,4 +1,5 @@
 #include <cassert>
+#include <vector>
 #include "ChunkFile.h"
 #include "exceptions.h"
 using namespace std;
@@ -62,11 +63,15 @@ ChunkType ChunkReader::next()
 	}
 
 	unsigned long size = letohl(hdr.size);
-	// Depth guard. Pre-fix m_curDepth was incremented unchecked and the
-	// write to m_offsets[m_curDepth] could scribble past the fixed
-	// array — a crafted .alo with excessive nesting would corrupt
-	// adjacent memory during parse. (F3.)
-	if (m_curDepth + 1 >= MAX_CHUNK_DEPTH) throw ReadException();
+	// Guard the fixed m_offsets[MAX_CHUNK_DEPTH] array: a crafted .alo with
+	// chunks nested past depth 255 would otherwise write out of bounds via
+	// the pre-increment below (CWE-787 heap corruption during parse).
+	// Reject the file. (nextMini() uses the flat m_miniOffset and is not
+	// affected.)
+	if (m_curDepth + 1 >= MAX_CHUNK_DEPTH)
+	{
+		throw BadFileException();
+	}
 	m_offsets[ ++m_curDepth ] = m_file->tell() + (size & 0x7FFFFFFF);
 	m_size     = (~size & 0x80000000) ? size : -1;
 	m_miniSize = -1;
@@ -94,24 +99,27 @@ long ChunkReader::size()
 
 string ChunkReader::readString()
 {
-	// Length-bounded read. Pre-fix this allocated `new char[size()]`,
-	// read exactly `size()` bytes, then did `str = data` — which
-	// invokes std::string::operator=(const char*) and walks past the
-	// allocation until it finds a zero byte if the chunk omits the
-	// terminator. (F2.) Size the std::string to the chunk
-	// byte count, read directly into its storage, then trim at the
-	// first NUL if present (chunk format may or may not include one).
-	long s = size();
-	if (s < 0) throw ReadException();
-	if (s == 0) return string();
-	string str((size_t)s, '\0');
-	read(&str[0], s);
-	size_t nulPos = str.find('\0');
-	if (nulPos != string::npos)
+	// A string chunk stores its bytes plus a trailing NUL (see
+	// ChunkWriter::writeString, which writes length()+1 bytes). The old
+	// body did `str = data;` -- std::string(const char*) walks to the
+	// first NUL, reading past the heap allocation on any malformed or
+	// unterminated string chunk (CWE-125 heap over-read); a zero-length
+	// chunk made `new char[0]` + C-string assign undefined too. Read into
+	// a bounded buffer, require the terminator, and construct the string
+	// length-bounded so neither a missing terminator nor an embedded NUL
+	// can misbehave.
+	const long len = size();
+	if (len <= 0)
 	{
-		str.resize(nulPos);
+		throw BadFileException();
 	}
-	return str;
+	std::vector<char> buf((size_t)len);
+	read(buf.data(), len);
+	if (buf.back() != '\0')
+	{
+		throw BadFileException();
+	}
+	return string(buf.data(), (size_t)len - 1);
 }
 
 long ChunkReader::read(void* buffer, long size, bool check)

@@ -541,16 +541,12 @@ ParticleSystem::Emitter::Emitter(const Emitter& emitter)
     }
 
     // F15: the default operator= just shallow-copied
-    // m_instances (std::set<EmitterInstance*>), leaving the cloned
-    // Emitter pointing at the source's live runtime EmitterInstance
-    // objects. Subsequent destruction or mutation of the clone would
-    // then affect instances that logically belong to the source.
-    // Clear here so the clone starts with no runtime presence; clone
-    // callers (addRootEmitter, insertEmitterAfter, etc.) place the
-    // new Emitter into the spawn graph, and m_instances grows via
-    // registerEmitterInstance as the engine spawns new instances
-    // against it. copySharedParamsFrom uses an analogous snapshot-
-    // and-restore pattern in its own context.
+    // m_instances (the set of live runtime EmitterInstance pointers),
+    // leaving the cloned Emitter pointing at the source's live
+    // instances. Subsequent destruction or mutation of the clone would
+    // then affect instances that logically belong to the source. Clear
+    // here so the clone starts with no runtime presence; the engine
+    // re-populates m_instances as it spawns instances against the clone.
     m_instances.clear();
 }
 
@@ -1074,44 +1070,12 @@ ParticleSystem::ParticleSystem(IFile* file)
 	        type = reader.next();
 	    }
 
-	    // Post-process. Range-clear out-of-bounds spawn indices first:
-	    // malformed files (saved by external tools or by an old version
-	    // of the editor that didn't update cross-references on delete)
-	    // can store an index that points past the end of the emitter
-	    // list. The "!= -1" guard alone doesn't catch that —
-	    // m_emitters[badIndex] then trips the debug assertion "vector
-	    // subscript out of range" before the file finishes loading.
-	    // Treat any out-of-range value as "no spawn".
-	    for (unsigned int i = 0; i < m_emitters.size(); i++)
-	    {
-            Emitter* emitter = m_emitters[i];
-
-            if (emitter->spawnOnDeath != (size_t)-1 && emitter->spawnOnDeath >= m_emitters.size())
-            {
-                printf("[Load] emitter %u '%s' has spawnOnDeath=%zu out of range (%zu emitters); clearing\n",
-                       i, emitter->name.c_str(), emitter->spawnOnDeath, m_emitters.size()); fflush(stdout);
-                emitter->spawnOnDeath = (size_t)-1;
-            }
-            if (emitter->spawnDuringLife != (size_t)-1 && emitter->spawnDuringLife >= m_emitters.size())
-            {
-                printf("[Load] emitter %u '%s' has spawnDuringLife=%zu out of range (%zu emitters); clearing\n",
-                       i, emitter->name.c_str(), emitter->spawnDuringLife, m_emitters.size()); fflush(stdout);
-                emitter->spawnDuringLife = (size_t)-1;
-            }
-	    }
-
-	    // Reject self-links, multi-parent, and cycles BEFORE assigning
-	    // parent pointers — otherwise downstream code (deleteEmitter
-	    // recursion, UI tree rebuild) can blow the stack or double-free
-	    // on cyclic input. (F4.)
-	    validateEmitterGraph();
-
-	    for (unsigned int i = 0; i < m_emitters.size(); i++)
-	    {
-            Emitter* emitter = m_emitters[i];
-		    if (emitter->spawnOnDeath    != (size_t)-1) m_emitters[emitter->spawnOnDeath]   ->parent = emitter;
-		    if (emitter->spawnDuringLife != (size_t)-1) m_emitters[emitter->spawnDuringLife]->parent = emitter;
-	    }
+	    // Post-process: make the loaded spawn-graph well-formed before any
+	    // emitter is parented or recursed over. ValidateEmitterGraph clears
+	    // out-of-range / self / duplicate-parent links, breaks cycles, and
+	    // rebuilds parent pointers. (Also covers autosave restore, which
+	    // loads through this same ParticleSystem(IFile*) constructor.)
+	    ValidateEmitterGraph();
     }
     catch (...)
     {
@@ -1123,68 +1087,186 @@ ParticleSystem::ParticleSystem(IFile* file)
     }
 }
 
-// Reject self-links, multi-parent, and cycles in the spawn graph.
-// Called from the file-load post-process before parent-pointer
-// assignment, so downstream tree-walks (deleteEmitter recursion, UI
-// tree rebuild) can assume well-formed input. (F4.)
-//
-// With single-parent validated, a cycle is a closed loop disconnected
-// from any root — DFS from each root (parentCount == 0) and verify
-// every node was visited. Any unvisited node is part of a cycle.
-void ParticleSystem::validateEmitterGraph()
+void ParticleSystem::ValidateEmitterGraph()
 {
     const size_t n = m_emitters.size();
 
-    // (1) Reject self-links.
+    // Pass 1: sanitise spawn indices so the graph is a single-parent forest.
+    //  (a) out-of-range index -> "no spawn". A malformed file (external tool,
+    //      or an old editor that didn't fix cross-references on delete) can
+    //      store an index past the end of the list; m_emitters[bad] would
+    //      otherwise trip the debug "vector subscript out of range" assert.
+    //  (b) self-link (an emitter spawning itself) -> clear.
+    //  (c) a child already claimed by an earlier parent slot -> clear, so no
+    //      child has two parents (otherwise deleteEmitter()'s recursion and
+    //      the EmitterList tree rebuild visit it twice -> double-free).
+    std::vector<bool> claimed(n, false);
     for (size_t i = 0; i < n; i++)
     {
-        const Emitter* e = m_emitters[i];
-        if ((e->spawnOnDeath    != (size_t)-1 && e->spawnOnDeath    == i) ||
-            (e->spawnDuringLife != (size_t)-1 && e->spawnDuringLife == i))
+        Emitter* e = m_emitters[i];
+        size_t* slots[2] = { &e->spawnOnDeath, &e->spawnDuringLife };
+        for (size_t s = 0; s < 2; s++)
         {
-            throw BadFileException();
+            const size_t c = *slots[s];
+            if (c == (size_t)-1) continue;
+            const char* reason = NULL;
+            if      (c >= n)      reason = "out of range";
+            else if (c == i)      reason = "self-link";
+            else if (claimed[c])  reason = "already parented";
+            if (reason != NULL)
+            {
+                printf("[Load] emitter %zu '%s' has invalid spawn index %zu (%s); clearing\n",
+                       i, e->name.c_str(), c, reason); fflush(stdout);
+                *slots[s] = (size_t)-1;
+            }
+            else
+            {
+                claimed[c] = true;
+            }
         }
     }
 
-    // (2) Reject any child claimed by more than one parent. The
-    // parent pointer is set unconditionally by the caller's loop;
-    // multi-parent input would leave parent inconsistent with the
-    // integer back-references.
-    std::vector<int> parentCount(n, 0);
-    for (size_t i = 0; i < n; i++)
-    {
-        const Emitter* e = m_emitters[i];
-        if (e->spawnOnDeath    != (size_t)-1) parentCount[e->spawnOnDeath]++;
-        if (e->spawnDuringLife != (size_t)-1) parentCount[e->spawnDuringLife]++;
-    }
-    for (size_t i = 0; i < n; i++)
-    {
-        if (parentCount[i] > 1) throw BadFileException();
-    }
-
-    // (3) Reject cycles. DFS from each root and confirm every node
-    // is visited.
-    std::vector<bool>   visited(n, false);
-    std::vector<size_t> stack;
+    // Pass 2: break cycles. After pass 1 every node has in-degree <= 1, so any
+    // remaining cycle is a simple loop; an iterative DFS clears the back-edge
+    // that closes it. color: 0 = unvisited, 1 = on the current path, 2 = done.
+    // Iterative (not recursive) so a deep chain can't overflow the stack.
+    std::vector<int> color(n, 0);
     for (size_t root = 0; root < n; root++)
     {
-        if (parentCount[root] != 0) continue;  // not a root
-        stack.push_back(root);
+        if (color[root] != 0) continue;
+        std::vector< std::pair<size_t, int> > stack;
+        color[root] = 1;
+        stack.push_back(std::make_pair(root, 0));
         while (!stack.empty())
         {
-            size_t i = stack.back();
-            stack.pop_back();
-            if (visited[i]) continue;  // single-parent → unreachable but defensive
-            visited[i] = true;
-            const Emitter* e = m_emitters[i];
-            if (e->spawnOnDeath    != (size_t)-1) stack.push_back(e->spawnOnDeath);
-            if (e->spawnDuringLife != (size_t)-1) stack.push_back(e->spawnDuringLife);
+            const size_t u       = stack.back().first;
+            const int    slotIdx = stack.back().second;
+            if (slotIdx >= 2)
+            {
+                color[u] = 2;
+                stack.pop_back();
+                continue;
+            }
+            stack.back().second = slotIdx + 1;   // advance before descending
+            Emitter* e = m_emitters[u];
+            const size_t v = (slotIdx == 0) ? e->spawnOnDeath : e->spawnDuringLife;
+            if (v == (size_t)-1) continue;
+            if (color[v] == 1)
+            {
+                // Back-edge into the active path: this link closes a cycle.
+                printf("[Load] emitter %zu '%s' closes a spawn cycle back to %zu; clearing\n",
+                       u, e->name.c_str(), v); fflush(stdout);
+                if (slotIdx == 0) e->spawnOnDeath    = (size_t)-1;
+                else              e->spawnDuringLife = (size_t)-1;
+            }
+            else if (color[v] == 0)
+            {
+                color[v] = 1;
+                stack.push_back(std::make_pair(v, 0));
+            }
+            // color[v] == 2 (already finished) can't occur after pass 1's
+            // in-degree<=1 guarantee, and would be a harmless cross-edge.
         }
     }
+
+    // Pass 3: rebuild parent pointers from the now acyclic, single-parent
+    // spawn links. Reset to NULL (root) first so a stale parent from a link
+    // we just cleared can't survive.
+    for (size_t i = 0; i < n; i++)
+        m_emitters[i]->parent = NULL;
     for (size_t i = 0; i < n; i++)
     {
-        if (!visited[i]) throw BadFileException();
+        Emitter* e = m_emitters[i];
+        if (e->spawnOnDeath    != (size_t)-1) m_emitters[e->spawnOnDeath]   ->parent = e;
+        if (e->spawnDuringLife != (size_t)-1) m_emitters[e->spawnDuringLife]->parent = e;
     }
+}
+
+size_t ParticleSystem::ImportEmittersFrom(
+    ParticleSystem& source,
+    const std::vector<size_t>& picks,
+    const std::function<std::string(const std::string&)>& makeUniqueName)
+{
+    if (picks.empty()) return 0;
+
+    // Pass 1: clone each pick as a root in THIS system; build the
+    // source→destination index map for Pass 2. A clone is a deep copy via
+    // the chunk serialiser in copy=true mode (strips runtime / link state).
+    std::map<size_t, size_t> srcToDest;
+    std::vector<Emitter*> destEmitters(picks.size(), NULL);
+    size_t imported = 0;
+    for (size_t i = 0; i < picks.size(); ++i)
+    {
+        size_t srcIdx = picks[i];
+        if (srcIdx >= source.getEmitters().size()) continue;
+        Emitter& srcEmit = source.getEmitter(srcIdx);
+
+        MemoryFile* mf = new MemoryFile;
+        Emitter* placed = NULL;
+        try
+        {
+            ChunkWriter w(mf);
+            srcEmit.copy(w);
+            mf->seek(0);
+            ChunkReader r(mf);
+            // Braced init avoids the most-vexing-parse on `Emitter clone(r);`.
+            Emitter clone{r};
+            clone.name = makeUniqueName(clone.name);
+            placed = addRootEmitter(clone);
+        }
+        catch (...)
+        {
+            placed = NULL;
+        }
+        mf->Release();
+
+        if (placed != NULL)
+        {
+            srcToDest[srcIdx] = placed->index;
+            destEmitters[i]   = placed;
+            ++imported;
+        }
+    }
+
+    // Pass 2: re-map spawn fields. Children whose source-index isn't in the
+    // picks set stay -1 (copy=true already cleared them).
+    for (size_t i = 0; i < picks.size(); ++i)
+    {
+        Emitter* dst = destEmitters[i];
+        if (dst == NULL) continue;
+        const Emitter& src = source.getEmitter(picks[i]);
+        auto rebind = [&](size_t srcChildIdx) -> size_t {
+            if (srcChildIdx == (size_t)-1) return (size_t)-1;
+            auto it = srcToDest.find(srcChildIdx);
+            return (it != srcToDest.end()) ? it->second : (size_t)-1;
+        };
+        dst->spawnDuringLife = rebind(src.spawnDuringLife);
+        dst->spawnOnDeath    = rebind(src.spawnOnDeath);
+    }
+
+    // Rebuild parent pointers + drop any self / duplicate-parent / cyclic link
+    // the re-map could have introduced. Pre-existing emitters revalidate
+    // harmlessly (their links are unchanged and already valid).
+    ValidateEmitterGraph();
+
+    // Pass 3: re-create source link groups. Bucket imports by source
+    // linkGroup; ≥2-member buckets get a fresh destination group. Single-
+    // member buckets arrive unlinked (copy=true stripped linkGroup).
+    std::map<uint32_t, std::vector<Emitter*>> byGroup;
+    for (size_t i = 0; i < picks.size(); ++i)
+    {
+        if (destEmitters[i] == NULL) continue;
+        uint32_t srcGroup = source.getEmitter(picks[i]).linkGroup;
+        if (srcGroup != 0)
+            byGroup[srcGroup].push_back(destEmitters[i]);
+    }
+    for (auto& kv : byGroup)
+    {
+        if (kv.second.size() >= 2)
+            CreateLinkGroup(*this, kv.second);
+    }
+
+    return imported;
 }
 
 ParticleSystem::Emitter* ParticleSystem::addRootEmitter(const ParticleSystem::Emitter& emitter)

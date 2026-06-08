@@ -1,0 +1,10 @@
+{
+  "name": "@particle-editor/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/tokens.ts",
+  "types": "./src/tokens.ts",
+  "exports": {
+    ".": "./src/tokens.ts"
+  }
+}

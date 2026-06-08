@@ -1,0 +1,6 @@
+- dialog "Reset View Settings":
+  - heading "Reset View Settings" [level=2]
+  - button "Close"
+  - paragraph: Reset background color, ground plane visibility, ground texture, ground Z offset, skydome, and bloom to defaults?
+  - button "Cancel"
+  - button "Reset"

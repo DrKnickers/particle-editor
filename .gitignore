@@ -259,3 +259,9 @@ tasks/ghidra_project/
 # Test artifacts. tests/*.cpp are checked in (they're the reproducer
 # alongside the production code); compiled binaries are not.
 tests/*.exe
+
+# Superpowers brainstorming sessions: per-session HTML mockups
+# rendered into the visual-companion browser. Transient working
+# artifacts; the design spec they fed into IS committed at
+# docs/superpowers/specs/.
+.superpowers/

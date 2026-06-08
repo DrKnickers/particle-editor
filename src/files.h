@@ -79,13 +79,12 @@ public:
 	SubFile(IFile* file, unsigned long start, unsigned long size);
 };
 
-// Read every byte of `file` into a freshly-allocated buffer, Release()
-// the file reference, return the bytes. Throws ReadException on
-// partial read, empty file, or null pointer (Releases before throwing).
-// The combined "read whole file + release the handle" is one logical
-// operation at every site that does load-once-and-decode (texture
-// thumbnails, shader bytecode, etc.) — see tasks/post-audit-followups.md
-// F13+F14 for the partial-read + leak history this consolidates.
+// F13+F14: read every byte of `file` into a fresh buffer,
+// Release() the file reference, return the bytes. Throws ReadException
+// on partial read, empty file, or null pointer (Releases before
+// throwing). Consolidates the load-once-and-decode sites (textures,
+// shaders, thumbnails) that previously leaked the IFile and ignored the
+// read return value.
 std::vector<unsigned char> ReadAndRelease(IFile* file);
 
 #endif

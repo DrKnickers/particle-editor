@@ -12,9 +12,15 @@ XMLNode::XMLNode(XMLNode* parent, const XML_Char* name, const XML_Char **atts)
 	this->parent   = parent;
 	this->name     = name;
 
-	while (*atts != NULL)
+	// Expat passes attributes as a NULL-terminated [name0, val0, name1,
+	// val1, ...] array. Advance by pairs — without the `atts += 2` this
+	// loop spun forever (100% CPU) on any element carrying >=1 attribute
+	// (audit G10). The `atts[1]` guard also tolerates a malformed
+	// odd-length array rather than reading past the terminator.
+	while (atts && atts[0] && atts[1])
 	{
 		attributes.insert(make_pair(atts[0], atts[1]));
+		atts += 2;
 	}
 }
 

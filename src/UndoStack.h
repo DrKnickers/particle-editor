@@ -56,6 +56,23 @@ public:
     bool Capture(const ParticleSystem& sys, size_t selectedIndex,
                  DWORD coalesceKey);
 
+    // PRE-mutation coalescing variant for the bridge. Callers
+    // snapshot BEFORE applying the edit, so the FIRST capture of a rapid
+    // burst already holds the correct undo target (the session-start
+    // state). When the previous entry shares coalesceKey within the time
+    // window AND we are at the head of history, SKIP the capture entirely —
+    // keeping that session-start snapshot — so the whole burst (e.g. a
+    // scroll-wheel spinning a spinner, or a held arrow) collapses into a
+    // single undo step. Otherwise pushes a new entry. coalesceKey == 0
+    // disables coalescing (always pushes).
+    //
+    // Contrast Capture(), whose coalesce branch REPLACES the tail snapshot
+    // with the current state — correct for legacy's POST-mutation capture
+    // (the tail must track the LATEST state), but wrong for PRE-mutation
+    // callers (it would overwrite the session-start state we undo back to).
+    bool CapturePreCoalesced(const ParticleSystem& sys, size_t selectedIndex,
+                             DWORD coalesceKey);
+
     bool CanUndo() const;
     bool CanRedo() const;
 
@@ -90,6 +107,23 @@ public:
     size_t Depth()  const { return m_entries.size(); }
     size_t Cursor() const { return m_cursor; }
 
+    // True when the live ParticleSystem holds an un-snapshotted edit
+    // sitting one step AHEAD of the stack tip (entries[cursor-1]).
+    // Set by Capture() (every editing capture is immediately followed by
+    // a mutation, so live becomes skewed ahead), cleared by Undo()/Redo()
+    // (navigation re-syncs live to the entry it just restored).
+    //
+    // The new-UI captures PRE-mutation, so after a fresh edit cursor ==
+    // Depth() AND live is skewed — undo/perform's head-of-history
+    // auto-capture relies on that to snapshot live before stepping back.
+    // But cursor == Depth() is ALSO true right after a Redo() (redo to
+    // the tip leaves cursor == size) where live is already IN SYNC. An
+    // auto-cap there is spurious: it duplicates the tip and the following
+    // Undo() returns that duplicate, silently swallowing the undo. Gate
+    // the auto-cap (and ComputeCanUndo) on this flag to tell the two
+    // cursor==Depth() states apart.
+    bool IsLiveAhead() const { return m_liveAhead; }
+
     // Compose a coalesce key from a notification code and a
     // sub-discriminator (typically the selected emitter index, or for
     // TE_CHANGE the (track << 16 | emitterIdx) combo). Two captures
@@ -118,6 +152,8 @@ private:
     // truncate any redo branch above N before pushing.
     size_t            m_cursor;
     bool              m_applying;
+    // See IsLiveAhead(): tracks whether live is skewed ahead of the tip.
+    bool              m_liveAhead;
 };
 
 #endif

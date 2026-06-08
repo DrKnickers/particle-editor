@@ -1,0 +1,132 @@
+/* Particle Editor 2026 design tokens.
+   Single source of truth for colors, radii, row heights, shadow.
+   - :root holds the dark-default values.
+   - [data-theme="light"] overrides the same names for light mode.
+   - The @theme inline block below republishes the variables under
+     --color-*, --radius-* so Tailwind v4 generates utilities like
+     bg-bg-2, text-text-3, border-border-2, accent. `inline` keeps the
+     values as var() references (not literal hex) so dark/light flip
+     correctly at runtime. */
+
+:root {
+  /* Neutral grey ramp — intentionally desaturated (no blue/purple tint).
+     Lightness is preserved from the prior navy-slate ramp, so contrast and
+     panel hierarchy are unchanged; only the hue is removed. Accent and
+     selection deliberately stay blue (below). Don't "fix" these back to
+     tinted values. */
+  /* Tell the UA to render native form controls (checkbox/radio fills +
+     backgrounds, native scrollbars) in DARK — without this they paint
+     light-mode chrome even on the dark theme. `accent-color` (base.css)
+     tints the check; `color-scheme` fixes the box background. Safe with
+     transparency: html/body/#root set explicit transparent
+     backgrounds (globals.css), so this doesn't repaint the canvas. */
+  color-scheme: dark;
+  --bg: #111111;
+  --bg-2: #181818;
+  --bg-3: #1f1f1f;
+  --panel: #1b1b1b;
+  --panel-2: #222222;
+  --panel-3: #2a2a2a;
+  --border: #2b2b2b;
+  --border-2: #353535;
+  --hover: #252525;
+  --selected: #213149;
+  --selected-border: #355385;
+  --text: #dddddd;
+  --text-2: #ababab;
+  --text-3: #747474;
+  --accent: #4ea3ff;
+  --accent-2: #2f7fd4;
+  --accent-soft: rgba(78, 163, 255, 0.16);
+  --danger: #e06c75;
+  --success: #6fbf7a;
+  --warning: #e0a14b;
+  --x-axis: #ef5350;
+  --y-axis: #66bb6a;
+  --z-axis: #42a5f5;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  --radius: 8px;
+  --radius-sm: 5px;
+  --row-h: 26px;
+  --row-h-sm: 22px;
+  /* Curve-editor grid line colour. Dark theme: ~8% white so the
+     grid recedes under colourful curves rather than competing with
+     them. Light theme uses ~8% black for the same reason. Both
+     themes match at the same alpha so the visual weight is
+     consistent regardless of background. */
+  --curve-grid: rgba(255, 255, 255, 0.08);
+  --curve-axis: #525252;
+}
+
+[data-theme="light"] {
+  /* Neutral grey ramp — desaturated to match the dark theme (no cool tint).
+     Lightness preserved from the prior values. Accent + selection stay blue. */
+  color-scheme: light;
+  --bg: #ececec;
+  --bg-2: #f2f2f2;
+  --bg-3: #ffffff;
+  --panel: #f7f7f7;
+  --panel-2: #ffffff;
+  --panel-3: #f0f0f0;
+  --border: #dcdcdc;
+  --border-2: #c9c9c9;
+  --hover: #e9e9e9;
+  --selected: #d5e4f8;
+  --selected-border: #79a8e6;
+  --text: #1f1f1f;
+  --text-2: #525252;
+  --text-3: #848484;
+  --accent: #2f7fd4;
+  --accent-2: #1f63b0;
+  --accent-soft: rgba(47, 127, 212, 0.14);
+  /* Light-theme grid: ~8% black to match the dark-theme alpha so
+     the grid is uniformly subtle across themes. */
+  --curve-grid: rgba(0, 0, 0, 0.08);
+  --curve-axis: rgba(0, 0, 0, 0.45);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-panel-3: var(--panel-3);
+  --color-border: var(--border);
+  --color-border-2: var(--border-2);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-selected-border: var(--selected-border);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-x-axis: var(--x-axis);
+  --color-y-axis: var(--y-axis);
+  --color-z-axis: var(--z-axis);
+  --radius-token: var(--radius);
+  --radius-token-sm: var(--radius-sm);
+}
+
+/* Type scale — rebased to the app's 12px body convention.
+ *
+ * The hand-written CSS (components.css etc.) sizes everything in explicit
+ * px and consistently targets 12px for body text. Tailwind's rem-based
+ * scale, however, is anchored to the 16px <html> root (NOT `body { 12px }`),
+ * so `text-sm` lands at 14px and is the lone outlier across the UI (24 uses,
+ * incl. the emitter list, which read ~17% larger than the 12px panels around
+ * them). Collapsing `--text-sm` to 12px makes Tailwind's small-text utilities
+ * agree with the 12px convention app-wide.
+ *
+ * Intentionally NOT rebasing `--text-xs` (already 12px, 87 uses — the de-facto
+ * body utility) or the larger steps (`text-lg` About heading, `text-2xl` "+"
+ * glyphs stay deliberately bigger). Line-height mirrors text-xs's ratio. */
+@theme {
+  --text-sm: 0.75rem;                    /* 12px (was 0.875rem / 14px) */
+  --text-sm--line-height: calc(1 / 0.75); /* match --text-xs */
+}

@@ -1,0 +1,8 @@
+- dialog "Set mod nickname":
+  - heading "Set mod nickname" [level=2]
+  - button "Close"
+  - paragraph: Give this mod's data directory a human-readable name.
+  - text: "Nickname:"
+  - textbox "Mod nickname"
+  - button "Cancel"
+  - button "OK" [disabled]

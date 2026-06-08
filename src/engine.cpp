@@ -9,6 +9,7 @@
 #include "EmitterInstance.h"
 #include "SphericalHarmonics.h"
 #include "utils.h"     // follow-up: WideToAnsi for custom-slot path bridging
+#include "host/AlphaCompositor.h"
 using namespace std;
 
 static const char* ShaderNames[Engine::NUM_SHADERS] = {
@@ -571,11 +572,42 @@ void Engine::Update()
     }
 }
 
+bool Engine::RecoverDeviceIfNeeded()
+{
+	if (m_pDevice == NULL) return false;
+	HRESULT hr = m_pDevice->TestCooperativeLevel();
+	if (hr == D3D_OK) return true;
+	if (hr == D3DERR_DEVICELOST) return false;
+	if (hr == D3DERR_DEVICENOTRESET)
+	{
+		try { Reset(); }
+		catch (...) { return false; }
+		return m_pDevice->TestCooperativeLevel() == D3D_OK;
+	}
+	return false;
+}
+
+// [PERF] round-2 sub-profiling helpers — QPC microsecond deltas for the
+// per-pass timing in Render(). Frequency is fixed for the process; cache it.
+static LONGLONG EngQpcNow()
+{
+	LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart;
+}
+static double EngQpcUs(LONGLONG a, LONGLONG b)
+{
+	static LONGLONG f = 0;
+	if (f == 0) { LARGE_INTEGER q; if (QueryPerformanceFrequency(&q)) f = q.QuadPart; }
+	return f ? static_cast<double>(b - a) * 1.0e6 / static_cast<double>(f) : 0.0;
+}
+
 bool Engine::Render()
 {
 	static const D3DXMATRIX Identity(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
 
-	// See if we can render
+	// See if we can render. Mirrors RecoverDeviceIfNeeded but keeps the
+	// switch here so DEVICELOST early-returns false (no point doing the
+	// rest of Render if we can't yet); RecoverDeviceIfNeeded is the
+	// "fix the latch, don't render" variant for non-render-thread callers.
 	switch (m_pDevice->TestCooperativeLevel())
 	{
 		case D3DERR_DEVICELOST:
@@ -627,7 +659,20 @@ bool Engine::Render()
 		return p1->GetZDistance() < p2->GetZDistance();
 	});
 	
+	// [PERF] round-2 per-pass timing — scene segment starts here.
+	const LONGLONG _ptScene0 = EngQpcNow();
 	m_pDevice->BeginScene();
+
+	//: when the layered-window compositor is installed, swap slot
+	// 0 from the swap-chain back buffer to the compositor's off-screen
+	// ARGB RT. The pScreenSurface capture immediately below then picks
+	// this RT up as the "screen" target for the full render chain
+	// (scene → bloom → distort → final composite), and Composite() at
+	// the bottom of Render pushes it via UpdateLayeredWindow.
+	if (m_pAlphaCompositor && m_pAlphaCompositor->GetRenderTarget())
+	{
+		m_pDevice->SetRenderTarget(0, m_pAlphaCompositor->GetRenderTarget());
+	}
 
 	IDirect3DSurface9* pScreenSurface;
 	IDirect3DSurface9* pDepthSurface;
@@ -645,6 +690,37 @@ bool Engine::Render()
 
     D3DCOLOR clearColor = D3DCOLOR_XRGB(GetRValue(m_background), GetGValue(m_background), GetBValue(m_background));
 	m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clearColor, 1.0f, 0);
+
+	// Phase 3 Stage 5 D12 — Clear-then-SetViewport ordering rule.
+	// The full-RT Clear above fills m_pSceneTexture with engine clear
+	// color in its entirety. NOW narrow the viewport to the scene-rect
+	// sub-region so scene draws only land inside it. The post-process
+	// passes below restore the full-RT viewport before sampling.
+	//
+	// This ordering eliminates post-process bleed across the scene-rect
+	// boundary (sub-plan R5b dissolved): bloom's gaussian taps near the
+	// inner scene-rect edge sample uniform engine clear color outside,
+	// not stale pixels from last frame.
+	//
+	// Non-composition transports (canvas-jpeg, arch-A) never call
+	// SetSceneViewport, so m_sceneViewportActive stays false and this
+	// block is a no-op for them — Render behaves byte-identical to
+	// pre-Stage-5.
+	D3DVIEWPORT9 prevViewportS5 = {};
+	bool         restoreViewportS5 = false;
+	if (m_sceneViewportActive)
+	{
+		m_pDevice->GetViewport(&prevViewportS5);
+		D3DVIEWPORT9 vp = {};
+		vp.X      = static_cast<DWORD>(m_sceneViewportX);
+		vp.Y      = static_cast<DWORD>(m_sceneViewportY);
+		vp.Width  = static_cast<DWORD>(m_sceneViewportW);
+		vp.Height = static_cast<DWORD>(m_sceneViewportH);
+		vp.MinZ   = 0.0f;
+		vp.MaxZ   = 1.0f;
+		m_pDevice->SetViewport(&vp);
+		restoreViewportS5 = true;
+	}
 
 	//: optional skydome pass, after Clear, before ground.
 	// Skipped when slot 0 (Off) is active or when effect/texture isn't
@@ -691,6 +767,18 @@ bool Engine::Render()
 	}
     m_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
 
+	// Phase 3 Stage 5 D12 — restore full-RT viewport before the
+	// bloom + distort post-process passes. They read+write at full-RT
+	// resolution on m_pSceneTexture / m_pDistortTexture / m_pBloomTexture[];
+	// keeping the scene-rect viewport active would clip their full-screen
+	// quads. DComp's SetClip on the engine visual crops the off-scene-
+	// rect region after compositing, so the wasted post-process work is
+	// invisible (sub-plan §3.4 "post-process at full-RT" trade-off).
+	if (restoreViewportS5)
+	{
+		m_pDevice->SetViewport(&prevViewportS5);
+	}
+
 	// Bloom post-process. Runs after the scene is drawn but before
 	// the heat/distortion pass, so distortion smears the bloomed
 	// image (matches in-game order). The game's SceneBloom.fx
@@ -715,6 +803,7 @@ bool Engine::Render()
 	// no runtime write site anywhere in the program -- equivalent to a
 	// hardcoded constant. See tasks/find_bloom_iterations.md.
 	static const UINT BLOOM_BLUR_ITERATIONS = 4;
+	const LONGLONG _ptScene1 = EngQpcNow();   // scene ends / bloom begins
 	if (m_bloomEnabled && m_bloomReady && m_pBloomEffect != NULL
 	    && m_pBloomPing != NULL && m_pBloomPong != NULL)
 	{
@@ -836,6 +925,7 @@ bool Engine::Render()
 		}
 	}
 
+	const LONGLONG _ptBloom1 = EngQpcNow();   // bloom ends / distort begins
 	// Now render to the heat texture
 	IDirect3DSurface9* pDistortSurface;
 	m_pDistortTexture->GetSurfaceLevel(0, &pDistortSurface);
@@ -848,9 +938,20 @@ bool Engine::Render()
         instance->RenderHeat(m_pDevice);
 	}
 
+	const LONGLONG _ptDistort1 = EngQpcNow();  // distort ends / composite begins
 	// Now render to the screen
 	m_pDevice->SetRenderTarget(0, pScreenSurface);
-    m_pDevice->SetDepthStencilSurface(pDepthSurface);
+	//: in alpha-compositor mode the slot-0 RT is our off-screen
+	// D3DMULTISAMPLE_NONE surface. The auto-depth-stencil captured at
+	// the top of Render is multisampled (matches the swap chain), so
+	// restoring it here pairs an MS_NONE RT with an MSAA depth — D3D9
+	// silently drops the next draw on that mismatch. Keep the engine's
+	// own MS_NONE depth (m_pDepthStencilSurface) bound instead; the
+	// legacy Present path still wants the auto-depth restored.
+	if (!m_pAlphaCompositor)
+	{
+		m_pDevice->SetDepthStencilSurface(pDepthSurface);
+	}
 	SAFE_RELEASE(pScreenSurface);
     SAFE_RELEASE(pDepthSurface);
 	m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0,0,0), 0.0f, 0);
@@ -879,8 +980,40 @@ bool Engine::Render()
 	pEffect->End();
     SAFE_RELEASE(pEffect);
 
+	const LONGLONG _ptComposite1 = EngQpcNow();  // composite ends / present begins
 	m_pDevice->EndScene();
-	m_pDevice->Present(NULL, NULL, NULL, NULL);
+
+	//: route the final frame either through the layered-window
+	// compositor (UpdateLayeredWindow on the off-screen ARGB RT we
+	// targeted at the top of this function) or through the legacy
+	// swap-chain Present.
+	if (m_pAlphaCompositor)
+	{
+		// [PERF]: the engine renders into the AlphaCompositor's RT,
+		// but the visible pixels reach the screen via the host's DComp
+		// shared-texture path (CompositeEngineFrame reads the same RT
+		// GPU-side). The layered Composite() here is a synchronous
+		// GetRenderTargetData readback + ~19 MB memcpy every frame — pure
+		// redundant work under composition (it fed only arch-B's invisible
+		// UpdateLayeredWindow and the FramePublisher cache, which is itself
+		// gated off in composition mode). Measured at ~98-99% of Render(),
+		// scaling linearly with window area. Modal snapshots do their own
+		// on-demand readback, so they're unaffected. See tasks/todo.md.
+		if (!m_compositionMode)
+			m_pAlphaCompositor->Composite(m_presentationParameters.hDeviceWindow);
+	}
+	else
+	{
+		m_pDevice->Present(NULL, NULL, NULL, NULL);
+	}
+
+	// [PERF] round-2 — store per-pass us for the host to fold into [PERF2].
+	const LONGLONG _ptPresent1 = EngQpcNow();
+	m_lastRenderTimings.scene     = EngQpcUs(_ptScene0,     _ptScene1);
+	m_lastRenderTimings.bloom     = EngQpcUs(_ptScene1,     _ptBloom1);
+	m_lastRenderTimings.distort   = EngQpcUs(_ptBloom1,     _ptDistort1);
+	m_lastRenderTimings.composite = EngQpcUs(_ptDistort1,   _ptComposite1);
+	m_lastRenderTimings.present   = EngQpcUs(_ptComposite1, _ptPresent1);
 	return true;
 }
 
@@ -995,11 +1128,20 @@ static bool CreateSolidColorTexture(IDirect3DDevice9*    pDevice,
 {
     if (pDevice == NULL || ppOut == NULL) return false;
     IDirect3DTexture9* pNew = NULL;
-    if (FAILED(pDevice->CreateTexture(1, 1, 1, 0, D3DFMT_A8R8G8B8,
-                                       D3DPOOL_MANAGED, &pNew, NULL)))
+    // Phase 3 Stage 1: D3DPOOL_MANAGED → D3DPOOL_DEFAULT, because
+    // D3D9Ex rejects the managed pool. But a DEFAULT-pool texture cannot
+    // be LockRect'd unless it is ALSO created D3DUSAGE_DYNAMIC — without
+    // it, LockRect returns D3DERR_INVALIDCALL, CreateSolidColorTexture
+    // fails, and the solid-colour ground slot silently never applies (it
+    // worked under the old MANAGED pool, which is lockable). Add the
+    // dynamic usage so the 1×1 fill below is legal under D3D9Ex; the
+    // texture is still recreated in Engine::Reset via ReloadGroundTexture
+    // (DEFAULT/dynamic resources are lost on device reset).
+    if (FAILED(pDevice->CreateTexture(1, 1, 1, D3DUSAGE_DYNAMIC, D3DFMT_A8R8G8B8,
+                                       D3DPOOL_DEFAULT, &pNew, NULL)))
         return false;
     D3DLOCKED_RECT lr;
-    if (FAILED(pNew->LockRect(0, &lr, NULL, 0)))
+    if (FAILED(pNew->LockRect(0, &lr, NULL, D3DLOCK_DISCARD)))
     {
         pNew->Release();
         return false;
@@ -1225,6 +1367,48 @@ void Engine::Reset()
         m_pShaders[i]->OnLostDevice();
     }
 	if (m_pBloomEffect != NULL) m_pBloomEffect->OnLostDevice();
+	// skydome effect needs the same OnLost/OnReset dance — without it,
+	// the effect's internal D3DPOOL_DEFAULT state-cache references survive
+	// past Reset and cause D3DERR_INVALIDCALL on any later size change.
+	// Surfaced as the ground-texture-stuck-at-0 bug in --test-host mode
+	// after the polluter pair background-picker × spawner-import-mod;
+	// interactive use never noticed because Render()'s recovery path
+	// papered over the failed Reset on the next WM_PAINT. (handoff
+	// Open Items §1, fixed 2026-05-20.)
+	if (m_pSkydomeEffect != NULL) m_pSkydomeEffect->OnLostDevice();
+	// Phase 3 Stage 1: D3D9Ex disallows D3DPOOL_MANAGED, so
+	// resources that were previously managed-pool (skydome VB/IB, the
+	// solid-colour ground texture, and any custom skydome texture)
+	// are now D3DPOOL_DEFAULT and must be released before Reset and
+	// recreated after. Same shape as incident — every newly-
+	// D3DPOOL_DEFAULT resource that misses this dance produces a
+	// stale-resource D3DERR on the next Reset.
+	ReleaseSkydomeMeshBuffers();
+	SAFE_RELEASE(m_pSkydomeTexture);
+	SAFE_RELEASE(m_pGroundTexture);
+	//: the compositor's off-screen RT is D3DPOOL_DEFAULT, so
+	// it must be released before m_pDevice->Reset — otherwise Reset
+	// fails with D3DERR_INVALIDCALL and the engine is left in a
+	// half-broken state (textures null, shaders OnLost'd but device
+	// never reset). The Resize() call at the end of this function
+	// recreates the RT against the new back-buffer size.
+	if (m_pAlphaCompositor) m_pAlphaCompositor->ReleaseGpuResources();
+	// [F6] D3DX texture helpers (D3DXCreateTextureFromFileInMemory,
+	// D3DXCreateTextureFromResource) silently substitute D3DPOOL_DEFAULT
+	// for D3DPOOL_MANAGED under D3D9Ex — the documented MANAGED default
+	// inside the helper hits D3D9Ex's pool restriction and the helper
+	// falls back to DEFAULT. TextureManager caches the result, so every
+	// cached handle is a DEFAULT-pool resource that must be released
+	// before Reset. Stage 1 sub-plan named this as Risk 4.7 but the
+	// chosen mitigation (grep for D3DPOOL_MANAGED literal) couldn't
+	// find it because the helper hides the pool argument.
+	m_textureManager.OnLostDevice();
+	// Phase 3 Stage 4a — release the event query before Reset.
+	// IDirect3DQuery9 is not in any D3DPOOL_*, but D3D9Ex's device Reset
+	// invalidates queries the same way it invalidates D3DPOOL_DEFAULT
+	// resources. Lazy-recreated by the next IssueEndFrameQuery call
+	// against the post-Reset device.
+	SAFE_RELEASE(m_pEndFrameQuery);
 	if (FAILED(m_pDevice->Reset(&m_presentationParameters)))
 	{
 		throw wruntime_error(LoadString(IDS_ERROR_RENDERER_RESET));
@@ -1235,8 +1419,306 @@ void Engine::Reset()
         m_pShaders[i]->OnResetDevice();
     }
 	if (m_pBloomEffect != NULL) m_pBloomEffect->OnResetDevice();
+	if (m_pSkydomeEffect != NULL) m_pSkydomeEffect->OnResetDevice();
+	// Phase 3 Stage 1: rebuild the previously-managed-pool
+	// resources. CreateSkydomeMeshBuffers regenerates the procedural
+	// VB/IB; ReloadGroundTexture re-runs the bundled-or-solid-colour
+	// loader using m_groundTextureIndex; ReloadSkydomeTexture re-runs
+	// the bundled-or-custom path using m_skydomeIndex.
+	CreateSkydomeMeshBuffers();
+	ReloadGroundTexture();
+	ReloadSkydomeTexture(m_skydomeIndex);
 
 	ResetParameters();
+
+	//: the alpha compositor owns D3D9 resources (RT + sysmem
+	// surface) sized to the popup client area. Refresh them so the
+	// off-screen RT keeps pace with the swap-chain's back-buffer
+	// size, which the engine's render chain (m_pSceneTexture etc.)
+	// is already keyed off via BackBufferWidth/Height.
+	if (m_pAlphaCompositor && m_presentationParameters.BackBufferWidth > 0
+	    && m_presentationParameters.BackBufferHeight > 0)
+	{
+		m_pAlphaCompositor->Resize(
+		    static_cast<int>(m_presentationParameters.BackBufferWidth),
+		    static_cast<int>(m_presentationParameters.BackBufferHeight));
+	}
+
+	// Phase 3 Stage 5 R8 mitigation — re-apply the cached scene
+	// viewport so its projection aspect ratio survives Reset.
+	// ResetParameters() above rebuilt m_projection at FULL-RT aspect via
+	// D3DXMatrixPerspectiveFovRH (engine.cpp:1448), overwriting whatever
+	// scene-rect-aspect projection SetSceneViewport had set last. Without
+	// this re-apply, the first frame after Reset would render at
+	// full-RT aspect until React's next layout/scene-rect dispatch
+	// catches up — visible as a one-frame aspect glitch at every window
+	// resize. SetSceneViewport recomputes m_projection at scene-rect
+	// aspect AND the Render hook's gating flag (m_sceneViewportActive)
+	// stays set so the next frame uses the constrained viewport.
+	//
+	// We snapshot the cached state, flip the active flag false to defeat
+	// the idempotent guard inside SetSceneViewport, then call back into
+	// SetSceneViewport with the snapshot. Net: m_sceneViewportActive
+	// re-armed, m_projection recomputed at scene-rect aspect, log line
+	// emitted as if the scene-rect was freshly dispatched.
+	if (m_sceneViewportActive)
+	{
+		int sx = m_sceneViewportX;
+		int sy = m_sceneViewportY;
+		int sw = m_sceneViewportW;
+		int sh = m_sceneViewportH;
+		m_sceneViewportActive = false;
+		SetSceneViewport(sx, sy, sw, sh);
+	}
+}
+
+// Phase 3 Stage 2: forwarder to the AlphaCompositor's shared
+// HANDLE. Returns nullptr when the compositor isn't installed (canvas-
+// jpeg mode skips the layered-window path) or before Resize has run.
+// Stage 4 will consume this via a D3D11 OpenSharedResource into the
+// DComp visual tree; today nothing reads it but the standalone
+// shared_texture_test exe (Stage 2c) verifies the handle is openable.
+HANDLE Engine::GetSharedTextureHandle() const
+{
+	return m_pAlphaCompositor ? m_pAlphaCompositor->GetSharedHandle() : nullptr;
+}
+
+// Phase 3 Stage 4a — cross-device GPU sync. See engine.h for
+// the design rationale (sub-plan §3.3 path b — engine-exposed helpers,
+// host orchestrates call sites under composition mode only).
+//
+// IssueEndFrameQuery lazily creates the IDirect3DQuery9 event query on
+// first call (m_pDevice must already exist — Engine::Reset releases the
+// query so subsequent first-call-after-Reset triggers recreation).
+// Query-create failure logs once via OutputDebugString and leaves
+// m_pEndFrameQuery null — subsequent Issue/Wait calls are no-ops.
+// Issue's D3DISSUE_END markers the moment in the D3D9 command stream
+// after the engine's current frame submissions; the D3D9 driver
+// guarantees the query reports SIGNALED only after all preceding
+// commands have completed.
+void Engine::IssueEndFrameQuery()
+{
+	if (m_pDevice == NULL) return;
+	if (m_pEndFrameQuery == NULL)
+	{
+		HRESULT hr = m_pDevice->CreateQuery(D3DQUERYTYPE_EVENT, &m_pEndFrameQuery);
+		if (FAILED(hr) || m_pEndFrameQuery == NULL)
+		{
+			OutputDebugStringA("[Engine] CreateQuery(EVENT) failed; cross-device sync disabled this run\n");
+			m_pEndFrameQuery = NULL;
+			return;
+		}
+	}
+	m_pEndFrameQuery->Issue(D3DISSUE_END);
+}
+
+// WaitEndFrameQuery spins on GetData with the spike's 100k cap (see
+// dxgi_spike.cpp:687-697 for the original). On timeout, logs once and
+// returns — degraded mode where the D3D11 CopyResource may read
+// partially-finished VRAM (visible tearing). Safer than blocking the
+// host message pump indefinitely on a hung GPU. Returns the spin count
+// (0 = signalled on the first poll) so the host can log GPU-wait pressure.
+int Engine::WaitEndFrameQuery()
+{
+	if (m_pEndFrameQuery == NULL) return 0;
+	BOOL done = FALSE;
+	int spins = 0;
+	while (m_pEndFrameQuery->GetData(&done, sizeof(done), D3DGETDATA_FLUSH) == S_FALSE)
+	{
+		if (++spins > 100000)
+		{
+			OutputDebugStringA("[Engine] D3D9 sync query never signalled after 100k spins\n");
+			break;
+		}
+	}
+	return spins;
+}
+
+// Phase 3 Stage 4b — adapter LUID accessor for the multi-GPU
+// guard. IDirect3D9Ex::GetAdapterLUID returns the LUID of the adapter
+// associated with the supplied D3D9 adapter ordinal — the bridge
+// between D3D9's adapter-index world and DXGI's LUID world. Compositor
+// compares this against the LUID of the adapter its D3D11 device
+// picked via D3D_DRIVER_TYPE_HARDWARE; if they differ, the two
+// devices are on different physical GPUs and the shared-handle path
+// is fundamentally broken (OpenSharedResource silently returns a
+// wrong texture).
+LUID Engine::GetAdapterLuid() const
+{
+	LUID luid = {};
+	if (m_pDirect3D == NULL || m_pDevice == NULL) return luid;
+
+	D3DDEVICE_CREATION_PARAMETERS params = {};
+	if (FAILED(m_pDevice->GetCreationParameters(&params))) return luid;
+
+	if (FAILED(m_pDirect3D->GetAdapterLUID(params.AdapterOrdinal, &luid)))
+	{
+		LUID zero = {};
+		return zero;
+	}
+	return luid;
+}
+
+// Phase 3 Stage 5 — scene-rect viewport (Variant B-γ).
+//
+// Stash the rect, mark active, and recompute m_projection at the
+// scene-rect aspect ratio. Next Engine::Render's scene pass picks
+// up m_sceneViewportActive == true and applies SetViewport after the
+// full-RT Clear (the D12 Clear-then-SetViewport ordering rule in
+// sub-plan §3.4 — prevents post-process bleed across the scene-rect
+// boundary). Post-process passes restore the cached viewport before
+// running.
+//
+// The projection-matrix shape mirrors ResetParameters at
+// engine.cpp:1518: D3DXMatrixPerspectiveFovRH @ 45° FOV, near=1.0,
+// far=1000, then the engine's _33 / _43 overrides that flip Z. The
+// only thing that varies is the aspect: (w / h) here instead of
+// (BackBufferWidth / BackBufferHeight) there. Duplicated inline
+// (~5 lines) per CLAUDE.md "surgical changes" guidance rather than
+// factoring a RebuildProjection helper that nothing else needs.
+//
+// Passing w <= 0 or h <= 0 clears the active flag and restores the
+// full-RT-aspect projection. The Render hook reads m_sceneViewportActive
+// each frame, so the cleared state effectively re-enables the
+// default (full-RT) viewport without us needing to call SetViewport
+// here.
+//
+// Logged to OutputDebugString + printf (live-debugging surface). The
+// canonical Playwright-detectable signal is the Compositor's
+// [COMP-engine-transform] line, which fires through host.log on the
+// same LayoutBroker gate that fired this call.
+void Engine::SetSceneViewport(int x, int y, int w, int h)
+{
+	const bool clearing = (w <= 0 || h <= 0);
+	if (clearing)
+	{
+		if (!m_sceneViewportActive) return;   // already cleared / never set
+
+		// Restore full-RT projection (matches ResetParameters' default).
+		if (m_presentationParameters.BackBufferWidth > 0 &&
+		    m_presentationParameters.BackBufferHeight > 0)
+		{
+			float n = 1.0f;
+			D3DXMatrixPerspectiveFovRH(&m_projection, D3DXToRadian(45),
+			    (float)m_presentationParameters.BackBufferWidth /
+			    (float)m_presentationParameters.BackBufferHeight, n, 1000.0f);
+			m_projection._33 = -1.0f;
+			m_projection._43 = -2 * n;
+			// Push to device + recompute m_viewProjection so shader
+			// effects (engine.cpp:613, 616) see the fresh matrix. Without
+			// this, the device keeps the stale projection until something
+			// else calls SetCamera (visible as "aspect snaps on click").
+			D3DXMatrixMultiply(&m_viewProjection, &m_view, &m_projection);
+			if (m_pDevice)
+			{
+				m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
+			}
+		}
+
+		m_sceneViewportX      = 0;
+		m_sceneViewportY      = 0;
+		m_sceneViewportW      = 0;
+		m_sceneViewportH      = 0;
+		m_sceneViewportActive = false;
+		OutputDebugStringA("[engine] SetSceneViewport CLEARED (restored full-RT projection)\n");
+		printf("[engine] SetSceneViewport CLEARED (restored full-RT projection)\n");
+		fflush(stdout);
+		return;
+	}
+
+	// [black-line fix, session 10] Defensive clamp to the engine RT. The
+	// caller (LayoutBroker) guard-bands the scene viewport a few px beyond the
+	// DComp clip so the D3D9Ex->D3D11 shared-surface edge incoherency lands
+	// outside the clip. The surrounding chrome guarantees margin so the band
+	// stays in-bounds in practice, but never let SetViewport fail on a
+	// degenerate (collapsed-panel) layout.
+	if (m_presentationParameters.BackBufferWidth > 0)
+	{
+		if (x < 0) { w += x; x = 0; }
+		if (x + w > static_cast<int>(m_presentationParameters.BackBufferWidth))
+			w = static_cast<int>(m_presentationParameters.BackBufferWidth) - x;
+	}
+	if (m_presentationParameters.BackBufferHeight > 0)
+	{
+		if (y < 0) { h += y; y = 0; }
+		if (y + h > static_cast<int>(m_presentationParameters.BackBufferHeight))
+			h = static_cast<int>(m_presentationParameters.BackBufferHeight) - y;
+	}
+	if (w <= 0 || h <= 0) return;  // fully clamped away — nothing to render
+
+	// Idempotent — same rect, no-op (silent — 60+ Hz pane-drag
+	// dispatches don't flood logs).
+	if (m_sceneViewportActive &&
+	    x == m_sceneViewportX && y == m_sceneViewportY &&
+	    w == m_sceneViewportW && h == m_sceneViewportH)
+	{
+		return;
+	}
+
+	m_sceneViewportX      = x;
+	m_sceneViewportY      = y;
+	m_sceneViewportW      = w;
+	m_sceneViewportH      = h;
+	m_sceneViewportActive = true;
+
+	// Per-pixel-FoV projection — reference is the CURRENT engine RT
+	// height (BackBufferHeight). At sceneH = RT_H (no chrome around
+	// the viewport): fovY = 45°, matching ResetParameters' default
+	// exactly. At sceneH < RT_H (chrome occupies some of the client):
+	// fovY < 45° proportionally — engine renders LESS world per frame
+	// than at full-RT, so engine.Render is at-or-faster than pre-
+	// Stage-5 across all window sizes.
+	//
+	// Combined with aspect = W/H, the horizontal FoV scales such
+	// that 1 RT pixel ≡ 1 scene-rect pixel angular extent. Pane
+	// resize widens scene-rect → horizontal FoV widens → new world
+	// content appears at the right/left edges. No "shrinking
+	// distortion" of existing content (each pixel keeps its angular
+	// extent constant across resizes).
+	//
+	// Falls back to 45° at scene-rect aspect when BackBufferHeight
+	// isn't yet known (pre-Init / pre-first-Reset). Engine::Reset's
+	// R8 re-apply at end of Reset uses the post-Reset BackBufferHeight
+	// so the reference always matches the live RT.
+	float n      = 1.0f;
+	float refH   = (m_presentationParameters.BackBufferHeight > 0)
+	                 ? (float)m_presentationParameters.BackBufferHeight
+	                 : (float)h;
+	float fovY   = D3DXToRadian(45.0f) * (float)h / refH;
+	float aspect = (float)w / (float)h;
+	D3DXMatrixPerspectiveFovRH(&m_projection, fovY, aspect, n, 1000.0f);
+	m_projection._33 = -1.0f;
+	m_projection._43 = -2 * n;
+	// Push the new projection to the device + recompute m_viewProjection
+	// for shader-effect consumers (engine.cpp:613, 616). Without these,
+	// the device retains whatever projection SetCamera last pushed
+	// (typically from boot) until SetCamera fires again — visible as
+	// "aspect snaps to correct on click in viewport" because click
+	// triggers a camera op which calls SetCamera and finally pushes
+	// the latest m_projection.
+	D3DXMatrixMultiply(&m_viewProjection, &m_view, &m_projection);
+	if (m_pDevice)
+	{
+		m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
+	}
+
+	char buf[224];
+	snprintf(buf, sizeof(buf),
+	    "[engine] SetSceneViewport x=%d y=%d w=%d h=%d (fovY=%.2f° aspect=%.3f refH=%.0f)\n",
+	    x, y, w, h, fovY * (180.0f / 3.14159265f), aspect, refH);
+	OutputDebugStringA(buf);
+	printf("%s", buf);
+	fflush(stdout);
+}
+
+bool Engine::GetSceneViewport(int& x, int& y, int& w, int& h) const
+{
+	if (!m_sceneViewportActive) return false;
+	x = m_sceneViewportX;
+	y = m_sceneViewportY;
+	w = m_sceneViewportW;
+	h = m_sceneViewportH;
+	return true;
 }
 
 void Engine::ResetParameters()
@@ -1366,10 +1848,34 @@ D3DMULTISAMPLE_TYPE Engine::GetMultiSampleType(DWORD* MultiSampleQuality, D3DFOR
 	return D3DMULTISAMPLE_NONE;
 }
 
-//: Build the UV sphere vertex + index buffers used by the skydome render pass.
-// Called once from the Engine constructor after m_pDevice is created.
-// D3DPOOL_MANAGED means these survive device Reset and only need cleanup in ~Engine.
+//: Build the UV sphere vertex declaration + mesh used by the skydome
+// render pass. Called once from the Engine constructor after m_pDevice is
+// created. Phase 3 Stage 1: the VB/IB allocation moved into
+// CreateSkydomeMeshBuffers() so Engine::Reset can recreate them after
+// the device Reset (D3DPOOL_DEFAULT resources don't survive Reset).
 void Engine::InitSkydomeMesh()
+{
+    // Vertex declaration — not pool-bound, survives device Reset.
+    D3DVERTEXELEMENT9 decl[] = {
+        {0, offsetof(SkydomeVertex, Position),  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+        {0, offsetof(SkydomeVertex, Normal),    D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0},
+        {0, offsetof(SkydomeVertex, TexCoord),  D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+        D3DDECL_END()
+    };
+    if (FAILED(m_pDevice->CreateVertexDeclaration(decl, &m_pSkydomeDecl)))
+        throw runtime_error("Unable to create skydome mesh");
+
+    // VB + IB — pool-bound, must be recreated on device Reset.
+    CreateSkydomeMeshBuffers();
+}
+
+// Phase 3 Stage 1: Allocate + fill the skydome VB and IB.
+// Called from InitSkydomeMesh (engine init) and from Engine::Reset (after
+// device Reset succeeds). D3DPOOL_DEFAULT means the buffers live in
+// driver-managed VRAM that's lost on Reset; the procedural sphere data
+// is cheap to regenerate (~256 vertices, ~1024 indices), so we just
+// re-emit it every time rather than caching.
+void Engine::CreateSkydomeMeshBuffers()
 {
     const int lon = kSkydomeLongSegments;
     const int lat = kSkydomeLatSegments;
@@ -1420,20 +1926,10 @@ void Engine::InitSkydomeMesh()
         }
     }
 
-    // Vertex declaration
-    D3DVERTEXELEMENT9 decl[] = {
-        {0, offsetof(SkydomeVertex, Position),  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
-        {0, offsetof(SkydomeVertex, Normal),    D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0},
-        {0, offsetof(SkydomeVertex, TexCoord),  D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
-        D3DDECL_END()
-    };
-    if (FAILED(m_pDevice->CreateVertexDeclaration(decl, &m_pSkydomeDecl)))
-        throw runtime_error("Unable to create skydome mesh");
-
-    // VB
+    // VB — D3DPOOL_DEFAULT for D3D9Ex compatibility.
     if (FAILED(m_pDevice->CreateVertexBuffer(
         UINT(verts.size() * sizeof(SkydomeVertex)),
-        D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &m_pSkydomeVB, NULL)))
+        D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &m_pSkydomeVB, NULL)))
         throw runtime_error("Unable to create skydome mesh");
     void* pVB = NULL;
     if (FAILED(m_pSkydomeVB->Lock(0, 0, &pVB, 0)))
@@ -1441,10 +1937,10 @@ void Engine::InitSkydomeMesh()
     memcpy(pVB, verts.data(), verts.size() * sizeof(SkydomeVertex));
     m_pSkydomeVB->Unlock();
 
-    // IB
+    // IB — D3DPOOL_DEFAULT for D3D9Ex compatibility.
     if (FAILED(m_pDevice->CreateIndexBuffer(
         UINT(idx.size() * sizeof(uint16_t)),
-        D3DUSAGE_WRITEONLY, D3DFMT_INDEX16, D3DPOOL_MANAGED, &m_pSkydomeIB, NULL)))
+        D3DUSAGE_WRITEONLY, D3DFMT_INDEX16, D3DPOOL_DEFAULT, &m_pSkydomeIB, NULL)))
         throw runtime_error("Unable to create skydome mesh");
     void* pIB = NULL;
     if (FAILED(m_pSkydomeIB->Lock(0, 0, &pIB, 0)))
@@ -1455,6 +1951,15 @@ void Engine::InitSkydomeMesh()
 #ifndef NDEBUG
     fprintf(stdout, "[Skydome] sphere mesh init verts=%d tris=%d\n", vertCount, triCount);
 #endif
+}
+
+// Phase 3 Stage 1: Release the skydome VB + IB ahead of
+// m_pDevice->Reset. Counterpart of CreateSkydomeMeshBuffers. Symmetric
+// with the existing OnLostDevice pattern used for shaders + compositor RT.
+void Engine::ReleaseSkydomeMeshBuffers()
+{
+    SAFE_RELEASE(m_pSkydomeVB);
+    SAFE_RELEASE(m_pSkydomeIB);
 }
 
 void Engine::InitSkydomeEffect()
@@ -1527,10 +2032,14 @@ bool Engine::ReloadSkydomeTexture(int slot)
         std::string narrowPath = WideToAnsi(path);
         m_pSkydomeTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, narrowPath);
         if (m_pSkydomeTexture != NULL) return true;
+        // Phase 3 Stage 1: D3DPOOL_MANAGED → D3DPOOL_DEFAULT.
+        // D3D9Ex disallows the managed pool. Custom-slot textures are
+        // re-loaded from disk via Engine::Reset → ReloadSkydomeTexture
+        // (called with m_skydomeIndex) when the device is reset.
         return SUCCEEDED(D3DXCreateTextureFromFileEx(
             m_pDevice, path.c_str(),
             D3DX_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, D3DFMT_UNKNOWN,
-            D3DPOOL_MANAGED, D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL,
+            D3DPOOL_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL,
             &m_pSkydomeTexture));
     }
     return false;
@@ -1548,6 +2057,17 @@ void Engine::RenderSkydome()
     m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &oldZWrite);
     m_pDevice->GetRenderState(D3DRS_ZENABLE,      &oldZEnable);
     m_pDevice->GetRenderState(D3DRS_CULLMODE,     &oldCull);
+    // Save the vertex declaration too. It is NOT part of the ID3DXEffect
+    // state block (Begin/End won't restore it), so the skydome's declaration
+    // (SkydomeVertex — position/normal/texcoord, NO diffuse-colour element)
+    // would otherwise leak into the ground + particle draws that follow. With
+    // no colour stream, the fixed-function pipeline defaults every vertex's
+    // diffuse to white (0xFFFFFFFF) — which blows out additive particles to
+    // white and breaks the alpha-blended ones. The ground is unaffected (its
+    // vertices are already white), which is exactly why the bug looked like a
+    // skydome-only blend issue. See tasks/lessons.md.
+    IDirect3DVertexDeclaration9* oldDecl = NULL;
+    m_pDevice->GetVertexDeclaration(&oldDecl);
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
     m_pDevice->SetRenderState(D3DRS_ZENABLE,      D3DZB_FALSE);
     m_pDevice->SetRenderState(D3DRS_CULLMODE,     D3DCULL_CCW); // we're inside the sphere; Y↔Z swap in InitSkydomeMesh reversed handedness so the inside-facing triangles are now CCW
@@ -1571,6 +2091,12 @@ void Engine::RenderSkydome()
         m_pSkydomeEffect->EndPass();
     }
     m_pSkydomeEffect->End();
+
+    // Restore the vertex declaration the skydome bound, so the ground +
+    // particle draws use the engine's diffuse-colour-carrying declaration
+    // again (see the save above). GetVertexDeclaration AddRef'd it.
+    m_pDevice->SetVertexDeclaration(oldDecl);
+    if (oldDecl) oldDecl->Release();
 
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, oldZWrite);
     m_pDevice->SetRenderState(D3DRS_ZENABLE,      oldZEnable);
@@ -1678,12 +2204,21 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
     m_background     = RGB(0x14,0x08,0x34);
 
 	//
-	// Initialize Direct3D
+	// Initialize Direct3D9Ex
 	//
-	m_pDirect3D = Direct3DCreate9(D3D_SDK_VERSION);
-	if (m_pDirect3D == NULL)
+	// Phase 3 Stage 1: D3D9 → D3D9Ex. D3D9Ex is required for
+	// the Stage 2 shared-handle render-target path; the spike validated
+	// the entire engine→D3D11→DComp pipeline on this rig (decision doc
+	// at docs/superpowers/research/dxgi-stage-0-decision.md). Per Stage 1
+	// decision #1: hard-fail if D3D9Ex is unavailable — there is no
+	// in-process fallback to vanilla D3D9 (production fallback to legacy
+	// arch-A is filed for Stage 6+).
 	{
-		throw runtime_error("Unable to initialize Direct3D");
+		HRESULT createHr = Direct3DCreate9Ex(D3D_SDK_VERSION, &m_pDirect3D);
+		if (FAILED(createHr) || m_pDirect3D == NULL)
+		{
+			throw runtime_error("Unable to initialize Direct3D9Ex");
+		}
 	}
 
 	ZeroMemory(&m_presentationParameters, sizeof(m_presentationParameters));
@@ -1710,12 +2245,45 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 
 	m_presentationParameters.MultiSampleType = GetMultiSampleType(&m_presentationParameters.MultiSampleQuality, DisplayMode.Format, m_presentationParameters.AutoDepthStencilFormat, m_presentationParameters.Windowed);
 
-	// Create device (first try hardware, then software)
-	if (FAILED(m_pDirect3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hFocus, D3DCREATE_HARDWARE_VERTEXPROCESSING, &m_presentationParameters, &m_pDevice)))
-	if (FAILED(m_pDirect3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hFocus, D3DCREATE_SOFTWARE_VERTEXPROCESSING, &m_presentationParameters, &m_pDevice)))
+	// Create device (first try hardware, then software).
+	// Phase 3 Stage 1: D3D9 CreateDevice → D3D9Ex CreateDeviceEx
+	// (extra trailing nullptr for fullscreen display mode — we are always
+	// windowed) + D3DCREATE_MULTITHREADED, which is required for Stage 2
+	// cross-device shared-handle textures and costs ~5% per-frame
+	// overhead in exchange. Verified across 189k frames in the dxgi_spike
+	// without anomaly.
 	{
-		SAFE_RELEASE(m_pDirect3D);
-		throw runtime_error("Unable to create render device");
+		DWORD const baseFlags = D3DCREATE_MULTITHREADED;
+		DWORD       vertexFlags = D3DCREATE_HARDWARE_VERTEXPROCESSING;
+		const char* vpModeName  = "HWVP";
+		HRESULT     createDevHr = m_pDirect3D->CreateDeviceEx(
+			D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hFocus,
+			baseFlags | vertexFlags, &m_presentationParameters,
+			NULL, &m_pDevice);
+		if (FAILED(createDevHr))
+		{
+			vertexFlags = D3DCREATE_SOFTWARE_VERTEXPROCESSING;
+			vpModeName  = "SOFTWARE_VP";
+			createDevHr = m_pDirect3D->CreateDeviceEx(
+				D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hFocus,
+				baseFlags | vertexFlags, &m_presentationParameters,
+				NULL, &m_pDevice);
+		}
+		if (FAILED(createDevHr))
+		{
+			SAFE_RELEASE(m_pDirect3D);
+			throw runtime_error("Unable to create render device");
+		}
+
+		// Adapter info for Stage 2 multi-GPU LUID match debugging.
+		D3DADAPTER_IDENTIFIER9 adapterIdent = {};
+		m_pDirect3D->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &adapterIdent);
+		printf("[D3D9Ex] device created (%s multithreaded) adapter=%s "
+		       "VendorId=0x%lX DeviceId=0x%lX\n",
+		       vpModeName, adapterIdent.Description,
+		       (unsigned long)adapterIdent.VendorId,
+		       (unsigned long)adapterIdent.DeviceId);
+		fflush(stdout);
 	}
 
 	// Create vertex declaration

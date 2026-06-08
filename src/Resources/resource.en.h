@@ -177,7 +177,6 @@
 #define IDC_BUILDDATE                   1099
 #define IDC_DISCLAIMER                  1100
 #define IDC_EXPAT_COPYRIGHT             1101
-#define IDC_FORK_INFO                   1102
 #define ID_FILE_EXIT                    40001
 #define ID_HELP_ABOUT                   40007
 #define ID_VIEW_SHOWGROUND              40020

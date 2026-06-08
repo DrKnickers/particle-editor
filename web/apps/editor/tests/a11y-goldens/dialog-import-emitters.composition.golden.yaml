@@ -1,0 +1,12 @@
+- dialog "Import Emitters":
+  - heading "Import Emitters" [level=2]
+  - button "Close"
+  - text: "Source file: (not selected)"
+  - button "Browse for source file": Browse…
+  - text: Click Browse… to select a source .alo file.
+  - checkbox "Auto-include children" [checked]
+  - text: Auto-include children
+  - button "Select all emitters" [disabled]: Select All
+  - button "Clear selection" [disabled]: Clear
+  - button "Cancel"
+  - button "Import" [disabled]

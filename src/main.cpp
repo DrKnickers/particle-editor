@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <memory>
 #include <string>
 #include <algorithm>
 #include <cfloat>
@@ -20,9 +21,24 @@
 #include "Autosave.h"
 #include "utils.h"
 #include "engine.h"
+#include "ParticleSystem.h"
 #include "ParticleSystemInstance.h"
 #include "Rescale.h"
+#include "ParticleSystemIO.h"
+#include "ModManager.h"
 #include "resource.h"
+
+// Task 1.3: the WebView2 + D3D9 host declared here is the DEFAULT UI
+// on x64 — launching with no flag enters it; `--legacy` (alias `--legacy-ui`)
+// opts back into the classic Win32 chrome. (`--new-ui` is kept as a no-op so the
+// native test harness and old launch shortcuts keep working.) The host
+// requires Windows 10+ (DPI awareness v2, WebView2) and is only built for
+// x64 — the legacy Win32 configuration defaults to legacy and silently
+// treats --new-ui as unrecognised. The .sln only exposes x64, so this gate
+// is purely belt-and-suspenders against an out-of-tree Win32 build.
+#ifdef _WIN64
+#include "host/Run.h"
+#endif
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -30,14 +46,8 @@
 #include <commdlg.h>
 using namespace std;
 
-// DrKnickers fork version. Bumped per tagged release on
-// https://github.com/DrKnickers/particle-editor/releases.
-// The upstream version (Mike.NL's GlyphX Particle Editor v1.5) is shown as
-// a literal in the IDD_ABOUT dialog's IDC_FORK_INFO line; if upstream ever
-// cuts a 1.6, edit that string in the .rc files directly.
-static const int FORK_VERSION_MAJOR = 0;
-static const int FORK_VERSION_MINOR = 2;
-static const int FORK_VERSION_PATCH = 0;
+static const int VERSION_MAJOR = 1;
+static const int VERSION_MINOR = 5;
 
 // Show up to this amount of files in the File menu
 static const int NUM_HISTORY_ITEMS = 9;
@@ -105,8 +115,7 @@ class TextureManager : public ITextureManager
 
 	// F13+F14: takes the decoded bytes by reference rather
 	// than an IFile* — file lifetime + exact-byte reads are handled by
-	// ReadAndRelease at the call sites. Returns NULL on D3DX decode
-	// failure; caller is responsible for the IFile lifecycle.
+	// ReadAndRelease at the call sites.
 	static IDirect3DTexture9* createTexture(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
 	{
 		IDirect3DTexture9* pTexture = NULL;
@@ -132,8 +141,7 @@ class TextureManager : public ITextureManager
 			return NULL;
 		}
 		// F13: ReadAndRelease consumes the IFile* reference
-		// (which the previous code leaked) and enforces exact-byte
-		// reads (which the previous file->read call ignored).
+		// (which the previous code leaked) and enforces exact-byte reads.
 		try
 		{
 			return createTexture(pDevice, ReadAndRelease(file));
@@ -149,7 +157,7 @@ public:
 	{
 		size_t pos;
 		transform(filename.begin(), filename.end(), filename.begin(), toupper);
-
+		
 		IDirect3DTexture9* pTexture = NULL;
 
 		// See if the file exists as specified
@@ -158,9 +166,7 @@ public:
 			IFile* file = new PhysicalFile(AnsiToWide(filename));
 			// F13/F14/N4: ReadAndRelease handles exact-byte
 			// reads and the IFile Release (was `delete file;` which
-			// violated the refcounted IFile abstraction). On
-			// ReadException, file is already Released and pTexture
-			// stays NULL.
+			// violated the refcounted IFile abstraction).
 			try
 			{
 				pTexture = createTexture(pDevice, ReadAndRelease(file));
@@ -225,6 +231,18 @@ public:
 		textures.clear();
 	}
 
+	// F6: drop every cached resource (including the missing-
+	// texture placeholder) for the device-reset path. Under D3D9Ex,
+	// D3DXCreateTextureFromFileInMemory and D3DXCreateTextureFromResource
+	// silently use D3DPOOL_DEFAULT — those handles are stale after
+	// IDirect3DDevice9::Reset, so all of them must go. getTexture()
+	// lazy-reloads on next call.
+	void OnLostDevice() override
+	{
+		Clear();
+		SAFE_RELEASE(pDefaultTexture);
+	}
+
 	TextureManager(IFileManager* fileManager, const std::string& basePath)
 	{
 		this->basePath		  = basePath;
@@ -258,7 +276,7 @@ class ShaderManager : public IShaderManager
 		{
 			return NULL;
 		}
-
+        
         D3DXHANDLE technique;
         pShader->FindNextValidTechnique(NULL, &technique);
         pShader->SetTechnique(technique);
@@ -283,7 +301,7 @@ class ShaderManager : public IShaderManager
 			return NULL;
 		}
 		// F13: ReadAndRelease consumes the IFile* reference
-		// (was leaked) and enforces exact-byte reads (was ignored).
+		// (was leaked) and enforces exact-byte reads.
 		try
 		{
 			return createShader(pDevice, ReadAndRelease(file));
@@ -391,37 +409,11 @@ public:
 	}
 };
 
-class MouseCursor : public Object3D
-{
-    D3DXVECTOR3   m_oldPosition;
-    LARGE_INTEGER m_updated;
-    LARGE_INTEGER m_frequency;
-
-public:
-	void SetPosition(const D3DXVECTOR3& position)
-	{
-	    m_position = position;
-    }
-
-  	void UpdateVelocity()
-    {
-        LARGE_INTEGER time;
-        QueryPerformanceCounter(&time);
-
-        D3DXVECTOR3 dx = m_position - m_oldPosition;
-        float       dt = (float)(time.QuadPart - m_updated.QuadPart) / (float)m_frequency.QuadPart;
-        m_velocity = dx / dt;
-
-        m_oldPosition = m_position;
-        m_updated     = time;
-    }
-
-    MouseCursor() : Object3D(NULL, D3DXVECTOR3(0,0,0))
-	{
-        QueryPerformanceFrequency(&m_frequency);
-        m_oldPosition = D3DXVECTOR3(0,0,0);
-	}
-};
+// MouseCursor + GetCursorPos3D were factored out to src/MouseCursor.h so
+// the --new-ui host can reuse them. The header is included alongside
+// ParticleSystemInstance.h above (line 23 brings in engine.h transitively;
+// MouseCursor.h re-includes engine.h with its own guard).
+#include "MouseCursor.h"
 
 static INT_PTR CALLBACK AboutProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -431,7 +423,7 @@ static INT_PTR CALLBACK AboutProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         {
             HWND hVersion = GetDlgItem(hWnd, IDC_VERSION);
             wstring text = GetWindowStr(hVersion);
-            text = FormatString(text.c_str(), FORK_VERSION_MAJOR, FORK_VERSION_MINOR, FORK_VERSION_PATCH);
+            text = FormatString(text.c_str(), VERSION_MAJOR, VERSION_MINOR);
             SetWindowText(hVersion, text.c_str());
             
             HWND hBuildDate = GetDlgItem(hWnd, IDC_BUILDDATE);
@@ -468,14 +460,9 @@ void ShowAboutDialog(HWND hWndParent)
     DialogBox(NULL, MAKEINTRESOURCE(IDD_ABOUT), hWndParent, AboutProc);
 }
 
-// Mod selection
-struct ModEntry
-{
-	wstring path;          // full path, e.g. D:\...\corruption\Mods\Mod
-	wstring folderName;    // "Mod"
-	wstring nickname;      // user-set, may be empty
-	bool    isFoC;         // true if under corruption\Mods, false if under GameData\Mods
-};
+// Mod selection — `ModEntry` and the discovery / activation logic
+// moved to src/ModManager.{h,cpp} in D6 so the same code can be
+// reached by the new-UI bridge dispatcher.
 
 // Reserved WM_COMMAND IDs for the dynamically-built Mods menu.
 // Picked above the standard MFC range (0xE100+) and below 0xF000.
@@ -499,12 +486,12 @@ static const UINT ID_BACKGROUND_PREVIEW       = 0x5002;   // unified background 
 static const UINT WM_APP_SHOW_NICKNAME = WM_APP + 1;
 
 // Forward declarations for the Mods support code (defined later).
+// Discovery / activation / nickname-registry are now in ModManager
+// (src/ModManager.h); these are legacy-Win32-menu-only.
 struct APPLICATION_INFO;
-static vector<ModEntry> DiscoverMods(const vector<wstring>& gameRoots);
 static void             RebuildModsMenu(APPLICATION_INFO* info);
 static void             SelectMod(APPLICATION_INFO* info, const wstring& modPath);
 static ModEntry*        FindModById(APPLICATION_INFO* info, UINT id);
-static void             WriteModNickname(const wstring& modPath, const wstring& nickname);
 static bool             ShowNicknameDialog(HWND hParent, const ModEntry& mod, wstring& outNickname);
 static const wstring&   ModDisplayLabel(const ModEntry& m);
 static void             EnsureMenuFonts(APPLICATION_INFO* info);
@@ -617,13 +604,15 @@ struct APPLICATION_INFO
 	wstring   filename;
 	bool      changed;
 
-	// Mod state — set up after createFileManager and used by the Mods menu
+	// Mod state — set up after createFileManager and used by the Mods menu.
+	// D6: `mods` and `selectedModPath` moved into ModManager (single
+	// source of truth shared with the new-UI bridge). The pointer below is
+	// borrowed from a stack-local in WinMain; lifetime is the editor session.
 	FileManager*    fileManager;     // non-owning; owned by main()
 	TextureManager* textureManager;  // non-owning; owned by main()
 	ShaderManager*  shaderManager;   // non-owning; owned by main()
 	vector<wstring> gameRoots;       // the EmpireAtWarPaths used to construct fileManager
-	vector<ModEntry> mods;
-	wstring         selectedModPath; // empty = unmodded
+	ModManager*     modManager;      // non-owning; owned by main() stack
 	HMENU           hModsMenu;       // top-level "Mods" submenu (HMENU of the popup)
 	HFONT           hMenuFont;       // cached for owner-drawn mod entries
 	HFONT           hMenuItalicFont; // italic variant for the nickname parenthetical
@@ -1265,6 +1254,101 @@ static void DoImportEmittersFromFile(APPLICATION_INFO* info);
 // reuses the name-collision helper from EmitterList.cpp.
 extern std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName);
 
+// ── Pure-IO ParticleSystem helpers (host-state plumbing) ─────────
+//
+// These free functions are declared in `src/ParticleSystemIO.h` and
+// implemented here so the new-UI BridgeDispatcher (which knows nothing
+// about `APPLICATION_INFO*`) can read/write .alo files without
+// duplicating the PhysicalFile + ParticleSystem(IFile*) ctor dance.
+// Legacy `LoadFile` / `DoSaveFile` / `ImportEmitters_LoadFile` below
+// are rewritten to delegate to these helpers and retain their UI
+// side-effects (dialogs, autosave flush, history append, etc.) so the
+// `--legacy-ui` codepaths keep working unchanged from the caller's
+// perspective.
+
+std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
+                                                   std::string* errorOut)
+{
+    if (errorOut) errorOut->clear();
+    PhysicalFile* file = NULL;
+    try
+    {
+        file = new PhysicalFile(path);
+    }
+    catch (wexception& e)
+    {
+        if (errorOut) *errorOut = WideToAnsi(e.what());
+        return nullptr;
+    }
+    catch (...)
+    {
+        if (errorOut) *errorOut = "could not open file";
+        return nullptr;
+    }
+
+    std::unique_ptr<ParticleSystem> system;
+    try
+    {
+        system.reset(new ParticleSystem(file));
+    }
+    catch (wexception& e)
+    {
+        if (errorOut) *errorOut = WideToAnsi(e.what());
+        system.reset();
+    }
+    catch (...)
+    {
+        if (errorOut) *errorOut = "not a valid particle system";
+        system.reset();
+    }
+    file->Release();
+    return system;
+}
+
+bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
+                        std::string* errorOut)
+{
+    if (errorOut) errorOut->clear();
+    if (system == NULL)
+    {
+        if (errorOut) *errorOut = "null particle system";
+        return false;
+    }
+    PhysicalFile* file = NULL;
+    try
+    {
+        file = new PhysicalFile(path, PhysicalFile::WRITE);
+    }
+    catch (wexception& e)
+    {
+        if (errorOut) *errorOut = WideToAnsi(e.what());
+        return false;
+    }
+    catch (...)
+    {
+        if (errorOut) *errorOut = "could not open file for writing";
+        return false;
+    }
+
+    bool ok = true;
+    try
+    {
+        system->write(file);
+    }
+    catch (wexception& e)
+    {
+        if (errorOut) *errorOut = WideToAnsi(e.what());
+        ok = false;
+    }
+    catch (...)
+    {
+        if (errorOut) *errorOut = "write failed";
+        ok = false;
+    }
+    file->Release();
+    return ok;
+}
+
 static bool LoadFile(APPLICATION_INFO* info, const wstring& filename)
 {
 	// Delete old particle system
@@ -1275,20 +1359,24 @@ static bool LoadFile(APPLICATION_INFO* info, const wstring& filename)
 	delete info->particleSystem;
 	info->particleSystem = NULL;
 
-	PhysicalFile* file = new PhysicalFile(filename);
-    ParticleSystem* system = NULL;
-	try
-	{
-		system = new ParticleSystem(file);
-		info->filename = filename;
-		file->Release();
-	}
-	catch (wexception& e)
-	{
-        system = NULL;
-		file->Release();
-		MessageBox(info->hMainWnd, LoadString(IDS_ERROR_FILE_OPEN, e.what()).c_str(), NULL, MB_OK | MB_ICONERROR );
-	}
+    //: delegate the actual PhysicalFile + ParticleSystem(IFile*)
+    // round-trip to the pure-IO helper so the new-UI host can reuse it.
+    // The helper swallows wexception internally and reports the message
+    // via errorOut; the legacy UI side-effect (MessageBox + history
+    // append + OnFileChange) stays here.
+    std::string err;
+    std::unique_ptr<ParticleSystem> owned = LoadParticleSystem(filename, &err);
+    ParticleSystem* system = owned.release();
+    if (system != NULL)
+    {
+        info->filename = filename;
+    }
+    else
+    {
+        MessageBox(info->hMainWnd,
+                   LoadString(IDS_ERROR_FILE_OPEN, AnsiToWide(err).c_str()).c_str(),
+                   NULL, MB_OK | MB_ICONERROR);
+    }
 
     if (system != NULL)
     {
@@ -1386,46 +1474,46 @@ static bool DoSaveFile(APPLICATION_INFO* info, bool saveas = false)
 		info->filename = filename;
 	}
 
-	PhysicalFile* file = new PhysicalFile(info->filename, PhysicalFile::WRITE);
-	bool saved = false;
-	try
-	{
-		// Create particleSystem name from filename
-		wstring name = info->filename;
+    // Create particleSystem name from filename (lowercase basename
+    // without extension). Match the previous behaviour exactly so the
+    // on-disk shape doesn't shift.
+    {
+        wstring name = info->filename;
+        size_t pos = name.find_last_of('\\');
+        if (pos != wstring::npos) name = name.substr(pos + 1);
+        pos = name.find_last_of('.');
+        if (pos != wstring::npos) name = name.substr(0, pos);
+        transform(name.begin(), name.end(), name.begin(), tolower);
+        info->particleSystem->setName(WideToAnsi(name,"_"));
+    }
 
-		size_t pos = name.find_last_of('\\');
-		if (pos != wstring::npos) name = name.substr(pos + 1);
-		pos = name.find_last_of('.');
-		if (pos != wstring::npos) name = name.substr(0, pos);
-		transform(name.begin(), name.end(), name.begin(), tolower);
-
-		info->particleSystem->setName(WideToAnsi(name,"_"));
-		info->particleSystem->write(file);
-		saved = true;
-	}
-	catch (wexception& e)
-	{
-		MessageBox(info->hMainWnd, LoadString(IDS_ERROR_FILE_SAVE, e.what()).c_str(), NULL, MB_OK | MB_ICONERROR );
-	}
-	file->Release();
-
-	// Only commit dirty-state cleanup if the write actually succeeded.
-	// Pre-fix this block ran unconditionally — a failed save would
-	// clear the dirty marker AND delete the autosave, so the user
-	// could close without re-prompt and lose both the in-memory state
-	// and recovery. (F1.)
-	if (saved)
-	{
-		SetFileChanged(info, false);
-		info->undoStack.MarkSaved();
-		UpdateUndoRedoUI(info);
-		// User just saved — the on-disk file is now authoritative; the
-		// autosave is no longer needed for recovery. Delete both tiers
-		// so we don't leave orphans that would prompt for recovery on
-		// next launch.
-		Autosave::DeleteOurSession();
-	}
-	return saved;
+    //: delegate the actual write to the pure-IO helper. The
+    // legacy UI side-effect (MessageBox on failure + undo-stack
+    // bookkeeping + autosave flush) stays here.
+    std::string err;
+    if (!SaveParticleSystem(info->particleSystem, info->filename, &err))
+    {
+        MessageBox(info->hMainWnd,
+                   LoadString(IDS_ERROR_FILE_SAVE, AnsiToWide(err).c_str()).c_str(),
+                   NULL, MB_OK | MB_ICONERROR);
+        // Save failed (disk full, permission denied, writer I/O
+        // exception): keep the dirty flag, leave the undo stack
+        // unmarked, and KEEP the autosave so recovery stays available.
+        // Return false so DoCheckChanges aborts the close/new/open it
+        // was guarding -- otherwise the user loses the document
+        // believing it was saved. The host twin (BridgeDispatcher
+        // file/save) already gates its bookkeeping the same way.
+        return false;
+    }
+    SetFileChanged(info, false);
+    info->undoStack.MarkSaved();
+    UpdateUndoRedoUI(info);
+    // User just saved — the on-disk file is now authoritative; the
+    // autosave is no longer needed for recovery. Delete both tiers
+    // so we don't leave orphans that would prompt for recovery on
+    // next launch.
+    Autosave::DeleteOurSession();
+	return true;
 }
 
 static bool DoCheckChanges(APPLICATION_INFO* info)
@@ -2223,8 +2311,10 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			if (mis->itemID < ID_MOD_FIRST || mis->itemID > ID_MOD_LAST) break;
 
 			size_t idx = (size_t)mis->itemData;
-			if (idx >= info->mods.size()) break;
-			const ModEntry& m = info->mods[idx];
+			if (!info->modManager) break;
+			const auto& mods = info->modManager->GetMods();
+			if (idx >= mods.size()) break;
+			const ModEntry& m = mods[idx];
 
 			EnsureMenuFonts(info);
 			HDC hdc = GetDC(hWnd);
@@ -2357,8 +2447,10 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 			if (dis->itemID < ID_MOD_FIRST || dis->itemID > ID_MOD_LAST) break;
 
 			size_t idx = (size_t)dis->itemData;
-			if (idx >= info->mods.size()) break;
-			const ModEntry& m = info->mods[idx];
+			if (!info->modManager) break;
+			const auto& mods = info->modManager->GetMods();
+			if (idx >= mods.size()) break;
+			const ModEntry& m = mods[idx];
 
 			EnsureMenuFonts(info);
 
@@ -2470,15 +2562,19 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     }
                     else if (id == ID_MOD_REFRESH)
                     {
-                        info->mods = DiscoverMods(info->gameRoots);
+                        if (info->modManager) info->modManager->DiscoverMods();
                         // If our currently-selected mod no longer exists, fall back to Unmodded
-                        bool stillExists = info->selectedModPath.empty();
-                        for (const ModEntry& m : info->mods)
+                        const std::wstring& sel = info->modManager ? info->modManager->GetSelectedModPath() : std::wstring();
+                        bool stillExists = sel.empty();
+                        if (info->modManager)
                         {
-                            if (_wcsicmp(m.path.c_str(), info->selectedModPath.c_str()) == 0)
+                            for (const ModEntry& m : info->modManager->GetMods())
                             {
-                                stillExists = true;
-                                break;
+                                if (_wcsicmp(m.path.c_str(), sel.c_str()) == 0)
+                                {
+                                    stillExists = true;
+                                    break;
+                                }
                             }
                         }
                         if (!stillExists) SelectMod(info, L"");
@@ -2807,21 +2903,9 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-// Calculates the 3D position of the intersection of the cursor with Z = 0
-static void GetCursorPos3D(Engine* engine, short x, short y, D3DXVECTOR3& position)
-{
-	D3DXVECTOR3  front, back;
-	D3DVIEWPORT9 viewport;
-	D3DXMATRIX   world;
-	D3DXMatrixIdentity(&world);
-	engine->GetViewPort(&viewport);
-
-	D3DXVec3Unproject(&front, &D3DXVECTOR3(x, y, 0.0f), &viewport, &engine->GetProjectionMatrix(), &engine->GetViewMatrix(), &world);
-	D3DXVec3Unproject(&back,  &D3DXVECTOR3(x, y, 0.9f), &viewport, &engine->GetProjectionMatrix(), &engine->GetViewMatrix(), &world);
-
-	D3DXPLANE plane(0,0,1,0);
-	D3DXPlaneIntersectLine(&position, &plane, &front, &back);
-}
+// GetCursorPos3D moved to src/MouseCursor.h (included near top of file).
+// Legacy callers below (WM_KEYDOWN VK_SHIFT, WM_MOUSEMOVE) resolve to the
+// header'd inline.
 
 static LRESULT CALLBACK RenderWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -2838,10 +2922,10 @@ static LRESULT CALLBACK RenderWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
 
 		case WM_PAINT:
 		{
-			// F12: pair Render with BeginPaint/EndPaint so
-			// the update region is validated. Pre-fix the case just
-			// called Render(info), which left the update region marked
-			// dirty and Windows kept re-posting WM_PAINT.
+			// F12: pair Render with BeginPaint/EndPaint so the
+			// update region is validated. Pre-fix the case just called
+			// Render(info), leaving the update region marked dirty so
+			// Windows kept re-posting WM_PAINT (paint storm + spurious CPU).
 			PAINTSTRUCT ps;
 			BeginPaint(hWnd, &ps);
 			Render(info);
@@ -3109,79 +3193,13 @@ static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 }
 
 //
-// Mods support
+// Mods support — registry helpers (ReadModNickname / WriteModNickname /
+// ReadLastMod / WriteLastMod) and disk scanning (ScanModsDir /
+// DiscoverMods) moved to ModManager (src/ModManager.{h,cpp}) in D6.
+// The nickname helpers are exposed via ModManager.h so the legacy
+// nickname dialog WM_COMMAND can still write them directly without
+// going through a ModManager method.
 //
-
-// Read the user-set nickname for a given mod path from the registry.
-// Returns empty string if no nickname is set.
-static wstring ReadModNickname(const wstring& modPath)
-{
-	wstring nickname;
-	HKEY hKey;
-	if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor\\ModNicknames", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
-	{
-		TCHAR  buf[256] = {0};
-		DWORD  type;
-		DWORD  size = sizeof(buf);
-		if (RegQueryValueEx(hKey, modPath.c_str(), NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ)
-		{
-			nickname = buf;
-		}
-		RegCloseKey(hKey);
-	}
-	return nickname;
-}
-
-static void WriteModNickname(const wstring& modPath, const wstring& nickname)
-{
-	HKEY hKey;
-	if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor\\ModNicknames", 0, NULL,
-	                   REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
-	{
-		if (nickname.empty())
-		{
-			RegDeleteValue(hKey, modPath.c_str());
-		}
-		else
-		{
-			RegSetValueEx(hKey, modPath.c_str(), 0, REG_SZ,
-			              (const BYTE*)nickname.c_str(),
-			              (DWORD)((nickname.size() + 1) * sizeof(TCHAR)));
-		}
-		RegCloseKey(hKey);
-	}
-}
-
-static wstring ReadLastMod()
-{
-	wstring path;
-	HKEY hKey;
-	if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
-	{
-		TCHAR  buf[MAX_PATH] = {0};
-		DWORD  type;
-		DWORD  size = sizeof(buf);
-		if (RegQueryValueEx(hKey, L"LastMod", NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ)
-		{
-			path = buf;
-		}
-		RegCloseKey(hKey);
-	}
-	return path;
-}
-
-static void WriteLastMod(const wstring& modPath)
-{
-	HKEY hKey;
-	if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
-	                   REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
-	{
-		RegSetValueEx(hKey, L"LastMod", 0, REG_SZ,
-		              (const BYTE*)modPath.c_str(),
-		              (DWORD)((modPath.size() + 1) * sizeof(TCHAR)));
-		RegCloseKey(hKey);
-	}
-}
 
 // View-state persistence. Registry layout under
 // HKCU\Software\AloParticleEditor:
@@ -6849,74 +6867,9 @@ static const wstring& ModDisplayLabel(const ModEntry& m)
 	return m.nickname.empty() ? m.folderName : m.nickname;
 }
 
-// Scan a single Mods\ directory for subfolders and append entries.
-static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& out)
-{
-	wstring search = modsRoot;
-	if (!search.empty() && search.back() != L'\\') search += L'\\';
-	search += L"*";
-
-	WIN32_FIND_DATA fd;
-	HANDLE hFind = FindFirstFile(search.c_str(), &fd);
-	if (hFind == INVALID_HANDLE_VALUE) return;
-
-	do
-	{
-		if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
-		if (fd.cFileName[0] == L'.') continue;
-		if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) continue;
-
-		ModEntry e;
-		e.folderName = fd.cFileName;
-		e.path       = modsRoot;
-		if (!e.path.empty() && e.path.back() != L'\\') e.path += L'\\';
-		e.path      += e.folderName;
-		e.isFoC      = isFoC;
-		e.nickname   = ReadModNickname(e.path);
-		out.push_back(e);
-	}
-	while (FindNextFile(hFind, &fd));
-
-	FindClose(hFind);
-}
-
-// Discover mods under the given game roots (corruption\Mods and GameData\Mods),
-// sorted alphabetically by display label within each category (FoC first, then base).
-static vector<ModEntry> DiscoverMods(const vector<wstring>& gameRoots)
-{
-	vector<ModEntry> mods;
-	for (const wstring& root : gameRoots)
-	{
-		wstring trimmed = root;
-		while (!trimmed.empty() && (trimmed.back() == L'\\' || trimmed.back() == L'/')) trimmed.pop_back();
-
-		// Determine flavor by leaf folder name
-		size_t sep  = trimmed.find_last_of(L"\\/");
-		wstring leaf = (sep == wstring::npos) ? trimmed : trimmed.substr(sep + 1);
-
-		bool isFoC;
-		if (_wcsicmp(leaf.c_str(), L"corruption") == 0) isFoC = true;
-		else if (_wcsicmp(leaf.c_str(), L"GameData") == 0) isFoC = false;
-		else continue;
-
-		wstring modsDir = trimmed + L"\\Mods";
-		if (PathIsDirectory(modsDir.c_str()))
-		{
-			ScanModsDir(modsDir, isFoC, mods);
-		}
-	}
-
-	// Sort: FoC mods first, then base game; within each, alphabetical by folder
-	// name (which is what's displayed first; nicknames are a parenthetical).
-	std::sort(mods.begin(), mods.end(), [](const ModEntry& a, const ModEntry& b) {
-		if (a.isFoC != b.isFoC) return a.isFoC && !b.isFoC;
-		return _wcsicmp(a.folderName.c_str(), b.folderName.c_str()) < 0;
-	});
-
-	printf("[Mods] DiscoverMods: scanned %zu game roots, found %zu mods\n",
-	       gameRoots.size(), mods.size()); fflush(stdout);
-	return mods;
-}
+// ScanModsDir / DiscoverMods moved to ModManager (src/ModManager.cpp)
+// in D6 so both the legacy menu and the new-UI bridge dispatcher
+// share the same disk-scanning code.
 
 // Lazily create (and cache) the menu fonts used to draw mod entries.
 // Owner-drawn items need to know which font to render with — we use the system
@@ -6983,8 +6936,12 @@ static void RebuildModsMenu(APPLICATION_INFO* info)
 		InsertMenuItem(hMenuBar, helpPos >= 0 ? helpPos : GetMenuItemCount(hMenuBar), TRUE, &mii);
 	}
 
+	// Read mod state from ModManager (single source of truth post-D6).
+	const std::vector<ModEntry>& mods = info->modManager ? info->modManager->GetMods() : std::vector<ModEntry>{};
+	const std::wstring& selectedPath = info->modManager ? info->modManager->GetSelectedModPath() : std::wstring{};
+
 	// Top: Unmodded radio item
-	UINT noneFlags = MF_STRING | (info->selectedModPath.empty() ? MF_CHECKED : MF_UNCHECKED);
+	UINT noneFlags = MF_STRING | (selectedPath.empty() ? MF_CHECKED : MF_UNCHECKED);
 	AppendMenu(info->hModsMenu, noneFlags, ID_MOD_NONE, L"&Unmodded");
 	AppendMenu(info->hModsMenu, MF_SEPARATOR, 0, NULL);
 
@@ -6997,11 +6954,11 @@ static void RebuildModsMenu(APPLICATION_INFO* info)
 	HMENU hFoCMenu  = CreatePopupMenu();
 	HMENU hBaseMenu = CreatePopupMenu();
 	int   nFoC = 0, nBase = 0;
-	for (size_t i = 0; i < info->mods.size(); i++)
+	for (size_t i = 0; i < mods.size(); i++)
 	{
-		const ModEntry& m = info->mods[i];
+		const ModEntry& m = mods[i];
 		UINT id      = ID_MOD_FIRST + (UINT)i;
-		bool checked = (_wcsicmp(m.path.c_str(), info->selectedModPath.c_str()) == 0);
+		bool checked = (_wcsicmp(m.path.c_str(), selectedPath.c_str()) == 0);
 
 		MENUITEMINFO mii = {};
 		mii.cbSize     = sizeof(mii);
@@ -7053,51 +7010,36 @@ static void RebuildModsMenu(APPLICATION_INFO* info)
 	DrawMenuBar(info->hMainWnd);
 }
 
-// Apply a mod selection: update FileManager, clear caches, persist,
-// rebuild menu, redraw render area.
+// Apply a mod selection. D6: the cross-mode core (FileManager
+// swap, registry persist, palette swap, thumbnail cache clear, engine
+// shader/texture reload) lives in ModManager::SelectMod so the new-UI
+// bridge can call it. The legacy wrapper below adds the Win32-only
+// finalisation (status bar text on shader-reload failure, HBITMAP
+// preview rebuild, modeless skydome picker refresh, render-window
+// invalidate, HMENU rebuild).
 static void SelectMod(APPLICATION_INFO* info, const wstring& modPath)
 {
-	info->selectedModPath = modPath;
+	bool ok = info->modManager ? info->modManager->SelectMod(modPath) : false;
+	if (!ok && info->engine != NULL && info->hStatusBar != NULL)
+	{
+		SendMessage(info->hStatusBar, SB_SETTEXT, 4,
+		            (LPARAM)L"Mod shader reload failed — keeping previous shaders");
+	}
 
-	if (info->fileManager) info->fileManager->SetModPath(modPath);
-
-	WriteLastMod(modPath);
-	// — swap the texture-palette to the new mod. SetActiveMod
-	// flushes any dirty state from the previous mod and lazy-loads the
-	// new mod's INI section. Empty `modPath` (unmodded) clears.
-	// Then drop the in-memory thumbnail cache (cache is keyed by
-	// filename, so a same-named file in a different mod would
-	// otherwise show the old mod's thumbnail) and refresh the popup
-	// content if visible.
-	TexturePalette::Store::Instance().SetActiveMod(modPath);
-	TexturePalette::ClearThumbnailCache();
-	TexturePalette::RefreshPopup();
-	RebuildModsMenu(info);
-
-	printf("[Mods] Selected: %S\n", modPath.empty() ? L"(unmodded)" : modPath.c_str()); fflush(stdout);
-
-	// Hot-swap shaders + textures so the new mod folder takes effect without
-	// restart. Shader reload may fail on a malformed mod shader; in that case
-	// we keep the previous set and surface the failure on the status bar.
+	// follow-up: skydome texture was re-resolved inside the engine
+	// ReloadTextures call, but the toolbar preview's cached HBITMAP and
+	// the (possibly open) picker's image list still point at the
+	// previous mod's bytes. Rebuild both so the UI matches what the
+	// engine just loaded.
 	if (info->engine != NULL)
 	{
-		if (!info->engine->ReloadShaders())
-		{
-			SendMessage(info->hStatusBar, SB_SETTEXT, 4,
-			            (LPARAM)L"Mod shader reload failed — keeping previous shaders");
-		}
-		info->engine->ReloadTextures();
-		// follow-up: skydome texture was re-resolved inside
-		// ReloadTextures, but the toolbar preview's cached HBITMAP and the
-		// (possibly open) picker's image list still point at the previous
-		// mod's bytes. Rebuild both so the UI matches what the engine just
-		// loaded.
 		RebuildBackgroundPreviewBitmap(info);
 		if (info->hSkydomePicker != NULL && IsWindowVisible(info->hSkydomePicker))
 		{
 			SendMessage(info->hSkydomePicker, WM_USER, 0, 0);
 		}
 	}
+	RebuildModsMenu(info);
 	if (info->hRenderWnd != NULL)
 	{
 		InvalidateRect(info->hRenderWnd, NULL, TRUE);
@@ -7105,12 +7047,24 @@ static void SelectMod(APPLICATION_INFO* info, const wstring& modPath)
 }
 
 // Find the mod entry corresponding to a given menu command ID, or NULL.
+// Const-correct: returns a pointer into ModManager's internal vector;
+// caller must not retain the pointer across mod-list mutations
+// (DiscoverMods will reallocate). Used by the nickname dialog
+// WM_COMMAND handler, which acts on the returned entry's path
+// immediately and doesn't cache it.
 static ModEntry* FindModById(APPLICATION_INFO* info, UINT id)
 {
 	if (id < ID_MOD_FIRST || id > ID_MOD_LAST) return NULL;
+	if (!info->modManager) return NULL;
 	UINT idx = id - ID_MOD_FIRST;
-	if (idx >= info->mods.size()) return NULL;
-	return &info->mods[idx];
+	const auto& mods = info->modManager->GetMods();
+	if (idx >= mods.size()) return NULL;
+	// const_cast is safe here: WriteModNickname (the only caller via
+	// WM_APP_SHOW_NICKNAME) writes the user-edited nickname BACK into
+	// the entry, and the entry's storage lives inside ModManager's
+	// mods vector. Future refactor: route nickname writes through a
+	// ModManager method so the cast goes away.
+	return const_cast<ModEntry*>(&mods[idx]);
 }
 
 // Backing data for the IDD_MOD_NICKNAME dialog
@@ -7207,33 +7161,30 @@ struct ImportEmittersDialogState
 
 static ParticleSystem* ImportEmitters_LoadFile(HWND hParent, const wstring& path)
 {
-    PhysicalFile* file = NULL;
-    try { file = new PhysicalFile(path); }
-    catch (...)
+    //: delegate the load to the pure-IO helper; the legacy UI
+    // (MessageBox surfacing) stays here. Pre-this function
+    // distinguished three failure modes (file-open / wexception /
+    // generic catch-all); the helper merges them into one — the
+    // single user-visible MessageBox is fine because the user only
+    // cares "open failed" + a message.
+    std::string err;
+    std::unique_ptr<ParticleSystem> owned = LoadParticleSystem(path, &err);
+    if (!owned)
     {
-        MessageBox(hParent, L"Could not open the selected file.",
-                   L"Import Emitters from File", MB_OK | MB_ICONERROR);
+        if (err.empty())
+        {
+            MessageBox(hParent, L"Could not open the selected file.",
+                       L"Import Emitters from File", MB_OK | MB_ICONERROR);
+        }
+        else
+        {
+            MessageBox(hParent,
+                       LoadString(IDS_ERROR_FILE_OPEN, AnsiToWide(err).c_str()).c_str(),
+                       L"Import Emitters from File", MB_OK | MB_ICONERROR);
+        }
         return NULL;
     }
-    ParticleSystem* sys = NULL;
-    try
-    {
-        sys = new ParticleSystem(file);
-    }
-    catch (wexception& e)
-    {
-        MessageBox(hParent, LoadString(IDS_ERROR_FILE_OPEN, e.what()).c_str(),
-                   L"Import Emitters from File", MB_OK | MB_ICONERROR);
-        sys = NULL;
-    }
-    catch (...)
-    {
-        MessageBox(hParent, L"The selected file is not a valid particle system.",
-                   L"Import Emitters from File", MB_OK | MB_ICONERROR);
-        sys = NULL;
-    }
-    file->Release();
-    return sys;
+    return owned.release();
 }
 
 static HTREEITEM ImportEmitters_AddTreeItem(HWND hTree, HTREEITEM hParent,
@@ -7335,89 +7286,16 @@ static void ImportEmitters_Execute(APPLICATION_INFO* info,
     if (info == NULL || info->particleSystem == NULL ||
         source == NULL || picks.empty()) return;
 
-    // Pass 1: clone each pick as a root in the destination. Build the
-    // source→destination index map for Pass 2.
-    map<size_t, size_t> srcToDest;
-    vector<ParticleSystem::Emitter*> destEmitters(picks.size(), NULL);
-    for (size_t i = 0; i < picks.size(); ++i)
-    {
-        size_t srcIdx = picks[i];
-        if (srcIdx >= source->getEmitters().size()) continue;
-        ParticleSystem::Emitter& srcEmit = source->getEmitter(srcIdx);
-
-        MemoryFile* mf = new MemoryFile;
-        ParticleSystem::Emitter* placed = NULL;
-        try
-        {
-            ChunkWriter w(mf);
-            srcEmit.copy(w);
-            mf->seek(0);
-            ChunkReader r(mf);
-            // Braced init avoids the most-vexing-parse on
-            // `Emitter clone(r);` which the parser would otherwise take as
-            // a function declaration of `clone(ChunkReader& r)`.
-            ParticleSystem::Emitter clone{r};
-            clone.name = GenerateDuplicateName(info->particleSystem, clone.name);
-            placed = info->particleSystem->addRootEmitter(clone);
-        }
-        catch (...)
-        {
-            placed = NULL;
-        }
-        mf->Release();
-
-        if (placed != NULL)
-        {
-            srcToDest[srcIdx] = placed->index;
-            destEmitters[i]   = placed;
-        }
-    }
-
-    // Pass 2: re-map spawn fields. Children whose source-index isn't in
-    // the picks set stay -1 (set by Emitter::copy's copy=true mode).
-    for (size_t i = 0; i < picks.size(); ++i)
-    {
-        ParticleSystem::Emitter* dst = destEmitters[i];
-        if (dst == NULL) continue;
-        const ParticleSystem::Emitter& src = source->getEmitter(picks[i]);
-        auto rebind = [&](size_t srcChildIdx) -> size_t {
-            if (srcChildIdx == (size_t)-1) return (size_t)-1;
-            auto it = srcToDest.find(srcChildIdx);
-            return (it != srcToDest.end()) ? it->second : (size_t)-1;
-        };
-        dst->spawnDuringLife = rebind(src.spawnDuringLife);
-        dst->spawnOnDeath    = rebind(src.spawnOnDeath);
-    }
-
-    // Rebuild parent pointers from the re-mapped spawn fields (mirrors
-    // ParticleSystem(IFile*) load-time logic). Walk every imported emitter;
-    // any child it points at gets its parent set to the imported parent.
-    for (ParticleSystem::Emitter* dst : destEmitters)
-    {
-        if (dst == NULL) continue;
-        if (dst->spawnDuringLife != (size_t)-1)
-            info->particleSystem->getEmitter(dst->spawnDuringLife).parent = dst;
-        if (dst->spawnOnDeath != (size_t)-1)
-            info->particleSystem->getEmitter(dst->spawnOnDeath).parent = dst;
-    }
-
-    // Pass 3: re-create source link groups in destination. Bucket imports
-    // by source linkGroup; ≥2-member buckets get a fresh destination group
-    // via CreateLinkGroup. Single-member buckets arrive unlinked (the
-    // copy=true serialiser already stripped linkGroup).
-    map<uint32_t, vector<ParticleSystem::Emitter*>> byGroup;
-    for (size_t i = 0; i < picks.size(); ++i)
-    {
-        if (destEmitters[i] == NULL) continue;
-        uint32_t srcGroup = source->getEmitter(picks[i]).linkGroup;
-        if (srcGroup != 0)
-            byGroup[srcGroup].push_back(destEmitters[i]);
-    }
-    for (auto& kv : byGroup)
-    {
-        if (kv.second.size() >= 2)
-            CreateLinkGroup(*info->particleSystem, kv.second);
-    }
+    // The clone / spawn-rebind / graph-revalidate / link-group-recreate core
+    // now lives on the data layer (ParticleSystem::ImportEmittersFrom), shared
+    // with the `emitters/import-from-file` bridge handler. The UI's
+    // unique-name generator is injected so the data layer stays UI-agnostic.
+    // Caller still owns undo + tree refresh.
+    info->particleSystem->ImportEmittersFrom(
+        *source, picks,
+        [info](const std::string& name) {
+            return GenerateDuplicateName(info->particleSystem, name);
+        });
 }
 
 static INT_PTR CALLBACK ImportEmittersDialogProc(HWND hDlg, UINT msg,
@@ -7741,35 +7619,28 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 		info->textureManager = &textureManager;
 		info->shaderManager  = &shaderManager;
 		info->gameRoots      = gameRoots;
-		info->mods           = DiscoverMods(gameRoots);
 
-		// Restore the previously-selected mod, if any (and it still exists)
-		wstring savedMod = ReadLastMod();
-		if (!savedMod.empty() && PathIsDirectory(savedMod.c_str()))
-		{
-			info->selectedModPath = savedMod;
-			fileManager->SetModPath(savedMod);
-			printf("[Mods] Restored from registry: %S\n", savedMod.c_str()); fflush(stdout);
-		}
-		else
-		{
-			info->selectedModPath = L"";
-			if (!savedMod.empty())
-			{
-				printf("[Mods] Saved mod path no longer exists, falling back to unmodded: %S\n", savedMod.c_str()); fflush(stdout);
-			}
-		}
-		// — initialize the texture-palette to whichever mod we just
-		// settled on (may be empty if no mod is active). Must run after
-		// the LastMod restore so the palette and FileManager agree on
-		// which mod is current.
-		TexturePalette::Store::Instance().SetActiveMod(info->selectedModPath);
+		// D6: ModManager owns mod discovery + active-mod state for
+		// both UI modes. Stack-local lifetime matches textureManager /
+		// shaderManager (live until main() returns). Setting m_engine
+		// happens AFTER `info->engine = new Engine(...)` below.
+		// RestoreLastSelectedMod() applies the registry path to
+		// FileManager + TexturePalette internally so this block no
+		// longer needs the inline ReadLastMod / SetActiveMod chain.
+		ModManager modManager(fileManager, gameRoots);
+		info->modManager = &modManager;
+		modManager.DiscoverMods();
+		modManager.RestoreLastSelectedMod();
 		RebuildModsMenu(info);
 
 		// Create the rendering engine
         try
         {
 		    info->engine = new Engine(info->hMainWnd, info->hRenderWnd, textureManager, shaderManager, *info->fileManager);
+
+		    // D6: now that the Engine exists, give it to ModManager
+		    // so future SelectMod() calls can hot-swap shaders / textures.
+		    modManager.SetEngine(info->engine);
 
 		    // — give the texture-palette its services now that the
 		    // engine has a D3D device. Both pointers must outlive the
@@ -8178,6 +8049,207 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		if (pSet) pSet(L"DrKnickers.AloParticleEditor");
 	}
 
+	// Task 1.3 — the WebView2 + D3D9 host is the DEFAULT UI on x64. With
+	// no flag we build the same three managers legacy main() builds (so the
+	// host can construct Engine identically), then return early — no legacy
+	// WNDCLASS / windows are registered. `--legacy` (alias `--legacy-ui`) opts
+	// back into the classic chrome; `--new-ui` is a no-op kept for the harness.
+	//
+	// x86 has no host (the `#else` at the dispatch below hard-returns), so the
+	// default MUST stay legacy there — the `newUi` initializer is x64-gated.
+	{
+		const std::vector<std::wstring> argv = parseCommandLine();
+#ifdef _WIN64
+		bool newUi    = true;   // new UI is the default on x64
+#else
+		bool newUi    = false;  // x86: no host, legacy only (see #else at dispatch)
+#endif
+		bool legacy   = false;  // --legacy opts back into the classic chrome
+		bool devUi    = false;
+		bool testHost = false;
+		// --gen-nt5-fixture <path>: one-shot CLI to produce a
+		// .alo file with a known pre-singleton link group. Used
+		// to exercise the load-time enforcement sweep at file/open.
+		// Since the production save path always runs through
+		// post-mutation enforcement (which would have demoted the
+		// singleton already), no other code path can produce such a
+		// file. This flag bypasses BridgeDispatcher entirely and
+		// constructs the singleton state directly via the
+		// ParticleSystem API + SaveParticleSystem.
+		std::wstring genNt5FixturePath;
+		std::wstring genA11yFixturePath;
+		// rendering-fidelity] --capture <alo> <png> [--frames N]:
+		// headless render-fidelity capture. Loads <alo>, renders N frames,
+		// writes the engine's render target to <png>, exits. Implies the
+		// --new-ui host path (it owns the engine). See src/host/Run.h.
+		std::wstring captureAlo;
+		std::wstring capturePng;
+		// Default ~180 frames ≈ 3 s of sim (loop paces ~16 ms/frame) so a
+		// freshly-spawned effect has time to fill before the snapshot.
+		int          captureFrames = 180;
+		// --skydome <slot>: render the capture with a background skydome
+		// (0 = Off / solid colour — the default; 1-8 bundled scenes).
+		int          captureSkydome = 0;
+		for (size_t i = 1; i < argv.size(); ++i)
+		{
+			if (argv[i] == L"--new-ui")    newUi    = true;  // no-op: now the default
+			// --legacy / --legacy-ui both opt back into the classic chrome.
+			// The `-ui` alias mirrors `--new-ui` and is the name used
+			// throughout the codebase's comments/docs; before the default
+			// flip it "worked" only because legacy was the default, so accept
+			// it explicitly now that it no longer falls through.
+			if (argv[i] == L"--legacy" ||
+			    argv[i] == L"--legacy-ui") legacy = true;
+			if (argv[i] == L"--dev-ui")    devUi    = true;
+			if (argv[i] == L"--test-host") testHost = true;
+			if (argv[i] == L"--gen-nt5-fixture" && i + 1 < argv.size())
+			{
+				genNt5FixturePath = argv[i + 1];
+			}
+			if (argv[i] == L"--gen-a11y-fixture" && i + 1 < argv.size())
+			{
+				genA11yFixturePath = argv[i + 1];
+			}
+			if (argv[i] == L"--capture" && i + 2 < argv.size())
+			{
+				captureAlo = argv[i + 1];
+				capturePng = argv[i + 2];
+			}
+			if (argv[i] == L"--frames" && i + 1 < argv.size())
+			{
+				captureFrames = _wtoi(argv[i + 1].c_str());
+			}
+			// --skydome <slot>: apply a background skydome in --capture mode
+			// (0 = Off / solid colour, 1-8 bundled).
+			if (argv[i] == L"--skydome" && i + 1 < argv.size())
+			{
+				captureSkydome = _wtoi(argv[i + 1].c_str());
+			}
+		}
+		// `--legacy` opts back into the classic chrome (clears the x64
+		// default-true). Applied before the --capture clamp so a headless
+		// --capture run — which needs the host to own the Engine — still wins.
+		if (legacy) newUi = false;
+		// --capture implies the new-UI host (it owns the Engine). Clamp a
+		// garbage/zero --frames back to the default.
+		if (!captureAlo.empty() && !capturePng.empty()) newUi = true;
+		if (captureFrames < 1) captureFrames = 180;
+		if (!genNt5FixturePath.empty())
+		{
+			auto sys = std::make_unique<ParticleSystem>();
+			sys->addRootEmitter();
+			sys->addRootEmitter();
+			auto& emitters = sys->getEmitters();
+			if (emitters.size() < 2 || !emitters[0] || !emitters[1])
+			{
+				fwprintf(stderr, L"gen-nt5-fixture: failed to add 2 root emitters\n");
+				return 2;
+			}
+			// Put both in link group 1 (transient — valid 2-member
+			// state), then manually demote emitter 0 back to 0.
+			// Result on disk: emitter 0 at linkGroup=0, emitter 1
+			// alone at linkGroup=1 — the pre-"singleton group"
+			// state that file/open's enforcement sweep must demote.
+			emitters[0]->linkGroup = 1;
+			emitters[1]->linkGroup = 1;
+			emitters[0]->linkGroup = 0;
+			std::string err;
+			const bool ok = SaveParticleSystem(sys.get(), genNt5FixturePath, &err);
+			if (!ok)
+			{
+				fwprintf(stderr, L"gen-nt5-fixture: SaveParticleSystem failed: %hs\n",
+				         err.c_str());
+				return 2;
+			}
+			fwprintf(stderr, L"gen-nt5-fixture: wrote %s "
+			                 L"(emitter 0 linkGroup=0, emitter 1 linkGroup=1 — singleton)\n",
+			         genNt5FixturePath.c_str());
+			return 0;
+		}
+		// T9.2] --gen-a11y-fixture <path>: one-shot CLI to produce a
+		// .alo file with a 3-emitter tree (1 root + 1 lifetime child + 1
+		// death child). Used by the T9 a11y specs so every surface driver's
+		// beforeEach can open a deterministic file with enough tree depth to
+		// exercise ArrowRight expand (kbd-arrow-tree-expanded) as well as the
+		// simpler single-row surfaces. Bypasses BridgeDispatcher; uses the
+		// ParticleSystem API directly (addRootEmitter / addLifetimeEmitter /
+		// addDeathEmitter) and saves via SaveParticleSystem.
+		if (!genA11yFixturePath.empty())
+		{
+			auto sys = std::make_unique<ParticleSystem>();
+			// Root emitter
+			ParticleSystem::Emitter* root = sys->addRootEmitter();
+			if (root == nullptr)
+			{
+				fwprintf(stderr, L"gen-a11y-fixture: failed to add root emitter\n");
+				return 2;
+			}
+			// Lifetime child (spawns during root's life)
+			ParticleSystem::Emitter* lifetimeChild = sys->addLifetimeEmitter(root);
+			if (lifetimeChild == nullptr)
+			{
+				fwprintf(stderr, L"gen-a11y-fixture: failed to add lifetime child emitter\n");
+				return 2;
+			}
+			// Death child (spawns on root's death)
+			ParticleSystem::Emitter* deathChild = sys->addDeathEmitter(root);
+			if (deathChild == nullptr)
+			{
+				fwprintf(stderr, L"gen-a11y-fixture: failed to add death child emitter\n");
+				return 2;
+			}
+			std::string err;
+			const bool ok = SaveParticleSystem(sys.get(), genA11yFixturePath, &err);
+			if (!ok)
+			{
+				fwprintf(stderr, L"gen-a11y-fixture: SaveParticleSystem failed: %hs\n",
+				         err.c_str());
+				return 2;
+			}
+			const auto& emitters = sys->getEmitters();
+			fwprintf(stderr,
+			         L"gen-a11y-fixture: wrote %s "
+			         L"(%zu emitters: root[0], lifetime-child[1], death-child[2])\n",
+			         genA11yFixturePath.c_str(),
+			         emitters.size());
+			return 0;
+		}
+		if (newUi)
+		{
+#ifdef _WIN64
+			// D6: capture gameRoots so the host can build its
+			// ModManager. createFileManager already discovers them
+			// internally; pass &gameRoots to extract.
+			std::vector<std::wstring> gameRoots;
+			FileManager* fileManager = createFileManager(NULL, argv, &gameRoots);
+			if (fileManager == NULL)
+			{
+				// Same semantics as legacy: user cancelled the data-path
+				// picker. Exit cleanly with the same -1 sentinel.
+				return -1;
+			}
+			TextureManager textureManager(fileManager, "Data\\Art\\Textures\\");
+			ShaderManager  shaderManager (fileManager, "Data\\Art\\Shaders\\");
+			int hostResult = host::Run(hInstance, SW_SHOWDEFAULT,
+			                           textureManager, shaderManager, *fileManager,
+			                           gameRoots,
+			                           devUi, testHost,
+			                           captureAlo, capturePng, captureFrames,
+			                           captureSkydome);
+			delete fileManager;
+#ifndef NDEBUG
+			FreeConsole();
+#endif
+			return hostResult;
+#else
+			MessageBoxW(NULL,
+				L"--new-ui is only available in the x64 build of this editor.",
+				L"AloParticleEditor", MB_ICONERROR);
+			return -1;
+#endif
+		}
+	}
+
 	int result = -1;
 
     APPLICATION_INFO info;
@@ -8192,6 +8264,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 	info.fileManager			= NULL;
 	info.textureManager			= NULL;
 	info.shaderManager			= NULL;
+	info.modManager				= NULL;
 	info.hModsMenu				= NULL;
 	info.hMenuFont				= NULL;
 	info.hMenuItalicFont		= NULL;

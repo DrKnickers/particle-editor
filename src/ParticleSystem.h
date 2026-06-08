@@ -6,6 +6,7 @@
 #include <set>
 #include <map>
 #include <cstdint>
+#include <functional>
 #include "ChunkFile.h"
 
 #include "files.h"
@@ -274,6 +275,31 @@ public:
     Emitter*       addLifetimeEmitter(Emitter* parent, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
     Emitter*       addDeathEmitter(Emitter* parent, const ParticleSystem::Emitter& emitter = ParticleSystem::Emitter());
 
+    // Make the emitter spawn-graph well-formed after loading or importing
+    // data that may be malformed: clear out-of-range spawn indices, drop
+    // self-links and any child claimed by more than one parent, break
+    // cycles, then rebuild parent pointers from the resulting forest.
+    // deleteEmitter() and the EmitterList tree rebuild both recurse through
+    // spawnOnDeath / spawnDuringLife and assume an acyclic single-parent
+    // forest -- a cyclic or multi-parent graph would otherwise infinite-
+    // recurse or double-free. Called from the ParticleSystem(IFile*) loader
+    // (which also backs autosave restore) and the import-emitters helper.
+    void ValidateEmitterGraph();
+
+    // Clone the picked emitters (indices into `source`) into THIS system as
+    // new roots: deep-copies each via the chunk serialiser (copy=true), re-maps
+    // spawn links among the picked set (links to non-picked emitters drop to
+    // -1), revalidates the merged graph via ValidateEmitterGraph (drops self /
+    // duplicate-parent / cyclic links and rebuilds parents), and recreates
+    // multi-member source link groups. `makeUniqueName` returns a collision-
+    // free name for a clone given its source name — injected so the data layer
+    // stays independent of the UI's GenerateDuplicateName. Returns the count
+    // imported. Shared by the legacy import dialog and the bridge handler.
+    size_t ImportEmittersFrom(
+        ParticleSystem& source,
+        const std::vector<size_t>& picks,
+        const std::function<std::string(const std::string&)>& makeUniqueName);
+
     // Insert a copy of `source` directly after `reference` in m_emitters.
     // The new emitter becomes a root (parent=NULL, no spawn-children); existing
     // emitters at index >= reference->index + 1 shift up by one slot, with
@@ -366,13 +392,6 @@ public:
     { return m_linkExempts; }
 
 private:
-	// Reject self-links, multi-parent, and cycles in the spawn graph.
-	// Throws BadFileException if the graph is structurally invalid.
-	// Called from the file-load post-process before parent-pointer
-	// assignment, so downstream tree-walks can assume well-formed
-	// input. (F4.)
-	void validateEmitterGraph();
-
 	bool			 	                       m_leaveParticles;
 	std::string                                m_name;
 	std::vector<Emitter*>                      m_emitters;

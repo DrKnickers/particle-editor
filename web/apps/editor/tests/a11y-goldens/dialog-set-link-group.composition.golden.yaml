@@ -1,0 +1,12 @@
+- dialog "Set Link Group":
+  - heading "Set Link Group" [level=2]
+  - button "Close"
+  - radio "Create new group" [checked]
+  - text: Create new group
+  - radio "Join existing group" [disabled]
+  - text: Join existing group
+  - combobox [disabled]:
+    - option "(none)" [selected]
+  - paragraph: Select at least 2 emitters to create a group.
+  - button "Cancel"
+  - button "OK" [disabled]

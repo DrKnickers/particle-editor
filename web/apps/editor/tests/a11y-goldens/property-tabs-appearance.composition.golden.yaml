@@ -1,0 +1,151 @@
+- banner:
+  - text: AloParticleEditor
+  - menubar:
+    - menuitem "File"
+    - menuitem "Edit"
+    - menuitem "Emitters"
+    - menuitem "Mods"
+    - menuitem "View"
+    - menuitem "Help"
+- button "New"
+- button "Open"
+- button "Save"
+- button "Save As"
+- button "Play"
+- button "Step"
+- button "Step 10"
+- button "Show ground" [pressed]
+- button "Toggle bloom"
+- button "Leave particles after instance death" [pressed]
+- button "Toggle Spawner panel" [pressed]
+- button "Toggle Lighting panel"
+- button "Ground": "Ground:"
+- button "Background": "Background:"
+- button "Light theme" [pressed]
+- button "Dark theme"
+- text: Particle System
+- complementary:
+  - tree "Emitters":
+    - treeitem "Hide emitter default":
+      - button "Hide emitter default":
+        - button "Hide emitter"
+        - text: default
+    - treeitem "Hide emitter default lifetime child":
+      - button "Hide emitter default lifetime child":
+        - button "Hide emitter"
+        - text: default ↻
+    - treeitem "Hide emitter default death child":
+      - button "Hide emitter default death child":
+        - button "Hide emitter"
+        - text: default ✕
+  - menubar:
+    - menuitem "New Emitter"
+  - button "Duplicate emitter" [disabled]
+  - button "Delete emitter" [disabled]
+  - button "Move emitter up" [disabled]
+  - button "Move emitter down" [disabled]
+  - button "Show all emitters"
+  - button "Hide all emitters"
+- separator
+- tablist "Emitter property tabs":
+  - tab "Basic"
+  - tab "Appearance" [selected]
+  - tab "Physics"
+- tabpanel "Appearance": Select an emitter to edit its properties
+- separator
+- separator
+- text: Curve editor
+- button "Select tool" [pressed]
+- button "Insert tool"
+- button "Interpolation linear" [disabled]
+- button "Interpolation smooth" [disabled]
+- button "Interpolation step" [disabled]
+- text: "Lock to:"
+- combobox "Lock-to track" [disabled]: None
+- button "Delete selected keys" [disabled]
+- text: "Time:"
+- textbox "Selected key time" [disabled]: "0.00"
+- text: "Value:"
+- textbox "Selected key value" [disabled]: "0.00"
+- group "Curve channels":
+  - button "Toggle Red curve Red" [pressed]:
+    - checkbox "Toggle Red curve" [checked]
+    - text: Red
+  - button "Toggle Green curve Green":
+    - checkbox "Toggle Green curve" [checked]
+    - text: Green
+  - button "Toggle Blue curve Blue":
+    - checkbox "Toggle Blue curve" [checked]
+    - text: Blue
+  - button "Toggle Alpha curve Alpha":
+    - checkbox "Toggle Alpha curve"
+    - text: Alpha
+  - button "Toggle Scale curve Scale":
+    - checkbox "Toggle Scale curve"
+    - text: Scale
+  - button "Toggle Index curve Index":
+    - checkbox "Toggle Index curve"
+    - text: Index
+  - button "Toggle Rotation curve Rotation":
+    - checkbox "Toggle Rotation curve"
+    - text: Rotation
+- text: Select an emitter to edit its tracks
+- separator
+- complementary:
+  - text: Spawner 0
+  - button "Stop spawner" [disabled]
+  - button "Close Spawner"
+  - text: Mode
+  - radiogroup "Spawner mode":
+    - radio "Manual mode"
+    - text: Manual
+    - radio "Auto mode" [checked]
+    - text: Auto
+  - checkbox "Enable spawner"
+  - text: Enabled
+  - button "Burst" [expanded]
+  - text: Burst size
+  - textbox "Burst size": "1"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Spacing
+  - textbox "Burst spacing": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Interval
+  - textbox "Burst interval": "10.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - button "Position" [expanded]
+  - text: X
+  - textbox "Position X": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "Y"
+  - textbox "Position Y": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Z
+  - textbox "Position Z": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - button "Velocity" [expanded]
+  - text: X
+  - textbox "Velocity X": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "Y"
+  - textbox "Velocity Y": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Z
+  - textbox "Velocity Z": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Lifetime Max lifetime
+  - textbox "Max lifetime": "5.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - button "Jitter position"
+  - button "Jitter velocity"
+- contentinfo: "FPS — · Emitters — · Particles — · Instances — · Cursor — PAUSED ⇧ Shift: spawn instance"

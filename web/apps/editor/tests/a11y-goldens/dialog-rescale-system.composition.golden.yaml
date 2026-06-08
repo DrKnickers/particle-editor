@@ -1,0 +1,17 @@
+- dialog "Rescale Particle System":
+  - heading "Rescale Particle System" [level=2]
+  - button "Close"
+  - text: Duration scale
+  - textbox "Duration scale": "100"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Size scale
+  - textbox "Size scale": "100"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - paragraph:
+    - text: Applies to the entire particle system. Use
+    - emphasis: Rescale Emitter…
+    - text: to rescale a single emitter.
+  - button "Cancel"
+  - button "OK"

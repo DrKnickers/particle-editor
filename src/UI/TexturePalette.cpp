@@ -244,11 +244,11 @@ HBITMAP DecodeThumbnail(const std::wstring& filename)
         return GetMissingPlaceholder();
     }
 
-    // F13+F14/N4: ReadAndRelease handles the exact-byte
-    // read (pre-fix this ignored the read return) and Releases the
-    // file reference (pre-fix `delete file;` violated the refcounted
-    // IFile abstraction). On empty or short read, ReadException maps
-    // to the broken-placeholder fallback.
+    // F13+F14/N4: ReadAndRelease handles the exact-byte read
+    // (pre-fix this ignored the read return) and Releases the file
+    // reference (pre-fix `delete file;` violated the refcounted IFile
+    // abstraction). On empty or short read, ReadException maps to the
+    // broken-placeholder fallback.
     std::vector<unsigned char> bytes;
     try
     {

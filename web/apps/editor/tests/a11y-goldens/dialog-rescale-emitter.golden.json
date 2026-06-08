@@ -1,0 +1,456 @@
+{
+  "Name": "AloParticleEditor",
+  "ControlType": "Window",
+  "AutomationId": "",
+  "ClassName": "AloHostMain",
+  "IsKeyboardFocusable": true,
+  "IsEnabled": true,
+  "IsOffscreen": false,
+  "children": [
+    {
+      "Name": "",
+      "ControlType": "Pane",
+      "AutomationId": "",
+      "ClassName": "AloHostViewport",
+      "IsKeyboardFocusable": true,
+      "IsEnabled": true,
+      "IsOffscreen": false,
+      "children": []
+    },
+    {
+      "Name": "",
+      "ControlType": "Pane",
+      "AutomationId": "",
+      "ClassName": "EmbeddedBrowserFrameView",
+      "IsKeyboardFocusable": false,
+      "IsEnabled": true,
+      "IsOffscreen": false,
+      "children": [
+        {
+          "Name": "Untitled",
+          "ControlType": "Text",
+          "AutomationId": "view_9",
+          "ClassName": "Label",
+          "IsKeyboardFocusable": false,
+          "IsEnabled": true,
+          "IsOffscreen": false,
+          "children": []
+        },
+        {
+          "Name": "",
+          "ControlType": "Pane",
+          "AutomationId": "",
+          "ClassName": "BrowserCaptionButtonContainer",
+          "IsKeyboardFocusable": false,
+          "IsEnabled": true,
+          "IsOffscreen": false,
+          "children": [
+            {
+              "Name": "Minimize",
+              "ControlType": "Button",
+              "AutomationId": "view_2",
+              "ClassName": "EdgeWindowsCaptionButton",
+              "IsKeyboardFocusable": true,
+              "IsEnabled": true,
+              "IsOffscreen": false,
+              "children": []
+            },
+            {
+              "Name": "Maximize",
+              "ControlType": "Button",
+              "AutomationId": "view_3",
+              "ClassName": "EdgeWindowsCaptionButton",
+              "IsKeyboardFocusable": true,
+              "IsEnabled": true,
+              "IsOffscreen": false,
+              "children": []
+            },
+            {
+              "Name": "Close",
+              "ControlType": "Button",
+              "AutomationId": "view_7",
+              "ClassName": "EdgeWindowsCaptionButton",
+              "IsKeyboardFocusable": true,
+              "IsEnabled": true,
+              "IsOffscreen": false,
+              "children": []
+            }
+          ]
+        },
+        {
+          "Name": "",
+          "ControlType": "Pane",
+          "AutomationId": "",
+          "ClassName": "BrowserView",
+          "IsKeyboardFocusable": false,
+          "IsEnabled": true,
+          "IsOffscreen": false,
+          "children": [
+            {
+              "Name": "",
+              "ControlType": "Pane",
+              "AutomationId": "",
+              "ClassName": "TopContainerView",
+              "IsKeyboardFocusable": false,
+              "IsEnabled": true,
+              "IsOffscreen": false,
+              "children": []
+            },
+            {
+              "Name": "",
+              "ControlType": "Pane",
+              "AutomationId": "",
+              "ClassName": "SidebarContentsSplitView",
+              "IsKeyboardFocusable": false,
+              "IsEnabled": true,
+              "IsOffscreen": false,
+              "children": [
+                {
+                  "Name": "",
+                  "ControlType": "Pane",
+                  "AutomationId": "",
+                  "ClassName": "SidebarContentsSplitView",
+                  "IsKeyboardFocusable": false,
+                  "IsEnabled": true,
+                  "IsOffscreen": false,
+                  "children": [
+                    {
+                      "Name": "",
+                      "ControlType": "Pane",
+                      "AutomationId": "",
+                      "ClassName": "View",
+                      "IsKeyboardFocusable": false,
+                      "IsEnabled": true,
+                      "IsOffscreen": false,
+                      "children": [
+                        {
+                          "Name": "",
+                          "ControlType": "Pane",
+                          "AutomationId": "",
+                          "ClassName": "MultiContentsView",
+                          "IsKeyboardFocusable": false,
+                          "IsEnabled": true,
+                          "IsOffscreen": false,
+                          "children": [
+                            {
+                              "Name": "",
+                              "ControlType": "Pane",
+                              "AutomationId": "",
+                              "ClassName": "View",
+                              "IsKeyboardFocusable": false,
+                              "IsEnabled": true,
+                              "IsOffscreen": false,
+                              "children": [
+                                {
+                                  "Name": "a11y-base-state.alo — AloParticleEditor",
+                                  "ControlType": "Document",
+                                  "AutomationId": "RootWebArea",
+                                  "ClassName": "",
+                                  "IsKeyboardFocusable": true,
+                                  "IsEnabled": true,
+                                  "IsOffscreen": false,
+                                  "children": [
+                                    {
+                                      "Name": "",
+                                      "ControlType": "Group",
+                                      "AutomationId": "",
+                                      "ClassName": "",
+                                      "IsKeyboardFocusable": false,
+                                      "IsEnabled": true,
+                                      "IsOffscreen": false,
+                                      "children": [
+                                        {
+                                          "Name": "Rescale Emitter",
+                                          "ControlType": "Window",
+                                          "AutomationId": "radix-_r_26_",
+                                          "ClassName": "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[320px] max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+                                          "IsKeyboardFocusable": true,
+                                          "IsEnabled": true,
+                                          "IsOffscreen": false,
+                                          "children": [
+                                            {
+                                              "Name": "Rescale Emitter",
+                                              "ControlType": "Text",
+                                              "AutomationId": "radix-_r_27_",
+                                              "ClassName": "text-sm font-semibold text-text",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": " to rescale the entire system.",
+                                              "ControlType": "Text",
+                                              "AutomationId": "",
+                                              "ClassName": "",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": " ",
+                                              "ControlType": "Text",
+                                              "AutomationId": "",
+                                              "ClassName": "",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Applies to the selected emitter only. Use",
+                                              "ControlType": "Text",
+                                              "AutomationId": "",
+                                              "ClassName": "",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Cancel",
+                                              "ControlType": "Button",
+                                              "AutomationId": "",
+                                              "ClassName": "rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-50",
+                                              "IsKeyboardFocusable": true,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Close",
+                                              "ControlType": "Button",
+                                              "AutomationId": "",
+                                              "ClassName": "flex size-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text outline-none",
+                                              "IsKeyboardFocusable": true,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Duration scale",
+                                              "ControlType": "Edit",
+                                              "AutomationId": "",
+                                              "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                              "IsKeyboardFocusable": true,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Duration scale",
+                                              "ControlType": "Text",
+                                              "AutomationId": "",
+                                              "ClassName": "",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "OK",
+                                              "ControlType": "Button",
+                                              "AutomationId": "",
+                                              "ClassName": "rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-50",
+                                              "IsKeyboardFocusable": true,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Rescale Particle System…",
+                                              "ControlType": "Text",
+                                              "AutomationId": "",
+                                              "ClassName": "",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Size scale",
+                                              "ControlType": "Edit",
+                                              "AutomationId": "",
+                                              "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                              "IsKeyboardFocusable": true,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Size scale",
+                                              "ControlType": "Text",
+                                              "AutomationId": "",
+                                              "ClassName": "",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "",
+                                              "ControlType": "Group",
+                                              "AutomationId": "",
+                                              "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": [
+                                                {
+                                                  "Name": "Decrement",
+                                                  "ControlType": "Button",
+                                                  "AutomationId": "",
+                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                  "IsKeyboardFocusable": true,
+                                                  "IsEnabled": true,
+                                                  "IsOffscreen": false,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "Name": "Increment",
+                                                  "ControlType": "Button",
+                                                  "AutomationId": "",
+                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                  "IsKeyboardFocusable": true,
+                                                  "IsEnabled": true,
+                                                  "IsOffscreen": false,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "Name": "",
+                                              "ControlType": "Group",
+                                              "AutomationId": "",
+                                              "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": [
+                                                {
+                                                  "Name": "Decrement",
+                                                  "ControlType": "Button",
+                                                  "AutomationId": "",
+                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                  "IsKeyboardFocusable": true,
+                                                  "IsEnabled": true,
+                                                  "IsOffscreen": false,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "Name": "Increment",
+                                                  "ControlType": "Button",
+                                                  "AutomationId": "",
+                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                  "IsKeyboardFocusable": true,
+                                                  "IsEnabled": true,
+                                                  "IsOffscreen": false,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "Name": "",
+              "ControlType": "Pane",
+              "AutomationId": "",
+              "ClassName": "EmbeddedBrowserDownloadView",
+              "IsKeyboardFocusable": false,
+              "IsEnabled": true,
+              "IsOffscreen": false,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "",
+      "ControlType": "Pane",
+      "AutomationId": "",
+      "ClassName": "TopContainerOverlayView",
+      "IsKeyboardFocusable": false,
+      "IsEnabled": true,
+      "IsOffscreen": false,
+      "children": []
+    },
+    {
+      "Name": "",
+      "ControlType": "TitleBar",
+      "AutomationId": "",
+      "ClassName": "",
+      "IsKeyboardFocusable": true,
+      "IsEnabled": true,
+      "IsOffscreen": false,
+      "children": [
+        {
+          "Name": "System",
+          "ControlType": "MenuBar",
+          "AutomationId": "MenuBar",
+          "ClassName": "",
+          "IsKeyboardFocusable": true,
+          "IsEnabled": true,
+          "IsOffscreen": false,
+          "children": [
+            {
+              "Name": "System",
+              "ControlType": "MenuItem",
+              "AutomationId": "",
+              "ClassName": "",
+              "IsKeyboardFocusable": true,
+              "IsEnabled": true,
+              "IsOffscreen": false,
+              "children": []
+            }
+          ]
+        },
+        {
+          "Name": "Close",
+          "ControlType": "Button",
+          "AutomationId": "",
+          "ClassName": "",
+          "IsKeyboardFocusable": false,
+          "IsEnabled": true,
+          "IsOffscreen": false,
+          "children": []
+        },
+        {
+          "Name": "Maximize",
+          "ControlType": "Button",
+          "AutomationId": "",
+          "ClassName": "",
+          "IsKeyboardFocusable": false,
+          "IsEnabled": true,
+          "IsOffscreen": false,
+          "children": []
+        },
+        {
+          "Name": "Minimize",
+          "ControlType": "Button",
+          "AutomationId": "",
+          "ClassName": "",
+          "IsKeyboardFocusable": false,
+          "IsEnabled": true,
+          "IsOffscreen": false,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

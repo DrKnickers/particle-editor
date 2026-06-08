@@ -1,0 +1,1240 @@
+/* Particle Editor 2026 design component classes.
+   Lifted from the design bundle's styles.css. Token references
+   (var(--bg-2), var(--border-2), etc.) resolve via tokens.css. */
+
+#root { height: 100vh; }
+
+/* ========== App layout ========== */
+.app {
+  display: grid;
+  grid-template-rows: 36px 44px 1fr 22px;
+  height: 100vh;
+  background: var(--bg);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 320px 1fr 340px;
+  gap: 6px;
+  padding: 6px;
+  min-height: 0;
+}
+
+.workspace-center {
+  display: grid;
+  grid-template-rows: 1fr 260px;
+  gap: 6px;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ========== Menu bar ========== */
+.menubar {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: linear-gradient(180deg, var(--bg-2), var(--bg));
+  border-bottom: 1px solid var(--border);
+  gap: 4px;
+  -webkit-app-region: drag;
+}
+
+.app-icon {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  color: var(--accent);
+  margin-right: 8px;
+}
+
+.app-title {
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: 0.1px;
+  color: var(--text);
+}
+
+.app-subtitle {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-left: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.menu-items {
+  display: flex;
+  gap: 0;
+  margin-left: 18px;
+  -webkit-app-region: no-drag;
+}
+
+.menu-item {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-2);
+  border-radius: 4px;
+  cursor: pointer;
+  position: relative;
+}
+.menu-item:hover, .menu-item.open { background: var(--hover); color: var(--text); }
+
+.menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 180px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  padding: 4px;
+  z-index: 1000;
+}
+.menu-dropdown-item {
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+}
+.menu-dropdown-item:hover { background: var(--accent-soft); color: var(--text); }
+.menu-dropdown-divider { height: 1px; background: var(--border); margin: 4px 2px; }
+
+.window-controls {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+.window-btn {
+  width: 36px; height: 26px;
+  display: grid; place-items: center;
+  color: var(--text-2);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.window-btn:hover { background: var(--hover); }
+.window-btn.close:hover { background: #d24a4a; color: white; }
+
+/* ========== Toolbar ========== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 1px 8px;
+  gap: 4px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.tb-group {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+}
+
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  height: 28px;
+  border-radius: 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tb-btn:hover { background: var(--hover); color: var(--text); }
+/* Pressed/active toggle state. Driven by `aria-pressed="true"` (the
+   single source of truth the toolbar toggles set) as well as the legacy
+   `.active` class. Attribute-selector form is golden-neutral: it changes
+   no className, and aria-pressed is already captured in the a11y goldens.
+   Used by Show ground / Toggle bloom / Leave particles / Spawner, plus
+   Play|Pause (highlights while playback is running). */
+.tb-btn.active,
+.tb-btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.tb-btn.playing { color: var(--success); }
+/* F3: pressed (LMB-down) feedback — lighter bg + slight scale, distinct
+   from the accent-soft toggled state. Wins during the press because it's
+   declared last; skipped while disabled. */
+.tb-btn:active:not(:disabled) { background: var(--panel-3); transform: scale(0.96); }
+.tb-btn .ic { color: inherit; opacity: 0.9; }
+.tb-btn .ic svg { display: block; }
+
+.tb-split {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  border-radius: 5px;
+}
+.tb-split .tb-btn { padding-right: 4px; }
+.tb-split .tb-split-chev {
+  padding: 0 4px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--text-2);
+  border-radius: 4px;
+}
+.tb-split .tb-split-chev:hover { background: var(--hover); }
+
+.tb-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-2);
+  margin: 0 4px;
+}
+
+.tb-spacer { flex: 1; }
+
+.tb-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.tb-select {
+  background: var(--panel-2);
+  border: 1px solid var(--border-2);
+  color: var(--text);
+  padding: 4px 22px 4px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  appearance: none;
+  font-family: inherit;
+  min-width: 90px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path fill='none' stroke='%23a3acbd' stroke-width='1.4' stroke-linecap='round' d='M2.5 4l2.5 2.5L7.5 4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  padding: 1px;
+  margin-left: 4px;
+}
+.theme-toggle button {
+  width: 26px; height: 22px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.theme-toggle button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.sim-speed-stepper {
+  display: flex;
+  align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  height: 26px;
+  overflow: hidden;
+}
+.sim-speed-stepper input {
+  width: 56px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+  outline: none;
+}
+.sim-speed-stepper button {
+  width: 18px; height: 100%;
+  display: grid; place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.sim-speed-stepper button:hover { background: var(--hover); color: var(--text); }
+
+/* ========== Panel ========== */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Square the corners that face the engine viewport so the rounded corner
+   doesn't leave a wedge of (clipped) engine backing showing. The outer
+   corners stay rounded. Applied to the left pane (the only rounded .panel
+   adjacent to the rectangular viewport). */
+.panel-flush-right {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 8px 0 10px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text);
+  flex-shrink: 0;
+  background: var(--panel);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.panel-header > span:not(.ic) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.panel-header .ic { color: var(--text-2); flex-shrink: 0; }
+.panel-header .panel-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.panel-header .icon-btn {
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  border-radius: 4px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.panel-header .icon-btn:hover { background: var(--hover); color: var(--text); }
+.panel-header .icon-btn:active { background: var(--panel-3); transform: scale(0.96); } /* F3 */
+
+.panel-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* ========== Left panel ========== */
+.search-row { padding: 8px; }
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: 5px;
+  padding: 0 8px;
+  height: 26px;
+}
+.search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+}
+.search input::placeholder { color: var(--text-3); }
+.search .ic { color: var(--text-3); }
+
+.emitter-tree {
+  padding: 0 4px;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  height: var(--row-h);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12px;
+}
+.tree-row:hover { background: var(--hover); }
+.tree-row.selected {
+  background: var(--selected);
+  border: 1px solid var(--selected-border);
+  height: calc(var(--row-h) - 2px);
+}
+.tree-row .chev {
+  width: 12px; height: 12px;
+  display: grid; place-items: center;
+  color: var(--text-3);
+  transition: transform 0.12s;
+}
+.tree-row .chev.open { transform: rotate(90deg); }
+.tree-row .vis, .tree-row .lock {
+  width: 18px; height: 18px;
+  display: grid; place-items: center;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 3px;
+}
+.tree-row .vis:hover, .tree-row .lock:hover { background: var(--hover); color: var(--text); }
+.tree-row .vis.on { color: var(--text); }
+.tree-row .lock.on { color: var(--warning); }
+.tree-row .swatch {
+  width: 12px; height: 12px;
+  border-radius: 2px;
+  border: 1px solid rgba(255,255,255,0.15);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tree-row .name { flex: 1; }
+.tree-row .emit-icon {
+  width: 14px; height: 14px;
+  display: grid; place-items: center;
+}
+
+.tree-child {
+  padding-left: 18px;
+}
+
+.tree-actions {
+  display: flex;
+  justify-content: center; /* F2: center the group so it stays balanced on pane resize */
+  gap: 2px;                /* F2: match the main toolbar's compact icon spacing */
+  padding: 4px 8px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.tree-actions .icon-btn {
+  width: 24px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 4px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.tree-actions .icon-btn:hover { background: var(--hover); color: var(--text); }
+.tree-actions .icon-btn:disabled,
+.tree-actions .icon-btn.disabled { color: var(--text-3); opacity: 0.5; cursor: not-allowed; }
+
+/* ========== Inspector tabs ========== */
+.tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab {
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* ========== Inspector form ========== */
+.inspector {
+  padding: 8px 10px 12px;
+}
+
+/* Collapsible section primitive — shared by Section.tsx (controlled
+ * via useState + data-open attribute) and ToolPanel.Section (native
+ * <details>). The rotation selector targets both state shapes so each
+ * consumer keeps its own state model while sharing the visual.
+ * B1.3.2 unification. */
+.panel-section {
+  /* Hybrid density (was a bordered+filled card): no container chrome — the
+     tinted header band (below) anchors each group while rows run edge-to-edge
+     for maximum label/input width. Shared with the ToolPanel.Section panels
+     (Lighting / Bloom / Ground / Background) via the B1.3.2 unification, so
+     they get the same treatment for app-wide consistency. */
+  margin-bottom: 9px;
+}
+
+.panel-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  background: var(--bg-2);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  /* Hide the native <details> disclosure marker. `list-style: none`
+   * covers Firefox + Safari's `::marker`; the `-webkit-details-marker`
+   * pseudo handles older Blink. `display: flex` (declared above)
+   * overrides `display: list-item` which `<summary>` carries by
+   * default — without it the chrome reserves an inset for the marker
+   * even when the marker is hidden. */
+  list-style: none;
+}
+.panel-section-header::-webkit-details-marker { display: none; }
+
+.panel-section-header:hover { color: var(--text); }
+.panel-section-header:focus-visible { color: var(--text); }
+
+.panel-section-header .chev {
+  color: var(--text-3);
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+/* Collapsed state: chevron points right. Every collapsible consumer is
+ * now controlled (Section.tsx + ToolPanel.Section + CategorySection all
+ * use a `data-open` attribute), so one selector covers them — the native
+ * `<details>` arm was retired when ToolPanel.Section became controlled to
+ * enable the body collapse animation below. */
+.panel-section[data-open="false"] .chev {
+  transform: rotate(-90deg);
+}
+
+/* Animated expand/collapse body. Self-contained utility (independent of
+ * `.panel-section`) so all three disclosure patterns can share it. The
+ * body lives in a one-row grid whose track tweens 1fr↔0fr; the single
+ * child clips via overflow:hidden + min-height:0. Content stays MOUNTED
+ * so it can animate — but a collapsed body is pulled OUT of the a11y tree
+ * and tab order via `visibility:hidden`, applied only AFTER the collapse
+ * finishes (transition-delay) so the content is still visible while it
+ * slides shut. Expand makes it visible immediately, then the height
+ * animates open. */
+.collapse-anim {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s ease;
+}
+.collapse-anim > * {
+  overflow: hidden;
+  min-height: 0;
+}
+.collapse-anim[data-open="false"] {
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition: grid-template-rows 0.2s ease, visibility 0s linear 0.2s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .collapse-anim,
+  .collapse-anim[data-open="false"] {
+    transition: none;
+  }
+}
+
+.panel-section-body {
+  padding: 6px 2px 2px;
+}
+/* Restore the `space-y-2` vertical rhythm that ToolPanel.Section's
+ * inline Tailwind utilities previously declared on the body's direct
+ * children. The inspector's `.form-row` grid carries its own row
+ * spacing so the sibling margin doesn't apply there visually — but
+ * it does apply between `.form-row` blocks, which is the desired
+ * inspector behavior too. */
+.panel-section-body > * + * { margin-top: 5px; }
+
+/* Generic 1px horizontal hairline. Used by CurveEditorPanel to
+ * separate the colour-channel group from the transform-channel
+ * group; was previously also the section-header bottom rule (now
+ * supplanted by .panel-section's bordered container). Kept as a
+ * standalone primitive for reuse. */
+.section-divider { height: 1px; background: var(--border); margin: 2px 0 6px; }
+
+.form-row {
+  display: grid;
+  /* Spinner cell 58px (post-polish: bumped from 52 per user smoke
+     test) and unit cell 40px so "units/s²" (Acceleration / Gravity /
+     Inward acceleration) fits without truncation. The unit also gets
+     overflow:visible below so it can spill into the gap if a longer
+     suffix ever shows up. */
+  grid-template-columns: 1fr 58px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+  /* Field labels use the primary text token for readability — the dim
+     --text-2 was hard to read at 12px (esp. "Bursts" / "Burst delay" and
+     the rest of the inspector). Values live in bordered inputs, so the
+     label/value distinction survives without dimming the label. */
+  color: var(--text);
+}
+.form-row .lbl { color: var(--text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.form-row .unit { color: var(--text-3); font-size: 11px; overflow: visible; min-width: 0; }
+/* Disabled params dim their label — the dim token now signals "disabled",
+   not "secondary label". Mode-gated rows (e.g. the Continuous-stream and
+   Weather spinners when that mode isn't selected, or any checkbox/select
+   passed disabled) carry a native :disabled control, so :has() catches
+   them without touching the markup (:has() is supported in the WebView2
+   Chromium runtime). Enabled labels stay at the readable --text above. */
+.form-row:has(:disabled) .lbl { color: var(--text-2); }
+
+/* Inspector indent hierarchy (visual nesting of params):
+ *   L0 section header text .......... 8px (the tinted band's padding)
+ *   L1 direct params + radio dots ... 8px (aligned with the header)
+ *   L2 a radio's sub-params ......... ~30px (nested UNDER the radio label)
+ * Inputs stay right-aligned because L2 indents the .lbl text, not the row. */
+.inspector .panel-section-body { padding-left: 8px; }   /* L1 aligns with header */
+.inspector .radio-row { padding-left: 0; }               /* radio dot sits at L1 */
+.basic-tab [role="radiogroup"] .form-row .lbl { padding-left: 22px; }  /* L2 under the radio label */
+
+/* Basic-tab-scoped default: every plain .form-row inside .basic-tab
+   picks up a wider input column (73 px, +25 % over the standard 58 px)
+   so all numeric spinners in Basic — Emitter Timing / Generation /
+   Connection — read with more room. Declared BEFORE the named modifier
+   rules below so equal-specificity modifiers (.full / .name-row /
+   .form-row-cluster / .form-row-mid-input / .form-row-wide-input /
+   .form-row-x2-input / etc.) win on declaration order and keep their
+   own layouts. */
+.basic-tab .form-row { grid-template-columns: 1fr 73px 40px; }
+
+.form-row.full {
+  grid-template-columns: 1fr;
+}
+.form-row.name-row {
+  grid-template-columns: 60px 1fr;
+  padding-left: 20px;
+}
+.form-row.with-radio {
+  grid-template-columns: 16px 1fr 92px 56px;
+}
+.form-row.with-check {
+  grid-template-columns: 16px 1fr 92px 56px;
+}
+/* Text-input rows have no unit cell, so the input slot expands well
+   beyond the spinner column to keep texture filenames like
+   "p_particle_default.tga" mostly visible instead of truncating at
+   the spinner width. 180px cap (second smoke-test bump from 160)
+   plus 11px font (one notch tighter than the 12px standard) so the
+   long underscore-heavy texture names fit. minmax(0,…) lets the row
+   shrink gracefully if the panel narrows. */
+.form-row.form-row-text {
+  grid-template-columns: 1fr minmax(0, 180px);
+}
+.form-row.form-row-text .text-input {
+  min-width: 0;
+  width: 100%;
+  font-size: 11px;
+}
+
+/* Texture picker row: label + text input + Browse button. The input
+   column is 1fr so it stretches to fill the inspector as the left pane
+   widens (the filename is the useful content); the label is a fixed
+   width so both rows align, and the Browse button sizes to content. The
+   Browse button opens the host-side native file dialog (textures/browse).
+   The label column is sized to the shortened "Color:" / "Bump:" labels
+   (was 96px for the old "Color texture:" labels) so the freed width flows
+   into the filename input. feature-parity A] */
+.form-row.form-row-texture {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+}
+.form-row.form-row-texture .text-input {
+  min-width: 0;
+  width: 100%;
+  font-size: 11px;
+}
+.btn-texture-browse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6px;
+  color: var(--text-2);
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.btn-texture-browse:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.btn-texture-browse:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Browse + palette buttons share the single trailing grid column so they
+   sit inline to the right of the input (same size), instead of the palette
+   button wrapping to its own row. */
+.form-row.form-row-texture .texture-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Multi-spinner clusters (Vec3 Value/Min/Max, Acceleration X/Y/Z,
+   RGBA randomColors). Standard .form-row gives the cluster only the
+   spinner+unit columns (98px), which divides to ~33px per spinner —
+   far too narrow for numbers like "100.0". This modifier drops the
+   label column to a fixed 60px (enough for "Value:" / "Min:" / "Max:"
+   / "RGBA:" / "X / Y / Z:") and gives the cluster the remaining 1fr,
+   so each spinner gets ~60px after gap distribution. */
+.form-row.form-row-cluster {
+  grid-template-columns: 60px minmax(0, 1fr);
+}
+
+/* Wider input cell for FieldSelect / FieldSpinner instances whose
+   default 58 px input column truncates long option labels (e.g. the
+   Physics "Type:" dropdown options "Exact" / "Box" / "Sphere…",
+   or "Tail length:" values like "1000.0x"). 87 px = 50% wider;
+   73 px = 25% wider. Unit cell stays at 40 px so "units/s²" still
+   fits. */
+.form-row.form-row-wide-input { grid-template-columns: 1fr 87px 40px; }
+.form-row.form-row-mid-input  { grid-template-columns: 1fr 73px 40px; }
+.form-row.form-row-x2-input   { grid-template-columns: 1fr 116px 40px; }
+
+/* Long-label FieldCheckbox variant for labels that don't fit the
+   default `1fr 58px 40px` label cell without truncation (e.g.
+   "Object space acceleration", "Link particles to instance"). Uses
+   the SAME column template as the default form-row so the checkbox
+   (which spans col 2-3 with `justify-self: end`) lines up
+   right-edge-wise with every other checkbox and every spinner's
+   unit-cell terminus. Only the label cell's wrapping behavior
+   diverges — wrap instead of ellipsis-truncate so the full text
+   shows even on a narrow inspector column. */
+.form-row.form-row-check-inline .lbl {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Checkbox rows: tight 2-column grid (label fills, checkbox hugs the
+   right). The default `.form-row` template reserves the spinner's 58px
+   input + 40px unit columns; for an 18px checkbox that's ~80px of empty
+   space beside it, which squeezed long labels ("Object space
+   acceleration", "Random rotation direction") into column 1 and
+   truncated them. Dropping those columns gives the label the full row
+   width minus the checkbox. The checkbox right-aligns to the inspector's
+   content edge — consistent across every checkbox row. */
+.form-row.form-row-check {
+  /* Reserve the same 40px unit column the spinner/select rows carry, so the
+     checkbox lands in column 2 (like the input box) and its right edge aligns
+     at row_right - 48px — flush with every spinner/dropdown box right edge.
+     Applies to every FieldCheckbox across Basic / Appearance / Physics. */
+  grid-template-columns: 1fr auto 40px;
+}
+
+/* Per-axis micro-label above each spinner in a Vec3 cluster (X / Y /
+   Z labels stacked above their Spinner). Matches legacy IDD_EMITTER_PROPS3
+   (.rc:352-354) which puts individual "X" / "Y" / "Z" LTEXTs above
+   the acceleration spinners; the same convention reads through for
+   Min/Max/Value rows in the RandomParam clusters. */
+.axis-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.axis-cell .axis-lbl {
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1;
+  padding-bottom: 2px;
+  color: var(--text-3);
+  user-select: none;
+}
+
+/* Tri-state Generation radio rows (B1.3 P3). Hand-rolled radio chrome
+   rather than Radix RadioGroup so the layout sits tightly inside
+   `.panel-section-body` alongside the FieldSpinner form-rows. Active
+   state fills the inner dot via the accent token. */
+.radio-row {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 4px 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.radio-row[aria-checked="true"] .radio-dot {
+  background: var(--accent);
+}
+.radio-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: transparent;
+}
+.radio-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Inputs */
+.num-input {
+  display: flex;
+  align-items: center;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  height: 22px;
+  overflow: hidden;
+}
+.num-input:focus-within { border-color: var(--accent); }
+.num-input input {
+  flex: 1;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  text-align: right;
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+  outline: none;
+}
+.num-input .steppers {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-2);
+}
+.num-input .steppers button {
+  width: 14px;
+  height: 11px;
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.num-input .steppers button:hover { background: var(--hover); color: var(--text); }
+
+.text-input {
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  height: 22px;
+  padding: 0 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+}
+.text-input:focus { border-color: var(--accent); }
+
+.select {
+  appearance: none;
+  background-color: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  height: 22px;
+  padding: 0 22px 0 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path fill='none' stroke='%23a3acbd' stroke-width='1.4' stroke-linecap='round' d='M2.5 4l2.5 2.5L7.5 4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.checkbox {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-3);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.checkbox.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.checkbox:hover { border-color: var(--accent); }
+
+.radio {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: var(--bg-3);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.radio.checked::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.radio:hover { border-color: var(--accent); }
+
+.radio-label, .check-label {
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ========== Viewport ========== */
+.viewport {
+  position: relative;
+  background: radial-gradient(ellipse at 50% 60%, #1a2030 0%, #0b0e15 75%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.viewport-floor {
+  position: absolute;
+  inset: 50% 0 0 0;
+  background:
+    linear-gradient(180deg, rgba(8,10,16,0) 0%, rgba(8,10,16,0.85) 70%, rgba(8,10,16,1) 100%),
+    repeating-linear-gradient(90deg, rgba(80, 100, 130, 0.10) 0 1px, transparent 1px 60px),
+    repeating-linear-gradient(0deg, rgba(80, 100, 130, 0.10) 0 1px, transparent 1px 60px),
+    linear-gradient(180deg, #0e1320, #060810);
+  transform: perspective(700px) rotateX(60deg);
+  transform-origin: top center;
+}
+
+.explosion {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 460px; height: 460px;
+  transform: translate(-50%, -55%);
+  pointer-events: none;
+}
+
+.explosion .core {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 50% 55%, rgba(255, 255, 220, 0.95) 0%, rgba(255, 200, 90, 0.85) 8%, rgba(255, 130, 30, 0.6) 22%, rgba(220, 60, 10, 0.35) 38%, rgba(80, 20, 0, 0.15) 58%, rgba(0,0,0,0) 75%);
+  filter: blur(2px);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.explosion .smoke {
+  position: absolute;
+  left: 10%; top: -10%; right: 10%; bottom: 30%;
+  background:
+    radial-gradient(ellipse at 30% 40%, rgba(60, 50, 50, 0.7) 0%, rgba(40, 35, 35, 0.4) 25%, rgba(0,0,0,0) 55%),
+    radial-gradient(ellipse at 70% 35%, rgba(80, 70, 65, 0.6) 0%, rgba(40, 35, 35, 0.3) 30%, rgba(0,0,0,0) 55%),
+    radial-gradient(ellipse at 50% 25%, rgba(70, 60, 55, 0.55) 0%, rgba(0,0,0,0) 55%);
+  filter: blur(8px);
+  animation: drift 6s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.96; }
+  50% { transform: scale(1.04); opacity: 1; }
+}
+@keyframes drift {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(-10px) scale(1.05); }
+}
+
+.spark {
+  position: absolute;
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: #ffcc66;
+  box-shadow: 0 0 6px #ffaa33, 0 0 12px rgba(255, 140, 40, 0.6);
+  animation: spark linear infinite;
+}
+
+@keyframes spark {
+  0% { transform: translate(0,0) scale(1); opacity: 1; }
+  80% { opacity: 0.8; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; }
+}
+
+.gizmo {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 0; height: 0;
+  pointer-events: none;
+}
+.gizmo .axis {
+  position: absolute;
+  left: 0; top: 0;
+  height: 2px;
+  border-radius: 1px;
+  transform-origin: 0 50%;
+}
+.gizmo .axis::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  top: -4px;
+  width: 0; height: 0;
+  border-left: 10px solid;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left-color: inherit;
+}
+.gizmo .x { width: 80px; background: var(--x-axis); color: var(--x-axis); transform: rotate(20deg); }
+.gizmo .y { width: 90px; background: var(--y-axis); color: var(--y-axis); transform: rotate(-90deg); }
+.gizmo .z { width: 70px; background: var(--z-axis); color: var(--z-axis); transform: rotate(160deg); }
+.gizmo .origin {
+  position: absolute;
+  width: 8px; height: 8px;
+  background: rgba(255,255,255,0.85);
+  border: 1px solid rgba(0,0,0,0.4);
+  transform: translate(-4px, -4px) rotate(45deg);
+}
+
+.vp-overlay {
+  position: absolute;
+  pointer-events: none;
+}
+.vp-overlay > * { pointer-events: auto; }
+
+.vp-perspective {
+  top: 10px; left: 10px;
+}
+.vp-perspective .select {
+  background-color: rgba(20, 24, 33, 0.85);
+  backdrop-filter: blur(8px);
+  border-color: rgba(255,255,255,0.08);
+  width: 140px;
+  height: 26px;
+}
+
+.vp-stats {
+  top: 10px; right: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.vp-stats .fps { color: var(--success); font-weight: 600; font-size: 12px; }
+
+.vp-axes {
+  bottom: 12px; right: 16px;
+  width: 70px; height: 70px;
+}
+
+.vp-bottom-right {
+  bottom: 10px; right: 12px;
+  display: flex; gap: 2px;
+  background: rgba(20, 24, 33, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  padding: 3px;
+}
+.vp-bottom-right .tool {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 4px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.vp-bottom-right .tool:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+
+/* ========== Curve editor ========== */
+.curve-editor {
+  display: grid;
+  /* `minmax(0, 1fr)` instead of bare `1fr` so the body row can
+     shrink below its content's min-content size. With bare `1fr`,
+     CSS Grid's implicit `minmax(auto, 1fr)` refuses to shrink the
+     row below `.curve-list`'s 7-row min-content (~224px), which
+     pushes `.curve-editor` past its `flex:1` slot, the parent
+     `.panel`'s `overflow:hidden` clips the bottom, and
+     `.curve-list`'s own `overflow-y:auto` never trips because its
+     cell is being *given* its content's size. */
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  /* CurveEditorPanel renders us as a `.panel`-flex-column sibling of
+     a `.panel-header`. Claim only the REMAINING space below the
+     header. */
+  flex: 1;
+}
+
+.ce-toolbar {
+  display: flex;
+  align-items: center;
+  /* Wrap to a second row when the panel is too narrow for the full
+     control set (Select/Insert + Linear/Smooth/Step + Lock-to +
+     Delete + Time/Value). Combined with `.curve-editor`'s `auto`
+     first row, the toolbar grows vertically as needed instead of
+     clipping the right-most control off the panel edge. */
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  min-height: 36px;
+  flex-shrink: 0;
+}
+
+.ce-body {
+  display: grid;
+  /* `minmax(0, 1fr)` for the canvas column (same trick as
+     `.curve-editor`'s row template) so the column can shrink below
+     the SVG's intrinsic 600px viewBox width. Bare `1fr` would inherit
+     `min-content: 600px`, pushing the canvas cell past its available
+     space and clipping the right edge of the curve. */
+  grid-template-columns: 180px minmax(0, 1fr);
+  /* Explicit row template, same `minmax(0, 1fr)` shape. Without this,
+     CSS Grid defaults to an implicit `auto`-sized row that grows to
+     content. The SVG inside `.curve-canvas-wrap` has
+     `preserveAspectRatio="none"` and no explicit height, so when its
+     width grows wide (≥ 2× the panel's available height), the
+     browser falls back to the viewBox's `600×300` aspect ratio and
+     computes a height that overflows the panel — at a 2415px wide
+     SVG that's a 1207px tall canvas, way past the 222px the row is
+     supposed to contain. Locking the row to `minmax(0, 1fr)` makes
+     the cell clamp to its container's height instead. */
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.curve-list {
+  border-right: 1px solid var(--border);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  /* 7 channel rows + padding don't always fit in the bottom 260px
+     strip (Inter line-height + native checkbox + DPI vary by host).
+     Scroll vertically so the Index row is always reachable. */
+  overflow-y: auto;
+  min-height: 0;
+  gap: 2px;
+  overflow: auto;
+}
+.curve-list .curve-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.curve-list .curve-row:hover { background: var(--hover); }
+.curve-list .swatch {
+  width: 10px; height: 10px;
+  border-radius: 2px;
+}
+
+.curve-canvas-wrap {
+  position: relative;
+  min-width: 0;
+  /* Inset the SVG from the cell edges so curves at extreme values
+     (RGBA=1 at viewBox top, Index=0 near viewBox bottom) don't get
+     clipped by the cell border, and so the canvas's right edge
+     isn't flush against the Spawner panel divider. The 12px gutter
+     on all sides is also the reserved space for the Y-axis tick
+     labels (left), X-axis time labels (bottom), and breathing room
+     (top + right) that the next polish pass will add. */
+  padding: 12px;
+}
+.curve-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ========== Status bar ========== */
+.statusbar {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-2);
+  gap: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.statusbar .sb-item { display: flex; align-items: center; gap: 6px; }
+.statusbar .sb-spacer { flex: 1; }
+.statusbar .sb-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+/* ========== Splitters (B1.4) ========== */
+/* react-resizable-panels 4.x emits `data-separator` on the handle.
+   Active-drag styling piggybacks on the `:active` pseudo-class
+   (4.x dropped the `data-resize-handle-active` attribute that 2.x
+   exposed). 8 px visible band == the hit/cursor zone (the Groups set
+   `resizeTargetMinimumSize.fine = 8`, so the library no longer inflates
+   a thin 4px handle to its 10px default — which used to spill the resize
+   cursor ~3px onto the viewport where no splitter was visible);
+   --accent-soft hover preview is a tactile but quiet signal. */
+[data-separator].ce-splitter {
+  /* Opaque app-shell colour, NOT transparent. In the engine DComp
+     visual is clipped to the scene rect and shows through any transparent
+     DOM; a transparent splitter gutter sitting next to the viewport (outside
+     the scene rect) revealed the black engine backing — stark in light theme.
+     Painting the gutter --bg matches the panel gaps and hides the seam. */
+  background: var(--bg);
+  position: relative;
+  transition: background 120ms ease;
+}
+[data-separator].ce-splitter:hover,
+[data-separator].ce-splitter:active {
+  background: var(--accent-soft);
+}
+/* Dock open/close slide. PanelLayout adds `.dock-animating` to the outer
+   Group only for the duration of an open/close toggle, so the three outer
+   panels' `flex` (which the library sets when the dock slot collapses/
+   expands) tweens. Scoped to direct children + toggle-only so splitter
+   DRAGS and window RESIZES stay instant (a permanent transition would lag
+   them). */
+.dock-animating [data-panel] {
+  transition: flex-grow 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-animating [data-panel] {
+    transition: none;
+  }
+}
+
+[data-separator].ce-splitter-v {
+  width: 8px;
+  cursor: col-resize;
+}
+[data-separator].ce-splitter-h {
+  height: 8px;
+  cursor: row-resize;
+}
+[data-separator].ce-splitter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}

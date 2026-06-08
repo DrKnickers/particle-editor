@@ -19,6 +19,12 @@
     <Filter Include="Header Files\UI">
       <UniqueIdentifier>{36a77cfe-1f80-40a0-9268-011f4c421c80}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\host">
+      <UniqueIdentifier>{7f2c5b3a-d8e1-4f5c-9a3e-1a6f8b9d2c14}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\host">
+      <UniqueIdentifier>{8e3d6c4b-e9f2-5a6d-0b4f-2b7090aece25}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ChunkFile.h">
@@ -49,6 +55,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="MegaFiles.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MouseCursor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ParticleSystem.h">
@@ -83,6 +92,27 @@
     </ClInclude>
     <ClInclude Include="xml.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="host\AcceleratorBridge.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\BridgeDispatcher.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\HostBridgeProxy.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\HostWindow.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\LayoutBroker.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\Run.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\third_party\nlohmann\json.hpp">
+      <Filter>Header Files\host</Filter>
     </ClInclude>
     <ClInclude Include="Resources\resource.de.h">
       <Filter>Resource Files</Filter>
@@ -161,6 +191,21 @@
     <ClCompile Include="xml.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="host\AcceleratorBridge.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatcher.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\HostBridgeProxy.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\HostWindow.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\LayoutBroker.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
     <ClCompile Include="UI\ColorButton.cpp">
       <Filter>Source Files\UI</Filter>
     </ClCompile>
@@ -183,6 +228,9 @@
       <Filter>Source Files\UI</Filter>
     </ClCompile>
     <ClCompile Include="UI\PaletteStore.cpp">
+      <Filter>Source Files\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\PaletteThumbs.cpp">
       <Filter>Source Files\UI</Filter>
     </ClCompile>
     <ClCompile Include="UI\TrackEditor.cpp">

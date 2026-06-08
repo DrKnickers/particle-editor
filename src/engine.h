@@ -8,6 +8,8 @@
 #include "utils.h"
 #include <memory>
 
+namespace host { class AlphaCompositor; }
+
 class Object3D
 {
     Object3D* m_parent;
@@ -119,6 +121,134 @@ public:
 	// create scratch textures via D3DXCreateTextureFromFile*Ex with
 	// width/height clamped to 64×64. Exposed read-only.
 	IDirect3DDevice9* GetDevice() const { return m_pDevice; }
+
+	// Idempotent device-state guard. Mirrors the recovery dance the
+	// Render() loop runs at the top of every frame:
+	//   - TestCooperativeLevel == D3D_OK              → returns true (no-op).
+	//   - TestCooperativeLevel == D3DERR_DEVICELOST   → returns false (caller
+	//                                                   should retry later).
+	//   - TestCooperativeLevel == D3DERR_DEVICENOTRESET → calls Reset() and
+	//                                                     returns the result.
+	// Call before any code path that creates D3D9 / D3DX9 resources off
+	// the render thread. In --test-host mode the render loop isn't pumped
+	// (hidden viewport HWND, no WM_PAINT), so resources allocated outside
+	// of Render() must guard themselves. In interactive mode this is a
+	// belt-and-suspenders no-op because Render() runs the same dance
+	// every frame.
+	bool RecoverDeviceIfNeeded();
+
+	//: install/clear the layered-window alpha compositor. When
+	// non-null, Render() redirects slot-0 RT to the compositor's
+	// off-screen ARGB surface and replaces Present() with
+	// Composite(viewport HWND). Pass nullptr to fall back to the
+	// legacy swap-chain Present path (used by viewport_poc and any
+	// host that doesn't enable the layered popup).
+	void SetAlphaCompositor(host::AlphaCompositor* c) { m_pAlphaCompositor = c; }
+
+	// [PERF] Composition mode (/ DComp). When set, Render() skips the
+	// per-frame AlphaCompositor::Composite() readback — the visible pixels
+	// reach the screen via the host's DComp shared-texture path, so the
+	// layered-window readback + ~19 MB memcpy is pure redundant per-frame
+	// work (measured at ~98-99% of Render(), scaling with window area). The
+	// engine still renders INTO the AlphaCompositor RT (the shared source);
+	// only the layered transport is skipped. See tasks/todo.md round-3.
+	void SetCompositionMode(bool on) { m_compositionMode = on; }
+
+	// Phase 3 Stage 2: NT-handle alias of the engine's primary
+	// render-target texture, openable from a parallel D3D11 device via
+	// OpenSharedResource. Forwarded from m_pAlphaCompositor->GetShared
+	// Handle() — the AlphaCompositor's offscreen RT is now a shared-
+	// handle texture (Stage 2a promotion). Returns nullptr when the
+	// compositor isn't installed (e.g. canvas-jpeg mode where
+	// the engine renders to its native swap-chain back buffer) or when
+	// Resize hasn't run yet. Stage 4 wires this into the DXGI / DComp
+	// path; Stage 2 only exposes + verifies the handle.
+	HANDLE GetSharedTextureHandle() const;
+
+	// Phase 3 Stage 4a — cross-device GPU sync helpers.
+	// Under composition mode (Stage 4+), HostWindow's per-frame loop
+	// calls these between engine->Render() (D3D9 draws into the shared
+	// texture) and m_compositor->CompositeEngineFrame() (D3D11
+	// CopyResource from alias to swapchain back buffer). Without the
+	// spin, the D3D11 read may race against in-flight D3D9 writes —
+	// symptoms: tearing, one-frame-stale appearance, half-frame updates.
+	//
+	// Production port of dxgi_spike.cpp:687-697 with the same 100k-
+	// iteration spin cap. Spike measured 0.30 ms total at 3440x1440;
+	// the spin doesn't dominate. Sub-plan §3.3 path (b): Engine owns
+	// the query (it has the D3D9 device anyway), host orchestrates the
+	// call sites under composition mode only — zero overhead on the
+	// non-composition paths (arch-A, canvas-jpeg) which never call.
+	//
+	// Lazy creation on first Issue. m_pEndFrameQuery is released in
+	// Engine::Reset before m_pDevice->Reset (queries aren't D3DPOOL_*
+	// but DO get invalidated by IDirect3DDevice9::Reset under D3D9Ex).
+	// Next Issue lazy-recreates against the post-Reset device.
+	void IssueEndFrameQuery();
+	// Returns the number of GetData spins it busy-waited (0 = signalled on
+	// the first poll), so the host can log GPU-wait pressure ([PERF]).
+	int  WaitEndFrameQuery();
+
+	// [PERF] round-2 sub-profiling — per-pass CPU-submit timing (us) of the
+	// last Render() call; the host folds these into the [PERF2] host.log
+	// line. `present` includes the AlphaCompositor::Composite() synchronous
+	// readback. Diagnostic-only; see tasks/todo.md.
+	struct RenderPassTimingsUs { double scene = 0, bloom = 0, distort = 0, composite = 0, present = 0; };
+	RenderPassTimingsUs GetLastRenderTimings() const { return m_lastRenderTimings; }
+	RenderPassTimingsUs m_lastRenderTimings = {};
+
+	// Phase 3 Stage 4b — adapter LUID for the multi-GPU
+	// guard. Compositor::AttachEngineVisual compares this against
+	// the D3D11 device's adapter LUID; on mismatch (hybrid laptops
+	// where D3D9Ex and D3D11 picked different physical GPUs),
+	// shared-handle opens silently return a wrong texture, so
+	// AttachEngineVisual logs + skips engine attach. Single-GPU
+	// systems (engine's RTX 3080 target) return matching LUIDs;
+	// the check is a no-op there. Returns LUID{0,0} on failure
+	// (no device, GetCreationParameters fails, GetAdapterLUID
+	// fails) — Compositor treats zero LUID as "caller doesn't
+	// know" and skips the comparison.
+	LUID GetAdapterLuid() const;
+
+	// Phase 3 Stage 5 — scene-rect viewport (Variant B-γ).
+	//
+	// Under composition mode, LayoutBroker calls this on every
+	// React-side layout/scene-rect dispatch (gated on a non-null
+	// DComp Compositor pointer per LayoutBroker R9 mitigation). The
+	// (x, y, w, h) is in main-host-client coords, which equals the
+	// engine RT's coordinate space (the engine RT is currently sized
+	// to full host client per the popup-spans-window invariant).
+	//
+	// Side effects:
+	//   1. Cache the rect + activate flag.
+	//   2. Recompute m_projection with the scene-rect aspect ratio
+	//      (sceneW / sceneH) via D3DXMatrixPerspectiveFovRH — otherwise
+	//      the scene gets stretched when scene-rect aspect ≠ RT aspect.
+	//   3. Next Engine::Render's scene pass will SetViewport(scene-rect)
+	//      after the full-RT Clear (the D12 ordering rule from sub-plan
+	//      §3.4 — Clear-then-SetViewport prevents post-process bleed
+	//      across the scene-rect boundary).
+	//
+	// Passing w<=0 or h<=0 clears the scene viewport: m_projection
+	// is recomputed at full-RT aspect (matches Engine::Reset's default
+	// setup) and Render skips the SetViewport call. Used by callers
+	// when composition mode detaches.
+	//
+	// Idempotent on identical args. Emits [engine] SetSceneViewport
+	// log lines on actual changes via host.log (when wired).
+	//
+	// Survives Engine::Reset (Reset re-applies the cached rect after
+	// rebuilding m_projection at full-RT aspect — sub-plan R8
+	// mitigation). Non-composition transports (canvas-jpeg, arch-A)
+	// never call this so m_sceneViewportActive stays false and Render
+	// behaves identically to today.
+	void SetSceneViewport(int x, int y, int w, int h);
+
+	// Diagnostic accessor — returns true and populates the outs when
+	// a scene viewport is active; returns false (outs untouched)
+	// otherwise.
+	bool GetSceneViewport(int& x, int& y, int& w, int& h) const;
+
 	const std::wstring& GetGroundSlotCustomPath(int slot) const;
 	// Does the slot currently have a loadable texture (either bundled
 	// default or user-supplied custom path)? Used by the picker dialog
@@ -287,6 +417,11 @@ private:
 
 	//: build the UV sphere VB/IB/Decl once at engine init.
 	void				InitSkydomeMesh();
+	// Phase 3 Stage 1: split out the VB/IB allocation + fill so
+	// Engine::Reset can recreate them post-device-Reset (D3DPOOL_DEFAULT
+	// no longer survives Reset, unlike the original D3DPOOL_MANAGED).
+	void				CreateSkydomeMeshBuffers();
+	void				ReleaseSkydomeMeshBuffers();
 	//: compile IDR_SHADER_SKYDOME from RCDATA and cache parameter handles.
 	void				InitSkydomeEffect();
 	//: release m_pSkydomeTexture and re-load from slot (bundled or custom).
@@ -312,6 +447,25 @@ private:
 	D3DXMATRIX	m_billboard;
 	D3DXMATRIX	m_projection;
 	D3DXMATRIX	m_viewProjection;
+
+	// Phase 3 Stage 5 — scene viewport cache (Variant B-γ).
+	// Active flag false means "use full RT" (default — matches all
+	// non-composition transports). When active, Engine::Render
+	// SetViewports the device to (X, Y, W, H) before the scene
+	// pass (after the full-RT Clear per the D12 ordering rule);
+	// m_projection is computed at W/H aspect by SetSceneViewport.
+	// Survives Reset (re-applied at end of Reset to overwrite the
+	// full-RT-aspect projection rebuild at engine.cpp:1448).
+	int  m_sceneViewportX      = 0;
+	int  m_sceneViewportY      = 0;
+	int  m_sceneViewportW      = 0;
+	int  m_sceneViewportH      = 0;
+	bool m_sceneViewportActive = false;
+
+	// (Stage 5 T6 follow-up: per-pixel-FoV reference fields removed —
+	// reference is now the current m_presentationParameters.BackBuffer
+	// Height read inline at SetSceneViewport time. See SetSceneViewport
+	// for the rationale.)
 
     COLORREF    m_background;
 	bool		m_showGround;
@@ -345,7 +499,15 @@ private:
     D3DXMATRIX  m_sphLightFill[3];
     D3DXMATRIX  m_sphLightAll[3];
 
-	//: Skydome UV sphere geometry (D3DPOOL_MANAGED; survives device Reset)
+	// / Phase 3 Stage 1: Skydome UV sphere geometry.
+	// Originally D3DPOOL_MANAGED so it survived device Reset, but
+	// D3D9Ex disallows the managed pool — promoted to D3DPOOL_DEFAULT.
+	// Engine::Reset now releases the VB/IB before m_pDevice->Reset and
+	// recreates them via CreateSkydomeMeshBuffers() after the device
+	// successfully resets (mirrors the existing OnLostDevice / OnResetDevice
+	// flow used for shaders + bloom + compositor RT). The vertex
+	// declaration m_pSkydomeDecl is not pool-bound and stays valid
+	// across Reset.
 	struct SkydomeVertex
 	{
 	    D3DXVECTOR3 Position;
@@ -409,10 +571,36 @@ private:
 	// follow-up: needed to resolve curated skydome textures from the
 	// base game / active mod via the MEG-archive + loose-file chain.
 	IFileManager&					m_fileManager;
-	IDirect3D9*						m_pDirect3D;
+	// Phase 3 Stage 1: promoted from IDirect3D9/IDirect3DDevice9 to
+	// the *Ex types so the engine's render target can be opened as a
+	// shared-handle resource by a D3D11 device (Stage 2). IDirect3DDevice9Ex
+	// inherits from IDirect3DDevice9, so existing call sites that use the
+	// base interface (TextureManager, ShaderManager, Effect helpers) keep
+	// working through implicit covariance. D3DPOOL_MANAGED is no longer
+	// available on this device — the four pre-existing managed-pool sites
+	// (engine.cpp 1044/1511/1522/1608) have been migrated to
+	// D3DPOOL_DEFAULT and added to the OnLostDevice/OnResetDevice flow.
+	IDirect3D9Ex*					m_pDirect3D;
 	D3DPRESENT_PARAMETERS			m_presentationParameters;
-	IDirect3DDevice9*				m_pDevice;
+	IDirect3DDevice9Ex*				m_pDevice;
 	IDirect3DVertexDeclaration9*	m_pDeclaration;
+
+	// Phase 3 Stage 4a — D3D9Ex event query for cross-device
+	// GPU sync. Lazy-created on first IssueEndFrameQuery; released in
+	// Engine::Reset before m_pDevice->Reset; lazy-recreated on next
+	// Issue. See IssueEndFrameQuery / WaitEndFrameQuery declarations
+	// in the public section for usage.
+	IDirect3DQuery9*				m_pEndFrameQuery = NULL;
+
+	//: non-owning. When non-null, Render targets its off-screen
+	// RT and Composite() replaces Present(). Lifetime managed by
+	// HostWindowImpl; detached via SetAlphaCompositor(nullptr) on
+	// WM_DESTROY before the compositor is destroyed.
+	host::AlphaCompositor*			m_pAlphaCompositor = nullptr;
+
+	// [PERF] composition mode — gates the layered Composite() readback
+	// out of Render() (set by the host via SetCompositionMode).
+	bool							m_compositionMode = false;
 
 	static D3DVERTEXELEMENT9 ParticleElements[];
     
