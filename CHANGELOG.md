@@ -18,7 +18,7 @@ Conventions:
 
 ### UI polish: consistent padding, no clipped fields, softer curve keys, a denser emitter list, a Preferences menu, and mod-aware Open
 
-*2026-06-08 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #94* <!-- TODO: backfill merge hash + PR number on merge -->
+*2026-06-08 · [`1239ff9`](https://github.com/DrKnickers/particle-editor/commit/1239ff9) · #94*
 
 A batch of new-UI refinements. The **Physics** inspector tab now matches
 Basic/Appearance padding; the **toolbar** has breathing room above the viewport
@@ -59,7 +59,7 @@ agent renders of the real host are unreliable; values were tuned with the user).
 
 ### Fix crash when editing a shared property on a linked emitter (`xtree:181` dangling cursor)
 
-*2026-06-08 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #94* <!-- TODO: backfill merge hash + PR number on merge -->
+*2026-06-08 · [`1239ff9`](https://github.com/DrKnickers/particle-editor/commit/1239ff9) · #94*
 
 Editing a shared parameter on a member of a link group while the simulation had
 live particles (e.g. Ctrl+scrolling **Burst delay** on one of several linked
