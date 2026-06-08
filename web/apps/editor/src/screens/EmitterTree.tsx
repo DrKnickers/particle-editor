@@ -594,7 +594,7 @@ function EmitterRow({
             data-drop-zone={indicatorZone ?? ""}
             data-dragging={draggingId === node.id ? "true" : "false"}
             className={[
-              "grid w-full items-center gap-1.5 py-1 pr-2 text-left text-sm transition-colors",
+              "grid w-full items-center gap-1.5 py-0.5 pr-2 text-left text-sm transition-colors",
               "border-l-2",
               borderClass,
               rowBgClass,
@@ -880,7 +880,7 @@ function EmitterRow({
 // bracket layer can lay out absolutely without per-render measurement
 // (a ResizeObserver pass adds complexity for a polish detail; if the
 // tree theme changes this constant moves with it).
-const ROW_HEIGHT_PX     = 24;
+const ROW_HEIGHT_PX     = 20;
 const LANE_WIDTH_PX     = 10;  // 2px bracket + 8px gap to next lane
 // Gap between the longest emitter name's right edge and the first bracket
 // lane. The bracket layer is absolutely positioned at (measured longest-name

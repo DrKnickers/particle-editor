@@ -47,11 +47,7 @@ test("Toolbar renders the 2026 button set", async () => {
     "Toggle bloom",
     "Leave particles after instance death",
   ]));
-  // Theme toggle remains rightmost.
-  expect(labels).toEqual(expect.arrayContaining([
-    "Light theme",
-    "Dark theme",
-  ]));
+  // (Theme switching moved out of the toolbar into Edit → Preferences.)
 });
 
 test("engine/set/paused mutates state and flips Play/Pause button", async () => {

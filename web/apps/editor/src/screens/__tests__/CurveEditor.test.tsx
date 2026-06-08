@@ -236,8 +236,8 @@ describe("CurveEditor", () => {
     expect(first.getAttribute("fill")).toBe("#94A3B8");
     expect(last.getAttribute("stroke")).toBe("#0EA5E9");
     expect(last.getAttribute("stroke-width")).toBe("1.5");
-    // Interior key keeps the default stroke + the lighter fill.
-    expect(middle.getAttribute("stroke")).toBe("#0a0a0a");
+    // Interior key has no outline stroke (drop-shadow via CSS) + lighter fill.
+    expect(middle.getAttribute("stroke")).toBe("none");
     expect(middle.getAttribute("fill")).toBe("#e5e5e5");
   });
 

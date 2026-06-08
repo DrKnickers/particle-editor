@@ -961,11 +961,12 @@ export function CurveEditor({
           : isBorder
             ? BORDER_FILL
             : UNSELECTED_FILL;
-        const stroke = isBorder ? BORDER_STROKE : "#0a0a0a";
-        const strokeWidth = isBorder ? 1.5 : 1;
+        const stroke = isBorder ? BORDER_STROKE : "none";
+        const strokeWidth = isBorder ? 1.5 : 0;
         return (
           <circle
             key={i}
+            className="curve-key-marker"
             data-testid="curve-key"
             data-key-time={p.time}
             data-selected={selected ? "true" : "false"}
@@ -1866,8 +1867,8 @@ function MultiChannelCurves({
               // `data-border` attribute below tags them for callers
               // that need the distinction programmatically.
               const fill = selected ? SELECTED_FILL : channel.color;
-              const stroke = "#0a0a0a";
-              const strokeWidth = 1;
+              const stroke = "none";
+              const strokeWidth = 0;
               // Each focus key is rendered as a (hit-pad, visible)
               // pair: the hit pad is a transparent circle ~2× the
               // visible radius that owns every pointer handler +
@@ -1919,6 +1920,7 @@ function MultiChannelCurves({
                     }}
                   />
                   <circle
+                    className="curve-key-marker"
                     cx={p.x}
                     cy={p.y}
                     r={visR}

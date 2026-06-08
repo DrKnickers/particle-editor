@@ -21,8 +21,6 @@
 - button "Toggle Lighting panel"
 - button "Ground": "Ground:"
 - button "Background": "Background:"
-- button "Light theme" [pressed]
-- button "Dark theme"
 - text: Particle System
 - complementary:
   - tree "Emitters":

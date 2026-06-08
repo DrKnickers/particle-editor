@@ -2017,15 +2017,39 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
                 lpstrTitle  = L"Open ground texture";
             }
 
+            // Default the "Open particle system" picker to the selected
+            // mod's Models folder (where .alo models live), mirroring the
+            // textures/browse default above. Gated on the .alo case
+            // (filterId empty) so the skydome/ground TEXTURE variants are
+            // NOT pointed at Models — they keep the dialog's default dir.
+            // Covers BOTH File->Open and Import Emitters' Browse (both call
+            // file/open with empty params). Fallback: mod root -> default.
+            std::wstring initialDir;
+            if (filterId.empty() && m_modManager)
+            {
+                const std::wstring& mod = m_modManager->GetSelectedModPath();
+                if (!mod.empty())
+                {
+                    auto isDir = [](const std::wstring& p) -> bool {
+                        DWORD a = GetFileAttributesW(p.c_str());
+                        return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                    };
+                    const std::wstring modelsDir = mod + L"\\Data\\Art\\Models";
+                    if (isDir(modelsDir)) initialDir = modelsDir;
+                    else if (isDir(mod))  initialDir = mod;
+                }
+            }
+
             wchar_t buf[MAX_PATH] = {};
             OPENFILENAMEW ofn = {};
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner   = m_hostHwnd;
-            ofn.lpstrFile   = buf;
-            ofn.nMaxFile    = MAX_PATH;
-            ofn.lpstrFilter = lpstrFilter;
-            ofn.lpstrTitle  = lpstrTitle;
-            ofn.Flags       = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+            ofn.lStructSize     = sizeof(ofn);
+            ofn.hwndOwner       = m_hostHwnd;
+            ofn.lpstrFile       = buf;
+            ofn.nMaxFile        = MAX_PATH;
+            ofn.lpstrFilter     = lpstrFilter;
+            ofn.lpstrTitle      = lpstrTitle;
+            ofn.lpstrInitialDir = initialDir.empty() ? nullptr : initialDir.c_str();
+            ofn.Flags           = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
 
             if (!GetOpenFileNameW(&ofn))
             {

@@ -69,7 +69,7 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss }: Vie
       open={orphan != null}
       onOpenChange={(o) => { if (!o) onDismiss(); }}
       title="Recover unsaved changes?"
-      size="sm"
+      size="md"
     >
       <Modal.Body>
         <div className="flex flex-col gap-3 text-sm text-text">
@@ -77,7 +77,11 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss }: Vie
             Unsaved changes from a previous session were found.
           </p>
           <p className="text-text-2">
-            Original: <span className="font-medium text-text">{original}</span>
+            Original:{" "}
+            {/* Long mod paths have no spaces in their segments; break-all lets
+                them wrap to fit the dialog instead of overflowing into a
+                horizontal scrollbar. */}
+            <span className="font-medium text-text break-all">{original}</span>
           </p>
           {orphan != null && (
             <ul className="flex flex-col gap-1 text-[11px] leading-relaxed text-text-3">

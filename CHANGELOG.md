@@ -16,6 +16,79 @@ Conventions:
 
 ## Changelog
 
+### UI polish: consistent padding, no clipped fields, softer curve keys, a denser emitter list, a Preferences menu, and mod-aware Open
+
+*2026-06-08 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #94* <!-- TODO: backfill merge hash + PR number on merge -->
+
+A batch of new-UI refinements. The **Physics** inspector tab now matches
+Basic/Appearance padding; the **toolbar** has breathing room above the viewport
+so a pressed button no longer sits flush against the preview; numeric fields no
+longer **clip** 2-decimal values (the curve Time/Value fields and the inspector
+spinner column were widened); curve **keys** carry a soft drop-shadow instead of
+a hard black outline; the **emitter list** is denser; and the **autosave
+recovery** dialog widened so long mod paths wrap instead of scrolling. Theme
+switching moved out of the toolbar into a new **Edit → Preferences…** dialog with
+a 3-way **Dark / Light / System** control (System follows the OS). Finally,
+**File → Open** and **Import Emitters** now default to the selected mod's
+`Data\Art\Models` folder (texture pickers still default to Textures).
+
+**How we tackled it.** Mostly localized CSS/React edits under
+[`web/apps/editor/src`](web/apps/editor/src) (`components.css`,
+`EmitterPropertyTabs.tsx`, `CurveEditor.tsx` + `CurveEditorPanel.tsx`,
+`EmitterTree.tsx`, a new `lib/theme.ts` + `PreferencesDialog.tsx`, `MenuBar.tsx`,
+`App.tsx`, `Toolbar.tsx`). The density change kept the hard-coded `ROW_HEIGHT_PX`
+in lockstep with the row padding so the link-group bracket gutter stays aligned.
+The curve drop-shadow uses a CSS `filter: drop-shadow` on a `.curve-key-marker`
+class rather than per-SVG `<filter>` defs. The mod-aware Open dir is one gated
+edit to the shared `file/open` host handler
+([`src/host/BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp:1986)) —
+`filterId.empty()` restricts it to the `.alo` particle case so the skydome/ground
+texture variants of the same handler are untouched, and it covers Import (which
+reuses `file/open`).
+
+**Issues encountered and resolutions.** *The inspector was already mostly
+cut-off-proof* — Basic used a 73px spinner column and wide fields used
+`widthBoost`; unifying the default column to 73px closed the remaining
+Appearance/Physics gap. *Removing the toolbar theme toggle cascaded* across 19
+a11y goldens (every composition snapshot includes the toolbar) plus a Playwright
+`toolbar.spec` assertion — all rebaselined/updated. *Browser-mode screenshots
+needed the `<canvas>` hidden* to settle the headless capture (—
+agent renders of the real host are unreliable; values were tuned with the user).
+
+---
+
+### Fix crash when editing a shared property on a linked emitter (`xtree:181` dangling cursor)
+
+*2026-06-08 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #94* <!-- TODO: backfill merge hash + PR number on merge -->
+
+Editing a shared parameter on a member of a link group while the simulation had
+live particles (e.g. Ctrl+scrolling **Burst delay** on one of several linked
+emitters) crashed in Debug with *"cannot dereference value-initialized map/set
+iterator"* (`xtree:181`). Pre-existing engine bug, surfaced while testing the UI
+polish build.
+
+**How we tackled it.** `BridgeDispatcher::propagateLinkGroup` copies the edited
+emitter's shared params to each sibling via `copySharedParamsFrom`, which
+reassigns the sibling's track multisets and orphans its live particles' cached
+cursor iterators. It then calls `Engine::OnParticleSystemChanged(-1)` to reseat
+them — but the `-1` branch of `EmitterInstance::onParticleSystemChanged` only
+recomputed composites/textures/blend; the cursor reseat lived solely in the
+per-track (`track >= 0`) branch. So the orphaned cursors stayed singular and the
+next `Engine::Update` dereferenced one. The fix runs the cursor reseat for both
+branches: `track == -1` now reseats EVERY track (a `track != -1` guard also
+short-circuits the otherwise out-of-bounds `tracks[-1]` read). This makes `-1`
+honor the "reseat everything" contract the comment already claimed, fixing
+both the new-UI link path and the legacy `main.cpp` one.
+
+**Issues encountered and resolutions.** The mitigation comment asserted
+`OnParticleSystemChanged(-1)` reseated cursors; it never did. Verified by the
+user's deterministic repro (the crash no longer fires) plus the native a11y
+harness staying green; an automated regression test is hard here (the crash needs
+live particles in linked siblings and *aborts* the process rather than failing
+cleanly) — noted as a follow-up.
+
+---
+
 ### New WebView2/React UI is now the default; `--legacy` opts back into the classic chrome
 
 *2026-06-08 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*

@@ -21,6 +21,7 @@ import { promptModNickname } from "@/lib/mod-nickname";
 import { BridgeContext } from "@/lib/bridge-context";
 import { useBackingColorSync } from "@/lib/backing-color-sync";
 import { useAppAccelerators } from "@/lib/use-app-accelerators";
+import { applyMode, readStoredMode } from "@/lib/theme";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
 // Evaluated once at module load; a page navigation to ?demo=primitives
@@ -75,14 +76,13 @@ function AppShell() {
 
   // Particle Editor 2026 redesign: apply persisted theme (or OS preference)
   // before any panel renders so the first paint is correctly themed.
+  // 3-way mode (dark/light/system): system follows prefers-color-scheme live.
   useEffect(() => {
-    const stored = localStorage.getItem("alo:theme");
-    const theme = stored === "dark" || stored === "light"
-      ? stored
-      : window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light";
-    document.documentElement.dataset.theme = theme;
+    applyMode(readStoredMode());
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => { if (readStoredMode() === "system") applyMode("system"); };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   // Screen 8 Batch 3: subscribe to file-state events (dirty/changed,

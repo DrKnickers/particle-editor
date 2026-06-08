@@ -1336,7 +1336,7 @@ export function CurveEditorPanel({ bridge }: Props) {
               track + selection size + displayed value so the input
               remounts when the selection or its committed value changes. */}
           <label className="text-xs text-text-2" htmlFor="ce-spinner-time">Time:&nbsp;</label>
-          <div className="w-16" data-testid="ce-spinner-time-wrapper">
+          <div style={{ width: 84 }} data-testid="ce-spinner-time-wrapper">
             <Spinner
               key={`time:${focusedChannel.trackName}:${selectedKeyTimes.size}:${spinnerTimeValue}`}
               aria-label="Selected key time"
@@ -1355,7 +1355,7 @@ export function CurveEditorPanel({ bridge }: Props) {
             />
           </div>
           <label className="text-xs text-text-2 ml-1" htmlFor="ce-spinner-value">Value:&nbsp;</label>
-          <div className="w-16" data-testid="ce-spinner-value-wrapper">
+          <div style={{ width: 84 }} data-testid="ce-spinner-value-wrapper">
             {(() => {
               const sb = spinnerBoundsForTrack(focusedChannel.trackName);
               return (

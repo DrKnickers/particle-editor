@@ -6,7 +6,7 @@
 // Group 3 (viewport toggles):   Show ground · Toggle bloom · Leave particles
 // Group 4 (panels):             Spawner toggle
 //   spacer
-// Group 5 (environment):        Ground dropdown · Background dropdown · ThemeToggle
+// Group 5 (environment):        Ground dropdown · Background dropdown
 //
 // Stop and Restart removed per design chat. The three viewport toggles
 // (ground / bloom / leave-particles) live here as lucide icon buttons —
@@ -23,7 +23,6 @@ import {
   Grid2x2, Sun, Sparkles, CirclePlus, Lightbulb,
 } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { BackgroundDropdown } from "@/components/BackgroundDropdown";
 import { GroundDropdown } from "@/components/GroundDropdown";
 import { useRightDock, toggleDock } from "@/lib/right-dock";
@@ -211,10 +210,9 @@ export function Toolbar({ bridge }: Props) {
 
       <span className="tb-spacer" />
 
-      {/* Group 5: environment + theme */}
+      {/* Group 5: environment */}
       <GroundDropdown bridge={bridge} />
       <BackgroundDropdown bridge={bridge} />
-      <ThemeToggle />
     </div>
   );
 }

@@ -738,7 +738,13 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
                 break;
 		}
 	}
-	else
+	// Cursor reseat runs for BOTH the `-1` (reseat-everything) path and a
+	// specific `track`. For `-1` we reseat EVERY track: callers like
+	// BridgeDispatcher::propagateLinkGroup (and the legacy main.cpp link path)
+	// reassign a sibling's track multisets via copySharedParamsFrom, then call
+	// OnParticleSystemChanged(-1) to fix the orphaned cursors. Previously this
+	// reseat lived only in the `else` branch, so the `-1` path left them
+	// singular → xtree:181 deref on the next Engine::Update.
 	{
 		TimeF currentTime = GetTimeF();
 
@@ -755,8 +761,10 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 
 			for (int t = 0; t < ParticleSystem::NUM_TRACKS; t++)
 			{
-				// Process the edited track itself + any channel aliasing it.
-				if (t != track && m_emitter.tracks[t] != m_emitter.tracks[track]) continue;
+				// Process the edited track + any channel aliasing it. For
+				// track == -1 reseat EVERY track; the `track != -1` guard also
+				// short-circuits the otherwise out-of-bounds `tracks[-1]` read.
+				if (track != -1 && t != track && m_emitter.tracks[t] != m_emitter.tracks[track]) continue;
 
 				Particle::TrackCursor& cursor = particle->m_cursors[t];
 				cursor.prev = cursor.next = m_emitter.tracks[t]->keys.begin();

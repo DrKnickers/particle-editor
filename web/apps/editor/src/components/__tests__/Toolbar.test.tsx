@@ -1,5 +1,5 @@
-// Vitest: Toolbar renders the 4 groups + ThemeToggle and dispatches
-// the right bridge calls on click.
+// Vitest: Toolbar renders the 4 groups and dispatches the right bridge
+// calls on click. ThemeToggle has been moved to Edit → Preferences….
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 describe("Toolbar — Particle Editor 2026 layout", () => {
-  it("renders the file/playback/spawner groups + ThemeToggle", async () => {
+  it("renders the file/playback/spawner groups", async () => {
     const b = makeBridge();
     render(<Toolbar bridge={b} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument());
@@ -43,8 +43,9 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     expect(screen.getByRole("button", { name: "Step" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Step 10" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Toggle Spawner panel" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /light theme/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /dark theme/i })).toBeInTheDocument();
+    // ThemeToggle removed from toolbar — theme is in Edit → Preferences…
+    expect(screen.queryByRole("button", { name: /light theme/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /dark theme/i })).not.toBeInTheDocument();
   });
 
   it("Pause button dispatches engine/set/paused with paused=true", async () => {

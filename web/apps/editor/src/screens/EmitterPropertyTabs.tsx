@@ -271,11 +271,9 @@ export function EmitterPropertyTabs({ bridge }: Props) {
         <TabTrigger value="appearance" label="Appearance" />
         <TabTrigger value="physics" label="Physics" />
       </Tabs.List>
-      {/* Basic + Appearance tabs use .inspector inside (BasicTab /
-          AppearanceTab render <div className="inspector">), so the
-          Tabs.Content wrapper omits Tailwind padding to avoid
-          doubling. Physics keeps p-3 until B2 wires it through the
-          same .inspector wrapper. */}
+      {/* All three tabs render <div className="inspector"> inside, which
+          owns the padding — so the Tabs.Content wrappers omit Tailwind
+          padding to avoid doubling. */}
       <Tabs.Content
         value="basic"
         className="flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
@@ -299,7 +297,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
       </Tabs.Content>
       <Tabs.Content
         value="physics"
-        className="flex-1 min-h-0 overflow-y-auto p-3 outline-none scrollbar-stable"
+        className="flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
         data-testid="tab-physics-content"
       >
         {renderBody((p) => <PhysicsTab properties={p} onCommit={commit} />)}

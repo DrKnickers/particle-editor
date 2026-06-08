@@ -121,7 +121,9 @@
 .toolbar {
   display: flex;
   align-items: center;
-  padding: 1px 8px;
+  /* 4px vertical so a pressed/active button (.tb-btn[aria-pressed]) clears
+     the viewport below and the menu bar above instead of sitting flush. */
+  padding: 4px 8px;
   gap: 4px;
   background: var(--bg-2);
   border-bottom: 1px solid var(--border);
@@ -569,12 +571,12 @@
 
 .form-row {
   display: grid;
-  /* Spinner cell 58px (post-polish: bumped from 52 per user smoke
-     test) and unit cell 40px so "units/s²" (Acceleration / Gravity /
-     Inward acceleration) fits without truncation. The unit also gets
-     overflow:visible below so it can spill into the gap if a longer
-     suffix ever shows up. */
-  grid-template-columns: 1fr 58px 40px;
+  /* Spinner cell 73px (unified across ALL tabs so 2-decimal values like
+     "100.00" / "-50.00" never clip — Basic already used 73px) and unit
+     cell 40px so "units/s²" (Acceleration / Gravity / Inward acceleration)
+     fits without truncation. The unit also gets overflow:visible below so
+     it can spill into the gap if a longer suffix ever shows up. */
+  grid-template-columns: 1fr 73px 40px;
   align-items: center;
   gap: 8px;
   padding: 2px 0;
@@ -603,16 +605,6 @@
 .inspector .panel-section-body { padding-left: 8px; }   /* L1 aligns with header */
 .inspector .radio-row { padding-left: 0; }               /* radio dot sits at L1 */
 .basic-tab [role="radiogroup"] .form-row .lbl { padding-left: 22px; }  /* L2 under the radio label */
-
-/* Basic-tab-scoped default: every plain .form-row inside .basic-tab
-   picks up a wider input column (73 px, +25 % over the standard 58 px)
-   so all numeric spinners in Basic — Emitter Timing / Generation /
-   Connection — read with more room. Declared BEFORE the named modifier
-   rules below so equal-specificity modifiers (.full / .name-row /
-   .form-row-cluster / .form-row-mid-input / .form-row-wide-input /
-   .form-row-x2-input / etc.) win on declaration order and keep their
-   own layouts. */
-.basic-tab .form-row { grid-template-columns: 1fr 73px 40px; }
 
 .form-row.full {
   grid-template-columns: 1fr;
@@ -1066,6 +1058,10 @@
 .vp-bottom-right .tool:hover { background: rgba(255,255,255,0.06); color: var(--text); }
 
 /* ========== Curve editor ========== */
+
+/* Curve key markers: soft drop-shadow for depth instead of a hard outline. */
+.curve-key-marker { filter: drop-shadow(0 1px 1.2px rgba(0, 0, 0, 0.5)); }
+
 .curve-editor {
   display: grid;
   /* `minmax(0, 1fr)` instead of bare `1fr` so the body row can

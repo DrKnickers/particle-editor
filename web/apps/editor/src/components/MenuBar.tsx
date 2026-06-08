@@ -44,6 +44,7 @@ import { useViewportOcclusion } from "@/lib/viewport-occlusion";
 import { toggleDock } from "@/lib/right-dock";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { Modal } from "@/components/Modal";
+import { PreferencesDialog } from "@/screens/PreferencesDialog";
 
 // follow-up: each MenubarContent needs to register itself with the
 // host as a viewport occlusion while open so the popup punches a
@@ -168,6 +169,7 @@ export function MenuBar({
   const [state, setState] = useState<EngineStateDto | null>(null);
   // Group D: View → Reset View Settings prompt visibility.
   const [resetViewOpen, setResetViewOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
 
   // D6: list of discovered mods, fetched separately from the
   // engine snapshot because it has a much lower change cadence (only
@@ -527,6 +529,10 @@ export function MenuBar({
             >
               Clear All Particles<Hint>Ctrl+Del</Hint>
             </Menubar.Item>
+            <Menubar.Separator className={SEPARATOR} />
+            <Menubar.Item className={ITEM} onSelect={() => setPrefsOpen(true)}>
+              Preferences…
+            </Menubar.Item>
           </OccludingMenubarContent>
         </Menubar.Portal>
       </Menubar.Menu>
@@ -833,6 +839,8 @@ export function MenuBar({
         </Menubar.Portal>
       </Menubar.Menu>
     </Menubar.Root>
+
+    <PreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} />
 
     {/* Group D: confirm prompt for View → Reset View Settings.
         Body copy mirrors the legacy MessageBox at main.cpp:1734.

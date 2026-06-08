@@ -21,8 +21,6 @@
 - button "Toggle Lighting panel"
 - button "Ground": "Ground:"
 - button "Background": "Background:"
-- button "Light theme" [pressed]
-- button "Dark theme"
 - text: Particle System
 - complementary:
   - tree "Emitters":
@@ -160,3 +158,5 @@
   - separator
   - menuitem "Rescale…"
   - menuitem "Clear All Particles Ctrl+Del"
+  - separator
+  - menuitem "Preferences…"
