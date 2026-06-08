@@ -18,7 +18,7 @@ Conventions:
 
 ### New WebView2/React UI is now the default; `--legacy` opts back into the classic chrome
 
-*2026-06-08 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)* <!-- TODO: backfill merge hash + PR number on integration-branch→master merge -->
+*2026-06-08 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Launching the x64 editor with **no flag** now opens the new WebView2 + D3D9 UI —
 the same interface previously gated behind `--new-ui`. To run the classic Win32
@@ -59,7 +59,7 @@ inherited from upstream, left as-is to keep the port faithful.
 
 ### Per-tick undo coalescing for curve-key spinner edits
 
-*2026-06-08 · [`dd3db53`](https://github.com/DrKnickers/particle-editor/commit/dd3db53) · [#NN](https://github.com/DrKnickers/particle-editor/pull/NN)* <!-- TODO: backfill merge hash + PR number on integration-branch→master merge -->
+*2026-06-08 · [`dd3db53`](https://github.com/DrKnickers/particle-editor/commit/dd3db53) · #92*
 
 Streaming a curve key's **Time** / **Value** spinner — by wheel, hold-arrow, or
 arrow-column scrub — now records a **single** undo step per gesture instead of one per
@@ -97,7 +97,7 @@ directly (Green/Blue/Alpha alias Red and are avoided).
 
 ### Animated dock open/close + left-pane flicker fix (new-UI)
 
-*2026-06-07 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-07 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The right-dock (Spawner / Lighting) now **slides open and closed** instead of snapping, and
 toggling it no longer **flickers the left pane**. Opening tweens the column out (0→~260px);
@@ -139,7 +139,7 @@ always-mounted dock is a11y-equivalent in the default open state); web vitest **
 
 ### Interaction polish: stable scrollbar gutter, wider texture field, clickable curve keys, splitter cursor (new-UI)
 
-*2026-06-07 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-07 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Four usability fixes. (1) Expanding an inspector/tool-panel section that overflows into a
 scrollbar no longer **shoves the panel sideways** — the scrollbar gutter is reserved. (2) The
@@ -174,7 +174,7 @@ space-minus-handles); corrected the formula. No a11y golden change; native harne
 
 ### Animated expand/collapse for collapsible sections (new-UI)
 
-*2026-06-07 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-07 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Every caret/disclosure section in the new UI now opens and closes with a smooth height
 animation instead of snapping. This covers the inspector property-tab sections, the Lighting
@@ -205,7 +205,7 @@ two native specs that clicked `summary:has-text("Bloom")` — updated to
 
 ### Curve, link-group, and Appearance polish (new-UI)
 
-*2026-06-07 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-07 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Three small parity/usability tweaks. The Appearance tab's texture labels shorten from "Color
 texture:" / "Bump texture:" to **"Color:" / "Bump:"**. The curve editor's **Rotation** channel
@@ -231,7 +231,7 @@ band; the row owns every other x.
 
 ### Paste As ▸ Lifetime / Death Child (new-UI · /)
 
-*2026-06-07 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-07 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The emitter-tree context menu regains the legacy **"Paste As ▸ Child"** capability. After
 copying or cutting an emitter, right-click another emitter and choose **Paste As ▸ Lifetime
@@ -265,7 +265,7 @@ suite 510; native harness 169 (incl. a new real-host round-trip spec).
 
 ### Import Emitters dialog "Clear" button (new-UI ·)
 
-*2026-06-07 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-07 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The new-UI **Import Emitters** dialog regains the legacy **"Clear"** button. Legacy ships two
 selection buttons in that dialog's footer — "Select all" and "Clear" — but the React port had only
@@ -295,7 +295,7 @@ harness 168/0.
 
 ### Status-bar parity: shift-to-spawn hint, PAUSED indicator, 2dp cursor (new-UI)
 
-*2026-06-06 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-06 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The new-UI status bar regains three elements the legacy Win32 bar had and the React port had
 dropped (/7/8). A persistent **"⇧ Shift: spawn instance"** hint now sits pinned to the far
@@ -328,7 +328,7 @@ PAUSED indicator rendering, rather than just the hint.
 
 ### Curve-editor marquee can start from the axis-label gutters (new-UI)
 
-*2026-06-05 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-05 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 You can now begin a rubber-band selection in the curve editor's axis-label margins — the 36px
 column of Y-axis numbers on the left and the 22px row of time labels along the bottom — not just
@@ -372,7 +372,7 @@ the margin, so `startMarquee` now keeps the raw press coordinate.
 
 ### Emitter-tree reorder-drag polish: edge autoscroll + Esc/right-click cancel (new-UI)
 
-*2026-06-05 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-05 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Reordering emitters in a long list is no longer cramped by the viewport. Dragging a row near
 the top or bottom edge of the emitter tree now autoscrolls the list — speed ramps up the closer
@@ -405,7 +405,7 @@ robust signal (the drag cancels with no drop) and the menu-suppression is confir
 
 ### Reset-Camera parity verified + single source of truth (new-UI)
 
-*2026-06-05 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-05 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 View → Reset Camera (and its `Ctrl+Home` shortcut) restores exactly the legacy camera —
 eye `(0, -250, 125)`, target origin, up `+Z`. This was confirmed against the legacy editor at
@@ -432,7 +432,7 @@ contextual typing to accept the plain array literals (`tsc --noEmit` clean).
 
 ### Crash-recovery autosave (new-UI)
 
-*2026-06-05 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-05 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The new UI now autosaves your work in the background and offers to recover it after a crash —
 matching the legacy editor. Two tiers run while you edit: a 30-second "recent" snapshot and a
@@ -471,7 +471,7 @@ crash smoke; the harness covers suppression, the recover no-op, and the dialog a
 
 ### Scroll-wheel / rapid spinner edits now undo as one step (new-UI)
 
-*2026-06-05 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-05 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Changing an emitter value with several quick scroll-wheel ticks (or a held spinner
 arrow) used to record one undo entry *per tick*, so reverting the gesture took as many
@@ -509,7 +509,7 @@ commits once on release (Spinner.tsx:18).
 
 ### Undo no longer swallows a step after a redo (new-UI)
 
-*2026-06-05 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-05 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 In the new UI, an `undo → redo → undo` sequence used to lose the second undo — after
 redoing back to the tip, the next Ctrl+Z (or Edit → Undo) did nothing, and the stuck
@@ -549,7 +549,7 @@ renderer-level key injection bypasses; the host-side undo logic is verified over
 
 ### Decimal numeric fields now display a consistent 2 decimal places
 
-*2026-06-03 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-03 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Spinner fields that hold fractional values render uniformly at 2 decimal places
 (e.g. Sun azimuth `0.00`, Position `0.00`, Burst interval `10.00`). Previously the
@@ -583,7 +583,7 @@ no structural change, and the legacy UIA lane was left untouched. → ****.
 
 ### Left-panel (property tabs) section chevrons now animate like the Spawner's
 
-*2026-06-03 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-03 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The collapse/expand chevrons on the left inspector's Basic / Appearance / Physics
 sections were stuck pointing one direction and never rotated, unlike the Spawner /
@@ -615,7 +615,7 @@ rebuild. → ****.
 
 ### New UI restores saved lighting from the registry, syncs Force Align with the legacy editor, and gains a Lighting toolbar toggle
 
-*2026-06-03 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-03 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Lighting-parity improvements to the new (`--new-ui`) editor. First, the
 viewport now **opens with your saved lighting**: the sun / fill 1 / fill 2 angles,
@@ -682,7 +682,7 @@ display (Sun intensity shows `0.50`, not the folded `1`), restoring the registry
 
 ### Lighting is now a docked pane (sharing the Spawner's slot) with Bloom settings folded in
 
-*2026-06-02 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-02 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The Lighting panel is no longer a floating overlay that covers the viewport — it's a
 **docked, full-height column** on the right, behaving exactly like the Spawner panel
@@ -729,7 +729,7 @@ removed Bloom surface's golden was dropped from both lanes). Captured as ****.
 
 ### Ground, background, and skydome view settings restored from the registry in the new-UI host
 
-*2026-06-02 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-02 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Launching the new UI now opens the viewport with the same persisted view settings the
 legacy editor restores — your tuned **background colour**, **ground visibility**, **ground
@@ -767,7 +767,7 @@ verification surface (agent screenshots are not —). Captured as ****.
 
 ### Emitter-tree drag-to-reorder works under (pointer events replace HTML5 DnD)
 
-*2026-06-02 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-02 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Dragging emitter rows in the tree to reorder roots or reparent a child works again in
 the new UI. Previously the row "wouldn't pick up at all" — the drag never started.
@@ -797,7 +797,7 @@ DOM-attribute-only (no ARIA), so the emitter-tree a11y golden is unchanged.
 
 ### Bloom settings restored from the registry in the new-UI host
 
-*2026-06-02 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-02 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Enabling bloom in the new UI produces visible glow again. Previously, ticking "Enable
 bloom" did nothing visible: the new-UI host never restored the persisted bloom settings,
@@ -831,7 +831,7 @@ while normal launches honour the saved value.
 
 ### Viewport "black line" on the Spawner edge — D3D9Ex→D3D11 shared-surface guard band
 
-*2026-06-02 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-02 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The thin near-black vertical line that ran along the Spawner panel's left (viewport-facing)
 edge in (composition) mode is gone. It was a real ~3–4px artifact at the viewport's
@@ -875,7 +875,7 @@ never set a scene viewport.
 
 ### Link-group brackets — per-member stubs, name-hugging position, dedicated lanes ()
 
-*2026-06-02 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-02 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Three improvements to the emitter tree's link-group bracket gutter. **(1)** Every member
 of a group now shows a short coloured stub off the bracket bar (previously only the first
@@ -912,7 +912,7 @@ text node).
 
 ### New-UI review polish — emitter role glyph placement + legacy-precision time fields
 
-*2026-06-02 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-02 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Two polish fixes from a `--new-ui` review pass. **(1)** In the emitter tree, a child
 emitter's spawn-role glyph (lifetime `↻` / on-death `✕`) now sits **between** the
@@ -948,7 +948,7 @@ host-side investigation since it can't be agent-verified ().
 
 ### `AlphaCompositor::Resize` is now transactional — a failed reallocation no longer kills the viewport (audit G7)
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 `AlphaCompositor::Resize` reallocates the off-screen ARGB render target, the
 SYSTEMMEM readback surface, and the CreateDIBSection bitmap whenever the popup's
@@ -988,7 +988,7 @@ re-run and check the delta is consistent.
 
 ### WebView2 navigation / new-window / permission policy + message-source check (audit G11)
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The WebView2 host now enforces an **origin allow-list** instead of trusting whatever
 page happens to be loaded. Off-origin top-level navigations are cancelled, popups
@@ -1032,7 +1032,7 @@ ever wanted.
 
 ### `NativeBridge` no longer leaks pending requests on send-failure or page teardown (audit G12)
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The WebView2 bridge's `request()` registered its pending-promise entry *before* calling
 `postMessage`, so if `JSON.stringify`/`postMessage` threw — or the page tore down
@@ -1054,7 +1054,7 @@ valid slow operations; the teardown path covers the common "response never comes
 
 ### Fix an infinite loop in the XML attribute parser (audit G10)
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 `XMLNode`'s attribute loop ([`src/xml.cpp:15`](src/xml.cpp:15)) read `atts[0]`/`atts[1]`
 but never advanced `atts`, so **any XML element carrying ≥1 attribute spun forever at
@@ -1074,7 +1074,7 @@ to `master` at integration.
 
 ### Import Emitters now works in the new UI — the native `emitters/import-from-file` handler (audit G1)
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The `--new-ui` **Import Emitters** dialog's "Import N selected" button now works.
 Previously the dialog could browse a `.alo` and preview its emitter tree, but clicking
@@ -1124,7 +1124,7 @@ vitest 386, Debug+Release clean.
 
 ### New-UI ground controls — solid-colour ground works end-to-end, and the ground-height field is back
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Three bugs in the `--new-ui` Ground toolbar dropdown are fixed. First, clicking the
 prominent **"Solid colour" tile now opens a colour picker** — previously the tile only
@@ -1169,7 +1169,7 @@ OS colour dialog paints over the live viewport — is left to a user spot-check
 
 ### [] Five correctness & memory-safety fixes — save-failure data loss, chunk-parser hardening, emitter-graph validation, particle-index cap
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The five `[both]`-tier P1 findings from the 2026-05-24 audit pass
 ([`tasks/post-audit-followups.md`](tasks/post-audit-followups.md)) are fixed. The
@@ -1219,7 +1219,7 @@ solution-local `packages/` layout ().
 
 ### UI follow-up] F1 — emitter-row icons: visibility on the left, spawn-role on the right
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Each emitter row now leads with the **visibility (eye) toggle on the left**
 (replacing the old `●` role dot), and **child** rows show their **spawn-role
@@ -1243,7 +1243,7 @@ row reorder + `●` removal, no theme/panel-state pollution, per).
 
 ### bugfix] Link groups now actually link — sync-on-link + per-edit propagation
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Linking emitters into a group had no behavioural effect in the new UI: the
 bracket gutter drew, but the members didn't share parameters and editing one
@@ -1288,7 +1288,7 @@ id + sync), caught by the native `emitter-mutations` spec, not vitest.
 
 ### UI follow-ups] F-series — number fields, curve editor, emitter toolbar, brackets
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Seven UI refinements from a live review (the `F2`–`F9` backlog, minus the native
 F4 above and the deferred F1 icon-layout):
@@ -1339,7 +1339,7 @@ a11y goldens untouched (all CSS/DOM-state, no captured-surface change).
 
 ### UI polish] Inspector density pass — tighter rhythm, flat sections, indent hierarchy, aligned checkboxes
 
-*2026-06-01 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-06-01 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 A four-part density/readability pass on the inspector (and the shared tool
 panels). More params fit on screen, groups read more clearly, and the columns
@@ -1380,7 +1380,7 @@ CSS-only throughout: vitest (371) and a11y goldens (CSS-independent) unaffected.
 
 ### UI polish] Inspector text readability — promote labels, reserve dimming for disabled params
 
-*2026-05-31 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-31 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Inspector field labels ("Bursts", "Burst delay", "Initial spawn delay", …)
 and the collapsible section headers ("EMITTER TIMING", "GENERATION") were
@@ -1410,7 +1410,7 @@ unaffected.
 
 ### UI polish] Rebase Tailwind `text-sm` to the 12px body convention
 
-*2026-05-31 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-31 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The emitter list ("Particle System" tree) rendered ~17% larger than the
 panels around it — its names sat at 14px while the curve track names, tabs,
@@ -1439,7 +1439,7 @@ exists; utilities are generated from theme vars). CSS-only change: vitest
 
 ### UI polish] Themed emitter-list scrollbar + theme-following native title bar
 
-*2026-05-31 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-31 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Two theming gaps closed. The emitter list (the "Particle System" tree) showed
 Chromium's default white scrollbar in dark mode instead of the thin themed bar
@@ -1473,7 +1473,7 @@ or ARIA impact, so vitest (371) and the a11y goldens are untouched.
 
 ### perf] viewport — drop the redundant per-frame layered-window readback
 
-*2026-05-31 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-31 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The editor felt sluggish and janky in real use, worst when maximized
 or on a large monitor. Root cause was a redundant per-frame GPU readback;
@@ -1527,7 +1527,7 @@ was confirmed by the user, not by agent screenshots (the host-side mechanism —
 
 ### UI polish] 1px light-grey hairline framing the viewport — removed
 
-*2026-05-31 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-31 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The viewport was framed on all four edges by a 1px light-grey
 (`#C0C0C0`) hairline — neutral, theme-independent, and jarring against the
@@ -1569,7 +1569,7 @@ layer-isolation method.
 
 ### feature-parity] Sphere/Cylinder emitter distribution fields match legacy
 
-*2026-05-31 · [`e89c1cc`](https://github.com/DrKnickers/particle-editor/commit/e89c1cc) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-31 · [`e89c1cc`](https://github.com/DrKnickers/particle-editor/commit/e89c1cc) · #92*
 
 The Physics tab's **Initial position** and **Initial speed** sections now match
 the legacy 0.2 editor for the **Sphere** and **Cylinder** distribution types.
@@ -1609,7 +1609,7 @@ Cylinder), unlike the compositing fixes which can't be eyeballed locally
 
 ### UI polish] Collapse the spawner's redundant nested panel
 
-*2026-05-31 · [`aba25f6`](https://github.com/DrKnickers/particle-editor/commit/aba25f6) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-31 · [`aba25f6`](https://github.com/DrKnickers/particle-editor/commit/aba25f6) · #92*
 
 The Spawner pane was wrapped in panel chrome twice — so it read as a subtly
 "framed" box with an inset border ring, unlike the flush left pane and curve
@@ -1642,7 +1642,7 @@ backing fix above; see).
 
 ### UI polish] Theme-coloured composition backing — kill the dark corner wedges
 
-*2026-05-30 · [`a545559`](https://github.com/DrKnickers/particle-editor/commit/a545559) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-30 · [`a545559`](https://github.com/DrKnickers/particle-editor/commit/a545559) · #92*
 
 Rounded panels that meet the engine viewport (or sit over any transparent gap)
 no longer show a dark triangular wedge in their corners. Previously, in
@@ -1701,7 +1701,7 @@ engine attach in the run.
 
 ### UI polish] Opaque splitter gutters — fix black seams next to the viewport
 
-*2026-05-30 · [`a41d869`](https://github.com/DrKnickers/particle-editor/commit/a41d869) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-30 · [`a41d869`](https://github.com/DrKnickers/particle-editor/commit/a41d869) · #92*
 
 The resize-handle gutters between panels were `background: transparent`. In
 the engine DComp visual is clipped to the scene rect and shows through any
@@ -1727,7 +1727,7 @@ visible navy wedge).
 
 ### UI polish] Desaturate the theme neutral ramp (no more navy/purple panels)
 
-*2026-05-30 · [`63d402e`](https://github.com/DrKnickers/particle-editor/commit/63d402e) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-30 · [`63d402e`](https://github.com/DrKnickers/particle-editor/commit/63d402e) · #92*
 
 The dark theme's panel/background ramp was a cool navy-slate (`--panel #161b25`
 etc., blue channel highest) that read as dark purple. Both themes' neutral ramps
@@ -1743,7 +1743,7 @@ values, so nothing else moved.
 
 ### rendering-fidelity] Fix particle blowout / alpha breakage over a background skydome
 
-*2026-05-30 · [`e1f12a4`](https://github.com/DrKnickers/particle-editor/commit/e1f12a4) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-30 · [`e1f12a4`](https://github.com/DrKnickers/particle-editor/commit/e1f12a4) · #92*
 
 Applying a background skydome (Background → any slot 1–11) no longer wrecks
 particle rendering. Previously, with a skydome active, additive particles
@@ -1786,7 +1786,7 @@ see. Full write-up in `tasks/lessons.md`.
 
 ### feature-parity] Frequently-used texture palette for emitter textures
 
-*2026-05-29 · [`59cfb27`](https://github.com/DrKnickers/particle-editor/commit/59cfb27) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-29 · [`59cfb27`](https://github.com/DrKnickers/particle-editor/commit/59cfb27) · #92*
 
 The second half of texture-selection parity. Each emitter **Color
 texture** / **Bump texture** field now has a **palette button** (grid
@@ -1841,7 +1841,7 @@ reverted — see [`tasks/lessons.md`](tasks/lessons.md).
 
 ### feature-parity] Browse button for emitter color/bump textures
 
-*2026-05-29 · [`ab1d340`](https://github.com/DrKnickers/particle-editor/commit/ab1d340) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-29 · [`ab1d340`](https://github.com/DrKnickers/particle-editor/commit/ab1d340) · #92*
 
 The emitter Appearance tab's **Color texture** and **Bump texture**
 fields now have a **Browse** button (folder icon) next to the text
@@ -1877,7 +1877,7 @@ stays green and the Browse button degrades to a no-op when unwired.
 
 ### rendering-fidelity] Headless frame-capture mode (`--capture`)
 
-*2026-05-29 · [`7af4b5c`](https://github.com/DrKnickers/particle-editor/commit/7af4b5c) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-29 · [`7af4b5c`](https://github.com/DrKnickers/particle-editor/commit/7af4b5c) · #92*
 
 New developer tooling for rendering-fidelity checks. `ParticleEditor.exe
 --new-ui --capture <alo> <png> [--frames N]` boots the host, auto-selects
@@ -1916,7 +1916,7 @@ pipeline.
 
 ### [handoff item 4] Native-test harness gates on dist/ build mode
 
-*2026-05-29 · [`b4765bd`](https://github.com/DrKnickers/particle-editor/commit/b4765bd) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-29 · [`b4765bd`](https://github.com/DrKnickers/particle-editor/commit/b4765bd) · #92*
 
 The native-test harness now refuses to run when the React `dist/`
 bundle was built for a different hosting mode than the lane being
@@ -1963,7 +1963,7 @@ code comment so a future reader doesn't "fix" a non-problem.
 
 ### follow-up] Complete the dialog-about a11y fix — normalize the volatile build date
 
-*2026-05-29 · [`a315245`](https://github.com/DrKnickers/particle-editor/commit/a315245) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-29 · [`a315245`](https://github.com/DrKnickers/particle-editor/commit/a315245) · #92*
 
 Completes the `dialog-about` half of the item-16 fix below. The prior
 entry pinned `BUILD_DATE` to HEAD's commit date and declared the
@@ -2020,7 +2020,7 @@ goldens now hold `<DATE>`.
 
 ### follow-up] Restore a11y golden lanes to 0 failed (autocrlf + BUILD_DATE pinning + --grep forwarding)
 
-*2026-05-27 · [`610d5dd`](https://github.com/DrKnickers/particle-editor/commit/610d5dd) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-27 · [`610d5dd`](https://github.com/DrKnickers/particle-editor/commit/610d5dd) · #92*
 
 Both Playwright a11y golden lanes — composition (default) and HWND
 (`--legacy`) — return to **0 failed** at the pre-drift baselines:
@@ -2117,7 +2117,7 @@ file:
 
 ### follow-up] Fix cursor → spawn world-position offset under default architecture C
 
-*2026-05-26 · [`40b53c3`](https://github.com/DrKnickers/particle-editor/commit/40b53c3) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-26 · [`40b53c3`](https://github.com/DrKnickers/particle-editor/commit/40b53c3) · #92*
 
 Under default architecture C (DXGI composition + DComp engine visual
 + WebView2 composition hosting — the post-default mode),
@@ -2201,7 +2201,7 @@ doesn't flood the log at 60+ Hz frame rate.
 
 ### follow-up] Skip FramePublisher under composition mode — fixes maximize FPS drop
 
-*2026-05-26 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-26 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Single-line guard on the default flip that just shipped:
 the host's per-frame JPEG encode pipeline (FramePublisher) no
@@ -2238,7 +2238,7 @@ and 15 (composition perf regression on maximize) together.
 
 ### Flip default to architecture C (DXGI composition) + retire env-var dual-toggle
 
-*2026-05-26 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-26 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Cold launch of `ParticleEditor.exe --new-ui` now boots architecture C
 (DXGI composition + DComp engine visual + WebView2 composition hosting)
@@ -2318,7 +2318,7 @@ so future architecture-A deletion can prune them cleanly.
 
 ### Phase 3 a11y close-out — dual-mode Playwright regression gate (HWND Win32 UIA + composition DOM snapshot) + composition backbone reachability spec + Stage 3i manual smoke
 
-*2026-05-26 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-26 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Closes Phase 3 acceptance hygiene. The new-UI chrome now has
 two complementary Playwright a11y regression gates running against
@@ -2455,7 +2455,7 @@ so debugging a golden diff doesn't require a manual re-capture.
 
 ### Dirty bit clears on undo-back-to-saved (snap-restore follow-up)
 
-*2026-05-25 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-25 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Tightening on the snap-restore ship that just landed. After Ctrl+Z
 restores a state that matches the last saved (or `file/new`'d)
@@ -2512,7 +2512,7 @@ content-compare site in [`src/host/BridgeDispatcher.{h,cpp}`](src/host/BridgeDis
 
 ### `undo/perform` snap-restore lands; new-UI Ctrl+Z / Ctrl+Shift+Z rewinds the ParticleSystem
 
-*2026-05-25 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-25 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The new-UI host now services `undo/perform { direction: "undo"|"redo" }`
 end-to-end. Ctrl+Z (and the Edit → Undo menu) rewinds the host-owned
@@ -2617,7 +2617,7 @@ Full plan + review at [`tasks/todo.md`](tasks/todo.md).
 
 ### follow-up — native test verification + load-time fixture + undo round-trip (fixme'd)
 
-*2026-05-25 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-25 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Follow-up verification pass on the ship. Playwright native tests
 under default dist/ + no env vars: **102 passed + 27 skipped + 0
@@ -2684,7 +2684,7 @@ ESM `__dirname` shim via `import.meta.url`). Fixtures added:
 
 ### Engine-side single-member link-group enforcement () — leaving or deleting reduces a link group to 1 member; lone survivor auto-demotes to `linkGroup = 0`; legacy `.alo` files with pre-singletons self-correct on load
 
-*2026-05-25 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-25 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 ROADMAP §1.1. Three C++ mutation paths can leave a link group
 with exactly one member: `linkGroups/set-membership` when leaving a
@@ -2762,7 +2762,7 @@ refresh);
 
 ### Lessons retro-doc for Phase 3 — formalized; handoff latent-bug claim retracted
 
-*2026-05-25 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-25 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 [`tasks/lessons.md`](tasks/lessons.md) gains four new entries closing
 out Phase 3's documentation hygiene. **** (DXSDK June 2010
@@ -2833,7 +2833,7 @@ reflect the post-retro-doc state), [`tasks/todo.md`](tasks/todo.md)
 
 ### Scene-rect transform on the engine visual (Phase 3 Stage 5) — pane resize and window resize now cleanly reveal more of the scene rather than distorting existing content; engine viewport scoped to scene-rect with per-pixel-FoV projection that keeps angular extent per pixel constant across resizes
 
-*2026-05-25 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-25 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Under composition mode (Stage 4 ship), Stage 5 wires the React-side `layout/scene-rect` bridge dispatch into both [`Compositor::SetEngineVisualTransform`](src/host/Compositor.cpp) (clips the DComp engine visual to the scene-rect sub-region of the host client) and [`Engine::SetSceneViewport`](src/engine.cpp) (constrains the engine's scene-pass rendering to the scene-rect with a per-pixel-FoV projection). User-observable result: chrome panels stop bleeding engine pixels (the panels show their own backgrounds where they used to leak engine clear-color), and pane drag / window resize "cleanly reveals more of the scene" — existing world content keeps the same pixel position and scale while new world content appears at the widened scene-rect edges. The Variant **B-γ** design with per-pixel-FoV-vs-current-RT reference (`fovY = 45° × sceneH / RT_H`) bounds the engine's render cost: scene-rect is always ≤ engine RT, so `fovY ≤ 45°` always — engine renders at-or-LESS world than pre-Stage-5, not more. Maximized idle composite rate ~70 fps at 3440×1440 (vs Stage 4's 79.1 mean — within parity, expected slight reduction from the deferred-clip mechanism's extra SetClip/Commit per frame). Playwright native HWND baseline (default dist/, no env vars): **99 passed + 26 skipped + 0 failed** — Stage 5's wiring is composition-mode-only via the `m_dcompCompositor != nullptr` gate, byte-identical to pre-Stage-5 on canvas-jpeg / arch-A paths. Composition-mode native: **122 passed + 3 skipped + 0 failed** — adds 4 new dxgi-scene-rect assertions on top of Stage 4's 118.
 
@@ -2847,7 +2847,7 @@ Test counts at ship: vitest **338 / 338** unchanged. Playwright native HWND base
 
 ### DXGI composition wiring (Phase 3 Stage 4) — engine pixels reach the screen via D3D9Ex shared texture → D3D11 alias → DXGI composition swapchain → DComp engine visual UNDER the WebView2 visual, fully interactive, resize-robust, alpha-correct
 
-*2026-05-25 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-25 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Under `ALO_WEBVIEW2_HOSTING=composition` + `ALO_VIEWPORT_TRANSPORT=canvas-jpeg` + a `dist/` built with the matching `VITE_*` env-var pair, the engine's particle viewport is now composited via DXGI instead of the legacy `WS_EX_LAYERED` popup. Engine renders into the AlphaCompositor's shared-handle D3D9Ex texture (Stage 2 infrastructure); a new D3D11 device opens that texture via `OpenSharedResource`; per-frame `CopyResource` into a `CreateSwapChainForComposition` back buffer + `Present1` lands the pixels in a DComp engine visual inserted BEHIND the Stage-3 WebView2 visual. The headline Stage 0 spike's 0.30 ms total frame-transport at 3440×1440 reproduces in production: measured **mean engine FPS 79.1** under the dxgi-perf spec, well above the 30 FPS regression floor — vs the canvas-jpeg readback path's ~40-50 FPS at the same resolution captured during Phase 2 perf investigation. Default new-UI path (env vars unset) is byte-identical to today, **Playwright native HWND baseline 99/99 PASS** unchanged. Under composition env vars + composition-built dist/, **118 PASS + 3 skipped + 0 failed** including 10 new dxgi-* assertions covering attach, per-frame composite, handle-stability, resize-stress, and FPS regression.
 
@@ -2861,7 +2861,7 @@ Test counts at ship: vitest **338 / 338** unchanged. Playwright native HWND base
 
 ### branch CI + native-spec allowlist guard — `integration-branch` and `session-branches` pushes now gate web build / Vitest / x64 C++, and a Vitest test fails any time `tests/*.spec.ts` and `scripts/run-native-tests.mjs` drift out of sync
 
-*2026-05-24 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-24 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The legacy [`build.yml`](.github/workflows/build.yml) workflow only triggers on `master` pushes and only runs MSBuild — fine for the historic C++ editor, blind to the React / WebView2 stack the branch added. New [`integration-branch.yml`](.github/workflows/integration-branch.yml) workflow triggers on every push to `integration-branch` and every per-session `session-branches` branch, plus PRs targeting `integration-branch`, with two jobs: a `web` job on `ubuntu-latest` that runs `pnpm install --frozen-lockfile` → `pnpm lint` (tsc --noEmit) → `pnpm build` → `pnpm test` (Vitest, currently **338 / 338**), and a `cpp` job on `windows-latest` that runs MSBuild for both Debug|x64 and Release|x64 (no x86 — is x64-only). Native Playwright (`pnpm test:native`) stays manually triggered via `workflow_dispatch` because each run launches the editor exe + WebView2 + CDP for several minutes and needs the DirectX SDK installed for the underlying x64 build. The new [`web/apps/editor/src/__tests__/native-spec-allowlist.test.ts`](web/apps/editor/src/__tests__/native-spec-allowlist.test.ts) Vitest spec diffs `tests/*.spec.ts` on disk against the hand-curated array inside [`run-native-tests.mjs`](web/apps/editor/scripts/run-native-tests.mjs) — any spec that exists on disk but is not in the harness (and not explicitly waived in `INTENTIONALLY_EXCLUDED`) fails the suite, as does any stale or phantom entry. Master CI is untouched: zero blast radius on the stable branch.
 
@@ -2875,7 +2875,7 @@ Test count: vitest **335 → 338** (+3 from the allowlist guard: missing-from-ha
 
 ### WebView2 composition hosting migration (Phase 3 Stage 3) — `ALO_WEBVIEW2_HOSTING=composition` swaps WebView2 from HWND mode to a host-owned DirectComposition visual tree,-class failure mode cleared, 4th-attempt success
 
-*2026-05-22 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-22 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The new env var `ALO_WEBVIEW2_HOSTING=composition` (paired with the existing `ALO_VIEWPORT_TRANSPORT=canvas-jpeg`) switches WebView2 from `CreateCoreWebView2Controller` (HWND mode) to `CreateCoreWebView2CompositionController` (composition mode), with a new `host::Compositor` class owning the DirectComposition V1 visual tree that WebView2's `RootVisualTarget` plugs into. The default new-UI path (env var unset) is byte-identical to today — Playwright native **99/99 PASS** in HWND mode as the baseline. With the env var set, native runs at **106 passed + 1 self-skip** including 7 new composition-mode-specific specs at [`composition-hosting.spec.ts`](web/apps/editor/tests/composition-hosting.spec.ts). This is the **4th attempt** at WebView2 visual hosting on this codebase — v1/v2/v3 each produced opaque-white output despite every API logging `S_OK`. This attempt cleared the failure mode (screenshot evidence at [`tasks/stage-3b-smoke-screenshot.png`](tasks/stage-3b-smoke-screenshot.png)) by mirroring the Stage 0 spike's known-good topology exactly: V1 `IDCompositionDevice` via the V2 factory function, deferred `CreateTargetForHwnd` inside the composition-controller completion callback, `AddVisual(insertAbove=FALSE, ref=nullptr)` for the counterintuitive "in front of all siblings" ordering, no `WS_EX_LAYERED` on the host HWND. Stage 3 also wires every adjacent surface the chrome needs under composition: real OS mouse forwarding via `SendMouseInput`, cursor sync via `add_CursorChanged` + `WM_SETCURSOR`, DPI via `put_RasterizationScale` + `WM_DPICHANGED`, keyboard focus transfer via `MoveFocus` (the actual fix for the keyboard story — the SDK doesn't expose `SendKeyboardInput` at all, see).
 
@@ -2889,7 +2889,7 @@ Test counts at handoff: vitest **335 / 335** unchanged. Playwright native: **+8*
 
 ### AlphaCompositor `lastRawDib` cache deferral (Phase 3 Stage 1 follow-up) — ~2-5 ms/frame reclaimed in arch B by gating the per-frame cache + on-demand snapshot readback
 
-*2026-05-22 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-22 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Phase 3 Stage 1g shipped at [`ad7d294`](https://github.com/DrKnickers/particle-editor/commit/ad7d294) with the D3D9Ex migration intact but ~50 FPS at maximized 3440×1440 instead of the ≥58 the per-phase budget targeted. Per-frame instrumentation pinned ~2-5 ms of that gap on the [`m_lastRawDib`](src/host/AlphaCompositor.cpp:597) memcpy inside [`AlphaCompositor::Composite`](src/host/AlphaCompositor.cpp:568) — a 19.8 MB snapshot copy maintained every frame for `CaptureSnapshotPng` (the modal frosted-glass backdrop introduced in [B1.3.1.1](https://github.com/DrKnickers/particle-editor/commit/f3570d3)). Modal opens fire seconds-to-minutes apart; the cache was paying ~120-300 MB/s of memory bandwidth at maximize to keep snapshots fresh for a consumer that almost never fires. After this change the cache is OFF by default — arch B (`WS_EX_LAYERED` popup) reclaims the memcpy, and `CaptureSnapshotPng` re-issues `GetRenderTargetData` + `LockRect` on demand to get a fresh snapshot at modal-open time (~12-15 ms one-shot, imperceptible against the ~50-100 ms dialog mount + React reflow that triggers it).
 
@@ -2903,7 +2903,7 @@ Test count: vitest **335 / 335** unchanged. Playwright native: **+3** new tests 
 
 ### Canvas-in-DOM input forwarding (Phase 2) — `viewport/input` bridge surface + hidden popup + chrome cutout gone + legacy Shift-place gesture preserved
 
-*2026-05-22 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-22 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The canvas-in-DOM viewport is now the visible, interactive source of truth when `ALO_VIEWPORT_TRANSPORT=canvas-jpeg` + `VITE_VIEWPORT_TRANSPORT=canvas-jpeg` are set. Phase 1 published engine pixels to a `<canvas>` but kept the legacy `WS_EX_LAYERED` popup visible on top; Phase 2 hides the popup (`ShowWindow(SW_HIDE)`, still sized to the full main client so `LayoutBroker` scene-rect math and the D3D9 swapchain stay untouched) and routes every viewport input gesture through a new `viewport/input` bridge surface to a host-side `InputDispatcher` that PostMessages the synthesized Win32 message into the (hidden) popup's existing WNDPROC. The engine's input handlers consume the synthetic messages unchanged because the renderer encodes modifiers into the `wParam` `MK_*` bitmask exactly the way the OS does — the popup's WNDPROC ([HostWindow.cpp:1075-1371](src/host/HostWindow.cpp:1075)) never calls `GetKeyState`/`GetAsyncKeyState`, so the hidden HWND not seeing real keyboard input is invisible to the engine. The headline payoff: chrome dropdowns over the viewport no longer show the alpha-cutout artifact, because the popup that produced it isn't visible any more. Smoke-driven regression fixes also landed in this dispatch: (a) `SetFocus(hwnd)` on the hidden popup was triggering a spurious `WM_KILLFOCUS` cascade that killed Shift+LMB spawns within ~2ms of creation — gated both the SetFocus call and the WM_KILLFOCUS defensive kill on `!m_archCMode` so archC mode skips the focus-thrash entirely; (b) the legacy "Shift down → preview, LMB-click → place permanently, system continues emitting" gesture from `src/main.cpp:2877-2934` was incomplete in the new UI's B1.3.1 polish round 5 (only the spawn-on-LMB-down path landed) — added `OBJECT_Z` drag mode + `Engine::DetachParticleSystem` call on WM_LBUTTONUP so the full legacy placement gesture works (Shift+click-drag-release places a free-running emitter at any height, chain-clicks place multiple).
 
@@ -2917,7 +2917,7 @@ Test count: vitest **300 → 335** (+35: viewport-input.test.ts adds 26 encoder 
 
 ### Resizable splitters for the editor shell (B1.4) — four drag handles + Reset menu item, with mid-arc architectural redirect to `layout/scene-rect`
 
-*2026-05-22 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-22 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The main editor row's three-column + two-inner-vertical-split structure is now driven by `react-resizable-panels@4.11.1`. Four draggable boundaries — left column ↔ centre column, centre column ↔ Spawner column (when Spawner is visible), viewport ↔ curve editor, emitter tree ↔ property tabs — replace the previous Tailwind fixed-width / flex-fraction layout. Sizes persist per user under `localStorage` keys `alo:layout:{outer:{2col,3col},left,center}`. Min/max constraints keep every pane usable at any window size (left clamped 15–40 %, centre min 30 %, Spawner clamped 12–40 %); 4.x ships double-click-handle-to-reset for each splitter for free. A new **View → Reset panel layout** menu item clears all four `alo:layout:*` keys and remounts `PanelLayout` at in-code defaults (20/60/20 outer 3-col, 25/75 left, 75/25 centre). The Spawner toggle button on the toolbar continues to mount / unmount the panel; the outer Group uses two separate persistence keys for the 2-col and 3-col states so each shape keeps its own ratios.
 
@@ -2931,7 +2931,7 @@ Test count: vitest **290 → 294** (+9 from T2 PanelLayout skeleton in session 1
 
 ### Unified section headers + inspector polish (B1.3.2) — shared `.panel-section` class, 15 inspector tweaks across 3 polish rounds
 
-*2026-05-22 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-22 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The inspector tabs (Basic / Appearance / Physics) and the tool panels (Spawner / Lighting / Bloom) now render collapsible-section headers with the same visual treatment — bordered-box container, uppercase muted title, Lucide ChevronDown on the right that rotates when expanded. The aesthetic comes from the prior tool-panel design; the unification routes both consumers through a single shared CSS class set. Across three smoke-test-driven polish rounds, 15 inspector field tweaks land in the same dispatch: widened dropdowns where long option labels were truncating (Physics Type, Appearance Blend mode, Basic Emit mode, Physics Behavior), per-channel R / G / B / A micro-labels on the random-color cluster (matching the X / Y / Z pattern used in Vec3 rows), a +25% spinner width boost for every numeric input in Basic, a "label-first / checkbox-right" layout for long-label checkboxes (Link particles to instance, Object space acceleration), and a unified checkbox-right-edge alignment so every checkbox in every tab lands at the same X regardless of which form-row width variant sits underneath. Spawner gains: Spawn now button moves into the Mode section (manual-only), Burst becomes collapsible.
 
@@ -2947,7 +2947,7 @@ Test count: vitest **281 / 281** (no count change — the modified `Section.test
 
 ### Frosted-glass modal backdrop via engine snapshot (B1.3.1.1) — replaces interim modal-mask with snapshot-into-DOM
 
-*2026-05-21 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-21 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Modal dialogs (Help → About, SaveChangesPrompt, etc.) now sit over a frosted-glass backdrop that blurs panels AND the engine viewport uniformly via `Dialog.Overlay`'s existing `bg-black/60 backdrop-blur-sm` CSS — no visible popup-boundary seam, no inner-shadow vignette. Replaces the interim modal-mask compositor pipeline that B1.3.1 polish round 9 landed; the older approach worked for engine pixels themselves but couldn't span the popup boundary (CSS effects can't reach the engine compositing layer — see [`tasks/lessons.md`](tasks/lessons.md) for the algebra). The new approach lifts the engine into the WebView2 DOM as a frozen `<img>`, so CSS effects sample it natively.
 
@@ -2961,7 +2961,7 @@ Test count: vitest **281 / 281** (modal-mask regression test in C2 reshaped to a
 
 ### B1.3.1 polish rounds 1-9 — 25/75 split, file-open behaviour, occlusion bugs, modal compositing, BridgeContext, modal-mask interim (replaced next session)
 
-*2026-05-21 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-21 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Nine layered polish rounds on top of the core B1.3.1 dispatch (which lands in the previous entry below). High-level coverage:
 
@@ -2983,7 +2983,7 @@ Test count: vitest **281 / 281** (was 277; +4 regression guards for opaque pill 
 
 ### Inspector layout follow-ups (B1.3.1) — always-mounted tab strip + flex split between tree and tabs
 
-*2026-05-21 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-21 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Addresses the three layout findings the user deferred from B1.3's smoke test. Opening the editor with no `.alo` loaded now shows the full Basic / Appearance / Physics tab strip at the bottom of the left column with a "Select an emitter to edit its properties" message inside the active tab's body — the strip and its three triggers stay clickable so you can pre-pick which tab will populate when you later select an emitter. The lower-left tabs slot stops being a fixed 288 px stripe; it now shares the column's vertical extent with the EmitterTree above on a **25/75 split favouring the tabs** (tree `flex-1` vs tabs `flex-[3_1_0%]`), so the tab strip dominates the visual hierarchy per the deferred-item brief. On tall windows the inspector body gets generous scroll headroom; on shorter windows both halves shrink proportionally rather than the tree being crushed under a non-negotiable slice. Resizing the window scales the split smoothly; B1.4 will make the boundary draggable so the default can be adjusted further.
 
@@ -2997,7 +2997,7 @@ Test count: vitest **277 / 277** (no count change — one spec body replaced + t
 
 ### Tab reorganization to match legacy parity (B1.3) — three property tabs restructured, tri-state Generation mutex, percent-display correctness fix
 
-*2026-05-21 · [`TODO-HASH`](https://github.com/DrKnickers/particle-editor/commit/TODO-HASH) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-21 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Brings the new-UI Basic / Appearance / Physics tabs back into per-section parity with the legacy Win32 editor (`IDD_EMITTER_PROPS1/2/3`). Basic now reads Emitter Timing / Generation / Connection; Appearance reads Textures / Random color addition / Tail / Rotation / Rendering; Physics reads Initial position / Initial speed / Acceleration / Ground interaction — each matching the legacy GROUPBOX structure section-for-section, with twelve field placements migrated to their legacy homes (rotation cluster Basic → Appearance, parent link strength Basic → Physics > Initial speed, random scale Basic → Appearance > Textures, affected-by-wind Appearance → Physics, emit mode/offset Physics → Basic > Connection, weather particle + cube size + fadeout distance Physics → Basic > Generation > Weather branch). The Bursts / Continuous stream legacy checkboxes become a tri-state Generation radio mutex (Bursts / Continuous stream / Weather particle) derived from the existing `(useBursts, isWeatherParticle)` pair, with atomic two-key bridge patches so the model can never settle in an invalid both-on or both-off state. Every field label now carries a trailing colon to match legacy `.rc` convention. The "World Oriented" checkbox is renamed "Always face camera" with the semantic flip applied (`checked = !isWorldOriented`); the existing BLEND_BUMP cascade that forces and disables the checkbox is preserved. A bundled correctness fix on `FieldSpinner` — new `displayInvertedPercent` prop — restores the legacy semantics of "Minimum lifetime:" and "Minimum scale:": the new UI was previously displaying `randomLifetimePerc=0.25` as `0.25%` instead of legacy's `75%` minimum. Each Vec3 cluster across the inspector and Spawner panel now carries X/Y/Z micro-labels above its three spinners. The Spawner panel scrolls its body when content overflows. Four inspector fields drop from the UI per source-resolved decisions (`nTriangles`, `weatherFadeoutDistance`, `groups[1]` Lifetime random-param, `index`); all four stay on the wire so existing `.alo` files round-trip losslessly.
 
@@ -3011,7 +3011,7 @@ Test count: vitest **277 / 277** (was 254 at B1.2 close; +23 net across the new 
 
 ### Left-pane polish (B1.2) — collapsible sections, Name input width, toolbar Duplicate + icon Show/Hide All
 
-*2026-05-20 · [`d69e7cc`](https://github.com/DrKnickers/particle-editor/commit/d69e7cc) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-20 · [`d69e7cc`](https://github.com/DrKnickers/particle-editor/commit/d69e7cc) · #92*
 
 Tightens the left pane's interior fidelity against the design
 source. New `Section` primitive at
@@ -3093,7 +3093,7 @@ from Duplicate, 1 from Show/Hide icons), Playwright unchanged at
 
 ### Left-pane realignment (B1) — tree toolbar at bottom, per-row eye, multi-lane bracket gutter
 
-*2026-05-20 · [`7e54015`](https://github.com/DrKnickers/particle-editor/commit/7e54015) · [#TODO-PR](https://github.com/DrKnickers/particle-editor/pull/TODO-PR)*
+*2026-05-20 · [`7e54015`](https://github.com/DrKnickers/particle-editor/commit/7e54015) · #92*
 
 Realigns the left pane against the design source's structural
 intent. Specifically: the tree toolbar moves from above the
@@ -3165,7 +3165,7 @@ specs), Playwright unchanged at **83 / 83**.
 
 ### Curve editor polish: lock-to feature, axis labels, theme-aware grid, spinner improvements, Spawner panel bleed-through fix
 
-*2026-05-20 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-20 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Single dispatch that grew during interactive smoke-testing — what started as "fix the Spawner panel showing the DirectX clear colour" turned into a round of curve-editor polish driven by the user testing each surface and reporting what looked off. Net effect: the curve editor is now genuinely usable end-to-end. Lock-to is functional (color channels can be aliased per the legacy pointer-identity model). Axis labels render correctly per focus channel. Spinners are robust (visible arrows, wheel works anywhere over them including arrows, doesn't leak scroll to the parent pane). Theme-aware grid colours mean the light-theme grid doesn't fight curves any more. No engine-side production code beyond a single Lock-to handler addition.
 
@@ -3222,7 +3222,7 @@ Single dispatch that grew during interactive smoke-testing — what started as "
 
 
 
-*2026-05-20 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-20 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 The single failing native spec from the post-Phase-2 handoff (`Clicking a bundled ground slot in the popover updates groundTexture`) is fixed at the engine layer; native Playwright suite is back to 83 / 83. The user-visible effect was: in `--test-host` mode, after specific cross-spec bridge sequences, the engine refused to apply *any* `engine/set/ground-texture` mutation — every slot set returned `ok: {}` but the snapshot's `groundTexture` stayed at 0. Interactive users never saw the symptom because the render loop's recovery papered over the underlying device-not-reset state on the next `WM_PAINT`. No user-facing UI changes; the fix is purely engine + a small defense-in-depth addition in `LayoutBroker`.
 
@@ -3243,19 +3243,20 @@ The single failing native spec from the post-Phase-2 handoff (`Clicking a bundle
 ---
 
 
-> **Note on the / new-UI entries below.** All entries from "Mods
-> menu detection + selection (D6)" down through "Playwright contract
-> tests unblocked via WebView2 host-object IPC" are in-flight work on
-> the `integration-branch` integration branch (not yet merged to `master`). For these
-> entries, the short-hash link points at the **`integration-branch` commit**, not a
-> merge-commit on `master`; the PR number stays `TODO` until merge.
-> When eventually merges to `master`, both fields get rewritten
-> to point at the master merge-commit + PR per the standard convention
-> documented in `CLAUDE.md`.
+> **Note on the / new-UI entries below.** These were developed on
+> the long-lived `integration-branch` integration branch and landed on `master` in one
+> **supersede merge** — PR #92,
+> merge-commit [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36)
+> (2026-06-08). Because dozens of features arrived through that single
+> merge rather than one PR each, the provisional `TODO` hash/PR fields
+> were backfilled uniformly to `f05fa36` / `#92` (the master merge-commit,
+> per the `CLAUDE.md` convention); a few entries keep their precise `integration-branch`
+> commit hash where one was already recorded. The per-entry **dates**
+> remain the original development dates to preserve the timeline.
 
 ### Particle Editor 2026 redesign — Phase 2 structural moves (Phase 2.1–2.7)
 
-*2026-05-19 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-19 · [`f05fa36`](https://github.com/DrKnickers/particle-editor/commit/f05fa36) · #92*
 
 Seven sub-commits restructure the new-UI workspace into the Particle Editor 2026 layout. The toolbar is reorganised into four design groups (File actions · Playback · Spawner toggle · spacer · Environment), Background and Ground Texture move from sliding `ToolPanel` overlays to Radix Popover dropdowns triggered from Group 4, the Spawner becomes a permanent right column (toggleable from the toolbar button), Basic / Appearance / Physics inspector tabs sit beneath the EmitterTree inside a unified `.panel` chrome on the left, the curve editor moves to an always-on bottom 260px panel with a multi-channel overlay (Phase 2.8 restored the edit surface on top of that), and a new top-left viewport pill exposes three engine toggles (Show ground · Toggle bloom · Leave particles after instance death — the last is a new bridge surface). The View menu drops the now-redundant "Background…" and "Ground Texture…" entries; the Emitters menu's "Spawner…" item is repurposed to toggle the column instead of opening a slide-in. F7 still toggles the Spawner column.
 
@@ -3278,7 +3279,7 @@ Seven sub-commits restructure the new-UI workspace into the Particle Editor 2026
 
 ### Particle Editor 2026 redesign — Phase 1 token system + theme toggle (Phase 1)
 
-*2026-05-19 · [`9df821d`](https://github.com/DrKnickers/particle-editor/commit/9df821d) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-19 · [`9df821d`](https://github.com/DrKnickers/particle-editor/commit/9df821d) · #92*
 
 The new-UI React shell adopts the Particle Editor 2026 design system's token + typography + theme machinery as a behaviour-preserving swap. No structural changes — every panel, dialog, button stays in the same DOM location it occupied before. The shell now renders in Inter (locally-bundled variable woff2, ~352 KB, `font-display: block` + `<link rel="preload">` so no FOUT), uses the design's six-tier dark palette by default, and exposes a Sun / Moon theme toggle in the toolbar that flips the page between dark and light. The toggle persists to `localStorage('alo:theme')` and falls back to `matchMedia('(prefers-color-scheme: dark)')` at first launch. View menu items, dialog bodies, and all chrome surfaces sweep from Tailwind's default `bg-neutral-*` / `text-neutral-*` / `sky-*` utilities to the new token-backed equivalents (`bg-bg-2` / `text-text-2` / `accent` etc.) so subsequent phases can rewrite individual surfaces without restructuring class architecture. A View-menu alignment fix shipped alongside — five items that were missing the empty `CheckSlot` indent now align with their siblings.
 
@@ -3300,7 +3301,7 @@ The new-UI React shell adopts the Particle Editor 2026 design system's token + t
 
 ### Hybrid focus-channel curve editor — restore edit surface (Phase 2.8)
 
-*2026-05-19 · [`3cd840a`](https://github.com/DrKnickers/particle-editor/commit/3cd840a) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-19 · [`3cd840a`](https://github.com/DrKnickers/particle-editor/commit/3cd840a) · #92*
 
 Task 2.6 of the Particle Editor 2026 redesign deleted the per-emitter `TrackEditor.tsx` (866 lines) and `EmitterPropertyPanel.tsx` (176 lines) in favour of a view-only multi-channel curve overlay. Curve editing is a key feature of the editor and the lossiness was too high, so this commit restores the edit surface on top of the 2.6 multi-channel panel using a *hybrid focus-channel* model: clicking a channel row in the left curve-list sets that channel as the **edit focus**, the multi-channel SVG renders the focus channel emphasised (thick stroke, opaque, key circles) and the other visible channels dimmed (opacity 0.4, no markers) as background context, and a new `.ce-toolbar` row above the canvas hosts the edit affordances (Select / Insert mode toggle, Linear / Smooth / Step interpolation, Lock-to combo, Time / Value spinners) — all scoped to the focus channel. Drag-to-move, marquee select, click-select, Insert-mode click-to-add, per-key right-click Delete context menu, and a panel-level Delete keyboard handler (with the typing-surface guard so Delete inside an input still deletes characters) are all back. Selection is per focus channel and clears on focus change; the optimistic (time, value) override (lessons.md) keeps the spinners populated across the bridge round-trip.
 
@@ -3321,7 +3322,7 @@ Task 2.6 of the Particle Editor 2026 redesign deleted the per-emitter `TrackEdit
 
 ### Mods menu detection + selection (D6)
 
-*2026-05-19 · [`059395d`](https://github.com/DrKnickers/particle-editor/commit/059395d) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-19 · [`059395d`](https://github.com/DrKnickers/particle-editor/commit/059395d) · #92*
 
 The new-UI Mods menu's `(none)` placeholder is replaced by a dynamic list of installed EaW / FoC mods scanned from `<gameRoot>/{corruption,GameData}/Mods` at startup. Entries are grouped (Forces of Corruption first, then Base Game) and alphabetised by folder name within each group, matching the legacy popup's ordering exactly. Clicking an entry hot-swaps the FileManager basepath, writes `HKCU\Software\AloParticleEditor\LastMod` for the next launch, refreshes the texture palette, clears the thumbnail cache, and reloads shaders + textures — all six legacy side effects, with no Win32-specific finalisation that doesn't apply in the React-rendered new UI. The active mod gets a check mark next to its entry; "Unmodded" gets the check when no mod is active. A "Refresh Mod List" item at the bottom re-scans disk without restarting. Cross-mode persistence is automatic: both legacy and new-UI read / write the same registry key, so flipping between `--legacy-ui` and `--new-ui` launches preserves which mod is active.
 
@@ -3342,7 +3343,7 @@ The new-UI Mods menu's `(none)` placeholder is replaced by a dynamic list of ins
 
 ### Texture-aware `file/open` for skydome + ground custom slots (D5)
 
-*2026-05-19 · [`9ad01d0`](https://github.com/DrKnickers/particle-editor/commit/9ad01d0) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-19 · [`9ad01d0`](https://github.com/DrKnickers/particle-editor/commit/9ad01d0) · #92*
 
 The native picker invoked from the Background panel's Custom slots (9/10/11) and the Ground Texture panel's Custom slots (5/6/7) now opens with `*.dds;*.tga` as the default filter and a title that names the surface ("Open skydome texture" / "Open ground texture"), instead of the `*.alo` filter inherited from File → Open. The Ground Texture custom-slot click is no longer a no-op — picking a file writes the path into the engine slot and activates it, mirroring the skydome flow that had been working through the wrong filter. File → Open / recents / drag-drop are unchanged: still `*.alo`, still load + commit as the current particle system. While we were in the dispatcher, every `lpstrFilter` was brought up to legacy label parity — the dropdown text now matches the legacy convention `"Particle Files (*.alo)"` / `"Texture Files (*.dds;*.tga)"` / `"All Files (*.*)"` (parenthesised pattern suffix, capitalised "Files"); previously the bridge's `.alo` filter read "Alo files" with no suffix and the texture filter read "Texture files" with no suffix.
 
@@ -3356,7 +3357,7 @@ The native picker invoked from the Background panel's Custom slots (9/10/11) and
 
 ### Close out the disabled-stub menu items (Group D polish)
 
-*2026-05-19 · [`244b339`](https://github.com/DrKnickers/particle-editor/commit/244b339) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-19 · [`244b339`](https://github.com/DrKnickers/particle-editor/commit/244b339) · #92*
 
 Four previously-disabled menu items now do something real. **File → Exit** routes through the existing save-prompt and then `PostMessage(WM_CLOSE)` on the host, matching legacy [`DoCheckChanges`](src/main.cpp:1395) → `DestroyWindow` semantics. **View → Reset Camera** snaps the camera to the legacy defaults `pos=(0,-250,125) target=(0,0,0) up=(0,0,1)` from [`src/main.cpp:1814`](src/main.cpp:1814) via a single existing `engine/set/camera` dispatch — no new bridge kind needed. **View → Reset View Settings** cascades background, ground (visibility/Z/texture), bloom, and skydome back to engine defaults after a Yes/No confirm dialog matching the legacy [`MessageBox`](src/main.cpp:1734) prompt. **Lighting panel → Force Align Fill Lights** restores the legacy checkbox: when ON, fill1/fill2 azimuth follow `sun.az + 120°` and `sun.az + 210°` respectively at -10° altitude (constants from [`src/main.cpp:6238-6240`](src/main.cpp:6238)), fill az/alt spinners and the Mirror Sun button disable to enforce the constraint.
 
@@ -3371,7 +3372,7 @@ Four previously-disabled menu items now do something real. **File → Exit** rou
 
 ### EmitterTree panel toolbar + 3D cursor in status bar (Group A polish)
 
-*2026-05-19 · [`af5b329`](https://github.com/DrKnickers/particle-editor/commit/af5b329) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-19 · [`af5b329`](https://github.com/DrKnickers/particle-editor/commit/af5b329) · #92*
 
 First wave of the legacy-parity polish sweep. The new-UI's EmitterTree sidebar now carries the same panel-header toolbar the legacy `EmitterList` panel had — `[New ▾] [Delete] [▲ Move Up] [▼ Move Down] · [👁] [Show All] [Hide All]` — matching the layout from [`src/UI/EmitterList.cpp:3016`](src/UI/EmitterList.cpp:3016). Adding emitters, deleting, reordering roots, and toggling per-emitter visibility no longer require the top menubar or right-click; the muscle-memory affordances live where the eye expects them. The status bar also picks up its fifth column from legacy — `Cursor: x, y, z` showing the 3D ground-plane intersection of the viewport mouse cursor, updated at ~30 Hz while the cursor is over the viewport.
 
@@ -3385,7 +3386,7 @@ First wave of the legacy-parity polish sweep. The new-UI's EmitterTree sidebar n
 
 ### Layered viewport with software alpha-stamp cut-outs ()
 
-*2026-05-18 · [`11ab97c`](https://github.com/DrKnickers/particle-editor/commit/11ab97c) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-18 · [`11ab97c`](https://github.com/DrKnickers/particle-editor/commit/11ab97c) · #92*
 
 The new-UI viewport popup now composites with per-pixel alpha through `WS_EX_LAYERED` + `UpdateLayeredWindow(ULW_ALPHA)`, and the/`SetWindowRgn` cut-out is gone. Chrome rectangles (menus, tool panels) still register themselves as occlusions via the existing `viewport/occlude` bridge call, but instead of building an HRGN with binary holes the host now stamps a smoothstep-feathered alpha hole into the readback DIB once per frame. Visible difference: the seam between the D3D9 viewport area and the WebView2 chrome behind it is soft-edged where there used to be a single pixel-hard step, and Tailwind's `shadow-xl` is restored on the Radix menu `CONTENT` class — the dropdown's own drop-shadow now blends through the alpha hole rather than getting lopped off at the cut-out boundary.
 
@@ -3407,7 +3408,7 @@ The new-UI viewport popup now composites with per-pixel alpha through `WS_EX_LAY
 
 ### Playwright contract tests unblocked via WebView2 host-object IPC
 
-*2026-05-16 · [`6c55abd`](https://github.com/DrKnickers/particle-editor/commit/6c55abd) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-05-16 · [`6c55abd`](https://github.com/DrKnickers/particle-editor/commit/6c55abd) · #92*
 
 The four Playwright contract specs guarding the bridge schema between the React UI and the C++ host (`engine/state/snapshot`, `engine/set/ground-z` round-trip, `engine/set/background` COLORREF, `engine/query/ground-slot-empty` typing) now run live and pass against `ParticleEditor.exe --new-ui --test-host`. Previously they were committed as `test.fixme` because WebView2 silently drops `chrome.webview.postMessage` calls from page → host while a CDP debugger is attached (Task 2.2 self-review, captured in [`tasks/lessons.md`](tasks/lessons.md)). With this change `pnpm --filter @particle-editor/editor test:native` exercises 5 specs (1 smoke + 4 contract) covering the request/response and event surfaces against the real C++ handlers; the 25 Vitest MockBridge specs continue to pass.
 
