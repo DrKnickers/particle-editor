@@ -1331,3 +1331,56 @@ describe("MockBridge contract", () => {
     expect(seen).toHaveLength(1);
   });
 });
+
+describe("MockBridge emitters/move-many (preserve order at the edge)", () => {
+  function rootsTree(names: string[]): EmitterTreeDto {
+    return {
+      root: {
+        id: -1, name: "", role: "root", linkGroup: 0, visible: true,
+        children: names.map((name, i) => ({
+          id: i, name, role: "root", linkGroup: 0, visible: true, children: [],
+        })),
+      },
+    };
+  }
+  const rootNames = () =>
+    useMockEmitterTree.getState().tree.root.children.map((c) => c.name);
+
+  it("moves a contiguous block together", async () => {
+    useMockEmitterTree.setState({ tree: rootsTree(["A", "B", "C", "D"]) });
+    const b = new MockBridge();
+    const r = await b.request({ kind: "emitters/move-many", params: { ids: [1, 2], direction: "up" } });
+    expect(rootNames()).toEqual(["B", "C", "A", "D"]);
+    expect(r.newIds).toEqual([1, 2]); // mock keeps ids stable through a move
+  });
+
+  it("freezes a contiguous selection pinned at the top edge", async () => {
+    useMockEmitterTree.setState({ tree: rootsTree(["A", "B", "C", "D"]) });
+    const b = new MockBridge();
+    await b.request({ kind: "emitters/move-many", params: { ids: [0, 1], direction: "up" } });
+    expect(rootNames()).toEqual(["A", "B", "C", "D"]); // nothing moved
+  });
+
+  it("freezes a NON-contiguous selection whose lead is pinned (preserve, no compacting)", async () => {
+    useMockEmitterTree.setState({ tree: rootsTree(["A", "B", "C", "D"]) });
+    const b = new MockBridge();
+    await b.request({ kind: "emitters/move-many", params: { ids: [0, 2], direction: "up" } });
+    // A is pinned at the top → the whole selection freezes. (Compacting would
+    // have produced ["A", "C", "B", "D"]; order is preserved instead.)
+    expect(rootNames()).toEqual(["A", "B", "C", "D"]);
+  });
+
+  it("translates a non-contiguous selection that is not edge-pinned", async () => {
+    useMockEmitterTree.setState({ tree: rootsTree(["A", "B", "C", "D"]) });
+    const b = new MockBridge();
+    await b.request({ kind: "emitters/move-many", params: { ids: [1, 3], direction: "up" } });
+    expect(rootNames()).toEqual(["B", "A", "D", "C"]);
+  });
+
+  it("freezes at the bottom edge for move down", async () => {
+    useMockEmitterTree.setState({ tree: rootsTree(["A", "B", "C", "D"]) });
+    const b = new MockBridge();
+    await b.request({ kind: "emitters/move-many", params: { ids: [2, 3], direction: "down" } });
+    expect(rootNames()).toEqual(["A", "B", "C", "D"]);
+  });
+});

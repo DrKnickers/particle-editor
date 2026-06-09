@@ -5,9 +5,11 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
+import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { EmitterTree } from "../EmitterTree";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+import { useEmitterTreeStore } from "@/lib/emitter-tree";
+import { useDeleteConfirmStore, requestDeleteEmitters } from "@/lib/delete-emitters";
 
 function fixtureTree(): EmitterTreeDto {
   return {
@@ -119,6 +121,50 @@ describe("EmitterTree", () => {
     const tree = screen.getByTestId("emitter-tree");
     expect(tree.getAttribute("data-selected-count")).toBe("2");
     expect(tree.getAttribute("data-primary-id")).toBe("3");
+  });
+
+  it("right-click → Delete on a multi-selection deletes the WHOLE selection (regression)", async () => {
+    localStorage.removeItem("alo:confirm-delete"); // confirm-before-delete on (default)
+    useDeleteConfirmStore.setState({ pending: null });
+    const bridge = makeStubBridge();
+    render(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+
+    // Multi-select Smoke(0) + the childless leaf Flash(5).
+    fireEvent.click(screen.getByText("Smoke"));
+    fireEvent.click(screen.getByText("Flash"), { ctrlKey: true });
+    expect(useEmitterSelectionStore.getState().ids).toEqual([0, 5]);
+
+    // Right-click the SELECTED leaf and choose Delete. Pre-fix this deleted
+    // only Flash (a leaf → immediate, no confirm); post-fix it confirms the
+    // whole selection because handleDelete uses resolveTargetIds().
+    fireEvent.contextMenu(screen.getByText("Flash"));
+    fireEvent.click(await screen.findByText("Delete"));
+
+    const pending = useDeleteConfirmStore.getState().pending;
+    expect(pending).not.toBeNull();
+    expect([...(pending?.ids ?? [])].sort((a, b) => a - b)).toEqual([0, 5]);
+  });
+
+  it("the trash button deletes the WHOLE multi-selection (confirms)", async () => {
+    localStorage.removeItem("alo:confirm-delete"); // confirm-before-delete on (default)
+    useDeleteConfirmStore.setState({ pending: null });
+    const bridge = makeStubBridge();
+    render(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+
+    // Multi-select Smoke(0) + the childless leaf Flash(5).
+    fireEvent.click(screen.getByText("Smoke"));
+    fireEvent.click(screen.getByText("Flash"), { ctrlKey: true });
+    expect(useEmitterSelectionStore.getState().ids).toEqual([0, 5]);
+
+    // Toolbar trash deletes the whole selection (pre-fix: only the primary
+    // Flash, a leaf → immediate, no confirm).
+    fireEvent.click(screen.getByLabelText("Delete emitter"));
+
+    const pending = useDeleteConfirmStore.getState().pending;
+    expect(pending).not.toBeNull();
+    expect([...(pending?.ids ?? [])].sort((a, b) => a - b)).toEqual([0, 5]);
   });
 
   // ─── Batch B3 — drag/drop reorder + reparent ─────────────────────
@@ -627,7 +673,7 @@ describe("EmitterTree", () => {
     expect(dupBtn.compareDocumentPosition(delBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("clicking Duplicate dispatches emitters/duplicate with the primary's id", async () => {
+  it("clicking Duplicate dispatches emitters/duplicate-many with the selection", async () => {
     const bridge = makeStubBridge();
     render(<EmitterTree bridge={bridge} />);
     await waitFor(() => {
@@ -643,9 +689,35 @@ describe("EmitterTree", () => {
     fireEvent.click(screen.getByLabelText("Duplicate emitter"));
 
     const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-    const dup = calls.find((c) => c.kind === "emitters/duplicate");
+    const dup = calls.find((c) => c.kind === "emitters/duplicate-many");
     expect(dup).toBeDefined();
-    expect(dup!.params).toEqual({ id: 0 });
+    expect(dup!.params).toEqual({ ids: [0] });
+  });
+
+  it("Move Up/Down disabled state is selection-aware and symmetric at both edges", async () => {
+    const bridge = makeStubBridge();
+    render(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+    const up = () => screen.getByLabelText("Move emitter up") as HTMLButtonElement;
+    const down = () => screen.getByLabelText("Move emitter down") as HTMLButtonElement;
+
+    // Top root (Smoke) selected → can't move up, can move down.
+    fireEvent.click(screen.getByText("Smoke"));
+    expect(up().disabled).toBe(true);
+    expect(down().disabled).toBe(false);
+
+    // Bottom root (Flash) selected → can't move down, can move up.
+    fireEvent.click(screen.getByText("Flash"));
+    expect(down().disabled).toBe(true);
+    expect(up().disabled).toBe(false);
+
+    // Non-contiguous selection pinned at BOTH edges (Smoke + Flash) → both
+    // disabled. Under the old primary-position logic this leaked the primary's
+    // position and could leave one button wrongly enabled.
+    fireEvent.click(screen.getByText("Smoke"));
+    fireEvent.click(screen.getByText("Flash"), { ctrlKey: true });
+    expect(up().disabled).toBe(true);
+    expect(down().disabled).toBe(true);
   });
 
   it("Duplicate button is disabled when no emitter is selected", async () => {
@@ -821,5 +893,23 @@ describe("EmitterTree", () => {
 
     const dissolve = await screen.findByText("Dissolve Link Group");
     expect(dissolve.closest("[role='menuitem']")?.getAttribute("data-disabled")).not.toBeNull();
+  });
+});
+
+const node = (id: number, name: string, children: EmitterTreeNode[] = []) =>
+  ({ id, name, role: "root", visible: true, children } as unknown as EmitterTreeNode);
+
+describe("EmitterTree delete gating (helper-level)", () => {
+  beforeEach(() => {
+    useEmitterTreeStore.setState({ tree: { root: node(-1, "root", [node(0, "a", [node(1, "a1")])]) } as unknown as EmitterTreeDto });
+    useDeleteConfirmStore.setState({ pending: null });
+    localStorage.clear();
+  });
+  it("deleting a parent opens the confirm", () => {
+    const calls: number[] = [];
+    const bridge = { request: (r: { kind: string; params: { id?: number } }) => { if (r.kind === "emitters/delete") calls.push(r.params.id!); return Promise.resolve({}); }, on: () => () => {} } as unknown as Bridge;
+    requestDeleteEmitters(bridge, [0]);
+    expect(calls).toEqual([]);
+    expect(useDeleteConfirmStore.getState().pending?.ids).toEqual([0]);
   });
 });

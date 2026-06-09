@@ -3243,6 +3243,83 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
+    // -------- emitters/duplicate-many --------------------------------
+    //
+    // Batch duplicate: clone each selected emitter (the same single-emitter
+    // copy emitters/duplicate does, looped). Returns `newIds` — the copies'
+    // final indices, aligned to the input `ids` order — so the React side
+    // re-selects the new copies. We keep the dup POINTERS and read their
+    // ->index AFTER every insert, so the index shifts each insertEmitterAfter
+    // causes don't corrupt the result.
+    if (kind == "emitters/duplicate-many")
+    {
+        if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
+        {
+            sendOk(json{{"ok", false}, {"error", "no particle system bound"}});
+            return res;
+        }
+        ParticleSystem* sys = m_pParticleSystem->get();
+
+        std::vector<ParticleSystem::Emitter*> sources;
+        if (params.contains("ids") && params["ids"].is_array())
+        {
+            for (const auto& j : params["ids"])
+            {
+                ParticleSystem::Emitter* e =
+                    getEmitterById(j.is_number_integer() ? j.get<int>() : -1);
+                if (e != nullptr) sources.push_back(e);
+            }
+        }
+        if (sources.empty())
+        {
+            sendOk(json{{"ok", false}, {"error", "no emitters to duplicate"}});
+            return res;
+        }
+
+        captureUndo();
+
+        std::vector<ParticleSystem::Emitter*> dups;
+        dups.reserve(sources.size());
+        for (ParticleSystem::Emitter* src : sources)
+        {
+            ParticleSystem::Emitter* dup = nullptr;
+            MemoryFile* memfile = new MemoryFile;
+            try
+            {
+                ChunkWriter writer(memfile);
+                src->copy(writer);
+                memfile->seek(0);
+                ChunkReader reader(memfile);
+                ParticleSystem::Emitter cleanCopy(reader);
+                cleanCopy.name = GenerateDuplicateName(sys, src->name);
+                dup = sys->insertEmitterAfter(src, cleanCopy);
+            }
+            catch (...)
+            {
+                memfile->Release();
+                sendOk(json{{"ok", false}, {"error", "emitter copy failed"}});
+                return res;
+            }
+            memfile->Release();
+            if (dup == nullptr)
+            {
+                sendOk(json{{"ok", false}, {"error", "insertEmitterAfter returned null"}});
+                return res;
+            }
+            dups.push_back(dup);
+        }
+
+        json newIds = json::array();
+        for (ParticleSystem::Emitter* dup : dups)
+            newIds.push_back(static_cast<int>(dup->index));
+
+        sendOk(json{{"ok", true}, {"newIds", newIds}});
+        markDirty();
+        EmitEngineStateChanged();
+        EmitEmittersTreeChanged();
+        return res;
+    }
+
     // -------- emitters/delete ---------------------------------------
     //
     // Mirrors legacy `EmitterList_DeleteEmitter` at
@@ -4221,6 +4298,94 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         const bool moved = (*m_pParticleSystem)->moveEmitter(target, dir);
         sendOk(json::object());
         if (moved)
+        {
+            markDirty();
+            EmitEngineStateChanged();
+            EmitEmittersTreeChanged();
+        }
+        return res;
+    }
+
+    // -------- emitters/move-many -------------------------------------
+    //
+    // Batch reorder: move the selected ROOT emitters up/down by one as a UNIT
+    // (non-root selections are no-ops — moveEmitter is root-only). Order is
+    // preserved: if the edge-most selected root is pinned at the edge, NOTHING
+    // moves (the block doesn't deform by compacting trailing members past the
+    // non-selected roots). Returns `newIds` (targets' final indices,
+    // input-order-aligned) read from the stable pointers afterwards, so the
+    // React selection follows the reorder.
+    if (kind == "emitters/move-many")
+    {
+        if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
+        {
+            sendOk(json{{"newIds", json::array()}});
+            return res;
+        }
+        const std::string dirStr = params.value("direction", std::string{"up"});
+        const int dir = (dirStr == "down") ? +1 : -1;
+
+        std::vector<ParticleSystem::Emitter*> targets;
+        if (params.contains("ids") && params["ids"].is_array())
+        {
+            for (const auto& j : params["ids"])
+            {
+                ParticleSystem::Emitter* e =
+                    getEmitterById(j.is_number_integer() ? j.get<int>() : -1);
+                if (e != nullptr) targets.push_back(e);
+            }
+        }
+        if (targets.empty())
+        {
+            sendOk(json{{"newIds", json::array()}});
+            return res;
+        }
+
+        ParticleSystem* sys = m_pParticleSystem->get();
+        auto isSel = [&](ParticleSystem::Emitter* e) {
+            return std::find(targets.begin(), targets.end(), e) != targets.end();
+        };
+
+        // Roots in vector order.
+        std::vector<ParticleSystem::Emitter*> roots;
+        for (ParticleSystem::Emitter* e : sys->getEmitters())
+            if (e != nullptr && e->parent == nullptr) roots.push_back(e);
+
+        // Preserve order: the selection moves as a UNIT, or not at all. If the
+        // edge-most root in the move direction is selected, the block is pinned
+        // against the edge and NOTHING moves — rather than letting the trailing
+        // members compact past the non-selected roots (order matters in a
+        // particle system). Otherwise every selected root shifts by one,
+        // processed ascending (up) / descending (down) so each one's neighbour
+        // is already an unselected root when it swaps.
+        std::vector<ParticleSystem::Emitter*> movable;
+        const bool edgePinned =
+            !roots.empty() && isSel(dir == -1 ? roots.front() : roots.back());
+        if (!edgePinned)
+        {
+            if (dir == -1)
+            {
+                for (size_t i = 0; i < roots.size(); ++i)
+                    if (isSel(roots[i])) movable.push_back(roots[i]);   // ascending
+            }
+            else
+            {
+                for (size_t i = roots.size(); i-- > 0; )
+                    if (isSel(roots[i])) movable.push_back(roots[i]);   // descending
+            }
+        }
+
+        if (!movable.empty()) captureUndo();
+        bool anyMoved = false;
+        for (ParticleSystem::Emitter* e : movable)
+            if (sys->moveEmitter(e, dir)) anyMoved = true;
+
+        json newIds = json::array();
+        for (ParticleSystem::Emitter* e : targets)
+            newIds.push_back(static_cast<int>(e->index));
+
+        sendOk(json{{"newIds", newIds}});
+        if (anyMoved)
         {
             markDirty();
             EmitEngineStateChanged();

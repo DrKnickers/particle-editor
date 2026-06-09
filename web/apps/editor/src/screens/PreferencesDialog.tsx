@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { applyMode, readStoredMode, type ThemeMode } from "@/lib/theme";
+import { readConfirmDelete, writeConfirmDelete } from "@/lib/delete-emitters";
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void };
 
@@ -12,6 +13,7 @@ const MODES: { value: ThemeMode; label: string }[] = [
 
 export function PreferencesDialog({ open, onOpenChange }: Props) {
   const [mode, setMode] = useState<ThemeMode>(() => readStoredMode());
+  const [confirmDelete, setConfirmDelete] = useState<boolean>(() => readConfirmDelete());
   const choose = (m: ThemeMode) => { setMode(m); applyMode(m); };
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Preferences" size="sm">
@@ -31,6 +33,18 @@ export function PreferencesDialog({ open, onOpenChange }: Props) {
                 {m.label}
               </button>
             ))}
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <label htmlFor="pref-confirm-delete" className="text-text-2">
+              Confirm before deleting emitters
+            </label>
+            <input
+              id="pref-confirm-delete"
+              type="checkbox"
+              checked={confirmDelete}
+              onChange={(e) => { setConfirmDelete(e.target.checked); writeConfirmDelete(e.target.checked); }}
+              className="accent-[var(--accent)]"
+            />
           </div>
         </div>
       </Modal.Body>

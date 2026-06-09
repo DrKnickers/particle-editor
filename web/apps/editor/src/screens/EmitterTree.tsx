@@ -93,6 +93,10 @@ import {
   type DropZone,
 } from "@/lib/drop-zone";
 import { computeLinkGroupBrackets, colorForGroup } from "@/lib/link-group-colors";
+import { useEmitterTreeStore } from "@/lib/emitter-tree";
+import { requestDeleteEmitters } from "@/lib/delete-emitters";
+import { moveEmitters, duplicateEmitters } from "@/lib/emitter-reorder";
+import { canMoveSelection } from "@/lib/move-enabled";
 
 type Props = {
   bridge: Bridge;
@@ -312,7 +316,7 @@ function EmitterRow({
   editing, beginEdit, setEditValue, commitEdit, cancelEdit,
   linkHover, onHoverLinkGroup, onDissolveLinkGroup,
 }: RowProps) {
-  const { node, depth, siblings, indexInSiblings } = row;
+  const { node, depth, siblings } = row;
   const isPrimary = primaryId === node.id;
   const isSelected = selectedIds.includes(node.id);
   const isLinked = node.linkGroup !== 0;
@@ -340,8 +344,13 @@ function EmitterRow({
   // Move is a root-only operation. The engine refuses non-root moves
   // (children of the same role can't be swapped — at most one of each).
   const isRoot = node.role === "root";
-  const canMoveUp   = isRoot && indexInSiblings > 0;
-  const canMoveDown = isRoot && indexInSiblings < siblings.length - 1;
+  // The context-menu Move targets the whole selection when this row is part of
+  // it (else just this row — mirrors resolveTargetIds), so its enabled state
+  // uses the same preserve rule as move-many over that target set.
+  const moveTargetIds = isRoot && selectedIds.includes(node.id) ? selectedIds : [node.id];
+  const rootIdsInOrder = siblings.map((s) => s.id);
+  const canMoveUp   = isRoot && canMoveSelection(moveTargetIds, rootIdsInOrder, "up");
+  const canMoveDown = isRoot && canMoveSelection(moveTargetIds, rootIdsInOrder, "down");
 
   // Leave Link Group: enabled when at least one of the currently
   // selected emitters has `linkGroup !== 0`. If the right-clicked row
@@ -405,12 +414,18 @@ function EmitterRow({
     beginEdit(node.id, node.name);
   };
   const handleDuplicate = () => {
-    resolveTargetIds();
-    void bridge.request({ kind: "emitters/duplicate", params: { id: node.id } });
+    // Duplicate the resolved target set (whole selection if the clicked row
+    // is in it, else just that row); the selection moves to the new copies.
+    void duplicateEmitters(bridge, resolveTargetIds());
   };
   const handleDelete = () => {
-    resolveTargetIds();
-    void bridge.request({ kind: "emitters/delete", params: { id: node.id } });
+    // Delete the resolved target set — the whole selection when the
+    // right-clicked row is part of it, else just the clicked row
+    // (resolveTargetIds promotes a non-selected row to a single select).
+    // Previously this discarded the return and hardcoded [node.id], so
+    // right-click → Delete on a multi-selection deleted only one row and
+    // skipped the destructive-confirm.
+    requestDeleteEmitters(bridge, resolveTargetIds());
   };
   const handleIncrement = () => {
     resolveTargetIds();
@@ -473,18 +488,10 @@ function EmitterRow({
     });
   };
   const handleMoveUp = () => {
-    resolveTargetIds();
-    void bridge.request({
-      kind: "emitters/move",
-      params: { id: node.id, direction: "up" },
-    });
+    void moveEmitters(bridge, resolveTargetIds(), "up");
   };
   const handleMoveDown = () => {
-    resolveTargetIds();
-    void bridge.request({
-      kind: "emitters/move",
-      params: { id: node.id, direction: "down" },
-    });
+    void moveEmitters(bridge, resolveTargetIds(), "down");
   };
   const handleSetLinkGroup = () => {
     resolveTargetIds();
@@ -933,6 +940,7 @@ type ToolbarProps = {
 function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
   const primary = findNodeInTree(tree, primaryId);
   const hasPrimary = primary !== null;
+  const selIds = useEmitterSelectionStore((s) => s.ids);
   // Lifetime/Death child adds require both a primary AND a free slot
   // (parents can hold at most one of each role).
   const canAddLifetime =
@@ -942,12 +950,11 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
   // Move is a root-only operation — same gate as the per-row context
   // menu. Sibling reordering at lifetime/death depth is a separate
   // capability not exposed by the legacy panel toolbar either.
-  const isRootPrimary = hasPrimary && primary!.node.role === "root";
-  const canMoveUp =
-    isRootPrimary && primary!.indexInSiblings > 0;
-  const canMoveDown =
-    isRootPrimary &&
-    primary!.indexInSiblings < primary!.siblings.length - 1;
+  // Move enabled state mirrors move-many's preserve rule, via the shared
+  // helper (same predicate the row context-menu Move items use).
+  const rootIds = (tree?.root.children ?? []).map((c) => c.id);
+  const canMoveUp = canMoveSelection(selIds, rootIds, "up");
+  const canMoveDown = canMoveSelection(selIds, rootIds, "down");
 
   const addRoot = () =>
     void bridge.request({ kind: "emitters/add-root", params: {} });
@@ -966,29 +973,30 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
     });
   };
   const duplicatePrimary = () => {
-    if (primaryId === null) return;
-    void bridge.request({
-      kind: "emitters/duplicate",
-      params: { id: primaryId },
-    });
+    // Toolbar Duplicate is selection-aware (like the trash button); the new
+    // copies become the selection.
+    const ids = useEmitterSelectionStore.getState().ids;
+    if (ids.length === 0) return;
+    void duplicateEmitters(bridge, ids);
   };
   const del = () => {
-    if (primaryId === null) return;
-    void bridge.request({ kind: "emitters/delete", params: { id: primaryId } });
+    // Selection-aware: the trash button deletes the WHOLE multi-selection
+    // (matching right-click → Delete and the Delete key), not just the
+    // primary row. ids and primary stay in sync, so an empty selection ==
+    // no primary == nothing to delete.
+    const ids = useEmitterSelectionStore.getState().ids;
+    if (ids.length === 0) return;
+    requestDeleteEmitters(bridge, ids);
   };
   const moveUp = () => {
-    if (primaryId === null) return;
-    void bridge.request({
-      kind: "emitters/move",
-      params: { id: primaryId, direction: "up" },
-    });
+    const ids = useEmitterSelectionStore.getState().ids;
+    if (ids.length === 0) return;
+    void moveEmitters(bridge, ids, "up");
   };
   const moveDown = () => {
-    if (primaryId === null) return;
-    void bridge.request({
-      kind: "emitters/move",
-      params: { id: primaryId, direction: "down" },
-    });
+    const ids = useEmitterSelectionStore.getState().ids;
+    if (ids.length === 0) return;
+    void moveEmitters(bridge, ids, "down");
   };
   const showAll = () =>
     void bridge.request({
@@ -1108,7 +1116,8 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
 }
 
 export function EmitterTree({ bridge }: Props) {
-  const [tree, setTree] = useState<EmitterTreeDto | null>(null);
+  const tree = useEmitterTreeStore((s) => s.tree);
+  const setTree = useEmitterTreeStore((s) => s.setTree);
   const selectedIds = useEmitterSelectionIds();
   const primaryId = useEmitterSelectionPrimary();
 
@@ -1167,7 +1176,10 @@ export function EmitterTree({ bridge }: Props) {
     bridge
       .request({ kind: "emitters/list", params: {} })
       .then((t) => {
-        if (!cancelled) setTree(t);
+        // Store invariant: null or a well-formed tree (every consumer here
+        // assumes a truthy tree has a `root`). Ignore a malformed/partial
+        // response — e.g. a stubbed `{}` — so it can't reach the renderers.
+        if (!cancelled && (t as EmitterTreeDto | null)?.root) setTree(t);
       })
       .catch((err) => console.warn("[EmitterTree] emitters/list failed:", err));
     return () => { cancelled = true; };
@@ -1674,14 +1686,9 @@ export function EmitterTree({ bridge }: Props) {
         const cur = useEmitterSelectionStore.getState().ids;
         if (cur.length === 0) return;
         e.preventDefault();
-        // Descending id order — deleting in ascending order would
-        // invalidate higher indices mid-loop on the C++ side (the
-        // mock's id-based delete is robust, but the contract has to
-        // match the host).
-        const sorted = [...cur].sort((a, b) => b - a);
-        for (const id of sorted) {
-          void bridge.request({ kind: "emitters/delete", params: { id } });
-        }
+        // Descending-order delete + the destructive-confirm gate both live in
+        // requestDeleteEmitters → performDelete now.
+        requestDeleteEmitters(bridge, [...cur]);
         return;
       }
       // Ctrl+C / Ctrl+X / Ctrl+V on the focused tree. Cmd+* on macOS

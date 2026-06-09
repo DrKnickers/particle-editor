@@ -29,6 +29,8 @@ import type {
   ModDescriptor,
 } from "@particle-editor/bridge-schema";
 import { promptSaveChanges, useFileState } from "@/lib/file-state";
+import { runFileOp } from "@/lib/file-op";
+import { requestDeleteEmitters } from "@/lib/delete-emitters";
 import {
   useEmitterSelectionPrimary,
   useEmitterSelectionIds,
@@ -270,21 +272,21 @@ export function MenuBar({
 
   const handleOpen = () => {
     promptSaveChanges(async () => {
-      await bridge.request({ kind: "file/open", params: {} });
+      await runFileOp(bridge, { kind: "file/open", params: {} });
     });
   };
 
   const handleSave = () => {
-    void bridge.request({ kind: "file/save", params: {} });
+    void runFileOp(bridge, { kind: "file/save", params: {} });
   };
 
   const handleSaveAs = () => {
-    void bridge.request({ kind: "file/save-as", params: {} });
+    void runFileOp(bridge, { kind: "file/save-as", params: {} });
   };
 
   const handleOpenRecent = (path: string) => {
     promptSaveChanges(async () => {
-      await bridge.request({ kind: "file/open", params: { path } });
+      await runFileOp(bridge, { kind: "file/open", params: { path } });
     });
   };
 
@@ -353,11 +355,7 @@ export function MenuBar({
   const handleDeleteSelection = () => {
     const ids = getEmitterSelectionSnapshot().ids;
     if (ids.length === 0) return;
-    // Descending id order — matches the tree's batch delete + the host
-    // contract (deleting ascending would invalidate higher ids mid-loop).
-    for (const id of [...ids].sort((a, b) => b - a)) {
-      void bridge.request({ kind: "emitters/delete", params: { id } });
-    }
+    requestDeleteEmitters(bridge, ids);
   };
 
   // ── Emitters-menu visibility () ─────────────────────────────

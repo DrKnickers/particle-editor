@@ -16,6 +16,7 @@
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { useFileStateStore } from "@/lib/file-state";
+import { runFileOp } from "@/lib/file-op";
 
 type Props = {
   bridge: Bridge;
@@ -47,16 +48,17 @@ export function SaveChangesPrompt({ bridge }: Props) {
   };
 
   const handleSave = async () => {
-    // Attempt to save the current document. If the user cancels the
-    // native save picker (ok:false), abort — don't run the pending
-    // action. Matches legacy DoCheckChanges → DoSaveFile semantics.
+    // Attempt to save via runFileOp, which surfaces a non-cancel failure
+    // (disk full / read-only / locked) in the error modal — without it a
+    // failed save here silently abandons the pending op AND leaves the doc
+    // dirty with no feedback (the data-loss path this routing closes). On
+    // ANY !ok (user-cancel OR failure) do NOT run the pending New/Open —
+    // the unsaved work must survive — and close this prompt.
     try {
-      const r = await bridge.request({ kind: "file/save", params: {} });
+      const r = await runFileOp(bridge, { kind: "file/save", params: {} });
       if (r.ok) {
         await runPending();
       } else {
-        // Save cancelled / failed — keep the prompt closed but discard
-        // the pending action so the user can decide afresh.
         setPendingAction(null);
       }
     } catch (err) {

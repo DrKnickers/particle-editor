@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { SaveChangesPrompt } from "../SaveChangesPrompt";
 import { useFileStateStore } from "@/lib/file-state";
+import { useFileOpErrorStore } from "@/lib/file-op";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 function makeStubBridge(saveOk = true): Bridge & { request: ReturnType<typeof vi.fn> } {
@@ -40,6 +41,7 @@ beforeEach(() => {
     recentFiles: [],
     pendingAction: null,
   });
+  useFileOpErrorStore.setState({ message: null });
 });
 
 describe("SaveChangesPrompt", () => {
@@ -91,5 +93,44 @@ describe("SaveChangesPrompt", () => {
     expect(bridge.request).not.toHaveBeenCalled();
     expect(action).not.toHaveBeenCalled();
     expect(useFileStateStore.getState().pendingAction).toBeNull();
+  });
+
+  it("a FAILED save surfaces the error modal and does not run the pending action", async () => {
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) =>
+        req.kind === "file/save"
+          ? Promise.resolve({ ok: false, error: "C:/x.alo is read-only" })
+          : Promise.resolve({}),
+      ),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge;
+    const action = vi.fn();
+    useFileStateStore.getState().setPendingAction(action);
+    render(<SaveChangesPrompt bridge={bridge} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // The failure is surfaced (not silently swallowed) and the pending
+    // New/Open is NOT run — the unsaved work survives.
+    await waitFor(() => {
+      expect(useFileOpErrorStore.getState().message).toContain("read-only");
+    });
+    expect(action).not.toHaveBeenCalled();
+    expect(useFileStateStore.getState().pendingAction).toBeNull();
+  });
+
+  it("a CANCELLED save stays silent (no error modal) and aborts the pending action", async () => {
+    const bridge = makeStubBridge(false); // resolves { ok:false, error:"user-cancelled" }
+    const action = vi.fn();
+    useFileStateStore.getState().setPendingAction(action);
+    render(<SaveChangesPrompt bridge={bridge} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(useFileStateStore.getState().pendingAction).toBeNull();
+    });
+    expect(action).not.toHaveBeenCalled();
+    expect(useFileOpErrorStore.getState().message).toBeNull(); // cancel is not an error
   });
 });

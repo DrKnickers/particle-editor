@@ -27,6 +27,7 @@ import { BackgroundDropdown } from "@/components/BackgroundDropdown";
 import { GroundDropdown } from "@/components/GroundDropdown";
 import { useRightDock, toggleDock } from "@/lib/right-dock";
 import { promptSaveChanges } from "@/lib/file-state";
+import { runFileOp } from "@/lib/file-op";
 
 type Props = { bridge: Bridge };
 
@@ -81,7 +82,7 @@ export function Toolbar({ bridge }: Props) {
           title="Open"
           onClick={() => {
             promptSaveChanges(async () => {
-              await bridge.request({ kind: "file/open", params: {} });
+              await runFileOp(bridge, { kind: "file/open", params: {} });
             });
           }}
         >
@@ -92,7 +93,7 @@ export function Toolbar({ bridge }: Props) {
           className="tb-btn"
           aria-label="Save"
           title="Save"
-          onClick={() => { void bridge.request({ kind: "file/save", params: {} }); }}
+          onClick={() => { void runFileOp(bridge, { kind: "file/save", params: {} }); }}
         >
           <Save {...ICON} />
         </button>
@@ -101,7 +102,7 @@ export function Toolbar({ bridge }: Props) {
           className="tb-btn"
           aria-label="Save As"
           title="Save As"
-          onClick={() => { void bridge.request({ kind: "file/save-as", params: {} }); }}
+          onClick={() => { void runFileOp(bridge, { kind: "file/save-as", params: {} }); }}
         >
           <SaveAll {...ICON} />
         </button>

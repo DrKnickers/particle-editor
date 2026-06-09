@@ -22,8 +22,10 @@
 import { useEffect, useRef } from "react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { promptSaveChanges } from "@/lib/file-state";
+import { runFileOp } from "@/lib/file-op";
 import { toggleDock } from "@/lib/right-dock";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+import { moveEmitters } from "@/lib/emitter-reorder";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 
 const ACCEL_COMBOS = [
@@ -86,11 +88,11 @@ export function useAppAccelerators(bridge: Bridge): void {
           break;
         case "Ctrl+O":
           promptSaveChanges(async () => {
-            await bridge.request({ kind: "file/open", params: {} });
+            await runFileOp(bridge, { kind: "file/open", params: {} });
           });
           break;
         case "Ctrl+S":
-          void bridge.request({ kind: "file/save", params: {} });
+          void runFileOp(bridge, { kind: "file/save", params: {} });
           break;
         // ── Edit ──
         case "Ctrl+Del":
@@ -106,13 +108,12 @@ export function useAppAccelerators(bridge: Bridge): void {
         // ── Emitters ──
         case "Alt+Up":
         case "Alt+Down": {
-          const primary = useEmitterSelectionStore.getState().primary;
-          if (primary !== null) {
-            void bridge.request({
-              kind: "emitters/move",
-              params: { id: primary, direction: combo === "Alt+Up" ? "up" : "down" },
-            });
-          }
+          // Move the whole selection as a block; the highlight follows.
+          void moveEmitters(
+            bridge,
+            useEmitterSelectionStore.getState().ids,
+            combo === "Alt+Up" ? "up" : "down",
+          );
           break;
         }
         case "Ctrl+Space":

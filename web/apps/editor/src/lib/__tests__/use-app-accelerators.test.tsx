@@ -89,13 +89,13 @@ describe("useAppAccelerators", () => {
     expect(b.request).toHaveBeenCalledWith({ kind: "engine/set/paused", params: { paused: false } });
   });
 
-  it("Alt+Up → emitters/move up for the primary selection ()", () => {
+  it("Alt+Up → emitters/move-many up for the selection ()", () => {
     const b = makeFakeBridge();
     useEmitterSelectionStore.getState().setIds([7], 7);
     render(<Harness bridge={b} />);
     b.request.mockClear();
     b.fire("Alt+Up");
-    expect(b.request).toHaveBeenCalledWith({ kind: "emitters/move", params: { id: 7, direction: "up" } });
+    expect(b.request).toHaveBeenCalledWith({ kind: "emitters/move-many", params: { ids: [7], direction: "up" } });
     useEmitterSelectionStore.getState().clear();
   });
 });

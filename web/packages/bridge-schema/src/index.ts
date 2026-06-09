@@ -666,6 +666,7 @@ export type Request =
 
   // Emitter mutations (Phase 3 Screen 4 Batch B1)
   | { kind: "emitters/duplicate";                       params: { id: number } }
+  | { kind: "emitters/duplicate-many";                  params: { ids: number[] } }   // batch: duplicate each; response.newIds are the copies, aligned to input order
   | { kind: "emitters/delete";                          params: { id: number } }
   | { kind: "emitters/rename";                          params: { id: number; name: string } }
   | { kind: "emitters/duplicate-with-index-increment";  params: { id: number; delta: number } }
@@ -699,6 +700,7 @@ export type Request =
   // practice).
   | { kind: "emitters/add-root";            params: Record<string, never> }
   | { kind: "emitters/move";                params: { id: number; direction: "up" | "down" } }
+  | { kind: "emitters/move-many";           params: { ids: number[]; direction: "up" | "down" } }   // batch: move the selected roots as a block; response.newIds follow them
   // (Group A polish): visibility ops for the EmitterTree panel
   // toolbar. `set-visible` flips a single emitter's `visible` flag
   // without touching its children (matches legacy
@@ -1020,6 +1022,9 @@ export type ResponseFor<R extends Request> =
   R extends { kind: "emitters/duplicate" } ?
     | { ok: true; newId: number }
     | { ok: false; error: string } :
+  R extends { kind: "emitters/duplicate-many" } ?
+    | { ok: true; newIds: number[] }
+    | { ok: false; error: string } :
   R extends { kind: "emitters/delete" }                         ? Record<string, never> :
   R extends { kind: "emitters/rename" }                         ? Record<string, never> :
   R extends { kind: "emitters/duplicate-with-index-increment" } ? { newId: number } :
@@ -1029,6 +1034,7 @@ export type ResponseFor<R extends Request> =
   R extends { kind: "emitters/add-death-child" }    ? { newId: number } :
   R extends { kind: "emitters/add-root" }           ? { newId: number } :
   R extends { kind: "emitters/move" }               ? Record<string, never> :
+  R extends { kind: "emitters/move-many" }          ? { newIds: number[] } :
   R extends { kind: "emitters/set-visible" }        ? Record<string, never> :
   R extends { kind: "emitters/set-all-visible" }    ? Record<string, never> :
   R extends { kind: "linkGroups/set-membership" }   ? Record<string, never> :
