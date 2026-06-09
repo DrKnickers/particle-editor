@@ -75,7 +75,7 @@ export function Modal({
   //
   // Bridge comes from BridgeContext (NOT `window.bridge` — see).
   const bridge = useBridge();
-  const [snapshot, setSnapshot] = useState<{ pngBase64: string; w: number; h: number } | null>(null);
+  const [snapshot, setSnapshot] = useState<{ imageBase64: string; w: number; h: number } | null>(null);
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
   // Phase 3 Stage 1 follow-up: gate Dialog open on snapshot
   // readiness so Dialog.Overlay's fade-in starts with the <img>
@@ -170,7 +170,7 @@ export function Modal({
       .request({ kind: "viewport/capture-snapshot", params: {} })
       .then((res) => {
         if (cancelled) return;
-        const snap = res as { pngBase64: string; w: number; h: number };
+        const snap = res as { imageBase64: string; w: number; h: number };
         setSnapshot(snap);
 
         // Engine layer goes transparent now that the DOM snapshot is
@@ -225,12 +225,13 @@ export function Modal({
           into the viewport-quadrant DOM so it sits below Dialog.Overlay
           in the same compositing tree — Dialog.Overlay's `bg-black/60
           backdrop-blur-sm` then blurs panels + snapshot uniformly. The
-          render guard skips when the host returns an empty PNG
-          (MockBridge, fresh engine, just-reset device). */}
-      {open && viewportEl && snapshot && snapshot.pngBase64 ? createPortal(
+          render guard skips when the host returns an empty image
+          (MockBridge, fresh engine, just-reset device). the host
+          encodes the backdrop as JPEG (blurred → lossy is invisible). */}
+      {open && viewportEl && snapshot && snapshot.imageBase64 ? createPortal(
         <img
           data-testid="modal-backdrop-snapshot"
-          src={`data:image/png;base64,${snapshot.pngBase64}`}
+          src={`data:image/jpeg;base64,${snapshot.imageBase64}`}
           alt=""
           aria-hidden
           style={{

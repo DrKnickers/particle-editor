@@ -12,10 +12,10 @@
 // What this spec proves:
 //
 //   1. The first snapshot after host boot returns a non-empty
-//      pngBase64 + non-zero dimensions. Pre-refactor this was served
+//      imageBase64 + non-zero dimensions. Pre-refactor this was served
 //      from the per-frame cache; post-refactor it's served from a
 //      fresh readback. Failure mode would be either `false` (returned
-//      empty pngBase64) — which the prior code path simulated via
+//      empty imageBase64) — which the prior code path simulated via
 //      `lastRawDib.empty()` — or a malformed payload.
 //
 //   2. Two consecutive snapshots both succeed. Validates that the new
@@ -35,7 +35,7 @@ import { test, expect, chromium, type Page, type Browser } from "@playwright/tes
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 
-type SnapshotDto = { pngBase64: string; w: number; h: number };
+type SnapshotDto = { imageBase64: string; w: number; h: number };
 
 let browser: Browser;
 let page: Page;
@@ -86,13 +86,13 @@ test("first viewport/capture-snapshot after boot returns valid PNG (cache-flag-o
     })) as SnapshotDto;
   });
 
-  // pngBase64 must be a non-trivial payload — a valid PNG starts with
-  // the IHDR + signature, so the base64 prefix `iVBORw0KGgo` (the
-  // standard 8-byte PNG signature) is a stable invariant. Assert on
-  // length AND prefix to catch both "empty string" (false path) and
-  // "garbage bytes" (encoder failure) regressions.
-  expect(result.pngBase64.length).toBeGreaterThan(100);
-  expect(result.pngBase64.startsWith("iVBORw0KGgo")).toBe(true);
+  // imageBase64 must be a non-trivial payload — the backdrop is a
+  // JPEG (shown blurred, so lossy is invisible and far cheaper than PNG).
+  // A JPEG starts with the SOI marker FF D8 FF, whose base64 prefix is
+  // `/9j/` — a stable invariant. Assert on length AND prefix to catch both
+  // "empty string" (false path) and "garbage bytes" (encoder failure).
+  expect(result.imageBase64.length).toBeGreaterThan(100);
+  expect(result.imageBase64.startsWith("/9j/")).toBe(true);
   // The backdrop snapshot is downscaled before encoding (min 2x, capped at a
   // 1024 long edge — it's blurred behind the dialog; see
   // AlphaCompositor::CaptureSnapshotPng). 1024x768 is under the cap, so it
@@ -106,7 +106,7 @@ test("two consecutive snapshots both succeed (readback path is re-entrant)", asy
   // properly paired. A bug where UnlockRect was missed would leave
   // the SYSTEMMEM surface locked; the second LockRect would return
   // D3DERR_INVALIDCALL and CaptureSnapshotPng would return false →
-  // pngBase64 would be the empty string per the host fall-through.
+  // imageBase64 would be the empty string per the host fall-through.
   const result = await page.evaluate(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const b = (window as any).bridge;
@@ -121,8 +121,8 @@ test("two consecutive snapshots both succeed (readback path is re-entrant)", asy
     return { first, second };
   });
 
-  expect(result.first.pngBase64.length).toBeGreaterThan(100);
-  expect(result.second.pngBase64.length).toBeGreaterThan(100);
+  expect(result.first.imageBase64.length).toBeGreaterThan(100);
+  expect(result.second.imageBase64.length).toBeGreaterThan(100);
   // Both must report the same dims (no in-between Resize was issued).
   expect(result.second.w).toBe(result.first.w);
   expect(result.second.h).toBe(result.first.h);
@@ -178,6 +178,6 @@ test("snapshot dimensions follow viewport resize (readback uses current RT, not 
   expect(result.small.h).toBe(300);
   expect(result.large.w).toBe(800);
   expect(result.large.h).toBe(450);
-  expect(result.small.pngBase64.startsWith("iVBORw0KGgo")).toBe(true);
-  expect(result.large.pngBase64.startsWith("iVBORw0KGgo")).toBe(true);
+  expect(result.small.imageBase64.startsWith("/9j/")).toBe(true);
+  expect(result.large.imageBase64.startsWith("/9j/")).toBe(true);
 });

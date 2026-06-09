@@ -16,6 +16,56 @@ Conventions:
 
 ## Changelog
 
+### Make the maximized save-modal backdrop snapshot near-instant
+
+*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Opening a modal (e.g. the save-changes dialog) with the editor **maximized** now
+paints its frosted-glass backdrop in **~6 ms** instead of **~70 ms** — effectively
+instant, matching the windowed case. There are no new controls; this is pure
+latency removal on the `viewport/capture-snapshot` path that every modal triggers
+on open. Behaviour under `--legacy` is unchanged.
+
+**How we tackled it.** Two complementary cuts in
+[`AlphaCompositor::CaptureSnapshotPng`](src/host/AlphaCompositor.cpp:572).
+**(1) GPU `StretchRect` fast path** — instead of reading the full
+3440×1369 render target back to system memory and downscaling it on the CPU with
+GDI+ `DrawImage`, the scene-rect crop is `StretchRect`-blitted (with the existing
+2×/1024-cap downscale formula reused verbatim) into a small `CreateRenderTarget`
+surface on the GPU, and `GetRenderTargetData` reads back **that** — so the readback
+collapses from ~8 ms to ~1.5 ms and stops scaling with window size, and the ~19 MB
+memcpy + the DrawImage downscale disappear. **(2) JPEG backdrop** — the snapshot is
+shown blurred under `Dialog.Overlay`'s `backdrop-blur-sm`, so it is now encoded as
+JPEG (q82) rather than PNG: lossy is invisible, the encode drops from ~28 ms to
+~1.7 ms, and the payload shrinks ~7× (905 KB → ~120 KB), which also slashes the
+base64 + IPC + browser-decode transit. The response field was renamed
+`pngBase64` → `imageBase64` across the host
+([`BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp:1047)), the bridge schema
+([`bridge-schema/src/index.ts`](web/packages/bridge-schema/src/index.ts:1064)), the
+consumer ([`Modal.tsx`](web/apps/editor/src/components/Modal.tsx:233), now a
+`data:image/jpeg` URL), the mock, and the native dim test (JPEG `/9j/` signature).
+[`CaptureSnapshotToFile`](src/host/AlphaCompositor.cpp:791) (the `--capture`
+offline-diff path) deliberately stays full-resolution PNG.
+
+**Issues encountered and resolutions.** *Profiling overturned the ROADMAP's
+premise.* Once avenue (a) cut the readback, maximized was **still ~53 ms** —
+because the PNG encode + base64/IPC of a ~905 KB image, not the readback, was the
+real bottleneck. JPEG was the actual lever (it took the combination to ~6 ms);
+avenue (a) alone was a ~27% win. *Three D3D9 preconditions the naïve `StretchRect`
+would have silently broken* were caught by a first-party-docs verification pass +
+an adversarial red-team **before** coding, then guarded in code: (i) `offscreenRT`
+is the engine's **currently-bound** slot-0 render target
+([`engine.cpp:674`](src/engine.cpp:674)/[`:943`](src/engine.cpp:943)), and
+`StretchRect` from the active RT can return `D3DERR_INVALIDCALL` — so slot 0 is
+parked on the swap-chain back buffer for the blit and restored immediately after;
+(ii) the source is an RT *texture*, needing `D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES`;
+(iii) `D3DTEXF_LINEAR` needs `StretchRectFilterCaps & D3DPTFILTERCAPS_MINFLINEAR`.
+Any cap miss or runtime failure falls back to the original full-readback + GDI+
+path — a zero-regression fallback verified by forcing it through the full 174-test
+native harness (still 174/0).
+
+---
+
 ### Smooth the viewport edge during the right-dock open/close slide
 
 *2026-06-08 · [`3eb6e28`](https://github.com/DrKnickers/particle-editor/commit/3eb6e28) · #97*

@@ -482,10 +482,10 @@ export class MockBridge implements Bridge {
         return {};
 
       case "viewport/capture-snapshot":
-        // Mock: no engine to snapshot. Empty PNG + zero dims so the
-        // React Modal's render guard (`snapshot && snapshot.pngBase64`)
+        // Mock: no engine to snapshot. Empty image + zero dims so the
+        // React Modal's render guard (`snapshot && snapshot.imageBase64`)
         // short-circuits the <img> portal in unit tests.
-        return { pngBase64: "", w: 0, h: 0 };
+        return { imageBase64: "", w: 0, h: 0 };
 
       case "viewport/input":
         // Phase 2 — mock: no native HWND to PostMessage to.

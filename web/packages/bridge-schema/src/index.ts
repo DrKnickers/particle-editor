@@ -1061,7 +1061,7 @@ export type ResponseFor<R extends Request> =
   R extends { kind: "animate-scene-rect" }        ? Record<string, never> :
   R extends { kind: "host/backing-color" }        ? Record<string, never> :
   R extends { kind: "viewport/occlude" }          ? Record<string, never> :
-  R extends { kind: "viewport/capture-snapshot" } ? { pngBase64: string; w: number; h: number } :
+  R extends { kind: "viewport/capture-snapshot" } ? { imageBase64: string; w: number; h: number } :
   R extends { kind: "viewport/input" }            ? Record<string, never> :
   R extends { kind: "spawner/start" }             ? Record<string, never> :
   R extends { kind: "spawner/trigger" }           ? Record<string, never> :

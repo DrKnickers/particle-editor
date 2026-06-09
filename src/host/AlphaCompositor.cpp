@@ -574,10 +574,19 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     // Phase 3 follow-up: self-sufficient readback. The cache
     // path was the bottleneck in arch B (layered popup) — paying
     // a 19 MB memcpy every frame to keep a snapshot fresh for modals
-    // that fire seconds-to-minutes apart. We now do a one-shot
-    // GetRenderTargetData + LockRect at snapshot time and consume
-    // ~12-15 ms of one-time cost (imperceptible vs. the ~50-100 ms
-    // dialog mount + React reflow that triggers us).
+    // that fire seconds-to-minutes apart. We now do a one-shot readback
+    // at snapshot time (~12-15 ms of one-time cost, imperceptible vs.
+    // the ~50-100 ms dialog mount + React reflow that triggers us).
+    //
+    // The maximized case (3440x1369) still cost ~69 ms because
+    // the readback, the ~19 MB memcpy AND the GDI+ DrawImage downscale
+    // all ran at full RT size — only the *encode* saw the small image.
+    // The fast path below moves the crop+downscale onto the GPU with a
+    // single StretchRect into a small render target, so every step after
+    // it operates on the already-small (~1024x383) image. It falls back
+    // to the proven full-readback path (further down) when the device
+    // lacks the StretchRect caps or the GPU path hits any failure, so
+    // there is zero behavioural regression.
     //
     // Safety: offscreenRT holds the engine's pre-stamp pixels —
     // stamps in Composite() mutate dibPixels only, never the GPU
@@ -589,66 +598,35 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     if (!m_impl->offscreenRT || !m_impl->sysMemSurface) return false;
     if (m_impl->width <= 0 || m_impl->height <= 0)     return false;
 
-    CLSID pngClsid = {};
-    if (!GetPngEncoderClsid(pngClsid)) return false;
+    // Encode the backdrop as JPEG, not PNG. It's only ever shown
+    // blurred under Dialog.Overlay's backdrop-blur-sm, so lossy is invisible;
+    // JPEG encodes several times faster than the GDI+ PNG path and transmits
+    // ~10x fewer bytes (base64 + IPC + browser decode), which is what
+    // dominated the maximized latency once the StretchRect fast path below cut
+    // the readback. (CaptureSnapshotToFile keeps PNG — the lossless --capture
+    // offline-diff path.)
+    CLSID jpegClsid = {};
+    if (!GetJpegEncoderClsid(jpegClsid)) return false;
+    constexpr int kBackdropJpegQuality = 82;  // blurred backdrop — fidelity is moot
 
 #ifndef NDEBUG
-    // [CACHE-DEFERRAL-PERF] on-demand readback latency. Logs once per
+    // [CACHE-DEFERRAL-PERF] / [INSTANT-MODAL] timing anchor. Logs once per
     // snapshot call (snapshots are rare — no throttling needed).
-    LARGE_INTEGER sQpf{}, sT0{}, sT1{};
+    LARGE_INTEGER sQpf{}, sT0{};
     QueryPerformanceFrequency(&sQpf);
     QueryPerformanceCounter(&sT0);
 #endif
 
-    // Fresh GPU → SYSTEMMEM. The actual sync to GPU work happens
-    // inside LockRect below, not here.
-    HRESULT hr = m_impl->device->GetRenderTargetData(
-        m_impl->offscreenRT.Get(), m_impl->sysMemSurface.Get());
-    if (FAILED(hr)) return false;
+    const int srcW = m_impl->width;
+    const int srcH = m_impl->height;
 
-    D3DLOCKED_RECT locked = {};
-    hr = m_impl->sysMemSurface->LockRect(&locked, nullptr, D3DLOCK_READONLY);
-    if (FAILED(hr)) return false;
-
-#ifndef NDEBUG
-    QueryPerformanceCounter(&sT1);
-    const double sMs = (sT1.QuadPart - sT0.QuadPart) * 1000.0 /
-                       static_cast<double>(sQpf.QuadPart);
-    fprintf(stderr,
-            "[CACHE-DEFERRAL-PERF] snapshotReadback=%.3f ms (%dx%d)\n",
-            sMs, m_impl->width, m_impl->height);
-    fflush(stderr);
-#endif
-
-    const int srcW   = m_impl->width;
-    const int srcH   = m_impl->height;
-    const int stride = srcW * 4;
-
-    // Copy SYSTEMMEM → a local buffer so the LockRect window is as
-    // short as possible (we don't want to hold the surface lock
-    // across PNG encoding, which can be many ms).
-    std::vector<uint8_t> rawDib(static_cast<size_t>(stride) *
-                                 static_cast<size_t>(srcH));
-    {
-        const auto* src = static_cast<const uint8_t*>(locked.pBits);
-        for (int y = 0; y < srcH; ++y)
-        {
-            memcpy(rawDib.data() + static_cast<size_t>(y) *
-                                    static_cast<size_t>(stride),
-                   src + static_cast<size_t>(y) * locked.Pitch,
-                   static_cast<size_t>(stride));
-        }
-    }
-    m_impl->sysMemSurface->UnlockRect();
-
-    // B1.4 T4c.5: crop the readback DIB to the current scene rect
-    // before encoding. The popup is full-main-row sized post-T4c, but
-    // only the scene-rect sub-region holds pixels the user sees, so
-    // encoding the full DIB stretches outside-scene engine content
-    // into the modal's quadrant-viewport <img>. When no scene rect
-    // is set (boot state, or vitest harnesses that drive
-    // CaptureSnapshotPng without first dispatching layout/scene-rect),
-    // fall back to the full DIB — matches the pre-T4c contract.
+    // B1.4 T4c.5: crop region = the current scene rect (the only sub-region
+    // that holds pixels the user sees; encoding the full DIB would stretch
+    // outside-scene engine content into the modal's quadrant <img>). When no
+    // scene rect is set (boot, or harnesses that drive CaptureSnapshotPng
+    // without a layout/scene-rect dispatch), fall back to the full RT. This
+    // needs only width/height, so it runs BEFORE any readback and is shared
+    // by both the fast (StretchRect) and slow (full-readback) paths.
     int cropX = 0;
     int cropY = 0;
     int cropW = srcW;
@@ -664,53 +642,261 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
         if (cropW <= 0 || cropH <= 0) return false;
     }
 
-    // The DIB pixels are BGRA in memory (D3DFMT_A8R8G8B8 + BI_RGB).
-    // Pre-stamp pixels all have alpha = 255 (the engine renders fully
-    // opaque), so PARGB vs ARGB pick is moot for storage but PARGB
-    // matches the layered-window convention; we use ARGB for the
-    // GDI+ Bitmap so PNG encoding writes straight sRGB without any
-    // premultiplied → straight conversion step.
-    //
-    // GDI+ subregion view: scan0 points at the crop's top-left pixel
-    // and we keep the full source stride, so GDI+ steps to the next
-    // row at the same X offset inside the parent buffer. Zero-copy.
+    // instant-modal] Encoded (downscaled) output dims. The snapshot is
+    // only ever shown as a modal's frosted-glass backdrop — Dialog.Overlay
+    // paints bg-black/60 + backdrop-blur-sm over it, so a full-res encode is
+    // wasted work. Two knobs cut it: kSnapshotMaxEdge caps the long edge
+    // (bounding the upscale/softness under the blur — ~3.4x at 3440 -> 1024);
+    // kSnapshotDownscale forces a min reduction even for sub-cap (windowed)
+    // captures. This formula is reused VERBATIM by both paths so the encoded
+    // size is byte-identical to the pre-output (the native dim tests and
+    // the backdrop-blur "floor" both depend on it — do not retune lightly).
+    constexpr int kSnapshotMaxEdge   = 1024;  // upper bound on the encoded long edge
+    constexpr int kSnapshotDownscale = 2;     // min downscale factor (windowed snappiness)
+    int dstW = cropW;
+    int dstH = cropH;
+    {
+        const int longEdge   = (cropW > cropH) ? cropW : cropH;
+        int       targetLong = longEdge / kSnapshotDownscale;
+        if (targetLong > kSnapshotMaxEdge) targetLong = kSnapshotMaxEdge;
+        if (targetLong < 1)                targetLong = 1;
+        if (targetLong < longEdge)
+        {
+            const double s = static_cast<double>(targetLong) / longEdge;
+            dstW = static_cast<int>(cropW * s + 0.5);
+            dstH = static_cast<int>(cropH * s + 0.5);
+            if (dstW < 1) dstW = 1;
+            if (dstH < 1) dstH = 1;
+        }
+    }
+
+    // Shared encode tail: PNG-encode `bmp` into outBase64 (+ set the out dims)
+    // via an in-memory IStream. CreateStreamOnHGlobal(nullptr, TRUE, ...) lets
+    // the stream own its HGLOBAL — released when the IStream releases. Used by
+    // BOTH the fast and slow paths; `pathTag` is for the debug latency log.
+    auto encodeBitmap = [&](Gdiplus::Bitmap* bmp, const char* pathTag) -> bool
+    {
+        IStream* stream = nullptr;
+        if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) || !stream)
+            return false;
+
+        // JPEG quality EncoderParameter (LONG 1..100), same shape as
+        // EncodeFrameJpeg. qval must outlive the Save call.
+        ULONG qval = static_cast<ULONG>(kBackdropJpegQuality);
+        Gdiplus::EncoderParameters encParams;
+        encParams.Count = 1;
+        encParams.Parameter[0].Guid           = Gdiplus::EncoderQuality;
+        encParams.Parameter[0].Type           = Gdiplus::EncoderParameterValueTypeLong;
+        encParams.Parameter[0].NumberOfValues = 1;
+        encParams.Parameter[0].Value          = &qval;
+
+        if (bmp->Save(stream, &jpegClsid, &encParams) != Gdiplus::Ok)
+        {
+            stream->Release();
+            return false;
+        }
+
+        LARGE_INTEGER zero = {};
+        stream->Seek(zero, STREAM_SEEK_SET, nullptr);
+
+        STATSTG stat = {};
+        if (FAILED(stream->Stat(&stat, STATFLAG_NONAME)))
+        {
+            stream->Release();
+            return false;
+        }
+        const size_t imgBytes = static_cast<size_t>(stat.cbSize.QuadPart);
+        std::vector<uint8_t> img(imgBytes);
+        ULONG read = 0;
+        if (FAILED(stream->Read(img.data(), static_cast<ULONG>(imgBytes), &read)) || read != imgBytes)
+        {
+            stream->Release();
+            return false;
+        }
+        stream->Release();
+
+        outBase64 = Base64Encode(img.data(), img.size());
+        outW = dstW;
+        outH = dstH;
+
+#ifndef NDEBUG
+        // [INSTANT-MODAL] Total capture cost (readback → downscale → JPEG
+        // encode → base64) — the latency the gated save-changes dialog waits
+        // on. `path=` says whether the GPU StretchRect fast path or the
+        // full-readback fallback ran. sT0/sQpf come from the anchor above.
+        {
+            LARGE_INTEGER sT2{};
+            QueryPerformanceCounter(&sT2);
+            const double totalMs = (sT2.QuadPart - sT0.QuadPart) * 1000.0 /
+                                   static_cast<double>(sQpf.QuadPart);
+            fprintf(stderr,
+                    "[INSTANT-MODAL] snapshotCapture total=%.1f ms path=%s "
+                    "(encoded %dx%d from crop %dx%d, jpg=%zu bytes)\n",
+                    totalMs, pathTag, dstW, dstH, cropW, cropH, img.size());
+            fflush(stderr);
+        }
+#else
+        (void)pathTag;
+#endif
+        return true;
+    };
+
+    // ===== Fast path: GPU StretchRect crop+downscale → small readback.
+    // Returns true only if it fully produced outBase64; ANY miss (missing caps,
+    // a failed Create*/StretchRect/readback) returns false so we fall through
+    // to the proven slow path below.
+    auto tryStretchPath = [&]() -> bool
+    {
+        // A 1:1 copy gains nothing (no downscale) — let the slow path handle it.
+        if (dstW >= cropW && dstH >= cropH) return false;
+
+        // offscreenRT is a render-target *texture* surface (CreateTexture +
+        // GetSurfaceLevel), so StretchRect from it requires
+        // CAN_STRETCHRECT_FROM_TEXTURES; D3DTEXF_LINEAR requires the filter
+        // cap. Both are universal on modern HAL but are real preconditions.
+        D3DCAPS9 caps = {};
+        if (FAILED(m_impl->device->GetDeviceCaps(&caps)))                  return false;
+        if (!(caps.DevCaps2 & D3DDEVCAPS2_CAN_STRETCHRECT_FROM_TEXTURES))  return false;
+        const D3DTEXTUREFILTERTYPE filter =
+            (caps.StretchRectFilterCaps & D3DPTFILTERCAPS_MINFLINEAR)
+                ? D3DTEXF_LINEAR : D3DTEXF_POINT;
+
+        // Destination: a small RT (POOL_DEFAULT, same ARGB, non-MSAA) for the
+        // StretchRect, plus a matching SYSTEMMEM surface for the readback.
+        Microsoft::WRL::ComPtr<IDirect3DSurface9> smallRT;
+        if (FAILED(m_impl->device->CreateRenderTarget(
+                static_cast<UINT>(dstW), static_cast<UINT>(dstH),
+                D3DFMT_A8R8G8B8, D3DMULTISAMPLE_NONE, 0, FALSE,
+                &smallRT, nullptr)))
+            return false;
+        Microsoft::WRL::ComPtr<IDirect3DSurface9> smallSys;
+        if (FAILED(m_impl->device->CreateOffscreenPlainSurface(
+                static_cast<UINT>(dstW), static_cast<UINT>(dstH),
+                D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &smallSys, nullptr)))
+            return false;
+
+        // offscreenRT is the engine's *currently bound* slot-0 render target
+        // (engine.cpp:674/943, left bound at :1017; the snapshot runs between
+        // Render calls, outside BeginScene/EndScene). StretchRect from the
+        // active RT can fail D3DERR_INVALIDCALL, so park slot 0 on the swap-
+        // chain back buffer just for the blit, then restore. We touch ONLY
+        // slot 0 (not depth); the back buffer is full-size (>= the small RT)
+        // and is never presented in, so this is side-effect-free, and
+        // the engine re-binds offscreenRT at the top of every frame regardless.
+        Microsoft::WRL::ComPtr<IDirect3DSurface9> savedRT;
+        if (FAILED(m_impl->device->GetRenderTarget(0, &savedRT)) || !savedRT) return false;
+        Microsoft::WRL::ComPtr<IDirect3DSurface9> backBuf;
+        if (FAILED(m_impl->device->GetBackBuffer(
+                0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuf)) || !backBuf)
+            return false;
+
+        const RECT srcRect{ cropX, cropY, cropX + cropW, cropY + cropH };
+        const RECT dstRect{ 0, 0, dstW, dstH };
+
+        if (FAILED(m_impl->device->SetRenderTarget(0, backBuf.Get()))) return false;
+        const HRESULT stretchHr = m_impl->device->StretchRect(
+            m_impl->offscreenRT.Get(), &srcRect, smallRT.Get(), &dstRect, filter);
+        m_impl->device->SetRenderTarget(0, savedRT.Get());  // restore (single point, unconditional)
+
+        if (FAILED(stretchHr)) return false;
+
+        if (FAILED(m_impl->device->GetRenderTargetData(smallRT.Get(), smallSys.Get())))
+            return false;
+
+        D3DLOCKED_RECT locked = {};
+        if (FAILED(smallSys->LockRect(&locked, nullptr, D3DLOCK_READONLY)))
+            return false;
+
+        const int dstStride = dstW * 4;
+        std::vector<uint8_t> smallBuf(static_cast<size_t>(dstStride) *
+                                      static_cast<size_t>(dstH));
+        {
+            const auto* src = static_cast<const uint8_t*>(locked.pBits);
+            for (int y = 0; y < dstH; ++y)
+                memcpy(smallBuf.data() + static_cast<size_t>(y) * dstStride,
+                       src + static_cast<size_t>(y) * locked.Pitch,
+                       static_cast<size_t>(dstStride));
+        }
+        smallSys->UnlockRect();
+
+#ifndef NDEBUG
+        {
+            LARGE_INTEGER rT{};
+            QueryPerformanceCounter(&rT);
+            const double rMs = (rT.QuadPart - sT0.QuadPart) * 1000.0 /
+                               static_cast<double>(sQpf.QuadPart);
+            fprintf(stderr,
+                    "[CACHE-DEFERRAL-PERF] snapshotReadback=%.3f ms (fast %dx%d "
+                    "filter=%s stretchHr=0x%08lX)\n",
+                    rMs, dstW, dstH,
+                    (filter == D3DTEXF_LINEAR) ? "LINEAR" : "POINT",
+                    static_cast<unsigned long>(stretchHr));
+            fflush(stderr);
+        }
+#endif
+
+        // ARGB Bitmap over the tightly-packed small buffer (alive across the
+        // Save call inside encodeBitmap). No GDI+ DrawImage — the GPU already
+        // did the resample.
+        Gdiplus::Bitmap smallBmp(dstW, dstH, dstStride, PixelFormat32bppARGB,
+                                 smallBuf.data());
+        if (smallBmp.GetLastStatus() != Gdiplus::Ok) return false;
+        return encodeBitmap(&smallBmp, "fast");
+    };
+
+    if (tryStretchPath()) return true;
+
+    // ===== Slow path (fallback): the proven pre-full readback + GDI+
+    // downscale. Reached when the device lacks the StretchRect caps or the GPU
+    // fast path hit any failure (so the modal still gets its backdrop).
+    HRESULT hr = m_impl->device->GetRenderTargetData(
+        m_impl->offscreenRT.Get(), m_impl->sysMemSurface.Get());
+    if (FAILED(hr)) return false;
+
+    D3DLOCKED_RECT locked = {};
+    hr = m_impl->sysMemSurface->LockRect(&locked, nullptr, D3DLOCK_READONLY);
+    if (FAILED(hr)) return false;
+
+#ifndef NDEBUG
+    {
+        LARGE_INTEGER rT{};
+        QueryPerformanceCounter(&rT);
+        const double rMs = (rT.QuadPart - sT0.QuadPart) * 1000.0 /
+                           static_cast<double>(sQpf.QuadPart);
+        fprintf(stderr,
+                "[CACHE-DEFERRAL-PERF] snapshotReadback=%.3f ms (slow %dx%d)\n",
+                rMs, srcW, srcH);
+        fflush(stderr);
+    }
+#endif
+
+    const int stride = srcW * 4;
+
+    // Copy SYSTEMMEM → a local buffer so the LockRect window is as short as
+    // possible (we don't hold the lock across PNG encoding, which can be ms).
+    std::vector<uint8_t> rawDib(static_cast<size_t>(stride) *
+                                 static_cast<size_t>(srcH));
+    {
+        const auto* src = static_cast<const uint8_t*>(locked.pBits);
+        for (int y = 0; y < srcH; ++y)
+        {
+            memcpy(rawDib.data() + static_cast<size_t>(y) *
+                                    static_cast<size_t>(stride),
+                   src + static_cast<size_t>(y) * locked.Pitch,
+                   static_cast<size_t>(stride));
+        }
+    }
+    m_impl->sysMemSurface->UnlockRect();
+
+    // The DIB pixels are BGRA in memory (D3DFMT_A8R8G8B8 + BI_RGB). We use
+    // ARGB for the GDI+ Bitmap so PNG encoding writes straight sRGB. scan0
+    // points at the crop's top-left pixel and we keep the full source stride,
+    // so GDI+ steps row-to-row at the same X offset inside the parent buffer.
     BYTE* scan0 = const_cast<BYTE*>(rawDib.data()) +
                   static_cast<size_t>(cropY) * static_cast<size_t>(stride) +
                   static_cast<size_t>(cropX) * 4u;
     Gdiplus::Bitmap srcBmp(cropW, cropH, stride, PixelFormat32bppARGB, scan0);
     if (srcBmp.GetLastStatus() != Gdiplus::Ok) return false;
-
-    // instant-modal] Downscale before PNG-encoding. This snapshot is
-    // only ever shown as a modal's frosted-glass backdrop — Dialog.Overlay
-    // paints bg-black/60 + backdrop-blur-sm over it, so it's blurred to mush
-    // and a full-res (e.g. 3440x1369) encode is wasted work. That full-res
-    // PNG encode + base64 + IPC + browser decode is what made the gated
-    // dialog take up to the 750 ms fallback to appear. Two knobs cut it:
-    //   * kSnapshotMaxEdge caps the encoded long edge, bounding the upscale
-    //     (and thus the softness under the blur) at large/maximized
-    //     viewports — ~3.4x at 3440 -> 1024, which reads as smooth.
-    //   * kSnapshotDownscale forces a minimum NxN reduction even for sub-cap
-    //     (windowed) captures, so small modals are snappy too. At 2x the
-    //     upscale is gentler than the maximized case, so quality is a
-    //     non-issue; we just shed ~3/4 of the encode + transit cost.
-    // The ~2-3 ms GPU readback above is left as-is; encode + transit dominate
-    // and are what we cut. Lower either knob for faster/softer.
-    constexpr int kSnapshotMaxEdge   = 1024;  // upper bound on the encoded long edge
-    constexpr int kSnapshotDownscale = 2;     // min downscale factor (windowed snappiness)
-    int dstW = cropW;
-    int dstH = cropH;
-    const int longEdge   = (cropW > cropH) ? cropW : cropH;
-    int       targetLong = longEdge / kSnapshotDownscale;
-    if (targetLong > kSnapshotMaxEdge) targetLong = kSnapshotMaxEdge;
-    if (targetLong < 1)                targetLong = 1;
-    if (targetLong < longEdge)
-    {
-        const double s = static_cast<double>(targetLong) / longEdge;
-        dstW = static_cast<int>(cropW * s + 0.5);
-        dstH = static_cast<int>(cropH * s + 0.5);
-        if (dstW < 1) dstW = 1;
-        if (dstH < 1) dstH = 1;
-    }
 
     Gdiplus::Bitmap* encodeBmp = &srcBmp;
     std::unique_ptr<Gdiplus::Bitmap> downscaled;
@@ -729,63 +915,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
         encodeBmp = downscaled.get();
     }
 
-    // Encode to PNG into an in-memory IStream so we can read the byte
-    // payload back out. CreateStreamOnHGlobal(nullptr, TRUE, ...) lets
-    // the stream own its HGLOBAL — released when the IStream releases.
-    IStream* stream = nullptr;
-    if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) || !stream)
-        return false;
-
-    if (encodeBmp->Save(stream, &pngClsid, nullptr) != Gdiplus::Ok)
-    {
-        stream->Release();
-        return false;
-    }
-
-    // Read the encoded PNG out of the stream. Seek to start, read into
-    // a temporary buffer, then base64-encode.
-    LARGE_INTEGER zero = {};
-    stream->Seek(zero, STREAM_SEEK_SET, nullptr);
-
-    STATSTG stat = {};
-    if (FAILED(stream->Stat(&stat, STATFLAG_NONAME)))
-    {
-        stream->Release();
-        return false;
-    }
-    const size_t pngBytes = static_cast<size_t>(stat.cbSize.QuadPart);
-    std::vector<uint8_t> png(pngBytes);
-    ULONG read = 0;
-    if (FAILED(stream->Read(png.data(), static_cast<ULONG>(pngBytes), &read)) || read != pngBytes)
-    {
-        stream->Release();
-        return false;
-    }
-    stream->Release();
-
-    outBase64 = Base64Encode(png.data(), png.size());
-    outW = dstW;
-    outH = dstH;
-
-#ifndef NDEBUG
-    // [INSTANT-MODAL] Total capture cost (readback → downscale → PNG encode
-    // → base64). This is the latency the gated save-changes dialog waits on;
-    // grep "[INSTANT-MODAL]" to confirm the downscale keeps it well under the
-    // 750 ms fallback. sT0/sQpf come from the readback-perf block above.
-    {
-        LARGE_INTEGER sT2{};
-        QueryPerformanceCounter(&sT2);
-        const double totalMs = (sT2.QuadPart - sT0.QuadPart) * 1000.0 /
-                               static_cast<double>(sQpf.QuadPart);
-        fprintf(stderr,
-                "[INSTANT-MODAL] snapshotCapture total=%.1f ms "
-                "(encoded %dx%d from crop %dx%d, png=%zu bytes)\n",
-                totalMs, dstW, dstH, cropW, cropH, png.size());
-        fflush(stderr);
-    }
-#endif
-
-    return true;
+    return encodeBitmap(encodeBmp, "slow");
 }
 
 bool AlphaCompositor::CaptureSnapshotToFile(const std::wstring& path)
