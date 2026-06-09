@@ -18,7 +18,7 @@ Conventions:
 
 ### Smooth the viewport edge during the right-dock open/close slide
 
-*2026-06-08 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-08 · [`3eb6e28`](https://github.com/DrKnickers/particle-editor/commit/3eb6e28) · #97*
 
 Opening or closing the right dock (Spawner / Lighting) animates the panel edge
 over ~200ms; the D3D9 viewport used to **judder** against it — its cropped edge
