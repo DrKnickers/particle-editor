@@ -18,7 +18,7 @@ Conventions:
 
 ### Multi-aware emitter operations: delete / duplicate / move act on the whole selection, order preserved
 
-*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-09 · [`6f462e0`](https://github.com/DrKnickers/particle-editor/commit/6f462e0) · #104*
 
 Selecting several emitters and then deleting, duplicating, or reordering now
 acts on the **whole selection** from every entry point — the panel toolbar, the
@@ -56,7 +56,7 @@ with the user in favour of preserve.
 
 ### Confirm destructive emitter deletes + surface failed Save / Open
 
-*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-09 · [`6f462e0`](https://github.com/DrKnickers/particle-editor/commit/6f462e0) · #104*
 
 Two safety gaps in the now-default new UI are closed. **(1)** A failed Save,
 Open, or Save As no longer fails silently: `file/save` · `file/open` ·
