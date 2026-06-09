@@ -18,11 +18,22 @@ type Props = ComponentProps<typeof Popover.Content> & {
   occlusionId: string;
 };
 
-export function OccludingPopover({ bridge, occlusionId, children, ...rest }: Props) {
+export function OccludingPopover({
+  bridge,
+  occlusionId,
+  children,
+  className,
+  ...rest
+}: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   useViewportOcclusion(bridge, occlusionId, ref, 24, 24);
+  // `popover-animate` (components.css) gives every toolbar/appearance
+  // popover the shared fade+slight-zoom entrance/exit. Prepended so the
+  // caller's structural classes still apply; it's a plain CSS class with
+  // no Tailwind-utility conflict, so a simple join is safe.
+  const merged = className ? `popover-animate ${className}` : "popover-animate";
   return (
-    <Popover.Content {...rest}>
+    <Popover.Content className={merged} {...rest}>
       <div ref={ref}>{children}</div>
     </Popover.Content>
   );

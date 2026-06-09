@@ -44,6 +44,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator, usePanelRef, type Layout } from "react-resizable-panels";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useRightDock, setDock } from "@/lib/right-dock";
+import { isLegacyMode } from "@/lib/hosting-mode";
+import { computeSceneRect, dockSlideTarget } from "@/lib/scene-rect";
+import { useDockAnim } from "@/lib/dock-anim";
 import { ViewportSlot } from "./ViewportSlot";
 import { CurveEditorPanel } from "./CurveEditorPanel";
 import { EmitterPropertyTabs } from "@/screens/EmitterPropertyTabs";
@@ -65,6 +68,12 @@ const RESIZE_HIT_MIN = { coarse: 20, fine: 8 } as const;
 const OUTER_3COL_DEFAULTS: Layout = { left: 20, center: 60, spawner: 20 };
 const LEFT_DEFAULTS: Layout = { tree: 25, tabs: 75 };
 const CENTER_DEFAULTS: Layout = { viewport: 75, curve: 25 };
+
+// The right-dock slot's pixel floor. Pinned to the Panel's `minSize` below so
+// they stay in lockstep, and reused by the Item-3 dock-slide anim as the
+// fallback open-target width on a first-ever open (before any close has
+// recorded the dock's remembered width).
+const DOCK_MIN_PX = 260;
 
 // B1.4 T6: every localStorage key PanelLayout owns. Exported so the
 // View → Reset panel layout menu item can clear them all in one shot
@@ -180,23 +189,127 @@ export function PanelLayout({ bridge }: Props) {
   // frame so the class is committed before flex changes (else the first
   // frame jumps with nothing to tween).
   const dockPanelRef = usePanelRef();
+  // Drives the `.dock-animating` CSS class (the flex-grow tween) — needed in
+  // BOTH hosting modes. Distinct from the dock-anim STORE signal used below,
+  // which suppresses ViewportSlot's RO sends and is raised ONLY under.
   const [dockAnimating, setDockAnimating] = useState(false);
+  // Shadow of react-resizable-panels' internal `expandToSize`: the dock's
+  // SETTLED pixel width, captured at the open-SETTLE (not at the toggle), so
+  // both the close (how much the centre grows) and the next open (how much it
+  // shrinks) use a stable value. Capturing at the toggle would read a
+  // mid-CSS-transition `offsetWidth` during a rapid re-toggle and poison the
+  // next slide's target (the host then snaps at the settle).
+  const lastDockWidthCssRef = useRef<number | null>(null);
+
   useEffect(() => {
     const p = dockPanelRef.current;
     if (!p) return;
     const need = dockVisible ? p.isCollapsed() : !p.isCollapsed();
     if (!need) return;
+
     setDockAnimating(true);
-    const raf = requestAnimationFrame(() => {
-      if (dockVisible) p.expand();
-      else p.collapse();
-    });
-    const t = setTimeout(() => setDockAnimating(false), 260);
+
+    // [Item 3] Under, drive a host-side time-interpolated viewport rect
+    // synced to the CSS flex-grow tween, so the D3D9 viewport edge glides with
+    // the panel instead of juddering against the clumpy per-frame scene-rect
+    // stream. No-op under --legacy: there the host has no DComp anim path, so we
+    // leave ViewportSlot's per-frame sends running (today's behaviour) and never
+    // raise the suppression signal.
+    const arch = !isLegacyMode();
+    const vpEl = arch
+      ? (document.querySelector('[data-testid="quadrant-viewport"]') as HTMLElement | null)
+      : null;
+
+    // Dock width (CSS px) that transfers to/from the centre column. Prefer the
+    // remembered SETTLED width (captured at the last open-settle). OPEN with no
+    // remembered width yet → the panel min (first-ever open); CLOSE with none →
+    // read the live width, which is accurate because a first close happens from
+    // a settled-open dock (the only residual is a first-open immediately
+    // re-closed mid-transition, which the authoritative settle send corrects).
+    let dockWidthCss = 0;
+    if (arch) {
+      dockWidthCss = dockVisible
+        ? lastDockWidthCssRef.current ?? DOCK_MIN_PX
+        : lastDockWidthCssRef.current ?? p.getSize().inPixels;
+    }
+
+    const reducedMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const animate = arch && vpEl !== null && dockWidthCss > 0 && !reducedMotion;
+    if (animate) useDockAnim.getState().setAnimating(true);
+
+    let raf = 0;
+    if (animate && vpEl) {
+      const dpr = window.devicePixelRatio || 1;
+      const from = computeSceneRect(vpEl);
+      const deltaDev = Math.round(dockWidthCss * dpr);
+      // `dockVisible` true here means we are OPENING (the dock becomes visible);
+      // the viewport shrinks by the dock width. CLOSE grows it. (The narrow-
+      // window edge where the LEFT pane also moves is corrected by the
+      // authoritative settle send below, which reads the real settled rect.)
+      const to = dockSlideTarget(from, deltaDev, dockVisible);
+      raf = requestAnimationFrame((rafTs) => {
+        if (dockVisible) p.expand();
+        else p.collapse();
+        // Stamp ms since the flex actually changed (this rAF) so the host can
+        // back-date its QPC clock to the CSS origin across the IPC hop;
+        // performance.now() and rafTs share the same clock.
+        const msElapsedAtSend = Math.max(0, performance.now() - rafTs);
+        void bridge
+          .request({
+            kind: "animate-scene-rect",
+            params: { from, to, durationMs: 200, easing: "ease", msElapsedAtSend },
+          })
+          .catch(() => {});
+      });
+    } else {
+      // Legacy, reduced-motion, or unknown width → no host anim. Snap the panel
+      // (under reduced-motion the CSS transition is `none`, so it jumps and
+      // `transitionend` never fires); the settle send below pins the host.
+      raf = requestAnimationFrame(() => {
+        if (dockVisible) p.expand();
+        else p.collapse();
+      });
+    }
+
+    // Reuse the existing post-toggle window (260ms > the 200ms tween) to (a)
+    // end the CSS class + suppression signal, (b) record the dock's now-SETTLED
+    // width for the next slide (getSize is accurate once the tween has ended;
+    // 0 on a close-settle, so guard >0), and (c) under send ONE
+    // authoritative layout/scene-rect at the REAL settled rect so host and web
+    // agree on rest (any from/to prediction error snaps out here — by now the
+    // host anim is done, so its self-defense no longer drops this send).
+    const t = setTimeout(() => {
+      setDockAnimating(false);
+      if (animate) useDockAnim.getState().setAnimating(false);
+      if (arch) {
+        const settledDockW = p.getSize().inPixels;
+        if (settledDockW > 0) lastDockWidthCssRef.current = settledDockW;
+        if (vpEl) {
+          void bridge
+            .request({ kind: "layout/scene-rect", params: computeSceneRect(vpEl) })
+            .catch(() => {});
+        }
+      }
+    }, 260);
+
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(t);
+      // A superseding toggle (or unmount) cancels the settle timer above — the
+      // ONLY happy-path clear. Drop the in-flight slide's flags here too, else
+      // a re-toggle that early-returns (or takes the non-animate branch) leaves
+      // the suppression signal stuck true and silences ViewportSlot's RO
+      // indefinitely. The re-run re-raises if the new toggle animates. Also
+      // covers unmount (this cleanup runs then), so no separate unmount net is
+      // needed. (Clearing dockAnimating here additionally fixes the pre-existing
+      // CSS-class stick on the same re-toggle path.)
+      useDockAnim.getState().setAnimating(false);
+      setDockAnimating(false);
     };
-  }, [dockVisible, dockPanelRef]);
+  }, [dockVisible, dockPanelRef, bridge]);
 
   // The content shown in the dock slot LAGS `dock` on close: keep the last
   // pane mounted while the slot animates shut so it slides out instead of
@@ -369,7 +482,7 @@ export function PanelLayout({ bridge }: Props) {
         collapsible
         collapsedSize={0}
         defaultSize={dockVisibleAtMount ? `${outerDefaultLayout.spawner ?? 20}%` : "0%"}
-        minSize={260}
+        minSize={DOCK_MIN_PX}
         maxSize="40%"
       >
         <aside

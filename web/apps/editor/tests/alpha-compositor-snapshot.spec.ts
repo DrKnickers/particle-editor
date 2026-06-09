@@ -93,8 +93,12 @@ test("first viewport/capture-snapshot after boot returns valid PNG (cache-flag-o
   // "garbage bytes" (encoder failure) regressions.
   expect(result.pngBase64.length).toBeGreaterThan(100);
   expect(result.pngBase64.startsWith("iVBORw0KGgo")).toBe(true);
-  expect(result.w).toBe(1024);
-  expect(result.h).toBe(768);
+  // The backdrop snapshot is downscaled before encoding (min 2x, capped at a
+  // 1024 long edge — it's blurred behind the dialog; see
+  // AlphaCompositor::CaptureSnapshotPng). 1024x768 is under the cap, so it
+  // takes the 2x path: 512x384.
+  expect(result.w).toBe(512);
+  expect(result.h).toBe(384);
 });
 
 test("two consecutive snapshots both succeed (readback path is re-entrant)", async () => {
@@ -164,10 +168,16 @@ test("snapshot dimensions follow viewport resize (readback uses current RT, not 
     return { small, large };
   });
 
-  expect(result.small.w).toBe(800);
-  expect(result.small.h).toBe(600);
-  expect(result.large.w).toBe(1600);
-  expect(result.large.h).toBe(900);
+  // The modal backdrop snapshot is downscaled before encoding (min 2x,
+  // capped at a 1024 long edge — it's blurred behind the dialog; see
+  // AlphaCompositor::CaptureSnapshotPng). Both these captures are under the
+  // cap, so each takes the 2x path with aspect preserved: 800x600 -> 400x300,
+  // 1600x900 -> 800x450. The dims still CHANGE between them, which is what
+  // this test actually guards (a fresh readback, not a stale cache).
+  expect(result.small.w).toBe(400);
+  expect(result.small.h).toBe(300);
+  expect(result.large.w).toBe(800);
+  expect(result.large.h).toBe(450);
   expect(result.small.pngBase64.startsWith("iVBORw0KGgo")).toBe(true);
   expect(result.large.pngBase64.startsWith("iVBORw0KGgo")).toBe(true);
 });

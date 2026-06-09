@@ -210,10 +210,9 @@ const DEFAULT_HEIGHT = 300;
 const DEFAULT_TIME_MIN = 0;
 const DEFAULT_TIME_MAX = 100;
 
-const SELECTED_FILL = "#0EA5E9";    // sky-500 — matches Screen 4 accent
 const UNSELECTED_FILL = "#e5e5e5";
 const BORDER_FILL = "#94A3B8";      // slate-400 — slightly darker than unselected
-const BORDER_STROKE = "#0EA5E9";    // accent ring, same hue as selected fill
+const BORDER_STROKE = "#0EA5E9";    // accent ring on border (anchor) keys
 
 /** Below this many pixels (in viewBox units) of pointer movement
  *  between down and up, we treat it as a click — not a drag. Matches
@@ -956,11 +955,12 @@ export function CurveEditor({
       {renderPoints.map((p, i) => {
         const selected = selectedKeyTimes?.has(p.time) ?? false;
         const isBorder = borderTimes.has(p.time);
-        const fill = selected
-          ? SELECTED_FILL
-          : isBorder
-            ? BORDER_FILL
-            : UNSELECTED_FILL;
+        // Selected keys keep their OWN colour (interior grey / border
+        // slate). The selection treatment — a saturated, larger marker
+        // with a stronger shadow — lives in the
+        // `.curve-key-marker[data-selected="true"]` CSS rule + the
+        // enlarged `r` below, replacing the old flat-blue fill override.
+        const fill = isBorder ? BORDER_FILL : UNSELECTED_FILL;
         const stroke = isBorder ? BORDER_STROKE : "none";
         const strokeWidth = isBorder ? 1.5 : 0;
         return (
@@ -973,7 +973,7 @@ export function CurveEditor({
             data-border={isBorder ? "true" : "false"}
             cx={p.x}
             cy={p.y}
-            r={selected ? 5 : 4}
+            r={selected ? 6 : 4}
             fill={fill}
             stroke={stroke}
             strokeWidth={strokeWidth}
@@ -1866,7 +1866,10 @@ function MultiChannelCurves({
               // by the Delete handler + drag-time clamp, and the
               // `data-border` attribute below tags them for callers
               // that need the distinction programmatically.
-              const fill = selected ? SELECTED_FILL : channel.color;
+              // Keys always render in their channel's colour; the
+              // selected marker is intensified (saturate) + enlarged +
+              // shadowed via CSS rather than recoloured to a flat blue.
+              const fill = channel.color;
               const stroke = "none";
               const strokeWidth = 0;
               // Each focus key is rendered as a (hit-pad, visible)
@@ -1879,8 +1882,8 @@ function MultiChannelCurves({
               // larger visual marker that would clutter the curve.
               // hitR was bumped (10/12 → 14/16) because the old pad was
               // still fiddly to hit; visible dot stays at 5/6.
-              const hitR = selected ? 16 : 14;
-              const visR = selected ? 6 : 5;
+              const hitR = selected ? 18 : 14;
+              const visR = selected ? 8 : 5;
               return (
                 <g key={i}>
                   <circle
@@ -1921,6 +1924,7 @@ function MultiChannelCurves({
                   />
                   <circle
                     className="curve-key-marker"
+                    data-selected={selected ? "true" : "false"}
                     cx={p.x}
                     cy={p.y}
                     r={visR}

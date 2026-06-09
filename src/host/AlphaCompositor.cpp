@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
@@ -676,8 +677,57 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     BYTE* scan0 = const_cast<BYTE*>(rawDib.data()) +
                   static_cast<size_t>(cropY) * static_cast<size_t>(stride) +
                   static_cast<size_t>(cropX) * 4u;
-    Gdiplus::Bitmap bmp(cropW, cropH, stride, PixelFormat32bppARGB, scan0);
-    if (bmp.GetLastStatus() != Gdiplus::Ok) return false;
+    Gdiplus::Bitmap srcBmp(cropW, cropH, stride, PixelFormat32bppARGB, scan0);
+    if (srcBmp.GetLastStatus() != Gdiplus::Ok) return false;
+
+    // instant-modal] Downscale before PNG-encoding. This snapshot is
+    // only ever shown as a modal's frosted-glass backdrop — Dialog.Overlay
+    // paints bg-black/60 + backdrop-blur-sm over it, so it's blurred to mush
+    // and a full-res (e.g. 3440x1369) encode is wasted work. That full-res
+    // PNG encode + base64 + IPC + browser decode is what made the gated
+    // dialog take up to the 750 ms fallback to appear. Two knobs cut it:
+    //   * kSnapshotMaxEdge caps the encoded long edge, bounding the upscale
+    //     (and thus the softness under the blur) at large/maximized
+    //     viewports — ~3.4x at 3440 -> 1024, which reads as smooth.
+    //   * kSnapshotDownscale forces a minimum NxN reduction even for sub-cap
+    //     (windowed) captures, so small modals are snappy too. At 2x the
+    //     upscale is gentler than the maximized case, so quality is a
+    //     non-issue; we just shed ~3/4 of the encode + transit cost.
+    // The ~2-3 ms GPU readback above is left as-is; encode + transit dominate
+    // and are what we cut. Lower either knob for faster/softer.
+    constexpr int kSnapshotMaxEdge   = 1024;  // upper bound on the encoded long edge
+    constexpr int kSnapshotDownscale = 2;     // min downscale factor (windowed snappiness)
+    int dstW = cropW;
+    int dstH = cropH;
+    const int longEdge   = (cropW > cropH) ? cropW : cropH;
+    int       targetLong = longEdge / kSnapshotDownscale;
+    if (targetLong > kSnapshotMaxEdge) targetLong = kSnapshotMaxEdge;
+    if (targetLong < 1)                targetLong = 1;
+    if (targetLong < longEdge)
+    {
+        const double s = static_cast<double>(targetLong) / longEdge;
+        dstW = static_cast<int>(cropW * s + 0.5);
+        dstH = static_cast<int>(cropH * s + 0.5);
+        if (dstW < 1) dstW = 1;
+        if (dstH < 1) dstH = 1;
+    }
+
+    Gdiplus::Bitmap* encodeBmp = &srcBmp;
+    std::unique_ptr<Gdiplus::Bitmap> downscaled;
+    if (dstW != cropW || dstH != cropH)
+    {
+        downscaled = std::make_unique<Gdiplus::Bitmap>(dstW, dstH, PixelFormat32bppARGB);
+        if (downscaled->GetLastStatus() != Gdiplus::Ok) return false;
+        Gdiplus::Graphics g(downscaled.get());
+        // Bilinear is plenty under the backdrop blur and avoids the multi-tap
+        // prefilter cost of the high-quality modes on a large downscale.
+        g.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        if (g.DrawImage(&srcBmp, Gdiplus::Rect(0, 0, dstW, dstH),
+                        0, 0, cropW, cropH, Gdiplus::UnitPixel) != Gdiplus::Ok)
+            return false;
+        encodeBmp = downscaled.get();
+    }
 
     // Encode to PNG into an in-memory IStream so we can read the byte
     // payload back out. CreateStreamOnHGlobal(nullptr, TRUE, ...) lets
@@ -686,7 +736,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) || !stream)
         return false;
 
-    if (bmp.Save(stream, &pngClsid, nullptr) != Gdiplus::Ok)
+    if (encodeBmp->Save(stream, &pngClsid, nullptr) != Gdiplus::Ok)
     {
         stream->Release();
         return false;
@@ -714,8 +764,27 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     stream->Release();
 
     outBase64 = Base64Encode(png.data(), png.size());
-    outW = cropW;
-    outH = cropH;
+    outW = dstW;
+    outH = dstH;
+
+#ifndef NDEBUG
+    // [INSTANT-MODAL] Total capture cost (readback → downscale → PNG encode
+    // → base64). This is the latency the gated save-changes dialog waits on;
+    // grep "[INSTANT-MODAL]" to confirm the downscale keeps it well under the
+    // 750 ms fallback. sT0/sQpf come from the readback-perf block above.
+    {
+        LARGE_INTEGER sT2{};
+        QueryPerformanceCounter(&sT2);
+        const double totalMs = (sT2.QuadPart - sT0.QuadPart) * 1000.0 /
+                               static_cast<double>(sQpf.QuadPart);
+        fprintf(stderr,
+                "[INSTANT-MODAL] snapshotCapture total=%.1f ms "
+                "(encoded %dx%d from crop %dx%d, png=%zu bytes)\n",
+                totalMs, dstW, dstH, cropW, cropH, png.size());
+        fflush(stderr);
+    }
+#endif
+
     return true;
 }
 

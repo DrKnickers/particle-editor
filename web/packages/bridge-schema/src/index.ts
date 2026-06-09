@@ -804,6 +804,28 @@ export type Request =
   // Coords in MAIN-HWND-CLIENT space (DPR-multiplied), same as
   // layout/viewport-rect.
   | { kind: "layout/scene-rect";          params: { x: number; y: number; w: number; h: number } }
+  // Item 3 (dock-slide viewport stutter): ONE-SHOT dock-slide animation.
+  // The per-frame layout/scene-rect stream is clumpy/gappy on the emit side,
+  // and the uncapped host render loop samples it at irregular Δt → the
+  // viewport's cropped edge juddered against the browser-smooth panel. Instead
+  // the web sends ONE of these at toggle time and the host re-renders the
+  // engine at a wall-clock-lerped rect every frame, synced to the CSS
+  // flex-grow tween (matched cubic-bezier + back-dated QPC clock).
+  // `from`/`to` are scene rects in device px (same space as layout/scene-rect);
+  // `msElapsedAtSend` = ms since the rAF commit where the panel flex actually
+  // changed, so the host can pin its curve to the CSS origin across the IPC
+  // hop. only — no-op under --legacy (the host anim path is the DComp
+  // path; the web side is gated on the same hosting-mode check).
+  | {
+      kind: "animate-scene-rect";
+      params: {
+        from: { x: number; y: number; w: number; h: number };
+        to: { x: number; y: number; w: number; h: number };
+        durationMs: number;
+        easing: string;
+        msElapsedAtSend: number;
+      };
+    }
   // Push the current theme background colour to the host's composition
   // backing. In the DComp tree is [backing, engine, webview]; the
   // engine visual is clipped to the scene rect, so every transparent DOM
@@ -1036,6 +1058,7 @@ export type ResponseFor<R extends Request> =
   R extends { kind: "undo/perform" }              ? { applied: boolean; label?: string } :
   R extends { kind: "layout/viewport-rect" }      ? Record<string, never> :
   R extends { kind: "layout/scene-rect" }         ? Record<string, never> :
+  R extends { kind: "animate-scene-rect" }        ? Record<string, never> :
   R extends { kind: "host/backing-color" }        ? Record<string, never> :
   R extends { kind: "viewport/occlude" }          ? Record<string, never> :
   R extends { kind: "viewport/capture-snapshot" } ? { pngBase64: string; w: number; h: number } :

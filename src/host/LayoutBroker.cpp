@@ -4,6 +4,77 @@
 #include "AlphaCompositor.h"
 #include "Compositor.h"
 
+#include <cmath>
+
+namespace {
+
+// [Item 3] CSS `ease` timing function = cubic-bezier(0.25, 0.1, 0.25, 1.0),
+// evaluated the way browsers do (the WebKit/Chromium UnitBezier): given the
+// animation's LINEAR progress x in [0,1], solve for the curve parameter t with
+// bezierX(t) = x (Newton-Raphson + bisection fallback), then return bezierY(t).
+// P0=(0,0), P3=(1,1); P1=(0.25,0.1), P2=(0.25,1.0). Matching this to the panel's
+// CSS curve is what makes the host viewport edge track the browser panel edge.
+struct UnitBezier
+{
+    double ax, bx, cx, ay, by, cy;
+    UnitBezier(double x1, double y1, double x2, double y2)
+    {
+        cx = 3.0 * x1; bx = 3.0 * (x2 - x1) - cx; ax = 1.0 - cx - bx;
+        cy = 3.0 * y1; by = 3.0 * (y2 - y1) - cy; ay = 1.0 - cy - by;
+    }
+    double sampleX(double t)  const { return ((ax * t + bx) * t + cx) * t; }
+    double sampleY(double t)  const { return ((ay * t + by) * t + cy) * t; }
+    double sampleDX(double t) const { return (3.0 * ax * t + 2.0 * bx) * t + cx; }
+    double solveT(double x) const
+    {
+        double t = x;
+        for (int i = 0; i < 8; ++i)             // Newton-Raphson
+        {
+            const double xe = sampleX(t) - x;
+            if (xe > -1e-6 && xe < 1e-6) return t;
+            const double d = sampleDX(t);
+            if (d > -1e-6 && d < 1e-6) break;    // flat slope → fall to bisection
+            t -= xe / d;
+        }
+        double lo = 0.0, hi = 1.0;              // bisection fallback
+        t = x;
+        if (t < lo) return lo;
+        if (t > hi) return hi;
+        for (int i = 0; i < 24; ++i)
+        {
+            const double xe = sampleX(t);
+            if (xe > x - 1e-6 && xe < x + 1e-6) return t;
+            if (x > xe) lo = t; else hi = t;
+            t = 0.5 * (lo + hi);
+        }
+        return t;
+    }
+};
+
+double CssEaseY(double x)
+{
+    if (x <= 0.0) return 0.0;
+    if (x >= 1.0) return 1.0;
+    static const UnitBezier kEase(0.25, 0.1, 0.25, 1.0);
+    return kEase.sampleY(kEase.solveT(x));
+}
+
+float Lerpf(float a, float b, double t) { return a + static_cast<float>((b - a) * t); }
+
+// QueryPerformanceCounter ticks per millisecond, or 0 if the counter is
+// unavailable. Cached on first use (the frequency is fixed at boot).
+double QpcPerMs()
+{
+    static double cached = []() -> double {
+        LARGE_INTEGER f;
+        if (!QueryPerformanceFrequency(&f) || f.QuadPart <= 0) return 0.0;
+        return static_cast<double>(f.QuadPart) / 1000.0;
+    }();
+    return cached;
+}
+
+} // namespace
+
 namespace host {
 
 void LayoutBroker::SetAlphaCompositor(AlphaCompositor* compositor)
@@ -73,6 +144,11 @@ void LayoutBroker::Apply(int x, int y, int w, int h)
     SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, w, h,
                  SWP_NOACTIVATE | SWP_NOZORDER);
     InvalidateRect(m_viewport, nullptr, FALSE);
+
+    // [Item 3] A real viewport resize invalidates the dock-slide anim's captured
+    // absolute-px from/to — cancel it (spec risk #4) and let the static
+    // scene-rect path resume. (m_lastW/H still hold the OLD size here.)
+    if (w != m_lastW || h != m_lastH) CancelSceneAnim();
 
     // Reset the D3D9 swap chain so its backbuffer matches the new HWND
     // client size.
@@ -161,6 +237,10 @@ void LayoutBroker::PredictAndApply()
 
     const bool sizeChanged = (newW != m_lastW || newH != m_lastH);
 
+    // [Item 3] Cancel a dock-slide anim on a real resize (spec risk #4); the
+    // move-only branch above already returned via RefreshScreenPosition.
+    if (sizeChanged) CancelSceneAnim();
+
     m_lastX = newX;
     m_lastY = newY;
     m_lastW = newW;
@@ -232,6 +312,18 @@ void LayoutBroker::RemoveOcclusion(const std::string& id)
 }
 
 void LayoutBroker::SetSceneRect(int x, int y, int w, int h)
+{
+    // [Item 3] Self-defense: while a dock-slide anim owns the scene rect, drop
+    // external (stray / late) scene-rects so they can't clobber the host's
+    // smooth interpolation. The authoritative settle send arrives AFTER the anim
+    // ends (web schedules it at 260ms > the 200ms tween, by which point
+    // m_sceneAnim.active is false), so it is not dropped; and a re-toggle arrives
+    // as a fresh animate-scene-rect (StartSceneAnim), not via this path.
+    if (m_sceneAnim.active) return;
+    ApplySceneRect(x, y, w, h);
+}
+
+void LayoutBroker::ApplySceneRect(int x, int y, int w, int h)
 {
     if (w <= 0 || h <= 0)
     {
@@ -313,6 +405,80 @@ void LayoutBroker::SetSceneRect(int x, int y, int w, int h)
         }
         m_dcompCompositor->SetEngineVisualTransform(x, y, w, h);
     }
+}
+
+void LayoutBroker::StartSceneAnim(int fromX, int fromY, int fromW, int fromH,
+                                  int toX, int toY, int toW, int toH,
+                                  double durationMs, double msElapsedAtSend)
+{
+    // Composition-mode () only: the interpolation drives the DComp engine
+    // visual + the per-frame engine viewport. With no DComp compositor there is
+    // no such path (legacy arch-A keeps its per-frame scene-rect stream), so this
+    // is a clean no-op under --legacy.
+    if (!m_dcompCompositor) return;
+
+    const double qpcPerMs = QpcPerMs();
+    LARGE_INTEGER nowLi;
+    if (durationMs <= 0.0 || qpcPerMs <= 0.0 || !QueryPerformanceCounter(&nowLi))
+    {
+        // No usable duration/clock → just apply the final rect (the panel still
+        // tweens in CSS; we forgo host-side interpolation this once). Clear any
+        // PRIOR anim first so this degenerate re-toggle can't leave a stale
+        // interpolation running past the snap.
+        m_sceneAnim.active = false;
+        ApplySceneRect(toX, toY, toW, toH);
+        return;
+    }
+    if (msElapsedAtSend < 0.0) msElapsedAtSend = 0.0;
+
+    m_sceneAnim.active = true;
+    m_sceneAnim.fromX  = static_cast<float>(fromX);
+    m_sceneAnim.fromY  = static_cast<float>(fromY);
+    m_sceneAnim.fromW  = static_cast<float>(fromW);
+    m_sceneAnim.fromH  = static_cast<float>(fromH);
+    m_sceneAnim.toX    = static_cast<float>(toX);
+    m_sceneAnim.toY    = static_cast<float>(toY);
+    m_sceneAnim.toW    = static_cast<float>(toW);
+    m_sceneAnim.toH    = static_cast<float>(toH);
+    m_sceneAnim.durMs  = durationMs;
+    // Back-date the start to the CSS origin: the web measured `msElapsedAtSend`
+    // since the flex actually changed, and host QPC + the browser clock share the
+    // same wall time, so the curve is pinned to the panel across the IPC hop.
+    m_sceneAnim.startQpc = nowLi.QuadPart - static_cast<long long>(msElapsedAtSend * qpcPerMs);
+}
+
+bool LayoutBroker::AdvanceSceneAnim(long long qpcNow)
+{
+    if (!m_sceneAnim.active) return false;
+
+    const double qpcPerMs = QpcPerMs();
+    double t = 1.0;
+    if (qpcPerMs > 0.0 && m_sceneAnim.durMs > 0.0)
+    {
+        const double elapsedMs = static_cast<double>(qpcNow - m_sceneAnim.startQpc) / qpcPerMs;
+        t = elapsedMs / m_sceneAnim.durMs;
+        if (t < 0.0) t = 0.0;
+        if (t > 1.0) t = 1.0;
+    }
+
+    if (t >= 1.0)
+    {
+        // Land exactly on `to` and release the rect; the authoritative settle
+        // send (due ~60ms later) then takes over through SetSceneRect.
+        m_sceneAnim.active = false;
+        ApplySceneRect(static_cast<int>(std::lround(m_sceneAnim.toX)),
+                       static_cast<int>(std::lround(m_sceneAnim.toY)),
+                       static_cast<int>(std::lround(m_sceneAnim.toW)),
+                       static_cast<int>(std::lround(m_sceneAnim.toH)));
+        return true;
+    }
+
+    const double e = CssEaseY(t);  // only the in-flight frames need the curve
+    ApplySceneRect(static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromX, m_sceneAnim.toX, e))),
+                   static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromY, m_sceneAnim.toY, e))),
+                   static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromW, m_sceneAnim.toW, e))),
+                   static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromH, m_sceneAnim.toH, e))));
+    return true;
 }
 
 bool LayoutBroker::CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH)

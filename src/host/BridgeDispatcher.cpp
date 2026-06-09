@@ -927,6 +927,30 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
+    // -------- animate-scene-rect --------
+    // [Item 3] One-shot dock-slide animation. Instead of the per-frame
+    // layout/scene-rect stream (which the uncapped render loop samples at
+    // irregular Δt → a juddering viewport edge), the web sends ONE of these at
+    // the dock toggle; LayoutBroker then re-renders the engine at a wall-clock-
+    // lerped rect every frame, synced to the CSS flex-grow tween. only
+    // (StartSceneAnim is a no-op when no DComp compositor is attached). `from`/
+    // `to` are scene rects in main-client device px; `msElapsedAtSend` back-dates
+    // the host clock to the CSS origin across this IPC hop. `easing` is ignored
+    // here — the host hardcodes the matching CSS `ease` cubic-bezier and the web
+    // only ever sends "ease"; the field stays in the schema for forward-compat.
+    if (kind == "animate-scene-rect")
+    {
+        const json from = params.value("from", json::object());
+        const json to   = params.value("to",   json::object());
+        m_layout.StartSceneAnim(
+            from.value("x", 0), from.value("y", 0), from.value("w", 0), from.value("h", 0),
+            to.value("x", 0),   to.value("y", 0),   to.value("w", 0),   to.value("h", 0),
+            params.value("durationMs", 0.0),
+            params.value("msElapsedAtSend", 0.0));
+        sendOk(json::object());
+        return res;
+    }
+
     // -------- host/backing-color --------
     // (session 3): recolour the DComp composition backing to the
     // app-shell --bg so every transparent DOM region outside the scene

@@ -31,6 +31,7 @@ import { fireEvent, render, screen, cleanup } from "@testing-library/react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { ViewportSlot } from "../ViewportSlot";
 import { MK_LBUTTON, MK_SHIFT } from "../../lib/viewport-input";
+import { useDockAnim } from "../../lib/dock-anim";
 
 function makeStubBridge(): Bridge & {
   request: ReturnType<typeof vi.fn>;
@@ -244,5 +245,74 @@ describe("ViewportSlot — Phase 2 input forwarding (architecture C only)", () =
     fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
     const inputs = findViewportInputCalls(bridge);
     expect(inputs.length).toBe(0);
+  });
+});
+
+describe("ViewportSlot — dock-slide RO suppression (Item 3, architecture C)", () => {
+  // Capture the ResizeObserver callback so we can fire it manually — jsdom's
+  // setup stub has a no-op observe(), so the RO never fires on its own. The
+  // real RO mechanics aren't under test; the suppression GATE on the callback
+  // is. scroll/resize stay on real window listeners (RO-only suppression).
+  const RealRO = globalThis.ResizeObserver;
+  let roCallbacks: Array<() => void>;
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_HOSTING_MODE", ""); // architecture C
+    roCallbacks = [];
+    globalThis.ResizeObserver = class {
+      constructor(cb: () => void) {
+        roCallbacks.push(cb);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    useDockAnim.setState({ animating: false });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+    globalThis.ResizeObserver = RealRO;
+    useDockAnim.setState({ animating: false });
+  });
+
+  function sceneRectCalls(bridge: ReturnType<typeof makeStubBridge>): number {
+    return bridge.request.mock.calls.filter((c) => c[0]?.kind === "layout/scene-rect").length;
+  }
+
+  it("the mount send fires even while a slide is animating (mount is never gated)", () => {
+    useDockAnim.setState({ animating: true });
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    expect(sceneRectCalls(bridge)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("suppresses the ResizeObserver callback while animating", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const before = sceneRectCalls(bridge);
+    expect(roCallbacks.length).toBeGreaterThan(0);
+    useDockAnim.setState({ animating: true }); // a resize lands mid-slide…
+    roCallbacks.forEach((cb) => cb());
+    expect(sceneRectCalls(bridge)).toBe(before); // …and is dropped
+  });
+
+  it("runs the ResizeObserver callback normally when not animating", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const before = sceneRectCalls(bridge);
+    useDockAnim.setState({ animating: false });
+    roCallbacks.forEach((cb) => cb());
+    expect(sceneRectCalls(bridge)).toBe(before + roCallbacks.length);
+  });
+
+  it("keeps scroll + resize sends live while animating (RO-only suppression)", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    useDockAnim.setState({ animating: true });
+    const before = sceneRectCalls(bridge);
+    window.dispatchEvent(new Event("scroll"));
+    window.dispatchEvent(new Event("resize"));
+    expect(sceneRectCalls(bridge)).toBe(before + 2);
   });
 });

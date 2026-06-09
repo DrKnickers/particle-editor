@@ -83,8 +83,10 @@ describe("CurveEditor", () => {
     expect(onKeyClick).toHaveBeenCalledTimes(1);
     expect(onKeyClick.mock.calls[0]![0]).toBe(50);
 
-    // Re-render with the click's time in the selected set; the
-    // matching circle should pick up the accent fill + larger r.
+    // Re-render with the click's time in the selected set; the matching
+    // circle enlarges (r 4→6) and is tagged data-selected. Its fill stays
+    // the key's OWN colour (interior grey) — selection styling is the
+    // saturate()+shadow CSS on [data-selected="true"], not a blue fill.
     rerender(
       <CurveEditor
         track={track}
@@ -95,8 +97,8 @@ describe("CurveEditor", () => {
     );
     const middle = container.querySelectorAll("[data-testid='curve-key']")[1]!;
     expect(middle.getAttribute("data-selected")).toBe("true");
-    expect(middle.getAttribute("r")).toBe("5");
-    expect(middle.getAttribute("fill")).toBe("#0EA5E9");
+    expect(middle.getAttribute("r")).toBe("6");
+    expect(middle.getAttribute("fill")).toBe("#e5e5e5");
     // Sanity: the unselected siblings stay at r=4.
     const first = container.querySelectorAll("[data-testid='curve-key']")[0]!;
     expect(first.getAttribute("r")).toBe("4");

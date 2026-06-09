@@ -16,6 +16,62 @@ Conventions:
 
 ## Changelog
 
+### Smooth the viewport edge during the right-dock open/close slide
+
+*2026-06-08 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Opening or closing the right dock (Spawner / Lighting) animates the panel edge
+over ~200ms; the D3D9 viewport used to **judder** against it — its cropped edge
+advancing in irregular integer steps while the panel glided smoothly. Now the
+viewport edge **glides with the panel** for the whole slide, in both directions
+and under rapid re-toggling. `prefers-reduced-motion` users get an instant snap
+(both edges together) instead of a tween. Behaviour is unchanged under `--legacy`.
+
+**How we tackled it.** The root cause was **multi-clock sampling**, not the
+1-frame clip lag an early hypothesis assumed (an adversarial pass corrected it):
+the browser animates the panel on its own compositor clock with sub-pixel
+flex-grow, while the uncapped host render loop sampled a clumpy, gap-ridden
+`layout/scene-rect` stream (Δt mean 13ms / **stdev 20ms**, gaps to 109ms) and
+snapped to integer pixels. Smoothing the stream is impossible — it's irregular at
+the *emit* side — so the host now **generates** the rect itself. On the dock
+toggle the web sends ONE `animate-scene-rect { from, to, durationMs, easing,
+msElapsedAtSend }` ([`PanelLayout.tsx`](web/apps/editor/src/components/PanelLayout.tsx));
+[`LayoutBroker`](src/host/LayoutBroker.cpp) then re-renders the engine at a
+wall-clock-lerped scene rect every frame (a WebKit-style `UnitBezier` matched to
+the CSS `ease` curve, off a QPC clock **back-dated** by `msElapsedAtSend` to the
+CSS origin across the IPC hop), advanced in the render loop just before
+`engine->Render()` ([`HostWindow.cpp`](src/host/HostWindow.cpp)). The host owns
+the rect for the slide's duration, so the web **suppresses** its per-frame
+`ResizeObserver` sends (RO-only — scroll/resize/DPR stay live) via a small zustand
+signal channel ([`lib/dock-anim.ts`](web/apps/editor/src/lib/dock-anim.ts)), and
+the host **self-defends** (`SetSceneRect` drops stray scene-rects while a slide
+owns the rect). The target width `to` is computed **analytically** (the dock's
+remembered width transfers to the centre column; verified against the panels
+library's `getSize()` + `expandToSize`), and an authoritative `layout/scene-rect`
+at the 260ms cleanup pins host and web to the true settled rect. The animation is
+gated to **architecture C** on both sides (the host path is the DComp compositor;
+the web extracted `isLegacyMode()` into [`lib/hosting-mode.ts`](web/apps/editor/src/lib/hosting-mode.ts)
+so the suppression + send no-op under `--legacy`, else legacy would freeze-then-snap).
+
+**Issues encountered and resolutions.** *Two load-bearing premises were proven
+false before any code* (the trust-but-verify discipline,): the "1-frame clip
+lag" root cause, and a planned "synchronous flexGrow read" for `to` — impossible,
+since react-resizable-panels only emits on the next React commit. *The
+cross-component suppression signal introduced a regression an adversarial review
+caught*: a rapid re-toggle could cancel the 260ms timer that was the signal's only
+clear, stranding it `true` and silencing the viewport's ResizeObserver
+indefinitely — fixed by clearing the signal in the effect *teardown* (which also
+covers unmount and a pre-existing CSS-class stick), with a regression test. *A
+window-resize mid-slide* drove the anim toward a stale target (spec risk #4's
+mitigation was unimplemented) — added `LayoutBroker::CancelSceneAnim()`, called
+from the resize paths (`Apply` / `PredictAndApply`) on a genuine size change only,
+so a pure window *move* (scene rect is client-relative) doesn't cancel. *Animation
+timing can't be judged from agent screenshots or the throttled preview tab*
+() — the bezier/phase were confirmed by the user in the real host (aligned on
+the first try — the back-dated clock + matched curve left no residual jitter).
+
+---
+
 ### UI polish: consistent padding, no clipped fields, softer curve keys, a denser emitter list, a Preferences menu, and mod-aware Open
 
 *2026-06-08 · [`1239ff9`](https://github.com/DrKnickers/particle-editor/commit/1239ff9) · #94*

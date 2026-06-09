@@ -819,6 +819,12 @@ void HostWindowImpl::RenderD3D9()
     engine->Update();
     const double perfUpdateUs = PerfUsSince(perfT0);
 
+    // [Item 3] Advance the dock-slide viewport interpolation to THIS frame's
+    // wall-clock, so the engine below paints the time-lerped scene rect. Placed
+    // before perfT1 so the (cheap, no-op-when-idle) advance stays OUTSIDE the
+    // [PERF] render-timed region. Composition-mode only — a no-op under --legacy.
+    layout.AdvanceSceneAnim(PerfQpcNow());
+
     const LONGLONG perfT1 = PerfQpcNow();
     engine->Render();
     const double perfRenderUs = PerfUsSince(perfT1);

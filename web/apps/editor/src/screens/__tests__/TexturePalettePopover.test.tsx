@@ -257,4 +257,24 @@ describe("TexturePalettePopover", () => {
     open();
     expect(await screen.findByText(/no mod selected/i)).toBeInTheDocument();
   });
+
+  it("carries the shared popover entrance/exit animation class when open", async () => {
+    const b = makeBridge({ list: { pins: [pin], recents: [] } });
+    render(
+      <TexturePalettePopover bridge={b} slot="color" onApply={() => {}}>
+        <button>Palette</button>
+      </TexturePalettePopover>,
+    );
+    open();
+    // The portaled Radix Popover.Content (via OccludingPopover) gets the
+    // `popover-animate` class + Radix's open state, so the fade+zoom
+    // keyframes in components.css apply. Guards against the caller's
+    // className silently overriding the shared animation.
+    const applyBtn = await screen.findByRole("button", {
+      name: `Apply ${pin.filename}`,
+    });
+    const content = applyBtn.closest(".popover-animate");
+    expect(content).not.toBeNull();
+    expect(content).toHaveAttribute("data-state", "open");
+  });
 });

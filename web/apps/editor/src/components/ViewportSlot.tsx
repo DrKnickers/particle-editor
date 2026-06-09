@@ -7,10 +7,11 @@ import {
   makeMouseEvent,
   makeWheelEvent,
 } from "../lib/viewport-input";
+import { computeSceneRect } from "../lib/scene-rect";
+import { isLegacyMode } from "../lib/hosting-mode";
+import { useDockAnim } from "../lib/dock-anim";
 
 type Props = { bridge: Bridge };
-
-const SLOT_BORDER_PX = 0;  // The real shell doesn't paint a slot border; D3D9 fills the whole rect.
 
 // Default rendering path is architecture C (DXGI composition
 // + DComp engine visual + WebView2 composition hosting). Engine
@@ -25,19 +26,10 @@ const SLOT_BORDER_PX = 0;  // The real shell doesn't paint a slot border; D3D9 f
 // into <img>). Mirrors the runtime ALO_HOSTING_MODE check in
 // HostWindow.cpp; a mismatch between build-time and runtime modes
 // triggers the boot-time consistency banner (see App.tsx mode-claim).
-//
-// Read the flag inside a function (not a module-level const) so
-// vitest can override the env var per-test via vi.stubEnv() without
-// needing vi.resetModules() chains. Check BOTH import.meta.env
-// (Vite bakes the build-time value here in production) and
-// process.env (vi.stubEnv writes here in vitest's node runtime).
-function isLegacyMode(): boolean {
-  const fromImportMeta = (import.meta as { env?: Record<string, unknown> }).env?.VITE_HOSTING_MODE;
-  const fromProcess = typeof process !== "undefined" && process.env
-    ? process.env.VITE_HOSTING_MODE
-    : undefined;
-  return fromImportMeta === "legacy" || fromProcess === "legacy";
-}
+// `isLegacyMode()` + the scene-rect math now live in shared libs
+// (lib/hosting-mode, lib/scene-rect) so PanelLayout's dock-slide anim
+// gates on the SAME hosting check and computes from/to with the SAME
+// geometry as the rect ViewportSlot reports at rest.
 
 export function ViewportSlot({ bridge }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -62,27 +54,40 @@ export function ViewportSlot({ bridge }: Props) {
   const archCEnabled = !legacyMode;
   const compositionMode = !legacyMode;
 
+  // [Item 3] Dock-slide suppression signal. While PanelLayout runs a host-
+  // interpolated viewport rect for the dock open/close slide (only),
+  // the ResizeObserver below must NOT also fire per-frame scene-rects — that
+  // clumpy stream is the very judder the host interpolation replaces. Mirror
+  // the zustand signal into a ref so the mount-time RO callback can read the
+  // latest value without re-subscribing on every change.
+  const animatingRef = useRef(useDockAnim.getState().animating);
+  useEffect(
+    () => useDockAnim.subscribe((s) => { animatingRef.current = s.animating; }),
+    [],
+  );
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
     const send = () => {
-      const r = el.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      const x = Math.round((r.left + SLOT_BORDER_PX) * dpr);
-      const y = Math.round((r.top + SLOT_BORDER_PX) * dpr);
-      const w = Math.round(Math.max(0, r.width - SLOT_BORDER_PX * 2) * dpr);
-      const h = Math.round(Math.max(0, r.height - SLOT_BORDER_PX * 2) * dpr);
-      // B1.4 T4c: the centre-quadrant rect now drives the
-      // SCENE rect (the visible sub-rect inside the popup), not the
-      // popup HWND itself. AlphaCompositor stamps alpha=0 outside
-      // this rect each frame — UI panels behind the alpha-zero bands
-      // show through (and receive their own mouse events).
+      const { x, y, w, h } = computeSceneRect(el);
+      // B1.4 T4c: the centre-quadrant rect drives the SCENE rect (the
+      // visible sub-rect inside the popup), not the popup HWND itself. The
+      // compositor crops the engine visual to it each frame — UI panels behind
+      // the cropped-away bands show through (and receive their own mouse events).
       void bridge.request({ kind: "layout/scene-rect", params: { x, y, w, h } }).catch(() => {});
     };
 
-    send();
-    const ro = new ResizeObserver(send);
+    send();  // mount — always raw (the dock-anim signal is irrelevant on first paint)
+    // RO is the ONLY source suppressed during a dock slide: the host owns the
+    // viewport rect for the slide's duration, so a flood of RO scene-rects would
+    // fight its smooth interpolation. scroll / resize / DPR stay raw below so a
+    // real resize or monitor swap mid-slide is never dropped.
+    const ro = new ResizeObserver(() => {
+      if (animatingRef.current) return;
+      send();
+    });
     ro.observe(el);
     window.addEventListener("scroll", send, { passive: true });
     window.addEventListener("resize", send);

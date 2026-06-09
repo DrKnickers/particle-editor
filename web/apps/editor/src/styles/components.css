@@ -101,6 +101,35 @@
 .menu-dropdown-item:hover { background: var(--accent-soft); color: var(--text); }
 .menu-dropdown-divider { height: 1px; background: var(--border); margin: 4px 2px; }
 
+/* ---- Popover entrance / exit (Background / Ground / texture picker) ----
+   Self-contained keyframes keyed off Radix's data-state, applied via the
+   shared OccludingPopover wrapper. The `animate-in`/`zoom-in-95` Tailwind
+   utilities are NOT available in this build (no tailwindcss-animate plugin),
+   so we define the fade+slight-zoom here. Radix keeps Popover.Content mounted
+   through the closing animation (Presence), so the exit actually plays.
+   Zoom emanates from the trigger corner via Radix's transform-origin var. */
+/* Entrance AND exit are pure opacity fades — deliberately NO scale.
+   A scale animation couples the popover's apparent position to its scale
+   state: transform-origin sits at the trigger corner and align="end" pins
+   the right edge, so ANY non-1 scale (mid-animation, or a transform that
+   gets re-resolved when the trigger is pressed) renders the popover offset
+   by a few px and snaps back on interaction — the "shift on press" bug.
+   A fade has no geometric component, so the popover can never shift. */
+@keyframes popover-pop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes popover-pop-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+.popover-animate[data-state="open"]   { animation: popover-pop-in 130ms ease-out; }
+.popover-animate[data-state="closed"] { animation: popover-pop-out 110ms ease-in; }
+@media (prefers-reduced-motion: reduce) {
+  .popover-animate[data-state="open"],
+  .popover-animate[data-state="closed"] { animation: none; }
+}
+
 .window-controls {
   margin-left: auto;
   display: flex;
@@ -166,6 +195,13 @@
    from the accent-soft toggled state. Wins during the press because it's
    declared last; skipped while disabled. */
 .tb-btn:active:not(:disabled) { background: var(--panel-3); transform: scale(0.96); }
+/* When the button is the trigger of an OPEN popover/menu (Radix sets
+   data-state="open"), suppress the press scale — but keep the bg feedback.
+   The scale shrinks the trigger, and Radix's popover anchors to it; on the
+   dismiss-press, floating-ui re-measures the scaled trigger and re-pins the
+   open menu (align="end") to the moved edge, so it visibly shifts a few px
+   until release. Holding the anchor's size steady keeps the menu put. */
+.tb-btn[data-state="open"]:active:not(:disabled) { transform: none; }
 .tb-btn .ic { color: inherit; opacity: 0.9; }
 .tb-btn .ic svg { display: block; }
 
@@ -1059,8 +1095,24 @@
 
 /* ========== Curve editor ========== */
 
-/* Curve key markers: soft drop-shadow for depth instead of a hard outline. */
-.curve-key-marker { filter: drop-shadow(0 1px 1.2px rgba(0, 0, 0, 0.5)); }
+/* Curve key markers. Unselected keys carry NO shadow — only the selected
+   key gets one. Selecting a key intensifies its OWN colour (saturate),
+   grows its radius, and fades in a stronger shadow; the transition
+   animates that select/deselect change. No animation library needed:
+   Chromium transitions the SVG `r` presentation attribute and `filter`
+   (`none` ↔ saturate+drop-shadow interpolates the identity filter list).
+   Selected radius is set in CurveEditor.tsx. First-pass values — tuned
+   live in the host. */
+.curve-key-marker {
+  filter: none;
+  transition: r 150ms ease, filter 150ms ease;
+}
+.curve-key-marker[data-selected="true"] {
+  filter: saturate(1.8) drop-shadow(0 1.5px 2.5px rgba(0, 0, 0, 0.7));
+}
+@media (prefers-reduced-motion: reduce) {
+  .curve-key-marker { transition: none; }
+}
 
 .curve-editor {
   display: grid;

@@ -159,6 +159,41 @@ public:
     // panels.
     bool CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH);
 
+    // [Item 3] Dock-slide viewport interpolation. The web sends ONE
+    // animate-scene-rect at the dock open/close toggle; the host then re-renders
+    // the engine at a wall-clock-lerped scene rect every render frame, synced to
+    // the CSS flex-grow tween, so the viewport edge glides with the panel instead
+    // of juddering against the clumpy per-frame scene-rect stream. `from`/`to`
+    // are scene rects in MAIN-HWND-CLIENT device px (same space as SetSceneRect);
+    // `from` is the live on-screen edge the web measured at toggle. `durationMs`
+    // matches the CSS duration; `msElapsedAtSend` (ms since the flex actually
+    // changed, web-stamped) back-dates the start clock to the CSS origin across
+    // the IPC hop. COMPOSITION-MODE () ONLY — a no-op when no DComp
+    // compositor is attached (legacy keeps its per-frame scene-rect path).
+    void StartSceneAnim(int fromX, int fromY, int fromW, int fromH,
+                        int toX, int toY, int toW, int toH,
+                        double durationMs, double msElapsedAtSend);
+
+    // Advance an in-flight scene anim to `qpcNow` (QueryPerformanceCounter ticks,
+    // the host render clock). Applies the time-lerped rect through the internal
+    // apply path; ends the anim (and applies the exact `to`) at t>=1. Returns
+    // true while active. A cheap no-op when idle. Call once per render frame,
+    // BEFORE engine->Render(), so the engine paints the advanced rect.
+    bool AdvanceSceneAnim(long long qpcNow);
+
+    // True while a dock-slide anim owns the scene rect — drives SetSceneRect's
+    // self-defense (stray/late scene-rects are dropped mid-anim).
+    bool IsSceneAnimActive() const { return m_sceneAnim.active; }
+
+    // Cancel an in-flight dock-slide anim so the static scene-rect path takes
+    // over. Called from the viewport RESIZE paths (Apply / PredictAndApply on a
+    // size change — incl. a DPR move's Engine::Reset): a resize invalidates the
+    // anim's captured absolute-px from/to, so per spec risk #4 we drop the anim
+    // (a 1-frame discontinuity is fine; a ~200ms stale-target slide is not). A
+    // pure window MOVE (RefreshScreenPosition) does NOT cancel — the scene rect
+    // is client-relative, so a move leaves from/to valid.
+    void CancelSceneAnim() { m_sceneAnim.active = false; }
+
 private:
     //: forward all currently-registered occlusions to the
     // compositor, translated to popup-client coords using the current
@@ -166,6 +201,12 @@ private:
     // PredictAndApply / RefreshScreenPosition because moving the
     // popup changes the popup-client coord of every occlusion.
     void ReemitOcclusions();
+
+    // [Item 3] The real scene-rect application (compositor mask + engine
+    // viewport + DComp clip). SetSceneRect is now a thin guard that drops
+    // external updates while a dock-slide anim owns the rect; both the guard and
+    // the per-frame anim advance funnel the actual work through here.
+    void ApplySceneRect(int x, int y, int w, int h);
 
     HWND    m_viewport;
     Engine* m_engine;
@@ -198,6 +239,20 @@ private:
     // polish: main's client size at the last Apply.
     int     m_lastClientW = 0;
     int     m_lastClientH = 0;
+
+    // [Item 3] In-flight dock-slide interpolation. `active` is false when idle.
+    // Rects are MAIN-HWND-CLIENT device px (held as float so the per-frame lerp
+    // keeps sub-pixel precision, rounded only at apply). `startQpc` is a QPC tick
+    // count back-dated to the CSS origin; `durMs` is the CSS duration.
+    struct ViewportAnim
+    {
+        bool      active   = false;
+        float     fromX = 0, fromY = 0, fromW = 0, fromH = 0;
+        float     toX   = 0, toY   = 0, toW   = 0, toH   = 0;
+        long long startQpc = 0;
+        double    durMs    = 0.0;
+    };
+    ViewportAnim m_sceneAnim;
 };
 
 } // namespace host
