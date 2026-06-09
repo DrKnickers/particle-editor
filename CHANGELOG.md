@@ -18,7 +18,7 @@ Conventions:
 
 ### Make the maximized save-modal backdrop snapshot near-instant
 
-*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-09 · [`d431bde`](https://github.com/DrKnickers/particle-editor/commit/d431bde) · #101*
 
 Opening a modal (e.g. the save-changes dialog) with the editor **maximized** now
 paints its frosted-glass backdrop in **~6 ms** instead of **~70 ms** — effectively
