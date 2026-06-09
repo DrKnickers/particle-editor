@@ -1384,3 +1384,25 @@ describe("MockBridge emitters/move-many (preserve order at the edge)", () => {
     expect(rootNames()).toEqual(["A", "B", "C", "D"]);
   });
 });
+
+describe("MockBridge dirty-bit for batch structural mutations", () => {
+  // isMutating must flag emitters/move-many and emitters/duplicate-many so the
+  // mock's dirty-bit / save-prompt gate matches the native host's markDirty
+  // rule. Both shipped in PR #104 but were missing from the allowlist, so a
+  // multi-select move/duplicate left the document falsely clean in the mock.
+  it("emitters/move-many marks the document dirty", async () => {
+    const b = new MockBridge();
+    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(false);
+    // Default fixture roots: Smoke(0), Sparks(3), Flash(5). Moving Smoke down
+    // is a real structural mutation.
+    await b.request({ kind: "emitters/move-many", params: { ids: [0], direction: "down" } });
+    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(true);
+  });
+
+  it("emitters/duplicate-many marks the document dirty", async () => {
+    const b = new MockBridge();
+    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(false);
+    await b.request({ kind: "emitters/duplicate-many", params: { ids: [0] } });
+    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(true);
+  });
+});

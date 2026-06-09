@@ -16,6 +16,26 @@ Conventions:
 
 ## Changelog
 
+### Multi-select move / duplicate now mark the document dirty (mock parity fix)
+
+*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+The dev **mock** bridge's `isMutating` allowlist was missing `emitters/move-many`
+and `emitters/duplicate-many` (both added in #104), so a multi-select move or
+duplicate left the document falsely **clean** in browser/mock mode — no dirty bit,
+no save-prompt gate. The native C++ host marks dirty per-handler, so the shipping
+app was unaffected; this was a mock↔host contract divergence that could mask a
+regression in tests. Both kinds are now flagged, restoring `isMutating`'s
+documented invariant ("the dirty-bit + save-prompt gate matches the native host's
+markDirty rule").
+
+**How we tackled it.** Two lines in
+[`mock.ts`](web/apps/editor/src/bridge/mock.ts) `isMutating`, beside their
+single-item siblings `emitters/duplicate` / `emitters/move`, plus bridge-contract
+tests asserting each kind flips the mock engine-state `dirty` bit.
+
+---
+
 ### Multi-aware emitter operations: delete / duplicate / move act on the whole selection, order preserved
 
 *2026-06-09 · [`6f462e0`](https://github.com/DrKnickers/particle-editor/commit/6f462e0) · #104*

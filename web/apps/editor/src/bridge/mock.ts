@@ -93,6 +93,7 @@ function isMutating(kind: Request["kind"]): boolean {
   // host's `markDirty` rule.
   if (kind === "engine/action/rescale-emitter") return true;
   if (kind === "emitters/duplicate") return true;
+  if (kind === "emitters/duplicate-many") return true;
   if (kind === "emitters/delete") return true;
   if (kind === "emitters/rename") return true;
   if (kind === "emitters/duplicate-with-index-increment") return true;
@@ -102,6 +103,7 @@ function isMutating(kind: Request["kind"]): boolean {
   if (kind === "emitters/add-death-child") return true;
   if (kind === "emitters/add-root") return true;
   if (kind === "emitters/move") return true;
+  if (kind === "emitters/move-many") return true;
   if (kind === "linkGroups/set-membership") return true;
   // Screen 4 Batch B3 — drag/drop reorder + reparent. Both modes
   // mutate persisted tree state.
