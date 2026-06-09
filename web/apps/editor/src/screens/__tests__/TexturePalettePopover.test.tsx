@@ -202,7 +202,11 @@ describe("TexturePalettePopover", () => {
     );
     open();
     const ph = await screen.findByTestId(`palette-thumb-placeholder-${pin.filename}`);
-    expect(ph).toHaveAttribute("data-thumb-status", "broken");
+    // The placeholder mounts in "loading" state (thumb === undefined) and flips to
+    // its final status only after the async thumbnail request resolves
+    // (useEffect → setThumb). findByTestId resolves on the loading render, so wait
+    // for the transition rather than reading the attribute synchronously.
+    await waitFor(() => expect(ph).toHaveAttribute("data-thumb-status", "broken"));
     expect(ph).toHaveTextContent(/broken/i);
   });
 
@@ -219,7 +223,7 @@ describe("TexturePalettePopover", () => {
     );
     open();
     const ph = await screen.findByTestId(`palette-thumb-placeholder-${pin.filename}`);
-    expect(ph).toHaveAttribute("data-thumb-status", "missing");
+    await waitFor(() => expect(ph).toHaveAttribute("data-thumb-status", "missing"));
     expect(ph).toHaveTextContent(/missing/i);
   });
 
