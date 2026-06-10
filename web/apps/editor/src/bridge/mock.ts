@@ -44,6 +44,7 @@ import {
   pasteEmittersFromClipboard,
   pasteAsChildFromClipboard,
   renameEmitter,
+  reorderManyRoots,
   reorderRootEmitter,
   reparentEmitterInTree,
   setAllEmittersVisibleMock,
@@ -108,6 +109,8 @@ function isMutating(kind: Request["kind"]): boolean {
   // Screen 4 Batch B3 — drag/drop reorder + reparent. Both modes
   // mutate persisted tree state.
   if (kind === "emitters/drop") return true;
+  // Multi-select drag-reorder — same structural-mutation tier as emitters/drop.
+  if (kind === "emitters/reorder-many") return true;
   // Screen 4 Batch C — clipboard. `copy` doesn't mutate the tree;
   // `cut` (delete) + `paste` (insert) both do. Matches the native
   // host's per-handler `SetDirty` rule.
@@ -636,17 +639,21 @@ export class MockBridge implements Bridge {
       // FileManager + ParticleSystem which the new-UI host doesn't yet
       // own).
       case "emitters/preview-from-file":
+        // stableId parity with the native preview tree (BuildEmitterTreeNode
+        // emits it; synthetic root uses the reserved 0). The preview tree is
+        // throwaway — fixed values are fine, they just must be present+unique.
         return {
           ok: true,
           tree: {
             id: 0,
+            stableId: 0,
             name: "root",
             children: [
-              { id: 1, name: "Smoke",  children: [
-                { id: 4, name: "Smoke embers", children: [] },
+              { id: 1, stableId: 9001, name: "Smoke",  children: [
+                { id: 4, stableId: 9004, name: "Smoke embers", children: [] },
               ] },
-              { id: 2, name: "Sparks", children: [] },
-              { id: 3, name: "Flash",  children: [] },
+              { id: 2, stableId: 9002, name: "Sparks", children: [] },
+              { id: 3, stableId: 9003, name: "Flash",  children: [] },
             ],
           },
         };
@@ -1058,6 +1065,19 @@ export class MockBridge implements Bridge {
         return { newIds: req.params.ids.filter((id) => finalRootIds.has(id)) };
       }
 
+      case "emitters/reorder-many": {
+        const cur = useMockEmitterTree.getState().tree;
+        const next = reorderManyRoots(cur, req.params.ids, req.params.rootIndex);
+        if (next === null) return { ok: false, error: "reorder refused" };
+        useMockEmitterTree.getState().setTree(next);
+        this.emit({ kind: "emitters/tree/changed", payload: next });
+        this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
+        // Mock ids are stable across a reorder; newIds = the selected ids still
+        // at root level, in input order (aligned for applyNewSelection).
+        const rootIds = new Set(next.root.children.map((c) => c.id));
+        return { ok: true, newIds: req.params.ids.filter((id) => rootIds.has(id)) };
+      }
+
       case "emitters/set-visible": {
         const cur = useMockEmitterTree.getState().tree;
         const next = setEmitterVisibleMock(cur, req.params.id, req.params.visible);
@@ -1088,6 +1108,14 @@ export class MockBridge implements Bridge {
       // match the native dispatcher's contract.
       case "emitters/drop": {
         const cur = useMockEmitterTree.getState().tree;
+        // After a successful drop the highlight FOLLOWS the moved emitter
+        // (re-select it + emit emitters/selected), mirroring the native host.
+        // Mock ids are stable across a drop, so the moved id is req.params.id.
+        const followSelection = () => {
+          const id = req.params.id;
+          useMockEngineState.getState().applyPatch({ selectedEmitterId: id });
+          this.emit({ kind: "emitters/selected", payload: { id } });
+        };
         if (req.params.mode === "reorder") {
           const next = reorderRootEmitter(cur, req.params.id, req.params.rootIndex);
           if (next === null) {
@@ -1095,6 +1123,7 @@ export class MockBridge implements Bridge {
           }
           useMockEmitterTree.getState().setTree(next);
           this.emit({ kind: "emitters/tree/changed", payload: next });
+          followSelection();
           this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
           return { ok: true };
         }
@@ -1110,6 +1139,7 @@ export class MockBridge implements Bridge {
         }
         useMockEmitterTree.getState().setTree(next);
         this.emit({ kind: "emitters/tree/changed", payload: next });
+        followSelection();
         this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
         return { ok: true };
       }

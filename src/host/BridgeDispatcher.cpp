@@ -534,6 +534,7 @@ json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx)
 
     return json{
         {"id",        static_cast<int>(idx)},
+        {"stableId",  emit.stableId},
         {"name",      emit.name},
         {"role",      role},
         {"linkGroup", static_cast<unsigned int>(emit.linkGroup)},
@@ -2531,6 +2532,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         // strictly.
         json tree = {
             {"id",        0},
+            {"stableId",  0},  // synthetic root: 0 is reserved (real ids start at 1)
             {"name",      "root"},
             {"role",      "root"},
             {"linkGroup", 0},
@@ -2564,6 +2566,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         }
         json tree = {
             {"id",        -1},
+            {"stableId",  0},  // synthetic root: 0 is reserved (real ids start at 1)
             {"name",      ""},
             {"role",      "root"},
             {"linkGroup", 0},
@@ -4604,6 +4607,35 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             sendOk(json{{"ok", false}, {"error", "source emitter not found"}});
             return res;
         }
+        // After a successful drop the dragged emitter's positional index has
+        // changed; re-select it (by its post-op index) so the highlight FOLLOWS
+        // the moved emitter rather than sticking on the slot it left behind
+        // (which now holds a different emitter). The web side leans on the
+        // emitters/selected event this emits. `source` is the same Emitter
+        // object across the move, so its new index is its position in the
+        // (now-reordered) flat emitter vector.
+        auto reselectMovedEmitter = [&]() {
+            const auto& es = (*m_pParticleSystem)->getEmitters();
+            for (size_t i = 0; i < es.size(); ++i)
+            {
+                if (es[i] == source)
+                {
+                    m_selectedEmitterId = static_cast<int>(i);
+                    // emitters/selected event — same narrow payload the
+                    // emitters/select handler emits; EmitterTree syncs primary.
+                    if (m_emit)
+                    {
+                        json env = {
+                            {"type",    "evt"},
+                            {"kind",    "emitters/selected"},
+                            {"payload", json{{"id", json(m_selectedEmitterId)}}},
+                        };
+                        m_emit(env.dump());
+                    }
+                    break;
+                }
+            }
+        };
         captureUndo();
         if (mode == "reorder")
         {
@@ -4622,6 +4654,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             }
             sendOk(json{{"ok", true}});
             markDirty();
+            reselectMovedEmitter();
             EmitEngineStateChanged();
             EmitEmittersTreeChanged();
             return res;
@@ -4646,11 +4679,76 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             }
             sendOk(json{{"ok", true}});
             markDirty();
+            reselectMovedEmitter();
             EmitEngineStateChanged();
             EmitEmittersTreeChanged();
             return res;
         }
         sendOk(json{{"ok", false}, {"error", "unknown mode"}});
+        return res;
+    }
+
+    // -------- emitters/reorder-many (multi-select drag-reorder) ------
+    //
+    // Batch absolute-position root reorder. Moves the selected ROOT
+    // emitters (params.ids, positional) to land contiguous at gap
+    // params.rootIndex, preserving tree order; non-contiguous selections
+    // collapse. Wraps ParticleSystem::reorderManyRootsToIndex, which refuses
+    // out-of-range / non-root / empty / own-footprint no-op. Returns the
+    // moved roots' final indices as newIds (a contiguous run).
+    if (kind == "emitters/reorder-many")
+    {
+        if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
+        {
+            sendOk(json{{"ok", false}, {"error", "particle system not bound"}});
+            return res;
+        }
+        int rootIndex = params.value("rootIndex", -1);
+        if (rootIndex < 0)
+        {
+            sendOk(json{{"ok", false}, {"error", "invalid rootIndex"}});
+            return res;
+        }
+        std::vector<ParticleSystem::Emitter*> selection;
+        if (params.contains("ids") && params["ids"].is_array())
+        {
+            for (const auto& j : params["ids"])
+            {
+                ParticleSystem::Emitter* e =
+                    getEmitterById(j.is_number_integer() ? j.get<int>() : -1);
+                if (e == nullptr)
+                {
+                    sendOk(json{{"ok", false}, {"error", "emitter not found"}});
+                    return res;
+                }
+                if (e->parent != nullptr)
+                {
+                    sendOk(json{{"ok", false}, {"error", "non-root in selection"}});
+                    return res;
+                }
+                selection.push_back(e);
+            }
+        }
+        if (selection.empty())
+        {
+            sendOk(json{{"ok", false}, {"error", "empty selection"}});
+            return res;
+        }
+        captureUndo();
+        std::vector<size_t> outNewIds;
+        const bool ok = (*m_pParticleSystem)->reorderManyRootsToIndex(
+            selection, static_cast<size_t>(rootIndex), outNewIds);
+        if (!ok)
+        {
+            sendOk(json{{"ok", false}, {"error", "reorder refused"}});
+            return res;
+        }
+        json newIds = json::array();
+        for (size_t v : outNewIds) newIds.push_back(static_cast<int>(v));
+        sendOk(json{{"ok", true}, {"newIds", newIds}});
+        markDirty();
+        EmitEngineStateChanged();
+        EmitEmittersTreeChanged();
         return res;
     }
 

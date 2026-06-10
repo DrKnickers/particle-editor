@@ -16,9 +16,175 @@ Conventions:
 
 ## Changelog
 
-### Multi-select move / duplicate now mark the document dirty (mock parity fix)
+### Emitter rows glide to their new positions on reorder
 
 *2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Reordering emitters — drag-drop (single or multi), Move Up/Down, delete,
+paste — now **glides** the affected rows to their new positions (~200 ms ease)
+instead of snapping. `prefers-reduced-motion` disables the glide.
+
+**How we tackled it.** The blocker was identity: an emitter "id" is a
+positional index that reshuffles on every structural change, so React keyed
+by it had to unmount/remount rows on reorder — unanimatable. Fixed at the
+root: every `ParticleSystem::Emitter` now carries a **`stableId`** assigned
+from a process-monotonic counter in all three constructors
+([`ParticleSystem.cpp`](src/ParticleSystem.cpp) — the copy ctor deliberately
+issues a *fresh* id, since a duplicate is a new emitter), surfaced on the
+`emitters/list` DTO ([`BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp))
+and required by the schema. The mock mirrors it with an offset counter
+(stableIds ≠ ids) so code confusing the two fails fast in tests. With rows
+keyed by `stableId`, the glide is a standard **FLIP** pass
+([`lib/flip.ts`](web/apps/editor/src/lib/flip.ts) pure deltas + a layout
+effect in [`EmitterTree.tsx`](web/apps/editor/src/screens/EmitterTree.tsx)):
+measure `offsetTop` per row before paint, apply the inverted `translateY`,
+transition to zero. The pass also runs **during a drag** (user call after the
+first smoke): the effect keys on the gap indicator too, so the make-room
+reflow glides as the gap inserts/moves/clears — snappier mid-drag
+(`FLIP_DRAG_MS` 120 ms) than the post-drop settle (`FLIP_SETTLE_MS` 200 ms).
+Interrupted glides (rapid gap hops) restart from the row's current *visual*
+position by folding the in-flight computed-transform residual into the next
+inversion — without that, re-inverting from layout positions teleports rows
+mid-flight. Resolution stays correct while rows animate because gap/onto
+targets come from the drag-activation geometry snapshot, never the live DOM.
+stableIds are runtime-only — never persisted to `.alo`; undo/redo
+rebuilds emitters and issues fresh ids, so a reorder undo remounts (snaps)
+rather than glides: accepted.
+
+**Issues encountered and resolutions.** Making the schema field *required*
+turned `tsc -b` into an exhaustive call-site inventory (the lesson,
+compiler-enforced): it flagged every fixture and mock creation site — but
+NOT the spread-based clones (`{...node}` satisfies the type while silently
+*duplicating* the source's stableId). Those needed manual auditing: mock
+duplicate/paste reassign walks now issue fresh stableIds (the C++ copy-ctor
+rule), while structural clones in reorder/reparent walkers correctly
+preserve them (same emitter). A scripted fixture update also over-matched
+TWO rename-params literals (rename params aren't a tree node): one `toEqual`
+expectation was caught by the suite, but a request-INPUT literal in the
+bridge-contract suite shipped green — the mock destructures params loosely
+and TypeScript skips excess-property checks when `request<R extends
+Request>(req: R)` infers R from the literal; an adversarial review pass
+caught it. The same review caught two real bugs the suites missed: a fourth
+Emitter-copy path (`copySharedParamsFrom`, the link-group propagation) doing
+`*this = src` without restoring `stableId` — every shared-field edit on a
+linked emitter would have stamped the source's identity onto all siblings
+(duplicate React keys); now restored + pinned by an `NDEBUG` assert. And a
+stale reparent latch: once the onto ring was acquired, moving to a no-op zone
+left `lastParams` set, so a release on the block's own footprint committed
+the stale reparent — the idempotent gap-setter couldn't see onto state; now
+cleared explicitly (+ regression test). Measure `offsetTop`, not
+`getBoundingClientRect`, in the FLIP pass — and snap any in-flight glide
+before the drag controller snapshots geometry, since `getBoundingClientRect`
+DOES include live transforms (a re-grab inside the 200 ms glide window would
+otherwise capture mid-animation positions).
+
+---
+
+### Multi-select drag-reorder: drag a whole selection as one block
+
+*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Dragging a root emitter that is part of a multi-selection now reorders the
+**entire selection as one contiguous block** instead of just the grabbed row —
+consistent with the selection-aware Move Up/Down arrows. A non-contiguous
+selection collapses together at the drop point in its current top-to-bottom
+order; the highlight follows the moved emitters to their new positions. While
+dragging, the other emitters slide aside to open a **make-room gap** at the drop
+point — sized to the lifted block's true height — and the **whole lifted
+subtree dims** (children ride along with their roots; a single-row drag dims its
+subtree too), so you see exactly where the block will land and exactly what is
+moving. A **vertical chip** by the cursor lists up to four of the rows being
+carried (+ a "+k more" line) and is **magnetized toward the active gap** — it
+glides partway into the gap so the emitters visibly "flow in", and returns to
+the pointer when a release would do nothing. Dropping a block onto its own
+footprint does nothing.
+
+**Single drag gets the same treatment.** Dragging one unselected root now shows
+the identical make-room gap + cursor chip (one name) and lifts its whole subtree,
+instead of a thin insertion line — and the highlight **follows** the emitter to
+its new spot after the drop (previously it stayed on the slot the emitter left,
+which then held a different emitter). Reparenting is unchanged: drop a root onto
+the **middle third** of any row to nest it under that row (its sky onto-ring,
+never a gap), and the highlight follows there too.
+
+**How we tackled it.** A new atomic host op `emitters/reorder-many { ids,
+rootIndex } -> { newIds }` ([`BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp)
++ [`ParticleSystem::reorderManyRootsToIndex`](src/ParticleSystem.cpp)) computes
+the final root order in a single pass — remove the selected block, reinsert it
+contiguously at the gap shifted by the count of selected roots ahead of it — then
+reuses `moveEmitterToRootIndex`'s subtree-reassembly to relayout and return the
+moved roots' new indices. The React pointer-drag controller
+([`EmitterTree.tsx`](web/apps/editor/src/screens/EmitterTree.tsx)) gained a
+multi-drag branch (pure intent resolution in
+[`lib/multi-drag.ts`](web/apps/editor/src/lib/multi-drag.ts)) that dispatches the
+op and re-selects the returned `newIds` through the existing `applyNewSelection`
+path; the dev mock mirrors the host algorithm exactly, so the Vitest suite is the
+behavioural contract for both. The drop target is resolved **geometrically**, not
+by DOM hit-testing: at drag activation the controller snapshots every root
+block's measured extent in scroll-content space
+(`captureRootBlockGeometry`), and each pointer move maps to a gap index with
+pure math ([`resolveGapFromGeometry`](web/apps/editor/src/lib/multi-drag.ts) —
+un-shift the pointer past the rendered gap, then the classic
+midpoint-crossing rule). Every pointer position resolves to a gap or the
+footprint no-op — there are no dead zones, so the preview tracks the pointer
+continuously. The chip's magnet is a small rAF spring toward a blend of the
+pointer and the gap's center (`computeChipTarget`, pull/spring constants
+`CHIP_PULL`/`CHIP_SPRING` in `EmitterTree.tsx`); `prefers-reduced-motion`
+skips the glide but keeps the position. The chip also **pops in on spawn**
+(`drag-chip-in`, components.css) and **flies into the landing spot on
+release** — the reorder gap's center, or the reparent target row — while
+fading (`CHIP_EXIT_MS`); cancels and no-ops fade in place. The flight target
+is computed in `finish()` from the same geometry snapshot the resolvers use. Single drag unifies onto the same
+controller: a single root is a size-1 block, so its reorder reuses
+`resolveGapFromGeometry` and commits through `reorder-many` (which is why the
+highlight follows — the `newIds` re-select). The one thing single drag adds is
+**reparent**, which needs per-row hit-testing; to stay flicker-free the
+controller also snapshots every row's extent (`captureRowGeometry`) and
+`resolveSingleRootDrop` resolves both outcomes in one geometric pass — middle
+third → onto (reusing the tested `resolveDropIntent` for reparent validity),
+else the reorder gap. The host re-selects the moved emitter after an
+`emitters/drop` (by scanning for the dragged `Emitter*`'s new index in the
+re-laid-out vector) and emits `emitters/selected`, so reparent's highlight
+follows even though ids are positional and reshuffle.
+
+**Issues encountered and resolutions.** A pre-coding adversarial design pass
+caught that the no-op rule must refuse **every** gap on an already-contiguous
+block's own footprint `[first, last+1]` (both edges *and* the interior gaps), not
+just the two edges — reinserting a block into its own vacated span is the
+identity layout. The smooth glide animation of rows sliding to their new
+positions was **deferred**: the data model has no stable emitter identity (ids
+are positional and reshuffle on every reorder), so a robust glide needs an
+imperative FLIP controller rather than a React-keyed transition — captured as a
+follow-up ([`tasks/next-reorder-glide-animation.md`](tasks/next-reorder-glide-animation.md))
+to take on after a stable id is added. The first preview iteration resolved the
+drop target from the **live** DOM, which a make-room gap inherently fights: the
+gap reflows the list, the pointer lands on the (pointer-events-none) gap, the
+target resolves null, the gap clears, the rows snap back — flicker. A
+hold-on-dead-zone workaround stopped the flicker but made the gap "stick" for
+~a block height of travel on tall blocks. The geometric snapshot resolver
+replaced both; its stability is pinned by a vitest **fixed-point property**
+(re-resolving a stationary pointer against the gap it produced never moves the
+gap; iteration from any reachable state converges without cycles — the property
+test caught a genuine transient on its first run). Synthetic-pointer testing
+gotcha: a dispatched `pointerdown` with the default `pointerType: ""` held over
+a Radix `ContextMenu.Trigger` opens the menu via the touch long-press path —
+drive synthetic drags with `pointerType: "mouse"`. Extending the gap to single
+drag risked the same flicker plus a new one: single drag toggles between a gap
+(reorder) and no gap (reparent onto), and clearing a flow gap reflows the list by
+the gap height under a stationary pointer, which can oscillate at the
+onto/reorder boundary. Rather than add speculative hysteresis, the no-cycle
+property test was extended to the single-root resolver and the **simplest**
+un-shift-only resolver was tried first — it converged for every reachable state
+and pointer (including a childless root where the gap height equals one row), so
+no hysteresis was needed. The highlight-not-following bug was a missing
+host/mock re-select: `emitters/drop` returned only `{ ok }`, so the stale
+positional id kept highlighting the slot the emitter vacated.
+
+---
+
+### Multi-select move / duplicate now mark the document dirty (mock parity fix)
+
+*2026-06-09 · [`3479fe6`](https://github.com/DrKnickers/particle-editor/commit/3479fe6) · #107*
 
 The dev **mock** bridge's `isMutating` allowlist was missing `emitters/move-many`
 and `emitters/duplicate-many` (both added in #104), so a multi-select move or

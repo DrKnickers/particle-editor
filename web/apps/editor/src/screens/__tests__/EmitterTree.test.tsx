@@ -14,23 +14,23 @@ import { useDeleteConfirmStore, requestDeleteEmitters } from "@/lib/delete-emitt
 function fixtureTree(): EmitterTreeDto {
   return {
     root: {
-      id: -1, name: "", role: "root", linkGroup: 0, visible: true,
+      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
       children: [
         {
-          id: 0, name: "Smoke", role: "root", linkGroup: 1, visible: true,
+          id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 1, visible: true,
           children: [
-            { id: 1, name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, children: [] },
-            { id: 2, name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, children: [] },
+            { id: 1, stableId: 101, name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, children: [] },
+            { id: 2, stableId: 102, name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, children: [] },
           ],
         },
         {
-          id: 3, name: "Sparks", role: "root", linkGroup: 1, visible: true,
+          id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 1, visible: true,
           children: [
-            { id: 4, name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, children: [] },
+            { id: 4, stableId: 104, name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, children: [] },
           ],
         },
         {
-          id: 5, name: "Flash", role: "root", linkGroup: 0, visible: true,
+          id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true,
           children: [],
         },
       ],
@@ -42,10 +42,15 @@ function makeStubBridge() {
   const tree = fixtureTree();
   const snapshot = { selectedEmitterId: null };
   return {
-    request: vi.fn().mockImplementation((req: { kind: string }) => {
+    request: vi.fn().mockImplementation((req: { kind: string; params?: unknown }) => {
       if (req.kind === "emitters/list") return Promise.resolve(tree);
       if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
       if (req.kind === "emitters/select") return Promise.resolve({});
+      if (req.kind === "emitters/drop") return Promise.resolve({ ok: true });
+      if (req.kind === "emitters/reorder-many") {
+        const ids = (req.params as { ids: number[] }).ids;
+        return Promise.resolve({ ok: true, newIds: ids });
+      }
       return Promise.resolve({});
     }),
     on: vi.fn().mockReturnValue(() => {}),
@@ -57,6 +62,32 @@ beforeEach(() => {
   // state mutations from prior cases don't leak.
   useEmitterSelectionStore.getState().clear();
 });
+
+/** Stub bridge whose served tree can be swapped and whose tree/changed
+ *  subscription is capturable — for tests that simulate a HOST-side reorder
+ *  (positional ids reshuffle, stableIds follow the emitters). */
+function makeMutableTreeBridge(initial: EmitterTreeDto) {
+  let tree = initial;
+  const subs: Array<() => void> = [];
+  const bridge = {
+    request: vi.fn().mockImplementation((req: { kind: string }) => {
+      if (req.kind === "emitters/list") return Promise.resolve(tree);
+      if (req.kind === "engine/state/snapshot") {
+        return Promise.resolve({ selectedEmitterId: null });
+      }
+      return Promise.resolve({});
+    }),
+    on: vi.fn().mockImplementation((kind: string, cb: () => void) => {
+      if (kind === "emitters/tree/changed") subs.push(cb);
+      return () => {};
+    }),
+  } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+  const pushTree = (next: EmitterTreeDto) => {
+    tree = next;
+    subs.forEach((cb) => cb());
+  };
+  return { bridge, pushTree };
+}
 
 describe("EmitterTree", () => {
   it("renders 3 root rows with their lifetime/death children", async () => {
@@ -82,6 +113,52 @@ describe("EmitterTree", () => {
     // rendered as a row.
     const items = screen.getAllByRole("treeitem");
     expect(items).toHaveLength(6);
+  });
+
+  // ─── Reorder glide — stableId keying ─────────────────────────────
+
+  it("a host-side reorder (positional ids reshuffled, stableIds follow) MOVES row elements instead of remounting them", async () => {
+    // Two roots; the host reorders them: after the swap, positional ids are
+    // reassigned by position (Beta is now id 0!) but each emitter keeps its
+    // stableId. Rows are keyed by stableId, so the <li> elements must be the
+    // SAME DOM nodes after the update — that element identity is what lets
+    // the FLIP pass glide them. (Keying by the positional id would remount:
+    // brand-new elements, snap instead of glide — the pre-glide behavior.)
+    const before: EmitterTreeDto = {
+      root: {
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+        children: [
+          { id: 0, stableId: 501, name: "Alpha", role: "root", linkGroup: 0, visible: true, children: [] },
+          { id: 1, stableId: 502, name: "Beta",  role: "root", linkGroup: 0, visible: true, children: [] },
+        ],
+      },
+    };
+    const after: EmitterTreeDto = {
+      root: {
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+        children: [
+          { id: 0, stableId: 502, name: "Beta",  role: "root", linkGroup: 0, visible: true, children: [] },
+          { id: 1, stableId: 501, name: "Alpha", role: "root", linkGroup: 0, visible: true, children: [] },
+        ],
+      },
+    };
+    const { bridge, pushTree } = makeMutableTreeBridge(before);
+    render(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+
+    const alphaLi = screen.getByText("Alpha").closest("li")!;
+    const betaLi  = screen.getByText("Beta").closest("li")!;
+    expect(alphaLi.getAttribute("data-stable-id")).toBe("501");
+
+    pushTree(after);
+    await waitFor(() => {
+      const rows = [...document.querySelectorAll("li[data-stable-id]")];
+      expect(rows.map((r) => r.getAttribute("data-stable-id"))).toEqual(["502", "501"]);
+    });
+
+    // Same DOM elements, new order — moved, not remounted.
+    expect(screen.getByText("Alpha").closest("li")).toBe(alphaLi);
+    expect(screen.getByText("Beta").closest("li")).toBe(betaLi);
   });
 
   it("clicking a row fires emitters/select with the row's id", async () => {
@@ -190,68 +267,74 @@ describe("EmitterTree", () => {
     });
   }
 
-  /** Drive a pointer-based drag from `sourceBtn`, releasing over
-   *  `targetBtn` at `clientY` within the target's stubbed rect.
+  /** Stub all six fixture rows as a contiguous 24px-tall stack, in DOM order.
+   *  The drag controller snapshots row + root-block geometry at activation
+   *  (the first threshold-crossing move) and resolves the drop purely from it
+   *  — so the FULL geometry must be stubbed, and the drag's clientY maps
+   *  directly to content space (jsdom's scroll container rect is all-zero).
+   *  Returns the 24px row height so callers can target a row's thirds.
    *
-   *  The drag is owned by the parent's pointer-drag controller, whose
-   *  move/up listeners live on `document`. pointermove/up dispatched on
-   *  the target bubble there, and the controller reads the move event's
-   *  target (its `[data-emitter-id]`) to find the hovered row. The
-   *  pointerdown is at clientY 0; the first move (clientY≠0) crosses the
-   *  drag threshold and resolves + stores the intent, which pointerup
-   *  commits. (HTML5 DnD was replaced by pointer events because dragstart
-   *  never fires under composition hosting.) */
-  function pointerDrag(
-    sourceBtn: HTMLElement,
-    targetBtn: HTMLElement,
-    clientY: number,
-  ) {
-    fireEvent.pointerDown(sourceBtn, { button: 0, clientX: 0, clientY: 0 });
-    fireEvent.pointerMove(targetBtn, { button: 0, clientX: 0, clientY });
-    fireEvent.pointerUp(targetBtn, { button: 0, clientX: 0, clientY });
+   *  Rows:  Smoke[0,24) embers[24,48) puff[48,72) Sparks[72,96) trail[96,120) Flash[120,144)
+   *  Root blocks (root + subtree): Smoke[0,72) Sparks[72,120) Flash[120,144); mids 36 / 96 / 132. */
+  function stubAllRows(): number {
+    const H = 24;
+    [0, 1, 2, 3, 4, 5].forEach((id, i) => {
+      const el = document.querySelector(`button[data-emitter-id="${id}"]`) as HTMLElement | null;
+      if (el) stubRect(el, i * H, H);
+    });
+    return H;
   }
 
-  it("dropping in the upper third of a root fires emitters/drop reorder above", async () => {
+  it("single-drag reorder above a root fires reorder-many (selection follows) + shows the make-room gap", async () => {
     const bridge = makeStubBridge();
     render(<EmitterTree bridge={bridge} />);
     await waitFor(() => {
       expect(screen.getByText("Sparks")).toBeInTheDocument();
     });
 
-    // Drag Flash (id=5) onto Sparks (id=3) upper third → reorder ABOVE
-    // Sparks (gap index = Sparks' position in roots = 1).
-    const flashBtn  = screen.getByText("Flash").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    stubRect(sparksBtn, 100, 30);  // y range [100, 130), thirds at 10
+    // Single-select + drag Flash (id=5, root idx 2). Pointer in Sparks' UPPER
+    // third (Sparks row [72,96), upper third [72,80)): content y=75 → past
+    // Smoke block mid (36), before Sparks mid (96) → gap 1 (before Sparks).
+    // Single-root reorder commits via reorder-many (a size-1 block), so the
+    // highlight follows the moved root.
+    fireEvent.click(screen.getByText("Flash"));
+    stubAllRows();
+    const flashBtn = screen.getByText("Flash").closest("button")!;
 
-    pointerDrag(flashBtn, sparksBtn, 103);  // y=3 within row → reorder above
+    fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 0, clientY: 75 });
+    // The make-room gap (not the old 2px line) previews the drop.
+    expect(screen.getByTestId("drop-gap-at-1")).toBeInTheDocument();
 
+    fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 75 });
     const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-    const dropCall = calls.find((c) => c.kind === "emitters/drop");
-    expect(dropCall).toBeDefined();
-    expect(dropCall.params).toEqual({
-      mode: "reorder",
-      id: 5,
-      rootIndex: 1,  // gap before Sparks (Sparks is at root idx 1)
-    });
+    const reorder = calls.find((c) => c.kind === "emitters/reorder-many");
+    expect(reorder).toBeDefined();
+    expect(reorder.params).toEqual({ ids: [5], rootIndex: 1 });
+    // NOT the single-emitter emitters/drop path anymore.
+    expect(calls.find((c) => c.kind === "emitters/drop")).toBeUndefined();
   });
 
-  it("dropping in the middle third of a root fires emitters/drop reparent with auto-picked slot", async () => {
+  it("single-drag onto the middle third of a row fires emitters/drop reparent with auto-picked slot", async () => {
     const bridge = makeStubBridge();
     render(<EmitterTree bridge={bridge} />);
     await waitFor(() => {
       expect(screen.getByText("Flash")).toBeInTheDocument();
     });
 
-    // Drag Flash (id=5) onto Sparks (id=3) middle third → reparent
-    // under Sparks. Sparks has a lifetime child only, so the auto-pick
-    // resolves to "death".
-    const flashBtn  = screen.getByText("Flash").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    stubRect(sparksBtn, 100, 30);  // middle third is [10, 20)
+    // Drag Flash (id=5) onto Sparks (id=3) middle third → reparent under
+    // Sparks. Sparks has a lifetime child only, so the auto-pick is "death".
+    // Sparks row is [72,96); middle third [80,88) → content y=84.
+    fireEvent.click(screen.getByText("Flash"));
+    stubAllRows();
+    const flashBtn = screen.getByText("Flash").closest("button")!;
 
-    pointerDrag(flashBtn, sparksBtn, 115);  // y=15 within row → reparent
+    fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 0, clientY: 84 });
+    // Reparent shows the onto-ring, never a make-room gap.
+    expect(document.querySelector('[data-testid^="drop-gap-at-"]')).toBeNull();
 
+    fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 84 });
     const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
     const dropCall = calls.find((c) => c.kind === "emitters/drop");
     expect(dropCall).toBeDefined();
@@ -261,44 +344,71 @@ describe("EmitterTree", () => {
       targetId: 3,
       slot: "death",
     });
+    expect(calls.find((c) => c.kind === "emitters/reorder-many")).toBeUndefined();
+  });
+
+  it("leaving the onto zone clears the latched reparent — a release on the no-op footprint commits NOTHING", async () => {
+    // Regression: once the onto ring was acquired, moving to a dead/no-op
+    // zone left lastParams latched (setReorderGap's idempotence check can't
+    // see onto state), so releasing over the block's own footprint silently
+    // committed the stale reparent.
+    const bridge = makeStubBridge();
+    render(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Sparks")).toBeInTheDocument());
+    stubAllRows();
+    const flashBtn  = screen.getByText("Flash").closest("button")!;
+    const sparksBtn = screen.getByText("Sparks").closest("button")!;
+
+    // Drag Flash; hover Sparks' middle third (y=84 in [80,88)) → onto ring.
+    fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 0, clientY: 84 });
+    expect(sparksBtn.className).toContain("ring-sky-400");
+
+    // Move onto Flash's own footprint (y=135 → past all block mids → gap 3,
+    // inside footprint [2,3] → no-op). Ring must clear; nothing latched.
+    fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 0, clientY: 135 });
+    expect(sparksBtn.className).not.toContain("ring-sky-400");
+
+    fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 135 });
+    const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(calls.find((c) => c.kind === "emitters/drop")).toBeUndefined();
+    expect(calls.find((c) => c.kind === "emitters/reorder-many")).toBeUndefined();
   });
 
   // ─── — cancel an in-progress reorder drag ─────────────────
 
-  /** Start a reorder drag and leave it ACTIVE (past the threshold) without
-   *  releasing, so the cancel paths can be exercised. The pending intent is a
-   *  valid reorder, so any commit would dispatch emitters/drop. */
-  function startActiveDrag(
-    sourceBtn: HTMLElement,
-    targetBtn: HTMLElement,
-    clientY: number,
-  ) {
-    fireEvent.pointerDown(sourceBtn, { button: 0, clientX: 0, clientY: 0 });
-    fireEvent.pointerMove(targetBtn, { button: 0, clientX: 0, clientY });
+  /** Start a single-root drag and leave it ACTIVE (past the threshold) without
+   *  releasing, so the cancel paths can be exercised. clientY 75 (Sparks' upper
+   *  third) resolves reorder gap 1, so any commit WOULD dispatch reorder-many. */
+  function startActiveDrag(sourceBtn: HTMLElement) {
+    fireEvent.pointerDown(sourceBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(sourceBtn, { pointerType: "mouse", clientX: 0, clientY: 75 });
   }
 
-  function dropCalls(bridge: ReturnType<typeof makeStubBridge>) {
+  /** Any drop/reorder commit (single drag now commits reorder via reorder-many,
+   *  reparent via emitters/drop). */
+  function commitCalls(bridge: ReturnType<typeof makeStubBridge>) {
     return (bridge.request as ReturnType<typeof vi.fn>).mock.calls
       .map((c) => c[0])
-      .filter((c) => c.kind === "emitters/drop");
+      .filter((c) => c.kind === "emitters/drop" || c.kind === "emitters/reorder-many");
   }
 
-  it("Escape cancels an in-progress reorder drag without dropping", async () => {
+  it("Escape cancels an in-progress reorder drag without committing", async () => {
     const bridge = makeStubBridge();
     render(<EmitterTree bridge={bridge} />);
     await waitFor(() => {
       expect(screen.getByText("Sparks")).toBeInTheDocument();
     });
+    stubAllRows();
     const flashBtn = screen.getByText("Flash").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    stubRect(sparksBtn, 100, 30);
 
-    startActiveDrag(flashBtn, sparksBtn, 103); // active, valid reorder pending
+    startActiveDrag(flashBtn); // active, valid reorder (gap 1) pending
+    expect(screen.getByTestId("drop-gap-at-1")).toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
-    // A trailing pointerup (as a real release would deliver) must NOT drop.
-    fireEvent.pointerUp(sparksBtn, { button: 0, clientX: 0, clientY: 103 });
+    // A trailing pointerup (as a real release would deliver) must NOT commit.
+    fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 80 });
 
-    expect(dropCalls(bridge)).toHaveLength(0);
+    expect(commitCalls(bridge)).toHaveLength(0);
   });
 
   it("right-click cancels an in-progress reorder drag and suppresses the menu", async () => {
@@ -307,20 +417,20 @@ describe("EmitterTree", () => {
     await waitFor(() => {
       expect(screen.getByText("Sparks")).toBeInTheDocument();
     });
+    stubAllRows();
     const flashBtn = screen.getByText("Flash").closest("button")!;
     const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    stubRect(sparksBtn, 100, 30);
 
-    startActiveDrag(flashBtn, sparksBtn, 103);
+    startActiveDrag(flashBtn);
     // A right-click during the drag cancels it. (Menu suppression — our
     // capture-phase handler stops the event reaching Radix — is verified live
     // in the browser; Radix preventDefaults contextmenu regardless, so a
     // defaultPrevented assertion here would be vacuous.)
-    fireEvent.contextMenu(sparksBtn, { clientX: 0, clientY: 103 });
-    fireEvent.pointerUp(sparksBtn, { button: 0, clientX: 0, clientY: 103 });
+    fireEvent.contextMenu(sparksBtn, { clientX: 0, clientY: 80 });
+    fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 80 });
 
     // The drag is cancelled, so no reorder is committed.
-    expect(dropCalls(bridge)).toHaveLength(0);
+    expect(commitCalls(bridge)).toHaveLength(0);
   });
 
   it("a completed drag swallows the trailing click so the row isn't re-selected", async () => {
@@ -329,11 +439,14 @@ describe("EmitterTree", () => {
     await waitFor(() => {
       expect(screen.getByText("Sparks")).toBeInTheDocument();
     });
+    stubAllRows();
     const flashBtn  = screen.getByText("Flash").closest("button")!;
     const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    stubRect(sparksBtn, 100, 30);
 
-    pointerDrag(flashBtn, sparksBtn, 103);  // a real (threshold-crossing) drag
+    // A real (threshold-crossing) single-root drag → reorder gap 1.
+    fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 0, clientY: 75 });
+    fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 75 });
     (bridge.request as ReturnType<typeof vi.fn>).mockClear();
 
     // In a browser, pointerup on the same element synthesises a click; that

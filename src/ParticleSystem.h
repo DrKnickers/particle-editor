@@ -131,6 +131,15 @@ public:
 		Emitter* parent;
         bool     visible;   // Not stored, for use in editor only
 
+        // Stable per-emitter identity (reorder glide). `index` is positional
+        // and reshuffles on every structural change; `stableId` is assigned
+        // once at construction from a process-monotonic counter and never
+        // changes across reorder/reparent. Runtime-only — never persisted to
+        // .alo, so undo/redo (which rebuilds emitters from a snapshot)
+        // issues fresh ids. Surfaced on the emitters/list DTO so the React
+        // tree can key rows by it. Assigned in ALL THREE constructors.
+        unsigned int stableId;
+
         // Link-group membership (). 0 = unlinked; non-zero IDs are
         // unique within a ParticleSystem and stable across save/load.
         // Persisted in an editor-only optional chunk (0x0100); ignored
@@ -226,8 +235,8 @@ public:
         // here to avoid pulling LinkGroup.h into ParticleSystem.h.
         //
         // Preserves on `*this`: m_instances, parent, spawnOnDeath,
-        // spawnDuringLife, index, linkGroup, visible, plus every
-        // exempt field (name, colorTexture, normalTexture, the
+        // spawnDuringLife, index, linkGroup, visible, stableId, plus
+        // every exempt field (name, colorTexture, normalTexture, the
         // TRACK_INDEX keymap, depending on the flags supplied).
         //
         // Track aliasing is preserved: if `src` has multiple tracks
@@ -336,6 +345,16 @@ public:
     // the target index is out of range (> count of roots), or the move
     // would be a no-op (target position equals current position).
     bool           moveEmitterToRootIndex(Emitter* emitter, size_t targetRootIndex);
+
+    // Move a SET of root emitters so they become contiguous, landing at `gap`
+    // (gap K = "before root K"; gap == rootCount = "after last root"),
+    // preserving the selected roots' current top-to-bottom order. Non-
+    // contiguous selections collapse together. `outNewIds` receives the moved
+    // roots' final positional indices (a contiguous run, tree order). Returns
+    // false on no-op / out-of-range / empty / non-root selection.
+    bool           reorderManyRootsToIndex(const std::vector<Emitter*>& selection,
+                                           size_t gap,
+                                           std::vector<size_t>& outNewIds);
 
     // Reparent `source` so it becomes a child of `target` via target's
     // spawnDuringLife (when useSpawnDuringLife is true) or spawnOnDeath

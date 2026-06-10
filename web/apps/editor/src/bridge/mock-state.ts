@@ -182,30 +182,42 @@ type RecentFilesStore = {
 // IDs are flat 0..5 and stable across resets so test assertions can
 // pin to specific rows.
 
+// Stable per-emitter identity (reorder glide), mirroring the host's
+// process-monotonic counter (ParticleSystem.cpp s_nextEmitterStableId).
+// DELIBERATELY offset from the mock's node ids (which are themselves stable —
+// unlike the host's positional ids) so web code that confuses `id` with
+// `stableId` fails fast in mock-driven tests instead of accidentally working.
+// 0 is reserved for the synthetic root.
+let s_nextStableId = 1001;
+export function nextStableId(): number {
+  return s_nextStableId++;
+}
+
 export function makeDefaultEmitterTree(): EmitterTreeDto {
   return {
     root: {
       id: -1,
+      stableId: 0,
       name: "",
       role: "root",
       linkGroup: 0,
       visible: true,
       children: [
         {
-          id: 0, name: "Smoke", role: "root", linkGroup: 1, visible: true,
+          id: 0, stableId: nextStableId(), name: "Smoke", role: "root", linkGroup: 1, visible: true,
           children: [
-            { id: 1, name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, children: [] },
-            { id: 2, name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, children: [] },
+            { id: 1, stableId: nextStableId(), name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, children: [] },
+            { id: 2, stableId: nextStableId(), name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, children: [] },
           ],
         },
         {
-          id: 3, name: "Sparks", role: "root", linkGroup: 1, visible: true,
+          id: 3, stableId: nextStableId(), name: "Sparks", role: "root", linkGroup: 1, visible: true,
           children: [
-            { id: 4, name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, children: [] },
+            { id: 4, stableId: nextStableId(), name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, children: [] },
           ],
         },
         {
-          id: 5, name: "Flash", role: "root", linkGroup: 0, visible: true,
+          id: 5, stableId: nextStableId(), name: "Flash", role: "root", linkGroup: 0, visible: true,
           children: [],
         },
       ],
@@ -413,10 +425,12 @@ export function duplicateEmitter(
     };
   };
   // Build the duplicate subtree with fresh ids. Walk via depth-first
-  // so id assignment matches the visit order.
+  // so id assignment matches the visit order. A duplicate is a NEW
+  // emitter → fresh stableId too (mirrors the C++ copy-ctor rule).
   const reassignAll = (n: EmitterTreeNode): EmitterTreeNode => ({
     ...n,
     id: nextId++,
+    stableId: nextStableId(),
     children: n.children.map(reassignAll),
   });
   // Reset nextId; we want the cloned root to take `newRootId`.
@@ -514,6 +528,7 @@ export function addLifetimeChildEmitter(
   const newId = maxIdIn(tree) + 1;
   const child: EmitterTreeNode = {
     id: newId,
+    stableId: nextStableId(),
     name: "",
     role: "lifetime",
     linkGroup: 0,
@@ -544,6 +559,7 @@ export function addRootEmitterMock(
   const newId = maxIdIn(tree) + 1;
   const child: EmitterTreeNode = {
     id: newId,
+    stableId: nextStableId(),
     name: "",
     role: "root",
     linkGroup: 0,
@@ -569,6 +585,7 @@ export function addDeathChildEmitter(
   const newId = maxIdIn(tree) + 1;
   const child: EmitterTreeNode = {
     id: newId,
+    stableId: nextStableId(),
     name: "",
     role: "death",
     linkGroup: 0,
@@ -789,6 +806,45 @@ export function reorderRootEmitter(
   return { root: { ...tree.root, children: next } };
 }
 
+/** Reorder a SET of root emitters so they land contiguous at gap `rootIndex`,
+ *  preserving their current top-to-bottom order; non-contiguous selections
+ *  collapse together. Mirrors `ParticleSystem::reorderManyRootsToIndex`.
+ *  Returns the mutated tree, or null on: out-of-range gap, empty selection,
+ *  any non-root id, or an own-footprint no-op (a contiguous block dropped
+ *  anywhere in [first, last+1]). */
+export function reorderManyRoots(
+  tree: EmitterTreeDto,
+  ids: number[],
+  rootIndex: number,
+): EmitterTreeDto | null {
+  const roots = tree.root.children;
+  const N = roots.length;
+  if (rootIndex < 0 || rootIndex > N) return null; // out of range (gap is 0..N)
+  const pos = new Map<number, number>();
+  roots.forEach((c, i) => pos.set(c.id, i));
+  const idxs: number[] = [];
+  for (const id of new Set(ids)) {
+    const i = pos.get(id);
+    if (i === undefined) return null; // missing or non-root
+    idxs.push(i);
+  }
+  if (idxs.length === 0) return null;
+  idxs.sort((a, b) => a - b);
+  const M = idxs.length;
+  const first = idxs[0]!, last = idxs[M - 1]!;
+  if (last - first + 1 === M && rootIndex >= first && rootIndex <= last + 1) {
+    return null;
+  }
+  const selSet = new Set(idxs);
+  const rest = roots.filter((_, i) => !selSet.has(i));
+  const block = idxs.map((i) => roots[i]!);
+  let removedBeforeGap = 0;
+  for (const i of idxs) if (i < rootIndex) removedBeforeGap++;
+  const insertAt = rootIndex - removedBeforeGap;
+  const next = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)];
+  return { root: { ...tree.root, children: next } };
+}
+
 /** Reparent `id` under `targetId` in the named slot. Refuses when:
  *    - source or target missing,
  *    - source === target,
@@ -873,6 +929,8 @@ function reassignIdsInPlace(n: EmitterTreeNode, startId: number): number {
   let next = startId;
   const walk = (m: EmitterTreeNode) => {
     m.id = next++;
+    // A pasted node is a NEW emitter → fresh stableId (C++ copy-ctor rule).
+    m.stableId = nextStableId();
     m.children.forEach(walk);
   };
   walk(n);

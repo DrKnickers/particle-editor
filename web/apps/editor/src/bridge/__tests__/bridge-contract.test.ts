@@ -1336,9 +1336,9 @@ describe("MockBridge emitters/move-many (preserve order at the edge)", () => {
   function rootsTree(names: string[]): EmitterTreeDto {
     return {
       root: {
-        id: -1, name: "", role: "root", linkGroup: 0, visible: true,
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
         children: names.map((name, i) => ({
-          id: i, name, role: "root", linkGroup: 0, visible: true, children: [],
+          id: i, stableId: 100 + i, name, role: "root", linkGroup: 0, visible: true, children: [],
         })),
       },
     };
@@ -1382,6 +1382,48 @@ describe("MockBridge emitters/move-many (preserve order at the edge)", () => {
     const b = new MockBridge();
     await b.request({ kind: "emitters/move-many", params: { ids: [2, 3], direction: "down" } });
     expect(rootNames()).toEqual(["A", "B", "C", "D"]);
+  });
+});
+
+describe("MockBridge stableId semantics (reorder-glide identity contract)", () => {
+  // The glide keys React rows + FLIP maps by stableId. Three invariants the
+  // host (ParticleSystem.cpp ctors/copySharedParamsFrom) and the mock must
+  // both uphold; the mock is the only automatable side, so pin it here:
+  //   presence+uniqueness, stability across reorders, freshness on copies.
+  const flatten = (n: EmitterTreeNode): Array<[string, number]> =>
+    [[n.name, n.stableId] as [string, number], ...n.children.flatMap(flatten)];
+  const stableIdsByName = () =>
+    new Map(useMockEmitterTree.getState().tree.root.children.flatMap(flatten));
+  const allStableIds = () =>
+    flatten(useMockEmitterTree.getState().tree.root).map(([, s]) => s);
+
+  it("emitters/list: synthetic root has stableId 0; every node carries a unique positive stableId", async () => {
+    const b = new MockBridge();
+    const tree = await b.request({ kind: "emitters/list", params: {} });
+    expect(tree.root.stableId).toBe(0);
+    const ids = tree.root.children.flatMap(flatten).map(([, s]) => s);
+    expect(ids.every((s) => s > 0)).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("stableIds survive reorder-many and move-many (same emitter, same id)", async () => {
+    const b = new MockBridge();
+    const before = stableIdsByName();
+    await b.request({ kind: "emitters/reorder-many", params: { ids: [5], rootIndex: 0 } });
+    await b.request({ kind: "emitters/move-many", params: { ids: [3], direction: "down" } });
+    const after = stableIdsByName();
+    for (const [name, sid] of before) expect(after.get(name), name).toBe(sid);
+  });
+
+  it("duplicate-many yields FRESH stableIds; the tree stays unique", async () => {
+    const b = new MockBridge();
+    const before = new Set(allStableIds());
+    const r = await b.request({ kind: "emitters/duplicate-many", params: { ids: [0] } });
+    expect(r.ok).toBe(true);
+    const after = allStableIds();
+    expect(new Set(after).size).toBe(after.length); // still unique
+    const fresh = after.filter((s) => !before.has(s));
+    expect(fresh.length).toBeGreaterThan(0); // the copies got new identities
   });
 });
 

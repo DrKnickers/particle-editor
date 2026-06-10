@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { moveEmitters, duplicateEmitters } from "@/lib/emitter-reorder";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { moveEmitters, duplicateEmitters, reorderManyEmitters } from "@/lib/emitter-reorder";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
@@ -53,5 +53,40 @@ describe("duplicateEmitters", () => {
     const { bridge } = fakeBridge({ "emitters/duplicate-many": { ok: false, error: "x" } });
     await duplicateEmitters(bridge, [0]);
     expect(useEmitterSelectionStore.getState().ids).toEqual([0]);
+  });
+});
+
+// ── reorderManyEmitters ──────────────────────────────────────────────────────
+// Returns the same `response` for every request kind (use when only one
+// dispatch is exercised, or when asserting via vi.fn toHaveBeenCalledWith).
+function fakeUniformBridge(response: unknown) {
+  return { request: vi.fn().mockResolvedValue(response) } as any;
+}
+
+describe("reorderManyEmitters", () => {
+  beforeEach(() => {
+    useEmitterSelectionStore.getState().setIds([1, 3], 3); // primary = 3
+  });
+  it("dispatches reorder-many then re-selects newIds, preserving primary by position", async () => {
+    const bridge = fakeUniformBridge({ ok: true, newIds: [4, 5] });
+    await reorderManyEmitters(bridge, [1, 3], 6);
+    expect(bridge.request).toHaveBeenCalledWith({
+      kind: "emitters/reorder-many",
+      params: { ids: [1, 3], rootIndex: 6 },
+    });
+    const sel = useEmitterSelectionStore.getState();
+    expect(sel.ids).toEqual([4, 5]);
+    expect(sel.primary).toBe(5);
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "emitters/select", params: { id: 5 } });
+  });
+  it("leaves the selection untouched when the host refuses", async () => {
+    const bridge = fakeUniformBridge({ ok: false, error: "reorder refused" });
+    await reorderManyEmitters(bridge, [1, 3], 2);
+    expect(useEmitterSelectionStore.getState().ids).toEqual([1, 3]);
+  });
+  it("no-ops on an empty id list", async () => {
+    const bridge = fakeUniformBridge({ ok: true, newIds: [] });
+    await reorderManyEmitters(bridge, [], 2);
+    expect(bridge.request).not.toHaveBeenCalled();
   });
 });

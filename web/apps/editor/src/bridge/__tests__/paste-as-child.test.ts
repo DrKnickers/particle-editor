@@ -16,7 +16,7 @@ function node(
   role: EmitterTreeNode["role"],
   children: EmitterTreeNode[] = [],
 ): EmitterTreeNode {
-  return { id, name, role, linkGroup: 0, visible: true, children };
+  return { id, stableId: 100 + id, name, role, linkGroup: 0, visible: true, children };
 }
 
 // A two-root tree; root id 1 ("Alpha") has no children (both slots free).
@@ -67,10 +67,12 @@ describe("pasteAsChildFromClipboard", () => {
     expect(pasteAsChildFromClipboard(freshTree(), clip, 999, "lifetime")).toBeNull();
   });
 
-  it("re-ids the WHOLE pasted subtree so no id collides with the tree", () => {
-    // Clipboard subtree whose descendant ids (1, 2) collide with the
-    // fresh tree's existing ids — the pasted nodes must all be re-id'd,
-    // or React renders duplicate keys.
+  it("re-ids the WHOLE pasted subtree (ids AND stableIds) so nothing collides with the tree", () => {
+    // Clipboard subtree whose descendant ids (1, 2) — and, via the fixture's
+    // stableId = 100 + id convention, stableIds (100/101/102) — collide with
+    // the fresh tree's existing nodes. Every pasted node must get a fresh id
+    // (legacy React-key rule) AND a fresh stableId (the glide keys rows and
+    // FLIP maps by stableId now — a collision breaks row identity).
     const colliding: EmitterTreeNode[] = [
       node(0, "Src", "root", [
         node(1, "Src life", "lifetime"),
@@ -80,9 +82,15 @@ describe("pasteAsChildFromClipboard", () => {
     const r = pasteAsChildFromClipboard(freshTree(), colliding, 1, "lifetime");
     expect(r).not.toBeNull();
     const ids: number[] = [];
-    const walk = (n: EmitterTreeNode) => { ids.push(n.id); n.children.forEach(walk); };
+    const sids: number[] = [];
+    const walk = (n: EmitterTreeNode) => {
+      ids.push(n.id);
+      sids.push(n.stableId);
+      n.children.forEach(walk);
+    };
     walk(r!.tree.root);
-    expect(new Set(ids).size).toBe(ids.length); // all unique
+    expect(new Set(ids).size).toBe(ids.length);   // all positional ids unique
+    expect(new Set(sids).size).toBe(sids.length); // all stableIds unique too
   });
 });
 

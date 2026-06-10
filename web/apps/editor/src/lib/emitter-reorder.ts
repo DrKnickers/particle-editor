@@ -47,3 +47,16 @@ export async function duplicateEmitters(bridge: Bridge, ids: number[]): Promise<
   const r = await bridge.request({ kind: "emitters/duplicate-many", params: { ids } });
   if (r.ok) applyNewSelection(bridge, ids, primary, r.newIds);
 }
+
+/** Drag-reorder `ids` (the selected roots, in tree order) to land contiguous
+ *  at gap `rootIndex`; the selection follows to the new positions. */
+export async function reorderManyEmitters(
+  bridge: Bridge,
+  ids: number[],
+  rootIndex: number,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const primary = useEmitterSelectionStore.getState().primary;
+  const r = await bridge.request({ kind: "emitters/reorder-many", params: { ids, rootIndex } });
+  if (r.ok) applyNewSelection(bridge, ids, primary, r.newIds);
+}

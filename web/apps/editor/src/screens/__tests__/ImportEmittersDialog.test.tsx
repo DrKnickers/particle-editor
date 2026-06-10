@@ -32,7 +32,7 @@ function makeStubBridge(): Bridge & {
 }
 
 function node(id: number, name: string, children: EmitterTreeNode[] = []): EmitterTreeNode {
-  return { id, name, role: "root", linkGroup: -1, visible: true, children };
+  return { id, stableId: 100 + id, name, role: "root", linkGroup: -1, visible: true, children };
 }
 
 /** A bridge whose Browse→preview round-trip resolves to a small tree

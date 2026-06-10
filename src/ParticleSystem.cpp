@@ -1,6 +1,8 @@
 #include <iostream>
 #include <algorithm>
 #include <cassert>
+#include <set>
+#include <unordered_map>
 #include "ParticleSystem.h"
 #include "EmitterInstance.h"
 #include "ParticleSystemInstance.h"
@@ -95,6 +97,12 @@ static void writeMiniInteger(ChunkWriter& writer, ChunkType type, unsigned long 
 //
 // Emitter class
 //
+
+// Process-monotonic counter for Emitter::stableId. UI-thread-only (every
+// Emitter is constructed on the editor's UI thread), so a plain unsigned
+// suffices. Starts at 1 so 0 stays free as the synthetic-root sentinel.
+static unsigned int s_nextEmitterStableId = 1;
+
 void ParticleSystem::Emitter::writeProperties(ChunkWriter& writer) const
 {
 	writer.beginChunk(0x0002);
@@ -548,6 +556,11 @@ ParticleSystem::Emitter::Emitter(const Emitter& emitter)
     // here so the clone starts with no runtime presence; the engine
     // re-populates m_instances as it spawns instances against the clone.
     m_instances.clear();
+
+    // A clone is a NEW emitter: `*this = emitter` copied the source's
+    // stableId, which would give two live rows the same React key (and the
+    // FLIP pass an ambiguous identity). Issue a fresh one.
+    stableId = s_nextEmitterStableId++;
 }
 
 void ParticleSystem::Emitter::detachFromLinkGroup()
@@ -584,6 +597,7 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     size_t                     savedIndex     = index;
     uint32_t                   savedLinkGrp   = linkGroup;
     bool                       savedVisible   = visible;
+    unsigned int               savedStableId  = stableId;
 
     // Strings + names.
     std::string savedName          = name;
@@ -671,7 +685,10 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
         tracks[i] = trackContents + (src.tracks[i] - src.trackContents);
     }
 
-    // 4) Restore private + structural fields.
+    // 4) Restore private + structural fields. stableId is identity — the
+    //    propagation copies PARAMETERS between linked emitters, never which
+    //    emitter a row IS (a clobber here would give two rows the same
+    //    React key and corrupt the reorder-glide FLIP identity).
     m_instances     = savedInstances;
     parent          = savedParent;
     spawnOnDeath    = savedSpawnOD;
@@ -679,6 +696,7 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     index           = savedIndex;
     linkGroup       = savedLinkGrp;
     visible         = savedVisible;
+    stableId        = savedStableId;
 
     // 5) Restore exempt fields per the flags.
     if (exempt.name)          name          = savedName;
@@ -773,6 +791,10 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     if (exempt.colorTexture) assert(colorTexture == savedColorTexture);
     if (exempt.acceleration)
         assert(memcmp(acceleration, sav_acceleration, sizeof(acceleration)) == 0);
+    // stableId is IDENTITY (React row keys + FLIP maps key by it) — a clobber
+    // here gives two live emitters the same id. Unconditional, unlike the
+    // exempt checks above.
+    assert(stableId == savedStableId);
 #endif
 }
 
@@ -799,6 +821,7 @@ void ParticleSystem::Emitter::setDefaults()
 	parent          = NULL;
     visible         = true;
     linkGroup       = 0;
+    stableId        = s_nextEmitterStableId++;
 
 	name          = "default";
 	colorTexture  = "p_particle_master.tga";
@@ -1544,6 +1567,117 @@ bool ParticleSystem::moveEmitterToRootIndex(Emitter* emitter, size_t targetRootI
         else if (e->parent->spawnOnDeath    == oldIndices[k]) e->parent->spawnOnDeath    = e->index;
     }
 
+    return true;
+}
+
+bool ParticleSystem::reorderManyRootsToIndex(
+        const std::vector<Emitter*>& selection, size_t gap,
+        std::vector<size_t>& outNewIds)
+{
+    // 1. Current root order (root index = position in this list).
+    std::vector<Emitter*> roots;
+    roots.reserve(m_emitters.size());
+    for (size_t i = 0; i < m_emitters.size(); i++)
+        if (m_emitters[i]->parent == NULL) roots.push_back(m_emitters[i]);
+    const size_t N = roots.size();
+    if (gap > N) return false;                          // out of range (gap is 0..N)
+
+    // 2. Map selection -> ascending source root indices. Reject a null /
+    //    missing / non-root id, or an empty selection.
+    std::vector<char> selFlag(N, 0);
+    std::set<size_t> uniq;                              // dedupe + ascending
+    {
+        std::unordered_map<Emitter*, size_t> rootPos;
+        for (size_t r = 0; r < N; r++) rootPos[roots[r]] = r;
+        for (Emitter* e : selection)
+        {
+            auto it = rootPos.find(e);
+            if (it == rootPos.end()) return false;      // null, missing, or non-root
+            uniq.insert(it->second);
+        }
+    }
+    if (uniq.empty()) return false;
+    std::vector<size_t> selRootIdx(uniq.begin(), uniq.end());
+    const size_t M = selRootIdx.size();
+    for (size_t r : selRootIdx) selFlag[r] = 1;
+    const size_t first = selRootIdx.front();
+    const size_t last  = selRootIdx.back();
+
+    // 3. No-op: an already-contiguous block dropped anywhere on its own
+    //    footprint [first, last+1] (edges AND interior gaps). Mirrors the
+    //    mock reorderManyRoots; generalises moveEmitterToRootIndex's rule.
+    if (last - first + 1 == M && gap >= first && gap <= last + 1) return false;
+
+    // 4. New root order: unselected roots (in order) with the selected block
+    //    spliced in at the shift-corrected insertion point. `removedBeforeGap`
+    //    is the count of selected roots strictly before the gap (the multi
+    //    generalisation of moveEmitterToRootIndex's single -1 shift).
+    std::vector<Emitter*> rest, block;
+    rest.reserve(N - M);
+    block.reserve(M);
+    for (size_t r = 0; r < N; r++) (selFlag[r] ? block : rest).push_back(roots[r]);
+    size_t removedBeforeGap = 0;
+    for (size_t r : selRootIdx) if (r < gap) removedBeforeGap++;
+    const size_t insertAt = gap - removedBeforeGap;
+    std::vector<Emitter*> newRoots;
+    newRoots.reserve(N);
+    newRoots.insert(newRoots.end(), rest.begin(), rest.begin() + insertAt);
+    newRoots.insert(newRoots.end(), block.begin(), block.end());
+    newRoots.insert(newRoots.end(), rest.begin() + insertAt, rest.end());
+
+    // 5. Reassemble m_emitters by subtree + reassign indices + rewrite parent
+    //    spawn fields. Copied from moveEmitterToRootIndex (KEEP IN SYNC):
+    //    collect each root's subtree in m_emitters order, concatenate per the
+    //    new root order, reassign index = position, fix spawnDuringLife /
+    //    spawnOnDeath references that pointed at a moved emitter.
+    auto rootOf = [this](Emitter* e) -> Emitter* {
+        while (e->parent != NULL) e = e->parent;
+        return e;
+    };
+    std::vector<std::vector<Emitter*>> subtrees(N);
+    std::vector<size_t> rootOrderIdx(m_emitters.size(), (size_t)-1);
+    for (size_t i = 0; i < N; i++) rootOrderIdx[roots[i]->index] = i;
+    for (size_t i = 0; i < m_emitters.size(); i++)
+    {
+        Emitter* e = m_emitters[i];
+        Emitter* r = rootOf(e);
+        size_t   k = rootOrderIdx[r->index];
+        subtrees[k].push_back(e);
+    }
+    std::vector<Emitter*> reordered;
+    reordered.reserve(m_emitters.size());
+    std::vector<size_t> oldIndices;
+    oldIndices.reserve(m_emitters.size());
+    for (Emitter* r : newRoots)
+    {
+        for (size_t k = 0; k < N; k++)
+        {
+            if (roots[k] == r)
+            {
+                for (Emitter* e : subtrees[k])
+                {
+                    oldIndices.push_back(e->index);
+                    reordered.push_back(e);
+                }
+                break;
+            }
+        }
+    }
+    m_emitters = reordered;
+    for (size_t i = 0; i < m_emitters.size(); i++) m_emitters[i]->index = i;
+    for (size_t k = 0; k < reordered.size(); k++)
+    {
+        Emitter* e = reordered[k];
+        if (e->parent == NULL) continue;
+        if      (e->parent->spawnDuringLife == oldIndices[k]) e->parent->spawnDuringLife = e->index;
+        else if (e->parent->spawnOnDeath    == oldIndices[k]) e->parent->spawnOnDeath    = e->index;
+    }
+
+    // 6. newIds = the block roots' final positional indices (contiguous run,
+    //    in the block's tree order).
+    outNewIds.clear();
+    outNewIds.reserve(M);
+    for (Emitter* r : block) outNewIds.push_back(r->index);
     return true;
 }
 
