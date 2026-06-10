@@ -174,7 +174,7 @@ public:
     // Convenience emitters (host-driven). EmitStatsTick is the 4 Hz status
     // bar push; EmitEngineStateChanged is the post-setter broadcast.
     void EmitEngineStateChanged();
-    void EmitStatsTick(float fps, int emitters, int particles, int instances);
+    void EmitStatsTick(float fps, int emitters, int particles, int instances, bool overload);
 
     // Phase 3 Screen 4 Batch B1 — emit `emitters/tree/changed` with the
     // live ParticleSystem's tree as payload. Called after each

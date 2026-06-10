@@ -125,6 +125,15 @@ int ParticleSystemInstance::Kill()
 
 EmitterInstance* ParticleSystemInstance::SpawnEmitter(TimeF currentTime, size_t idxEmitter, Object3D* parent)
 {
+    // Overload guard: refuse new instances past the engine-wide cap
+    // (see engine.h kMaxLiveEmitterInstances) — chain multiplication
+    // allocates a whole EmitterInstance per spawned particle, so this
+    // is the second OOM choke point besides the particle budget. Every
+    // caller tolerates nullptr (child links are null-checked; the ctor
+    // ignores the return).
+    if (!m_engine.TryConsumeInstanceBudget())
+        return nullptr;
+
     int numParticles;
 	ParticleSystem::Emitter* emitter = m_system.getEmitters()[idxEmitter];
     auto instance = std::make_unique<EmitterInstance>(currentTime, *this, m_engine, *emitter, parent, &numParticles);
@@ -151,11 +160,19 @@ void ParticleSystemInstance::RemoveEmitter(EmitterInstance* instance)
 	{
 		if (it->get() == instance)
 		{
+			// Budget-leak fix: this path can destroy an instance that
+			// still holds live particles (e.g. deleting an emitter while
+			// it previews). Without subtracting them the engine's
+			// m_numParticles stays inflated until Clear(), permanently
+			// shrinking the overload guard's spawn budget. Kill() returns
+			// the negative live-particle delta — mirror
+			// Engine::KillParticleSystem's accounting.
+			const int particleDelta = instance->Kill();
 			// erase() destroys the unique_ptr, which calls ~EmitterInstance.
 			// That dtor unregisters from its Emitter::m_instances, so the
 			// caller's iteration over m_instances stays consistent.
 			m_emitters.erase(it);
-			m_engine.OnEmitterDestroyed();
+			m_engine.OnEmitterDestroyed(particleDelta);
 			return;
 		}
 	}

@@ -2245,7 +2245,8 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             int emitters   = engine ? engine->GetNumEmitters()  : 0;
             int particles  = engine ? engine->GetNumParticles() : 0;
             int instances  = engine ? engine->GetNumInstances() : 0;
-            dispatcher->EmitStatsTick(fps, emitters, particles, instances);
+            bool overload  = engine ? engine->IsSpawnOverloadActive() : false;
+            dispatcher->EmitStatsTick(fps, emitters, particles, instances, overload);
         }
         //: autosave tick. Best-effort + dirty-gated — skip the write
         // when nothing changed since the last save (no point autosaving an

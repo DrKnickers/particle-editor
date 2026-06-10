@@ -5291,7 +5291,8 @@ void BridgeDispatcher::EnforceSingleMemberLinkGroups()
 }
 
 void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
-                                     int particles, int instances)
+                                     int particles, int instances,
+                                     bool overload)
 {
     if (!m_emit) return;
     // T9] Gate test-driven freeze. When frozen, the React
@@ -5307,6 +5308,9 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
             {"emitters",  emitters},
             {"particles", particles},
             {"instances", instances},
+            // Latched preview overload flag — spawning is suppressed
+            // while true (Engine::IsSpawnOverloadActive).
+            {"overload",  overload},
         }},
     };
     m_emit(env.dump());

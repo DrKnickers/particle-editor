@@ -43,6 +43,14 @@ export function useViewportOcclusion(
    *  smoothly transitions from viewport-opaque at the outer ring to
    *  full-cut at the chrome's actual outline. Default 0 (hard cut). */
   featherPx: number = 0,
+  /** Also observe the element's PARENT for resizes. Needed when the
+   *  element is content-sized but positioned relative to its container
+   *  (e.g. a `left-1/2` centered banner): a splitter drag resizes the
+   *  container and MOVES the element without resizing it, so the
+   *  element's own ResizeObserver never fires and the cut-out goes
+   *  stale at the old coordinates. Default false (existing occluders
+   *  either fill their container or live in portals). */
+  observeParent: boolean = false,
 ) {
   useEffect(() => {
     const el = ref.current;
@@ -74,6 +82,7 @@ export function useViewportOcclusion(
     send();
     const ro = new ResizeObserver(send);
     ro.observe(el);
+    if (observeParent && el.parentElement) ro.observe(el.parentElement);
     window.addEventListener("scroll", send, { passive: true });
     window.addEventListener("resize", send);
 
@@ -89,5 +98,5 @@ export function useViewportOcclusion(
         })
         .catch(() => { /* ignore */ });
     };
-  }, [bridge, id, ref, padPx, featherPx]);
+  }, [bridge, id, ref, padPx, featherPx, observeParent]);
 }

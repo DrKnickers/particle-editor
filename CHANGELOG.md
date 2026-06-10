@@ -17,9 +17,66 @@ Conventions:
 ## Changelog
 
 
+### Preview overload guard: the editor survives any spawn parameters
+
+*2026-06-10 · `TODO` · `#TODO`*
+
+The live preview can no longer be crashed by extreme spawn values. During
+the feel test an accidental Shift (the spinner's ×10 step modifier)
+committed a six-figure Particles/sec and the editor hard-died — OOM, no
+exception, host.log stops mid-stream. The engine now enforces hard budgets
+on the simulation (100,000 live particles / 5,000 live emitter instances):
+over budget it **suppresses spawning** — existing particles live out their
+lives, authored `.alo` values are never clamped or modified — and surfaces
+a latched overload flag. The UI shows a non-modal amber banner over the
+viewport ("Preview spawn limit reached — spawning paused…") that clears
+itself when the population decays back under budget, and the StatusBar
+particle counter tints amber. A new ~2-test native spec drives a 1e9/s
+bomb plus a death-child refusal storm against the real host and asserts
+plateau + recovery — the regression test that previously read "the editor
+dies".
+
+**How we tackled it.** Root cause first: no global budget existed — the
+per-instance uint16 index cap (16,383) can't help because chained emitters
+allocate one child `EmitterInstance` **per parent particle**
+([`src/EmitterInstance.cpp`](src/EmitterInstance.cpp:362)), so instances ×
+per-instance particles is unbounded. The guard is a per-frame spawn budget
+refilled at the top of `Engine::Update` (90% resume hysteresis + a 0.5 s
+clear debounce so the latch doesn't flicker at a pinned cap), spent via
+`TryConsumeSpawnBudget()` in the burst loop and
+`TryConsumeInstanceBudget()` in `ParticleSystemInstance::SpawnEmitter`
+(which now returns nullptr on refusal — all callers made null-safe). The
+flag rides the existing 4 Hz `stats/tick` (payload + `overload: boolean`);
+the banner registers a `useViewportOcclusion` cut-out (the context-menu
+precedent) so the composited D3D viewport doesn't overpaint it. The
+debounce deliberately uses the pausable `GetTimeF()` clock: a paused
+over-budget population doesn't decay, so the banner truthfully holds.
+
+**Issues encountered and resolutions.** (1) The plan assumed "1e9/s alone
+exceeds the budget" — wrong: the per-instance index cap plateaus a single
+emitter at 16,384, *below* the global budget, and the refused-allocation
+churn (~80k alloc/free rounds/frame) tanked FPS to 3 — fixed with a
+refused-round `m_nextSpawnTime` snap ("dropped, not deferred"), and
+index-cap refusals also latch the banner (hence "spawn limit reached", not
+"budget exceeded"). (2) **Latent counting bug found**: refused spawns were
+still counted into `Engine::m_numParticles` (+1, never decremented) —
+`SpawnParticle` now returns bool and callers count only successes; same
+class fixed in `RemoveEmitter`, which destroyed instances with live
+particles without subtracting them (a permanent budget leak). Counters
+must track *actual* work, not intended work. (3) The banner is the first
+occluder that's content-sized but container-positioned — a splitter drag
+moved it without resizing it, leaving the alpha cut-out stale;
+`useViewportOcclusion` gained an opt-in `observeParent`. (4) The a11y
+spec quartet paused the preview clock in `beforeEach` and never reverted
+it in `afterAll`, so every later spec file in the shared-host harness ran
+with frozen sim time — all eight a11y files now unpause in cleanup (the
+overload spec also unpauses defensively at its own start).
+
+---
+
 ### Soft chain-load warning on the emitter tree ()
 
-*2026-06-10 · `TODO-merge-hash` · #120*
+*2026-06-10 · [`e67e5e5`](https://github.com/DrKnickers/particle-editor/commit/e67e5e5) · #120*
 
 The emitter tree now shows an advisory amber ⚠ on every row of a chain whose
 estimated alive-particle count exceeds 10,000 — the class of authoring

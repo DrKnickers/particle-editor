@@ -1122,7 +1122,9 @@ export type Event =
   | { kind: "engine/state/changed";   payload: EngineStateDto }
   | { kind: "emitters/tree/changed";  payload: EmitterTreeDto }
   | { kind: "emitters/selected";      payload: { id: number | null } }
-  | { kind: "stats/tick";             payload: { fps: number; emitters: number; particles: number; instances: number } }
+  // `overload`: latched preview overload — engine is suppressing spawning
+  // because the live particle/instance budget was exceeded.
+  | { kind: "stats/tick";             payload: { fps: number; emitters: number; particles: number; instances: number; overload: boolean } }
   // T9] Emitted whenever stats/set-frozen flips. When
   // frozen=true, StatusBar clears its local state so the cells
   // render `—` placeholders. Used by a11y spec beforeEach for

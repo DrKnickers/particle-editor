@@ -48,6 +48,7 @@ import { isLegacyMode } from "@/lib/hosting-mode";
 import { computeSceneRect, dockSlideTarget } from "@/lib/scene-rect";
 import { useDockAnim } from "@/lib/dock-anim";
 import { ViewportSlot } from "./ViewportSlot";
+import { OverloadBanner } from "./OverloadBanner";
 import { CurveEditorPanel } from "./CurveEditorPanel";
 import { EmitterPropertyTabs } from "@/screens/EmitterPropertyTabs";
 import { EmitterTree } from "@/screens/EmitterTree";
@@ -504,6 +505,13 @@ export function PanelLayout({ bridge }: Props) {
               className="relative h-full w-full min-h-0"
             >
               <ViewportSlot bridge={bridge} />
+              {/* Preview spawn-overload banner (overload guard §3) — a
+                  sibling of ViewportSlot inside this `relative`
+                  viewport-rect container so `absolute top-center`
+                  positioning needs no extra geometry. Registers its
+                  own viewport occlusion (risk 4); see the component
+                  header for the full rationale. */}
+              <OverloadBanner bridge={bridge} />
             </div>
           </Panel>
           <Separator className="ce-splitter ce-splitter-h" />

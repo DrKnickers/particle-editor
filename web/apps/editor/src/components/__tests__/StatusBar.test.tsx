@@ -53,4 +53,28 @@ describe("StatusBar", () => {
     emit("cursor/position-3d", { x: 1, y: -2.5, z: 3.456 });
     expect(screen.getByText("1.00, -2.50, 3.46")).toBeInTheDocument();
   });
+
+  // Preview spawn-overload guard (plan part 2 §3): while stats/tick
+  // reports overload=true, the Particles readout tints amber and carries
+  // an explanatory title; it reverts when the overload clears.
+  it("tints the particle count amber while overloaded", () => {
+    const { bridge, emit } = makeBridge();
+    render(<StatusBar bridge={bridge} />);
+    const tick = (overload: boolean) => ({
+      fps: 30, emitters: 2, particles: 16384, instances: 3, overload,
+    });
+
+    emit("stats/tick", tick(true));
+    const value = screen.getByText("16384");
+    expect(value.className).toContain("text-amber-400");
+    expect(value).toHaveAttribute(
+      "title",
+      "preview spawn limit reached — spawning paused",
+    );
+
+    emit("stats/tick", tick(false));
+    const cleared = screen.getByText("16384");
+    expect(cleared.className).not.toContain("text-amber-400");
+    expect(cleared).not.toHaveAttribute("title");
+  });
 });

@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
-type Stats = { fps: number; emitters: number; particles: number; instances: number };
+type Stats = { fps: number; emitters: number; particles: number; instances: number; overload: boolean };
 type Cursor3D = { x: number; y: number; z: number };
 
 export function StatusBar({ bridge }: { bridge: Bridge }) {
@@ -55,13 +55,18 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   const s = stats;
   const placeholder = s === null;
 
-  const cell = (label: string, value: string, dim = placeholder) => (
+  // Preview spawn-overload guard: while stats/tick latches overload,
+  // the value cell can tint amber + carry an explanatory title (used by
+  // the Particles readout; the OverloadBanner over the viewport is the
+  // primary surface — this is the persistent low-key echo).
+  const cell = (label: string, value: string, dim = placeholder, warn = false) => (
     <span className="flex items-baseline gap-1.5">
       <span className="text-text-3">{label}</span>
       <span
         className={`font-mono tabular-nums ${
-          dim ? "text-text-3" : "text-text-2"
+          warn ? "text-amber-400" : dim ? "text-text-3" : "text-text-2"
         }`}
+        title={warn ? "preview spawn limit reached — spawning paused" : undefined}
       >
         {value}
       </span>
@@ -79,7 +84,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
       <span className="text-text-3">·</span>
       {cell("Emitters", placeholder ? "—" : s!.emitters.toString())}
       <span className="text-text-3">·</span>
-      {cell("Particles", placeholder ? "—" : s!.particles.toString())}
+      {cell("Particles", placeholder ? "—" : s!.particles.toString(), placeholder, !placeholder && s!.overload)}
       <span className="text-text-3">·</span>
       {cell("Instances", placeholder ? "—" : s!.instances.toString())}
       <span className="text-text-3">·</span>

@@ -413,6 +413,14 @@ async function main() {
       // composition users with no screen-reader access to React).
       // Auto-skips under default HWND mode.
       "tests/a11y-uia-composition-reachable.spec.ts",
+      // Preview overload guard regression (session 35 part 2). Bombs the
+      // live preview with rate=1e9 and asserts the engine plateaus at
+      // the particle budget + latches `overload` on stats/tick instead
+      // of OOM-crashing. Runs LAST: it floods the live engine and
+      // briefly mutates the boot doc's first emitter; its finally-block
+      // restores properties + clears instances, but keeping it after
+      // the deterministic a11y goldens removes any timing coupling.
+      "tests/preview-overload.spec.ts",
       // [handoff item 16 follow-up] Forward unknown args (e.g. --grep
       // "dialog-about") so scoped a11y refresh actually scopes. See
       // RECOGNISED_FLAGS above.

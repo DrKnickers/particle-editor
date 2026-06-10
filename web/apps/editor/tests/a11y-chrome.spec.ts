@@ -46,6 +46,9 @@ test.afterAll(async () => {
       const bridge = (window as { bridge?: { request: (req: { kind: string; params: unknown }) => Promise<unknown> } }).bridge;
       if (bridge) {
         await bridge.request({ kind: "stats/set-frozen", params: { frozen: false } });
+        // beforeEach pauses the preview clock; revert it or every later
+        // spec file in the shared host runs with frozen sim time.
+        await bridge.request({ kind: "engine/set/paused", params: { paused: false } });
         // Reset the document to a fresh one-root-emitter state. The a11y
         // fixture (a11y-base-state.alo) had 3 emitters; leaving it loaded
         // contaminates downstream specs (emitter-mutations expects "host

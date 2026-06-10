@@ -62,7 +62,9 @@ private:
 	Particle& AllocateParticle();
 	void      FreeParticle(Particle& particle);
 
-	void  SpawnParticle(TimeF currentTime);
+	// Returns false when the per-instance uint16 index cap refused the
+	// spawn — callers must not count refused spawns (see definition).
+	bool  SpawnParticle(TimeF currentTime);
 	int   SpawnParticles(TimeF currentTime);
     void  ResetParticle(Particle& particle, TimeF currentTime);
 	void  UpdateTrackCursors(Particle& particle, float relTime) const;
