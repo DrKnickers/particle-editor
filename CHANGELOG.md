@@ -19,7 +19,7 @@ Conventions:
 
 ### Splitter-drag cost trims: scene-rect send dedupe + per-message log hygiene (chase-lerp built and reverted)
 
-*2026-06-10 · TODO(merge hash) · TODO(PR — ships with the render-loop pacing below)*
+*2026-06-10 · [`b37f198`](https://github.com/DrKnickers/particle-editor/commit/b37f198) · #118*
 
 Two objective cost trims on the splitter-drag path: the web side stops
 re-sending identical scene rects (a measured 2× send rate during window
@@ -67,7 +67,7 @@ time; per-kind attribution is what made the call defensible either way.
 
 ### Render loop paced to display cadence; GPU sync wait yields
 
-*2026-06-10 · TODO(merge hash) · TODO(PR)*
+*2026-06-10 · [`b37f198`](https://github.com/DrKnickers/particle-editor/commit/b37f198) · #118*
 
 The editor's render loop no longer free-runs: it used to render ~3000 fps at
 idle (measured by the `[PERF]` probe), pegging one CPU core and saturating
@@ -108,7 +108,7 @@ resize-storm regression (per-tick cheap resets + one settle, unchanged).
 
 ### Closed right-dock hardening: inert splitter + correct collapsed mount
 
-*2026-06-10 · TODO(merge hash) · #117*
+*2026-06-10 · [`9b4dcc8`](https://github.com/DrKnickers/particle-editor/commit/9b4dcc8) · #117*
 
 Two closed-dock bugs fixed. (1) With the Spawner/Lighting dock closed,
 dragging at the window's right edge could open the empty dock slot — the
