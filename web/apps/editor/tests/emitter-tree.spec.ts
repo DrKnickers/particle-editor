@@ -4,8 +4,10 @@
 //      first paint — the host seeds with one root emitter at startup).
 //   2. Clicking a row updates engine/state/snapshot.selectedEmitterId
 //      and fires emitters/selected.
+//   3. emitters/list nodes carry the spawn params (chain-load
+//      warning input).
 //
-// Both specs talk to the host's real ParticleSystem via window.bridge —
+// All specs talk to the host's real ParticleSystem via window.bridge —
 // no seeding mocks; the native host owns the live system.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
@@ -70,4 +72,33 @@ test("clicking a row updates snapshot.selectedEmitterId", async () => {
 
   expect(result.error).toBeUndefined();
   expect(result.selectedAfter).toBe(result.expected);
+});
+
+test("emitters/list nodes carry spawn params ()", async () => {
+  // The host serializes a `spawn` object on every EmitterTreeNode
+  // (commit a5bec9c). Assert the first root child carries all six
+  // spawn keys with the right primitive types.
+  const result = await page.evaluate(async () => {
+    const bridge = (window as Window & { bridge?: {
+      request: (req: { kind: string; params: unknown }) => Promise<unknown>;
+    } }).bridge;
+    if (!bridge) return { error: "bridge missing" };
+
+    const list = await bridge.request({ kind: "emitters/list", params: {} }) as {
+      root: { children: { spawn?: unknown }[] };
+    };
+    const first = list.root.children[0];
+    if (!first) return { error: "no emitters in tree" };
+    return { spawn: first.spawn };
+  });
+
+  expect(result.error).toBeUndefined();
+  expect(result.spawn).toMatchObject({
+    lifetime: expect.any(Number),
+    useBursts: expect.any(Boolean),
+    nBursts: expect.any(Number),
+    burstDelay: expect.any(Number),
+    nParticlesPerSecond: expect.any(Number),
+    nParticlesPerBurst: expect.any(Number),
+  });
 });

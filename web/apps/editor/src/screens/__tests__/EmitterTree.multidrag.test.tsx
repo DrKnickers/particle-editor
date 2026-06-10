@@ -10,6 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 import { EmitterTree } from "../EmitterTree";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
@@ -17,18 +18,18 @@ import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 function fixtureTree(): EmitterTreeDto {
   return {
     root: {
-      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
       children: [
         {
-          id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 0, visible: true,
+          id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
           children: [],
         },
         {
-          id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 0, visible: true,
+          id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
           children: [],
         },
         {
-          id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true,
+          id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
           children: [],
         },
       ],
@@ -218,16 +219,16 @@ describe("EmitterTree multi-drag preview", () => {
   function fixtureWithChildren(): EmitterTreeDto {
     return {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
         children: [
           {
-            id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 0, visible: true,
+            id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
             children: [
-              { id: 1, stableId: 101, name: "SmokeLife", role: "lifetime", linkGroup: 0, visible: true, children: [] },
+              { id: 1, stableId: 101, name: "SmokeLife", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
             ],
           },
-          { id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 0, visible: true, children: [] },
-          { id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true, children: [] },
+          { id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+          { id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
         ],
       },
     };
@@ -342,9 +343,9 @@ describe("EmitterTree multi-drag preview", () => {
   it("the cursor chip caps at 4 names + a '+k more' line for big selections", async () => {
     const manyRoots: EmitterTreeDto = {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
         children: [0, 1, 2, 3, 4, 5].map((i) => ({
-          id: i, stableId: 100 + i, name: `R${i}`, role: "root" as const, linkGroup: 0, visible: true, children: [],
+          id: i, stableId: 100 + i, name: `R${i}`, role: "root" as const, linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [],
         })),
       },
     };

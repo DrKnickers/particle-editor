@@ -24,7 +24,7 @@ import type {
   TrackKey,
   TrackName,
 } from "@particle-editor/bridge-schema";
-import { TRACK_NAMES } from "@particle-editor/bridge-schema";
+import { TRACK_NAMES, ZERO_SPAWN } from "@particle-editor/bridge-schema";
 
 /** Defaults mirror `SpawnerConfig()` at [src/SpawnerDriver.h:18]:
  *  Auto mode + disabled + burst 1 + 0 s spacing + 10 s interval + origin
@@ -202,22 +202,23 @@ export function makeDefaultEmitterTree(): EmitterTreeDto {
       role: "root",
       linkGroup: 0,
       visible: true,
+      spawn: ZERO_SPAWN,
       children: [
         {
-          id: 0, stableId: nextStableId(), name: "Smoke", role: "root", linkGroup: 1, visible: true,
+          id: 0, stableId: nextStableId(), name: "Smoke", role: "root", linkGroup: 1, visible: true, spawn: ZERO_SPAWN,
           children: [
-            { id: 1, stableId: nextStableId(), name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, children: [] },
-            { id: 2, stableId: nextStableId(), name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, children: [] },
+            { id: 1, stableId: nextStableId(), name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+            { id: 2, stableId: nextStableId(), name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
           ],
         },
         {
-          id: 3, stableId: nextStableId(), name: "Sparks", role: "root", linkGroup: 1, visible: true,
+          id: 3, stableId: nextStableId(), name: "Sparks", role: "root", linkGroup: 1, visible: true, spawn: ZERO_SPAWN,
           children: [
-            { id: 4, stableId: nextStableId(), name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, children: [] },
+            { id: 4, stableId: nextStableId(), name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
           ],
         },
         {
-          id: 5, stableId: nextStableId(), name: "Flash", role: "root", linkGroup: 0, visible: true,
+          id: 5, stableId: nextStableId(), name: "Flash", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
           children: [],
         },
       ],
@@ -533,6 +534,7 @@ export function addLifetimeChildEmitter(
     role: "lifetime",
     linkGroup: 0,
     visible: true,
+    spawn: ZERO_SPAWN,
     children: [],
   };
   const next = mapNode(tree, parentId, (n) => ({
@@ -564,6 +566,7 @@ export function addRootEmitterMock(
     role: "root",
     linkGroup: 0,
     visible: true,
+    spawn: ZERO_SPAWN,
     children: [],
   };
   return {
@@ -590,6 +593,7 @@ export function addDeathChildEmitter(
     role: "death",
     linkGroup: 0,
     visible: true,
+    spawn: ZERO_SPAWN,
     children: [],
   };
   const next = mapNode(tree, parentId, (n) => ({

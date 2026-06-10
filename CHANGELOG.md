@@ -17,6 +17,56 @@ Conventions:
 ## Changelog
 
 
+### Soft chain-load warning on the emitter tree ()
+
+*2026-06-10 · `TODO-merge-hash` · #120*
+
+The emitter tree now shows an advisory amber ⚠ on every row of a chain whose
+estimated alive-particle count exceeds 10,000 — the class of authoring
+mistake that crashed the game in the v1 chain test (each generation spawns
+one child-emitter instance **per parent particle**, so counts multiply down
+a chain). Hovering the glyph shows the estimated total plus a per-generation
+breakdown (`sparkle: ~18 alive` → `→ highlight: ×30 → ~540` → …). Purely
+advisory: nothing blocks — save, undo, reparent, and authoring proceed
+untouched, and vanilla-scale effects (tens to hundreds alive) never trigger
+it. The warning updates within one edit whenever the tree structure or any
+spawn parameter (rate, lifetime, bursts) changes.
+
+**How we tackled it.** The host mirrors the six spawn-quantity params it
+already has onto every tree node (`spawn` sub-object on `EmitterTreeNode`,
+serialized in [`src/host/BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp:543)'s
+`BuildEmitterTreeNode` + three synthetic-root literals), so the estimator is
+ONE pure web-side function ([`src/lib/chain-load.ts`](web/apps/editor/src/lib/chain-load.ts:1):
+Little's law per emitter — continuous `rate × lifetime`, burst
+`perBurst × concurrent bursts` — multiplied down the chain, node + ancestors
+marked above `CHAIN_WARN_THRESHOLD`). Threshold tweaks never need a native
+rebuild. The mock achieves parity without duplicating the formula or
+mirroring state from its ~35 tree-changed emit sites: a single decoration
+choke point in `emit()` + `emitters/list`
+([`src/bridge/mock.ts`](web/apps/editor/src/bridge/mock.ts:246)) injects live
+spawn values from the properties overlay at payload time, while the stored
+tree literals carry a frozen `ZERO_SPAWN` placeholder purely for the type.
+No new refresh mechanism was needed — `emitters/set-properties` already
+re-emits `emitters/tree/changed` on both host and mock.
+
+**Issues encountered and resolutions.** (1) The plan named two synthetic-root
+JSON literals to extend in `BridgeDispatcher.cpp`; the implementer found a
+**third** inside `EmitEmittersTreeChanged()` — the event payload itself, the
+most-trafficked path. A required schema field means *every* node-shaped
+literal must carry it; grep for the `"visible"`/`"children"` key pair when
+widening the tree DTO. (2) `Math.round` in the tooltip rendered sub-1 chain
+multipliers as `×0` ("×0 → ~20,000" reads as nonsense) — small values now
+keep one decimal. (3) `ZERO_SPAWN` started as a plain exported object;
+review flagged that dozens of fixture nodes share that one reference, so an
+accidental in-place write would corrupt every sharer invisibly — it ships
+`Object.freeze`d with a `Readonly<>` type, matching the `TRACK_NAMES`
+precedent. (4) PowerShell 5.1 `Get-Content -Raw`/`Set-Content` round-trips
+mojibake'd the UTF-8 em-dashes in ROADMAP.md during the ship bookkeeping —
+use `[System.IO.File]::ReadAllText/WriteAllText` with an explicit
+`UTF8Encoding($false)` for scripted edits of UTF-8 docs.
+
+---
+
 ### Splitter-drag cost trims: scene-rect send dedupe + per-message log hygiene (chase-lerp built and reverted)
 
 *2026-06-10 · [`b37f198`](https://github.com/DrKnickers/particle-editor/commit/b37f198) · #118*

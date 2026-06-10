@@ -1,13 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { reorderManyRoots } from "@/bridge/mock-state";
+import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 function tree(): EmitterTreeDto {
   const children: EmitterTreeNode[] = LETTERS.map((name, id) => ({
-    id, stableId: 100 + id, name, role: "root", linkGroup: 0, visible: true, children: [],
+    id, stableId: 100 + id, name, role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [],
   }));
-  return { root: { id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, children } };
+  return { root: { id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children } };
 }
 const order = (t: EmitterTreeDto | null) =>
   t === null ? null : t.root.children.map((c) => c.name).join("");

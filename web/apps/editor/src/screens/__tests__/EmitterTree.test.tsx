@@ -5,8 +5,11 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { EmitterTree } from "../EmitterTree";
+import { MockBridge } from "@/bridge/mock";
+import { useMockEmitterProperties } from "@/bridge/mock-state";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
 import { useDeleteConfirmStore, requestDeleteEmitters } from "@/lib/delete-emitters";
@@ -14,23 +17,23 @@ import { useDeleteConfirmStore, requestDeleteEmitters } from "@/lib/delete-emitt
 function fixtureTree(): EmitterTreeDto {
   return {
     root: {
-      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
       children: [
         {
-          id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 1, visible: true,
+          id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 1, visible: true, spawn: ZERO_SPAWN,
           children: [
-            { id: 1, stableId: 101, name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, children: [] },
-            { id: 2, stableId: 102, name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, children: [] },
+            { id: 1, stableId: 101, name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+            { id: 2, stableId: 102, name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
           ],
         },
         {
-          id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 1, visible: true,
+          id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 1, visible: true, spawn: ZERO_SPAWN,
           children: [
-            { id: 4, stableId: 104, name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, children: [] },
+            { id: 4, stableId: 104, name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
           ],
         },
         {
-          id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true,
+          id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
           children: [],
         },
       ],
@@ -126,19 +129,19 @@ describe("EmitterTree", () => {
     // brand-new elements, snap instead of glide — the pre-glide behavior.)
     const before: EmitterTreeDto = {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
         children: [
-          { id: 0, stableId: 501, name: "Alpha", role: "root", linkGroup: 0, visible: true, children: [] },
-          { id: 1, stableId: 502, name: "Beta",  role: "root", linkGroup: 0, visible: true, children: [] },
+          { id: 0, stableId: 501, name: "Alpha", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+          { id: 1, stableId: 502, name: "Beta",  role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
         ],
       },
     };
     const after: EmitterTreeDto = {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
         children: [
-          { id: 0, stableId: 502, name: "Beta",  role: "root", linkGroup: 0, visible: true, children: [] },
-          { id: 1, stableId: 501, name: "Alpha", role: "root", linkGroup: 0, visible: true, children: [] },
+          { id: 0, stableId: 502, name: "Beta",  role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+          { id: 1, stableId: 501, name: "Alpha", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
         ],
       },
     };
@@ -1010,7 +1013,7 @@ describe("EmitterTree", () => {
 });
 
 const node = (id: number, name: string, children: EmitterTreeNode[] = []) =>
-  ({ id, name, role: "root", visible: true, children } as unknown as EmitterTreeNode);
+  ({ id, name, role: "root", visible: true, spawn: ZERO_SPAWN, children } as unknown as EmitterTreeNode);
 
 describe("EmitterTree delete gating (helper-level)", () => {
   beforeEach(() => {
@@ -1024,5 +1027,57 @@ describe("EmitterTree delete gating (helper-level)", () => {
     requestDeleteEmitters(bridge, [0]);
     expect(calls).toEqual([]);
     expect(useDeleteConfirmStore.getState().pending?.ids).toEqual([0]);
+  });
+});
+
+// ─── — chain-load warning glyph ────────────────────────────────
+//
+// These render against the REAL MockBridge (not the stub) because the
+// mock decorates tree payloads with live spawn values from the
+// properties overlay (`decorateSpawn` in bridge/mock.ts) — patching the
+// overlay then rendering exercises the same data path the browser-mode
+// editor uses.
+describe("chain-load warning glyph ()", () => {
+  beforeEach(() => {
+    // The overlay is module-scoped; reset so a patched spawn value can't
+    // leak between tests.
+    useMockEmitterProperties.getState().reset();
+  });
+
+  it("renders no glyph at fixture-default spawn values", async () => {
+    render(<EmitterTree bridge={new MockBridge()} />);
+    await waitFor(() => {
+      expect(screen.getByText("Smoke")).toBeInTheDocument();
+    });
+    // Fixture defaults (10/s × 1-5 s lifetime) estimate far below the
+    // 10,000 threshold — no row warns.
+    expect(screen.queryAllByTestId(/^emitter-chain-warning-/)).toHaveLength(0);
+  });
+
+  it("shows the glyph with a breakdown tooltip when an emitter crosses the threshold", async () => {
+    // Smoke is id 0 in the mock fixture; 20,000/s × 1 s = 20,000 > 10,000.
+    useMockEmitterProperties.getState().patch(0, { nParticlesPerSecond: 20_000, lifetime: 1 });
+    render(<EmitterTree bridge={new MockBridge()} />);
+    const glyph = await screen.findByTestId("emitter-chain-warning-0");
+    expect(glyph.getAttribute("title")).toContain("20,000");
+    expect(glyph.getAttribute("title")).toContain("Soft warning");
+    // Only the offending chain glyphs: Smoke + its two children (the
+    // cumulative product carries down), NOT the sane siblings Sparks (3)
+    // and Flash (5). Pins the per-row prop wiring, not just presence.
+    expect(screen.queryAllByTestId(/^emitter-chain-warning-/)).toHaveLength(3);
+    expect(screen.queryByTestId("emitter-chain-warning-3")).toBeNull();
+    expect(screen.queryByTestId("emitter-chain-warning-5")).toBeNull();
+  });
+
+  it("marks ancestors when a CHILD's edit makes the chain offend (multi-line tooltip)", async () => {
+    // Root Smoke stays at fixture defaults (10/s × 1 s → E = 10); child
+    // "Smoke embers" (id 1) patched to 2,000/s × 1 s → cumulative
+    // 10 × 2,000 = 20,000 > 10,000. The root glyphs as an ancestor and
+    // the child's tooltip carries the per-generation breakdown.
+    useMockEmitterProperties.getState().patch(1, { nParticlesPerSecond: 2_000, lifetime: 1 });
+    render(<EmitterTree bridge={new MockBridge()} />);
+    const childGlyph = await screen.findByTestId("emitter-chain-warning-1");
+    expect(childGlyph.getAttribute("title")).toContain("→ Smoke embers");
+    expect(screen.getByTestId("emitter-chain-warning-0")).toBeInTheDocument();
   });
 });

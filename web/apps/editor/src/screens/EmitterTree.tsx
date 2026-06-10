@@ -69,7 +69,7 @@ import {
 } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Menubar from "@radix-ui/react-menubar";
-import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useViewportOcclusion } from "@/lib/viewport-occlusion";
 import type {
   Bridge,
@@ -94,6 +94,7 @@ import {
   type DropZone,
 } from "@/lib/drop-zone";
 import { computeLinkGroupBrackets, colorForGroup } from "@/lib/link-group-colors";
+import { estimateChainLoad, formatChainWarning, type ChainWarning } from "@/lib/chain-load";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
 import { moveEmitters, duplicateEmitters, reorderManyEmitters } from "@/lib/emitter-reorder";
@@ -339,6 +340,9 @@ type RowProps = {
   onHoverLinkGroup: (groupId: number | null) => void;
   //: dissolve the entire link group this row belongs to.
   onDissolveLinkGroup: (groupId: number) => void;
+  //: non-null when this row sits on a chain whose estimated alive
+  // count crosses CHAIN_WARN_THRESHOLD. Advisory only.
+  chainWarning: ChainWarning | null;
 };
 
 // (Group A): mirror of MenuBar's OccludingMenubarContent for
@@ -401,7 +405,7 @@ function EmitterRow({
   row, primaryId, selectedIds, orderedIds, onRowClick, bridge,
   draggingId, draggingIds, indicator, startDrag,
   editing, beginEdit, setEditValue, commitEdit, cancelEdit,
-  linkHover, onHoverLinkGroup, onDissolveLinkGroup,
+  linkHover, onHoverLinkGroup, onDissolveLinkGroup, chainWarning,
 }: RowProps) {
   const { node, depth, siblings } = row;
   const isPrimary = primaryId === node.id;
@@ -710,7 +714,13 @@ function EmitterRow({
               // accessibility tree (and the emitter-tree a11y goldens, which
               // capture "default ↻" + the row's accessible name) are
               // unchanged. Eye auto-places into column 1.
-              gridTemplateColumns: "18px 18px 10px 1fr",
+              //: warned rows append a 16px col 5 for the chain-load
+              // glyph; unwarned rows keep the 4-column template so their
+              // layout (and the existing grid-template assertion) is
+              // byte-identical.
+              gridTemplateColumns: chainWarning !== null
+                ? "18px 18px 10px 1fr 16px"
+                : "18px 18px 10px 1fr",
             }}
           >
             {/* F1: visibility toggle on the LEFT (replaces the old role
@@ -832,6 +842,23 @@ function EmitterRow({
                 }}
                 className="pointer-events-none size-1.5 justify-self-center rounded-full"
               />
+            )}
+            {/*: soft chain-load warning glyph, placed VISUALLY in
+                col 5 (right of the name) via grid-column but rendered
+                LAST in DOM — same convention as the role glyph / link
+                dot, so unwarned rows' accessible names stay byte-
+                identical and the a11y goldens hold. The native `title`
+                carries the multi-line root→offender breakdown. */}
+            {chainWarning !== null && (
+              <span
+                style={{ gridColumn: 5, gridRow: 1 }}
+                data-testid={`emitter-chain-warning-${node.id}`}
+                title={formatChainWarning(chainWarning)}
+                aria-label={`Chain load warning: about ${Math.round(chainWarning.estimate).toLocaleString("en-US")} particles estimated alive`}
+                className="grid place-items-center w-4 h-4 shrink-0 justify-self-center text-amber-400"
+              >
+                <TriangleAlert className="size-3" />
+              </span>
             )}
           </button>
         </ContextMenu.Trigger>
@@ -1207,6 +1234,14 @@ export function EmitterTree({ bridge }: Props) {
   const setTree = useEmitterTreeStore((s) => s.setTree);
   const selectedIds = useEmitterSelectionIds();
   const primaryId = useEmitterSelectionPrimary();
+
+  //: stableId → soft chain-load warning, recomputed whenever the
+  // tree refetches (spawn values ride the tree DTO, so a properties edit
+  // that matters lands here via emitters/tree/changed → setTree).
+  const chainWarnings = useMemo(
+    () => (tree !== null ? estimateChainLoad(tree.root) : new Map<number, ChainWarning>()),
+    [tree],
+  );
 
   // Batch B3 — drag/drop state. `draggingId` is the source row's id;
   // `indicator` is the row + zone currently displaying a drop hint.
@@ -2201,6 +2236,7 @@ export function EmitterTree({ bridge }: Props) {
                   }
                   onHoverLinkGroup={setHoveredLinkGroup}
                   onDissolveLinkGroup={handleDissolveLinkGroup}
+                  chainWarning={chainWarnings.get(row.node.stableId) ?? null}
                 />
               </Fragment>
             );

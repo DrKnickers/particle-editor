@@ -23,6 +23,7 @@ import type {
   EngineStateDto,
   Event,
 } from "@particle-editor/bridge-schema";
+import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 
 beforeEach(() => {
   // Reset the store between tests so state mutations don't leak.
@@ -1336,9 +1337,9 @@ describe("MockBridge emitters/move-many (preserve order at the edge)", () => {
   function rootsTree(names: string[]): EmitterTreeDto {
     return {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
         children: names.map((name, i) => ({
-          id: i, stableId: 100 + i, name, role: "root", linkGroup: 0, visible: true, children: [],
+          id: i, stableId: 100 + i, name, role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [],
         })),
       },
     };
@@ -1472,5 +1473,43 @@ describe("MockBridge dirty-bit for batch structural mutations", () => {
     // Smoke is the TOP root; moving it up is pinned → nothing moves.
     await b.request({ kind: "emitters/move-many", params: { ids: [0], direction: "up" } });
     expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(false);
+  });
+});
+
+describe("emitter tree spawn params ()", () => {
+  //: tree nodes must mirror the LIVE spawn values from the
+  // properties overlay (fixture defaults + set-properties patches), not
+  // the frozen ZERO_SPAWN placeholder the tree-store literals carry for
+  // type satisfaction. Decoration happens at the mock's emit/return
+  // choke points.
+  it("emitters/list nodes mirror the properties overlay's spawn fields", async () => {
+    const b = new MockBridge();
+    const tree = await b.request({ kind: "emitters/list", params: {} });
+    const first = tree.root.children[0]!;
+    const { properties } = await b.request({
+      kind: "emitters/get-properties", params: { id: first.id },
+    });
+    expect(first.spawn).toEqual({
+      lifetime: properties.lifetime,
+      useBursts: properties.useBursts,
+      nBursts: properties.nBursts,
+      burstDelay: properties.burstDelay,
+      nParticlesPerSecond: properties.nParticlesPerSecond,
+      nParticlesPerBurst: properties.nParticlesPerBurst,
+    });
+  });
+
+  it("a set-properties spawn patch is reflected in the next tree/changed payload", async () => {
+    const b = new MockBridge();
+    const events: EmitterTreeDto[] = [];
+    const off = b.on("emitters/tree/changed", (e) => { events.push(e.payload); });
+    await b.request({
+      kind: "emitters/set-properties",
+      params: { id: 0, patch: { nParticlesPerSecond: 4242 } },
+    });
+    off();
+    expect(events.length).toBeGreaterThan(0);
+    const node = events.at(-1)!.root.children.find((n) => n.id === 0);
+    expect(node?.spawn.nParticlesPerSecond).toBe(4242);
   });
 });

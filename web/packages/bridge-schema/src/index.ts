@@ -137,6 +137,31 @@ export type SpawnerParamsDto = {
 
 export type EmitterRole = "root" | "lifetime" | "death";
 
+// Spawn-quantity params mirrored onto every tree node (chain-load
+// warning). Field names match EmitterPropertiesDto exactly so the host and
+// the mock copy them verbatim; the consumer is estimateChainLoad() in
+// web/apps/editor/src/lib/chain-load.ts.
+export type SpawnParamsDto = Pick<
+  EmitterPropertiesDto,
+  | "lifetime"
+  | "useBursts"
+  | "nBursts"
+  | "burstDelay"
+  | "nParticlesPerSecond"
+  | "nParticlesPerBurst"
+>;
+
+// All-zero spawn for synthetic roots and test fixtures that don't care
+// about chain-load (estimate = 0 → never warns).
+export const ZERO_SPAWN: Readonly<SpawnParamsDto> = Object.freeze({
+  lifetime: 0,
+  useBursts: false,
+  nBursts: 0,
+  burstDelay: 0,
+  nParticlesPerSecond: 0,
+  nParticlesPerBurst: 0,
+});
+
 export type EmitterTreeNode = {
   id: number;
   // Stable per-emitter identity (reorder glide). `id` is a POSITIONAL index
@@ -150,6 +175,7 @@ export type EmitterTreeNode = {
   role: EmitterRole;
   linkGroup: number;
   visible: boolean;
+  spawn: SpawnParamsDto;
   children: EmitterTreeNode[];
 };
 

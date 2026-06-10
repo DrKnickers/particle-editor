@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { ImportEmittersDialog } from "../ImportEmittersDialog";
 
@@ -32,7 +33,7 @@ function makeStubBridge(): Bridge & {
 }
 
 function node(id: number, name: string, children: EmitterTreeNode[] = []): EmitterTreeNode {
-  return { id, stableId: 100 + id, name, role: "root", linkGroup: -1, visible: true, children };
+  return { id, stableId: 100 + id, name, role: "root", linkGroup: -1, visible: true, spawn: ZERO_SPAWN, children };
 }
 
 /** A bridge whose Browse→preview round-trip resolves to a small tree

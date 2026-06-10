@@ -11,10 +11,11 @@ import {
   type RootBlockGeometry,
   type RowGeometry,
 } from "@/lib/multi-drag";
+import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { EmitterTreeNode } from "@particle-editor/bridge-schema";
 
 const roots: EmitterTreeNode[] = [0, 1, 2, 3].map((id) => ({
-  id, stableId: 100 + id, name: String(id), role: "root", linkGroup: 0, visible: true, children: [],
+  id, stableId: 100 + id, name: String(id), role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [],
 }));
 
 describe("selectedRootIdsInOrder", () => {
@@ -32,15 +33,15 @@ describe("isMultiDrag", () => {
 describe("collectSubtreeIds", () => {
   it("returns the node's id plus every descendant id, depth-first", () => {
     const node: EmitterTreeNode = {
-      id: 0, stableId: 100, name: "A", role: "root", linkGroup: 0, visible: true,
+      id: 0, stableId: 100, name: "A", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
       children: [
         {
-          id: 1, stableId: 101, name: "A1", role: "lifetime", linkGroup: 0, visible: true,
+          id: 1, stableId: 101, name: "A1", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
           children: [
-            { id: 2, stableId: 102, name: "A1a", role: "death", linkGroup: 0, visible: true, children: [] },
+            { id: 2, stableId: 102, name: "A1a", role: "death", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
           ],
         },
-        { id: 4, stableId: 104, name: "A2", role: "lifetime", linkGroup: 0, visible: true, children: [] },
+        { id: 4, stableId: 104, name: "A2", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
       ],
     };
     expect(collectSubtreeIds(node)).toEqual([0, 1, 2, 4]);

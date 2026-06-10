@@ -26,7 +26,10 @@ import type {
   EventKind,
   EventOf,
   EngineStateDto,
+  EmitterTreeDto,
+  EmitterTreeNode,
   LightDto,
+  SpawnParamsDto,
 } from "@particle-editor/bridge-schema";
 import {
   addDeathChildEmitter,
@@ -166,6 +169,33 @@ function didMutate(
   }
 }
 
+//: live spawn values come from the properties overlay at emit time —
+// ONE decoration point instead of mirroring into the tree store from every
+// mutation handler. Tree-node literals carry ZERO_SPAWN purely to satisfy
+// the type; this override is the source of truth.
+function pickSpawn(id: number): SpawnParamsDto {
+  const p = useMockEmitterProperties.getState().read(id);
+  return {
+    lifetime: p.lifetime,
+    useBursts: p.useBursts,
+    nBursts: p.nBursts,
+    burstDelay: p.burstDelay,
+    nParticlesPerSecond: p.nParticlesPerSecond,
+    nParticlesPerBurst: p.nParticlesPerBurst,
+  };
+}
+
+function decorateSpawn(node: EmitterTreeNode): EmitterTreeNode {
+  return {
+    ...node,
+    // The synthetic root (id -1) keeps its stored ZERO_SPAWN — host parity
+    // (the native synthetic roots serialize all-zeros, and the estimator
+    // never reads the root's spawn).
+    spawn: node.id === -1 ? node.spawn : pickSpawn(node.id),
+    children: node.children.map(decorateSpawn),
+  };
+}
+
 export class MockBridge implements Bridge {
   private listeners = new Map<EventKind, Set<(e: Event) => void>>();
 
@@ -217,6 +247,11 @@ export class MockBridge implements Bridge {
   // ---------------------------------------------------------------- internals
 
   private emit(e: Event): void {
+    //: decorate tree payloads with live spawn values at the single
+    // event choke point (see decorateSpawn above).
+    if (e.kind === "emitters/tree/changed") {
+      e = { ...e, payload: { ...e.payload, root: decorateSpawn(e.payload.root) } };
+    }
     const bucket = this.listeners.get(e.kind);
     bucket?.forEach((h) => h(e));
   }
@@ -908,8 +943,13 @@ export class MockBridge implements Bridge {
       // selectedEmitterId scalar and emits both `emitters/selected` and
       // `engine/state/changed` so subscribers picking up either channel
       // see the change. Selection of an unknown id resets to null.
-      case "emitters/list":
-        return JSON.parse(JSON.stringify(useMockEmitterTree.getState().tree));
+      case "emitters/list": {
+        const cloned = JSON.parse(
+          JSON.stringify(useMockEmitterTree.getState().tree),
+        ) as EmitterTreeDto;
+        //: decorate the clone with live spawn values (see decorateSpawn).
+        return { root: decorateSpawn(cloned.root) };
+      }
 
       case "emitters/select": {
         const reqId = req.params.id;

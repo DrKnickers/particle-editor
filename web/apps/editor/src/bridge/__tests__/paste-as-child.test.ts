@@ -2,6 +2,7 @@
 // helper and the MockBridge `emitters/paste-as-child` round-trip.
 
 import { describe, it, expect } from "vitest";
+import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import {
   pasteAsChildFromClipboard,
@@ -16,7 +17,7 @@ function node(
   role: EmitterTreeNode["role"],
   children: EmitterTreeNode[] = [],
 ): EmitterTreeNode {
-  return { id, stableId: 100 + id, name, role, linkGroup: 0, visible: true, children };
+  return { id, stableId: 100 + id, name, role, linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children };
 }
 
 // A two-root tree; root id 1 ("Alpha") has no children (both slots free).

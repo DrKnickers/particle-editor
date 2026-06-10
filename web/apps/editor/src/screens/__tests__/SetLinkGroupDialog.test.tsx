@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 import { SetLinkGroupDialog } from "../SetLinkGroupDialog";
 import { useTreeContextStore } from "@/lib/tree-context";
@@ -15,10 +16,10 @@ import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 function fixtureTree(): EmitterTreeDto {
   return {
     root: {
-      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
       children: [
-        { id: 0, stableId: 100, name: "A", role: "root", linkGroup: 0, visible: true, children: [] },
-        { id: 1, stableId: 101, name: "B", role: "root", linkGroup: 0, visible: true, children: [] },
+        { id: 0, stableId: 100, name: "A", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+        { id: 1, stableId: 101, name: "B", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
       ],
     },
   };
@@ -101,10 +102,10 @@ describe("SetLinkGroupDialog", () => {
     // Joining ONE emitter to an existing group is valid (>= 2 members result).
     const tree: EmitterTreeDto = {
       root: {
-        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true,
+        id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
         children: [
-          { id: 0, stableId: 100, name: "A", role: "root", linkGroup: 0, visible: true, children: [] },
-          { id: 1, stableId: 101, name: "B", role: "root", linkGroup: 3, visible: true, children: [] },
+          { id: 0, stableId: 100, name: "A", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
+          { id: 1, stableId: 101, name: "B", role: "root", linkGroup: 3, visible: true, spawn: ZERO_SPAWN, children: [] },
         ],
       },
     };
