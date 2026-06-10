@@ -18,7 +18,7 @@ Conventions:
 
 ### Emitter-tree drag hardening: ten audit fixes (data-corruption, mid-drag safety, parity)
 
-*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-09 · [`e4ef42b`](https://github.com/DrKnickers/particle-editor/commit/e4ef42b) · #110*
 
 A resumed multi-agent audit of the click-drag reorder/reparent feature
 surfaced ten adversarially-confirmed defects; all are fixed. The headline:
