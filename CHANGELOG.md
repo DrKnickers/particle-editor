@@ -16,6 +16,82 @@ Conventions:
 
 ## Changelog
 
+### Smooth window resize: cheap ResetEx-based per-tick device reset, plus resize-perf probes
+
+*2026-06-10 · TODO(merge hash) · #116*
+
+Resizing the app window no longer tanks: the full D3D9Ex device reset that
+fires on **every mouse-move tick** of the modal sizemove loop used to cost
+~24 ms (full render-target/shader teardown, whole texture-cache wipe with disk
+re-decode — ~20 ms of the total) and now costs **~3-5 ms**, because resize-only
+resets switched to `IDirect3DDevice9Ex::ResetEx`, which keeps all surfaces,
+textures, and shaders alive across the reset ("all other surfaces persistent"
+— first-party docs). The scene still renders at the **correct size on every
+tick** — no deferred work, no end-of-gesture snap. Resizing the window also
+no longer **rescales the world**: the per-pixel-FoV projection now anchors to
+a fixed reference (45° per 768 px of viewport height) instead of the current
+render-target height, so growing the window reveals more scene at the edges —
+the dock-slide behaviour — rather than zooming the existing content. Always-on
+`[resize-perf]` log probes (1 Hz aggregates in `host.log`) quantify the reset
+rate, the per-reset sub-stages, and the bridge scene-rect message rate — the
+measurement basis for the remaining splitter-drag fixes.
+
+**How we tackled it.** New `Engine::ResetForResize`
+([`src/engine.cpp`](src/engine.cpp:1494)): `ResetEx` + rebuild of only the
+size-keyed targets (scene/distort/bloom RTs + depth-stencil via the existing
+`ResetParameters`, the AlphaCompositor shared RT via `Resize`); the
+OnLostDevice dance, texture-cache wipe, and ground/skydome re-decode that
+plain `Reset()` legally requires are all skipped — D3D9Ex semantics make them
+unnecessary for a windowed size change. All three resize-driven reset sites in
+[`src/host/LayoutBroker.cpp`](src/host/LayoutBroker.cpp:251) funnel through
+one `ResetEngineForResize` helper (cheap path → full `Reset()` fallback →
+`RecoverDeviceIfNeeded`), per the no-hand-copies rule. Full `Reset()`
+remains the device-loss recovery primitive. `WM_ENTERSIZEMOVE`/`EXITSIZEMOVE`
+handlers gate a main-window `WM_ERASEBKGND → 1` suppression (DefWindowProc was
+GDI-filling the full client with the class brush per tick) and arm a 150 ms
+quiescence timer that re-resets only if a mid-gesture reset failed.
+Engine-side, `Engine::ResetPerf` ([`src/engine.h`](src/engine.h:200)) mirrors
+the `RenderPassTimingsUs` diagnostic pattern: the engine publishes per-reset
+sub-stage wall-clock + a cheap-path counter, the host logs it at 1 Hz.
+
+**Issues encountered and resolutions.** (1) **The first iteration of this fix
+was rejected by the user and redesigned.** It deferred the reset to gesture
+settle (`WM_EXITSIZEMOVE`) — numerically a 30× win (21 resets/s @ 27 ms →
+0 resets @ 0.9 ms/tick) but the end-of-gesture snap "feels like a regression"
+(the scene rendered into the old-size target mid-gesture, then jumped). The
+probe data itself pointed at the snapless fix: ~20 ms of every reset was
+texture re-decode that `ResetEx` makes unnecessary. Lesson recorded as:
+prefer making per-tick work cheap (continuous-correct) over deferring it
+(deferred-correct); measured wins don't override a feel verdict. (2) A
+`put_Bounds` ~30 Hz throttle shipped with the first iteration was **reverted**
+— it halved the panels' tracking rate during resize, plausibly reading as the
+very regression being fixed (corollary: never bundle feel-degrading
+riders with the headline fix). (3) The investigation's sketch said "stretch
+the last-presented surface via the dock-slide path" — but the dock-slide
+transform (`SetEngineVisualTransform`) only offsets and **clips**; it cannot
+scale (a dock slide never changes the window size). Moot after the redesign.
+(4) The smoke is **programmatic**: a `SetWindowPos` storm with/without the
+`WM_ENTERSIZEMOVE` bracket
+([`tasks/tool-sizemove-storm.ps1`](tasks/tool-sizemove-storm.ps1)) reproduces
+the modal loop's message sequence without interactive input. On the final
+build: every tick resets on the cheap path (zero fallbacks), reset
+tot ≈ 3.5-4 ms (`reload` 20 ms → 0.4 ms), native harness 174/0. (5) The probes
+confirmed two predictions for the next phases: the scene-rect stream runs at
+**2×** the tick rate (redundant `window resize` listener in
+`ViewportSlot.tsx` — fix C1), and the idle pump free-runs at ~3000 fps with
+~4000 GPU-query spins per frame (fix B). (6) Smooth resize **exposed a
+pre-existing framing wart**: `SetSceneViewport`'s per-pixel-FoV reference was
+the *current* RT height ([`src/engine.cpp`](src/engine.cpp:1765)), so a window
+resize rescaled the world while a dock slide revealed it (the user noticed
+the inconsistency only once resize was smooth enough to watch). Anchoring the
+reference to a constant (45°/768 px, ≈ the default window's client height so
+default framing is unchanged within ~1%) unifies both gestures on the reveal
+behaviour; fovY clamps at 120° to stay clear of the perspective-projection
+breakdown at extreme heights. Legacy arch-A's `ResetParameters` 45° full-RT
+projection is deliberately untouched.
+
+---
+
 ### Emitter-tree drag hardening: ten audit fixes (data-corruption, mid-drag safety, parity)
 
 *2026-06-09 · [`e4ef42b`](https://github.com/DrKnickers/particle-editor/commit/e4ef42b) · #110*

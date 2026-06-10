@@ -88,6 +88,13 @@ constexpr int     kInitialHeight             = 800;
 constexpr wchar_t kVirtualHostName[]         = L"app.local";
 constexpr INTERNET_PORT kDevServerPort       = 5174;
 constexpr UINT_PTR    kStatsTimerId          = 0x100;  // 4 Hz stats broadcast
+// [resize-perf revised Fix A] one-shot safety net: re-armed on every
+// size tick while in sizemove; fires 150 ms after the ticks stop and
+// re-resets ONLY if a per-tick cheap reset failed mid-gesture (normally
+// a no-op — see LayoutBroker::SettleDeferredReset). Covers a lost
+// WM_EXITSIZEMOVE too.
+constexpr UINT_PTR    kResizeSettleTimerId   = 0x101;
+constexpr UINT        kResizeSettleDelayMs   = 150;
 
 // G11: WebView2 origin allow-list. The host must trust only the
 // page it deliberately loads, not "whatever is currently navigated". Three
@@ -452,6 +459,25 @@ struct HostWindowImpl
     unsigned           perfWaitSpinsMax = 0;
     DWORD              perfLastEmitTick = 0;
 
+    // [resize-perf] Phase-0 probes (tasks/resize-perf-investigation.md).
+    // Always-on 1 Hz aggregates, same convention as [PERF] above.
+    // perfWmpos times the per-tick PredictAndApply+RenderD3D9 chain in
+    // WM_WINDOWPOSCHANGED (the suspected reset storm); the reset counter
+    // baseline turns Engine's monotonic ResetPerf.count into resets/sec.
+    // perfSceneRectMsgs counts layout/scene-rect arrivals in OnWebMessage
+    // (the RO→bridge stream rate during splitter drags).
+    PerfStage perfWmpos;
+    unsigned  perfWmposResetBase = 0;
+    DWORD     perfWmposLastEmit  = 0;
+    unsigned  perfSceneRectMsgs  = 0;
+    unsigned  perfWebMsgs        = 0;
+    DWORD     perfMsgLastEmit    = 0;
+
+    // [resize-perf Fix D] true between WM_ENTERSIZEMOVE and
+    // WM_EXITSIZEMOVE — gates the main-window WM_ERASEBKGND
+    // suppression and arms the settle-safety quiescence timer.
+    bool      m_inSizeMove       = false;
+
     // D6: mod state shared with React. ModManager constructed in
     // the impl ctor (DiscoverMods + RestoreLastSelectedMod run before
     // any UI shows); SetEngine called in WM_CREATE once the Engine
@@ -717,6 +743,11 @@ struct HostWindowImpl
     void    ForwardMouseToCompositionWebView2(UINT msg, WPARAM wp, LPARAM lp);
     void    ResizeWebViewToClient();
 
+    // [resize-perf Fix A] End-of-resize-gesture settle: the one deferred
+    // Engine::Reset (via LayoutBroker), an exact final put_Bounds, and a
+    // fresh frame. Called from WM_EXITSIZEMOVE and the quiescence timer.
+    void    SettleResize(const char* why);
+
     void OnWebMessage(const std::wstring& json);
 
     // Extracted HWND-mode controller dispatch. Originally inline in the
@@ -962,6 +993,11 @@ void HostWindowImpl::RenderD3D9()
 void HostWindowImpl::ResizeWebViewToClient()
 {
     if (!webController) return;
+    // ([resize-perf] note: an earlier revision throttled put_Bounds to
+    // ~30 Hz during sizemove. Reverted after the user's feel verdict —
+    // halving the panels' tracking rate read as a regression, and with
+    // the per-tick reset now on the cheap ResetEx path there is no
+    // budget pressure to justify it. corollary 1.)
     RECT r;
     GetClientRect(hMain, &r);
     webController->put_Bounds(r);
@@ -974,9 +1010,44 @@ void HostWindowImpl::ResizeWebViewToClient()
     layout.RefreshScreenPosition();
 }
 
+void HostWindowImpl::SettleResize(const char* why)
+{
+    // Order matters: reset first so the engine RT matches the settled
+    // popup size, exact WebView bounds second, then one fresh frame so
+    // the next DWM composition shows post-reset pixels (mirrors the
+    // forced render in WM_WINDOWPOSCHANGED).
+    layout.SettleDeferredReset();
+    ResizeWebViewToClient();
+    RenderD3D9();
+    Log("[resize-perf] settle (%s)\n", why);
+}
+
 void HostWindowImpl::OnWebMessage(const std::wstring& json)
 {
     Log("[host] WebMsg (%zu chars)\n", json.size());
+
+    // [resize-perf] Phase-0 probe — bridge message rate, split out the
+    // layout/scene-rect stream (the per-display-frame ResizeObserver
+    // round-trips during splitter drags). Substring scan is trivially
+    // cheap next to the UTF16→8 + JSON parse that follows. 1 Hz emit;
+    // idle (no messages) emits nothing by construction.
+    ++perfWebMsgs;
+    if (json.find(L"layout/scene-rect") != std::wstring::npos)
+        ++perfSceneRectMsgs;
+    const DWORD rpNow = GetTickCount();
+    if (perfMsgLastEmit == 0)
+    {
+        perfMsgLastEmit = rpNow;
+    }
+    else if ((rpNow - perfMsgLastEmit) >= 1000)
+    {
+        Log("[resize-perf] bridge: msgs=%u scene-rect=%u (per ~1s)\n",
+            perfWebMsgs, perfSceneRectMsgs);
+        perfWebMsgs = 0;
+        perfSceneRectMsgs = 0;
+        perfMsgLastEmit = rpNow;
+    }
+
     if (dispatcher)
         dispatcher->Dispatch(Utf16ToUtf8(json));
 }
@@ -2147,6 +2218,15 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             (void)wrote;
 #endif
         }
+        // [resize-perf revised Fix A] quiescence safety net — fires
+        // 150 ms after size ticks stop; normally a no-op (per-tick
+        // cheap resets keep sizes in sync), it only re-resets if a
+        // mid-gesture reset failed. Covers a lost WM_EXITSIZEMOVE.
+        else if (wp == kResizeSettleTimerId)
+        {
+            KillTimer(hwnd, kResizeSettleTimerId);
+            SettleResize(m_inSizeMove ? "quiescence-pause" : "quiescence");
+        }
         return 0;
 
     case WM_SIZE:
@@ -2161,6 +2241,16 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             m_compositor->SetSize(r.right - r.left, r.bottom - r.top);
         }
         return 0;
+
+    // [resize-perf Fix D] During the modal sizemove loop DefWindowProc
+    // erases the full client with the class brush on every tick (the
+    // main class registers CS_HREDRAW|CS_VREDRAW) — pure GDI cost:
+    // WebView2 repaints the whole client continuously anyway. Suppress
+    // only while in sizemove; normal paints keep the dark theme brush
+    // (first-paint / expose flashes are the reason it exists).
+    case WM_ERASEBKGND:
+        if (m_inSizeMove) return 1;
+        break;  // DefWindowProc fills with the class brush as today
 
     // Phase 3 Stage 3f (path b+): host HWND gained focus
     // (initial show, Alt-Tab back, click into the window). Forward
@@ -2341,10 +2431,46 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         //     fresh — the popup just stretches the LAST presented
         //     frame, so a wider/taller resize reveals dark purple
         //     where the ground plane should be.
+        //
+        // [resize-perf revised Fix A] PredictAndApply's per-tick reset
+        // runs on the cheap ResetEx path (~3-5 ms — textures/shaders
+        // persist per D3D9Ex semantics; only size-keyed RTs rebuild),
+        // so the scene renders at the CORRECT size every tick — no
+        // deferred-settle snap. RenderD3D9 stays the modal-loop frame
+        // driver (the idle pump is starved in here). The
+        // kResizeSettleTimerId one-shot is a safety net that re-resets
+        // only if a mid-gesture reset failed.
         if (hViewport)
         {
+            // [resize-perf] Phase-0 probe — time the per-tick chain and
+            // emit a 1 Hz aggregate with the engine's reset sub-stage
+            // breakdown (cheap = ResetForResize successes).
+            const LONGLONG rpT0 = PerfQpcNow();
             layout.PredictAndApply();
             RenderD3D9();
+            perfWmpos.add(PerfUsSince(rpT0));
+
+            if (m_inSizeMove)
+                SetTimer(hwnd, kResizeSettleTimerId, kResizeSettleDelayMs, nullptr);
+
+            const DWORD rpNow = GetTickCount();
+            if (perfWmposLastEmit == 0 || (rpNow - perfWmposLastEmit) >= 1000)
+            {
+                if (engine)
+                {
+                    const Engine::ResetPerf& rp = engine->GetResetPerf();
+                    Log("[resize-perf] wmpos: ticks=%u apply+render(ms av/mx)=%.1f/%.1f "
+                        "resets=%u (cheap-total=%u) last(ms tot=%.1f lost=%.1f dev=%.1f reload=%.1f alpha=%.1f)\n",
+                        perfWmpos.n,
+                        perfWmpos.avg() / 1000.0, perfWmpos.maxUs / 1000.0,
+                        rp.count - perfWmposResetBase, rp.cheapCount,
+                        rp.lastTotalMs, rp.lastLostMs, rp.lastDeviceResetMs,
+                        rp.lastReloadMs, rp.lastAlphaResizeMs);
+                    perfWmposResetBase = rp.count;
+                }
+                perfWmpos.reset();
+                perfWmposLastEmit = rpNow;
+            }
         }
         break;  // fall through so DefWindowProc continues processing
 
@@ -2355,11 +2481,28 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     // — React's ResizeObserver will fire AFTER the sizemove loop
     // exits, sending a fresh layout/viewport-rect, but in the
     // meantime the popup at least stays anchored to roughly the
-    // right place via owner-client translation. No
-    // WM_ENTERSIZEMOVE/EXITSIZEMOVE handling: hiding the popup
-    // during resize just exposes the bare WebView2 transparent
-    // region (which paints white through the parent's null brush),
-    // which is worse than a slightly-stale-sized popup.
+    // right place via owner-client translation. (An earlier design
+    // note rejected HIDING the popup during sizemove — that exposes
+    // the bare WebView2 transparent region, which paints white. The
+    // Fix A handlers below don't hide anything; they only defer the
+    // per-tick engine reset.)
+
+    // [resize-perf revised Fix A] Modal sizemove bracket. m_inSizeMove
+    // gates the WM_ERASEBKGND suppression below; per-tick engine resets
+    // now run unconditionally on the cheap ResetEx path (LayoutBroker::
+    // ResetEngineForResize), so EXITSIZEMOVE's settle is a no-op safety
+    // net that only acts if a mid-gesture reset FAILED. Both fall
+    // through to DefWindowProc, which runs its own modal-loop
+    // bookkeeping on these messages.
+    case WM_ENTERSIZEMOVE:
+        m_inSizeMove = true;
+        break;
+
+    case WM_EXITSIZEMOVE:
+        m_inSizeMove = false;
+        KillTimer(hwnd, kResizeSettleTimerId);
+        SettleResize("exitsizemove");
+        break;
 
     case WM_DESTROY:
         KillTimer(hwnd, kStatsTimerId);

@@ -1350,6 +1350,10 @@ const Engine::Light& Engine::GetLight(LightType which) const
 
 void Engine::Reset()
 {
+	// [resize-perf] Phase-0 probe — sub-stage QPC brackets filled into
+	// m_resetPerf at the end; the host logs them at 1 Hz. See engine.h.
+	const LONGLONG _rpT0 = EngQpcNow();
+
 	ReleaseBloomTargets();
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
@@ -1409,10 +1413,12 @@ void Engine::Reset()
 	// resources. Lazy-recreated by the next IssueEndFrameQuery call
 	// against the post-Reset device.
 	SAFE_RELEASE(m_pEndFrameQuery);
+	const LONGLONG _rpT1 = EngQpcNow();   // [resize-perf] lost ends / device Reset begins
 	if (FAILED(m_pDevice->Reset(&m_presentationParameters)))
 	{
 		throw wruntime_error(LoadString(IDS_ERROR_RENDERER_RESET));
 	}
+	const LONGLONG _rpT2 = EngQpcNow();   // [resize-perf] device Reset ends / reload begins
 	m_pDistortShader->OnResetDevice();
     for (int i = 0; i < NUM_SHADERS; i++)
     {
@@ -1431,6 +1437,8 @@ void Engine::Reset()
 
 	ResetParameters();
 
+	const LONGLONG _rpT3 = EngQpcNow();   // [resize-perf] reload ends / alpha resize begins
+
 	//: the alpha compositor owns D3D9 resources (RT + sysmem
 	// surface) sized to the popup client area. Refresh them so the
 	// off-screen RT keeps pace with the swap-chain's back-buffer
@@ -1443,6 +1451,8 @@ void Engine::Reset()
 		    static_cast<int>(m_presentationParameters.BackBufferWidth),
 		    static_cast<int>(m_presentationParameters.BackBufferHeight));
 	}
+
+	const LONGLONG _rpT4 = EngQpcNow();   // [resize-perf] alpha resize ends
 
 	// Phase 3 Stage 5 R8 mitigation — re-apply the cached scene
 	// viewport so its projection aspect ratio survives Reset.
@@ -1470,6 +1480,97 @@ void Engine::Reset()
 		m_sceneViewportActive = false;
 		SetSceneViewport(sx, sy, sw, sh);
 	}
+
+	// [resize-perf] publish this Reset's sub-stage costs. count increments
+	// only on a COMPLETED reset (the device-Reset throw above skips this),
+	// so the host's delta-per-second reads as successful resets.
+	m_resetPerf.lastLostMs        = EngQpcUs(_rpT0, _rpT1) / 1000.0;
+	m_resetPerf.lastDeviceResetMs = EngQpcUs(_rpT1, _rpT2) / 1000.0;
+	m_resetPerf.lastReloadMs      = EngQpcUs(_rpT2, _rpT3) / 1000.0;
+	m_resetPerf.lastAlphaResizeMs = EngQpcUs(_rpT3, _rpT4) / 1000.0;
+	m_resetPerf.lastTotalMs       = EngQpcUs(_rpT0, EngQpcNow()) / 1000.0;
+	++m_resetPerf.count;
+}
+
+// [resize-perf revised Fix A] Cheap resize-only reset. See engine.h for the
+// contract and the first-party ResetEx semantics this leans on. Mirrors
+// Reset()'s structure minus everything ResetEx makes unnecessary: no
+// OnLostDevice/OnResetDevice on shaders/effects, no skydome VB/IB release,
+// no ground/skydome texture re-decode, no TextureManager cache wipe. The
+// end-frame query is still released + lazily recreated — IDirect3DQuery9
+// invalidation across device resets was observed empirically under plain
+// Reset (Stage 4a) and a query re-create costs nothing next frame.
+bool Engine::ResetForResize()
+{
+	if (m_pDevice == NULL) return false;
+
+	const LONGLONG _rpT0 = EngQpcNow();
+
+	// Release the size-keyed render targets so ResetParameters below can
+	// recreate them at the new backbuffer size (it CreateTexture-s into
+	// the member pointers without releasing first). NOT required by
+	// ResetEx itself — DEFAULT-pool resources persist — purely lifetime
+	// hygiene for the recreate.
+	ReleaseBloomTargets();
+	SAFE_RELEASE(m_pDistortTexture);
+	SAFE_RELEASE(m_pSceneTexture);
+	SAFE_RELEASE(m_pDepthStencilSurface);
+	SAFE_RELEASE(m_pEndFrameQuery);
+
+	m_presentationParameters.BackBufferWidth  = 0;   // size to the HWND client
+	m_presentationParameters.BackBufferHeight = 0;
+	m_presentationParameters.BackBufferCount  = 1;
+	m_presentationParameters.Windowed         = true;
+
+	const LONGLONG _rpT1 = EngQpcNow();
+	HRESULT hr = m_pDevice->ResetEx(&m_presentationParameters, NULL);
+	if (FAILED(hr))
+	{
+		// Device is now in the lost state (ResetEx docs). Caller falls
+		// back to the full Reset() / RecoverDeviceIfNeeded path.
+		char buf[96];
+		sprintf(buf, "[Engine] ResetForResize: ResetEx failed hr=0x%08lx\n", static_cast<unsigned long>(hr));
+		OutputDebugStringA(buf);
+		return false;
+	}
+	const LONGLONG _rpT2 = EngQpcNow();
+
+	// Rebuild the size-keyed targets + re-apply pipeline state and the
+	// full-RT projection (same routine the full Reset uses). Throws on
+	// allocation failure — propagate; the caller's fallback handles it.
+	ResetParameters();
+	const LONGLONG _rpT3 = EngQpcNow();
+
+	// Same tail as Reset(): the AlphaCompositor's shared RT + readback
+	// surfaces track the backbuffer size, and the cached scene viewport
+	// must be re-applied so the projection survives at scene-rect aspect.
+	if (m_pAlphaCompositor && m_presentationParameters.BackBufferWidth > 0
+	    && m_presentationParameters.BackBufferHeight > 0)
+	{
+		m_pAlphaCompositor->Resize(
+		    static_cast<int>(m_presentationParameters.BackBufferWidth),
+		    static_cast<int>(m_presentationParameters.BackBufferHeight));
+	}
+	const LONGLONG _rpT4 = EngQpcNow();
+
+	if (m_sceneViewportActive)
+	{
+		int sx = m_sceneViewportX;
+		int sy = m_sceneViewportY;
+		int sw = m_sceneViewportW;
+		int sh = m_sceneViewportH;
+		m_sceneViewportActive = false;
+		SetSceneViewport(sx, sy, sw, sh);
+	}
+
+	m_resetPerf.lastLostMs        = EngQpcUs(_rpT0, _rpT1) / 1000.0;
+	m_resetPerf.lastDeviceResetMs = EngQpcUs(_rpT1, _rpT2) / 1000.0;
+	m_resetPerf.lastReloadMs      = EngQpcUs(_rpT2, _rpT3) / 1000.0;
+	m_resetPerf.lastAlphaResizeMs = EngQpcUs(_rpT3, _rpT4) / 1000.0;
+	m_resetPerf.lastTotalMs       = EngQpcUs(_rpT0, EngQpcNow()) / 1000.0;
+	++m_resetPerf.count;
+	++m_resetPerf.cheapCount;
+	return true;
 }
 
 // Phase 3 Stage 2: forwarder to the AlphaCompositor's shared
@@ -1661,30 +1762,33 @@ void Engine::SetSceneViewport(int x, int y, int w, int h)
 	m_sceneViewportH      = h;
 	m_sceneViewportActive = true;
 
-	// Per-pixel-FoV projection — reference is the CURRENT engine RT
-	// height (BackBufferHeight). At sceneH = RT_H (no chrome around
-	// the viewport): fovY = 45°, matching ResetParameters' default
-	// exactly. At sceneH < RT_H (chrome occupies some of the client):
-	// fovY < 45° proportionally — engine renders LESS world per frame
-	// than at full-RT, so engine.Render is at-or-faster than pre-
-	// Stage-5 across all window sizes.
+	// Per-pixel-FoV projection — reference is a FIXED anchor: 45° per
+	// kFovAnchorHeightPx (768) of viewport height, so one pixel always
+	// subtends the same angle REGARDLESS of window size. Combined with
+	// aspect = W/H, 1 px ≡ 1 px angular extent in both axes: growing
+	// the scene rect (pane drag, dock slide, AND a window resize)
+	// reveals more world at the edges; shrinking crops. No zoom/FoV
+	// rescale of existing content, ever.
 	//
-	// Combined with aspect = W/H, the horizontal FoV scales such
-	// that 1 RT pixel ≡ 1 scene-rect pixel angular extent. Pane
-	// resize widens scene-rect → horizontal FoV widens → new world
-	// content appears at the right/left edges. No "shrinking
-	// distortion" of existing content (each pixel keeps its angular
-	// extent constant across resizes).
+	// History: the reference used to be the CURRENT RT height
+	// (BackBufferHeight), which kept the per-pixel angle constant only
+	// while the WINDOW size was constant — a dock slide revealed, but a
+	// window resize rescaled the world to the new height (user verdict
+	// 2026-06-10: "adjusts the zoom as I resize … not desired; I like
+	// how the dock slide just reveals more/less"). An absolute anchor
+	// extends the reveal behaviour to window resizes. 768 ≈ the default
+	// window's client height, so the default framing matches the old
+	// scheme within ~1%; overall zoom is the camera's job (mouse wheel).
 	//
-	// Falls back to 45° at scene-rect aspect when BackBufferHeight
-	// isn't yet known (pre-Init / pre-first-Reset). Engine::Reset's
-	// R8 re-apply at end of Reset uses the post-Reset BackBufferHeight
-	// so the reference always matches the live RT.
+	// fovY is clamped to 120° — at extreme viewport heights (~2050+ px)
+	// the linear per-pixel widening would approach the projection
+	// breakdown at 180°; past the clamp the view rescales instead
+	// (accepted: wide-angle distortion is objectionable there anyway).
 	float n      = 1.0f;
-	float refH   = (m_presentationParameters.BackBufferHeight > 0)
-	                 ? (float)m_presentationParameters.BackBufferHeight
-	                 : (float)h;
-	float fovY   = D3DXToRadian(45.0f) * (float)h / refH;
+	const float kFovAnchorHeightPx = 768.0f;
+	float fovY   = D3DXToRadian(45.0f) * (float)h / kFovAnchorHeightPx;
+	const float kMaxFovY = D3DXToRadian(120.0f);
+	if (fovY > kMaxFovY) fovY = kMaxFovY;
 	float aspect = (float)w / (float)h;
 	D3DXMatrixPerspectiveFovRH(&m_projection, fovY, aspect, n, 1000.0f);
 	m_projection._33 = -1.0f;
@@ -1704,8 +1808,8 @@ void Engine::SetSceneViewport(int x, int y, int w, int h)
 
 	char buf[224];
 	snprintf(buf, sizeof(buf),
-	    "[engine] SetSceneViewport x=%d y=%d w=%d h=%d (fovY=%.2f° aspect=%.3f refH=%.0f)\n",
-	    x, y, w, h, fovY * (180.0f / 3.14159265f), aspect, refH);
+	    "[engine] SetSceneViewport x=%d y=%d w=%d h=%d (fovY=%.2f° aspect=%.3f anchorH=%.0f)\n",
+	    x, y, w, h, fovY * (180.0f / 3.14159265f), aspect, kFovAnchorHeightPx);
 	OutputDebugStringA(buf);
 	printf("%s", buf);
 	fflush(stdout);

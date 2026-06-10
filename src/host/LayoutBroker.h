@@ -194,6 +194,14 @@ public:
     // is client-relative, so a move leaves from/to valid.
     void CancelSceneAnim() { m_sceneAnim.active = false; }
 
+    // [resize-perf revised Fix A] Safety-net settle: if the popup size
+    // diverged from the size at the last completed engine reset (i.e. a
+    // per-tick reset FAILED mid-gesture), reset once now. A cheap no-op
+    // in the normal case — every size change resets inline via
+    // ResetEngineForResize, so the sizes already match. Called from
+    // WM_EXITSIZEMOVE and the quiescence-timer fallback.
+    void SettleDeferredReset();
+
 private:
     //: forward all currently-registered occlusions to the
     // compositor, translated to popup-client coords using the current
@@ -207,6 +215,15 @@ private:
     // external updates while a dock-slide anim owns the rect; both the guard and
     // the per-frame anim advance funnel the actual work through here.
     void ApplySceneRect(int x, int y, int w, int h);
+
+    // [resize-perf revised Fix A] One resize-driven engine reset, shared
+    // by Apply / PredictAndApply / SettleDeferredReset (one helper, not
+    // three hand-copies —). Tries the cheap ResetEx path
+    // (Engine::ResetForResize — textures/shaders persist, ~3-5 ms) and
+    // falls back to the full Reset() + RecoverDeviceIfNeeded chain on
+    // failure. Updates m_resetW/H bookkeeping. (w, h) is the popup size
+    // the reset is FOR.
+    void ResetEngineForResize(int w, int h);
 
     HWND    m_viewport;
     Engine* m_engine;
@@ -239,6 +256,13 @@ private:
     // polish: main's client size at the last Apply.
     int     m_lastClientW = 0;
     int     m_lastClientH = 0;
+
+    // [resize-perf revised Fix A] m_resetW/H track the popup size at the
+    // last completed engine reset so SettleDeferredReset can tell whether
+    // a per-tick reset failed (m_lastW/H ≠ m_resetW/H) without poking at
+    // the engine's presentation parameters.
+    int     m_resetW = 0;
+    int     m_resetH = 0;
 
     // [Item 3] In-flight dock-slide interpolation. `active` is false when idle.
     // Rects are MAIN-HWND-CLIENT device px (held as float so the per-frame lerp

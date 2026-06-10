@@ -197,6 +197,29 @@ public:
 	RenderPassTimingsUs GetLastRenderTimings() const { return m_lastRenderTimings; }
 	RenderPassTimingsUs m_lastRenderTimings = {};
 
+	// [resize-perf] Phase-0 probe — per-Reset() sub-stage wall-clock (ms)
+	// plus a monotonic call counter, so the host's 1 Hz [resize-perf]
+	// log line can show the device-reset storm during window resize and
+	// size the A2 (cheap settle-reset) payoff. Same diagnostic pattern as
+	// RenderPassTimingsUs above; see tasks/resize-perf-investigation.md.
+	// `lost` = OnLostDevice + releases + texture-cache wipe (pre-Reset);
+	// `reload` = shader OnReset + skydome/ground re-decode + ResetParameters;
+	// `alpha` = AlphaCompositor::Resize (shared RT + SYSTEMMEM + DIB rebuild).
+	struct ResetPerf
+	{
+		unsigned count      = 0;       // completed resets (full + cheap)
+		unsigned cheapCount = 0;       // of which: ResetForResize (ResetEx path)
+		// For a cheap reset: lost = size-keyed releases, dev = ResetEx,
+		// reload = ResetParameters (RT/depth/bloom rebuild), alpha = same.
+		double lastTotalMs       = 0.0;
+		double lastLostMs        = 0.0;
+		double lastDeviceResetMs = 0.0;
+		double lastReloadMs      = 0.0;
+		double lastAlphaResizeMs = 0.0;
+	};
+	const ResetPerf& GetResetPerf() const { return m_resetPerf; }
+	ResetPerf m_resetPerf = {};
+
 	// Phase 3 Stage 4b — adapter LUID for the multi-GPU
 	// guard. Compositor::AttachEngineVisual compares this against
 	// the D3D11 device's adapter LUID; on mismatch (hybrid laptops
@@ -385,6 +408,24 @@ public:
 	void SetBloomSize(float v);
 
 	void				Reset();
+
+	// [resize-perf revised Fix A] Cheap RESIZE-ONLY reset via
+	// IDirect3DDevice9Ex::ResetEx. Per first-party docs (ResetEx, d3d9.h):
+	// "Resets the type, size, and format of the swap chain with all other
+	// surfaces persistent" / "does not cause surfaces, textures or state
+	// information to be lost" / shaders "do not need to be re-created".
+	// So unlike Reset() this skips the OnLostDevice dance, the
+	// texture-cache wipe, and the ground/skydome re-decode (~20 ms of the
+	// ~24 ms full reset) — only the size-keyed targets are rebuilt
+	// (scene/distort/bloom RTs + depth-stencil via ResetParameters, the
+	// AlphaCompositor shared RT via Resize). ~3-5 ms, cheap enough to run
+	// on EVERY sizemove tick so the scene always renders at the correct
+	// size (no settle snap). Returns false on ResetEx failure — the device
+	// is then in the lost state and the caller falls back to the full
+	// Reset() / RecoverDeviceIfNeeded path. NOT for device-loss recovery;
+	// Reset() remains the recovery primitive.
+	bool				ResetForResize();
+
 	Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager, IFileManager& fileManager);
 	~Engine();
 

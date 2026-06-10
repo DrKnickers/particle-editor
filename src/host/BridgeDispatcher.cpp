@@ -914,9 +914,16 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // Engine code is unchanged — camera frustum still uses the full
     // popup backbuffer aspect (popup-rect aspect per the T4c
     // questionnaire). This message is alpha-mask-only; it does NOT
-    // trigger Engine::Reset (which stays bound to layout/viewport-rect
-    // for actual window-resize events). Splitter drag can fire this
-    // per frame without stacking expensive D3D9 device resets.
+    // trigger Engine::Reset. Splitter drag can fire this per frame
+    // without stacking expensive D3D9 device resets.
+    //
+    // [resize-perf hygiene] In PRODUCTION no web code sends
+    // layout/viewport-rect at all (the handler above is exercised only
+    // by tests/POCs, e.g. viewport-resize.spec.ts) — the live
+    // window-resize reset driver is the NATIVE path:
+    // WM_WINDOWPOSCHANGED → LayoutBroker::PredictAndApply →
+    // Engine::Reset (deferred to gesture settle while in sizemove,
+    // fix A). Don't chase this bridge binding when profiling resets.
     if (kind == "layout/scene-rect")
     {
         int x = params.value("x", 0);
