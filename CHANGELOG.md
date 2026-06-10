@@ -18,7 +18,7 @@ Conventions:
 
 ### Emitter rows glide to their new positions on reorder
 
-*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-09 · [`71b5c41`](https://github.com/DrKnickers/particle-editor/commit/71b5c41) · #108*
 
 Reordering emitters — drag-drop (single or multi), Move Up/Down, delete,
 paste — now **glides** the affected rows to their new positions (~200 ms ease)
@@ -82,7 +82,7 @@ otherwise capture mid-animation positions).
 
 ### Multi-select drag-reorder: drag a whole selection as one block
 
-*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-09 · [`71b5c41`](https://github.com/DrKnickers/particle-editor/commit/71b5c41) · #108*
 
 Dragging a root emitter that is part of a multi-selection now reorders the
 **entire selection as one contiguous block** instead of just the grabbed row —
