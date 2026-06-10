@@ -30,12 +30,19 @@ export function computeAutoscrollDelta(
   const maxSpeed = opts.maxSpeed ?? 12;
 
   const distFromTop = pointerY - rect.top;
-  if (distFromTop < zone) {
+  const distFromBottom = rect.bottom - pointerY;
+
+  // In a viewport shorter than 2×zone the two edge zones overlap. Tie-break by
+  // the NEARER edge so dragging toward the bottom scrolls DOWN — testing the top
+  // first unconditionally made the bottom branch dead on a short panel (the
+  // pointer always sat within `zone` of the top), so the end-of-list gap was
+  // unreachable by autoscroll. On a tall viewport the zones don't overlap and
+  // this is identical to checking each edge independently.
+  if (distFromTop < zone && distFromTop <= distFromBottom) {
     const intensity = Math.min(1, Math.max(0, (zone - distFromTop) / zone));
     return -maxSpeed * intensity;
   }
 
-  const distFromBottom = rect.bottom - pointerY;
   if (distFromBottom < zone) {
     const intensity = Math.min(1, Math.max(0, (zone - distFromBottom) / zone));
     return maxSpeed * intensity;

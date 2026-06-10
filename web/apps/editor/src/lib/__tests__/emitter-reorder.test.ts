@@ -89,4 +89,44 @@ describe("reorderManyEmitters", () => {
     await reorderManyEmitters(bridge, [], 2);
     expect(bridge.request).not.toHaveBeenCalled();
   });
+
+  it("keeps a non-block selection member highlighted, following it across the host reindex (audit fix E)", async () => {
+    // Selection mixes a root (Flash, id 5) and a CHILD of another root
+    // (Smoke embers, id 1). Dragging Flash to the front reindexes positional
+    // ids on the host: Flash becomes id 0 and Smoke embers shifts 1 → 2. The
+    // untouched member must FOLLOW its emitter (id 2), not stick on the stale
+    // id 1 (which now denotes a different emitter) — and must not be dropped.
+    const node = (id: number, stableId: number, children: any[] = []) => ({
+      id, stableId, name: `n${stableId}`, role: "root", linkGroup: 0, visible: true, children,
+    });
+    // Pre-reorder tree: Smoke(0)[embers(1),puff(2)], Sparks(3)[trail(4)], Flash(5).
+    const preTree = { root: node(-1, 0, [
+      node(0, 100, [node(1, 101), node(2, 102)]),
+      node(3, 103, [node(4, 104)]),
+      node(5, 105),
+    ]) };
+    // Post-reorder tree: Flash to the front → ids reassigned, stableIds kept.
+    const postTree = { root: node(-1, 0, [
+      node(0, 105),                                  // Flash, was id 5
+      node(1, 100, [node(2, 101), node(3, 102)]),    // Smoke; embers now id 2
+      node(4, 103, [node(5, 104)]),                  // Sparks
+    ]) };
+    let listCall = 0;
+    const bridge = {
+      request: vi.fn((req: { kind: string }) => {
+        if (req.kind === "emitters/list") return Promise.resolve(listCall++ === 0 ? preTree : postTree);
+        if (req.kind === "emitters/reorder-many") return Promise.resolve({ ok: true, newIds: [0] });
+        return Promise.resolve({});
+      }),
+    } as any;
+
+    useEmitterSelectionStore.getState().setIds([5, 1], 5); // root Flash + child embers
+    await reorderManyEmitters(bridge, [5], 0);
+
+    const sel = useEmitterSelectionStore.getState();
+    // Flash followed to id 0; embers followed to its NEW id 2 (not stale 1).
+    expect(sel.ids).toContain(0);
+    expect(sel.ids).toContain(2);
+    expect(sel.ids).not.toContain(1);
+  });
 });

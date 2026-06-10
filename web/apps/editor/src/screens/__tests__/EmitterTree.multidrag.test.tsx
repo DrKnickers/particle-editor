@@ -9,7 +9,7 @@
 // here we only exercise the additive multi-drag branch.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 import { EmitterTree } from "../EmitterTree";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
@@ -278,6 +278,65 @@ describe("EmitterTree multi-drag preview", () => {
     expect(row(3)).toHaveAttribute("data-dragging", "false");  // Sparks (not dragged)
 
     fireEvent.pointerUp(smokeBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 103 });
+  });
+
+  it("cancels an in-flight drag when the host mutates the tree mid-gesture — no stale-id commit, no stale preview [audit A1/A2/A3]", async () => {
+    // A structural change can land mid-drag: undo/redo/paste reach the app
+    // accelerators focus-independently, or another pane mutates. The drag's
+    // closures captured POSITIONAL ids + geometry at pointerdown, so the
+    // gesture must abort on emitters/tree/changed rather than commit stale ids
+    // (A1) or paint a stale gap/dim (A2/A3). This bridge records the
+    // tree/changed subscriber so the test can fire it mid-gesture.
+    const tree = fixtureTree();
+    const handlers = new Map<string, (e: unknown) => void>();
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string; params?: unknown }) => {
+        if (req.kind === "emitters/list") return Promise.resolve(tree);
+        if (req.kind === "engine/state/snapshot") return Promise.resolve({ selectedEmitterId: null });
+        if (req.kind === "emitters/reorder-many") {
+          const ids = (req.params as { ids: number[] }).ids;
+          return Promise.resolve({ ok: true, newIds: ids });
+        }
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockImplementation((kind: string, h: (e: unknown) => void) => {
+        handlers.set(kind, h);
+        return () => handlers.delete(kind);
+      }),
+    } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+
+    render(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Flash"));
+    const smokeBtn  = screen.getByText("Smoke").closest("button")!;
+    const sparksBtn = screen.getByText("Sparks").closest("button")!;
+    const flashBtn  = screen.getByText("Flash").closest("button")!;
+    stubRect(smokeBtn, 0, 24);
+    stubRect(sparksBtn, 24, 24);
+    stubRect(flashBtn, 48, 24);
+
+    // Activate a drag: gap + chip + the dragged row dims.
+    fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 40, clientY: 26 });
+    expect(screen.getByTestId("drop-gap-at-1")).toBeInTheDocument();
+    expect(document.querySelector('button[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "true");
+
+    // A structural mutation lands mid-drag (e.g. Ctrl+Z) → tree/changed fires.
+    await act(async () => {
+      handlers.get("emitters/tree/changed")?.({ payload: tree });
+    });
+
+    // The gesture is aborted: the make-room gap is gone (A2) and the dim is
+    // cleared (A3) — no stale preview against the reshuffled tree.
+    expect(screen.queryByTestId("drop-gap-at-1")).toBeNull();
+    expect(document.querySelector('button[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "false");
+
+    // Releasing now commits NOTHING — no stale-id reorder/drop (A1).
+    fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 40, clientY: 26 });
+    const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(calls.find((c) => c.kind === "emitters/reorder-many")).toBeUndefined();
+    expect(calls.find((c) => c.kind === "emitters/drop")).toBeUndefined();
   });
 
   it("the cursor chip caps at 4 names + a '+k more' line for big selections", async () => {

@@ -1366,6 +1366,43 @@ ParticleSystem::Emitter* ParticleSystem::insertEmitterAfter(const Emitter* refer
     return pEmitter;
 }
 
+namespace {
+
+// Rewrite each moved emitter's parent spawn-field index to the emitter's new
+// `index`, after a root reorder has permuted m_emitters and reassigned indices.
+//
+// Two-pass: snapshot every affected parent's two slot fields (spawnDuringLife /
+// spawnOnDeath) BEFORE writing any of them, then match each child's pre-move
+// index (`oldIndices[k]`) against the SNAPSHOT — never the live field. The
+// single-pass read-modify-write this replaces compared against the live field
+// and silently SWAPPED a parent's life/death children whenever one child's new
+// index aliased a sibling's old index (audit fix C). `moved[k]->index` is
+// already the new index; `moved` and `oldIndices` are parallel, new-layout order.
+//
+// Shared by moveEmitter / moveEmitterToRootIndex / reorderManyRootsToIndex so
+// the rewrite lives in exactly one place (the three were hand-copied KEEP-IN-
+// SYNC loops, which is how the swap escaped into all three).
+void rewriteParentSpawnIndices(const std::vector<ParticleSystem::Emitter*>& moved,
+                               const std::vector<size_t>& oldIndices)
+{
+    std::unordered_map<ParticleSystem::Emitter*, std::pair<size_t, size_t>> origSlots;
+    for (ParticleSystem::Emitter* e : moved)
+        if (e->parent != NULL)
+            origSlots.emplace(e->parent,
+                std::make_pair(e->parent->spawnDuringLife, e->parent->spawnOnDeath));
+
+    for (size_t k = 0; k < moved.size(); k++)
+    {
+        ParticleSystem::Emitter* e = moved[k];
+        if (e->parent == NULL) continue;
+        const std::pair<size_t, size_t>& orig = origSlots[e->parent];
+        if      (orig.first  == oldIndices[k]) e->parent->spawnDuringLife = e->index;
+        else if (orig.second == oldIndices[k]) e->parent->spawnOnDeath    = e->index;
+    }
+}
+
+} // namespace
+
 bool ParticleSystem::moveEmitter(Emitter* emitter, int direction)
 {
     if (emitter == NULL || emitter->parent != NULL) return false;
@@ -1458,14 +1495,8 @@ bool ParticleSystem::moveEmitter(Emitter* emitter, int direction)
 
     // Rewrite parent spawn-field indices that referenced any moved emitter.
     // The parent pointer is stable across this operation; only the integer
-    // index it stored has shifted.
-    for (size_t k = 0; k < reorder.size(); k++)
-    {
-        Emitter* e = reorder[k];
-        if (e->parent == NULL) continue;
-        if      (e->parent->spawnDuringLife == oldIndices[k]) e->parent->spawnDuringLife = e->index;
-        else if (e->parent->spawnOnDeath    == oldIndices[k]) e->parent->spawnOnDeath    = e->index;
-    }
+    // index it stored has shifted. (Two-pass; see rewriteParentSpawnIndices.)
+    rewriteParentSpawnIndices(reorder, oldIndices);
 
     return true;
 }
@@ -1558,14 +1589,8 @@ bool ParticleSystem::moveEmitterToRootIndex(Emitter* emitter, size_t targetRootI
 
     // Rewrite parent spawn-field indices that referenced any moved emitter.
     // The parent pointer is stable across this operation; only the integer
-    // index it stored has shifted.
-    for (size_t k = 0; k < reordered.size(); k++)
-    {
-        Emitter* e = reordered[k];
-        if (e->parent == NULL) continue;
-        if      (e->parent->spawnDuringLife == oldIndices[k]) e->parent->spawnDuringLife = e->index;
-        else if (e->parent->spawnOnDeath    == oldIndices[k]) e->parent->spawnOnDeath    = e->index;
-    }
+    // index it stored has shifted. (Two-pass; see rewriteParentSpawnIndices.)
+    rewriteParentSpawnIndices(reordered, oldIndices);
 
     return true;
 }
@@ -1665,13 +1690,8 @@ bool ParticleSystem::reorderManyRootsToIndex(
     }
     m_emitters = reordered;
     for (size_t i = 0; i < m_emitters.size(); i++) m_emitters[i]->index = i;
-    for (size_t k = 0; k < reordered.size(); k++)
-    {
-        Emitter* e = reordered[k];
-        if (e->parent == NULL) continue;
-        if      (e->parent->spawnDuringLife == oldIndices[k]) e->parent->spawnDuringLife = e->index;
-        else if (e->parent->spawnOnDeath    == oldIndices[k]) e->parent->spawnOnDeath    = e->index;
-    }
+    // Two-pass spawn-field rewrite (see rewriteParentSpawnIndices).
+    rewriteParentSpawnIndices(reordered, oldIndices);
 
     // 6. newIds = the block roots' final positional indices (contiguous run,
     //    in the block's tree order).

@@ -16,6 +16,65 @@ Conventions:
 
 ## Changelog
 
+### Emitter-tree drag hardening: ten audit fixes (data-corruption, mid-drag safety, parity)
+
+*2026-06-09 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+A resumed multi-agent audit of the click-drag reorder/reparent feature
+surfaced ten adversarially-confirmed defects; all are fixed. The headline:
+**a routine root reorder could silently swap a parent's life/death child
+slots** — corrupting the `.alo` on save — whenever one child's new index
+aliased a sibling's old index. Beyond that: a mid-drag undo/redo/paste no
+longer commits the move against stale ids (it cancels the gesture); alt-tab
+or a second mouse mid-drag no longer strands or double-commits a drag;
+dragging a root no longer drops a separately-selected child from the
+highlight; the mock no longer reports the document dirty after a *refused*
+drag-commit; autoscroll reaches the end-of-list gap in a very short tree
+panel; and a drag that ends over a different row no longer eats your next
+click on an unrelated row.
+
+**How we tackled it.** The data-corruption bug
+([`ParticleSystem.cpp`](src/ParticleSystem.cpp)) was a read-modify-write
+aliasing fault, hand-copied across three KEEP-IN-SYNC reorder functions
+(`moveEmitter` / `moveEmitterToRootIndex` / `reorderManyRootsToIndex`). Fixed
+once by consolidating them into a single two-pass helper,
+`rewriteParentSpawnIndices`, that **snapshots each parent's slot fields before
+writing any of them** so a comparison never reads a half-rewritten field —
+eliminating the duplication that let the bug into all three. A new standalone
+unit test ([`tests/test_emitter_reorder.cpp`](tests/test_emitter_reorder.cpp))
+reproduces the swap through both bridge-reachable entry points. The mid-drag
+class (stale-id commit, gap-before-wrong-row, wrong-rows-dim) shared one root
+cause — the `emitters/tree/changed` subscription refetched unconditionally
+while the drag held a pointerdown snapshot — so one `activeDragCancelRef` in
+[`EmitterTree.tsx`](web/apps/editor/src/screens/EmitterTree.tsx) **aborts the
+in-flight gesture before refetching**, killing all three. The controller also
+gained a `pointerId` re-entrancy guard, `setPointerCapture` + a `blur` /
+`visibilitychange` teardown, and a scoped (next-macrotask) reset of the
+click-suppression flag. Selection-follow now captures untouched members'
+`stableId`s before a reorder and re-resolves them against the fresh tree
+([`lib/emitter-reorder.ts`](web/apps/editor/src/lib/emitter-reorder.ts)), so
+they follow the host reindex instead of being dropped. The mock's dirty bit
+moved behind a `didMutate` result check mirroring the host's per-handler
+`markDirty` ([`bridge/mock.ts`](web/apps/editor/src/bridge/mock.ts)).
+Autoscroll now tie-breaks overlapping edge zones by the nearer edge
+([`lib/drag-autoscroll.ts`](web/apps/editor/src/lib/drag-autoscroll.ts)).
+
+**Issues encountered and resolutions.** The audit run that found these had
+itself been rate-limited mid-flight in a prior session and reported a
+*false* clean pass (`confirmed: []`) — its workflow scored a dead verifier's
+missing verdict as "refuted". The re-run hardened the accounting to a
+three-way `confirmed` / `refuted` / **`unverified`** split with an
+`isCleanRun` flag, so an incomplete run can no longer masquerade as a pass.
+Building a standalone C++ test for `ParticleSystem` (whose headers drag the
+D3D types) linked with a single no-op stub for one rendering method
+`~Emitter` references but the test never exercises — keeping the harness on
+the pure data model. Two findings need live host smoke (no unit harness can
+drive a true second physical pointer or an OS window-blur): the re-entrancy
+guard and the blur/visibility teardown — both unit-tested for the reachable
+parts, flagged for a manual pass.
+
+---
+
 ### Emitter rows glide to their new positions on reorder
 
 *2026-06-09 · [`71b5c41`](https://github.com/DrKnickers/particle-editor/commit/71b5c41) · #108*

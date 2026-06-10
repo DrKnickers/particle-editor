@@ -1233,6 +1233,21 @@ export function EmitterTree({ bridge }: Props) {
   // composition visual with no HWND for the OS drag loop.)
   const draggedRef = useRef(false);
 
+  // [audit A1/A2/A3] While a pointer drag is active this holds a function that
+  // ABORTS it (tears down dims/gap/chip + listeners, commits nothing). The
+  // emitters/tree/changed subscription calls it before refetching, so a host-
+  // side structural change mid-drag — undo/redo/paste reach the accelerators
+  // focus-independently, or another pane mutates — can't let the gesture commit
+  // captured-but-now-stale POSITIONAL ids (which would move the wrong emitters)
+  // or render the gap/dim against a reshuffled tree. The drag is cancelled and
+  // the user re-drags against the fresh tree.
+  const activeDragCancelRef = useRef<(() => void) | null>(null);
+
+  // [audit B1] The pointerId of the in-flight drag (null = none). Re-entrancy
+  // guard: a second pointerdown while a drag is live is ignored, so two
+  // gestures can't register duplicate listeners over shared controller state.
+  const dragPointerRef = useRef<number | null>(null);
+
   // Batch C — inline rename. Local component state because only the
   // tree owns both the focus target (each row's button) and the input
   // (mounted inside the row). One row at a time; null = no edit in
@@ -1287,6 +1302,11 @@ export function EmitterTree({ bridge }: Props) {
   useEffect(() => {
     const cancelList = refreshTree();
     const offTree = bridge.on("emitters/tree/changed", () => {
+      // [audit A1/A2/A3] A structural change while a drag is held invalidates
+      // the gesture's pointerdown snapshot (positional ids + geometry). Abort
+      // it BEFORE refetching so it can't commit stale ids or paint a stale
+      // gap/dim against the reshuffled tree.
+      activeDragCancelRef.current?.();
       refreshTree();
     });
     return () => {
@@ -1475,6 +1495,18 @@ export function EmitterTree({ bridge }: Props) {
   const startDrag = (source: EmitterTreeNode, e: React.PointerEvent) => {
     if (e.button !== 0) return;               // primary button only
     if (editingRef.current !== null) return;  // not while inline-renaming
+    // [audit B1] One tree drag at a time — a second pointerdown (second mouse,
+    // pen) while a drag is live must not arm a duplicate controller over the
+    // shared component state.
+    if (dragPointerRef.current !== null) return;
+    const pointerId = e.pointerId;
+    dragPointerRef.current = pointerId;
+    // [audit B2] Capture the pointer so losing it (alt-tab / window blur)
+    // delivers pointercancel — Chromium synthesises it for captured pointers —
+    // and so the gesture only reacts to ITS pointer. jsdom has no
+    // setPointerCapture; guard so unit tests are unaffected.
+    const captureTarget = e.currentTarget as HTMLElement;
+    try { captureTarget.setPointerCapture?.(pointerId); } catch { /* jsdom / lost pointer */ }
     draggedRef.current = false;
     const startX = e.clientX;
     const startY = e.clientY;
@@ -1642,6 +1674,7 @@ export function EmitterTree({ bridge }: Props) {
     };
 
     const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return; // [audit B1/B2] our pointer only
       lastX = ev.clientX;
       lastY = ev.clientY;
       if (!active) {
@@ -1672,6 +1705,13 @@ export function EmitterTree({ bridge }: Props) {
         // the row context menu. [] start the autoscroll loop.
         document.addEventListener("keydown", onKey, true);
         document.addEventListener("contextmenu", onCtx, true);
+        // [audit A1/A2/A3] expose the abort hook only while active, so a mid-
+        // drag tree mutation cancels the gesture before it commits stale ids.
+        // [audit B2] tear down on focus loss (alt-tab / window blur / tab hide)
+        // so the drag can't get stranded with no pointerup ever arriving.
+        activeDragCancelRef.current = () => finish(false);
+        window.addEventListener("blur", onBlur);
+        document.addEventListener("visibilitychange", onVis);
         rafId = requestAnimationFrame(tick);
       }
       updateTarget(ev.clientY);
@@ -1684,6 +1724,14 @@ export function EmitterTree({ bridge }: Props) {
       document.removeEventListener("pointercancel", onCancel);
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("contextmenu", onCtx, true);
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", onVis);
+      // [audit B1/B2] clear the re-entrancy latch + abort hook on EVERY exit
+      // path (including a pre-threshold release that returns early below) and
+      // release the captured pointer.
+      dragPointerRef.current = null;
+      activeDragCancelRef.current = null;
+      try { captureTarget.releasePointerCapture?.(pointerId); } catch { /* already released */ }
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
         rafId = null;
@@ -1720,7 +1768,13 @@ export function EmitterTree({ bridge }: Props) {
         setDragChip((c) => (c === null ? null : { ...c, exit }));
         window.setTimeout(() => setDragChip(null), CHIP_EXIT_MS + 40);
       }
-      draggedRef.current = true; // swallow the trailing click
+      // [audit F2] Swallow the trailing synthetic click, but only briefly. If
+      // the drag ended over a DIFFERENT row (the common reparent/reorder case)
+      // or empty space, no synthetic click fires to consume the flag — so
+      // clear it on the next macrotask instead of letting it eat the user's
+      // next, unrelated click on some other row.
+      draggedRef.current = true;
+      window.setTimeout(() => { draggedRef.current = false; }, 0);
       if (commit) {
         // A single-drag reparent goes through emitters/drop (the host
         // re-selects the moved emitter so the highlight follows). Every reorder
@@ -1733,8 +1787,14 @@ export function EmitterTree({ bridge }: Props) {
         }
       }
     };
-    const onUp = () => finish(true);
-    const onCancel = () => finish(false);
+    const onUp = (ev: PointerEvent) => { if (ev.pointerId !== pointerId) return; finish(true); };
+    const onCancel = (ev: PointerEvent) => { if (ev.pointerId !== pointerId) return; finish(false); };
+    // [audit B2] Focus loss can swallow the pointerup entirely (the up happens
+    // off-window, or the OS steals the pointer). Without these the gesture
+    // would stay armed — dims/gap/chip frozen, rAF looping, the next stray
+    // click committing the abandoned drop. visibilitychange covers tab hide.
+    const onBlur = () => finish(false);
+    const onVis = () => { if (document.visibilityState === "hidden") finish(false); };
     // [] Capture-phase so we win over the row's Radix context menu and
     // the tree's own key handler; stopPropagation keeps the menu from opening.
     const onKey = (ev: KeyboardEvent) => {

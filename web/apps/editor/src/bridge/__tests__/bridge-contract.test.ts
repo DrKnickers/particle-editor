@@ -1447,4 +1447,30 @@ describe("MockBridge dirty-bit for batch structural mutations", () => {
     await b.request({ kind: "emitters/duplicate-many", params: { ids: [0] } });
     expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(true);
   });
+
+  // Audit fix D — the mock fired markDirty UNCONDITIONALLY for any mutating
+  // kind, so a REFUSED or NO-OP drag-commit (which the native host leaves
+  // clean, marking dirty only on a real mutation) falsely dirtied the doc.
+  it("a REFUSED emitters/drop (own-footprint reorder) leaves the document clean", async () => {
+    const b = new MockBridge();
+    // Smoke is root 0; dropping it at root index 0 is its own position → refused.
+    const r = await b.request({ kind: "emitters/drop", params: { mode: "reorder", id: 0, rootIndex: 0 } });
+    expect((r as { ok: boolean }).ok).toBe(false);
+    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(false);
+  });
+
+  it("a REFUSED emitters/reorder-many (own-footprint) leaves the document clean", async () => {
+    const b = new MockBridge();
+    // Selecting root 0 and landing at gap 0 is the block's own footprint → refused.
+    const r = await b.request({ kind: "emitters/reorder-many", params: { ids: [0], rootIndex: 0 } });
+    expect((r as { ok: boolean }).ok).toBe(false);
+    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(false);
+  });
+
+  it("a NO-OP emitters/move-many (edge-pinned) leaves the document clean", async () => {
+    const b = new MockBridge();
+    // Smoke is the TOP root; moving it up is pinned → nothing moves.
+    await b.request({ kind: "emitters/move-many", params: { ids: [0], direction: "up" } });
+    expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(false);
+  });
 });

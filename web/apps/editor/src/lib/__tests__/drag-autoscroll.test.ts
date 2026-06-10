@@ -39,6 +39,17 @@ describe("computeAutoscrollDelta", () => {
     expect(computeAutoscrollDelta(600, RECT)).toBeCloseTo(12);  // below bottom
   });
 
+  it("scrolls DOWN when the pointer is nearer the bottom in a viewport shorter than 2×zone", () => {
+    // Viewport height 40 (< 2*28): the top and bottom edge zones overlap.
+    // A pointer at y=25 is 15px from the bottom but 25px from the top — nearer
+    // the bottom, so it must scroll DOWN. The old top-zone-first short-circuit
+    // returned UP here, making the end-of-list gap unreachable on a short panel.
+    const SHORT = { top: 0, bottom: 40 };
+    expect(computeAutoscrollDelta(25, SHORT)).toBeGreaterThan(0);
+    // And a pointer nearer the top in the same overlap still scrolls UP.
+    expect(computeAutoscrollDelta(15, SHORT)).toBeLessThan(0);
+  });
+
   it("respects custom zone and maxSpeed", () => {
     // rect [0,200], zone 20, maxSpeed 5; 10px in = halfway → -2.5.
     expect(

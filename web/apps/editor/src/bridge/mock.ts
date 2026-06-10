@@ -134,6 +134,38 @@ function isMutating(kind: Request["kind"]): boolean {
   return false;
 }
 
+/**
+ * Whether a mutating request ACTUALLY changed persisted state — gates the
+ * dirty bit so refused / no-op drag-commits stay clean, matching the native
+ * host (which marks dirty only on each handler's success branch). Most
+ * mutating kinds always mutate when they return normally; only the drag
+ * commits are conditional:
+ *  - emitters/drop, emitters/reorder-many → `{ ok:false }` on refusal.
+ *  - emitters/move-many → no-op when the block is edge-pinned (nothing moved);
+ *    detected from the pre-move root order, since the response always returns
+ *    the surviving newIds regardless.
+ */
+function didMutate(
+  req: Request,
+  result: unknown,
+  preMoveRootOrder: number[] | null,
+): boolean {
+  switch (req.kind) {
+    case "emitters/drop":
+    case "emitters/reorder-many":
+      return (result as { ok?: boolean }).ok !== false;
+    case "emitters/move-many": {
+      const order = preMoveRootOrder ?? [];
+      if (order.length === 0) return false;
+      const edge = req.params.direction === "up" ? order[0]! : order[order.length - 1]!;
+      // Block pinned against the edge in the move direction → nothing moves.
+      return !req.params.ids.includes(edge);
+    }
+    default:
+      return true;
+  }
+}
+
 export class MockBridge implements Bridge {
   private listeners = new Map<EventKind, Set<(e: Event) => void>>();
 
@@ -150,11 +182,23 @@ export class MockBridge implements Bridge {
   private lightingForceAlign = true;
 
   async request<R extends Request>(req: R): Promise<ResponseFor<R>> {
+    // Capture pre-mutation root order for move-many, whose dirtiness depends on
+    // whether anything actually moved (edge-pinned block → no move). The host
+    // gates markDirty on its anyMoved flag; we reconstruct the same condition.
+    const preMoveRootOrder =
+      req.kind === "emitters/move-many"
+        ? useMockEmitterTree.getState().tree.root.children.map((c) => c.id)
+        : null;
     const result = this.handle(req);
-    // After the handler completes, mark dirty for any engine mutation.
+    // After the handler completes, mark dirty for any engine mutation —
+    // but only on a REAL mutation. A refused drag-commit (ok:false) or a
+    // no-op batch move leaves the document clean, mirroring the native host
+    // (which marks dirty only on the success branch of each handler). The
+    // mock previously fired this unconditionally for any mutating kind, so a
+    // refused/no-op drag-commit falsely dirtied the doc (audit fix D).
     // (file/* and engine/action/reload-* / clear are deliberately NOT
     // marked dirty — see isMutating below.)
-    if (isMutating(req.kind)) {
+    if (isMutating(req.kind) && didMutate(req, result, preMoveRootOrder)) {
       this.markDirty();
     }
     return result as ResponseFor<R>;
