@@ -16,9 +16,69 @@ Conventions:
 
 ## Changelog
 
+### Closed right-dock hardening: inert splitter + correct collapsed mount
+
+*2026-06-10 · TODO(merge hash) · #117*
+
+Two closed-dock bugs fixed. (1) With the Spawner/Lighting dock closed,
+dragging at the window's right edge could open the empty dock slot — the
+splitter was invisible but still live. It is now fully inert while the dock
+is closed: no resize cursor, no drag, no keyboard resize. (2) Booting with
+the dock closed while a saved panel layout existed rendered the dock slot
+**open and empty** (at its remembered share) and it never collapsed; it now
+mounts collapsed, and the first open from that state expands properly
+(previously a masked zero-width open). Open behaviour is otherwise
+unchanged.
+
+**How we tackled it.** The dock `Separator` in
+[`src/components/PanelLayout.tsx`](web/apps/editor/src/components/PanelLayout.tsx)
+already carried `invisible pointer-events-none` while closed — but
+react-resizable-panels (4.11) hit-tests separators by **document-level
+pointer coordinates against their rects**, not via DOM events on the element,
+so CSS could never block the drag (an invisible element still has a rect).
+The supported switch is the `disabled` prop, applied to BOTH the `Separator`
+("cannot be used to resize its neighboring panels") and the `Panel` (per the
+lib's own docs, else it can still be resized indirectly). Verified in the lib
+source that the imperative `expand()`/`collapse()` the dock toggle uses
+bypasses `disabled` (`trigger === "imperative-api"` sets
+`overrideDisabledPanels`), so open/close animation is unaffected.
+
+The mount bug's root cause: the outer Group's `defaultLayout` (the persisted
+blob, with the dock's remembered OPEN share) and the dock Panel's `"0%"`
+`defaultSize` disagreed at a closed mount, and which one wins depends on the
+library's init path (immediate vs deferred) — with the mount effect's
+`isCollapsed()` check racing the deferred apply. Fixed at the SOURCE: a pure
+`collapseDockShare` helper folds the stored dock share into the centre
+column when seeding the Group for a closed mount, so both seeds agree on
+spawner=0 (the stored blob itself is untouched — persistence is
+dockVisible-gated, so the remembered width still serves open-at-mount
+sessions). The first open from a mount-collapsed dock relies on the lib's
+documented `expand()` fallback to `minSize` (= `DOCK_MIN_PX`, which is also
+the dock-slide anim's first-open assumption, so panel and host anim agree),
+with an explicit `resize()` chain kept as a zero-share safety net.
+
+**Issues encountered and resolutions.** (1) Verification used a synthetic
+pointer-drag in the vite preview with a **positive control**: with the dock
+open the same dispatched pointer sequence resizes it 260→360 px (proving the
+synthetic events drive the library), with it closed the drag is a no-op and
+the lib renders `aria-disabled`/`data-disabled` (also asserted by new vitest
+cases; the mount fix adds a flex-grow assertion seeded from both localStorage
+keys, proven red without the seed change). (2) The mount bug was discovered
+DURING the splitter-fix verification and confirmed pre-existing via an A/B
+stash test before being fixed here. (3) Two preview-environment traps cost
+debugging time and are worth remembering: vite **HMR-stale module epochs**
+(the dep-array size-change error after editing a hook's deps live) made the
+fixed code appear broken — always hard-reload after editing effect deps; and
+`getSize().inPixels` reads `offsetWidth`, which is **stale (0) in the same
+tick** as an `expand()` — gate imperative-API decisions on `asPercentage`,
+which updates synchronously, or a correct expand gets "corrected" into
+clobbering the remembered width.
+
+---
+
 ### Smooth window resize: cheap ResetEx-based per-tick device reset, plus resize-perf probes
 
-*2026-06-10 · TODO(merge hash) · #116*
+*2026-06-10 · [`e7cf484`](https://github.com/DrKnickers/particle-editor/commit/e7cf484) · #116*
 
 Resizing the app window no longer tanks: the full D3D9Ex device reset that
 fires on **every mouse-move tick** of the modal sizemove loop used to cost

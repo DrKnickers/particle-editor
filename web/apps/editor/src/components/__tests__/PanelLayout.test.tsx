@@ -29,6 +29,7 @@ import {
   loadLayout,
   saveLayout,
   resetPanelLayoutStorage,
+  collapseDockShare,
   PANEL_LAYOUT_KEYS,
   type Layout,
 } from "../PanelLayout";
@@ -80,6 +81,64 @@ describe("PanelLayout — persistence helpers", () => {
     expect(localStorage.getItem("alo:layout:test")).toBe(
       JSON.stringify({ a: 33, b: 67 }),
     );
+  });
+});
+
+describe("PanelLayout — collapseDockShare (dock-mount fix)", () => {
+  // Regression (2026-06-10): a CLOSED dock at mount + a persisted
+  // alo:layout:outer:3col with a nonzero spawner share rendered the dock
+  // slot open-and-empty (~its old share) and it never collapsed. The
+  // Group's defaultLayout (stored blob, spawner 20) disagreed with the
+  // dock Panel's "0%" defaultSize, and the mount effect's isCollapsed()
+  // check raced the library's deferred initial-layout apply. The fix
+  // makes both seeds agree by folding the dock share into centre.
+
+  it("folds the spawner share into center and zeroes spawner", () => {
+    expect(collapseDockShare({ left: 20, center: 60, spawner: 20 })).toEqual({
+      left: 20,
+      center: 80,
+      spawner: 0,
+    });
+  });
+
+  it("preserves the ~100 sum loadLayout validates", () => {
+    const out = collapseDockShare({ left: 33, center: 33, spawner: 34 });
+    const sum = Object.values(out).reduce((a, v) => a + v, 0);
+    expect(Math.abs(sum - 100)).toBeLessThanOrEqual(0.5);
+  });
+
+  it("is a no-op when spawner is already 0 or absent", () => {
+    const zero = { left: 30, center: 70, spawner: 0 };
+    expect(collapseDockShare(zero)).toEqual(zero);
+    const absent = { left: 30, center: 70 };
+    expect(collapseDockShare(absent)).toEqual(absent);
+  });
+
+  it("seeds the dock slot at zero share when closed at mount with a stale stored layout", () => {
+    // The full repro: dock closed + persisted open-width blob.
+    localStorage.setItem("alo:right-dock", "none");
+    localStorage.setItem(
+      "alo:layout:outer:3col",
+      JSON.stringify({ left: 20, center: 60, spawner: 20 }),
+    );
+    __resetRightDockForTests();
+
+    const bridge = makeStubBridge();
+    render(
+      <BridgeContext.Provider value={bridge}>
+        <PanelLayout bridge={bridge} />
+      </BridgeContext.Provider>,
+    );
+
+    const slotPanel = screen
+      .getByTestId("quadrant-spawner")
+      .closest("[data-panel]") as HTMLElement;
+    expect(slotPanel).not.toBeNull();
+    // The library maps each panel's layout share onto flex-grow. With the
+    // fix, the Group's defaultLayout carries spawner=0 (the stale 20 is
+    // folded into center), so the slot renders with zero share instead of
+    // its remembered open width.
+    expect(slotPanel.style.flexGrow).toBe("0");
   });
 });
 
@@ -181,6 +240,64 @@ describe("PanelLayout — DOM structure", () => {
       screen.getByRole("dialog", { name: "Lighting" }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("quadrant-curve-editor")).toBeInTheDocument();
+  });
+
+  it("disables the dock separator AND panel while the dock is closed (drag-open guard)", () => {
+    // Regression (2026-06-10): with the dock closed, the user could DRAG
+    // the invisible dock splitter and open an empty slot. CSS
+    // `pointer-events-none` on the Separator does NOT stop it — the
+    // library hit-tests separators by document-level pointer
+    // coordinates against their rects, not via DOM events on the
+    // element. The supported switch is the `disabled` prop, on both the
+    // Separator ("cannot be used to resize its neighboring panels") and
+    // the Panel (else it can still be resized indirectly). The lib
+    // surfaces these as aria-disabled / data-disabled.
+    localStorage.setItem("alo:right-dock", "none");
+    __resetRightDockForTests();
+
+    const bridge = makeStubBridge();
+    const { container } = render(
+      <BridgeContext.Provider value={bridge}>
+        <PanelLayout bridge={bridge} />
+      </BridgeContext.Provider>,
+    );
+
+    const separators = Array.from(container.querySelectorAll("[data-separator]"));
+    expect(separators.length).toBeGreaterThan(0);
+    const disabled = separators.filter(
+      (s) => s.getAttribute("aria-disabled") === "true",
+    );
+    // Exactly one disabled separator: the dock's (the hidden vertical one).
+    expect(disabled).toHaveLength(1);
+    expect(disabled[0]!.className).toContain("invisible");
+
+    const slotPanel = screen
+      .getByTestId("quadrant-spawner")
+      .closest("[data-panel]");
+    expect(slotPanel).not.toBeNull();
+    expect(slotPanel!.hasAttribute("data-disabled")).toBe(true);
+  });
+
+  it("keeps the dock separator and panel resizable while the dock is open", () => {
+    // Default right-dock is "spawner" (lib/right-dock.ts) — open.
+    const bridge = makeStubBridge();
+    const { container } = render(
+      <BridgeContext.Provider value={bridge}>
+        <PanelLayout bridge={bridge} />
+      </BridgeContext.Provider>,
+    );
+
+    const separators = Array.from(container.querySelectorAll("[data-separator]"));
+    expect(separators.length).toBeGreaterThan(0);
+    expect(
+      separators.filter((s) => s.getAttribute("aria-disabled") === "true"),
+    ).toHaveLength(0);
+
+    const slotPanel = screen
+      .getByTestId("quadrant-spawner")
+      .closest("[data-panel]");
+    expect(slotPanel).not.toBeNull();
+    expect(slotPanel!.hasAttribute("data-disabled")).toBe(false);
   });
 
   it("quadrant-viewport rect is the innermost wrapper (Modal portal target preservation)", () => {

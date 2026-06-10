@@ -135,6 +135,24 @@ export function saveLayout(key: string, layout: Layout): void {
   }
 }
 
+/** [dock-mount fix, 2026-06-10] Fold the right-dock's share into the centre
+ *  column. Used to seed the outer Group's `defaultLayout` when the dock is
+ *  CLOSED at mount: the stored 3col blob remembers the dock's OPEN width
+ *  (persistence is gated on dockVisible), so feeding it verbatim to the
+ *  Group seeds the dock slot open-and-empty (~its old share) on boot. The
+ *  dock Panel's own `defaultSize` is already "0%" in that case, but the lib
+ *  has TWO init paths — immediate (Group `defaultLayout` wins) and deferred
+ *  (Panel `defaultSize` wins, see the 4.x quirk note below) — and the mount
+ *  effect's isCollapsed() check races the deferred apply. Making both seeds
+ *  agree on spawner=0 removes the race instead of correcting it after the
+ *  fact. Pure + exported for the regression test. Sum is preserved (the
+ *  loadLayout ~100 validation stays satisfied). */
+export function collapseDockShare(layout: Layout): Layout {
+  const spawner = layout.spawner ?? 0;
+  if (!(spawner > 0)) return layout;
+  return { ...layout, center: (layout.center ?? 0) + spawner, spawner: 0 };
+}
+
 function usePersistedLayout(key: string, defaults: Layout) {
   // useMemo with [key] so a visibility flip (key change) re-reads.
   const defaultLayout = useMemo(() => loadLayout(key, defaults), [key, defaults]);
@@ -168,10 +186,21 @@ export function PanelLayout({ bridge }: Props) {
   // initial defaultSize matches (mount collapsed when closed); toggles
   // after mount are driven imperatively via dockPanelRef.
   const dockVisibleAtMount = useRef(dockVisible).current;
-  const outerDefaultLayout = useMemo<Layout>(
-    () => loadLayout("alo:layout:outer:3col", OUTER_3COL_DEFAULTS),
-    [],
-  );
+  // [dock-mount fix] Closed at mount → fold the stored dock share into the
+  // centre column so the Group's defaultLayout agrees with the dock Panel's
+  // "0%" defaultSize (see collapseDockShare). The STORED blob is untouched —
+  // persistence is dockVisible-gated — so the remembered open width still
+  // seeds the next open-at-mount session.
+  // storedDockSharePct keeps the blob's ORIGINAL spawner share even when the
+  // seed below zeroes it — the first open after a closed-at-mount session
+  // restores the dock to this width (see expandDock in the toggle effect).
+  const { outerDefaultLayout, storedDockSharePct } = useMemo(() => {
+    const stored = loadLayout("alo:layout:outer:3col", OUTER_3COL_DEFAULTS);
+    return {
+      outerDefaultLayout: dockVisibleAtMount ? stored : collapseDockShare(stored),
+      storedDockSharePct: stored.spawner ?? null,
+    };
+  }, [dockVisibleAtMount]);
   // Persist only while the dock is OPEN, so a closed (collapsed) layout
   // never overwrites the remembered open widths.
   const onOuterLayoutChanged = useCallback(
@@ -233,6 +262,36 @@ export function PanelLayout({ bridge }: Props) {
         : lastDockWidthCssRef.current ?? p.getSize().inPixels;
     }
 
+    // [dock-mount fix] expand() restores the library's remembered
+    // pre-collapse size (`expandToSize`), falling back to minSize when
+    // nothing was recorded — the closed-AT-MOUNT case, where no
+    // in-session collapse ever ran. That minSize fallback is the
+    // DESIRED first-open width: it equals DOCK_MIN_PX, which is also
+    // what the dock-slide anim assumes for a first-ever open
+    // (dockWidthCss above), so panel and host anim agree. The resize
+    // chain below is purely a safety net for expand() landing at ~zero
+    // share (never observed with the current lib, but cheap to keep):
+    // in-session settled width, else the stored blob's share
+    // (storedDockSharePct — the Group seed zeroed it via
+    // collapseDockShare), else the px floor.
+    const expandDock = () => {
+      p.expand();
+      // Guard on asPercentage, NOT inPixels: the layout share updates
+      // synchronously on expand(), but inPixels reads offsetWidth, which
+      // only reflects the new flex style after the next render — it
+      // reads a stale 0 here even on a successful expand, and acting on
+      // it would clobber the remembered reopen width every time.
+      if (p.getSize().asPercentage < 0.5) {
+        if (lastDockWidthCssRef.current != null) {
+          p.resize(lastDockWidthCssRef.current);
+        } else if (storedDockSharePct != null && storedDockSharePct > 0) {
+          p.resize(`${storedDockSharePct}%`);
+        } else {
+          p.resize(DOCK_MIN_PX);
+        }
+      }
+    };
+
     const reducedMotion =
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -251,7 +310,7 @@ export function PanelLayout({ bridge }: Props) {
       // authoritative settle send below, which reads the real settled rect.)
       const to = dockSlideTarget(from, deltaDev, dockVisible);
       raf = requestAnimationFrame((rafTs) => {
-        if (dockVisible) p.expand();
+        if (dockVisible) expandDock();
         else p.collapse();
         // Stamp ms since the flex actually changed (this rAF) so the host can
         // back-date its QPC clock to the CSS origin across the IPC hop;
@@ -269,7 +328,7 @@ export function PanelLayout({ bridge }: Props) {
       // (under reduced-motion the CSS transition is `none`, so it jumps and
       // `transitionend` never fires); the settle send below pins the host.
       raf = requestAnimationFrame(() => {
-        if (dockVisible) p.expand();
+        if (dockVisible) expandDock();
         else p.collapse();
       });
     }
@@ -309,7 +368,7 @@ export function PanelLayout({ bridge }: Props) {
       useDockAnim.getState().setAnimating(false);
       setDockAnimating(false);
     };
-  }, [dockVisible, dockPanelRef, bridge]);
+  }, [dockVisible, dockPanelRef, bridge, storedDockSharePct]);
 
   // The content shown in the dock slot LAGS `dock` on close: keep the last
   // pane mounted while the slot animates shut so it slides out instead of
@@ -469,8 +528,21 @@ export function PanelLayout({ bridge }: Props) {
           handle floats at the edge. Pixel minSize (260) keeps the docked
           labels readable; the Panel id stays "spawner" regardless of content
           so the persistence key (alo:layout:outer:3col) is stable — the
-          slot's identity is the right-dock, not the tool inside it. */}
+          slot's identity is the right-dock, not the tool inside it.
+
+          While CLOSED, both the separator and the panel are `disabled` —
+          the CSS classes alone do NOT stop a drag, because the library
+          hit-tests separators by document-level pointer COORDINATES
+          against their rects (an invisible, pointer-events-none element
+          still has a rect), so the user could drag an empty slot open
+          (bug, 2026-06-10). Separator.disabled removes it from that
+          hit-test; Panel.disabled stops indirect resizes (the lib's own
+          docs: "to prevent a panel from being resized at all, it needs
+          to also be disabled"). The dock toggle's imperative
+          p.expand()/p.collapse() still works — trigger="imperative-api"
+          overrides disabled-panel constraints in the lib. */}
       <Separator
+        disabled={!dockVisible}
         className={
           "ce-splitter ce-splitter-v" +
           (dockVisible ? "" : " invisible pointer-events-none")
@@ -479,6 +551,7 @@ export function PanelLayout({ bridge }: Props) {
       <Panel
         id="spawner"
         panelRef={dockPanelRef}
+        disabled={!dockVisible}
         collapsible
         collapsedSize={0}
         defaultSize={dockVisibleAtMount ? `${outerDefaultLayout.spawner ?? 20}%` : "0%"}
