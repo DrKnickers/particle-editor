@@ -262,6 +262,11 @@ tasks/ghidra_project/
 # Test artifacts. tests/*.cpp are checked in (they're the reproducer
 # alongside the production code); compiled binaries are not.
 tests/*.exe
+# Game .alo assets used as tool input/output (chain-investigation scratch):
+# copyrighted game data, fully reproducible (vanilla from the user's mod repo,
+# the test file via tests/make_chain_test_alo.exe). Never commit them.
+tests/*.ALO
+tests/*.alo
 
 # Superpowers brainstorming sessions: per-session HTML mockups
 # rendered into the visual-companion browser. Transient working
