@@ -16,6 +16,96 @@ Conventions:
 
 ## Changelog
 
+
+### Splitter-drag cost trims: scene-rect send dedupe + per-message log hygiene (chase-lerp built and reverted)
+
+*2026-06-10 · TODO(merge hash) · TODO(PR — ships with the render-loop pacing below)*
+
+Two objective cost trims on the splitter-drag path: the web side stops
+re-sending identical scene rects (a measured 2× send rate during window
+resizes), and the host stops paying a synchronous disk flush per interactive
+bridge message (a 3 s drag now adds ~50 host.log lines, was 200+). A third
+piece — smoothing the scene-rect stream with host-clocked chase lerps — was
+built, user-tested, and **reverted**; see issues below for the lesson.
+
+**How we tackled it.** Attribution first: a per-kind tally in the bridge
+probe + a real-mouse `SendInput` drag driver
+([`tasks/tool-splitter-drag-probe.mjs`](tasks/tool-splitter-drag-probe.mjs))
+identified the actual streams — `layout/scene-rect` at ~22-28/s while
+dragging, plus `viewport/input` at mouse rate (~60-140/s) whenever the cursor
+crosses the viewport (the unranked ~104/s in the user's live log; it's the
+input pipeline, functional traffic). **C1**: `ViewportSlot`'s `send()`
+dedupes on (rect, DPR) — DPR in the key so a monitor swap at an identical CSS
+rect is never dropped; the "redundant" listeners stay as the mid-dock-slide
+safety net, dedupe makes their overlap free. **C2**: the per-message `WebMsg`
+host.log line is skipped for the two interactive kinds (the 1 Hz per-kind
+tally carries their rates); `SetSceneViewport`'s per-apply printf is
+1 Hz-throttled; the DComp transform log moved to a `quiet` flag — per-frame
+anim applies (the dock slide) are silent, instant + anim-terminal applies
+log, so the settled clip always appears and the rate self-throttles by
+construction.
+
+**Issues encountered and resolutions.** (1) **C3 (chase-lerp) built and
+reverted —.** Streamed scene-rects became short host-clocked glides
+(duration = inter-arrival gap) to fix the engine-edge-vs-panel-edge judder.
+The numbers looked right; the feel was wrong, twice over: a chase's
+steady-state lag is ONE PACKET INTERVAL by construction, and under real drag
+load the stream runs ~12/s → 80-160 ms of visible edge lag plus an end snap;
+and during window resizes `PredictAndApply` cancels the anim every size tick,
+starving the chases so newly revealed window area sat on backing colour for
+up to a second. Smoothing cannot beat the data rate — the residual splitter
+stutter is Chromium's own relayout cadence under drag, which instant
+application already tracks as tightly as the architecture allows. (2) A first
+C2 attempt time-throttled the transform log to 1 Hz — wrong: it dropped the
+SETTLE line (the one state you want) and broke a spec pinning per-dispatch
+transform logging; the quiet-flag design keeps both. (3) The investigation's
+audit had "refuted" per-message log-flush materiality — correct in isolation,
+but at the measured combined stream rates the flushes sum to real UI-thread
+time; per-kind attribution is what made the call defensible either way.
+
+---
+
+### Render loop paced to display cadence; GPU sync wait yields
+
+*2026-06-10 · TODO(merge hash) · TODO(PR)*
+
+The editor's render loop no longer free-runs: it used to render ~3000 fps at
+idle (measured by the `[PERF]` probe), pegging one CPU core and saturating
+the GPU with queued frames — headroom WebView2's renderer needed during
+splitter drags, making panel resizes feel far heavier than they are. The
+loop now renders once per display refresh period (~240 Hz cap on a 240 Hz
+monitor, ~60 on a 60 Hz one) and sleeps between frames; input still wakes it
+instantly, so interaction latency is unchanged. Idle CPU dropped from a full
+core to ~20% of one. The cross-device GPU sync wait also yields its
+timeslice while polling instead of burning the core.
+
+**How we tackled it.** Fix B of the resize-perf plan, two independent
+commits. B1 ([`src/host/HostWindow.cpp`](src/host/HostWindow.cpp:3500)): the
+main loop renders only when a QPC frame budget elapses (one display
+refresh period, read via `EnumDisplaySettings` at startup, 60 Hz fallback)
+and otherwise blocks in `MsgWaitForMultipleObjectsEx(…, QS_ALLINPUT,
+MWMO_INPUTAVAILABLE)` — messages wake it immediately, the timeout wakes the
+next frame; `timeBeginPeriod(1)` for the loop's lifetime keeps the wait from
+quantizing to the ~15.6 ms default timer; a slow frame schedules from "now"
+(cap semantics — no vsync, no catch-up bursts); QPC failure degrades to the
+old free-run; capture mode keeps its `Sleep(16)` path untouched. B2
+([`src/engine.cpp`](src/engine.cpp:1622)): `WaitEndFrameQuery` polls tight
+for 64 iterations (the common already-signalled case) then `SwitchToThread()`s
+between polls; the 100k hung-GPU cap is unchanged. The `[PERF]` line gains
+`rps=` — actual renders/sec — because its `fps` field is `1/frame-cost`
+(theoretical max) and stopped tracking cadence once the loop was paced.
+
+**Issues encountered and resolutions.** (1) Exactly that `fps` field
+initially made the pacing look broken (`fps=2400` post-fix) — it never
+measured cadence, the unpaced loop just made cost and cadence coincide;
+`rps=` disambiguates permanently. (2) The 1 ms wait quantization means the
+cap runs slightly under the budget on fast monitors (~190 rps at a 4.17 ms /
+240 Hz budget) — accepted: it's a load cap, not vsync, and sub-ms spin-waits
+to hit exact cadence would reintroduce the burn being removed. (3) Verified
+the timing-sensitive surfaces explicitly: the native a11y/bridge harness
+(174/0 — bridge round-trips now ride a ≤1-frame-budget pump latency) and the
+resize-storm regression (per-tick cheap resets + one settle, unchanged).
+
 ### Closed right-dock hardening: inert splitter + correct collapsed mount
 
 *2026-06-10 · TODO(merge hash) · #117*

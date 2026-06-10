@@ -151,7 +151,11 @@ struct Compositor::Impl
     // DWM composition cycle sees both the new pixels and the new clip
     // simultaneously — no transient "engine clear color at the new
     // clip edge" artifact during pane-drag resize storms.
+    // [resize-perf C2] pendingQuiet carries the caller's quiet flag
+    // (per-frame anim applies skip the transform log) across the
+    // deferral.
     bool pendingTransform  = false;
+    bool pendingQuiet      = false;
     int  pendingX          = 0;
     int  pendingY          = 0;
     int  pendingW          = 0;
@@ -201,11 +205,16 @@ struct Compositor::Impl
     // transform immediately. Shared by SetEngineVisualTransform's
     // immediate path and CompositeEngineFrame's pending-apply tail.
     // Caller validates engineVisualAttached + engineVisual + device
-    // exist and (w, h) > 0.
-    HRESULT ApplyTransform(int x, int y, int w, int h);
+    // exist and (w, h) > 0. [resize-perf C2] quiet=true skips the
+    // [COMP-engine-transform] log line — used for per-frame anim
+    // applies (dock slide / scene-rect chase, which would otherwise
+    // log + fflush at the render rate); instant and anim-TERMINAL
+    // applies log as before, so the settled state is always visible
+    // in host.log and the rate self-throttles by construction.
+    HRESULT ApplyTransform(int x, int y, int w, int h, bool quiet);
 };
 
-HRESULT Compositor::Impl::ApplyTransform(int x, int y, int w, int h)
+HRESULT Compositor::Impl::ApplyTransform(int x, int y, int w, int h, bool quiet)
 {
     HRESULT hr;
 
@@ -256,11 +265,14 @@ HRESULT Compositor::Impl::ApplyTransform(int x, int y, int w, int h)
     engineLastTransformW = w;
     engineLastTransformH = h;
 
-    char buf[160];
-    snprintf(buf, sizeof(buf),
-             "[COMP-engine-transform] clip=(%d,%d,%d,%d) (absolute host-client)",
-             x, y, x + w, y + h);
-    LogLine(buf);
+    if (!quiet)
+    {
+        char buf[160];
+        snprintf(buf, sizeof(buf),
+                 "[COMP-engine-transform] clip=(%d,%d,%d,%d) (absolute host-client)",
+                 x, y, x + w, y + h);
+        LogLine(buf);
+    }
     return S_OK;
 }
 
@@ -1117,7 +1129,8 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
         {
             (void)m_impl->ApplyTransform(
                 m_impl->pendingX, m_impl->pendingY,
-                m_impl->pendingW, m_impl->pendingH);
+                m_impl->pendingW, m_impl->pendingH,
+                m_impl->pendingQuiet);
             // Best-effort: log and proceed even on failure (the visible
             // result is "scene-rect doesn't update," which is the same
             // shape the user already sees during drag storms — not a
@@ -1292,7 +1305,7 @@ HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
 // IF the engine rendered at RT (0, 0); under B-γ, the engine
 // renders at RT (sceneX, sceneY), so SetOffset(0, 0) + clip at
 // absolute coords is the matching shape.
-HRESULT Compositor::SetEngineVisualTransform(int x, int y, int w, int h, bool immediate) noexcept
+HRESULT Compositor::SetEngineVisualTransform(int x, int y, int w, int h, bool immediate, bool quiet) noexcept
 {
     if (!m_impl->engineVisualAttached) return S_FALSE;
     if (!m_impl->engineVisual || !m_impl->device)
@@ -1327,7 +1340,7 @@ HRESULT Compositor::SetEngineVisualTransform(int x, int y, int w, int h, bool im
         // render has happened yet and there's nothing to coordinate
         // with. Clear any stale pending queue too.
         m_impl->pendingTransform = false;
-        return m_impl->ApplyTransform(x, y, w, h);
+        return m_impl->ApplyTransform(x, y, w, h, quiet);
     }
 
     // Default: queue for application at the end of the next
@@ -1342,6 +1355,7 @@ HRESULT Compositor::SetEngineVisualTransform(int x, int y, int w, int h, bool im
     // and engine rendering at ~100 Hz, this means at most a 1-frame
     // delay between dispatch and visible clip update, never a backlog.
     m_impl->pendingTransform = true;
+    m_impl->pendingQuiet = quiet;
     m_impl->pendingX = x;
     m_impl->pendingY = y;
     m_impl->pendingW = w;

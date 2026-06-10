@@ -357,11 +357,21 @@ void LayoutBroker::SetSceneRect(int x, int y, int w, int h)
     // ends (web schedules it at 260ms > the 200ms tween, by which point
     // m_sceneAnim.active is false), so it is not dropped; and a re-toggle arrives
     // as a fresh animate-scene-rect (StartSceneAnim), not via this path.
+    //
+    // [resize-perf C3, REVERTED 2026-06-10] A chase-lerp variant smoothed the
+    // interactive scene-rect stream here (each rect a short host-clocked glide).
+    // User verdict killed it: a chase's steady-state lag is ONE PACKET INTERVAL
+    // by construction, and under real drag load the stream runs ~12/s →
+    // 80-160 ms of visible edge lag + an end snap; worse, window resizes
+    // starved the chases (PredictAndApply cancels the anim every size tick),
+    // leaving backing colour in newly revealed areas. Smoothing cannot beat the
+    // data rate — instant application tracks the panels' own relayout cadence
+    // as tightly as the architecture allows ().
     if (m_sceneAnim.active) return;
     ApplySceneRect(x, y, w, h);
 }
 
-void LayoutBroker::ApplySceneRect(int x, int y, int w, int h)
+void LayoutBroker::ApplySceneRect(int x, int y, int w, int h, bool animFrame)
 {
     if (w <= 0 || h <= 0)
     {
@@ -441,7 +451,9 @@ void LayoutBroker::ApplySceneRect(int x, int y, int w, int h)
             const int GBy = (w > 0) ? (GBx * h + w / 2) / w : GBx;
             m_engine->SetSceneViewport(x - GBx, y - GBy, w + 2 * GBx, h + 2 * GBy);
         }
-        m_dcompCompositor->SetEngineVisualTransform(x, y, w, h);
+        m_dcompCompositor->SetEngineVisualTransform(x, y, w, h,
+                                                    /*immediate=*/false,
+                                                    /*quiet=*/animFrame);
     }
 }
 
@@ -511,11 +523,14 @@ bool LayoutBroker::AdvanceSceneAnim(long long qpcNow)
         return true;
     }
 
+    // animFrame=true: mid-flight applies skip the per-apply transform
+    // log (they run at the render rate; the terminal apply above logs).
     const double e = CssEaseY(t);  // only the in-flight frames need the curve
     ApplySceneRect(static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromX, m_sceneAnim.toX, e))),
                    static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromY, m_sceneAnim.toY, e))),
                    static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromW, m_sceneAnim.toW, e))),
-                   static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromH, m_sceneAnim.toH, e))));
+                   static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromH, m_sceneAnim.toH, e))),
+                   /*animFrame=*/true);
     return true;
 }
 

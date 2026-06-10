@@ -24,9 +24,11 @@
 #include <winhttp.h>
 #include <shlwapi.h>  // Phase 0: SHCreateMemStream for WebResourceRequested response
 #include <dwmapi.h>   // title-bar dark-mode (DWMWA_USE_IMMERSIVE_DARK_MODE)
+#include <timeapi.h>  // [resize-perf Fix B1] timeBeginPeriod/timeEndPeriod for the paced pump
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "winmm.lib")   // [resize-perf Fix B1] timeBeginPeriod
 
 // See BridgeDispatcher.cpp for the runtime (theme-toggle) title-bar sync;
 // this is the startup default. Guarded for older SDKs (value 20 on modern
@@ -37,6 +39,7 @@
 #include "WebView2.h"
 #include "WebView2EnvironmentOptions.h"
 
+#include <algorithm>   // [resize-perf] per-kind bridge-probe sort
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
@@ -44,6 +47,7 @@
 #include <cstring>
 #include <share.h>     // Stage 4f: _SH_DENYNO for _wfsopen sharing
 #include <filesystem>
+#include <map>         // [resize-perf] per-kind bridge-probe tally
 #include <memory>
 #include <mutex>
 #include <string>
@@ -469,9 +473,11 @@ struct HostWindowImpl
     PerfStage perfWmpos;
     unsigned  perfWmposResetBase = 0;
     DWORD     perfWmposLastEmit  = 0;
-    unsigned  perfSceneRectMsgs  = 0;
     unsigned  perfWebMsgs        = 0;
     DWORD     perfMsgLastEmit    = 0;
+    // [resize-perf] per-kind tally for the bridge probe (cleared each
+    // 1 Hz emit). Keyed by the wire `kind` string.
+    std::map<std::wstring, unsigned> perfMsgKinds;
 
     // [resize-perf Fix D] true between WM_ENTERSIZEMOVE and
     // WM_EXITSIZEMOVE — gates the main-window WM_ERASEBKGND
@@ -931,9 +937,13 @@ void HostWindowImpl::RenderD3D9()
         const double fps     = favg > 0.0 ? 1.0e6 / favg : 0.0;
         const double spinAvg = perfWait.n
             ? static_cast<double>(perfWaitSpinsSum) / static_cast<double>(perfWait.n) : 0.0;
-        Log("[PERF] win=%ldx%ld fps=%.0f frame=%.0f/%.0f update=%.0f/%.0f "
+        // [resize-perf Fix B1] rps = RenderD3D9 calls in this ~1s window —
+        // the REAL render cadence (the fps field is 1/frame-cost, the
+        // theoretical max, and stopped tracking cadence once the pump
+        // was paced).
+        Log("[PERF] win=%ldx%ld rps=%u fps=%.0f frame=%.0f/%.0f update=%.0f/%.0f "
             "render=%.0f/%.0f wait=%.0f/%.0f spins=%.0f/%u composite=%.0f/%.0f (us avg/max)\n",
-            pr.right - pr.left, pr.bottom - pr.top, fps,
+            pr.right - pr.left, pr.bottom - pr.top, perfFrame.n, fps,
             perfFrame.avg(), perfFrame.maxUs,
             perfUpdate.avg(), perfUpdate.maxUs,
             perfRender.avg(), perfRender.maxUs,
@@ -1024,16 +1034,40 @@ void HostWindowImpl::SettleResize(const char* why)
 
 void HostWindowImpl::OnWebMessage(const std::wstring& json)
 {
-    Log("[host] WebMsg (%zu chars)\n", json.size());
-
-    // [resize-perf] Phase-0 probe — bridge message rate, split out the
-    // layout/scene-rect stream (the per-display-frame ResizeObserver
-    // round-trips during splitter drags). Substring scan is trivially
-    // cheap next to the UTF16→8 + JSON parse that follows. 1 Hz emit;
-    // idle (no messages) emits nothing by construction.
+    // [resize-perf] Phase-0 probe — bridge message rate, tallied PER
+    // KIND (the user's live splitter drag showed ~104/s of NON-scene-rect
+    // traffic the dimension audit hadn't ranked; attribution found it was
+    // viewport/input at mouse rate). Extracting the kind is a cheap
+    // substring scan next to the UTF16→8 + JSON parse that follows.
+    // 1 Hz emit of the top kinds; idle emits nothing by construction.
     ++perfWebMsgs;
-    if (json.find(L"layout/scene-rect") != std::wstring::npos)
-        ++perfSceneRectMsgs;
+    std::wstring msgKind;
+    {
+        static const std::wstring kKindNeedle = L"\"kind\":\"";
+        const size_t kp = json.find(kKindNeedle);
+        if (kp != std::wstring::npos)
+        {
+            const size_t vs = kp + kKindNeedle.size();
+            const size_t ve = json.find(L'"', vs);
+            if (ve != std::wstring::npos && ve > vs && ve - vs < 64)
+            {
+                msgKind = json.substr(vs, ve - vs);
+                ++perfMsgKinds[msgKind];
+            }
+        }
+    }
+
+    // [resize-perf C2] Per-message log hygiene: the interactive streams
+    // (layout/scene-rect at ~28/s during a splitter drag, viewport/input
+    // at mouse rate ~60-140/s whenever the cursor crosses the viewport)
+    // each paid a host.log write + fflush — a synchronous DISK flush per
+    // message on the UI thread. Skip their per-message line; the 1 Hz
+    // [resize-perf] bridge tally above carries their rates, and every
+    // other (low-frequency) kind keeps the full per-message log.
+    const bool highFrequencyKind =
+        msgKind == L"layout/scene-rect" || msgKind == L"viewport/input";
+    if (!highFrequencyKind)
+        Log("[host] WebMsg (%zu chars)\n", json.size());
     const DWORD rpNow = GetTickCount();
     if (perfMsgLastEmit == 0)
     {
@@ -1041,10 +1075,24 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     }
     else if ((rpNow - perfMsgLastEmit) >= 1000)
     {
-        Log("[resize-perf] bridge: msgs=%u scene-rect=%u (per ~1s)\n",
-            perfWebMsgs, perfSceneRectMsgs);
+        // Top-4 kinds by count, formatted "kind=count".
+        std::vector<std::pair<std::wstring, unsigned>> kinds(
+            perfMsgKinds.begin(), perfMsgKinds.end());
+        std::sort(kinds.begin(), kinds.end(),
+                  [](const auto& a, const auto& b) { return a.second > b.second; });
+        char detail[256] = "";
+        size_t off = 0;
+        for (size_t i = 0; i < kinds.size() && i < 4; ++i)
+        {
+            const int n = _snprintf_s(detail + off, sizeof(detail) - off, _TRUNCATE,
+                                      "%s%ls=%u", i ? " " : "",
+                                      kinds[i].first.c_str(), kinds[i].second);
+            if (n < 0) break;
+            off += static_cast<size_t>(n);
+        }
+        Log("[resize-perf] bridge: msgs=%u top[%s] (per ~1s)\n", perfWebMsgs, detail);
         perfWebMsgs = 0;
-        perfSceneRectMsgs = 0;
+        perfMsgKinds.clear();
         perfMsgLastEmit = rpNow;
     }
 
@@ -3500,15 +3548,55 @@ int HostWindowImpl::Run(int nCmdShow)
     // main loop: switched from blocking GetMessage to PeekMessage
     // idle-render. The blocking variant produces no continuous WM_PAINT
     // events, so the per-frame spawner tick + engine render had no driver.
-    // Now: drain queued messages, then render once on idle, loop until
+    // Now: drain queued messages, then render on idle, loop until
     // WM_QUIT. Mirrors legacy src/main.cpp:8023.
     //
     // No IsDialogMessage routing — the host has no modeless Win32
     // dialogs; tool panels live in React under WebView2 (which has its
     // own input routing and doesn't need TranslateAccelerator either).
+    //
+    // [resize-perf Fix B1] The render is PACED to the display's refresh
+    // cadence instead of free-running. The unpaced loop measured ~3000 fps
+    // at idle ([PERF] probe): one core pegged and the GPU saturated with
+    // queued frames, starving WebView2's renderer during splitter drags
+    // (the dominant splitter-jank amplifier — see
+    // tasks/resize-perf-investigation.md, fix B). Mechanics:
+    //   - render only when the per-frame QPC budget has elapsed;
+    //   - between frames, MsgWaitForMultipleObjectsEx sleeps until EITHER
+    //     input/messages arrive (instant wake — input latency unchanged)
+    //     or the next frame is due. MWMO_INPUTAVAILABLE because we consume
+    //     via PeekMessage: input queued before the wait must still wake it.
+    //   - timeBeginPeriod(1) for the loop's lifetime — without it the wait
+    //     quantizes to the default ~15.6 ms timer and the cadence judders.
+    //   - budget = one period of the primary display's refresh rate read at
+    //     startup (fallback 60 Hz). This is a CAP, not vsync — Present
+    //     stays unsynchronized; DWM composes whatever is latest.
+    //   - QPC-frequency failure degrades to budget 0 = today's free-run.
+    // Capture mode keeps its own Sleep(16) pacing and renders every
+    // iteration (path unchanged).
     MSG m = {};
     bool quit = false;
     int  capturedFrames = 0;
+
+    DWORD displayHz = 60;
+    {
+        DEVMODEW dm = {};
+        dm.dmSize = sizeof(dm);
+        // 0 and 1 mean "hardware default" per EnumDisplaySettings docs —
+        // treat anything below 30 as unknown and keep the 60 Hz fallback.
+        if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm)
+            && dm.dmDisplayFrequency >= 30)
+        {
+            displayHz = dm.dmDisplayFrequency;
+        }
+    }
+    const LONGLONG frameBudgetQpc =
+        PerfQpcFreq() > 0 ? PerfQpcFreq() / static_cast<LONGLONG>(displayHz) : 0;
+    LONGLONG nextFrameQpc = PerfQpcNow();
+    timeBeginPeriod(1);
+    Log("[resize-perf] pump paced to %lu Hz (budget %.2f ms)\n",
+        static_cast<unsigned long>(displayHz), 1000.0 / static_cast<double>(displayHz));
+
     while (!quit)
     {
         while (PeekMessage(&m, nullptr, 0, 0, PM_REMOVE))
@@ -3525,10 +3613,37 @@ int HostWindowImpl::Run(int nCmdShow)
         // without rendering (exit code set below).
         if (captureFailed) break;
 
-        // Idle: render one frame. Cheap enough to always run (Engine has
-        // its own paused / IsPreviewPaused gates that skip the simulation
-        // step when set; render still presents to keep the surface valid).
-        if (engine)
+        // Idle: render one frame per budget slot. Cheap enough to always
+        // run (Engine has its own paused / IsPreviewPaused gates that skip
+        // the simulation step when set; render still presents to keep the
+        // surface valid).
+        if (engine && !captureMode)
+        {
+            const LONGLONG now = PerfQpcNow();
+            if (now >= nextFrameQpc)
+            {
+                RenderD3D9();
+                // Schedule from "now", not "+= budget": a slow frame must
+                // not bank catch-up renders (cap semantics, not vsync).
+                nextFrameQpc = now + frameBudgetQpc;
+            }
+            // Sleep until input or the next frame slot, whichever first.
+            // Round the wait UP to whole ms so an early wake doesn't spin
+            // through sub-ms remainders.
+            const LONGLONG remainTicks = nextFrameQpc - PerfQpcNow();
+            const LONGLONG f = PerfQpcFreq();
+            if (remainTicks > 0 && f > 0)
+            {
+                const DWORD waitMs =
+                    static_cast<DWORD>((remainTicks * 1000 + f - 1) / f);
+                if (waitMs > 0)
+                {
+                    MsgWaitForMultipleObjectsEx(0, nullptr, waitMs,
+                                                QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+                }
+            }
+        }
+        else if (engine)
         {
             RenderD3D9();
 
@@ -3569,6 +3684,9 @@ int HostWindowImpl::Run(int nCmdShow)
             WaitMessage();
         }
     }
+
+    // [resize-perf Fix B1] matching release for the timeBeginPeriod above.
+    timeEndPeriod(1);
 
     g_self = nullptr;
     // B1.3.1.1: matching shutdown for the GdiplusStartup above. Safe

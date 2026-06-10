@@ -70,8 +70,18 @@ export function ViewportSlot({ bridge }: Props) {
     const el = ref.current;
     if (!el) return;
 
+    // [resize-perf C1] Last-sent dedupe. The same rect is computed by
+    // multiple sources (the RO and the window-resize listener BOTH fire
+    // for every window-resize tick — a measured 2× send rate), and
+    // scroll events frequently leave the rect unchanged. Key includes
+    // the DPR: a monitor swap can change the backing size while the
+    // CSS rect stays identical, and that send must NOT be dropped.
+    let lastSent = "";
     const send = () => {
       const { x, y, w, h } = computeSceneRect(el);
+      const key = `${x},${y},${w},${h},${window.devicePixelRatio || 1}`;
+      if (key === lastSent) return;
+      lastSent = key;
       // B1.4 T4c: the centre-quadrant rect drives the SCENE rect (the
       // visible sub-rect inside the popup), not the popup HWND itself. The
       // compositor crops the engine visual to it each frame — UI panels behind
@@ -83,7 +93,8 @@ export function ViewportSlot({ bridge }: Props) {
     // RO is the ONLY source suppressed during a dock slide: the host owns the
     // viewport rect for the slide's duration, so a flood of RO scene-rects would
     // fight its smooth interpolation. scroll / resize / DPR stay raw below so a
-    // real resize or monitor swap mid-slide is never dropped.
+    // real resize or monitor swap mid-slide is never dropped (the dedupe above
+    // makes the overlap free instead of removing the safety listeners).
     const ro = new ResizeObserver(() => {
       if (animatingRef.current) return;
       send();

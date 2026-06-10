@@ -240,7 +240,14 @@ public:
     // happened yet and the deferral path has nothing to coordinate
     // with), pass immediate=true to apply the transform straight
     // through.
-    HRESULT SetEngineVisualTransform(int x, int y, int w, int h, bool immediate = false) noexcept;
+    //
+    // [resize-perf C2] quiet=true skips the [COMP-engine-transform]
+    // line for THIS apply — used by per-frame anim applies (dock
+    // slide / scene-rect chase), which would otherwise log + fflush
+    // at the render rate. Instant and anim-TERMINAL applies keep
+    // logging, so host.log always shows the settled clip and the log
+    // rate self-throttles by construction.
+    HRESULT SetEngineVisualTransform(int x, int y, int w, int h, bool immediate = false, bool quiet = false) noexcept;
 
     // (session 3) — theme-coloured composition backing. Recolour
     // the rearmost backing visual so every transparent DOM region

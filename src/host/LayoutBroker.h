@@ -214,7 +214,10 @@ private:
     // viewport + DComp clip). SetSceneRect is now a thin guard that drops
     // external updates while a dock-slide anim owns the rect; both the guard and
     // the per-frame anim advance funnel the actual work through here.
-    void ApplySceneRect(int x, int y, int w, int h);
+    // [resize-perf C2] animFrame=true marks a mid-flight anim apply —
+    // the DComp transform log is skipped for those (they fire at the
+    // render rate); instant applies and anim terminals log normally.
+    void ApplySceneRect(int x, int y, int w, int h, bool animFrame = false);
 
     // [resize-perf revised Fix A] One resize-driven engine reset, shared
     // by Apply / PredictAndApply / SettleDeferredReset (one helper, not

@@ -1619,6 +1619,17 @@ void Engine::IssueEndFrameQuery()
 // partially-finished VRAM (visible tearing). Safer than blocking the
 // host message pump indefinitely on a hung GPU. Returns the spin count
 // (0 = signalled on the first poll) so the host can log GPU-wait pressure.
+//
+// [resize-perf Fix B2] The wait now YIELDS between polls past a short
+// tight burst. The original no-yield spin burned a full core while the
+// GPU drained (measured ~4000 spins/frame at the unpaced ~3000 fps idle
+// — engine.cpp's share of the splitter-drag contention). The first 64
+// polls stay tight for the common already-signalled / sub-µs case;
+// after that each poll SwitchToThread()s, handing the rest of the
+// timeslice to any ready thread (WebView2's renderer, the compositor)
+// instead of re-polling a bit that hasn't flipped. Cap semantics
+// unchanged: a hung GPU still exits after 100k polls (wall-clock longer
+// now that late polls yield — irrelevant next to a hung GPU).
 int Engine::WaitEndFrameQuery()
 {
 	if (m_pEndFrameQuery == NULL) return 0;
@@ -1631,6 +1642,7 @@ int Engine::WaitEndFrameQuery()
 			OutputDebugStringA("[Engine] D3D9 sync query never signalled after 100k spins\n");
 			break;
 		}
+		if (spins > 64) SwitchToThread();
 	}
 	return spins;
 }
@@ -1806,13 +1818,23 @@ void Engine::SetSceneViewport(int x, int y, int w, int h)
 		m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
 	}
 
-	char buf[224];
-	snprintf(buf, sizeof(buf),
-	    "[engine] SetSceneViewport x=%d y=%d w=%d h=%d (fovY=%.2f° aspect=%.3f anchorH=%.0f)\n",
-	    x, y, w, h, fovY * (180.0f / 3.14159265f), aspect, kFovAnchorHeightPx);
-	OutputDebugStringA(buf);
-	printf("%s", buf);
-	fflush(stdout);
+	// [resize-perf C2] Throttled to 1 Hz: this used to print + fflush +
+	// OutputDebugStringA on EVERY apply, and splitter drags apply at the
+	// stream rate (~28/s) — ODS alone is ms-class with a debugger
+	// attached. One line per second is plenty to see the live rect.
+	static DWORD s_lastSvpLogTick = 0;
+	const DWORD svpNow = GetTickCount();
+	if (s_lastSvpLogTick == 0 || (svpNow - s_lastSvpLogTick) >= 1000)
+	{
+		s_lastSvpLogTick = svpNow;
+		char buf[224];
+		snprintf(buf, sizeof(buf),
+		    "[engine] SetSceneViewport x=%d y=%d w=%d h=%d (fovY=%.2f° aspect=%.3f anchorH=%.0f)\n",
+		    x, y, w, h, fovY * (180.0f / 3.14159265f), aspect, kFovAnchorHeightPx);
+		OutputDebugStringA(buf);
+		printf("%s", buf);
+		fflush(stdout);
+	}
 }
 
 bool Engine::GetSceneViewport(int& x, int& y, int& w, int& h) const

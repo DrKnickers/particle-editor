@@ -297,12 +297,29 @@ describe("ViewportSlot — dock-slide RO suppression (Item 3, architecture C)", 
     expect(sceneRectCalls(bridge)).toBe(before); // …and is dropped
   });
 
+  // [resize-perf C1] `send` dedupes on (rect, DPR) — in jsdom every
+  // getBoundingClientRect is zeros, so the rect never changes and a repeat
+  // fire is (correctly) dropped. Tests that assert a fire RESULTS in a send
+  // must make the send unique; bumping devicePixelRatio (part of the dedupe
+  // key by design — a monitor swap changes the backing size at an identical
+  // CSS rect) is the lever jsdom lets us pull.
+  let dprCounter = 1;
+  function bumpDpr() {
+    Object.defineProperty(window, "devicePixelRatio", {
+      configurable: true,
+      value: ++dprCounter,
+    });
+  }
+
   it("runs the ResizeObserver callback normally when not animating", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
     const before = sceneRectCalls(bridge);
     useDockAnim.setState({ animating: false });
-    roCallbacks.forEach((cb) => cb());
+    roCallbacks.forEach((cb) => {
+      bumpDpr();
+      cb();
+    });
     expect(sceneRectCalls(bridge)).toBe(before + roCallbacks.length);
   });
 
@@ -311,8 +328,23 @@ describe("ViewportSlot — dock-slide RO suppression (Item 3, architecture C)", 
     render(<ViewportSlot bridge={bridge} />);
     useDockAnim.setState({ animating: true });
     const before = sceneRectCalls(bridge);
+    bumpDpr();
     window.dispatchEvent(new Event("scroll"));
+    bumpDpr();
     window.dispatchEvent(new Event("resize"));
     expect(sceneRectCalls(bridge)).toBe(before + 2);
+  });
+
+  it("dedupes repeat sends for an unchanged rect+DPR (C1)", () => {
+    // The RO and the window-resize listener BOTH fire per window-resize
+    // tick (a measured 2× send rate); with an unchanged rect the repeats
+    // must be dropped, not re-sent.
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const before = sceneRectCalls(bridge);
+    roCallbacks.forEach((cb) => cb());            // same rect as mount
+    window.dispatchEvent(new Event("resize"));    // same rect again
+    window.dispatchEvent(new Event("scroll"));    // and again
+    expect(sceneRectCalls(bridge)).toBe(before);  // all deduped
   });
 });
