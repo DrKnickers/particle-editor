@@ -213,6 +213,9 @@ const DEFAULT_TIME_MAX = 100;
 const UNSELECTED_FILL = "#e5e5e5";
 const BORDER_FILL = "#94A3B8";      // slate-400 — slightly darker than unselected
 const BORDER_STROKE = "#0EA5E9";    // accent ring on border (anchor) keys
+/** Stroke dash pattern for the locked-mirror curve. Visually distinguishes
+ *  a read-only focus channel from an editable one. Feel-tunable. */
+const READONLY_DASH = "7 5";
 
 /** Below this many pixels (in viewBox units) of pointer movement
  *  between down and up, we treat it as a click — not a drag. Matches
@@ -1190,6 +1193,9 @@ function MultiChannelCurves({
     ? null
     : (layers.find((l) => l.channel.id === focusChannel) ?? null);
   const focusEnabled = focusLayer !== null;
+  // Read-only mirror: the focus channel is locked to another channel.
+  // Derived from the DTO (lockedTo) — no prop threaded from the panel.
+  const focusReadOnly = focusLayer !== null && focusLayer.track.lockedTo != null;
 
   // ── Drag state. Held in refs so pointer-move handlers don't trigger
   // a re-render on every pixel; setDragTick flushes a render when we
@@ -1270,6 +1276,7 @@ function MultiChannelCurves({
     keyValue: number,
   ) => {
     if (!focusEnabled) return;
+    if (focusReadOnly) return;
     if (event.button !== 0) return;
     if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     // Group drag when the grabbed key is one of several selected keys —
@@ -1505,6 +1512,7 @@ function MultiChannelCurves({
   // gutter pointerdown. No-op in the read-only (non-focus) overlay.
   const startMarquee = (clientX: number, clientY: number, shiftKey: boolean, pointerId: number) => {
     if (!focusEnabled) return;
+    if (focusReadOnly) return;
     const svg = svgRef.current;
     if (svg === null) return;
     const { x, y } = eventToViewBox(svg, clientX, clientY, width, height);
@@ -1528,6 +1536,10 @@ function MultiChannelCurves({
   const onCanvasPointerDown = (event: ReactPointerEvent<SVGRectElement>) => {
     if (!focusEnabled) return;
     if (event.button !== 0) return;
+    // Read-only mirror: no pointer gestures — insert, marquee, and all
+    // canvas-edit paths are suppressed. Plain clicks still reach the
+    // backdrop's onClick → onCanvasClick (clear-selection UX preserved).
+    if (focusReadOnly) return;
     const svg = event.currentTarget.ownerSVGElement;
     if (svg === null) return;
     if (insertMode) {
@@ -1800,6 +1812,7 @@ function MultiChannelCurves({
             data-channel-id={channel.id}
             data-key-count={focusRenderPoints.length}
             data-focus="true"
+            data-readonly={focusReadOnly ? "true" : "false"}
           >
             {/* Gradient definition — objectBoundingBox units mean the
                 stops are positioned within the fill path's own bbox,
@@ -1829,6 +1842,7 @@ function MultiChannelCurves({
                 fill="none"
                 stroke={channel.color}
                 strokeWidth={3}
+                strokeDasharray={focusReadOnly ? READONLY_DASH : undefined}
                 d={buildSmoothPath(focusRenderPoints)}
                 pointerEvents="none"
               />
@@ -1840,6 +1854,7 @@ function MultiChannelCurves({
                 fill="none"
                 stroke={channel.color}
                 strokeWidth={3}
+                strokeDasharray={focusReadOnly ? READONLY_DASH : undefined}
                 points={buildStepPolyline(focusRenderPoints)}
                 pointerEvents="none"
               />
@@ -1851,6 +1866,7 @@ function MultiChannelCurves({
                 fill="none"
                 stroke={channel.color}
                 strokeWidth={3}
+                strokeDasharray={focusReadOnly ? READONLY_DASH : undefined}
                 points={focusRenderPoints.map((p) => `${p.x},${p.y}`).join(" ")}
                 pointerEvents="none"
               />
@@ -1900,12 +1916,14 @@ function MultiChannelCurves({
                     style={{ cursor: onKeyClick ? "pointer" : undefined }}
                     onPointerDown={(e) => startDrag(e, p.time, p.value)}
                     onContextMenu={(e) => {
+                      if (focusReadOnly) return;
                       if (!onKeyContextMenu) return;
                       e.preventDefault();
                       e.stopPropagation();
                       onKeyContextMenu(p.time, isBorder, e.clientX, e.clientY);
                     }}
                     onClick={(e) => {
+                      if (focusReadOnly) return;
                       e.stopPropagation();
                       // an-audit-finding: suppress the synthetic click that the browser
                       // fires after a drag. Without this, a group drag ends
@@ -1928,9 +1946,9 @@ function MultiChannelCurves({
                     cx={p.x}
                     cy={p.y}
                     r={visR}
-                    fill={fill}
-                    stroke={stroke}
-                    strokeWidth={strokeWidth}
+                    fill={focusReadOnly ? "none" : fill}
+                    stroke={focusReadOnly ? channel.color : stroke}
+                    strokeWidth={focusReadOnly ? 2 : strokeWidth}
                     pointerEvents="none"
                   />
                 </g>

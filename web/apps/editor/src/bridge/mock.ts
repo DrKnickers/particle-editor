@@ -36,6 +36,7 @@ import {
   addLifetimeChildEmitter,
   addRootEmitterMock,
   addTrackKeyInOverlay,
+  deriveLockViews,
   copyEmittersToClipboard,
   deleteEmitter,
   deleteTrackKeysInOverlay,
@@ -773,7 +774,10 @@ export class MockBridge implements Bridge {
         }
         // Read through the overlay so mutations made via
         // delete-track-keys / set-track-interpolation are reflected.
-        return { tracks: useMockTrackOverlay.getState().read(node.id) };
+        // deriveLockViews applies the pointer-alias semantics at this
+        // read boundary: locked channels present their master's current
+        // canonical content rather than a stale copy taken at lock time.
+        return { tracks: deriveLockViews(useMockTrackOverlay.getState().read(node.id)) };
       }
 
       // ---------------- emitters/get-properties (Phase 4.1 Fix 1) ----

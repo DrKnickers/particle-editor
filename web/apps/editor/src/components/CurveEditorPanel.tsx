@@ -43,7 +43,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import * as Select from "@radix-ui/react-select";
-import { ChevronDown, MousePointer2, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Lock, MousePointer2, Plus, Trash2 } from "lucide-react";
 import type {
   Bridge,
   InterpolationType,
@@ -500,6 +500,18 @@ export function CurveEditorPanel({ bridge }: Props) {
     return tracks.find((t) => t.name === focusedChannel.trackName) ?? null;
   }, [tracks, focusedChannel]);
 
+  // Locked-now flag: when the focus channel is currently a read-only
+  // alias of another channel, every edit affordance (Insert mode,
+  // interpolation toggle, Delete, drag, marquee) should be disabled.
+  // Lock dropdown itself stays enabled so the user can unlock.
+  const focusLocked = focusedTrack !== null && focusedTrack.lockedTo !== null;
+
+  // Read-only mirror: never leave Insert active on a locked focus —
+  // covers lock-while-insert AND focus-switch-onto-locked (spec §3.3).
+  useEffect(() => {
+    if (focusLocked && mode === "insert") setMode("select");
+  }, [focusLocked, mode]);
+
   // an-audit-finding robustness: after a tree/changed refetch the engine's float32 key
   // times can land an ULP away from the times we optimistically put in
   // `selectedKeyTimes` (e.g. a group move commits N keys; the real engine
@@ -673,7 +685,7 @@ export function CurveEditorPanel({ bridge }: Props) {
 
   const handleKeyDragEnd = useCallback(
     (keyTime: number, newTime: number, newValue: number) => {
-      if (selectedId === null || focusedTrack === null) return;
+      if (selectedId === null || focusedTrack === null || focusLocked) return;
       // The engine stores track key times as float32; a JS-side
       // double like 49.476439790575924 comes back from the bridge
       // refetch as 49.476440429... — equal at float32 precision but
@@ -710,7 +722,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         },
       }).catch(() => { /* silent — re-fetch on tree/changed */ });
     },
-    [bridge, selectedId, focusedTrack, focusedChannel.trackName],
+    [bridge, selectedId, focusedTrack, focusLocked, focusedChannel.trackName],
   );
 
   const handleKeyDragStart = useCallback(
@@ -746,7 +758,7 @@ export function CurveEditorPanel({ bridge }: Props) {
 
   const handleCanvasAdd = useCallback(
     (time: number, value: number) => {
-      if (selectedId === null) return;
+      if (selectedId === null || focusLocked) return;
       void bridge.request({
         kind: "emitters/add-track-key",
         params: { id: selectedId, track: focusedChannel.trackName, time, value },
@@ -756,12 +768,12 @@ export function CurveEditorPanel({ bridge }: Props) {
         setOptimisticSelected({ time: insertedTime, value });
       }).catch(() => { /* silent */ });
     },
-    [bridge, selectedId, focusedChannel.trackName],
+    [bridge, selectedId, focusLocked, focusedChannel.trackName],
   );
 
   // Delete — filters border keys + fires bridge call.
   const handleDelete = useCallback(() => {
-    if (selectedId === null) return;
+    if (selectedId === null || focusLocked) return;
     const candidates: number[] = [];
     for (const t of selectedKeyTimes) {
       if (!borderKeyTimes.has(t)) candidates.push(t);
@@ -774,7 +786,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       setSelectedKeyTimes(new Set());
       setOptimisticSelected(null);
     }).catch(() => { /* silent */ });
-  }, [bridge, selectedId, focusedChannel.trackName, selectedKeyTimes, borderKeyTimes]);
+  }, [bridge, selectedId, focusLocked, focusedChannel.trackName, selectedKeyTimes, borderKeyTimes]);
 
   const handleInterpolationClick = useCallback(
     (kind: InterpolationType) => {
@@ -922,10 +934,10 @@ export function CurveEditorPanel({ bridge }: Props) {
   // the same path the Time/Value spinners use for multi-selections.
   const handleGroupDragEnd = useCallback(
     (dTime: number, dValue: number) => {
-      if (dTime === 0 && dValue === 0) return;
+      if (focusLocked || (dTime === 0 && dValue === 0)) return;
       applyGroupShift(dTime, dValue);
     },
-    [applyGroupShift],
+    [focusLocked, applyGroupShift],
   );
 
   // Spinner display values + enablement. Single-key wins; otherwise the
@@ -934,7 +946,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   const spinnerTimeValue = singleSelected?.time ?? multiSelected?.avgTime ?? 0;
   const spinnerValueValue = singleSelected?.value ?? multiSelected?.avgValue ?? 0;
   const spinnersDisabled =
-    selectedId === null || (singleSelected === null && multiSelected === null);
+    selectedId === null || (singleSelected === null && multiSelected === null) || focusLocked;
   const timeSpinnerDisabled =
     spinnersDisabled ||
     (singleSelected !== null
@@ -945,7 +957,7 @@ export function CurveEditorPanel({ bridge }: Props) {
 
   const handleTimeSpinner = useCallback(
     (nextTime: number) => {
-      if (selectedId === null || focusedTrack === null) return;
+      if (selectedId === null || focusedTrack === null || focusLocked) return;
       // F8: multi-key → shift the group's times by (new avg − old avg).
       if (multiSelected !== null) {
         if (!multiSelected.editable) return;
@@ -981,12 +993,12 @@ export function CurveEditorPanel({ bridge }: Props) {
         },
       }).catch(() => { /* silent */ });
     },
-    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusedChannel.trackName, focusedTrack],
+    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusLocked, focusedChannel.trackName, focusedTrack],
   );
 
   const handleValueSpinner = useCallback(
     (nextValue: number) => {
-      if (selectedId === null) return;
+      if (selectedId === null || focusLocked) return;
       // F8: multi-key → shift the group's values by (new avg − old avg).
       if (multiSelected !== null) {
         const dValue = nextValue - multiSelected.avgValue;
@@ -1012,7 +1024,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         },
       }).catch(() => { /* silent */ });
     },
-    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusedChannel.trackName],
+    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusLocked, focusedChannel.trackName],
   );
 
   // ── Delete keyboard handler (window-scoped, TYPING_TAGS guard) ────
@@ -1068,12 +1080,6 @@ export function CurveEditorPanel({ bridge }: Props) {
     setSelectedKeyTimes(new Set());
     setOptimisticSelected(null);
   }, [bridge, selectedId, focusedChannel.trackName, lockToValue]);
-
-  // Locked-now flag: when the focus channel is currently a read-only
-  // alias of another channel, every edit affordance (Insert mode,
-  // interpolation toggle, Delete, drag, marquee) should be disabled.
-  // Lock dropdown itself stays enabled so the user can unlock.
-  const focusLocked = focusedTrack !== null && focusedTrack.lockedTo !== null;
 
   // Delete-button disabled state for the toolbar.
   const deletableCount = useMemo(() => {
@@ -1171,6 +1177,28 @@ export function CurveEditorPanel({ bridge }: Props) {
     return () => { window.removeEventListener("keydown", onKeyDown); };
   }, [handleCopyKeys, handleCutKeys, handlePasteKeys, selectedKeyTimes]);
 
+  // Read-only mirror (spec §2.1): a locked focus channel gets NO
+  // interactive handlers — drag, insert, key-click, marquee, and the
+  // key context menu are all selection/mutation gateways. onCanvasClick
+  // and onCanvasContextMenu stay wired (clear-selection / mode-drop UX).
+  // Renderer-side focusReadOnly gates are the second layer of the same
+  // defense (CurveEditor.tsx).
+  const interactiveHandlers = focusLocked
+    ? {}
+    : {
+        onKeyClick: handleKeyClick,
+        insertMode: mode === "insert",
+        onCanvasAdd: handleCanvasAdd,
+        onKeyContextMenu: (time: number, isBorder: boolean, x: number, y: number) =>
+          setKeyContextMenu({ time, isBorder, x, y }),
+        onKeyDragEnd: handleKeyDragEnd,
+        onKeyDragStart: handleKeyDragStart,
+        onKeyDragMove: handleKeyDragMove,
+        onKeyDragCancel: handleKeyDragCancel,
+        onGroupDragEnd: handleGroupDragEnd,
+        onCanvasMarqueeSelect: handleCanvasMarqueeSelect,
+      };
+
   return (
     <div
       data-testid="curve-editor-panel"
@@ -1195,39 +1223,54 @@ export function CurveEditorPanel({ bridge }: Props) {
           className="ce-toolbar"
         >
           {/* Mode toggle (Select / Insert) */}
-          <Tip content="Select (click a key to select; click empty area to clear)" occlusionId="tip:curve:select">
-            <button
-              type="button"
-              aria-label="Select tool"
-              aria-pressed={mode === "select"}
-              data-state={mode === "select" ? "on" : "off"}
-              data-testid="ce-tool-select"
-              onClick={() => setMode("select")}
-              className={
-                mode === "select"
-                  ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent"
-                  : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2"
-              }
-            >
-              <MousePointer2 className="size-3.5" aria-hidden="true" />
-            </button>
+          {/* T6: disabled buttons fire no pointer events, so the Tip rides an
+              inline-block span wrapper. Copy flips to the lock hint while
+              the channel is locked, mirroring the Delete button pattern. */}
+          <Tip
+            content={focusLocked ? "Channel is locked — unlock to edit" : "Select (click a key to select; click empty area to clear)"}
+            occlusionId="tip:curve:select"
+          >
+            <span className="inline-block">
+              <button
+                type="button"
+                aria-label="Select tool"
+                aria-pressed={mode === "select"}
+                data-state={mode === "select" ? "on" : "off"}
+                data-testid="ce-tool-select"
+                disabled={focusLocked}
+                onClick={() => setMode("select")}
+                className={
+                  mode === "select"
+                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40"
+                }
+              >
+                <MousePointer2 className="size-3.5" aria-hidden="true" />
+              </button>
+            </span>
           </Tip>
-          <Tip content="Insert (click empty canvas to add a key)" occlusionId="tip:curve:insert">
-            <button
-              type="button"
-              aria-label="Insert tool"
-              aria-pressed={mode === "insert"}
-              data-state={mode === "insert" ? "on" : "off"}
-              data-testid="ce-tool-insert"
-              onClick={() => setMode("insert")}
-              className={
-                mode === "insert"
-                  ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent"
-                  : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2"
-              }
-            >
-              <Plus className="size-3.5" aria-hidden="true" />
-            </button>
+          <Tip
+            content={focusLocked ? "Channel is locked — unlock to edit" : "Insert (click empty canvas to add a key)"}
+            occlusionId="tip:curve:insert"
+          >
+            <span className="inline-block">
+              <button
+                type="button"
+                aria-label="Insert tool"
+                aria-pressed={mode === "insert"}
+                data-state={mode === "insert" ? "on" : "off"}
+                data-testid="ce-tool-insert"
+                disabled={focusLocked}
+                onClick={() => setMode("insert")}
+                className={
+                  mode === "insert"
+                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40"
+                }
+              >
+                <Plus className="size-3.5" aria-hidden="true" />
+              </button>
+            </span>
           </Tip>
 
           <span className="mx-1 h-4 w-px bg-panel-2" aria-hidden />
@@ -1307,6 +1350,26 @@ export function CurveEditorPanel({ bridge }: Props) {
               </Select.Content>
             </Select.Portal>
           </Select.Root>
+
+          {/* Read-only mirror cue: a deliberate info glyph naming the master.
+              The dashed curve is the in-canvas signal; this is the worded one.
+              Non-interactive span (not a button) — the Tip carries the
+              explanation; the aria-label is the always-on accessible name. */}
+          {focusLocked && (
+            <Tip
+              content={`${focusedChannel.label} is locked to ${lockToValue} and shows ${lockToValue}'s curve. Unlock to edit.`}
+              occlusionId="tip:curve:lock"
+            >
+              <span
+                data-testid="ce-lock-glyph"
+                role="img"
+                aria-label={`${focusedChannel.label} is locked to ${lockToValue} — read-only`}
+                className="inline-flex h-6 items-center text-accent"
+              >
+                <Lock className="size-3.5" aria-hidden="true" />
+              </span>
+            </Tip>
+          )}
 
           <span className="mx-1 h-4 w-px bg-panel-2" aria-hidden />
 
@@ -1485,7 +1548,8 @@ export function CurveEditorPanel({ bridge }: Props) {
                 onGutterPointerDown={(e) => {
                   // Gutter press starts a marquee only in Select mode (Insert
                   // needs an in-plot coordinate, so a gutter press is a no-op).
-                  if (mode === "select") {
+                  // Locked focus: withheld entirely (no mutation on a read-only mirror).
+                  if (mode === "select" && !focusLocked) {
                     curveRef.current?.startMarquee(e.clientX, e.clientY, e.shiftKey, e.pointerId);
                   }
                 }}
@@ -1498,10 +1562,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                   focusChannel={focusChannel}
                   valueRange={unifiedRange}
                   selectedKeyTimes={selectedKeyTimes}
-                  onKeyClick={handleKeyClick}
                   onCanvasClick={handleCanvasClick}
-                  insertMode={mode === "insert"}
-                  onCanvasAdd={handleCanvasAdd}
                   onCanvasContextMenu={() => {
                     // an-audit-finding: mirror legacy WM_RBUTTONDOWN. In Insert mode a
                     // right-click drops back to Select mode without
@@ -1513,15 +1574,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                     setOptimisticSelected(null);
                     setSelectedKeyTimes((prev) => (prev.size === 0 ? prev : new Set()));
                   }}
-                  onKeyContextMenu={(time, isBorder, x, y) =>
-                    setKeyContextMenu({ time, isBorder, x, y })
-                  }
-                  onKeyDragEnd={handleKeyDragEnd}
-                  onKeyDragStart={handleKeyDragStart}
-                  onKeyDragMove={handleKeyDragMove}
-                  onKeyDragCancel={handleKeyDragCancel}
-                  onGroupDragEnd={handleGroupDragEnd}
-                  onCanvasMarqueeSelect={handleCanvasMarqueeSelect}
+                  {...interactiveHandlers}
                 />
               </CanvasWithAxisLabels>
             )}
@@ -1539,7 +1592,7 @@ export function CurveEditorPanel({ bridge }: Props) {
           onDelete={() => {
             const t = keyContextMenu.time;
             setKeyContextMenu(null);
-            if (selectedId === null) return;
+            if (selectedId === null || focusLocked) return;
             if (borderKeyTimes.has(t)) return;
             void bridge.request({
               kind: "emitters/delete-track-keys",

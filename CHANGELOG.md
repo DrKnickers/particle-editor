@@ -17,6 +17,71 @@ Conventions:
 ## Changelog
 
 
+### Locked curve channels are now genuinely read-only (dashed mirror treatment)
+
+*2026-06-11 · TODO-hash · #126*
+
+Locking a curve channel to an earlier one (Green/Blue → Red in the curve
+editor's "Lock to" dropdown) is a live one-way mirror: the follower
+displays and tracks the master's curve. Previously the lock was only
+half-enforced — a locked curve's keys could still be dragged, inserted,
+deleted, or spinner-edited, and because the lock shares the master's key
+storage, those edits silently mutated the master and moved the whole
+trio. Now a locked focus channel is fully inert: no drag, insert,
+marquee/click selection, Delete, cut, spinner commit, or context-menu
+delete can touch it. Visually the locked curve renders as a **dashed
+line in its own colour** (lying exactly over the dimmed master — the
+overlap *is* the mirror) with **hollow ring markers**, the Select/Insert
+tools disable, and a small **lock glyph** beside the Lock-to dropdown
+explains "Green is locked to Red… Unlock to edit" on hover. Editing the
+master still carries the followers live; unlocking restores the
+follower's own curve and full editing.
+
+**How we tackled it.** Three defensive layers, all web-side (the native
+pointer-alias model is untouched — once no follower edit path exists,
+the alias *is* the correct mirror). (1) The renderer
+([`src/screens/CurveEditor.tsx`](web/apps/editor/src/screens/CurveEditor.tsx:1195))
+derives `focusReadOnly` from the track DTO's `lockedTo` — no prop
+threaded — and gates `startDrag`/marquee/insert/context-menu/key-click
+at the gesture source, plus the dashed/hollow treatment
+(`READONLY_DASH`). (2) The panel
+([`src/components/CurveEditorPanel.tsx`](web/apps/editor/src/components/CurveEditorPanel.tsx:1186))
+withholds all ten interactive handler props via an `interactiveHandlers`
+spread when `focusLocked`. (3) Commit-site guards (`handleDelete`, both
+spinner handlers, the key-context-menu delete) refuse under
+`focusLocked` — the load-bearing defense for lock state changing
+*underneath* a live gesture (undo accelerators or `propagateLinkGroup`
+can deliver a lock via `tree/changed` refetch while a selection, an
+open context menu, or a half-typed spinner edit is in flight; the
+guards read current lock state at commit time). The mock bridge was
+redesigned from copy-at-lock to **derive-at-read**
+([`src/bridge/mock-state.ts`](web/apps/editor/src/bridge/mock-state.ts:1272)
+`deriveLockViews`, applied only at the `get-tracks` boundary): master
+edits now mirror live, unlock restores the canonical pre-lock curve,
+and chained locks (Blue→Green while Green→Red) present the
+intermediate channel's canonical content — all 1:1 with the native
+alias semantics.
+
+**Issues encountered and resolutions.** (1) The original design gated
+only drag + insert; review found **selection is the gateway** — marquee
+select still worked on a locked curve, exposing Delete, the spinners,
+and the context menu (none of which checked the lock). The sweep that
+followed produced the three-layer posture above. (2) The spinner guards
+are not redundant with the `disabled` attribute: `Spinner` commits on
+blur, so a value typed *before* the lock lands commits *after* it — a
+test pins exactly this. (3) `deriveLockViews` must be applied only at
+the read boundary, never inside the overlay's `read()` — the mutators
+read-modify-write through `read()`, and deriving there would bake the
+mirror into canonical data. (4) Known residual divergence (UI-
+unreachable): a direct bridge mutation addressed AT a locked follower
+edits the mock's hidden canonical, whereas native would route through
+the alias to the master; acceptable until something other than the UI
+drives the mock. (5) Tips on the newly-disableable Select/Insert
+buttons needed the T6 span shim (disabled elements fire no pointer
+events) with lock-aware copy — the Delete button's existing pattern.
+
+---
+
 ### Configurable preview overload guard (Preferences toggle + tunable cap)
 
 *2026-06-10 · [`bd52588`](https://github.com/DrKnickers/particle-editor/commit/bd52588) · #123*

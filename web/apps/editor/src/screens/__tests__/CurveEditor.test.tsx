@@ -544,3 +544,204 @@ describe("CurveEditor — gutter-initiated marquee (CRV multi-channel)", () => {
     expect(onCanvasClick).not.toHaveBeenCalled();
   });
 });
+
+// ─── Locked focus channel (read-only mirror) ─────────────────────────────────
+//
+// When the focus channel has lockedTo set, the renderer must:
+//   - mark the focus <g> with data-readonly="true"
+//   - dash the stroke and hollow the markers (visual signal)
+//   - suppress key drag and canvas marquee (gesture-inert)
+//   - still allow backdrop clicks through to onCanvasClick (clear-selection UX)
+
+const LOCK_RED_CHANNEL: ChannelDef = {
+  id: "red", label: "Red", color: "#FF0000", defaultOn: true, trackName: "red",
+};
+const LOCK_GREEN_CHANNEL: ChannelDef = {
+  id: "green", label: "Green", color: "#00FF00", defaultOn: true, trackName: "green",
+};
+
+function makeLockedTrack(name: "red" | "green", lockedTo: "red" | null): TrackDto {
+  return {
+    name,
+    keys: [
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 1 },
+    ],
+    interpolation: "linear",
+    lockedTo,
+  };
+}
+
+/** Render the multi-channel CurveEditor with red + green tracks, green
+ *  focused and optionally locked. Returns container + svg + backdrop. */
+function renderLockFixture(
+  greenLockedTo: "red" | null,
+  extras: Partial<React.ComponentProps<typeof CurveEditor>> = {},
+) {
+  const result = render(
+    <CurveEditor
+      tracks={[makeLockedTrack("red", null), makeLockedTrack("green", greenLockedTo)]}
+      channels={[LOCK_RED_CHANNEL, LOCK_GREEN_CHANNEL]}
+      visibleChannels={{ red: true, green: true }}
+      focusChannel="green"
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+      {...extras}
+    />,
+  );
+  const svg = result.container.querySelector(
+    "[data-testid='curve-editor-svg']",
+  ) as SVGSVGElement;
+  svg.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  const backdrop = result.container.querySelector(
+    "[data-testid='curve-canvas-backdrop']",
+  ) as SVGRectElement;
+  if (backdrop) {
+    backdrop.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  }
+  return { ...result, svg, backdrop };
+}
+
+describe("locked focus channel (read-only mirror)", () => {
+  it("dashed + hollow + data-readonly when locked", () => {
+    const { container } = renderLockFixture("red");
+    const focusG = container.querySelector(
+      '[data-channel-id="green"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    expect(focusG.getAttribute("data-readonly")).toBe("true");
+
+    const polyline = focusG.querySelector(
+      '[data-testid="curve-polyline"]',
+    ) as SVGPolylineElement;
+    expect(polyline).not.toBeNull();
+    expect(polyline.getAttribute("stroke-dasharray")).toBe("7 5");
+
+    const markers = focusG.querySelectorAll(".curve-key-marker");
+    expect(markers.length).toBeGreaterThan(0);
+    for (const m of markers) {
+      expect(m.getAttribute("fill")).toBe("none");
+      expect(m.getAttribute("stroke")).toBe(LOCK_GREEN_CHANNEL.color);
+    }
+  });
+
+  it("smooth interpolation on a locked focus also carries stroke-dasharray", () => {
+    // Re-render the locked fixture but with smooth interpolation so the
+    // renderer takes the <path data-testid="curve-path"> branch instead
+    // of the linear <polyline data-testid="curve-polyline"> branch.
+    const smoothRed: TrackDto = { ...makeLockedTrack("red", null), interpolation: "smooth" };
+    const smoothGreen: TrackDto = { ...makeLockedTrack("green", "red"), interpolation: "smooth" };
+    const { container } = render(
+      <CurveEditor
+        tracks={[smoothRed, smoothGreen]}
+        channels={[LOCK_RED_CHANNEL, LOCK_GREEN_CHANNEL]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="green"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+      />,
+    );
+    const focusG = container.querySelector(
+      '[data-channel-id="green"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    const path = focusG.querySelector('[data-testid="curve-path"]') as SVGPathElement | null;
+    expect(path).not.toBeNull();
+    expect(path!.getAttribute("stroke-dasharray")).toBe("7 5");
+  });
+
+  it("solid + filled when unlocked", () => {
+    const { container } = renderLockFixture(null);
+    const focusG = container.querySelector(
+      '[data-channel-id="green"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    expect(focusG.getAttribute("data-readonly")).toBe("false");
+
+    const polyline = focusG.querySelector('[data-testid="curve-polyline"]') as SVGPolylineElement;
+    expect(polyline).not.toBeNull();
+    expect(polyline.hasAttribute("stroke-dasharray")).toBe(false);
+
+    const markers = focusG.querySelectorAll(".curve-key-marker");
+    expect(markers.length).toBeGreaterThan(0);
+    for (const m of markers) {
+      expect(m.getAttribute("fill")).toBe(LOCK_GREEN_CHANNEL.color);
+    }
+  });
+
+  it("no drag on a locked focus key", () => {
+    const onKeyDragStart = vi.fn();
+    const onKeyDragEnd = vi.fn();
+    const { container, svg } = renderLockFixture("red", {
+      onKeyDragStart,
+      onKeyDragEnd,
+    });
+    const hitPads = container.querySelectorAll('[data-testid="curve-key"][data-channel-id="green"]');
+    expect(hitPads.length).toBeGreaterThan(0);
+    const pad = container.querySelector('[data-testid="curve-key"][data-key-time="50"]') as SVGCircleElement;
+    expect(pad).not.toBeNull();
+    // Pointer-down on the middle key hit-pad.
+    fireEvent.pointerDown(pad, { pointerId: 50, button: 0, clientX: 300, clientY: 150 });
+    // Pointer-move past slop on the SVG.
+    fireEvent.pointerMove(svg, { pointerId: 50, clientX: 200, clientY: 100 });
+    // Pointer-up.
+    fireEvent.pointerUp(svg, { pointerId: 50, clientX: 200, clientY: 100 });
+    expect(onKeyDragStart).not.toHaveBeenCalled();
+    expect(onKeyDragEnd).not.toHaveBeenCalled();
+  });
+
+  it("no marquee on a locked focus canvas, click still clears", () => {
+    const onCanvasMarqueeSelect = vi.fn();
+    const onCanvasClick = vi.fn();
+    const { container, svg, backdrop } = renderLockFixture("red", {
+      onCanvasMarqueeSelect,
+      onCanvasClick,
+    });
+    // Pointer-down on backdrop then move past slop.
+    fireEvent.pointerDown(backdrop, { pointerId: 51, button: 0, clientX: 100, clientY: 50 });
+    fireEvent.pointerMove(svg, { pointerId: 51, clientX: 400, clientY: 250 });
+    // No marquee rect should have mounted.
+    expect(container.querySelector('[data-testid="curve-marquee"]')).toBeNull();
+    fireEvent.pointerUp(svg, { pointerId: 51, clientX: 400, clientY: 250 });
+    expect(onCanvasMarqueeSelect).not.toHaveBeenCalled();
+    // Plain click on the backdrop should still fire onCanvasClick.
+    fireEvent.click(backdrop);
+    expect(onCanvasClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("insertMode + locked focus: pointer-down does NOT call onCanvasAdd", () => {
+    // Fix 1: the focusReadOnly guard is hoisted before the insertMode branch,
+    // so insert is suppressed on a locked canvas even when insertMode=true.
+    const onCanvasAdd = vi.fn();
+    const { backdrop } = renderLockFixture("red", {
+      insertMode: true,
+      onCanvasAdd,
+    });
+    fireEvent.pointerDown(backdrop, { pointerId: 60, button: 0, clientX: 180, clientY: 90 });
+    expect(onCanvasAdd).not.toHaveBeenCalled();
+  });
+
+  it("right-click and click on a locked hit pad do NOT invoke onKeyContextMenu / onKeyClick", () => {
+    // Fixes 2 + 3: context-menu and click handlers bail immediately when
+    // focusReadOnly, so the callbacks are never reached.
+    const onKeyContextMenu = vi.fn();
+    const onKeyClick = vi.fn();
+    const { container } = renderLockFixture("red", {
+      onKeyContextMenu,
+      onKeyClick,
+    });
+    const pad = container.querySelector(
+      '[data-testid="curve-key"][data-channel-id="green"][data-key-time="50"]',
+    ) as SVGCircleElement;
+    expect(pad).not.toBeNull();
+    fireEvent.contextMenu(pad);
+    expect(onKeyContextMenu).not.toHaveBeenCalled();
+    fireEvent.click(pad);
+    expect(onKeyClick).not.toHaveBeenCalled();
+  });
+});

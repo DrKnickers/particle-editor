@@ -1495,6 +1495,99 @@ describe("MockBridge dirty-bit for batch structural mutations", () => {
   });
 });
 
+describe("emitters/set-track-lock — read aliasing (native parity)", () => {
+  // These tests pin the DERIVE-AT-READ semantics: a locked channel is a live
+  // view of its master's CANONICAL content, not a stale copy taken at lock
+  // time. Three invariants that must all hold simultaneously:
+  //   1. Master edits AFTER the lock are visible through the follower.
+  //   2. Unlock restores the follower's own pre-lock canonical content.
+  //   3. Chained locks (blue→green while green→red) present green's
+  //      CANONICAL content, not the mirror green currently displays.
+
+  it("Mirror after master edit: green reflects red keys added after lock", async () => {
+    const b = new MockBridge();
+    // Lock green → red on emitter id 1.
+    await b.request({
+      kind: "emitters/set-track-lock",
+      params: { id: 1, channel: "green", lockTo: "red" },
+    });
+    // Add a key on RED after the lock (time=42, value=0.42).
+    await b.request({
+      kind: "emitters/add-track-key",
+      params: { id: 1, track: "red", time: 42, value: 0.42 },
+    });
+    const r = await b.request({ kind: "emitters/get-tracks", params: { id: 1 } });
+    const green = r.tracks.find((t) => t.name === "green");
+    const red   = r.tracks.find((t) => t.name === "red");
+    expect(green?.lockedTo).toBe("red");
+    // green must mirror red's current keys exactly.
+    expect(green?.keys).toEqual(red?.keys);
+    // The key added after the lock must appear in green.
+    expect(green?.keys.some((k) => k.time === 42)).toBe(true);
+  });
+
+  it("Unlock restores: green regains its own pre-lock canonical keys", async () => {
+    const b = new MockBridge();
+    // Capture green's canonical keys BEFORE locking.
+    const before = await b.request({ kind: "emitters/get-tracks", params: { id: 1 } });
+    const preLockGreenKeys = before.tracks.find((t) => t.name === "green")!.keys;
+
+    // Lock green → red.
+    await b.request({
+      kind: "emitters/set-track-lock",
+      params: { id: 1, channel: "green", lockTo: "red" },
+    });
+    // Add a key on red so the locked state diverges from the pre-lock snapshot.
+    await b.request({
+      kind: "emitters/add-track-key",
+      params: { id: 1, track: "red", time: 77, value: 0.77 },
+    });
+
+    // Unlock green (lockTo: null).
+    await b.request({
+      kind: "emitters/set-track-lock",
+      params: { id: 1, channel: "green", lockTo: null },
+    });
+
+    const after = await b.request({ kind: "emitters/get-tracks", params: { id: 1 } });
+    const greenAfter = after.tracks.find((t) => t.name === "green");
+    expect(greenAfter?.lockedTo).toBeNull();
+    // green's keys must match the pre-lock snapshot exactly.
+    expect(greenAfter?.keys).toEqual(preLockGreenKeys);
+  });
+
+  it("Chained lock: blue→green presents green's CANONICAL keys (not red mirror)", async () => {
+    const b = new MockBridge();
+    // Capture green's pre-lock canonical keys.
+    const before = await b.request({ kind: "emitters/get-tracks", params: { id: 1 } });
+    const greenCanonicalKeys = before.tracks.find((t) => t.name === "green")!.keys;
+
+    // Lock green → red (green now displays red's content).
+    await b.request({
+      kind: "emitters/set-track-lock",
+      params: { id: 1, channel: "green", lockTo: "red" },
+    });
+    // Mutate red so green's displayed mirror diverges from green's canonical.
+    await b.request({
+      kind: "emitters/add-track-key",
+      params: { id: 1, track: "red", time: 55, value: 0.55 },
+    });
+
+    // Lock blue → green. The alias must follow green's CANONICAL content
+    // (what trackContents[green] holds), NOT the red mirror green displays.
+    await b.request({
+      kind: "emitters/set-track-lock",
+      params: { id: 1, channel: "blue", lockTo: "green" },
+    });
+
+    const r = await b.request({ kind: "emitters/get-tracks", params: { id: 1 } });
+    const blue = r.tracks.find((t) => t.name === "blue");
+    expect(blue?.lockedTo).toBe("green");
+    // blue must show green's pre-lock (canonical) keys, NOT red's keys.
+    expect(blue?.keys).toEqual(greenCanonicalKeys);
+  });
+});
+
 describe("emitter tree spawn params ()", () => {
   //: tree nodes must mirror the LIVE spawn values from the
   // properties overlay (fixture defaults + set-properties patches), not

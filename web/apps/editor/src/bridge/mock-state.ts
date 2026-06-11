@@ -1225,11 +1225,12 @@ export function deleteTrackKeysInOverlay(
  *    - Only RGBA channels participate (channelIdx 0..3).
  *    - Only earlier-channel targets are valid (channelIdx > targetIdx,
  *      both in 0..3). Anything else is silently treated as unlock.
- *    - When locked, the locked channel's keys array is overwritten to
- *      mirror the target's keys, and `lockedTo` is set on the locked
- *      channel's DTO; the native side does this by pointer alias, the
- *      mock by copy + an explicit field. The locked channel's edit
- *      surface should treat it as read-only.
+ *    - The overlay stores ONLY `lockedTo`; the canonical keys are
+ *      NEVER overwritten by a lock/unlock. Locked-channel views are
+ *      derived at read time (see `deriveLockViews`), matching the
+ *      native pointer-alias semantics where `tracks[i] = &trackContents[j]`
+ *      — the master's edits are instantly visible through the follower,
+ *      and `trackContents[i]` is preserved intact throughout the lock.
  *  Returns true when the state actually changed (write happened). */
 export function setTrackLockInOverlay(
   id: number,
@@ -1251,37 +1252,34 @@ export function setTrackLockInOverlay(
   const target = cur[channelIdx]!;
   if (target.lockedTo === resolvedLockTo) return false; // no-op
 
-  let nextTracks: TrackDto[];
-  if (resolvedLockTo === null) {
-    // Unlock — restore lockedTo: null. Keep the channel's current
-    // keys (the mock doesn't preserve pre-lock data separately;
-    // this matches a "locked-while-target-changes" path on the
-    // native side too, since the locked channel's own
-    // `trackContents[i]` is preserved unmodified during the lock
-    // and re-appears verbatim on unlock).
-    nextTracks = cur.map((t, i) =>
-      i === channelIdx ? { ...t, lockedTo: null } : t,
-    );
-  } else {
-    // Lock — mirror the target's keys + interpolation so the React
-    // side renders identical curves (native does this via pointer
-    // alias; mock does it by copy because the overlay stores keys
-    // per channel, not per shared Track object).
-    const sourceIdx = cur.findIndex((t) => t.name === resolvedLockTo);
-    const source = cur[sourceIdx]!;
-    nextTracks = cur.map((t, i) =>
-      i === channelIdx
-        ? {
-            ...t,
-            keys: source.keys.map((k) => ({ ...k })),
-            interpolation: source.interpolation,
-            lockedTo: resolvedLockTo,
-          }
-        : t,
-    );
-  }
+  // Write ONLY the lockedTo field — canonical keys are untouched in both the
+  // lock and unlock paths. The live view is derived at the get-tracks read
+  // boundary via `deriveLockViews`.
+  const nextTracks = cur.map((t, i) =>
+    i === channelIdx ? { ...t, lockedTo: resolvedLockTo } : t,
+  );
   useMockTrackOverlay.getState().write(id, nextTracks);
   return true;
+}
+
+/** Present locked channels as views of their master's CANONICAL
+ *  content — the mock equivalent of the native pointer alias
+ *  (tracks[i] = &trackContents[j]). Pure; applied at the
+ *  emitters/get-tracks read boundary ONLY. Mutators must keep
+ *  operating on canonical overlay data — deriving inside the
+ *  overlay's read() would bake mirrors into canonical on the next
+ *  read-modify-write. */
+export function deriveLockViews(tracks: TrackDto[]): TrackDto[] {
+  return tracks.map((t, i) => {
+    if (i >= 4 || t.lockedTo == null) return t;
+    const src = tracks.find((s) => s.name === t.lockedTo);
+    if (src === undefined) return t;
+    return {
+      ...t,
+      keys: src.keys.map((k) => ({ ...k })),
+      interpolation: src.interpolation,
+    };
+  });
 }
 
 /** Set `track.interpolation = interp` on emitter `id`. Always succeeds
