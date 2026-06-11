@@ -89,6 +89,24 @@ describe("Modal", () => {
     expect(content.className).not.toContain("shadow-2xl");
   });
 
+  it("uses the motion classes, not the dead animate-in utilities", () => {
+    // The old `data-[state=open]:animate-in` utilities came from the
+    // tailwindcss-animate plugin, which this Tailwind v4 build does NOT
+    // load — they generated zero CSS (see components.css's popover
+    // section note). replaced them with real keyframe classes.
+    render(
+      <Modal open onOpenChange={() => {}} title="Test Modal">
+        <Modal.Body>body</Modal.Body>
+      </Modal>
+    );
+    const content = screen.getByRole("dialog");
+    expect(content.className).toContain("modal-animate");
+    expect(content.className).not.toContain("animate-in");
+    const overlay = screen.getByTestId("modal-overlay");
+    expect(overlay.className).toContain("modal-overlay-animate");
+    expect(overlay.className).not.toContain("animate-in");
+  });
+
   it("dispatches viewport/capture-snapshot + full-quadrant occlude on open and clears occlusion on close", async () => {
     // B1.3.1.1: the frosted-glass backdrop replaces the old modal-mask
     // approach (which dimmed engine pixels server-side and produced

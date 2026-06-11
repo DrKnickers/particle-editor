@@ -14,6 +14,7 @@
 //   Items with no callback render as disabled.
 
 import * as ContextMenu from "@radix-ui/react-context-menu";
+import { Tip } from "./Tip";
 import type { SpinnerDensity } from "./Spinner";
 
 export type TextureItem = {
@@ -68,38 +69,44 @@ export function TexturePalette({
         const selected = value === item.path;
         return (
           <ContextMenu.Root key={item.path}>
-            <ContextMenu.Trigger asChild>
-              <button
-                type="button"
-                role="option"
-                aria-selected={selected}
-                aria-label={item.label ?? item.path}
-                title={item.label ?? item.path}
-                onClick={() => onChange(item.path)}
-                className={`relative overflow-hidden rounded border-2 transition focus:outline-none focus:ring-1 focus:ring-accent ${
-                  selected
-                    ? "border-accent"
-                    : "border-border-2 hover:border-border-2"
-                }`}
-                style={{ width: cellSize, height: cellSize }}
-              >
-                {item.thumbnailSrc !== null ? (
-                  <img
-                    src={item.thumbnailSrc}
-                    alt={item.label ?? item.path}
-                    className="h-full w-full object-cover"
-                    draggable={false}
-                  />
-                ) : (
-                  <MissingPlaceholder size={cellSize - 4} />
-                )}
-                {item.label && (
-                  <span className="absolute inset-x-0 bottom-0 truncate bg-bg/80 px-0.5 text-center text-[9px] text-text">
-                    {item.label}
-                  </span>
-                )}
-              </button>
-            </ContextMenu.Trigger>
+            {/* Tip wraps the ContextMenu.Trigger (not the button inside it) —
+                Tooltip.Trigger asChild around another Radix trigger is the
+                blessed nesting; both forward their props down to the button.
+                Static occlusionId on grid cells is safe: only ONE tooltip is
+                ever open at a time (app-level Radix Tooltip.Provider). */}
+            <Tip content={item.label ?? item.path} occlusionId="tip:texpal:item">
+              <ContextMenu.Trigger asChild>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  aria-label={item.label ?? item.path}
+                  onClick={() => onChange(item.path)}
+                  className={`relative overflow-hidden rounded border-2 transition focus:outline-none focus:ring-1 focus:ring-accent ${
+                    selected
+                      ? "border-accent"
+                      : "border-border-2 hover:border-border-2"
+                  }`}
+                  style={{ width: cellSize, height: cellSize }}
+                >
+                  {item.thumbnailSrc !== null ? (
+                    <img
+                      src={item.thumbnailSrc}
+                      alt={item.label ?? item.path}
+                      className="h-full w-full object-cover"
+                      draggable={false}
+                    />
+                  ) : (
+                    <MissingPlaceholder size={cellSize - 4} />
+                  )}
+                  {item.label && (
+                    <span className="absolute inset-x-0 bottom-0 truncate bg-bg/80 px-0.5 text-center text-[9px] text-text">
+                      {item.label}
+                    </span>
+                  )}
+                </button>
+              </ContextMenu.Trigger>
+            </Tip>
 
             <ContextMenu.Portal>
               <ContextMenu.Content

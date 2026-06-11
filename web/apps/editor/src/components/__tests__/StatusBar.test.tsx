@@ -55,8 +55,10 @@ describe("StatusBar", () => {
   });
 
   // Preview spawn-overload guard (plan part 2 §3): while stats/tick
-  // reports overload=true, the Particles readout tints amber and carries
-  // an explanatory title; it reverts when the overload clears.
+  // reports overload=true, the Particles readout tints amber; it reverts
+  // when the overload clears. feel test]: the readout is a passive
+  // non-button, so it carries NO tooltip — the OverloadBanner over the
+  // viewport states the cause.
   it("tints the particle count amber while overloaded", () => {
     const { bridge, emit } = makeBridge();
     render(<StatusBar bridge={bridge} />);
@@ -67,14 +69,9 @@ describe("StatusBar", () => {
     emit("stats/tick", tick(true));
     const value = screen.getByText("16384");
     expect(value.className).toContain("text-amber-400");
-    expect(value).toHaveAttribute(
-      "title",
-      "preview spawn limit reached — spawning paused",
-    );
 
     emit("stats/tick", tick(false));
     const cleared = screen.getByText("16384");
     expect(cleared.className).not.toContain("text-amber-400");
-    expect(cleared).not.toHaveAttribute("title");
   });
 });

@@ -185,10 +185,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
           {/* Source file row */}
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-text-2">Source file:</span>
-            <span
-              title={sourcePath ?? undefined}
-              className="flex-1 truncate rounded border border-border bg-bg px-2 py-1 text-xs text-text-2"
-            >
+            <span className="flex-1 truncate rounded border border-border bg-bg px-2 py-1 text-xs text-text-2">
               {sourcePath ? basename(sourcePath) : "(not selected)"}
             </span>
             <button

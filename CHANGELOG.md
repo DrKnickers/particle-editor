@@ -17,6 +17,120 @@ Conventions:
 ## Changelog
 
 
+### Configurable preview overload guard (Preferences toggle + tunable cap)
+
+*2026-06-10 · `TODO` · #123*
+
+The preview overload guard shipped in #121 (which stops an extreme effect from
+OOM-crashing the editor) is now configurable from **Preferences → Preview**.
+The live-particle ceiling defaults to **15,000** — well under the old fixed
+100k, so the preview stays light — and is adjustable in a number field
+(1,000–1,000,000). A **"Limit preview particle count"** checkbox turns the
+guard off entirely: spawning then runs fully uncapped (the pre-#121 behavior),
+which *can* OOM the editor on an extreme effect — an amber line under the
+toggle says so, and autosave is the backstop. The setting persists and applies
+at startup; the instance ceiling derives from the particle cap (the same 20:1
+ratio #121 used, so the default allows 750 live instances).
+
+**How we tackled it.** The engine's compile-time budget constants became
+runtime members behind one clamped setter
+([`Engine::SetOverloadGuard`](src/engine.cpp:232)); the per-particle / per-round
+spawn gates short-circuit to "allow" when the guard is disabled, and the
+`Update` refill + latch block are skipped — so "uncapped" records no refusals
+and never lights the banner. "Bail earlier" needed no new code: a lower cap
+makes the existing `SpawnBudgetExhausted` bail engage sooner. One new bridge
+command [`engine/set/overload-guard`](web/packages/bridge-schema/src/index.ts:606)
+carries `{ enabled, maxParticles }`; the web owns persistence
+([`lib/overload-guard.ts`](web/apps/editor/src/lib/overload-guard.ts:1), the
+`lib/theme.ts` localStorage pattern) and pushes the config on every change and
+once at app mount. `BridgeDispatcher` caches the last config and reapplies it
+on `SetEngine` so a recreated engine never silently reverts (insurance — the
+engine is constructed once per process today).
+
+**Issues encountered and resolutions.** (1) The clamp is duplicated across the
+web lib, and the engine setter — deliberate: the bridge schema is a TypeScript
+type-union with **no runtime validation**, so the engine must not trust its
+caller (a cap of 0 would zero the spawn budget forever and read as "editor
+broken"). (2) The `readOverloadGuard()` default paths returned the shared
+module constant by reference; `Object.freeze` on it closes the
+mutate-the-singleton hazard. (3) The native regression specs couldn't be pinned
+to 100k as first planned — a 100k particle plateau OOM-crashes the *Debug test
+host* at the tail of the full 178-spec single-process harness run (cumulative
+heap pressure, not an engine fault — the enabled path is byte-equivalent to
+#121's 100k behavior). Pinned the existing bomb tests to the default cap and added three
+new specs (cap honored at 5k, mid-run lowering decays to the new ceiling,
+disabled = no latch on a moderate effect). Verified: web 700, `tsc -b` 0,
+native 180/0, host Debug x64 clean.
+
+---
+
+### Styled, animated tooltips app-wide + one motion family for modal and banner
+
+*2026-06-10 · `TODO` · #123*
+
+Interactive controls (buttons, toolbar glyphs, the emitter-tree affordances)
+now carry a styled, animated tooltip instead of a native HTML `title` —
+themed surface with a soft drop shadow that adapts to dark/light mode, a
+fade + 4px slip entrance/exit, a 400 ms first-open delay that collapses to
+instant when sweeping across controls, and full `prefers-reduced-motion`
+support. Passive readouts (property-tab labels, the status-bar counts) carry
+no tooltip — they don't need one. The heavy-emitter ⚠ glyph gained a
+rich tooltip: an amber header band stating plainly *"This chain may spawn
+too many particles"* (or *"…emitter…"* when a single emitter pins the
+threshold on its own) over an aligned per-generation breakdown. The same motion
+family now animates the Modal (fade + 8 px rise; its previous entrance
+classes were silent no-ops) and the preview-overload banner (fade + 6 px
+drop, soft shadow replacing the old hard ring), driven by shared
+`--motion-*` / `--slip-*` / `--shadow-soft` tokens in
+[`src/styles/tokens.css`](web/apps/editor/src/styles/tokens.css:48).
+
+**How we tackled it.** One `Tip` primitive
+([`src/primitives/Tip.tsx`](web/apps/editor/src/primitives/Tip.tsx:1)) on
+`@radix-ui/react-tooltip` (asChild trigger, portaled content), with motion
+as hand-rolled CSS keyframes keyed to Radix `data-state`/`data-side` — the
+shipped `popover-animate` pattern extended, no animation library. Two
+architectural points worth remembering: (1) tooltips are portaled DOM, so
+any site whose tooltip can reach the D3D-composited viewport popup
+registers `useViewportOcclusion` via an opt-in `occlusionId` prop (the
+OccludingPopover precedent), and (2) Radix Tooltip renders its content
+TWICE (visible + a VisuallyHidden a11y duplicate), so the occlusion body
+arms only for the visible copy via a `closest('[role="tooltip"]')`
+discriminator — without it the hidden copy clobbers the occlusion rect.
+The ~45-site sweep used six per-site classes (keep/add `aria-label`,
+truncation labels get NO added label so a11y goldens stay byte-stable,
+titles inside Radix menus deleted as redundant, disabled controls get a
+span shim because they fire no pointer events). The OverloadBanner's exit
+plays through a new generic `usePresence` hook
+([`src/lib/use-presence.ts`](web/apps/editor/src/lib/use-presence.ts:1)) —
+animationend unmount with a timeout fallback so reduced-motion (which
+fires no animationend) can never leak the banner's occlusion registration.
+
+**Issues encountered and resolutions.** Three gotchas a future contributor
+would step on. (1) Radix Tooltip's `data-state` vocabulary is
+`delayed-open`/`instant-open`/`closed` — NOT Dialog/Popover's `open`;
+verified against the installed dist before writing the CSS selectors.
+(2) The `?demo=` routes return before the AppShell and so bypassed the
+app-level `Tooltip.Provider` — `Tooltip.Root` throws without one, which
+white-screened `?demo=primitives` in the native harness; every demo
+return is now Provider-wrapped. (3) Keyboard-focus a11y goldens flaked:
+tabbing opens the focused control's tooltip (deterministic) but the
+PREVIOUS stop's tooltip is mid-exit-animation at snapshot time —
+sometimes mounted, sometimes not. `captureDomA11y` now settles
+(`waitForFunction` for no `.tip-animate[data-state="closed"]`) before
+capturing; the only legitimate golden delta is tab-stop-2's open tooltip,
+and regenerating goldens via a single-test `--grep` is invalid anyway
+(earlier spec files establish selection state — regenerate from the full
+run only). (4, found at the user feel test) The modal and overload banner
+spawned mis-centered and snapped into place mid-animation: Tailwind v4
+compiles `-translate-x/y-1/2` to the standalone CSS `translate` PROPERTY,
+not `transform`, so keyframes that repeated `translate(-50%, …)` inside
+`transform` double-shifted the surface; the keyframes now slip via
+`transform` only and leave centering to the `translate` property (the two
+compose). Verified: web 688, `tsc -b` 0, native 177/0, host Debug x64
+clean; modal + banner centering reconfirmed in-browser.
+
+---
+
 ### Preview overload guard: the editor survives any spawn parameters
 
 *2026-06-10 · [`2ed99d5`](https://github.com/DrKnickers/particle-editor/commit/2ed99d5) · #121*

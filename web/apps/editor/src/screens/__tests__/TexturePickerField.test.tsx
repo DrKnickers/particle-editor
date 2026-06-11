@@ -11,9 +11,19 @@
 // `textures/palette/touch-recent` so recents stay warm (legacy parity).
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent, waitFor } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import { TexturePickerField } from "../EmitterPropertyTabs";
 import type { Bridge } from "@particle-editor/bridge-schema";
+
+//: TexturePickerField mounts Tips (Radix Tooltip.Root) on its label
+// and buttons, which require the app-level Tooltip.Provider — wrapper stands
+// in for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 function makeBridge() {
   const request = vi

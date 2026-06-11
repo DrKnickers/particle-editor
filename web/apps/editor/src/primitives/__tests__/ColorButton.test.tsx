@@ -5,10 +5,20 @@
 // (before/after swatch, editable R/G/B inputs, Enter-in-hex commits + closes).
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import { ColorButton } from "../ColorButton";
 import { usePaletteStore } from "../palette-store";
+
+//: the swatch grids mount Tips (Radix Tooltip.Root), which require
+// the app-level Tooltip.Provider — wrapper stands in for it (precedent:
+// renderToolbar in Toolbar.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 const RED = { r: 255, g: 0, b: 0 };
 

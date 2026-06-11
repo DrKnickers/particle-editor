@@ -126,7 +126,7 @@ int ParticleSystemInstance::Kill()
 EmitterInstance* ParticleSystemInstance::SpawnEmitter(TimeF currentTime, size_t idxEmitter, Object3D* parent)
 {
     // Overload guard: refuse new instances past the engine-wide cap
-    // (see engine.h kMaxLiveEmitterInstances) — chain multiplication
+    // (see engine.h kDefaultMaxPreviewParticles) — chain multiplication
     // allocates a whole EmitterInstance per spawned particle, so this
     // is the second OOM choke point besides the particle budget. Every
     // caller tolerates nullptr (child links are null-checked; the ctor

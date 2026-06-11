@@ -52,6 +52,7 @@ import type {
 } from "@particle-editor/bridge-schema";
 import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "@/screens/CurveEditor";
 import { Spinner } from "@/primitives/Spinner";
+import { Tip } from "@/primitives/Tip";
 import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
@@ -1194,38 +1195,40 @@ export function CurveEditorPanel({ bridge }: Props) {
           className="ce-toolbar"
         >
           {/* Mode toggle (Select / Insert) */}
-          <button
-            type="button"
-            aria-label="Select tool"
-            aria-pressed={mode === "select"}
-            data-state={mode === "select" ? "on" : "off"}
-            data-testid="ce-tool-select"
-            onClick={() => setMode("select")}
-            title="Select (click a key to select; click empty area to clear)"
-            className={
-              mode === "select"
-                ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent"
-                : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2"
-            }
-          >
-            <MousePointer2 className="size-3.5" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="Insert tool"
-            aria-pressed={mode === "insert"}
-            data-state={mode === "insert" ? "on" : "off"}
-            data-testid="ce-tool-insert"
-            onClick={() => setMode("insert")}
-            title="Insert (click empty canvas to add a key)"
-            className={
-              mode === "insert"
-                ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent"
-                : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2"
-            }
-          >
-            <Plus className="size-3.5" aria-hidden="true" />
-          </button>
+          <Tip content="Select (click a key to select; click empty area to clear)" occlusionId="tip:curve:select">
+            <button
+              type="button"
+              aria-label="Select tool"
+              aria-pressed={mode === "select"}
+              data-state={mode === "select" ? "on" : "off"}
+              data-testid="ce-tool-select"
+              onClick={() => setMode("select")}
+              className={
+                mode === "select"
+                  ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent"
+                  : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2"
+              }
+            >
+              <MousePointer2 className="size-3.5" aria-hidden="true" />
+            </button>
+          </Tip>
+          <Tip content="Insert (click empty canvas to add a key)" occlusionId="tip:curve:insert">
+            <button
+              type="button"
+              aria-label="Insert tool"
+              aria-pressed={mode === "insert"}
+              data-state={mode === "insert" ? "on" : "off"}
+              data-testid="ce-tool-insert"
+              onClick={() => setMode("insert")}
+              className={
+                mode === "insert"
+                  ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent"
+                  : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2"
+              }
+            >
+              <Plus className="size-3.5" aria-hidden="true" />
+            </button>
+          </Tip>
 
           <span className="mx-1 h-4 w-px bg-panel-2" aria-hidden />
 
@@ -1235,24 +1238,24 @@ export function CurveEditorPanel({ bridge }: Props) {
             const isActive = focusedTrack?.interpolation === kind;
             const label = kind[0]!.toUpperCase() + kind.slice(1);
             return (
-              <button
-                key={kind}
-                type="button"
-                disabled={interpDisabled}
-                aria-label={`Interpolation ${kind}`}
-                aria-pressed={isActive}
-                data-state={isActive ? "on" : "off"}
-                data-testid={`ce-interp-${kind}`}
-                onClick={() => handleInterpolationClick(kind)}
-                title={`${label} interpolation`}
-                className={
-                  isActive
-                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent"
-                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40"
-                }
-              >
-                {INTERP_ICONS[kind]}
-              </button>
+              <Tip key={kind} content={`${label} interpolation`} occlusionId={`tip:curve:interp-${kind}`}>
+                <button
+                  type="button"
+                  disabled={interpDisabled}
+                  aria-label={`Interpolation ${kind}`}
+                  aria-pressed={isActive}
+                  data-state={isActive ? "on" : "off"}
+                  data-testid={`ce-interp-${kind}`}
+                  onClick={() => handleInterpolationClick(kind)}
+                  className={
+                    isActive
+                      ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent"
+                      : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40"
+                  }
+                >
+                  {INTERP_ICONS[kind]}
+                </button>
+              </Tip>
             );
           })}
 
@@ -1310,21 +1313,30 @@ export function CurveEditorPanel({ bridge }: Props) {
           {/* Delete action — useful as a visible affordance even
               with the Delete key wired (discoverability + works in
               browsers with the key intercepted by extensions). */}
-          <button
-            type="button"
-            disabled={deleteDisabled}
-            aria-label="Delete selected keys"
-            data-testid="ce-action-delete"
-            onClick={handleDelete}
-            title={deleteDisabled ? "Select a non-border key first" : "Delete selected key(s)"}
-            className={
-              deleteDisabled
-                ? "grid h-6 w-6 place-items-center rounded border border-border bg-bg-2/60 text-text-3"
-                : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-rose-500 hover:text-rose-300"
-            }
+          {/* T6: the "Select a non-border key first" hint only matters while
+              the button is DISABLED — disabled elements fire no pointer
+              events, so the Tip rides an inline-block span wrapper. */}
+          <Tip
+            content={deleteDisabled ? "Select a non-border key first" : "Delete selected key(s)"}
+            occlusionId="tip:curve:delete"
           >
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </button>
+            <span className="inline-block">
+              <button
+                type="button"
+                disabled={deleteDisabled}
+                aria-label="Delete selected keys"
+                data-testid="ce-action-delete"
+                onClick={handleDelete}
+                className={
+                  deleteDisabled
+                    ? "grid h-6 w-6 place-items-center rounded border border-border bg-bg-2/60 text-text-3"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-rose-500 hover:text-rose-300"
+                }
+              >
+                <Trash2 className="size-3.5" aria-hidden="true" />
+              </button>
+            </span>
+          </Tip>
 
           <div className="flex-1" />
 
@@ -1598,17 +1610,27 @@ function KeyContextMenu({
       className="fixed z-50 min-w-[140px] rounded-md border border-border-2 bg-bg-2 p-1 text-xs text-text shadow-xl"
       style={{ left: x, top: y }}
     >
-      <button
-        type="button"
-        role="menuitem"
-        data-testid="ce-key-context-menu-delete"
-        onClick={onDelete}
-        disabled={isBorder}
-        title={isBorder ? "Border keys cannot be deleted" : undefined}
-        className="block w-full rounded px-2 py-1 text-left hover:bg-panel-2 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none"
+      {/* T6 + T4: the tooltip only exists while the item is DISABLED
+          (border key) — disabled elements fire no pointer events, so the
+          Tip rides a block span wrapper (block, not inline-block, to keep
+          the menu item full-width). */}
+      <Tip
+        content={isBorder ? "Border keys cannot be deleted" : undefined}
+        occlusionId="tip:curve:key-menu-delete"
       >
-        Delete
-      </button>
+        <span className="block w-full">
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="ce-key-context-menu-delete"
+            onClick={onDelete}
+            disabled={isBorder}
+            className="block w-full rounded px-2 py-1 text-left hover:bg-panel-2 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none"
+          >
+            Delete
+          </button>
+        </span>
+      </Tip>
     </div>
   );
 }

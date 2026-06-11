@@ -81,6 +81,9 @@ function isMutating(kind: Request["kind"]): boolean {
   // save-prompt gates. Native host applies the same rule in
   // BridgeDispatcher.cpp.
   if (kind === "engine/set/paused") return false;
+  // [guard-config] View-only preview setting — same rule as paused;
+  // native host mirrors this (handler never marks dirty).
+  if (kind === "engine/set/overload-guard") return false;
   if (kind === "engine/set/heat-debug") return false;
   // T9] stats/set-frozen is a test-only knob; never mutating.
   if (kind === "stats/set-frozen") return false;
@@ -210,6 +213,10 @@ export class MockBridge implements Bridge {
    *  memory, defaulting to the legacy `kLightForceAlignDefault = true`.
    *  Read by `settings/lighting-force-align`, written by `…/set`. */
   private lightingForceAlign = true;
+
+  // [guard-config] Last engine/set/overload-guard params received —
+  // test-observable; no mock behavior depends on it.
+  lastOverloadGuard: { enabled: boolean; maxParticles: number } | null = null;
 
   async request<R extends Request>(req: R): Promise<ResponseFor<R>> {
     // Capture pre-mutation root order for move-many, whose dirtiness depends on
@@ -398,6 +405,12 @@ export class MockBridge implements Bridge {
       // ---------------- engine setters: view state (preview clock) ----------------
       case "engine/set/paused":
         this.patchAndBroadcast({ paused: req.params.paused });
+        return {};
+
+      case "engine/set/overload-guard":
+        // View-only preview config; the mock has no simulation to govern —
+        // store it so contract tests can assert the round-trip.
+        this.lastOverloadGuard = { ...req.params };
         return {};
 
       // ---------------- stats freeze (test-only knob) ----------------

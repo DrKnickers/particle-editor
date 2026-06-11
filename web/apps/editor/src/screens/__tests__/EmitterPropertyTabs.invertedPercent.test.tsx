@@ -1,10 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 
 // Import FieldSpinner — it's not exported today; we'll export it as
 // part of this task. If the import fails, the test fails red as
 // expected for a TDD step.
 import { FieldSpinner } from "../EmitterPropertyTabs";
+
+//: FieldSpinner mounts a Tip (Radix Tooltip.Root) on its label,
+// which requires the app-level Tooltip.Provider — wrapper stands in for it
+// (precedent: renderWithTooltips in EmitterTree.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 describe("FieldSpinner displayInvertedPercent", () => {
   it("displays 100 - value*100 rounded to integer", () => {

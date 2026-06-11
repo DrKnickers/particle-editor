@@ -223,10 +223,32 @@ void Engine::Clear()
 
     // Overload guard: population is gone, so refill the spawn budget and
     // drop the latch immediately (don't wait for the next Update tick).
-    m_spawnBudget       = kMaxLivePreviewParticles;
+    m_spawnBudget       = m_maxPreviewParticles;
     m_overloadActive    = false;
     m_overloadThisFrame = false;
     m_lastOverloadTime  = -1.0f;
+}
+
+void Engine::SetOverloadGuard(bool enabled, int maxParticles)
+{
+	if (maxParticles < kMinConfigurableParticles) maxParticles = kMinConfigurableParticles;
+	if (maxParticles > kMaxConfigurableParticles) maxParticles = kMaxConfigurableParticles;
+	m_overloadGuardEnabled = enabled;
+	m_maxPreviewParticles  = maxParticles;
+	m_maxPreviewInstances  = maxParticles / kInstancesDivisor;
+	if (!enabled)
+	{
+		// Latch off NOW — mirrors Clear()'s immediate reset so the UI
+		// banner drops without waiting for the clear-delay debounce.
+		m_overloadActive    = false;
+		m_overloadThisFrame = false;
+		m_lastOverloadTime  = -1.0f;
+	}
+#ifndef NDEBUG
+	printf("[overload] guard config: enabled=%d maxParticles=%d (instances=%d)\n",
+	       enabled ? 1 : 0, m_maxPreviewParticles, m_maxPreviewInstances);
+	fflush(stdout);
+#endif
 }
 
 int Engine::ActiveSpawnerInstanceCount() const
@@ -565,11 +587,16 @@ void Engine::Update()
 	// Overload guard: refill the per-frame spawn budget. Hysteresis: once
 	// overloaded, spawning stays suppressed until the population decays
 	// below 90% of the cap, so the boundary doesn't flicker at the 4 Hz
-	// stats rate.
-	const int resumeAt = m_overloadActive
-		? (kMaxLivePreviewParticles * 9) / 10 : kMaxLivePreviewParticles;
-	m_spawnBudget = (m_numParticles < resumeAt)
-		? kMaxLivePreviewParticles - m_numParticles : 0;
+	// stats rate. [guard-config] Skipped entirely when the guard is
+	// disabled — the gates return early, so no refusal can be recorded
+	// and the latch stays false (banner/amber never show).
+	if (m_overloadGuardEnabled)
+	{
+		const int resumeAt = m_overloadActive
+			? (m_maxPreviewParticles * 9) / 10 : m_maxPreviewParticles;
+		m_spawnBudget = (m_numParticles < resumeAt)
+			? m_maxPreviewParticles - m_numParticles : 0;
+	}
 	// NOTE: m_overloadThisFrame is deliberately NOT reset here — it is
 	// reset at the END of Update, after the latch evaluation. Refusals
 	// recorded BETWEEN frames (bridge/spawner-driven instance
@@ -595,25 +622,32 @@ void Engine::Update()
 	// Latch with a clear-delay debounce: refusals only occur on frames
 	// where a spawn round fires, so the raw per-frame flag flickers at
 	// moderate rates; hold the latch until kOverloadClearDelaySec passes
-	// with no refusal (see engine.h).
-	if (m_overloadThisFrame) m_lastOverloadTime = currentTime;
-	const bool overloadNow = m_overloadThisFrame
-		|| (m_overloadActive
-		    && (currentTime - m_lastOverloadTime) < kOverloadClearDelaySec);
-#ifndef NDEBUG
-	// Overload guard: log only the latch TRANSITIONS — never per refusal
-	// (refusals happen per-particle on a hot path).
-	if (overloadNow != m_overloadActive)
+	// with no refusal (see engine.h). [guard-config] Skipped when the
+	// guard is disabled — no refusal can be recorded, and SetOverloadGuard
+	// already dropped the latch, so leave m_overloadActive false.
+	if (m_overloadGuardEnabled)
 	{
-		printf("[overload] spawn suppression %s (particles=%d instances=%d)\n",
-		       overloadNow ? "ON" : "OFF", m_numParticles, m_numEmitters);
-		fflush(stdout);
-	}
+		if (m_overloadThisFrame) m_lastOverloadTime = currentTime;
+		const bool overloadNow = m_overloadThisFrame
+			|| (m_overloadActive
+			    && (currentTime - m_lastOverloadTime) < kOverloadClearDelaySec);
+#ifndef NDEBUG
+		// Overload guard: log only the latch TRANSITIONS — never per refusal
+		// (refusals happen per-particle on a hot path).
+		if (overloadNow != m_overloadActive)
+		{
+			printf("[overload] spawn suppression %s (particles=%d instances=%d)\n",
+			       overloadNow ? "ON" : "OFF", m_numParticles, m_numEmitters);
+			fflush(stdout);
+		}
 #endif
-	m_overloadActive = overloadNow;
+		m_overloadActive = overloadNow;
+	}
 
 	// Reset AFTER the latch evaluation so refusals between now and the
 	// next Update (inter-frame spawns) accumulate into the next frame.
+	// Unconditional: a refusal recorded just before the guard was disabled
+	// must not leak into a later re-enable.
 	m_overloadThisFrame = false;
 }
 

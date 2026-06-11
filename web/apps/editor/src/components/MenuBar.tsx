@@ -436,7 +436,6 @@ export function MenuBar({
                       <Menubar.Item
                         key={path}
                         className={ITEM}
-                        title={path}
                         onSelect={() => handleOpenRecent(path)}
                       >
                         {basename(path)}
@@ -838,7 +837,7 @@ export function MenuBar({
       </Menubar.Menu>
     </Menubar.Root>
 
-    <PreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} />
+    <PreferencesDialog bridge={bridge} open={prefsOpen} onOpenChange={setPrefsOpen} />
 
     {/* Group D: confirm prompt for View → Reset View Settings.
         Body copy mirrors the legacy MessageBox at main.cpp:1734.

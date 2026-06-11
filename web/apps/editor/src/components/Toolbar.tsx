@@ -26,6 +26,7 @@ import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { BackgroundDropdown } from "@/components/BackgroundDropdown";
 import { GroundDropdown } from "@/components/GroundDropdown";
 import { useRightDock, toggleDock } from "@/lib/right-dock";
+import { Tip } from "@/primitives/Tip";
 import { promptSaveChanges } from "@/lib/file-state";
 import { runFileOp } from "@/lib/file-op";
 
@@ -62,84 +63,91 @@ export function Toolbar({ bridge }: Props) {
           being replaced (same gate the MenuBar uses). Save + Save As are
           themselves the save path so they don't need the gate. */}
       <div className="tb-group">
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="New"
-          title="New"
-          onClick={() => {
-            promptSaveChanges(async () => {
-              await bridge.request({ kind: "file/new", params: {} });
-            });
-          }}
-        >
-          <FilePlus {...ICON} />
-        </button>
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Open"
-          title="Open"
-          onClick={() => {
-            promptSaveChanges(async () => {
-              await runFileOp(bridge, { kind: "file/open", params: {} });
-            });
-          }}
-        >
-          <FolderOpen {...ICON} />
-        </button>
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Save"
-          title="Save"
-          onClick={() => { void runFileOp(bridge, { kind: "file/save", params: {} }); }}
-        >
-          <Save {...ICON} />
-        </button>
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Save As"
-          title="Save As"
-          onClick={() => { void runFileOp(bridge, { kind: "file/save-as", params: {} }); }}
-        >
-          <SaveAll {...ICON} />
-        </button>
+        <Tip content="New" occlusionId="tip:toolbar:new">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="New"
+            onClick={() => {
+              promptSaveChanges(async () => {
+                await bridge.request({ kind: "file/new", params: {} });
+              });
+            }}
+          >
+            <FilePlus {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Open" occlusionId="tip:toolbar:open">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Open"
+            onClick={() => {
+              promptSaveChanges(async () => {
+                await runFileOp(bridge, { kind: "file/open", params: {} });
+              });
+            }}
+          >
+            <FolderOpen {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Save" occlusionId="tip:toolbar:save">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Save"
+            onClick={() => { void runFileOp(bridge, { kind: "file/save", params: {} }); }}
+          >
+            <Save {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Save As" occlusionId="tip:toolbar:save-as">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Save As"
+            onClick={() => { void runFileOp(bridge, { kind: "file/save-as", params: {} }); }}
+          >
+            <SaveAll {...ICON} />
+          </button>
+        </Tip>
       </div>
 
       <span className="tb-divider" />
 
       {/* Group 2: playback */}
       <div className="tb-group">
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label={paused ? "Play" : "Pause"}
-          title={paused ? "Play" : "Pause"}
-          aria-pressed={!paused}
-          onClick={() => { void bridge.request({ kind: "engine/set/paused", params: { paused: !paused } }); }}
-        >
-          {paused ? <Play {...ICON} /> : <Pause {...ICON} />}
-        </button>
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Step"
-          title="Step one frame"
-          onClick={() => { void bridge.request({ kind: "engine/action/step-frames", params: { frames: 1 } }); }}
-        >
-          <ChevronRight {...ICON} />
-        </button>
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Step 10"
-          title="Step 10 frames"
-          onClick={() => { void bridge.request({ kind: "engine/action/step-frames", params: { frames: 10 } }); }}
-        >
-          <ChevronsRight {...ICON} />
-        </button>
+        <Tip content={paused ? "Play" : "Pause"} occlusionId="tip:toolbar:play-pause">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label={paused ? "Play" : "Pause"}
+            aria-pressed={!paused}
+            onClick={() => { void bridge.request({ kind: "engine/set/paused", params: { paused: !paused } }); }}
+          >
+            {paused ? <Play {...ICON} /> : <Pause {...ICON} />}
+          </button>
+        </Tip>
+        <Tip content="Step one frame" occlusionId="tip:toolbar:step">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Step"
+            onClick={() => { void bridge.request({ kind: "engine/action/step-frames", params: { frames: 1 } }); }}
+          >
+            <ChevronRight {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Step 10 frames" occlusionId="tip:toolbar:step-10">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Step 10"
+            onClick={() => { void bridge.request({ kind: "engine/action/step-frames", params: { frames: 10 } }); }}
+          >
+            <ChevronsRight {...ICON} />
+          </button>
+        </Tip>
       </div>
 
       <span className="tb-divider" />
@@ -149,36 +157,39 @@ export function Toolbar({ bridge }: Props) {
           preserved. Each reads the live engine snapshot and dispatches the
           matching engine/set/* with the inverted value. */}
       <div className="tb-group">
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Show ground"
-          title="Show ground"
-          aria-pressed={ground}
-          onClick={() => { void bridge.request({ kind: "engine/set/ground", params: { enabled: !ground } }); }}
-        >
-          <Grid2x2 {...ICON} />
-        </button>
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Toggle bloom"
-          title="Toggle bloom"
-          aria-pressed={bloom}
-          onClick={() => { void bridge.request({ kind: "engine/set/bloom", params: { enabled: !bloom } }); }}
-        >
-          <Sun {...ICON} />
-        </button>
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Leave particles after instance death"
-          title="Leave particles after instance death"
-          aria-pressed={leaveParticles}
-          onClick={() => { void bridge.request({ kind: "engine/set/leave-particles", params: { enabled: !leaveParticles } }); }}
-        >
-          <Sparkles {...ICON} />
-        </button>
+        <Tip content="Show ground" occlusionId="tip:toolbar:show-ground">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Show ground"
+            aria-pressed={ground}
+            onClick={() => { void bridge.request({ kind: "engine/set/ground", params: { enabled: !ground } }); }}
+          >
+            <Grid2x2 {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Toggle bloom" occlusionId="tip:toolbar:toggle-bloom">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Toggle bloom"
+            aria-pressed={bloom}
+            onClick={() => { void bridge.request({ kind: "engine/set/bloom", params: { enabled: !bloom } }); }}
+          >
+            <Sun {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Leave particles after instance death" occlusionId="tip:toolbar:leave-particles">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Leave particles after instance death"
+            aria-pressed={leaveParticles}
+            onClick={() => { void bridge.request({ kind: "engine/set/leave-particles", params: { enabled: !leaveParticles } }); }}
+          >
+            <Sparkles {...ICON} />
+          </button>
+        </Tip>
       </div>
 
       <span className="tb-divider" />
@@ -187,26 +198,28 @@ export function Toolbar({ bridge }: Props) {
           exclusive slot (opening one closes the other — see lib/right-dock.ts),
           so their aria-pressed states are mutually exclusive. */}
       <div className="tb-group">
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Toggle Spawner panel"
-          title="Toggle Spawner panel"
-          aria-pressed={spawnerVisible}
-          onClick={() => toggleDock("spawner")}
-        >
-          <CirclePlus {...ICON} />
-        </button>
-        <button
-          type="button"
-          className="tb-btn"
-          aria-label="Toggle Lighting panel"
-          title="Toggle Lighting panel"
-          aria-pressed={lightingVisible}
-          onClick={() => toggleDock("lighting")}
-        >
-          <Lightbulb {...ICON} />
-        </button>
+        <Tip content="Toggle Spawner panel" occlusionId="tip:toolbar:toggle-spawner">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Toggle Spawner panel"
+            aria-pressed={spawnerVisible}
+            onClick={() => toggleDock("spawner")}
+          >
+            <CirclePlus {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Toggle Lighting panel" occlusionId="tip:toolbar:toggle-lighting">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Toggle Lighting panel"
+            aria-pressed={lightingVisible}
+            onClick={() => toggleDock("lighting")}
+          >
+            <Lightbulb {...ICON} />
+          </button>
+        </Tip>
       </div>
 
       <span className="tb-spacer" />

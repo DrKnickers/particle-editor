@@ -36,12 +36,35 @@
 // The browser MockBridge emits no stats/tick at all, so in browser dev
 // the banner never appears; component tests drive it with a stub
 // bridge.
+//
+// motion: entrance/exit animate via .banner-animate
+// (components.css, slow tier — fade + 6px slip from the top edge). The
+// raw `overload ? <Body/> : null` mount unmounted instantly on clear,
+// so the wrapper goes through the usePresence shim: on the falling
+// edge the body stays mounted in data-state="closed" while banner-out
+// plays, then unmounts on animationend (or the timeout fallback under
+// reduced motion). Consequence: the viewport occlusion now outlives
+// the latch by one ~150ms exit — invisible, and release still fires on
+// unmount as before.
 
 import { useEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useViewportOcclusion } from "@/lib/viewport-occlusion";
+import { usePresence } from "@/lib/use-presence";
 
-function OverloadBannerBody({ bridge }: { bridge: Bridge }) {
+// EXIT_MS must equal --motion-slow-out (tokens.css). The +50ms slack
+// lives inside usePresence.
+const EXIT_MS = 150;
+
+function OverloadBannerBody({
+  bridge,
+  state,
+  onAnimationEnd,
+}: {
+  bridge: Bridge;
+  state: "open" | "closed";
+  onAnimationEnd: () => void;
+}) {
   const ref = useRef<HTMLDivElement | null>(null);
   // pad=12 / feather=12 — modest ring (smaller than the context menu's
   // 24: the banner has no shadow-xl spread to feather across).
@@ -56,10 +79,20 @@ function OverloadBannerBody({ bridge }: { bridge: Bridge }) {
       role="status"
       aria-live="polite"
       data-testid="preview-overload-banner"
+      data-state={state}
+      // Filter on animationName: only banner-OUT may unmount — without
+      // it the ENTRANCE animation's end would fire onAnimationEnd too
+      // (harmless today since usePresence ignores it while visible, but
+      // the filter keeps the contract explicit).
+      onAnimationEnd={(e) => {
+        if (e.animationName === "banner-out") onAnimationEnd();
+      }}
       // pointer-events-none: purely informational — viewport input
       // (camera drags, wheel zoom) passes straight through to the
       // canvas underneath.
-      className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 select-none rounded-md bg-warning px-3 py-1.5 text-xs font-medium text-[#1a1200] shadow-xl ring-1 ring-black/15"
+      // banner-animate also supplies the soft shadow (--shadow-soft)
+      // that replaced shadow-xl ring-1 ring-black/15.
+      className="banner-animate pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 select-none rounded-md bg-warning px-3 py-1.5 text-xs font-medium text-[#1a1200]"
     >
       Preview spawning limited — lower spawn rates to resume. ⚠ marks
       heavy emitters.
@@ -73,6 +106,7 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
     () => bridge.on("stats/tick", (e) => setOverload(e.payload.overload)),
     [bridge],
   );
-  if (!overload) return null;
-  return <OverloadBannerBody bridge={bridge} />;
+  const { mounted, state, onAnimationEnd } = usePresence(overload, EXIT_MS);
+  if (!mounted) return null;
+  return <OverloadBannerBody bridge={bridge} state={state} onAnimationEnd={onAnimationEnd} />;
 }

@@ -12,9 +12,10 @@
 // No active mod ⇒ the list is empty and the popover shows an honest hint.
 
 import * as Popover from "@radix-ui/react-popover";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import type { Bridge, PaletteEntry } from "@particle-editor/bridge-schema";
 import { OccludingPopover } from "@/components/OccludingPopover";
+import { Tip } from "@/primitives/Tip";
 
 type Slot = "color" | "bump";
 
@@ -22,13 +23,27 @@ type Props = {
   bridge: Bridge;
   slot: Slot;
   onApply: (filename: string) => void;
-  children: ReactNode;
+  /** Optional tooltip for the trigger. Rendered here (Tooltip.Trigger
+   *  wrapping Popover.Trigger — the Radix-blessed nesting) because a Tip
+   *  placed around the child at the call site would sit under
+   *  Popover.Trigger asChild and swallow the trigger props. Side/occlusion
+   *  are fixed for the single production caller (TexturePickerField in the
+   *  right dock, which opens toward the viewport). */
+  tip?: string;
+  children: ReactElement;
 };
 
-export function TexturePalettePopover({ bridge, slot, onApply, children }: Props) {
+export function TexturePalettePopover({ bridge, slot, onApply, tip, children }: Props) {
+  const trigger = <Popover.Trigger asChild>{children}</Popover.Trigger>;
   return (
     <Popover.Root>
-      <Popover.Trigger asChild>{children}</Popover.Trigger>
+      {tip ? (
+        <Tip content={tip} side="left" occlusionId="tip:props:texture-palette">
+          {trigger}
+        </Tip>
+      ) : (
+        trigger
+      )}
       <Popover.Portal>
         <OccludingPopover
           bridge={bridge}
@@ -236,45 +251,51 @@ function PaletteCell({
 
   return (
     <div className="relative">
-      <Popover.Close asChild>
-        <button
-          type="button"
-          onClick={() => onApply(entry.filename)}
-          aria-label={`Apply ${entry.filename}`}
-          title={entry.filename}
-          className="relative block aspect-square w-full overflow-hidden rounded border border-border-2 transition hover:border-accent"
-        >
-          {thumb?.dataUri ? (
-            <img src={thumb.dataUri} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          ) : (
-            <div
-              data-testid={`palette-thumb-placeholder-${entry.filename}`}
-              data-thumb-status={thumb ? thumb.status : "loading"}
-              className={`absolute inset-0 flex flex-col items-center justify-center gap-0.5 ${
-                thumb?.status === "broken"
-                  ? "bg-red-950/40 text-red-300"
-                  : thumb?.status === "missing"
-                    ? "bg-bg-2 text-text-3"
-                    : "bg-bg-2"
-              }`}
-            >
-              {thumb && (
-                <>
-                  <span aria-hidden="true" className="text-base leading-none">
-                    {thumb.status === "broken" ? "⚠" : "?"}
-                  </span>
-                  <span className="text-[9px] uppercase tracking-wide">
-                    {thumb.status === "broken" ? "broken" : "missing"}
-                  </span>
-                </>
-              )}
-            </div>
-          )}
-          <span className="absolute inset-x-0 bottom-0 truncate bg-bg/80 px-1 py-0.5 text-left text-[10px] text-text backdrop-blur-sm">
-            {entry.filename}
-          </span>
-        </button>
-      </Popover.Close>
+      {/* Tip wraps the Popover.Close (not the button inside it) — Tooltip
+          trigger around another Radix asChild trigger is the blessed
+          nesting; both forward their props down to the button. Static
+          occlusionId across grid cells is safe: only one tooltip is ever
+          open at a time (app-level Tooltip.Provider). */}
+      <Tip content={entry.filename} occlusionId="tip:texpop:entry">
+        <Popover.Close asChild>
+          <button
+            type="button"
+            onClick={() => onApply(entry.filename)}
+            aria-label={`Apply ${entry.filename}`}
+            className="relative block aspect-square w-full overflow-hidden rounded border border-border-2 transition hover:border-accent"
+          >
+            {thumb?.dataUri ? (
+              <img src={thumb.dataUri} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            ) : (
+              <div
+                data-testid={`palette-thumb-placeholder-${entry.filename}`}
+                data-thumb-status={thumb ? thumb.status : "loading"}
+                className={`absolute inset-0 flex flex-col items-center justify-center gap-0.5 ${
+                  thumb?.status === "broken"
+                    ? "bg-red-950/40 text-red-300"
+                    : thumb?.status === "missing"
+                      ? "bg-bg-2 text-text-3"
+                      : "bg-bg-2"
+                }`}
+              >
+                {thumb && (
+                  <>
+                    <span aria-hidden="true" className="text-base leading-none">
+                      {thumb.status === "broken" ? "⚠" : "?"}
+                    </span>
+                    <span className="text-[9px] uppercase tracking-wide">
+                      {thumb.status === "broken" ? "broken" : "missing"}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+            <span className="absolute inset-x-0 bottom-0 truncate bg-bg/80 px-1 py-0.5 text-left text-[10px] text-text backdrop-blur-sm">
+              {entry.filename}
+            </span>
+          </button>
+        </Popover.Close>
+      </Tip>
       <button
         type="button"
         onClick={() => onTogglePin(entry.filename)}

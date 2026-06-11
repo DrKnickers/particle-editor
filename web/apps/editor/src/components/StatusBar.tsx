@@ -55,10 +55,11 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   const s = stats;
   const placeholder = s === null;
 
-  // Preview spawn-overload guard: while stats/tick latches overload,
-  // the value cell can tint amber + carry an explanatory title (used by
-  // the Particles readout; the OverloadBanner over the viewport is the
-  // primary surface — this is the persistent low-key echo).
+  // Preview spawn-overload guard: while stats/tick latches overload, the
+  // Particles value cell tints amber. The OverloadBanner over the viewport
+  // is the primary surface; this is the persistent low-key echo. (No
+  // tooltip — the readout is a passive non-button, and the banner already
+  // states the cause.)
   const cell = (label: string, value: string, dim = placeholder, warn = false) => (
     <span className="flex items-baseline gap-1.5">
       <span className="text-text-3">{label}</span>
@@ -66,7 +67,6 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
         className={`font-mono tabular-nums ${
           warn ? "text-amber-400" : dim ? "text-text-3" : "text-text-2"
         }`}
-        title={warn ? "preview spawn limit reached — spawning paused" : undefined}
       >
         {value}
       </span>

@@ -15,6 +15,7 @@
 // NOT routed through native ChooseColor — pure React, safe for CDP test mode.
 
 import { useState, useCallback } from "react";
+import { Tip } from "@/primitives/Tip";
 import * as Popover from "@radix-ui/react-popover";
 import type { RgbColor } from "./palette-store";
 import { usePaletteStore } from "./palette-store";
@@ -167,16 +168,19 @@ export function ColorButton({
           <div className="mb-2">
             <div className="mb-1 text-[10px] text-text-3">Basic colors</div>
             <div className="grid grid-cols-8 gap-0.5">
+              {/* Static occlusionIds on grid cells are safe: only ONE
+                  tooltip is ever open at a time (app-level Radix
+                  Tooltip.Provider), so the ids never coexist. */}
               {BASIC_COLORS.map((color, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  aria-label={`Basic color ${rgbToHex(color).toUpperCase()}`}
-                  title={rgbToHex(color).toUpperCase()}
-                  onClick={() => handleSelectColor(color)}
-                  className="size-5 rounded-sm border border-transparent hover:border-border-2 focus:border-accent focus:outline-none"
-                  style={{ backgroundColor: rgbToHex(color) }}
-                />
+                <Tip key={i} content={rgbToHex(color).toUpperCase()} occlusionId="tip:color:swatch">
+                  <button
+                    type="button"
+                    aria-label={`Basic color ${rgbToHex(color).toUpperCase()}`}
+                    onClick={() => handleSelectColor(color)}
+                    className="size-5 rounded-sm border border-transparent hover:border-border-2 focus:border-accent focus:outline-none"
+                    style={{ backgroundColor: rgbToHex(color) }}
+                  />
+                </Tip>
               ))}
             </div>
           </div>
@@ -186,18 +190,18 @@ export function ColorButton({
             <div className="mb-1 text-[10px] text-text-3">Custom colors</div>
             <div className="grid grid-cols-8 gap-0.5">
               {slots.map((color, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  aria-label={color ? `Custom color ${rgbToHex(color).toUpperCase()}` : `Custom slot ${i + 1} (empty)`}
-                  title={color ? rgbToHex(color).toUpperCase() : "Empty"}
-                  onClick={() => { if (color) handleSelectColor(color); }}
-                  onContextMenu={(e) => { e.preventDefault(); setSlot(i, null); }}
-                  className={`size-5 rounded-sm border hover:border-border-2 focus:outline-none ${
-                    color ? "border-border-2" : "border-dashed border-border-2"
-                  }`}
-                  style={color ? { backgroundColor: rgbToHex(color) } : { backgroundColor: "transparent" }}
-                />
+                <Tip key={i} content={color ? rgbToHex(color).toUpperCase() : "Empty"} occlusionId="tip:color:slot">
+                  <button
+                    type="button"
+                    aria-label={color ? `Custom color ${rgbToHex(color).toUpperCase()}` : `Custom slot ${i + 1} (empty)`}
+                    onClick={() => { if (color) handleSelectColor(color); }}
+                    onContextMenu={(e) => { e.preventDefault(); setSlot(i, null); }}
+                    className={`size-5 rounded-sm border hover:border-border-2 focus:outline-none ${
+                      color ? "border-border-2" : "border-dashed border-border-2"
+                    }`}
+                    style={color ? { backgroundColor: rgbToHex(color) } : { backgroundColor: "transparent" }}
+                  />
+                </Tip>
               ))}
             </div>
           </div>

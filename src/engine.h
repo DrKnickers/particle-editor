@@ -84,7 +84,7 @@ public:
 
     static const int NUM_SHADERS = 14;
 
-	// Preview overload guard: hard ceilings on the live simulation so no
+	// Preview overload guard: ceilings on the live simulation so no
 	// authored spawn parameters (or chain multiplication — every spawned
 	// particle with a life/death child allocates a whole child
 	// EmitterInstance) can OOM the editor. Over budget the engine
@@ -93,8 +93,25 @@ public:
 	// population decays below the resume threshold (hysteresis so the
 	// boundary doesn't flicker at the 4 Hz stats rate). Authored .alo
 	// values are never clamped or modified.
-	static constexpr int kMaxLivePreviewParticles  = 100'000;
-	static constexpr int kMaxLiveEmitterInstances  = 5'000;
+	//
+	// [guard-config] The budgets are RUNTIME state (SetOverloadGuard),
+	// user-configurable from Preferences via engine/set/overload-guard.
+	// Default 15k: the old fixed 100k survived the OOM but still let the
+	// preview get heavy on the climb. Disabled = fully uncapped (an
+	// explicit power-user choice — CAN OOM on extreme chain effects; the
+	// per-instance uint16 index cap below is a data-structure limit, not
+	// part of this guard, so the unbounded dimension is instance count).
+	static constexpr int kDefaultMaxPreviewParticles = 15'000;
+	// One knob: the instance ceiling derives from the particle cap,
+	// preserving #121's 100k:5k ratio (15k → 750 live instances —
+	// vanilla effects run tens; raising the particle knob raises this).
+	static constexpr int kInstancesDivisor           = 20;
+	// Defensive clamp bounds for SetOverloadGuard — engine invariants
+	// must not depend on UI-side validation (cap 0 would zero the spawn
+	// budget forever and read as "editor broken"). 1M lets a power user
+	// exceed the old 100k without going fully uncapped.
+	static constexpr int kMinConfigurableParticles   = 1'000;
+	static constexpr int kMaxConfigurableParticles   = 1'000'000;
 	// Debounce on the latched overload flag: refusals only happen on
 	// frames where a spawn round actually fires (e.g. every 0.1 s at
 	// rate 10 while pinned at a cap), so the raw per-frame flag would
@@ -370,11 +387,13 @@ public:
     // the default 0: IsDead() implies m_primitives is already empty.
     void OnEmitterDestroyed(int numParticles = 0) { m_numEmitters--; m_numParticles += numParticles; }
 
-    // --- Preview overload guard (see kMaxLivePreviewParticles) ---
+    // --- Preview overload guard (see kDefaultMaxPreviewParticles) ---
     // Per-particle gate: spend one unit of the per-frame spawn budget.
     // Refusal flags this frame as overloaded; the caller drops the spawn.
+    // Disabled guard: always allow — uncapped is uncapped.
     bool TryConsumeSpawnBudget()
     {
+        if (!m_overloadGuardEnabled) return true;
         if (m_spawnBudget > 0) { m_spawnBudget--; return true; }
         m_overloadThisFrame = true;
         return false;
@@ -384,13 +403,17 @@ public:
     // OnEmitterDestroyed (instance-death erase paths call the latter).
     bool TryConsumeInstanceBudget()
     {
-        if (m_numEmitters < kMaxLiveEmitterInstances) return true;
+        if (!m_overloadGuardEnabled) return true;
+        if (m_numEmitters < m_maxPreviewInstances) return true;
         m_overloadThisFrame = true;
         return false;
     }
     // Cheap loop-exit check for spawn catch-up loops: once the budget is
     // gone there is no point iterating spawn rounds that can't spawn.
-    bool SpawnBudgetExhausted() const { return m_spawnBudget <= 0; }
+    bool SpawnBudgetExhausted() const
+    {
+        return m_overloadGuardEnabled && m_spawnBudget <= 0;
+    }
     // Catch-up loops that bail via SpawnBudgetExhausted() never reach a
     // TryConsume* refusal, so they must register the suppression here or
     // the latch would clear while spawning is still being suppressed.
@@ -398,6 +421,13 @@ public:
     // Latched flag the UI reads (stats/tick). True while any spawn was
     // suppressed during the last completed Update.
     bool IsSpawnOverloadActive() const { return m_overloadActive; }
+    // [guard-config] Configure the preview overload guard at runtime.
+    // maxParticles is clamped DEFENSIVELY to
+    // [kMinConfigurableParticles, kMaxConfigurableParticles] — engine
+    // invariants must not depend on UI-side validation. Disabling clears
+    // the latch immediately so the overload banner doesn't linger after
+    // the user opts out.
+    void SetOverloadGuard(bool enabled, int maxParticles);
 
 	void SetBackground(COLORREF color);
 	void SetLight(LightType which, const Light& light);
@@ -531,13 +561,17 @@ private:
     int m_numParticles;
     int m_numEmitters;
 
-    // Preview overload guard state (see kMaxLivePreviewParticles).
+    // Preview overload guard state (see kDefaultMaxPreviewParticles).
     // m_spawnBudget refills at the top of Update(); m_overloadThisFrame
     // accumulates refusals from the end of one Update to the end of the
     // next (so inter-frame refusals — bridge/spawner-driven instance
     // construction — count too), is folded into the latched
     // m_overloadActive at the end of Update(), then reset there.
-    int  m_spawnBudget       = kMaxLivePreviewParticles;
+    // [guard-config] enabled/max are runtime config (SetOverloadGuard).
+    bool m_overloadGuardEnabled = true;
+    int  m_maxPreviewParticles  = kDefaultMaxPreviewParticles;
+    int  m_maxPreviewInstances  = kDefaultMaxPreviewParticles / kInstancesDivisor;
+    int  m_spawnBudget       = kDefaultMaxPreviewParticles;
     bool m_overloadActive    = false;
     bool m_overloadThisFrame = false;
     // Time of the most recent refused spawn — drives the

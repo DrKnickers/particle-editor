@@ -762,6 +762,18 @@ static json BuildDispatchExceptionEnvelope(const json& parsed, const char* what)
     return res;
 }
 
+void BridgeDispatcher::SetEngine(Engine* engine)
+{
+    m_engine = engine;
+    // [guard-config §2] Reapply the cached overload-guard config so a
+    // recreated engine never silently reverts to defaults. Today the
+    // engine is constructed once per process (HostWindow startup) and
+    // this is a no-op safety net; if a future change recreates the
+    // engine, the user's setting follows automatically.
+    if (m_engine && m_overloadGuardCached)
+        m_engine->SetOverloadGuard(m_overloadGuardEnabled, m_overloadGuardMaxParticles);
+}
+
 void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
 {
     json parsed;
@@ -1445,6 +1457,22 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         sendOk(json::object());
         //: paused is a view-only toggle (preview clock). Don't mark dirty.
         EmitEngineStateChanged();
+        return res;
+    }
+    if (kind == "engine/set/overload-guard")
+    {
+        // [guard-config] View-only preview setting (like engine/set/paused):
+        // never marks the document dirty. The engine clamps maxParticles
+        // defensively; we cache pre-clamp intent for SetEngine reapply
+        // (the engine re-clamps on every apply, so the cache needs no
+        // clamping of its own).
+        const bool enabled      = params.value("enabled", true);
+        const int  maxParticles = params.value("maxParticles", 15'000);
+        m_overloadGuardCached       = true;
+        m_overloadGuardEnabled      = enabled;
+        m_overloadGuardMaxParticles = maxParticles;
+        if (m_engine) m_engine->SetOverloadGuard(enabled, maxParticles);
+        sendOk(json::object());
         return res;
     }
     // T9] stats/set-frozen — test-only knob that suppresses

@@ -75,20 +75,26 @@ export function estimateChainLoad(root: EmitterTreeNode): Map<number, ChainWarni
   return out;
 }
 
-// Multi-line tooltip body (the native `title` attribute renders \n as
-// line breaks).
+// Number formatting shared by the plain-text tooltip body and the
+// rich ChainWarningTip — one set of rules, two presentations.
+export const fmtCount = (n: number) => Math.round(n).toLocaleString("en-US");
+// Sub-10 multipliers keep a decimal so e.g. ×0.4 doesn't render as ×0.
+export const fmtMultiplier = (n: number) =>
+  n >= 10 ? fmtCount(n) : n.toLocaleString("en-US", { maximumFractionDigits: 1 });
+
+// Multi-line plain-text body for the glyph's aria-label (screen readers).
+// Mirrors the rich ChainWarningTip's wording: "chain" when the offending
+// path is multi-generation, "emitter" when a single emitter pins the
+// threshold on its own.
 export function formatChainWarning(w: ChainWarning): string {
-  const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
-  // Sub-10 multipliers keep a decimal so e.g. ×0.4 doesn't render as ×0.
-  const fmtSmall = (n: number) =>
-    n >= 10 ? Math.round(n).toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  const subject = w.path.length > 1 ? "chain" : "emitter";
   const lines = w.path.map((p, i) =>
     i === 0
-      ? `${p.name}: ~${fmtSmall(p.perEmitter)} alive`
-      : `→ ${p.name}: ×${fmtSmall(p.perEmitter)} → ~${fmt(p.cumulative)}`,
+      ? `${p.name}: ~${fmtMultiplier(p.perEmitter)} particles`
+      : `→ ${p.name}: ×${fmtMultiplier(p.perEmitter)} → ~${fmtCount(p.cumulative)}`,
   );
   return [
-    `Soft warning: ~${fmt(w.estimate)} particles estimated alive through this chain`,
+    `This ${subject} may spawn too many particles — ~${fmtCount(w.estimate)} particles estimated`,
     ...lines,
   ].join("\n");
 }

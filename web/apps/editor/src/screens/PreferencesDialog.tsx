@@ -1,9 +1,19 @@
 import { useState } from "react";
+import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { applyMode, readStoredMode, type ThemeMode } from "@/lib/theme";
 import { readConfirmDelete, writeConfirmDelete } from "@/lib/delete-emitters";
+import {
+  applyOverloadGuard,
+  clampMaxParticles,
+  readOverloadGuard,
+  writeOverloadGuard,
+  MIN_MAX_PARTICLES,
+  MAX_MAX_PARTICLES,
+  type OverloadGuardConfig,
+} from "@/lib/overload-guard";
 
-type Props = { open: boolean; onOpenChange: (open: boolean) => void };
+type Props = { bridge: Bridge; open: boolean; onOpenChange: (open: boolean) => void };
 
 const MODES: { value: ThemeMode; label: string }[] = [
   { value: "dark", label: "Dark" },
@@ -11,10 +21,23 @@ const MODES: { value: ThemeMode; label: string }[] = [
   { value: "system", label: "System" },
 ];
 
-export function PreferencesDialog({ open, onOpenChange }: Props) {
+export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
   const [mode, setMode] = useState<ThemeMode>(() => readStoredMode());
   const [confirmDelete, setConfirmDelete] = useState<boolean>(() => readConfirmDelete());
   const choose = (m: ThemeMode) => { setMode(m); applyMode(m); };
+
+  const [guard, setGuard] = useState<OverloadGuardConfig>(() => readOverloadGuard());
+  // Draft string for the number field so partial typing ("2", "25") isn't
+  // clamped/sent per keystroke — commit on blur/Enter only.
+  const [capDraft, setCapDraft] = useState<string>(() => String(readOverloadGuard().maxParticles));
+
+  const commitGuard = (next: OverloadGuardConfig) => {
+    const clamped = { ...next, maxParticles: clampMaxParticles(next.maxParticles) };
+    setGuard(clamped);
+    setCapDraft(String(clamped.maxParticles));
+    writeOverloadGuard(clamped);
+    applyOverloadGuard(bridge, clamped);
+  };
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Preferences" size="sm">
       <Modal.Body>
@@ -45,6 +68,53 @@ export function PreferencesDialog({ open, onOpenChange }: Props) {
               onChange={(e) => { setConfirmDelete(e.target.checked); writeConfirmDelete(e.target.checked); }}
               className="accent-[var(--accent)]"
             />
+          </div>
+          {/* [guard-config] Preview overload guard. OFF is fully uncapped —
+              the pre-#121 behavior that CAN OOM the editor; the warning
+              line states the trade (autosave #41 is the backstop). */}
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            <div className="text-text-2">Preview</div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="pref-overload-guard" className="text-text-2">
+                Limit preview particle count
+              </label>
+              <input
+                id="pref-overload-guard"
+                type="checkbox"
+                checked={guard.enabled}
+                onChange={(e) => commitGuard({ ...guard, enabled: e.target.checked })}
+                className="accent-[var(--accent)]"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="pref-overload-max"
+                className={guard.enabled ? "text-text-2" : "text-text-3"}
+              >
+                Max preview particles
+              </label>
+              <input
+                id="pref-overload-max"
+                type="number"
+                aria-label="Max preview particles"
+                disabled={!guard.enabled}
+                value={capDraft}
+                min={MIN_MAX_PARTICLES}
+                max={MAX_MAX_PARTICLES}
+                onChange={(e) => setCapDraft(e.target.value)}
+                onBlur={() => commitGuard({ ...guard, maxParticles: Number(capDraft) })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitGuard({ ...guard, maxParticles: Number(capDraft) });
+                }}
+                className="w-28 rounded border border-border-2 bg-bg px-2 py-1 text-right text-xs text-text disabled:opacity-50"
+              />
+            </div>
+            {!guard.enabled && (
+              <div className="text-[11px] text-warning">
+                Unlimited spawning can crash the editor on extreme effects —
+                unsaved changes are at risk.
+              </div>
+            )}
           </div>
         </div>
       </Modal.Body>

@@ -2,9 +2,19 @@
 // Exercises: selection border, right-click menu items, empty-state placeholder.
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent, waitFor } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import { TexturePalette } from "../TexturePalette";
 import type { TextureItem } from "../TexturePalette";
+
+//: each palette cell mounts a Tip (Radix Tooltip.Root), which
+// requires the app-level Tooltip.Provider — wrapper stands in for it
+// (precedent: renderToolbar in Toolbar.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 const ITEMS: TextureItem[] = [
   { path: "a.tga", label: "alpha", thumbnailSrc: "data:image/png;base64,iVBOR" },

@@ -54,16 +54,25 @@ describe("OverloadBanner", () => {
     expect(banner.textContent).toContain("marks heavy emitters");
   });
 
-  it("clears the banner when a later tick reports overload=false", () => {
+  it("clears the banner when a later tick reports overload=false", async () => {
     const { bridge, emit } = makeBridge();
     render(<OverloadBanner bridge={bridge} />);
     emit("stats/tick", tick(true));
     expect(screen.getByTestId("preview-overload-banner")).toBeInTheDocument();
     emit("stats/tick", tick(false));
+    // presence shim: the banner stays mounted in
+    // data-state="closed" while banner-out plays, then unmounts. jsdom
+    // runs no CSS animations, so the unmount path here is usePresence's
+    // timeout fallback (EXIT_MS 150 + 50ms slack).
+    const banner = screen.getByTestId("preview-overload-banner");
+    expect(banner).toHaveAttribute("data-state", "closed");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
     expect(screen.queryByTestId("preview-overload-banner")).not.toBeInTheDocument();
   });
 
-  it("registers a viewport occlusion while visible and releases it on clear (plan risk 4)", () => {
+  it("registers a viewport occlusion while visible and releases it on clear (plan risk 4)", async () => {
     const { bridge, emit, request } = makeBridge();
     render(<OverloadBanner bridge={bridge} />);
     expect(request).not.toHaveBeenCalled();
@@ -78,11 +87,30 @@ describe("OverloadBanner", () => {
 
     request.mockClear();
     emit("stats/tick", tick(false));
+    // The occlusion release fires on UNMOUNT, which the
+    // presence shim defers until the exit finishes (timeout fallback
+    // in jsdom — see the clear test above).
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
     const release = request.mock.calls
       .map((c) => c[0] as { kind: string; params: { id: string; rect: unknown } })
       .filter((r) => r.kind === "viewport/occlude" && r.params.rect === null);
     expect(release.length).toBe(1);
     expect(release[0]!.params.id).toBe("banner:preview-overload");
+  });
+
+  it("wears the soft-shadow motion class instead of shadow-xl", () => {
+    //: .banner-animate carries box-shadow: var(--shadow-soft)
+    // (components.css) and the entrance/exit keyframes; the old
+    // shadow-xl ring-1 ring-black/15 Tailwind stack is retired.
+    const { bridge, emit } = makeBridge();
+    render(<OverloadBanner bridge={bridge} />);
+    emit("stats/tick", tick(true));
+    const banner = screen.getByTestId("preview-overload-banner");
+    expect(banner.className).toContain("banner-animate");
+    expect(banner.className).not.toContain("shadow-xl");
+    expect(banner.className).not.toContain("ring-1");
   });
 
   it("unsubscribes from stats/tick on unmount", () => {

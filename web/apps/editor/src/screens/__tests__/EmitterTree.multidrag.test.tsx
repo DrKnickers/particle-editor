@@ -10,10 +10,18 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import type { ReactElement } from "react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 import { EmitterTree } from "../EmitterTree";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+
+//: EmitterTree mounts Tips (Radix Tooltip.Root), which require the
+// Tooltip.Provider that App.tsx supplies in production — this helper stands
+// in for it here (same precedent as EmitterTree.test.tsx).
+const renderWithTooltips = (ui: ReactElement) =>
+  render(<Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>);
 
 function fixtureTree(): EmitterTreeDto {
   return {
@@ -75,7 +83,7 @@ beforeEach(() => {
 describe("EmitterTree multi-drag preview", () => {
   it("dragging a multi-root selection renders the destination band + cursor chip and commits reorder-many", async () => {
     const bridge = makeStubBridge();
-    render(<EmitterTree bridge={bridge} />);
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
     // Multi-root selection: Smoke(0) + Flash(5) — two roots, non-contiguous.
@@ -127,7 +135,7 @@ describe("EmitterTree multi-drag preview", () => {
 
   it("a single-root drag also shows the make-room gap + chip and reorders via reorder-many", async () => {
     const bridge = makeStubBridge();
-    render(<EmitterTree bridge={bridge} />);
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
     // Single selection of the dragged root — NOT a multi-drag, but now the
@@ -159,7 +167,7 @@ describe("EmitterTree multi-drag preview", () => {
 
   it("hovering the block's own footprint clears the gap and a release there is a no-op (no wire call)", async () => {
     const bridge = makeStubBridge();
-    render(<EmitterTree bridge={bridge} />);
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
     // Contiguous block: Smoke(0) + Sparks(3) at root indices 0,1 → noop gaps 0..2.
@@ -188,7 +196,7 @@ describe("EmitterTree multi-drag preview", () => {
 
   it("dragging below every block resolves the END gap (after the whole list)", async () => {
     const bridge = makeStubBridge();
-    render(<EmitterTree bridge={bridge} />);
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("Smoke"));
@@ -236,7 +244,7 @@ describe("EmitterTree multi-drag preview", () => {
 
   it("a multi-drag dims the dragged roots' children too (whole subtree lifts)", async () => {
     const bridge = makeStubBridge(fixtureWithChildren());
-    render(<EmitterTree bridge={bridge} />);
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("SmokeLife")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("Smoke"));
@@ -262,7 +270,7 @@ describe("EmitterTree multi-drag preview", () => {
 
   it("a single drag dims the grabbed root's subtree too", async () => {
     const bridge = makeStubBridge(fixtureWithChildren());
-    render(<EmitterTree bridge={bridge} />);
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("SmokeLife")).toBeInTheDocument());
 
     const smokeBtn  = screen.getByText("Smoke").closest("button")!;
@@ -306,7 +314,7 @@ describe("EmitterTree multi-drag preview", () => {
       }),
     } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
 
-    render(<EmitterTree bridge={bridge} />);
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("Flash"));
@@ -350,7 +358,7 @@ describe("EmitterTree multi-drag preview", () => {
       },
     };
     const bridge = makeStubBridge(manyRoots);
-    render(<EmitterTree bridge={bridge} />);
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("R0")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("R0"));

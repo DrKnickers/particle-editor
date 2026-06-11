@@ -13,13 +13,24 @@
 //     with `patch: { lifetime: <new value> }`.
 
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import type {
   Bridge,
   EmitterPropertiesDto,
 } from "@particle-editor/bridge-schema";
 import { EmitterPropertyTabs, AppearanceTab, PhysicsTab } from "../EmitterPropertyTabs";
 import { makeDefaultEngineState, makeFixtureProperties } from "@/bridge/mock-state";
+
+//: the property tabs mount Tips (Radix Tooltip.Root) on the form-row
+// labels, which require the Tooltip.Provider App.tsx supplies in production —
+// this wrapper stands in for it (precedent: renderWithTooltips in
+// EmitterTree.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 type SelectionListener = (e: { payload: { id: number | null } }) => void;
 

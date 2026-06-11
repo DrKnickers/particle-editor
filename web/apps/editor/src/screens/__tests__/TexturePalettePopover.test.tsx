@@ -4,9 +4,19 @@
 // assert against the portaled content.
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent, waitFor } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import { TexturePalettePopover } from "../TexturePalettePopover";
 import type { Bridge, PaletteEntry } from "@particle-editor/bridge-schema";
+
+//: each palette cell mounts a Tip (Radix Tooltip.Root), which
+// requires the app-level Tooltip.Provider — wrapper stands in for it
+// (precedent: renderToolbar in Toolbar.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 type ListResp = {
   hasMod: boolean;

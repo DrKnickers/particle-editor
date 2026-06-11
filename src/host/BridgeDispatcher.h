@@ -71,7 +71,10 @@ public:
     // Sets / replaces the live Engine pointer. The host can install this
     // before or after the Engine is constructed; null is treated as
     // "engine not ready, snapshot requests return ok:false".
-    void SetEngine(Engine* engine) { m_engine = engine; }
+    // Body in BridgeDispatcher.cpp — Engine is only forward-declared here,
+    // so the cached-config reapply (which calls m_engine->SetOverloadGuard)
+    // cannot be inlined in this header.
+    void SetEngine(Engine* engine);
 
     // Inject the UndoStack used to service `undo/perform` requests.
     // Stack is constructed by HostWindow alongside the Engine. Null is
@@ -271,6 +274,11 @@ private:
     void EnforceSingleMemberLinkGroups();
 
     Engine*            m_engine;
+    // [guard-config] Last config applied via engine/set/overload-guard —
+    // reapplied by SetEngine (see above).
+    bool m_overloadGuardCached       = false;
+    bool m_overloadGuardEnabled      = true;
+    int  m_overloadGuardMaxParticles = 15'000;
     LayoutBroker&      m_layout;
     AcceleratorBridge& m_accel;
     EmitFn             m_emit;

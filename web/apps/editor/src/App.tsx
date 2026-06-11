@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { makeBridge } from "@/bridge";
 import { exposeBridgeForTests } from "@/bridge/expose";
 import { PanelLayout, resetPanelLayoutStorage } from "@/components/PanelLayout";
@@ -24,6 +25,7 @@ import { BridgeContext } from "@/lib/bridge-context";
 import { useBackingColorSync } from "@/lib/backing-color-sync";
 import { useAppAccelerators } from "@/lib/use-app-accelerators";
 import { applyMode, readStoredMode } from "@/lib/theme";
+import { applyOverloadGuard, readOverloadGuard } from "@/lib/overload-guard";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
 // Evaluated once at module load; a page navigation to ?demo=primitives
@@ -87,6 +89,14 @@ function AppShell() {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
+  // [guard-config] Push the persisted overload-guard config to the engine
+  // once at startup — mirrors the theme apply-on-mount above. Without
+  // this the engine would sit on its built-in defaults until the user
+  // first opens Preferences.
+  useEffect(() => {
+    applyOverloadGuard(bridge, readOverloadGuard());
+  }, [bridge]);
+
   // Screen 8 Batch 3: subscribe to file-state events (dirty/changed,
   // recent/changed, engine/state/changed) and seed from snapshot +
   // file/recent/list on mount. Stays mounted for the app's lifetime.
@@ -138,73 +148,79 @@ function AppShell() {
 
   return (
     <BridgeContext.Provider value={bridge}>
-    <div data-testid="app-shell" className="flex h-full w-full flex-col text-text">
-      {/* Top bar */}
-      <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-bg px-4 text-sm">
-        <span className="font-semibold">AloParticleEditor</span>
-        <MenuBar
-          bridge={bridge}
-          onOpenImportEmittersDialog={() => setImportEmittersOpen(true)}
-          onOpenAboutDialog={() => setAboutOpen(true)}
-          onOpenRescaleDialog={() => setRescaleOpen(true)}
-          onResetPanelLayout={resetPanelLayout}
-        />
-      </header>
+      {/* One app-level tooltip provider: first hover waits 400ms;
+          moving between tooltipped controls within 300ms opens instantly
+          (the "sweep the toolbar" feel native title can't give). Values are
+          feel-tunable — adjust at the user smoke if flagged. */}
+      <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
+        <div data-testid="app-shell" className="flex h-full w-full flex-col text-text">
+          {/* Top bar */}
+          <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-bg px-4 text-sm">
+            <span className="font-semibold">AloParticleEditor</span>
+            <MenuBar
+              bridge={bridge}
+              onOpenImportEmittersDialog={() => setImportEmittersOpen(true)}
+              onOpenAboutDialog={() => setAboutOpen(true)}
+              onOpenRescaleDialog={() => setRescaleOpen(true)}
+              onResetPanelLayout={resetPanelLayout}
+            />
+          </header>
 
-      {/* Toolbar — 4 groups (File · Edit · View · Render) */}
-      <Toolbar bridge={bridge} />
+          {/* Toolbar — 4 groups (File · Edit · View · Render) */}
+          <Toolbar bridge={bridge} />
 
-      {/* Main row — B1.4: PanelLayout owns the three-column +
-          two-inner-vertical-split structure with draggable separators
-          via react-resizable-panels@4.x. Sizes persist per-user under
-          alo:layout:{outer:{2col,3col},left,center}. The five
-          quadrant-* data-testids live on inner divs inside PanelLayout
-          (preserved exactly so Modal.tsx's querySelector portal
-          lookup and Playwright specs continue to work). */}
-      <PanelLayout key={panelLayoutEpoch} bridge={bridge} />
+          {/* Main row — B1.4: PanelLayout owns the three-column +
+              two-inner-vertical-split structure with draggable separators
+              via react-resizable-panels@4.x. Sizes persist per-user under
+              alo:layout:{outer:{2col,3col},left,center}. The five
+              quadrant-* data-testids live on inner divs inside PanelLayout
+              (preserved exactly so Modal.tsx's querySelector portal
+              lookup and Playwright specs continue to work). */}
+          <PanelLayout key={panelLayoutEpoch} bridge={bridge} />
 
-      {/* Status bar */}
-      <StatusBar bridge={bridge} />
+          {/* Status bar */}
+          <StatusBar bridge={bridge} />
 
-      {/* Sub-dialogs (Screen 8 batch 1). Mounted at app level so menu
-          triggers from anywhere can drive them and Radix portals don't
-          fight clipping from intermediate scrollable parents. */}
-      <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
-      <RescaleDialog
-        bridge={bridge}
-        open={rescaleOpen}
-        onOpenChange={setRescaleOpen}
-      />
-      <ImportEmittersDialog
-        bridge={bridge}
-        open={importEmittersOpen}
-        onOpenChange={setImportEmittersOpen}
-      />
-      {/* ModNicknameDialog is mounted unconditionally; it observes its
-          own Zustand atom for open state. Driven by `promptModNickname`
-          (programmatic) or the `?demo=mod-nickname` route in App below. */}
-      <ModNicknameDialog />
-      {/* Save-changes prompt (Screen 8 Batch 3). Open state lives in
-          the file-state atom; this mount is invisible while the
-          pendingAction slot is null. Driven from any destructive op
-          handler via `promptSaveChanges(...)`. */}
-      <SaveChangesPrompt bridge={bridge} />
-      {/* Screen 4 Batch B1 — emitter-tree context-menu modals. They
-          observe the `tree-context` Zustand atom for open state; the
-          EmitterTree row's ContextMenu items poke the atom to mount
-          whichever one was chosen. Rename moved to inline editing in
-          Batch C — no modal involvement. */}
-      <IncrementIndexDialog bridge={bridge} />
-      <RescaleEmitterDialog bridge={bridge} />
-      <LinkGroupSettingsDialog bridge={bridge} />
-      {/* Screen 4 Batch B2 — multi-select link-group assignment. */}
-      <SetLinkGroupDialog bridge={bridge} />
-      {/* — crash-recovery. Checks for an orphaned autosave on mount;
-          a no-op when the host reports none (always so under the mock). */}
-      <AutosaveRecoveryDialog bridge={bridge} />
-      <FileOpErrorModal />
-      <DeleteConfirmModal bridge={bridge} />
-    </div>
+          {/* Sub-dialogs (Screen 8 batch 1). Mounted at app level so menu
+              triggers from anywhere can drive them and Radix portals don't
+              fight clipping from intermediate scrollable parents. */}
+          <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
+          <RescaleDialog
+            bridge={bridge}
+            open={rescaleOpen}
+            onOpenChange={setRescaleOpen}
+          />
+          <ImportEmittersDialog
+            bridge={bridge}
+            open={importEmittersOpen}
+            onOpenChange={setImportEmittersOpen}
+          />
+          {/* ModNicknameDialog is mounted unconditionally; it observes its
+              own Zustand atom for open state. Driven by `promptModNickname`
+              (programmatic) or the `?demo=mod-nickname` route in App below. */}
+          <ModNicknameDialog />
+          {/* Save-changes prompt (Screen 8 Batch 3). Open state lives in
+              the file-state atom; this mount is invisible while the
+              pendingAction slot is null. Driven from any destructive op
+              handler via `promptSaveChanges(...)`. */}
+          <SaveChangesPrompt bridge={bridge} />
+          {/* Screen 4 Batch B1 — emitter-tree context-menu modals. They
+              observe the `tree-context` Zustand atom for open state; the
+              EmitterTree row's ContextMenu items poke the atom to mount
+              whichever one was chosen. Rename moved to inline editing in
+              Batch C — no modal involvement. */}
+          <IncrementIndexDialog bridge={bridge} />
+          <RescaleEmitterDialog bridge={bridge} />
+          <LinkGroupSettingsDialog bridge={bridge} />
+          {/* Screen 4 Batch B2 — multi-select link-group assignment. */}
+          <SetLinkGroupDialog bridge={bridge} />
+          {/* — crash-recovery. Checks for an orphaned autosave on mount;
+              a no-op when the host reports none (always so under the mock). */}
+          <AutosaveRecoveryDialog bridge={bridge} />
+          <FileOpErrorModal />
+          <DeleteConfirmModal bridge={bridge} />
+        </div>
+      </Tooltip.Provider>
     </BridgeContext.Provider>
   );
 }
@@ -279,14 +295,31 @@ export function App() {
     logReactHostingMode();
   }, []);
 
+  // The demo routes bypass AppShell and therefore its app-level
+  // Tooltip.Provider — but demo'd components (ColorButton, TexturePalette)
+  // mount Tips, and Radix Tooltip.Root THROWS without a Provider (the
+  // ?demo=primitives gallery white-screened in the native harness). Wrap
+  // every demo return so standalone mounts stay viable.
   if (DEMO_PARAM === "primitives") {
-    return <PrimitivesGallery />;
+    return (
+      <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
+        <PrimitivesGallery />
+      </Tooltip.Provider>
+    );
   }
   if (DEMO_PARAM === "mod-nickname") {
-    return <ModNicknameDemo />;
+    return (
+      <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
+        <ModNicknameDemo />
+      </Tooltip.Provider>
+    );
   }
   if (DEMO_PARAM === "autosave-recovery") {
-    return <AutosaveRecoveryDemo />;
+    return (
+      <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
+        <AutosaveRecoveryDemo />
+      </Tooltip.Provider>
+    );
   }
   return <AppShell />;
 }

@@ -13,13 +13,23 @@
 //     (visibleChannels prop wired correctly).
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import type {
   Bridge,
   TrackDto,
 } from "@particle-editor/bridge-schema";
 import { TRACK_NAMES } from "@particle-editor/bridge-schema";
 import { CurveEditorPanel, CHANNELS } from "../CurveEditorPanel";
+
+//: the toolbar buttons mount Tips (Radix Tooltip.Root), which
+// require the app-level Tooltip.Provider — wrapper stands in for it
+// (precedent: renderToolbar in Toolbar.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 import { makeDefaultEngineState } from "@/bridge/mock-state";
 import {
   getCurveKeysClipboard,

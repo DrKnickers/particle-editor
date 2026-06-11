@@ -95,6 +95,8 @@ import {
 } from "@/lib/drop-zone";
 import { computeLinkGroupBrackets, colorForGroup } from "@/lib/link-group-colors";
 import { estimateChainLoad, formatChainWarning, type ChainWarning } from "@/lib/chain-load";
+import { Tip } from "@/primitives/Tip";
+import { ChainWarningTip } from "./ChainWarningTip";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
 import { moveEmitters, duplicateEmitters, reorderManyEmitters } from "@/lib/emitter-reorder";
@@ -726,36 +728,41 @@ function EmitterRow({
             {/* F1: visibility toggle on the LEFT (replaces the old role
                 dot). Always rendered so the grid columns stay stable
                 during inline rename. */}
-            <span
-              role="button"
-              tabIndex={0}
-              data-testid={`emitter-vis-${node.id}`}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                void bridge.request({
-                  kind: "emitters/set-visible",
-                  params: { id: node.id, visible: !node.visible },
-                });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
+            <Tip
+              content={node.visible ? "Hide emitter" : "Show emitter"}
+              side="right"
+              occlusionId={`tip:tree-eye:${node.id}`}
+            >
+              <span
+                role="button"
+                tabIndex={0}
+                data-testid={`emitter-vis-${node.id}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
                   e.stopPropagation();
                   void bridge.request({
                     kind: "emitters/set-visible",
                     params: { id: node.id, visible: !node.visible },
                   });
-                }
-              }}
-              title={node.visible ? "Hide emitter" : "Show emitter"}
-              aria-label={node.visible ? "Hide emitter" : "Show emitter"}
-              className="grid place-items-center w-4 h-4 shrink-0 rounded text-text-3 hover:bg-panel-2 hover:text-text cursor-pointer"
-            >
-              {node.visible
-                ? <Eye className="size-3" />
-                : <EyeOff className="size-3" />}
-            </span>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void bridge.request({
+                      kind: "emitters/set-visible",
+                      params: { id: node.id, visible: !node.visible },
+                    });
+                  }
+                }}
+                aria-label={node.visible ? "Hide emitter" : "Show emitter"}
+                className="grid place-items-center w-4 h-4 shrink-0 rounded text-text-3 hover:bg-panel-2 hover:text-text cursor-pointer"
+              >
+                {node.visible
+                  ? <Eye className="size-3" />
+                  : <EyeOff className="size-3" />}
+              </span>
+            </Tip>
             {isEditing ? (
               // Inline-rename input. Stops click + drag propagation so
               // typing doesn't accidentally re-trigger row selection /
@@ -847,18 +854,27 @@ function EmitterRow({
                 col 5 (right of the name) via grid-column but rendered
                 LAST in DOM — same convention as the role glyph / link
                 dot, so unwarned rows' accessible names stay byte-
-                identical and the a11y goldens hold. The native `title`
-                carries the multi-line root→offender breakdown. */}
+                identical and the a11y goldens hold.: the rich
+                ChainWarningTip carries the root→offender breakdown for
+                sighted users; the aria-label keeps the FULL plain-text
+                breakdown for screen readers (spec §4). side="right" +
+                occlusion because tree tooltips open toward the D3D
+                viewport. */}
             {chainWarning !== null && (
-              <span
-                style={{ gridColumn: 5, gridRow: 1 }}
-                data-testid={`emitter-chain-warning-${node.id}`}
-                title={formatChainWarning(chainWarning)}
-                aria-label={`Chain load warning: about ${Math.round(chainWarning.estimate).toLocaleString("en-US")} particles estimated alive`}
-                className="grid place-items-center w-4 h-4 shrink-0 justify-self-center text-amber-400"
+              <Tip
+                content={<ChainWarningTip warning={chainWarning} />}
+                side="right"
+                occlusionId={`tip:chain-warn:${node.id}`}
               >
-                <TriangleAlert className="size-3" />
-              </span>
+                <span
+                  style={{ gridColumn: 5, gridRow: 1 }}
+                  data-testid={`emitter-chain-warning-${node.id}`}
+                  aria-label={formatChainWarning(chainWarning)}
+                  className="grid place-items-center w-4 h-4 shrink-0 justify-self-center text-amber-400"
+                >
+                  <TriangleAlert className="size-3" />
+                </span>
+              </Tip>
             )}
           </button>
         </ContextMenu.Trigger>
@@ -1130,13 +1146,14 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
     >
       <Menubar.Root>
         <Menubar.Menu>
-          <Menubar.Trigger
-            className={TOOLBAR_BTN}
-            title="New Emitter"
-            aria-label="New Emitter"
-          >
-            <Plus className="size-4" />
-          </Menubar.Trigger>
+          <Tip content="New Emitter" occlusionId="tip:tree-footer:new-emitter">
+            <Menubar.Trigger
+              className={TOOLBAR_BTN}
+              aria-label="New Emitter"
+            >
+              <Plus className="size-4" />
+            </Menubar.Trigger>
+          </Tip>
           <Menubar.Portal>
             <Menubar.Content
               className="min-w-[160px] rounded-md border border-border bg-bg-2 p-1 shadow-xl z-50"
@@ -1167,64 +1184,81 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </Menubar.Portal>
         </Menubar.Menu>
       </Menubar.Root>
-      <button
-        type="button"
-        className={TOOLBAR_BTN}
-        title="Duplicate"
-        aria-label="Duplicate emitter"
-        disabled={!hasPrimary}
-        onClick={duplicatePrimary}
-      >
-        <Copy className="size-4" />
-      </button>
-      <button
-        type="button"
-        className={TOOLBAR_BTN}
-        title="Delete"
-        aria-label="Delete emitter"
-        disabled={!hasPrimary}
-        onClick={del}
-      >
-        <Trash2 className="size-4" />
-      </button>
-      <button
-        type="button"
-        className={TOOLBAR_BTN}
-        title="Move Up"
-        aria-label="Move emitter up"
-        disabled={!canMoveUp}
-        onClick={moveUp}
-      >
-        <ChevronUp className="size-4" />
-      </button>
-      <button
-        type="button"
-        className={TOOLBAR_BTN}
-        title="Move Down"
-        aria-label="Move emitter down"
-        disabled={!canMoveDown}
-        onClick={moveDown}
-      >
-        <ChevronDown className="size-4" />
-      </button>
-      <button
-        type="button"
-        className={TOOLBAR_BTN}
-        title="Show All Emitters"
-        aria-label="Show all emitters"
-        onClick={showAll}
-      >
-        <Eye className="size-4" />
-      </button>
-      <button
-        type="button"
-        className={TOOLBAR_BTN}
-        title="Hide All Emitters"
-        aria-label="Hide all emitters"
-        onClick={hideAll}
-      >
-        <EyeOff className="size-4" />
-      </button>
+      {/* T6 span shims: disabled buttons fire no pointer events, so the Tip
+          listens on a wrapping span that stays interactive while the button
+          inside is disabled. */}
+      <Tip content="Duplicate" occlusionId="tip:tree-footer:duplicate">
+        <span className="inline-block">
+          <button
+            type="button"
+            className={TOOLBAR_BTN}
+            aria-label="Duplicate emitter"
+            disabled={!hasPrimary}
+            onClick={duplicatePrimary}
+          >
+            <Copy className="size-4" />
+          </button>
+        </span>
+      </Tip>
+      <Tip content="Delete" occlusionId="tip:tree-footer:delete">
+        <span className="inline-block">
+          <button
+            type="button"
+            className={TOOLBAR_BTN}
+            aria-label="Delete emitter"
+            disabled={!hasPrimary}
+            onClick={del}
+          >
+            <Trash2 className="size-4" />
+          </button>
+        </span>
+      </Tip>
+      <Tip content="Move Up" occlusionId="tip:tree-footer:move-up">
+        <span className="inline-block">
+          <button
+            type="button"
+            className={TOOLBAR_BTN}
+            aria-label="Move emitter up"
+            disabled={!canMoveUp}
+            onClick={moveUp}
+          >
+            <ChevronUp className="size-4" />
+          </button>
+        </span>
+      </Tip>
+      <Tip content="Move Down" occlusionId="tip:tree-footer:move-down">
+        <span className="inline-block">
+          <button
+            type="button"
+            className={TOOLBAR_BTN}
+            aria-label="Move emitter down"
+            disabled={!canMoveDown}
+            onClick={moveDown}
+          >
+            <ChevronDown className="size-4" />
+          </button>
+        </span>
+      </Tip>
+      <Tip content="Show All Emitters" occlusionId="tip:tree-footer:show-all-emitters">
+        <button
+          type="button"
+          className={TOOLBAR_BTN}
+          aria-label="Show all emitters"
+          onClick={showAll}
+        >
+          <Eye className="size-4" />
+        </button>
+      </Tip>
+      <Tip content="Hide All Emitters" occlusionId="tip:tree-footer:hide-all-emitters">
+        <button
+          type="button"
+          className={TOOLBAR_BTN}
+          aria-label="Hide all emitters"
+          onClick={hideAll}
+        >
+          <EyeOff className="size-4" />
+        </button>
+      </Tip>
     </div>
   );
 }
@@ -2290,61 +2324,66 @@ export function EmitterTree({ bridge }: Props) {
                 // also lights the group (the click affordance).
                 const HITZONE_INSET = 4;
                 return (
-                  <div
+                  <Tip
                     key={b.groupId}
-                    data-testid={`link-group-bracket-${b.groupId}`}
-                    data-link-group={b.groupId}
-                    data-lane={b.lane}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Select link group ${b.groupId}`}
-                    title={`Select link group ${b.groupId}`}
-                    className="pointer-events-auto absolute cursor-pointer"
-                    style={{ top, left: left - HITZONE_INSET, width: LANE_WIDTH_PX, height }}
-                    onPointerEnter={() => setHoveredLinkGroup(b.groupId)}
-                    onPointerLeave={() => setHoveredLinkGroup(null)}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSelectLinkGroup(b.groupId);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
+                    content={`Select link group ${b.groupId}`}
+                    side="right"
+                    occlusionId={`tip:tree-linkgroup:${b.groupId}`}
+                  >
+                    <div
+                      data-testid={`link-group-bracket-${b.groupId}`}
+                      data-link-group={b.groupId}
+                      data-lane={b.lane}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Select link group ${b.groupId}`}
+                      className="pointer-events-auto absolute cursor-pointer"
+                      style={{ top, left: left - HITZONE_INSET, width: LANE_WIDTH_PX, height }}
+                      onPointerEnter={() => setHoveredLinkGroup(b.groupId)}
+                      onPointerLeave={() => setHoveredLinkGroup(null)}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
                         e.stopPropagation();
                         handleSelectLinkGroup(b.groupId);
-                      }
-                    }}
-                  >
-                    {/* The visible coloured line. */}
-                    <div
-                      aria-hidden
-                      className="absolute"
-                      style={{
-                        left: HITZONE_INSET,
-                        top: 0,
-                        width: hovered ? 3 : 2,
-                        height,
-                        background: b.color,
-                        opacity: hovered ? 1 : 0.85,
                       }}
-                    />
-                    {b.memberRowIndices.map((rowIdx) => (
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleSelectLinkGroup(b.groupId);
+                        }
+                      }}
+                    >
+                      {/* The visible coloured line. */}
                       <div
-                        key={rowIdx}
                         aria-hidden
-                        data-testid={`link-group-stub-${b.groupId}-${rowIdx}`}
                         className="absolute"
                         style={{
-                          top: (rowIdx - b.firstRowIndex) * ROW_HEIGHT_PX - 1,
-                          left: 0,
-                          width: 5,
-                          height: 2,
+                          left: HITZONE_INSET,
+                          top: 0,
+                          width: hovered ? 3 : 2,
+                          height,
                           background: b.color,
+                          opacity: hovered ? 1 : 0.85,
                         }}
                       />
-                    ))}
-                  </div>
+                      {b.memberRowIndices.map((rowIdx) => (
+                        <div
+                          key={rowIdx}
+                          aria-hidden
+                          data-testid={`link-group-stub-${b.groupId}-${rowIdx}`}
+                          className="absolute"
+                          style={{
+                            top: (rowIdx - b.firstRowIndex) * ROW_HEIGHT_PX - 1,
+                            left: 0,
+                            width: 5,
+                            height: 2,
+                            background: b.color,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </Tip>
                 );
               })}
             </div>

@@ -32,6 +32,26 @@
 import type { Page } from "@playwright/test";
 
 export async function captureDomA11y(page: Page): Promise<string> {
+  // Tooltip exit-animation settle. Keyboard-focus surfaces open
+  // a Radix tooltip on the focused control (instant, deterministic) —
+  // but the PREVIOUS tab stop's tooltip plays a 110ms exit animation
+  // (Radix Presence keeps it mounted while data-state="closed"), so a
+  // snapshot taken mid-exit races it: kbd-tab-cycle-stop-2 and
+  // kbd-emitter-rename-mode flaked golden mismatches on exactly this.
+  // Wait until no exiting tooltip remains; the focused control's OPEN
+  // tooltip stays in the snapshot, which is stable and intended. Costs
+  // ~0ms when no tooltip is exiting (the common case for non-keyboard
+  // surfaces); reduced-motion or a dropped animation can't hang it —
+  // Radix unmounts on animation end and the 2s timeout backstops.
+  await page
+    .waitForFunction(
+      () => !document.querySelector('.tip-animate[data-state="closed"]'),
+      null,
+      { timeout: 2_000 },
+    )
+    .catch(() => {
+      /* backstop: snapshot anyway; the golden diff will say what's left */
+    });
   // ariaSnapshot on body captures the whole document tree. Returns
   // canonical YAML (newline-terminated, deterministic key order).
   return page.locator("body").ariaSnapshot();

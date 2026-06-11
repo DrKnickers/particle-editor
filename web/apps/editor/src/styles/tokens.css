@@ -45,6 +45,23 @@
   --y-axis: #66bb6a;
   --z-axis: #42a5f5;
   --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  /* Motion family. Fast tier = tooltips (matches the shipped
+     popover-pop timings); slow tier = modal/banner (larger elements).
+     Entrances decelerate (ease-out), exits accelerate (ease-in). */
+  --motion-fast-in: 130ms;
+  --motion-fast-out: 110ms;
+  --motion-slow-in: 180ms;
+  --motion-slow-out: 150ms; /* mirrored by EXIT_MS in OverloadBanner.tsx — keep in sync */
+  --ease-entrance: ease-out;
+  --ease-exit: ease-in;
+  --slip-tooltip: 4px;
+  --slip-banner: 6px;
+  --slip-modal: 8px;
+  /* Soft two-layer drop shadow: wide ambient + tight contact.
+     Unlike --shadow (dark-only), this HAS a light-theme override so it
+     reads equally soft on both themes. Worn by tooltips + the overload
+     banner. */
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
   --radius: 8px;
   --radius-sm: 5px;
   --row-h: 26px;
@@ -83,6 +100,7 @@
      the grid is uniformly subtle across themes. */
   --curve-grid: rgba(0, 0, 0, 0.08);
   --curve-axis: rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.10);
 }
 
 @theme inline {

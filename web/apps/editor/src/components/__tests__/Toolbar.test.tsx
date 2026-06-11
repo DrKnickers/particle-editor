@@ -3,9 +3,20 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { Toolbar } from "../Toolbar";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { __resetRightDockForTests } from "@/lib/right-dock";
+
+//: toolbar buttons mount a Tip (Radix Tooltip.Root), which requires
+// the Tooltip.Provider that App.tsx supplies in production — this helper
+// stands in for it here (same precedent as EmitterTree.test.tsx).
+const renderToolbar = (bridge: Bridge) =>
+  render(
+    <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+      <Toolbar bridge={bridge} />
+    </Tooltip.Provider>,
+  );
 
 function makeBridge() {
   const snap = {
@@ -34,7 +45,7 @@ beforeEach(() => {
 describe("Toolbar — Particle Editor 2026 layout", () => {
   it("renders the file/playback/spawner groups", async () => {
     const b = makeBridge();
-    render(<Toolbar bridge={b} />);
+    renderToolbar(b);
     await waitFor(() => expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "New" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
@@ -50,7 +61,7 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
 
   it("Pause button dispatches engine/set/paused with paused=true", async () => {
     const b = makeBridge();
-    render(<Toolbar bridge={b} />);
+    renderToolbar(b);
     await waitFor(() => expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     await waitFor(() => {
@@ -60,7 +71,7 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
 
   it("Step 10 dispatches engine/action/step-frames { frames: 10 }", async () => {
     const b = makeBridge();
-    render(<Toolbar bridge={b} />);
+    renderToolbar(b);
     await waitFor(() => expect(screen.getByRole("button", { name: "Step 10" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Step 10" }));
     await waitFor(() => {
@@ -70,7 +81,7 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
 
   it("Spawner toggle updates aria-pressed and persists to localStorage", async () => {
     const b = makeBridge();
-    render(<Toolbar bridge={b} />);
+    renderToolbar(b);
     const btn = await screen.findByRole("button", { name: "Toggle Spawner panel" });
     expect(btn).toHaveAttribute("aria-pressed", "true"); // default dock = spawner
     fireEvent.click(btn);
@@ -80,7 +91,7 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
 
   it("Lighting toggle opens the lighting dock and is exclusive with the Spawner", async () => {
     const b = makeBridge();
-    render(<Toolbar bridge={b} />);
+    renderToolbar(b);
     const spawnerBtn = await screen.findByRole("button", { name: "Toggle Spawner panel" });
     const lightingBtn = screen.getByRole("button", { name: "Toggle Lighting panel" });
     // Default dock = spawner → Spawner pressed, Lighting not.
@@ -101,7 +112,7 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
 
   it("renders the three viewport toggles with their aria-labels", async () => {
     const b = makeBridge();
-    render(<Toolbar bridge={b} />);
+    renderToolbar(b);
     expect(
       await screen.findByRole("button", { name: "Show ground" }),
     ).toBeInTheDocument();
@@ -119,7 +130,7 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     // makeBridge snapshot: ground=true, bloom=false, leaveParticles absent
     // (so it falls back to the default `true`).
     const b = makeBridge();
-    render(<Toolbar bridge={b} />);
+    renderToolbar(b);
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Show ground" })).toHaveAttribute(
         "aria-pressed",
@@ -138,7 +149,7 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
 
   it("renders the Spawner toggle as an icon, not a text label", async () => {
     const b = makeBridge();
-    render(<Toolbar bridge={b} />);
+    renderToolbar(b);
     const btn = await screen.findByRole("button", {
       name: "Toggle Spawner panel",
     });
@@ -148,7 +159,7 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
 
   it("clicking a viewport toggle dispatches engine/set/* with the inverted value", async () => {
     const b = makeBridge();
-    render(<Toolbar bridge={b} />);
+    renderToolbar(b);
     // Wait for the snapshot so ground=true is reflected before clicking.
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Show ground" })).toHaveAttribute(

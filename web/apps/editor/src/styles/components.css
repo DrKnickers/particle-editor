@@ -143,6 +143,112 @@
   .drag-chip-enter { animation: none; }
 }
 
+/* ---- Tooltip surface + motion family ----
+   The shared Tip primitive (primitives/Tip.tsx). Surface is theme-following
+   (panel-3 + border-2; flips with [data-theme]) and wears --shadow-soft.
+   Motion = fast-tier fade + 4px slip AWAY from the trigger, keyed off
+   Radix data-state/data-side. NOTE: Tooltip's data-state vocabulary is
+   `closed` / `delayed-open` / `instant-open` — NOT Dialog/Popover's plain
+   `open` (verified against the installed package). Radix Presence keeps
+   Content mounted through the closing animation, so the exit plays.
+   Plain-string content gets padding via .tip-body; rich content (the
+   chain-warning band) brings its own padding so headers can run
+   edge-to-edge. */
+.tip-surface {
+  background: var(--panel-3);
+  color: var(--text);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 320px;
+  z-index: 60;
+  overflow: hidden; /* rich-tier bands clip to the rounded corner */
+}
+.tip-body { display: block; padding: 5px 9px; }
+.tip-arrow { fill: var(--panel-3); }
+
+.tip-animate { --tip-slip-x: 0px; --tip-slip-y: 0px; }
+.tip-animate[data-side="top"]    { --tip-slip-y: var(--slip-tooltip); }
+.tip-animate[data-side="bottom"] { --tip-slip-y: calc(-1 * var(--slip-tooltip)); }
+.tip-animate[data-side="left"]   { --tip-slip-x: var(--slip-tooltip); }
+.tip-animate[data-side="right"]  { --tip-slip-x: calc(-1 * var(--slip-tooltip)); }
+@keyframes tip-in {
+  from { opacity: 0; transform: translate(var(--tip-slip-x), var(--tip-slip-y)); }
+  to   { opacity: 1; transform: translate(0, 0); }
+}
+@keyframes tip-out {
+  from { opacity: 1; transform: translate(0, 0); }
+  to   { opacity: 0; transform: translate(var(--tip-slip-x), var(--tip-slip-y)); }
+}
+.tip-animate[data-state="delayed-open"],
+.tip-animate[data-state="instant-open"] {
+  animation: tip-in var(--motion-fast-in) var(--ease-entrance);
+}
+.tip-animate[data-state="closed"] {
+  animation: tip-out var(--motion-fast-out) var(--ease-exit);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tip-animate[data-state="delayed-open"],
+  .tip-animate[data-state="instant-open"],
+  .tip-animate[data-state="closed"] { animation: none; }
+}
+
+/* ---- Modal + overload-banner motion (slow tier) ----
+   Same family as the tooltips: fade + slip toward the resting position.
+   Modal rises 8px into center; banner drops 6px from the viewport's top
+   edge. Radix Dialog's Presence plays the modal exit; the banner's exit
+   needs usePresence (lib/use-presence.ts) because it custom-unmounts.
+
+   CRITICAL (Tailwind v4): both surfaces center via Tailwind's
+   `-translate-x/y-1/2`, which in v4 compiles to the standalone CSS
+   `translate` PROPERTY (`translate: -50% -50%`) — NOT `transform`. The
+   `translate` and `transform` properties COMPOSE (translate applies
+   first, then transform), so the keyframes must do ONLY the slip via
+   `transform` and leave centering to `translate`. An earlier cut
+   repeated `translate(-50%, …)` inside the keyframe `transform`, which
+   stacked on top of the `translate` property → the surface was
+   double-shifted during the animation and snapped to center when the
+   animation ended (transform → none). Keep these keyframes
+   transform-slip-only. */
+@keyframes modal-overlay-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-overlay-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(var(--slip-modal)); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes modal-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(var(--slip-modal)); }
+}
+.modal-overlay-animate[data-state="open"]   { animation: modal-overlay-in var(--motion-slow-in) var(--ease-entrance); }
+.modal-overlay-animate[data-state="closed"] { animation: modal-overlay-out var(--motion-slow-out) var(--ease-exit); }
+.modal-animate[data-state="open"]   { animation: modal-in var(--motion-slow-in) var(--ease-entrance); }
+.modal-animate[data-state="closed"] { animation: modal-out var(--motion-slow-out) var(--ease-exit); }
+
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(calc(-1 * var(--slip-banner))); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes banner-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(calc(-1 * var(--slip-banner))); }
+}
+/* Centering is the Tailwind `translate` property (see CRITICAL above);
+   these keyframes only slip via `transform`, so the two compose. The
+   box-shadow lives here (not a Tailwind arbitrary value) so it stays
+   var()-driven. */
+.banner-animate { box-shadow: var(--shadow-soft); }
+.banner-animate[data-state="open"]   { animation: banner-in var(--motion-slow-in) var(--ease-entrance) both; }
+.banner-animate[data-state="closed"] { animation: banner-out var(--motion-slow-out) var(--ease-exit) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay-animate[data-state="open"], .modal-overlay-animate[data-state="closed"],
+  .modal-animate[data-state="open"], .modal-animate[data-state="closed"],
+  .banner-animate[data-state="open"], .banner-animate[data-state="closed"] { animation: none; }
+}
+
 .window-controls {
   margin-left: auto;
   display: flex;

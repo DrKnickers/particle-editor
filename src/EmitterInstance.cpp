@@ -957,7 +957,7 @@ int EmitterInstance::SpawnParticles(TimeF spawnTime)
 	for (unsigned long i = 0; i < m_nParticlesPerBurst; i++)
 	{
         // Overload guard: every spawn spends one unit of the engine-wide
-        // per-frame budget (see Engine::kMaxLivePreviewParticles). When
+        // per-frame budget (see Engine::kDefaultMaxPreviewParticles). When
         // it runs out, drop the REST of this burst — never deferred.
         if (!m_engine.TryConsumeSpawnBudget())
             break;

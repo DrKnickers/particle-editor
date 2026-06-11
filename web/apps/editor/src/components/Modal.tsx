@@ -249,7 +249,7 @@ export function Modal({
         <Dialog.Portal>
           <Dialog.Overlay
             data-testid="modal-overlay"
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0"
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm modal-overlay-animate"
           />
           <Dialog.Content
             // aria-describedby={undefined} opts out of Radix's accessibility
@@ -258,7 +258,7 @@ export function Modal({
             // copy worth distinguishing from the title; the title alone is
             // sufficient SR context.
             aria-describedby={undefined}
-            className={`fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 ${SIZE_CLASS[size]} max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95`}
+            className={`fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 ${SIZE_CLASS[size]} max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none modal-animate`}
           >
             {/* Header */}
             <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-bg-2 px-4">

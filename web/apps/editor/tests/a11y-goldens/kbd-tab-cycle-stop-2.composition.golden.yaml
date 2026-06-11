@@ -204,3 +204,6 @@
   - button "Jitter position"
   - button "Jitter velocity"
 - contentinfo: "FPS — · Emitters — · Particles — · Instances — · Cursor — PAUSED ⇧ Shift: spawn instance"
+- text: Open
+- img
+- tooltip "Open"

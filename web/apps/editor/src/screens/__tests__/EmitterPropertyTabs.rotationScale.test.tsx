@@ -1,7 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 
 import { FieldSpinner } from "../EmitterPropertyTabs";
+
+//: FieldSpinner mounts a Tip (Radix Tooltip.Root) on its label,
+// which requires the app-level Tooltip.Provider — wrapper stands in for it
+// (precedent: renderWithTooltips in EmitterTree.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 // PRM-4 / PRM-5: the legacy panel displays rotation average as
 // `stored * 360` (integer degrees, -180..180) and commits `typed / 360`,

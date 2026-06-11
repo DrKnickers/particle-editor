@@ -22,6 +22,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { BridgeContext } from "@/lib/bridge-context";
 import { PanelLayout } from "../PanelLayout";
@@ -41,6 +42,18 @@ function makeStubBridge(): Bridge {
     on: () => () => {},
   } as unknown as Bridge;
 }
+
+//: PanelLayout mounts EmitterTree, whose Tips (Radix Tooltip.Root)
+// require the Tooltip.Provider that App.tsx supplies in production — this
+// helper stands in for it here (same precedent as EmitterTree.test.tsx).
+const renderPanelLayout = (bridge: Bridge) =>
+  render(
+    <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>
+      <BridgeContext.Provider value={bridge}>
+        <PanelLayout bridge={bridge} />
+      </BridgeContext.Provider>
+    </Tooltip.Provider>,
+  );
 
 beforeEach(() => {
   localStorage.removeItem("alo:right-dock");
@@ -124,11 +137,7 @@ describe("PanelLayout — collapseDockShare (dock-mount fix)", () => {
     __resetRightDockForTests();
 
     const bridge = makeStubBridge();
-    render(
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>,
-    );
+    renderPanelLayout(bridge);
 
     const slotPanel = screen
       .getByTestId("quadrant-spawner")
@@ -189,11 +198,7 @@ describe("PanelLayout — Reset panel layout (T6)", () => {
 describe("PanelLayout — DOM structure", () => {
   it("renders all five quadrant testIDs when Spawner is visible", () => {
     const bridge = makeStubBridge();
-    render(
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>,
-    );
+    renderPanelLayout(bridge);
     // Default right-dock is `"spawner"` (lib/right-dock.ts).
     expect(screen.getByTestId("quadrant-emitter-tree")).toBeInTheDocument();
     expect(screen.getByTestId("quadrant-property-tabs")).toBeInTheDocument();
@@ -209,11 +214,7 @@ describe("PanelLayout — DOM structure", () => {
     __resetRightDockForTests();
 
     const bridge = makeStubBridge();
-    render(
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>,
-    );
+    renderPanelLayout(bridge);
     // The dock is now an ALWAYS-mounted collapsible slot — so the Group
     // never remounts on open/close (no left-pane flicker) and the slot can
     // animate. When closed it stays in the DOM but renders no content.
@@ -230,11 +231,7 @@ describe("PanelLayout — DOM structure", () => {
     // and the centre column (curve editor) stays mounted alongside it.
     setDock("lighting");
     const bridge = makeStubBridge();
-    render(
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>,
-    );
+    renderPanelLayout(bridge);
     expect(screen.getByTestId("quadrant-spawner")).toBeInTheDocument();
     expect(
       screen.getByRole("dialog", { name: "Lighting" }),
@@ -256,11 +253,7 @@ describe("PanelLayout — DOM structure", () => {
     __resetRightDockForTests();
 
     const bridge = makeStubBridge();
-    const { container } = render(
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>,
-    );
+    const { container } = renderPanelLayout(bridge);
 
     const separators = Array.from(container.querySelectorAll("[data-separator]"));
     expect(separators.length).toBeGreaterThan(0);
@@ -281,11 +274,7 @@ describe("PanelLayout — DOM structure", () => {
   it("keeps the dock separator and panel resizable while the dock is open", () => {
     // Default right-dock is "spawner" (lib/right-dock.ts) — open.
     const bridge = makeStubBridge();
-    const { container } = render(
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>,
-    );
+    const { container } = renderPanelLayout(bridge);
 
     const separators = Array.from(container.querySelectorAll("[data-separator]"));
     expect(separators.length).toBeGreaterThan(0);
@@ -302,11 +291,7 @@ describe("PanelLayout — DOM structure", () => {
 
   it("quadrant-viewport rect is the innermost wrapper (Modal portal target preservation)", () => {
     const bridge = makeStubBridge();
-    render(
-      <BridgeContext.Provider value={bridge}>
-        <PanelLayout bridge={bridge} />
-      </BridgeContext.Provider>,
-    );
+    renderPanelLayout(bridge);
     // Risk 2 from the plan: Modal.tsx does
     //   document.querySelector('[data-testid="quadrant-viewport"]')
     // and reads getBoundingClientRect on the result. The testID must

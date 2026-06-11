@@ -325,6 +325,25 @@ describe("MockBridge contract", () => {
     off();
   });
 
+  it("engine/set/overload-guard round-trips and stores the config on the mock", async () => {
+    const b = new MockBridge();
+    const res = await b.request({
+      kind: "engine/set/overload-guard",
+      params: { enabled: false, maxParticles: 50_000 },
+    });
+    expect(res).toEqual({});
+    expect(b.lastOverloadGuard).toEqual({ enabled: false, maxParticles: 50_000 });
+  });
+
+  it("engine/set/overload-guard is view-only (does not mark the doc dirty)", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "engine/set/overload-guard", params: { enabled: true, maxParticles: 25_000 } });
+    // Dirty state is read via engine/state/snapshot.dirty in this file
+    // (no file/state kind exists in the schema).
+    const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.dirty).toBe(false);
+  });
+
   // Task 2.4: file/open is no longer a hard reject. The native handler
   // shows GetOpenFileNameW; the mock resolves with the schema's
   // cancellation shape so the React handler's request chain aborts

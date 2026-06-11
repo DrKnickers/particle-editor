@@ -4,9 +4,19 @@
 // Mirror Sun button dispatches engine/set/light for both fills.
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import type { ReactElement, ReactNode } from "react";
 import { LightingPanel } from "../LightingPanel";
 import type { Bridge } from "@particle-editor/bridge-schema";
+
+//: the Mirror Sun button mounts a Tip (Radix Tooltip.Root) while
+// disabled, which requires the app-level Tooltip.Provider — wrapper stands
+// in for it (precedent: renderToolbar in Toolbar.test.tsx).
+const TipProvider = ({ children }: { children: ReactNode }) => (
+  <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{children}</Tooltip.Provider>
+);
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: TipProvider });
 
 function makeStubBridge(): Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> } {
   // Bridge stub: snapshot returns a minimal EngineStateDto so the

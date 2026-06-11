@@ -604,6 +604,7 @@ export type Request =
 
   // Engine setters — view state (preview clock)
   | { kind: "engine/set/paused";              params: { paused: boolean } }
+  | { kind: "engine/set/overload-guard";      params: { enabled: boolean; maxParticles: number } }
 
   // T9] Test-only knob: suppress the 4 Hz stats/tick emission
   // AND tell React's StatusBar to clear its local state via
@@ -998,6 +999,7 @@ export type ResponseFor<R extends Request> =
   R extends { kind: "engine/set/ambient" }                 ? Record<string, never> :
   R extends { kind: "engine/set/shadow" }                  ? Record<string, never> :
   R extends { kind: "engine/set/paused" }                  ? Record<string, never> :
+  R extends { kind: "engine/set/overload-guard" }          ? Record<string, never> :
   R extends { kind: "stats/set-frozen" }                   ? Record<string, never> :
 
   // Engine actions — empty body

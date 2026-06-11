@@ -46,6 +46,7 @@ const FORCE_ALIGN_FILL2_AZ_OFFSET = 210;
 const FORCE_ALIGN_FILL_ALT        = -10;
 
 import { useEffect, useState } from "react";
+import { Tip } from "@/primitives/Tip";
 import type {
   Bridge,
   Color,
@@ -518,15 +519,26 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
       </ToolPanel.Section>
 
       <ToolPanel.Footer>
-        <button
-          type="button"
-          onClick={handleMirrorSun}
-          disabled={forceAlign}
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-panel-2"
-          title={forceAlign ? "Disabled while Force Align is on" : undefined}
+        {/* T6 + T4: the tooltip only exists while the button is DISABLED
+            (Force Align on) — disabled elements fire no pointer events, so
+            the Tip rides an inline-block span wrapper. The footer is a
+            flex-wrap row, so the span is layout-neutral (it becomes the
+            flex item; the button keeps its own box). */}
+        <Tip
+          content={forceAlign ? "Disabled while Force Align is on" : undefined}
+          occlusionId="tip:lighting:force-align"
         >
-          Mirror Sun
-        </button>
+          <span className="inline-block">
+            <button
+              type="button"
+              onClick={handleMirrorSun}
+              disabled={forceAlign}
+              className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-panel-2"
+            >
+              Mirror Sun
+            </button>
+          </span>
+        </Tip>
         <button
           type="button"
           onClick={handleReset}

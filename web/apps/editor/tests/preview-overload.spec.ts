@@ -34,11 +34,14 @@ import { test, expect, chromium, type Page, type Browser } from "@playwright/tes
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 
-// Engine::kMaxLivePreviewParticles (src/engine.h) is 100_000, plus
-// slack since the stats counter is sampled at 4 Hz between frames. In
-// practice a SINGLE emitter plateaus far lower (the per-instance uint16
-// index cap, 16,383) — the assertion only needs to prove the population
-// is bounded, not which ceiling bit first.
+// The overload guard cap is now runtime-configurable (engine default
+// 15_000, user-adjustable). The two 1e9-bomb tests pin the cap explicitly
+// at the top of each test (engine/set/overload-guard) so they don't
+// depend on the default. The slack stays 110_000 — well above any pinned
+// cap below — since the stats counter is sampled at 4 Hz between frames.
+// In practice a SINGLE emitter plateaus far lower (the per-instance
+// uint16 index cap, 16,383) — the assertion only needs to prove the
+// population is bounded, not which ceiling bit first.
 const BUDGET_SLACK = 110_000;
 
 let browser: Browser;
@@ -135,6 +138,14 @@ test("huge spawn rate plateaus at the budget, latches overload, and recovers", a
   // clock frozen no spawn round ever fires, so overload could never
   // latch (bit this spec on its first full-harness run).
   await bridgeRequest("engine/set/paused", { paused: false });
+
+  // [guard-config] Pin the cap explicitly so this spec doesn't depend on
+  // the engine default. 15_000 is pinned deliberately rather than the old
+  // hardcoded 100_000: in a full-harness Debug run the 1e9 bomb below
+  // plateaus AT the cap, and a 100k plateau OOM-crashes the Debug host at
+  // cleanup (reproduced 2/2), cascading into the next test's timeout. 25k
+  // plateaus comfortably and stays well under BUDGET_SLACK.
+  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 });
 
   // Locate the first root emitter and snapshot the fields we'll touch.
   const tree = await bridgeRequest<{ root: { children: { id: number }[] } }>(
@@ -247,6 +258,10 @@ test("huge spawn rate plateaus at the budget, latches overload, and recovers", a
     }
     // Kill the lingering preview instance (and reset the budget latch).
     await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    // Restore the engine default cap for any later run / spec.
+    await cleanupStep("guard-restore", () =>
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+    );
   }
 });
 
@@ -257,6 +272,11 @@ test("death-child spawns are refused under overload and the editor survives", as
   // Defensive (same as test 1): stats flowing, clock running.
   await bridgeRequest("stats/set-frozen", { frozen: false });
   await bridgeRequest("engine/set/paused", { paused: false });
+
+  // [guard-config] Pin the cap explicitly so this spec doesn't depend on
+  // the engine default. 15_000 pinned deliberately (see test 1): a 100k
+  // particle plateau crashes the Debug host under the full harness.
+  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 });
 
   const tree = await bridgeRequest<{ root: { children: { id: number }[] } }>(
     "emitters/list",
@@ -369,5 +389,247 @@ test("death-child spawns are refused under overload and the editor survives", as
     }
     // Kill the lingering preview instance (and reset the budget latch).
     await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    // Restore the engine default cap for any later run / spec.
+    await cleanupStep("guard-restore", () =>
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+    );
+  }
+});
+
+test("a lowered cap bounds the plateau at the configured value", async () => {
+  test.setTimeout(120_000);
+  await bridgeRequest("stats/set-frozen", { frozen: false });
+  await bridgeRequest("engine/set/paused", { paused: false });
+  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 5_000 });
+
+  const tree = await bridgeRequest<{ root: { children: { id: number }[] } }>("emitters/list", {});
+  const targetId = tree.root.children[0]?.id;
+  expect(targetId).not.toBeUndefined();
+  const before = await bridgeRequest<{
+    properties: { lifetime: number; useBursts: boolean; nParticlesPerSecond: number };
+  }>("emitters/get-properties", { id: targetId });
+  const orig = before.properties;
+  const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
+  const origSpawner = snapshot.spawner;
+
+  try {
+    await bridgeRequest("emitters/set-properties", {
+      id: targetId,
+      patch: { nParticlesPerSecond: 1_000_000_000, lifetime: 5, useBursts: false },
+    });
+    await bridgeRequest("spawner/start", {
+      mode: "manual",
+      enabled: false,
+      burstSize: 1,
+      spacingSec: 0,
+      intervalSec: 10,
+      position: [0, 0, 0],
+      velocity: [0, 0, 0],
+      maxLifetimeSec: 0,
+      jitterPosition: [0, 0, 0],
+      jitterVelocity: [0, 0, 0],
+    });
+    await bridgeRequest("spawner/trigger", {});
+
+    const overloaded = await waitForOverload(true, 10_000);
+    if (overloaded.hit === null) {
+      console.log("[preview-overload] lowered-cap ticks seen:", JSON.stringify(overloaded.seen));
+    }
+    expect(overloaded.hit, "expected a stats/tick with overload=true").not.toBeNull();
+    // 4 Hz sampling slack on a 5k cap: one inter-tick round can overshoot
+    // a little; 6k proves the 100k ceiling is NOT in play.
+    for (const t of overloaded.seen) expect(t.particles).toBeLessThanOrEqual(6_000);
+  } finally {
+    await cleanupStep("restore-properties", () =>
+      bridgeRequest("emitters/set-properties", {
+        id: targetId,
+        patch: {
+          nParticlesPerSecond: orig.nParticlesPerSecond,
+          lifetime: orig.lifetime,
+          useBursts: orig.useBursts,
+        },
+      }),
+    );
+    await cleanupStep("push-live", () =>
+      bridgeRequest("engine/action/on-particle-system-changed", { track: -1 }),
+    );
+    await cleanupStep("spawner-stop", () => bridgeRequest("spawner/stop", {}));
+    if (origSpawner) {
+      await cleanupStep("spawner-restore", () => bridgeRequest("spawner/start", origSpawner));
+    }
+    await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    await cleanupStep("guard-restore", () =>
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+    );
+  }
+});
+
+test("lowering the cap mid-run suppresses and decays to the new ceiling", async () => {
+  test.setTimeout(120_000);
+  await bridgeRequest("stats/set-frozen", { frozen: false });
+  await bridgeRequest("engine/set/paused", { paused: false });
+  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 50_000 });
+
+  const tree = await bridgeRequest<{ root: { children: { id: number }[] } }>("emitters/list", {});
+  const targetId = tree.root.children[0]?.id;
+  expect(targetId).not.toBeUndefined();
+  const before = await bridgeRequest<{
+    properties: { lifetime: number; useBursts: boolean; nParticlesPerSecond: number };
+  }>("emitters/get-properties", { id: targetId });
+  const orig = before.properties;
+  const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
+  const origSpawner = snapshot.spawner;
+
+  try {
+    // lifetime 2: faster natural decay keeps the test quick.
+    await bridgeRequest("emitters/set-properties", {
+      id: targetId,
+      patch: { nParticlesPerSecond: 1_000_000_000, lifetime: 2, useBursts: false },
+    });
+    await bridgeRequest("spawner/start", {
+      mode: "manual",
+      enabled: false,
+      burstSize: 1,
+      spacingSec: 0,
+      intervalSec: 10,
+      position: [0, 0, 0],
+      velocity: [0, 0, 0],
+      maxLifetimeSec: 0,
+      jitterPosition: [0, 0, 0],
+      jitterVelocity: [0, 0, 0],
+    });
+    await bridgeRequest("spawner/trigger", {});
+    const armed = await waitForOverload(true, 10_000);
+    if (armed.hit === null) {
+      console.log("[preview-overload] mid-run arm ticks seen:", JSON.stringify(armed.seen));
+    }
+    expect(armed.hit, "expected overload=true before lowering the cap").not.toBeNull();
+
+    await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 5_000 });
+    const decayed = await page.evaluate(
+      () =>
+        new Promise<boolean>((resolve) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const b = (window as any).bridge;
+          const timer = setTimeout(() => {
+            off();
+            resolve(false);
+          }, 15_000);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const off = b.on("stats/tick", (e: any) => {
+            if (e.payload.particles <= 5_000) {
+              clearTimeout(timer);
+              off();
+              resolve(true);
+            }
+          });
+        }),
+    );
+    expect(decayed, "expected population to decay to the lowered 5k cap").toBe(true);
+  } finally {
+    await cleanupStep("restore-properties", () =>
+      bridgeRequest("emitters/set-properties", {
+        id: targetId,
+        patch: {
+          nParticlesPerSecond: orig.nParticlesPerSecond,
+          lifetime: orig.lifetime,
+          useBursts: orig.useBursts,
+        },
+      }),
+    );
+    await cleanupStep("push-live", () =>
+      bridgeRequest("engine/action/on-particle-system-changed", { track: -1 }),
+    );
+    await cleanupStep("spawner-stop", () => bridgeRequest("spawner/stop", {}));
+    if (origSpawner) {
+      await cleanupStep("spawner-restore", () => bridgeRequest("spawner/start", origSpawner));
+    }
+    await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    await cleanupStep("guard-restore", () =>
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+    );
+  }
+});
+
+test("disabled guard lets the population exceed the cap with no overload latch", async () => {
+  test.setTimeout(120_000);
+  await bridgeRequest("stats/set-frozen", { frozen: false });
+  await bridgeRequest("engine/set/paused", { paused: false });
+  // Low cap + disabled: if the guard were active the population would pin
+  // at 2k; exceeding it proves uncapped. MODERATE rate (4k/s × 5s ≈ 20k) —
+  // deliberately NOT the 1e9 bomb, so the test host stays healthy.
+  await bridgeRequest("engine/set/overload-guard", { enabled: false, maxParticles: 2_000 });
+
+  const tree = await bridgeRequest<{ root: { children: { id: number }[] } }>("emitters/list", {});
+  const targetId = tree.root.children[0]?.id;
+  expect(targetId).not.toBeUndefined();
+  const before = await bridgeRequest<{
+    properties: { lifetime: number; useBursts: boolean; nParticlesPerSecond: number };
+  }>("emitters/get-properties", { id: targetId });
+  const orig = before.properties;
+  const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
+  const origSpawner = snapshot.spawner;
+
+  try {
+    await bridgeRequest("emitters/set-properties", {
+      id: targetId,
+      patch: { nParticlesPerSecond: 4_000, lifetime: 5, useBursts: false },
+    });
+    await bridgeRequest("spawner/start", {
+      mode: "manual",
+      enabled: false,
+      burstSize: 1,
+      spacingSec: 0,
+      intervalSec: 10,
+      position: [0, 0, 0],
+      velocity: [0, 0, 0],
+      maxLifetimeSec: 0,
+      jitterPosition: [0, 0, 0],
+      jitterVelocity: [0, 0, 0],
+    });
+    await bridgeRequest("spawner/trigger", {});
+
+    const result = await page.evaluate(
+      () =>
+        new Promise<{ peak: number; latched: boolean }>((resolve) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const b = (window as any).bridge;
+          let peak = 0;
+          let latched = false;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const off = b.on("stats/tick", (e: any) => {
+            peak = Math.max(peak, e.payload.particles);
+            if (e.payload.overload) latched = true;
+          });
+          setTimeout(() => {
+            off();
+            resolve({ peak, latched });
+          }, 8_000);
+        }),
+    );
+    expect(result.peak, "expected the uncapped population to exceed the 2k cap").toBeGreaterThan(2_500);
+    expect(result.latched, "expected no overload latch while the guard is disabled").toBe(false);
+  } finally {
+    await cleanupStep("restore-properties", () =>
+      bridgeRequest("emitters/set-properties", {
+        id: targetId,
+        patch: {
+          nParticlesPerSecond: orig.nParticlesPerSecond,
+          lifetime: orig.lifetime,
+          useBursts: orig.useBursts,
+        },
+      }),
+    );
+    await cleanupStep("push-live", () =>
+      bridgeRequest("engine/action/on-particle-system-changed", { track: -1 }),
+    );
+    await cleanupStep("spawner-stop", () => bridgeRequest("spawner/stop", {}));
+    if (origSpawner) {
+      await cleanupStep("spawner-restore", () => bridgeRequest("spawner/start", origSpawner));
+    }
+    await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
+    await cleanupStep("guard-restore", () =>
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+    );
   }
 });
