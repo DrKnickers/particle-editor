@@ -880,6 +880,10 @@ export function CurveEditorPanel({ bridge }: Props) {
       const moves = sel.map((k) => {
         const isBorder = borderKeyTimes.has(k.time);
         let nt = isBorder ? k.time : k.time + dTime;
+        // NOTE: the clamped nt/nv here are the values the engine commits.
+        // CurveEditor.tsx (~:1499-1500) records the same clamped values
+        // into morphSuppressRef; movesMatch() in use-curve-morph.ts
+        // verifies them. Keep clamp logic in sync with the recorder.
         if (!isBorder) nt = Math.min(lastTime - eps, Math.max(firstTime + eps, nt));
         const nv = Math.min(sb.max, Math.max(sb.min, k.value + dValue));
         return { oldTime: k.time, wireTime: nt, engineTime: Math.fround(nt), newValue: nv };

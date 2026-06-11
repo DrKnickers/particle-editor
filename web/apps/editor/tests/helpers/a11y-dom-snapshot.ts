@@ -52,6 +52,23 @@ export async function captureDomA11y(page: Page): Promise<string> {
     .catch(() => {
       /* backstop: snapshot anyway; the golden diff will say what's left */
     });
+  // [curve-morph / Part B] Curve morph-animation settle. The WebView2
+  // host is Chromium, so window.matchMedia exists and the curve morph
+  // (sample-and-tween) RUNS live in the harness whenever a track edit
+  // restructures a curve. A snapshot taken mid-morph would capture the
+  // transient overlay <g data-testid="curve-morph-overlay"> + hidden
+  // static layer instead of the settled curve. Wait until no morph
+  // overlay remains; ~0ms when none is animating (the common case).
+  // Same 2s backstop + catch so a stuck/edge case can't hang capture.
+  await page
+    .waitForFunction(
+      () => !document.querySelector('[data-testid="curve-morph-overlay"]'),
+      null,
+      { timeout: 2_000 },
+    )
+    .catch(() => {
+      /* backstop: snapshot anyway */
+    });
   // ariaSnapshot on body captures the whole document tree. Returns
   // canonical YAML (newline-terminated, deterministic key order).
   return page.locator("body").ariaSnapshot();

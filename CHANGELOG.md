@@ -17,6 +17,68 @@ Conventions:
 ## Changelog
 
 
+### Curves animate smoothly on structural changes (morph + key choreography)
+
+*2026-06-11 · TODO-hash · TODO-PR*
+
+Editing a curve no longer snaps. Adding or deleting a key, pasting,
+nudging values with the spinners, undo/redo, switching interpolation
+mode (linear ↔ smooth ↔ step), or watching a locked follower re-mirror
+its master — the curve now **morphs** smoothly from its old shape to
+its new shape over ~180 ms, with matched key markers gliding to their
+new positions, added keys popping in, and removed keys fading out.
+Dragging a key stays live (the drag preview already tracks the cursor —
+no animation piled on top), and `prefers-reduced-motion` turns the whole
+thing off (curves snap, as before).
+
+**How we tackled it.** One mechanism covers every trigger:
+**sample-and-tween**. A pure core
+([`src/lib/curve-morph.ts`](web/apps/editor/src/lib/curve-morph.ts:1))
+samples the old and new *rendered* curves at a shared x-grid and the
+hook tweens the sample arrays in projected pixel space — so an
+interpolation-mode change or an auto-range growth morphs as one coherent
+shape, not a special case. Two facts made the hard parts easy: the
+legacy smooth curve reduces to a **fixed monotonic cubic + smoothstep**
+(`x(t)=0.75t+0.75t²−0.5t³`, `y`=smoothstep), so uniform-x sampling is one
+4-iteration Newton solve of a single polynomial; and the grid is
+augmented with an epsilon pair at every key time so **step
+discontinuities stay true verticals** even mid-morph. The animation
+itself is a hook
+([`src/lib/use-curve-morph.ts`](web/apps/editor/src/lib/use-curve-morph.ts:1))
+that diffs consecutive `tracks` props per channel and drives one shared
+`requestAnimationFrame` loop, drawing into an imperatively-owned overlay
+`<g>` per morphing channel (React mounts/unmounts the group; every frame
+is a direct DOM write — the FLIP/dock-anim idiom, no per-frame setState);
+the static curve hides while its overlay animates and reappears at the
+final geometry (snap-to-truth). The whole feature is gated on
+`window.matchMedia` existing **and** reduced-motion being off — jsdom has
+no `matchMedia`, so the entire existing test suite runs in snap mode
+untouched and morph tests opt in by stubbing it. No native, bridge, or
+schema changes.
+
+**Issues encountered and resolutions.** (1) **Drag-commit double-glide:**
+a committed drag re-delivers the tracks via `tree/changed`, but the
+dragged curve already moved during the preview — without suppression it
+would visibly snap back and re-glide. The renderer records the committed
+move(s) at the drag-commit site; the hook skips re-morphing the channel
+when the incoming change matches. The matcher is **reorder-tolerant**
+(content multiset, not array index) so a group drag that moves a
+selected key past an unselected neighbor — which re-sorts the keys —
+still suppresses correctly; a locked follower of the dragged master is
+*not* recorded, so it morphs (the intended mirror glide). (2) **Live-host
+morphs vs. a11y goldens:** the WebView2 host is Chromium, so morphs run
+in the native harness too; `captureDomA11y` now settles on the absence
+of `[data-testid="curve-morph-overlay"]` (mirroring the tooltip-exit
+settle) before snapshotting. (3) **Interruption folding:** rapid edits
+(spinner auto-repeat, undo spam) retarget an in-flight morph from the
+currently-displayed shape rather than restarting from a stale one; the
+leak-guard fallback timeout is refreshed on each retarget so a sustained
+fold is never cut off early. (4) **`lockedTo` is styling, not shape:** the
+change classifier ignores it (a re-mirror always arrives as key deltas),
+so toggling a lock never spuriously triggers a morph.
+
+---
+
 ### Locked curve channels are now genuinely read-only (dashed mirror treatment)
 
 *2026-06-11 · [`75cbe6d`](https://github.com/DrKnickers/particle-editor/commit/75cbe6d) · #126*

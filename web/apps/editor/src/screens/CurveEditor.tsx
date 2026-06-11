@@ -57,6 +57,7 @@
 
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from "react";
 import type { InterpolationType, TrackDto, TrackName } from "@particle-editor/bridge-schema";
+import { useCurveMorph, type SuppressedMove } from "../lib/use-curve-morph";
 
 /** Channel definition for the multi-channel overlay branch (Task 2.6).
  *  `id` is the UI-facing identifier (e.g. "rotation"); `trackName` is
@@ -1219,6 +1220,30 @@ function MultiChannelCurves({
   } | null>(null);
   const [, setDragTick] = useState(0);
 
+  // ── Morph animation. morphSuppressRef stays null this task (Task 4
+  // wires the recording at the drag-commit site). dragRef must be
+  // declared before this hook so the isDragging closure captures it.
+  const morphSuppressRef = useRef<SuppressedMove>(null);
+  const morph = useCurveMorph({
+    channels: layers.map((l) => ({
+      channelId: l.channel.id,
+      color: l.channel.color,
+      track: l.track,
+      vMin: (displayRange ?? l.range).min,
+      vMax: (displayRange ?? l.range).max,
+      dashed: focusReadOnly && focusLayer !== null && l.channel.id === focusLayer.channel.id,
+      strokeWidth: focusEnabled && focusLayer !== null && l.channel.id === focusLayer.channel.id ? 3 : 2,
+      opacity: focusEnabled && (focusLayer === null || l.channel.id !== focusLayer.channel.id) ? 0.4 : 1,
+      isFocus: focusLayer !== null && l.channel.id === focusLayer.channel.id,
+    })),
+    width,
+    height,
+    timeMin,
+    timeMax,
+    isDragging: () => dragRef.current !== null,
+    suppressRef: morphSuppressRef,
+  });
+
   // ── Marquee state (mirrors the single-track branch).
   type MarqueeState = {
     startX: number;
@@ -1460,6 +1485,32 @@ function MultiChannelCurves({
       // plain key click so it falls back to single-select).
       if (moved && onGroupDragEnd) {
         dragConsumedClickRef.current = true;
+        // Record suppression BEFORE firing the callback so the hook
+        // sees it when the parent re-renders with the committed tracks.
+        if (focusLayer !== null && selectedKeyTimes) {
+          const eps = 1e-4;
+          const allKeys = focusLayer.track.keys;
+          const suppMoves: Array<{ oldTime: number; newTime: number; newValue: number }> = [];
+          for (const k of allKeys) {
+            if (!selectedKeyTimes.has(k.time)) continue;
+            const isBorder = focusBorderTimes.has(k.time);
+            // NOTE: newTime/newValue must match the values committed by
+            // applyGroupShift in CurveEditorPanel.tsx (~:883-884) within
+            // KEY_MATCH_EPS; movesMatch() in use-curve-morph.ts uses them
+            // to verify the incoming track change. Keep in sync.
+            const newTime = isBorder
+              ? k.time
+              : Math.max(timeMin + eps, Math.min(timeMax - eps, k.time + groupDTime));
+            const newValue = Math.max(focusVMin, Math.min(focusVMax, k.value + groupDValue));
+            suppMoves.push({ oldTime: k.time, newTime, newValue });
+          }
+          if (suppMoves.length > 0) {
+            morphSuppressRef.current = {
+              channelId: focusLayer.channel.id,
+              moves: suppMoves,
+            };
+          }
+        }
         onGroupDragEnd(groupDTime, groupDValue);
       } else if (!moved && onKeyClick) {
         onKeyClick(keyTime, event);
@@ -1469,6 +1520,18 @@ function MultiChannelCurves({
       // `dragConsumedClickRef`'s comment. Without this the backdrop
       // would clear the selection we set in handleKeyDragEnd.
       dragConsumedClickRef.current = true;
+      // Record suppression BEFORE firing the callback so the hook
+      // sees it when the parent re-renders with the committed tracks.
+      if (focusLayer !== null) {
+        // NOTE: newTime/newValue here must equal the committed key values
+        // within KEY_MATCH_EPS; movesMatch() in use-curve-morph.ts uses
+        // them to verify the incoming track change. Keep in sync with the
+        // group-clamp in CurveEditorPanel.tsx applyGroupShift (~:883-884).
+        morphSuppressRef.current = {
+          channelId: focusLayer.channel.id,
+          moves: [{ oldTime: keyTime, newTime: currentTime, newValue: currentValue }],
+        };
+      }
       onKeyDragEnd(keyTime, currentTime, currentValue);
     } else if (!moved && onKeyClick) {
       onKeyClick(keyTime, event);
@@ -1747,7 +1810,7 @@ function MultiChannelCurves({
             data-channel-id={channel.id}
             data-key-count={points.length}
             data-focus="false"
-            style={{ opacity: layerOpacity }}
+            style={{ opacity: layerOpacity, visibility: morph.isActive(channel.id) ? "hidden" : undefined }}
           >
             {points.length >= 2 && interp === "smooth" && (
               <path
@@ -1813,6 +1876,7 @@ function MultiChannelCurves({
             data-key-count={focusRenderPoints.length}
             data-focus="true"
             data-readonly={focusReadOnly ? "true" : "false"}
+            style={{ visibility: morph.isActive(channel.id) ? "hidden" : undefined }}
           >
             {/* Gradient definition — objectBoundingBox units mean the
                 stops are positioned within the fill path's own bbox,
@@ -1957,6 +2021,20 @@ function MultiChannelCurves({
           </g>
         );
       })()}
+
+      {/* Morph overlays — one per channel that is currently morphing.
+          React mounts/unmounts the group; the rAF loop writes into it
+          imperatively. Rendered above the focus layer so the in-flight
+          shape is always visible. */}
+      {morph.activeIds.map((id) => (
+        <g
+          key={id}
+          data-testid="curve-morph-overlay"
+          data-channel-id={id}
+          pointerEvents="none"
+          ref={morph.attach(id)}
+        />
+      ))}
 
       {/* Marquee rectangle */}
       {marquee !== null && marquee.movedPastSlop && (

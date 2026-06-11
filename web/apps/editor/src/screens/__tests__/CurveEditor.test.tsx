@@ -15,8 +15,8 @@
 import type { InterpolationType, TrackDto } from "@particle-editor/bridge-schema";
 import type * as React from "react";
 import { createRef } from "react";
-import { describe, it, expect, vi } from "vitest";
-import { act, fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "../CurveEditor";
 
 function fixtureTrack(
@@ -743,5 +743,521 @@ describe("locked focus channel (read-only mirror)", () => {
     expect(onKeyContextMenu).not.toHaveBeenCalled();
     fireEvent.click(pad);
     expect(onKeyClick).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Curve morph animation tests ─────────────────────────────────────────────
+//
+// These tests stub window.matchMedia so morphs RUN (jsdom lacks it by
+// default, which is the mechanism that keeps the other ~720 tests in
+// snap mode).
+
+// Helper: build a TrackDto key point.
+function k(time: number, value: number): { time: number; value: number } {
+  return { time, value };
+}
+
+// Helper: build a full TrackDto.
+// Name must be a TrackName literal; "red" and "green" are valid in the schema.
+function trk(
+  name: "red" | "green",
+  keys: Array<{ time: number; value: number }>,
+  interpolation: InterpolationType = "linear",
+  lockedTo: "red" | "green" | null = null,
+): TrackDto {
+  return { name, keys, interpolation, lockedTo };
+}
+
+// A canonical 3-key set shared across tests.
+const KEYS3 = [k(0, 0), k(50, 0.5), k(100, 1)];
+
+// Channel definitions for morph tests.
+// Re-use the lock fixtures' pattern: `trackName` must be a valid TrackName
+// literal. "red" and "green" are valid TrackName values in the schema.
+const MORPH_RED_CHANNEL = {
+  id: "red", label: "Red", color: "#FF0000", defaultOn: true, trackName: "red",
+} satisfies ChannelDef;
+const MORPH_GREEN_CHANNEL = {
+  id: "green", label: "Green", color: "#00FF00", defaultOn: true, trackName: "green",
+} satisfies ChannelDef;
+
+/** Render the multi-channel CurveEditor with the given tracks, focusing
+ *  the given channel. Width/height are pinned to 600×300. */
+function mcCurve(
+  tracks: TrackDto[],
+  focusId: string,
+): React.ReactElement {
+  const channelDefs = tracks.map((t) =>
+    t.name === "green" ? MORPH_GREEN_CHANNEL : MORPH_RED_CHANNEL,
+  );
+  const visibleChannels = Object.fromEntries(tracks.map((t) => [t.name, true]));
+  return (
+    <CurveEditor
+      tracks={tracks}
+      channels={channelDefs}
+      visibleChannels={visibleChannels}
+      focusChannel={focusId}
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+    />
+  );
+}
+
+// matchMedia stub — morphs RUN (reduce=false).
+function stubMatchMediaMotionOn(): () => void {
+  const realMM = (window as Window & typeof globalThis).matchMedia;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (q: string) => ({
+      matches: false, // prefers-reduced-motion: reduce → false → motion OK
+      media: q,
+      onchange: null,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent() { return false; },
+    }),
+  });
+  return () => {
+    Object.defineProperty(window, "matchMedia", { configurable: true, value: realMM });
+  };
+}
+
+// matchMedia stub — reduced-motion ON.
+function stubMatchMediaMotionOff(): () => void {
+  const realMM = (window as Window & typeof globalThis).matchMedia;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (q: string) => ({
+      matches: q.includes("reduce"), // prefers-reduced-motion: reduce → true → NO motion
+      media: q,
+      onchange: null,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent() { return false; },
+    }),
+  });
+  return () => {
+    Object.defineProperty(window, "matchMedia", { configurable: true, value: realMM });
+  };
+}
+
+/** Variant of mcCurve that lets the caller override the channel colour.
+ *  Used for the var(...) colour branch test. */
+function mcCurveWithColor(
+  tracks: TrackDto[],
+  focusId: string,
+  color: string,
+): React.ReactElement {
+  const channelDefs: ChannelDef[] = tracks.map((t) => ({
+    id: t.name,
+    label: t.name,
+    color,
+    defaultOn: true,
+    trackName: t.name as ChannelDef["trackName"],
+  }));
+  const visibleChannels = Object.fromEntries(tracks.map((t) => [t.name, true]));
+  return (
+    <CurveEditor
+      tracks={tracks}
+      channels={channelDefs}
+      visibleChannels={visibleChannels}
+      focusChannel={focusId}
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+    />
+  );
+}
+
+describe("curve morph (structural changes)", () => {
+  let restoreMatchMedia: (() => void) | null = null;
+
+  afterEach(() => {
+    restoreMatchMedia?.();
+    restoreMatchMedia = null;
+  });
+
+  it("mounts a morph overlay on a structural change, hides the static curve, then settles", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    const t1 = [trk("red", [k(0, 0), k(50, 0.9), k(100, 1)], "linear")];
+    rerender(mcCurve(t1, "red"));
+
+    // Overlay should mount.
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // Static focus layer should be hidden while morphing.
+    const staticLayer = container.querySelector('[data-channel-id="red"][data-focus="true"]')!;
+    expect((staticLayer as SVGGElement).style.visibility).toBe("hidden");
+
+    // After the morph completes, overlay unmounts and static layer re-appears.
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+
+    expect((staticLayer as SVGGElement).style.visibility).not.toBe("hidden");
+    // Suppress unused-variable warning — overlay was captured to verify the
+    // same node is used throughout.
+    void overlay;
+  });
+
+  it("interp change morphs; locked follower morphs with stroke-dasharray '7 5' on its overlay polyline", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", KEYS3, "linear"), trk("green", KEYS3, "linear", "red")];
+    const { rerender, container } = render(mcCurve(t0, "green"));
+
+    const t1 = [trk("red", KEYS3, "smooth"), trk("green", KEYS3, "smooth", "red")];
+    rerender(mcCurve(t1, "green"));
+
+    // The green channel is the focused+locked follower — its overlay polyline
+    // should carry the READONLY_DASH ("7 5").
+    const line = await waitFor(() => {
+      const el = container.querySelector(
+        '[data-testid="curve-morph-overlay"][data-channel-id="green"] polyline',
+      );
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    expect(line.getAttribute("stroke-dasharray")).toBe("7 5");
+  });
+
+  it("no matchMedia (jsdom default) => no overlay ever mounts", async () => {
+    // Run WITHOUT any stub — jsdom has no matchMedia, so the gate blocks morphs.
+    // Ensure matchMedia is genuinely absent for this test.
+    const savedMM = (window as unknown as Record<string, unknown>).matchMedia;
+    delete (window as unknown as Record<string, unknown>).matchMedia;
+    try {
+      const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+      const { rerender, container } = render(mcCurve(t0, "red"));
+      rerender(mcCurve([trk("red", [k(0, 0), k(50, 1), k(100, 1)], "linear")], "red"));
+      // Give any rAF-backed morph time to manifest (it shouldn't).
+      await new Promise<void>((r) => setTimeout(r, 50));
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    } finally {
+      (window as unknown as Record<string, unknown>).matchMedia = savedMM;
+    }
+  });
+
+  it("reduced-motion => no overlay", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOff(); // prefers-reduced-motion: reduce = true
+
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+    rerender(mcCurve([trk("red", [k(0, 0), k(50, 1), k(100, 1)], "linear")], "red"));
+    // Give rAF time to fire if the gate erroneously passes.
+    await new Promise<void>((r) => setTimeout(r, 50));
+    expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+  });
+
+  it("interruption: a second structural change mid-morph retargets without unmounting the overlay", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    // First structural change — starts a morph.
+    rerender(mcCurve([trk("red", [k(0, 0), k(40, 0.8), k(100, 1)], "linear")], "red"));
+
+    // Wait for the overlay to appear.
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // About 30ms into the morph, issue a second structural change.
+    await new Promise<void>((r) => setTimeout(r, 30));
+    rerender(mcCurve([trk("red", [k(0, 0), k(60, 0.3), k(100, 1)], "linear")], "red"));
+
+    // The overlay element should be the SAME node (not unmounted/remounted).
+    await new Promise<void>((r) => setTimeout(r, 10));
+    const overlayAfterRetarget = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+    expect(overlayAfterRetarget).toBe(overlay);
+
+    // Eventually the morph settles.
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("sustained interruption-folding: repeated retargets past 430 ms never trigger the stale fallback", async () => {
+    // Regression test for the stale-fallback bug: before the fix, the fallback
+    // was set ONCE at ensureLoop() call time (at the first retarget). A stream
+    // of retargets extending the total duration past MORPH_MS+250 (~430ms)
+    // would hit that deadline and snap everything to done early.
+    //
+    // After the fix, each retarget resets the fallback to MORPH_MS+250 from
+    // NOW, so the overlay survives for the full sequence.
+    //
+    // Approach: retarget 4 times at ~80ms intervals (t≈0, 80, 160, 240, 320).
+    // Assert the overlay still exists at ~500ms (well past the old 430ms
+    // stale deadline, but only ~180ms after the last retarget). Then wait for
+    // natural completion.
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    // Retarget 1 — starts the morph.
+    rerender(mcCurve([trk("red", [k(0, 0), k(30, 0.7), k(100, 1)], "linear")], "red"));
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]')).not.toBeNull();
+    });
+
+    // Retarget 2 at ~80 ms.
+    await new Promise<void>((r) => setTimeout(r, 80));
+    rerender(mcCurve([trk("red", [k(0, 0), k(45, 0.4), k(100, 1)], "linear")], "red"));
+
+    // Retarget 3 at ~160 ms.
+    await new Promise<void>((r) => setTimeout(r, 80));
+    rerender(mcCurve([trk("red", [k(0, 0), k(55, 0.6), k(100, 1)], "linear")], "red"));
+
+    // Retarget 4 at ~240 ms.
+    await new Promise<void>((r) => setTimeout(r, 80));
+    rerender(mcCurve([trk("red", [k(0, 0), k(65, 0.2), k(100, 1)], "linear")], "red"));
+
+    // Retarget 5 at ~320 ms.
+    await new Promise<void>((r) => setTimeout(r, 80));
+    rerender(mcCurve([trk("red", [k(0, 0), k(70, 0.9), k(100, 1)], "linear")], "red"));
+
+    // At ~400 ms (>430 ms from the first start but only ~80 ms after last
+    // retarget), wait another 100 ms (total ~500 ms from first retarget).
+    // The stale-fallback bug would have snapped done at ~430 ms; the fixed
+    // version must NOT have snapped.
+    await new Promise<void>((r) => setTimeout(r, 100));
+    expect(
+      container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]'),
+      "overlay must still exist at ~500 ms (fallback must NOT have fired at ~430 ms)",
+    ).not.toBeNull();
+
+    // Allow the morph to settle naturally (MORPH_MS=180 from the last
+    // retarget at ~320 ms → done by ~500 ms + rAF latency). Give extra
+    // headroom for CI.
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("focus-channel markers: matched keys glide, added key pops in, removed key ghosts out", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", [k(0, 0), k(50, 0.5), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    // delete the 50-key, add a 75-key in one change (paste-like)
+    rerender(mcCurve([trk("red", [k(0, 0), k(75, 0.9), k(100, 1)], "linear")], "red"));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // mid-morph: overlay carries marker circles — 2 moved (0, 100) + 1 in (75) + 1 ghost (50) = 4
+    await waitFor(() => {
+      expect(overlay.querySelectorAll("circle").length).toBe(4);
+    });
+
+    // Structural diversity check: the 4 circles must not all share the same cx.
+    // Move markers sit at px 0 and 600 (keys at time 0 and 100 are stable).
+    // The "in" marker sits at px 450 (time 75) and the "out" at px 300 (time 50).
+    // A regression that creates 4 circles with wrong choreography (e.g. all at
+    // the same position) will fail here even if the count is still 4.
+    const circles4 = Array.from(overlay.querySelectorAll("circle"));
+    const cxValues = new Set(circles4.map((c) => c.getAttribute("cx")));
+    expect(cxValues.size, "all 4 marker circles must have distinct cx values").toBe(4);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("non-focus channels morph their line but render no overlay markers", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", KEYS3, "linear"), trk("green", KEYS3, "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red")); // focus red; green is background
+
+    rerender(mcCurve([trk("red", KEYS3, "linear"),
+                      trk("green", [k(0, 0), k(40, 1), k(100, 0.5)], "linear")], "red"));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // Give at least one rAF tick so drawJob runs.
+    await new Promise<void>((r) => setTimeout(r, 30));
+
+    expect(overlay.querySelectorAll("circle").length).toBe(0);
+  });
+
+  it("var(...) channel colour: overlay polyline stroke is the var string; focus fill references gradient with var(...) stops", async () => {
+    // The focus overlay fill must use a self-contained linearGradient whose
+    // stop-color attributes carry the channel colour verbatim — even when the
+    // colour is a CSS variable token (e.g. var(--x-axis)) that is not parseable
+    // as hex. The gradient id is morph-fill-<channelId>. The fill path's fill
+    // attribute is url(#morph-fill-<channelId>).
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const varColor = "var(--x-axis)";
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurveWithColor(t0, "red", varColor));
+
+    rerender(mcCurveWithColor([trk("red", [k(0, 0), k(50, 0.9), k(100, 1)], "linear")], "red", varColor));
+
+    // Wait for the overlay to mount and for drawJob to create the imperative children.
+    const overlayG = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // Give at least one rAF tick so drawJob creates the imperative children.
+    await new Promise<void>((r) => setTimeout(r, 30));
+
+    const polyline = overlayG.querySelector("polyline");
+    expect(polyline, "overlay polyline must exist after first rAF tick").not.toBeNull();
+    // The var(...) colour must be forwarded verbatim as the stroke — no NaN corruption.
+    expect(polyline!.getAttribute("stroke")).toBe(varColor);
+
+    // Focus fill: path fill must reference the gradient, not a flat colour.
+    const fillPath = overlayG.querySelector("path");
+    expect(fillPath, "overlay fill path must exist for focus channel").not.toBeNull();
+    expect(fillPath!.getAttribute("fill")).toBe("url(#morph-fill-red)");
+    // No flat fill-opacity attribute (gradient handles opacity).
+    expect(fillPath!.getAttribute("fill-opacity")).toBeNull();
+
+    // A <linearGradient> with the correct id and two stops must exist.
+    const grad = overlayG.querySelector("linearGradient#morph-fill-red");
+    expect(grad, "linearGradient#morph-fill-red must exist in overlay").not.toBeNull();
+    const stops = grad!.querySelectorAll("stop");
+    expect(stops).toHaveLength(2);
+    // Both stops must carry the channel colour verbatim.
+    expect(stops[0]!.getAttribute("stop-color")).toBe(varColor);
+    expect(stops[1]!.getAttribute("stop-color")).toBe(varColor);
+    // Stops must have the matching opacities.
+    expect(stops[0]!.getAttribute("stop-opacity")).toBe("0.25");
+    expect(stops[1]!.getAttribute("stop-opacity")).toBe("0");
+  });
+
+  it("non-focus channel morph overlay has no fill path", async () => {
+    // The static layer draws no fill under non-focus (background) channels.
+    // The overlay must match: only a polyline, no <path> fill element.
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    // red is focus; green is the background channel that will morph.
+    const t0 = [trk("red", KEYS3, "linear"), trk("green", KEYS3, "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    rerender(mcCurve([trk("red", KEYS3, "linear"),
+                      trk("green", [k(0, 0), k(40, 1), k(100, 0.5)], "linear")], "red"));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // Give at least one rAF tick so drawJob runs.
+    await new Promise<void>((r) => setTimeout(r, 30));
+
+    // Non-focus: no fill <path> should exist.
+    expect(overlay.querySelector("path"), "non-focus overlay must not have a fill path").toBeNull();
+    // But the line polyline must be there.
+    expect(overlay.querySelector("polyline"), "non-focus overlay must have a polyline").not.toBeNull();
+  });
+
+  it("a drag-committed move does not re-morph the dragged channel, but its locked follower morphs", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    // red is focus; green is locked-to-red — both have identical keys.
+    const t0 = [
+      trk("red",   [k(0, 0), k(50, 0.5), k(100, 1)], "linear"),
+      trk("green", [k(0, 0), k(50, 0.5), k(100, 1)], "linear", "red"),
+    ];
+    const onKeyDragEnd = vi.fn();
+
+    const { rerender, container } = render(
+      <CurveEditor
+        tracks={t0}
+        channels={[MORPH_RED_CHANNEL, MORPH_GREEN_CHANNEL]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        onKeyDragEnd={onKeyDragEnd}
+      />,
+    );
+
+    // Stub getBoundingClientRect so eventToViewBox gets a valid scale.
+    const svg = container.querySelector('[data-testid="curve-editor-svg"]') as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    // Find the hit-pad for the t=50 key on the red (focus) channel.
+    // data-key-time="50" on the focus channel's <circle>.
+    const pad = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="50"][data-channel-id="red"]',
+    )!;
+    expect(pad).not.toBeNull();
+
+    // Simulate a drag: down at key position, move past slop, up.
+    // t=50 → x=300; v=0.5 → y=150.
+    fireEvent.pointerDown(pad, { button: 0, pointerId: 99, clientX: 300, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 99, clientX: 340, clientY: 120 });
+    fireEvent.pointerUp(svg,  { pointerId: 99, clientX: 340, clientY: 120 });
+
+    // onKeyDragEnd must have fired with (oldTime=50, newTime, newValue).
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+    const [, committedTime, committedValue] = onKeyDragEnd.mock.calls[0] as [number, number, number];
+
+    // Build t1: red's 50-key is now at the committed position; green mirrors it.
+    // Both tracks get the moved key; the other keys stay in place.
+    const t1 = [
+      trk("red",   [k(0, 0), k(committedTime, committedValue), k(100, 1)], "linear"),
+      trk("green", [k(0, 0), k(committedTime, committedValue), k(100, 1)], "linear", "red"),
+    ];
+
+    rerender(
+      <CurveEditor
+        tracks={t1}
+        channels={[MORPH_RED_CHANNEL, MORPH_GREEN_CHANNEL]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        onKeyDragEnd={onKeyDragEnd}
+      />,
+    );
+
+    // The locked follower (green) MUST morph — its change wasn't the dragged channel.
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]'),
+      ).not.toBeNull();
+    });
+
+    // The dragged channel (red) must NOT morph — suppression swallows it.
+    expect(
+      container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]'),
+    ).toBeNull();
   });
 });
