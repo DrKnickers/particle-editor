@@ -19,7 +19,7 @@ Conventions:
 
 ### Group-drag now live-updates the Time/Value spinners
 
-*2026-06-11 · TODO-hash · TODO-PR*
+*2026-06-11 · [`d5b6f1d`](https://github.com/DrKnickers/particle-editor/commit/d5b6f1d) · #130*
 
 When multiple curve keys are selected, dragging the group around now
 live-updates the Time and Value spinner readouts (which show the
