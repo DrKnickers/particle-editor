@@ -363,8 +363,16 @@ export function Spinner({
           (ns-resize cursor); a plain click on a button steps by ±step. */}
       <div
         onMouseDown={handleArrowsMouseDown}
-        className={`absolute right-0 top-0 flex flex-col border-l border-border-2 ${disabled ? "opacity-40" : "cursor-ns-resize"}`}
-        style={{ height, width: `${ARROW_W}px` }}
+        // Inset 1px on top/right/bottom and clip with rounded-right
+        // corners so the buttons' hover/active background stays INSIDE
+        // the input's rounded border instead of painting over the right
+        // edge + corners (which made the box outline look broken on
+        // press). rounded-r-[3px] is concentric with the input's 4px
+        // `rounded` corner, exactly 1px inside — the border sits in the
+        // gap. overflow-hidden clips the square-cornered button fills to
+        // the rounded column.
+        className={`absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 ${disabled ? "opacity-40" : "cursor-ns-resize"}`}
+        style={{ top: 1, right: 1, bottom: 1, width: `${ARROW_W - 1}px` }}
         aria-hidden={disabled}
       >
         <button
@@ -372,7 +380,7 @@ export function Spinner({
           tabIndex={-1}
           disabled={disabled}
           aria-label="Increment"
-          className="flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed"
+          className="flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed"
           style={{ fontSize: "7px", lineHeight: 1 }}
         >
           ▲
@@ -382,7 +390,7 @@ export function Spinner({
           tabIndex={-1}
           disabled={disabled}
           aria-label="Decrement"
-          className="flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed"
+          className="flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed"
           style={{ fontSize: "7px", lineHeight: 1 }}
         >
           ▼

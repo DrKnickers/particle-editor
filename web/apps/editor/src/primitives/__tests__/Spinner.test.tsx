@@ -95,6 +95,17 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenLastCalledWith(25);
   });
 
+  // The arrow column is inset + clipped so its hover/active background
+  // can't paint over the input's rounded border (the "outline looks
+  // broken on press" bug). Guards the containment classes from being
+  // silently reverted.
+  it("arrow column is clipped + rounded so its background stays inside the box outline", () => {
+    render(<Spinner value={5} onChange={vi.fn()} step={1} aria-label="test-spinner" />);
+    const column = screen.getByLabelText("Increment").parentElement as HTMLElement;
+    expect(column.className).toContain("overflow-hidden");
+    expect(column.className).toContain("rounded-r-[3px]");
+  });
+
   // F6: a plain click on an arrow still steps by ±step (no drag).
   it("clicking the increment arrow steps by step", () => {
     const onChange = vi.fn();
