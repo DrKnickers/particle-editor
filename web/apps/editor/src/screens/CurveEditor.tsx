@@ -1988,24 +1988,20 @@ function MultiChannelCurves({
               // by the Delete handler + drag-time clamp, and the
               // `data-border` attribute below tags them for callers
               // that need the distinction programmatically.
-              // Keys always render in their channel's colour; the
-              // selected marker is intensified (saturate) + enlarged +
-              // shadowed via CSS rather than recoloured to a flat blue.
-              const fill = channel.color;
-              const stroke = "none";
-              const strokeWidth = 0;
-              // Each focus key is rendered as a (hit-pad, visible)
-              // pair: the hit pad is a transparent circle ~2× the
-              // visible radius that owns every pointer handler +
-              // data attribute (so test queries + click targets
-              // land on it), and the visible circle on top is
-              // decorative-only (`pointerEvents="none"`). This
-              // makes keys comfortable to click without forcing a
-              // larger visual marker that would clutter the curve.
-              // hitR was bumped (10/12 → 14/16) because the old pad was
-              // still fiddly to hit; visible dot stays at 5/6.
+              // Keys always render in their channel's colour. The
+              // selected marker uses the inverted-core style: compact
+              // canvas-background fill + thick channel-colour stroke
+              // (r=6.5, strokeWidth=2.5, fill=var(--curve-marker-core)).
+              // Crisp, zero blur, theme-proof. Unselected: r=5 solid fill.
               const hitR = selected ? 18 : 14;
-              const visR = selected ? 8 : 5;
+              const visR = selected ? 6.5 : 5;
+              // Inverted-core: selected → bg fill + channel stroke.
+              // Unselected → channel fill, no stroke.
+              // focusReadOnly (locked channel) → hollow: fill=none, channel stroke.
+              // focusReadOnly takes precedence; locked channels are never selected.
+              const markerFill = focusReadOnly ? "none" : selected ? "var(--curve-marker-core)" : channel.color;
+              const markerStroke = focusReadOnly ? channel.color : selected ? channel.color : "none";
+              const markerStrokeWidth = focusReadOnly ? 2 : selected ? 2.5 : 0;
               return (
                 <g key={i}>
                   <circle
@@ -2052,9 +2048,9 @@ function MultiChannelCurves({
                     cx={p.x}
                     cy={p.y}
                     r={visR}
-                    fill={focusReadOnly ? "none" : fill}
-                    stroke={focusReadOnly ? channel.color : stroke}
-                    strokeWidth={focusReadOnly ? 2 : strokeWidth}
+                    fill={markerFill}
+                    stroke={markerStroke}
+                    strokeWidth={markerStrokeWidth}
                     pointerEvents="none"
                   />
                 </g>

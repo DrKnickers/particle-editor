@@ -73,6 +73,11 @@
      consistent regardless of background. */
   --curve-grid: rgba(255, 255, 255, 0.08);
   --curve-axis: #525252;
+  /* Fill for the selected-key inverted-core marker — MUST match the curve
+     canvas background. Aliased so a canvas bg change can't silently strand it.
+     The canvas area sits inside .panel (background: var(--panel)), with no
+     override on .ce-body or .curve-canvas-wrap. */
+  --curve-marker-core: var(--panel);
 }
 
 [data-theme="light"] {

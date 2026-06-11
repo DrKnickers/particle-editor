@@ -17,6 +17,34 @@ Conventions:
 ## Changelog
 
 
+### Selected curve key: inverted core replaces the grow + drop shadow
+
+*2026-06-11 · TODO-hash · TODO-PR*
+
+The selected key on the focus curve no longer balloons and casts a dark
+drop shadow (which read as a smudge at marker scale), and the
+interim ring concept (#132, never merged) is superseded. The selected
+dot now uses the **inverted core** treatment — the standard
+selected-anchor from vector editors: a compact dot whose fill flips to
+the canvas background with a thick stroke in the channel's own colour.
+Crisp, zero blur, equally legible on both themes.
+
+**How we tackled it.** In the focus-layer key render
+([`src/screens/CurveEditor.tsx`](web/apps/editor/src/screens/CurveEditor.tsx:1988))
+the marker styling is now a three-way precedence ladder —
+locked-channel hollow (`focusReadOnly`, unchanged) > selected inverted
+core (r 6.5, `fill: var(--curve-marker-core)`, channel-colour stroke
+2.5) > unselected (r 5, solid channel fill). The old
+`saturate()`/`drop-shadow()` CSS is gone; only the r transition
+remains. The core's fill is a new semantic alias token
+([`--curve-marker-core`](web/apps/editor/src/styles/tokens.css:77)
+→ `var(--panel)`) — aliased rather than hardcoded so a future curve
+canvas background change can't silently strand the marker core on the
+old colour. Verified the canvas area sits on `.panel` with no
+background override on `.ce-body` or the canvas wrapper.
+
+---
+
 ### Morphing follower curves no longer paint over the focus channel's keys
 
 *2026-06-11 · TODO-hash · TODO-PR*

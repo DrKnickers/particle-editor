@@ -1396,3 +1396,128 @@ describe("CurveEditor — group-drag fires onGroupDragMove (live-spinner fix)", 
     expect(onGroupDragMove).not.toHaveBeenCalled();
   });
 });
+
+// ─── Selected-key inverted-core marker geometry ────────────────────────────
+//
+// Option A: selected dot flips to canvas-bg fill + channel-colour stroke.
+// Geometry: r=6.5, fill="var(--curve-marker-core)", stroke=channel.color,
+// stroke-width=2.5. Unselected: r=5, fill=channel.color, no stroke.
+// Locked (focusReadOnly) hollow markers are unchanged: fill="none",
+// stroke=channel.color.
+
+const MARKER_CHANNEL_COLOR = "#FF4400";
+const MARKER_CHANNELS: ChannelDef[] = [
+  { id: "red", label: "Red", color: MARKER_CHANNEL_COLOR, defaultOn: true, trackName: "red" },
+];
+
+function markerTrack(): TrackDto {
+  return {
+    name: "red",
+    keys: [k(0, 0), k(50, 0.5), k(100, 1)],
+    interpolation: "linear",
+    lockedTo: null,
+  };
+}
+
+/** Render the multi-channel editor with red channel, optionally with a
+ *  selection set and optional locked green channel mirror. */
+function renderMarkerFixture(
+  selectedKeyTimes?: ReadonlySet<number>,
+  extras: Partial<React.ComponentProps<typeof CurveEditor>> = {},
+) {
+  const result = render(
+    <CurveEditor
+      tracks={[markerTrack()]}
+      channels={MARKER_CHANNELS}
+      visibleChannels={{ red: true }}
+      focusChannel="red"
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+      selectedKeyTimes={selectedKeyTimes}
+      {...extras}
+    />,
+  );
+  return result;
+}
+
+describe("selected-key inverted-core marker geometry", () => {
+  it("selected key has r=6.5, fill=var(--curve-marker-core), stroke=channel colour, stroke-width=2.5", () => {
+    const { container } = renderMarkerFixture(new Set([50]));
+    // The visible marker for time=50 (index 1 in the focus group).
+    const focusG = container.querySelector(
+      '[data-channel-id="red"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    // The hit-pad with data-selected="true" is time=50.
+    const hitPad = focusG.querySelector(
+      '[data-testid="curve-key"][data-selected="true"]',
+    ) as Element | null;
+    expect(hitPad).not.toBeNull();
+    // The visible marker is the next sibling circle inside the same <g>.
+    const markerG = hitPad!.closest("g")!;
+    const marker = markerG.querySelector(".curve-key-marker") as SVGCircleElement | null;
+    expect(marker).not.toBeNull();
+    expect(marker!.getAttribute("r")).toBe("6.5");
+    expect(marker!.getAttribute("fill")).toBe("var(--curve-marker-core)");
+    expect(marker!.getAttribute("stroke")).toBe(MARKER_CHANNEL_COLOR);
+    expect(marker!.getAttribute("stroke-width")).toBe("2.5");
+  });
+
+  it("unselected keys keep r=5, fill=channel colour, no stroke", () => {
+    const { container } = renderMarkerFixture(new Set([50]));
+    const focusG = container.querySelector(
+      '[data-channel-id="red"][data-focus="true"]',
+    ) as Element;
+    // time=0 and time=100 are NOT in the selection.
+    const unselectedPads = focusG.querySelectorAll(
+      '[data-testid="curve-key"][data-selected="false"]',
+    );
+    expect(unselectedPads.length).toBeGreaterThanOrEqual(2);
+    for (const pad of unselectedPads) {
+      const markerG = pad.closest("g")!;
+      const marker = markerG.querySelector(".curve-key-marker") as SVGCircleElement | null;
+      expect(marker).not.toBeNull();
+      expect(marker!.getAttribute("r")).toBe("5");
+      expect(marker!.getAttribute("fill")).toBe(MARKER_CHANNEL_COLOR);
+      // No stroke — attribute should be absent or "none".
+      const stroke = marker!.getAttribute("stroke");
+      expect(stroke === null || stroke === "none").toBe(true);
+    }
+  });
+
+  it("locked (focusReadOnly) channel markers remain hollow: fill=none, stroke=channel colour", () => {
+    // Green track locked to red — render with green focused so focusReadOnly=true.
+    const lockedGreenChannel: ChannelDef = {
+      id: "green", label: "Green", color: "#00FF00", defaultOn: true, trackName: "green",
+    };
+    const lockedGreenTrack: TrackDto = {
+      name: "green",
+      keys: [k(0, 0), k(50, 0.5), k(100, 1)],
+      interpolation: "linear",
+      lockedTo: "red",
+    };
+    const { container } = render(
+      <CurveEditor
+        tracks={[markerTrack(), lockedGreenTrack]}
+        channels={[MARKER_CHANNELS[0]!, lockedGreenChannel]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="green"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+      />,
+    );
+    const focusG = container.querySelector(
+      '[data-channel-id="green"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    expect(focusG.getAttribute("data-readonly")).toBe("true");
+    const markers = focusG.querySelectorAll(".curve-key-marker");
+    expect(markers.length).toBeGreaterThan(0);
+    for (const m of markers) {
+      expect(m.getAttribute("fill")).toBe("none");
+      expect(m.getAttribute("stroke")).toBe(lockedGreenChannel.color);
+    }
+  });
+});

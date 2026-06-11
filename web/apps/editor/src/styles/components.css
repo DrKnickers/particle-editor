@@ -1214,20 +1214,15 @@
 
 /* ========== Curve editor ========== */
 
-/* Curve key markers. Unselected keys carry NO shadow — only the selected
-   key gets one. Selecting a key intensifies its OWN colour (saturate),
-   grows its radius, and fades in a stronger shadow; the transition
-   animates that select/deselect change. No animation library needed:
-   Chromium transitions the SVG `r` presentation attribute and `filter`
-   (`none` ↔ saturate+drop-shadow interpolates the identity filter list).
-   Selected radius is set in CurveEditor.tsx. First-pass values — tuned
-   live in the host. */
+/* Curve key markers — inverted-core treatment.
+   Selected key: canvas-background fill + thick channel-colour stroke
+   (r=6.5, strokeWidth=2.5, fill=var(--curve-marker-core)).
+   Crisp, zero blur, theme-proof — no saturate or drop-shadow.
+   The radius animates 5→6.5 on select; no filter transition needed.
+   Selected fill/stroke are set as SVG presentation attributes in
+   CurveEditor.tsx so they can reference the channel colour at render time. */
 .curve-key-marker {
-  filter: none;
-  transition: r 150ms ease, filter 150ms ease;
-}
-.curve-key-marker[data-selected="true"] {
-  filter: saturate(1.8) drop-shadow(0 1.5px 2.5px rgba(0, 0, 0, 0.7));
+  transition: r 150ms ease;
 }
 @media (prefers-reduced-motion: reduce) {
   .curve-key-marker { transition: none; }
