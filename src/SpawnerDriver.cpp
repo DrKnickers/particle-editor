@@ -194,6 +194,19 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
                 inst->SetMaxLifetime(m_cfg.maxLifetimeSec);
                 inst->Detach();   // freeze the stamped values; per-frame motion takes over from Update
             }
+            else
+            {
+                // [hard-guard] SpawnParticleSystem returns NULL ONLY on a gate
+                // refusal (the estimate × placed-count would blow the cap, so
+                // it cleared the preview). Disable the driver so an auto/interval
+                // spawner doesn't refuse-and-clear every cycle (banner churn) —
+                // the user re-arms deliberately after lightening the effect or
+                // raising the cap.
+                m_cfg.enabled    = false;
+                m_burstRemaining = 0;
+                m_phase          = Phase::Waiting;
+                break;
+            }
 
             m_burstRemaining--;
             m_timeUntilNextInstance += m_cfg.spacingSec;

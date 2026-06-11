@@ -95,6 +95,7 @@ import {
 } from "@/lib/drop-zone";
 import { computeLinkGroupBrackets, colorForGroup } from "@/lib/link-group-colors";
 import { estimateChainLoad, formatChainWarning, type ChainWarning } from "@/lib/chain-load";
+import { useEstimatedLoadPush } from "@/lib/use-estimated-load-push";
 import { Tip } from "@/primitives/Tip";
 import { ChainWarningTip } from "./ChainWarningTip";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
@@ -1276,6 +1277,12 @@ export function EmitterTree({ bridge }: Props) {
     () => (tree !== null ? estimateChainLoad(tree.root) : new Map<number, ChainWarning>()),
     [tree],
   );
+
+  // [hard-guard] Push the system-total alive estimate to the engine on
+  // every tree update (same source as the ⚠ glyph — gate and glyph agree
+  // by construction). BridgeDispatcher caches the value and reapplies on
+  // SetEngine.
+  useEstimatedLoadPush(bridge, tree);
 
   // Batch B3 — drag/drop state. `draggingId` is the source row's id;
   // `indicator` is the row + zone currently displaying a drop hint.

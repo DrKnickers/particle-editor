@@ -17,6 +17,87 @@ Conventions:
 ## Changelog
 
 
+### Preview overload guard now refuses oversized spawns preemptively (estimate gate + clear)
+
+*2026-06-11 · TODO-hash · TODO-PR*
+
+The overload guard gains a **preemptive** layer on top of the existing
+reactive runtime budget. Before this change the editor let a heavy
+effect start, then suppressed per-frame spawning once the live
+population exceeded the cap — you watched it grind through a plateau.
+Now, when the *estimated* alive-particle load for the whole preview
+would exceed the guard cap, the editor refuses to make it worse and
+cleans up. Placing a new instance (Shift-click or the spawner panel) is
+refused when *(already-placed instances + 1) × the effect's estimated
+alive-particles* exceeds the cap — the gate counts the **cumulative**
+preview, not just the new instance. Cranking a parameter on an already
+placed effect so that *placed × new-estimate* goes over the cap clears
+the preview the same way (the **edit-time** gate). On either refusal the
+**whole preview is cleared** — you see "nothing spawned, the effect is
+too big," not a heavy partial scene — and a **transient ~5 s banner**
+names both the estimate and the cap. An interval/auto spawner that is
+refused **self-disables** after the first refusal (one banner, not one
+per cycle); you re-arm it deliberately after lightening the effect or
+raising the cap. The guard's **runtime budget remains the backstop**:
+the static estimate cannot predict every runtime multiplication (deep
+chains, death-spawn storms), so the actual-count suppression + decay +
+latch banner stay behind the new gate. Disabling the guard
+(Preferences) bypasses the gate entirely, consistent with #123's
+"uncapped is an explicit power-user choice."
+
+**How we tackled it.** The split is **host-enforced, web-supplied**: the
+estimate formula lives ONLY in
+[`web/apps/editor/src/lib/chain-load.ts`](web/apps/editor/src/lib/chain-load.ts:1)
+(`estimateSystemLoad` — the same Little's-law walk that drives the ⚠
+chain-warning glyph, so the gate and the glyph can never disagree). The
+web pushes one number per tree update —
+`engine/set/estimated-load { perInstance }`, via the
+[`useEstimatedLoadPush`](web/apps/editor/src/lib/use-estimated-load-push.ts:1)
+hook wired into
+[`EmitterTree.tsx`](web/apps/editor/src/screens/EmitterTree.tsx:1285) —
+and the engine multiplies by its live placed-instance count to run the
+gate. All enforcement happens inside the single `SpawnParticleSystem`
+choke point ([`src/engine.cpp`](src/engine.cpp:191)) plus
+`SetEstimatedLoad`'s edit-time check, so every placement path is
+covered. The key invariant: `SpawnParticleSystem` now returns
+**`nullptr` if and only if the gate refused** (it was previously a
+4-line never-null function), so callers treat null as a refusal —
+`SpawnerDriver` self-disables on it ([`src/SpawnerDriver.cpp`](src/SpawnerDriver.cpp:197)).
+Refusals are a one-shot engine record polled by the dispatcher's 4 Hz
+stats path and emitted as `engine/overload/refused`
+([`src/host/BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp:5344)),
+driving a transient variant of the existing `OverloadBanner` (the latch
+banner is unchanged; the refusal takes precedence for its 5 s window).
+`BridgeDispatcher` caches the last pushed estimate and reapplies it on
+`SetEngine`, mirroring the guard-config cache.
+
+**Issues encountered and resolutions.** The native regression suite
+surfaced a real interaction between the live push hook and the four
+existing **runtime-backstop** specs (the two 1e9 "bomb" specs and the
+two cap-bound specs). Those specs proved the backstop by cranking an
+emitter to rate 1e9 *while the guard is enabled*, then spawning. With
+the push hook live, that rate-crank fires `emitters/tree/changed` → the
+hook recomputes an astronomical `estimateSystemLoad` → pushes it → and
+the subsequent spawn is now (correctly) **refused preemptively** by the
+new gate, so the live population stays at 0 and the backstop never
+engages. A defensive `engine/set/estimated-load { perInstance: 0 }`
+reset at the top of each bomb spec is **not** sufficient on its own,
+because the hook re-pushes the huge estimate on the rate-crank that
+follows the reset. The resolution is to accept that the preemptive gate
+makes the old visible-rate backstop scenarios **unreachable by design**:
+any spawn the estimate can see is refused before the runtime budget
+engages. The four obsolete bomb / cap-bound specs were therefore
+**retired**, since the five NEW gate specs (cumulative / edit-time /
+single-instance-repeat / spawner-churn-stop / disabled-guard-bypass)
+prove those over-budget cases are now *prevented* up front. The
+engine's runtime particle/instance budget is **kept in the code** as
+belt-and-suspenders for the hard-to-trigger case the estimate
+undercounts (deep runtime chains, death-spawn storms) — it just no
+longer has a dedicated regression spec, because no visible-rate test can
+reach it past the gate.
+
+---
+
 ### Selected curve key: inverted core replaces the grow + drop shadow
 
 *2026-06-11 · [`12c22bd`](https://github.com/DrKnickers/particle-editor/commit/12c22bd) · #136*

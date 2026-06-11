@@ -5,6 +5,7 @@ import {
   CHAIN_WARN_THRESHOLD,
   estimateChainLoad,
   estimatePerEmitter,
+  estimateSystemLoad,
   formatChainWarning,
 } from "../chain-load";
 
@@ -117,6 +118,46 @@ describe("estimateChainLoad", () => {
     const w = warnings.get(degenerate.stableId);
     expect(w).toBeDefined();
     expect(Number.isFinite(w!.estimate)).toBe(true);
+  });
+});
+
+describe("estimateSystemLoad", () => {
+  it("empty tree → 0", () => {
+    expect(estimateSystemLoad(syntheticRoot([]))).toBe(0);
+  });
+
+  it("single root = its own per-emitter estimate", () => {
+    // nParticlesPerSecond=12, lifetime=1 → E = 12
+    const s = spawn({ nParticlesPerSecond: 12, lifetime: 1 });
+    const root = syntheticRoot([node("a", s)]);
+    expect(estimateSystemLoad(root)).toBeCloseTo(estimatePerEmitter(s), 6);
+  });
+
+  it("chains multiply and SUM across nodes (A(parent)+A(parent)×E(child))", () => {
+    // parent E=10, child E=5 → A(parent)=10, A(child)=10×5=50 → total=60
+    const child = node("child", spawn({ nParticlesPerSecond: 5, lifetime: 1 }), [], "lifetime");
+    const parent = node("parent", spawn({ nParticlesPerSecond: 10, lifetime: 1 }), [child]);
+    expect(estimateSystemLoad(syntheticRoot([parent]))).toBeCloseTo(60, 6);
+  });
+
+  it("multiple roots sum", () => {
+    // rootA E=10, rootB E=20 → total = 30
+    const rootA = node("rootA", spawn({ nParticlesPerSecond: 10, lifetime: 1 }));
+    const rootB = node("rootB", spawn({ nParticlesPerSecond: 20, lifetime: 1 }));
+    expect(estimateSystemLoad(syntheticRoot([rootA, rootB]))).toBeCloseTo(30, 6);
+  });
+
+  it("agreement: system load >= max single-chain cumulative for an over-threshold tree", () => {
+    // Reuse the depth-3 bomb fixture: 18 × 30 × 40 = 21,600
+    // estimateChainLoad reports each node's cumulative; system load sums ALL nodes
+    // so it must be >= the highest cumulative in the chain-load map.
+    const leaf = node("smoke", { nParticlesPerSecond: 40, lifetime: 1 }, [], "death");
+    const mid = node("highlight", { nParticlesPerSecond: 30, lifetime: 1 }, [leaf], "lifetime");
+    const root = node("sparkle", { nParticlesPerSecond: 12, lifetime: 1.5 }, [mid]);
+    const tree = syntheticRoot([root]);
+    const chainMap = estimateChainLoad(tree);
+    const maxChainCumulative = Math.max(...[...chainMap.values()].map((w) => w.estimate));
+    expect(estimateSystemLoad(tree)).toBeGreaterThanOrEqual(maxChainCumulative);
   });
 });
 

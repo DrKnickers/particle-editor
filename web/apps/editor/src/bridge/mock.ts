@@ -85,6 +85,9 @@ function isMutating(kind: Request["kind"]): boolean {
   // [guard-config] View-only preview setting — same rule as paused;
   // native host mirrors this (handler never marks dirty).
   if (kind === "engine/set/overload-guard") return false;
+  // [hard-guard] Estimated-load push is view-only; the browser preview
+  // has no engine sim so the value has no effect here.
+  if (kind === "engine/set/estimated-load") return false;
   if (kind === "engine/set/heat-debug") return false;
   // T9] stats/set-frozen is a test-only knob; never mutating.
   if (kind === "stats/set-frozen") return false;
@@ -412,6 +415,12 @@ export class MockBridge implements Bridge {
         // View-only preview config; the mock has no simulation to govern —
         // store it so contract tests can assert the round-trip.
         this.lastOverloadGuard = { ...req.params };
+        return {};
+
+      case "engine/set/estimated-load":
+        // [hard-guard] The browser preview has no engine sim, so the
+        // estimated-load value has no effect here; accept as a no-op so
+        // web code paths are identical to native.
         return {};
 
       // ---------------- stats freeze (test-only knob) ----------------

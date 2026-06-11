@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <vector>
 #include <cstdint>
+#include <cmath>     // [hard-guard] std::isfinite for the estimate clamp
 #include "engine.h"
 #include "exceptions.h"
 #include "resource.h"
@@ -189,6 +190,25 @@ void StepPreviewFrames(int frames)
 
 ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem& system, Object3D* parent)
 {
+    // [hard-guard spawn-time check] Refuse the placement (and clear the
+    // rest of the preview) when the estimated TOTAL — already-placed
+    // instances plus this one — exceeds the guard cap. Estimate 0 = no
+    // estimate pushed yet = gate inert (runtime budget is the backstop).
+    // Runs BEFORE any allocation, so Clear() only touches pre-existing
+    // instances — no re-entrancy hazard for the not-yet-created one.
+    // A nullptr return now means EXACTLY one thing: a gate refusal.
+    if (m_overloadGuardEnabled && m_estimatedPerInstance > 0.0)
+    {
+        const double projected = (GetNumInstances() + 1) * m_estimatedPerInstance;
+        if (projected > (double)m_maxPreviewParticles)
+        {
+            m_spawnRefusal = { projected, m_maxPreviewParticles, GetNumInstances() + 1 };
+            m_spawnRefusalPending = true;
+            Clear();
+            return nullptr;
+        }
+    }
+
 	auto instance = std::make_unique<ParticleSystemInstance>(*this, system, parent);
     m_instances.push_back(std::move(instance));
 	return m_instances.back().get();
@@ -249,6 +269,31 @@ void Engine::SetOverloadGuard(bool enabled, int maxParticles)
 	       enabled ? 1 : 0, m_maxPreviewParticles, m_maxPreviewInstances);
 	fflush(stdout);
 #endif
+}
+
+void Engine::SetEstimatedLoad(double perInstance)
+{
+    if (perInstance < 0.0 || !std::isfinite(perInstance)) perInstance = 0.0;
+    m_estimatedPerInstance = perInstance;
+    // [hard-guard edit-time check] A parameter revision can push the
+    // already-placed preview over budget: clear it and record the
+    // refusal so the banner explains what happened.
+    const int n = GetNumInstances();
+    if (m_overloadGuardEnabled && perInstance > 0.0 && n > 0 &&
+        n * perInstance > (double)m_maxPreviewParticles)
+    {
+        m_spawnRefusal = { n * perInstance, m_maxPreviewParticles, n };
+        m_spawnRefusalPending = true;
+        Clear();
+    }
+}
+
+bool Engine::TakeSpawnRefusal(SpawnRefusal* out)
+{
+    if (!m_spawnRefusalPending) return false;
+    if (out) *out = m_spawnRefusal;
+    m_spawnRefusalPending = false;
+    return true;
 }
 
 int Engine::ActiveSpawnerInstanceCount() const

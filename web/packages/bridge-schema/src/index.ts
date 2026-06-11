@@ -605,6 +605,10 @@ export type Request =
   // Engine setters — view state (preview clock)
   | { kind: "engine/set/paused";              params: { paused: boolean } }
   | { kind: "engine/set/overload-guard";      params: { enabled: boolean; maxParticles: number } }
+  // [hard-guard] Estimated alive particles per placed instance, pushed by
+  // the web (chain-load.ts). The engine multiplies by its live placed-
+  // instance count for the preemptive overload gate.
+  | { kind: "engine/set/estimated-load";      params: { perInstance: number } }
 
   // T9] Test-only knob: suppress the 4 Hz stats/tick emission
   // AND tell React's StatusBar to clear its local state via
@@ -948,7 +952,11 @@ export type Request =
   | { kind: "register-accelerators";      params: { combos: string[] } };
 
 // One response shape per Request kind.
-export type ResponseFor<R extends Request> =
+// Split into two halves to avoid TS2321 "Excessive stack depth comparing
+// types" — TypeScript's conditional-type depth checker trips on chains
+// longer than ~100 branches. Both halves share the same `never` tail so
+// the composed type is `ResponseForA<R> extends never ? ResponseForB<R> : ResponseForA<R>`.
+type ResponseForA<R extends Request> =
   // File
   R extends { kind: "file/new" }                  ? Record<string, never> :
   R extends { kind: "file/open" }                 ? { ok: true; path?: string } | { ok: false; error: string } :
@@ -1000,6 +1008,7 @@ export type ResponseFor<R extends Request> =
   R extends { kind: "engine/set/shadow" }                  ? Record<string, never> :
   R extends { kind: "engine/set/paused" }                  ? Record<string, never> :
   R extends { kind: "engine/set/overload-guard" }          ? Record<string, never> :
+  R extends { kind: "engine/set/estimated-load" }          ? Record<string, never> :
   R extends { kind: "stats/set-frozen" }                   ? Record<string, never> :
 
   // Engine actions — empty body
@@ -1019,6 +1028,9 @@ export type ResponseFor<R extends Request> =
   R extends { kind: "settings/lighting" }                 ? LightingSettingsDto :
   R extends { kind: "settings/lighting-force-align/set" } ? Record<string, never> :
 
+  never;
+
+type ResponseForB<R extends Request> =
   // Emitters
   R extends { kind: "emitters/list" }             ? EmitterTreeDto :
   R extends { kind: "emitters/select" }           ? Record<string, never> :
@@ -1116,6 +1128,9 @@ export type ResponseFor<R extends Request> =
   R extends { kind: "register-accelerators" }     ? Record<string, never> :
   never;
 
+export type ResponseFor<R extends Request> =
+  ResponseForA<R> extends never ? ResponseForB<R> : ResponseForA<R>;
+
 // ============================================================================
 // Event DTOs (host → JS push)
 // ============================================================================
@@ -1127,6 +1142,10 @@ export type Event =
   // `overload`: latched preview overload — engine is suppressing spawning
   // because the live particle/instance budget was exceeded.
   | { kind: "stats/tick";             payload: { fps: number; emitters: number; particles: number; instances: number; overload: boolean } }
+  // [hard-guard] One-shot event emitted when the preemptive estimate gate
+  // refuses a spawn. Polled by the dispatcher's 4 Hz stats path and used
+  // to drive a transient (~5 s) refusal banner in the UI.
+  | { kind: "engine/overload/refused"; payload: { estimated: number; cap: number; attemptedCount: number } }
   // T9] Emitted whenever stats/set-frozen flips. When
   // frozen=true, StatusBar clears its local state so the cells
   // render `—` placeholders. Used by a11y spec beforeEach for

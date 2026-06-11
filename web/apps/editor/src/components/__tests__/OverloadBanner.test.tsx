@@ -120,4 +120,89 @@ describe("OverloadBanner", () => {
     unmount();
     expect(handlers.has("stats/tick")).toBe(false);
   });
+
+  // ── Refusal banner (Task 5) ──────────────────────────────────────────────
+
+  it("mounts the banner with refusal copy when engine/overload/refused fires", () => {
+    const { bridge, emit } = makeBridge();
+    render(<OverloadBanner bridge={bridge} />);
+    emit("engine/overload/refused", { estimated: 24000, cap: 10000, attemptedCount: 3 });
+    const banner = screen.getByTestId("preview-overload-banner");
+    expect(banner).toBeInTheDocument();
+    expect(banner.textContent).toContain("Spawn blocked");
+    expect(banner.textContent).toContain("24,000");
+    expect(banner.textContent).toContain("10,000");
+  });
+
+  it("auto-dismisses the refusal banner after ~5s", async () => {
+    const { bridge, emit } = makeBridge();
+    render(<OverloadBanner bridge={bridge} />);
+    emit("engine/overload/refused", { estimated: 24000, cap: 10000, attemptedCount: 3 });
+    expect(screen.getByTestId("preview-overload-banner")).toBeInTheDocument();
+    // First act: wait past REFUSAL_MS (5000ms) so setRefusal(null) fires and
+    // the banner transitions to data-state="closed".
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5050));
+    });
+    // Banner is now in data-state="closed" (usePresence exit window started).
+    // Second act: wait for the usePresence timeout fallback (EXIT_MS+50 = 200ms).
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
+    expect(screen.queryByTestId("preview-overload-banner")).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("latch banner unchanged: stats/tick overload=true shows latch copy, overload=false hides it", async () => {
+    const { bridge, emit } = makeBridge();
+    render(<OverloadBanner bridge={bridge} />);
+    emit("stats/tick", tick(true));
+    const banner = screen.getByTestId("preview-overload-banner");
+    expect(banner.textContent).toContain("Preview spawning limited");
+    expect(banner.textContent).toContain("lower spawn rates");
+    // Clear latch
+    emit("stats/tick", tick(false));
+    expect(screen.getByTestId("preview-overload-banner")).toHaveAttribute("data-state", "closed");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
+    expect(screen.queryByTestId("preview-overload-banner")).not.toBeInTheDocument();
+  });
+
+  it("refusal takes precedence over latch copy while the refusal window is active", async () => {
+    const { bridge, emit } = makeBridge();
+    render(<OverloadBanner bridge={bridge} />);
+    // Activate latch
+    emit("stats/tick", tick(true));
+    expect(screen.getByTestId("preview-overload-banner").textContent).toContain("Preview spawning limited");
+    // Fire refusal — should show refusal copy
+    emit("engine/overload/refused", { estimated: 24000, cap: 10000, attemptedCount: 1 });
+    expect(screen.getByTestId("preview-overload-banner").textContent).toContain("Spawn blocked");
+    expect(screen.getByTestId("preview-overload-banner").textContent).toContain("24,000");
+    // After 5s window with latch still active → banner returns to latch copy.
+    // Wait past REFUSAL_MS so setRefusal(null) fires.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5050));
+    });
+    // Latch is still active (overload=true was never cleared) → latch copy visible.
+    // visible = false || true = true, so usePresence stays mounted (no exit).
+    const bannerAfter = screen.queryByTestId("preview-overload-banner");
+    expect(bannerAfter).toBeInTheDocument();
+    expect(bannerAfter!.textContent).toContain("Preview spawning limited");
+  }, 10_000);
+
+  it("re-firing a refusal restarts the 5s dismiss window", async () => {
+    const { bridge, emit } = makeBridge();
+    render(<OverloadBanner bridge={bridge} />);
+    emit("engine/overload/refused", { estimated: 24000, cap: 10000, attemptedCount: 1 });
+    // After ~3s, fire a second refusal (restarts the window)
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 3000));
+    });
+    emit("engine/overload/refused", { estimated: 24000, cap: 10000, attemptedCount: 1 });
+    // At ~4s from first refusal (1s after second), still visible
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 1000));
+    });
+    expect(screen.queryByTestId("preview-overload-banner")).toBeInTheDocument();
+  }, 15_000);
 });

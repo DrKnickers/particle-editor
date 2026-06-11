@@ -279,6 +279,10 @@ private:
     bool m_overloadGuardCached       = false;
     bool m_overloadGuardEnabled      = true;
     int  m_overloadGuardMaxParticles = 15'000;
+    // [hard-guard] Last estimate pushed via engine/set/estimated-load —
+    // cached + reapplied by SetEngine, mirroring the guard config.
+    bool   m_estimatedLoadCached      = false;
+    double m_estimatedLoadPerInstance = 0.0;
     LayoutBroker&      m_layout;
     AcceleratorBridge& m_accel;
     EmitFn             m_emit;

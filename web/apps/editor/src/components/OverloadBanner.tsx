@@ -51,19 +51,30 @@ import { useEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useViewportOcclusion } from "@/lib/viewport-occlusion";
 import { usePresence } from "@/lib/use-presence";
+import { fmtCount } from "@/lib/chain-load";
 
 // EXIT_MS must equal --motion-slow-out (tokens.css). The +50ms slack
 // lives inside usePresence.
 const EXIT_MS = 150;
 
+// REFUSAL_MS: how long the transient refusal banner stays visible.
+// A second refusal event during this window restarts the timer.
+const REFUSAL_MS = 5_000;
+
+// Refusal state: the two numbers the copy needs.
+// attemptedCount is on the wire but unused by the copy (spec §2.5).
+type RefusalState = { estimated: number; cap: number };
+
 function OverloadBannerBody({
   bridge,
   state,
   onAnimationEnd,
+  refusal,
 }: {
   bridge: Bridge;
   state: "open" | "closed";
   onAnimationEnd: () => void;
+  refusal: RefusalState | null;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   // pad=12 / feather=12 — modest ring (smaller than the context menu's
@@ -80,6 +91,7 @@ function OverloadBannerBody({
       aria-live="polite"
       data-testid="preview-overload-banner"
       data-state={state}
+      data-variant={refusal !== null ? "refusal" : "latch"}
       // Filter on animationName: only banner-OUT may unmount — without
       // it the ENTRANCE animation's end would fire onAnimationEnd too
       // (harmless today since usePresence ignores it while visible, but
@@ -94,19 +106,58 @@ function OverloadBannerBody({
       // that replaced shadow-xl ring-1 ring-black/15.
       className="banner-animate pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 select-none rounded-md bg-warning px-3 py-1.5 text-xs font-medium text-[#1a1200]"
     >
-      Preview spawning limited — lower spawn rates to resume. ⚠ marks
-      heavy emitters.
+      {refusal !== null
+        ? `Spawn blocked — this effect is estimated at ~${fmtCount(refusal.estimated)} particles, over the ${fmtCount(refusal.cap)} preview limit. Preview cleared.`
+        : <>Preview spawning limited — lower spawn rates to resume. ⚠ marks heavy emitters.</>}
     </div>
   );
 }
 
 export function OverloadBanner({ bridge }: { bridge: Bridge }) {
   const [overload, setOverload] = useState(false);
+  const [refusal, setRefusal] = useState<RefusalState | null>(null);
+  // Track the active refusal timeout so we can restart it on re-fire
+  const refusalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(
     () => bridge.on("stats/tick", (e) => setOverload(e.payload.overload)),
     [bridge],
   );
-  const { mounted, state, onAnimationEnd } = usePresence(overload, EXIT_MS);
+
+  useEffect(() => {
+    const unsub = bridge.on("engine/overload/refused", (e) => {
+      const { estimated, cap } = e.payload as { estimated: number; cap: number; attemptedCount: number };
+      // Restart the window if a second refusal arrives mid-flight
+      if (refusalTimerRef.current !== null) {
+        clearTimeout(refusalTimerRef.current);
+      }
+      setRefusal({ estimated, cap });
+      refusalTimerRef.current = setTimeout(() => {
+        refusalTimerRef.current = null;
+        setRefusal(null);
+      }, REFUSAL_MS);
+    });
+    return () => {
+      unsub();
+      // Clean up any pending timer on unmount
+      if (refusalTimerRef.current !== null) {
+        clearTimeout(refusalTimerRef.current);
+        refusalTimerRef.current = null;
+      }
+    };
+  }, [bridge]);
+
+  // The banner is visible when a refusal is active OR when the latch is set.
+  // usePresence drives the exit animation for both cases off a single boolean.
+  const visible = refusal !== null || overload;
+  const { mounted, state, onAnimationEnd } = usePresence(visible, EXIT_MS);
   if (!mounted) return null;
-  return <OverloadBannerBody bridge={bridge} state={state} onAnimationEnd={onAnimationEnd} />;
+  return (
+    <OverloadBannerBody
+      bridge={bridge}
+      state={state}
+      onAnimationEnd={onAnimationEnd}
+      refusal={refusal}
+    />
+  );
 }

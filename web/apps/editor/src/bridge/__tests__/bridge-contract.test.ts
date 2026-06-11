@@ -344,6 +344,22 @@ describe("MockBridge contract", () => {
     expect(snap.dirty).toBe(false);
   });
 
+  it("engine/set/estimated-load resolves ok via the mock", async () => {
+    const b = new MockBridge();
+    const res = await b.request({
+      kind: "engine/set/estimated-load",
+      params: { perInstance: 1234.5 },
+    });
+    expect(res).toEqual({});
+  });
+
+  it("engine/set/estimated-load is view-only (does not mark the doc dirty)", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "engine/set/estimated-load", params: { perInstance: 500 } });
+    const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.dirty).toBe(false);
+  });
+
   // Task 2.4: file/open is no longer a hard reject. The native handler
   // shows GetOpenFileNameW; the mock resolves with the schema's
   // cancellation shape so the React handler's request chain aborts

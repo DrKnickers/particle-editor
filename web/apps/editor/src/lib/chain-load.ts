@@ -75,6 +75,23 @@ export function estimateChainLoad(root: EmitterTreeNode): Map<number, ChainWarni
   return out;
 }
 
+/** Total estimated steady-state alive particles for ONE placed instance
+ *  of the whole system: Σ over every node of its cumulative alive
+ *  estimate (A(node) = A(parent) × E(node); roots start at A = E).
+ *  Drives the preemptive overload gate (engine/set/estimated-load) —
+ *  the SAME walk + estimator as the ⚠ chain warning, so the gate and
+ *  the glyph can never disagree. */
+export function estimateSystemLoad(root: EmitterTreeNode): number {
+  let total = 0;
+  const visit = (node: EmitterTreeNode, parentCumulative: number): void => {
+    const cumulative = parentCumulative * estimatePerEmitter(node.spawn);
+    total += cumulative;
+    node.children.forEach((c) => visit(c, cumulative));
+  };
+  root.children.forEach((c) => visit(c, 1));
+  return total;
+}
+
 // Number formatting shared by the plain-text tooltip body and the
 // rich ChainWarningTip — one set of rules, two presentations.
 export const fmtCount = (n: number) => Math.round(n).toLocaleString("en-US");

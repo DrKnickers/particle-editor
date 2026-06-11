@@ -772,6 +772,10 @@ void BridgeDispatcher::SetEngine(Engine* engine)
     // engine, the user's setting follows automatically.
     if (m_engine && m_overloadGuardCached)
         m_engine->SetOverloadGuard(m_overloadGuardEnabled, m_overloadGuardMaxParticles);
+    // [hard-guard] Reapply the cached estimate the same way, for the same
+    // engine-recreation safety net.
+    if (m_engine && m_estimatedLoadCached)
+        m_engine->SetEstimatedLoad(m_estimatedLoadPerInstance);
 }
 
 void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
@@ -1472,6 +1476,20 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         m_overloadGuardEnabled      = enabled;
         m_overloadGuardMaxParticles = maxParticles;
         if (m_engine) m_engine->SetOverloadGuard(enabled, maxParticles);
+        sendOk(json::object());
+        return res;
+    }
+    // -------- engine/set/estimated-load (hard-guard) -----------------
+    // Web-computed estimate of alive particles per placed instance
+    // (chain-load.ts owns the formula — see the hard-guard spec). Cached
+    // and reapplied on SetEngine like the guard config.
+    if (kind == "engine/set/estimated-load")
+    {
+        double perInstance = params.value("perInstance", 0.0);
+        if (perInstance < 0.0) perInstance = 0.0;
+        m_estimatedLoadCached       = true;
+        m_estimatedLoadPerInstance  = perInstance;
+        if (m_engine) m_engine->SetEstimatedLoad(perInstance);
         sendOk(json::object());
         return res;
     }
@@ -5323,6 +5341,44 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
                                      bool overload)
 {
     if (!m_emit) return;
+    // [hard-guard] Poll the engine's one-shot spawn-refusal record on the
+    // same 4 Hz cadence (this is EmitStatsTick's only caller — the stats
+    // timer). Done BEFORE the stats-freeze gate so a refusal is never
+    // swallowed by the test-only freeze knob.
+    {
+        Engine::SpawnRefusal refusal;
+        if (m_engine && m_engine->TakeSpawnRefusal(&refusal))
+        {
+            // Surface the refusal to the web (transient banner).
+            json env = {
+                {"type",    "evt"},
+                {"kind",    "engine/overload/refused"},
+                {"payload", {
+                    {"estimated",      refusal.estimated},
+                    {"cap",            refusal.cap},
+                    {"attemptedCount", refusal.attemptedCount},
+                }},
+            };
+            m_emit(env.dump());
+            // The engine's SpawnerDriver self-disabled on the refusal
+            // (enabled=false), but the cached spawner config + the web's
+            // panel toggle don't know. Mirror spawner/stop: update the
+            // live driver first (EmitEngineStateChanged reads it), then
+            // sync the JSON cache, then broadcast so the panel toggle
+            // reflects the disabled state.
+            if (m_spawnerDriver)
+            {
+                SpawnerConfig cfg = m_spawnerDriver->GetConfig();
+                cfg.enabled = false;
+                m_spawnerDriver->SetConfig(cfg);
+            }
+            if (m_spawnerConfig.is_object())
+            {
+                m_spawnerConfig["enabled"] = false;
+            }
+            EmitEngineStateChanged();
+        }
+    }
     // T9] Gate test-driven freeze. When frozen, the React
     // StatusBar has already cleared its state (via stats/frozen-
     // changed) and is rendering placeholders; emitting would

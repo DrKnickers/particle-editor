@@ -431,6 +431,20 @@ public:
     // the user opts out.
     void SetOverloadGuard(bool enabled, int maxParticles);
 
+    // [hard-guard] One-shot spawn-refusal record polled by the host's
+    // 4 Hz stats path and emitted as engine/overload/refused. Declared
+    // here (public) so the dispatcher can name Engine::SpawnRefusal; the
+    // pending flag + record live with the other guard state members.
+    struct SpawnRefusal { double estimated; int cap; int attemptedCount; };
+    // [hard-guard] Set the web-computed estimate of alive particles per
+    // placed instance (clamped >= 0, non-finite -> 0). Re-runs the
+    // edit-time check: if the guard is enabled and the already-placed
+    // preview now exceeds the cap, Clear() + record a refusal.
+    void SetEstimatedLoad(double perInstance);
+    // [hard-guard] Returns true once per refusal and clears the record
+    // (4 Hz poll). out may be null.
+    bool TakeSpawnRefusal(SpawnRefusal* out);
+
 	void SetBackground(COLORREF color);
 	void SetLight(LightType which, const Light& light);
 	void SetAmbient(const D3DXVECTOR4& color);
@@ -579,6 +593,16 @@ private:
     // Time of the most recent refused spawn — drives the
     // kOverloadClearDelaySec debounce on m_overloadActive.
     TimeF m_lastOverloadTime = -1.0f;
+
+    // [hard-guard] Estimated alive particles for ONE placed instance,
+    // pushed by the web (engine/set/estimated-load; chain-load.ts owns
+    // the formula). 0 = no estimate yet → the gate is INERT (never refuse
+    // on a number we don't have; the runtime budget above is the backstop).
+    double m_estimatedPerInstance = 0.0;
+    // One-shot spawn-refusal record for the dispatcher's 4 Hz poll.
+    // (SpawnRefusal type is declared public beside TakeSpawnRefusal.)
+    bool m_spawnRefusalPending = false;
+    SpawnRefusal m_spawnRefusal{};
 
 	// Viewing
 	Camera		m_eye;
