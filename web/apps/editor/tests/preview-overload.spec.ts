@@ -35,7 +35,7 @@ import { test, expect, chromium, type Page, type Browser } from "@playwright/tes
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 
 // The overload guard cap is now runtime-configurable (engine default
-// 15_000, user-adjustable). The two 1e9-bomb tests pin the cap explicitly
+// 10_000, user-adjustable). The two 1e9-bomb tests pin the cap explicitly
 // at the top of each test (engine/set/overload-guard) so they don't
 // depend on the default. The slack stays 110_000 — well above any pinned
 // cap below — since the stats counter is sampled at 4 Hz between frames.
@@ -140,12 +140,14 @@ test("huge spawn rate plateaus at the budget, latches overload, and recovers", a
   await bridgeRequest("engine/set/paused", { paused: false });
 
   // [guard-config] Pin the cap explicitly so this spec doesn't depend on
-  // the engine default. 15_000 is pinned deliberately rather than the old
-  // hardcoded 100_000: in a full-harness Debug run the 1e9 bomb below
-  // plateaus AT the cap, and a 100k plateau OOM-crashes the Debug host at
-  // cleanup (reproduced 2/2), cascading into the next test's timeout. 25k
-  // plateaus comfortably and stays well under BUDGET_SLACK.
-  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 });
+  // the engine default — and pin it LOW (1_000, the clamp minimum). The
+  // banner/latch/recovery behaviour under test is cap-independent, and
+  // the 1e9 bomb below plateaus AT the cap: heavy plateaus ground the
+  // Debug test host under full-harness pressure (a 100k plateau
+  // OOM-crashed it 2/2; even the old 15k pin produced repeated
+  // host-death flakes at the tail of the run). 1k keeps the bomb cheap
+  // while still proving plateau + latch + recovery.
+  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 1_000 });
 
   // Locate the first root emitter and snapshot the fields we'll touch.
   const tree = await bridgeRequest<{ root: { children: { id: number }[] } }>(
@@ -260,7 +262,7 @@ test("huge spawn rate plateaus at the budget, latches overload, and recovers", a
     await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
     // Restore the engine default cap for any later run / spec.
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
     );
   }
 });
@@ -274,9 +276,12 @@ test("death-child spawns are refused under overload and the editor survives", as
   await bridgeRequest("engine/set/paused", { paused: false });
 
   // [guard-config] Pin the cap explicitly so this spec doesn't depend on
-  // the engine default. 15_000 pinned deliberately (see test 1): a 100k
-  // particle plateau crashes the Debug host under the full harness.
-  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 });
+  // the engine default — pinned LOW (1_000) like test 1: heavy plateaus
+  // ground the Debug host under full-harness pressure; the refusal
+  // behaviour under test is cap-independent (the instance ceiling
+  // derives as cap/20 = 50, so the death-child storm hits refusals
+  // even sooner).
+  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 1_000 });
 
   const tree = await bridgeRequest<{ root: { children: { id: number }[] } }>(
     "emitters/list",
@@ -391,7 +396,7 @@ test("death-child spawns are refused under overload and the editor survives", as
     await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
     // Restore the engine default cap for any later run / spec.
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
     );
   }
 });
@@ -459,7 +464,7 @@ test("a lowered cap bounds the plateau at the configured value", async () => {
     }
     await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
     );
   }
 });
@@ -468,7 +473,11 @@ test("lowering the cap mid-run suppresses and decays to the new ceiling", async 
   test.setTimeout(120_000);
   await bridgeRequest("stats/set-frozen", { frozen: false });
   await bridgeRequest("engine/set/paused", { paused: false });
-  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 50_000 });
+  // Start cap kept SMALL (2k): the mechanics under test only need
+  // start > lowered, and a big Debug plateau (the original 50k) grinds
+  // the test host — the same pressure class as the bomb specs, which
+  // pin 1k for the same reason.
+  await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 2_000 });
 
   const tree = await bridgeRequest<{ root: { children: { id: number }[] } }>("emitters/list", {});
   const targetId = tree.root.children[0]?.id;
@@ -505,7 +514,7 @@ test("lowering the cap mid-run suppresses and decays to the new ceiling", async 
     }
     expect(armed.hit, "expected overload=true before lowering the cap").not.toBeNull();
 
-    await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 5_000 });
+    await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 1_000 });
     const decayed = await page.evaluate(
       () =>
         new Promise<boolean>((resolve) => {
@@ -517,7 +526,7 @@ test("lowering the cap mid-run suppresses and decays to the new ceiling", async 
           }, 15_000);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const off = b.on("stats/tick", (e: any) => {
-            if (e.payload.particles <= 5_000) {
+            if (e.payload.particles <= 1_000) {
               clearTimeout(timer);
               off();
               resolve(true);
@@ -525,7 +534,7 @@ test("lowering the cap mid-run suppresses and decays to the new ceiling", async 
           });
         }),
     );
-    expect(decayed, "expected population to decay to the lowered 5k cap").toBe(true);
+    expect(decayed, "expected population to decay to the lowered 1k cap").toBe(true);
   } finally {
     await cleanupStep("restore-properties", () =>
       bridgeRequest("emitters/set-properties", {
@@ -546,7 +555,7 @@ test("lowering the cap mid-run suppresses and decays to the new ceiling", async 
     }
     await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
     );
   }
 });
@@ -556,9 +565,11 @@ test("disabled guard lets the population exceed the cap with no overload latch",
   await bridgeRequest("stats/set-frozen", { frozen: false });
   await bridgeRequest("engine/set/paused", { paused: false });
   // Low cap + disabled: if the guard were active the population would pin
-  // at 2k; exceeding it proves uncapped. MODERATE rate (4k/s × 5s ≈ 20k) —
-  // deliberately NOT the 1e9 bomb, so the test host stays healthy.
-  await bridgeRequest("engine/set/overload-guard", { enabled: false, maxParticles: 2_000 });
+  // at 1k; exceeding it proves uncapped. MODEST rate (1k/s × 5s ≈ 5k peak)
+  // — deliberately NOT the 1e9 bomb, and kept an order of magnitude under
+  // the old 4k/s ≈ 20k version: Debug-host pressure at the tail of the
+  // full run is the harness's failure mode.
+  await bridgeRequest("engine/set/overload-guard", { enabled: false, maxParticles: 1_000 });
 
   const tree = await bridgeRequest<{ root: { children: { id: number }[] } }>("emitters/list", {});
   const targetId = tree.root.children[0]?.id;
@@ -573,7 +584,7 @@ test("disabled guard lets the population exceed the cap with no overload latch",
   try {
     await bridgeRequest("emitters/set-properties", {
       id: targetId,
-      patch: { nParticlesPerSecond: 4_000, lifetime: 5, useBursts: false },
+      patch: { nParticlesPerSecond: 1_000, lifetime: 5, useBursts: false },
     });
     await bridgeRequest("spawner/start", {
       mode: "manual",
@@ -607,7 +618,7 @@ test("disabled guard lets the population exceed the cap with no overload latch",
           }, 8_000);
         }),
     );
-    expect(result.peak, "expected the uncapped population to exceed the 2k cap").toBeGreaterThan(2_500);
+    expect(result.peak, "expected the uncapped population to exceed the 1k cap").toBeGreaterThan(1_500);
     expect(result.latched, "expected no overload latch while the guard is disabled").toBe(false);
   } finally {
     await cleanupStep("restore-properties", () =>
@@ -629,7 +640,7 @@ test("disabled guard lets the population exceed the cap with no overload latch",
     }
     await cleanupStep("engine-clear", () => bridgeRequest("engine/action/clear", {}));
     await cleanupStep("guard-restore", () =>
-      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 15_000 }),
+      bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 10_000 }),
     );
   }
 });

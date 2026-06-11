@@ -11,7 +11,7 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 describe("overload-guard", () => {
   it("defaults when localStorage is empty", () => {
     expect(readOverloadGuard()).toEqual(OVERLOAD_GUARD_DEFAULT);
-    expect(OVERLOAD_GUARD_DEFAULT).toEqual({ enabled: true, maxParticles: 15_000 });
+    expect(OVERLOAD_GUARD_DEFAULT).toEqual({ enabled: true, maxParticles: 10_000 });
   });
 
   it("round-trips a written config", () => {

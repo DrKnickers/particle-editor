@@ -17,6 +17,41 @@ Conventions:
 ## Changelog
 
 
+### Overload guard default lowered to 10k; harness bomb specs pinned to 1k
+
+*2026-06-11 · TODO-hash · TODO-PR*
+
+The preview overload guard's default particle cap drops from 15,000 to
+**10,000** — user feel verdict: even a 15k simultaneous burst makes the
+editor struggle, and 10k keeps the preview responsive while staying far
+above what vanilla effects use. (The cap remains fully adjustable in
+Preferences → Preview, 1,000–1,000,000, and the instance ceiling still
+derives at 20:1 → 500.)
+
+**How we tackled it.** The default lives in two deliberately-synced
+places — [`Engine::kDefaultMaxPreviewParticles`](src/engine.h:104) and
+[`OVERLOAD_GUARD_DEFAULT`](web/apps/editor/src/lib/overload-guard.ts:16)
+— both now 10k with cross-reference comments. Separately, the native
+overload regression specs were re-pinned: the two 1e9-bomb specs now pin
+the cap at **1,000** (the clamp minimum), the mid-run-lowering spec
+starts at 2k → 1k (was 50k → 5k), and the disabled-guard spec runs a
+1k/s rate (was 4k/s).
+
+**Issues encountered and resolutions.** The re-pin is not cosmetic — it
+fixes real harness instability: heavy Debug-host plateaus at the tail of
+the full 180-spec single-process run were **killing the test host**
+(page crashes mid-bomb with failed cleanup poisoning the shared WebView2
+user-data folder, and dumpless mid-run host exits — the
+environmental signature; reproduced repeatedly at 15k pins, and the
+50k-start spec died even after the bombs were cheapened). The behaviours
+under test (plateau, latch, recovery, refusal, decay, uncapped) are all
+cap-independent, so low pins prove the same contracts. Result: the
+overload block dropped from ~5–7 minutes of grinding to ~30 seconds and
+the full harness from ~5–8 min to ~2 min, with the host-death flakes
+gone.
+
+---
+
 ### Group-drag now live-updates the Time/Value spinners
 
 *2026-06-11 · [`d5b6f1d`](https://github.com/DrKnickers/particle-editor/commit/d5b6f1d) · #130*

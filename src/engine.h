@@ -96,14 +96,16 @@ public:
 	//
 	// [guard-config] The budgets are RUNTIME state (SetOverloadGuard),
 	// user-configurable from Preferences via engine/set/overload-guard.
-	// Default 15k: the old fixed 100k survived the OOM but still let the
-	// preview get heavy on the climb. Disabled = fully uncapped (an
-	// explicit power-user choice — CAN OOM on extreme chain effects; the
-	// per-instance uint16 index cap below is a data-structure limit, not
-	// part of this guard, so the unbounded dimension is instance count).
-	static constexpr int kDefaultMaxPreviewParticles = 15'000;
+	// Default 10k (user feel-tested down from 15k, which still made the
+	// editor struggle on a large simultaneous burst; the old fixed 100k
+	// survived the OOM but let the preview get far too heavy on the
+	// climb). Disabled = fully uncapped (an explicit power-user choice —
+	// CAN OOM on extreme chain effects; the per-instance uint16 index cap
+	// below is a data-structure limit, not part of this guard, so the
+	// unbounded dimension is instance count).
+	static constexpr int kDefaultMaxPreviewParticles = 10'000;
 	// One knob: the instance ceiling derives from the particle cap,
-	// preserving #121's 100k:5k ratio (15k → 750 live instances —
+	// preserving #121's 100k:5k ratio (10k → 500 live instances —
 	// vanilla effects run tens; raising the particle knob raises this).
 	static constexpr int kInstancesDivisor           = 20;
 	// Defensive clamp bounds for SetOverloadGuard — engine invariants

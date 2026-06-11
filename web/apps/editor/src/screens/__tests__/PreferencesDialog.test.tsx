@@ -41,7 +41,7 @@ describe("PreferencesDialog", () => {
     expect(box).toBeChecked();
     const num = screen.getByRole("spinbutton", { name: /max preview particles/i });
     expect(num).toBeEnabled();
-    expect((num as HTMLInputElement).value).toBe("15000");
+    expect((num as HTMLInputElement).value).toBe("10000");
     expect(screen.queryByText(/can crash the editor/i)).not.toBeInTheDocument();
   });
 
@@ -51,11 +51,11 @@ describe("PreferencesDialog", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /limit preview particle count/i }));
     expect(request).toHaveBeenCalledWith({
       kind: "engine/set/overload-guard",
-      params: { enabled: false, maxParticles: 15_000 },
+      params: { enabled: false, maxParticles: 10_000 },
     });
     expect(JSON.parse(localStorage.getItem("alo:overload-guard")!)).toEqual({
       enabled: false,
-      maxParticles: 15_000,
+      maxParticles: 10_000,
     });
     expect(screen.getByRole("spinbutton", { name: /max preview particles/i })).toBeDisabled();
     expect(screen.getByText(/can crash the editor/i)).toBeInTheDocument();
