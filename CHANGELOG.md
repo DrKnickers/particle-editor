@@ -19,7 +19,7 @@ Conventions:
 
 ### Selected curve key: inverted core replaces the grow + drop shadow
 
-*2026-06-11 · TODO-hash · TODO-PR*
+*2026-06-11 · [`12c22bd`](https://github.com/DrKnickers/particle-editor/commit/12c22bd) · #136*
 
 The selected key on the focus curve no longer balloons and casts a dark
 drop shadow (which read as a smudge at marker scale), and the
