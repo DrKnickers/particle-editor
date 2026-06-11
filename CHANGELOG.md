@@ -19,7 +19,7 @@ Conventions:
 
 ### Configurable preview overload guard (Preferences toggle + tunable cap)
 
-*2026-06-10 · `TODO` · #123*
+*2026-06-10 · [`bd52588`](https://github.com/DrKnickers/particle-editor/commit/bd52588) · #123*
 
 The preview overload guard shipped in #121 (which stops an extreme effect from
 OOM-crashing the editor) is now configurable from **Preferences → Preview**.
@@ -66,7 +66,7 @@ native 180/0, host Debug x64 clean.
 
 ### Styled, animated tooltips app-wide + one motion family for modal and banner
 
-*2026-06-10 · `TODO` · #123*
+*2026-06-10 · [`bd52588`](https://github.com/DrKnickers/particle-editor/commit/bd52588) · #123*
 
 Interactive controls (buttons, toolbar glyphs, the emitter-tree affordances)
 now carry a styled, animated tooltip instead of a native HTML `title` —
