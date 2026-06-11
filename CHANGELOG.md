@@ -19,7 +19,7 @@ Conventions:
 
 ### Preview overload guard now refuses oversized spawns preemptively (estimate gate + clear)
 
-*2026-06-11 · TODO-hash · TODO-PR*
+*2026-06-11 · [`a50db90`](https://github.com/DrKnickers/particle-editor/commit/a50db90) · #138*
 
 The overload guard gains a **preemptive** layer on top of the existing
 reactive runtime budget. Before this change the editor let a heavy
@@ -128,7 +128,7 @@ background override on `.ce-body` or the canvas wrapper.
 
 ### Morphing follower curves no longer paint over the focus channel's keys
 
-*2026-06-11 · TODO-hash · TODO-PR*
+*2026-06-11 · [`e8c1a14`](https://github.com/DrKnickers/particle-editor/commit/e8c1a14) · #135*
 
 When a curve that other channels are locked to is edited, the followers
 "catch up" with a morph animation. That morphing line used to render ON
@@ -155,7 +155,7 @@ morphing followers. A regression test pins the document order
 
 ### Spinner arrow buttons: contained background + a press state
 
-*2026-06-11 · TODO-hash · TODO-PR*
+*2026-06-11 · [`297ffd0`](https://github.com/DrKnickers/particle-editor/commit/297ffd0) · #133*
 
 Two fixes to the spinner up/down arrows. (1) Pressing or hovering an
 arrow no longer breaks the field's rounded border — the arrow column
@@ -182,7 +182,7 @@ an `active:bg-accent-soft active:text-accent` pair on the arrow buttons
 
 ### Overload guard default lowered to 10k; harness bomb specs pinned to 1k
 
-*2026-06-11 · TODO-hash · TODO-PR*
+*2026-06-11 · [`f85cdc2`](https://github.com/DrKnickers/particle-editor/commit/f85cdc2) · #134*
 
 The preview overload guard's default particle cap drops from 15,000 to
 **10,000** — user feel verdict: even a 15k simultaneous burst makes the
