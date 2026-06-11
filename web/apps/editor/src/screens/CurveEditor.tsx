@@ -182,6 +182,12 @@ type Props = {
   /** an-audit-finding group-drag commit: a drag of one key within a multi-selection
    *  shifts the whole selection by (dTime, dValue). */
   onGroupDragEnd?: (dTime: number, dValue: number) => void;
+  /** Group-drag live move: fires on every pointer-move past slop during
+   *  a multi-selection group drag, carrying the accumulated
+   *  (dTime, dValue). The parent uses it to live-update the Time/Value
+   *  spinners (which show the selection AVERAGE) — the group analogue of
+   *  `onKeyDragMove`. */
+  onGroupDragMove?: (dTime: number, dValue: number) => void;
   /** Marquee-select handler (Phase 4.1 Fix dispatch 5). Fires at
    *  pointer-up when a Select-mode rubber-band drag has covered at
    *  least one key. `times` is the set of key TIMES inside the
@@ -410,6 +416,7 @@ export function CurveEditor({
   onKeyDragMove,
   onKeyDragCancel,
   onGroupDragEnd,
+  onGroupDragMove,
   onCanvasMarqueeSelect,
 }: Props) {
   // Multi-channel overlay branch. Triggered when the caller provides
@@ -442,6 +449,7 @@ export function CurveEditor({
         onKeyDragMove={onKeyDragMove}
         onKeyDragCancel={onKeyDragCancel}
         onGroupDragEnd={onGroupDragEnd}
+        onGroupDragMove={onGroupDragMove}
         onCanvasMarqueeSelect={onCanvasMarqueeSelect}
         marqueeRef={marqueeRef}
       />
@@ -1084,6 +1092,9 @@ type MultiProps = {
   /** an-audit-finding: a drag of one key within a multi-selection shifts the whole
    *  selection by (dTime, dValue). The parent applies it via applyGroupShift. */
   onGroupDragEnd?: (dTime: number, dValue: number) => void;
+  /** Group-drag live move — fires every move past slop with the live
+   *  (dTime, dValue) so the parent can live-update the average spinners. */
+  onGroupDragMove?: (dTime: number, dValue: number) => void;
   onCanvasMarqueeSelect?: (times: number[], shift: boolean) => void;
   marqueeRef?: Ref<CurveMarqueeHandle>;
 };
@@ -1110,6 +1121,7 @@ function MultiChannelCurves({
   onKeyDragMove,
   onKeyDragCancel,
   onGroupDragEnd,
+  onGroupDragMove,
   onCanvasMarqueeSelect,
   marqueeRef,
 }: MultiProps) {
@@ -1395,6 +1407,11 @@ function MultiChannelCurves({
       const gdx = event.clientX - drag.startClientX;
       const gdy = event.clientY - drag.startClientY;
       if (Math.abs(gdx) > DRAG_SLOP || Math.abs(gdy) > DRAG_SLOP) drag.moved = true;
+      // Live-update the average spinners (group analogue of the single-key
+      // onKeyDragMove fired below) — only once past slop.
+      if (drag.moved) {
+        onGroupDragMove?.(drag.groupDTime, drag.groupDValue);
+      }
       setDragTick((n) => n + 1);
       return;
     }

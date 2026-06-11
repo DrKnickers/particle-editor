@@ -1826,3 +1826,223 @@ describe("CurveEditorPanel — an-audit-finding key copy/cut/paste", () => {
     });
   });
 });
+
+// CRV: group-drag live-updates the Time/Value spinners.
+//
+// When ≥2 keys are selected and the user drags the group, the Value
+// spinner must reflect the live shifted average — not the stale committed
+// average. This exercises the full panel path: onGroupDragMove → liveGroup
+// state → multiSelected recompute → spinnerValueValue.
+describe("CurveEditorPanel — group-drag live-updates spinners", () => {
+  /** Bridge whose `red` track has TWO interior keys (25/75) plus borders (0/100),
+   *  making it easy to select both interior keys for a group drag on the default
+   *  focus channel without needing a channel switch. */
+  function makeStubBridgeRedInterior() {
+    const tracks: TrackDto[] = TRACK_NAMES.map((name) => ({
+      name,
+      keys: name === "red"
+        ? [
+            { time: 0,   value: 0 },
+            { time: 25,  value: 0.25 },
+            { time: 75,  value: 0.75 },
+            { time: 100, value: 1 },
+          ]
+        : [
+            { time: 0,   value: 0 },
+            { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+          ],
+      interpolation: "linear" as const,
+      lockedTo: null,
+    }));
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) => {
+        if (req.kind === "engine/state/snapshot") {
+          return Promise.resolve({ ...makeDefaultEngineState(), selectedEmitterId: 1 });
+        }
+        if (req.kind === "emitters/get-tracks") {
+          return Promise.resolve({ tracks });
+        }
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockImplementation(() => () => {}),
+    } as unknown as Bridge & {
+      request: ReturnType<typeof vi.fn>;
+      on: ReturnType<typeof vi.fn>;
+    };
+    return { bridge };
+  }
+
+  it("Value spinner live-updates during a group drag (multiSelected uses shifted positions)", async () => {
+    const { bridge } = makeStubBridgeRedInterior();
+    render(<CurveEditorPanel bridge={bridge} />);
+
+    // Wait for the red track to render (default focus channel).
+    await waitFor(() => {
+      expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
+    });
+
+    // Select both interior red keys (t=25 and t=75) with ctrl+click.
+    const keyAt25 = screen.getAllByTestId("curve-key")
+      .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red");
+    const keyAt75 = screen.getAllByTestId("curve-key")
+      .find((k) => k.getAttribute("data-key-time") === "75" && k.getAttribute("data-channel-id") === "red");
+    expect(keyAt25).toBeDefined();
+    expect(keyAt75).toBeDefined();
+    fireEvent.click(keyAt25!);
+    fireEvent.click(keyAt75!, { ctrlKey: true });
+
+    const panel = screen.getByTestId("curve-editor-panel");
+    await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("2"));
+
+    // Verify the committed average value is (0.25 + 0.75) / 2 = 0.5 before the drag.
+    // NOTE: the Spinner is keyed by its value, so it REMOUNTS on every live
+    // change — re-query `getByLabelText` for each read rather than caching it.
+    const readValue = () =>
+      Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
+    await waitFor(() =>
+      expect((screen.getByLabelText("Selected key value") as HTMLInputElement).disabled).toBe(false),
+    );
+    expect(readValue()).toBeCloseTo(0.5, 2);
+
+    // Set up the SVG for pointer event coordinates.
+    // Red channel default focus: the SVG is 600×300 (jsdom falls back to props).
+    const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    expect(svg).not.toBeNull();
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    // Begin group drag on the t=25 key.
+    // t=25 → x = 25/100 * 600 = 150; v=0.25 → y = 300 - (0.25 * 300) = 225.
+    fireEvent.pointerDown(keyAt25!, { button: 0, pointerId: 77, clientX: 150, clientY: 225 });
+
+    // Move past DRAG_SLOP (1.5 px): shift value UP by 30 px (−30 in SVG y → +30/300 ≈ +0.1 value).
+    // clientY 225 → 195: ΔclientY = −30 → Δvalue ≈ +0.1 on a 300px / 1.0 range canvas.
+    fireEvent.pointerMove(svg, { pointerId: 77, clientX: 150, clientY: 195 });
+
+    // During the drag, the live average value should reflect the shifted positions.
+    // Pre-drag avg = 0.5; with dValue ≈ +0.1, live avg ≈ 0.5 + 0.1 = 0.6.
+    // We just verify the spinner has moved away from the committed 0.5.
+    await waitFor(() => {
+      const liveValue = readValue();
+      expect(liveValue).not.toBeCloseTo(0.5, 1); // spinner must have updated
+      expect(liveValue).toBeGreaterThan(0.5);     // drag went up → value increased
+    });
+  });
+
+  it("Value spinner returns to committed average after group drag cancel", async () => {
+    const { bridge } = makeStubBridgeRedInterior();
+    render(<CurveEditorPanel bridge={bridge} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument();
+    });
+
+    const keyAt25 = screen.getAllByTestId("curve-key")
+      .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red")!;
+    const keyAt75 = screen.getAllByTestId("curve-key")
+      .find((k) => k.getAttribute("data-key-time") === "75" && k.getAttribute("data-channel-id") === "red")!;
+    fireEvent.click(keyAt25);
+    fireEvent.click(keyAt75, { ctrlKey: true });
+
+    const panel = screen.getByTestId("curve-editor-panel");
+    await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("2"));
+
+    const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    // The Spinner remounts on each live change — re-query per read.
+    const readValue = () =>
+      Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
+    await waitFor(() =>
+      expect((screen.getByLabelText("Selected key value") as HTMLInputElement).disabled).toBe(false),
+    );
+
+    // Drag past slop, then cancel.
+    fireEvent.pointerDown(keyAt25, { button: 0, pointerId: 78, clientX: 150, clientY: 225 });
+    fireEvent.pointerMove(svg, { pointerId: 78, clientX: 150, clientY: 195 });
+
+    // Verify spinner moved.
+    await waitFor(() => expect(readValue()).not.toBeCloseTo(0.5, 1));
+
+    // Cancel the drag — spinner must revert to the committed average.
+    fireEvent.pointerCancel(svg, { pointerId: 78 });
+
+    await waitFor(() => {
+      expect(readValue()).toBeCloseTo(0.5, 2);
+    });
+  });
+
+  it("Time spinner live-updates during a horizontal group drag", async () => {
+    const { bridge } = makeStubBridgeRedInterior();
+    render(<CurveEditorPanel bridge={bridge} />);
+    await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
+
+    const keyAt25 = screen.getAllByTestId("curve-key")
+      .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red")!;
+    const keyAt75 = screen.getAllByTestId("curve-key")
+      .find((k) => k.getAttribute("data-key-time") === "75" && k.getAttribute("data-channel-id") === "red")!;
+    fireEvent.click(keyAt25);
+    fireEvent.click(keyAt75, { ctrlKey: true });
+    const panel = screen.getByTestId("curve-editor-panel");
+    await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("2"));
+
+    const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    // Both interior keys selected → avgTime = (25+75)/2 = 50 before the drag.
+    const readTime = () =>
+      Number((screen.getByLabelText("Selected key time") as HTMLInputElement).value);
+    await waitFor(() =>
+      expect((screen.getByLabelText("Selected key time") as HTMLInputElement).disabled).toBe(false),
+    );
+    expect(readTime()).toBeCloseTo(50, 1);
+
+    // Grab t=25 (x=150) and drag RIGHT by 60px → +60/600*100 = +10 time units.
+    fireEvent.pointerDown(keyAt25, { button: 0, pointerId: 81, clientX: 150, clientY: 225 });
+    fireEvent.pointerMove(svg, { pointerId: 81, clientX: 210, clientY: 225 });
+
+    await waitFor(() => {
+      const t = readTime();
+      expect(t).not.toBeCloseTo(50, 1); // Time spinner must live-update too
+      expect(t).toBeGreaterThan(50);    // dragged right → average time increased
+    });
+  });
+
+  it("all-border group drag live-updates value only; time spinner stays disabled", async () => {
+    const { bridge } = makeStubBridgeRedInterior();
+    render(<CurveEditorPanel bridge={bridge} />);
+    await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
+
+    // Select BOTH border keys (t=0, t=100) — no interior in the selection.
+    const keyAt0 = screen.getAllByTestId("curve-key")
+      .find((k) => k.getAttribute("data-key-time") === "0" && k.getAttribute("data-channel-id") === "red")!;
+    const keyAt100 = screen.getAllByTestId("curve-key")
+      .find((k) => k.getAttribute("data-key-time") === "100" && k.getAttribute("data-channel-id") === "red")!;
+    fireEvent.click(keyAt0);
+    fireEvent.click(keyAt100, { ctrlKey: true });
+    const panel = screen.getByTestId("curve-editor-panel");
+    await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("2"));
+
+    const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    // Time spinner disabled (all-border selection); value spinner enabled at avg (0+1)/2 = 0.5.
+    const timeInput = () => screen.getByLabelText("Selected key time") as HTMLInputElement;
+    const readValue = () =>
+      Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
+    await waitFor(() => expect(timeInput().disabled).toBe(true));
+    expect(readValue()).toBeCloseTo(0.5, 2);
+
+    // Grab t=0 (x=0, v=0 → y=300) and drag UP 30px → value +0.1.
+    fireEvent.pointerDown(keyAt0, { button: 0, pointerId: 82, clientX: 0, clientY: 300 });
+    fireEvent.pointerMove(svg, { pointerId: 82, clientX: 0, clientY: 270 });
+
+    await waitFor(() => {
+      expect(readValue()).toBeGreaterThan(0.5); // borders shift in value
+    });
+    expect(timeInput().disabled).toBe(true);     // time still pinned for all-border
+  });
+});

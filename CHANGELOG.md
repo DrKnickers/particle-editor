@@ -17,6 +17,42 @@ Conventions:
 ## Changelog
 
 
+### Group-drag now live-updates the Time/Value spinners
+
+*2026-06-11 · TODO-hash · TODO-PR*
+
+When multiple curve keys are selected, dragging the group around now
+live-updates the Time and Value spinner readouts (which show the
+selection average) in real time, the same way a single-key drag always
+has. Previously the numbers froze at the pre-drag average until release.
+
+**How we tackled it.** The renderer's group-drag branch
+([`src/screens/CurveEditor.tsx`](web/apps/editor/src/screens/CurveEditor.tsx:1370))
+returned after updating the preview without firing any live-move
+callback — only the single-key branch fired `onKeyDragMove`. Added an
+`onGroupDragMove(dTime, dValue)` callback (fired once past the slop
+threshold); the panel stashes it in a `liveGroup` state and
+[`multiSelected`](web/apps/editor/src/components/CurveEditorPanel.tsx:845)
+averages the LIVE shifted positions while a group drag is active,
+falling back to the committed average otherwise. The per-key
+shift+clamp math (borders pinned in time but shifted in value, interior
+keys clamped inside the endpoints, value clamped to the channel's
+spinner bounds) was extracted into a single `computeGroupMoves` helper
+consumed by BOTH the commit (`applyGroupShift`) and the live average, so
+the displayed numbers always match what will commit — and there's now
+one source for the clamp logic the morph drag-suppression recorder
+depends on. `liveGroup` clears on drag-end and cancel.
+
+**Issues encountered and resolutions.** The Time/Value spinners are
+keyed by their value, so they remount on every live change — the new
+tests must re-query the input each read rather than caching a reference
+(a cached handle goes stale on the remount and reads the pre-drag
+value). Verified the `applyGroupShift` refactor is commit-identical
+(same `Math.fround` engine times, same clamps) so the morph recorder's
+`movesMatch` is unaffected.
+
+---
+
 ### Curves animate smoothly on structural changes (morph + key choreography)
 
 *2026-06-11 · [`dc7f81f`](https://github.com/DrKnickers/particle-editor/commit/dc7f81f) · #128*

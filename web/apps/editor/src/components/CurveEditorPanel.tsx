@@ -238,6 +238,39 @@ function spinnerBoundsForTrack(name: TrackName): {
   }
 }
 
+/** Per-key result of shifting a multi-selection by (dTime, dValue):
+ *  border keys keep their time but shift value; interior keys shift
+ *  both, with time clamped strictly inside the track endpoints and
+ *  value clamped to the channel's spinner bounds. SINGLE SOURCE of the
+ *  group-shift transform — both `applyGroupShift` (the commit) and the
+ *  live multi-select average (the spinner readout during a drag)
+ *  consume it, so the displayed numbers always match what will commit.
+ *  Keep in sync with the morph recorder in CurveEditor.tsx per the note
+ *  in `applyGroupShift`. */
+function computeGroupMoves(
+  trackKeys: ReadonlyArray<{ time: number; value: number }>,
+  selectedTimes: ReadonlySet<number>,
+  borderTimes: ReadonlySet<number>,
+  dTime: number,
+  dValue: number,
+  bounds: { min: number; max: number },
+): Array<{ oldTime: number; newTime: number; newValue: number }> {
+  if (trackKeys.length === 0) return [];
+  const firstTime = trackKeys[0]!.time;
+  const lastTime = trackKeys[trackKeys.length - 1]!.time;
+  const eps = (lastTime - firstTime) / 10000 || 1e-4;
+  const out: Array<{ oldTime: number; newTime: number; newValue: number }> = [];
+  for (const k of trackKeys) {
+    if (!selectedTimes.has(k.time)) continue;
+    const isBorder = borderTimes.has(k.time);
+    let nt = isBorder ? k.time : k.time + dTime;
+    if (!isBorder) nt = Math.min(lastTime - eps, Math.max(firstTime + eps, nt));
+    const nv = Math.min(bounds.max, Math.max(bounds.min, k.value + dValue));
+    out.push({ oldTime: k.time, newTime: nt, newValue: nv });
+  }
+  return out;
+}
+
 /** Format an axis-label number. Integer ranges show as integers,
  *  non-integers show one decimal place. Avoids "12.0" noise on
  *  integer ranges (Scale 0..24, Index -3..10) while keeping precision
@@ -428,6 +461,10 @@ export function CurveEditorPanel({ bridge }: Props) {
   const [liveDrag, setLiveDrag] = useState<
     { keyTime: number; time: number; value: number } | null
   >(null);
+  // Live group-drag delta — set on every group-drag move so the
+  // multi-select AVERAGE spinners track the shift in real time (the
+  // group analogue of `liveDrag`). Null when no group drag is active.
+  const [liveGroup, setLiveGroup] = useState<{ dTime: number; dValue: number } | null>(null);
   const [keyContextMenu, setKeyContextMenu] = useState<
     { time: number; isBorder: boolean; x: number; y: number } | null
   >(null);
@@ -752,8 +789,15 @@ export function CurveEditorPanel({ bridge }: Props) {
     [],
   );
 
+  // Group-drag live move: stash the live (dTime, dValue) so the
+  // multi-select average spinners reflect the shift mid-drag.
+  const handleGroupDragMove = useCallback((dTime: number, dValue: number) => {
+    setLiveGroup({ dTime, dValue });
+  }, []);
+
   const handleKeyDragCancel = useCallback(() => {
     setLiveDrag(null);
+    setLiveGroup(null);
   }, []);
 
   const handleCanvasAdd = useCallback(
@@ -848,16 +892,31 @@ export function CurveEditorPanel({ bridge }: Props) {
     if (selectedKeyTimes.size <= 1 || focusedTrack === null) return null;
     const keys = focusedTrack.keys.filter((k) => selectedKeyTimes.has(k.time));
     if (keys.length <= 1) return null;
-    let st = 0;
-    let sv = 0;
     let anyInterior = false;
     for (const k of keys) {
-      st += k.time;
-      sv += k.value;
       if (!borderKeyTimes.has(k.time)) anyInterior = true;
     }
-    return { keys, avgTime: st / keys.length, avgValue: sv / keys.length, editable: anyInterior };
-  }, [selectedKeyTimes, focusedTrack, borderKeyTimes]);
+    // During a group drag, average over the LIVE shifted positions
+    // (same per-key transform the commit uses) so the spinners track
+    // the drag; otherwise average the committed keys. Mean is over the
+    // same selected-key set either way.
+    const positions =
+      liveGroup !== null
+        ? computeGroupMoves(
+            focusedTrack.keys, selectedKeyTimes, borderKeyTimes,
+            liveGroup.dTime, liveGroup.dValue,
+            spinnerBoundsForTrack(focusedChannel.trackName),
+          ).map((m) => ({ time: m.newTime, value: m.newValue }))
+        : keys;
+    let st = 0;
+    let sv = 0;
+    for (const p of positions) {
+      st += p.time;
+      sv += p.value;
+    }
+    const n = positions.length || 1;
+    return { keys, avgTime: st / n, avgValue: sv / n, editable: anyInterior };
+  }, [selectedKeyTimes, focusedTrack, borderKeyTimes, liveGroup, focusedChannel.trackName]);
 
   // Apply a (dTime, dValue) shift to every selected key. Borders are
   // pinned in time (value still shifts); interior keys clamp to stay
@@ -872,22 +931,21 @@ export function CurveEditorPanel({ bridge }: Props) {
       if (selectedId === null || focusedTrack === null) return;
       const keys = focusedTrack.keys;
       if (keys.length === 0) return;
-      const firstTime = keys[0]!.time;
-      const lastTime = keys[keys.length - 1]!.time;
-      const eps = (lastTime - firstTime) / 10000 || 1e-4;
       const sb = spinnerBoundsForTrack(focusedChannel.trackName);
-      const sel = keys.filter((k) => selectedKeyTimes.has(k.time));
-      const moves = sel.map((k) => {
-        const isBorder = borderKeyTimes.has(k.time);
-        let nt = isBorder ? k.time : k.time + dTime;
-        // NOTE: the clamped nt/nv here are the values the engine commits.
-        // CurveEditor.tsx (~:1499-1500) records the same clamped values
-        // into morphSuppressRef; movesMatch() in use-curve-morph.ts
-        // verifies them. Keep clamp logic in sync with the recorder.
-        if (!isBorder) nt = Math.min(lastTime - eps, Math.max(firstTime + eps, nt));
-        const nv = Math.min(sb.max, Math.max(sb.min, k.value + dValue));
-        return { oldTime: k.time, wireTime: nt, engineTime: Math.fround(nt), newValue: nv };
-      });
+      // NOTE: the clamped nt/nv are the values the engine commits.
+      // CurveEditor.tsx (~:1499-1500) records the same clamped values
+      // into morphSuppressRef; movesMatch() in use-curve-morph.ts
+      // verifies them. `computeGroupMoves` is the single source of this
+      // clamp logic (shared with the live spinner average) — keep it in
+      // sync with the morph recorder.
+      const moves = computeGroupMoves(
+        keys, selectedKeyTimes, borderKeyTimes, dTime, dValue, sb,
+      ).map((m) => ({
+        oldTime: m.oldTime,
+        wireTime: m.newTime,
+        engineTime: Math.fround(m.newTime),
+        newValue: m.newValue,
+      }));
       // Optimistic overlay (same idiom as handleKeyDragEnd).
       const moveMap = new Map(moves.map((m) => [m.oldTime, m]));
       setTracks((prev) =>
@@ -938,6 +996,9 @@ export function CurveEditorPanel({ bridge }: Props) {
   // the same path the Time/Value spinners use for multi-selections.
   const handleGroupDragEnd = useCallback(
     (dTime: number, dValue: number) => {
+      // Drag is over — drop the live delta so the average snaps to the
+      // committed (optimistic) positions instead of the in-flight shift.
+      setLiveGroup(null);
       if (focusLocked || (dTime === 0 && dValue === 0)) return;
       applyGroupShift(dTime, dValue);
     },
@@ -1200,6 +1261,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         onKeyDragMove: handleKeyDragMove,
         onKeyDragCancel: handleKeyDragCancel,
         onGroupDragEnd: handleGroupDragEnd,
+        onGroupDragMove: handleGroupDragMove,
         onCanvasMarqueeSelect: handleCanvasMarqueeSelect,
       };
 
