@@ -19,7 +19,7 @@ Conventions:
 
 ### Locked curve channels are now genuinely read-only (dashed mirror treatment)
 
-*2026-06-11 · TODO-hash · #126*
+*2026-06-11 · [`75cbe6d`](https://github.com/DrKnickers/particle-editor/commit/75cbe6d) · #126*
 
 Locking a curve channel to an earlier one (Green/Blue → Red in the curve
 editor's "Lock to" dropdown) is a live one-way mirror: the follower
