@@ -19,7 +19,7 @@ Conventions:
 
 ### Curves animate smoothly on structural changes (morph + key choreography)
 
-*2026-06-11 · TODO-hash · TODO-PR*
+*2026-06-11 · [`dc7f81f`](https://github.com/DrKnickers/particle-editor/commit/dc7f81f) · #128*
 
 Editing a curve no longer snaps. Adding or deleting a key, pasting,
 nudging values with the spinners, undo/redo, switching interpolation
