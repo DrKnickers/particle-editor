@@ -17,6 +17,33 @@ Conventions:
 ## Changelog
 
 
+### Morphing follower curves no longer paint over the focus channel's keys
+
+*2026-06-11 · TODO-hash · TODO-PR*
+
+When a curve that other channels are locked to is edited, the followers
+"catch up" with a morph animation. That morphing line used to render ON
+TOP of the focus channel's curve and key markers — most visibly right
+after dragging a master key, when the follower's line swept over the key
+just edited. Morphing non-focus channels now render below the focus
+layer, like their static counterparts always have.
+
+**How we tackled it.** The morph overlay groups were rendered after the
+focus layer in
+[`src/screens/CurveEditor.tsx`](web/apps/editor/src/screens/CurveEditor.tsx:1878)
+(an "in-flight shape always visible" choice that was wrong for follower
+morphs — SVG paints in document order). The overlays now render between
+the background layers and the focus layer, taking the same stacking
+position as the static layers they replace; the morphing channel's own
+static layer is visibility-hidden during its morph, so for the focus
+channel the overlay stands in at the correct z-position anyway. Within
+the overlays the focus channel sorts last, so a simultaneously-morphing
+focus channel (e.g. undo restructuring several tracks) still draws above
+morphing followers. A regression test pins the document order
+(`compareDocumentPosition`).
+
+---
+
 ### Spinner arrow buttons: contained background + a press state
 
 *2026-06-11 · TODO-hash · TODO-PR*
@@ -75,7 +102,7 @@ under test (plateau, latch, recovery, refusal, decay, uncapped) are all
 cap-independent, so low pins prove the same contracts. Result: the
 overload block dropped from ~5–7 minutes of grinding to ~30 seconds and
 the full harness from ~5–8 min to ~2 min, with the host-death flakes
-gone.
+gone.
 
 ---
 

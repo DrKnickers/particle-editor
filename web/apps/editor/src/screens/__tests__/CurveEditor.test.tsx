@@ -1107,6 +1107,31 @@ describe("curve morph (structural changes)", () => {
     expect(overlay.querySelectorAll("circle").length).toBe(0);
   });
 
+  it("a non-focus channel's morph overlay renders BELOW the focus layer (follower lines never paint over focus keys)", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", KEYS3, "linear"), trk("green", KEYS3, "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red")); // focus red
+    // Green (a background/follower channel) restructures — e.g. a locked
+    // follower catching up to a master edit.
+    rerender(mcCurve([trk("red", KEYS3, "linear"),
+                      trk("green", [k(0, 0), k(40, 1), k(100, 0.5)], "linear")], "red"));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    const focusG = container.querySelector('[data-channel-id="red"][data-focus="true"]')!;
+    expect(focusG).not.toBeNull();
+    // SVG paints in document order: the overlay must PRECEDE the focus
+    // layer so the focus curve + key markers draw on top of the
+    // morphing follower line.
+    expect(
+      overlay.compareDocumentPosition(focusG) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("var(...) channel colour: overlay polyline stroke is the var string; focus fill references gradient with var(...) stops", async () => {
     // The focus overlay fill must use a self-contained linearGradient whose
     // stop-color attributes carry the channel colour verbatim — even when the

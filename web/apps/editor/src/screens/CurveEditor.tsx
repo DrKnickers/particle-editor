@@ -1875,6 +1875,31 @@ function MultiChannelCurves({
         );
       })}
 
+      {/* Morph overlays — one per channel that is currently morphing.
+          React mounts/unmounts the group; the rAF loop writes into it
+          imperatively. Rendered BELOW the focus layer so a morphing
+          NON-focus channel (e.g. a locked follower catching up to a
+          master edit) never paints over the focus channel's curve or
+          key markers — overlays take the same stacking position as the
+          static layers they replace (the morphing channel's own static
+          layer is visibility-hidden, so for the focus channel the
+          overlay effectively stands in at the right z-position).
+          Within the overlays, the focus channel sorts LAST so a
+          simultaneously-morphing focus channel still draws above
+          morphing followers. */}
+      {[...morph.activeIds]
+        .sort((a, b) =>
+          (a === focusLayer?.channel.id ? 1 : 0) - (b === focusLayer?.channel.id ? 1 : 0))
+        .map((id) => (
+          <g
+            key={id}
+            data-testid="curve-morph-overlay"
+            data-channel-id={id}
+            pointerEvents="none"
+            ref={morph.attach(id)}
+          />
+        ))}
+
       {/* Focus layer — full opacity, thicker stroke, interactive
           circles. Rendered last so it draws above the dimmed
           background layers. A vertical gradient fill emanates from
@@ -2038,20 +2063,6 @@ function MultiChannelCurves({
           </g>
         );
       })()}
-
-      {/* Morph overlays — one per channel that is currently morphing.
-          React mounts/unmounts the group; the rAF loop writes into it
-          imperatively. Rendered above the focus layer so the in-flight
-          shape is always visible. */}
-      {morph.activeIds.map((id) => (
-        <g
-          key={id}
-          data-testid="curve-morph-overlay"
-          data-channel-id={id}
-          pointerEvents="none"
-          ref={morph.attach(id)}
-        />
-      ))}
 
       {/* Marquee rectangle */}
       {marquee !== null && marquee.movedPastSlop && (
