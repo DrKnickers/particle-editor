@@ -19,7 +19,7 @@ Conventions:
 
 ### Open file's name in the titlebar + "Particle Editor" rebrand
 
-*2026-06-12 · TODO-hash · TODO-PR*
+*2026-06-12 · [`8dc8256`](https://github.com/DrKnickers/particle-editor/commit/8dc8256) · #142*
 
 The OS window title now shows the open particle file: `Untitled.alo —
 Particle Editor` on a fresh launch, `plasma_blast.alo — Particle Editor`
