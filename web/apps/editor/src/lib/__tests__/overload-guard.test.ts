@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
+import { renderHook, act } from "@testing-library/react";
 import {
   OVERLOAD_GUARD_DEFAULT,
+  OVERLOAD_GUARD_CHANGED_EVENT,
   clampMaxParticles,
   readOverloadGuard,
   writeOverloadGuard,
   applyOverloadGuard,
+  useOverloadGuardConfig,
 } from "../overload-guard";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
@@ -46,5 +49,35 @@ describe("overload-guard", () => {
       kind: "engine/set/overload-guard",
       params: { enabled: true, maxParticles: 1_000 },
     });
+  });
+});
+
+describe("useOverloadGuardConfig", () => {
+  it("writeOverloadGuard dispatches the change event", () => {
+    const seen = vi.fn();
+    window.addEventListener(OVERLOAD_GUARD_CHANGED_EVENT, seen);
+    writeOverloadGuard({ enabled: true, maxParticles: 5_000 });
+    expect(seen).toHaveBeenCalledTimes(1);
+    window.removeEventListener(OVERLOAD_GUARD_CHANGED_EVENT, seen);
+  });
+
+  it("seeds from storage and updates live on writeOverloadGuard", () => {
+    writeOverloadGuard({ enabled: true, maxParticles: 2_000 });
+    const { result } = renderHook(() => useOverloadGuardConfig());
+    expect(result.current).toEqual({ enabled: true, maxParticles: 2_000 });
+    act(() => {
+      writeOverloadGuard({ enabled: false, maxParticles: 9_000 });
+    });
+    expect(result.current).toEqual({ enabled: false, maxParticles: 9_000 });
+  });
+
+  it("stops listening after unmount", () => {
+    writeOverloadGuard({ enabled: true, maxParticles: 2_000 });
+    const { result, unmount } = renderHook(() => useOverloadGuardConfig());
+    unmount();
+    act(() => {
+      writeOverloadGuard({ enabled: true, maxParticles: 3_000 });
+    });
+    expect(result.current).toEqual({ enabled: true, maxParticles: 2_000 });
   });
 });

@@ -7,6 +7,7 @@
 // The engine clamps defensively too; this clamp exists so the UI and
 // localStorage never even hold a nonsense value.
 
+import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 export type OverloadGuardConfig = { enabled: boolean; maxParticles: number };
@@ -24,6 +25,11 @@ export const MIN_MAX_PARTICLES = 1_000;
 export const MAX_MAX_PARTICLES = 1_000_000;
 
 const KEY = "alo:overload-guard";
+
+// Same-tab change signal for useOverloadGuardConfig — the `storage` event
+// only fires in OTHER tabs, and the editor is a single WebView anyway.
+// Constant lives here so this file owns both ends of the contract.
+export const OVERLOAD_GUARD_CHANGED_EVENT = "alo:overload-guard-changed";
 
 export function clampMaxParticles(n: number): number {
   if (!Number.isFinite(n)) return OVERLOAD_GUARD_DEFAULT.maxParticles;
@@ -49,6 +55,20 @@ export function writeOverloadGuard(c: OverloadGuardConfig): void {
     KEY,
     JSON.stringify({ enabled: c.enabled, maxParticles: clampMaxParticles(c.maxParticles) }),
   );
+  window.dispatchEvent(new CustomEvent(OVERLOAD_GUARD_CHANGED_EVENT));
+}
+
+/** Live overload-guard config for React consumers (the cap-tracking ⚠
+ *  glyph + the system-load chip). Seeds from readOverloadGuard(); re-reads
+ *  whenever writeOverloadGuard() dispatches the change event. */
+export function useOverloadGuardConfig(): OverloadGuardConfig {
+  const [config, setConfig] = useState<OverloadGuardConfig>(() => readOverloadGuard());
+  useEffect(() => {
+    const onChange = () => setConfig(readOverloadGuard());
+    window.addEventListener(OVERLOAD_GUARD_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(OVERLOAD_GUARD_CHANGED_EVENT, onChange);
+  }, []);
+  return config;
 }
 
 // Fire-and-forget: a failed send (mock quirk, host teardown) must never

@@ -94,8 +94,10 @@ import {
   type DropZone,
 } from "@/lib/drop-zone";
 import { computeLinkGroupBrackets, colorForGroup } from "@/lib/link-group-colors";
-import { estimateChainLoad, formatChainWarning, type ChainWarning } from "@/lib/chain-load";
+import { estimateChainLoad, estimateSystemLoad, formatChainWarning, type ChainWarning } from "@/lib/chain-load";
+import { useOverloadGuardConfig } from "@/lib/overload-guard";
 import { useEstimatedLoadPush } from "@/lib/use-estimated-load-push";
+import { SystemLoadChip } from "@/components/SystemLoadChip";
 import { Tip } from "@/primitives/Tip";
 import { ChainWarningTip } from "./ChainWarningTip";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
@@ -344,7 +346,7 @@ type RowProps = {
   //: dissolve the entire link group this row belongs to.
   onDissolveLinkGroup: (groupId: number) => void;
   //: non-null when this row sits on a chain whose estimated alive
-  // count crosses CHAIN_WARN_THRESHOLD. Advisory only.
+  // count crosses the warning threshold (guard cap, or the 10k advisory).
   chainWarning: ChainWarning | null;
 };
 
@@ -1270,11 +1272,28 @@ export function EmitterTree({ bridge }: Props) {
   const selectedIds = useEmitterSelectionIds();
   const primaryId = useEmitterSelectionPrimary();
 
+  // [indicator-consistency] Live guard config: the glyph threshold follows
+  // the configurable cap while the guard is enabled (glyph ⟺ gate), and
+  // falls back to the advisory 10k when disabled.
+  const guard = useOverloadGuardConfig();
+
   //: stableId → soft chain-load warning, recomputed whenever the
   // tree refetches (spawn values ride the tree DTO, so a properties edit
   // that matters lands here via emitters/tree/changed → setTree).
   const chainWarnings = useMemo(
-    () => (tree !== null ? estimateChainLoad(tree.root) : new Map<number, ChainWarning>()),
+    () =>
+      tree !== null
+        ? estimateChainLoad(tree.root, guard.enabled ? guard.maxParticles : undefined)
+        : new Map<number, ChainWarning>(),
+    [tree, guard],
+  );
+
+  // [indicator-consistency] System-total estimate for the chip — the same
+  // walk useEstimatedLoadPush(bridge, tree) runs for the engine push below;
+  // recomputing the pure O(nodes) walk here is cheaper than widening the
+  // hook's signature.
+  const systemLoad = useMemo(
+    () => (tree !== null ? estimateSystemLoad(tree.root) : 0),
     [tree],
   );
 
@@ -2207,6 +2226,7 @@ export function EmitterTree({ bridge }: Props) {
       }}
       className="flex h-full flex-col outline-none"
     >
+      {tree !== null && <SystemLoadChip bridge={bridge} systemLoad={systemLoad} />}
       {tree === null ? (
         <div className="flex-1 min-h-0 text-text-3 text-sm">(loading…)</div>
       ) : rootChildren.length === 0 ? (

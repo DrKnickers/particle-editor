@@ -46,18 +46,24 @@ export type ChainWarning = {
 
 // Walks the tree (synthetic root excluded) and returns stableId →
 // ChainWarning for every row on a root→node path whose cumulative estimate
-// crosses CHAIN_WARN_THRESHOLD. A(child) = A(parent) × E(child): every
+// crosses `threshold` (default `CHAIN_WARN_THRESHOLD`). A(child) = A(parent) × E(child): every
 // alive parent particle hosts one child-emitter instance. Life and death
 // children deliberately share the rule — documented approximation, see
 // spec §1.
-export function estimateChainLoad(root: EmitterTreeNode): Map<number, ChainWarning> {
+export function estimateChainLoad(
+  root: EmitterTreeNode,
+  // Configurable guard cap when the overload guard is enabled; the
+  // advisory default otherwise. The glyph means "will be gated" whenever
+  // a cap is passed — see the consistency spec (Decisions).
+  threshold: number = CHAIN_WARN_THRESHOLD,
+): Map<number, ChainWarning> {
   const out = new Map<number, ChainWarning>();
   type TrailEntry = { stableId: number; name: string; perEmitter: number; cumulative: number };
   const visit = (node: EmitterTreeNode, parentCumulative: number, trail: TrailEntry[]): void => {
     const perEmitter = estimatePerEmitter(node.spawn);
     const cumulative = parentCumulative * perEmitter;
     const path = [...trail, { stableId: node.stableId, name: node.name, perEmitter, cumulative }];
-    if (cumulative > CHAIN_WARN_THRESHOLD) {
+    if (cumulative > threshold) {
       // One shared copy is safe: the display array is never mutated downstream.
       const display = path.map(({ name, perEmitter: e, cumulative: a }) => ({
         name, perEmitter: e, cumulative: a,

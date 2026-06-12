@@ -132,6 +132,11 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
         clearTimeout(refusalTimerRef.current);
       }
       setRefusal({ estimated, cap });
+      // A refusal means the engine Clear()'d the preview — its latch reset
+      // with it (engine.cpp Clear()), so any web-held `overload` is stale.
+      // Force-clear it; a GENUINELY still-latched engine re-asserts via the
+      // next 4 Hz tick (≤250 ms). Kills the delivery-order race outright.
+      setOverload(false);
       refusalTimerRef.current = setTimeout(() => {
         refusalTimerRef.current = null;
         setRefusal(null);
@@ -150,6 +155,17 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
   // The banner is visible when a refusal is active OR when the latch is set.
   // usePresence drives the exit animation for both cases off a single boolean.
   const visible = refusal !== null || overload;
+  // [s37 bug] Freeze the rendered variant for the exit: when the refusal
+  // window expires and visible drops, usePresence keeps the body mounted
+  // for the 150 ms fade — and the raw `refusal ?? latch` ternary would
+  // fall through to the LATCH copy for the whole fade. While visible,
+  // track the live choice; while exiting, render what was shown last.
+  // (Render-time ref write is safe: idempotent "last rendered value".)
+  const lastShownRef = useRef<RefusalState | null>(null);
+  if (visible) lastShownRef.current = refusal;
+  // A null frozen value is valid: it means the latch copy (not a refusal)
+  // was on screen when the exit began, so the body renders the latch copy.
+  const shownRefusal = visible ? refusal : lastShownRef.current;
   const { mounted, state, onAnimationEnd } = usePresence(visible, EXIT_MS);
   if (!mounted) return null;
   return (
@@ -157,7 +173,7 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
       bridge={bridge}
       state={state}
       onAnimationEnd={onAnimationEnd}
-      refusal={refusal}
+      refusal={shownRefusal}
     />
   );
 }

@@ -119,6 +119,20 @@ describe("estimateChainLoad", () => {
     expect(w).toBeDefined();
     expect(Number.isFinite(w!.estimate)).toBe(true);
   });
+  it("honours a passed threshold below the default (cap-tracking glyph)", () => {
+    // 2,000/s × 1 s = 2,000 — silent at the default 10k, flagged at cap 1,000.
+    const root = node("stream", { nParticlesPerSecond: 2_000, lifetime: 1 });
+    expect(estimateChainLoad(syntheticRoot([root])).size).toBe(0);
+    const warnings = estimateChainLoad(syntheticRoot([root]), 1_000);
+    expect(warnings.get(root.stableId)?.estimate).toBe(2_000);
+  });
+  it("honours a passed threshold above the default", () => {
+    // 20,000 estimate: flagged at the default 10k, silent at cap 50k —
+    // the deliberate semantic change (glyph ⟺ gate, not "heavy").
+    const root = node("big", { nParticlesPerSecond: 20_000, lifetime: 1 });
+    expect(estimateChainLoad(syntheticRoot([root])).size).toBe(1);
+    expect(estimateChainLoad(syntheticRoot([root]), 50_000).size).toBe(0);
+  });
 });
 
 describe("estimateSystemLoad", () => {

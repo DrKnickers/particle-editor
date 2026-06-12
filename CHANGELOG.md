@@ -17,6 +17,73 @@ Conventions:
 ## Changelog
 
 
+### Overload indicators made consistent — cap-tracking ⚠ glyph, predictive system-load chip, banner exit fix
+
+*TODO(backfill): YYYY-MM-DD · [`hash`](https://github.com/DrKnickers/particle-editor/commit/hash) · [#NN](https://github.com/DrKnickers/particle-editor/pull/NN)*
+
+The two #138 feel-test bugs, fixed. The emitter-tree ⚠ glyph now warns at
+the **configurable** guard cap (Preferences → Preview) instead of the
+fixed 10,000, so an effect the gate refuses is always marked on its row
+(disabling the guard restores the 10k advisory). Because the per-row
+glyph is per-emitter / per-single-instance and the gate compares the
+**system total × placed-instance count**, a new **system-load chip**
+above the emitter rows covers the gap: it warns whenever the *next*
+placement would be refused — `(placed + 1) × estimated total > cap` —
+naming both the projected count and the cap, with distinct copy before
+the first placement ("This effect ≈ N particles — over the M preview
+limit") and after ("Another instance would exceed the preview limit").
+And the transient refusal banner no longer flashes the stale "Preview
+spawning limited" latch copy as it fades out.
+
+**How we tackled it.** Entirely web-side — **zero engine/bridge changes**.
+[`estimateChainLoad`](web/apps/editor/src/lib/chain-load.ts:53) gained an
+optional `threshold`; a new
+[`useOverloadGuardConfig`](web/apps/editor/src/lib/overload-guard.ts:64)
+hook makes the localStorage guard config reactive via an
+`alo:overload-guard-changed` `CustomEvent` dispatched inside
+[`writeOverloadGuard`](web/apps/editor/src/lib/overload-guard.ts:53) (the
+lib owns both ends of the contract, so the glyph and chip update live on
+a Preferences edit with no reload). The new
+[`SystemLoadChip`](web/apps/editor/src/components/SystemLoadChip.tsx:1)
+subscribes to `stats/tick` itself, confining the 4 Hz re-render to that
+leaf instead of the whole tree; its trigger is deliberately *predictive*
+(`(instances + 1) × load > cap`) because the engine **clears** any
+over-cap placed state via the edit-time check, which makes a
+current-state condition self-erasing. The system-total estimate reuses
+the same `estimateSystemLoad` walk
+[`useEstimatedLoadPush`](web/apps/editor/src/lib/use-estimated-load-push.ts:1)
+already runs for the gate — one formula, never divergent. Semantic note
+worth remembering: with a cap above 10k the glyph now means "**will be
+gated**," not "heavy" — effects between 10k and the cap lose the old
+advisory glyph (guard-off keeps it).
+
+**Issues encountered and resolutions.** The session-37 handoff blamed the
+stale-banner bug on a spawn leaking through the estimate-push staleness
+window and suggested an engine-side latch reset in `Engine::Clear()` —
+but that reset **already existed** ([`src/engine.cpp`](src/engine.cpp:247)),
+and the host emits the refusal event and `overload=false` in the same
+4 Hz poll. The real bug was in the web render layer: when the 5 s refusal
+window expires, [`usePresence`](web/apps/editor/src/lib/use-presence.ts:1)
+keeps the banner mounted for the 150 ms exit fade, and the
+`refusal ?? latch` ternary fell through to the latch copy for the whole
+fade. Fix: freeze the rendered variant at exit start via a render-time
+ref (`lastShownRef`), plus `setOverload(false)` in the refusal handler as
+a delivery-order belt-and-suspenders (a genuinely latched engine
+re-asserts on the next tick). The precedence contract — the latch
+re-asserts after the refusal window if still latched — is pinned by an
+updated test that models the real 4 Hz re-assert stream. Separately, the
+plan's literal test values for the cap-tracking glyph were wrong against
+the mock fixture (its child emitters carry default multipliers that push
+the chain over 10k regardless of cap); the implementer caught it and the
+tests now document the fixture math (`Smoke puff` id 2 at the default
+10/s × 3 s = ×30). Finally, the native `preview-overload` specs flake at
+the **tail** of the full single-process harness (cumulative Debug-host
+pressure,) — they pass 5/5 in isolation and exercise only the
+unchanged engine gate, so this is environmental, not a regression of
+this change.
+
+---
+
 ### Preview overload guard now refuses oversized spawns preemptively (estimate gate + clear)
 
 *2026-06-11 · [`a50db90`](https://github.com/DrKnickers/particle-editor/commit/a50db90) · #138*
