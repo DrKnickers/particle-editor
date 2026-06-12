@@ -17,6 +17,73 @@ Conventions:
 ## Changelog
 
 
+### Open file's name in the titlebar + "Particle Editor" rebrand
+
+*2026-06-12 · TODO-hash · TODO-PR*
+
+The OS window title now shows the open particle file: `Untitled.alo —
+Particle Editor` on a fresh launch, `plasma_blast.alo — Particle Editor`
+once a `.alo` is open, and a leading `●` while there are unsaved changes
+(`● plasma_blast.alo — Particle Editor`). Because it's the real Win32
+title, the open file is also visible in the taskbar button and Alt-Tab,
+not just inside the app. The title shows the filename only (no path),
+matching the Recent Files basenames. Alongside this, the app is
+**rebranded "AloParticleEditor" → "Particle Editor"** across every
+user-visible surface (titlebar, browser tab, About dialog, host error
+dialogs), and the redundant `AloParticleEditor` brand label that sat next
+to **File** in the menu header is **removed** — the menu bar now starts at
+File.
+
+**How we tackled it.** React stays the single source of truth for the
+title string: a new pure
+[`formatWindowTitle`](web/apps/editor/src/lib/window-title.ts:18) helper
+owns the format (dirty `●` + basename + app name), the
+[`App.tsx`](web/apps/editor/src/App.tsx:111) effect assigns it to
+`document.title`, and the **host mirrors that into the Win32 titlebar** via
+a new `add_DocumentTitleChanged` handler in
+[`FinishWebView2ControllerSetup`](src/host/HostWindow.cpp:1221) that calls
+`SetWindowTextW(hMain, get_DocumentTitle())` — registered beside the
+existing accelerator handler, with a registration token and a teardown
+`remove_DocumentTitleChanged` mirroring the established `accelKeyTok`
+pattern (placed in the `if (webView)` unsubscribe group, before
+`webView.Reset()`). Keeping the format in TypeScript means it stays
+unit-tested and there is exactly one definition. The rebrand was done as
+an **enumerated eight-site change**, never a find-and-replace: the
+hard-won boundary is that storage/identity strings keep
+`AloParticleEditor` — the registry key
+[`HKCU\Software\AloParticleEditor`](src/host/BridgeDispatcher.cpp:212),
+the `%LOCALAPPDATA%\AloParticleEditor` log path, the
+`%TEMP%\AloParticleEditor` autosave + WebView2 user-data folders, the
+window class, and the `AloParticleEditor-DevProbe` user-agent — because
+renaming any of those would silently orphan every existing user's
+settings, recent files, and autosaves. The initial `CreateWindowExW` title
+and `index.html`'s `<title>` both became `Particle Editor` so the
+pre-WebView2 titlebar reads correctly with no `AloParticleEditor` flash.
+
+**Issues encountered and resolutions.** *(1) The spec's golden-proof claim
+was wrong.* The design assumed the UIA goldens would prove the
+`SetWindowTextW` mirror via the root window Name, but the HWND/UIA (JSON)
+golden lane **auto-skips** in the default composition hosting mode
+([`a11y-chrome.spec.ts:11`](web/apps/editor/tests/a11y-chrome.spec.ts:11)),
+and the composition (YAML) lane is a DOM snapshot with no Win32
+window-Name node. The mirror is instead proven by
+[`file-ops.spec.ts`](web/apps/editor/tests/file-ops.spec.ts:183)'s
+`document.title` assertion against the **real host**, plus the cold-launch
+smoke reading `MainWindowTitle` = `Untitled.alo — Particle Editor` via
+`Get-Process` (a non-screenshot API). The dormant HWND lane's goldens stay
+`AloParticleEditor` — known rebrand-exposed debt, not CI-gated (the native
+harness is local-only); refresh them with an `ALO_HOSTING_MODE=legacy
+--update` run only if that lane is ever reactivated. *(2) `toContain`
+tautology.* `expect(title).toContain("Particle Editor")` passes against
+the **old** `AloParticleEditor` too (it's a substring), so the native
+assertions use exact `toBe`. *(3) A vacuous untitled test.* The
+"`Untitled.alo` after `file/new`" native test initially passed without
+exercising anything, because the spec-level `beforeEach` already
+`file/new`s; it was rewritten to first save to a named path, then
+`file/new`, so it actually verifies the named→untitled reset.
+
+---
+
 ### Overload indicators made consistent — cap-tracking ⚠ glyph, predictive system-load chip, banner exit fix
 
 *2026-06-11 · [`541c79a`](https://github.com/DrKnickers/particle-editor/commit/541c79a) · #140*

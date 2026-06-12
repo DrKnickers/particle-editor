@@ -75,7 +75,7 @@ export function PrimitivesGallery() {
   return (
     <div className="h-full w-full overflow-y-auto bg-bg text-text">
       <header className="sticky top-0 z-10 flex h-10 items-center gap-3 border-b border-border bg-bg px-6">
-        <span className="font-semibold">AloParticleEditor</span>
+        <span className="font-semibold">Particle Editor</span>
         <span className="text-text-3">·</span>
         <span className="text-xs text-text-2">Primitives gallery</span>
         <span className="ml-auto text-[10px] text-text-3">?demo=primitives</span>

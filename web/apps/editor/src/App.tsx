@@ -20,6 +20,7 @@ import { FileOpErrorModal } from "@/components/FileOpErrorModal";
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
 import { SaveChangesPrompt } from "@/screens/SaveChangesPrompt";
 import { useFileState, useSeedFileState } from "@/lib/file-state";
+import { formatWindowTitle } from "@/lib/window-title";
 import { promptModNickname } from "@/lib/mod-nickname";
 import { BridgeContext } from "@/lib/bridge-context";
 import { useBackingColorSync } from "@/lib/backing-color-sync";
@@ -102,30 +103,14 @@ function AppShell() {
   // file/recent/list on mount. Stays mounted for the app's lifetime.
   useSeedFileState(bridge);
 
-  // Window title — Phase 3 Screen 8 Batch 3. Reflects dirty + current
-  // file path:
-  //   - Dirty,   untitled : `* AloParticleEditor`
-  //   - Dirty,   named    : `* foo.alo — AloParticleEditor`
-  //   - Clean,   untitled : `AloParticleEditor`
-  //   - Clean,   named    : `foo.alo — AloParticleEditor`
-  // Mirrors legacy `SetFileChanged` title-bar logic at
-  // [src/main.cpp:1063-1085]. Em-dash separator matches the
-  // legacy "AloParticleEditor - [filename*]" pattern but in the
-  // friendlier modern form.
+  // Window title — single source of truth for the titlebar. The host
+  // mirrors document.title into the Win32 titlebar (DocumentTitleChanged
+  // → SetWindowTextW in HostWindow.cpp), so this effect drives the OS
+  // title, taskbar, and Alt-Tab text. Format cases live (tested) in
+  // lib/window-title.ts.
   const { currentFilePath, dirty } = useFileState();
   useEffect(() => {
-    const APP_NAME = "AloParticleEditor";
-    const dirtyMark = dirty ? "* " : "";
-    if (currentFilePath) {
-      const idx = Math.max(
-        currentFilePath.lastIndexOf("/"),
-        currentFilePath.lastIndexOf("\\"),
-      );
-      const base = idx >= 0 ? currentFilePath.slice(idx + 1) : currentFilePath;
-      document.title = `${dirtyMark}${base} — ${APP_NAME}`;
-    } else {
-      document.title = `${dirtyMark}${APP_NAME}`;
-    }
+    document.title = formatWindowTitle(currentFilePath, dirty);
   }, [currentFilePath, dirty]);
 
   // / /: wire the legacy global keyboard accelerators to
@@ -156,7 +141,6 @@ function AppShell() {
         <div data-testid="app-shell" className="flex h-full w-full flex-col text-text">
           {/* Top bar */}
           <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-bg px-4 text-sm">
-            <span className="font-semibold">AloParticleEditor</span>
             <MenuBar
               bridge={bridge}
               onOpenImportEmittersDialog={() => setImportEmittersOpen(true)}

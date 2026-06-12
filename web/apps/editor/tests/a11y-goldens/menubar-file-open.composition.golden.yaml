@@ -1,5 +1,4 @@
 - banner:
-  - text: AloParticleEditor
   - menubar:
     - menuitem "File" [expanded]
     - menuitem "Edit"

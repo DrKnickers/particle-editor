@@ -392,6 +392,7 @@ struct HostWindowImpl
     // construct the response stream via env->CreateWebResourceResponse.
     ComPtr<ICoreWebView2Environment> webEnv;
     EventRegistrationToken          accelKeyTok = {};
+    EventRegistrationToken          docTitleTok = {};
     // G5: stash the WebMessageReceived registration token so
     // WM_DESTROY can explicitly remove the handler before tearing down
     // webView. Pre-fix the token was a local in InitWebView2 and the
@@ -1352,6 +1353,35 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
             }).Get(),
         &accelKeyTok);
     Log("[host] AcceleratorKeyPressed handler registered\n");
+
+    // Mirror the web document title into the Win32 titlebar. React owns
+    // the title format (dirty ● + basename + app name — see
+    // web/apps/editor/src/lib/window-title.ts); the host just reflects
+    // document.title so the titlebar, taskbar, and Alt-Tab always show
+    // the open .alo file. Fires once for index.html's static <title> at
+    // navigation, then on every document.title assignment.
+    if (webView)
+    {
+        webView->add_DocumentTitleChanged(
+            Callback<ICoreWebView2DocumentTitleChangedEventHandler>(
+                [this](ICoreWebView2* sender, IUnknown* /*args*/) -> HRESULT
+                {
+                    LPWSTR title = nullptr;
+                    HRESULT thr = sender->get_DocumentTitle(&title);
+                    if (SUCCEEDED(thr) && title)
+                    {
+                        SetWindowTextW(hMain, title);
+                        CoTaskMemFree(title);
+                    }
+                    else
+                    {
+                        Log("[host] get_DocumentTitle failed hr=0x%08lx\n", thr);
+                    }
+                    return S_OK;
+                }).Get(),
+            &docTitleTok);
+        Log("[host] DocumentTitleChanged handler registered\n");
+    }
 
     // Fit to client.
     RECT bounds;
@@ -2604,6 +2634,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 webView->remove_PermissionRequested(permissionTok);
                 permissionTok = {};
             }
+            if (docTitleTok.value != 0)
+            {
+                webView->remove_DocumentTitleChanged(docTitleTok);
+                docTitleTok = {};
+            }
         }
         if (webController)
         {
@@ -3252,7 +3287,7 @@ int HostWindowImpl::Run(int nCmdShow)
     {
         Log("[host] WebView2 runtime not found — showing install dialog\n");
         int r = MessageBoxW(nullptr,
-            L"AloParticleEditor requires the Microsoft Edge WebView2 Runtime.\n\n"
+            L"Particle Editor requires the Microsoft Edge WebView2 Runtime.\n\n"
             L"Install it from https://aka.ms/webview2 and relaunch.\n\n"
             L"Click OK to open the download page in your browser.\n"
             L"Click Cancel to exit.",
@@ -3327,7 +3362,7 @@ int HostWindowImpl::Run(int nCmdShow)
     RegisterClassExW(&vc);
 
     hMain = CreateWindowExW(
-        0, kHostWindowClassName, L"AloParticleEditor",
+        0, kHostWindowClassName, L"Particle Editor",
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, CW_USEDEFAULT, kInitialWidth, kInitialHeight,
         nullptr, nullptr, hInstance, nullptr);
@@ -3420,7 +3455,7 @@ int HostWindowImpl::Run(int nCmdShow)
         swprintf(msg, 256,
                  L"WebView2 initialisation failed (0x%08lx).\n"
                  L"Is the Evergreen runtime installed?", hr);
-        MessageBoxW(hMain, msg, L"AloParticleEditor", MB_ICONERROR);
+        MessageBoxW(hMain, msg, L"Particle Editor", MB_ICONERROR);
         DestroyWindow(hMain);
         g_self = nullptr;
         CoUninitialize();

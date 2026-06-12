@@ -26,13 +26,13 @@ export function AboutDialog({ open, onOpenChange }: Props) {
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="About AloParticleEditor"
+      title="About Particle Editor"
       size="sm"
     >
       <Modal.Body>
         <div className="flex flex-col gap-3 text-sm">
           <div className="text-lg font-semibold text-text">
-            AloParticleEditor
+            Particle Editor
           </div>
           <div className="text-text-2">
             Version {VERSION}

@@ -198,24 +198,59 @@ test("Window title reflects dirty + currentFilePath", async () => {
     { timeout: 3000 },
   );
 
-  // Clean + named: `title-test.alo — AloParticleEditor`
+  // Clean + named — exact match (NOT toContain: "Particle Editor" is a
+  // substring of the old "AloParticleEditor", so contains-checks can't
+  // prove the rebrand).
   const cleanTitle = await page.title();
-  expect(cleanTitle).toContain("title-test.alo");
-  expect(cleanTitle).toContain("AloParticleEditor");
-  expect(cleanTitle.startsWith("*")).toBe(false);
+  expect(cleanTitle).toBe("title-test.alo — Particle Editor");
 
-  // Now mutate and assert the asterisk prefix appears.
+  // Now mutate and assert the ● prefix appears.
   await page.evaluate(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const b = (window as any).bridge;
     await b.request({ kind: "engine/set/ground-z", params: { z: 5 } });
   });
   await page.waitForFunction(
-    () => document.title.startsWith("* "),
+    () => document.title.startsWith("● "),
     null,
     { timeout: 3000 },
   );
   const dirtyTitle = await page.title();
-  expect(dirtyTitle.startsWith("* ")).toBe(true);
-  expect(dirtyTitle).toContain("title-test.alo");
+  expect(dirtyTitle).toBe("● title-test.alo — Particle Editor");
+});
+
+// ── 5. Untitled state: file/new resets the title to the placeholder ────────
+
+test("Window title shows Untitled.alo after file/new", async () => {
+  // Establish a NAMED doc first so file/new has a real named→untitled
+  // reset to perform. (The spec-level beforeEach already file/new's, so
+  // without naming the doc here the assertion would pass vacuously on the
+  // pre-existing untitled state.)
+  await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    await b.request({
+      kind: "file/save",
+      params: { path: "C:/Temp/untitled-reset.alo" },
+    });
+  });
+  await page.waitForFunction(
+    () => /untitled-reset\.alo/.test(document.title),
+    null,
+    { timeout: 3000 },
+  );
+
+  // file/new clears the current path → the title returns to the
+  // Untitled placeholder.
+  await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    await b.request({ kind: "file/new", params: {} });
+  });
+  await page.waitForFunction(
+    () => document.title === "Untitled.alo — Particle Editor",
+    null,
+    { timeout: 3000 },
+  );
+  expect(await page.title()).toBe("Untitled.alo — Particle Editor");
 });
