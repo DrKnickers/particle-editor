@@ -17,6 +17,47 @@ Conventions:
 ## Changelog
 
 
+### Link-group indicator reworked — left spine + row tint + group badge
+
+*2026-06-12 · TODO-hash · TODO-PR*
+
+Emitters that share a link group are now marked three ways at once, all
+at **fixed positions** that don't drift with emitter-name length: a
+coloured **spine** on the row's left edge, a soft **row tint** in the
+group colour, and a small **`G{n}` badge** at the right of the name. The
+shared colour + the explicit `G{n}` label make it obvious that members
+belong together even when they're scattered across non-adjacent rows.
+Clicking either the spine or the badge selects the whole group, and
+hovering any member still lights up the rest. This replaces the previous
+end-of-name dot and the right-hand **bracket gutter** — the bracket was
+absolutely positioned at the *measured longest name*, so a single long
+emitter name shoved every bracket out of place.
+
+**How we tackled it.** All in [`EmitterTree.tsx`](src/screens/EmitterTree.tsx:420):
+the row computes its group hue once (`colorForGroup`) and, when linked and
+unselected, overrides the existing 2px left border (the spine) and sets a
+low-alpha inline `backgroundColor` (the tint; 12% at rest, 20% while the
+group is hovered) — selection styling still wins when a row is selected.
+The badge is a `shrink-0` outlined chip inside the name's flex cell; an
+8px transparent hit-strip over the left edge makes the thin spine
+clickable. Both call a new `onSelectLinkGroup` prop wired to the existing
+`handleSelectLinkGroup`. The whole bracket subsystem
+(`computeLinkGroupBrackets`, `laneCount`, the longest-name measurement
+`useLayoutEffect`, and the absolute gutter layer) was deleted. The new
+cues stay `aria-hidden` (mouse conveniences over the keyboard-accessible
+row selection), matching the old bracket's a11y posture so the a11y
+goldens are unchanged.
+
+**Issues encountered and resolutions.** The row tint is an inline
+`backgroundColor`, which beats the Tailwind `bg-accent/10` hover class on
+specificity — so that class is now applied only where there's no inline
+tint (`linkHover && spineTintColor === null`) to avoid a silently-dead
+class. Group colours come back as 6-digit hex (or `null` for unlinked);
+the tint appends an `"1f"`/`"33"` alpha suffix, guarded so a `null` hue
+never produces a `"null1f"` string.
+
+---
+
 ### Open file's name in the titlebar + "Particle Editor" rebrand
 
 *2026-06-12 · [`8dc8256`](https://github.com/DrKnickers/particle-editor/commit/8dc8256) · #142*

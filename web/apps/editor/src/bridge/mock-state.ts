@@ -733,9 +733,9 @@ export function setLinkGroupMembership(
 /** Sweep the tree and demote any positive `linkGroup` with
  *  exactly one member to 0. Idempotent — a second call produces no
  *  further change. Mirrors the host-side `EnforceSingleMemberLinkGroups`
- *  in `src/host/BridgeDispatcher.cpp` AND the render-layer filter at
- *  `computeLinkGroupBrackets` in `src/lib/link-group-colors.ts` so
- *  data and view agree end-to-end. Pure function — returns a new tree
+ *  in `src/host/BridgeDispatcher.cpp` so data and view agree end-to-end
+ *  (a single-member group renders no group indicator). Pure function —
+ *  returns a new tree
  *  DTO; doesn't mutate the input. */
 export function enforceSingleMemberLinkGroups(
   tree: EmitterTreeDto,

@@ -494,65 +494,6 @@ describe("EmitterTree", () => {
     expect(sel.primary).toBe(4);
   });
 
-  // ─── Batch C — link-group brackets ───────────────────────────────
-
-  it("renders link-group brackets in the right gutter for grouped rows", async () => {
-    const bridge = makeStubBridge();
-    renderWithTooltips(<EmitterTree bridge={bridge} />);
-    await waitFor(() => {
-      expect(screen.getByText("Smoke")).toBeInTheDocument();
-    });
-    // Fixture: Smoke (id=0) + Sparks (id=3) share linkGroup=1. Flash
-    // (id=5) is unlinked. We expect exactly one bracket descriptor
-    // (group 1) in the gutter.
-    const gutter = screen.getByTestId("link-group-bracket-gutter");
-    expect(gutter).toBeInTheDocument();
-    const bracket1 = screen.getByTestId("link-group-bracket-1");
-    expect(bracket1).toBeInTheDocument();
-    expect(bracket1.getAttribute("data-link-group")).toBe("1");
-    // No bracket for group 0 (unlinked) or any other group.
-    expect(screen.queryByTestId("link-group-bracket-0")).toBeNull();
-    expect(screen.queryByTestId("link-group-bracket-2")).toBeNull();
-    // Per-member stubs: group 1 spans Smoke (flat row 0) + Sparks (flat
-    // row 3); a stub is drawn at EACH member row, not just the ends.
-    expect(screen.getByTestId("link-group-stub-1-0")).toBeInTheDocument();
-    expect(screen.getByTestId("link-group-stub-1-3")).toBeInTheDocument();
-    // No stub on a non-member row (Smoke embers at flat row 1).
-    expect(screen.queryByTestId("link-group-stub-1-1")).toBeNull();
-  });
-
-  it("bracket layer is absolutely positioned to hug the names (no fixed gutter width)", async () => {
-    const bridge = makeStubBridge();
-    renderWithTooltips(<EmitterTree bridge={bridge} />);
-    await waitFor(() => {
-      expect(screen.getByText("Smoke")).toBeInTheDocument();
-    });
-
-    // The gutter no longer reserves a fixed flex-column width; it's an
-    // absolute layer positioned at (measured longest-name right + gap).
-    // jsdom returns 0-size rects, so the measured right is 0 and left
-    // collapses to the gap constant (BRACKET_NAME_GAP_PX = 16px,
-    // widened from 8 so the bracket no longer hugs the name).
-    const gutter = screen.getByTestId("link-group-bracket-gutter");
-    expect(gutter).toBeInTheDocument();
-    expect(gutter.className).toContain("absolute");
-    expect(gutter.style.width).toBe("");      // no fixed width anymore
-    expect(gutter.style.left).toBe("16px");   // hug position (gap only in jsdom)
-  });
-
-  it("rendered brackets carry a data-lane attribute matching their assigned lane", async () => {
-    const bridge = makeStubBridge();
-    renderWithTooltips(<EmitterTree bridge={bridge} />);
-    await waitFor(() => {
-      expect(screen.getByText("Smoke")).toBeInTheDocument();
-    });
-
-    // Group 1 spans Smoke (row 0) → Sparks (row 3). Only one group
-    // visible in the fixture → lane 0.
-    const bracket = screen.getByTestId("link-group-bracket-1");
-    expect(bracket).toHaveAttribute("data-lane", "0");
-  });
-
   // ─── Batch C — inline rename ─────────────────────────────────────
 
   it("F2 on the focused row enters inline rename mode (input renders with current name)", async () => {
@@ -700,17 +641,17 @@ describe("EmitterTree", () => {
     expect(calls.find((c) => c.kind === "emitters/select")).toBeUndefined();
   });
 
-  it("per-row link-group dot is no longer rendered (gutter brackets are the only affordance)", async () => {
+  it("no element carries aria-label='Link group N' (badge + spine are aria-hidden)", async () => {
     const bridge = makeStubBridge();
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => {
       expect(screen.getByText("Smoke")).toBeInTheDocument();
     });
 
-    // The legacy per-row dot used `aria-label="Link group N"`. No
-    // element should match that pattern any more.
-    const dots = screen.queryAllByLabelText(/^Link group \d+$/);
-    expect(dots).toHaveLength(0);
+    // Badge and spine are both aria-hidden — nothing should match the
+    // accessible pattern "Link group N".
+    const labeled = screen.queryAllByLabelText(/^Link group \d+$/);
+    expect(labeled).toHaveLength(0);
   });
 
   it("row uses a 3-column grid (eye / role-glyph / name) — visual reorder", async () => {
@@ -721,13 +662,13 @@ describe("EmitterTree", () => {
     });
 
     // Each row's outer button carries the grid template via inline style.
-    // Columns are [eye | role-glyph | link-dot | name]: the glyph sits in
-    // col 2, the dot in col 3 (reserved on every row). DOM order stays
-    // [eye, label, role, dot] (all re-placed visually via grid-column; the
-    // dot is aria-hidden) so the a11y tree / goldens are unchanged — assert
-    // that DOM order explicitly below.
+    // Columns are [eye | role-glyph | name]: the glyph sits in col 2, the
+    // name in col 3. The link dot no longer reserves its own column —
+    // it's appended INLINE to the END of the name cell (reclaiming the old
+    // 10px col 3) and is aria-hidden, so the a11y tree / goldens are
+    // unchanged. DOM order stays [eye, name(+dot), role].
     const rowButton = screen.getByText("Smoke").closest("button")!;
-    expect(rowButton.style.gridTemplateColumns).toBe("18px 18px 10px 1fr");
+    expect(rowButton.style.gridTemplateColumns).toBe("18px 18px 1fr");
 
     // The visibility toggle is the FIRST DOM child (auto-placed in column 1).
     expect(rowButton.firstElementChild).toBe(
@@ -882,58 +823,96 @@ describe("EmitterTree", () => {
     expect(hideAll.querySelector("svg")).not.toBeNull();
   });
 
-  // ─── P7 — per-row link dot ─────────────────────────────────
+  // ─── P7 — per-row link indicators (badge + spine) ──────────
 
-  it("renders a decorative link dot on rows whose linkGroup !== 0", async () => {
+  it("link dot test ids no longer exist — emitter-link-dot-* is gone", async () => {
     const bridge = makeStubBridge();
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => {
       expect(screen.getByText("Smoke")).toBeInTheDocument();
     });
-
-    // Smoke (id=0) and Sparks (id=3) are both in linkGroup 1.
-    const dot0 = screen.getByTestId("emitter-link-dot-0");
-    const dot3 = screen.getByTestId("emitter-link-dot-3");
-    expect(dot0).toBeInTheDocument();
-    expect(dot3).toBeInTheDocument();
-
-    // The dot is decorative — it must NOT add to the accessible tree
-    // (keeps the a11y goldens stable,).
-    expect(dot0.getAttribute("aria-hidden")).toBe("true");
-  });
-
-  it("does NOT render a link dot on unlinked rows (linkGroup === 0)", async () => {
-    const bridge = makeStubBridge();
-    renderWithTooltips(<EmitterTree bridge={bridge} />);
-    await waitFor(() => {
-      expect(screen.getByText("Smoke embers")).toBeInTheDocument();
-    });
-
-    // Smoke embers (id=1), Smoke puff (id=2), Spark trail (id=4), Flash
-    // (id=5) all have linkGroup 0 → no dot.
+    // Old dot affordance fully removed.
+    expect(screen.queryByTestId("emitter-link-dot-0")).toBeNull();
+    expect(screen.queryByTestId("emitter-link-dot-3")).toBeNull();
     expect(screen.queryByTestId("emitter-link-dot-1")).toBeNull();
     expect(screen.queryByTestId("emitter-link-dot-5")).toBeNull();
   });
 
-  // ─── P7 — bracket hover-tint (brackets are visual-only) ─────
-
-  it("clicking the link-group bracket selects all members of that group", async () => {
+  it("linked row renders a badge with text G{n}; unlinked row renders no badge", async () => {
     const bridge = makeStubBridge();
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => {
       expect(screen.getByText("Smoke")).toBeInTheDocument();
     });
 
-    // Pre-select Flash (id=5, ungrouped) so we can see the selection change.
+    // Smoke (id=0, linkGroup=1) → badge present with text "G1".
+    const badge0 = screen.getByTestId("emitter-link-badge-0");
+    expect(badge0).toBeInTheDocument();
+    expect(badge0.textContent).toBe("G1");
+    // Badge is decorative — aria-hidden keeps a11y goldens stable.
+    expect(badge0.getAttribute("aria-hidden")).toBe("true");
+
+    // Smoke embers (id=1, linkGroup=0) → no badge.
+    expect(screen.queryByTestId("emitter-link-badge-1")).toBeNull();
+  });
+
+  it("linked row renders a spine hit-strip; unlinked row renders none", async () => {
+    const bridge = makeStubBridge();
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
+    await waitFor(() => {
+      expect(screen.getByText("Smoke")).toBeInTheDocument();
+    });
+
+    // Smoke (id=0, linkGroup=1) → spine present.
+    expect(screen.getByTestId("emitter-link-spine-0")).toBeInTheDocument();
+    // Sparks (id=3, linkGroup=1) → spine present.
+    expect(screen.getByTestId("emitter-link-spine-3")).toBeInTheDocument();
+    // Flash (id=5, linkGroup=0) → no spine.
+    expect(screen.queryByTestId("emitter-link-spine-5")).toBeNull();
+    // Smoke embers (id=1, linkGroup=0) → no spine.
+    expect(screen.queryByTestId("emitter-link-spine-1")).toBeNull();
+  });
+
+  // ─── P7 — badge / spine click selects the whole group ───────
+
+  it("clicking the link badge selects all members of that group", async () => {
+    const bridge = makeStubBridge();
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
+    await waitFor(() => {
+      expect(screen.getByText("Smoke")).toBeInTheDocument();
+    });
+
+    // Pre-select Flash (id=5, ungrouped).
     fireEvent.click(screen.getByText("Flash"));
     expect(useEmitterSelectionStore.getState().ids).toEqual([5]);
 
-    // Click the group-1 bracket → selection becomes ALL group-1 members
-    // (Smoke id=0 and Sparks id=3), primary = the first (top-most) member.
-    // The hit-zone has its own pointer-events (the gutter stays inert); a
-    // real-browser check that it doesn't steal ROW clicks is done live
-    // (jsdom has no hit-testing/z-order —).
-    fireEvent.click(screen.getByTestId("link-group-bracket-1"));
+    // Click the badge on Smoke (id=0, group 1) → selection = all group-1 members.
+    fireEvent.click(screen.getByTestId("emitter-link-badge-0"));
+    const sel = useEmitterSelectionStore.getState();
+    expect([...sel.ids].sort((a, b) => a - b)).toEqual([0, 3]);
+    expect(sel.primary).toBe(0);
+    // Primary synced to the host.
+    expect(
+      bridge.request.mock.calls.some((c) => {
+        const req = c[0] as { kind: string; params?: { id?: number } };
+        return req.kind === "emitters/select" && req.params?.id === 0;
+      }),
+    ).toBe(true);
+  });
+
+  it("clicking the spine hit-strip selects all members of that group", async () => {
+    const bridge = makeStubBridge();
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
+    await waitFor(() => {
+      expect(screen.getByText("Smoke")).toBeInTheDocument();
+    });
+
+    // Pre-select Flash (id=5, ungrouped).
+    fireEvent.click(screen.getByText("Flash"));
+    expect(useEmitterSelectionStore.getState().ids).toEqual([5]);
+
+    // Click the spine on Smoke (id=0, group 1) → selection = all group-1 members.
+    fireEvent.click(screen.getByTestId("emitter-link-spine-0"));
     const sel = useEmitterSelectionStore.getState();
     expect([...sel.ids].sort((a, b) => a - b)).toEqual([0, 3]);
     expect(sel.primary).toBe(0);

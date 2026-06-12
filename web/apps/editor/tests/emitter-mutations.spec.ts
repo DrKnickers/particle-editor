@@ -231,8 +231,8 @@ test("linkGroups/list-exempt-fields returns the v1 default exempt set for a fres
 // Drives the host's real `EnforceSingleMemberLinkGroups` via the bridge.
 // Sets up a 2-member group, then leaves one emitter — verifies the
 // surviving member auto-demotes to linkGroup=0 because group N would
-// otherwise have count=1 (matches the render-layer filter at
-// computeLinkGroupBrackets, which already hides single-member groups).
+// otherwise have count=1 (a single-member group renders no group
+// indicator, so the data is normalised to match).
 
 test(": leaving a 2-member link group demotes the survivor to linkGroup=0", async () => {
   await page.keyboard.press("Escape").catch(() => {});
