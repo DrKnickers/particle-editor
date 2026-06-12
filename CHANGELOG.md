@@ -19,7 +19,7 @@ Conventions:
 
 ### Overload indicators made consistent — cap-tracking ⚠ glyph, predictive system-load chip, banner exit fix
 
-*TODO(backfill): YYYY-MM-DD · [`hash`](https://github.com/DrKnickers/particle-editor/commit/hash) · [#NN](https://github.com/DrKnickers/particle-editor/pull/NN)*
+*2026-06-11 · [`541c79a`](https://github.com/DrKnickers/particle-editor/commit/541c79a) · #140*
 
 The two #138 feel-test bugs, fixed. The emitter-tree ⚠ glyph now warns at
 the **configurable** guard cap (Preferences → Preview) instead of the
