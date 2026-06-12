@@ -19,7 +19,7 @@ Conventions:
 
 ### Link-group indicator reworked — left spine + row tint + group badge
 
-*2026-06-12 · TODO-hash · TODO-PR*
+*2026-06-12 · [`73727f2`](https://github.com/DrKnickers/particle-editor/commit/73727f2) · #146*
 
 Emitters that share a link group are now marked three ways at once, all
 at **fixed positions** that don't drift with emitter-name length: a
