@@ -19,7 +19,7 @@ Conventions:
 
 ### Background picker selections persist in the new UI
 
-*2026-06-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-13 · [`247a716`](https://github.com/DrKnickers/particle-editor/commit/247a716) · #159*
 
 A skydome (bundled or custom-path) or a solid background colour chosen from the
 Background picker in the new UI now survives a restart. Previously the new-UI

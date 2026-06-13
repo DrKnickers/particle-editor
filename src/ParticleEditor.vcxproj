@@ -165,6 +165,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AloModel.h" />
     <ClInclude Include="ChunkFile.h" />
     <ClInclude Include="crc32.h" />
     <ClInclude Include="Effect.h" />
@@ -187,6 +188,7 @@
     <ClInclude Include="Resources\resource.de.h" />
     <ClInclude Include="Resources\resource.en.h" />
     <ClInclude Include="Resources\resource.h" />
+    <ClInclude Include="SkydomeEnvironment.h" />
     <ClInclude Include="SphericalHarmonics.h" />
     <ClInclude Include="types.h" />
     <ClInclude Include="UI\TexturePalette.h" />
@@ -206,6 +208,7 @@
     <ClInclude Include="host\third_party\nlohmann\json.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AloModel.cpp" />
     <ClCompile Include="ChunkReader.cpp" />
     <ClCompile Include="ChunkWriter.cpp" />
     <ClCompile Include="crc32.cpp" />
@@ -224,6 +227,7 @@
     <ClCompile Include="Autosave.cpp" />
     <ClCompile Include="SpawnerDriver.cpp" />
     <ClCompile Include="UndoStack.cpp" />
+    <ClCompile Include="SkydomeEnvironment.cpp" />
     <ClCompile Include="SphericalHarmonics.cpp" />
     <ClCompile Include="UI\ColorButton.cpp" />
     <ClCompile Include="UI\CurveEditor.cpp" />
