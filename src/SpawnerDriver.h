@@ -41,7 +41,24 @@ struct SpawnerConfig
     float       maxLifetimeSec = 5.0f;
 
     D3DXVECTOR3 jitterPosition = D3DXVECTOR3(0, 0, 0);   // per-axis ±, world units
-    D3DXVECTOR3 jitterVelocity = D3DXVECTOR3(0, 0, 0);   // per-axis ±, units/sec
+
+    // Path-shaping (). Each spawned instance follows a shaped path
+    // over its lifetime rather than a straight line:
+    //
+    //   - acceleration: deterministic constant accel (gravity-like) that
+    //     bends the path into an arc. units/sec².
+    //   - squiggleAmplitude / squiggleFrequency: a smooth per-axis
+    //     sinusoidal lateral wander layered on top of the arc. Each
+    //     instance gets its own random phase per axis at spawn, so
+    //     siblings in a burst diverge organically. Amplitude is peak
+    //     lateral displacement (world units); frequency is oscillations
+    //     per second (Hz), shared across axes.
+    //
+    // All zero ⇒ a plain straight line (constant velocity), the
+    // pre-behaviour minus the old velocity jitter.
+    D3DXVECTOR3 acceleration      = D3DXVECTOR3(0, 0, 0);   // arc, units/sec²
+    D3DXVECTOR3 squiggleAmplitude = D3DXVECTOR3(0, 0, 0);   // per-axis ±, world units
+    float       squiggleFrequency = 1.0f;                  // Hz; 0..SQUIGGLE_FREQ_MAX
 };
 
 class SpawnerDriver
@@ -55,6 +72,7 @@ public:
     static constexpr float MAX_INTERVAL_SEC   = 60.0f;
     static constexpr float MAX_LIFETIME_SEC   = 600.0f;
     static constexpr float JITTER_MAX         = 10000.0f;
+    static constexpr float SQUIGGLE_FREQ_MAX  = 20.0f;
 
     SpawnerDriver();
 

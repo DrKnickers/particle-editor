@@ -110,8 +110,15 @@ export type SpawnerParamsDto = {
   maxLifetimeSec: number;
   /** Per-axis ± jitter on the spawn position, world units. */
   jitterPosition: Vec3;
-  /** Per-axis ± jitter on the spawn velocity, units/sec. */
-  jitterVelocity: Vec3;
+  /** Deterministic arc: constant acceleration applied over each
+   *  instance's lifetime, units/sec². () */
+  acceleration: Vec3;
+  /** Smooth squiggle: per-axis peak lateral displacement, world units.
+   *  Layered on top of the arc with a per-instance random phase. () */
+  squiggleAmplitude: Vec3;
+  /** Squiggle frequency in Hz (oscillations/sec), 0..SQUIGGLE_FREQ_MAX
+   *  (=20), shared across axes. () */
+  squiggleFrequency: number;
 };
 
 // ─── Emitter tree DTO (Phase 3 Screen 8 Batch 4 + Screen 4 Batch A) ──

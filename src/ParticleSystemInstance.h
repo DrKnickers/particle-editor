@@ -23,6 +23,25 @@ class ParticleSystemInstance : public Object3D
     TimeF                    m_lastUpdateTime = -1.0f;
     bool                     m_lifetimeExpired = false;
 
+    // Path-shaping (). Captured at the first-Update baseline /
+    // SetPathShape; the instance position is then computed analytically
+    // from elapsed time τ = currentTime - m_spawnTime:
+    //
+    //   pos(τ) = m_spawnPos + m_spawnVel·τ + ½·m_accel·τ²
+    //            + Aᵢ·( sin(ωτ + φᵢ) − sin(φᵢ) )          // ω = 2π·freq
+    //   vel(τ) = m_spawnVel + m_accel·τ + Aᵢ·ω·cos(ωτ + φᵢ)
+    //
+    // The −sin(φᵢ) term zeroes the squiggle at τ=0 so the instance still
+    // emanates from its exact spawn point. vel(τ) is written back to
+    // m_velocity each tick so emitted particles inherit the correct
+    // instantaneous velocity (EmitterInstance.cpp parentLinkStrength).
+    D3DXVECTOR3              m_spawnPos       = D3DXVECTOR3(0, 0, 0);
+    D3DXVECTOR3              m_spawnVel       = D3DXVECTOR3(0, 0, 0);
+    D3DXVECTOR3              m_accel          = D3DXVECTOR3(0, 0, 0);
+    D3DXVECTOR3              m_squiggleAmp    = D3DXVECTOR3(0, 0, 0);
+    float                    m_squiggleFreq   = 0.0f;
+    D3DXVECTOR3              m_squigglePhase  = D3DXVECTOR3(0, 0, 0);
+
 public:
     const ParticleSystem& GetParticleSystem() { return m_system; }
 
@@ -46,6 +65,20 @@ public:
     // Set by the SpawnerDriver after spawn. 0 means "no cap"; > 0 means
     // call StopSpawning when (currentTime - spawnTime) reaches it.
     void SetMaxLifetime(float seconds) { m_maxLifetime = seconds; }
+
+    // Set by the SpawnerDriver after spawn (). Stamps the
+    // path-shaping parameters; the per-instance squiggle phase makes
+    // sibling instances in a burst diverge. All-zero ⇒ a straight line.
+    void SetPathShape(const D3DXVECTOR3& accel,
+                      const D3DXVECTOR3& squiggleAmp,
+                      float squiggleFreq,
+                      const D3DXVECTOR3& squigglePhase)
+    {
+        m_accel         = accel;
+        m_squiggleAmp   = squiggleAmp;
+        m_squiggleFreq  = squiggleFreq;
+        m_squigglePhase = squigglePhase;
+    }
 
     void SetPosition(const D3DXVECTOR3& position);
 

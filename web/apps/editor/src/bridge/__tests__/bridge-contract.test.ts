@@ -391,7 +391,9 @@ describe("MockBridge contract", () => {
         velocity: [0, 0, 0],
         maxLifetimeSec: 12,
         jitterPosition: [0, 0, 0],
-        jitterVelocity: [0, 0, 0],
+        acceleration: [0, 0, 0],
+        squiggleAmplitude: [0, 0, 0],
+        squiggleFrequency: 1,
       },
     });
 

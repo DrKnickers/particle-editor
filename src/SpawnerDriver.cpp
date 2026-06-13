@@ -30,6 +30,14 @@ inline D3DXVECTOR3 Jitter(const D3DXVECTOR3& r)
     return D3DXVECTOR3(JitterAxis(r.x), JitterAxis(r.y), JitterAxis(r.z));
 }
 
+// Random squiggle phase in [0, 2π) per axis, seeded once at spawn so
+// each instance wanders on its own offset ().
+inline float RandPhase()
+{
+    float u = (float)std::rand() / (float)RAND_MAX;
+    return u * (2.0f * 3.14159265358979323846f);
+}
+
 inline float Clamp(float v, float lo, float hi)
 {
     if (v < lo) return lo;
@@ -62,7 +70,9 @@ void ClampSpawnerConfig(SpawnerConfig& cfg)
     cfg.position       = ClampVec(cfg.position, SpawnerDriver::JITTER_MAX);
     cfg.velocity       = ClampVec(cfg.velocity, SpawnerDriver::JITTER_MAX);
     cfg.jitterPosition = ClampVec(cfg.jitterPosition, SpawnerDriver::JITTER_MAX);
-    cfg.jitterVelocity = ClampVec(cfg.jitterVelocity, SpawnerDriver::JITTER_MAX);
+    cfg.acceleration      = ClampVec(cfg.acceleration,      SpawnerDriver::JITTER_MAX);
+    cfg.squiggleAmplitude = ClampVec(cfg.squiggleAmplitude, SpawnerDriver::JITTER_MAX);
+    cfg.squiggleFrequency = Clamp(cfg.squiggleFrequency, 0.0f, SpawnerDriver::SQUIGGLE_FREQ_MAX);
 
     if ((int)cfg.mode < 0 || (int)cfg.mode > 1)
     {
@@ -183,15 +193,18 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
             }
 
             D3DXVECTOR3 pos = m_cfg.position + Jitter(m_cfg.jitterPosition);
-            D3DXVECTOR3 vel = m_cfg.velocity + Jitter(m_cfg.jitterVelocity);
             anchor.SetPosition(pos);
-            anchor.SetVelocity(vel);
+            anchor.SetVelocity(m_cfg.velocity);   //: no velocity jitter; path is shaped over lifetime instead
 
             ParticleSystemInstance* inst = engine->SpawnParticleSystem(*sys, &anchor);
             if (inst != NULL)
             {
                 inst->MarkSpawnerOwned();
                 inst->SetMaxLifetime(m_cfg.maxLifetimeSec);
+                inst->SetPathShape(m_cfg.acceleration,
+                                   m_cfg.squiggleAmplitude,
+                                   m_cfg.squiggleFrequency,
+                                   D3DXVECTOR3(RandPhase(), RandPhase(), RandPhase()));
                 inst->Detach();   // freeze the stamped values; per-frame motion takes over from Update
             }
             else

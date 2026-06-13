@@ -5838,12 +5838,12 @@ static void SpawnerDlg_LoadFromConfig(HWND hDlg, const SpawnerConfig& cfg)
 
     ConfigureFloatSpinner(hDlg, IDC_SPAWNER_LIFETIME, 0.0f, SpawnerDriver::MAX_LIFETIME_SEC, 0.5f, cfg.maxLifetimeSec);
 
+    //: legacy dialog exposes spawn-point jitter only. Path-shaping
+    // (arc / squiggle) is React-UI-only; legacy is slated for removal
+    // (), so the new path controls aren't wired here.
     ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_X, 0.0f, posLim, 0.5f, cfg.jitterPosition.x);
     ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_Y, 0.0f, posLim, 0.5f, cfg.jitterPosition.y);
     ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_Z, 0.0f, posLim, 0.5f, cfg.jitterPosition.z);
-    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_X, 0.0f, posLim, 0.5f, cfg.jitterVelocity.x);
-    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_Y, 0.0f, posLim, 0.5f, cfg.jitterVelocity.y);
-    ConfigureFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_Z, 0.0f, posLim, 0.5f, cfg.jitterVelocity.z);
 
     SpawnerDlg_SyncModeVisibility(hDlg, cfg.mode);
     SpawnerDlg_UpdateBurstsPerSec(hDlg, cfg);
@@ -5877,9 +5877,7 @@ static SpawnerConfig SpawnerDlg_ReadIntoConfig(HWND hDlg)
     cfg.jitterPosition = D3DXVECTOR3(GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_X),
                                      GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_Y),
                                      GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_POS_Z));
-    cfg.jitterVelocity = D3DXVECTOR3(GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_X),
-                                     GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_Y),
-                                     GetFloatSpinner(hDlg, IDC_SPAWNER_JIT_VEL_Z));
+    //: acceleration/squiggle path-shaping not editable in legacy.
     ClampSpawnerConfig(cfg);
     return cfg;
 }

@@ -181,6 +181,7 @@
     <ClInclude Include="Rescale.h" />
     <ClInclude Include="Autosave.h" />
     <ClInclude Include="SpawnerDriver.h" />
+    <ClInclude Include="SpawnerPath.h" />
     <ClInclude Include="UndoStack.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Resources\resource.de.h" />

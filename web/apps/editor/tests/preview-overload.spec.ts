@@ -157,7 +157,9 @@ const MANUAL_SPAWNER_1 = {
   velocity: [0, 0, 0],
   maxLifetimeSec: 0,
   jitterPosition: [0, 0, 0],
-  jitterVelocity: [0, 0, 0],
+  acceleration: [0, 0, 0],
+  squiggleAmplitude: [0, 0, 0],
+  squiggleFrequency: 1,
 };
 
 // ─────────────────────────────────────────────────────────────────────
@@ -338,7 +340,9 @@ test("an auto spawner refused over-cap fires one banner and self-disables", asyn
       velocity: [0, 0, 0],
       maxLifetimeSec: 0,
       jitterPosition: [0, 0, 0],
-      jitterVelocity: [0, 0, 0],
+      acceleration: [0, 0, 0],
+      squiggleAmplitude: [0, 0, 0],
+      squiggleFrequency: 1,
     });
 
     // Observe across many intervals (3s ≫ 0.25s interval): exactly one

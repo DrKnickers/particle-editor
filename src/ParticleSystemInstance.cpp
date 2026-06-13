@@ -1,5 +1,6 @@
 #include "ParticleSystemInstance.h"
 #include "EmitterInstance.h"
+#include "SpawnerPath.h"
 using namespace std;
 
 void ParticleSystemInstance::onParticleSystemChanged(const Engine& engine, int track)
@@ -12,28 +13,34 @@ void ParticleSystemInstance::onParticleSystemChanged(const Engine& engine, int t
 
 int ParticleSystemInstance::Update(TimeF currentTime)
 {
-    // Spawner-owned: advance position by velocity·dt and enforce the
-    // optional max-lifetime cap. Non-spawner-owned instances skip this
-    // and behave as before (parent-tracked or static-after-detach).
+    // Spawner-owned: drive the shaped path (arc + squiggle) and enforce
+    // the optional max-lifetime cap. Non-spawner-owned instances skip
+    // this and behave as before (parent-tracked or static-after-detach).
     if (m_spawnerOwned)
     {
         if (m_spawnTime < 0.0f)
         {
-            // First Update after spawn — establish the time baseline.
+            // First Update after spawn — establish the baseline. Capture
+            // the launch position + velocity (post-Detach absolutes) so
+            // the path is computed analytically from them, not Euler-
+            // integrated (exact arc, frame-rate independent).
             m_spawnTime      = currentTime;
             m_lastUpdateTime = currentTime;
+            m_spawnPos       = m_position;
+            m_spawnVel       = m_velocity;
         }
         else
         {
-            float dt = (float)(currentTime - m_lastUpdateTime);
-            if (dt > 0.0f)
-            {
-                // m_position is the absolute world position post-Detach;
-                // m_velocity was stamped at spawn time. Drive ballistic
-                // motion at constant velocity (no acceleration in v1.5).
-                m_position += m_velocity * dt;
-                m_lastUpdateTime = currentTime;
-            }
+            // Analytic position + instantaneous velocity at τ via the
+            // shared closed form (one source of truth, unit-tested in
+            // tests/test_spawner_path.cpp). Writing the live velocity back
+            // each tick keeps emitted-particle inheritance correct
+            // (EmitterInstance parentLinkStrength).
+            float tau = (float)(currentTime - m_spawnTime);
+            SpawnerPathState st = { m_spawnPos, m_spawnVel, m_accel,
+                                    m_squiggleAmp, m_squiggleFreq, m_squigglePhase };
+            EvalSpawnerPath(st, tau, m_position, m_velocity);
+            m_lastUpdateTime = currentTime;
         }
 
         if (!m_lifetimeExpired

@@ -10,7 +10,10 @@
 //   4. Position  — Vec3 spinner row.
 //   5. Velocity  — Vec3 spinner row.
 //   6. Lifetime  — single Spinner.
-//   7. Jitter position / Jitter velocity — Vec3 rows.
+//   7. Jitter position — Vec3 row (spawn-point scatter).
+//   7b. Acceleration (arc) / Squiggle amplitude — Vec3 rows; Squiggle
+//       frequency — scalar. Path-shaping over each instance's lifetime
+//       (), replacing the old one-time velocity jitter.
 //   8. Spawn now — manual-only button (fires spawner/trigger).
 //
 // State sync. The panel reads `snapshot.spawner` on mount and listens
@@ -47,6 +50,7 @@ const MAX_BURST_SIZE = 10;
 const MAX_SPACING_SEC = 10;
 const MAX_INTERVAL_SEC = 60;
 const MAX_LIFETIME_SEC = 600;
+const SQUIGGLE_FREQ_MAX = 20;
 
 /** Build a new config from the current one with a single field replaced.
  *  Returns a fresh object so the host/mock sees a full SpawnerParamsDto
@@ -144,14 +148,20 @@ export function SpawnerPanel({ bridge }: Props) {
         patchVec(config.jitterPosition, idx, v),
       ),
     );
-  const setJitterVelAxis = (idx: 0 | 1 | 2, v: number) =>
+  const setAccelAxis = (idx: 0 | 1 | 2, v: number) =>
+    commit(
+      patchSpawner(config, "acceleration", patchVec(config.acceleration, idx, v)),
+    );
+  const setSquiggleAmpAxis = (idx: 0 | 1 | 2, v: number) =>
     commit(
       patchSpawner(
         config,
-        "jitterVelocity",
-        patchVec(config.jitterVelocity, idx, v),
+        "squiggleAmplitude",
+        patchVec(config.squiggleAmplitude, idx, v),
       ),
     );
+  const setSquiggleFreq = (v: number) =>
+    commit(patchSpawner(config, "squiggleFrequency", v));
 
   const handleTrigger = () => {
     void bridge.request({ kind: "spawner/trigger", params: {} });
@@ -402,36 +412,83 @@ export function SpawnerPanel({ bridge }: Props) {
         </div>
       </ToolPanel.Section>
 
-      <ToolPanel.Section title="Jitter velocity">
+      <ToolPanel.Section title="Acceleration (arc)">
         <div className="grid grid-cols-3 gap-1">
           <div className="axis-cell">
             <span className="axis-lbl">X</span>
             <Spinner
-              value={config.jitterVelocity[0]}
-              onChange={(v) => setJitterVelAxis(0, v)}
-              step={0.05}
-              aria-label="Jitter velocity X"
+              value={config.acceleration[0]}
+              onChange={(v) => setAccelAxis(0, v)}
+              step={0.1}
+              aria-label="Acceleration X"
             />
           </div>
           <div className="axis-cell">
             <span className="axis-lbl">Y</span>
             <Spinner
-              value={config.jitterVelocity[1]}
-              onChange={(v) => setJitterVelAxis(1, v)}
-              step={0.05}
-              aria-label="Jitter velocity Y"
+              value={config.acceleration[1]}
+              onChange={(v) => setAccelAxis(1, v)}
+              step={0.1}
+              aria-label="Acceleration Y"
             />
           </div>
           <div className="axis-cell">
             <span className="axis-lbl">Z</span>
             <Spinner
-              value={config.jitterVelocity[2]}
-              onChange={(v) => setJitterVelAxis(2, v)}
-              step={0.05}
-              aria-label="Jitter velocity Z"
+              value={config.acceleration[2]}
+              onChange={(v) => setAccelAxis(2, v)}
+              step={0.1}
+              aria-label="Acceleration Z"
             />
           </div>
         </div>
+      </ToolPanel.Section>
+
+      <ToolPanel.Section title="Squiggle amplitude">
+        <div className="grid grid-cols-3 gap-1">
+          <div className="axis-cell">
+            <span className="axis-lbl">X</span>
+            <Spinner
+              value={config.squiggleAmplitude[0]}
+              onChange={(v) => setSquiggleAmpAxis(0, v)}
+              step={0.05}
+              aria-label="Squiggle amplitude X"
+            />
+          </div>
+          <div className="axis-cell">
+            <span className="axis-lbl">Y</span>
+            <Spinner
+              value={config.squiggleAmplitude[1]}
+              onChange={(v) => setSquiggleAmpAxis(1, v)}
+              step={0.05}
+              aria-label="Squiggle amplitude Y"
+            />
+          </div>
+          <div className="axis-cell">
+            <span className="axis-lbl">Z</span>
+            <Spinner
+              value={config.squiggleAmplitude[2]}
+              onChange={(v) => setSquiggleAmpAxis(2, v)}
+              step={0.05}
+              aria-label="Squiggle amplitude Z"
+            />
+          </div>
+        </div>
+      </ToolPanel.Section>
+
+      <ToolPanel.Section title="Squiggle frequency">
+        <ToolPanel.Row label="Frequency">
+          <Spinner
+            value={config.squiggleFrequency}
+            onChange={setSquiggleFreq}
+            min={0}
+            max={SQUIGGLE_FREQ_MAX}
+            step={0.1}
+            decimals={2}
+            unit="Hz"
+            aria-label="Squiggle frequency"
+          />
+        </ToolPanel.Row>
       </ToolPanel.Section>
 
       </div>

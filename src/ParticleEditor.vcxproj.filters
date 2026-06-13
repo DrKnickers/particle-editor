@@ -72,6 +72,9 @@
     <ClInclude Include="SpawnerDriver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SpawnerPath.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Autosave.h">
       <Filter>Header Files</Filter>
     </ClInclude>

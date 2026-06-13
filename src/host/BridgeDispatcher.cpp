@@ -334,8 +334,10 @@ SpawnerConfig JsonToSpawnerConfig(const json& j)
     cfg.position       = JsonToVec3(j.value("position", json::array()));
     cfg.velocity       = JsonToVec3(j.value("velocity", json::array()));
     cfg.maxLifetimeSec = j.value("maxLifetimeSec", 5.0f);
-    cfg.jitterPosition = JsonToVec3(j.value("jitterPosition", json::array()));
-    cfg.jitterVelocity = JsonToVec3(j.value("jitterVelocity", json::array()));
+    cfg.jitterPosition    = JsonToVec3(j.value("jitterPosition", json::array()));
+    cfg.acceleration      = JsonToVec3(j.value("acceleration", json::array()));
+    cfg.squiggleAmplitude = JsonToVec3(j.value("squiggleAmplitude", json::array()));
+    cfg.squiggleFrequency = j.value("squiggleFrequency", 1.0f);
     return cfg;
 }
 
@@ -350,8 +352,10 @@ json SpawnerConfigToJson(const SpawnerConfig& cfg)
         {"position",       Vec3ToJson(cfg.position)},
         {"velocity",       Vec3ToJson(cfg.velocity)},
         {"maxLifetimeSec", cfg.maxLifetimeSec},
-        {"jitterPosition", Vec3ToJson(cfg.jitterPosition)},
-        {"jitterVelocity", Vec3ToJson(cfg.jitterVelocity)},
+        {"jitterPosition",    Vec3ToJson(cfg.jitterPosition)},
+        {"acceleration",      Vec3ToJson(cfg.acceleration)},
+        {"squiggleAmplitude", Vec3ToJson(cfg.squiggleAmplitude)},
+        {"squiggleFrequency", cfg.squiggleFrequency},
     };
 }
 
@@ -571,8 +575,10 @@ json DefaultSpawnerConfigJson()
         {"position",        json::array({0.0, 0.0, 0.0})},
         {"velocity",        json::array({0.0, 0.0, 0.0})},
         {"maxLifetimeSec",  5.0},
-        {"jitterPosition",  json::array({0.0, 0.0, 0.0})},
-        {"jitterVelocity",  json::array({0.0, 0.0, 0.0})},
+        {"jitterPosition",    json::array({0.0, 0.0, 0.0})},
+        {"acceleration",      json::array({0.0, 0.0, 0.0})},
+        {"squiggleAmplitude", json::array({0.0, 0.0, 0.0})},
+        {"squiggleFrequency", 1.0},
     };
 }
 

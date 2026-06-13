@@ -17,6 +17,53 @@ Conventions:
 ## Changelog
 
 
+### Spawner jitter reworked — instances follow a shaped path (arc + squiggle)
+
+*2026-06-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Spawner-emitted instances no longer fly off on a random straight line.
+The old one-time **velocity jitter** is gone, replaced by **per-instance
+path shaping** over each instance's lifetime. Two controls in the React
+Spawner panel steer it: **Acceleration (arc)** — a gravity-like constant
+acceleration Vec3 that bends the path into an arc (set Y negative for a
+fountain) — and **Squiggle amplitude** (Vec3) + **Squiggle frequency**
+(Hz), a smooth per-axis sinusoidal wander layered on top. Each instance
+draws its own random phase per axis at spawn, so the siblings in a burst
+diverge organically instead of moving in lockstep. The emit point traces
+the shaped path, so the particle trail itself arcs and squiggles. Spawn-
+point **Jitter position** is unchanged. Zero everything and you get a
+plain straight line (the old non-jitter behaviour). Note: these controls
+live only in the new React UI; the legacy `--legacy` Win32 dialog keeps
+spawn-point jitter and no longer shows a velocity-jitter column.
+
+**How we tackled it.** Motion in [`ParticleSystemInstance::Update`](src/ParticleSystemInstance.cpp:13)
+switched from incremental Euler (`m_position += m_velocity·dt`) to an
+**analytic** closed form evaluated from elapsed time τ, extracted into a
+pure header-only [`EvalSpawnerPath`](src/SpawnerPath.h:39) so it has one
+source of truth and is unit-testable headless (the rest of `Update` is
+D3D-coupled). `pos(τ) = spawnPos + spawnVel·τ + ½·accel·τ² + Aᵢ·(sin(ωτ+φᵢ)
+− sin(φᵢ))`. The `−sin(φᵢ)` term zeroes the squiggle at τ=0 so instances
+still emanate from the exact spawn point (no frame-1 teleport). The new
+fields thread through [`SpawnerConfig`](src/SpawnerDriver.h:18), the three
+[`BridgeDispatcher`](src/host/BridgeDispatcher.cpp:320) JSON converters,
+the [`SpawnerParamsDto`](web/packages/bridge-schema/src/index.ts:103), and
+[`SpawnerPanel`](web/apps/editor/src/screens/SpawnerPanel.tsx:379).
+
+**Issues encountered and resolutions.** Emitted particles inherit the
+instance's **current** velocity ([`EmitterInstance.cpp:557`](src/EmitterInstance.cpp:557):
+`velocity += GetVelocity()·parentLinkStrength`). Freezing `m_velocity` and
+only moving `m_position` would make trailing particles inherit the stale
+launch velocity, so the analytic step writes the **instantaneous** velocity
+`vel(τ) = spawnVel + accel·τ + Aᵢ·ω·cos(ωτ+φᵢ)` back each tick. This
+constraint is exactly why the closed form (which yields velocity for free)
+beat incremental integration. A standalone test
+([`tests/test_spawner_path.cpp`](tests/test_spawner_path.cpp:1), 12 cases)
+pins the τ=0 spawn-point invariant, the accel parabola + live velocity, the
+squiggle's amplitude bound and period return, and the all-zero straight
+line.
+
+---
+
 ### Link-group indicator reworked — left spine + row tint + group badge
 
 *2026-06-12 · [`73727f2`](https://github.com/DrKnickers/particle-editor/commit/73727f2) · #146*
