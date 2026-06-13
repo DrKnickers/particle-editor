@@ -17,6 +17,42 @@ Conventions:
 ## Changelog
 
 
+### skydome foundation — `.alo` mesh decoder + environment reader
+
+*2026-06-13 · [`72d55bf`](https://github.com/DrKnickers/particle-editor/commit/72d55bf) · #160*
+
+Internal groundwork for (rendering the game's real skydome behind the
+preview); no user-facing change yet. Two device-free modules now compile into
+the host: `AloModel`, a decoder for the static-mesh + material subset of Alamo
+`.alo` models, and `SkydomeEnvironment`, which enumerates skydome GameObjects
+from the game/mod's `{Land,Space}{Primary,Secondary}Skydomes.xml` and resolves a
+primary + secondary pair by name. A device spike confirmed the game's dome
+shaders (`ps_1_1` / DX8 techniques) validate and render on the editor's D3D9Ex
+device, so the render core can run each sub-mesh's own game shader 1:1.
+
+**How we tackled it.** `AloModel` ([`src/AloModel.cpp`](src/AloModel.cpp:1)) is
+ported from the maintainer's own MIT exporter `max2alamo-2026`, cross-checked
+against GlyphXTools/alo-viewer; it keeps the raw 144-byte on-disk vertex blob +
+16-bit indices verbatim so the render core (and the future game-object
+import) transcode on their own terms. `SkydomeEnvironment`
+([`src/SkydomeEnvironment.cpp`](src/SkydomeEnvironment.cpp:1)) reuses the
+existing `XMLTree` + `FileManager` (mod→base→MEG) chain; its `MapEnvironment`
+struct is the extension point will hang per-map colour-grade params off.
+Both are leaf modules with no engine / D3D coupling, unit-tested
+([`tests/test_alo_model.cpp`](tests/test_alo_model.cpp:1),
+[`tests/test_skydome_environment.cpp`](tests/test_skydome_environment.cpp:1)) and
+validated against real install assets. The §5a format questions were closed
+against a real FoC install first (scope doc §0).
+
+**Issues encountered and resolutions.** The on-disk vertex stride was the one
+open format unknown; the `max2alamo` exporter pinned it to a fixed 144 bytes
+(colour is a float4 at offset 80), confirmed against real `.alo`. A code-review
+pass caught a 32-bit `long` overflow in the geometry size checks (MSVC `long` is
+32-bit even on x64) that a crafted file could use to bypass validation — fixed
+with 64-bit products plus count bounds.
+
+---
+
 ### Background picker selections persist in the new UI
 
 *2026-06-13 · [`247a716`](https://github.com/DrKnickers/particle-editor/commit/247a716) · #159*
