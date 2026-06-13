@@ -858,31 +858,44 @@ bool Engine::Render()
 
 	if (m_showGround)
 	{
-		static const float TEXTURE_SCALE  = 256;
-		static const float MAP_SIZE       = 80;
-		static const float UNITS_PER_CELL = 20;
-		// Per-frame init so m_groundZ is picked up live; cost is 4
-		// vertices × ~80 bytes, negligible against the surrounding draw.
-		const float z = m_groundZ;
-		const EmitterInstance::Vertex ground[4] = {
-			{D3DXVECTOR3(-UNITS_PER_CELL*MAP_SIZE/2,-UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(                                    0,                                     0), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
-			{D3DXVECTOR3( UNITS_PER_CELL*MAP_SIZE/2,-UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE,                                     0), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
-			{D3DXVECTOR3(-UNITS_PER_CELL*MAP_SIZE/2, UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(                                    0, MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
-			{D3DXVECTOR3( UNITS_PER_CELL*MAP_SIZE/2, UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE, MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)}
-		};
+		//: bump-mapped lit ground via the game's terrain shader when the
+		// effect is ready; else the original unlit fixed-function quad.
+		if (m_pGroundEffect != NULL && m_pGroundDecl != NULL)
+		{
+			RenderGroundLit();
+		}
+		else
+		{
+			static const float TEXTURE_SCALE  = 256;
+			static const float MAP_SIZE       = 80;
+			static const float UNITS_PER_CELL = 20;
+			// Per-frame init so m_groundZ is picked up live; cost is 4
+			// vertices × ~80 bytes, negligible against the surrounding draw.
+			const float z = m_groundZ;
+			const EmitterInstance::Vertex ground[4] = {
+				{D3DXVECTOR3(-UNITS_PER_CELL*MAP_SIZE/2,-UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(                                    0,                                     0), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
+				{D3DXVECTOR3( UNITS_PER_CELL*MAP_SIZE/2,-UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE,                                     0), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
+				{D3DXVECTOR3(-UNITS_PER_CELL*MAP_SIZE/2, UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(                                    0, MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)},
+				{D3DXVECTOR3( UNITS_PER_CELL*MAP_SIZE/2, UNITS_PER_CELL*MAP_SIZE/2,z), D3DXVECTOR3(0,0,1), D3DXVECTOR2(MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE, MAP_SIZE*UNITS_PER_CELL/TEXTURE_SCALE), D3DXVECTOR2(0,0), D3DCOLOR_RGBA(255,255,255,255)}
+			};
 
-		m_pDevice->SetTexture(0, m_pGroundTexture);
-		m_pDevice->SetTransform(D3DTS_TEXTURE0, &Identity);
-		m_pDevice->SetTexture(1, NULL);
-		m_pDevice->SetRenderState(D3DRS_ZENABLE,          TRUE);
-		m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
-		m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-		m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, ground, sizeof(EmitterInstance::Vertex));
+			m_pDevice->SetTexture(0, m_pGroundTexture);
+			m_pDevice->SetTransform(D3DTS_TEXTURE0, &Identity);
+			m_pDevice->SetTexture(1, NULL);
+			m_pDevice->SetRenderState(D3DRS_ZENABLE,          TRUE);
+			m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
+			m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+			m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, ground, sizeof(EmitterInstance::Vertex));
+		}
 	}
 
     // Particles never write to the depth buffer — let painter's-order
     // (the order each emitter is drawn) decide stacking when emitters
-    // overlap, matching the in-game behaviour.
+    // overlap, matching the in-game behaviour. ZENABLE is re-asserted here so
+    // the depth test against the ground holds regardless of which ground path
+    // ran above (the effect's Begin/End restores states to its pre-Begin
+    // values, which may leave ZENABLE off).
+    m_pDevice->SetRenderState(D3DRS_ZENABLE,      TRUE);
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 
     for (auto& instance : m_instances)
@@ -1365,7 +1378,9 @@ bool Engine::SetGroundTexture(int index)
     // Fast-path: already at this slot AND we have a valid texture.
     if (index == m_groundTextureIndex && m_pGroundTexture != NULL) return true;
     m_groundTextureIndex = index;
-    return ReloadGroundTexture();
+    bool ok = ReloadGroundTexture();
+    ReloadGroundNormalTexture();   //: re-resolve the slot's companion _bc map
+    return ok;
 }
 
 bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
@@ -1383,7 +1398,9 @@ bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
         {
             m_groundTextureIndex = 0;
         }
-        return ReloadGroundTexture();
+        bool ok = ReloadGroundTexture();
+        ReloadGroundNormalTexture();   //: re-resolve the slot's companion _bc map
+        return ok;
     }
     return true;
 }
@@ -1504,6 +1521,12 @@ void Engine::Reset()
 	// papered over the failed Reset on the next WM_PAINT. (handoff
 	// Open Items §1, fixed 2026-05-20.)
 	if (m_pSkydomeEffect != NULL) m_pSkydomeEffect->OnLostDevice();
+	//: same OnLost dance for the ground effect; its normal textures are
+	// D3DPOOL_DEFAULT under D3D9Ex (procedural flat normal + D3DX-loaded _bc
+	// map) and must be released before Reset, recreated after (below).
+	if (m_pGroundEffect != NULL) m_pGroundEffect->OnLostDevice();
+	SAFE_RELEASE(m_pGroundNormalTexture);
+	SAFE_RELEASE(m_pGroundFlatNormalTexture);
 	// Phase 3 Stage 1: D3D9Ex disallows D3DPOOL_MANAGED, so
 	// resources that were previously managed-pool (skydome VB/IB, the
 	// solid-colour ground texture, and any custom skydome texture)
@@ -1550,6 +1573,9 @@ void Engine::Reset()
     }
 	if (m_pBloomEffect != NULL) m_pBloomEffect->OnResetDevice();
 	if (m_pSkydomeEffect != NULL) m_pSkydomeEffect->OnResetDevice();
+	if (m_pGroundEffect  != NULL) m_pGroundEffect->OnResetDevice();
+	//: recreate the D3DPOOL_DEFAULT ground normal textures post-Reset.
+	CreateGroundFlatNormal();
 	// Phase 3 Stage 1: rebuild the previously-managed-pool
 	// resources. CreateSkydomeMeshBuffers regenerates the procedural
 	// VB/IB; ReloadGroundTexture re-runs the bundled-or-solid-colour
@@ -1557,6 +1583,7 @@ void Engine::Reset()
 	// the bundled-or-custom path using m_skydomeIndex.
 	CreateSkydomeMeshBuffers();
 	ReloadGroundTexture();
+	ReloadGroundNormalTexture();   //: re-resolve the companion _bc map
 	ReloadSkydomeTexture(m_skydomeIndex);
 
 	ResetParameters();
@@ -2353,6 +2380,205 @@ void Engine::RenderSkydome()
     m_pDevice->SetRenderState(D3DRS_CULLMODE,     oldCull);
 }
 
+//: compile IDR_SHADER_GROUND_LIT, cache parameter handles, select the
+// best-validating technique (bump → gloss), and build the tangent-space ground
+// vertex declaration. Graceful-degrade: on any failure m_pGroundEffect stays
+// NULL and Render() falls back to the unlit fixed-function ground quad.
+void Engine::InitGroundEffect()
+{
+    if (m_pGroundDecl == NULL)
+    {
+        static const D3DVERTEXELEMENT9 decl[] = {
+            {0, offsetof(GroundVertex, Position), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+            {0, offsetof(GroundVertex, Normal),   D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0},
+            {0, offsetof(GroundVertex, TexCoord), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+            {0, offsetof(GroundVertex, Tangent),  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT,  0},
+            {0, offsetof(GroundVertex, Binormal), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BINORMAL, 0},
+            D3DDECL_END()
+        };
+        m_pDevice->CreateVertexDeclaration(decl, &m_pGroundDecl);
+    }
+
+    HMODULE hMod   = GetModuleHandle(NULL);
+    HRSRC   hRes   = FindResource(hMod, MAKEINTRESOURCE(IDR_SHADER_GROUND_LIT), RT_RCDATA);
+    if (!hRes) return;
+    HGLOBAL hData  = LoadResource(hMod, hRes);
+    DWORD   dwSize = SizeofResource(hMod, hRes);
+    void*   pData  = hData ? LockResource(hData) : NULL;
+    if (!pData || !dwSize) return;
+
+    LPD3DXBUFFER pErrors = NULL;
+    HRESULT hr = D3DXCreateEffect(m_pDevice, pData, dwSize, NULL, NULL, 0, NULL,
+                                  &m_pGroundEffect, &pErrors);
+    if (FAILED(hr))
+    {
+#ifndef NDEBUG
+        if (pErrors) fprintf(stderr, "[GroundLit] effect compile failed: %s\n",
+                             (const char*)pErrors->GetBufferPointer());
+#endif
+        SAFE_RELEASE(pErrors);
+        m_pGroundEffect = NULL;
+        return;
+    }
+    SAFE_RELEASE(pErrors);
+
+    m_hGroundWVP           = m_pGroundEffect->GetParameterByName(NULL, "g_WorldViewProj");
+    m_hGroundWorld         = m_pGroundEffect->GetParameterByName(NULL, "g_World");
+    m_hGroundSphFill       = m_pGroundEffect->GetParameterByName(NULL, "g_SphFill");
+    m_hGroundLightObjVec   = m_pGroundEffect->GetParameterByName(NULL, "g_LightObjVec");
+    m_hGroundLightDiffuse  = m_pGroundEffect->GetParameterByName(NULL, "g_LightDiffuse");
+    m_hGroundLightSpecular = m_pGroundEffect->GetParameterByName(NULL, "g_LightSpecular");
+    m_hGroundEyeObjPos     = m_pGroundEffect->GetParameterByName(NULL, "g_EyeObjPos");
+    m_hGroundBaseTex       = m_pGroundEffect->GetParameterByName(NULL, "g_BaseTexture");
+    m_hGroundNormalTex     = m_pGroundEffect->GetParameterByName(NULL, "g_NormalTexture");
+
+    // Single vs_2_0/ps_2_0 bump technique. If the device can't validate it,
+    // drop the effect entirely so Render() uses the unlit FF ground quad.
+    // SetTechnique state survives device Reset (effect state, not device state).
+    D3DXHANDLE tech = m_pGroundEffect->GetTechniqueByName("bump");
+    if (tech == NULL || FAILED(m_pGroundEffect->ValidateTechnique(tech)))
+    {
+#ifndef NDEBUG
+        fprintf(stderr, "[GroundLit] bump technique failed validation; using FF fallback\n");
+#endif
+        SAFE_RELEASE(m_pGroundEffect);
+        m_pGroundEffect = NULL;
+        return;
+    }
+    m_pGroundEffect->SetTechnique(tech);
+#ifndef NDEBUG
+    fprintf(stderr, "[GroundLit] effect loaded ok; technique=bump\n");
+#endif
+}
+
+//: 1x1 neutral tangent-space normal (0,0,1) packed RGB(128,128,255).
+// Dynamic+default pool so it's lockable under D3D9Ex (see CreateSolidColorTexture).
+void Engine::CreateGroundFlatNormal()
+{
+    SAFE_RELEASE(m_pGroundFlatNormalTexture);
+    if (m_pDevice == NULL) return;
+    if (FAILED(m_pDevice->CreateTexture(1, 1, 1, D3DUSAGE_DYNAMIC, D3DFMT_A8R8G8B8,
+                                        D3DPOOL_DEFAULT, &m_pGroundFlatNormalTexture, NULL)))
+    {
+        m_pGroundFlatNormalTexture = NULL;
+        return;
+    }
+    D3DLOCKED_RECT lr;
+    if (SUCCEEDED(m_pGroundFlatNormalTexture->LockRect(0, &lr, NULL, D3DLOCK_DISCARD)))
+    {
+        // RGB = flat tangent-space normal (0,0,1); ALPHA = 0 so a slot with no
+        // real _bc gloss map is matte (no specular) instead of fully glossy
+        // (: gloss lives in the _bc map's alpha — see GroundLit.fx).
+        *(DWORD*)lr.pBits = D3DCOLOR_ARGB(0, 128, 128, 255);
+        m_pGroundFlatNormalTexture->UnlockRect(0);
+    }
+}
+
+//: resolve the active slot's companion `<base>_bc` normal map from the
+// game/mod via FileManager. Only the three vanilla-textured slots have a known
+// base name; dirt/solid/empty-custom slots get the flat-normal fallback (lit,
+// no relief). Re-run on slot change and after device Reset.
+void Engine::ReloadGroundNormalTexture()
+{
+    SAFE_RELEASE(m_pGroundNormalTexture);
+    if (m_pDevice == NULL) return;
+
+    std::string normalLeaf;     // bundled-vanilla slots: known base + _bc.dds
+    switch (m_groundTextureIndex)
+    {
+        case 1: normalLeaf = "W_TEMPGRND00_bc.dds"; break;  // grass
+        case 2: normalLeaf = "W_SAND00_bc.dds";     break;  // sand
+        case 3: normalLeaf = "W_SNOW_RGH_bc.dds";   break;  // snow
+        default: break;
+    }
+    std::string customDerived;  // custom slots: <custombase>_bc.<ext> next to it
+    if (normalLeaf.empty()
+        && m_groundTextureIndex >= 0 && m_groundTextureIndex < kGroundTextureCount
+        && !m_groundSlotCustomPaths[m_groundTextureIndex].empty())
+    {
+        const std::wstring& base = m_groundSlotCustomPaths[m_groundTextureIndex];
+        size_t dot = base.find_last_of(L'.');
+        std::wstring derived = (dot == std::wstring::npos)
+            ? base + L"_bc"
+            : base.substr(0, dot) + L"_bc" + base.substr(dot);
+        customDerived = WideToAnsi(derived);
+    }
+
+    if (!normalLeaf.empty())
+    {
+        std::string path = "DATA\\ART\\TEXTURES\\" + normalLeaf;
+        m_pGroundNormalTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, path);
+        if (m_pGroundNormalTexture == NULL)   // mod may stash it loose by leaf name
+            m_pGroundNormalTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, normalLeaf);
+    }
+    else if (!customDerived.empty())
+    {
+        m_pGroundNormalTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, customDerived);
+    }
+#ifndef NDEBUG
+    fprintf(stderr, "[GroundLit] slot=%d normal=%s\n", m_groundTextureIndex,
+            m_pGroundNormalTexture ? "resolved" : "flat-fallback");
+#endif
+}
+
+//: draw the lit ground quad through m_pGroundEffect. World is identity
+// (the quad is already in world space), so object space == world space for the
+// per-pixel light/half vectors — matching the game's object-space bump path.
+void Engine::RenderGroundLit()
+{
+    static const D3DXMATRIX Identity(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
+    D3DXMATRIX wvp = Identity * m_view * m_projection;
+
+    static const float TEXTURE_SCALE  = 256;
+    static const float MAP_SIZE       = 80;
+    static const float UNITS_PER_CELL = 20;
+    const float z = m_groundZ;
+    const float h = UNITS_PER_CELL * MAP_SIZE / 2.0f;
+    const float u = MAP_SIZE * UNITS_PER_CELL / TEXTURE_SCALE;
+    const D3DXVECTOR3 N(0,0,1), T(1,0,0), B(0,1,0);
+    const GroundVertex quad[4] = {
+        {D3DXVECTOR3(-h,-h,z), N, D3DXVECTOR2(0,0), T, B},
+        {D3DXVECTOR3( h,-h,z), N, D3DXVECTOR2(u,0), T, B},
+        {D3DXVECTOR3(-h, h,z), N, D3DXVECTOR2(0,u), T, B},
+        {D3DXVECTOR3( h, h,z), N, D3DXVECTOR2(u,u), T, B},
+    };
+
+    D3DXVECTOR3 lightVec(m_lights[0].Position.x, m_lights[0].Position.y, m_lights[0].Position.z);
+    D3DXVec3Normalize(&lightVec, &lightVec);
+    D3DXVECTOR3 eyePos(m_eye.Position.x, m_eye.Position.y, m_eye.Position.z);
+
+    m_pGroundEffect->SetMatrix     (m_hGroundWVP,           &wvp);
+    m_pGroundEffect->SetMatrix     (m_hGroundWorld,         &Identity);
+    m_pGroundEffect->SetMatrixArray(m_hGroundSphFill,       m_sphLightFill, 3);
+    m_pGroundEffect->SetValue      (m_hGroundLightObjVec,   &lightVec, sizeof(D3DXVECTOR3));
+    m_pGroundEffect->SetVector     (m_hGroundLightDiffuse,  &m_lights[0].Diffuse);
+    m_pGroundEffect->SetVector     (m_hGroundLightSpecular, &m_lights[0].Specular);
+    m_pGroundEffect->SetValue      (m_hGroundEyeObjPos,     &eyePos, sizeof(D3DXVECTOR3));
+    m_pGroundEffect->SetTexture    (m_hGroundBaseTex,       m_pGroundTexture);
+    m_pGroundEffect->SetTexture    (m_hGroundNormalTex,
+        m_pGroundNormalTexture ? m_pGroundNormalTexture : m_pGroundFlatNormalTexture);
+
+    // The vertex declaration is NOT captured by the effect state block, so it
+    // must be restored or the particle draws lose their diffuse-colour stream
+    // (). Render states the effect changes ARE saved/restored by Begin/End.
+    IDirect3DVertexDeclaration9* oldDecl = NULL;
+    m_pDevice->GetVertexDeclaration(&oldDecl);
+
+    UINT passes = 0;
+    m_pGroundEffect->Begin(&passes, 0);
+    for (UINT i = 0; i < passes; ++i)
+    {
+        m_pGroundEffect->BeginPass(i);
+        m_pDevice->SetVertexDeclaration(m_pGroundDecl);
+        m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(GroundVertex));
+        m_pGroundEffect->EndPass();
+    }
+    m_pGroundEffect->End();
+
+    m_pDevice->SetVertexDeclaration(oldDecl);
+    if (oldDecl) oldDecl->Release();
+}
+
 bool Engine::SetSkydomeSlot(int newIndex)
 {
     if (newIndex < 0 || newIndex >= kSkydomeSlotCount) return false;
@@ -2418,6 +2644,14 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	m_hSkydomeTex       = NULL;
 	m_pSkydomeTexture   = NULL;
 	m_skydomeIndex      = kSkydomeOffSlot;
+	//: ground-lighting effect + tangent-space decl + normal-map state
+	m_pGroundEffect            = NULL;
+	m_pGroundDecl              = NULL;
+	m_pGroundNormalTexture     = NULL;
+	m_pGroundFlatNormalTexture = NULL;
+	m_hGroundWVP = m_hGroundWorld = m_hGroundSphFill = NULL;
+	m_hGroundLightObjVec = m_hGroundLightDiffuse = m_hGroundLightSpecular = NULL;
+	m_hGroundEyeObjPos = m_hGroundBaseTex = m_hGroundNormalTex = NULL;
 	m_hBloomStrength = m_hBloomCutoff = m_hBloomSize = NULL;
 	m_hBloomIteration = m_hBloomSceneTextureParam = NULL;
 	m_hBloomResolutionConstants = NULL;
@@ -2610,6 +2844,12 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	// Graceful-degrade: if compile fails m_pSkydomeEffect stays NULL and the
 	// render pass (Task 4) will guard on it and skip skydome rendering.
 	InitSkydomeEffect();
+	//: ground-lighting effect + tangent-space decl + flat-normal fallback.
+	// Graceful-degrade identically: on compile failure m_pGroundEffect stays
+	// NULL and Render() falls back to the unlit fixed-function ground quad.
+	CreateGroundFlatNormal();
+	InitGroundEffect();
+	ReloadGroundNormalTexture();
 }
 
 Engine::~Engine()
@@ -2632,6 +2872,11 @@ Engine::~Engine()
 	SAFE_RELEASE(m_pSkydomeVB);
 	SAFE_RELEASE(m_pSkydomeIB);
 	SAFE_RELEASE(m_pSkydomeDecl);
+	//: ground-lighting effect + decl + normal textures
+	SAFE_RELEASE(m_pGroundEffect);
+	SAFE_RELEASE(m_pGroundDecl);
+	SAFE_RELEASE(m_pGroundNormalTexture);
+	SAFE_RELEASE(m_pGroundFlatNormalTexture);
 	SAFE_RELEASE(m_pDeclaration);
 	SAFE_RELEASE(m_pDevice);
 	SAFE_RELEASE(m_pDirect3D);

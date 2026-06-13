@@ -17,6 +17,59 @@ Conventions:
 ## Changelog
 
 
+### Ground plane responds to lighting — bump-mapped terrain render
+
+*2026-06-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #151*
+
+The preview's ground plane now reacts to the **Lighting panel**. Drag the
+sun's intensity / azimuth / altitude or the ambient colour and the ground
+brightens, dims, and tints in step — previously it was drawn unlit and
+ignored the lighting setting entirely (the original question was a
+triage: the ground was simply *excluded* from scene lighting, not a sign
+that world lighting was broken). The lit ground uses the game's bump-mapped
+terrain model — per-pixel sun off a normal map, spherical-harmonic fill,
+gloss-gated specular, ×2 terrain brightness — so when you point the editor
+at a mod whose terrain textures ship a companion `<base>_bc.dds` normal map,
+the ground also picks up per-pixel surface relief and a gloss-masked
+highlight. With no such map it stays cleanly matte.
+
+**How we tackled it.** New bundled effect [`GroundLit.fx`](src/Resources/Engine/GroundLit.fx)
+adapts the game's `TerrainRenderBump` path (vendored, with the rest of the
+Petroglyph FoC shader source, under `reference/foc-shaders/`). It's driven by
+a new [`Engine::RenderGroundLit()`](src/engine.cpp) + `m_pGroundEffect`, built
+to mirror the existing **skydome effect** pattern 1:1 — `D3DXCreateEffect`
+from an `IDR_SHADER_GROUND_LIT` RCDATA blob, cached parameter handles,
+`OnLostDevice`/`OnResetDevice` lifecycle, and a compile-failure
+graceful-degrade back to the original unlit fixed-function quad. The lighting
+reuses the spherical-harmonic matrices the engine already maintains for the
+particle shaders (`m_sphLightFill`, `m_lights[0]`). Companion normal maps are
+resolved at runtime from the active mod / base game through `FileManager`
+(the same chain the skydome textures use), with a 1×1 flat-normal fallback
+(alpha 0 → no specular) when a slot has none.
+
+**Issues encountered and resolutions.** (1) The runtime D3DX compiler rejects
+`ps_1_x` (`X3539`), so the planned ps_1_1 gloss-fallback technique was cut to a
+single `vs_2_0`/`ps_2_0` path (). A cold-launch **stderr** smoke check
+caught this in seconds — this GUI exe's stdout isn't captured when launched
+detached. (2) First feel-test blew out the specular at grazing angles: the
+gloss must be read from the **`_bc` map's alpha** (where this game stores it —
+see `TerrainRenderBump.fx`), not the base-colour alpha, and the heightmap
+terrain shader multiplies *only diffuse* by 2 (spec is ×1) — I'd carried the
+×2 onto spec from the wrong sibling (`TerrainMeshBump`). The no-gloss fallback
+also needed alpha 0 (matte), not 1 (). (3) The ground is a single huge
+flat quad, so the game's per-vertex tangent-space half-vector smeared the
+specular; because the quad is flat and world-axis-aligned, evaluating the
+whole model **per-pixel in world space** is exact and avoids tessellation.
+**Parity caveat:** this is therefore an *adaptation* of the game's terrain
+shader (per-pixel on a preview quad), not the game's literal per-vertex
+heightmap-terrain pipeline. For a flat preview aid the result is equivalent
+and the maintainer feel-tested it; a stricter "run the game's real shader"
+pass belongs with the broader render-parity work (/). The real
+`_bc` relief path is also still unverified — the dev box had no mod configured,
+so every slot exercised the matte fallback.
+
+---
+
 ### Spawner jitter reworked — instances follow a shaped path (arc + squiggle)
 
 *2026-06-13 · [`87a8654`](https://github.com/DrKnickers/particle-editor/commit/87a8654) · #149*

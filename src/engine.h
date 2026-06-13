@@ -568,6 +568,19 @@ private:
 	// Called from Render() when slot != Off and effect/texture are ready.
 	void				RenderSkydome();
 
+	//: compile IDR_SHADER_GROUND_LIT from RCDATA, cache parameter
+	// handles, and build the tangent-space ground vertex declaration.
+	void				InitGroundEffect();
+	//: release + reload the companion `<base>_bc` normal map for the
+	// active ground slot (game/mod via FileManager); flat-normal on miss.
+	void				ReloadGroundNormalTexture();
+	//: create the 1px (128,128,255) neutral tangent-space normal used
+	// when a slot has no companion normal map.
+	void				CreateGroundFlatNormal();
+	//: draw the lit ground quad through m_pGroundEffect. Called from
+	// Render() when the effect is ready; else the unlit FF quad is used.
+	void				RenderGroundLit();
+
 	//
 	// Data members
 	//
@@ -695,6 +708,25 @@ private:
 	IDirect3DTexture9*       m_pSkydomeTexture;
 	int                      m_skydomeIndex;
 	std::wstring             m_skydomeCustomSlotPaths[kSkydomeSlotCount - kSkydomeFirstCustomSlot];
+
+	//: bump-mapped ground lighting. Effect + tangent-space vertex decl +
+	// normal-map state, mirroring the skydome effect lifecycle. Faithful port
+	// of TerrainMeshBump.fx (reference/foc-shaders/) minus cloud/FOW.
+	struct GroundVertex
+	{
+	    D3DXVECTOR3 Position;
+	    D3DXVECTOR3 Normal;
+	    D3DXVECTOR2 TexCoord;
+	    D3DXVECTOR3 Tangent;
+	    D3DXVECTOR3 Binormal;
+	};
+	ID3DXEffect*                 m_pGroundEffect;
+	IDirect3DVertexDeclaration9* m_pGroundDecl;
+	IDirect3DTexture9*           m_pGroundNormalTexture;     // companion _bc map, or flat fallback
+	IDirect3DTexture9*           m_pGroundFlatNormalTexture; // 1px (128,128,255) neutral normal
+	D3DXHANDLE m_hGroundWVP, m_hGroundWorld, m_hGroundSphFill,
+	           m_hGroundLightObjVec, m_hGroundLightDiffuse, m_hGroundLightSpecular,
+	           m_hGroundEyeObjPos, m_hGroundBaseTex, m_hGroundNormalTex;
 
 	// Resources
 	IDirect3DTexture9*	m_pGroundTexture;

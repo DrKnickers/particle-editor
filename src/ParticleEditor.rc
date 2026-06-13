@@ -81,6 +81,7 @@ END
 IDS_SCENEHEAT           RCDATA                  "Resources\\SceneHeat.fx"
 IDR_DEFAULT_SHADER      RCDATA                  "resources\\DefaultShader.fx"
 IDR_SHADER_SKYDOME      RCDATA                  "Resources\\Engine\\Skydome.fx"
+IDR_SHADER_GROUND_LIT   RCDATA                  "Resources\\Engine\\GroundLit.fx"
 
 // ground textures. Declared RCDATA (not BITMAP) so the source
 // file format isn't restricted to .bmp — D3DXCreateTextureFromFileInMemory

@@ -104,6 +104,10 @@
 #define IDR_SKYDOME_STUDIO              157
 #define IDR_SKYDOME_INDOOR              158
 
+// — bump-mapped terrain lighting for the ground plane. Faithful port of
+// the game's TerrainMeshBump.fx (reference/foc-shaders/) minus cloud/FOW.
+#define IDR_SHADER_GROUND_LIT           159
+
 
 // Next default values for new objects
 //
