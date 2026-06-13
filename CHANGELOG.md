@@ -19,7 +19,7 @@ Conventions:
 
 ### Spawner jitter reworked — instances follow a shaped path (arc + squiggle)
 
-*2026-06-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-13 · [`87a8654`](https://github.com/DrKnickers/particle-editor/commit/87a8654) · #149*
 
 Spawner-emitted instances no longer fly off on a random straight line.
 The old one-time **velocity jitter** is gone, replaced by **per-instance
