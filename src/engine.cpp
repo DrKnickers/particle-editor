@@ -1111,7 +1111,24 @@ bool Engine::Render()
 	for (UINT i = 0; i < nPasses; i++)
 	{
 		pEffect->BeginPass(i);
+		// Mask alpha writes on the final scene blit so the eroded
+		// scene-texture alpha doesn't overwrite the opaque alpha the screen
+		// RT was just cleared to (the Clear above uses XRGB → A=0xFF). The
+		// layered/DComp compositor treats this RT's per-pixel alpha as the
+		// viewport's opacity; a game backbuffer ignores alpha. Particle
+		// transparent/modulate blends erode the scene RT alpha, and SceneHeat.fx
+		// copies it straight through, so without this mask the viewport composites
+		// particles against the chrome behind it → washed-out / too-light. Forcing
+		// the final alpha opaque presents the engine's RGB at full opacity, exactly
+		// like the game → editor↔in-game parity, blend-mode-agnostic. No shader
+		// edit (no-fork rule). Set AFTER BeginPass so the effect's pass-state apply
+		// can't clobber it; restore full RGBA after the draw so later frames'
+		// particle blends are unaffected.
+		m_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE,
+			D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
 		m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(EmitterInstance::Vertex));
+		m_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE,
+			D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
 		pEffect->EndPass();
 	}
 	pEffect->End();

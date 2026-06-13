@@ -17,6 +17,50 @@ Conventions:
 ## Changelog
 
 
+### Editor ↔ in-game transparency parity — opaque scene alpha
+
+*2026-06-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #155*
+
+Particles in the preview no longer look **washed-out / see-through** versus
+in-game. Transparent and modulate-blended particles now read at the same
+opacity the game shows. (This is the transparency half of; the broader
+per-map colour-grade / tone difference — the dominant contributor to overall
+"darker in-game" — is tracked separately as the game-pipeline work and is
+**not** addressed here.)
+
+**How we tackled it.** The session-40 triage
+([`docs/superpowers/specs/2026-06-13-mt16-transparency-parity-triage.md`](docs/superpowers/specs/2026-06-13-mt16-transparency-parity-triage.md))
+found the cause: the new-UI viewport is a per-pixel-alpha `WS_EX_LAYERED` /
+DComp surface, so the scene render target's alpha is *meaningful* (it's the
+viewport's opacity over the WebView page). But the particle render path was
+written for a game backbuffer, where alpha is ignored — transparent/modulate
+blends erode the RT alpha (no `SEPARATEALPHABLENDENABLE` anywhere), the final
+`SceneHeat.fx` combine copies that eroded alpha through, and the compositor
+faithfully shows it as transparency. The fix masks alpha writes
+(`D3DRS_COLORWRITEENABLE = RED|GREEN|BLUE`) around the final scene-combine
+draw in [`src/engine.cpp`](src/engine.cpp:1111), then restores full RGBA, so
+the RT keeps the opaque alpha it was cleared to. The editor then presents the
+engine's RGB at full opacity — exactly what a game backbuffer does (alpha
+ignored) — achieving parity independent of blend mode and covering both the
+DComp (default) and arch-B layered compositor paths, which sample the
+same RT. **No shader was edited** (the no-fork render-parity rule): forcing
+alpha GPU-side on the existing blit is a render-state change, not a shader
+patch.
+
+**Issues encountered and resolutions.** The mask had to be set **after**
+`ID3DXEffect::BeginPass` (not before `Begin`) so the effect's pass-state apply
+couldn't clobber it — though `SceneHeat.fx`'s pass sets only
+`AlphaBlendEnable` / `AlphaTestEnable` / `ZWriteEnable` / `ZFunc`, never
+`ColorWriteEnable`, so it was never in the effect's managed-state set anyway;
+the placement is belt-and-suspenders. The explicit restore to full RGBA after
+the draw keeps the next frame's particle alpha-blending into the scene RT
+unchanged. Verified visually (maintainer feel-test, default composition mode)
+plus the native `alpha-compositor-snapshot` readback/composite regression
+(3/3) — note that path encodes JPEG, which has no alpha channel, so the
+opaque-alpha result itself can only be confirmed by eye, not by that spec.
+
+---
+
 ### Ground plane responds to lighting — bump-mapped terrain render
 
 *2026-06-13 · [`056e2ed`](https://github.com/DrKnickers/particle-editor/commit/056e2ed) · #151*
