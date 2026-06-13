@@ -17,6 +17,39 @@ Conventions:
 ## Changelog
 
 
+### Background picker selections persist in the new UI
+
+*2026-06-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+A skydome (bundled or custom-path) or a solid background colour chosen from the
+Background picker in the new UI now survives a restart. Previously the new-UI
+host applied the selection to the live engine but never wrote it to the
+registry, so the next launch fell back to the default — only the legacy UI
+persisted these. The startup restore already read the keys; only the write-back
+was missing.
+
+**How we tackled it.** The `engine/set/skydome-slot`,
+`engine/set/skydome-custom-path`, and `engine/set/background` bridge handlers
+([`src/host/BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp:1319)) gained a
+registry write that mirrors the legacy writers value-for-value — `SkydomeIndex`
+(REG_DWORD), `SkydomeCustomSlot%d` (REG_SZ, deleted when cleared), and
+`BackgroundColor` (REG_DWORD) under `HKCU\Software\AloParticleEditor`
+([`src/main.cpp`](src/main.cpp:5564)) — so the two UIs round-trip the same keys
+that [`HostWindow`](src/host/HostWindow.cpp:2062)'s startup restore already
+reads. The write is gated on the same `m_testHost && !m_settingsLive` condition
+as `settings/lighting-force-align/set`, so the accessibility harness never
+mutates the dev box registry.
+
+**Issues encountered and resolutions.** The custom-path write reuses the legacy
+delete-on-empty contract (clearing a slot removes the value rather than storing
+an empty string) so `HostWindow`'s sized REG_SZ read doesn't resurrect a stale
+path. Background colour was folded in because the solid-colour option lives in
+the same Background picker and had the identical gap; the ground picker is a
+separate surface, left for a follow-up.
+
+---
+
+
 ### Editor ↔ in-game transparency parity — opaque scene alpha
 
 *2026-06-13 · [`460c070`](https://github.com/DrKnickers/particle-editor/commit/460c070) · #155*

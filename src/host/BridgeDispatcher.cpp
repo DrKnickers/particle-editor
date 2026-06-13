@@ -311,6 +311,67 @@ std::vector<std::wstring> WriteRecentFile(const std::wstring& path)
     return list;
 }
 
+// Persist the skydome selection to HKCU\Software\AloParticleEditor
+// using the SAME value names/types as legacy WriteSkydomeIndex /
+// WriteSkydomeCustomPath (src/main.cpp:5564,5598), so a dome chosen in the new
+// UI survives restart AND round-trips with the legacy picker. The new-UI
+// skydome handlers previously only marked the doc dirty (no registry write),
+// so a daily-driver selection was silently lost on restart — these close that
+// gap. Callers gate the write on m_testHost/m_settingsLive (mirroring
+// settings/lighting-force-align/set) so the a11y harness never mutates the
+// dev box registry.
+static void PersistSkydomeIndex(int value)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
+                        &hKey, nullptr) == ERROR_SUCCESS)
+    {
+        DWORD v = static_cast<DWORD>(value);
+        RegSetValueExW(hKey, L"SkydomeIndex", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
+        RegCloseKey(hKey);
+    }
+}
+
+static void PersistSkydomeCustomPath(int slot, const std::wstring& path)
+{
+    if (slot < Engine::kSkydomeFirstCustomSlot || slot >= Engine::kSkydomeSlotCount)
+        return;
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
+                        &hKey, nullptr) == ERROR_SUCCESS)
+    {
+        wchar_t name[64];
+        swprintf_s(name, L"SkydomeCustomSlot%d", slot);
+        if (path.empty())
+            RegDeleteValueW(hKey, name);   // mirror legacy: clearing a slot deletes the value
+        else
+            RegSetValueExW(hKey, name, 0, REG_SZ,
+                           reinterpret_cast<const BYTE*>(path.c_str()),
+                           static_cast<DWORD>((path.size() + 1) * sizeof(wchar_t)));
+        RegCloseKey(hKey);
+    }
+}
+
+// Persist the solid-colour background (same BackgroundColor REG_DWORD as
+// legacy WriteBackgroundColor, src/main.cpp:3230). The solid-colour option lives
+// in the same Background picker as the skydome and had the identical new-UI gap.
+static void PersistBackgroundColor(COLORREF color)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
+                        &hKey, nullptr) == ERROR_SUCCESS)
+    {
+        DWORD v = static_cast<DWORD>(color);
+        RegSetValueExW(hKey, L"BackgroundColor", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
+        RegCloseKey(hKey);
+    }
+}
+
 // host-state plumbing — JSON ↔ SpawnerConfig converters. The
 // schema's SpawnerParamsDto (web/packages/bridge-schema/src/index.ts:60)
 // is value-for-value compatible with the native SpawnerConfig (lines in
@@ -1319,7 +1380,12 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (kind == "engine/set/skydome-slot")
     {
         if (!requireEngine(kind.c_str())) return res;
-        m_engine->SetSkydomeSlot(params.value("slot", 0));
+        const int slot = params.value("slot", 0);
+        m_engine->SetSkydomeSlot(slot);
+        // Persist so the selection survives restart in the new UI
+        // (the handler previously only markDirty'd — the daily-driver lost it).
+        if (!(m_testHost && !m_settingsLive))
+            PersistSkydomeIndex(slot);
         sendOk(json::object());
         markDirty();
         EmitEngineStateChanged();
@@ -1330,7 +1396,11 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         int slot = params.value("slot", -1);
         std::string p = params.value("path", std::string{});
-        m_engine->SetSkydomeCustomPath(slot, Utf8ToWide(p));
+        std::wstring wpath = Utf8ToWide(p);
+        m_engine->SetSkydomeCustomPath(slot, wpath);
+        // Persist the custom slot path (round-trips with legacy).
+        if (!(m_testHost && !m_settingsLive))
+            PersistSkydomeCustomPath(slot, wpath);
         sendOk(json::object());
         markDirty();
         EmitEngineStateChanged();
@@ -1341,6 +1411,10 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         unsigned int rgb = params.value("rgb", 0u);
         m_engine->SetBackground(static_cast<COLORREF>(rgb));
+        // Persist the solid-colour background (same Background picker as
+        // the skydome; previously only markDirty'd, so it was lost on restart).
+        if (!(m_testHost && !m_settingsLive))
+            PersistBackgroundColor(static_cast<COLORREF>(rgb));
         sendOk(json::object());
         markDirty();
         EmitEngineStateChanged();
