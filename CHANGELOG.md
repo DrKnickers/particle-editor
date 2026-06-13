@@ -19,7 +19,7 @@ Conventions:
 
 ### Ground plane responds to lighting — bump-mapped terrain render
 
-*2026-06-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #151*
+*2026-06-13 · [`056e2ed`](https://github.com/DrKnickers/particle-editor/commit/056e2ed) · #151*
 
 The preview's ground plane now reacts to the **Lighting panel**. Drag the
 sun's intensity / azimuth / altitude or the ambient colour and the ground
