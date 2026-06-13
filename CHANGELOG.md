@@ -19,7 +19,7 @@ Conventions:
 
 ### Editor ↔ in-game transparency parity — opaque scene alpha
 
-*2026-06-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #155*
+*2026-06-13 · [`460c070`](https://github.com/DrKnickers/particle-editor/commit/460c070) · #155*
 
 Particles in the preview no longer look **washed-out / see-through** versus
 in-game. Transparent and modulate-blended particles now read at the same
