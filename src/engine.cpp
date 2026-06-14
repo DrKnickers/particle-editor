@@ -2589,11 +2589,15 @@ void Engine::RenderSkydomes()
 
     if (primaryReady || secondaryReady)
     {
-        // Layering: depth is off, so the layer drawn LATER paints over the earlier.
-        //  Space: secondary nebula sits BEHIND the primary starfield -> secondary first.
-        //  Land:  secondary is a partial overlay (rings/horizon/traffic) ON TOP of the
-        //         primary full sky-dome -> primary first.
-        const bool primaryFirst = (m_skydomeContext == SkydomeContext::Land);
+        // Layering: depth is off, so the layer drawn LATER paints on top of the
+        // earlier. In BOTH contexts the PRIMARY is the opaque/full-dome background
+        // and is drawn FIRST; the SECONDARY composites ON TOP:
+        //  Space: primary = opaque star sphere (the game's Sort_Order_Adjust=-1 back
+        //         layer); secondary = ADDITIVE nebula (MeshAdditiveVColor, ONE/ONE) --
+        //         it MUST add after the opaque base or the base overwrites it (the bug
+        //         this fixes: secondary-first buried the nebula under the star sphere).
+        //  Land:  primary = full sky-dome; secondary = partial overlay (rings/horizon).
+        const bool primaryFirst = true;
         SkydomeMesh* order[2] = {
             primaryFirst ? &m_skydomePrimaryMesh   : &m_skydomeSecondaryMesh,
             primaryFirst ? &m_skydomeSecondaryMesh : &m_skydomePrimaryMesh

@@ -17,6 +17,39 @@ Conventions:
 ## Changelog
 
 
+### space skydome — the secondary nebula now composites over the primary starfield
+
+*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Picking a **space** dual-slot dome (a starfield primary + a nebula secondary) now renders
+both layers as it does in-game — previously the nebula was invisible. No user-facing
+behaviour change for **land** domes.
+
+**How we tackled it.** A one-line compose-order fix in
+[`Engine::RenderSkydomes`](src/engine.cpp:2588). The space branch drew the two domes in the
+order `{secondary, primary}`; because the skydome pass runs with depth off, the layer drawn
+later wins. Every space secondary is an **additive** `MeshAdditiveVColor` nebula (`ONE/ONE`),
+and every space primary has an **opaque** star-sphere sub-mesh (`MeshGloss`, classified
+`SKYBLEND_OPAQUE` → `ALPHABLENDENABLE=FALSE`). Drawing the secondary first and the opaque
+primary second meant the star sphere overwrote every nebula pixel. The game draws all Opaque
+meshes before all Transparent ones and tags the primary `Sort_Order_Adjust=-1` (back layer),
+so the correct order is **primary first, secondary on top** — in both contexts (land was
+already primary-first, so it's byte-identical). Verified against the first-party base assets
+(`w_stars_medium.alo` = MeshGloss + sun billboard; `w_stars_nebula_*.alo` = a single additive
+`MeshAdditiveVColor`) and the FoC `MeshAdditiveVColor.fx` / `MeshGloss.fx` blend states.
+
+**Issues encountered and resolutions.** The bug only manifests on a space dome, which the
+fixed-downward headless `--capture` camera can't show (the dome sits behind the ground) — so
+the fix was confirmed via the `[SkyDraw]` per-sub-mesh blend/order trace (opaque MeshGloss now
+draws before the additive nebula) plus the first-party asset/shader analysis, with the final
+visual left to a live feel-test. Two related items were deferred: the primary starfield's
+faint vertical **seam** is the UV-sphere longitude closure baked into the model's tiled UVs
+(the game's `.fxo` re-applies `WRAP` at `BeginPass`, so the editor samples identically — it is
+an asset/filtering matter, not a render-core bug); and `hLightScale` is still unbound in the
+dome draw (benign at the shader default `{1,1,1,1}`, but not engine-driven).
+
+---
+
 ### skydome renders for real — two render-blocker fixes + a render-capture bridge
 
 *2026-06-13 · [`70fc6a8`](https://github.com/DrKnickers/particle-editor/commit/70fc6a8) · #165*
