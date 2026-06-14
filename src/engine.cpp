@@ -2767,6 +2767,22 @@ void Engine::RenderReferenceObject()
         fx->SetMatrixArray(h.hSphLightFill,   m_sphLightFill, 3);
         fx->SetFloat(h.hTime,                 GetTimeF());
 
+        // Skinned (RSkin) sub-mesh: render in BIND POSE. The RSkin VS uses
+        // m_viewProj (world->clip) + a float4x3 m_skinMatrixArray[24] bone palette
+        // (P = mul(In.Pos, palette[Normal.w])), NOT m_world / m_worldViewProj. At
+        // bind pose every bone's skin matrix collapses to the object world (verified
+        // against the alo-viewer's invBind*current build), so bind a UNIFORM
+        // objectWorld palette -> P = mul(In.Pos, objectWorld) = world. The .alo
+        // skinned verts are model-space, so `world` here == objectWorld (placement
+        // is identity for skinned).
+        if (sub.skinned && h.hSkinMatrixArray)
+        {
+            D3DXMATRIX palette[24];
+            for (int b = 0; b < 24; ++b) palette[b] = world;
+            fx->SetMatrix(h.hViewProjection, &m_viewProjection);
+            fx->SetMatrixArray(h.hSkinMatrixArray, palette, 24);
+        }
+
         for (size_t i = 0; i < sub.params.size(); ++i)
         {
             D3DXHANDLE ph = (i < sub.matHandles.size()) ? sub.matHandles[i] : NULL;

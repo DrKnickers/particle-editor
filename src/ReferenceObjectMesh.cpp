@@ -32,28 +32,47 @@ namespace
     //   alD3dVertNU2U3U3C POS NORMAL UV0 TANGENT BINORMAL COLOR   (60B)
     enum RuntimeFormat { RF_N, RF_NU2, RF_NU2C, RF_NU2U3, RF_NU2U3U3, RF_NU2U3U3C };
 
+    // An RSkin (1-bone "rigid skinning") sub-mesh: its geometry is identical
+    // to the rigid `alD3dVertNU2U3U3...` set, but the VS_INPUT NORMAL is a float4
+    // whose .w carries the bone index (`m_skinMatrixArray[Normal.w]`). We render
+    // these in BIND POSE with a uniform `objectWorld` skin palette (so the index is
+    // irrelevant -> .w = 0), which only needs the NORMAL widened to float4 (+4 bytes,
+    // shifting every later field). B4I4 (4-bone) uses a different layout -> still
+    // deferred (skipped in Load). isSkinned below == "is RSkin" here.
+    bool isRSkinFormat(const std::string& name)  { return name.rfind("alD3dVertRSkin", 0) == 0; }
+
     RuntimeFormat classifyFormat(const std::string& name)
     {
-        if (name == "alD3dVertN")         return RF_N;
-        if (name == "alD3dVertNU2")       return RF_NU2;
-        if (name == "alD3dVertNU2C")      return RF_NU2C;
-        if (name == "alD3dVertNU2U3")     return RF_NU2U3;
-        if (name == "alD3dVertNU2U3U3")   return RF_NU2U3U3;
-        if (name == "alD3dVertNU2U3U3C")  return RF_NU2U3U3C;
+        // Strip an RSkin / B4I4 prefix so the geometry suffix classifies like its
+        // rigid counterpart (e.g. "alD3dVertRSkinNU2U3U3" -> RF_NU2U3U3).
+        std::string g = name;
+        if      (g.rfind("alD3dVertRSkin", 0) == 0) g = "alD3dVert" + g.substr(14);
+        else if (g.rfind("alD3dVertB4I4",  0) == 0) g = "alD3dVert" + g.substr(13);
+        if (g == "alD3dVertN")         return RF_N;
+        if (g == "alD3dVertNU2")       return RF_NU2;
+        if (g == "alD3dVertNU2C")      return RF_NU2C;
+        if (g == "alD3dVertNU2U3")     return RF_NU2U3;
+        if (g == "alD3dVertNU2U3U3")   return RF_NU2U3U3;
+        if (g == "alD3dVertNU2U3U3C")  return RF_NU2U3U3C;
         return RF_NU2C;   // unknown rigid format -> the safe pos/normal/uv/color subset
     }
 
-    uint32_t strideFor(RuntimeFormat f)
+    // Skinned shifts every field after the NORMAL by +4 (float3 normal -> float4).
+    uint32_t skinShift(bool skinned)  { return skinned ? 4u : 0u; }
+
+    uint32_t strideFor(RuntimeFormat f, bool skinned)
     {
+        uint32_t base;
         switch (f)
         {
-            case RF_N:         return 24;
-            case RF_NU2:       return 32;
-            case RF_NU2C:      return 36;
-            case RF_NU2U3:     return 44;
-            case RF_NU2U3U3:   return 56;
-            default:           return 60;   // RF_NU2U3U3C
+            case RF_N:         base = 24; break;
+            case RF_NU2:       base = 32; break;
+            case RF_NU2C:      base = 36; break;
+            case RF_NU2U3:     base = 44; break;
+            case RF_NU2U3U3:   base = 56; break;
+            default:           base = 60; break;   // RF_NU2U3U3C
         }
+        return base + skinShift(skinned);
     }
 
     bool hasUV(RuntimeFormat f)       { return f != RF_N; }
@@ -61,42 +80,48 @@ namespace
     bool hasTangent(RuntimeFormat f)  { return f == RF_NU2U3 || f == RF_NU2U3U3 || f == RF_NU2U3U3C; }
     bool hasBinormal(RuntimeFormat f) { return f == RF_NU2U3U3 || f == RF_NU2U3U3C; }
 
-    // Runtime offsets of the optional fields (after pos@0 + normal@12).
-    uint32_t uvOff(RuntimeFormat f)       { return 24; }
-    uint32_t tangentOff(RuntimeFormat f)  { return 32; }                       // after uv0
-    uint32_t binormalOff(RuntimeFormat f) { return 44; }                       // after tangent
-    uint32_t colorOff(RuntimeFormat f)    { return hasBinormal(f) ? 56u : 32u; } // NU2C: @32; NU2U3U3C: @56
+    // Runtime offsets of the optional fields (after pos@0 + normal@12; +4 if skinned).
+    uint32_t uvOff(bool skinned)                  { return 24 + skinShift(skinned); }
+    uint32_t tangentOff(bool skinned)             { return 32 + skinShift(skinned); }   // after uv0
+    uint32_t binormalOff(bool skinned)            { return 44 + skinShift(skinned); }   // after tangent
+    uint32_t colorOff(RuntimeFormat f, bool skinned) { return (hasBinormal(f) ? 56u : 32u) + skinShift(skinned); }
 
-    void declElementsFor(RuntimeFormat f, std::vector<D3DVERTEXELEMENT9>& out)
+    void declElementsFor(RuntimeFormat f, bool skinned, std::vector<D3DVERTEXELEMENT9>& out)
     {
         auto push = [&](WORD off, BYTE type, BYTE usage, BYTE idx) {
             const D3DVERTEXELEMENT9 e = { 0, off, type, D3DDECLMETHOD_DEFAULT, usage, idx };
             out.push_back(e);
         };
-        push(0,  D3DDECLTYPE_FLOAT3,  D3DDECLUSAGE_POSITION, 0);
-        push(12, D3DDECLTYPE_FLOAT3,  D3DDECLUSAGE_NORMAL,   0);
-        if (hasUV(f))       push((WORD)uvOff(f),       D3DDECLTYPE_FLOAT2,   D3DDECLUSAGE_TEXCOORD, 0);
-        if (hasTangent(f))  push((WORD)tangentOff(f),  D3DDECLTYPE_FLOAT3,   D3DDECLUSAGE_TANGENT,  0);
-        if (hasBinormal(f)) push((WORD)binormalOff(f), D3DDECLTYPE_FLOAT3,   D3DDECLUSAGE_BINORMAL, 0);
-        if (hasColor(f))    push((WORD)colorOff(f),    D3DDECLTYPE_D3DCOLOR, D3DDECLUSAGE_COLOR,    0);
+        push(0,  D3DDECLTYPE_FLOAT3, D3DDECLUSAGE_POSITION, 0);
+        // RSkin: NORMAL is float4 (xyz + bone index in .w).
+        push(12, skinned ? D3DDECLTYPE_FLOAT4 : D3DDECLTYPE_FLOAT3, D3DDECLUSAGE_NORMAL, 0);
+        if (hasUV(f))       push((WORD)uvOff(skinned),         D3DDECLTYPE_FLOAT2,   D3DDECLUSAGE_TEXCOORD, 0);
+        if (hasTangent(f))  push((WORD)tangentOff(skinned),    D3DDECLTYPE_FLOAT3,   D3DDECLUSAGE_TANGENT,  0);
+        if (hasBinormal(f)) push((WORD)binormalOff(skinned),   D3DDECLTYPE_FLOAT3,   D3DDECLUSAGE_BINORMAL, 0);
+        if (hasColor(f))    push((WORD)colorOff(f, skinned),   D3DDECLTYPE_D3DCOLOR, D3DDECLUSAGE_COLOR,    0);
         const D3DVERTEXELEMENT9 end = D3DDECL_END();
         out.push_back(end);
     }
 
     // Transcode one 144B on-disk vertex into the compact runtime record.
-    void transcodeVertex(RuntimeFormat f, const unsigned char* src, unsigned char* dst)
+    void transcodeVertex(RuntimeFormat f, bool skinned, const unsigned char* src, unsigned char* dst)
     {
         memcpy(dst + 0,  src + 0,  12);                       // POSITION @0
-        memcpy(dst + 12, src + 12, 12);                       // NORMAL   @12
-        if (hasUV(f))      memcpy(dst + uvOff(f),       src + 24, 8);   // TEXCOORD0 (on-disk uv0@24)
-        if (hasTangent(f)) memcpy(dst + tangentOff(f),  src + 56, 12);  // TANGENT0  (on-disk @56)
-        if (hasBinormal(f))memcpy(dst + binormalOff(f), src + 68, 12);  // BINORMAL0 (on-disk @68)
+        memcpy(dst + 12, src + 12, 12);                       // NORMAL.xyz @12
+        if (skinned)                                          // NORMAL.w = bone index; uniform
+        {                                                     // bind-pose palette -> any index ok -> 0.
+            const float zero = 0.0f;
+            memcpy(dst + 24, &zero, 4);
+        }
+        if (hasUV(f))      memcpy(dst + uvOff(skinned),       src + 24, 8);   // TEXCOORD0 (on-disk uv0@24)
+        if (hasTangent(f)) memcpy(dst + tangentOff(skinned),  src + 56, 12);  // TANGENT0  (on-disk @56)
+        if (hasBinormal(f))memcpy(dst + binormalOff(skinned), src + 68, 12);  // BINORMAL0 (on-disk @68)
         if (hasColor(f))
         {
             float c[4];
             memcpy(c, src + kAloColorOffset, 16);             // on-disk color float4 RGBA @80
             D3DCOLOR col = D3DCOLOR_COLORVALUE(c[0], c[1], c[2], c[3]);
-            memcpy(dst + colorOff(f), &col, 4);
+            memcpy(dst + colorOff(f, skinned), &col, 4);
         }
     }
 
@@ -262,17 +287,21 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
 #endif
                 continue;
             }
-            if (AloIsSkinnedVertexFormat(sm.vertexFormatName)) // v1 defers skinning
+            // RSkin (1-bone) renders in BIND POSE (model-space verts +
+            // uniform objectWorld skin palette). B4I4 (4-bone) still deferred.
+            const bool skinned = isRSkinFormat(sm.vertexFormatName);
+            if (AloIsSkinnedVertexFormat(sm.vertexFormatName) && !skinned)
             {
                 m_skippedSkinned = true;
                 continue;
             }
 
             const RuntimeFormat f = classifyFormat(sm.vertexFormatName);
-            const uint32_t stride = strideFor(f);
+            const uint32_t stride = strideFor(f, skinned);
 
             RefSubMeshGpu gpu;
             gpu.renderClass      = rc;
+            gpu.skinned          = skinned;
             gpu.shaderName       = sm.shaderName;
             gpu.vertexFormatName = sm.vertexFormatName;
             gpu.params           = sm.params;
@@ -280,12 +309,16 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
             gpu.vertexCount      = sm.vertexCount;
             gpu.primitiveCount   = sm.primitiveCount;
             gpu.indexBytes       = sm.indexBytes;
-            gpu.placement        = placement;
+            // Skinned verts are model-space bind pose -> NO per-mesh bone placement
+            // (the uniform objectWorld skin palette positions them at draw). Rigid
+            // verts are bone-local -> placed by their mesh's bone matrix.
+            if (skinned) D3DXMatrixIdentity(&gpu.placement);
+            else         gpu.placement = placement;
 
             gpu.vertexBytes.resize((size_t)stride * sm.vertexCount);
             for (uint32_t v = 0; v < sm.vertexCount; ++v)
             {
-                transcodeVertex(f,
+                transcodeVertex(f, skinned,
                                 sm.rawVertexBytes.data() + (size_t)v * kAloVertexStride,
                                 gpu.vertexBytes.data()   + (size_t)v * stride);
             }
@@ -467,7 +500,7 @@ IDirect3DVertexDeclaration9* ReferenceObjectMesh::GetOrCreateDecl(IDirect3DDevic
     if (it != m_decls.end()) return it->second;
 
     std::vector<D3DVERTEXELEMENT9> elems;
-    declElementsFor(classifyFormat(formatName), elems);
+    declElementsFor(classifyFormat(formatName), isRSkinFormat(formatName), elems);
 
     IDirect3DVertexDeclaration9* decl = nullptr;
     if (FAILED(dev->CreateVertexDeclaration(elems.data(), &decl)))

@@ -3,8 +3,9 @@
 // the skinned-status path) are exercised end-to-end against the schema.
 //
 // Covered: object enumeration + category grouping, selection dispatch, the
-// "skinned — not supported" status note, the visibility toggle, the grid toggle,
-// and a numeric transform commit (position X via the Spinner).
+// "skinned — not supported" status note, the visibility toggle, and a numeric
+// transform commit (position X via the Spinner). (The unit-grid toggle moved to
+// the Ground panel in S48 — see GroundTexturePanel.test.tsx.)
 
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -45,18 +46,6 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
     const note = await screen.findByRole("alert");
     expect(note.textContent).toMatch(/skinned/i);
-  });
-
-  it("toggles the unit grid", async () => {
-    const bridge = new MockBridge();
-    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
-
-    const grid = await screen.findByRole("checkbox", { name: "Grid visible" });
-    fireEvent.click(grid);
-    await waitFor(async () => {
-      const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
-      expect(snap.gridVisible).toBe(true);
-    });
   });
 
   it("commits a position-X change through the transform dispatch", async () => {

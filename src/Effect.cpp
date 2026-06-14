@@ -68,6 +68,7 @@ Effect::Effect(ID3DXEffect* pD3DEffect)
 	m_handles.hViewInverse         = pD3DEffect->GetParameterBySemantic(NULL, "VIEWINVERSE");
 	m_handles.hViewProjection      = pD3DEffect->GetParameterBySemantic(NULL, "VIEWPROJECTION");
 	m_handles.hProjection          = pD3DEffect->GetParameterBySemantic(NULL, "PROJECTION");
+	m_handles.hSkinMatrixArray     = pD3DEffect->GetParameterBySemantic(NULL, "SKINMATRIXARRAY");
 	m_handles.hEyePosition         = pD3DEffect->GetParameterBySemantic(NULL, "EYE_POSITION");
 	m_handles.hEyeObjPosition      = pD3DEffect->GetParameterBySemantic(NULL, "EYE_OBJ_POSITION");
 	m_handles.hTime                = pD3DEffect->GetParameterBySemantic(NULL, "TIME");

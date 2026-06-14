@@ -47,6 +47,8 @@ function makeStubBridge(
     camera: { position: [0, 0, 0], target: [0, 0, 0], up: [0, 0, 1] },
     wind: [0, 0, 0],
     gravity: [0, 0, 0],
+    gridVisible: false,
+    gridSpacing: 20,
   };
   const request: RequestFn = vi.fn().mockImplementation((req) => {
     if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
@@ -72,6 +74,16 @@ describe("GroundTexturePanel", () => {
     const setSlot = calls.find((c) => c.kind === "engine/set/ground-texture");
     expect(setSlot).toBeDefined();
     expect(setSlot.params.slot).toBe(1);
+  });
+
+  it("toggles the unit grid (relocated here from the Reference picker, S48)", () => {
+    const bridge = makeStubBridge();
+    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Grid visible" }));
+    const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    const setGrid = calls.find((c) => c.kind === "engine/set/grid-visible");
+    expect(setGrid).toBeDefined();
+    expect(setGrid.params.visible).toBe(true);
   });
 
   it("clicking an empty Custom slot dispatches file/open with filter:\"ground\"", async () => {

@@ -49,13 +49,24 @@ class FileManager : public IFileManager
 {
 	std::vector<std::wstring> basepaths;
 	std::vector<MegaFile*>    megafiles;
-	std::wstring              modpath;     // priority basepath for the active mod, or empty
+	std::wstring              modpath;     // the active mod root (or empty = Unmodded)
+	// Loose-file search roots for the active mod: the mod root PLUS its shared
+	// `Core` core folder (Mod keeps hundreds of loose .alo there, shared across
+	// its one-at-a-time submods). Rebuilt by SetModPath; searched before the base
+	// paths. Root-first, so existing lookups are unchanged and only previously-
+	// unreachable core content becomes resolvable.
+	std::vector<std::wstring> modContentRoots;
+
+	// Populate modContentRoots from `modpath`: the root + a `Core` core
+	// sub-folder if present (with a Data\Art tree).
+	void BuildModContentRoots();
 
 public:
 	IFile* getFile(const std::string& path);
 
-	// Hot-swap a "mod" base path that's checked before the regular basepaths
-	// during loose-file lookups. Pass an empty string to clear (Unmodded).
+	// Hot-swap the active "mod": its content roots (mod folder + bundled
+	// sub-content folders) are checked before the regular basepaths during
+	// loose-file lookups. Pass an empty string to clear (Unmodded).
 	void SetModPath(const std::wstring& path) override;
 	const std::wstring& GetModPath() const { return modpath; }
 

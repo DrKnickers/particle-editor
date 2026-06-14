@@ -244,7 +244,10 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
         {
             if (sm.rawVertexBytes.empty() || sm.vertexCount == 0 || sm.primitiveCount == 0) continue;
             if (AloIsNonVisibleShader(sm.shaderName))         continue;   // shadow / occluded / heat
-            if (AloIsSkinnedVertexFormat(sm.vertexFormatName)) continue;  // v1 defers skinning
+            // RSkin (1-bone) now renders in bind pose -> counts as renderable;
+            // only B4I4 (4-bone) skinning is still deferred.
+            if (AloIsSkinnedVertexFormat(sm.vertexFormatName) &&
+                sm.vertexFormatName.rfind("alD3dVertRSkin", 0) != 0) continue;
             return ModelProbeResult::Renderable;
         }
     }

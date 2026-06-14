@@ -17,6 +17,42 @@ Conventions:
 ## Changelog
 
 
+### Reference-object fixes — skinned units render, mod Core content loads, a gizmo Reset, grid moves to the Ground popup
+
+*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Four fixes to the imported reference-object feature. **Skinned units now render** — AT-ST, the
+Gallofree HTT, infantry, and the like were invisible (their animated bodies were skipped, leaving only
+a stray muzzle-flash plane); they now draw in **bind pose**. **A mod's shared `Core` content now
+loads** — Mod keeps hundreds of models loose in `Core\Data\Art` that the editor never searched,
+so picking them reported "couldn't load"; the editor now resolves the mod root **plus** its `Core`
+core. A selected object gains a **Reset** button (position + rotation back to 0), and the **Unit-grid**
+toggle moved out of the Object picker into the **Ground** popup, where viewport scenery belongs.
+
+**How we tackled it.** *Skinned (bind pose):* the game's `RSkin*` shaders are 1-bone rigid skinning
+(`P = mul(In.Pos, m_skinMatrixArray[Normal.w])`); the alo-viewer builds each skin matrix as
+`invBind·current`, which at bind pose collapses to the object world. So the editor stops skipping
+`RSkin*` sub-meshes, widens the runtime NORMAL to float4 (the bone index), and binds a **uniform
+`objectWorld` skin palette** + `m_viewProjection` ([`src/engine.cpp`](src/engine.cpp), new
+`Effect::Handles::hSkinMatrixArray`, [`src/ReferenceObjectMesh.cpp`](src/ReferenceObjectMesh.cpp)
+transcoder). B4I4 (4-bone) stays deferred. *Core:* `FileManager` now keeps a list of mod content
+roots (`BuildModContentRoots` in [`src/managers.cpp`](src/managers.cpp)) — the mod root + its `Core`
+core — searched before the base paths, root-first so existing lookups are byte-for-byte unchanged.
+*Grid move:* pure UI relocation to `GroundTexturePanel` (same `engine/set/grid-*` bridge kinds), test
+moved with it.
+
+**Issues encountered and resolutions.** The float4×3 skin palette via `SetMatrixArray` was the one
+empirical unknown — verified correct by headless capture (AT-ST + Gallofree render in true bind pose,
+not collapsed). The `Prop_ElectricBox_00` failure turned out NOT to be a code bug: that model isn't
+shipped in the Mod install at all (only in a separate extraction), so it genuinely can't load — a
+"model file not found" diagnostic is a follow-up. Mod's per-submod folders (`Mod`/`GCW`/`Rev`/`TR`)
+are deliberately **not** auto-loaded — a mod runs one submod at a time and they'd cross-contaminate on
+shared asset names; per-submod selection is a follow-up. The skydome "doesn't always apply" report is
+the same Core-reachability root cause (now fixed for in-Core domes) plus a swallowed load
+failure (surfacing that is the same follow-up).
+
+---
+
 ### Rotate handles for the imported-object gizmo — translate arrows + world-axis rotate rings
 
 *2026-06-14 · [`1182386`](https://github.com/DrKnickers/particle-editor/commit/1182386) · #178*

@@ -104,6 +104,11 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
   // Custom-slot paths live at the array's tail. The bridge DTO carries
   // all 8 slots indexed by slot number; we read 5..7 directly.
   const customPaths = snapshot?.groundSlotCustomPaths ?? [];
+  // Unit grid — viewport scenery, sits with the ground plane (S48: relocated
+  // here from the Reference-object picker). Bridge kinds are general grid kinds,
+  // unchanged by the move.
+  const gridVisible = snapshot?.gridVisible ?? false;
+  const gridSpacing = snapshot?.gridSpacing ?? 20;
 
   const handleToggleGround = (v: boolean) => {
     void bridge.request({ kind: "engine/set/ground", params: { enabled: v } });
@@ -309,6 +314,36 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
             </button>
           );
         })}
+      </div>
+
+      {/* Unit grid — viewport scenery; belongs with the ground plane (S48,
+          relocated from the Reference-object picker). Same bridge kinds. */}
+      <label className="mb-3 mt-3 flex items-center gap-2 text-xs text-text">
+        <input
+          type="checkbox"
+          checked={gridVisible}
+          onChange={(e) =>
+            void bridge.request({ kind: "engine/set/grid-visible", params: { visible: e.target.checked } })
+          }
+          aria-label="Grid visible"
+          className="size-3 accent-sky-500"
+        />
+        <span>Show grid</span>
+      </label>
+      <div className="mb-3 flex items-center justify-between gap-2 text-xs text-text">
+        <span className={gridVisible ? "" : "opacity-40"}>Grid spacing</span>
+        <Spinner
+          value={gridSpacing}
+          onChange={(v) =>
+            void bridge.request({ kind: "engine/set/grid-spacing", params: { spacing: v } })
+          }
+          min={1}
+          step={5}
+          decimals={0}
+          disabled={!gridVisible}
+          density="tight"
+          aria-label="Grid spacing"
+        />
       </div>
     </>
   );

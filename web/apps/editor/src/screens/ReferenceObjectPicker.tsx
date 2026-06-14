@@ -72,8 +72,6 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const status = snapshot?.referenceObjectStatus ?? "none";
   const pos: Vec3 = snapshot?.referenceObjectPosition ?? [0, 0, 0];
   const rot: Vec3 = snapshot?.referenceObjectRotation ?? [0, 0, 0];
-  const gridVisible = snapshot?.gridVisible ?? false;
-  const gridSpacing = snapshot?.gridSpacing ?? 20;
 
   // Group the enumerated objects by category for the <optgroup>s.
   const byCategory = new Map<ReferenceObjectCategory, string[]>();
@@ -163,9 +161,22 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
 
       {/* ── Numeric transform (position + rotation) ──────────────────── */}
       <section className="flex flex-col gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-text-3">
-          Transform
-        </span>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium uppercase tracking-wide text-text-3">
+            Transform
+          </span>
+          {/* Reset the object back to where it loads (origin, no rotation). */}
+          <button
+            type="button"
+            onClick={() => setTransform([0, 0, 0], [0, 0, 0])}
+            disabled={name === NONE}
+            className="rounded px-2 py-0.5 text-xs text-text-2 transition hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none"
+            aria-label="Reset transform to origin"
+            title="Reset position + rotation to 0"
+          >
+            Reset
+          </button>
+        </div>
         <div className="grid grid-cols-3 gap-2">
           {(["X", "Y", "Z"] as const).map((axis, i) => (
             <label key={axis} className="flex flex-col gap-1 text-xs text-text-2">
@@ -195,38 +206,6 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
             </label>
           ))}
         </div>
-      </section>
-
-      {/* ── Unit grid ────────────────────────────────────────────────── */}
-      <section className="flex flex-col gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-text-3">
-          Unit grid
-        </span>
-        <label className="flex items-center gap-2 text-xs text-text-2">
-          <input
-            type="checkbox"
-            checked={gridVisible}
-            onChange={(e) =>
-              void bridge.request({ kind: "engine/set/grid-visible", params: { visible: e.target.checked } })
-            }
-            aria-label="Grid visible"
-          />
-          Show grid
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-text-2">
-          Spacing
-          <Spinner
-            value={gridSpacing}
-            onChange={(v) =>
-              void bridge.request({ kind: "engine/set/grid-spacing", params: { spacing: v } })
-            }
-            min={1}
-            step={5}
-            decimals={0}
-            disabled={!gridVisible}
-            aria-label="Grid spacing"
-          />
-        </label>
       </section>
     </div>
   );

@@ -29,6 +29,7 @@ public:
 		D3DXHANDLE hViewInverse;
 		D3DXHANDLE hViewProjection;
 		D3DXHANDLE hProjection;
+		D3DXHANDLE hSkinMatrixArray;   // float4x3[24] bone palette (RSkin shaders, reg c0)
 		D3DXHANDLE hEyePosition;
 		D3DXHANDLE hEyeObjPosition;
 		D3DXHANDLE hResolutionConstants;

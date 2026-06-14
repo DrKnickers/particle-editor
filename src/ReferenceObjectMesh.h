@@ -18,9 +18,10 @@
 // risky surgery on the shipped (render-unverified) dome code.
 //
 // v1 deferrals, enforced at Load:
-//   - SKINNED sub-meshes (vertexFormatName starts "alD3dVertRSkin" / "alD3dVertB4I4")
-//     are DROPPED -- they need a bone-matrix palette the editor has no source for.
-//     SkippedSkinned() reports it so the picker can show "skinned -- not supported".
+//   - RSkin (1-bone "rigid skinning") sub-meshes now RENDER in BIND POSE: the
+//     verts are model-space, so a uniform objectWorld skin palette (all 24 bones)
+//     reproduces the rest pose (verified vs the alo-viewer). B4I4 (4-bone, distinct
+//     blend-index/weight layout) is still DROPPED; SkippedSkinned() reports it.
 //   - Invisible COLLISION / SHADOW sub-meshes (MeshCollision.fx / MeshShadowVolume.fx
 //     / RSkinShadowVolume.fx) are dropped -- they would render as solid hulls.
 
@@ -52,6 +53,7 @@ struct RefSubMeshGpu
     uint32_t                    vertexCount = 0;
     uint32_t                    primitiveCount = 0;
     AloRenderClass              renderClass = ALO_RC_OPAQUE;  // phase/blend bucket (AloClassifyShader)
+    bool                        skinned = false;              // RSkin: render in bind pose (uniform objectWorld skin palette); model-space verts (no `placement`)
 
     // Object-space placement = this sub-mesh's parent mesh's bone, accumulated up
     // the parent chain (rigid). Identity when the model has no usable skeleton.
