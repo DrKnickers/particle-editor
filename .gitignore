@@ -273,3 +273,9 @@ tests/*.alo
 # artifacts; the design spec they fed into IS committed at
 # docs/superpowers/specs/.
 .superpowers/
+
+# rc.exe preprocessor temp files: extensionless RC<hex> scratch the
+# Resource Compiler writes next to src/ParticleEditor.rc and normally
+# cleans up, but leaves behind on an interrupted build. The VS template's
+# *.tmp / *.aps rules miss these because the temps have no extension.
+/src/RC[0-9A-Fa-f]*
