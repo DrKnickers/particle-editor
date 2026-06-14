@@ -37,6 +37,25 @@ namespace
     const ChunkType CHUNK_VERTEX_NEW    = 0x10007;
     const ChunkType CHUNK_INDICES       = 0x10004;
 
+    // Skeleton + connections (decoded for rigid multi-part placement).
+    const ChunkType CHUNK_SKELETON      = 0x200;    // container
+    //  0x201 info (data; boneCount + 124 reserved -- we trust the actual 0x202 count, not this)
+    const ChunkType CHUNK_BONE          = 0x202;    // container, repeated
+    const ChunkType CHUNK_BONE_NAME     = 0x203;    // string
+    const ChunkType CHUNK_BONE_DATA     = 0x205;    // data, 56 B (parentIndex, visible, matrix[12])
+    const ChunkType CHUNK_BONE_DATA_BB  = 0x206;    // data, 60 B (+ billboardMode before the matrix)
+    const ChunkType CHUNK_CONNECTIONS   = 0x600;    // container
+    //  0x601 counts (data) / 0x603 proxies / 0x604 dazzles -- skipped
+    const ChunkType CHUNK_CONN_OBJECT   = 0x602;    // data leaf, mini-chunks
+
+    // Bone-data leaf sizes (max2alamo alo_build.cpp: build_bone_data).
+    const long kBoneData205Bytes = 56;   // parentIndex(4) + visible(4) + matrix(48)
+    const long kBoneData206Bytes = 60;   // + billboardMode(4)
+
+    // 0x602 connection mini-chunk ids (alo_build.cpp build_connections).
+    const ChunkType MINI_CONN_OBJECT = 2;   // u32 objectIndex
+    const ChunkType MINI_CONN_BONE   = 3;   // u32 boneIndex
+
     const long kIndexSize = 2;  // uint16 triangle-list indices
 
     // Bounds for file-derived counts, to cap allocation and keep the 16-bit
@@ -74,6 +93,17 @@ namespace
         float v = 0.0f;
         r.read(&v, sizeof(v));
         return v;
+    }
+
+    // Read a u32 at the reader's current position WITHIN a multi-field data
+    // chunk (unlike readU32, does NOT assert the whole chunk is 4 bytes). The
+    // caller has already Verify()'d the total chunk size. read() advances
+    // m_position, so sequential calls walk the fields. (bone-data leaf.)
+    uint32_t readU32At(ChunkReader& r)
+    {
+        uint32_t v = 0;
+        r.read(&v, sizeof(v));
+        return letohl(v);
     }
 
     // Read one already-entered material param chunk (its Kind from the chunk
@@ -219,6 +249,94 @@ namespace
             }
         }
     }
+
+    // r is positioned inside a 0x202 bone container. TOLERANT: an unrecognized
+    // child or an unexpected bone-data size leaves the field at its default
+    // (identity matrix / parentIndex 0) rather than throwing -- these chunks were
+    // skipped wholesale before, so a surprising shape must not break a model
+    // that loaded before. The consumer () flags a degenerate placement.
+    void ReadBone(ChunkReader& r, AloBone& bone)
+    {
+        ChunkType t;
+        while ((t = r.next()) != -1)
+        {
+            switch (t)
+            {
+                case CHUNK_BONE_NAME:
+                    bone.name = r.readString();
+                    break;
+                case CHUNK_BONE_DATA:       // 0x205: parentIndex, visible, matrix
+                case CHUNK_BONE_DATA_BB:    // 0x206: + billboardMode before the matrix
+                {
+                    const bool hasBillboard = (t == CHUNK_BONE_DATA_BB);
+                    const long expect = hasBillboard ? kBoneData206Bytes : kBoneData205Bytes;
+                    if (r.size() == expect)
+                    {
+                        bone.parentIndex   = readU32At(r);
+                        bone.visible       = (readU32At(r) != 0);
+                        bone.billboardMode = hasBillboard ? readU32At(r) : 0;
+                        r.read(bone.matrix, (long)sizeof(bone.matrix));   // 48 B raw LE floats
+                    }
+                    // else: unexpected size -> keep defaults; next() skips the chunk.
+                    break;
+                }
+                default:
+                    if (r.size() < 0) r.skip();   // unknown container
+                    break;
+            }
+        }
+    }
+
+    // r is positioned inside a 0x200 skeleton container. The 0x201 info leaf
+    // (and its boneCount) is intentionally ignored -- we trust the actual count
+    // of 0x202 children (a stub 0x201 may lie). TOLERANT (never throws).
+    void ReadSkeleton(ChunkReader& r, std::vector<AloBone>& bones)
+    {
+        ChunkType t;
+        while ((t = r.next()) != -1)
+        {
+            if (t == CHUNK_BONE)
+            {
+                bones.emplace_back();
+                ReadBone(r, bones.back());
+            }
+            else if (r.size() < 0)
+            {
+                r.skip();   // unknown container
+            }
+            // 0x201 info + any unknown data chunk auto-skip on the next next().
+        }
+    }
+
+    // r is positioned inside a 0x600 connections container. Reads the 0x602
+    // object->bone entries; skips 0x601 counts + 0x603/0x604 proxies/dazzles.
+    // TOLERANT: a non-4-byte mini is skipped rather than throwing.
+    void ReadConnections(ChunkReader& r, std::vector<AloConnection>& conns)
+    {
+        ChunkType t;
+        while ((t = r.next()) != -1)
+        {
+            if (t == CHUNK_CONN_OBJECT)
+            {
+                AloConnection c;
+                ChunkType mt;
+                while ((mt = r.nextMini()) != -1)
+                {
+                    if (mt == MINI_CONN_OBJECT && r.size() == (long)sizeof(uint32_t))
+                        c.objectIndex = readU32(r);
+                    else if (mt == MINI_CONN_BONE && r.size() == (long)sizeof(uint32_t))
+                        c.boneIndex = readU32(r);
+                    // unknown / odd-sized mini auto-skipped by the next nextMini().
+                }
+                conns.push_back(c);
+            }
+            else if (r.size() < 0)
+            {
+                r.skip();   // unknown container (defensive; proxies are data leaves)
+            }
+            // 0x601 counts + 0x603/0x604 (data leaves) auto-skip.
+        }
+    }
 }
 
 AloModel LoadAloModel(IFile* file)
@@ -234,9 +352,17 @@ AloModel LoadAloModel(IFile* file)
             model.meshes.emplace_back();
             ReadMesh(r, model.meshes.back());
         }
+        else if (t == CHUNK_SKELETON)
+        {
+            ReadSkeleton(r, model.bones);          // rigid multi-part placement
+        }
+        else if (t == CHUNK_CONNECTIONS)
+        {
+            ReadConnections(r, model.connections); // object->bone bindings
+        }
         else if (r.size() < 0)
         {
-            // 0x200 skeleton / 0x1300 lights / 0x600 connections (containers).
+            // 0x1300 lights + any other unknown container.
             r.skip();
         }
         // Any unexpected root DATA chunk is auto-skipped by the next next().

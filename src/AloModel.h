@@ -5,12 +5,18 @@
 //
 // Pure-data leaf module: depends only on the editor's ChunkReader + IFile
 // (no engine / D3D coupling), so the skydome render core,
-// (game-object import) and all consume it. It decodes only the
-// static-mesh subset of the `.alo` chunk vocabulary -- skeleton (0x200),
-// lights (0x1300), connections/proxies (0x600) and any unrecognized chunk
-// are tolerantly skipped. Skinning / animation are out of scope; the raw
-// 144-byte on-disk vertex blob is cached verbatim so a later consumer can
-// recover bone / extra-UV / tangent fields without re-parsing.
+// (game-object import) and all consume it. It decodes the static-mesh +
+// material subset of the `.alo` chunk vocabulary, PLUS (for rigid
+// multi-part placement) the skeleton (0x200) bones + the connections (0x600)
+// object->bone bindings -- everything else (lights 0x1300, proxies/dazzles
+// 0x603/0x604, per-vertex skinning, any unrecognized chunk) is tolerantly
+// skipped. The skeleton/connection readers NEVER throw on an unexpected shape
+// (those chunks were skipped wholesale before, so every previously-loading
+// model must keep loading). The raw 144-byte on-disk vertex blob is cached
+// verbatim so a consumer can recover tangent / extra-UV / per-vertex-bone
+// fields without re-parsing. Building the runtime bone matrices + resolving
+// the parent/bone-index root-sentinel convention is the CONSUMER's job (it
+// needs D3D math + empirical verification), not this pure-data layer's.
 //
 // Format authority: the maintainer's own MIT exporter
 // DrKnickers/max2alamo-2026 (alamo_format/src/alo_build.cpp), cross-checked
@@ -56,9 +62,40 @@ struct AloMesh
     std::vector<AloSubMesh> subMeshes;
 };
 
+// One skeleton bone (chunk 0x202). places each rigid sub-mesh by its
+// bone's accumulated object-space transform. Stored VERBATIM from disk -- the
+// consumer builds the runtime matrix and resolves the root-sentinel convention:
+//   - `matrix` is the raw 4x3 transform in COLUMN-MAJOR order (3 columns of 4
+//     floats: col0 @ matrix[0..3], col1 @ [4..7], col2 @ [8..11]); it is
+//     PARENT-LOCAL (the consumer accumulates up the parent chain for object
+//     space). Identity = {1,0,0,0, 0,1,0,0, 0,0,1,0}.
+//   - `parentIndex` is the raw on-disk value (the root bone's sentinel -- e.g.
+//     0xFFFFFFFF -- is NOT normalized here; the docs note an "importer subtracts
+//     1" variant, so the consumer pins the convention against a known model).
+struct AloBone
+{
+    std::string name;                                       // 0x203
+    uint32_t    parentIndex   = 0;                          // raw; root sentinel not normalized
+    bool        visible       = true;
+    uint32_t    billboardMode = 0;                          // 0 for a 0x205 (no-billboard) bone
+    float       matrix[12]    = { 1,0,0,0, 0,1,0,0, 0,0,1,0 };  // 4x3 column-major, verbatim
+};
+
+// One object->bone connection (chunk 0x602): which bone places a given object.
+// `objectIndex` indexes the combined meshes++lights array; v1 imports meshes
+// only (lights skipped), so objectIndex == the mesh ordinal. `boneIndex` is the
+// raw on-disk value (same root-sentinel caveat as AloBone::parentIndex).
+struct AloConnection
+{
+    uint32_t objectIndex = 0;
+    uint32_t boneIndex   = 0;
+};
+
 struct AloModel
 {
-    std::vector<AloMesh> meshes;        // one per 0x400 chunk
+    std::vector<AloMesh>       meshes;       // one per 0x400 chunk
+    std::vector<AloBone>       bones;        // 0x202 under the 0x200 skeleton (empty if none)
+    std::vector<AloConnection> connections;  // 0x602 under the 0x600 connections (empty if none)
 };
 
 // On-disk vertex stride is a fixed 144-byte MASTER_VERTEX for EVERY vertex

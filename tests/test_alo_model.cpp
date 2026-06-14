@@ -119,6 +119,41 @@ static Bytes skeletonStub() {
 static Bytes connectionsStub() {
     Bytes c; u32le(c, 0); return container(0x0600, { leaf(0x0601, c) });
 }
+
+// real-skeleton + connection builders (vs the empty stubs above).
+// Bone data: 0x205 = parentIndex(4)+visible(4)+matrix[12](48) = 56 B;
+//            0x206 = + billboardMode(4) before the matrix = 60 B.
+static Bytes boneData(uint32_t parent, uint32_t visible, bool useBillboard, uint32_t billboard, const float m[12]) {
+    Bytes p; u32le(p, parent); u32le(p, visible);
+    if (useBillboard) u32le(p, billboard);
+    for (int i = 0; i < 12; ++i) f32le(p, m[i]);
+    return leaf(useBillboard ? 0x0206 : 0x0205, p);
+}
+static Bytes bone(const std::string& name, uint32_t parent, uint32_t visible,
+                  bool useBillboard, uint32_t billboard, const float m[12]) {
+    Bytes nm; cstr(nm, name);
+    return container(0x0202, { leaf(0x0203, nm), boneData(parent, visible, useBillboard, billboard, m) });
+}
+static Bytes skeleton(const std::vector<Bytes>& bones) {
+    Bytes info; u32le(info, (uint32_t)bones.size()); info.resize(128, 0);
+    std::vector<Bytes> kids; kids.push_back(leaf(0x0201, info));
+    for (const auto& b : bones) kids.push_back(b);
+    return container(0x0200, kids);
+}
+static Bytes connectionObj(uint32_t objIdx, uint32_t boneIdx) {
+    Bytes p, v;
+    u32le(v, objIdx);  mini(p, 2, v); v.clear();
+    u32le(v, boneIdx); mini(p, 3, v);
+    return leaf(0x0602, p);
+}
+static Bytes connections(const std::vector<Bytes>& objs) {
+    Bytes counts, v, v2;
+    u32le(v,  (uint32_t)objs.size()); mini(counts, 1, v);   // nConnections
+    u32le(v2, 0);                     mini(counts, 4, v2);  // nProxies
+    std::vector<Bytes> kids; kids.push_back(leaf(0x0601, counts));
+    for (const auto& o : objs) kids.push_back(o);
+    return container(0x0600, kids);
+}
 static Bytes assemble(const std::vector<Bytes>& roots) {
     Bytes b; for (const auto& r : roots) b.insert(b.end(), r.begin(), r.end()); return b;
 }
@@ -174,6 +209,17 @@ static int dumpRealAlo(const char* path) {
             }
         }
     }
+    std::printf("bones: %zu\n", m.bones.size());
+    for (size_t bi = 0; bi < m.bones.size(); ++bi) {
+        const AloBone& b = m.bones[bi];
+        // translation row = (col0[3], col1[3], col2[3]) = matrix[3], [7], [11].
+        std::printf("  bone[%zu] \"%s\" parent=%u vis=%d bb=%u T=(%g,%g,%g)\n",
+            bi, b.name.c_str(), b.parentIndex, b.visible ? 1 : 0, b.billboardMode,
+            b.matrix[3], b.matrix[7], b.matrix[11]);
+    }
+    std::printf("connections: %zu\n", m.connections.size());
+    for (size_t ci = 0; ci < m.connections.size(); ++ci)
+        std::printf("  conn[%zu] obj=%u -> bone=%u\n", ci, m.connections[ci].objectIndex, m.connections[ci].boneIndex);
     return 0;
 }
 
@@ -319,6 +365,56 @@ int main(int argc, char** argv) {
         bool threw = false;
         try { parseBytes(file); } catch (ReadException&) { threw = true; } catch (...) {}
         CHECK(threw, "truncated file -> ReadException");
+    }
+
+    // ---- skeleton (0x200) + connections (0x600) decode ---------------
+    std::printf("[lt7-skeleton]\n");
+    {
+        float rootM[12] = { 1,0,0,0, 0,1,0,0, 0,0,1,0 };   // identity
+        // Base bone: a 90deg rotation + a z translation, stored COLUMN-MAJOR:
+        //   col0 @ [0..3] = (0,1,0,0), col1 @ [4..7] = (-1,0,0,0), col2 @ [8..11] = (0,0,1,6.5)
+        float baseM[12] = { 0,1,0,0,  -1,0,0,0,  0,0,1,6.5f };
+        Bytes skel = skeleton({
+            bone("Root", 0xFFFFFFFFu, 1, /*billboard*/true,  7, rootM),   // 0x206 path
+            bone("Base", 0,           1, /*billboard*/false, 0, baseM),   // 0x205 path
+        });
+        Bytes conn = connections({ connectionObj(/*objIdx*/0, /*boneIdx*/1) });  // mesh 0 -> bone 1
+        Bytes mat  = material("MeshBumpColorize.fx", {});
+        Bytes geo  = geometry(4, 2, "alD3dVertNU2U3U3");
+        AloModel m = parseBytes(assemble({ skel, mesh("turret", { { mat, geo } }), conn }));
+
+        CHECK(m.bones.size() == 2, "2 bones decoded");
+        CHECK(m.bones.size() == 2 && m.bones[0].name == "Root", "bone0 name=Root");
+        CHECK(m.bones.size() == 2 && m.bones[0].parentIndex == 0xFFFFFFFFu, "bone0 root sentinel stored verbatim");
+        CHECK(m.bones.size() == 2 && m.bones[0].billboardMode == 7, "bone0 billboardMode from 0x206");
+        CHECK(m.bones.size() == 2 && m.bones[1].name == "Base", "bone1 name=Base");
+        CHECK(m.bones.size() == 2 && m.bones[1].parentIndex == 0, "bone1 parentIndex=0 (Root)");
+        CHECK(m.bones.size() == 2 && m.bones[1].billboardMode == 0, "bone1 billboardMode=0 (0x205, no billboard)");
+        CHECK(m.bones.size() == 2 && m.bones[1].matrix[0] == 0.0f && m.bones[1].matrix[1] == 1.0f, "bone1 matrix col0 verbatim (column-major)");
+        CHECK(m.bones.size() == 2 && m.bones[1].matrix[11] == 6.5f, "bone1 matrix translation z @ [11] verbatim");
+        CHECK(m.connections.size() == 1, "1 connection decoded");
+        CHECK(m.connections.size() == 1 && m.connections[0].objectIndex == 0, "connection objectIndex=0");
+        CHECK(m.connections.size() == 1 && m.connections[0].boneIndex == 1, "connection boneIndex=1 (Base)");
+        CHECK(m.meshes.size() == 1, "mesh still decoded alongside skeleton/connections");
+    }
+    std::printf("[lt7-tolerant]\n");
+    {
+        // (a) No skeleton / connections at all -> empty vectors, mesh still loads.
+        AloModel m = parseBytes(assemble({ mesh("plain", { { material("MeshGloss.fx", {}), geometry(4, 2, "alD3dVertNU2") } }) }));
+        CHECK(m.bones.empty() && m.connections.empty(), "no skeleton/connections -> empty vectors");
+        CHECK(m.meshes.size() == 1, "mesh loads without a skeleton");
+
+        // (b) A bone-data chunk of an UNEXPECTED size must be TOLERATED (keep
+        // identity defaults), never throw -- these chunks loaded before.
+        Bytes nm; cstr(nm, "Weird");
+        Bytes badData; u32le(badData, 5); badData.resize(40, 0);   // 40 B: neither 56 nor 60
+        Bytes badSkel = container(0x0200, { container(0x0202, { leaf(0x0203, nm), leaf(0x0206, badData) }) });
+        bool threw = false; AloModel m2;
+        try { m2 = parseBytes(assemble({ badSkel, mesh("t", { { material("X.fx", {}), geometry(4, 2, "alD3dVertN") } }) })); }
+        catch (...) { threw = true; }
+        CHECK(!threw, "wrong-size bone data tolerated (no throw)");
+        CHECK(!threw && m2.bones.size() == 1 && m2.bones[0].name == "Weird", "tolerant bone still recorded (name)");
+        CHECK(!threw && m2.bones.size() == 1 && m2.bones[0].parentIndex == 0 && m2.bones[0].matrix[0] == 1.0f, "tolerant bone keeps identity defaults");
     }
 
     std::printf("\n=== AloModel: %s ===\n", g_failed == 0 ? "ALL PASS" : "FAILURES");
