@@ -17,9 +17,44 @@ Conventions:
 ## Changelog
 
 
+### imported game objects — render correctness: hidden meshes, collision, transparency, normals + a selection box
+
+*2026-06-14 · [`713d418`](https://github.com/DrKnickers/particle-editor/commit/713d418) · #174*
+
+Imported game objects now render the way the game shows them. Meshes flagged **hidden** in the
+`.alo` no longer appear — a capital ship's hidden shield/engine/collision meshes were being drawn,
+and the hidden shield (forced opaque) **warped the view like a mirror**. A *visible* collision mesh
+renders as flat blue (its real `MeshCollision.fx`). **Transparent** sub-meshes (shields, additive
+engine glows, glass) blend correctly via a faithful opaque→transparent pass instead of painting
+opaque. Objects are no longer **inside-out** (the editor renders right-handed, so the `.alo` needs
+`CULL_CW`). Selecting an object draws an **amber bounding box**, and clicking inside that exact box
+selects it (the box == the clickable region); clicking empty space deselects + orbits. Picking an
+object the editor can't fully render now reports it failed instead of silently showing nothing. A
+latent crash — loading a mod whose `MegaFiles.xml` carries the standard `<Info>` element — is fixed.
+
+**How we tackled it.** The `.alo` decoder ([`src/AloModel.cpp`](src/AloModel.cpp)) now reads the
+per-mesh `0x402` hidden/collision flags (cross-verified against the `max2alamo` writer + the
+`alo-viewer` reader), and a new `AloClassifyShader` maps each game shader to its render phase/blend
+(opaque / additive / alpha / heat / shadow / occluded), grounded in the FoC shader corpus.
+`Engine::RenderReferenceObject` ([`src/engine.cpp`](src/engine.cpp)) draws two phases reusing the
+skydome blend pattern; the selection box + ray-vs-AABB pick share `Engine::ReferenceObjectWorld`.
+`FileManager` ([`src/managers.cpp`](src/managers.cpp)) now tolerates non-`<File>` `MegaFiles.xml`
+children. A headless `--capture` self-verification path
+([`tasks/capture-refobj.ps1`](tasks/capture-refobj.ps1)) was built to confirm the render — and it
+flushed out the `MegaFiles.xml` crash.
+
+**Issues encountered and resolutions.** The faithful **Heat** phase (a two-stage scene-composite) is
+deferred to its own design pass (rare on reference objects; folds into); a visible heat mesh is
+logged + skipped. Two multi-agent reviews (the s46 render work, then the capture/load hardening) drove
+the fixes — including a scoped process-kill in the capture script (), dropping an over-built
+load-guard layer, and a Release `/WX` follow-up (). The normals/selection-box/drag *interaction*
+remains a user live-test (mouse + eye); the gizmo gets a dedicated design pass.
+
+---
+
 ### imported game objects + unit grid — drop a real game/mod object in the preview as a scale reference
 
-*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #174*
+*2026-06-14 · [`713d418`](https://github.com/DrKnickers/particle-editor/commit/713d418) · #174*
 
 You can now place a real game/mod object in the preview to size effects against. A new toolbar
 **Object** picker (beside Background) lists every in-game object by Name — enumerated live from the
