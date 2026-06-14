@@ -19,7 +19,7 @@ Conventions:
 
 ### Reference-object fixes — skinned units render, mod Core content loads, a gizmo Reset, grid moves to the Ground popup
 
-*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-14 · [`396464d`](https://github.com/DrKnickers/particle-editor/commit/396464d) · #180*
 
 Four fixes to the imported reference-object feature. **Skinned units now render** — AT-ST, the
 Gallofree HTT, infantry, and the like were invisible (their animated bodies were skipped, leaving only
