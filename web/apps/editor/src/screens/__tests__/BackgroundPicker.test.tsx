@@ -12,6 +12,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { BackgroundPicker } from "../BackgroundPicker";
+import { MockBridge } from "@/bridge/mock";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 type RequestFn = (req: { kind: string; params?: Record<string, unknown> }) => Promise<unknown>;
@@ -112,5 +113,38 @@ describe("BackgroundPicker — custom-slot file picker chain", () => {
     expect(calls).toContain("file/open");
     expect(calls).not.toContain("engine/set/skydome-custom-path");
     expect(calls).not.toContain("engine/set/skydome-slot");
+  });
+});
+
+// The game-dome section: Names enumerate from skydome-list per context,
+// and choosing one dispatches skydome-environment.
+describe("BackgroundPicker — game dome", () => {
+  it("populates the primary selector from skydome-list and dispatches on change", async () => {
+    const bridge = new MockBridge();
+    render(<BackgroundPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+
+    // Default context is Space → the mock returns Stars_* primaries.
+    const primary = await screen.findByRole("combobox", { name: "Primary dome" });
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Stars_Low" })).toBeInTheDocument();
+    });
+
+    fireEvent.change(primary, { target: { value: "Stars_Low" } });
+    await waitFor(async () => {
+      const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
+      expect(snap.skydomePrimaryName).toBe("Stars_Low");
+      expect(snap.skydomeContext).toBe("space");
+    });
+  });
+
+  it("switching context to Land re-enumerates the lists", async () => {
+    const bridge = new MockBridge();
+    render(<BackgroundPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("combobox", { name: "Primary dome" });
+
+    fireEvent.click(screen.getByRole("button", { name: "land" }));
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Day_Blue_Sky" })).toBeInTheDocument();
+    });
   });
 });

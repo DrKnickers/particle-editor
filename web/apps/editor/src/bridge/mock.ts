@@ -353,6 +353,15 @@ export class MockBridge implements Bridge {
         return {};
       }
 
+      // game-dome environment: store context + the two chosen Names.
+      case "engine/set/skydome-environment":
+        this.patchAndBroadcast({
+          skydomeContext: req.params.context,
+          skydomePrimaryName: req.params.primaryName,
+          skydomeSecondaryName: req.params.secondaryName,
+        });
+        return {};
+
       case "engine/set/background":
         this.patchAndBroadcast({ background: req.params.rgb });
         return {};
@@ -513,6 +522,23 @@ export class MockBridge implements Bridge {
         const paths = state.skydomeCustomPaths;
         if (idx < 0 || idx >= paths.length) return true;
         return (paths[idx] ?? "") === "";
+      }
+
+      // Enumerate selectable game-dome Names. Browser mode has no disk
+      // to read *Skydomes.xml from, so return a small canned set per context
+      // (real Names from vanilla FoC) to exercise the picker dispatch surface.
+      case "engine/query/skydome-list": {
+        const lists = {
+          space: {
+            primary: ["Stars_Low", "Stars_Medium", "Stars_High", "Stars_Cinematic"],
+            secondary: ["Star_Backdrop_Blue", "Star_Backdrop_Green", "Nebula_Field_Blue"],
+          },
+          land: {
+            primary: ["Day_Blue_Sky", "Day_Clear_Sky", "Day_Storm_Sky", "Night_Stars"],
+            secondary: ["Planet_Rings00", "Horizon_Haze00"],
+          },
+        };
+        return req.params.context === "land" ? lists.land : lists.space;
       }
 
       case "engine/query/bloom-available":

@@ -1,24 +1,24 @@
-// BackgroundPicker — right-side slide-in panel that replaces the legacy
-// `SkydomePickerProc` modal. Picks the engine background:
-//   - Slot 0: solid colour (drives `engine/set/background`)
-//   - Slots 1-8: bundled skydome textures (drives `engine/set/skydome-slot`)
-//   - Slots 9-11: user-supplied custom skydomes. An empty-slot click
-//     chains the native picker (`file/open` with `filter: "skydome"`,
-//     defaulting to `*.dds;*.tga`) through
-//     `engine/set/skydome-custom-path` + `engine/set/skydome-slot`.
-//     Populated slots just re-activate the existing path.
+// BackgroundPicker — right-side panel that picks the engine background.
 //
-// State subscription:
-//   - One-shot `engine/state/snapshot` at mount for the initial DTO.
-//   - Live `engine/state/changed` subscription so external mutations
-//     (e.g. Playwright driving the bridge, devtools poking
-//     `window.bridge`) reflect immediately.
+// Two ways to set the background:
+//   1. Game dome — a real in-game/in-mod skydome chosen by GameObject
+//      Name for a battle context (Land/Space), with an independent primary and
+//      secondary dome. Names are enumerated live from the game/mod's
+//      *Skydomes.xml via `engine/query/skydome-list`; selection drives
+//      `engine/set/skydome-environment`. This is the faithful path (the editor
+//      loads the real .alo + runs each sub-mesh's own game shader).
+//   2. Simple background (fallback when no game dome is selected):
+//        - Solid colour (slot 0)        → `engine/set/background`
+//        - Custom skydome texture (9-11) → native picker → `skydome-custom-path`
+//      Picking a simple background clears the game-dome selection, and vice
+//      versa, so the two are mutually exclusive from the user's view.
 //
-// Browser-mode only: the bundled-tile gradients are static CSS swatches,
-// not real skydome thumbnails. The native host will eventually serve
-// real previews; until then this is enough to validate selection state +
-// dispatch surface against the schema. Custom-slot clicks resolve to
-// `{ ok: false }` in MockBridge (no native picker in the browser).
+// State: one-shot `engine/state/snapshot` at mount + a live
+// `engine/state/changed` subscription (so external bridge mutations reflect).
+//
+// Browser/mock mode: `skydome-list` returns a small canned set and the custom
+// native picker resolves `{ ok: false }` — enough to validate selection state +
+// dispatch surface against the schema without a real install.
 
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -37,25 +37,8 @@ type BodyProps = {
   bridge: Bridge;
 };
 
-type BundledSlot = {
-  readonly slot: number;
-  readonly name: string;
-  readonly gradient: string;
-  readonly swatch: string;
-};
-
-export const BUNDLED_SLOTS: readonly BundledSlot[] = [
-  { slot: 1, name: "Storm",          gradient: "linear-gradient(180deg, #2a3340 0%, #4a5568 100%)", swatch: "#2a3340" },
-  { slot: 2, name: "Murky Clouds",   gradient: "linear-gradient(180deg, #5b6878 0%, #7a8696 100%)", swatch: "#5b6878" },
-  { slot: 3, name: "Smog Clouds",    gradient: "linear-gradient(180deg, #8a8474 0%, #a39a82 100%)", swatch: "#8a8474" },
-  { slot: 4, name: "Blue Horizon",   gradient: "linear-gradient(180deg, #5da3d4 0%, #9bc4e0 100%)", swatch: "#5da3d4" },
-  { slot: 5, name: "Blue Sky",       gradient: "linear-gradient(180deg, #4a90e2 0%, #87cefa 100%)", swatch: "#4a90e2" },
-  { slot: 6, name: "Orange Horizon", gradient: "linear-gradient(180deg, #d97a3a 0%, #f4a261 100%)", swatch: "#d97a3a" },
-  { slot: 7, name: "Orange Sky",     gradient: "linear-gradient(180deg, #e07a3a 0%, #ffc56e 100%)", swatch: "#e07a3a" },
-  { slot: 8, name: "Volcanic Storm", gradient: "linear-gradient(180deg, #2c1810 0%, #6b2c1f 100%)", swatch: "#2c1810" },
-] as const;
-
 const CUSTOM_SLOTS: readonly number[] = [9, 10, 11];
+const NONE = ""; // empty Name = no dome in that slot
 
 /** Pull just the file basename out of an absolute path. Handles both
  *  Windows-style and POSIX-style separators since the engine doesn't
@@ -68,14 +51,14 @@ function basename(path: string): string {
 }
 
 /**
- * BackgroundPickerBody — the slot-grid + colour-picker chain markup that
- * used to live inside <ToolPanel>. Extracted so both the legacy
- * default-export wrapper and the new BackgroundDropdown popover can
- * mount the same content. No onClose: the host (popover or ToolPanel)
- * handles its own dismissal.
+ * BackgroundPickerBody — the picker content (game-dome section + simple
+ * background fallback). Extracted so both the legacy default-export wrapper
+ * and the BackgroundDropdown popover mount the same markup.
  */
 export function BackgroundPickerBody({ bridge }: BodyProps) {
   const [snapshot, setSnapshot] = useState<EngineStateDto | null>(null);
+  const [primaryNames, setPrimaryNames] = useState<string[]>([]);
+  const [secondaryNames, setSecondaryNames] = useState<string[]>([]);
   const colorInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -93,14 +76,71 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
     };
   }, [bridge]);
 
+  const context = snapshot?.skydomeContext ?? "space";
+  const primaryName = snapshot?.skydomePrimaryName ?? NONE;
+  const secondaryName = snapshot?.skydomeSecondaryName ?? NONE;
   const selectedSlot = snapshot?.skydomeSlot ?? 0;
   const backgroundHex = snapshot ? colorrefToHex(snapshot.background) : "#000000";
   const customPaths = snapshot?.skydomeCustomPaths ?? ["", "", ""];
 
+  // A game dome is active when either slot carries a Name; that takes engine
+  // render precedence over the simple-background slot below.
+  const gameDomeActive = primaryName !== NONE || secondaryName !== NONE;
+
+  // (Re)enumerate the selectable Names whenever the battle context changes.
+  useEffect(() => {
+    let cancelled = false;
+    bridge
+      .request({ kind: "engine/query/skydome-list", params: { context } })
+      .then((r) => {
+        if (cancelled) return;
+        setPrimaryNames(r.primary ?? []);
+        setSecondaryNames(r.secondary ?? []);
+      })
+      .catch((err) => console.warn("[BackgroundPicker] skydome-list failed:", err));
+    return () => { cancelled = true; };
+  }, [bridge, context]);
+
+  const setEnvironment = (
+    ctx: "land" | "space",
+    primary: string,
+    secondary: string,
+  ) => {
+    void bridge.request({
+      kind: "engine/set/skydome-environment",
+      params: { context: ctx, primaryName: primary, secondaryName: secondary },
+    });
+  };
+
+  const handleContextChange = (ctx: "land" | "space") => {
+    if (ctx === context) return;
+    // Switching context invalidates the chosen Names (different lists), so clear
+    // them; the enumeration effect repopulates the dropdowns for the new context.
+    setEnvironment(ctx, NONE, NONE);
+  };
+
+  const handlePrimaryChange = (name: string) =>
+    setEnvironment(context, name, secondaryName);
+
+  const handleSecondaryChange = (name: string) =>
+    setEnvironment(context, primaryName, name);
+
+  // Always include the current selection as an option, even if it's not in the
+  // freshly-enumerated list yet (async load) or at all (a persisted/mod dome
+  // absent from this context's list) — otherwise the controlled <select> would
+  // silently fall back to "None" and misreport the active dome.
+  const withCurrent = (name: string, list: string[]) =>
+    name && !list.includes(name) ? [name, ...list] : list;
+  const primaryOptions = withCurrent(primaryName, primaryNames);
+  const secondaryOptions = withCurrent(secondaryName, secondaryNames);
+
+  // --- simple-background fallback handlers (also clear the game dome) ---
+  const clearGameDome = () => {
+    if (gameDomeActive) setEnvironment(context, NONE, NONE);
+  };
+
   const handleSolidColorClick = () => {
-    // Switch the engine to the solid-colour slot, then trigger the
-    // native colour picker. We *also* switch to slot 0 here so a fresh
-    // open from any other slot lands on solid-colour as the user expects.
+    clearGameDome();
     void bridge.request({ kind: "engine/set/skydome-slot", params: { slot: 0 } });
     colorInputRef.current?.click();
   };
@@ -112,18 +152,9 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
     });
   };
 
-  const handleBundledClick = (slot: number) => {
-    void bridge.request({ kind: "engine/set/skydome-slot", params: { slot } });
-  };
-
   const handleCustomClick = (slot: number, isEmpty: boolean) => {
+    clearGameDome();
     if (isEmpty) {
-      // Chain native picker → write the chosen path into the slot →
-      // activate the slot. Each step awaits the previous; abort on
-      // cancellation or failure (MockBridge returns ok:false in browser
-      // mode, native returns ok:false on user-cancel). `filter: "skydome"`
-      // pops the dialog with `*.dds;*.tga` as the default filter so the
-      // user isn't fighting an `.alo`-by-default dropdown.
       void (async () => {
         const r = await bridge.request({
           kind: "file/open",
@@ -141,79 +172,108 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
     void bridge.request({ kind: "engine/set/skydome-slot", params: { slot } });
   };
 
+  const simpleSolidSelected = !gameDomeActive && selectedSlot === 0;
+
   return (
-    <div className="flex flex-col gap-3">
-        {/* Solid-colour row */}
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={handleSolidColorClick}
-            className={`relative col-span-3 flex h-16 items-center justify-center rounded-md border-2 transition ${
-              selectedSlot === 0 ? "border-accent" : "border-border hover:border-border-2"
-            }`}
-            style={{ backgroundColor: backgroundHex }}
-            aria-label="Solid colour"
-            aria-pressed={selectedSlot === 0}
-          >
-            <span className="rounded bg-bg/70 px-2 py-0.5 text-xs text-text backdrop-blur-sm">
-              Solid colour
-            </span>
-            {selectedSlot === 0 && (
-              <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-xs text-white">
-                ✓
-              </span>
-            )}
-          </button>
-
-          {/* Hidden native colour input. Clicking the solid-colour tile
-              triggers it programmatically. */}
-          <input
-            ref={colorInputRef}
-            type="color"
-            value={backgroundHex}
-            onChange={(e) => handleColorChange(e.target.value)}
-            className="sr-only pointer-events-none absolute"
-            tabIndex={-1}
-            aria-hidden="true"
-          />
-        </div>
-
-        {/* Bundled slots 1-8 */}
-        <div className="grid grid-cols-3 gap-2">
-          {BUNDLED_SLOTS.map(({ slot, name, gradient }) => {
-            const selected = selectedSlot === slot;
-            return (
+    <div className="flex flex-col gap-4">
+      {/* ── Game dome (real .alo skydome) ────────────────────────────── */}
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium uppercase tracking-wide text-text-3">
+            Game dome
+          </span>
+          {/* Land / Space context toggle */}
+          <div role="group" aria-label="Battle context" className="flex rounded-md border border-border">
+            {(["space", "land"] as const).map((ctx) => (
               <button
-                key={slot}
+                key={ctx}
                 type="button"
-                onClick={() => handleBundledClick(slot)}
-                className={`relative aspect-square overflow-hidden rounded-md border-2 transition ${
-                  selected ? "border-accent" : "border-border hover:border-border-2"
+                onClick={() => handleContextChange(ctx)}
+                aria-pressed={context === ctx}
+                className={`px-2 py-0.5 text-xs capitalize transition first:rounded-l-md last:rounded-r-md ${
+                  context === ctx ? "bg-accent text-white" : "text-text-2 hover:bg-bg-2"
                 }`}
-                aria-label={name}
-                aria-pressed={selected}
               >
-                <div className="absolute inset-0" style={{ background: gradient }} />
-                <span className="absolute inset-x-0 bottom-0 truncate bg-bg/80 px-1 py-0.5 text-center text-xs text-text backdrop-blur-sm">
-                  {name}
-                </span>
-                {selected && (
-                  <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-xs text-white">
-                    ✓
-                  </span>
-                )}
+                {ctx}
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
 
-        {/* Custom slots 9-11 */}
+        <label className="flex flex-col gap-1 text-xs text-text-2">
+          Primary
+          <select
+            value={primaryName}
+            onChange={(e) => handlePrimaryChange(e.target.value)}
+            aria-label="Primary dome"
+            className="rounded-md border border-border bg-bg-2 px-2 py-1 text-sm text-text"
+          >
+            <option value={NONE}>None</option>
+            {primaryOptions.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs text-text-2">
+          Secondary
+          <select
+            value={secondaryName}
+            onChange={(e) => handleSecondaryChange(e.target.value)}
+            aria-label="Secondary dome"
+            className="rounded-md border border-border bg-bg-2 px-2 py-1 text-sm text-text"
+          >
+            <option value={NONE}>None</option>
+            {secondaryOptions.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      {/* ── Simple background (fallback when no game dome) ────────────── */}
+      <section className="flex flex-col gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-text-3">
+          Simple background
+        </span>
+
+        {/* Solid colour */}
+        <button
+          type="button"
+          onClick={handleSolidColorClick}
+          className={`relative flex h-14 items-center justify-center rounded-md border-2 transition ${
+            simpleSolidSelected ? "border-accent" : "border-border hover:border-border-2"
+          }`}
+          style={{ backgroundColor: backgroundHex }}
+          aria-label="Solid colour"
+          aria-pressed={simpleSolidSelected}
+        >
+          <span className="rounded bg-bg/70 px-2 py-0.5 text-xs text-text backdrop-blur-sm">
+            Solid colour
+          </span>
+          {simpleSolidSelected && (
+            <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-xs text-white">
+              ✓
+            </span>
+          )}
+        </button>
+        <input
+          ref={colorInputRef}
+          type="color"
+          value={backgroundHex}
+          onChange={(e) => handleColorChange(e.target.value)}
+          className="sr-only pointer-events-none absolute"
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+
+        {/* Custom skydome textures (slots 9-11) */}
         <div className="grid grid-cols-3 gap-2">
           {CUSTOM_SLOTS.map((slot) => {
             const idx = slot - 9;
             const path = customPaths[idx] ?? "";
             const isEmpty = path === "";
-            const selected = selectedSlot === slot;
+            const selected = !gameDomeActive && selectedSlot === slot;
             const label = isEmpty ? "Browse..." : basename(path);
             return (
               <button
@@ -255,17 +315,14 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
             );
           })}
         </div>
+      </section>
     </div>
   );
 }
 
 /**
- * BackgroundPicker — thin <ToolPanel> wrapper around BackgroundPickerBody.
- * Kept as the default export so the existing vitest spec
- * (BackgroundPicker.test.tsx) and any remaining slide-in callsite still
- * compile. The new toolbar dropdown (BackgroundDropdown) mounts
- * BackgroundPickerBody directly inside a Radix Popover and never reaches
- * this wrapper.
+ * BackgroundPicker — thin <ToolPanel> wrapper around BackgroundPickerBody,
+ * kept as the default export for the existing slide-in callsite + spec.
  */
 export function BackgroundPicker({ bridge, onClose }: Props) {
   return (

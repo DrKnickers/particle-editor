@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { OccludingPopover } from "@/components/OccludingPopover";
-import { BackgroundPickerBody, BUNDLED_SLOTS } from "@/screens/BackgroundPicker";
+import { BackgroundPickerBody } from "@/screens/BackgroundPicker";
 import { colorrefToHex } from "@/lib/colorref";
 
 type Props = { bridge: Bridge };
@@ -29,11 +29,14 @@ export function BackgroundDropdown({ bridge }: Props) {
   }, [bridge]);
 
   const slot = snap?.skydomeSlot ?? 0;
-  const bundled = BUNDLED_SLOTS.find((s) => s.slot === slot);
-  const swatchStyle: React.CSSProperties = slot === 0
-    ? { backgroundColor: snap ? colorrefToHex(snap.background) : "#000000" }
-    : bundled
-      ? { background: bundled.gradient }
+  // a game dome (by Name) takes render precedence; show a dome indicator.
+  const gameDome =
+    (snap?.skydomePrimaryName ?? "") !== "" ||
+    (snap?.skydomeSecondaryName ?? "") !== "";
+  const swatchStyle: React.CSSProperties = gameDome
+    ? { background: "linear-gradient(180deg, #2a3a5a 0%, #141c2b 100%)" }
+    : slot === 0
+      ? { backgroundColor: snap ? colorrefToHex(snap.background) : "#000000" }
       : { backgroundColor: "var(--bg-3)" }; // custom slot — no thumbnail yet
 
   return (

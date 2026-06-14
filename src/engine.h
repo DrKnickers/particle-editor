@@ -6,6 +6,8 @@
 #include "managers.h"
 #include "ParticleSystem.h"
 #include "utils.h"
+#include "SkydomeEnvironment.h"   // SkydomeContext
+#include "SkydomeMesh.h"          // game-faithful dome render core
 #include <memory>
 
 namespace host { class AlphaCompositor; }
@@ -485,6 +487,20 @@ public:
 	// Slot 0 = Off, slots 1-8 = bundled scenes, slots 9-11 = user-supplied paths.
 	int  GetSkydomeSlot() const { return m_skydomeIndex; }
 	bool SetSkydomeSlot(int index);
+
+	// Select real game/mod skydomes by GameObject Name for the given
+	// battle context. An empty name clears that slot. Loads + resolves both
+	// meshes immediately when the device is up (no-op resolve otherwise).
+	void SetSkydomeEnvironment(SkydomeContext context,
+	                           const std::string& primaryName,
+	                           const std::string& secondaryName);
+	SkydomeContext     GetSkydomeContext()       const { return m_skydomeContext; }
+	const std::string& GetSkydomePrimaryName()   const { return m_skydomePrimaryName; }
+	const std::string& GetSkydomeSecondaryName() const { return m_skydomeSecondaryName; }
+	// Enumerate selectable dome Names for a battle context (primary + secondary).
+	void EnumerateSkydomeNames(SkydomeContext context,
+	                           std::vector<std::string>& outPrimary,
+	                           std::vector<std::string>& outSecondary) const;
 	const std::wstring& GetSkydomeCustomPath(int slot) const;
 	bool SetSkydomeCustomPath(int slot, const std::wstring& path);
 	bool IsSkydomeSlotEmpty(int slot) const;
@@ -567,6 +583,17 @@ private:
 	//: draw the skydome sphere, camera-locked, depth off, cull CW.
 	// Called from Render() when slot != Off and effect/texture are ready.
 	void				RenderSkydome();
+
+	// Game-faithful skydome. Load the real primary/secondary .alo dome
+	// meshes for the current selection and render each sub-mesh with its own
+	// named game shader 1:1 (Skydome.fx / MeshGloss.fxo / MeshAdditive.fx, ...).
+	// RebuildSkydomeMeshes re-drives Load->Resolve->CreateBuffers for both slots
+	// from m_skydome*Name (called on selection change + mod-switch). RenderSkydomes
+	// replaces the single RenderSkydome() call site: it draws the game domes when
+	// present, else falls back to the simple-background sphere.
+	void				RebuildSkydomeMeshes();
+	void				RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world);
+	void				RenderSkydomes();
 
 	//: compile IDR_SHADER_GROUND_LIT from RCDATA, cache parameter
 	// handles, and build the tangent-space ground vertex declaration.
@@ -708,6 +735,16 @@ private:
 	IDirect3DTexture9*       m_pSkydomeTexture;
 	int                      m_skydomeIndex;
 	std::wstring             m_skydomeCustomSlotPaths[kSkydomeSlotCount - kSkydomeFirstCustomSlot];
+
+	// Game-faithful dome meshes (additive to the simple-background state
+	// above; m_skydomeIndex stays the frozen legacy/primary scalar). When a real
+	// dome is selected by Name these hold the decoded .alo + per-sub-mesh shaders;
+	// otherwise empty and the simple-background sphere renders instead.
+	SkydomeContext           m_skydomeContext = SkydomeContext::Space;
+	std::string              m_skydomePrimaryName;     // "" = none
+	std::string              m_skydomeSecondaryName;   // "" = none
+	SkydomeMesh              m_skydomePrimaryMesh;
+	SkydomeMesh              m_skydomeSecondaryMesh;
 
 	//: bump-mapped ground lighting. Effect + tangent-space vertex decl +
 	// normal-map state, mirroring the skydome effect lifecycle. Faithful port

@@ -2072,6 +2072,23 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         && static_cast<int>(dw) < Engine::kSkydomeSlotCount)
                         engine->SetSkydomeSlot(static_cast<int>(dw));
 
+                    // Game-dome environment: battle context + the two chosen
+                    // GameObject Names. This restore block runs after the device is
+                    // up, so SetSkydomeEnvironment resolves + uploads the meshes now
+                    // (the only place the new UI re-resolves a name-based selection).
+                    {
+                        std::wstring primW = readSz(L"SkydomePrimaryName");
+                        std::wstring secW  = readSz(L"SkydomeSecondaryName");
+                        if (!primW.empty() || !secW.empty())
+                        {
+                            DWORD ctxDw = 1;   // default Space
+                            readDword(L"SkydomeContext", ctxDw);
+                            engine->SetSkydomeEnvironment(
+                                ctxDw == 0 ? SkydomeContext::Land : SkydomeContext::Space,
+                                WideToAnsi(primW), WideToAnsi(secW));
+                        }
+                    }
+
                     // [lighting-restore, session 12] Restore the persisted
                     // lighting (sun / fill1 / fill2 angles + colours +
                     // intensities, ambient, shadow) so the new-UI viewport

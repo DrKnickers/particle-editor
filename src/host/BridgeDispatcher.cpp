@@ -355,6 +355,36 @@ static void PersistSkydomeCustomPath(int slot, const std::wstring& path)
     }
 }
 
+// Persist the game-dome environment selection (context + the two chosen
+// GameObject Names) under the same hive. New REG keys (legacy has no equivalent);
+// the new-UI startup restore reads them back. Empty name => delete the value.
+static void PersistSkydomeEnvironment(int context, const std::wstring& primaryName,
+                                      const std::wstring& secondaryName)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
+                        &hKey, nullptr) != ERROR_SUCCESS)
+        return;
+    DWORD ctx = static_cast<DWORD>(context);
+    RegSetValueExW(hKey, L"SkydomeContext", 0, REG_DWORD,
+                   reinterpret_cast<const BYTE*>(&ctx), sizeof(ctx));
+    const struct { const wchar_t* name; const std::wstring& val; } kv[] = {
+        { L"SkydomePrimaryName",   primaryName   },
+        { L"SkydomeSecondaryName", secondaryName },
+    };
+    for (const auto& e : kv)
+    {
+        if (e.val.empty())
+            RegDeleteValueW(hKey, e.name);
+        else
+            RegSetValueExW(hKey, e.name, 0, REG_SZ,
+                           reinterpret_cast<const BYTE*>(e.val.c_str()),
+                           static_cast<DWORD>((e.val.size() + 1) * sizeof(wchar_t)));
+    }
+    RegCloseKey(hKey);
+}
+
 // Persist the solid-colour background (same BackgroundColor REG_DWORD as
 // legacy WriteBackgroundColor, src/main.cpp:3230). The solid-colour option lives
 // in the same Background picker as the skydome and had the identical new-UI gap.
@@ -702,6 +732,10 @@ json BuildEngineStateSnapshot(Engine* engine,
         // Skydome
         {"skydomeSlot",           engine->GetSkydomeSlot()},
         {"skydomeCustomPaths",    skyPaths},
+        // game-dome environment selection
+        {"skydomeContext",        engine->GetSkydomeContext() == SkydomeContext::Land ? "land" : "space"},
+        {"skydomePrimaryName",    engine->GetSkydomePrimaryName()},
+        {"skydomeSecondaryName",  engine->GetSkydomeSecondaryName()},
 
         // Background (COLORREF; low byte = blue)
         {"background",            static_cast<unsigned int>(engine->GetBackground())},
@@ -1406,6 +1440,22 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         EmitEngineStateChanged();
         return res;
     }
+    if (kind == "engine/set/skydome-environment")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        std::string ctxStr = params.value("context", std::string{"space"});
+        std::string prim   = params.value("primaryName", std::string{});
+        std::string sec    = params.value("secondaryName", std::string{});
+        SkydomeContext ctx = (ctxStr == "land") ? SkydomeContext::Land : SkydomeContext::Space;
+        m_engine->SetSkydomeEnvironment(ctx, prim, sec);
+        if (!(m_testHost && !m_settingsLive))
+            PersistSkydomeEnvironment(ctx == SkydomeContext::Land ? 0 : 1,
+                                      Utf8ToWide(prim), Utf8ToWide(sec));
+        sendOk(json::object());
+        markDirty();
+        EmitEngineStateChanged();
+        return res;
+    }
     if (kind == "engine/set/background")
     {
         if (!requireEngine(kind.c_str())) return res;
@@ -1720,6 +1770,19 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     {
         if (!requireEngine(kind.c_str())) return res;
         sendOk(json(m_engine->IsGroundSlotEmpty(params.value("slot", -1))));
+        return res;
+    }
+    if (kind == "engine/query/skydome-list")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        std::string ctxStr = params.value("context", std::string{"space"});
+        SkydomeContext ctx = (ctxStr == "land") ? SkydomeContext::Land : SkydomeContext::Space;
+        std::vector<std::string> prim, sec;
+        m_engine->EnumerateSkydomeNames(ctx, prim, sec);
+        json out;
+        out["primary"]   = prim;
+        out["secondary"] = sec;
+        sendOk(out);
         return res;
     }
     if (kind == "engine/query/skydome-slot-empty")

@@ -189,6 +189,7 @@
     <ClInclude Include="Resources\resource.en.h" />
     <ClInclude Include="Resources\resource.h" />
     <ClInclude Include="SkydomeEnvironment.h" />
+    <ClInclude Include="SkydomeMesh.h" />
     <ClInclude Include="SphericalHarmonics.h" />
     <ClInclude Include="types.h" />
     <ClInclude Include="UI\TexturePalette.h" />
@@ -228,6 +229,7 @@
     <ClCompile Include="SpawnerDriver.cpp" />
     <ClCompile Include="UndoStack.cpp" />
     <ClCompile Include="SkydomeEnvironment.cpp" />
+    <ClCompile Include="SkydomeMesh.cpp" />
     <ClCompile Include="SphericalHarmonics.cpp" />
     <ClCompile Include="UI\ColorButton.cpp" />
     <ClCompile Include="UI\CurveEditor.cpp" />

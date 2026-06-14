@@ -218,6 +218,36 @@ describe("MockBridge contract", () => {
     expect(v).toBe(true);
   });
 
+  // game-dome environment: setter mutates the snapshot, query enumerates.
+  it("engine/set/skydome-environment patches context + the two Names and fires state/changed", async () => {
+    const b = new MockBridge();
+    let last: EngineStateDto | null = null;
+    const off = b.on("engine/state/changed", (e) => { last = e.payload; });
+    await b.request({
+      kind: "engine/set/skydome-environment",
+      params: { context: "land", primaryName: "Day_Blue_Sky", secondaryName: "Planet_Rings00" },
+    });
+    expect(last).not.toBeNull();
+    expect(last!.skydomeContext).toBe("land");
+    expect(last!.skydomePrimaryName).toBe("Day_Blue_Sky");
+    expect(last!.skydomeSecondaryName).toBe("Planet_Rings00");
+    const fresh = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(fresh.skydomePrimaryName).toBe("Day_Blue_Sky");
+    off();
+  });
+
+  it("engine/query/skydome-list returns primary + secondary Name lists per context", async () => {
+    const b = new MockBridge();
+    const space = await b.request({ kind: "engine/query/skydome-list", params: { context: "space" } });
+    expect(Array.isArray(space.primary)).toBe(true);
+    expect(Array.isArray(space.secondary)).toBe(true);
+    expect(space.primary).toContain("Stars_Low");
+    const land = await b.request({ kind: "engine/query/skydome-list", params: { context: "land" } });
+    expect(land.primary).toContain("Day_Blue_Sky");
+    // The two contexts enumerate different lists.
+    expect(land.primary).not.toEqual(space.primary);
+  });
+
   it("engine/action/step-frames resolves with an empty body in browser mode", async () => {
     const b = new MockBridge();
     // Pause first; the request is a response-only no-op either way, but

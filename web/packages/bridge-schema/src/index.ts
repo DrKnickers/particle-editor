@@ -205,9 +205,15 @@ export type EngineStateDto = {
   groundSolidColor: Color;          // GetGroundSolidColor() — slot kGroundSolidColorSlot colour
   groundSlotCustomPaths: string[];  // GetGroundSlotCustomPath() across all slots
 
-  // Skydome
+  // Skydome — legacy bundled/custom texture slot (simple-background fallback)
   skydomeSlot: number;              // GetSkydomeSlot() — 0=Off, 1-8=bundled, 9-11=custom
   skydomeCustomPaths: string[];     // GetSkydomeCustomPath() for slots 9..11
+
+  // Game-faithful skydome environment (real .alo domes by GameObject Name).
+  // Empty primary+secondary names => no game dome (the slot above renders instead).
+  skydomeContext: "land" | "space";   // GetSkydomeContext()
+  skydomePrimaryName: string;         // GetSkydomePrimaryName() — "" = none
+  skydomeSecondaryName: string;       // GetSkydomeSecondaryName() — "" = none
 
   // Background (solid colour when skydome slot 0)
   background: Color;                // GetBackground()
@@ -585,6 +591,9 @@ export type Request =
   // Engine setters — skydome / background
   | { kind: "engine/set/skydome-slot";        params: { slot: number } }
   | { kind: "engine/set/skydome-custom-path"; params: { slot: number; path: string } }
+  // Select real game/mod domes by GameObject Name for a battle context.
+  // Empty names clear the corresponding slot.
+  | { kind: "engine/set/skydome-environment"; params: { context: "land" | "space"; primaryName: string; secondaryName: string } }
   | { kind: "engine/set/background";          params: { rgb: Color } }
 
   // Engine setters — bloom
@@ -634,6 +643,9 @@ export type Request =
   // Engine queries
   | { kind: "engine/query/ground-slot-empty";  params: { slot: number } }
   | { kind: "engine/query/skydome-slot-empty"; params: { slot: number } }
+  // Enumerate selectable game-dome Names for a battle context (both the
+  // primary and secondary lists), read from the game/mod's *Skydomes.xml.
+  | { kind: "engine/query/skydome-list";       params: { context: "land" | "space" } }
   | { kind: "engine/query/bloom-available";    params: Record<string, never> }
 
   // Settings (cross-mode registry persistence). Legacy persists lighting
@@ -1002,6 +1014,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/set/ground-slot-custom-path" } ? Record<string, never> :
   R extends { kind: "engine/set/skydome-slot" }            ? Record<string, never> :
   R extends { kind: "engine/set/skydome-custom-path" }     ? Record<string, never> :
+  R extends { kind: "engine/set/skydome-environment" }     ? Record<string, never> :
   R extends { kind: "engine/set/background" }              ? Record<string, never> :
   R extends { kind: "engine/set/bloom" }                   ? Record<string, never> :
   R extends { kind: "engine/set/bloom-strength" }          ? Record<string, never> :
@@ -1029,6 +1042,7 @@ type ResponseForA<R extends Request> =
   // Engine queries
   R extends { kind: "engine/query/ground-slot-empty" }   ? boolean :
   R extends { kind: "engine/query/skydome-slot-empty" }  ? boolean :
+  R extends { kind: "engine/query/skydome-list" }        ? { primary: string[]; secondary: string[] } :
   R extends { kind: "engine/query/bloom-available" }     ? boolean :
 
   // Settings (cross-mode registry persistence)

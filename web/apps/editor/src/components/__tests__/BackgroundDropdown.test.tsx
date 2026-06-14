@@ -32,16 +32,16 @@ describe("BackgroundDropdown", () => {
     expect(await screen.findByRole("button", { name: "Background" })).toBeInTheDocument();
   });
 
-  it("clicking the trigger opens the popover with slot buttons", async () => {
+  it("clicking the trigger opens the popover with the picker body", async () => {
     const b = makeBridge();
     render(<BackgroundDropdown bridge={b} />);
     const trigger = await screen.findByRole("button", { name: "Background" });
     fireEvent.click(trigger);
-    // Wait for popover to mount and slot buttons to render
+    // Wait for the popover to mount and the picker body to render.
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Solid colour" })).toBeInTheDocument();
     });
-    // At least one bundled slot should be present
-    expect(screen.getByRole("button", { name: "Storm" })).toBeInTheDocument();
+    // the game-dome section's primary selector is present.
+    expect(screen.getByRole("combobox", { name: "Primary dome" })).toBeInTheDocument();
   });
 });

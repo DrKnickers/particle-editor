@@ -622,6 +622,14 @@ void Engine::ReloadTextures()
 	{
 		ReloadSkydomeTexture(m_skydomeIndex);
 	}
+	// re-resolve the game domes so a changed .alo / texture (and, on the
+	// mod-switch path where ReloadShaders->ShaderManager::Clear ran first, a
+	// changed .fxo) is picked up. On a standalone Reload-Textures the cached
+	// shader is still valid, so the re-getShader is a cheap no-op (Risk 6).
+	if (!m_skydomePrimaryName.empty() || !m_skydomeSecondaryName.empty())
+	{
+		RebuildSkydomeMeshes();
+	}
 	printf("[Textures] Reload: cache cleared, %d instance(s) notified\n", n); fflush(stdout);
 }
 
@@ -846,15 +854,10 @@ bool Engine::Render()
 		restoreViewportS5 = true;
 	}
 
-	//: optional skydome pass, after Clear, before ground.
-	// Skipped when slot 0 (Off) is active or when effect/texture isn't
-	// ready (e.g. effect compile failure during init).
-	if (m_skydomeIndex != kSkydomeOffSlot
-	    && m_pSkydomeTexture != NULL
-	    && m_pSkydomeEffect != NULL)
-	{
-	    RenderSkydome();
-	}
+	// /: optional skydome pass, after Clear, before ground.
+	// RenderSkydomes() draws the real game .alo domes when one is selected,
+	// else falls back to the simple-background sphere (slot != Off).
+	RenderSkydomes();
 
 	if (m_showGround)
 	{
@@ -1553,6 +1556,10 @@ void Engine::Reset()
 	// stale-resource D3DERR on the next Reset.
 	ReleaseSkydomeMeshBuffers();
 	SAFE_RELEASE(m_pSkydomeTexture);
+	// release the game-dome DEFAULT-pool VB/IB + material textures and
+	// OnLostDevice their effects (decls survive). Both slots.
+	m_skydomePrimaryMesh.OnLostDevice();
+	m_skydomeSecondaryMesh.OnLostDevice();
 	SAFE_RELEASE(m_pGroundTexture);
 	//: the compositor's off-screen RT is D3DPOOL_DEFAULT, so
 	// it must be released before m_pDevice->Reset — otherwise Reset
@@ -1591,6 +1598,10 @@ void Engine::Reset()
 	if (m_pBloomEffect != NULL) m_pBloomEffect->OnResetDevice();
 	if (m_pSkydomeEffect != NULL) m_pSkydomeEffect->OnResetDevice();
 	if (m_pGroundEffect  != NULL) m_pGroundEffect->OnResetDevice();
+	// two-phase like the rest of the dance: all effects OnReset here,
+	// then the DEFAULT-pool VB/IB + textures refill below (todo.md Risk 7).
+	m_skydomePrimaryMesh.OnResetEffects();
+	m_skydomeSecondaryMesh.OnResetEffects();
 	//: recreate the D3DPOOL_DEFAULT ground normal textures post-Reset.
 	CreateGroundFlatNormal();
 	// Phase 3 Stage 1: rebuild the previously-managed-pool
@@ -1602,6 +1613,10 @@ void Engine::Reset()
 	ReloadGroundTexture();
 	ReloadGroundNormalTexture();   //: re-resolve the companion _bc map
 	ReloadSkydomeTexture(m_skydomeIndex);
+	// phase 2: refill the game-dome DEFAULT-pool VB/IB + material
+	// textures from the cached transcoded blobs (no re-parse).
+	m_skydomePrimaryMesh.CreateBuffers(m_pDevice, m_fileManager);
+	m_skydomeSecondaryMesh.CreateBuffers(m_pDevice, m_fileManager);
 
 	ResetParameters();
 
@@ -2397,6 +2412,271 @@ void Engine::RenderSkydome()
     m_pDevice->SetRenderState(D3DRS_CULLMODE,     oldCull);
 }
 
+// The blend mode a dome sub-mesh's shader expects. The game .fxo set this
+// inside a no-op'd SB block (ALAMO_STATE_BLOCKS 0; todo.md Risk 2), so the app
+// applies it. MeshAdditive* -> ONE/ONE (space starfields); MeshAlpha* ->
+// SRCALPHA/INVSRCALPHA (land ring/horizon overlays); everything else (Skydome,
+// MeshGloss base) -> opaque.
+enum SkydomeBlend { SKYBLEND_OPAQUE, SKYBLEND_ADDITIVE, SKYBLEND_ALPHA };
+
+static SkydomeBlend SkydomeBlendFor(const std::string& shaderName)
+{
+    if (_strnicmp(shaderName.c_str(), "MeshAdditive", 12) == 0) return SKYBLEND_ADDITIVE;
+    if (_strnicmp(shaderName.c_str(), "MeshAlpha",     9) == 0) return SKYBLEND_ALPHA;
+    return SKYBLEND_OPAQUE;
+}
+
+// Draw one decoded .alo dome: each sub-mesh runs its OWN named game
+// shader 1:1 (Skydome.fx / MeshGloss.fxo / MeshAdditive.fx). Mirrors the
+// particle per-frame binding template (engine.cpp:746) but binds the REAL world
+// matrix (Skydome.fx computes world_pos/world_normal for SH) instead of the
+// identity the particle path uses. Saves + restores the full render-state delta
+// any sub-mesh may touch so the dome can't leak blend/zwrite/cull/decl into the
+// ground + particle draws that follow ().
+void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
+{
+    D3DXMATRIX wvp = world * m_view * m_projection;
+
+    DWORD oldAlphaBlend, oldSrcBlend, oldDestBlend, oldZWrite, oldZEnable, oldCull;
+    m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
+    m_pDevice->GetRenderState(D3DRS_SRCBLEND,         &oldSrcBlend);
+    m_pDevice->GetRenderState(D3DRS_DESTBLEND,        &oldDestBlend);
+    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE,     &oldZWrite);
+    m_pDevice->GetRenderState(D3DRS_ZENABLE,          &oldZEnable);
+    m_pDevice->GetRenderState(D3DRS_CULLMODE,         &oldCull);
+    IDirect3DVertexDeclaration9* oldDecl = NULL;
+    m_pDevice->GetVertexDeclaration(&oldDecl);
+
+    // Draw in two phases matching the game's Opaque-then-Transparent order: opaque
+    // sub-meshes first (fill the background), then additive/alpha layers blended on
+    // top -- so layering is correct regardless of the .alo's sub-mesh order.
+    for (int phase = 0; phase < 2; ++phase)
+    {
+      const bool opaquePhase = (phase == 0);
+      for (SubMeshGpu& sub : mesh.SubMeshes())
+      {
+        if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL)
+            continue;
+        const SkydomeBlend blend = SkydomeBlendFor(sub.shaderName);
+        if ((blend == SKYBLEND_OPAQUE) != opaquePhase)
+            continue;   // opaque sub-meshes in phase 0, blended in phase 1
+
+        // Render state the shader expects (the game .fxo may NOT set it itself --
+        // ALAMO_STATE_BLOCKS; todo.md Risk 2 -- so we set it regardless). Every dome
+        // layer is a camera-centred background: depth test+write OFF (drawn first,
+        // ground/particles paint over it) and CULL_NONE (one triangle per view ray
+        // -> no overdraw, sidesteps the unknown .alo winding). Blend per shader
+        // intent: additive (MeshAdditive) adds, alpha (MeshAlpha) src-over, else opaque.
+        m_pDevice->SetRenderState(D3DRS_ZENABLE,      D3DZB_FALSE);
+        m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        m_pDevice->SetRenderState(D3DRS_CULLMODE,     D3DCULL_NONE);
+        switch (blend)
+        {
+            case SKYBLEND_ADDITIVE:
+                m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                m_pDevice->SetRenderState(D3DRS_SRCBLEND,         D3DBLEND_ONE);
+                m_pDevice->SetRenderState(D3DRS_DESTBLEND,        D3DBLEND_ONE);
+                break;
+            case SKYBLEND_ALPHA:
+                m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                m_pDevice->SetRenderState(D3DRS_SRCBLEND,         D3DBLEND_SRCALPHA);
+                m_pDevice->SetRenderState(D3DRS_DESTBLEND,        D3DBLEND_INVSRCALPHA);
+                break;
+            default: // SKYBLEND_OPAQUE (Skydome, MeshGloss base)
+                m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+                break;
+        }
+
+        ID3DXEffect* fx = sub.effect->getD3DEffect();   // AddRef'd
+        const Effect::Handles& h = sub.effect->getHandles();
+
+        // Engine semantics: the verbatim particle binding template (engine.cpp:746)
+        // but with the REAL world matrix -- the dome shaders compute world_pos /
+        // world_normal for SH diffuse + (MeshGloss) specular -- not the identity the
+        // particle path uses. Handles a shader doesn't declare are NULL -> no-op.
+        D3DXVECTOR4 eyePos(m_eye.Position.x, m_eye.Position.y, m_eye.Position.z, 1.0f);
+        fx->SetMatrix(h.hWorld,               &world);
+        fx->SetMatrix(h.hWorldViewProjection, &wvp);
+        fx->SetVector(h.hEyePosition,         &eyePos);
+        fx->SetVector(h.hGlobalAmbient,       &m_ambient);
+        fx->SetVector(h.hDirLightVec0,        &m_lights[0].Position);
+        fx->SetVector(h.hDirLightObjVec0,     &m_lights[0].Position);
+        fx->SetVector(h.hDirLightDiffuse,     &m_lights[0].Diffuse);
+        fx->SetVector(h.hDirLightSpecular,    &m_lights[0].Specular);
+        fx->SetMatrixArray(h.hSphLightAll,    m_sphLightAll,  3);
+        fx->SetMatrixArray(h.hSphLightFill,   m_sphLightFill, 3);
+        fx->SetFloat(h.hTime,                 GetTimeF());
+
+        // Authored material params (index-parallel handles) -> samplers via the
+        // .fx Texture=(X) link. Skips params absent from this shader (NULL handle).
+        for (size_t i = 0; i < sub.params.size(); ++i)
+        {
+            D3DXHANDLE ph = (i < sub.matHandles.size()) ? sub.matHandles[i] : NULL;
+            if (ph == NULL) continue;
+            const AloShaderParam& p = sub.params[i];
+            switch (p.kind)
+            {
+                case AloShaderParam::INT:    fx->SetInt(ph, p.i); break;
+                case AloShaderParam::FLOAT:  fx->SetFloat(ph, p.f[0]); break;
+                case AloShaderParam::FLOAT3: fx->SetFloatArray(ph, p.f, 3); break;
+                case AloShaderParam::FLOAT4:
+                {
+                    D3DXVECTOR4 v(p.f[0], p.f[1], p.f[2], p.f[3]);
+                    fx->SetVector(ph, &v);
+                    break;
+                }
+                case AloShaderParam::TEXTURE:
+                    if (i < sub.matTextures.size()) fx->SetTexture(ph, sub.matTextures[i]);
+                    break;
+            }
+        }
+
+        m_pDevice->SetVertexDeclaration(sub.decl);
+        m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
+        m_pDevice->SetIndices(sub.ib);
+
+        UINT passes = 0;
+        fx->Begin(&passes, 0);
+        for (UINT pass = 0; pass < passes; ++pass)
+        {
+            fx->BeginPass(pass);
+#ifndef NDEBUG
+            {
+                DWORD zw = 0, ab = 0, cm = 0;
+                m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE,     &zw);
+                m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &ab);
+                m_pDevice->GetRenderState(D3DRS_CULLMODE,         &cm);
+                fprintf(stderr, "[SkyDraw] %s pass %u/%u zwrite=%lu ablend=%lu cull=%lu prims=%u\n",
+                        sub.shaderName.c_str(), pass + 1, passes, zw, ab, cm, sub.primitiveCount);
+            }
+#endif
+            m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+                                            sub.vertexCount, 0, sub.primitiveCount);
+            fx->EndPass();
+        }
+        fx->End();
+        fx->Release();
+      }
+    }
+
+    // Restore the saved delta. Stream-source / indices are intentionally NOT
+    // restored: every subsequent draw rebinds them (todo.md Risk 9).
+    m_pDevice->SetVertexDeclaration(oldDecl);
+    if (oldDecl) oldDecl->Release();
+    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, oldAlphaBlend);
+    m_pDevice->SetRenderState(D3DRS_SRCBLEND,         oldSrcBlend);
+    m_pDevice->SetRenderState(D3DRS_DESTBLEND,        oldDestBlend);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     oldZWrite);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE,          oldZEnable);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE,         oldCull);
+}
+
+// Compose entry, replacing the single RenderSkydome() call site. Draws
+// the game domes (secondary behind, then primary) when a real dome is selected;
+// otherwise falls back to the simple-background sphere (bundled / custom / solid).
+void Engine::RenderSkydomes()
+{
+    const bool primaryReady   = !m_skydomePrimaryMesh.IsEmpty()   && m_skydomePrimaryMesh.HasResolved();
+    const bool secondaryReady = !m_skydomeSecondaryMesh.IsEmpty() && m_skydomeSecondaryMesh.HasResolved();
+
+    if (primaryReady || secondaryReady)
+    {
+        // Layering: depth is off, so the layer drawn LATER paints over the earlier.
+        //  Space: secondary nebula sits BEHIND the primary starfield -> secondary first.
+        //  Land:  secondary is a partial overlay (rings/horizon/traffic) ON TOP of the
+        //         primary full sky-dome -> primary first.
+        const bool primaryFirst = (m_skydomeContext == SkydomeContext::Land);
+        SkydomeMesh* order[2] = {
+            primaryFirst ? &m_skydomePrimaryMesh   : &m_skydomeSecondaryMesh,
+            primaryFirst ? &m_skydomeSecondaryMesh : &m_skydomePrimaryMesh
+        };
+        const bool ready[2] = {
+            primaryFirst ? primaryReady   : secondaryReady,
+            primaryFirst ? secondaryReady : primaryReady
+        };
+
+        D3DXMATRIX t;
+        D3DXMatrixTranslation(&t, m_eye.Position.x, m_eye.Position.y, m_eye.Position.z);
+        for (int i = 0; i < 2; ++i)
+        {
+            if (!ready[i]) continue;
+            const float sf = order[i]->ScaleFactor();
+            D3DXMATRIX s, world;
+            D3DXMatrixScaling(&s, sf, sf, sf);
+            world = s * t;
+            RenderSkydomeMesh(*order[i], world);
+        }
+        return;
+    }
+
+    if (m_skydomeIndex != kSkydomeOffSlot && m_pSkydomeTexture != NULL && m_pSkydomeEffect != NULL)
+        RenderSkydome();
+}
+
+// Re-drive Load->Resolve->CreateBuffers for both slots from the current
+// selected Names. Used on selection change and mod-switch (ReloadTextures, after
+// ShaderManager::Clear ran, so getShader picks up the new mod's .fxo). Resolve +
+// CreateBuffers no-op until the device is valid; Load (CPU) runs regardless.
+void Engine::RebuildSkydomeMeshes()
+{
+    MapEnvironment env;
+    LoadMapEnvironment(m_fileManager, m_skydomeContext,
+                       m_skydomePrimaryName, m_skydomeSecondaryName, env);
+
+    SkydomeMesh* meshes[2]   = { &m_skydomePrimaryMesh, &m_skydomeSecondaryMesh };
+    const SkydomeRef* refs[2] = { &env.primary, &env.secondary };
+    const bool has[2]        = { env.hasPrimary, env.hasSecondary };
+
+    for (int i = 0; i < 2; ++i)
+    {
+        if (!has[i] || refs[i]->modelPath.empty())
+        {
+            meshes[i]->Clear();   // deselected slot -> empty (no FileManager probe)
+            continue;
+        }
+        const std::string aloPath = "Data\\Art\\Models\\" + refs[i]->modelPath;
+        if (!meshes[i]->Load(m_fileManager, aloPath))
+            continue;
+        meshes[i]->SetScaleFactor(refs[i]->scaleFactor);
+        if (m_pDevice != NULL)
+        {
+            meshes[i]->Resolve(m_shaderManager, m_pDevice);
+            meshes[i]->CreateBuffers(m_pDevice, m_fileManager);
+        }
+    }
+}
+
+// Public selection entry (bridge + startup restore). Stores the choice
+// and rebuilds both meshes immediately.
+void Engine::SetSkydomeEnvironment(SkydomeContext context,
+                                   const std::string& primaryName,
+                                   const std::string& secondaryName)
+{
+    m_skydomeContext       = context;
+    m_skydomePrimaryName   = primaryName;
+    m_skydomeSecondaryName = secondaryName;
+    RebuildSkydomeMeshes();
+}
+
+// Enumerate the primary + secondary dome Names for a battle context from
+// the game/mod's *Skydomes.xml (device-free; safe before the device exists).
+void Engine::EnumerateSkydomeNames(SkydomeContext context,
+                                   std::vector<std::string>& outPrimary,
+                                   std::vector<std::string>& outSecondary) const
+{
+    outPrimary.clear();
+    outSecondary.clear();
+    const SkydomeAxis primAxis = (context == SkydomeContext::Land) ? SkydomeAxis::LandPrimary   : SkydomeAxis::SpacePrimary;
+    const SkydomeAxis secAxis  = (context == SkydomeContext::Land) ? SkydomeAxis::LandSecondary : SkydomeAxis::SpaceSecondary;
+
+    std::vector<SkydomeRef> refs;
+    if (LoadSkydomeList(m_fileManager, primAxis, refs))
+        for (const SkydomeRef& r : refs) outPrimary.push_back(r.name);
+    refs.clear();
+    if (LoadSkydomeList(m_fileManager, secAxis, refs))
+        for (const SkydomeRef& r : refs) outSecondary.push_back(r.name);
+}
+
 //: compile IDR_SHADER_GROUND_LIT, cache parameter handles, select the
 // best-validating technique (bump → gloss), and build the tangent-space ground
 // vertex declaration. Graceful-degrade: on any failure m_pGroundEffect stays
@@ -2867,6 +3147,30 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	CreateGroundFlatNormal();
 	InitGroundEffect();
 	ReloadGroundNormalTexture();
+
+#ifndef NDEBUG
+	// bring-up driver (debug only): force-load a real game dome by Name
+	// so the render core can be feel-tested before the M3 picker exists. Default
+	// launch is unaffected -- with no env var both slots stay Off.
+	// TODO(M3): remove once the React picker drives SetSkydomeEnvironment.
+	//   set ALO_MT15_TEST_DOME=<PrimaryName> [ALO_MT15_TEST_SEC=<SecondaryName>]
+	//       [ALO_MT15_TEST_CTX=land|space]   (default space)
+	{
+		char buf[256];
+		if (GetEnvironmentVariableA("ALO_MT15_TEST_DOME", buf, sizeof(buf)) > 0)
+		{
+			std::string prim = buf, sec;
+			if (GetEnvironmentVariableA("ALO_MT15_TEST_SEC", buf, sizeof(buf)) > 0) sec = buf;
+			SkydomeContext ctx = SkydomeContext::Space;
+			if (GetEnvironmentVariableA("ALO_MT15_TEST_CTX", buf, sizeof(buf)) > 0
+			    && _stricmp(buf, "land") == 0)
+				ctx = SkydomeContext::Land;
+			fprintf(stderr, "[SkyEnv] test driver: ctx=%s primary='%s' secondary='%s'\n",
+			        ctx == SkydomeContext::Land ? "land" : "space", prim.c_str(), sec.c_str());
+			SetSkydomeEnvironment(ctx, prim, sec);
+		}
+	}
+#endif
 }
 
 Engine::~Engine()

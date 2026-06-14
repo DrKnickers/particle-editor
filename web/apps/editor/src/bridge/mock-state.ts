@@ -76,6 +76,10 @@ export function makeDefaultEngineState(): EngineStateDto {
 
     skydomeSlot: 0,
     skydomeCustomPaths: Array.from({ length: SKYDOME_CUSTOM_COUNT }, () => ""),
+    // game-dome environment (no dome selected by default)
+    skydomeContext: "space",
+    skydomePrimaryName: "",
+    skydomeSecondaryName: "",
 
     background: 0x00340814,
 
