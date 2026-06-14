@@ -2959,6 +2959,14 @@ void Engine::BuildCursorRay(short screenX, short screenY,
 
 namespace
 {
+    // Gizmo geometry constants shared by the render and the pick so the
+    // drawn handle and the grabbable region stay in lockstep. Arrow length is
+    // `baseLen` (eye-scaled); rings sit just outside the arrowheads.
+    constexpr float kAxisPickScale   = 0.18f;   // arrow pick radius = len * this
+    constexpr float kHoverGrow       = 1.3f;    // hovered arrow grows (visual + pick)
+    constexpr float kRingRadiusScale = 1.15f;   // ring radius   = baseLen * this
+    constexpr float kRingPickBand    = 0.14f;   // ring pick band = ringRadius * this
+
     // Eye-distance-scaled handle length so the gizmo keeps a roughly
     // constant on-screen size across zoom (not full screen-space-uniform; v1).
     float manipulatorHandleLength(const D3DXVECTOR3& eye, const D3DXVECTOR3& refPos)
@@ -2993,27 +3001,37 @@ namespace
     }
 }
 
-// Ray-pick the 3 axis handles under the cursor. Returns 0=X/1=Y/2=Z
-// for the nearest axis within the pick threshold, else -1. Same visible+resolved
-// gate as the render so a pick is only attempted on a clickable object.
-int Engine::PickManipulatorAxis(short screenX, short screenY) const
+// Ray-pick the manipulator handle under the cursor: 3 translate arrows + 3
+// rotate rings. Each candidate is scored by its miss distance divided by its own
+// pick threshold (so the arrow's ray-to-segment gap and the ring's |rho-R| band are
+// comparable); the smallest score < 1 wins, and an arrow wins ties (it's tested
+// first with a strict `<`). Returns kind=NONE on a miss. Same visible+resolved gate
+// as the render so a pick is only attempted on a clickable object.
+Engine::ManipHandle Engine::PickManipulatorHandle(short screenX, short screenY) const
 {
-    if (!m_referenceObjectSelected) return -1;   // gizmo only grabbable when selected
-    if (!m_referenceObjectVisible) return -1;
-    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return -1;
-    if (m_pDevice == NULL) return -1;
+    ManipHandle hit;   // NONE / -1
+    if (!m_referenceObjectSelected) return hit;   // gizmo only grabbable when selected
+    if (!m_referenceObjectVisible) return hit;
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return hit;
+    if (m_pDevice == NULL) return hit;
 
     D3DXVECTOR3 P, d;
     BuildCursorRay(screenX, screenY, P, d);
 
     const D3DXVECTOR3 A = m_referencePosition;
-    const float len       = manipulatorHandleLength(m_eye.Position, m_referencePosition);
-    const float threshold = len * 0.18f;   // tracks the eye-distance scaling
+    const float baseLen = manipulatorHandleLength(m_eye.Position, m_referencePosition);
 
-    int   best     = -1;
-    float bestDist = threshold;            // must beat the threshold to pick
+    float bestScore = 1.0f;   // miss/threshold; a candidate must beat 1 to pick
+
+    // --- 3 translate arrows: ray-to-segment gap, threshold = len * kAxisPickScale.
+    // The hovered arrow grows by kHoverGrow, so its pick uses the grown extent too
+    // (hover was set on the prior mouse-move, so the grown extent is the live one --
+    // the outer/arrowhead region of the hovered axis becomes grabbable).
     for (int i = 0; i < 3; ++i)
     {
+        const bool  hot = (m_hoverManip.kind == ManipHandle::TRANSLATE && m_hoverManip.axis == i);
+        const float len = hot ? baseLen * kHoverGrow : baseLen;
+        const float threshold = len * kAxisPickScale;
         const D3DXVECTOR3 u = unitAxis(i);
         D3DXVECTOR3 axisPt;
         float t;
@@ -3033,10 +3051,30 @@ int Engine::PickManipulatorAxis(short screenX, short screenY) const
         if (tc < 0.0f) tc = 0.0f;
         D3DXVECTOR3 rayPt = P + d * tc;
         D3DXVECTOR3 gap   = axisPt - rayPt;
-        const float dist  = D3DXVec3Length(&gap);
-        if (dist < bestDist) { bestDist = dist; best = i; }
+        const float score = D3DXVec3Length(&gap) / threshold;
+        if (score < bestScore) { bestScore = score; hit.kind = ManipHandle::TRANSLATE; hit.axis = i; }
     }
-    return best;
+
+    // --- 3 rotate rings: intersect the ray with the ring's world-axis plane, then
+    // score |in-plane radius - R| against the band. A ray grazing the plane
+    // (denom ~0) or hitting it behind the camera is skipped.
+    const float R    = baseLen * kRingRadiusScale;
+    const float band = R * kRingPickBand;
+    for (int i = 0; i < 3; ++i)
+    {
+        const D3DXVECTOR3 n = unitAxis(i);
+        const float denom = D3DXVec3Dot(&d, &n);
+        if (fabsf(denom) < 1e-4f) continue;          // grazing: edge-on ring, skip
+        D3DXVECTOR3 oToP = A - P;
+        const float t = D3DXVec3Dot(&oToP, &n) / denom;
+        if (t < 0.0f) continue;                       // plane behind the ray
+        const D3DXVECTOR3 H = P + d * t;              // hit point (lies in the plane)
+        D3DXVECTOR3 g = H - A;
+        const float rho   = D3DXVec3Length(&g);
+        const float score = fabsf(rho - R) / band;
+        if (score < bestScore) { bestScore = score; hit.kind = ManipHandle::ROTATE; hit.axis = i; }
+    }
+    return hit;
 }
 
 // Signed distance along `axis` from `anchor` to the cursor ray's
@@ -3051,10 +3089,41 @@ bool Engine::ManipulatorAxisParam(short screenX, short screenY, int axis,
     return axisParamFromRay(P, d, anchor, unitAxis(axis), outParam);
 }
 
-// Draw the 3 translate-axis handles (X=red/Y=green/Z=blue) from the
-// object origin: a shaft + a 4-sided arrowhead per axis, drawn ALWAYS-ON-TOP
-// (depth-test off) so the gizmo is never hidden inside the object. The hovered
-// axis is brighter + longer. Only shown when the object is selected.
+// The cursor's angle (radians) around rotate ring `axis`, measured in that
+// ring's world-axis plane (centred at the object origin). The plane normal is the
+// world axis; the in-plane basis (a,b) is chosen so increasing angle matches the
+// positive Euler rotation that axis drives: ring Z=yaw basis (X,Y), ring X=pitch
+// basis (Y,Z), ring Y=roll basis (Z,X) -- i.e. a=axis+1, b=axis+2 (mod 3). The
+// host snapshots this at grab and accumulates wrapped per-move deltas (no-jump,
+// multi-turn). False when the ray grazes the plane or hits it behind the camera.
+bool Engine::ManipulatorRingAngle(short screenX, short screenY, int axis,
+                                  float& outAngleRad) const
+{
+    if (axis < 0 || axis > 2) return false;
+    D3DXVECTOR3 P, d;
+    BuildCursorRay(screenX, screenY, P, d);
+
+    const D3DXVECTOR3 n = unitAxis(axis);
+    const float denom = D3DXVec3Dot(&d, &n);
+    if (fabsf(denom) < 1e-4f) return false;          // ray ~parallel to the plane
+    const D3DXVECTOR3 o = m_referencePosition;
+    D3DXVECTOR3 oToP = o - P;
+    const float t = D3DXVec3Dot(&oToP, &n) / denom;
+    if (t < 0.0f) return false;                       // plane behind the ray
+    const D3DXVECTOR3 H = P + d * t;
+    D3DXVECTOR3 g = H - o;                             // in-plane vector from centre
+    const D3DXVECTOR3 a = unitAxis((axis + 1) % 3);
+    const D3DXVECTOR3 b = unitAxis((axis + 2) % 3);
+    outAngleRad = atan2f(D3DXVec3Dot(&g, &b), D3DXVec3Dot(&g, &a));
+    return true;
+}
+
+// Draw the combined manipulator (X=red/Y=green/Z=blue), ALWAYS-ON-TOP
+// (depth-test off) so it is never hidden inside the object. Per axis: a translate
+// arrow (shaft + 4-sided head) from the object origin, plus a rotate ring (a
+// world-axis circle just outside the arrowheads). The hovered handle brightens;
+// a hovered ARROW also grows (its pick uses the grown extent); a hovered RING
+// brightens only (no radius pop). Only shown when the object is selected.
 void Engine::RenderReferenceManipulator()
 {
     if (!m_referenceObjectSelected) return;
@@ -3070,8 +3139,9 @@ void Engine::RenderReferenceManipulator()
                                    D3DCOLOR_RGBA(170, 255, 170, 255),
                                    D3DCOLOR_RGBA(170, 200, 255, 255) };
 
+    constexpr int kRingSegs = 48;
     std::vector<EmitterInstance::Vertex> v;
-    v.reserve(3 * 5 * 2);   // 3 axes x (shaft + 4 arrowhead lines) x 2 verts
+    v.reserve((3 * 5 + 3 * kRingSegs) * 2);   // arrows (shaft + 4 head) + rings
     auto line = [&](const D3DXVECTOR3& a, const D3DXVECTOR3& b, D3DCOLOR c)
     {
         EmitterInstance::Vertex v0 = {}, v1 = {};
@@ -3080,11 +3150,13 @@ void Engine::RenderReferenceManipulator()
         v.push_back(v0);
         v.push_back(v1);
     };
+
+    // Translate arrows.
     for (int i = 0; i < 3; ++i)
     {
-        const bool hot = (i == m_hoverManipAxis);
-        const float    len = hot ? baseLen * 1.3f : baseLen;   // hovered axis grows
-        const D3DCOLOR c   = hot ? hoverCol[i] : axisCol[i];   // ... and brightens
+        const bool hot = (m_hoverManip.kind == ManipHandle::TRANSLATE && m_hoverManip.axis == i);
+        const float    len = hot ? baseLen * kHoverGrow : baseLen;   // hovered arrow grows
+        const D3DCOLOR c   = hot ? hoverCol[i] : axisCol[i];         // ... and brightens
         const D3DXVECTOR3 dir = unitAxis(i);
         const D3DXVECTOR3 p1  = unitAxis((i + 1) % 3);   // perpendiculars for the head
         const D3DXVECTOR3 p2  = unitAxis((i + 2) % 3);
@@ -3097,6 +3169,26 @@ void Engine::RenderReferenceManipulator()
         line(tip, base + p2 * r, c);
         line(tip, base - p2 * r, c);
     }
+
+    // Rotate rings: a closed world-axis circle of radius R in the plane perpendicular
+    // to each axis, built from the same (a,b) in-plane basis the angle pick uses.
+    const float R = baseLen * kRingRadiusScale;
+    for (int i = 0; i < 3; ++i)
+    {
+        const bool hot = (m_hoverManip.kind == ManipHandle::ROTATE && m_hoverManip.axis == i);
+        const D3DCOLOR c = hot ? hoverCol[i] : axisCol[i];
+        const D3DXVECTOR3 a = unitAxis((i + 1) % 3);
+        const D3DXVECTOR3 b = unitAxis((i + 2) % 3);
+        D3DXVECTOR3 prev = o + a * R;   // angle 0
+        for (int s = 1; s <= kRingSegs; ++s)
+        {
+            const float ang = (2.0f * D3DX_PI) * (float)s / (float)kRingSegs;
+            const D3DXVECTOR3 cur = o + (a * cosf(ang) + b * sinf(ang)) * R;
+            line(prev, cur, c);
+            prev = cur;
+        }
+    }
+
     DrawWorldLines(m_pDevice, m_pDeclaration, v.data(), (int)(v.size() / 2), /*depthTest=*/false);
 }
 
@@ -3284,7 +3376,7 @@ void Engine::SetReferenceObject(const std::string& name)
     // Auto-select on pick so the manipulator gizmo appears immediately; clearing
     // the selection deselects. (Click the object body to re-select, empty to clear.)
     m_referenceObjectSelected = !name.empty();
-    m_hoverManipAxis = -1;
+    m_hoverManip = ManipHandle();
     RebuildReferenceObjectMesh();
 }
 

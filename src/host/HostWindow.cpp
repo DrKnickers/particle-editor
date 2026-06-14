@@ -516,19 +516,26 @@ struct HostWindowImpl
     // Only Z (height) tracks the drag delta; X/Y stay frozen at the
     // click position. WM_LBUTTONUP detaches the preview (place it).
     // Matches legacy src/main.cpp:2891-2898 + 2877-2883 + 2936-2948.
-    // MANIPULATE: an axis handle of the reference-object translate
-    // gizmo was grabbed; LMB drag moves the object along that axis (wins over
-    // camera orbit only when a handle is actually under the cursor at press).
+    // MANIPULATE: / S47] a manipulator handle (translate arrow or rotate
+    // ring) was grabbed; LMB drag moves/rotates the object (wins over camera orbit
+    // only when a handle is actually under the cursor at press).
     enum class DragMode { NONE, MOVE, ROTATE, ZOOM, OBJECT_Z, MANIPULATE };
     DragMode        m_dragMode      = DragMode::NONE;
     Engine::Camera  m_dragStartCam  = {};
     int             m_dragStartX    = 0;
     int             m_dragStartY    = 0;
-    // manipulator drag state: grabbed axis (0=X/1=Y/2=Z), the object
-    // position snapshot at grab, and the grab-time axis param (no-jump offset).
+    // / S47] manipulator drag state: the grabbed handle (kind + axis),
+    // the transform snapshot at grab, and the no-jump anchors. TRANSLATE uses
+    // m_manipGrabT0 (axis param at press); ROTATE accumulates wrapped per-move ring
+    // angle deltas (m_manipGrabAngle/Prev/Accum) onto the snapshot rotation.
+    Engine::ManipHandle::Kind m_manipKind = Engine::ManipHandle::NONE;
     int             m_manipAxis        = -1;
     D3DXVECTOR3     m_manipStartPos    = D3DXVECTOR3(0, 0, 0);
+    D3DXVECTOR3     m_manipStartRot    = D3DXVECTOR3(0, 0, 0);
     float           m_manipGrabT0      = 0.0f;
+    float           m_manipGrabAngle   = 0.0f;   // ring angle at grab (rad)
+    float           m_manipPrevAngle   = 0.0f;   // previous-move ring angle (rad)
+    float           m_manipAccumAngle  = 0.0f;   // accumulated rotation (rad)
     // ~30 Hz throttle for the per-move engine/state/changed emit (the snapshot is
     // heavy; the gizmo render still moves every frame via SetReferenceObjectTransform).
     DWORD           m_lastManipEmitTick = 0;
@@ -2913,21 +2920,38 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             SetCapture(hwnd);
             return 0;
         }
-        // Reference-object translate manipulator: if an axis handle
-        // is under the cursor, grab it (drag moves the object) — this wins over
-        // camera orbit. On a MISS the pick returns -1 and we fall through to the
-        // plain camera drag below, so clicking empty space still orbits.
+        // / S47] Reference-object manipulator: if a handle (translate
+        // arrow or rotate ring) is under the cursor, grab it (drag moves/rotates the
+        // object) — this wins over camera orbit. On a MISS the pick returns NONE and
+        // we fall through to the plain camera drag below, so empty space still orbits.
         {
-            const int axis = engine->PickManipulatorAxis((short)LOWORD(lp), (short)HIWORD(lp));
-            if (axis >= 0)
+            const Engine::ManipHandle h =
+                engine->PickManipulatorHandle((short)LOWORD(lp), (short)HIWORD(lp));
+            if (h.kind != Engine::ManipHandle::NONE)
             {
-                m_manipAxis     = axis;
+                m_manipKind     = h.kind;
+                m_manipAxis     = h.axis;
                 m_manipStartPos = engine->GetReferencePosition();
-                // Grab offset (axis param at press) so the object doesn't jump
-                // on the first move; if degenerate, fall back to 0.
-                if (!engine->ManipulatorAxisParam((short)LOWORD(lp), (short)HIWORD(lp),
-                                                  axis, m_manipStartPos, m_manipGrabT0))
-                    m_manipGrabT0 = 0.0f;
+                m_manipStartRot = engine->GetReferenceRotation();
+                if (h.kind == Engine::ManipHandle::TRANSLATE)
+                {
+                    // Grab offset (axis param at press) so the object doesn't jump
+                    // on the first move; if degenerate, fall back to 0.
+                    if (!engine->ManipulatorAxisParam((short)LOWORD(lp), (short)HIWORD(lp),
+                                                      h.axis, m_manipStartPos, m_manipGrabT0))
+                        m_manipGrabT0 = 0.0f;
+                }
+                else   // ROTATE
+                {
+                    // Grab angle on the ring; the accumulator starts at 0 so the
+                    // first move is a no-op delta (no jump). If degenerate, the
+                    // first valid move re-seeds prev (accum stays 0 until then).
+                    if (!engine->ManipulatorRingAngle((short)LOWORD(lp), (short)HIWORD(lp),
+                                                      h.axis, m_manipGrabAngle))
+                        m_manipGrabAngle = 0.0f;
+                    m_manipPrevAngle  = m_manipGrabAngle;
+                    m_manipAccumAngle = 0.0f;
+                }
                 m_dragMode = DragMode::MANIPULATE;
                 SetCapture(hwnd);
                 return 0;
@@ -2961,6 +2985,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         {
             if (dispatcher) dispatcher->CommitReferenceObjectTransform();
             m_manipAxis = -1;
+            m_manipKind = Engine::ManipHandle::NONE;
         }
         m_dragMode     = (wp & MK_CONTROL) ? DragMode::ZOOM : DragMode::ROTATE;
         m_dragStartCam = engine->GetCamera();
@@ -2982,6 +3007,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             if (dispatcher) dispatcher->CommitReferenceObjectTransform();
             m_dragMode  = DragMode::NONE;
             m_manipAxis = -1;
+            m_manipKind = Engine::ManipHandle::NONE;
             ReleaseCapture();
             return 0;
         }
@@ -3022,6 +3048,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // / grabbed axis.
         m_dragMode  = DragMode::NONE;
         m_manipAxis = -1;
+        m_manipKind = Engine::ManipHandle::NONE;
         return 0;
     }
     case WM_MOUSEMOVE:
@@ -3033,24 +3060,56 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         m_lastCursorX = mx;
         m_lastCursorY = my;
 
-        // Manipulator drag: project the cursor ray onto the grabbed
-        // axis and move the object there. No-jump via the grab offset
-        // (newPos = startPos + axis*(now - grab)). Only set + emit here so the
-        // picker spinners track live; persistence is deferred to LMB-up.
+        // / S47] Manipulator drag. TRANSLATE: project the cursor ray onto
+        // the grabbed axis (newPos = startPos + axis*(now - grab), no jump). ROTATE:
+        // accumulate wrapped per-move ring-angle deltas onto the snapshot rotation's
+        // Euler component for that ring (no jump, multi-turn). Only set + emit here so
+        // the picker spinners track live; persistence is deferred to LMB-up.
         if (m_dragMode == DragMode::MANIPULATE && m_manipAxis >= 0)
         {
-            float tNow;
-            if (engine->ManipulatorAxisParam((short)mx, (short)my, m_manipAxis,
-                                             m_manipStartPos, tNow))
+            bool moved = false;
+            if (m_manipKind == Engine::ManipHandle::TRANSLATE)
             {
-                const D3DXVECTOR3 ax(m_manipAxis == 0 ? 1.0f : 0.0f,
-                                     m_manipAxis == 1 ? 1.0f : 0.0f,
-                                     m_manipAxis == 2 ? 1.0f : 0.0f);
-                const D3DXVECTOR3 newPos = m_manipStartPos + ax * (tNow - m_manipGrabT0);
-                engine->SetReferenceObjectTransform(newPos, engine->GetReferenceRotation());
-                // Throttle the (heavy) full-snapshot emit to ~30 Hz so the picker
-                // spinners track without flooding the bridge / re-rendering the UI
-                // every frame; the final exact position emits on release (commit).
+                float tNow;
+                if (engine->ManipulatorAxisParam((short)mx, (short)my, m_manipAxis,
+                                                 m_manipStartPos, tNow))
+                {
+                    const D3DXVECTOR3 ax(m_manipAxis == 0 ? 1.0f : 0.0f,
+                                         m_manipAxis == 1 ? 1.0f : 0.0f,
+                                         m_manipAxis == 2 ? 1.0f : 0.0f);
+                    const D3DXVECTOR3 newPos = m_manipStartPos + ax * (tNow - m_manipGrabT0);
+                    engine->SetReferenceObjectTransform(newPos, m_manipStartRot);
+                    moved = true;
+                }
+            }
+            else   // ROTATE
+            {
+                float aNow;
+                if (engine->ManipulatorRingAngle((short)mx, (short)my, m_manipAxis, aNow))
+                {
+                    auto wrapPi = [](float a) {
+                        const float twoPi = 2.0f * D3DX_PI;
+                        while (a >   D3DX_PI) a -= twoPi;
+                        while (a <= -D3DX_PI) a += twoPi;
+                        return a;
+                    };
+                    m_manipAccumAngle += wrapPi(aNow - m_manipPrevAngle);
+                    m_manipPrevAngle   = aNow;
+                    // Euler component this ring drives (m_referenceRotation = [yaw=Z,
+                    // pitch=X, roll=Y]): ring axis 2(Z)->yaw(.x), 0(X)->pitch(.y),
+                    // 1(Y)->roll(.z).
+                    const int comp = (m_manipAxis == 2) ? 0 : (m_manipAxis == 0) ? 1 : 2;
+                    D3DXVECTOR3 newRot = m_manipStartRot;
+                    (&newRot.x)[comp] += m_manipAccumAngle * (180.0f / D3DX_PI);
+                    engine->SetReferenceObjectTransform(m_manipStartPos, newRot);
+                    moved = true;
+                }
+            }
+            // Throttle the (heavy) full-snapshot emit to ~30 Hz so the picker spinners
+            // track without flooding the bridge; the final exact transform emits on
+            // release (commit).
+            if (moved)
+            {
                 const DWORD now = GetTickCount();
                 if (dispatcher && (now - m_lastManipEmitTick) >= 33)
                 {
@@ -3061,11 +3120,11 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             return 0;
         }
 
-        // Hover feedback: when idle (not dragging), highlight the gizmo
-        // axis under the cursor. PickManipulatorAxis returns -1 unless an object is
-        // selected, so this is a cheap no-op when there's nothing to hover.
+        // / S47] Hover feedback: when idle (not dragging), highlight the
+        // handle under the cursor. PickManipulatorHandle returns NONE unless an object
+        // is selected, so this is a cheap no-op when there's nothing to hover.
         if (m_dragMode == DragMode::NONE)
-            engine->SetManipulatorHoverAxis(engine->PickManipulatorAxis((short)mx, (short)my));
+            engine->SetManipulatorHover(engine->PickManipulatorHandle((short)mx, (short)my));
 
         // Legacy parity: in OBJECT_Z drag (placing a cursor-bound preview),
         // only Z tracks the drag. X/Y stay frozen at the click position so

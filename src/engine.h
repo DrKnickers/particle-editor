@@ -547,28 +547,41 @@ public:
 	bool  GetGridVisible()  const { return m_gridVisible; }
 	float GetGridSpacing()  const { return m_gridSpacing; }
 
-	// In-viewport translate manipulator (grab an axis handle, drag to
-	// move the reference object). RenderReferenceManipulator draws the 3 axis
-	// handles (called from Render). PickManipulatorAxis ray-picks one under the
-	// cursor (returns 0=X/1=Y/2=Z, or -1 = miss). ManipulatorAxisParam returns the
-	// signed distance along `axis` from `anchor` to the cursor ray's closest point
-	// (false when the ray is ~parallel to the axis); the host uses it for the
-	// no-jump grab offset + per-move position. BuildCursorRay is the shared
-	// screen->world unproject (also used by GetCursorPos3D) so the pick can't drift
-	// from the working cursor. Screen coords are popup-client physical px.
+	// / S47] In-viewport manipulator (grab a handle, drag to move/rotate
+	// the reference object). A handle is one of 3 translate arrows or 3 rotate rings,
+	// identified by a (kind, axis) pair; axis 0=X/1=Y/2=Z.
+	struct ManipHandle
+	{
+		enum Kind { NONE, TRANSLATE, ROTATE };
+		Kind kind = NONE;
+		int  axis = -1;
+	};
+
+	// RenderReferenceManipulator draws the 3 arrows + 3 rings (called from Render).
+	// PickManipulatorHandle ray-picks the handle under the cursor, scoring all 6
+	// candidates by miss/threshold and returning the best (kind=NONE on a miss; an
+	// arrow wins ties). ManipulatorAxisParam returns the signed distance along a
+	// translate `axis` from `anchor` to the cursor ray's closest point (false when
+	// the ray is ~parallel to the axis). ManipulatorRingAngle returns the cursor's
+	// angle (radians) around a rotate ring in that ring's world-axis plane (false
+	// when the ray grazes the plane). The host uses these for the no-jump grab.
+	// BuildCursorRay is the shared screen->world unproject (also used by
+	// GetCursorPos3D). Screen coords are popup-client physical px.
 	void RenderReferenceManipulator();
-	int  PickManipulatorAxis(short screenX, short screenY) const;
+	ManipHandle PickManipulatorHandle(short screenX, short screenY) const;
 	bool ManipulatorAxisParam(short screenX, short screenY, int axis,
 	                          const D3DXVECTOR3& anchor, float& outParam) const;
+	bool ManipulatorRingAngle(short screenX, short screenY, int axis,
+	                          float& outAngleRad) const;
 	void BuildCursorRay(short screenX, short screenY,
 	                    D3DXVECTOR3& outOrigin, D3DXVECTOR3& outDir) const;
 	// polish] The gizmo only shows + is grabbable when the object is
 	// SELECTED (auto-selected on pick; click the object body to re-select; click
 	// empty to deselect). PickReferenceObject (S46) ray-tests the object's
-	// object-space AABB for the body-click. SetManipulatorHoverAxis lets the host
-	// highlight the axis under the cursor (set each idle mouse-move; -1 = none).
-	void SetReferenceObjectSelected(bool selected) { m_referenceObjectSelected = selected; if (!selected) m_hoverManipAxis = -1; }
-	void SetManipulatorHoverAxis(int axis)          { m_hoverManipAxis = axis; }
+	// object-space AABB for the body-click. SetManipulatorHover lets the host
+	// highlight the handle under the cursor (set each idle mouse-move; NONE = none).
+	void SetReferenceObjectSelected(bool selected) { m_referenceObjectSelected = selected; if (!selected) m_hoverManip = ManipHandle(); }
+	void SetManipulatorHover(ManipHandle h)         { m_hoverManip = h; }
 	bool PickReferenceObject(short screenX, short screenY) const;
 
 	void SetHeatDebug(bool debug);
@@ -843,7 +856,7 @@ private:
 	D3DXVECTOR3              m_referenceRotation = D3DXVECTOR3(0.0f, 0.0f, 0.0f);  // degrees [yaw,pitch,roll]
 	ReferenceObjectStatus    m_referenceObjectStatus = ReferenceObjectStatus::None;
 	bool                     m_referenceObjectSelected = false;  // gizmo visible/grabbable only when selected
-	int                      m_hoverManipAxis = -1;              // axis under the cursor (highlight), -1 = none
+	ManipHandle              m_hoverManip;                       // handle under the cursor (highlight), kind=NONE = none
 	GameObjectCatalog        m_referenceCatalog;               // lazily built; invalidated on mod switch
 	bool                     m_referenceCatalogBuilt = false;
 

@@ -17,6 +17,41 @@ Conventions:
 ## Changelog
 
 
+### Rotate handles for the imported-object gizmo — translate arrows + world-axis rotate rings
+
+*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+A selected reference object's in-viewport gizmo now **rotates** as well as translates. Alongside the
+three colour-matched **translate arrows** (X/Y/Z) it draws three colour-matched **rotation rings** —
+drag a ring to spin the object about that world axis. Rings are drawn always-combined with the arrows,
+always-on-top, and hover-highlit; the grab is no-jump and accumulates for unlimited multi-turn
+rotation, writing the same yaw/pitch/roll the numeric picker spinners own (viewport and spinners stay
+in lock-step). The previously-known hover dead-zone is fixed too — the whole hovered arrow, arrowhead
+included, is now grabbable.
+
+**How we tackled it.** Engine-owned and additive — the working translate math is left byte-identical.
+`PickManipulatorAxis`→`PickManipulatorHandle` ([`src/engine.cpp`](src/engine.cpp:2999)) now ray-scores
+all six handles (3 arrows + 3 rings) by *miss ÷ its own threshold*, so an arrow wins ties and a ring's
+`|radius − R|` band is comparable to an arrow's ray-to-segment gap; new `ManipulatorRingAngle`
+([`src/engine.cpp`](src/engine.cpp:3092)) intersects the cursor ray with each ring's world-axis plane
+and returns the in-plane angle in an `(axis+1, axis+2)` basis chosen so each ring maps **1:1 onto its
+Euler component** (Z→yaw, X→pitch, Y→roll) — keeping the existing Euler state and the picker in sync
+with no quaternion machinery. The host ([`src/host/HostWindow.cpp`](src/host/HostWindow.cpp:3060))
+accumulates wrapped per-move ring-angle deltas onto the grab-snapshot rotation, reusing the translate
+gesture's commit/persist path verbatim.
+
+**Issues encountered and resolutions.** World-axis Euler-component rings are an *exact* world rotation
+only for the outermost axis (yaw/Z); for a mixed pose, dragging the pitch/roll ring rotates in the
+partially-rotated frame — accepted (it's the "rings == the picker spinners" contract the world/global
+choice implies; a true world-axis quaternion path is a deferred upgrade). Verified by building Debug
+**and** Release (the `/WX` gate,) plus a headless render capture, then live-tested by
+**synthesising real OS mouse input** (`SendInput`) against the running build and reading the result
+back from window screenshots — the computer-use harness won't grant a custom dev `.exe`, so this was
+the way to drive the actual drag end-to-end (blue ring → yaw, green ring → a distinct tilt, the rings
+staying world-fixed while the object turned).
+
+---
+
 ### imported game objects — render correctness: hidden meshes, collision, transparency, normals + a selection box
 
 *2026-06-14 · [`713d418`](https://github.com/DrKnickers/particle-editor/commit/713d418) · #174*
