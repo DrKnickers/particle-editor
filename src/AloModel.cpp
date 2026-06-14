@@ -373,3 +373,17 @@ AloModel LoadAloModel(IFile* file)
 
     return model;
 }
+
+// --- Sub-mesh classification (shared by ReferenceObjectMesh + GameObjectCatalog) ---
+
+bool AloIsSkinnedVertexFormat(const std::string& vertexFormatName)
+{
+    return vertexFormatName.rfind("alD3dVertRSkin", 0) == 0 ||
+           vertexFormatName.rfind("alD3dVertB4I4", 0) == 0;
+}
+
+bool AloIsNonVisibleShader(const std::string& shaderName)
+{
+    return shaderName == "MeshCollision.fx"    || shaderName == "MeshShadowVolume.fx" ||
+           shaderName == "RSkinShadowVolume.fx" || shaderName == "MeshOccludedUnit.fx";
+}

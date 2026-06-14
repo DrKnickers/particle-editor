@@ -107,6 +107,21 @@ struct AloModel
 static const long kAloVertexStride = 144;
 static const long kAloColorOffset  = 80;   // float4 RGBA (RGB@80, A@92)
 
+// Sub-mesh classification helpers (pure string checks) shared by the
+// renderer (ReferenceObjectMesh skips these sub-meshes) and the catalog
+// (GameObjectCatalog greys out a model that has no renderable rigid sub-mesh).
+// Kept on this pure-data leaf so the picker's "skinned / unsupported" verdict
+// stays in lockstep with what the renderer actually skips -- if the set of
+// skipped formats/shaders ever changes, both consumers move together.
+//
+//   AloIsSkinnedVertexFormat -- a 0x10002 format the rigid path can't upload
+//     (per-vertex bone indices/weights need a bone-matrix palette v1 lacks):
+//     "alD3dVertRSkin*" / "alD3dVertB4I4*".
+//   AloIsNonVisibleShader -- a 0x10101 shader that is collision / shadow-volume
+//     scaffolding, never drawn as visible geometry.
+bool AloIsSkinnedVertexFormat(const std::string& vertexFormatName);
+bool AloIsNonVisibleShader(const std::string& shaderName);
+
 // Parse the static-mesh + material subset of an `.alo` from `file` (caller
 // retains ownership; the parser AddRef/Releases the file internally). Returns
 // a model with one AloMesh per 0x400 chunk.

@@ -98,16 +98,9 @@ namespace
         }
     }
 
-    // v1 deferral detectors (per SUB-MESH -- a model can mix rigid + skinned).
-    bool IsSkinnedFormat(const std::string& vfmt)
-    {
-        return vfmt.rfind("alD3dVertRSkin", 0) == 0 || vfmt.rfind("alD3dVertB4I4", 0) == 0;
-    }
-    bool IsNonVisibleShader(const std::string& shader)
-    {
-        return shader == "MeshCollision.fx" || shader == "MeshShadowVolume.fx" ||
-               shader == "RSkinShadowVolume.fx" || shader == "MeshOccludedUnit.fx";
-    }
+    // v1 deferral detectors live on the AloModel pure-data leaf
+    // (AloIsSkinnedVertexFormat / AloIsNonVisibleShader) so GameObjectCatalog's
+    // picker grey-out stays in lockstep with what this renderer skips.
 
     // Texture resolution: bare leaf name -> Data\Art\Textures\, with the
     // engine's .tga->.dds fallback (game ships compiled .dds). Mirrors
@@ -243,9 +236,9 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
         {
             if (sm.rawVertexBytes.empty() || sm.vertexCount == 0 || sm.primitiveCount == 0)
                 continue;
-            if (IsNonVisibleShader(sm.shaderName))   // collision / shadow hulls
+            if (AloIsNonVisibleShader(sm.shaderName))   // collision / shadow hulls
                 continue;
-            if (IsSkinnedFormat(sm.vertexFormatName)) // v1 defers skinning
+            if (AloIsSkinnedVertexFormat(sm.vertexFormatName)) // v1 defers skinning
             {
                 m_skippedSkinned = true;
                 continue;
