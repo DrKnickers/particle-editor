@@ -892,6 +892,11 @@ bool Engine::Render()
 		}
 	}
 
+	// Imported reference object: solid, depth-tested geometry drawn after
+	// the ground and before the (depth-test-only) particles, so particles sort
+	// against it and it sits on the ground plane. No-op when none is loaded.
+	RenderReferenceObject();
+
     // Particles never write to the depth buffer — let painter's-order
     // (the order each emitter is drawn) decide stacking when emitters
     // overlap, matching the in-game behaviour. ZENABLE is re-asserted here so
@@ -1560,6 +1565,7 @@ void Engine::Reset()
 	// OnLostDevice their effects (decls survive). Both slots.
 	m_skydomePrimaryMesh.OnLostDevice();
 	m_skydomeSecondaryMesh.OnLostDevice();
+	m_referenceObjectMesh.OnLostDevice();   // same DEFAULT-pool dance
 	SAFE_RELEASE(m_pGroundTexture);
 	//: the compositor's off-screen RT is D3DPOOL_DEFAULT, so
 	// it must be released before m_pDevice->Reset — otherwise Reset
@@ -1602,6 +1608,7 @@ void Engine::Reset()
 	// then the DEFAULT-pool VB/IB + textures refill below (todo.md Risk 7).
 	m_skydomePrimaryMesh.OnResetEffects();
 	m_skydomeSecondaryMesh.OnResetEffects();
+	m_referenceObjectMesh.OnResetEffects();   // phase 1
 	//: recreate the D3DPOOL_DEFAULT ground normal textures post-Reset.
 	CreateGroundFlatNormal();
 	// Phase 3 Stage 1: rebuild the previously-managed-pool
@@ -1617,6 +1624,7 @@ void Engine::Reset()
 	// textures from the cached transcoded blobs (no re-parse).
 	m_skydomePrimaryMesh.CreateBuffers(m_pDevice, m_fileManager);
 	m_skydomeSecondaryMesh.CreateBuffers(m_pDevice, m_fileManager);
+	m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);   // phase 2
 
 	ResetParameters();
 
@@ -2613,6 +2621,118 @@ void Engine::RenderSkydomes()
         RenderSkydome();
 }
 
+// Draw the imported reference object: SOLID, depth-tested, backface-culled
+// geometry. Each rigid sub-mesh is placed by its bone's object-space matrix
+// (sub.placement) times the live object world (identity until the gizmo),
+// and runs its OWN game shader 1:1 with the same engine binding the particle /
+// dome paths use. render-state save/restore so the particle draw is
+// unaffected. No-op when nothing is loaded/resolved.
+void Engine::RenderReferenceObject()
+{
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved())
+        return;
+
+    D3DXMATRIX objectWorld;
+    D3DXMatrixIdentity(&objectWorld);   //: live position/rotation goes here
+
+    DWORD oldAlphaBlend, oldZWrite, oldZEnable, oldCull;
+    m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
+    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE,     &oldZWrite);
+    m_pDevice->GetRenderState(D3DRS_ZENABLE,          &oldZEnable);
+    m_pDevice->GetRenderState(D3DRS_CULLMODE,         &oldCull);
+    IDirect3DVertexDeclaration9* oldDecl = NULL;
+    m_pDevice->GetVertexDeclaration(&oldDecl);
+
+    // Solid object: depth test + write ON, backface cull, opaque. CULL_CCW is the
+    // initial guess for the .alo winding -- verify via capture and flip to CW if
+    // the object renders inside-out.
+    m_pDevice->SetRenderState(D3DRS_ZENABLE,          D3DZB_TRUE);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_CCW);
+    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+
+    D3DXVECTOR4 eyePos(m_eye.Position.x, m_eye.Position.y, m_eye.Position.z, 1.0f);
+
+    for (RefSubMeshGpu& sub : m_referenceObjectMesh.SubMeshes())
+    {
+        if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL)
+            continue;
+
+        D3DXMATRIX world = sub.placement * objectWorld;
+        D3DXMATRIX wvp   = world * m_view * m_projection;
+
+        ID3DXEffect* fx = sub.effect->getD3DEffect();   // AddRef'd
+        const Effect::Handles& h = sub.effect->getHandles();
+
+        fx->SetMatrix(h.hWorld,               &world);
+        fx->SetMatrix(h.hWorldViewProjection, &wvp);
+        fx->SetVector(h.hEyePosition,         &eyePos);
+        fx->SetVector(h.hGlobalAmbient,       &m_ambient);
+        fx->SetVector(h.hDirLightVec0,        &m_lights[0].Position);
+        fx->SetVector(h.hDirLightObjVec0,     &m_lights[0].Position);
+        fx->SetVector(h.hDirLightDiffuse,     &m_lights[0].Diffuse);
+        fx->SetVector(h.hDirLightSpecular,    &m_lights[0].Specular);
+        fx->SetMatrixArray(h.hSphLightAll,    m_sphLightAll,  3);
+        fx->SetMatrixArray(h.hSphLightFill,   m_sphLightFill, 3);
+        fx->SetFloat(h.hTime,                 GetTimeF());
+
+        for (size_t i = 0; i < sub.params.size(); ++i)
+        {
+            D3DXHANDLE ph = (i < sub.matHandles.size()) ? sub.matHandles[i] : NULL;
+            if (ph == NULL) continue;
+            const AloShaderParam& p = sub.params[i];
+            switch (p.kind)
+            {
+                case AloShaderParam::INT:    fx->SetInt(ph, p.i); break;
+                case AloShaderParam::FLOAT:  fx->SetFloat(ph, p.f[0]); break;
+                case AloShaderParam::FLOAT3: fx->SetFloatArray(ph, p.f, 3); break;
+                case AloShaderParam::FLOAT4:
+                {
+                    D3DXVECTOR4 v(p.f[0], p.f[1], p.f[2], p.f[3]);
+                    fx->SetVector(ph, &v);
+                    break;
+                }
+                case AloShaderParam::TEXTURE:
+                    if (i < sub.matTextures.size()) fx->SetTexture(ph, sub.matTextures[i]);
+                    break;
+            }
+        }
+
+        m_pDevice->SetVertexDeclaration(sub.decl);
+        m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
+        m_pDevice->SetIndices(sub.ib);
+
+        UINT passes = 0;
+        fx->Begin(&passes, 0);
+        for (UINT pass = 0; pass < passes; ++pass)
+        {
+            fx->BeginPass(pass);
+#ifndef NDEBUG
+            if (sub.primitiveCount > 0)
+            {
+                DWORD zw = 0, cm = 0;
+                m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &zw);
+                m_pDevice->GetRenderState(D3DRS_CULLMODE,     &cm);
+                fprintf(stderr, "[RefObjDraw] %s pass %u/%u zwrite=%lu cull=%lu prims=%u\n",
+                        sub.shaderName.c_str(), pass + 1, passes, zw, cm, sub.primitiveCount);
+            }
+#endif
+            m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+                                            sub.vertexCount, 0, sub.primitiveCount);
+            fx->EndPass();
+        }
+        fx->End();
+        fx->Release();
+    }
+
+    m_pDevice->SetVertexDeclaration(oldDecl);
+    if (oldDecl) oldDecl->Release();
+    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, oldAlphaBlend);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     oldZWrite);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE,          oldZEnable);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE,         oldCull);
+}
+
 // Re-drive Load->Resolve->CreateBuffers for both slots from the current
 // selected Names. Used on selection change and mod-switch (ReloadTextures, after
 // ShaderManager::Clear ran, so getShader picks up the new mod's .fxo). Resolve +
@@ -3168,6 +3288,29 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 			fprintf(stderr, "[SkyEnv] test driver: ctx=%s primary='%s' secondary='%s'\n",
 			        ctx == SkydomeContext::Land ? "land" : "space", prim.c_str(), sec.c_str());
 			SetSkydomeEnvironment(ctx, prim, sec);
+		}
+	}
+	// bring-up driver (debug only): load a reference object by .alo path so
+	// the rigid-multi-part render core can be feel-tested before the picker.
+	//   set ALO_LT7_TEST_OBJECT=Data\Art\Models\AI_Bunker_Turret1.alo
+	{
+		char buf[512];
+		if (GetEnvironmentVariableA("ALO_LT7_TEST_OBJECT", buf, sizeof(buf)) > 0)
+		{
+			std::string aloPath = buf;
+			fprintf(stderr, "[RefObj] test driver: loading '%s'\n", aloPath.c_str());
+			if (m_referenceObjectMesh.Load(m_fileManager, aloPath))
+			{
+				m_referenceObjectMesh.Resolve(m_shaderManager, m_pDevice);
+				m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);
+				fprintf(stderr, "[RefObj] loaded: %zu sub-meshes, skippedSkinned=%d\n",
+				        m_referenceObjectMesh.SubMeshes().size(),
+				        m_referenceObjectMesh.SkippedSkinned() ? 1 : 0);
+			}
+			else
+			{
+				fprintf(stderr, "[RefObj] load FAILED for '%s'\n", aloPath.c_str());
+			}
 		}
 	}
 #endif

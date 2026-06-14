@@ -187,6 +187,7 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="Resources\resource.de.h" />
     <ClInclude Include="Resources\resource.en.h" />
+    <ClInclude Include="ReferenceObjectMesh.h" />
     <ClInclude Include="Resources\resource.h" />
     <ClInclude Include="SkydomeEnvironment.h" />
     <ClInclude Include="SkydomeMesh.h" />
@@ -228,6 +229,7 @@
     <ClCompile Include="Autosave.cpp" />
     <ClCompile Include="SpawnerDriver.cpp" />
     <ClCompile Include="UndoStack.cpp" />
+    <ClCompile Include="ReferenceObjectMesh.cpp" />
     <ClCompile Include="SkydomeEnvironment.cpp" />
     <ClCompile Include="SkydomeMesh.cpp" />
     <ClCompile Include="SphericalHarmonics.cpp" />
