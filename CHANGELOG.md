@@ -19,7 +19,7 @@ Conventions:
 
 ### Rotate handles for the imported-object gizmo — translate arrows + world-axis rotate rings
 
-*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-14 · [`1182386`](https://github.com/DrKnickers/particle-editor/commit/1182386) · #178*
 
 A selected reference object's in-viewport gizmo now **rotates** as well as translates. Alongside the
 three colour-matched **translate arrows** (X/Y/Z) it draws three colour-matched **rotation rings** —
@@ -133,7 +133,7 @@ review). The ROADMAP "Shipped" marking is deferred until that live-test confirms
 
 ### space skydome — the secondary nebula now composites over the primary starfield
 
-*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-14 · [`c399357`](https://github.com/DrKnickers/particle-editor/commit/c399357) · #171*
 
 Picking a **space** dual-slot dome (a starfield primary + a nebula secondary) now renders
 both layers as it does in-game — previously the nebula was invisible. No user-facing
