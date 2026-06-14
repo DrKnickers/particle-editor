@@ -77,6 +77,15 @@ PhysicalFile::~PhysicalFile()
 //
 unsigned long SubFile::read(void* buffer, unsigned long size)
 {
+	// Clamp the request to the bytes remaining INSIDE this sub-view. Without
+	// this, a read larger than the sub-file (e.g. XMLTree::parse's 32 KB chunks
+	// on a small packed XML) spills into the adjacent MEG entry's bytes, handing
+	// trailing garbage to the caller -- which broke MEG-packed XML parsing
+	// (skydome lists resolved but failed to parse). Exact-size reads
+	// (ReadAndRelease) are unaffected: size already equals the remaining bytes.
+	const unsigned long remaining = (m_position < m_size) ? (m_size - m_position) : 0;
+	if (size > remaining) size = remaining;
+	if (size == 0) return 0;
 	m_file->seek(m_start + m_position);
 	size = m_file->read(buffer, size);
 	m_position = min(m_position + size, m_size);

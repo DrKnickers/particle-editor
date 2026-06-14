@@ -17,6 +17,49 @@ Conventions:
 ## Changelog
 
 
+### skydome renders for real — two render-blocker fixes + a render-capture bridge
+
+*2026-06-13 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+The game/mod skydome
+shipped code-complete but **render-unverified**. A render-capture feel-test against a
+real FoC install found it was broken two ways on any MEG-packed install, both now fixed:
+the game-dome picker enumerated **zero** domes, and even when force-loaded the dome rendered
+**black**. After the fixes a real dome (`Day_Blue_Sky` → `w_sky00.alo`) renders faithfully —
+its blue `W_SkyBlue_clear` base texture, SH-lit, running `Skydome.fx`/`MeshAdditive.fx` 1:1 —
+and a space `Stars_High` + `Star_Backdrop_Blue` nebula loads its `MeshGloss`/`MeshAdditive`/
+`MeshAdditiveVColor` sub-meshes. This change also adds a debug-gated `debug/capture-frame`
+bridge kind so the rendered viewport can be written to a PNG and inspected/diffed offline —
+the tool that makes render work self-verifiable (and, paired with the existing pause +
+step-frames, enables deterministic particle-lifecycle filmstrips).
+
+**How we tackled it.** Two surgical fixes, no shader edits (the 1:1-no-fork rule holds).
+(1) [`SubFile::read`](src/files.cpp:78) — the bounded MEG-entry view — never clamped a read
+to its own remaining bytes, so `XMLTree::parse`'s 32 KB chunks on a small packed XML spilled
+the **adjacent** MEG entry's bytes into expat, failing the parse; `LoadSkydomeList` then
+returned false and the picker saw no domes. A three-line bounds clamp fixes it (also unblocks
+game-object XML import). (2) [`loadMaterialTexture`](src/SkydomeMesh.cpp:98) didn't
+mirror the engine's `.tga`→`.dds` extension fallback ([`main.cpp`](src/main.cpp:193)): `.alo`
+materials name the source `.tga`, the packed game ships compiled `.dds`, so every dome texture
+missed and the dome drew black — fixed by trying the `.dds`-swapped name too. The capture
+bridge reuses the proven [`AlphaCompositor::CaptureSnapshotToFile`](src/host/AlphaCompositor.cpp:921)
+readback through a new [`LayoutBroker`](src/host/LayoutBroker.cpp:543) forwarder, so it captures
+the real `Engine::Render()` RT rather than a second renderer; the handler
+([`src/host/BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp:1201)) is gated to Debug
+builds / `--test-host` because it writes a caller-chosen path.
+
+**Issues encountered and resolutions.** Both bugs were invisible to the session-42 leaf tests
+because those parse only *loose* XML with mocks — the over-read needs a real bounded `SubFile`
+over a packed MEG, and the texture miss needs the real `.tga`-named-but-`.dds`-shipped install.
+A dedicated [`tests/test_subfile_read.cpp`](tests/test_subfile_read.cpp:1) regression test pins
+the clamp (verified to fail without the fix). The "empty state blocks" risk (todo.md Risk 2) was
+settled empirically along the way: a post-`BeginPass` `GetRenderState` dump showed the app's
+render states **are** applied. The `#ifndef NDEBUG` `ALO_MT15_TEST_DOME` env hook was kept (not
+removed as the #163 handoff planned) because it is the only way to select a dome for a *headless*
+`--capture` render — the React picker only drives an interactive session.
+
+---
+
 ### skydome foundation — `.alo` mesh decoder + environment reader
 
 *2026-06-13 · [`72d55bf`](https://github.com/DrKnickers/particle-editor/commit/72d55bf) · #160*

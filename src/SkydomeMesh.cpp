@@ -95,12 +95,35 @@ namespace
     // .alo material textures are bare leaf names; the MEG CRC-matches the full
     // Data\Art\Textures\ path. Try that first, then the bare name (loose mod
     // files). Mirrors Engine::LoadTextureViaFileManager + the curated-slot prefix.
+    //
+    // Extension fallback: the .alo names the SOURCE texture (e.g.
+    // "W_SkyBlue_clear.tga") but the packed game ships the COMPILED ".dds" -- so
+    // every candidate is also tried with the extension swapped to .dds, mirroring
+    // the engine's TextureManager::getTexture (main.cpp: try as-named, then swap to
+    // ".DDS"). Lowercase ".dds" here is fine: case is irrelevant on both resolution
+    // paths -- MegaFile::getFile uppercases the path before the CRC match
+    // (MegaFiles.cpp), and the loose-disk lookup is NTFS case-insensitive
+    // (managers.cpp). Without this every dome texture misses and the dome draws black.
     IDirect3DTexture9* loadMaterialTexture(IDirect3DDevice9* dev, IFileManager& fm, const std::string& bareName)
     {
         if (bareName.empty()) return nullptr;
-        IDirect3DTexture9* tex = loadTextureExact(dev, fm, "Data\\Art\\Textures\\" + bareName);
-        if (!tex) tex = loadTextureExact(dev, fm, bareName);
-        return tex;
+
+        std::string asDds = bareName;
+        const size_t dot = asDds.rfind('.');
+        if (dot != std::string::npos) asDds = asDds.substr(0, dot) + ".dds";
+
+        const std::string candidates[] = {
+            "Data\\Art\\Textures\\" + bareName,
+            "Data\\Art\\Textures\\" + asDds,
+            bareName,
+            asDds,
+        };
+        for (const std::string& c : candidates)
+        {
+            IDirect3DTexture9* tex = loadTextureExact(dev, fm, c);
+            if (tex) return tex;
+        }
+        return nullptr;
     }
 }
 

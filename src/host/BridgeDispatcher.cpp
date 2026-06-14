@@ -1198,6 +1198,41 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
+    // -------- debug/capture-frame ([render-capture]) --------
+    // Write the current engine viewport frame straight to a PNG at `path` so the
+    // rendered output can be inspected / diffed offline -- render-fidelity
+    // feel-tests and, paired with engine/set/paused + engine/action/step-frames,
+    // deterministic pause->step->capture particle-lifecycle filmstrips. Reuses the
+    // proven CaptureSnapshotToFile readback (the real Engine::Render() RT), so it
+    // never diverges into a second renderer.
+    //
+    // Gated: Debug builds always; Release only under --test-host. It writes a
+    // caller-chosen path, so it must never be reachable from a normal Release
+    // session. Returns { path } on success.
+    if (kind == "debug/capture-frame")
+    {
+#ifdef NDEBUG
+        const bool allowed = m_testHost;
+#else
+        const bool allowed = true;
+#endif
+        if (!allowed)
+        {
+            sendErr("debug/capture-frame is gated to debug builds / --test-host");
+            return res;
+        }
+        const std::string path = params.value("path", std::string{});
+        if (path.empty())
+        {
+            sendErr("debug/capture-frame requires a non-empty 'path'");
+            return res;
+        }
+        const bool ok = m_layout.CaptureSnapshotToFile(Utf8ToWide(path));
+        if (ok) sendOk(json{{"path", path}});
+        else    sendErr("capture failed (no composited frame yet, no render target, or file write failed)");
+        return res;
+    }
+
     // -------- viewport/input (Phase 2) --------
     //
     // DOM mouse/wheel/key events on the in-DOM <canvas> arrive here

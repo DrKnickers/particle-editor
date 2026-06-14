@@ -540,6 +540,12 @@ bool LayoutBroker::CaptureSnapshotPng(std::string& outBase64, int& outW, int& ou
     return m_alphaCompositor->CaptureSnapshotPng(outBase64, outW, outH);
 }
 
+bool LayoutBroker::CaptureSnapshotToFile(const std::wstring& path)
+{
+    if (!m_alphaCompositor) return false;
+    return m_alphaCompositor->CaptureSnapshotToFile(path);
+}
+
 void LayoutBroker::ReemitOcclusions()
 {
     if (!m_alphaCompositor && !m_dcompCompositor) return;

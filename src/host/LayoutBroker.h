@@ -159,6 +159,15 @@ public:
     // panels.
     bool CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH);
 
+    // [render-capture] Forward a to-file snapshot request to the compositor.
+    // Writes the most recent pre-stamp engine frame straight to a PNG at `path`
+    // (same readback as CaptureSnapshotPng, lossless PNG to disk). Returns false
+    // when no compositor is attached or it has no frame yet. Used by the
+    // debug/--test-host-gated `debug/capture-frame` bridge kind so the rendered
+    // viewport can be inspected/diffed offline (render-fidelity feel-tests +
+    // pause->step->capture particle filmstrips).
+    bool CaptureSnapshotToFile(const std::wstring& path);
+
     // [Item 3] Dock-slide viewport interpolation. The web sends ONE
     // animate-scene-rect at the dock open/close toggle; the host then re-renders
     // the engine at a wall-clock-lerped scene rect every render frame, synced to
