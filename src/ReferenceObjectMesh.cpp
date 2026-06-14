@@ -369,6 +369,8 @@ bool ReferenceObjectMesh::Resolve(IShaderManager& sm, IDirect3DDevice9* dev)
 #ifndef NDEBUG
             fwprintf(stderr, L"[RefObj] resolve FAILED %hs / %hs: %ls -- sub-mesh skipped\n",
                      gpu.shaderName.c_str(), gpu.vertexFormatName.c_str(), we.what());
+#else
+            (void)we;   // Release (/WX): `we` is only read by the NDEBUG log above
 #endif
             relptr(gpu.effect);   // leave effect/decl null -> skipped at draw
         }
