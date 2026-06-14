@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { BackgroundDropdown } from "@/components/BackgroundDropdown";
+import { ReferenceObjectDropdown } from "@/components/ReferenceObjectDropdown";
 import { GroundDropdown } from "@/components/GroundDropdown";
 import { useRightDock, toggleDock } from "@/lib/right-dock";
 import { Tip } from "@/primitives/Tip";
@@ -227,6 +228,7 @@ export function Toolbar({ bridge }: Props) {
       {/* Group 5: environment */}
       <GroundDropdown bridge={bridge} />
       <BackgroundDropdown bridge={bridge} />
+      <ReferenceObjectDropdown bridge={bridge} />
     </div>
   );
 }

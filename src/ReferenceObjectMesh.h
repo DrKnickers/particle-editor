@@ -51,6 +51,7 @@ struct RefSubMeshGpu
     uint32_t                    stride = 0;        // runtime vertex stride (== decl size)
     uint32_t                    vertexCount = 0;
     uint32_t                    primitiveCount = 0;
+    AloRenderClass              renderClass = ALO_RC_OPAQUE;  // phase/blend bucket (AloClassifyShader)
 
     // Object-space placement = this sub-mesh's parent mesh's bone, accumulated up
     // the parent chain (rigid). Identity when the model has no usable skeleton.
@@ -77,10 +78,12 @@ public:
     ReferenceObjectMesh& operator=(const ReferenceObjectMesh&) = delete;
 
     // Decode + transcode the `.alo` at `aloPath` (resolved via `fm`). CPU only:
-    // touches no device. Replaces any prior contents. Drops skinned + collision/
-    // shadow sub-meshes; computes each kept sub-mesh's bone placement matrix from
-    // the model's skeleton + connections. Returns false (mesh left empty) on a
-    // FileManager miss, a parse failure, or zero renderable rigid sub-meshes.
+    // touches no device. Replaces any prior contents. Drops 0x402-hidden meshes +
+    // skinned + shadow/occluded/heat sub-meshes; KEEPS opaque (incl. collision =
+    // flat blue) + transparent (additive/alpha). Records each kept sub-mesh's
+    // phase/blend class + bone placement, and the object-space AABB over the kept
+    // geometry. Returns false (mesh left empty) on a FileManager miss, a parse
+    // failure, or zero renderable rigid sub-meshes.
     bool Load(IFileManager& fm, const std::string& aloPath);
 
     // Release all GPU + cached CPU data and empty the mesh.
@@ -102,6 +105,11 @@ public:
     bool HasResolved()  const;                  // >=1 sub-mesh with a non-NULL effect
     bool SkippedSkinned() const { return m_skippedSkinned; }   // dropped >=1 skinned sub-mesh
 
+    // Object-space AABB over the KEPT (drawn) geometry, accumulated at Load.
+    // Used both to draw the selection box and as the click-to-select hit target, so
+    // the visual box == the pickable region. False (box untouched) when empty.
+    bool GetBoundingBox(D3DXVECTOR3& outMin, D3DXVECTOR3& outMax) const;
+
     std::vector<RefSubMeshGpu>&       SubMeshes()       { return m_subMeshes; }
     const std::vector<RefSubMeshGpu>& SubMeshes() const { return m_subMeshes; }
 
@@ -109,6 +117,9 @@ private:
     std::vector<RefSubMeshGpu> m_subMeshes;
     std::map<std::string, IDirect3DVertexDeclaration9*> m_decls;  // per-format, shared
     bool m_skippedSkinned = false;
+    D3DXVECTOR3 m_boundMin = D3DXVECTOR3(0, 0, 0);   // object-space AABB over kept geometry
+    D3DXVECTOR3 m_boundMax = D3DXVECTOR3(0, 0, 0);
+    bool m_hasBounds = false;
 
     void ReleaseGpuBuffers();
     void ReleaseEffects();

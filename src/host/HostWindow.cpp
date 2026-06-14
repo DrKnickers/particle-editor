@@ -516,11 +516,22 @@ struct HostWindowImpl
     // Only Z (height) tracks the drag delta; X/Y stay frozen at the
     // click position. WM_LBUTTONUP detaches the preview (place it).
     // Matches legacy src/main.cpp:2891-2898 + 2877-2883 + 2936-2948.
-    enum class DragMode { NONE, MOVE, ROTATE, ZOOM, OBJECT_Z };
+    // MANIPULATE: an axis handle of the reference-object translate
+    // gizmo was grabbed; LMB drag moves the object along that axis (wins over
+    // camera orbit only when a handle is actually under the cursor at press).
+    enum class DragMode { NONE, MOVE, ROTATE, ZOOM, OBJECT_Z, MANIPULATE };
     DragMode        m_dragMode      = DragMode::NONE;
     Engine::Camera  m_dragStartCam  = {};
     int             m_dragStartX    = 0;
     int             m_dragStartY    = 0;
+    // manipulator drag state: grabbed axis (0=X/1=Y/2=Z), the object
+    // position snapshot at grab, and the grab-time axis param (no-jump offset).
+    int             m_manipAxis        = -1;
+    D3DXVECTOR3     m_manipStartPos    = D3DXVECTOR3(0, 0, 0);
+    float           m_manipGrabT0      = 0.0f;
+    // ~30 Hz throttle for the per-move engine/state/changed emit (the snapshot is
+    // heavy; the gizmo render still moves every frame via SetReferenceObjectTransform).
+    DWORD           m_lastManipEmitTick = 0;
 
     // shift-click-to-spawn. Mirror of legacy
     // `info->mouseCursor` + `info->attachedParticleSystem` at
@@ -2089,6 +2100,50 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         }
                     }
 
+                    // Imported reference object + unit grid (). Runs
+                    // after the device is up so SetReferenceObject resolves +
+                    // uploads the mesh now. Transform / grid spacing are
+                    // REG_BINARY floats; visibility / grid toggle are REG_DWORD.
+                    {
+                        auto readFloats = [&](const wchar_t* name, float* out, DWORD count) -> bool {
+                            DWORD t = 0, cb = count * sizeof(float);
+                            if (RegQueryValueExW(hKey, name, nullptr, &t,
+                                    reinterpret_cast<BYTE*>(out), &cb) != ERROR_SUCCESS
+                                || t != REG_BINARY || cb != count * sizeof(float))
+                                return false;
+                            // Reject NaN/Inf so a corrupt blob can't poison the
+                            // transform matrix (mirrors the bloom readF guard above).
+                            for (DWORD i = 0; i < count; ++i)
+                                if (!(out[i] == out[i] && (out[i] - out[i]) == 0.0f))
+                                    return false;
+                            return true;
+                        };
+                        float xform[6] = { 0, 0, 0, 0, 0, 0 };
+                        if (readFloats(L"ReferenceObjectTransform", xform, 6))
+                            engine->SetReferenceObjectTransform(
+                                D3DXVECTOR3(xform[0], xform[1], xform[2]),
+                                D3DXVECTOR3(xform[3], xform[4], xform[5]));
+                        if (readDword(L"ReferenceObjectVisible", dw))
+                            engine->SetReferenceObjectVisible(dw != 0);
+                        if (readDword(L"GridVisible", dw))
+                            engine->SetGridVisible(dw != 0);
+                        float spacing = 0.0f;
+                        if (readFloats(L"GridSpacing", &spacing, 1))
+                            engine->SetGridSpacing(spacing);
+                        // Name LAST so the mesh loads once with the transform in
+                        // place; guard on non-empty so an unset selection doesn't
+                        // clobber a debug ALO_LT7_TEST_OBJECT env-hook mesh.
+                        std::wstring nameW = readSz(L"ReferenceObjectName");
+                        if (!nameW.empty())
+                        {
+                            engine->SetReferenceObject(WideToAnsi(nameW));
+                            // A silent startup restore is NOT a pick -- load the
+                            // object inert so the gizmo + selection box appear only when
+                            // the user clicks its body (honours the selection-gating).
+                            engine->SetReferenceObjectSelected(false);
+                        }
+                    }
+
                     // [lighting-restore, session 12] Restore the persisted
                     // lighting (sun / fill1 / fill2 angles + colours +
                     // intensities, ambient, shadow) so the new-UI viewport
@@ -2858,6 +2913,37 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             SetCapture(hwnd);
             return 0;
         }
+        // Reference-object translate manipulator: if an axis handle
+        // is under the cursor, grab it (drag moves the object) — this wins over
+        // camera orbit. On a MISS the pick returns -1 and we fall through to the
+        // plain camera drag below, so clicking empty space still orbits.
+        {
+            const int axis = engine->PickManipulatorAxis((short)LOWORD(lp), (short)HIWORD(lp));
+            if (axis >= 0)
+            {
+                m_manipAxis     = axis;
+                m_manipStartPos = engine->GetReferencePosition();
+                // Grab offset (axis param at press) so the object doesn't jump
+                // on the first move; if degenerate, fall back to 0.
+                if (!engine->ManipulatorAxisParam((short)LOWORD(lp), (short)HIWORD(lp),
+                                                  axis, m_manipStartPos, m_manipGrabT0))
+                    m_manipGrabT0 = 0.0f;
+                m_dragMode = DragMode::MANIPULATE;
+                SetCapture(hwnd);
+                return 0;
+            }
+        }
+        // Click-to-select: clicking the object body selects it (the
+        // gizmo appears); clicking empty space deselects it and falls through to
+        // camera orbit. (Handle grabs above already won when the object was selected.)
+        {
+            if (engine->PickReferenceObject((short)LOWORD(lp), (short)HIWORD(lp)))
+            {
+                engine->SetReferenceObjectSelected(true);
+                return 0;   // consume — don't orbit when clicking the object
+            }
+            engine->SetReferenceObjectSelected(false);   // empty click: deselect
+        }
         // Plain LMB drag — camera MOVE / ZOOM (no preview involved).
         m_dragMode     = (wp & MK_CONTROL) ? DragMode::ZOOM : DragMode::MOVE;
         m_dragStartCam = engine->GetCamera();
@@ -2869,6 +2955,13 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     case WM_RBUTTONDOWN:
     {
         if (!engine) return 0;
+        // An RMB press mid-LMB-manipulate-drag takes over the mode;
+        // commit the in-flight move first so its persist/dirty isn't dropped.
+        if (m_dragMode == DragMode::MANIPULATE)
+        {
+            if (dispatcher) dispatcher->CommitReferenceObjectTransform();
+            m_manipAxis = -1;
+        }
         m_dragMode     = (wp & MK_CONTROL) ? DragMode::ZOOM : DragMode::ROTATE;
         m_dragStartCam = engine->GetCamera();
         m_dragStartX   = (short)LOWORD(lp);
@@ -2881,6 +2974,17 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     }
     case WM_LBUTTONUP:
     {
+        // Manipulator drag release: commit the moved transform once
+        // (gated persist + dirty + emit). Per-move only set+emitted (no persist),
+        // so the registry/dirty flag is touched exactly once per gesture.
+        if (m_dragMode == DragMode::MANIPULATE)
+        {
+            if (dispatcher) dispatcher->CommitReferenceObjectTransform();
+            m_dragMode  = DragMode::NONE;
+            m_manipAxis = -1;
+            ReleaseCapture();
+            return 0;
+        }
         // Legacy parity: if a cursor-bound preview was being dragged
         // for placement (OBJECT_Z mode, or any state with an attached
         // preview), DETACH it now. After Detach the system stays in
@@ -2909,9 +3013,15 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     case WM_CAPTURECHANGED:
     {
         // Capture lost (Alt-Tab away mid-drag, foreign SetCapture, etc.).
-        // Drop drag state so the next mouse-move doesn't ride a stale
-        // start camera.
-        m_dragMode = DragMode::NONE;
+        // If a manipulator drag was interrupted, commit its current
+        // position so the move isn't silently lost (the engine already holds the
+        // last per-move position; CommitReferenceObjectTransform persists it).
+        if (m_dragMode == DragMode::MANIPULATE && dispatcher)
+            dispatcher->CommitReferenceObjectTransform();
+        // Drop drag state so the next mouse-move doesn't ride a stale start camera
+        // / grabbed axis.
+        m_dragMode  = DragMode::NONE;
+        m_manipAxis = -1;
         return 0;
     }
     case WM_MOUSEMOVE:
@@ -2922,6 +3032,40 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         int my = (short)HIWORD(lp);
         m_lastCursorX = mx;
         m_lastCursorY = my;
+
+        // Manipulator drag: project the cursor ray onto the grabbed
+        // axis and move the object there. No-jump via the grab offset
+        // (newPos = startPos + axis*(now - grab)). Only set + emit here so the
+        // picker spinners track live; persistence is deferred to LMB-up.
+        if (m_dragMode == DragMode::MANIPULATE && m_manipAxis >= 0)
+        {
+            float tNow;
+            if (engine->ManipulatorAxisParam((short)mx, (short)my, m_manipAxis,
+                                             m_manipStartPos, tNow))
+            {
+                const D3DXVECTOR3 ax(m_manipAxis == 0 ? 1.0f : 0.0f,
+                                     m_manipAxis == 1 ? 1.0f : 0.0f,
+                                     m_manipAxis == 2 ? 1.0f : 0.0f);
+                const D3DXVECTOR3 newPos = m_manipStartPos + ax * (tNow - m_manipGrabT0);
+                engine->SetReferenceObjectTransform(newPos, engine->GetReferenceRotation());
+                // Throttle the (heavy) full-snapshot emit to ~30 Hz so the picker
+                // spinners track without flooding the bridge / re-rendering the UI
+                // every frame; the final exact position emits on release (commit).
+                const DWORD now = GetTickCount();
+                if (dispatcher && (now - m_lastManipEmitTick) >= 33)
+                {
+                    dispatcher->EmitEngineStateChanged();
+                    m_lastManipEmitTick = now;
+                }
+            }
+            return 0;
+        }
+
+        // Hover feedback: when idle (not dragging), highlight the gizmo
+        // axis under the cursor. PickManipulatorAxis returns -1 unless an object is
+        // selected, so this is a cheap no-op when there's nothing to hover.
+        if (m_dragMode == DragMode::NONE)
+            engine->SetManipulatorHoverAxis(engine->PickManipulatorAxis((short)mx, (short)my));
 
         // Legacy parity: in OBJECT_Z drag (placing a cursor-bound preview),
         // only Z tracks the drag. X/Y stay frozen at the click position so

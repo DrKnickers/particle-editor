@@ -630,6 +630,13 @@ void Engine::ReloadTextures()
 	{
 		RebuildSkydomeMeshes();
 	}
+	// A mod switch changes both the object catalog and the selected .alo /
+	// textures / .fxo; drop the cached catalog and rebuild the reference object.
+	m_referenceCatalogBuilt = false;
+	if (!m_referenceObjectName.empty())
+	{
+		RebuildReferenceObjectMesh();
+	}
 	printf("[Textures] Reload: cache cleared, %d instance(s) notified\n", n); fflush(stdout);
 }
 
@@ -892,10 +899,21 @@ bool Engine::Render()
 		}
 	}
 
+	// Unit grid: drawn after the ground, before the reference object, so a
+	// placed object occludes the grid lines behind it. No-op when hidden.
+	RenderUnitGrid();
+
 	// Imported reference object: solid, depth-tested geometry drawn after
 	// the ground and before the (depth-test-only) particles, so particles sort
 	// against it and it sits on the ground plane. No-op when none is loaded.
 	RenderReferenceObject();
+
+	// Selection box (depth-tested, part of the scene) when the object is
+	// selected -- shows the clickable region. Drawn before the on-top gizmo.
+	RenderReferenceSelectionBox();
+
+	// Translate-manipulator axis handles over the placed object.
+	RenderReferenceManipulator();
 
     // Particles never write to the depth buffer — let painter's-order
     // (the order each emitter is drawn) decide stacking when emitters
@@ -2625,45 +2643,113 @@ void Engine::RenderSkydomes()
         RenderSkydome();
 }
 
-// Draw the imported reference object: SOLID, depth-tested, backface-culled
-// geometry. Each rigid sub-mesh is placed by its bone's object-space matrix
-// (sub.placement) times the live object world (identity until the gizmo),
-// and runs its OWN game shader 1:1 with the same engine binding the particle /
-// dome paths use. render-state save/restore so the particle draw is
-// unaffected. No-op when nothing is loaded/resolved.
+// Live reference-object world = rotation then translation. The engine is
+// Z-UP (m_eye.Up = (0,0,1); see the Z-up note ~engine.cpp:2213), so "yaw"
+// (heading -- turning while staying upright) is rotation about world Z, NOT the
+// Y axis D3DXMatrixRotationYawPitchRoll would use. Build the Z-up analogue
+// explicitly: yaw->Z, pitch->X, roll->Y, with yaw applied LAST (outermost) so it
+// turns the already-tilted object about world up. Wire convention is
+// [yaw,pitch,roll] in degrees (schema + BridgeDispatcher). Shared by the render,
+// the selection box, and the pick so all three agree on placement.
+D3DXMATRIX Engine::ReferenceObjectWorld() const
+{
+    const float deg2rad = D3DX_PI / 180.0f;
+    D3DXMATRIX mYaw, mPitch, mRoll, trans;
+    D3DXMatrixRotationZ(&mYaw,   m_referenceRotation.x * deg2rad);   // yaw   = heading about world up (Z)
+    D3DXMatrixRotationX(&mPitch, m_referenceRotation.y * deg2rad);   // pitch = tilt about X
+    D3DXMatrixRotationY(&mRoll,  m_referenceRotation.z * deg2rad);   // roll  = bank about Y
+    D3DXMatrixTranslation(&trans, m_referencePosition.x, m_referencePosition.y, m_referencePosition.z);
+    return mRoll * mPitch * mYaw * trans;
+}
+
+// Draw the imported reference object in two phases (opaque then
+// transparent). Each rigid sub-mesh is placed by its bone's object-space matrix
+// (sub.placement) times the live object world, and runs its OWN game shader 1:1
+// with the same engine binding the particle / dome paths use. render-state
+// save/restore so the particle draw is unaffected. No-op when none loaded/resolved.
 void Engine::RenderReferenceObject()
 {
+    if (!m_referenceObjectVisible)
+        return;
     if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved())
         return;
 
-    D3DXMATRIX objectWorld;
-    D3DXMatrixIdentity(&objectWorld);   //: live position/rotation goes here
+    const D3DXMATRIX objectWorld = ReferenceObjectWorld();
 
-    DWORD oldAlphaBlend, oldZWrite, oldZEnable, oldCull;
+    DWORD oldAlphaBlend, oldSrcBlend, oldDestBlend, oldZWrite, oldZEnable, oldCull;
     m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
+    m_pDevice->GetRenderState(D3DRS_SRCBLEND,         &oldSrcBlend);
+    m_pDevice->GetRenderState(D3DRS_DESTBLEND,        &oldDestBlend);
     m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE,     &oldZWrite);
     m_pDevice->GetRenderState(D3DRS_ZENABLE,          &oldZEnable);
     m_pDevice->GetRenderState(D3DRS_CULLMODE,         &oldCull);
     IDirect3DVertexDeclaration9* oldDecl = NULL;
     m_pDevice->GetVertexDeclaration(&oldDecl);
 
-    // Solid object: depth test + write ON, backface cull, opaque. CULL_CCW is the
-    // initial guess for the .alo winding -- verify via capture and flip to CW if
-    // the object renders inside-out.
-    m_pDevice->SetRenderState(D3DRS_ZENABLE,          D3DZB_TRUE);
-    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
-    m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_CCW);
-    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-
     D3DXVECTOR4 eyePos(m_eye.Position.x, m_eye.Position.y, m_eye.Position.z, 1.0f);
 
-    for (RefSubMeshGpu& sub : m_referenceObjectMesh.SubMeshes())
+    // Two phases matching the game's Opaque-then-Transparent order: opaque
+    // sub-meshes (fill + depth) first, then additive/alpha layers blended on top.
+    // Each sub-mesh's render state is set here, not by the .fxo (its SB block is
+    // compiled out -- ALAMO_STATE_BLOCKS 0; / todo.md Risk 2). Opaque uses
+    // CULL_CW (the editor renders RIGHT-handed -- LookAtRH/PerspectiveFovRH -- which
+    // flips screen-space winding vs the game, so game-front faces present as CW
+    // here; CCW culled the front faces and showed the lit hull interior, the
+    // "inverted normals" report). Transparent uses CULL_NONE (glows/shields are
+    // two-sided; MeshShield itself sets CullMode=NONE) + z-write OFF so the layers
+    // don't occlude each other; depth TEST stays on so the opaque hull occludes
+    // transparent geometry behind it.
+    for (int phase = 0; phase < 2; ++phase)
     {
+      const bool opaquePhase = (phase == 0);
+      for (RefSubMeshGpu& sub : m_referenceObjectMesh.SubMeshes())
+      {
         if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL)
             continue;
+        const bool subOpaque = (sub.renderClass == ALO_RC_OPAQUE);
+        if (subOpaque != opaquePhase)
+            continue;   // opaque sub-meshes in phase 0, additive/alpha in phase 1
+
+        m_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+        if (subOpaque)
+        {
+            m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     TRUE);
+            m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_CW);
+            m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        }
+        else
+        {
+            m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     FALSE);
+            m_pDevice->SetRenderState(D3DRS_CULLMODE,         D3DCULL_NONE);
+            m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+            if (sub.renderClass == ALO_RC_ADDITIVE)
+            {
+                m_pDevice->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_ONE);
+                m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+            }
+            else // ALO_RC_ALPHA
+            {
+                m_pDevice->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_SRCALPHA);
+                m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+            }
+        }
 
         D3DXMATRIX world = sub.placement * objectWorld;
         D3DXMATRIX wvp   = world * m_view * m_projection;
+
+        // Object-space eye + light for the bump shader's tangent-space lighting
+        // (m_eyePosObj / m_light0ObjVector). These equal the world values only at
+        // identity world; transform by inverse-world so the bump + specular stay
+        // correct once the object is moved/rotated (picker spinners / gizmo).
+        D3DXMATRIX invWorld;
+        if (!D3DXMatrixInverse(&invWorld, NULL, &world))   // singular (a degenerate bone matrix)
+            D3DXMatrixIdentity(&invWorld);                 // sane fallback: obj-space == world-space
+        const D3DXVECTOR3 lightDir3(m_lights[0].Position.x, m_lights[0].Position.y, m_lights[0].Position.z);
+        D3DXVECTOR3 eyeObj3, lightObj3;
+        D3DXVec3TransformCoord(&eyeObj3, &m_eye.Position, &invWorld);   // point
+        D3DXVec3TransformNormal(&lightObj3, &lightDir3, &invWorld);     // direction
+        const D3DXVECTOR4 eyeObj  (eyeObj3.x,   eyeObj3.y,   eyeObj3.z,   1.0f);
+        const D3DXVECTOR4 lightObj(lightObj3.x, lightObj3.y, lightObj3.z, 0.0f);
 
         ID3DXEffect* fx = sub.effect->getD3DEffect();   // AddRef'd
         const Effect::Handles& h = sub.effect->getHandles();
@@ -2671,9 +2757,10 @@ void Engine::RenderReferenceObject()
         fx->SetMatrix(h.hWorld,               &world);
         fx->SetMatrix(h.hWorldViewProjection, &wvp);
         fx->SetVector(h.hEyePosition,         &eyePos);
+        fx->SetVector(h.hEyeObjPosition,      &eyeObj);     // m_eyePosObj (was unbound -> wrong specular when rotated)
         fx->SetVector(h.hGlobalAmbient,       &m_ambient);
         fx->SetVector(h.hDirLightVec0,        &m_lights[0].Position);
-        fx->SetVector(h.hDirLightObjVec0,     &m_lights[0].Position);
+        fx->SetVector(h.hDirLightObjVec0,     &lightObj);   // object-space light dir (was world)
         fx->SetVector(h.hDirLightDiffuse,     &m_lights[0].Diffuse);
         fx->SetVector(h.hDirLightSpecular,    &m_lights[0].Specular);
         fx->SetMatrixArray(h.hSphLightAll,    m_sphLightAll,  3);
@@ -2727,14 +2814,381 @@ void Engine::RenderReferenceObject()
         }
         fx->End();
         fx->Release();
-    }
+      }   // sub-mesh loop
+    }     // phase loop
 
     m_pDevice->SetVertexDeclaration(oldDecl);
     if (oldDecl) oldDecl->Release();
     m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, oldAlphaBlend);
+    m_pDevice->SetRenderState(D3DRS_SRCBLEND,         oldSrcBlend);
+    m_pDevice->SetRenderState(D3DRS_DESTBLEND,        oldDestBlend);
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,     oldZWrite);
     m_pDevice->SetRenderState(D3DRS_ZENABLE,          oldZEnable);
     m_pDevice->SetRenderState(D3DRS_CULLMODE,         oldCull);
+}
+
+// Reusable fixed-function world-space line-list draw. Uses the passed
+// EmitterInstance::Vertex decl (Position + diffuse Color; the FF view/proj are
+// already set this frame). Depth test ON (so a placed object occludes lines
+// behind it) but depth write OFF (lines never block particle sorting). Saves +
+// restores every render / texture-stage state it touches (discipline).
+// File-static (not an Engine member) so the header needn't see EmitterInstance::Vertex.
+static void DrawWorldLines(IDirect3DDevice9* dev, IDirect3DVertexDeclaration9* decl,
+                           const EmitterInstance::Vertex* verts, int lineCount,
+                           bool depthTest = true)
+{
+    if (dev == NULL || decl == NULL || verts == NULL || lineCount <= 0) return;
+
+    DWORD oldZEnable, oldZWrite, oldAlphaBlend, oldLighting, oldCull;
+    DWORD oldColorOp, oldColorArg1, oldAlphaOp, oldAlphaArg1;
+    dev->GetRenderState(D3DRS_ZENABLE,          &oldZEnable);
+    dev->GetRenderState(D3DRS_ZWRITEENABLE,     &oldZWrite);
+    dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
+    dev->GetRenderState(D3DRS_LIGHTING,         &oldLighting);
+    dev->GetRenderState(D3DRS_CULLMODE,         &oldCull);
+    dev->GetTextureStageState(0, D3DTSS_COLOROP,   &oldColorOp);
+    dev->GetTextureStageState(0, D3DTSS_COLORARG1, &oldColorArg1);
+    dev->GetTextureStageState(0, D3DTSS_ALPHAOP,   &oldAlphaOp);
+    dev->GetTextureStageState(0, D3DTSS_ALPHAARG1, &oldAlphaArg1);
+    IDirect3DBaseTexture9* oldTex0 = NULL;
+    dev->GetTexture(0, &oldTex0);   // AddRef'd; released after restore
+    IDirect3DVertexDeclaration9* oldDecl = NULL;
+    dev->GetVertexDeclaration(&oldDecl);
+
+    D3DXMATRIX ident; D3DXMatrixIdentity(&ident);
+    dev->SetTransform(D3DTS_WORLD, &ident);
+    dev->SetVertexDeclaration(decl);
+    dev->SetTexture(0, NULL);
+    dev->SetRenderState(D3DRS_LIGHTING,         FALSE);
+    // depthTest=false => always-on-top (the manipulator gizmo, so handles aren't
+    // hidden inside the object); true => co-planar depth-tested (the grid).
+    dev->SetRenderState(D3DRS_ZENABLE,          depthTest ? D3DZB_TRUE : D3DZB_FALSE);
+    dev->SetRenderState(D3DRS_ZWRITEENABLE,     FALSE);
+    dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+    dev->SetRenderState(D3DRS_CULLMODE,         D3DCULL_NONE);
+    // Emit the vertex diffuse colour directly (no texture bound).
+    dev->SetTextureStageState(0, D3DTSS_COLOROP,   D3DTOP_SELECTARG1);
+    dev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG1);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+
+    dev->DrawPrimitiveUP(D3DPT_LINELIST, lineCount, verts, sizeof(EmitterInstance::Vertex));
+
+    dev->SetVertexDeclaration(oldDecl);
+    if (oldDecl) oldDecl->Release();
+    dev->SetTexture(0, oldTex0);
+    if (oldTex0) oldTex0->Release();
+    dev->SetTextureStageState(0, D3DTSS_COLOROP,   oldColorOp);
+    dev->SetTextureStageState(0, D3DTSS_COLORARG1, oldColorArg1);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAOP,   oldAlphaOp);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, oldAlphaArg1);
+    dev->SetRenderState(D3DRS_ZENABLE,          oldZEnable);
+    dev->SetRenderState(D3DRS_ZWRITEENABLE,     oldZWrite);
+    dev->SetRenderState(D3DRS_ALPHABLENDENABLE, oldAlphaBlend);
+    dev->SetRenderState(D3DRS_LIGHTING,         oldLighting);
+    dev->SetRenderState(D3DRS_CULLMODE,         oldCull);
+}
+
+// Unit grid: axis-aligned world lines on the ground plane (the engine's
+// first D3DPT_LINELIST primitive). Spacing = m_gridSpacing over a fixed extent,
+// with a brighter major line every 5 cells from centre. Co-planar with the
+// ground (lifted by a small epsilon so it does not z-fight). No-op when hidden.
+void Engine::RenderUnitGrid()
+{
+    if (!m_gridVisible) return;
+
+    const float spacing = m_gridSpacing;            // > 0 (SetGridSpacing clamps)
+    if (spacing <= 0.0f) return;
+    const float extent  = 800.0f;                   // half-size: lines span +/-extent
+    const int   cells   = (int)(extent / spacing);  // lines each side of centre
+    if (cells <= 0) return;
+    const float span = cells * spacing;             // half-extent on a cell boundary
+    const float z    = m_groundZ + 0.05f;           // tiny lift above the ground quad
+    const D3DCOLOR kMinor = D3DCOLOR_RGBA( 70,  70,  85, 255);
+    const D3DCOLOR kMajor = D3DCOLOR_RGBA(120, 120, 150, 255);
+
+    std::vector<EmitterInstance::Vertex> verts;
+    verts.reserve((size_t)(cells * 2 + 1) * 4);
+    auto addLine = [&](float ax, float ay, float bx, float by, D3DCOLOR c)
+    {
+        EmitterInstance::Vertex v0 = {}, v1 = {};
+        v0.Position = D3DXVECTOR3(ax, ay, z); v0.Color = c;
+        v1.Position = D3DXVECTOR3(bx, by, z); v1.Color = c;
+        verts.push_back(v0);
+        verts.push_back(v1);
+    };
+    for (int i = -cells; i <= cells; ++i)
+    {
+        const float p = i * spacing;
+        const D3DCOLOR c = (i % 5 == 0) ? kMajor : kMinor;   // major every 5 cells
+        addLine(p, -span, p,  span, c);   // line parallel to Y (constant X)
+        addLine(-span, p,  span, p, c);   // line parallel to X (constant Y)
+    }
+
+    DrawWorldLines(m_pDevice, m_pDeclaration, verts.data(), (int)(verts.size() / 2));
+}
+
+// Screen->world ray for the cursor. Shared with GetCursorPos3D
+// (MouseCursor.h) so the manipulator pick uses the IDENTICAL unproject incl. the
+// scene-viewport aspect fix. Origin = near-plane point; dir = unit toward far.
+void Engine::BuildCursorRay(short screenX, short screenY,
+                            D3DXVECTOR3& outOrigin, D3DXVECTOR3& outDir) const
+{
+    D3DVIEWPORT9 viewport;
+    int sx, sy, sw, sh;
+    if (GetSceneViewport(sx, sy, sw, sh))
+    {
+        viewport.X = (DWORD)sx; viewport.Y = (DWORD)sy;
+        viewport.Width = (DWORD)sw; viewport.Height = (DWORD)sh;
+        viewport.MinZ = 0.0f; viewport.MaxZ = 1.0f;
+    }
+    else
+    {
+        GetViewPort(&viewport);
+    }
+    D3DXMATRIX world; D3DXMatrixIdentity(&world);
+    D3DXVECTOR3 front, back;
+    const D3DXVECTOR3 sNear((float)screenX, (float)screenY, 0.0f);
+    const D3DXVECTOR3 sFar ((float)screenX, (float)screenY, 0.9f);
+    D3DXVec3Unproject(&front, &sNear, &viewport, &m_projection, &m_view, &world);
+    D3DXVec3Unproject(&back,  &sFar,  &viewport, &m_projection, &m_view, &world);
+    outOrigin = front;
+    D3DXVECTOR3 d = back - front;
+    D3DXVec3Normalize(&outDir, &d);
+}
+
+namespace
+{
+    // Eye-distance-scaled handle length so the gizmo keeps a roughly
+    // constant on-screen size across zoom (not full screen-space-uniform; v1).
+    float manipulatorHandleLength(const D3DXVECTOR3& eye, const D3DXVECTOR3& refPos)
+    {
+        D3DXVECTOR3 d = refPos - eye;
+        const float len = D3DXVec3Length(&d) * 0.12f;
+        return (len > 1.0f) ? len : 1.0f;
+    }
+
+    D3DXVECTOR3 unitAxis(int axis)
+    {
+        return D3DXVECTOR3(axis == 0 ? 1.0f : 0.0f,
+                           axis == 1 ? 1.0f : 0.0f,
+                           axis == 2 ? 1.0f : 0.0f);
+    }
+
+    // Signed distance along the unit axis `u` (anchored at A) to the point on that
+    // axis closest to the ray (origin P, unit dir d). Classic two-line closest
+    // point with a=c=1 (u,d unit) and w0 = A - P. False if the ray is ~parallel to
+    // the axis (denom -> 0; closest point ill-defined).
+    bool axisParamFromRay(const D3DXVECTOR3& P, const D3DXVECTOR3& d,
+                          const D3DXVECTOR3& A, const D3DXVECTOR3& u, float& outT)
+    {
+        const D3DXVECTOR3 w0 = A - P;
+        const float b     = D3DXVec3Dot(&u, &d);
+        const float dCoef = D3DXVec3Dot(&u, &w0);
+        const float eCoef = D3DXVec3Dot(&d, &w0);
+        const float denom = 1.0f - b * b;   // a*c - b^2
+        if (denom < 1e-5f) return false;
+        outT = (b * eCoef - dCoef) / denom; // param along u from A
+        return true;
+    }
+}
+
+// Ray-pick the 3 axis handles under the cursor. Returns 0=X/1=Y/2=Z
+// for the nearest axis within the pick threshold, else -1. Same visible+resolved
+// gate as the render so a pick is only attempted on a clickable object.
+int Engine::PickManipulatorAxis(short screenX, short screenY) const
+{
+    if (!m_referenceObjectSelected) return -1;   // gizmo only grabbable when selected
+    if (!m_referenceObjectVisible) return -1;
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return -1;
+    if (m_pDevice == NULL) return -1;
+
+    D3DXVECTOR3 P, d;
+    BuildCursorRay(screenX, screenY, P, d);
+
+    const D3DXVECTOR3 A = m_referencePosition;
+    const float len       = manipulatorHandleLength(m_eye.Position, m_referencePosition);
+    const float threshold = len * 0.18f;   // tracks the eye-distance scaling
+
+    int   best     = -1;
+    float bestDist = threshold;            // must beat the threshold to pick
+    for (int i = 0; i < 3; ++i)
+    {
+        const D3DXVECTOR3 u = unitAxis(i);
+        D3DXVECTOR3 axisPt;
+        float t;
+        if (axisParamFromRay(P, d, A, u, t))
+        {
+            if (t < 0.0f)      t = 0.0f;
+            else if (t > len)  t = len;     // clamp to the handle segment [0,len]
+            axisPt = A + u * t;
+        }
+        else
+        {
+            axisPt = A;                     // ray ~parallel: test the anchor
+        }
+        // Closest point on the ray to axisPt, then the gap between them.
+        D3DXVECTOR3 toAxis = axisPt - P;
+        float tc = D3DXVec3Dot(&toAxis, &d);
+        if (tc < 0.0f) tc = 0.0f;
+        D3DXVECTOR3 rayPt = P + d * tc;
+        D3DXVECTOR3 gap   = axisPt - rayPt;
+        const float dist  = D3DXVec3Length(&gap);
+        if (dist < bestDist) { bestDist = dist; best = i; }
+    }
+    return best;
+}
+
+// Signed distance along `axis` from `anchor` to the cursor ray's
+// closest point. The host snapshots this at grab time (offset) and per move,
+// then sets the new position = anchor + axis*(now - grab). False when degenerate.
+bool Engine::ManipulatorAxisParam(short screenX, short screenY, int axis,
+                                  const D3DXVECTOR3& anchor, float& outParam) const
+{
+    if (axis < 0 || axis > 2) return false;
+    D3DXVECTOR3 P, d;
+    BuildCursorRay(screenX, screenY, P, d);
+    return axisParamFromRay(P, d, anchor, unitAxis(axis), outParam);
+}
+
+// Draw the 3 translate-axis handles (X=red/Y=green/Z=blue) from the
+// object origin: a shaft + a 4-sided arrowhead per axis, drawn ALWAYS-ON-TOP
+// (depth-test off) so the gizmo is never hidden inside the object. The hovered
+// axis is brighter + longer. Only shown when the object is selected.
+void Engine::RenderReferenceManipulator()
+{
+    if (!m_referenceObjectSelected) return;
+    if (!m_referenceObjectVisible) return;
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return;
+
+    const D3DXVECTOR3 o = m_referencePosition;
+    const float baseLen = manipulatorHandleLength(m_eye.Position, m_referencePosition);
+    const D3DCOLOR axisCol[3]  = { D3DCOLOR_RGBA(230,  60,  60, 255),
+                                   D3DCOLOR_RGBA( 60, 210,  60, 255),
+                                   D3DCOLOR_RGBA( 70, 120, 255, 255) };
+    const D3DCOLOR hoverCol[3] = { D3DCOLOR_RGBA(255, 150, 150, 255),
+                                   D3DCOLOR_RGBA(170, 255, 170, 255),
+                                   D3DCOLOR_RGBA(170, 200, 255, 255) };
+
+    std::vector<EmitterInstance::Vertex> v;
+    v.reserve(3 * 5 * 2);   // 3 axes x (shaft + 4 arrowhead lines) x 2 verts
+    auto line = [&](const D3DXVECTOR3& a, const D3DXVECTOR3& b, D3DCOLOR c)
+    {
+        EmitterInstance::Vertex v0 = {}, v1 = {};
+        v0.Position = a; v0.Color = c;
+        v1.Position = b; v1.Color = c;
+        v.push_back(v0);
+        v.push_back(v1);
+    };
+    for (int i = 0; i < 3; ++i)
+    {
+        const bool hot = (i == m_hoverManipAxis);
+        const float    len = hot ? baseLen * 1.3f : baseLen;   // hovered axis grows
+        const D3DCOLOR c   = hot ? hoverCol[i] : axisCol[i];   // ... and brightens
+        const D3DXVECTOR3 dir = unitAxis(i);
+        const D3DXVECTOR3 p1  = unitAxis((i + 1) % 3);   // perpendiculars for the head
+        const D3DXVECTOR3 p2  = unitAxis((i + 2) % 3);
+        const D3DXVECTOR3 tip  = o + dir * len;
+        const D3DXVECTOR3 base = o + dir * (len * 0.82f);
+        const float r = len * 0.06f;
+        line(o, tip, c);                 // shaft
+        line(tip, base + p1 * r, c);     // 4-sided arrowhead
+        line(tip, base - p1 * r, c);
+        line(tip, base + p2 * r, c);
+        line(tip, base - p2 * r, c);
+    }
+    DrawWorldLines(m_pDevice, m_pDeclaration, v.data(), (int)(v.size() / 2), /*depthTest=*/false);
+}
+
+// Selection box: the object's object-space AABB (over the kept/drawn
+// geometry) transformed by the live world, drawn as a 12-edge wireframe via the
+// shared line renderer. Depth-tested (it's part of the scene -- the object's near
+// faces occlude the far box edges), drawn before the always-on-top gizmo. Shown
+// only when the object is selected. The SAME AABB + world drive PickReferenceObject
+// below, so the drawn box == the clickable region.
+void Engine::RenderReferenceSelectionBox()
+{
+    if (!m_referenceObjectSelected) return;
+    if (!m_referenceObjectVisible) return;
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return;
+    D3DXVECTOR3 mn, mx;
+    if (!m_referenceObjectMesh.GetBoundingBox(mn, mx)) return;
+
+    const D3DXMATRIX world = ReferenceObjectWorld();
+    D3DXVECTOR3 c[8];   // corner i: bit0=x, bit1=y, bit2=z (min/max)
+    for (int i = 0; i < 8; ++i)
+    {
+        D3DXVECTOR3 o((i & 1) ? mx.x : mn.x,
+                      (i & 2) ? mx.y : mn.y,
+                      (i & 4) ? mx.z : mn.z);
+        D3DXVec3TransformCoord(&c[i], &o, &world);
+    }
+    static const int edges[12][2] = {
+        {0,1},{1,3},{3,2},{2,0},   // min-z face loop
+        {4,5},{5,7},{7,6},{6,4},   // max-z face loop
+        {0,4},{1,5},{2,6},{3,7},   // verticals
+    };
+    const D3DCOLOR col = D3DCOLOR_RGBA(255, 220, 60, 255);   // amber selection
+    EmitterInstance::Vertex v[24] = {};
+    for (int e = 0; e < 12; ++e)
+    {
+        v[e * 2 + 0].Position = c[edges[e][0]]; v[e * 2 + 0].Color = col;
+        v[e * 2 + 1].Position = c[edges[e][1]]; v[e * 2 + 1].Color = col;
+    }
+    DrawWorldLines(m_pDevice, m_pDeclaration, v, 12, /*depthTest=*/true);
+}
+
+// Body pick for click-to-select: ray vs the object's object-space AABB (the
+// same box RenderReferenceSelectionBox draws), so the visual box == the clickable
+// region. Ray is transformed into object space (inverse world) then slab-tested.
+// Not gated on selection (you click an unselected object to select it), but DOES
+// gate on visibility (a hidden object draws nothing, so it must not be clickable --
+// matches the render/box/gizmo gates). False when no object / hidden / no device /
+// no bounds.
+bool Engine::PickReferenceObject(short screenX, short screenY) const
+{
+    if (!m_referenceObjectVisible) return false;   // hidden -> nothing drawn -> not pickable
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return false;
+    if (m_pDevice == NULL) return false;
+    D3DXVECTOR3 bmin, bmax;
+    if (!m_referenceObjectMesh.GetBoundingBox(bmin, bmax)) return false;
+
+    D3DXVECTOR3 P, d;
+    BuildCursorRay(screenX, screenY, P, d);
+
+    // Ray into object space (inverse world). The direction is transformed as a
+    // vector (not renormalized) so the slab params stay consistent with the box.
+    D3DXMATRIX world = ReferenceObjectWorld(), invWorld;
+    D3DXMatrixInverse(&invWorld, NULL, &world);
+    D3DXVECTOR3 Po, Do;
+    D3DXVec3TransformCoord(&Po, &P, &invWorld);
+    D3DXVec3TransformNormal(&Do, &d, &invWorld);
+
+    // Slab method. Components near zero are parallel to that slab -> only a hit if
+    // the origin is already inside the slab.
+    const float origin[3] = { Po.x, Po.y, Po.z };
+    const float dir[3]    = { Do.x, Do.y, Do.z };
+    const float lo[3]     = { bmin.x, bmin.y, bmin.z };
+    const float hi[3]     = { bmax.x, bmax.y, bmax.z };
+    float tmin = -1e30f, tmax = 1e30f;
+    for (int i = 0; i < 3; ++i)
+    {
+        if (fabsf(dir[i]) < 1e-8f)
+        {
+            if (origin[i] < lo[i] || origin[i] > hi[i]) return false;
+        }
+        else
+        {
+            const float inv = 1.0f / dir[i];
+            float t1 = (lo[i] - origin[i]) * inv;
+            float t2 = (hi[i] - origin[i]) * inv;
+            if (t1 > t2) { const float tmp = t1; t1 = t2; t2 = tmp; }
+            if (t1 > tmin) tmin = t1;
+            if (t2 < tmax) tmax = t2;
+            if (tmin > tmax) return false;
+        }
+    }
+    return tmax >= 0.0f;   // box is ahead of (or around) the eye
 }
 
 // Re-drive Load->Resolve->CreateBuffers for both slots from the current
@@ -2799,6 +3253,111 @@ void Engine::EnumerateSkydomeNames(SkydomeContext context,
     refs.clear();
     if (LoadSkydomeList(m_fileManager, secAxis, refs))
         for (const SkydomeRef& r : refs) outSecondary.push_back(r.name);
+}
+
+// Build the game-object catalog once per active mod. The catalog is XML-
+// only (no .alo decode), so this is cheap; it's invalidated on a mod switch
+// (ReloadTextures clears m_referenceCatalogBuilt).
+void Engine::EnsureReferenceCatalog()
+{
+    if (m_referenceCatalogBuilt) return;
+    m_referenceCatalog = GameObjectCatalog();
+    BuildGameObjectCatalog(m_fileManager, m_referenceCatalog);
+    m_referenceCatalogBuilt = true;
+}
+
+// Enumerate selectable game objects (Name + category) for the picker.
+void Engine::EnumerateReferenceObjects(std::vector<GameObjectRef>& out)
+{
+    EnsureReferenceCatalog();
+    out = m_referenceCatalog.objects;
+}
+
+// Select a reference object by its in-game Name; clears it when empty.
+// A fresh selection is shown by default (reset visibility) so a previously-hidden
+// object doesn't make a newly-picked one silently invisible.
+void Engine::SetReferenceObject(const std::string& name)
+{
+    m_referenceObjectName = name;
+    if (!name.empty())
+        m_referenceObjectVisible = true;
+    // Auto-select on pick so the manipulator gizmo appears immediately; clearing
+    // the selection deselects. (Click the object body to re-select, empty to clear.)
+    m_referenceObjectSelected = !name.empty();
+    m_hoverManipAxis = -1;
+    RebuildReferenceObjectMesh();
+}
+
+// Resolve the selected Name -> model path -> load. The probe (only on the
+// load-failure path, so the common case parses the .alo once) distinguishes a
+// skinned/unsupported object from a missing/corrupt one for the picker status.
+// Resolve + CreateBuffers no-op until the device is valid; Load (CPU) always runs.
+void Engine::RebuildReferenceObjectMesh()
+{
+    if (m_referenceObjectName.empty())
+    {
+        m_referenceObjectMesh.Clear();
+        m_referenceObjectStatus = ReferenceObjectStatus::None;
+        return;
+    }
+
+    EnsureReferenceCatalog();
+    // Case-INSENSITIVE match: the catalog folds Names to lower-case keys (the
+    // Alamo engine resolves Names case-insensitively) but stores original casing
+    // for display, so a persisted/cross-mod name with different casing must still
+    // resolve. Adopt the catalog's canonical casing so the snapshot converges.
+    std::string modelPath;
+    for (const GameObjectRef& r : m_referenceCatalog.objects)
+        if (_stricmp(r.name.c_str(), m_referenceObjectName.c_str()) == 0)
+        {
+            modelPath = r.modelPath;
+            m_referenceObjectName = r.name;
+            break;
+        }
+    if (modelPath.empty())
+    {
+        m_referenceObjectMesh.Clear();
+        m_referenceObjectStatus = ReferenceObjectStatus::LoadFailed;
+        return;
+    }
+
+    const std::string aloPath = "Data\\Art\\Models\\" + modelPath;
+    if (m_referenceObjectMesh.Load(m_fileManager, aloPath))
+    {
+        if (m_pDevice != NULL)
+        {
+            // Resolve degrades per-sub-mesh on a throwing/missing shader (see
+            // ReferenceObjectMesh::Resolve, which catches the wexception getShader
+            // can raise), so it returns false only when NOTHING resolved. Report
+            // that as LoadFailed rather than a silent "Ok" that renders nothing
+            // (HasResolved() would be false -> RenderReferenceObject draws nothing,
+            // no error shown). No try/catch here: the per-sub-mesh guard already
+            // contains the throw, so this call can't throw a wexception.
+            if (!m_referenceObjectMesh.Resolve(m_shaderManager, m_pDevice))
+            {
+                m_referenceObjectMesh.Clear();
+                m_referenceObjectStatus = ReferenceObjectStatus::LoadFailed;
+                return;
+            }
+            m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);
+        }
+        m_referenceObjectStatus = ReferenceObjectStatus::Ok;
+        return;
+    }
+
+    // Load failed (skinned-only / collision-only / missing / corrupt) -> probe to
+    // tell the user which, so the picker shows the right "not supported" message.
+    m_referenceObjectMesh.Clear();
+    const ModelProbeResult probe = ProbeModelSkinned(m_fileManager, modelPath);
+    m_referenceObjectStatus = (probe == ModelProbeResult::SkinnedUnsupported)
+                              ? ReferenceObjectStatus::Skinned
+                              : ReferenceObjectStatus::LoadFailed;
+}
+
+// Grid spacing must stay positive ('s line loop steps by it).
+void Engine::SetGridSpacing(float spacing)
+{
+    m_gridSpacing = (spacing > 0.0f) ? spacing : 1.0f;
 }
 
 //: compile IDR_SHADER_GROUND_LIT, cache parameter handles, select the
@@ -3307,6 +3866,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 			{
 				m_referenceObjectMesh.Resolve(m_shaderManager, m_pDevice);
 				m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);
+				m_referenceObjectSelected = true;   // show the gizmo for the bring-up object
 				fprintf(stderr, "[RefObj] loaded: %zu sub-meshes, skippedSkinned=%d\n",
 				        m_referenceObjectMesh.SubMeshes().size(),
 				        m_referenceObjectMesh.SkippedSkinned() ? 1 : 0);

@@ -186,6 +186,17 @@ export type EmitterTreeNode = {
   children: EmitterTreeNode[];
 };
 
+// Imported reference object (a real game/mod object placed in the preview
+// as a scale reference). Category mirrors the host's GameObjectCategory
+// (GameObjectCatalog.h); the picker groups the Name list by it. Status is the
+// lazy .alo probe verdict for the CURRENTLY-selected object — "skinned" and
+// "load-failed" mean the object can't render (skinned units are a v1 deferral).
+export type ReferenceObjectCategory =
+  | "Vehicle" | "Infantry" | "Structure" | "Turret"
+  | "Hero" | "Prop" | "Space" | "Projectile" | "Other";
+export type ReferenceObjectEntry = { name: string; category: ReferenceObjectCategory };
+export type ReferenceObjectStatus = "none" | "ok" | "skinned" | "load-failed";
+
 export type EngineStateDto = {
   // ─── File / editor-level state ─────────────────────────────────────
   // Phase 3 Screen 8 Batch 3: dirty + current file path live at the top
@@ -214,6 +225,17 @@ export type EngineStateDto = {
   skydomeContext: "land" | "space";   // GetSkydomeContext()
   skydomePrimaryName: string;         // GetSkydomePrimaryName() — "" = none
   skydomeSecondaryName: string;       // GetSkydomeSecondaryName() — "" = none
+
+  // Imported reference object (scale reference) + unit grid.
+  referenceObjectName: string;             // GetReferenceObjectName() — "" = none
+  referenceObjectVisible: boolean;         // GetReferenceObjectVisible()
+  referenceObjectPosition: Vec3;           // GetReferencePosition() — world units
+  // degrees [yaw,pitch,roll]; the engine is Z-up, so yaw = heading about world
+  // up (Z), pitch = tilt about X, roll = bank about Y (yaw applied last).
+  referenceObjectRotation: Vec3;           // GetReferenceRotation()
+  referenceObjectStatus: ReferenceObjectStatus;  // lazy probe of the selected .alo
+  gridVisible: boolean;                    // GetGridVisible()
+  gridSpacing: number;                     // GetGridSpacing() — world units between lines
 
   // Background (solid colour when skydome slot 0)
   background: Color;                // GetBackground()
@@ -596,6 +618,17 @@ export type Request =
   | { kind: "engine/set/skydome-environment"; params: { context: "land" | "space"; primaryName: string; secondaryName: string } }
   | { kind: "engine/set/background";          params: { rgb: Color } }
 
+  // Imported reference object + unit grid.
+  // `reference-object` selects by in-game Name ("" clears it). `-transform`
+  // carries world position + rotation (degrees [yaw,pitch,roll]; Z-up engine, so
+  // yaw = heading about world Z). Grid spacing is world units between lines (host
+  // clamps to > 0).
+  | { kind: "engine/set/reference-object";           params: { name: string } }
+  | { kind: "engine/set/reference-object-visible";   params: { visible: boolean } }
+  | { kind: "engine/set/reference-object-transform"; params: { position: Vec3; rotation: Vec3 } }
+  | { kind: "engine/set/grid-visible";               params: { visible: boolean } }
+  | { kind: "engine/set/grid-spacing";               params: { spacing: number } }
+
   // Engine setters — bloom
   | { kind: "engine/set/bloom";               params: { enabled: boolean } }
   | { kind: "engine/set/bloom-strength";      params: { v: number } }
@@ -646,6 +679,9 @@ export type Request =
   // Enumerate selectable game-dome Names for a battle context (both the
   // primary and secondary lists), read from the game/mod's *Skydomes.xml.
   | { kind: "engine/query/skydome-list";       params: { context: "land" | "space" } }
+  // Enumerate selectable game objects (Name + category) for the reference-
+  // object picker, read from the active mod/base via GameObjectFiles.xml.
+  | { kind: "engine/query/reference-object-list"; params: Record<string, never> }
   | { kind: "engine/query/bloom-available";    params: Record<string, never> }
 
   // Settings (cross-mode registry persistence). Legacy persists lighting
@@ -1015,6 +1051,11 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/set/skydome-slot" }            ? Record<string, never> :
   R extends { kind: "engine/set/skydome-custom-path" }     ? Record<string, never> :
   R extends { kind: "engine/set/skydome-environment" }     ? Record<string, never> :
+  R extends { kind: "engine/set/reference-object" }           ? Record<string, never> :
+  R extends { kind: "engine/set/reference-object-visible" }   ? Record<string, never> :
+  R extends { kind: "engine/set/reference-object-transform" } ? Record<string, never> :
+  R extends { kind: "engine/set/grid-visible" }               ? Record<string, never> :
+  R extends { kind: "engine/set/grid-spacing" }               ? Record<string, never> :
   R extends { kind: "engine/set/background" }              ? Record<string, never> :
   R extends { kind: "engine/set/bloom" }                   ? Record<string, never> :
   R extends { kind: "engine/set/bloom-strength" }          ? Record<string, never> :
@@ -1043,6 +1084,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/query/ground-slot-empty" }   ? boolean :
   R extends { kind: "engine/query/skydome-slot-empty" }  ? boolean :
   R extends { kind: "engine/query/skydome-list" }        ? { primary: string[]; secondary: string[] } :
+  R extends { kind: "engine/query/reference-object-list" } ? { objects: ReferenceObjectEntry[] } :
   R extends { kind: "engine/query/bloom-available" }     ? boolean :
 
   // Settings (cross-mode registry persistence)

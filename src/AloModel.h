@@ -59,6 +59,14 @@ struct AloSubMesh
 struct AloMesh
 {
     std::string             name;       // 0x401
+    // Per-mesh flags from the 0x402 MESH-INFO chunk (the consumer gates rendering
+    // on `hidden`). Cross-verified writer-side (max2alamo alo_build.cpp:145-161,
+    // `isHidden`@offset32 = 1=>hidden) and reader-side (alo-viewer Models.cpp:189,
+    // `isVisible = (readInteger()==0)`). Default visible/non-collision when 0x402
+    // is absent or too short (tolerant). Visibility is a MESH property -> it gates
+    // all of this mesh's sub-meshes.
+    bool                    hidden    = false;  // 0x402 isHidden    (1 => not drawn)
+    bool                    collision = false;  // 0x402 isCollision (1 => collision mesh)
     std::vector<AloSubMesh> subMeshes;
 };
 
@@ -117,10 +125,31 @@ static const long kAloColorOffset  = 80;   // float4 RGBA (RGB@80, A@92)
 //   AloIsSkinnedVertexFormat -- a 0x10002 format the rigid path can't upload
 //     (per-vertex bone indices/weights need a bone-matrix palette v1 lacks):
 //     "alD3dVertRSkin*" / "alD3dVertB4I4*".
-//   AloIsNonVisibleShader -- a 0x10101 shader that is collision / shadow-volume
-//     scaffolding, never drawn as visible geometry.
+//   AloIsNonVisibleShader -- a 0x10101 shader whose sub-mesh is NOT drawn in the
+//     visible (opaque + transparent) passes: stencil shadow-volume, occluded-unit
+//     scaffolding, or (v1-deferred) heat distortion. NOTE collision is NOT here --
+//     a visible MeshCollision.fx sub-mesh IS drawn (flat blue via its own shader).
 bool AloIsSkinnedVertexFormat(const std::string& vertexFormatName);
 bool AloIsNonVisibleShader(const std::string& shaderName);
+
+// Render classification of a sub-mesh's named shader (case-insensitive), so the
+// reference renderer phase-sorts + blends each sub-mesh the way the game does.
+// The shipped .fxo's SB blocks are compiled out (ALAMO_STATE_BLOCKS 0; todo.md
+// Risk 2), so the APP applies the blend -- this is the source of "which blend".
+// Grounded in the FoC Mesh*/RSkin* corpus (reference/foc-shaders): additive =
+// ONE/ONE (MeshAdditive*, and the name-mismatched MeshShield), alpha =
+// SRCALPHA/INVSRCALPHA (MeshAlpha*), Heat/Shadow/Occluded are non-opaque-visible
+// scaffolding phases, everything else (MeshGloss/Bump/Collision/SolidColor...) is
+// opaque. The single classifier keeps the renderer + the catalog in lockstep.
+enum AloRenderClass {
+    ALO_RC_OPAQUE,     // opaque pass (incl. MeshCollision = flat blue)
+    ALO_RC_ADDITIVE,   // transparent pass, ONE/ONE
+    ALO_RC_ALPHA,      // transparent pass, SRCALPHA/INVSRCALPHA
+    ALO_RC_HEAT,       // "Heat" phase: a two-stage scene-composite -- v1 logs + skips
+    ALO_RC_SHADOW,     // stencil shadow volume -- never visible geometry
+    ALO_RC_OCCLUDED,   // occluded-unit phase -- never visible geometry
+};
+AloRenderClass AloClassifyShader(const std::string& shaderName);
 
 // Parse the static-mesh + material subset of an `.alo` from `file` (caller
 // retains ownership; the parser AddRef/Releases the file internally). Returns

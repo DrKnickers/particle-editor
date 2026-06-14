@@ -9,7 +9,14 @@
 #include "SkydomeEnvironment.h"   // SkydomeContext
 #include "SkydomeMesh.h"          // game-faithful dome render core
 #include "ReferenceObjectMesh.h"  // imported game-object render core
+#include "GameObjectCatalog.h"    // enumerate game objects by Name
 #include <memory>
+
+// Renderability verdict for the currently-selected reference object,
+// surfaced in the engine-state snapshot so the picker can show "skinned -- not
+// supported" / "couldn't load" for the chosen object (the .alo is probed lazily
+// on select; see Engine::SetReferenceObject).
+enum class ReferenceObjectStatus { None, Ok, Skinned, LoadFailed };
 
 namespace host { class AlphaCompositor; }
 
@@ -515,6 +522,55 @@ public:
 	// thumbnail builder so its resolution chain matches Engine's.
 	static const char* const* GetSkydomeBundledGamePaths();
 
+	// Imported reference object (a game/mod object placed in the preview as
+	// a scale reference). SetReferenceObject resolves `name` via the GameObject
+	// catalog, lazily probes the .alo for renderability (skinned / load-failed are
+	// reported via GetReferenceObjectStatus and NOT rendered), and rebuilds the
+	// mesh. An empty name clears the object. Transform rotation is degrees,
+	// ordered [yaw, pitch, roll] (D3DXMatrixRotationYawPitchRoll).
+	void SetReferenceObject(const std::string& name);
+	void SetReferenceObjectVisible(bool visible) { m_referenceObjectVisible = visible; }
+	void SetReferenceObjectTransform(const D3DXVECTOR3& position, const D3DXVECTOR3& rotationDeg)
+	     { m_referencePosition = position; m_referenceRotation = rotationDeg; }
+	const std::string&    GetReferenceObjectName()    const { return m_referenceObjectName; }
+	bool                  GetReferenceObjectVisible() const { return m_referenceObjectVisible; }
+	const D3DXVECTOR3&    GetReferencePosition()      const { return m_referencePosition; }
+	const D3DXVECTOR3&    GetReferenceRotation()      const { return m_referenceRotation; }
+	ReferenceObjectStatus GetReferenceObjectStatus()  const { return m_referenceObjectStatus; }
+	// Enumerate selectable game objects (Name + category) for the active mod/base.
+	// Builds + caches the catalog on first call (invalidated on mod switch).
+	void EnumerateReferenceObjects(std::vector<GameObjectRef>& out);
+
+	// Unit grid. State + setters land here (); RenderUnitGrid is.
+	void  SetGridVisible(bool visible) { m_gridVisible = visible; }
+	void  SetGridSpacing(float spacing);
+	bool  GetGridVisible()  const { return m_gridVisible; }
+	float GetGridSpacing()  const { return m_gridSpacing; }
+
+	// In-viewport translate manipulator (grab an axis handle, drag to
+	// move the reference object). RenderReferenceManipulator draws the 3 axis
+	// handles (called from Render). PickManipulatorAxis ray-picks one under the
+	// cursor (returns 0=X/1=Y/2=Z, or -1 = miss). ManipulatorAxisParam returns the
+	// signed distance along `axis` from `anchor` to the cursor ray's closest point
+	// (false when the ray is ~parallel to the axis); the host uses it for the
+	// no-jump grab offset + per-move position. BuildCursorRay is the shared
+	// screen->world unproject (also used by GetCursorPos3D) so the pick can't drift
+	// from the working cursor. Screen coords are popup-client physical px.
+	void RenderReferenceManipulator();
+	int  PickManipulatorAxis(short screenX, short screenY) const;
+	bool ManipulatorAxisParam(short screenX, short screenY, int axis,
+	                          const D3DXVECTOR3& anchor, float& outParam) const;
+	void BuildCursorRay(short screenX, short screenY,
+	                    D3DXVECTOR3& outOrigin, D3DXVECTOR3& outDir) const;
+	// polish] The gizmo only shows + is grabbable when the object is
+	// SELECTED (auto-selected on pick; click the object body to re-select; click
+	// empty to deselect). PickReferenceObject (S46) ray-tests the object's
+	// object-space AABB for the body-click. SetManipulatorHoverAxis lets the host
+	// highlight the axis under the cursor (set each idle mouse-move; -1 = none).
+	void SetReferenceObjectSelected(bool selected) { m_referenceObjectSelected = selected; if (!selected) m_hoverManipAxis = -1; }
+	void SetManipulatorHoverAxis(int axis)          { m_hoverManipAxis = axis; }
+	bool PickReferenceObject(short screenX, short screenY) const;
+
 	void SetHeatDebug(bool debug);
 	void SetBloom(bool enable);
 	void SetBloomStrength(float v);
@@ -596,10 +652,33 @@ private:
 	void				RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world);
 	void				RenderSkydomes();
 
-	// Draw the imported reference object as solid, depth-tested,
-	// backface-culled geometry -- each rigid sub-mesh placed by its bone and
-	// running its own game shader 1:1. No-op when empty/unresolved.
+	// Resolve m_referenceObjectName -> catalog model path -> lazy skinned
+	// probe -> Load/Resolve/CreateBuffers (clone of RebuildSkydomeMeshes). Sets
+	// m_referenceObjectStatus. EnsureReferenceCatalog builds the catalog once per
+	// active mod (invalidated in ReloadTextures on a mod switch).
+	void				RebuildReferenceObjectMesh();
+	void				EnsureReferenceCatalog();
+
+	// Draw the imported reference object in two phases (opaque then
+	// transparent) -- each rigid sub-mesh placed by its bone, running its own game
+	// shader 1:1, blended per its phase/blend class. No-op when empty/unresolved.
 	void				RenderReferenceObject();
+
+	// Live reference-object world (Z-up yaw/pitch/roll then translate),
+	// shared by the render, the selection box, and the pick so all three agree.
+	D3DXMATRIX			ReferenceObjectWorld() const;
+
+	// Draw the object's AABB as a depth-tested wireframe when selected -- the
+	// same box the click-pick (PickReferenceObject) hit-tests. No-op when unselected.
+	void				RenderReferenceSelectionBox();
+
+	// Unit grid (): the engine's first line-list primitive. RenderUnitGrid
+	// draws axis-aligned world lines at m_gridSpacing over a fixed extent, co-planar
+	// with the ground (z-test on, z-write off), with a brighter line every 5 cells.
+	// (The reusable fixed-function D3DPT_LINELIST helper, DrawWorldLines, is a
+	// file-static in engine.cpp -- it references EmitterInstance::Vertex, which is
+	// only forward-declared here.)
+	void				RenderUnitGrid();
 
 	//: compile IDR_SHADER_GROUND_LIT from RCDATA, cache parameter
 	// handles, and build the tangent-space ground vertex declaration.
@@ -756,6 +835,21 @@ private:
 	// for scale). Rigid multi-part: each sub-mesh placed by its skeleton bone.
 	// is the render path only; the picker/transform/persistence are.
 	ReferenceObjectMesh      m_referenceObjectMesh;
+
+	// selection + placement state driving m_referenceObjectMesh.
+	std::string              m_referenceObjectName;            // "" = none selected
+	bool                     m_referenceObjectVisible = true;
+	D3DXVECTOR3              m_referencePosition = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
+	D3DXVECTOR3              m_referenceRotation = D3DXVECTOR3(0.0f, 0.0f, 0.0f);  // degrees [yaw,pitch,roll]
+	ReferenceObjectStatus    m_referenceObjectStatus = ReferenceObjectStatus::None;
+	bool                     m_referenceObjectSelected = false;  // gizmo visible/grabbable only when selected
+	int                      m_hoverManipAxis = -1;              // axis under the cursor (highlight), -1 = none
+	GameObjectCatalog        m_referenceCatalog;               // lazily built; invalidated on mod switch
+	bool                     m_referenceCatalogBuilt = false;
+
+	// unit-grid state (RenderUnitGrid is).
+	bool                     m_gridVisible = false;
+	float                    m_gridSpacing = 20.0f;
 
 	//: bump-mapped ground lighting. Effect + tangent-space vertex decl +
 	// normal-map state, mirroring the skydome effect lifecycle. Faithful port

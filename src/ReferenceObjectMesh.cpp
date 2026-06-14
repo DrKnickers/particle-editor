@@ -1,7 +1,9 @@
 // Reference-object render core implementation. See ReferenceObjectMesh.h.
 // Structurally cloned from SkydomeMesh.cpp; diverges in (1) an extended
-// transcoder covering the tangent/binormal unit formats, (2) skinned +
-// collision/shadow sub-mesh filtering, and (3) per-sub-mesh rigid bone placement.
+// transcoder covering the tangent/binormal unit formats, (2) visibility filtering
+// (skip 0x402-hidden meshes + skinned + shadow/occluded/heat sub-meshes, keep
+// collision = drawn blue), (3) per-sub-mesh rigid bone placement + phase/blend
+// classification, and (4) an object-space AABB for the selection box + pick.
 
 #include "ReferenceObjectMesh.h"
 
@@ -111,7 +113,7 @@ namespace
         if (!file) return nullptr;
         std::vector<unsigned char> bytes;
         try { bytes = ReadAndRelease(file); }
-        catch (const ReadException&) { return nullptr; }
+        catch (const ReadException&) { return nullptr; }   // missing/short read -> untextured
         if (bytes.empty()) return nullptr;
         IDirect3DTexture9* tex = nullptr;
         HRESULT hr = D3DXCreateTextureFromFileInMemory(dev, bytes.data(), (UINT)bytes.size(), &tex);
@@ -193,6 +195,8 @@ void ReferenceObjectMesh::Clear()
     ReleaseDecls();
     m_subMeshes.clear();
     m_skippedSkinned = false;
+    m_boundMin = m_boundMax = D3DXVECTOR3(0, 0, 0);
+    m_hasBounds = false;
 }
 
 bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
@@ -219,6 +223,12 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
     {
         const AloMesh& mesh = model.meshes[meshIdx];
 
+        // Respect the per-mesh 0x402 hidden flag: a hidden mesh is not drawn
+        // (game/alo-viewer gate visibility here). Removes hidden collision boxes +
+        // the hidden shield/heat distortion meshes that were warping the view.
+        if (mesh.hidden)
+            continue;
+
         // This mesh's rigid placement = its bone's object-space matrix (identity
         // if no skeleton / no connection / out-of-range bone).
         D3DXMATRIX placement;
@@ -236,8 +246,22 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
         {
             if (sm.rawVertexBytes.empty() || sm.vertexCount == 0 || sm.primitiveCount == 0)
                 continue;
-            if (AloIsNonVisibleShader(sm.shaderName))   // collision / shadow hulls
+
+            // Phase/blend class. Shadow + occluded are never visible geometry.
+            // Heat is a deferred two-stage scene-composite (D3) -> log + skip in v1.
+            // Opaque (incl. MeshCollision = flat blue) + additive/alpha are KEPT and
+            // drawn (the latter two in the transparent pass).
+            const AloRenderClass rc = AloClassifyShader(sm.shaderName);
+            if (rc == ALO_RC_SHADOW || rc == ALO_RC_OCCLUDED)
                 continue;
+            if (rc == ALO_RC_HEAT)
+            {
+#ifndef NDEBUG
+                fprintf(stderr, "[RefObj] skip Heat sub-mesh \"%s\" -- faithful Heat phase deferred (S46/D3)\n",
+                        sm.shaderName.c_str());
+#endif
+                continue;
+            }
             if (AloIsSkinnedVertexFormat(sm.vertexFormatName)) // v1 defers skinning
             {
                 m_skippedSkinned = true;
@@ -248,6 +272,7 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
             const uint32_t stride = strideFor(f);
 
             RefSubMeshGpu gpu;
+            gpu.renderClass      = rc;
             gpu.shaderName       = sm.shaderName;
             gpu.vertexFormatName = sm.vertexFormatName;
             gpu.params           = sm.params;
@@ -268,7 +293,40 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
         }
     }
 
+    // Object-space AABB over the kept (drawn) geometry -- the selection box
+    // + the click-to-select hit target, so the drawn box == the pickable region.
+    // Position is float3 @0 in every runtime format; place each vertex by its
+    // sub-mesh bone matrix to match exactly what RenderReferenceObject draws.
+    for (const RefSubMeshGpu& g : m_subMeshes)
+    {
+        const unsigned char* vb = g.vertexBytes.data();
+        for (uint32_t v = 0; v < g.vertexCount; ++v)
+        {
+            const float* p = reinterpret_cast<const float*>(vb + (size_t)v * g.stride);
+            D3DXVECTOR3 pos(p[0], p[1], p[2]), placed;
+            D3DXVec3TransformCoord(&placed, &pos, &g.placement);
+            if (!m_hasBounds) { m_boundMin = m_boundMax = placed; m_hasBounds = true; }
+            else
+            {
+                if (placed.x < m_boundMin.x) m_boundMin.x = placed.x;
+                if (placed.y < m_boundMin.y) m_boundMin.y = placed.y;
+                if (placed.z < m_boundMin.z) m_boundMin.z = placed.z;
+                if (placed.x > m_boundMax.x) m_boundMax.x = placed.x;
+                if (placed.y > m_boundMax.y) m_boundMax.y = placed.y;
+                if (placed.z > m_boundMax.z) m_boundMax.z = placed.z;
+            }
+        }
+    }
+
     return !m_subMeshes.empty();
+}
+
+bool ReferenceObjectMesh::GetBoundingBox(D3DXVECTOR3& outMin, D3DXVECTOR3& outMax) const
+{
+    if (!m_hasBounds) return false;
+    outMin = m_boundMin;
+    outMax = m_boundMax;
+    return true;
 }
 
 bool ReferenceObjectMesh::Resolve(IShaderManager& sm, IDirect3DDevice9* dev)
@@ -279,24 +337,41 @@ bool ReferenceObjectMesh::Resolve(IShaderManager& sm, IDirect3DDevice9* dev)
     for (RefSubMeshGpu& gpu : m_subMeshes)
     {
         relptr(gpu.effect);
-        gpu.effect = sm.getShader(dev, gpu.shaderName);   // ext-tolerant .fx -> .FXO; cached + AddRef'd
-        if (gpu.effect == nullptr) continue;
+        // getShader (a missing/uncompilable .fxo) and GetOrCreateDecl can
+        // throw a wexception; the env hook + the picker path (SetReferenceObject)
+        // call Resolve with NO try/catch, so an unresolvable sub-mesh would
+        // std::terminate the whole editor (a Mod capital ship whose shader
+        // the editor can't load is enough). Degrade THIS sub-mesh to unresolved
+        // (skipped at draw) and keep going, matching the nullptr-skip below.
+        try
+        {
+            gpu.effect = sm.getShader(dev, gpu.shaderName);   // ext-tolerant .fx -> .FXO; cached + AddRef'd
+            if (gpu.effect == nullptr) continue;
 
-        gpu.decl = GetOrCreateDecl(dev, gpu.vertexFormatName);
+            gpu.decl = GetOrCreateDecl(dev, gpu.vertexFormatName);
 
-        gpu.matHandles.assign(gpu.params.size(), nullptr);
-        ID3DXEffect* fx = gpu.effect->getD3DEffect();      // AddRef'd
-        for (size_t i = 0; i < gpu.params.size(); ++i)
-            gpu.matHandles[i] = fx->GetParameterByName(nullptr, gpu.params[i].name.c_str());
+            gpu.matHandles.assign(gpu.params.size(), nullptr);
+            ID3DXEffect* fx = gpu.effect->getD3DEffect();      // AddRef'd
+            for (size_t i = 0; i < gpu.params.size(); ++i)
+                gpu.matHandles[i] = fx->GetParameterByName(nullptr, gpu.params[i].name.c_str());
 #ifndef NDEBUG
-        D3DXHANDLE cur = fx->GetCurrentTechnique();
-        D3DXTECHNIQUE_DESC td; memset(&td, 0, sizeof(td));
-        if (cur) fx->GetTechniqueDesc(cur, &td);
-        fprintf(stderr, "[RefObj] resolved %-20s fmt=%-18s technique=%s\n",
-                gpu.shaderName.c_str(), gpu.vertexFormatName.c_str(), td.Name ? td.Name : "(none)");
+            D3DXHANDLE cur = fx->GetCurrentTechnique();
+            D3DXTECHNIQUE_DESC td; memset(&td, 0, sizeof(td));
+            if (cur) fx->GetTechniqueDesc(cur, &td);
+            fprintf(stderr, "[RefObj] resolved %-20s fmt=%-18s technique=%s\n",
+                    gpu.shaderName.c_str(), gpu.vertexFormatName.c_str(), td.Name ? td.Name : "(none)");
 #endif
-        fx->Release();
-        anyResolved = true;
+            fx->Release();
+            anyResolved = true;
+        }
+        catch (wexception& we)
+        {
+#ifndef NDEBUG
+            fwprintf(stderr, L"[RefObj] resolve FAILED %hs / %hs: %ls -- sub-mesh skipped\n",
+                     gpu.shaderName.c_str(), gpu.vertexFormatName.c_str(), we.what());
+#endif
+            relptr(gpu.effect);   // leave effect/decl null -> skipped at draw
+        }
     }
     return anyResolved;
 }

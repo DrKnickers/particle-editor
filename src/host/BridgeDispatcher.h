@@ -177,6 +177,13 @@ public:
     // Convenience emitters (host-driven). EmitStatsTick is the 4 Hz status
     // bar push; EmitEngineStateChanged is the post-setter broadcast.
     void EmitEngineStateChanged();
+
+    // Commit the reference object's CURRENT transform after a
+    // host-side manipulator drag: gated persist + markDirty + EmitEngineStateChanged.
+    // The per-move drag already set the transform on the engine (+ emitted so the
+    // spinners track live, no persist); this runs once on release so the gesture
+    // persists + flips the dirty flag exactly once. Reads the live engine values.
+    void CommitReferenceObjectTransform();
     void EmitStatsTick(float fps, int emitters, int particles, int instances, bool overload);
 
     // Phase 3 Screen 4 Batch B1 — emit `emitters/tree/changed` with the

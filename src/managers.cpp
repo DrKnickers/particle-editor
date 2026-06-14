@@ -84,7 +84,10 @@ FileManager::FileManager(const vector<wstring>& basepaths)
 				const XMLNode* child = root->getChild(i);
 				if (child->getName() != L"File")
 				{
-					throw BadFileException();
+					// Tolerate non-<File> children (e.g. <Info Name=.../> in mod MegaFiles.xml):
+					// skip them instead of throwing (the ctor's catch(...) would rethrow ->
+					// std::terminate, crashing the editor on a standard-format mod).
+					continue;
 				}
 		
 				wstring filename = *path + child->getData();

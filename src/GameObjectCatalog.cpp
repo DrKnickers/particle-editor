@@ -233,16 +233,21 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
     f->Release();                                  // release our getFile ref
     if (!ok) return ModelProbeResult::LoadFailed;
 
-    // Renderable iff at least one sub-mesh would actually be drawn -- the exact
-    // condition ReferenceObjectMesh uses to accept a sub-mesh.
+    // Renderable iff at least one sub-mesh would actually be drawn -- kept in
+    // lockstep with ReferenceObjectMesh::Load: skip 0x402-hidden meshes, then
+    // shadow/occluded/heat shaders + skinned formats; an opaque (incl. collision)
+    // or transparent sub-mesh means the renderer will show geometry.
     for (const AloMesh& mesh : model.meshes)
+    {
+        if (mesh.hidden) continue;                                    // 0x402-hidden mesh -> not drawn
         for (const AloSubMesh& sm : mesh.subMeshes)
         {
             if (sm.rawVertexBytes.empty() || sm.vertexCount == 0 || sm.primitiveCount == 0) continue;
-            if (AloIsNonVisibleShader(sm.shaderName))         continue;   // collision / shadow hull
+            if (AloIsNonVisibleShader(sm.shaderName))         continue;   // shadow / occluded / heat
             if (AloIsSkinnedVertexFormat(sm.vertexFormatName)) continue;  // v1 defers skinning
             return ModelProbeResult::Renderable;
         }
+    }
     return ModelProbeResult::SkinnedUnsupported;
 }
 

@@ -29,6 +29,7 @@ import type {
   EmitterTreeDto,
   EmitterTreeNode,
   LightDto,
+  ReferenceObjectStatus,
   SpawnParamsDto,
 } from "@particle-editor/bridge-schema";
 import {
@@ -203,6 +204,11 @@ function decorateSpawn(node: EmitterTreeNode): EmitterTreeNode {
   };
 }
 
+// Browser mode can't probe a real .alo, so these canned Names stand in
+// for "skinned / unsupported" objects — selecting one drives the picker's
+// "not supported" status path. Must match a Name in the reference-object-list.
+const MOCK_SKINNED_REFS = new Set<string>(["Stormtrooper_Squad"]);
+
 export class MockBridge implements Bridge {
   private listeners = new Map<EventKind, Set<(e: Event) => void>>();
 
@@ -359,6 +365,38 @@ export class MockBridge implements Bridge {
           skydomeContext: req.params.context,
           skydomePrimaryName: req.params.primaryName,
           skydomeSecondaryName: req.params.secondaryName,
+        });
+        return {};
+
+      // imported reference object: select by Name (browser mode can't probe
+      // a real .alo, so a canned skinned-set drives the "not supported" status),
+      // toggle visibility, set transform; plus the unit grid toggle/spacing.
+      case "engine/set/reference-object": {
+        const name = req.params.name;
+        const status: ReferenceObjectStatus =
+          name === "" ? "none" : MOCK_SKINNED_REFS.has(name) ? "skinned" : "ok";
+        this.patchAndBroadcast({ referenceObjectName: name, referenceObjectStatus: status });
+        return {};
+      }
+
+      case "engine/set/reference-object-visible":
+        this.patchAndBroadcast({ referenceObjectVisible: req.params.visible });
+        return {};
+
+      case "engine/set/reference-object-transform":
+        this.patchAndBroadcast({
+          referenceObjectPosition: req.params.position,
+          referenceObjectRotation: req.params.rotation,
+        });
+        return {};
+
+      case "engine/set/grid-visible":
+        this.patchAndBroadcast({ gridVisible: req.params.visible });
+        return {};
+
+      case "engine/set/grid-spacing":
+        this.patchAndBroadcast({
+          gridSpacing: req.params.spacing > 0 ? req.params.spacing : 1,
         });
         return {};
 
@@ -540,6 +578,22 @@ export class MockBridge implements Bridge {
         };
         return req.params.context === "land" ? lists.land : lists.space;
       }
+
+      // Enumerate selectable game objects. Browser mode has no disk to read
+      // GameObjectFiles.xml from, so return a small canned set (real vanilla Names
+      // across categories) to exercise the picker dispatch + grouping surface.
+      case "engine/query/reference-object-list":
+        return {
+          objects: [
+            { name: "AT_AT_Walker", category: "Vehicle" },
+            { name: "AT_ST_Walker", category: "Vehicle" },
+            { name: "Empire_Anti_Aircraft_Turret", category: "Turret" },
+            { name: "Rebel_Barracks", category: "Structure" },
+            { name: "Star_Destroyer", category: "Space" },
+            { name: "Asteroid_Field", category: "Prop" },
+            { name: "Stormtrooper_Squad", category: "Infantry" },  // MOCK_SKINNED_REFS
+          ],
+        };
 
       case "engine/query/bloom-available":
         return snapshotEngineState().bloomAvailable;

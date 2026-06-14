@@ -81,6 +81,15 @@ export function makeDefaultEngineState(): EngineStateDto {
     skydomePrimaryName: "",
     skydomeSecondaryName: "",
 
+    // imported reference object + unit grid (nothing selected by default)
+    referenceObjectName: "",
+    referenceObjectVisible: true,
+    referenceObjectPosition: [0, 0, 0],
+    referenceObjectRotation: [0, 0, 0],
+    referenceObjectStatus: "none",
+    gridVisible: false,
+    gridSpacing: 20,
+
     background: 0x00340814,
 
     lights: {

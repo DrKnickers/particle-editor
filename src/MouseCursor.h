@@ -74,31 +74,15 @@ public:
 // unchanged.
 inline void GetCursorPos3D(Engine* engine, short x, short y, D3DXVECTOR3& position)
 {
-    D3DXVECTOR3  front, back;
-    D3DVIEWPORT9 viewport;
-    D3DXMATRIX   world;
-    D3DXMatrixIdentity(&world);
+    // Use the engine's shared screen->world ray (the same one the
+    // manipulator pick uses) so the cursor and the gizmo can never drift apart.
+    // BuildCursorRay carries the scene-viewport aspect fix documented above.
+    D3DXVECTOR3 origin, dir;
+    engine->BuildCursorRay(x, y, origin, dir);
 
-    int sx, sy, sw, sh;
-    if (engine->GetSceneViewport(sx, sy, sw, sh))
-    {
-        viewport.X      = static_cast<DWORD>(sx);
-        viewport.Y      = static_cast<DWORD>(sy);
-        viewport.Width  = static_cast<DWORD>(sw);
-        viewport.Height = static_cast<DWORD>(sh);
-        viewport.MinZ   = 0.0f;
-        viewport.MaxZ   = 1.0f;
-    }
-    else
-    {
-        engine->GetViewPort(&viewport);
-    }
-
-    D3DXVec3Unproject(&front, &D3DXVECTOR3(x, y, 0.0f), &viewport, &engine->GetProjectionMatrix(), &engine->GetViewMatrix(), &world);
-    D3DXVec3Unproject(&back,  &D3DXVECTOR3(x, y, 0.9f), &viewport, &engine->GetProjectionMatrix(), &engine->GetViewMatrix(), &world);
-
-    D3DXPLANE plane(0,0,1,0);
-    D3DXPlaneIntersectLine(&position, &plane, &front, &back);
+    D3DXVECTOR3 second = origin + dir;
+    D3DXPLANE   plane(0, 0, 1, 0);
+    D3DXPlaneIntersectLine(&position, &plane, &origin, &second);
 }
 
 #endif // MOUSECURSOR_H

@@ -112,6 +112,29 @@ static Bytes mesh(const std::string& name, const std::vector<std::pair<Bytes, By
     for (const auto& s : subs) { kids.push_back(s.first); kids.push_back(s.second); }
     return container(0x0400, kids);
 }
+// 0x402 MESH-INFO with the hidden/collision flags set: subMeshCount(4) +
+// bbox_min[3](12) + bbox_max[3](12) + unused(4) + isHidden(4)@32 + isCollision(4)@36,
+// padded to the writer's fixed 128 B. `payloadBytes` lets a test truncate the
+// chunk below the 40-B minimum to exercise the tolerant-defaults path.
+static Bytes meshInfoChunk(uint32_t subCount, bool hidden, bool collision, size_t payloadBytes = 128) {
+    Bytes p;
+    u32le(p, subCount);
+    for (int i = 0; i < 6; ++i) f32le(p, 0.0f);   // bbox min + max
+    u32le(p, 0);                                  // unused @28
+    u32le(p, hidden ? 1u : 0u);                   // isHidden @32
+    u32le(p, collision ? 1u : 0u);                // isCollision @36
+    p.resize(payloadBytes, 0);                    // pad (or, if < 40, truncate)
+    return leaf(0x0402, p);
+}
+static Bytes meshFlagged(const std::string& name,
+                         const std::vector<std::pair<Bytes, Bytes>>& subs,
+                         bool hidden, bool collision, size_t infoBytes = 128) {
+    std::vector<Bytes> kids;
+    Bytes nm; cstr(nm, name); kids.push_back(leaf(0x0401, nm));
+    kids.push_back(meshInfoChunk((uint32_t)subs.size(), hidden, collision, infoBytes));
+    for (const auto& s : subs) { kids.push_back(s.first); kids.push_back(s.second); }
+    return container(0x0400, kids);
+}
 static Bytes skeletonStub() {
     Bytes info; u32le(info, 1); info.resize(128, 0);
     return container(0x0200, { leaf(0x0201, info) });
@@ -192,7 +215,8 @@ static int dumpRealAlo(const char* path) {
     std::printf("meshes: %zu\n", m.meshes.size());
     for (size_t mi = 0; mi < m.meshes.size(); ++mi) {
         const AloMesh& me = m.meshes[mi];
-        std::printf("  mesh[%zu] \"%s\" submeshes=%zu\n", mi, me.name.c_str(), me.subMeshes.size());
+        std::printf("  mesh[%zu] \"%s\" submeshes=%zu hidden=%d collision=%d\n",
+            mi, me.name.c_str(), me.subMeshes.size(), me.hidden ? 1 : 0, me.collision ? 1 : 0);
         for (size_t si = 0; si < me.subMeshes.size(); ++si) {
             const AloSubMesh& sm = me.subMeshes[si];
             std::printf("    sub[%zu] shader=%s fmt=%s verts=%u prims=%u vbytes=%zu ibytes=%zu params=%zu\n",
@@ -293,6 +317,65 @@ int main(int argc, char** argv) {
         AloModel m = parseBytes(assemble({ skeletonStub(), m0, m1 }));
         CHECK(m.meshes.size() == 2, "2 meshes");
         CHECK(m.meshes[0].name == "a" && m.meshes[1].name == "b", "mesh names");
+    }
+
+    // ---- 0x402 mesh-info: hidden + collision flags --------------------------
+    std::printf("[mesh-info-0x402]\n");
+    {
+        auto sub = []() -> std::pair<Bytes, Bytes> {
+            return { material("MeshCollision.fx", {}), geometry(3, 1, "alD3dVertN") };
+        };
+        // default (all-zero 0x402 via mesh()) -> visible, non-collision.
+        {
+            AloModel m = parseBytes(assemble({ mesh("vis", { sub() }) }));
+            CHECK(m.meshes.size() == 1 && !m.meshes[0].hidden && !m.meshes[0].collision,
+                  "all-zero 0x402 -> visible, non-collision");
+        }
+        // isHidden = 1.
+        {
+            AloModel m = parseBytes(assemble({ meshFlagged("hid", { sub() }, true, false) }));
+            CHECK(m.meshes.size() == 1 && m.meshes[0].hidden, "isHidden=1 decodes hidden");
+            CHECK(!m.meshes[0].collision, "isHidden=1 leaves collision false");
+        }
+        // isCollision = 1 (and visible).
+        {
+            AloModel m = parseBytes(assemble({ meshFlagged("col", { sub() }, false, true) }));
+            CHECK(m.meshes.size() == 1 && m.meshes[0].collision && !m.meshes[0].hidden,
+                  "isCollision=1 decodes collision, stays visible");
+        }
+        // both flags set.
+        {
+            AloModel m = parseBytes(assemble({ meshFlagged("both", { sub() }, true, true) }));
+            CHECK(m.meshes[0].hidden && m.meshes[0].collision, "both flags decode");
+        }
+        // short 0x402 (< 40 B) -> tolerant defaults (visible), no throw.
+        {
+            AloModel m = parseBytes(assemble({ meshFlagged("short", { sub() }, true, true, 16) }));
+            CHECK(m.meshes.size() == 1 && !m.meshes[0].hidden && !m.meshes[0].collision,
+                  "short 0x402 keeps visible defaults (tolerant)");
+        }
+    }
+
+    // ---- AloClassifyShader: phase/blend buckets (FoC corpus) ----------------
+    std::printf("[classify-shader]\n");
+    {
+        CHECK(AloClassifyShader("MeshGloss.fx")        == ALO_RC_OPAQUE,   "MeshGloss -> opaque");
+        CHECK(AloClassifyShader("MeshBumpColorize.fx") == ALO_RC_OPAQUE,   "MeshBumpColorize -> opaque");
+        CHECK(AloClassifyShader("MeshCollision.fx")    == ALO_RC_OPAQUE,   "MeshCollision -> opaque (blue)");
+        CHECK(AloClassifyShader("MeshAdditive.fx")     == ALO_RC_ADDITIVE, "MeshAdditive -> additive");
+        CHECK(AloClassifyShader("MeshAdditiveVColor.fx")== ALO_RC_ADDITIVE,"MeshAdditiveVColor -> additive");
+        CHECK(AloClassifyShader("MeshShield.fx")       == ALO_RC_ADDITIVE, "MeshShield -> additive (name mismatch)");
+        CHECK(AloClassifyShader("MeshAlpha.fx")        == ALO_RC_ALPHA,    "MeshAlpha -> alpha");
+        CHECK(AloClassifyShader("MeshAlphaGloss.fx")   == ALO_RC_ALPHA,    "MeshAlphaGloss -> alpha");
+        CHECK(AloClassifyShader("MeshHeat.fx")         == ALO_RC_HEAT,     "MeshHeat -> heat");
+        CHECK(AloClassifyShader("MeshShadowVolume.fx") == ALO_RC_SHADOW,   "MeshShadowVolume -> shadow");
+        CHECK(AloClassifyShader("MeshOccludedUnit.fx") == ALO_RC_OCCLUDED, "MeshOccludedUnit -> occluded");
+        CHECK(AloClassifyShader("MESHSHIELD.FX")       == ALO_RC_ADDITIVE, "case-insensitive");
+        // AloIsNonVisibleShader: shadow/occluded/heat true; collision/opaque/blend false.
+        CHECK(AloIsNonVisibleShader("MeshShadowVolume.fx"), "shadow is non-visible");
+        CHECK(AloIsNonVisibleShader("MeshHeat.fx"),         "heat is non-visible (v1-deferred)");
+        CHECK(!AloIsNonVisibleShader("MeshCollision.fx"),   "collision is NOT non-visible (drawn blue)");
+        CHECK(!AloIsNonVisibleShader("MeshShield.fx"),      "shield is visible (transparent)");
     }
 
     // ---- Legacy 0x10005 vertex chunk: submesh skipped (empty verts) --------

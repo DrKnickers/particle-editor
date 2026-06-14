@@ -402,6 +402,78 @@ static void PersistBackgroundColor(COLORREF color)
     }
 }
 
+// Persist the imported reference object (selected Name) + its visibility +
+// transform, plus the unit-grid toggle/spacing, under the same hive. New REG
+// keys; the new-UI startup restore reads them back. Empty Name => delete.
+// Transform + grid spacing are REG_BINARY floats (6 and 1 respectively).
+static void PersistReferenceObjectName(const std::wstring& name)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) != ERROR_SUCCESS)
+        return;
+    if (name.empty())
+        RegDeleteValueW(hKey, L"ReferenceObjectName");
+    else
+        RegSetValueExW(hKey, L"ReferenceObjectName", 0, REG_SZ,
+                       reinterpret_cast<const BYTE*>(name.c_str()),
+                       static_cast<DWORD>((name.size() + 1) * sizeof(wchar_t)));
+    RegCloseKey(hKey);
+}
+
+static void PersistReferenceObjectVisible(bool visible)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
+    {
+        DWORD v = visible ? 1u : 0u;
+        RegSetValueExW(hKey, L"ReferenceObjectVisible", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
+        RegCloseKey(hKey);
+    }
+}
+
+static void PersistReferenceObjectTransform(const D3DXVECTOR3& pos, const D3DXVECTOR3& rot)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
+    {
+        const float xform[6] = { pos.x, pos.y, pos.z, rot.x, rot.y, rot.z };
+        RegSetValueExW(hKey, L"ReferenceObjectTransform", 0, REG_BINARY,
+                       reinterpret_cast<const BYTE*>(xform), sizeof(xform));
+        RegCloseKey(hKey);
+    }
+}
+
+static void PersistGrid(bool visible, float spacing)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
+    {
+        DWORD vis = visible ? 1u : 0u;
+        RegSetValueExW(hKey, L"GridVisible", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&vis), sizeof(vis));
+        RegSetValueExW(hKey, L"GridSpacing", 0, REG_BINARY,
+                       reinterpret_cast<const BYTE*>(&spacing), sizeof(spacing));
+        RegCloseKey(hKey);
+    }
+}
+
+// ReferenceObjectStatus -> wire string for the snapshot DTO.
+static const char* RefStatusToString(ReferenceObjectStatus s)
+{
+    switch (s)
+    {
+        case ReferenceObjectStatus::Ok:         return "ok";
+        case ReferenceObjectStatus::Skinned:    return "skinned";
+        case ReferenceObjectStatus::LoadFailed: return "load-failed";
+        default:                                return "none";
+    }
+}
+
 // host-state plumbing — JSON ↔ SpawnerConfig converters. The
 // schema's SpawnerParamsDto (web/packages/bridge-schema/src/index.ts:60)
 // is value-for-value compatible with the native SpawnerConfig (lines in
@@ -736,6 +808,15 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"skydomeContext",        engine->GetSkydomeContext() == SkydomeContext::Land ? "land" : "space"},
         {"skydomePrimaryName",    engine->GetSkydomePrimaryName()},
         {"skydomeSecondaryName",  engine->GetSkydomeSecondaryName()},
+
+        // imported reference object + unit grid
+        {"referenceObjectName",     engine->GetReferenceObjectName()},
+        {"referenceObjectVisible",  engine->GetReferenceObjectVisible()},
+        {"referenceObjectPosition", Vec3ToJson(engine->GetReferencePosition())},
+        {"referenceObjectRotation", Vec3ToJson(engine->GetReferenceRotation())},
+        {"referenceObjectStatus",   RefStatusToString(engine->GetReferenceObjectStatus())},
+        {"gridVisible",             engine->GetGridVisible()},
+        {"gridSpacing",             engine->GetGridSpacing()},
 
         // Background (COLORREF; low byte = blue)
         {"background",            static_cast<unsigned int>(engine->GetBackground())},
@@ -1491,6 +1572,69 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         EmitEngineStateChanged();
         return res;
     }
+    // imported reference object: select by Name, toggle visibility, set transform.
+    if (kind == "engine/set/reference-object")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        std::string name = params.value("name", std::string{});
+        m_engine->SetReferenceObject(name);
+        if (!(m_testHost && !m_settingsLive))
+            PersistReferenceObjectName(Utf8ToWide(name));
+        sendOk(json::object());
+        markDirty();
+        EmitEngineStateChanged();
+        return res;
+    }
+    if (kind == "engine/set/reference-object-visible")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        bool visible = params.value("visible", true);
+        m_engine->SetReferenceObjectVisible(visible);
+        if (!(m_testHost && !m_settingsLive))
+            PersistReferenceObjectVisible(visible);
+        sendOk(json::object());
+        markDirty();
+        EmitEngineStateChanged();
+        return res;
+    }
+    if (kind == "engine/set/reference-object-transform")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        D3DXVECTOR3 pos = JsonToVec3(params.value("position", json::array()));
+        D3DXVECTOR3 rot = JsonToVec3(params.value("rotation", json::array()));
+        m_engine->SetReferenceObjectTransform(pos, rot);
+        if (!(m_testHost && !m_settingsLive))
+            PersistReferenceObjectTransform(pos, rot);
+        sendOk(json::object());
+        markDirty();
+        EmitEngineStateChanged();
+        return res;
+    }
+    // unit grid: toggle + spacing.
+    if (kind == "engine/set/grid-visible")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        bool visible = params.value("visible", false);
+        m_engine->SetGridVisible(visible);
+        if (!(m_testHost && !m_settingsLive))
+            PersistGrid(visible, m_engine->GetGridSpacing());
+        sendOk(json::object());
+        markDirty();
+        EmitEngineStateChanged();
+        return res;
+    }
+    if (kind == "engine/set/grid-spacing")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        float spacing = params.value("spacing", 20.0f);
+        m_engine->SetGridSpacing(spacing);
+        if (!(m_testHost && !m_settingsLive))
+            PersistGrid(m_engine->GetGridVisible(), m_engine->GetGridSpacing());
+        sendOk(json::object());
+        markDirty();
+        EmitEngineStateChanged();
+        return res;
+    }
     if (kind == "engine/set/background")
     {
         if (!requireEngine(kind.c_str())) return res;
@@ -1818,6 +1962,18 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         out["primary"]   = prim;
         out["secondary"] = sec;
         sendOk(out);
+        return res;
+    }
+    // Enumerate selectable game objects (Name + category) for the picker.
+    if (kind == "engine/query/reference-object-list")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        std::vector<GameObjectRef> objs;
+        m_engine->EnumerateReferenceObjects(objs);
+        json arr = json::array();
+        for (const GameObjectRef& r : objs)
+            arr.push_back(json{ {"name", r.name}, {"category", GameObjectCategoryName(r.category)} });
+        sendOk(json{ {"objects", arr} });
         return res;
     }
     if (kind == "engine/query/skydome-slot-empty")
@@ -5297,6 +5453,17 @@ void BridgeDispatcher::EmitEmittersTreeChanged()
         {"payload", json{{"root", tree}}},
     };
     m_emit(env.dump());
+}
+
+void BridgeDispatcher::CommitReferenceObjectTransform()
+{
+    if (!m_engine) return;
+    const D3DXVECTOR3 pos = m_engine->GetReferencePosition();
+    const D3DXVECTOR3 rot = m_engine->GetReferenceRotation();
+    if (!(m_testHost && !m_settingsLive))
+        PersistReferenceObjectTransform(pos, rot);
+    SetDirty(true);   // markDirty() in DispatchSync is a local lambda over this
+    EmitEngineStateChanged();
 }
 
 void BridgeDispatcher::EmitEngineStateChanged()

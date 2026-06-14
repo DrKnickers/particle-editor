@@ -11,6 +11,9 @@
 #include <cfloat>
 #include <sstream>
 #include <queue>
+#include <cstdlib>     // _set_abort_behavior (headless --capture: no abort dialog)
+#include <crtdbg.h>    // _CrtSetReportMode/File (route Debug asserts to stderr)
+#include <exception>   // std::set_terminate (log unhandled exceptions headlessly)
 
 #include "exceptions.h"
 #include "UI/UI.h"
@@ -8132,6 +8135,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// garbage/zero --frames back to the default.
 		if (!captureAlo.empty() && !capturePng.empty()) newUi = true;
 		if (captureFrames < 1) captureFrames = 180;
+		// A headless --capture must NEVER pop a modal CRT assert/abort dialog
+		// -- it hangs the run AND disrupts the user's screen (and tells us nothing).
+		// Route Debug asserts/errors + unhandled exceptions to stderr (captured to
+		// the redirect file) so a crash is diagnosable headlessly. Interactive Debug
+		// launches keep their dialogs.
+#ifndef NDEBUG
+		if (!captureAlo.empty() && !capturePng.empty())
+		{
+			setvbuf(stderr, nullptr, _IONBF, 0);   // unbuffered: pre-crash traces survive a terminate
+			_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+			_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+			_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+			_CrtSetReportMode(_CRT_ERROR,  _CRTDBG_MODE_FILE);
+			_CrtSetReportFile(_CRT_ERROR,  _CRTDBG_FILE_STDERR);
+			std::set_terminate([]() {
+				fprintf(stderr, "[capture] FATAL: std::terminate (unhandled exception)\n");
+				try { if (auto e = std::current_exception()) std::rethrow_exception(e); }
+				catch (wexception& we) { fwprintf(stderr, L"  wexception: %ls\n", we.what()); }
+				catch (const std::exception& ex) { fprintf(stderr, "  std::exception: %s\n", ex.what()); }
+				catch (...) { fprintf(stderr, "  (non-std exception)\n"); }
+				fflush(stderr);
+				_exit(3);
+			});
+		}
+#endif
 		if (!genNt5FixturePath.empty())
 		{
 			auto sys = std::make_unique<ParticleSystem>();

@@ -17,6 +17,50 @@ Conventions:
 ## Changelog
 
 
+### imported game objects + unit grid — drop a real game/mod object in the preview as a scale reference
+
+*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #174*
+
+You can now place a real game/mod object in the preview to size effects against. A new toolbar
+**Object** picker (beside Background) lists every in-game object by Name — enumerated live from the
+active mod/base's `GameObjectFiles.xml`, grouped by category (Vehicle / Infantry / Structure /
+Turret / Hero / Prop / Space / Projectile) — and loading one renders it 1:1 via each sub-mesh's own
+game shader, placed by its skeleton (a turret's barrel sits horizontally, etc.). Skinned units
+(animated troopers) are detected and shown as "skinned — not yet supported" rather than rendered
+wrong. Position + rotation are set either with six numeric spinners (X/Y/Z + yaw/pitch/roll in
+degrees) **or by dragging the object's red/green/blue axis handles directly in the viewport**. A
+separate **unit grid** (toggle + spacing) draws a ground reference grid at known native spacing. The
+object, its transform, and the grid persist across restarts. This is the user-facing half of
+(/B/C earlier added the `.alo` skeleton decode, the rigid multi-part renderer, and the by-Name
+catalog): **** engine state + bridge + persistence + the React `ReferenceObjectPicker`, ****
+the unit grid, **** the drag manipulator.
+
+**How we tackled it.** The feature mirrors the skydome dual-slot plumbing
+([`src/engine.cpp`](src/engine.cpp), [`src/host/BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp),
+[`ReferenceObjectPicker.tsx`](web/apps/editor/src/screens/ReferenceObjectPicker.tsx) cloned from
+`BackgroundPicker`). The object list comes from a pure-data leaf
+[`src/GameObjectCatalog.cpp`](src/GameObjectCatalog.cpp) that two-phase-parses `GameObjectFiles.xml`
+and resolves `Variant_Of_Existing_Type` inheritance case-insensitively (matching the engine). The
+grid + the manipulator handles share one new fixed-function line primitive,
+[`DrawWorldLines`](src/engine.cpp) (the engine's first `D3DPT_LINELIST`). The manipulator reuses the
+existing screen→world unproject for ray-picking — factored into `Engine::BuildCursorRay` and shared
+with the cursor-spawn path so the two can't drift — drags along the grabbed axis with a no-jump grab
+offset, and persists once per gesture (per-move only updates the live view, throttled to ~30 Hz). The
+rotation transform is built **Z-up** (yaw = heading about world Z), matching the engine's up-axis.
+
+**Issues encountered and resolutions.** Model resolution is case-insensitive because vanilla ships
+`Variant_Of` references whose casing differs from the parent's declared Name (`V-Wing_Fighter` vs
+`V-wing_Fighter`) — an exact match silently dropped ~15 real objects. The rotation was first built
+with `D3DXMatrixRotationYawPitchRoll` (a Y-up helper), which mislabelled the spinners in this Z-up
+engine; fixed to an explicit Z-up build. The manipulator's persist/dirty fire exactly once per
+gesture (on release, RMB-interrupt, or capture-loss) and the per-move snapshot emit is throttled.
+**Pending user verification:** the manipulator's drag *feel* — axis-correctness under a real mouse,
+the no-jump grab, and the picker spinners tracking the drag live — is mouse-driven and can't be
+verified headlessly (the handle *render* and the drag *math* are verified via capture + adversarial
+review). The ROADMAP "Shipped" marking is deferred until that live-test confirms the drag.
+
+---
+
 ### space skydome — the secondary nebula now composites over the primary starfield
 
 *2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*

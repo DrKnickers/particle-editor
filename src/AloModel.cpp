@@ -3,13 +3,15 @@
 #include "ChunkFile.h"
 #include "exceptions.h"
 
+#include <string.h>   // _stricmp / _strnicmp (case-insensitive shader-name match)
+
 // Static-mesh subset of the Alamo `.alo` chunk vocabulary. See AloModel.h for
 // provenance (max2alamo-2026 writer + alo-viewer reader, both MIT). The chunk
 // nesting that matters here:
 //
 //   0x0400  Mesh                       (container)
 //     0x0401  name                     (string)
-//     0x0402  info                     (data; skipped)
+//     0x0402  info                     (data; per-mesh hidden + collision flags)
 //     0x10100 SubMesh material         (container)   -- SIBLING of 0x10000
 //       0x10101 shader name            (string)
 //       0x10102..0x10106 params        (data; name(1)/value(2) mini-chunks)
@@ -23,6 +25,7 @@ namespace
 {
     const ChunkType CHUNK_MESH          = 0x0400;
     const ChunkType CHUNK_MESH_NAME     = 0x0401;
+    const ChunkType CHUNK_MESH_INFO     = 0x0402;   // data: subMeshCount, bbox, isHidden, isCollision
     const ChunkType CHUNK_SUBMESH_MAT   = 0x10100;
     const ChunkType CHUNK_SHADER_NAME   = 0x10101;
     const ChunkType CHUNK_PARAM_INT     = 0x10102;
@@ -51,6 +54,13 @@ namespace
     // Bone-data leaf sizes (max2alamo alo_build.cpp: build_bone_data).
     const long kBoneData205Bytes = 56;   // parentIndex(4) + visible(4) + matrix(48)
     const long kBoneData206Bytes = 60;   // + billboardMode(4)
+
+    // 0x402 MESH-INFO: leading bytes up to + including the two flag u32s. Writer
+    // pads to 128 B (alo_build.cpp:145-161); we read only what we need + let
+    // next() skip the tail. subMeshCount(4)+bboxMin(12)+bboxMax(12)+unused(4)
+    // = 32 before isHidden(4) @32 + isCollision(4) @36.
+    const long kMeshInfo402MinBytes = 40;
+    const long kMeshInfo402SkipBytes = 32;
 
     // 0x602 connection mini-chunk ids (alo_build.cpp build_connections).
     const ChunkType MINI_CONN_OBJECT = 2;   // u32 objectIndex
@@ -234,6 +244,22 @@ namespace
                 case CHUNK_MESH_NAME:
                     mesh.name = r.readString();
                     break;
+                case CHUNK_MESH_INFO:   // 0x402: per-mesh hidden + collision flags
+                {
+                    // Read only the leading 40 B (count + bbox + the two flag u32s);
+                    // next() skips the reserved tail. TOLERANT: a short/odd chunk
+                    // leaves the visible/non-collision defaults (never throws -- this
+                    // chunk was skipped wholesale before, so a surprising shape must
+                    // not break a model that loaded before).
+                    if (r.size() >= kMeshInfo402MinBytes)
+                    {
+                        unsigned char skip[kMeshInfo402SkipBytes];
+                        r.read(skip, sizeof(skip));         // subMeshCount + bbox + unused
+                        mesh.hidden    = (readU32At(r) != 0);   // @ data offset 32
+                        mesh.collision = (readU32At(r) != 0);   // @ data offset 36
+                    }
+                    break;
+                }
                 case CHUNK_SUBMESH_MAT:
                     mesh.subMeshes.emplace_back();
                     ReadSubMeshMaterial(r, mesh.subMeshes.back());
@@ -243,7 +269,7 @@ namespace
                     ReadGeometry(r, mesh.subMeshes.back());
                     break;
                 default:
-                    // 0x402 info (data) auto-skips; unknown containers skip().
+                    // Unknown DATA chunks auto-skip; unknown containers skip().
                     if (r.size() < 0) r.skip();
                     break;
             }
@@ -382,8 +408,36 @@ bool AloIsSkinnedVertexFormat(const std::string& vertexFormatName)
            vertexFormatName.rfind("alD3dVertB4I4", 0) == 0;
 }
 
+AloRenderClass AloClassifyShader(const std::string& shaderName)
+{
+    const char* s = shaderName.c_str();
+    auto eq  = [&](const char* n) { return _stricmp(s, n) == 0; };
+    auto pre = [&](const char* p) { return _strnicmp(s, p, (int)strlen(p)) == 0; };
+
+    // Scaffolding phases first (exact names) -- never drawn as opaque/transparent.
+    if (eq("MeshShadowVolume.fx") || eq("RSkinShadowVolume.fx")) return ALO_RC_SHADOW;
+    if (eq("MeshOccludedUnit.fx") || eq("RSkinOccludedUnit.fx")) return ALO_RC_OCCLUDED;
+    if (eq("MeshHeat.fx")         || eq("RSkinHeat.fx"))         return ALO_RC_HEAT;
+
+    // MeshShield: Transparent/additive (ONE/ONE) but NOT named MeshAdditive* --
+    // the one name-vs-blend mismatch in the FoC corpus; pin it explicitly.
+    if (eq("MeshShield.fx")) return ALO_RC_ADDITIVE;
+
+    // Prefix families: additive (ONE/ONE) and alpha (SRCALPHA/INVSRCALPHA).
+    if (pre("MeshAdditive") || pre("RSkinAdditive")) return ALO_RC_ADDITIVE;
+    if (pre("MeshAlpha")    || pre("RSkinAlpha"))    return ALO_RC_ALPHA;
+
+    // Everything else (MeshGloss/BumpColorize/GlossColorize/SolidColor/Collision/
+    // LightVisualize + the RSkin gloss/bump variants) is opaque (AlphaBlendEnable
+    // FALSE in its SB block); MeshCollision.fx is opaque flat blue.
+    return ALO_RC_OPAQUE;
+}
+
 bool AloIsNonVisibleShader(const std::string& shaderName)
 {
-    return shaderName == "MeshCollision.fx"    || shaderName == "MeshShadowVolume.fx" ||
-           shaderName == "RSkinShadowVolume.fx" || shaderName == "MeshOccludedUnit.fx";
+    // Not drawn in the visible (opaque + transparent) passes. Collision is drawn
+    // (opaque blue) so it is deliberately NOT here; Heat is v1-deferred (skipped),
+    // so it counts as non-visible until the Heat phase ships.
+    const AloRenderClass rc = AloClassifyShader(shaderName);
+    return rc == ALO_RC_SHADOW || rc == ALO_RC_OCCLUDED || rc == ALO_RC_HEAT;
 }

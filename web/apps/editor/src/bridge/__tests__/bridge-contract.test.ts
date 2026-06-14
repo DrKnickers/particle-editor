@@ -248,6 +248,61 @@ describe("MockBridge contract", () => {
     expect(land.primary).not.toEqual(space.primary);
   });
 
+  // reference object + unit grid: setters mutate the snapshot + fire
+  // state/changed; the list query enumerates Name + category; the skinned
+  // canned Name drives the "skinned" status.
+  it("engine/set/reference-object patches name + status and fires state/changed", async () => {
+    const b = new MockBridge();
+    let last: EngineStateDto | null = null;
+    const off = b.on("engine/state/changed", (e) => { last = e.payload; });
+    await b.request({ kind: "engine/set/reference-object", params: { name: "AT_AT_Walker" } });
+    expect(last).not.toBeNull();
+    expect(last!.referenceObjectName).toBe("AT_AT_Walker");
+    expect(last!.referenceObjectStatus).toBe("ok");
+    // A canned skinned object reports "skinned".
+    await b.request({ kind: "engine/set/reference-object", params: { name: "Stormtrooper_Squad" } });
+    expect(last!.referenceObjectStatus).toBe("skinned");
+    // Empty clears the selection.
+    await b.request({ kind: "engine/set/reference-object", params: { name: "" } });
+    expect(last!.referenceObjectName).toBe("");
+    expect(last!.referenceObjectStatus).toBe("none");
+    off();
+  });
+
+  it("engine/set/reference-object-transform + -visible round-trip through the snapshot", async () => {
+    const b = new MockBridge();
+    await b.request({
+      kind: "engine/set/reference-object-transform",
+      params: { position: [1, 2, 3], rotation: [45, 0, 90] },
+    });
+    await b.request({ kind: "engine/set/reference-object-visible", params: { visible: false } });
+    const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.referenceObjectPosition).toEqual([1, 2, 3]);
+    expect(snap.referenceObjectRotation).toEqual([45, 0, 90]);
+    expect(snap.referenceObjectVisible).toBe(false);
+  });
+
+  it("engine/set/grid-visible + -grid-spacing round-trip; spacing clamps to > 0", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "engine/set/grid-visible", params: { visible: true } });
+    await b.request({ kind: "engine/set/grid-spacing", params: { spacing: 50 } });
+    let snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.gridVisible).toBe(true);
+    expect(snap.gridSpacing).toBe(50);
+    // A non-positive spacing is clamped (mirrors Engine::SetGridSpacing).
+    await b.request({ kind: "engine/set/grid-spacing", params: { spacing: 0 } });
+    snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.gridSpacing).toBeGreaterThan(0);
+  });
+
+  it("engine/query/reference-object-list returns Name + category entries", async () => {
+    const b = new MockBridge();
+    const r = await b.request({ kind: "engine/query/reference-object-list", params: {} });
+    expect(Array.isArray(r.objects)).toBe(true);
+    const turret = r.objects.find((o) => o.name === "Empire_Anti_Aircraft_Turret");
+    expect(turret?.category).toBe("Turret");
+  });
+
   it("engine/action/step-frames resolves with an empty body in browser mode", async () => {
     const b = new MockBridge();
     // Pause first; the request is a response-only no-op either way, but

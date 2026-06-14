@@ -67,9 +67,10 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out);
 //   Renderable          -- has >= 1 rigid, visible sub-mesh the renderer draws
 //   SkinnedUnsupported  -- loads, but every visible sub-mesh is skinned (v1 skip)
 //   LoadFailed          -- empty path, missing file, or a malformed / non-mesh .alo
-// The accept condition mirrors ReferenceObjectMesh's draw filter exactly (via
-// the shared AloIsSkinnedVertexFormat / AloIsNonVisibleShader predicates) so a
-// "Renderable" verdict means the renderer will actually show geometry.
+// The accept condition is kept in lockstep with ReferenceObjectMesh::Load's draw
+// filter (skip 0x402-hidden meshes + the shared AloIsSkinnedVertexFormat /
+// AloIsNonVisibleShader predicates) so a "Renderable" verdict means the renderer
+// will actually show geometry.
 enum class ModelProbeResult { Renderable, SkinnedUnsupported, LoadFailed };
 ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPath);
 
