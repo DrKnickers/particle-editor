@@ -184,6 +184,7 @@ static int dumpProbe(const char* aloPath)
     ModelProbeResult r = ProbeModelSkinned(fm, "probe.alo");
     const char* s = (r == ModelProbeResult::Renderable) ? "Renderable"
                   : (r == ModelProbeResult::SkinnedUnsupported) ? "SkinnedUnsupported"
+                  : (r == ModelProbeResult::NotFound) ? "NotFound"
                   : "LoadFailed";
     std::printf("probe %s -> %s\n", aloPath, s);
     return 0;
@@ -299,7 +300,7 @@ int main(int argc, char** argv)
     std::printf("[probe]\n");
     {
         CHECK(ProbeModelSkinned(fm, "") == ModelProbeResult::LoadFailed, "empty modelPath -> LoadFailed");
-        CHECK(ProbeModelSkinned(fm, "nope.alo") == ModelProbeResult::LoadFailed, "missing model -> LoadFailed");
+        CHECK(ProbeModelSkinned(fm, "nope.alo") == ModelProbeResult::NotFound, "missing file -> NotFound");
     }
 
     std::printf("\n=== GameObjectCatalog: %s ===\n", g_failed == 0 ? "ALL PASS" : "FAILURES");

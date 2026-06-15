@@ -278,6 +278,9 @@ describe("MockBridge contract", () => {
     // A canned skinned object reports "skinned".
     await b.request({ kind: "engine/set/reference-object", params: { name: "Stormtrooper_Squad" } });
     expect(last!.referenceObjectStatus).toBe("skinned");
+    // A Name whose model file is absent reports "model-missing".
+    await b.request({ kind: "engine/set/reference-object", params: { name: "Prop_ElectricBox_00" } });
+    expect(last!.referenceObjectStatus).toBe("model-missing");
     // Empty clears the selection.
     await b.request({ kind: "engine/set/reference-object", params: { name: "" } });
     expect(last!.referenceObjectName).toBe("");

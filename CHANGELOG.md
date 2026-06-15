@@ -17,9 +17,35 @@ Conventions:
 ## Changelog
 
 
-### Skydome picker — surfaces a dome that won't load, and drops the unused custom-texture slots
+### Reference-object picker — "model file not found" vs "couldn't load"
 
 *2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Selecting an imported game object whose model file is genuinely **absent** from the active mod/base —
+a Name listed in `GameObjectFiles.xml` whose `.alo` isn't shipped (e.g. Mod's `Prop_ElectricBox_00`)
+— now reports **"Model file not found in the current mod/base game."** instead of the misleading
+"Couldn't load this object's model." The latter is now reserved for a file that *is* present but won't
+decode (corrupt / non-mesh).
+
+**How we tackled it.** Split the probe's file-miss path from the decode-failure path: a new
+`ModelProbeResult::NotFound` ([`src/GameObjectCatalog.cpp`](src/GameObjectCatalog.cpp:226), returned
+on a `getFile` miss) flows through a new `ReferenceObjectStatus::ModelMissing`
+([`src/engine.cpp`](src/engine.cpp) `RebuildReferenceObjectMesh`) → `RefStatusToString`
+`"model-missing"` ([`src/host/BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp:466)) → the
+schema's `ReferenceObjectStatus` union → a distinct picker note
+([`web/apps/editor/src/screens/ReferenceObjectPicker.tsx`](web/apps/editor/src/screens/ReferenceObjectPicker.tsx)).
+Empty-path and corrupt/non-mesh cases stay `LoadFailed`. Mirrors the existing `referenceObjectStatus`
+plumbing; the mock derives `model-missing` from a canned `MOCK_MISSING_MODELS` set.
+
+**Issues encountered and resolutions.** The GameObjectCatalog leaf test asserted a missing file →
+`LoadFailed`; that assertion now correctly expects `NotFound`, and the `--probe` dump printer gained
+the `NotFound` label. No render-path change — the status is a picker hint only.
+
+---
+
+### Skydome picker — surfaces a dome that won't load, and drops the unused custom-texture slots
+
+*2026-06-14 · [`8692156`](https://github.com/DrKnickers/particle-editor/commit/8692156) · #182*
 
 Picking a game skydome whose model fails to load no longer silently shows the solid-colour
 background while the dropdown still reads as if the dome applied. The Background popover now shows

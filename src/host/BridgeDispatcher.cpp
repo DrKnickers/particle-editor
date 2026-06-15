@@ -467,10 +467,11 @@ static const char* RefStatusToString(ReferenceObjectStatus s)
 {
     switch (s)
     {
-        case ReferenceObjectStatus::Ok:         return "ok";
-        case ReferenceObjectStatus::Skinned:    return "skinned";
-        case ReferenceObjectStatus::LoadFailed: return "load-failed";
-        default:                                return "none";
+        case ReferenceObjectStatus::Ok:           return "ok";
+        case ReferenceObjectStatus::Skinned:      return "skinned";
+        case ReferenceObjectStatus::LoadFailed:   return "load-failed";
+        case ReferenceObjectStatus::ModelMissing: return "model-missing";
+        default:                                  return "none";
     }
 }
 

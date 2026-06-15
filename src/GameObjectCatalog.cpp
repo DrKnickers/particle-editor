@@ -224,7 +224,7 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
     if (modelPath.empty()) return ModelProbeResult::LoadFailed;
 
     IFile* f = fm.getFile(std::string("Data\\Art\\Models\\") + modelPath);
-    if (f == nullptr) return ModelProbeResult::LoadFailed;
+    if (f == nullptr) return ModelProbeResult::NotFound;   // file genuinely absent
 
     AloModel model;
     bool ok = false;

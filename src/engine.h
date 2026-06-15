@@ -16,7 +16,7 @@
 // surfaced in the engine-state snapshot so the picker can show "skinned -- not
 // supported" / "couldn't load" for the chosen object (the .alo is probed lazily
 // on select; see Engine::SetReferenceObject).
-enum class ReferenceObjectStatus { None, Ok, Skinned, LoadFailed };
+enum class ReferenceObjectStatus { None, Ok, Skinned, LoadFailed, ModelMissing };
 
 ///S49] Per-slot load outcome for a game skydome, surfaced in the
 // engine-state snapshot so the Background picker can distinguish "no dome

@@ -48,6 +48,20 @@ describe("ReferenceObjectPicker — selection + status", () => {
     expect(note.textContent).toMatch(/skinned/i);
   });
 
+  it("shows the model-missing note for an object whose file is absent", async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+
+    const select = await screen.findByRole("combobox", { name: "Reference object" });
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Prop_ElectricBox_00" })).toBeInTheDocument();
+    });
+    fireEvent.change(select, { target: { value: "Prop_ElectricBox_00" } });
+
+    const note = await screen.findByRole("alert");
+    expect(note.textContent).toMatch(/not found/i);
+  });
+
   it("commits a position-X change through the transform dispatch", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);

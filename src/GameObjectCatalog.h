@@ -66,12 +66,17 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out);
 // (the `.alo` parse is far too costly to run for every object at build time).
 //   Renderable          -- has >= 1 rigid, visible sub-mesh the renderer draws
 //   SkinnedUnsupported  -- loads, but every visible sub-mesh is skinned (v1 skip)
-//   LoadFailed          -- empty path, missing file, or a malformed / non-mesh .alo
+//   LoadFailed          -- empty path, or present-but-malformed / non-mesh .alo
+//   NotFound            -- the file is genuinely absent (getFile miss), distinct
+//                          from LoadFailed so the picker can say "model file not
+//                          found" rather than the misleading "couldn't load".
+//                          E.g. a Name listed in GameObjectFiles.xml whose .alo
+//                          isn't shipped in this mod/base (Prop_ElectricBox_00).
 // The accept condition is kept in lockstep with ReferenceObjectMesh::Load's draw
 // filter (skip 0x402-hidden meshes + the shared AloIsSkinnedVertexFormat /
 // AloIsNonVisibleShader predicates) so a "Renderable" verdict means the renderer
 // will actually show geometry.
-enum class ModelProbeResult { Renderable, SkinnedUnsupported, LoadFailed };
+enum class ModelProbeResult { Renderable, SkinnedUnsupported, LoadFailed, NotFound };
 ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPath);
 
 // Stable display string for a category (picker headers / dump mode).

@@ -210,6 +210,11 @@ function decorateSpawn(node: EmitterTreeNode): EmitterTreeNode {
 // "not supported" status path. Must match a Name in the reference-object-list.
 const MOCK_SKINNED_REFS = new Set<string>(["Stormtrooper_Squad"]);
 
+// Names that resolve in the catalog but whose model file is absent from the
+// mod/base (getFile miss) — selecting one drives the "model file not found" status
+// path (distinct from skinned / corrupt). Must match a Name in the catalog list.
+const MOCK_MISSING_MODELS = new Set<string>(["Prop_ElectricBox_00"]);
+
 // Browser mode can't load a real .alo, so these canned dome Names stand in
 // for "chosen but the .alo wouldn't load" — selecting one drives the picker's
 // load-failed status path + the solid-colour fallback indicator.
@@ -387,7 +392,10 @@ export class MockBridge implements Bridge {
       case "engine/set/reference-object": {
         const name = req.params.name;
         const status: ReferenceObjectStatus =
-          name === "" ? "none" : MOCK_SKINNED_REFS.has(name) ? "skinned" : "ok";
+          name === ""                      ? "none"
+          : MOCK_MISSING_MODELS.has(name)  ? "model-missing"
+          : MOCK_SKINNED_REFS.has(name)    ? "skinned"
+          :                                  "ok";
         this.patchAndBroadcast({ referenceObjectName: name, referenceObjectStatus: status });
         return {};
       }
@@ -607,7 +615,8 @@ export class MockBridge implements Bridge {
             { name: "Rebel_Barracks", category: "Structure" },
             { name: "Star_Destroyer", category: "Space" },
             { name: "Asteroid_Field", category: "Prop" },
-            { name: "Stormtrooper_Squad", category: "Infantry" },  // MOCK_SKINNED_REFS
+            { name: "Stormtrooper_Squad", category: "Infantry" },   // MOCK_SKINNED_REFS
+            { name: "Prop_ElectricBox_00", category: "Prop" },      // MOCK_MISSING_MODELS
           ],
         };
 

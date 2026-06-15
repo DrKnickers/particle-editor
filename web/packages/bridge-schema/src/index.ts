@@ -195,7 +195,10 @@ export type ReferenceObjectCategory =
   | "Vehicle" | "Infantry" | "Structure" | "Turret"
   | "Hero" | "Prop" | "Space" | "Projectile" | "Other";
 export type ReferenceObjectEntry = { name: string; category: ReferenceObjectCategory };
-export type ReferenceObjectStatus = "none" | "ok" | "skinned" | "load-failed";
+// "model-missing" = the model file is genuinely absent from the current
+// mod/base (distinct from "load-failed" = present but undecodable), so the
+// picker can say "model file not found" rather than "couldn't load".
+export type ReferenceObjectStatus = "none" | "ok" | "skinned" | "load-failed" | "model-missing";
 // Per-slot game-skydome load outcome. "load-failed" = a Name is chosen but
 // its .alo wouldn't load (the renderer falls back to solid colour); the picker
 // surfaces it instead of silently showing the dome as selected.

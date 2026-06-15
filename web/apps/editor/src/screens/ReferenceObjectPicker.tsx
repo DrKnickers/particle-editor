@@ -111,9 +111,11 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const statusNote =
     status === "skinned"
       ? "Skinned unit — not yet supported (rigid parts only)."
-      : status === "load-failed"
-        ? "Couldn't load this object's model."
-        : null;
+      : status === "model-missing"
+        ? "Model file not found in the current mod/base game."
+        : status === "load-failed"
+          ? "Couldn't load this object's model."
+          : null;
 
   return (
     <div className="flex flex-col gap-4">

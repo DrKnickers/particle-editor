@@ -3484,12 +3484,15 @@ void Engine::RebuildReferenceObjectMesh()
     }
 
     // Load failed (skinned-only / collision-only / missing / corrupt) -> probe to
-    // tell the user which, so the picker shows the right "not supported" message.
+    // tell the user which, so the picker shows the right message: a genuinely
+    // absent file (NotFound) reads "model file not found", a skinned-only object
+    // reads "not supported", and anything else (corrupt / non-mesh) "couldn't load".
     m_referenceObjectMesh.Clear();
     const ModelProbeResult probe = ProbeModelSkinned(m_fileManager, modelPath);
-    m_referenceObjectStatus = (probe == ModelProbeResult::SkinnedUnsupported)
-                              ? ReferenceObjectStatus::Skinned
-                              : ReferenceObjectStatus::LoadFailed;
+    m_referenceObjectStatus =
+        (probe == ModelProbeResult::SkinnedUnsupported) ? ReferenceObjectStatus::Skinned
+      : (probe == ModelProbeResult::NotFound)           ? ReferenceObjectStatus::ModelMissing
+      :                                                   ReferenceObjectStatus::LoadFailed;
 }
 
 // Grid spacing must stay positive ('s line loop steps by it).
