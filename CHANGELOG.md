@@ -19,9 +19,7 @@ Conventions:
 
 ### Submods — Core is a selectable, orderable layer (not auto-loaded)
 
-*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
-
-<!-- TODO: backfill merge-commit short hash + PR number once merged (lands with the hardpoint PR). -->
+*2026-06-15 · [`ee6b99e`](https://github.com/DrKnickers/particle-editor/commit/ee6b99e) · #188*
 
 The **Mods ▸ Submods…** dialog now lists **Core** (Mod's shared core) as a normal layer you tick and
 order, instead of it being silently auto-loaded under every submod. This lets the editor reproduce any Mod
@@ -49,9 +47,7 @@ present / no-Core-folder).
 
 ### Reference-object hardpoints — mount weapons/turrets, hide damaged-state geometry
 
-*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
-
-<!-- TODO: backfill merge-commit short hash + PR number once merged (see #184/#187 prior art). -->
+*2026-06-15 · [`439c1b3`](https://github.com/DrKnickers/particle-editor/commit/439c1b3) · #191*
 
 A game unit dropped into the preview as a scale reference now **composes the way the engine assembles
 it**. Every unit declares *hardpoints* — the mount points for its weapons, turrets, shield generator,
