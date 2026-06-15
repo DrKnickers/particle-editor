@@ -49,6 +49,7 @@ function makeStubBridge(
     gravity: [0, 0, 0],
     gridVisible: false,
     gridSpacing: 20,
+    snapEnabled: false,
   };
   const request: RequestFn = vi.fn().mockImplementation((req) => {
     if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);

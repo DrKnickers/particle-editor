@@ -17,6 +17,48 @@ Conventions:
 ## Changelog
 
 
+### Gizmo polish — screen-uniform handles, precision drags, grid/angle snapping, in-drag guides
+
+*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+The in-viewport manipulator for a reference object gains four placement refinements (the first
+batch of). **The gizmo now holds a constant on-screen size** as you resize the window or
+move past the projection's wide-angle limit, instead of the old approximation that only held near
+the centre. **Holding Shift while dragging** scales the motion to ~0.2× for fine positioning or
+rotation. A new **"Snap to grid" checkbox** in the object's Transform panel snaps a drag's X/Y to
+the ground-grid spacing (set in the Background ▸ Ground popup) and rotation to 15°; the object's
+height (Z) stays free, and holding Shift while snapping gives a finer ×0.2 step. And **while you
+drag, the gizmo draws a guide**: a long line along the grabbed axis (so the direction reads even
+when the arrow foreshortens), or — for a rotate — two radials marking the swept arc, with the
+non-dragged handles dimmed so the eye stays on the one in hand. Snapping is remembered across
+restarts; the Shift+click gesture now grabs a handle precisely instead of spawning a particle.
+
+**How we tackled it.** Sizing moved to a pure, unit-tested formula
+([`src/GizmoSizing.h`](src/GizmoSizing.h)) consumed by a new `Engine::ReferenceGizmoHandleLength`
+([`src/engine.cpp`](src/engine.cpp)): world-units-per-pixel from the projection's clamped vertical
+FoV (stored once in `m_sceneFovY`) and viewport height, anchored on the object's *view-space depth*.
+The translate drag in [`src/host/HostWindow.cpp`](src/host/HostWindow.cpp) was refactored from
+absolute-from-grab to **accumulate-per-move**, which telescopes to the old result at full scale and
+stays jump-free when Shift is toggled mid-drag; snap rounds the accumulated offset and the driven
+Euler component. The snap toggle is engine state (`m_snapEnabled`) round-tripped through the bridge
+exactly like the grid toggle (`engine/set/snap-enabled`, registry-persisted, picker checkbox). The
+guides are an engine render addition fed by a host push, `SetManipulatorActiveDrag` (mirroring
+`SetManipulatorHover`), cleared at every drag-end through a single `ResetManipDragState` helper.
+
+**Issues encountered and resolutions.** A five-lens adversarial design review plus per-task and
+final-integration reviews caught the defects a green build hides. Two were (the x64-default
+WebView2 mode) input-routing traps: the hidden viewport window never holds keyboard focus, so
+`GetKeyState(VK_SHIFT)` is blind — Shift must be read from the mouse message's `wParam` bitmask the
+renderer reassembles; and Alt-Tab arrives as `WM_KILLFOCUS` (a `window.blur` bridge message), not
+`WM_CAPTURECHANGED`, which previously cleared no drag state and would have stranded the new guide
+line. The final cross-task review caught that the rotate sweep used the *un-snapped* accumulator, so
+under snapping the guide glided while the object clicked in 15° steps — fixed by deriving the
+radial from the snapped Euler delta. Snap is X/Y only because the unit grid is an XY-plane grid;
+snapping height would detach the object from the ground with no visual referent. Plane handles and
+the in-viewport numeric readout remain deferred to a later batch.
+
+---
+
 ### Submods — Core is a selectable, orderable layer (not auto-loaded)
 
 *2026-06-15 · [`ee6b99e`](https://github.com/DrKnickers/particle-editor/commit/ee6b99e) · #188*

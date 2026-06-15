@@ -113,6 +113,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const status = snapshot?.referenceObjectStatus ?? "none";
   const pos: Vec3 = snapshot?.referenceObjectPosition ?? [0, 0, 0];
   const rot: Vec3 = snapshot?.referenceObjectRotation ?? [0, 0, 0];
+  const snapEnabled = snapshot?.snapEnabled ?? false;
 
   // Live search: case-insensitive substring on Name. The category filter
   // already shrank the list (props gone); this narrows it the rest of the way.
@@ -142,6 +143,11 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
 
   const setVisible = (v: boolean) =>
     void bridge.request({ kind: "engine/set/reference-object-visible", params: { visible: v } });
+
+  // Persistent gizmo snap toggle. Ticking it persists/round-trips now; the
+  // drag-time apply (reads the engine's snap state) lands in a separate task.
+  const setSnapEnabled = (v: boolean) =>
+    void bridge.request({ kind: "engine/set/snap-enabled", params: { enabled: v } });
 
   const setTransform = (position: Vec3, rotation: Vec3) =>
     void bridge.request({
@@ -280,6 +286,21 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
             </label>
           ))}
         </div>
+
+        {/* Persistent snap toggle. State + plumbing only — the drag-time
+            snap apply (reads the engine snap state) lands in a separate task. */}
+        <label
+          className="flex items-center gap-2 text-xs text-text-2"
+          title="Snaps X/Y to the grid spacing (set in the Ground popup, default 20u) and rotation to 15°. Hold Shift while dragging for a finer ×0.2 step."
+        >
+          <input
+            type="checkbox"
+            checked={snapEnabled}
+            onChange={(e) => setSnapEnabled(e.target.checked)}
+            aria-label="Snap to grid"
+          />
+          Snap to grid
+        </label>
       </section>
     </div>
   );

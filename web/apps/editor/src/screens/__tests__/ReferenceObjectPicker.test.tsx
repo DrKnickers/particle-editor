@@ -102,6 +102,23 @@ describe("ReferenceObjectPicker — selection + status", () => {
     expect((opt as HTMLOptionElement).selected).toBe(true);
   });
 
+  // The Transform "Snap to grid" checkbox reflects + dispatches snapEnabled.
+  it("reflects snapEnabled and dispatches engine/set/snap-enabled on toggle", async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+
+    const snap = await screen.findByRole("checkbox", { name: "Snap to grid" });
+    expect((snap as HTMLInputElement).checked).toBe(false); // mock default
+
+    fireEvent.click(snap);
+    await waitFor(async () => {
+      const s = await bridge.request({ kind: "engine/state/snapshot", params: {} });
+      expect(s.snapEnabled).toBe(true);
+    });
+    // The controlled checkbox follows the round-tripped engine state.
+    await waitFor(() => expect((snap as HTMLInputElement).checked).toBe(true));
+  });
+
   it("a single-axis transform edit preserves the other axes + rotation", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);

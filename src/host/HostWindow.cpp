@@ -42,6 +42,7 @@
 #include <algorithm>   // [resize-perf] per-kind bridge-probe sort
 #include <atomic>
 #include <cstdarg>
+#include <cmath>       ///roundf for drag-time grid/angle snap
 #include <cstdio>
 #include <cstdlib>     // _wgetenv / _wtoi for ALO_HOSTING_MODE etc.
 #include <cstring>
@@ -525,20 +526,42 @@ struct HostWindowImpl
     int             m_dragStartX    = 0;
     int             m_dragStartY    = 0;
     // / S47] manipulator drag state: the grabbed handle (kind + axis),
-    // the transform snapshot at grab, and the no-jump anchors. TRANSLATE uses
-    // m_manipGrabT0 (axis param at press); ROTATE accumulates wrapped per-move ring
-    // angle deltas (m_manipGrabAngle/Prev/Accum) onto the snapshot rotation.
+    // the transform snapshot at grab, and the no-jump anchors. TRANSLATE
+    // accumulates precision-scaled per-move axis-param deltas: each WM_MOUSEMOVE adds
+    // (tNow - m_manipPrevT) * factor to m_manipAccumT (factor = 0.2 while Shift held,
+    // else 1.0) and applies newPos = startPos + axis*m_manipAccumT. m_manipGrabT0 is
+    // the axis param at press (seeds m_manipPrevT so the first move's delta is 0 -> no
+    // jump). With factor==1 throughout, m_manipAccumT telescopes to (tNow - grabT0),
+    // matching the old absolute-from-grab formula; a mid-drag Shift toggle only rescales
+    // subsequent deltas (no jump, since m_manipPrevT tracks the raw param). ROTATE
+    // accumulates wrapped, precision-scaled per-move ring angle deltas
+    // (m_manipGrabAngle/Prev/Accum) onto the snapshot rotation.
     Engine::ManipHandle::Kind m_manipKind = Engine::ManipHandle::NONE;
     int             m_manipAxis        = -1;
     D3DXVECTOR3     m_manipStartPos    = D3DXVECTOR3(0, 0, 0);
     D3DXVECTOR3     m_manipStartRot    = D3DXVECTOR3(0, 0, 0);
     float           m_manipGrabT0      = 0.0f;
+    float           m_manipPrevT       = 0.0f;   // translate accumulate-per-move: last raw axis param
+    float           m_manipAccumT      = 0.0f;   // accumulated (precision-scaled) translate offset from grab
     float           m_manipGrabAngle   = 0.0f;   // ring angle at grab (rad)
     float           m_manipPrevAngle   = 0.0f;   // previous-move ring angle (rad)
     float           m_manipAccumAngle  = 0.0f;   // accumulated rotation (rad)
     // ~30 Hz throttle for the per-move engine/state/changed emit (the snapshot is
     // heavy; the gizmo render still moves every frame via SetReferenceObjectTransform).
     DWORD           m_lastManipEmitTick = 0;
+
+    // The invariant tail every MANIPULATE drag-end shares: drop the grabbed handle, zero the
+    // accumulators, and clear the engine's active-drag (guide/sweep/dim) state. Per-site Commit /
+    // ReleaseCapture / m_dragMode handling stays at the call site -- only this shared tail is factored
+    // out so a new end-site can't forget the active-drag clear (the bug WM_KILLFOCUS originally had).
+    void ResetManipDragState()
+    {
+        m_manipAxis = -1;
+        m_manipKind = Engine::ManipHandle::NONE;
+        m_manipAccumT = 0.0f;
+        m_manipAccumAngle = 0.0f;
+        if (engine) engine->SetManipulatorActiveDrag(Engine::ManipHandle(), 0.0f, 0.0f);
+    }
 
     // shift-click-to-spawn. Mirror of legacy
     // `info->mouseCursor` + `info->attachedParticleSystem` at
@@ -2119,7 +2142,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     // a frame or more later, once Update() harvests the catalog and reruns
                     // the deferred rebuild (so a restored object isn't on the first frame).
                     // Transform / grid spacing are REG_BINARY floats; visibility / grid
-                    // toggle are REG_DWORD.
+                    // toggle / snap toggle are REG_DWORD.
                     {
                         auto readFloats = [&](const wchar_t* name, float* out, DWORD count) -> bool {
                             DWORD t = 0, cb = count * sizeof(float);
@@ -2146,6 +2169,9 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         float spacing = 0.0f;
                         if (readFloats(L"GridSpacing", &spacing, 1))
                             engine->SetGridSpacing(spacing);
+                        // Persistent gizmo snap toggle (REG_DWORD, like GridVisible).
+                        if (readDword(L"SnapEnabled", dw))
+                            engine->SetSnapEnabled(dw != 0);
                         // Name LAST so the mesh loads once with the transform in
                         // place; guard on non-empty so an unset selection doesn't
                         // clobber a debug ALO_LT7_TEST_OBJECT env-hook mesh.
@@ -2889,6 +2915,51 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 static_cast<void*>(m_attachedParticleSystem));
             return 0;
         }
+        // / S47] Reference-object manipulator: if a handle (translate
+        // arrow or rotate ring) is under the cursor, grab it (drag moves/rotates the
+        // object) — this wins over camera orbit AND over the Shift+LMB particle-spawn
+        // below (: so Shift-clicking a handle is a precise grab, not a spawn).
+        // PickManipulatorHandle returns NONE unless the object is selected, so a MISS
+        // (including empty-space Shift-clicks) falls through to the spawn / camera path.
+        {
+            const Engine::ManipHandle h =
+                engine->PickManipulatorHandle((short)LOWORD(lp), (short)HIWORD(lp));
+            if (h.kind != Engine::ManipHandle::NONE)
+            {
+                m_manipKind     = h.kind;
+                m_manipAxis     = h.axis;
+                m_manipStartPos = engine->GetReferencePosition();
+                m_manipStartRot = engine->GetReferenceRotation();
+                if (h.kind == Engine::ManipHandle::TRANSLATE)
+                {
+                    // Grab offset (axis param at press) so the object doesn't jump
+                    // on the first move; if degenerate, fall back to 0.
+                    if (!engine->ManipulatorAxisParam((short)LOWORD(lp), (short)HIWORD(lp),
+                                                      h.axis, m_manipStartPos, m_manipGrabT0))
+                        m_manipGrabT0 = 0.0f;
+                    m_manipPrevT  = m_manipGrabT0;   // seed accumulate-per-move (first move delta = 0 -> no jump)
+                    m_manipAccumT = 0.0f;
+                }
+                else   // ROTATE
+                {
+                    // Grab angle on the ring; the accumulator starts at 0 so the
+                    // first move is a no-op delta (no jump). If degenerate, the
+                    // first valid move re-seeds prev (accum stays 0 until then).
+                    if (!engine->ManipulatorRingAngle((short)LOWORD(lp), (short)HIWORD(lp),
+                                                      h.axis, m_manipGrabAngle))
+                        m_manipGrabAngle = 0.0f;
+                    m_manipPrevAngle  = m_manipGrabAngle;
+                    m_manipAccumAngle = 0.0f;
+                }
+                // Tell the engine which handle is being dragged (drives the guide line / rotate sweep / dim).
+                // Rotate seeds both angles to the grab angle (applied == grab at accum 0); translate uses 0.
+                const float grabA = (h.kind == Engine::ManipHandle::ROTATE) ? m_manipGrabAngle : 0.0f;
+                if (engine) engine->SetManipulatorActiveDrag(h, grabA, grabA);
+                m_dragMode = DragMode::MANIPULATE;
+                SetCapture(hwnd);
+                return 0;
+            }
+        }
         // B1.3.1 round 5 fallback: Shift+LMB with no existing preview spawns
         // one in-place (covers the case where WM_KEYDOWN VK_SHIFT didn't
         // fire because WebView2 held focus). Then immediately enter
@@ -2929,43 +3000,6 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             SetCapture(hwnd);
             return 0;
         }
-        // / S47] Reference-object manipulator: if a handle (translate
-        // arrow or rotate ring) is under the cursor, grab it (drag moves/rotates the
-        // object) — this wins over camera orbit. On a MISS the pick returns NONE and
-        // we fall through to the plain camera drag below, so empty space still orbits.
-        {
-            const Engine::ManipHandle h =
-                engine->PickManipulatorHandle((short)LOWORD(lp), (short)HIWORD(lp));
-            if (h.kind != Engine::ManipHandle::NONE)
-            {
-                m_manipKind     = h.kind;
-                m_manipAxis     = h.axis;
-                m_manipStartPos = engine->GetReferencePosition();
-                m_manipStartRot = engine->GetReferenceRotation();
-                if (h.kind == Engine::ManipHandle::TRANSLATE)
-                {
-                    // Grab offset (axis param at press) so the object doesn't jump
-                    // on the first move; if degenerate, fall back to 0.
-                    if (!engine->ManipulatorAxisParam((short)LOWORD(lp), (short)HIWORD(lp),
-                                                      h.axis, m_manipStartPos, m_manipGrabT0))
-                        m_manipGrabT0 = 0.0f;
-                }
-                else   // ROTATE
-                {
-                    // Grab angle on the ring; the accumulator starts at 0 so the
-                    // first move is a no-op delta (no jump). If degenerate, the
-                    // first valid move re-seeds prev (accum stays 0 until then).
-                    if (!engine->ManipulatorRingAngle((short)LOWORD(lp), (short)HIWORD(lp),
-                                                      h.axis, m_manipGrabAngle))
-                        m_manipGrabAngle = 0.0f;
-                    m_manipPrevAngle  = m_manipGrabAngle;
-                    m_manipAccumAngle = 0.0f;
-                }
-                m_dragMode = DragMode::MANIPULATE;
-                SetCapture(hwnd);
-                return 0;
-            }
-        }
         // Click-to-select: clicking the object body selects it (the
         // gizmo appears); clicking empty space deselects it and falls through to
         // camera orbit. (Handle grabs above already won when the object was selected.)
@@ -2993,8 +3027,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         if (m_dragMode == DragMode::MANIPULATE)
         {
             if (dispatcher) dispatcher->CommitReferenceObjectTransform();
-            m_manipAxis = -1;
-            m_manipKind = Engine::ManipHandle::NONE;
+            ResetManipDragState();          // drop handle + zero accumulators + clear active-drag
         }
         m_dragMode     = (wp & MK_CONTROL) ? DragMode::ZOOM : DragMode::ROTATE;
         m_dragStartCam = engine->GetCamera();
@@ -3015,8 +3048,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         {
             if (dispatcher) dispatcher->CommitReferenceObjectTransform();
             m_dragMode  = DragMode::NONE;
-            m_manipAxis = -1;
-            m_manipKind = Engine::ManipHandle::NONE;
+            ResetManipDragState();          // drop handle + zero accumulators + clear active-drag
             ReleaseCapture();
             return 0;
         }
@@ -3056,8 +3088,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // Drop drag state so the next mouse-move doesn't ride a stale start camera
         // / grabbed axis.
         m_dragMode  = DragMode::NONE;
-        m_manipAxis = -1;
-        m_manipKind = Engine::ManipHandle::NONE;
+        ResetManipDragState();          // drop handle + zero accumulators + clear active-drag
         return 0;
     }
     case WM_MOUSEMOVE:
@@ -3069,13 +3100,20 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         m_lastCursorX = mx;
         m_lastCursorY = my;
 
-        // / S47] Manipulator drag. TRANSLATE: project the cursor ray onto
-        // the grabbed axis (newPos = startPos + axis*(now - grab), no jump). ROTATE:
-        // accumulate wrapped per-move ring-angle deltas onto the snapshot rotation's
-        // Euler component for that ring (no jump, multi-turn). Only set + emit here so
-        // the picker spinners track live; persistence is deferred to LMB-up.
+        // / S47] Manipulator drag. TRANSLATE: accumulate precision-
+        // scaled per-move axis-param deltas (m_manipAccumT += (now - prev) * factor)
+        // and apply newPos = startPos + axis*m_manipAccumT — with factor==1 this
+        // telescopes to (now - grab), i.e. the old absolute-from-grab; factor=0.2 while
+        // Shift is held gives a finer drag with no jump on toggle. ROTATE: accumulate
+        // wrapped, precision-scaled per-move ring-angle deltas onto the snapshot
+        // rotation's Euler component for that ring (no jump, multi-turn). When
+        // engine->GetSnapEnabled(), TRANSLATE rounds X/Y to the grid spacing (Z/height
+        // free) and ROTATE rounds the driven Euler component to 15° (both finer by the
+        // same factor while Shift held). Only set + emit here so the picker spinners
+        // track live; persistence is deferred to LMB-up.
         if (m_dragMode == DragMode::MANIPULATE && m_manipAxis >= 0)
         {
+            const float factor = (wp & MK_SHIFT) ? 0.2f : 1.0f;   //: read wParam, NOT GetKeyState
             bool moved = false;
             if (m_manipKind == Engine::ManipHandle::TRANSLATE)
             {
@@ -3083,10 +3121,17 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 if (engine->ManipulatorAxisParam((short)mx, (short)my, m_manipAxis,
                                                  m_manipStartPos, tNow))
                 {
+                    m_manipAccumT += (tNow - m_manipPrevT) * factor;   // precision-scaled per-move delta
+                    m_manipPrevT   = tNow;
                     const D3DXVECTOR3 ax(m_manipAxis == 0 ? 1.0f : 0.0f,
                                          m_manipAxis == 1 ? 1.0f : 0.0f,
                                          m_manipAxis == 2 ? 1.0f : 0.0f);
-                    const D3DXVECTOR3 newPos = m_manipStartPos + ax * (tNow - m_manipGrabT0);
+                    D3DXVECTOR3 newPos = m_manipStartPos + ax * m_manipAccumT;   // note: NOT const now
+                    if (engine->GetSnapEnabled())                  // snap X/Y to grid; Z (height) free
+                    {
+                        const float step = engine->GetGridSpacing() * factor;    // finer step when Shift held
+                        if (step > 0.0f) { newPos.x = roundf(newPos.x / step) * step; newPos.y = roundf(newPos.y / step) * step; }
+                    }
                     engine->SetReferenceObjectTransform(newPos, m_manipStartRot);
                     moved = true;
                 }
@@ -3102,7 +3147,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         while (a <= -D3DX_PI) a += twoPi;
                         return a;
                     };
-                    m_manipAccumAngle += wrapPi(aNow - m_manipPrevAngle);
+                    m_manipAccumAngle += wrapPi(aNow - m_manipPrevAngle) * factor;   // precision
                     m_manipPrevAngle   = aNow;
                     // Euler component this ring drives (m_referenceRotation = [yaw=Z,
                     // pitch=X, roll=Y]): ring axis 2(Z)->yaw(.x), 0(X)->pitch(.y),
@@ -3110,7 +3155,21 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     const int comp = (m_manipAxis == 2) ? 0 : (m_manipAxis == 0) ? 1 : 2;
                     D3DXVECTOR3 newRot = m_manipStartRot;
                     (&newRot.x)[comp] += m_manipAccumAngle * (180.0f / D3DX_PI);
+                    if (engine->GetSnapEnabled())                  // snap rotation to 15deg (3deg w/ Shift)
+                    {
+                        const float s = 15.0f * factor;
+                        (&newRot.x)[comp] = roundf((&newRot.x)[comp] / s) * s;
+                    }
                     engine->SetReferenceObjectTransform(m_manipStartPos, newRot);
+                    // Push the active-drag AFTER snap so the rotate sweep's "applied" radial
+                    // tracks the orientation the object ACTUALLY shows (snapped / precision-scaled),
+                    // not the raw accumulator -- under snap the two would diverge by up to the snap
+                    // step. Derive the applied angle from the final Euler delta in this ring's plane;
+                    // with snap off this reduces to grab + m_manipAccumAngle (unchanged behavior).
+                    Engine::ManipHandle activeH; activeH.kind = m_manipKind; activeH.axis = m_manipAxis;
+                    const float appliedRad = m_manipGrabAngle
+                        + ((&newRot.x)[comp] - (&m_manipStartRot.x)[comp]) * (D3DX_PI / 180.0f);
+                    if (engine) engine->SetManipulatorActiveDrag(activeH, m_manipGrabAngle, appliedRad);
                     moved = true;
                 }
             }
@@ -3323,6 +3382,15 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     }
     case WM_KILLFOCUS:
     {
+        // End an in-flight gizmo drag on focus loss (archC routes Alt-Tab here as window.blur;
+        // WM_CAPTURECHANGED may not fire for the hidden popup). Commit the moved transform so it isn't
+        // lost, then clear drag + active-guide state. A spurious archC focus-churn mid-drag would also end
+        // the drag, but commit preserves the position (accepted tradeoff -- a captured drag rarely churns).
+        if (m_dragMode == DragMode::MANIPULATE) {
+            if (dispatcher) dispatcher->CommitReferenceObjectTransform();
+            m_dragMode  = DragMode::NONE;
+            ResetManipDragState();          // drop handle + zero accumulators + clear active-drag
+        }
         // Defensive: if the viewport loses focus while Shift is held
         // (Alt-Tab away, foreign focus steal), WM_KEYUP may never arrive
         // and the attached instance leaks. Drop it here.

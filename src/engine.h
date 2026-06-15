@@ -591,6 +591,11 @@ public:
 	bool  GetGridVisible()  const { return m_gridVisible; }
 	float GetGridSpacing()  const { return m_gridSpacing; }
 
+	// Persistent gizmo snap toggle. State + round-trip land here; the
+	// drag-time snap apply (reads GetSnapEnabled) is a separate task.
+	void  SetSnapEnabled(bool v) { m_snapEnabled = v; }
+	bool  GetSnapEnabled()  const { return m_snapEnabled; }
+
 	// / S47] In-viewport manipulator (grab a handle, drag to move/rotate
 	// the reference object). A handle is one of 3 translate arrows or 3 rotate rings,
 	// identified by a (kind, axis) pair; axis 0=X/1=Y/2=Z.
@@ -624,8 +629,12 @@ public:
 	// empty to deselect). PickReferenceObject (S46) ray-tests the object's
 	// object-space AABB for the body-click. SetManipulatorHover lets the host
 	// highlight the handle under the cursor (set each idle mouse-move; NONE = none).
-	void SetReferenceObjectSelected(bool selected) { m_referenceObjectSelected = selected; if (!selected) m_hoverManip = ManipHandle(); }
+	void SetReferenceObjectSelected(bool selected) { m_referenceObjectSelected = selected; if (!selected) { m_hoverManip = ManipHandle(); m_activeManip = ManipHandle(); } }
 	void SetManipulatorHover(ManipHandle h)         { m_hoverManip = h; }
+	// The host pushes the active drag handle on grab + per rotate-move so the renderer can draw
+	// the axis guide line / rotate sweep and dim the other handles; cleared (NONE) at every drag-end.
+	void SetManipulatorActiveDrag(ManipHandle h, float grabRad, float appliedRad)
+	{ m_activeManip = h; m_activeGrabAngle = grabRad; m_activeAppliedAngle = appliedRad; }
 	bool PickReferenceObject(short screenX, short screenY) const;
 
 	void SetHeatDebug(bool debug);
@@ -660,6 +669,11 @@ private:
 	D3DMULTISAMPLE_TYPE GetMultiSampleType(DWORD* MultiSampleQuality, D3DFORMAT DisplayFormat, D3DFORMAT DepthStencilFormat, BOOL Windowed);
 	D3DFORMAT           GetDepthStencilFormat(D3DFORMAT AdapterFormat, bool withStencilBuffer);
 	void				ResetParameters();
+
+	///Screen-uniform gizmo handle length (world units), sized so the
+	// reference-object gizmo holds a constant on-screen pixel size at its origin.
+	// Reads m_sceneFovY / m_sceneViewportH / m_sceneViewportActive + the camera; see GizmoSizing.h.
+	float				ReferenceGizmoHandleLength() const;
 
 	// Helper used by both the constructor and ReloadShaders(): scans the
 	// freshly-loaded shader's parameters for "texture_filename" annotations
@@ -814,11 +828,12 @@ private:
 	int  m_sceneViewportW      = 0;
 	int  m_sceneViewportH      = 0;
 	bool m_sceneViewportActive = false;
+	float m_sceneFovY          = D3DXToRadian(45.0f);
 
-	// (Stage 5 T6 follow-up: per-pixel-FoV reference fields removed —
-	// reference is now the current m_presentationParameters.BackBuffer
-	// Height read inline at SetSceneViewport time. See SetSceneViewport
-	// for the rationale.)
+	// m_sceneFovY: the vertical FoV (radians, POST 120-degree clamp) that SetSceneViewport
+	// feeds to the projection; read by ReferenceGizmoHandleLength for screen-uniform gizmo
+	// sizing while m_sceneViewportActive. (Supersedes the old per-pixel-FoV reference-height
+	// fields, which were removed; the projection uses the anchored 768px height, not BackBufferHeight.)
 
     COLORREF    m_background;
 	bool		m_showGround;
@@ -916,6 +931,9 @@ private:
 	ReferenceObjectStatus    m_referenceObjectStatus = ReferenceObjectStatus::None;
 	bool                     m_referenceObjectSelected = false;  // gizmo visible/grabbable only when selected
 	ManipHandle              m_hoverManip;                       // handle under the cursor (highlight), kind=NONE = none
+	ManipHandle              m_activeManip;            // the handle currently being DRAGGED (NONE = idle); drives guide/sweep/dim
+	float                    m_activeGrabAngle   = 0.0f;  // rotate: ring angle (rad) at grab
+	float                    m_activeAppliedAngle = 0.0f; // rotate: grab + applied accumulated angle (rad)
 	GameObjectCatalog        m_referenceCatalog;               // lazily built; invalidated on mod switch
 	bool                     m_referenceCatalogBuilt = false;
 	// Off-UI-thread catalog build. BuildGameObjectCatalog parses every object
@@ -944,6 +962,7 @@ private:
 	// unit-grid state (RenderUnitGrid is).
 	bool                     m_gridVisible = false;
 	float                    m_gridSpacing = 20.0f;
+	bool                     m_snapEnabled = false;            // gizmo grid/angle snap
 
 	//: bump-mapped ground lighting. Effect + tangent-space vertex decl +
 	// normal-map state, mirroring the skydome effect lifecycle. Faithful port

@@ -462,6 +462,21 @@ static void PersistGrid(bool visible, float spacing)
     }
 }
 
+// Persist the gizmo snap toggle (single REG_DWORD, mirrors PersistGrid's
+// GridVisible write). The drag-time apply that reads it is a separate task.
+static void PersistSnap(bool enabled)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
+    {
+        DWORD en = enabled ? 1u : 0u;
+        RegSetValueExW(hKey, L"SnapEnabled", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&en), sizeof(en));
+        RegCloseKey(hKey);
+    }
+}
+
 // ReferenceObjectStatus -> wire string for the snapshot DTO.
 static const char* RefStatusToString(ReferenceObjectStatus s)
 {
@@ -838,6 +853,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"referenceCatalogBuilding", engine->IsReferenceCatalogBuilding()},
         {"gridVisible",             engine->GetGridVisible()},
         {"gridSpacing",             engine->GetGridSpacing()},
+        {"snapEnabled",             engine->GetSnapEnabled()},
 
         // Background (COLORREF; low byte = blue)
         {"background",            static_cast<unsigned int>(engine->GetBackground())},
@@ -1694,6 +1710,20 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         m_engine->SetGridSpacing(spacing);
         if (!(m_testHost && !m_settingsLive))
             PersistGrid(m_engine->GetGridVisible(), m_engine->GetGridSpacing());
+        sendOk(json::object());
+        markDirty();
+        EmitEngineStateChanged();
+        return res;
+    }
+    // Persistent gizmo snap toggle. State + round-trip only; the drag-time
+    // apply (reads GetSnapEnabled) is a separate task.
+    if (kind == "engine/set/snap-enabled")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        bool enabled = params.value("enabled", false);
+        m_engine->SetSnapEnabled(enabled);
+        if (!(m_testHost && !m_settingsLive))
+            PersistSnap(enabled);
         sendOk(json::object());
         markDirty();
         EmitEngineStateChanged();

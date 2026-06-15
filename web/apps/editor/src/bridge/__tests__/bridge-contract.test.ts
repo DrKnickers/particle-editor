@@ -314,6 +314,13 @@ describe("MockBridge contract", () => {
     expect(snap.gridSpacing).toBeGreaterThan(0);
   });
 
+  it("engine/set/snap-enabled round-trips to snapshot.snapEnabled", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "engine/set/snap-enabled", params: { enabled: true } });
+    const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.snapEnabled).toBe(true);
+  });
+
   it("engine/query/reference-object-list returns Name + category entries", async () => {
     const b = new MockBridge();
     const r = await b.request({ kind: "engine/query/reference-object-list", params: {} });

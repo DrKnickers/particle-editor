@@ -14,6 +14,7 @@
 #include "SphericalHarmonics.h"
 #include "utils.h"     // follow-up: WideToAnsi for custom-slot path bridging
 #include "host/AlphaCompositor.h"
+#include "GizmoSizing.h"   ///pure screen-uniform gizmo-handle formula
 using namespace std;
 
 static const char* ShaderNames[Engine::NUM_SHADERS] = {
@@ -2062,6 +2063,7 @@ void Engine::SetSceneViewport(int x, int y, int w, int h)
 	float fovY   = D3DXToRadian(45.0f) * (float)h / kFovAnchorHeightPx;
 	const float kMaxFovY = D3DXToRadian(120.0f);
 	if (fovY > kMaxFovY) fovY = kMaxFovY;
+	m_sceneFovY = fovY;   ///capture the CLAMPED FoV the projection uses (gizmo sizing)
 	float aspect = (float)w / (float)h;
 	D3DXMatrixPerspectiveFovRH(&m_projection, fovY, aspect, n, 1000.0f);
 	m_projection._33 = -1.0f;
@@ -3040,20 +3042,12 @@ namespace
 {
     // Gizmo geometry constants shared by the render and the pick so the
     // drawn handle and the grabbable region stay in lockstep. Arrow length is
-    // `baseLen` (eye-scaled); rings sit just outside the arrowheads.
+    // `baseLen` (screen-uniform; Engine::ReferenceGizmoHandleLength, S51/);
+    // rings sit just outside the arrowheads.
     constexpr float kAxisPickScale   = 0.18f;   // arrow pick radius = len * this
     constexpr float kHoverGrow       = 1.3f;    // hovered arrow grows (visual + pick)
     constexpr float kRingRadiusScale = 1.15f;   // ring radius   = baseLen * this
     constexpr float kRingPickBand    = 0.14f;   // ring pick band = ringRadius * this
-
-    // Eye-distance-scaled handle length so the gizmo keeps a roughly
-    // constant on-screen size across zoom (not full screen-space-uniform; v1).
-    float manipulatorHandleLength(const D3DXVECTOR3& eye, const D3DXVECTOR3& refPos)
-    {
-        D3DXVECTOR3 d = refPos - eye;
-        const float len = D3DXVec3Length(&d) * 0.12f;
-        return (len > 1.0f) ? len : 1.0f;
-    }
 
     D3DXVECTOR3 unitAxis(int axis)
     {
@@ -3080,6 +3074,18 @@ namespace
     }
 }
 
+///Screen-uniform gizmo sizing (was eye-distance*0.12, "v1"). See GizmoSizing.h.
+float Engine::ReferenceGizmoHandleLength() const
+{
+    const D3DXVECTOR3 eye = m_eye.Position;
+    D3DXVECTOR3 fwd = m_eye.Target - eye;                 // view forward (matches LookAtRH)
+    D3DXVec3Normalize(&fwd, &fwd);
+    D3DXVECTOR3 toRef = m_referencePosition - eye;
+    const float depth   = D3DXVec3Dot(&toRef, &fwd);      // VIEW-SPACE depth
+    const float eyeDist = D3DXVec3Length(&toRef);
+    return GizmoHandleLengthWorld(depth, m_sceneFovY, m_sceneViewportH, m_sceneViewportActive, eyeDist);
+}
+
 // Ray-pick the manipulator handle under the cursor: 3 translate arrows + 3
 // rotate rings. Each candidate is scored by its miss distance divided by its own
 // pick threshold (so the arrow's ray-to-segment gap and the ring's |rho-R| band are
@@ -3098,7 +3104,7 @@ Engine::ManipHandle Engine::PickManipulatorHandle(short screenX, short screenY) 
     BuildCursorRay(screenX, screenY, P, d);
 
     const D3DXVECTOR3 A = m_referencePosition;
-    const float baseLen = manipulatorHandleLength(m_eye.Position, m_referencePosition);
+    const float baseLen = ReferenceGizmoHandleLength();
 
     float bestScore = 1.0f;   // miss/threshold; a candidate must beat 1 to pick
 
@@ -3157,8 +3163,11 @@ Engine::ManipHandle Engine::PickManipulatorHandle(short screenX, short screenY) 
 }
 
 // Signed distance along `axis` from `anchor` to the cursor ray's
-// closest point. The host snapshots this at grab time (offset) and per move,
-// then sets the new position = anchor + axis*(now - grab). False when degenerate.
+// closest point. The host snapshots this at grab time, then accumulates
+// precision-scaled per-move deltas of this param (sum of (now - prevMove) * factor)
+// and applies new position = anchor + axis*accumulated. (With factor==1 the sum
+// telescopes to (now - grab); a Shift-held factor<1 only rescales later deltas.)
+// False when degenerate.
 bool Engine::ManipulatorAxisParam(short screenX, short screenY, int axis,
                                   const D3DXVECTOR3& anchor, float& outParam) const
 {
@@ -3210,7 +3219,8 @@ void Engine::RenderReferenceManipulator()
     if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return;
 
     const D3DXVECTOR3 o = m_referencePosition;
-    const float baseLen = manipulatorHandleLength(m_eye.Position, m_referencePosition);
+    const float baseLen = ReferenceGizmoHandleLength();
+    const bool dragging = (m_activeManip.kind != ManipHandle::NONE);
     const D3DCOLOR axisCol[3]  = { D3DCOLOR_RGBA(230,  60,  60, 255),
                                    D3DCOLOR_RGBA( 60, 210,  60, 255),
                                    D3DCOLOR_RGBA( 70, 120, 255, 255) };
@@ -3220,7 +3230,7 @@ void Engine::RenderReferenceManipulator()
 
     constexpr int kRingSegs = 48;
     std::vector<EmitterInstance::Vertex> v;
-    v.reserve((3 * 5 + 3 * kRingSegs) * 2);   // arrows (shaft + 4 head) + rings
+    v.reserve((3 * 5 + 3 * kRingSegs + 3) * 2);   // arrows (shaft + 4 head) + rings + active guide/2 sweep radials
     auto line = [&](const D3DXVECTOR3& a, const D3DXVECTOR3& b, D3DCOLOR c)
     {
         EmitterInstance::Vertex v0 = {}, v1 = {};
@@ -3229,13 +3239,21 @@ void Engine::RenderReferenceManipulator()
         v.push_back(v0);
         v.push_back(v1);
     };
+    // During a drag, dim the non-active handles (RGB *0.4; alpha unused -- DrawWorldLines runs
+    // with alpha-blend OFF, so dropping alpha would be a no-op). The dragged handle keeps full color.
+    auto dim = [&](D3DCOLOR c) -> D3DCOLOR {
+        const BYTE A=(c>>24)&0xFF, R=(BYTE)(((c>>16)&0xFF)*0.4f), G=(BYTE)(((c>>8)&0xFF)*0.4f), B=(BYTE)((c&0xFF)*0.4f);
+        return D3DCOLOR_RGBA(R,G,B,A);
+    };
 
     // Translate arrows.
     for (int i = 0; i < 3; ++i)
     {
         const bool hot = (m_hoverManip.kind == ManipHandle::TRANSLATE && m_hoverManip.axis == i);
         const float    len = hot ? baseLen * kHoverGrow : baseLen;   // hovered arrow grows
-        const D3DCOLOR c   = hot ? hoverCol[i] : axisCol[i];         // ... and brightens
+        D3DCOLOR c         = hot ? hoverCol[i] : axisCol[i];         // ... and brightens
+        const bool isActive = (m_activeManip.kind == ManipHandle::TRANSLATE && m_activeManip.axis == i);
+        if (dragging && !isActive) c = dim(c);
         const D3DXVECTOR3 dir = unitAxis(i);
         const D3DXVECTOR3 p1  = unitAxis((i + 1) % 3);   // perpendiculars for the head
         const D3DXVECTOR3 p2  = unitAxis((i + 2) % 3);
@@ -3255,7 +3273,9 @@ void Engine::RenderReferenceManipulator()
     for (int i = 0; i < 3; ++i)
     {
         const bool hot = (m_hoverManip.kind == ManipHandle::ROTATE && m_hoverManip.axis == i);
-        const D3DCOLOR c = hot ? hoverCol[i] : axisCol[i];
+        D3DCOLOR c = hot ? hoverCol[i] : axisCol[i];
+        const bool isActive = (m_activeManip.kind == ManipHandle::ROTATE && m_activeManip.axis == i);
+        if (dragging && !isActive) c = dim(c);
         const D3DXVECTOR3 a = unitAxis((i + 1) % 3);
         const D3DXVECTOR3 b = unitAxis((i + 2) % 3);
         D3DXVECTOR3 prev = o + a * R;   // angle 0
@@ -3266,6 +3286,26 @@ void Engine::RenderReferenceManipulator()
             line(prev, cur, c);
             prev = cur;
         }
+    }
+
+    // Active-drag guides. Translate: a long axis line through the origin. The extent (700) is
+    // a readability choice -- long enough to read as an axis, not absurdly long; comparable to the
+    // grid's +/-800. (The projection's _33=-1/_43=-2n override puts the far plane at infinity, so the
+    // line never far-clips at any length.) Rotate: two radials at the grab + applied angle in the
+    // ring's (a,b) basis, marking the swept arc.
+    if (dragging && m_activeManip.kind == ManipHandle::TRANSLATE) {
+        const int ax = m_activeManip.axis;
+        const D3DXVECTOR3 dir = unitAxis(ax);
+        constexpr float kGuideExtent = 700.0f;
+        line(o - dir * kGuideExtent, o + dir * kGuideExtent, axisCol[ax]);
+    }
+    else if (dragging && m_activeManip.kind == ManipHandle::ROTATE) {
+        const int ax = m_activeManip.axis;
+        const D3DXVECTOR3 a = unitAxis((ax + 1) % 3);
+        const D3DXVECTOR3 b = unitAxis((ax + 2) % 3);
+        auto radial = [&](float ang){ line(o, o + (a * cosf(ang) + b * sinf(ang)) * R, axisCol[ax]); };
+        radial(m_activeGrabAngle);
+        radial(m_activeAppliedAngle);
     }
 
     DrawWorldLines(m_pDevice, m_pDeclaration, v.data(), (int)(v.size() / 2), /*depthTest=*/false);

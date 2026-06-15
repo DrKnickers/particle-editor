@@ -250,6 +250,7 @@ export type EngineStateDto = {
   referenceCatalogBuilding: boolean;       // IsReferenceCatalogBuilding()
   gridVisible: boolean;                    // GetGridVisible()
   gridSpacing: number;                     // GetGridSpacing() — world units between lines
+  snapEnabled: boolean;                    // GetSnapEnabled() — gizmo grid/angle snap
 
   // Background (solid colour when skydome slot 0)
   background: Color;                // GetBackground()
@@ -642,6 +643,7 @@ export type Request =
   | { kind: "engine/set/reference-object-transform"; params: { position: Vec3; rotation: Vec3 } }
   | { kind: "engine/set/grid-visible";               params: { visible: boolean } }
   | { kind: "engine/set/grid-spacing";               params: { spacing: number } }
+  | { kind: "engine/set/snap-enabled";               params: { enabled: boolean } }
 
   // Engine setters — bloom
   | { kind: "engine/set/bloom";               params: { enabled: boolean } }
@@ -1081,6 +1083,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/set/reference-object-transform" } ? Record<string, never> :
   R extends { kind: "engine/set/grid-visible" }               ? Record<string, never> :
   R extends { kind: "engine/set/grid-spacing" }               ? Record<string, never> :
+  R extends { kind: "engine/set/snap-enabled" }               ? Record<string, never> :
   R extends { kind: "engine/set/background" }              ? Record<string, never> :
   R extends { kind: "engine/set/bloom" }                   ? Record<string, never> :
   R extends { kind: "engine/set/bloom-strength" }          ? Record<string, never> :

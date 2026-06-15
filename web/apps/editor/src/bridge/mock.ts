@@ -442,6 +442,10 @@ export class MockBridge implements Bridge {
         });
         return {};
 
+      case "engine/set/snap-enabled":
+        this.patchAndBroadcast({ snapEnabled: req.params.enabled });
+        return {};
+
       case "engine/set/background":
         this.patchAndBroadcast({ background: req.params.rgb });
         return {};

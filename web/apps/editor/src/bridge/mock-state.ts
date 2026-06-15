@@ -93,6 +93,7 @@ export function makeDefaultEngineState(): EngineStateDto {
     referenceCatalogBuilding: false,   // browser mode has no off-thread build
     gridVisible: false,
     gridSpacing: 20,
+    snapEnabled: false,
 
     background: 0x00340814,
 
