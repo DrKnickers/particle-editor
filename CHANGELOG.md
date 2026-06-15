@@ -19,7 +19,7 @@ Conventions:
 
 ### Reference-object gizmo, Reset, and spinners are now undoable (unified Ctrl+Z)
 
-*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #199*
+*2026-06-15 · [`30b5b47`](https://github.com/DrKnickers/particle-editor/commit/30b5b47) · #199*
 
 Moving the in-preview reference object can now be undone and redone on the **same Ctrl+Z / Ctrl+Y
 timeline as particle edits** — interleaved in the order you did them. This covers every way the
