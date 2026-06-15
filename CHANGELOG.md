@@ -19,7 +19,7 @@ Conventions:
 
 ### Undo / Redo toolbar buttons
 
-*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #201*
+*2026-06-15 · [`8624ce7`](https://github.com/DrKnickers/particle-editor/commit/8624ce7) · #201*
 
 The toolbar gains a dedicated **Undo / Redo** pair (a new Edit group between the file actions and
 playback), so undo/redo is no longer keyboard- and menu-only. Each button is disabled when there's
