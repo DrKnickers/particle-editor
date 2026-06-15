@@ -27,6 +27,18 @@ class ParticleSystem;
 class UndoStack
 {
 public:
+    // s52] Side-band editor state that travels with a snapshot but is
+    // NOT part of the ParticleSystem buffer: the reference-object transform
+    // (position + rotation). It persists to the registry, not the .alo, so it
+    // can't live in the serialized buffer. Carried on EVERY entry so undoing a
+    // particle edit restores the ref transform it captured — i.e. leaves the
+    // reference object where it is. Plain floats keep this header D3D-free.
+    struct EditorAux
+    {
+        float refPos[3] = {0.0f, 0.0f, 0.0f};
+        float refRot[3] = {0.0f, 0.0f, 0.0f};
+    };
+
     // Coalescing: if a new capture's coalesceKey matches the previous
     // entry's AND the new timestamp is within COALESCE_WINDOW_MS, the
     // previous entry's snapshot is replaced in place rather than a new
@@ -54,7 +66,7 @@ public:
     // pushed; false if the call coalesced into an existing entry or
     // was suppressed by the m_applying guard.
     bool Capture(const ParticleSystem& sys, size_t selectedIndex,
-                 DWORD coalesceKey);
+                 DWORD coalesceKey, const EditorAux& aux = {});
 
     // PRE-mutation coalescing variant for the bridge. Callers
     // snapshot BEFORE applying the edit, so the FIRST capture of a rapid
@@ -71,7 +83,7 @@ public:
     // (the tail must track the LATEST state), but wrong for PRE-mutation
     // callers (it would overwrite the session-start state we undo back to).
     bool CapturePreCoalesced(const ParticleSystem& sys, size_t selectedIndex,
-                             DWORD coalesceKey);
+                             DWORD coalesceKey, const EditorAux& aux = {});
 
     bool CanUndo() const;
     bool CanRedo() const;
@@ -80,10 +92,12 @@ public:
     // with a pointer to the buffer to restore from (owned by this
     // stack — copy or use immediately) and outSelectedIndex with the
     // selection-index at capture time.
+    // outAux is defaulted to nullptr so the legacy arch-A callers in
+    // src/main.cpp (which pass 2 args to Undo/Redo) compile untouched.
     bool Undo(const std::vector<char>** outSnapshot,
-              size_t* outSelectedIndex);
+              size_t* outSelectedIndex, EditorAux* outAux = nullptr);
     bool Redo(const std::vector<char>** outSnapshot,
-              size_t* outSelectedIndex);
+              size_t* outSelectedIndex, EditorAux* outAux = nullptr);
 
     // Clear all entries (used on file open / new).
     void Clear();
@@ -144,6 +158,7 @@ private:
         DWORD             coalesceKey;
         DWORD             timestamp;
         bool              isSavedState;
+        EditorAux         aux;   // s52] ref-object transform at capture
     };
 
     std::deque<Entry> m_entries;

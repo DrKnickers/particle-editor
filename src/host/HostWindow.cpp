@@ -546,6 +546,10 @@ struct HostWindowImpl
     float           m_manipGrabAngle   = 0.0f;   // ring angle at grab (rad)
     float           m_manipPrevAngle   = 0.0f;   // previous-move ring angle (rad)
     float           m_manipAccumAngle  = 0.0f;   // accumulated rotation (rad)
+    // s52] Per-gesture latch: false until the FIRST per-move mutation
+    // of a manipulator drag pushes its (one) pre-mutation undo point. A grab
+    // that never moves the object captures nothing — no phantom undo step.
+    bool            m_manipUndoCaptured = false;
     // ~30 Hz throttle for the per-move engine/state/changed emit (the snapshot is
     // heavy; the gizmo render still moves every frame via SetReferenceObjectTransform).
     DWORD           m_lastManipEmitTick = 0;
@@ -560,6 +564,7 @@ struct HostWindowImpl
         m_manipKind = Engine::ManipHandle::NONE;
         m_manipAccumT = 0.0f;
         m_manipAccumAngle = 0.0f;
+        m_manipUndoCaptured = false;   // s52] next grab starts a fresh gesture
         if (engine) engine->SetManipulatorActiveDrag(Engine::ManipHandle(), 0.0f, 0.0f);
     }
 
@@ -3132,6 +3137,17 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         const float step = engine->GetGridSpacing() * factor;    // finer step when Shift held
                         if (step > 0.0f) { newPos.x = roundf(newPos.x / step) * step; newPos.y = roundf(newPos.y / step) * step; }
                     }
+                    // s52] Capture the pre-drag transform ONCE, on the
+                    // first move that ACTUALLY changes the position, BEFORE
+                    // mutating — the engine still holds the grab-time transform
+                    // here, so this is the PRE state. Gating on a real change
+                    // (not just a successful projection) avoids a phantom undo
+                    // step from a zero-delta first move — notably under snap,
+                    // where a tiny move can round back to the grab point.
+                    if (!m_manipUndoCaptured && newPos != m_manipStartPos) {
+                        if (dispatcher) dispatcher->CaptureReferenceTransformUndoPoint();
+                        m_manipUndoCaptured = true;
+                    }
                     engine->SetReferenceObjectTransform(newPos, m_manipStartRot);
                     moved = true;
                 }
@@ -3159,6 +3175,15 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     {
                         const float s = 15.0f * factor;
                         (&newRot.x)[comp] = roundf((&newRot.x)[comp] / s) * s;
+                    }
+                    // s52] Capture the pre-drag transform ONCE, on the
+                    // first move that ACTUALLY changes the rotation, BEFORE
+                    // mutating (engine still at the grab-time transform → PRE
+                    // state). Gating on a real change avoids a phantom undo step
+                    // from a zero-delta first move (e.g. snap rounding back).
+                    if (!m_manipUndoCaptured && newRot != m_manipStartRot) {
+                        if (dispatcher) dispatcher->CaptureReferenceTransformUndoPoint();
+                        m_manipUndoCaptured = true;
                     }
                     engine->SetReferenceObjectTransform(m_manipStartPos, newRot);
                     // Push the active-drag AFTER snap so the rotate sweep's "applied" radial

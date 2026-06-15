@@ -63,7 +63,7 @@ DWORD UndoStack::MakeCoalesceKey(WORD notifyCode, WORD discriminator)
 }
 
 bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
-                         DWORD coalesceKey)
+                         DWORD coalesceKey, const EditorAux& aux)
 {
     if (m_applying) return false;
 
@@ -95,6 +95,9 @@ bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
         tail.snapshot      = Serialize(sys);
         tail.selectedIndex = selectedIndex;
         tail.timestamp     = now;
+        // POST-mutation REPLACE: the tail tracks the LATEST state, so its aux
+        // updates in lockstep with the snapshot.
+        tail.aux           = aux;
         // Don't touch isSavedState — coalescing into a saved entry
         // means we're still at the saved state's content if no real
         // change accumulated, which is fine for most cases. If the
@@ -111,6 +114,7 @@ bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
     e.coalesceKey   = coalesceKey;
     e.timestamp     = now;
     e.isSavedState  = false;
+    e.aux           = aux;
     m_entries.push_back(std::move(e));
     m_cursor = m_entries.size();
 
@@ -124,7 +128,8 @@ bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
 }
 
 bool UndoStack::CapturePreCoalesced(const ParticleSystem& sys,
-                                    size_t selectedIndex, DWORD coalesceKey)
+                                    size_t selectedIndex, DWORD coalesceKey,
+                                    const EditorAux& aux)
 {
     if (m_applying) return false;
 
@@ -147,6 +152,11 @@ bool UndoStack::CapturePreCoalesced(const ParticleSystem& sys,
         && m_entries.back().coalesceKey == coalesceKey
         && (now - m_entries.back().timestamp) <= COALESCE_WINDOW_MS)
     {
+        // SKIP branch: the existing tail ALREADY holds the burst's
+        // session-start state (snapshot AND aux) — the exact undo target.
+        // Slide the window only; do NOT touch the snapshot or the aux, or a
+        // spinner wheel-burst's Ctrl+Z would jump to the last pre-fold value
+        // instead of reverting the whole burst.
         m_entries.back().timestamp = now;
         return false;
     }
@@ -164,6 +174,7 @@ bool UndoStack::CapturePreCoalesced(const ParticleSystem& sys,
     e.coalesceKey   = coalesceKey;
     e.timestamp     = now;
     e.isSavedState  = false;
+    e.aux           = aux;
     m_entries.push_back(std::move(e));
     m_cursor = m_entries.size();
 
@@ -188,7 +199,7 @@ bool UndoStack::CanRedo() const
 }
 
 bool UndoStack::Undo(const std::vector<char>** outSnapshot,
-                     size_t* outSelectedIndex)
+                     size_t* outSelectedIndex, EditorAux* outAux)
 {
     if (!CanUndo()) return false;
     // Live will be restored to the returned snapshot by the caller, so it
@@ -198,11 +209,12 @@ bool UndoStack::Undo(const std::vector<char>** outSnapshot,
     const Entry& e = m_entries[m_cursor - 1];
     if (outSnapshot)         *outSnapshot         = &e.snapshot;
     if (outSelectedIndex)    *outSelectedIndex    = e.selectedIndex;
+    if (outAux)              *outAux              = e.aux;
     return true;
 }
 
 bool UndoStack::Redo(const std::vector<char>** outSnapshot,
-                     size_t* outSelectedIndex)
+                     size_t* outSelectedIndex, EditorAux* outAux)
 {
     if (!CanRedo()) return false;
     // Live will be restored to the returned snapshot by the caller, so it
@@ -212,6 +224,7 @@ bool UndoStack::Redo(const std::vector<char>** outSnapshot,
     m_cursor++;
     if (outSnapshot)         *outSnapshot         = &e.snapshot;
     if (outSelectedIndex)    *outSelectedIndex    = e.selectedIndex;
+    if (outAux)              *outAux              = e.aux;
     return true;
 }
 

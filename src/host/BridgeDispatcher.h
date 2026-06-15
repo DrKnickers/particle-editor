@@ -39,9 +39,9 @@
 
 //: Autosave::OrphanSession is held by value in the recovery stash.
 #include "../Autosave.h"
+#include "../UndoStack.h"   // s52] full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
 
 class Engine;
-class UndoStack;
 class ParticleSystem;
 class ParticleSystemInstance;
 class SpawnerDriver;
@@ -184,6 +184,14 @@ public:
     // spinners track live, no persist); this runs once on release so the gesture
     // persists + flips the dirty flag exactly once. Reads the live engine values.
     void CommitReferenceObjectTransform();
+
+    // s52] Push ONE pre-mutation undo point for a reference-object
+    // transform change driven from the host (the gizmo). Thin wrapper over
+    // CaptureUndoPoint(0) — a gizmo gesture never coalesces. Called from
+    // HostWindow on the FIRST per-move mutation of a drag (so a grab without
+    // a drag captures nothing). The capture reads the engine's CURRENT
+    // transform, which at that first move is still the pre-drag value.
+    void CaptureReferenceTransformUndoPoint();
     void EmitStatsTick(float fps, int emitters, int particles, int instances, bool overload);
 
     // Phase 3 Screen 4 Batch B1 — emit `emitters/tree/changed` with the
@@ -266,7 +274,18 @@ private:
     // in UndoStack::BeginApplying/EndApplying so the swap doesn't
     // recursively trigger Capture(). Caller is responsible for emitting
     // engine/state/changed + emitters/tree/changed after this returns.
-    void ApplyUndoSnapshot(const std::vector<char>& buf, size_t selIdx);
+    void ApplyUndoSnapshot(const std::vector<char>& buf, size_t selIdx,
+                           const UndoStack::EditorAux& aux);
+
+    // s52] Single source of truth for a PRE-mutation undo capture:
+    // snapshots the live ParticleSystem + selection (as the captureUndo
+    // lambda did) PLUS the engine's current reference-object transform into
+    // the snapshot's side-band aux. The engine read is guarded — m_engine is
+    // null when D3D init fails — so a particle edit on an engine-less host
+    // still captures (aux stays {0,0,0}) instead of dereferencing null.
+    // Preserves both capture paths: coalesceKey!=0 -> CapturePreCoalesced,
+    // else -> Capture, matching the lambda it replaces.
+    void CaptureUndoPoint(DWORD coalesceKey);
 
     // Walks the currently-bound ParticleSystem's emitters and,
     // for every positive linkGroup with exactly one member, demotes

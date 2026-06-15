@@ -14,6 +14,7 @@
 #include "../UI/TexturePalette.h"
 #include "../ParticleSystemIO.h"
 #include "../Rescale.h"
+#include "../RefTransformUndoKey.h"
 #include "../SpawnerDriver.h"
 #include "../UndoStack.h"
 
@@ -1682,6 +1683,19 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         D3DXVECTOR3 pos = JsonToVec3(params.value("position", json::array()));
         D3DXVECTOR3 rot = JsonToVec3(params.value("rotation", json::array()));
+        // s52] PRE-mutation undo capture, keyed PER changed component
+        // (see RefTransformUndoKey.h): an X-spinner edit and a Y-spinner edit
+        // are separate undo steps; a no-op set (e.g. Reset on an already-origin
+        // object) returns key 0 and we push NO entry. requireEngine() above
+        // guarantees m_engine here, so the getter reads are safe.
+        {
+            const D3DXVECTOR3 cp = m_engine->GetReferencePosition();
+            const D3DXVECTOR3 cr = m_engine->GetReferenceRotation();
+            const float inc[6] = { pos.x, pos.y, pos.z, rot.x, rot.y, rot.z };
+            const float cur[6] = { cp.x,  cp.y,  cp.z,  cr.x,  cr.y,  cr.z  };
+            const DWORD refKey = RefTransformCoalesceKey(inc, cur);
+            if (refKey != 0) CaptureUndoPoint(refKey);
+        }
         m_engine->SetReferenceObjectTransform(pos, rot);
         if (!(m_testHost && !m_settingsLive))
             PersistReferenceObjectTransform(pos, rot);
@@ -2294,31 +2308,27 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
                 && m_undo->Depth() > 0
                 && m_undo->IsLiveAhead())
             {
-                const ParticleSystem* sys = m_pParticleSystem->get();
-                size_t selIdxNow = SIZE_MAX;
-                if (m_selectedEmitterId >= 0
-                    && static_cast<size_t>(m_selectedEmitterId)
-                           < sys->getEmitters().size())
-                {
-                    selIdxNow = static_cast<size_t>(m_selectedEmitterId);
-                }
-                m_undo->Capture(*sys, selIdxNow, 0);
+                // s52] Route through the chokepoint so the auto-capped
+                // live state carries the CURRENT ref transform (else the first
+                // Ctrl+Z after a gizmo drag would restore an older transform).
+                CaptureUndoPoint(0);
             }
 
             const std::vector<char>* snap = nullptr;
             size_t selIdx = SIZE_MAX;
+            UndoStack::EditorAux aux;   // s52] restored ref transform
             if (dir == "undo" && m_undo->CanUndo())
             {
-                applied = m_undo->Undo(&snap, &selIdx);
+                applied = m_undo->Undo(&snap, &selIdx, &aux);
             }
             else if (dir == "redo" && m_undo->CanRedo())
             {
-                applied = m_undo->Redo(&snap, &selIdx);
+                applied = m_undo->Redo(&snap, &selIdx, &aux);
             }
 
             if (applied && snap != nullptr)
             {
-                ApplyUndoSnapshot(*snap, selIdx);
+                ApplyUndoSnapshot(*snap, selIdx, aux);
             }
         }
         sendOk(json{{"applied", applied}});
@@ -3337,20 +3347,11 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // (a wheel-spun spinner / held arrow on one emitter) fold into a
     // single undo step within the time window — see legacy EP_CHANGE
     // coalescing (main.cpp ~2682).
-    auto captureUndo = [&](DWORD coalesceKey = 0) {
-        if (m_undo == nullptr || m_pParticleSystem == nullptr || !*m_pParticleSystem) return;
-        const ParticleSystem* sys = m_pParticleSystem->get();
-        size_t selIdx = SIZE_MAX;
-        if (m_selectedEmitterId >= 0
-            && static_cast<size_t>(m_selectedEmitterId) < sys->getEmitters().size())
-        {
-            selIdx = static_cast<size_t>(m_selectedEmitterId);
-        }
-        if (coalesceKey != 0)
-            m_undo->CapturePreCoalesced(*sys, selIdx, coalesceKey);
-        else
-            m_undo->Capture(*sys, selIdx, 0);
-    };
+    // s52] Forwarder to the member chokepoint — the member also folds
+    // in the engine's current reference-object transform as snapshot side-band
+    // aux (engine-guarded) so undo/redo carries the ref transform on the same
+    // timeline. Behavior for the ~30 particle-edit call sites is unchanged.
+    auto captureUndo = [&](DWORD coalesceKey = 0) { CaptureUndoPoint(coalesceKey); };
 
     // F4: link-group propagation. After a shared (non-exempt) field is
     // edited on a linked emitter, copy its non-exempt params to every
@@ -5628,6 +5629,41 @@ void BridgeDispatcher::CommitReferenceObjectTransform()
     EmitEngineStateChanged();
 }
 
+// s52] See the header. PRE-mutation capture chokepoint: live PS +
+// selection + (engine-guarded) current reference-object transform as aux.
+void BridgeDispatcher::CaptureUndoPoint(DWORD coalesceKey)
+{
+    if (m_undo == nullptr || m_pParticleSystem == nullptr || !*m_pParticleSystem) return;
+    const ParticleSystem* sys = m_pParticleSystem->get();
+    size_t selIdx = SIZE_MAX;
+    if (m_selectedEmitterId >= 0
+        && static_cast<size_t>(m_selectedEmitterId) < sys->getEmitters().size())
+    {
+        selIdx = static_cast<size_t>(m_selectedEmitterId);
+    }
+    UndoStack::EditorAux aux;   // defaults to {0,0,0}
+    if (m_engine)               // nullable when D3D init failed — never deref unguarded
+    {
+        const D3DXVECTOR3 p = m_engine->GetReferencePosition();
+        const D3DXVECTOR3 r = m_engine->GetReferenceRotation();
+        aux.refPos[0] = p.x; aux.refPos[1] = p.y; aux.refPos[2] = p.z;
+        aux.refRot[0] = r.x; aux.refRot[1] = r.y; aux.refRot[2] = r.z;
+    }
+    // Preserve both capture paths (matches the lambda this replaced + the
+    // auto-cap's Capture(...,0)): non-zero key coalesces, zero never does.
+    if (coalesceKey != 0)
+        m_undo->CapturePreCoalesced(*sys, selIdx, coalesceKey, aux);
+    else
+        m_undo->Capture(*sys, selIdx, 0, aux);
+}
+
+// s52] Host-facing wrapper for a gizmo gesture — one non-coalescing
+// undo point. Called on the first real per-move mutation of a drag.
+void BridgeDispatcher::CaptureReferenceTransformUndoPoint()
+{
+    CaptureUndoPoint(0);
+}
+
 void BridgeDispatcher::EmitEngineStateChanged()
 {
     if (!m_emit || !m_engine) return;
@@ -5725,7 +5761,8 @@ void BridgeDispatcher::EmitRecentChanged()
 // recursively trigger a Capture(). Cross-reference legacy
 // RestoreFromSnapshot at src/main.cpp:916 for the original pattern.
 void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
-                                         size_t selIdx)
+                                         size_t selIdx,
+                                         const UndoStack::EditorAux& aux)
 {
     if (m_undo == nullptr) return;
     if (m_pParticleSystem == nullptr) return;
@@ -5784,6 +5821,23 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
                                        : json(m_selectedEmitterId)}}},
         };
         m_emit(env.dump());
+    }
+
+    // s52] Restore the reference-object transform that rode with this
+    // snapshot, and keep the registry in step. Engine-guarded (null when D3D
+    // init failed); applied AFTER the PS swap/Clear so nothing clobbers it.
+    // The undo/perform caller emits engine/state/changed next, which re-reads
+    // these getters → the React Transform spinners refresh (no schema change).
+    // Stays in lockstep with CaptureUndoPoint's matching `if (m_engine)` guard:
+    // with no engine there's no gizmo, so aux is always {0,0,0} on these
+    // entries and skipping the restore drops nothing.
+    if (m_engine)
+    {
+        const D3DXVECTOR3 p(aux.refPos[0], aux.refPos[1], aux.refPos[2]);
+        const D3DXVECTOR3 r(aux.refRot[0], aux.refRot[1], aux.refRot[2]);
+        m_engine->SetReferenceObjectTransform(p, r);
+        if (!(m_testHost && !m_settingsLive))
+            PersistReferenceObjectTransform(p, r);
     }
 
     // Dirty bit follows content-equality against the saved baseline.

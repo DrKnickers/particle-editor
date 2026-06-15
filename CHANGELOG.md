@@ -17,6 +17,49 @@ Conventions:
 ## Changelog
 
 
+### Reference-object gizmo, Reset, and spinners are now undoable (unified Ctrl+Z)
+
+*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #199*
+
+Moving the in-preview reference object can now be undone and redone on the **same Ctrl+Z / Ctrl+Y
+timeline as particle edits** — interleaved in the order you did them. This covers every way the
+object moves: **dragging a gizmo** translate arrow or rotate ring, clicking the Transform **Reset**
+button, and editing the numeric **X/Y/Z position & rotation spinners**. Undoing a *particle* edit
+leaves the reference object exactly where it is, and vice-versa. Editing the X spinner and then the
+Y spinner are two separate undo steps (matching the rest of the UI), while a single spinner's
+scroll-burst collapses into one; a handle click that doesn't actually drag — and a Reset on an
+object already at the origin — create no undo step at all. (Undo/redo remains keyboard-driven for
+now; visible toolbar buttons are a tracked follow-up.)
+
+**How we tackled it.** The editor's undo system is a *whole-document snapshot* stack
+([`src/UndoStack.h`](src/UndoStack.h)), not a per-control command system, so the cleanest fit was to
+**widen the snapshot** rather than add a parallel stack: each entry gained a side-band
+`EditorAux{refPos,refRot}` — plain floats, never written into the serialized `.alo`, since the
+reference transform persists to the registry, not the file. Every capture now funnels through one
+member chokepoint `BridgeDispatcher::CaptureUndoPoint` that folds in the engine's current reference
+transform, and `ApplyUndoSnapshot` restores it (engine set + registry persist); the existing
+`engine/state/changed` echo refreshes the React spinners with **no bridge-schema change**. The gizmo
+captures lazily on the first per-move mutation that actually changes the transform (so a bare click
+records nothing), and the spinner/Reset path keys its undo coalescing per changed component via a
+pure, unit-tested helper ([`src/RefTransformUndoKey.h`](src/RefTransformUndoKey.h)).
+
+**Issues encountered and resolutions.** A pre-code 5-lens design-review workflow and a post-code
+pr-review fan-out together caught the defects a green build hides. The reference transform reads the
+engine, but `m_engine` is null when D3D init fails — an unguarded read in the shared capture path
+would have crashed *every* particle-edit undo on a headless/failed-device host; both the capture and
+the restore now read the engine only under an `if (m_engine)` guard. Coalescing has an asymmetry that
+bit once: a `Capture` fold *replaces* the tail (so its aux updates), but a `CapturePreCoalesced`
+*skips* (keeping the burst's session-start state) — so the skip branch must **not** touch the aux, or
+a spinner scroll-burst's Ctrl+Z would jump to the last value instead of reverting the whole burst.
+The review also caught that capturing on a "successful projection" rather than an actual displacement
+re-introduced a phantom undo step under snapping (a tiny move can round back to the grab point) —
+fixed by gating the capture on `newPos != m_manipStartPos`. New params on `UndoStack::Capture/Undo/Redo`
+are defaulted so the legacy arch-A callers in `src/main.cpp` compile untouched. Verified by a new
+leaf test ([`tests/test_undo_aux.cpp`](tests/test_undo_aux.cpp), 18 asserts incl. the session-start
+coalesce invariant and the per-field key) plus the user's live Ctrl+Z eye-test on a Release build.
+
+---
+
 ### Gizmo polish — screen-uniform handles, precision drags, grid/angle snapping, in-drag guides
 
 *2026-06-15 · [`aa2137d`](https://github.com/DrKnickers/particle-editor/commit/aa2137d) · #197*
