@@ -3439,6 +3439,32 @@ void Engine::EnumerateSkydomeNames(SkydomeContext context,
         for (const SkydomeRef& r : refs) outSecondary.push_back(r.name);
 }
 
+// [PERF] Composition mode (/ DComp); see the header for the render-path
+// rationale. Composition mode is also the "new-UI path, a reference-object
+// picker exists" signal, so turning it on ARMS the eager catalog prefetch: set the
+// persistent m_catalogWanted latch and the next Update()->StartCatalogBuildIfNeeded()
+// kicks a background build immediately -- so the catalog is likely ready before the
+// user ever opens the picker, and every later mod/submod switch rebuilds eagerly
+// (the switch invalidates the catalog, the latch stays set, Update() re-kicks) with
+// no picker-open needed.
+//
+// Ordering invariant (HostWindow): ModManager::RestoreLastSelectedMod() runs in the
+// host impl ctor and applies the saved mod path + submod stack to the FileManager
+// SYNCHRONOUSLY, BEFORE the host calls SetCompositionMode(true). So the first build
+// this arms snapshots the FileManager already reflecting the then-selected mod +
+// submods -- it prioritizes the active content, not a wasted base-game pass. If a
+// future refactor moves the mod restore AFTER this call, the startup build would
+// target base game and a later ReloadTextures would rebuild for the mod (correct,
+// just one wasted pass) -- keep restore before SetCompositionMode.
+// Legacy (--legacy) never calls this with true, so the latch stays false and no
+// catalog is ever built there (no picker to consume it).
+void Engine::SetCompositionMode(bool on)
+{
+    m_compositionMode = on;
+    if (on)
+        m_catalogWanted = true;
+}
+
 // Kick a background catalog (re)build when one is wanted and not already
 // built or in flight. BuildGameObjectCatalog parses every object XML the active
 // content exposes (O(content)); on a big mod that froze the whole window when run

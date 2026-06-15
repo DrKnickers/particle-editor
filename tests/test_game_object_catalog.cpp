@@ -16,6 +16,7 @@
 #include "managers.h"
 #include "files.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -143,8 +144,31 @@ static int dumpRealCatalog(const char* xmlDir)
     RealDirFM fm;
     fm.xmlDir.assign(xmlDir, xmlDir + std::strlen(xmlDir));
 
+    // Time the build (averaged over a few iterations to smooth OS-cache /
+    // scheduler noise). Set CATALOG_PARSE_THREADS=1 to force the serial path for an
+    // A/B against the parallel default on identical content.
     GameObjectCatalog cat;
-    bool ok = BuildGameObjectCatalog(fm, cat);
+    bool ok = false;
+    const int kIters = 5;
+    double bestMs = 1e30, totalMs = 0.0;
+    for (int it = 0; it < kIters; ++it)
+    {
+        GameObjectCatalog tmp;
+        const auto t0 = std::chrono::steady_clock::now();
+        ok = BuildGameObjectCatalog(fm, tmp);
+        const auto t1 = std::chrono::steady_clock::now();
+        const double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        totalMs += ms;
+        if (ms < bestMs) bestMs = ms;
+        if (it == kIters - 1) cat = std::move(tmp);
+    }
+    {
+        char tbuf[16] = { 0 };
+        const DWORD g = GetEnvironmentVariableA("CATALOG_PARSE_THREADS", tbuf, sizeof(tbuf));
+        std::printf("build time: best=%.1f ms  avg=%.1f ms  (%d iters, CATALOG_PARSE_THREADS=%s)\n",
+                    bestMs, totalMs / kIters, kIters,
+                    (g > 0 && g < sizeof(tbuf)) ? tbuf : "auto");
+    }
     std::printf("build=%s  objects=%zu\n", ok ? "true" : "false", cat.objects.size());
     if (!ok) return 2;
 

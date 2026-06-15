@@ -17,6 +17,51 @@ Conventions:
 ## Changelog
 
 
+### Reference-object catalog — eager prefetch + parallel parse
+
+*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+<!-- TODO: backfill the merge-commit short hash + PR number once merged (prior art: PR #27). -->
+
+Follow-up to the off-UI-thread catalog build (#187): opening the object picker after a mod/submod
+switch no longer makes you **wait** on "Loading objects…". The catalog now builds **eagerly** — the
+moment the new-UI (composition) path starts, and on every later mod/submod switch — so it's typically
+already done before you open the picker. And the build itself is **~3× faster**: parsing the object
+XMLs (≈90% of the build time, ≈140 ms of a 153 ms Mod build) is spread across CPU cores, dropping the
+real-content (Forces of Renewal) build from **~153 ms to ~53 ms** in a Release measurement on a loose
+Mod `Data\XML` dump (1880 objects / 1120 picker-listed, unchanged).
+
+**How we tackled it.** Two engine-only changes (no React/bridge/schema touch — the picker already
+level-triggers Loading→ready). (1) *Eager prefetch*: [`Engine::SetCompositionMode`](src/engine.cpp:3461)
+arms the persistent `m_catalogWanted` latch when composition mode turns on (the "a picker exists"
+signal), so the existing `Update()`→`StartCatalogBuildIfNeeded()` per-frame poll kicks the background
+build at startup and, because a mod/submod switch invalidates the catalog while the latch stays set,
+on every switch — no picker-open required. The host's `RestoreLastSelectedMod()` runs synchronously in
+the impl ctor *before* `SetCompositionMode(true)`, so the first build targets the then-selected mod +
+submods, not a wasted vanilla pass. (2) *Parallel parse*: [`BuildGameObjectCatalog`](src/GameObjectCatalog.cpp:283)
+became a four-phase pipeline — serial **read** (one thread slurps each XML's bytes via the FileManager),
+parallel **parse** (a bounded pool, `clamp(hw,1,8)`, each worker parses its own in-memory `MemoryFile`
+into a per-file `RawEntry` list), serial ordered **merge** (first-wins by file-order then doc-order via
+`map::emplace`), serial **resolve** (Variant_Of + categorize + sort, unchanged). Keeping the FileManager
+touched only on the serial read thread removes the MEG-handle shared-seek race
+([`files.cpp`](src/files.cpp:89)) by construction; the ordered merge makes the output byte-identical to
+the old sequential build regardless of thread schedule.
+
+**Issues encountered and resolutions.** The first parallel measurement was *slower* than serial — a
+`/MDd` debug-CRT artifact: the debug heap's allocation lock serializes the allocation-heavy expat parse,
+so threads added contention, not throughput. Measuring the **deployment config** (Release `/MD`) showed
+the real ~3× win; the Debug build stays slightly slower but still off the UI thread (no freeze). The
+adversarial pre-merge review (per the multi-agent-review lesson) then caught a **failure-mode
+regression**: a `bad_alloc` (or any throw) inside a parse worker would escape the thread and
+`std::terminate`, whereas the old sequential build let it unwind to `StartCatalogBuildIfNeeded`'s
+`catch(...)` and publish an empty catalog. Fixed by giving `parseObjectBytes` a strict never-throw
+contract (release the `MemoryFile` + drop a partial list on any throw) and wrapping the worker body, plus
+a serial fallback if the OS refuses a thread mid-spawn. A gated `[catalog-timing]` stderr hook
+(`CATALOG_TIMING=1`) and a thread-cap override (`CATALOG_PARSE_THREADS`) were left in for measuring the
+speedup on a real MEG-stacked install.
+
+---
+
 ### Reference-object picker — units & structures only, built off the UI thread
 
 *2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*

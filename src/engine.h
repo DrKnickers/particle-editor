@@ -209,7 +209,9 @@ public:
 	// work (measured at ~98-99% of Render(), scaling with window area). The
 	// engine still renders INTO the AlphaCompositor RT (the shared source);
 	// only the layered transport is skipped. See tasks/todo.md round-3.
-	void SetCompositionMode(bool on) { m_compositionMode = on; }
+	// Also arms the eager game-object-catalog prefetch (composition mode ==
+	// the new-UI path where a reference-object picker exists). Defined in engine.cpp.
+	void SetCompositionMode(bool on);
 
 	// Phase 3 Stage 2: NT-handle alias of the engine's primary
 	// render-target texture, openable from a parallel D3D11 device via

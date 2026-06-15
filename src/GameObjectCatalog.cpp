@@ -8,10 +8,15 @@
 #include "exceptions.h"   // wexception (LoadAloModel boundary)
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace
@@ -143,40 +148,118 @@ namespace
         return true;
     }
 
-    // Phase 1: parse one object file's direct children into `byName` (first-wins
-    // on a duplicate Name). Missing / malformed file -> no-op (non-fatal). We do
-    // NOT follow nested <File> includes some mods use -- v1 trusts the flat
-    // GameObjectFiles.xml list (a follow-up if a mod needs includes).
-    void parseObjectFile(IFileManager& fm, const std::string& fileName,
-                         std::map<std::string, RawEntry>& byName)
+    // Phase-1 READ (SERIAL): slurp one listed file's raw bytes via the
+    // FileManager into `bytes`. This and readFileList are the ONLY catalog-build
+    // accesses to `fm` -- the parallel parse below never touches it, so the MEG
+    // handle's shared seek pointer is never raced (files.cpp:89). Missing file ->
+    // empty (skipped downstream). A MEG-packed file's SubFile clamps the read to
+    // its own extent, so reading size() bytes from offset 0 yields exactly it.
+    void readObjectFileBytes(IFileManager& fm, const std::string& fileName,
+                             std::vector<char>& bytes)
     {
+        bytes.clear();
         IFile* f = fm.getFile(std::string("Data\\XML\\") + fileName);
         if (f == nullptr) return;
-
-        XMLTree xml;
-        try { xml.parse(f); }
-        catch (...) { f->Release(); return; }
-        f->Release();
-
-        const XMLNode* root = xml.getRoot();
-        if (root == nullptr) return;
-
-        for (unsigned i = 0; i < root->getNumChildren(); ++i)
+        const unsigned long sz = f->size();
+        if (sz > 0)
         {
-            const XMLNode* e = root->getChild(i);
-            std::string name = WideToAnsi(e->getAttribute(L"Name"));
-            if (name.empty()) continue;                 // comment / anonymous / <File> include -> not an object
-            std::string key = asciiLower(name);
-            if (byName.find(key) != byName.end()) continue;  // first-wins (case-insensitive, like the engine)
-
-            RawEntry re;
-            re.name       = name;
-            re.tag        = WideToAnsi(e->getName());
-            re.sourceFile = fileName;
-            re.variantOf  = trim(WideToAnsi(childData(e, L"Variant_Of_Existing_Type")));
-            re.ownModel   = firstModel(e);
-            byName[key]   = re;
+            bytes.resize(sz);
+            f->seek(0);
+            const unsigned long got = f->read(bytes.data(), sz);
+            if (got != sz) bytes.resize(got);   // short read (shouldn't happen) -> trim
         }
+        f->Release();
+    }
+
+    // Phase-2 PARSE (PARALLEL-SAFE): parse one file's already-read bytes
+    // into `entries` in document order. Uses a private MemoryFile + a private
+    // XMLTree (XML_ParserCreate per call, no global state -- xml.cpp:125), so
+    // concurrent calls on distinct buffers share NO mutable state. Crucially it
+    // does NOT dedup: first-wins is applied once, serially, by the ordered merge
+    // (so within-file first-wins is preserved by document order + insert-if-absent).
+    //
+    // STRICT never-throw contract: this runs on a parse worker, where an escaping
+    // exception std::terminates (unlike the old sequential build whose throws
+    // unwound to StartCatalogBuildIfNeeded's catch(...) -> empty catalog). So ANY
+    // failure (malformed XML, or a bad_alloc from new / MemoryFile::write /
+    // WideToAnsi / push_back) degrades to "this file contributes nothing" -- the
+    // same observable result as the old malformed-file catch-and-skip, never a crash.
+    //
+    // Footgun (xmlparse.c:694): expat seeds the CRT PRNG via srand()/rand() on the
+    // FIRST XML_Parse per thread. MSVC's rand/srand are per-thread, so dedicated +
+    // joined parse workers don't race or perturb the engine's rand stream. Do NOT
+    // move parsing onto a reused/engine thread (it would disturb that thread's rand).
+    void parseObjectBytes(const std::vector<char>& bytes, const std::string& fileName,
+                          std::vector<RawEntry>& entries)
+    {
+        if (bytes.empty()) return;
+
+        MemoryFile* mem = nullptr;
+        try
+        {
+            // RefCounted has a protected dtor + starts at refcount 1 -> heap-allocate
+            // and Release() (delete at 0), mirroring MockFM::getFile. XMLTree copies
+            // the data into its own nodes, so the MemoryFile can go right after parse.
+            mem = new MemoryFile();
+            mem->write(bytes.data(), (unsigned long)bytes.size());
+            mem->seek(0);
+            XMLTree xml;
+            xml.parse(mem);          // throws on malformed XML
+            mem->Release();
+            mem = nullptr;
+
+            const XMLNode* root = xml.getRoot();
+            if (root == nullptr) return;
+
+            for (unsigned i = 0; i < root->getNumChildren(); ++i)
+            {
+                const XMLNode* e = root->getChild(i);
+                std::string name = WideToAnsi(e->getAttribute(L"Name"));
+                if (name.empty()) continue;             // comment / anonymous / <File> include -> not an object
+
+                RawEntry re;
+                re.name       = name;
+                re.tag        = WideToAnsi(e->getName());
+                re.sourceFile = fileName;
+                re.variantOf  = trim(WideToAnsi(childData(e, L"Variant_Of_Existing_Type")));
+                re.ownModel   = firstModel(e);
+                entries.push_back(re);
+            }
+        }
+        catch (...)
+        {
+            if (mem) mem->Release();   // throw before the explicit Release -> no leak
+            entries.clear();           // partial list from a mid-loop throw -> file contributes nothing
+        }
+    }
+
+    // Worker count for the parallel parse. Auto = clamp(hardware_concurrency,
+    // 1, 8); the CATALOG_PARSE_THREADS env var overrides (1 = force the serial path,
+    // used for A/B timing; N = cap the pool). Never exceeds the file count (no idle
+    // threads) and never returns 0. GetEnvironmentVariableA (not getenv) so it builds
+    // clean under the engine's /WX (getenv -> C4996). <2 files -> serial (no spawn).
+    unsigned parseThreadCount(size_t fileCount)
+    {
+        if (fileCount < 2) return 1;
+
+        unsigned cap;
+        char envbuf[16] = { 0 };
+        const DWORD got = GetEnvironmentVariableA("CATALOG_PARSE_THREADS", envbuf, sizeof(envbuf));
+        if (got > 0 && got < sizeof(envbuf))
+        {
+            long v = std::atol(envbuf);
+            if (v < 1)  v = 1;
+            if (v > 64) v = 64;
+            cap = (unsigned)v;
+        }
+        else
+        {
+            unsigned hw = std::thread::hardware_concurrency();
+            if (hw < 1) hw = 1;
+            cap = (hw < 8) ? hw : 8;
+        }
+        if ((size_t)cap > fileCount) cap = (unsigned)fileCount;
+        return cap;
     }
 
     // Phase 2: resolve one object's model. Own model wins; otherwise walk the
@@ -202,6 +285,15 @@ namespace
     }
 }
 
+// Parses the object XMLs across threads (each file is independent), keeping
+// READ serial (only one thread touches the FileManager / MEG handle, files.cpp:89)
+// and the first-wins MERGE + Variant_Of RESOLUTION serial. The four phases:
+//   1. read  (serial)   -- slurp every listed file's bytes via fm
+//   2. parse (parallel) -- each blob -> its own RawEntry list (document order)
+//   3. merge (serial)   -- ordered first-wins into byName (file order, then doc order)
+//   4. resolve (serial) -- Variant_Of chain + categorize + sort
+// The output is independent of the parse thread schedule, so it is byte-identical
+// to the old sequential build (the unit test's first-wins/dedup asserts pin this).
 bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
 {
     out.objects.clear();
@@ -209,14 +301,82 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
     std::vector<std::string> files;
     if (!readFileList(fm, files)) return false;          // GameObjectFiles.xml unreadable
 
-    std::map<std::string, RawEntry> byName;
-    std::set<std::string> seenFiles;
-    for (const std::string& fn : files)
+    // De-dup the listed files, preserving first-listed order (order drives cross-file
+    // first-wins; a doubly-listed file is read+parsed once).
+    std::vector<std::string> uniqueFiles;
     {
-        if (!seenFiles.insert(fn).second) continue;       // de-dup a doubly-listed file
-        parseObjectFile(fm, fn, byName);
+        std::set<std::string> seenFiles;
+        for (const std::string& fn : files)
+            if (seenFiles.insert(fn).second) uniqueFiles.push_back(fn);
     }
+    const size_t n = uniqueFiles.size();
 
+    //-timing] Diagnostic per-phase timing to stderr, gated by the
+    // CATALOG_TIMING env var (off in normal runs). Tag: [catalog-timing].
+    char tmbuf[8] = { 0 };
+    const bool timing = GetEnvironmentVariableA("CATALOG_TIMING", tmbuf, sizeof(tmbuf)) > 0;
+    using clk = std::chrono::steady_clock;
+    auto ms = [](clk::time_point a, clk::time_point b)
+    { return std::chrono::duration<double, std::milli>(b - a).count(); };
+    const auto tReadStart = clk::now();
+
+    // Phase 1 -- READ (serial): the only fm access in the parse stage.
+    std::vector<std::vector<char>> blobs(n);
+    for (size_t i = 0; i < n; ++i)
+        readObjectFileBytes(fm, uniqueFiles[i], blobs[i]);
+    const auto tParseStart = clk::now();
+
+    // Phase 2 -- PARSE (parallel): perFile[i] written by exactly one worker
+    // (disjoint indices) -> no lock needed on the result vectors.
+    std::vector<std::vector<RawEntry>> perFile(n);
+    const unsigned threads = parseThreadCount(n);
+    if (threads <= 1)
+    {
+        for (size_t i = 0; i < n; ++i)
+            parseObjectBytes(blobs[i], uniqueFiles[i], perFile[i]);
+    }
+    else
+    {
+        std::atomic<size_t> next{ 0 };
+        // The worker body is wrapped so NO exception crosses the thread boundary
+        // (a throw out of a std::thread entry -> std::terminate). parseObjectBytes
+        // is already internally never-throw; this is the definitive boundary guard.
+        auto worker = [&]()
+        {
+            try
+            {
+                for (size_t i = next.fetch_add(1); i < n; i = next.fetch_add(1))
+                    parseObjectBytes(blobs[i], uniqueFiles[i], perFile[i]);
+            }
+            catch (...) {}
+        };
+        std::vector<std::thread> pool;
+        pool.reserve(threads);                            // no vector realloc mid-spawn
+        // If the OS refuses a thread mid-spawn, the std::thread ctor throws. Catch it:
+        // any worker that DID start drains every index via the shared atomic, so we
+        // just join what launched. If NONE launched, fall back to a serial parse.
+        try
+        {
+            for (unsigned t = 0; t < threads; ++t) pool.emplace_back(worker);
+        }
+        catch (...) {}
+        for (std::thread& th : pool)
+            if (th.joinable()) th.join();                 // all joined before phase 3
+        if (pool.empty())
+            for (size_t i = 0; i < n; ++i)
+                parseObjectBytes(blobs[i], uniqueFiles[i], perFile[i]);
+    }
+    const auto tMergeStart = clk::now();
+
+    // Phase 3 -- MERGE (serial, ordered): first-wins across files in list order,
+    // entries in document order. emplace is insert-if-absent -> reproduces the old
+    // build's exact first-wins (cross-file AND within-file) regardless of schedule.
+    std::map<std::string, RawEntry> byName;
+    for (size_t i = 0; i < n; ++i)
+        for (const RawEntry& re : perFile[i])
+            byName.emplace(asciiLower(re.name), re);
+
+    // Phase 4 -- RESOLVE (serial, unchanged): Variant_Of chain + categorize + sort.
     for (const auto& kv : byName)
     {
         std::string model = resolveModel(kv.first, byName);
@@ -233,6 +393,16 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
 
     std::sort(out.objects.begin(), out.objects.end(),
               [](const GameObjectRef& a, const GameObjectRef& b) { return a.name < b.name; });
+
+    if (timing)
+    {
+        const auto tEnd = clk::now();
+        std::fprintf(stderr,
+            "[catalog-timing] files=%zu threads=%u  read=%.1f  parse=%.1f  merge+resolve=%.1f  total=%.1f ms\n",
+            n, threads, ms(tReadStart, tParseStart), ms(tParseStart, tMergeStart),
+            ms(tMergeStart, tEnd), ms(tReadStart, tEnd));
+        std::fflush(stderr);
+    }
     return true;
 }
 
