@@ -19,7 +19,7 @@ Conventions:
 
 ### Per-submod selection — stack Mod submods in precedence order
 
-*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-14 · [`05d0baf`](https://github.com/DrKnickers/particle-editor/commit/05d0baf) · #184*
 
 A mod whose content is split into submods — like Mod, which keeps `Mod`/`GCW`/`Rev`/`TR` campaign
 folders layered on a shared `Core` core — can now **stack several submods in explicit precedence
