@@ -17,6 +17,28 @@ Conventions:
 ## Changelog
 
 
+### Undo / Redo toolbar buttons
+
+*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · #201*
+
+The toolbar gains a dedicated **Undo / Redo** pair (a new Edit group between the file actions and
+playback), so undo/redo is no longer keyboard- and menu-only. Each button is disabled when there's
+nothing to undo or redo, mirroring the Edit menu.
+
+**How we tackled it.** Pure React/toolbar work — the plumbing already existed. The buttons live in
+[`web/apps/editor/src/components/Toolbar.tsx`](web/apps/editor/src/components/Toolbar.tsx), read the
+`canUndo` / `canRedo` flags from the `engine/state/changed` snapshot the toolbar already subscribes
+to, and dispatch the same `undo/perform` bridge kind (with `direction`) the Edit menu uses. A new
+`.tb-btn:disabled` rule in [`components.css`](web/apps/editor/src/styles/components.css) dims the
+inert state (the toolbar's other buttons are always enabled, so it had none before).
+
+**Issues encountered and resolutions.** None of note. The MockBridge hardcodes `canUndo:false` and
+doesn't model the undo stack, so the buttons read disabled in the browser preview regardless — the
+enabled→dispatch path is covered by the Vitest unit tests instead (and the live engine flips the
+flags, as shipped in #199).
+
+---
+
 ### Reference-object gizmo, Reset, and spinners are now undoable (unified Ctrl+Z)
 
 *2026-06-15 · [`30b5b47`](https://github.com/DrKnickers/particle-editor/commit/30b5b47) · #199*

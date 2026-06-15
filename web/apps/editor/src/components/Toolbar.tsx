@@ -2,16 +2,17 @@
 // dividers, spacer to the right, theme toggle at the rightmost edge.
 //
 // Group 1 (file actions):       New · Open · Save · Save As
-// Group 2 (playback):           Play|Pause · Step · Step 10
-// Group 3 (viewport toggles):   Show ground · Toggle bloom · Leave particles
-// Group 4 (panels):             Spawner toggle
+// Group 2 (edit):               Undo · Redo
+// Group 3 (playback):           Play|Pause · Step · Step 10
+// Group 4 (viewport toggles):   Show ground · Toggle bloom · Leave particles
+// Group 5 (panels):             Spawner toggle
 //   spacer
-// Group 5 (environment):        Ground dropdown · Background dropdown
+// Group 6 (environment):        Ground dropdown · Background dropdown
 //
 // Stop and Restart removed per design chat. The three viewport toggles
 // (ground / bloom / leave-particles) live here as lucide icon buttons —
-// they replaced the floating ViewportPill. Undo/Redo and Reload
-// Shaders/Textures live in the menubar only.
+// they replaced the floating ViewportPill. Undo/Redo also appear in the
+// Edit menu; Reload Shaders/Textures lives in the menubar only.
 //
 // Uses the design's semantic CSS classes from components.css:
 //   .toolbar, .tb-group, .tb-btn, .tb-divider, .tb-spacer
@@ -19,6 +20,7 @@
 import { useEffect, useState } from "react";
 import {
   FilePlus, FolderOpen, Save, SaveAll,
+  Undo2, Redo2,
   Play, Pause, ChevronRight, ChevronsRight,
   Grid2x2, Sun, Sparkles, CirclePlus, Lightbulb,
 } from "lucide-react";
@@ -48,6 +50,8 @@ export function Toolbar({ bridge }: Props) {
   }, [bridge]);
 
   const paused = state?.paused ?? false;
+  const canUndo = state?.canUndo ?? false;
+  const canRedo = state?.canRedo ?? false;
   // Viewport engine toggles (formerly the floating ViewportPill). Defaults
   // match the pill: ground/bloom off, leave-particles on.
   const ground = state?.ground ?? false;
@@ -116,7 +120,37 @@ export function Toolbar({ bridge }: Props) {
 
       <span className="tb-divider" />
 
-      {/* Group 2: playback */}
+      {/* Group 2: edit (undo / redo). Drives the same `undo/perform` bridge
+          kind + `canUndo`/`canRedo` engine-state the Edit menu uses; each
+          button is disabled when there's nothing to undo / redo. */}
+      <div className="tb-group">
+        <Tip content="Undo" occlusionId="tip:toolbar:undo">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Undo"
+            disabled={!canUndo}
+            onClick={() => { void bridge.request({ kind: "undo/perform", params: { direction: "undo" } }); }}
+          >
+            <Undo2 {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Redo" occlusionId="tip:toolbar:redo">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Redo"
+            disabled={!canRedo}
+            onClick={() => { void bridge.request({ kind: "undo/perform", params: { direction: "redo" } }); }}
+          >
+            <Redo2 {...ICON} />
+          </button>
+        </Tip>
+      </div>
+
+      <span className="tb-divider" />
+
+      {/* Group 3: playback */}
       <div className="tb-group">
         <Tip content={paused ? "Play" : "Pause"} occlusionId="tip:toolbar:play-pause">
           <button
@@ -153,7 +187,7 @@ export function Toolbar({ bridge }: Props) {
 
       <span className="tb-divider" />
 
-      {/* Group 3: viewport engine toggles. aria-pressed + aria-labels are
+      {/* Group 4: viewport engine toggles. aria-pressed + aria-labels are
           ported verbatim from the old ViewportPill so a11y semantics are
           preserved. Each reads the live engine snapshot and dispatches the
           matching engine/set/* with the inverted value. */}
@@ -195,7 +229,7 @@ export function Toolbar({ bridge }: Props) {
 
       <span className="tb-divider" />
 
-      {/* Group 4: right-dock panel toggles. Spawner + Lighting share one
+      {/* Group 5: right-dock panel toggles. Spawner + Lighting share one
           exclusive slot (opening one closes the other — see lib/right-dock.ts),
           so their aria-pressed states are mutually exclusive. */}
       <div className="tb-group">
@@ -225,7 +259,7 @@ export function Toolbar({ bridge }: Props) {
 
       <span className="tb-spacer" />
 
-      {/* Group 5: environment */}
+      {/* Group 6: environment */}
       <GroundDropdown bridge={bridge} />
       <BackgroundDropdown bridge={bridge} />
       <ReferenceObjectDropdown bridge={bridge} />

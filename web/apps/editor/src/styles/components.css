@@ -298,6 +298,11 @@
   font-family: inherit;
 }
 .tb-btn:hover { background: var(--hover); color: var(--text); }
+/* Disabled toolbar buttons (e.g. Undo/Redo with nothing to undo/redo): dim
+   and inert, no hover affordance. The toolbar's other buttons are always
+   enabled, so this rule is new with the undo/redo group. */
+.tb-btn:disabled { opacity: 0.4; cursor: default; }
+.tb-btn:disabled:hover { background: transparent; color: var(--text-2); }
 /* Pressed/active toggle state. Driven by `aria-pressed="true"` (the
    single source of truth the toolbar toggles set) as well as the legacy
    `.active` class. Attribute-selector form is golden-neutral: it changes

@@ -25,6 +25,8 @@ function makeBridge() {
     bloomAvailable: true,
     ground: true,
     heatDebug: false,
+    canUndo: true,
+    canRedo: false,
   };
   const request = vi.fn().mockImplementation((req: { kind: string }) => {
     if (req.kind === "engine/state/snapshot") return Promise.resolve(snap);
@@ -57,6 +59,36 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     // ThemeToggle removed from toolbar — theme is in Edit → Preferences…
     expect(screen.queryByRole("button", { name: /light theme/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /dark theme/i })).not.toBeInTheDocument();
+  });
+
+  it("renders Undo/Redo buttons reflecting canUndo/canRedo", async () => {
+    // snapshot: canUndo=true, canRedo=false
+    const b = makeBridge();
+    renderToolbar(b);
+    const undo = await screen.findByRole("button", { name: "Undo" });
+    const redo = screen.getByRole("button", { name: "Redo" });
+    await waitFor(() => expect(undo).not.toBeDisabled());
+    expect(redo).toBeDisabled();
+  });
+
+  it("Undo button dispatches undo/perform { direction: 'undo' }", async () => {
+    const b = makeBridge();
+    renderToolbar(b);
+    const undo = await screen.findByRole("button", { name: "Undo" });
+    await waitFor(() => expect(undo).not.toBeDisabled());
+    fireEvent.click(undo);
+    await waitFor(() => {
+      expect(b.request).toHaveBeenCalledWith({ kind: "undo/perform", params: { direction: "undo" } });
+    });
+  });
+
+  it("Redo is disabled when canRedo is false (no dispatch on click)", async () => {
+    const b = makeBridge();
+    renderToolbar(b);
+    const redo = await screen.findByRole("button", { name: "Redo" });
+    expect(redo).toBeDisabled();
+    fireEvent.click(redo);
+    expect(b.request).not.toHaveBeenCalledWith({ kind: "undo/perform", params: { direction: "redo" } });
   });
 
   it("Pause button dispatches engine/set/paused with paused=true", async () => {
