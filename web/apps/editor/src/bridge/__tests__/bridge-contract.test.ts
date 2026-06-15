@@ -231,9 +231,25 @@ describe("MockBridge contract", () => {
     expect(last!.skydomeContext).toBe("land");
     expect(last!.skydomePrimaryName).toBe("Day_Blue_Sky");
     expect(last!.skydomeSecondaryName).toBe("Planet_Rings00");
+    // resolvable Names report "ok"; an empty slot reports "none".
+    expect(last!.skydomePrimaryStatus).toBe("ok");
+    expect(last!.skydomeSecondaryStatus).toBe("ok");
     const fresh = await b.request({ kind: "engine/state/snapshot", params: {} });
     expect(fresh.skydomePrimaryName).toBe("Day_Blue_Sky");
     off();
+  });
+
+  // A chosen-but-unloadable dome reports "load-failed" so the picker can
+  // surface it instead of silently falling back to the solid background.
+  it("engine/set/skydome-environment reports load-failed for a missing dome", async () => {
+    const b = new MockBridge();
+    await b.request({
+      kind: "engine/set/skydome-environment",
+      params: { context: "space", primaryName: "Broken_Sky", secondaryName: "" },
+    });
+    const s = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(s.skydomePrimaryStatus).toBe("load-failed");
+    expect(s.skydomeSecondaryStatus).toBe("none");
   });
 
   it("engine/query/skydome-list returns primary + secondary Name lists per context", async () => {

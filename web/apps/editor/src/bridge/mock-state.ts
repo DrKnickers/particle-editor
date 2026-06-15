@@ -80,6 +80,9 @@ export function makeDefaultEngineState(): EngineStateDto {
     skydomeContext: "space",
     skydomePrimaryName: "",
     skydomeSecondaryName: "",
+    // per-slot load outcome (no dome chosen => "none")
+    skydomePrimaryStatus: "none",
+    skydomeSecondaryStatus: "none",
 
     // imported reference object + unit grid (nothing selected by default)
     referenceObjectName: "",

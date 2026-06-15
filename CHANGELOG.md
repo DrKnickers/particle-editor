@@ -17,6 +17,52 @@ Conventions:
 ## Changelog
 
 
+### Skydome picker — surfaces a dome that won't load, and drops the unused custom-texture slots
+
+*2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+Picking a game skydome whose model fails to load no longer silently shows the solid-colour
+background while the dropdown still reads as if the dome applied. The Background popover now shows
+an **active-mode indicator** ("Showing: Game dome" / "Custom texture" / "Solid colour") reflecting
+what the renderer is *actually* displaying, plus a per-slot **"Couldn't load this dome's model."**
+note when a chosen dome's `.alo` can't be loaded — so a dome absent from the current mod/base, or one
+whose asset is missing, is obvious instead of mysteriously inert. The three "custom skydome texture"
+slots (the unused "recent images" browse tiles) were removed; the popover is now Game dome (Land/Space
+primary + secondary) + Solid colour only.
+
+**How we tackled it.** Mirrored the `referenceObjectStatus` plumbing end to end: a new
+`SkydomeSlotStatus` (`None` / `Ok` / `LoadFailed`) set per slot in `Engine::RebuildSkydomeMeshes`
+([`src/engine.cpp`](src/engine.cpp:3306)) inside the *same* branches that already
+clear / continue / load — so the render path is byte-for-byte unchanged and the status is pure
+metadata; `SkyStatusToString` + two snapshot fields in
+[`src/host/BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp:465); a `SkydomeSlotStatus` union +
+DTO fields in [`web/packages/bridge-schema/src/index.ts`](web/packages/bridge-schema/src/index.ts:198);
+the mock derives the status ([`web/apps/editor/src/bridge/mock.ts`](web/apps/editor/src/bridge/mock.ts:367),
+default `"none"`); and [`BackgroundPicker.tsx`](web/apps/editor/src/screens/BackgroundPicker.tsx)
+splits the previously-overloaded `gameDomeActive` into `gameDomeSelected` (a Name is chosen — drives
+the dropdowns) vs `gameDomeRendering` (a slot actually loaded — drives the indicator + the
+solid-colour fallback state). That split is the crux: a selected-but-failed dome must read as "not
+rendering".
+
+**Issues encountered and resolutions.** The end-to-end Vitest that drives the mock through the live
+`engine/state/changed` subscription was flaky — the global mock store wasn't reset between tests and
+the initial-snapshot promise could resolve after (and clobber) the post-dispatch broadcast. Fixed by
+resetting `useMockEngineState` in `beforeEach` and dispatching via a direct awaited `bridge.request`
+(the `ReferenceObjectPicker` test pattern) so the initial snapshot drains first. An adversarial
+multi-agent pre-merge review then caught two honesty gaps in the first cut: (1) the new indicator,
+derived only from the game-dome status, falsely read "Solid colour" when a **persisted legacy
+texture slot** (the engine's `RenderSkydome()` fallback, slots 1–11) was still rendering — fixed by
+reading `skydomeSlot` and surfacing it as "Custom texture"; and (2) `RebuildSkydomeMeshes` set `Ok`
+without checking `SkydomeMesh::Resolve()`'s return, so a dome that loaded but whose shaders didn't
+resolve would render the fallback while reporting "ok" — fixed by mirroring `SetReferenceObject`'s
+resolve guard (Clear + `LoadFailed`). The toolbar trigger swatch
+([`BackgroundDropdown.tsx`](web/apps/editor/src/components/BackgroundDropdown.tsx)) was likewise
+re-gated on render status so it can't show the dome gradient for a failed dome. The engine's custom
+skydome slots 9–11 and their persistence are left intact (the legacy `--legacy` UI still uses them);
+only the new-UI surfacing was removed, so there is no state migration.
+
+---
+
 ### Reference-object fixes — skinned units render, mod Core content loads, a gizmo Reset, grid moves to the Ground popup
 
 *2026-06-14 · [`396464d`](https://github.com/DrKnickers/particle-editor/commit/396464d) · #180*

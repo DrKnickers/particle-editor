@@ -1,13 +1,17 @@
 // Task 2.4 contract tests: Background picker wired against the *real*
 // native bridge inside ParticleEditor.exe --new-ui --test-host. Sibling
 // of bridge-native.spec.ts (Task 2.2.1) — same CDP-attach harness, same
-// `window.bridge` host-object channel, but exercising the surface the
-// BackgroundPicker actually drives:
+// `window.bridge` host-object channel.
 //
-//   - engine/set/skydome-slot     (bundled slot mutation)
-//   - engine/set/background       (COLORREF round-trip — Win32 byte order)
+//   - engine/set/skydome-slot        (bundled slot mutation)
+//   - engine/set/background          (COLORREF round-trip — Win32 byte order)
 //   - engine/set/skydome-custom-path (custom slot persistence)
-//   - undo/perform                (handler dispatch, Task 2.4 surface)
+//   - undo/perform                   (handler dispatch, Task 2.4 surface)
+//
+// skydome-slot / skydome-custom-path are exercised here purely as a
+// native-bridge contract (legacy Win32 UI + registry startup-restore still
+// drive them); the new-UI BackgroundPicker no longer does — its custom
+// skydome-texture slots were removed (it's Game dome + Solid colour only).
 //
 // Notes on TestHostBridge.on(): the host-object channel doesn't carry
 // events, so TestHostBridge.on returns a no-op unsubscribe. Specs that
@@ -43,8 +47,11 @@ test("Background popover opens from the toolbar dropdown trigger", async () => {
   // Radix Popover triggered from the Toolbar's Group 4 dropdown. The
   // dropdown button still carries aria-label="Background", but the
   // mounted content is now a popover wrapper (data-radix-popper-content-wrapper)
-  // rather than role="dialog". Slot count assertion is preserved —
-  // BackgroundPickerBody still renders 12 aria-pressed slot buttons.
+  // rather than role="dialog". BackgroundPickerBody is now Game dome +
+  // Solid colour only (the custom skydome-texture tiles were removed), so the
+  // aria-pressed surface is the Space/Land context toggle (2) + the Solid
+  // colour swatch (1) = 3. The Primary/Secondary domes are <select>s, not
+  // aria-pressed buttons. (e2e against --test-host; not part of the Vitest leg.)
   const probe = await page.evaluate(async () => {
     const btn = document.querySelector<HTMLButtonElement>('button[aria-label="Background"]');
     if (!btn) return { clicked: false, popover: false, slots: 0 };
@@ -56,7 +63,7 @@ test("Background popover opens from the toolbar dropdown trigger", async () => {
   });
   expect(probe.clicked).toBe(true);
   expect(probe.popover).toBe(true);
-  expect(probe.slots).toBe(12);
+  expect(probe.slots).toBe(3);
 });
 
 test("engine/set/skydome-slot mutates state (bundled slot 5)", async () => {

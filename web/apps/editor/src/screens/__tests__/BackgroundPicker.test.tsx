@@ -1,120 +1,54 @@
-// Vitest unit tests for BackgroundPicker — specifically the
-// custom-slot chain (file/open → set-skydome-custom-path →
-// set-skydome-slot). The bundled-slot path is covered indirectly by
-// the Playwright suite (background-picker.spec.ts). Here we focus on:
+// Vitest unit tests for BackgroundPicker.
 //
-//   1. The file/open call carries `filter: "skydome"` so the native
-//      host pops the DDS/TGA picker, not the .alo one.
-//   2. On a resolved path, the two follow-up dispatches fire in order.
-//   3. On a cancelled / failed pick, the chain aborts cleanly with no
-//      follow-ups (the slot stays empty).
+// Covers:
+//   1. Game-dome section: Names enumerate from skydome-list per context,
+//      and choosing one dispatches skydome-environment.
+//   2. Load-status surfacing: a dome whose .alo loads shows the "Game dome"
+//      active-mode indicator; a dome that fails to load shows a per-slot
+//      "couldn't load" note + the solid-colour fallback indicator (instead of
+//      silently reading as applied).
+//   3. The former custom skydome-texture slots are gone (no "Browse..."
+//      tiles) — the picker is Game dome + Solid colour only.
 
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { BackgroundPicker } from "../BackgroundPicker";
 import { MockBridge } from "@/bridge/mock";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import { useMockEngineState, makeDefaultEngineState } from "@/bridge/mock-state";
+import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 
-type RequestFn = (req: { kind: string; params?: Record<string, unknown> }) => Promise<unknown>;
+// The MockBridge mutates a global zustand store; reset it so each MockBridge-
+// driven test starts from a clean snapshot (the stub-bridge tests below don't
+// touch the store).
+beforeEach(() => {
+  useMockEngineState.setState(makeDefaultEngineState());
+});
 
-function makeStubBridge(opts: {
-  fileOpen: { ok: true; path: string } | { ok: false; error: string };
-}): Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> } {
+// Display-logic stub: inject just the skydome fields the picker reads so we can
+// assert the surfacing without a real engine. skydome-list returns empty (the
+// injected current Name is added by the picker's withCurrent()).
+function makeSnapshotBridge(partial: Partial<EngineStateDto>): Bridge {
   const snapshot = {
-    ground: false,
-    groundZ: 0,
-    groundTexture: 0,
-    groundSolidColor: 0x00888888,
-    groundSlotCustomPaths: ["", "", "", "", "", "", "", ""],
+    background: 0x00112233,
     skydomeSlot: 0,
-    // Slot 9 is empty so clicking it routes through the picker chain.
-    skydomeCustomPaths: ["", "", ""],
-    background: 0,
-    lights: {
-      sun:   { diffuse: [1, 1, 1, 1], specular: [1, 1, 1, 1], position: [0, 0, 1, 0], direction: [0, 0, 0, 0] },
-      fill1: { diffuse: [0, 0, 0, 1], specular: [0, 0, 0, 1], position: [0, 0, 1, 0], direction: [0, 0, 0, 0] },
-      fill2: { diffuse: [0, 0, 0, 1], specular: [0, 0, 0, 1], position: [0, 0, 1, 0], direction: [0, 0, 0, 0] },
-    },
-    ambient: [0, 0, 0, 1],
-    shadow:  [0, 0, 0, 1],
-    bloom: false,
-    bloomAvailable: true,
-    bloomStrength: 1,
-    bloomCutoff: 0.5,
-    bloomSize: 8,
-    heatDebug: false,
-    paused: false,
-    camera: { position: [0, 0, 0], target: [0, 0, 0], up: [0, 0, 1] },
-    wind: [0, 0, 0],
-    gravity: [0, 0, 0],
+    skydomeContext: "space",
+    skydomePrimaryName: "",
+    skydomeSecondaryName: "",
+    skydomePrimaryStatus: "none",
+    skydomeSecondaryStatus: "none",
+    ...partial,
   };
-  const request: RequestFn = vi.fn().mockImplementation((req) => {
+  const request = vi.fn().mockImplementation((req: { kind: string }) => {
     if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
-    if (req.kind === "file/open") return Promise.resolve(opts.fileOpen);
+    if (req.kind === "engine/query/skydome-list")
+      return Promise.resolve({ primary: [], secondary: [] });
     return Promise.resolve({});
   });
   return {
     request,
     on: vi.fn().mockReturnValue(() => {}),
-  } as unknown as Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> };
+  } as unknown as Bridge;
 }
-
-describe("BackgroundPicker — custom-slot file picker chain", () => {
-  it("clicking an empty Custom slot dispatches file/open with filter:\"skydome\"", async () => {
-    const bridge = makeStubBridge({ fileOpen: { ok: false, error: "browser-mode" } });
-    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
-    // Wait for the snapshot to land so the Custom slot tiles render
-    // with their empty-state Browse... label.
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Custom slot 1 \(empty\)/ })).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole("button", { name: /Custom slot 1 \(empty\)/ }));
-    await waitFor(() => {
-      const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-      const open = calls.find((c) => c.kind === "file/open");
-      expect(open).toBeDefined();
-      expect(open.params).toEqual({ filter: "skydome" });
-    });
-  });
-
-  it("on a resolved path the chain dispatches set-skydome-custom-path then set-skydome-slot", async () => {
-    const bridge = makeStubBridge({ fileOpen: { ok: true, path: "C:/textures/sky.dds" } });
-    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Custom slot 1 \(empty\)/ })).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole("button", { name: /Custom slot 1 \(empty\)/ }));
-    await waitFor(() => {
-      const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].kind);
-      // Snapshot lands first, then file/open, then the two engine setters.
-      expect(calls).toContain("engine/set/skydome-custom-path");
-      expect(calls).toContain("engine/set/skydome-slot");
-      const customPathIdx = calls.indexOf("engine/set/skydome-custom-path");
-      const slotIdx = calls.indexOf("engine/set/skydome-slot");
-      expect(customPathIdx).toBeLessThan(slotIdx);
-    });
-    const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-    const setPath = calls.find((c) => c.kind === "engine/set/skydome-custom-path");
-    expect(setPath.params).toEqual({ slot: 9, path: "C:/textures/sky.dds" });
-    const setSlot = calls.find((c) => c.kind === "engine/set/skydome-slot");
-    expect(setSlot.params).toEqual({ slot: 9 });
-  });
-
-  it("on a cancelled pick the follow-up chain does not fire", async () => {
-    const bridge = makeStubBridge({ fileOpen: { ok: false, error: "user-cancelled" } });
-    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Custom slot 1 \(empty\)/ })).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole("button", { name: /Custom slot 1 \(empty\)/ }));
-    // Give the async chain a tick to settle before asserting absence.
-    await new Promise((r) => setTimeout(r, 20));
-    const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].kind);
-    expect(calls).toContain("file/open");
-    expect(calls).not.toContain("engine/set/skydome-custom-path");
-    expect(calls).not.toContain("engine/set/skydome-slot");
-  });
-});
 
 // The game-dome section: Names enumerate from skydome-list per context,
 // and choosing one dispatches skydome-environment.
@@ -146,5 +80,108 @@ describe("BackgroundPicker — game dome", () => {
     await waitFor(() => {
       expect(screen.getByRole("option", { name: "Day_Blue_Sky" })).toBeInTheDocument();
     });
+  });
+});
+
+// Load-status surfacing + active-mode indicator.
+describe("BackgroundPicker — skydome load status", () => {
+  it("a loaded dome shows the Game dome indicator and no failure note", async () => {
+    const bridge = makeSnapshotBridge({
+      skydomePrimaryName: "Stars_Low",
+      skydomePrimaryStatus: "ok",
+    });
+    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+
+    const indicator = await screen.findByRole("status", { name: "Active background" });
+    expect(within(indicator).getByText("Game dome")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load this dome's model.")).toBeNull();
+    expect(screen.queryByText(/selected dome didn't load/)).toBeNull();
+  });
+
+  it("a failed dome shows a per-slot note + the solid-colour fallback indicator", async () => {
+    const bridge = makeSnapshotBridge({
+      skydomePrimaryName: "Broken_Sky",
+      skydomePrimaryStatus: "load-failed",
+    });
+    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+
+    // The chosen Name still shows in the dropdown (controlled by the name)...
+    const primary = await screen.findByRole("combobox", { name: "Primary dome" });
+    expect((primary as HTMLSelectElement).value).toBe("Broken_Sky");
+    // ...but the load failure is surfaced rather than read as applied.
+    expect(screen.getByText("Couldn't load this dome's model.")).toBeInTheDocument();
+    const indicator = screen.getByRole("status", { name: "Active background" });
+    expect(within(indicator).getByText("Solid colour")).toBeInTheDocument();
+    expect(within(indicator).getByText(/selected dome didn't load/)).toBeInTheDocument();
+  });
+
+  it("surfaces a failed SECONDARY dome independently of the primary slot", async () => {
+    const bridge = makeSnapshotBridge({
+      skydomeSecondaryName: "Broken_Sky",
+      skydomeSecondaryStatus: "load-failed",
+    });
+    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+
+    const secondary = await screen.findByRole("combobox", { name: "Secondary dome" });
+    expect((secondary as HTMLSelectElement).value).toBe("Broken_Sky");
+    expect(screen.getByText("Couldn't load this dome's model.")).toBeInTheDocument();
+    const indicator = screen.getByRole("status", { name: "Active background" });
+    expect(within(indicator).getByText("Solid colour")).toBeInTheDocument();
+  });
+
+  it("a loaded SECONDARY-only dome reads as Game dome", async () => {
+    const bridge = makeSnapshotBridge({
+      skydomeSecondaryName: "Nebula_Field_Blue",
+      skydomeSecondaryStatus: "ok",
+    });
+    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+
+    const indicator = await screen.findByRole("status", { name: "Active background" });
+    expect(within(indicator).getByText("Game dome")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load this dome's model.")).toBeNull();
+  });
+
+  it("a persisted legacy texture slot (no game dome) reads as Custom texture, not Solid colour", async () => {
+    // Regression guard: dropping the skydomeSlot read would make the indicator
+    // claim "Solid colour" while the engine still renders the legacy texture.
+    const bridge = makeSnapshotBridge({ skydomeSlot: 9 });
+    render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
+
+    const indicator = await screen.findByRole("status", { name: "Active background" });
+    expect(within(indicator).getByText("Custom texture")).toBeInTheDocument();
+    expect(within(indicator).queryByText("Solid colour")).toBeNull();
+    // The solid swatch must NOT read as the active/selected background.
+    const solid = screen.getByRole("button", { name: "Solid colour" });
+    expect(solid).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("end-to-end: a missing dome dispatched through the mock surfaces load-failed", async () => {
+    const bridge = new MockBridge();
+    render(<BackgroundPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("combobox", { name: "Primary dome" });
+
+    // Drive the dispatch directly (awaiting it drains the initial-snapshot
+    // request first, so the live engine/state/changed update isn't clobbered).
+    // The mock derives "load-failed" for a MOCK_MISSING_DOMES Name.
+    await bridge.request({
+      kind: "engine/set/skydome-environment",
+      params: { context: "space", primaryName: "Broken_Sky", secondaryName: "" },
+    });
+
+    expect(await screen.findByText("Couldn't load this dome's model.")).toBeInTheDocument();
+    const indicator = screen.getByRole("status", { name: "Active background" });
+    expect(within(indicator).getByText("Solid colour")).toBeInTheDocument();
+  });
+});
+
+// The custom skydome-texture slots were removed.
+describe("BackgroundPicker — no custom texture slots", () => {
+  it("renders no Browse... custom-slot tiles", async () => {
+    const bridge = new MockBridge();
+    render(<BackgroundPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    // Wait for the body to mount.
+    await screen.findByRole("combobox", { name: "Primary dome" });
+    expect(screen.queryByRole("button", { name: /Custom slot/ })).toBeNull();
+    expect(screen.queryByText("Browse...")).toBeNull();
   });
 });

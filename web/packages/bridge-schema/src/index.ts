@@ -196,6 +196,10 @@ export type ReferenceObjectCategory =
   | "Hero" | "Prop" | "Space" | "Projectile" | "Other";
 export type ReferenceObjectEntry = { name: string; category: ReferenceObjectCategory };
 export type ReferenceObjectStatus = "none" | "ok" | "skinned" | "load-failed";
+// Per-slot game-skydome load outcome. "load-failed" = a Name is chosen but
+// its .alo wouldn't load (the renderer falls back to solid colour); the picker
+// surfaces it instead of silently showing the dome as selected.
+export type SkydomeSlotStatus = "none" | "ok" | "load-failed";
 
 export type EngineStateDto = {
   // ─── File / editor-level state ─────────────────────────────────────
@@ -225,6 +229,10 @@ export type EngineStateDto = {
   skydomeContext: "land" | "space";   // GetSkydomeContext()
   skydomePrimaryName: string;         // GetSkydomePrimaryName() — "" = none
   skydomeSecondaryName: string;       // GetSkydomeSecondaryName() — "" = none
+  // Per-slot load outcome. "load-failed" => the chosen dome's .alo
+  // wouldn't load and the renderer fell back to the solid background.
+  skydomePrimaryStatus: SkydomeSlotStatus;    // GetSkydomePrimaryStatus()
+  skydomeSecondaryStatus: SkydomeSlotStatus;  // GetSkydomeSecondaryStatus()
 
   // Imported reference object (scale reference) + unit grid.
   referenceObjectName: string;             // GetReferenceObjectName() — "" = none

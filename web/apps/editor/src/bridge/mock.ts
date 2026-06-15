@@ -30,6 +30,7 @@ import type {
   EmitterTreeNode,
   LightDto,
   ReferenceObjectStatus,
+  SkydomeSlotStatus,
   SpawnParamsDto,
 } from "@particle-editor/bridge-schema";
 import {
@@ -209,6 +210,11 @@ function decorateSpawn(node: EmitterTreeNode): EmitterTreeNode {
 // "not supported" status path. Must match a Name in the reference-object-list.
 const MOCK_SKINNED_REFS = new Set<string>(["Stormtrooper_Squad"]);
 
+// Browser mode can't load a real .alo, so these canned dome Names stand in
+// for "chosen but the .alo wouldn't load" — selecting one drives the picker's
+// load-failed status path + the solid-colour fallback indicator.
+const MOCK_MISSING_DOMES = new Set<string>(["Broken_Sky"]);
+
 export class MockBridge implements Bridge {
   private listeners = new Map<EventKind, Set<(e: Event) => void>>();
 
@@ -360,13 +366,20 @@ export class MockBridge implements Bridge {
       }
 
       // game-dome environment: store context + the two chosen Names.
-      case "engine/set/skydome-environment":
+      // derive each slot's load outcome so the picker can surface a
+      // chosen-but-unloadable dome (mirrors the native RebuildSkydomeMeshes).
+      case "engine/set/skydome-environment": {
+        const slotStatus = (name: string): SkydomeSlotStatus =>
+          name === "" ? "none" : MOCK_MISSING_DOMES.has(name) ? "load-failed" : "ok";
         this.patchAndBroadcast({
           skydomeContext: req.params.context,
           skydomePrimaryName: req.params.primaryName,
           skydomeSecondaryName: req.params.secondaryName,
+          skydomePrimaryStatus: slotStatus(req.params.primaryName),
+          skydomeSecondaryStatus: slotStatus(req.params.secondaryName),
         });
         return {};
+      }
 
       // imported reference object: select by Name (browser mode can't probe
       // a real .alo, so a canned skinned-set drives the "not supported" status),
@@ -568,7 +581,10 @@ export class MockBridge implements Bridge {
       case "engine/query/skydome-list": {
         const lists = {
           space: {
-            primary: ["Stars_Low", "Stars_Medium", "Stars_High", "Stars_Cinematic"],
+            // "Broken_Sky" is in MOCK_MISSING_DOMES — selecting it drives the
+            // load-failed status path (browser-mode stand-in for an .alo
+            // that won't load).
+            primary: ["Stars_Low", "Stars_Medium", "Stars_High", "Stars_Cinematic", "Broken_Sky"],
             secondary: ["Star_Backdrop_Blue", "Star_Backdrop_Green", "Nebula_Field_Blue"],
           },
           land: {

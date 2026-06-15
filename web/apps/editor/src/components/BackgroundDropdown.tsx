@@ -3,8 +3,8 @@
 //
 // Trigger: "Background:" label + preview swatch (background colour or
 // active skydome's swatch) + chevron. Click opens the popover beneath.
-// Popover content reuses BackgroundPickerBody — same slot grid, custom
-// slots, colour picker chain as the sliding panel had.
+// Popover content reuses BackgroundPickerBody — the Game dome (Land/Space)
+// + Solid colour surface (the custom skydome-texture slots were removed).
 
 import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useState } from "react";
@@ -29,15 +29,18 @@ export function BackgroundDropdown({ bridge }: Props) {
   }, [bridge]);
 
   const slot = snap?.skydomeSlot ?? 0;
-  // a game dome (by Name) takes render precedence; show a dome indicator.
-  const gameDome =
-    (snap?.skydomePrimaryName ?? "") !== "" ||
-    (snap?.skydomeSecondaryName ?? "") !== "";
-  const swatchStyle: React.CSSProperties = gameDome
+  ///S49] a game dome takes render precedence — but show the dome swatch
+  // only when it actually loaded (status "ok"), mirroring the picker body's
+  // gameDomeRendering. A selected-but-failed dome falls back to the simple
+  // background, so its swatch must too (not paint the dome gradient).
+  const gameDomeRendering =
+    (snap?.skydomePrimaryStatus ?? "none") === "ok" ||
+    (snap?.skydomeSecondaryStatus ?? "none") === "ok";
+  const swatchStyle: React.CSSProperties = gameDomeRendering
     ? { background: "linear-gradient(180deg, #2a3a5a 0%, #141c2b 100%)" }
     : slot === 0
       ? { backgroundColor: snap ? colorrefToHex(snap.background) : "#000000" }
-      : { backgroundColor: "var(--bg-3)" }; // custom slot — no thumbnail yet
+      : { backgroundColor: "var(--bg-3)" }; // legacy texture slot — no thumbnail
 
   return (
     <Popover.Root>

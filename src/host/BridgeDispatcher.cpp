@@ -474,6 +474,18 @@ static const char* RefStatusToString(ReferenceObjectStatus s)
     }
 }
 
+// SkydomeSlotStatus -> wire string for the snapshot DTO. Mirrors
+// RefStatusToString so the picker can flag a chosen-but-unloadable dome.
+static const char* SkyStatusToString(SkydomeSlotStatus s)
+{
+    switch (s)
+    {
+        case SkydomeSlotStatus::Ok:         return "ok";
+        case SkydomeSlotStatus::LoadFailed: return "load-failed";
+        default:                            return "none";
+    }
+}
+
 // host-state plumbing — JSON ↔ SpawnerConfig converters. The
 // schema's SpawnerParamsDto (web/packages/bridge-schema/src/index.ts:60)
 // is value-for-value compatible with the native SpawnerConfig (lines in
@@ -808,6 +820,10 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"skydomeContext",        engine->GetSkydomeContext() == SkydomeContext::Land ? "land" : "space"},
         {"skydomePrimaryName",    engine->GetSkydomePrimaryName()},
         {"skydomeSecondaryName",  engine->GetSkydomeSecondaryName()},
+        // per-slot load outcome so the picker surfaces a chosen-but-
+        // unloadable dome instead of silently showing the solid background.
+        {"skydomePrimaryStatus",   SkyStatusToString(engine->GetSkydomePrimaryStatus())},
+        {"skydomeSecondaryStatus", SkyStatusToString(engine->GetSkydomeSecondaryStatus())},
 
         // imported reference object + unit grid
         {"referenceObjectName",     engine->GetReferenceObjectName()},

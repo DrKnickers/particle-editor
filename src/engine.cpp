@@ -3309,26 +3309,56 @@ void Engine::RebuildSkydomeMeshes()
     LoadMapEnvironment(m_fileManager, m_skydomeContext,
                        m_skydomePrimaryName, m_skydomeSecondaryName, env);
 
-    SkydomeMesh* meshes[2]   = { &m_skydomePrimaryMesh, &m_skydomeSecondaryMesh };
-    const SkydomeRef* refs[2] = { &env.primary, &env.secondary };
-    const bool has[2]        = { env.hasPrimary, env.hasSecondary };
+    SkydomeMesh* meshes[2]    = { &m_skydomePrimaryMesh, &m_skydomeSecondaryMesh };
+    const SkydomeRef* refs[2]  = { &env.primary, &env.secondary };
+    const bool has[2]         = { env.hasPrimary, env.hasSecondary };
+    // The chosen Name decides None-vs-LoadFailed: an empty Name is simply
+    // "no dome", a non-empty Name that doesn't resolve/load is a failure the
+    // picker must surface (it otherwise silently falls back to solid colour).
+    const std::string* names[2] = { &m_skydomePrimaryName, &m_skydomeSecondaryName };
+    SkydomeSlotStatus* status[2] = { &m_skydomePrimaryStatus, &m_skydomeSecondaryStatus };
 
     for (int i = 0; i < 2; ++i)
     {
-        if (!has[i] || refs[i]->modelPath.empty())
+        if (names[i]->empty())
         {
             meshes[i]->Clear();   // deselected slot -> empty (no FileManager probe)
+            *status[i] = SkydomeSlotStatus::None;
+            continue;
+        }
+        if (!has[i] || refs[i]->modelPath.empty())
+        {
+            // Name chosen but the *Skydomes.xml lookup yielded no model path
+            // (absent from this context's list / unreadable) -> load failure.
+            meshes[i]->Clear();
+            *status[i] = SkydomeSlotStatus::LoadFailed;
             continue;
         }
         const std::string aloPath = "Data\\Art\\Models\\" + refs[i]->modelPath;
-        if (!meshes[i]->Load(m_fileManager, aloPath))
+        if (!meshes[i]->Load(m_fileManager, aloPath))   // Load() Clear()s on failure
+        {
+            *status[i] = SkydomeSlotStatus::LoadFailed;
             continue;
+        }
         meshes[i]->SetScaleFactor(refs[i]->scaleFactor);
         if (m_pDevice != NULL)
         {
-            meshes[i]->Resolve(m_shaderManager, m_pDevice);
+            // Mirror SetReferenceObject: Resolve() returns false only when NO
+            // sub-mesh resolved a shader, so HasResolved() stays false and
+            // RenderSkydomes gates the dome out (it falls back to the simple
+            // background). Report that as LoadFailed, not a silent Ok that
+            // renders nothing. Pre-device (m_pDevice == NULL) Load success alone
+            // is Ok; the device-up rebuild path re-runs this and downgrades if
+            // the shaders then fail to resolve.
+            if (!meshes[i]->Resolve(m_shaderManager, m_pDevice))
+            {
+                meshes[i]->Clear();
+                *status[i] = SkydomeSlotStatus::LoadFailed;
+                continue;
+            }
             meshes[i]->CreateBuffers(m_pDevice, m_fileManager);
         }
+        *status[i] = SkydomeSlotStatus::Ok;
     }
 }
 

@@ -7,23 +7,32 @@
 //      *Skydomes.xml via `engine/query/skydome-list`; selection drives
 //      `engine/set/skydome-environment`. This is the faithful path (the editor
 //      loads the real .alo + runs each sub-mesh's own game shader).
-//   2. Simple background (fallback when no game dome is selected):
-//        - Solid colour (slot 0)        → `engine/set/background`
-//        - Custom skydome texture (9-11) → native picker → `skydome-custom-path`
-//      Picking a simple background clears the game-dome selection, and vice
-//      versa, so the two are mutually exclusive from the user's view.
+//   2. Solid colour (the fallback when no game dome renders) → `engine/set/background`.
+//
+// Picking the solid colour clears the game-dome selection, and choosing a dome
+// supersedes the solid colour, so the two are mutually exclusive from the
+// user's view.
+//
+// A dome that's *selected* isn't necessarily *rendering*: if its .alo
+// won't load, the engine silently falls back to the solid background. The
+// snapshot now carries a per-slot load status (skydomePrimaryStatus /
+// skydomeSecondaryStatus) so the picker surfaces that failure and an
+// active-mode indicator instead of showing the dome as if it applied. (The
+// former "custom skydome texture" slots were removed here in S49 — the new UI
+// is Game dome + Solid colour only.)
 //
 // State: one-shot `engine/state/snapshot` at mount + a live
 // `engine/state/changed` subscription (so external bridge mutations reflect).
 //
-// Browser/mock mode: `skydome-list` returns a small canned set and the custom
-// native picker resolves `{ ok: false }` — enough to validate selection state +
-// dispatch surface against the schema without a real install.
+// Browser/mock mode: `skydome-list` returns a small canned set; selecting a
+// name in MOCK_MISSING_DOMES drives the load-failed status path — enough to
+// validate the surfacing logic against the schema without a real install.
 
 import { useEffect, useRef, useState } from "react";
 import type {
   Bridge,
   EngineStateDto,
+  SkydomeSlotStatus,
 } from "@particle-editor/bridge-schema";
 import { colorrefToHex, hexToColorref } from "@/lib/colorref";
 import { ToolPanel } from "@/components/ToolPanel";
@@ -37,23 +46,12 @@ type BodyProps = {
   bridge: Bridge;
 };
 
-const CUSTOM_SLOTS: readonly number[] = [9, 10, 11];
 const NONE = ""; // empty Name = no dome in that slot
 
-/** Pull just the file basename out of an absolute path. Handles both
- *  Windows-style and POSIX-style separators since the engine doesn't
- *  normalise them on the wire. */
-function basename(path: string): string {
-  if (!path) return "";
-  const norm = path.replace(/\\/g, "/");
-  const i = norm.lastIndexOf("/");
-  return i >= 0 ? norm.slice(i + 1) : norm;
-}
-
 /**
- * BackgroundPickerBody — the picker content (game-dome section + simple
- * background fallback). Extracted so both the legacy default-export wrapper
- * and the BackgroundDropdown popover mount the same markup.
+ * BackgroundPickerBody — the picker content (game-dome section + solid-colour
+ * fallback). Extracted so both the legacy default-export wrapper and the
+ * BackgroundDropdown popover mount the same markup.
  */
 export function BackgroundPickerBody({ bridge }: BodyProps) {
   const [snapshot, setSnapshot] = useState<EngineStateDto | null>(null);
@@ -79,13 +77,28 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
   const context = snapshot?.skydomeContext ?? "space";
   const primaryName = snapshot?.skydomePrimaryName ?? NONE;
   const secondaryName = snapshot?.skydomeSecondaryName ?? NONE;
-  const selectedSlot = snapshot?.skydomeSlot ?? 0;
+  const primaryStatus: SkydomeSlotStatus = snapshot?.skydomePrimaryStatus ?? "none";
+  const secondaryStatus: SkydomeSlotStatus = snapshot?.skydomeSecondaryStatus ?? "none";
   const backgroundHex = snapshot ? colorrefToHex(snapshot.background) : "#000000";
-  const customPaths = snapshot?.skydomeCustomPaths ?? ["", "", ""];
+  // The legacy bundled/custom texture-dome slot (0 = Off → solid colour). The
+  // new UI no longer manages slots 1-11, but a value persisted from a prior
+  // session still drives the engine's RenderSkydome() fallback, so we must read
+  // it to report the active mode honestly (see legacyTextureActive below).
+  const selectedSlot = snapshot?.skydomeSlot ?? 0;
 
-  // A game dome is active when either slot carries a Name; that takes engine
-  // render precedence over the simple-background slot below.
-  const gameDomeActive = primaryName !== NONE || secondaryName !== NONE;
+  // A game dome is *selected* when either slot carries a Name — this drives the
+  // controlled dropdowns + the mutual-exclusion clear below. It is actually
+  // *rendering* only when at least one slot's .alo loaded (status "ok"); the
+  // engine falls back to the simple background otherwise. Keeping these two
+  // distinct is the whole fix: a selected-but-failed dome must NOT read as
+  // active (the bug this surfaces — it silently showed the simple background).
+  const gameDomeSelected = primaryName !== NONE || secondaryName !== NONE;
+  const gameDomeRendering = primaryStatus === "ok" || secondaryStatus === "ok";
+  // When no game dome renders, the simple background is what shows — either a
+  // persisted legacy texture dome (slot != 0) or the solid colour (slot 0). The
+  // texture slots are retired from this UI, but a leftover persisted one still
+  // renders, so surface it honestly rather than claiming "Solid colour".
+  const legacyTextureActive = !gameDomeRendering && selectedSlot !== 0;
 
   // (Re)enumerate the selectable Names whenever the battle context changes.
   useEffect(() => {
@@ -134,9 +147,15 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
   const primaryOptions = withCurrent(primaryName, primaryNames);
   const secondaryOptions = withCurrent(secondaryName, secondaryNames);
 
-  // --- simple-background fallback handlers (also clear the game dome) ---
+  // Per-slot "couldn't load" note (mirrors ReferenceObjectPicker's statusNote).
+  const failNote = (status: SkydomeSlotStatus) =>
+    status === "load-failed" ? "Couldn't load this dome's model." : null;
+  const primaryNote = failNote(primaryStatus);
+  const secondaryNote = failNote(secondaryStatus);
+
+  // --- solid-colour fallback handlers (also clear the game dome) ---
   const clearGameDome = () => {
-    if (gameDomeActive) setEnvironment(context, NONE, NONE);
+    if (gameDomeSelected) setEnvironment(context, NONE, NONE);
   };
 
   const handleSolidColorClick = () => {
@@ -152,30 +171,36 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
     });
   };
 
-  const handleCustomClick = (slot: number, isEmpty: boolean) => {
-    clearGameDome();
-    if (isEmpty) {
-      void (async () => {
-        const r = await bridge.request({
-          kind: "file/open",
-          params: { filter: "skydome" },
-        });
-        if (!r.ok || !r.path) return;
-        await bridge.request({
-          kind: "engine/set/skydome-custom-path",
-          params: { slot, path: r.path },
-        });
-        await bridge.request({ kind: "engine/set/skydome-slot", params: { slot } });
-      })();
-      return;
-    }
-    void bridge.request({ kind: "engine/set/skydome-slot", params: { slot } });
-  };
-
-  const simpleSolidSelected = !gameDomeActive && selectedSlot === 0;
+  // The solid colour is selected only when it's actually what renders: no game
+  // dome AND no legacy texture slot (a persisted texture dome would render
+  // instead, so the solid swatch must not falsely read as active).
+  const simpleSolidSelected = !gameDomeRendering && !legacyTextureActive;
 
   return (
     <div className="flex flex-col gap-4">
+      {/* ── Active-mode indicator: what the renderer is actually showing ── */}
+      <p
+        role="status"
+        aria-label="Active background"
+        className="flex flex-wrap items-center gap-2 text-xs"
+      >
+        <span className="text-text-3">Showing:</span>
+        <span
+          className={`rounded px-2 py-0.5 font-medium ${
+            gameDomeRendering ? "bg-accent text-white" : "bg-bg-2 text-text-2"
+          }`}
+        >
+          {gameDomeRendering
+            ? "Game dome"
+            : legacyTextureActive
+              ? "Custom texture"
+              : "Solid colour"}
+        </span>
+        {gameDomeSelected && !gameDomeRendering && (
+          <span className="text-warning">— selected dome didn't load</span>
+        )}
+      </p>
+
       {/* ── Game dome (real .alo skydome) ────────────────────────────── */}
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -214,6 +239,9 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
             ))}
           </select>
         </label>
+        {primaryNote && (
+          <p role="alert" className="text-xs text-warning">{primaryNote}</p>
+        )}
 
         <label className="flex flex-col gap-1 text-xs text-text-2">
           Secondary
@@ -229,15 +257,17 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
             ))}
           </select>
         </label>
+        {secondaryNote && (
+          <p role="alert" className="text-xs text-warning">{secondaryNote}</p>
+        )}
       </section>
 
-      {/* ── Simple background (fallback when no game dome) ────────────── */}
+      {/* ── Solid colour (fallback when no game dome renders) ─────────── */}
       <section className="flex flex-col gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-text-3">
-          Simple background
+          Solid colour
         </span>
 
-        {/* Solid colour */}
         <button
           type="button"
           onClick={handleSolidColorClick}
@@ -266,55 +296,6 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
           tabIndex={-1}
           aria-hidden="true"
         />
-
-        {/* Custom skydome textures (slots 9-11) */}
-        <div className="grid grid-cols-3 gap-2">
-          {CUSTOM_SLOTS.map((slot) => {
-            const idx = slot - 9;
-            const path = customPaths[idx] ?? "";
-            const isEmpty = path === "";
-            const selected = !gameDomeActive && selectedSlot === slot;
-            const label = isEmpty ? "Browse..." : basename(path);
-            return (
-              <button
-                key={slot}
-                type="button"
-                onClick={() => handleCustomClick(slot, isEmpty)}
-                className={`relative aspect-square overflow-hidden rounded-md border-2 transition ${
-                  selected
-                    ? "border-accent"
-                    : isEmpty
-                      ? "border-dashed border-border-2 hover:border-border-2"
-                      : "border-border hover:border-border-2"
-                }`}
-                aria-label={isEmpty ? `Custom slot ${idx + 1} (empty)` : `Custom slot ${idx + 1}: ${label}`}
-                aria-pressed={selected}
-              >
-                {isEmpty ? (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-bg-2 text-text-3">
-                    <span className="text-2xl leading-none">+</span>
-                    <span className="text-xs">Browse...</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="absolute inset-0 bg-panel-2" />
-                    <span className="absolute inset-x-0 bottom-0 truncate bg-bg/80 px-1 py-0.5 text-center text-xs text-text backdrop-blur-sm">
-                      {label}
-                    </span>
-                    <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-bg-2/80 text-xs text-text-2">
-                      ↺
-                    </span>
-                  </>
-                )}
-                {selected && !isEmpty && (
-                  <span className="absolute left-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-xs text-white">
-                    ✓
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
       </section>
     </div>
   );

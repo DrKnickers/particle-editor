@@ -18,6 +18,13 @@
 // on select; see Engine::SetReferenceObject).
 enum class ReferenceObjectStatus { None, Ok, Skinned, LoadFailed };
 
+///S49] Per-slot load outcome for a game skydome, surfaced in the
+// engine-state snapshot so the Background picker can distinguish "no dome
+// chosen" from "dome chosen but its .alo wouldn't load" (the latter silently
+// falls through to the solid-colour background; see Engine::RenderSkydomes).
+// Domes are always rigid, so there is no Skinned case.
+enum class SkydomeSlotStatus { None, Ok, LoadFailed };
+
 namespace host { class AlphaCompositor; }
 
 class Object3D
@@ -505,6 +512,10 @@ public:
 	SkydomeContext     GetSkydomeContext()       const { return m_skydomeContext; }
 	const std::string& GetSkydomePrimaryName()   const { return m_skydomePrimaryName; }
 	const std::string& GetSkydomeSecondaryName() const { return m_skydomeSecondaryName; }
+	// Load outcome of each selected dome (set in RebuildSkydomeMeshes); the
+	// picker surfaces LoadFailed instead of silently falling back to solid colour.
+	SkydomeSlotStatus  GetSkydomePrimaryStatus()   const { return m_skydomePrimaryStatus; }
+	SkydomeSlotStatus  GetSkydomeSecondaryStatus() const { return m_skydomeSecondaryStatus; }
 	// Enumerate selectable dome Names for a battle context (primary + secondary).
 	void EnumerateSkydomeNames(SkydomeContext context,
 	                           std::vector<std::string>& outPrimary,
@@ -843,6 +854,11 @@ private:
 	std::string              m_skydomeSecondaryName;   // "" = none
 	SkydomeMesh              m_skydomePrimaryMesh;
 	SkydomeMesh              m_skydomeSecondaryMesh;
+	// Per-slot load outcome (None = no Name chosen, Ok = .alo loaded,
+	// LoadFailed = Name chosen but the .alo wouldn't load). Set in
+	// RebuildSkydomeMeshes alongside the mesh state it gates the render on.
+	SkydomeSlotStatus        m_skydomePrimaryStatus   = SkydomeSlotStatus::None;
+	SkydomeSlotStatus        m_skydomeSecondaryStatus = SkydomeSlotStatus::None;
 
 	// Imported reference object (a game-object .alo placed in the preview
 	// for scale). Rigid multi-part: each sub-mesh placed by its skeleton bone.
