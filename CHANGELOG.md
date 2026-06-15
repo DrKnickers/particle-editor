@@ -19,17 +19,17 @@ Conventions:
 
 ### Reference-object catalog — eager prefetch + parallel parse
 
-*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
-
-<!-- TODO: backfill the merge-commit short hash + PR number once merged (prior art: PR #27). -->
+*2026-06-15 · [`0d98d46`](https://github.com/DrKnickers/particle-editor/commit/0d98d46) · #189*
 
 Follow-up to the off-UI-thread catalog build (#187): opening the object picker after a mod/submod
 switch no longer makes you **wait** on "Loading objects…". The catalog now builds **eagerly** — the
 moment the new-UI (composition) path starts, and on every later mod/submod switch — so it's typically
-already done before you open the picker. And the build itself is **~3× faster**: parsing the object
-XMLs (≈90% of the build time, ≈140 ms of a 153 ms Mod build) is spread across CPU cores, dropping the
-real-content (Forces of Renewal) build from **~153 ms to ~53 ms** in a Release measurement on a loose
-Mod `Data\XML` dump (1880 objects / 1120 picker-listed, unchanged).
+already done before you open the picker. And the build itself is **~2.6–3× faster**: parsing the object
+XMLs (≈90% of the build time) is spread across CPU cores. Measured on the full live **Mod + Mod**
+content stack (base MEGs + Core + Mod, 13,813 objects) through the real FileManager, the Release
+build drops from **~420 ms to ~160 ms (2.62×)**; on a loose Mod `Data\XML` dump alone (1880 objects)
+it's ~153 ms → ~53 ms. Eager prefetch was confirmed in the running editor to have the catalog ready
+~0.4 s after launch with no picker interaction.
 
 **How we tackled it.** Two engine-only changes (no React/bridge/schema touch — the picker already
 level-triggers Loading→ready). (1) *Eager prefetch*: [`Engine::SetCompositionMode`](src/engine.cpp:3461)
@@ -64,7 +64,7 @@ speedup on a real MEG-stacked install.
 
 ### Reference-object picker — units & structures only, built off the UI thread
 
-*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-15 · [`43aebae`](https://github.com/DrKnickers/particle-editor/commit/43aebae) · #187*
 
 The reference-object picker now lists **units and structures** instead of every game object — the noise
 (props, projectiles, planets, markers, dummies, death-clone debris) is hidden, so the list isn't
