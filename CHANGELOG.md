@@ -19,7 +19,7 @@ Conventions:
 
 ### Lighting panel writes its settings back to the registry
 
-*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-15 · [`be20df4`](https://github.com/DrKnickers/particle-editor/commit/be20df4) · #192*
 
 The new-UI Lighting panel now **persists** its changes. Previously it only read the saved
 lighting on open and pushed edits to the live engine — it never wrote them back. So any value the
