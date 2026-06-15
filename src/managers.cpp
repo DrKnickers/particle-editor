@@ -12,10 +12,10 @@ using namespace std;
 //
 IFile* FileManager::getFile(const string& path)
 {
-	// If a mod is selected, try its content roots first (mod root + bundled
-	// sub-content folders like Mod's Core) so mod loose files shadow the
-	// base game's. Root-first ordering preserves the prior single-modpath
-	// behaviour; the extra roots only ADD reachability for sub-content.
+	// If a mod is selected, try its content roots first (in precedence order --
+	// submods, then Core, then the mod root; see BuildModContentRoots) so mod
+	// loose files shadow the base game's. First match wins: the engine REPLACES a
+	// file by precedence, never merges, so this single resolved copy is faithful.
 	for (vector<wstring>::const_iterator root = modContentRoots.begin(); root != modContentRoots.end(); ++root)
 	{
 		try
@@ -155,31 +155,37 @@ void FileManager::SetSubmods(const vector<wstring>& names)
 // holds hundreds of loose .alo (e.g. GalloFree_HTT26.alo) shared across its submods
 // (Mod/GCW/Rev/TR). The editor only searched the mod ROOT, so all of Core was
 // invisible. We add the mod root PLUS its `Core` core folder (if it has a
-// Data\Art tree). Root goes first (override content wins), so existing lookups are
-// byte-for-byte unchanged -- purely additive.
+// Data\Art tree). The mod root is the LOWEST-precedence mod layer (see the
+// ordering note below) -- it does NOT shadow a submod/Core copy of the same file.
 //
-// A mod can stack several submods explicitly, in precedence order. We add
-// the SELECTED submod stack -- between the mod root and Core so each chosen
-// campaign wins over the shared core, and earlier submods win over later ones.
-// Search order (first match wins in getFile):
-//   mod root      (user/override content wins)
+// A mod can stack several submods explicitly, in precedence order. The
+// order matches Mod's own launch parameters (LEFT = highest), where the mod root is
+// the LOWEST mod layer -- a stale file in the root must NOT shadow a submod's copy.
+// Search order (first match wins in getFile; the game replaces per file, never merges):
 //   submods[0..n] (the selected stack, front = highest precedence; each needs a Data\Art tree)
-//   Core      (shared core)
+//   mod root      (lowest mod layer; the game lists it last)
 //   ...base game  (appended later in getFile)
-// An empty submod stack reproduces the prior [mod root, Core] behaviour exactly.
+// Core is just another entry in `submods` now -- the user selects + orders it
+// in the Submods dialog (it was previously auto-appended here, which wrongly forced it on
+// for Mod's Rev config; ModManager migrates legacy selections to keep it for Mod/IR/TR).
 void FileManager::BuildModContentRoots()
 {
 	modContentRoots.clear();
 	if (modpath.empty()) return;
-	modContentRoots.push_back(modpath);
 
 	auto hasArtTree = [](const wstring& root) -> bool {
 		const DWORD attr = GetFileAttributesW((root + L"Data\\Art").c_str());
 		return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY);
 	};
 
-	// The selected submod stack (e.g. {"GCW","Mod"}), in precedence order; each
-	// only if it carries content.
+	// FAITHFUL precedence, matching Mod's launch parameters (a submod ships a
+	// chain like `Modpath=...\Mod Modpath=...\Core Modpath=...`, LEFT = highest):
+	// the selected submod stack first (front = highest, Core among them where the
+	// user placed it), then the MOD ROOT LAST. The earlier mod-root-FIRST order was
+	// inverted -- it let a stale file in the mod root (e.g. its old HardPointDataFiles.xml)
+	// shadow the active submod's real one, which the game replaces the other way round.
+	// The game REPLACES per file by precedence (never merges), so getFile's first-match
+	// is faithful once the root order is right.
 	for (const wstring& sub : submods)
 	{
 		if (sub.empty()) continue;
@@ -188,8 +194,6 @@ void FileManager::BuildModContentRoots()
 			modContentRoots.push_back(subRoot);
 	}
 
-	// The shared core folder (Mod convention: "Core"), if present with content.
-	const wstring core = modpath + L"Core\\";
-	if (hasArtTree(core))
-		modContentRoots.push_back(core);
+	// The mod root is the LOWEST-precedence mod layer (the game lists it last).
+	modContentRoots.push_back(modpath);
 }

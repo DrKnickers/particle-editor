@@ -684,8 +684,8 @@ export function MenuBar({
             })()}
 
             {/* Submods… — only when the active mod has submods (e.g. Mod's
-                Mod/GCW/Rev/TR). Opens a reorderable checklist to stack several in
-                precedence order on top of Core. */}
+                Mod/GCW/Rev/TR + the shared Core layer). Opens a reorderable
+                checklist to stack several in precedence order. */}
             {hasSubmods && (
               <>
                 <Menubar.Separator className={SEPARATOR} />

@@ -140,6 +140,33 @@ static void WriteLastSubmods(const vector<wstring>& names)
     }
 }
 
+// One-time migration marker. Core used to be auto-loaded; it is now a normal
+// selectable/orderable submod layer. On the FIRST restore after this change we append
+// Core to a legacy NON-EMPTY selection so an existing Mod/IR/TR stack keeps it. The
+// flag then stops us re-adding it after the user deliberately removes it (e.g. for Rev).
+static bool ReadCoreMigrated()
+{
+    HKEY hKey; DWORD val = 0, size = sizeof(val), type = 0;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        RegQueryValueEx(hKey, L"CoreLayerMigrated", NULL, &type, (LPBYTE)&val, &size);
+        RegCloseKey(hKey);
+    }
+    return val != 0;
+}
+
+static void WriteCoreMigrated()
+{
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+    {
+        DWORD val = 1;
+        RegSetValueEx(hKey, L"CoreLayerMigrated", 0, REG_DWORD, (const BYTE*)&val, sizeof(val));
+        RegCloseKey(hKey);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Discovery (file-scope helper + ModManager::DiscoverMods).
 // ---------------------------------------------------------------------------
@@ -178,8 +205,10 @@ static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& o
 }
 
 // Scan a mod root for submod folders: immediate subdirectories that carry
-// their own Data\Art tree, EXCLUDING the shared "Core" core (always loaded).
-// Returns folder names (not paths), sorted case-insensitively.
+// their own Data\Art tree. Core (the shared core) is INCLUDED -- it's now a
+// normal selectable/orderable layer in the Submods dialog, not auto-loaded, so the user
+// can place it (Mod/IR/TR put it after their campaign; Rev omits it). Returns folder
+// names (not paths), sorted case-insensitively.
 static void ScanSubmods(const wstring& modRoot, vector<wstring>& out)
 {
     out.clear();
@@ -197,7 +226,6 @@ static void ScanSubmods(const wstring& modRoot, vector<wstring>& out)
         if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
         if (fd.cFileName[0] == L'.') continue;
         if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) continue;
-        if (_wcsicmp(fd.cFileName, L"Core") == 0) continue;   // shared core, always loaded
 
         // Only count folders that actually carry content (a Data\Art tree).
         const wstring art = base + fd.cFileName + L"\\Data\\Art";
@@ -309,6 +337,28 @@ void ModManager::RestoreLastSelectedMod()
             m_selectedSubmods.push_back(*it);
         }
     }
+
+    // One-time Core migration: it used to be auto-loaded but is now a normal
+    // layer, so a legacy stack saved without it would silently lose Core. Append it
+    // (after the campaign submods, matching the launch order) to a non-empty legacy
+    // selection that doesn't already list it; persist so it sticks. The flag makes this
+    // happen ONCE -- after that the saved list is authoritative (a user who removes
+    // Core, e.g. for Rev, keeps it removed).
+    if (!ReadCoreMigrated())
+    {
+        auto coreIt = std::find_if(m_submods.begin(), m_submods.end(),
+            [](const wstring& s){ return _wcsicmp(s.c_str(), L"Core") == 0; });
+        const bool coreSelected = std::find_if(m_selectedSubmods.begin(), m_selectedSubmods.end(),
+            [](const wstring& s){ return _wcsicmp(s.c_str(), L"Core") == 0; }) != m_selectedSubmods.end();
+        if (!m_selectedSubmods.empty() && coreIt != m_submods.end() && !coreSelected)
+        {
+            m_selectedSubmods.push_back(*coreIt);   // discovered casing
+            WriteLastSubmods(m_selectedSubmods);
+            printf("[Mods] Migrated legacy submod stack -> appended Core\n"); fflush(stdout);
+        }
+        WriteCoreMigrated();
+    }
+
     if (!m_selectedSubmods.empty())
     {
         if (m_fileManager) m_fileManager->SetSubmods(m_selectedSubmods);
@@ -404,6 +454,7 @@ bool ModManager::SelectSubmods(const vector<wstring>& names)
     }
     if (m_fileManager) m_fileManager->SetSubmods(m_selectedSubmods);
     WriteLastSubmods(m_selectedSubmods);
+    WriteCoreMigrated();   // explicit selection -> past legacy: respect the list exactly (incl. a deliberate no-Core)
 
     // Same-named textures can differ between submods; drop cached thumbnails so
     // a switch doesn't render the previous stack's art.

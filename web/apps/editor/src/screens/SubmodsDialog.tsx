@@ -1,10 +1,11 @@
 // SubmodsDialog — pick and order the submod stack under the active mod.
 //
 // A mod (e.g. Mod) can keep several submod folders (Mod/GCW/Rev/TR) that each
-// carry their own Data\Art layered on the shared Core. Several can be stacked
-// at once in explicit precedence order — the user arranges them to mirror their
-// game launch stack. This dialog is a reorderable checklist: check the submods to
-// include, use ↑/↓ to set precedence (top wins), then Apply.
+// carry their own Data\Art. The shared Core core is one of these folders
+// now too — a normal selectable/orderable layer (Mod/IR/TR include it after their
+// campaign; Rev omits it). Several can be stacked in explicit precedence order — the
+// user arranges them to mirror their game launch stack. This dialog is a reorderable
+// checklist: check the layers to include, use ↑/↓ to set precedence (top wins), then Apply.
 //
 // State: loads the available submods + the current stack from `mods/list` each
 // time it opens. Apply dispatches `mods/set-submods` once (one engine reload),

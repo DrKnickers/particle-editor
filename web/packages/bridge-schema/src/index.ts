@@ -1014,9 +1014,9 @@ export type Request =
   | { kind: "mods/select";                params: { path: string | null } }
   | { kind: "mods/refresh";               params: Record<string, never> }
   // Set the ordered submod stack under the active mod (e.g. Mod's
-  // Mod/GCW/Rev/TR), layered on top of the shared Core. `names` are folder
-  // names in precedence order, highest first; [] = no submods. Emits
-  // engine/state/changed and persists to HKCU\Software\AloParticleEditor\LastSubmods.
+  // Mod/GCW/Rev/TR; the shared Core core is one of the selectable layers
+  // too). `names` are folder names in precedence order, highest first; [] = no submods.
+  // Emits engine/state/changed and persists to HKCU\Software\AloParticleEditor\LastSubmods.
   | { kind: "mods/set-submods";           params: { names: string[] } }
 
   // Autosave crash-recovery (). React-initiated on mount (no host→React

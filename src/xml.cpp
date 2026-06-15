@@ -122,6 +122,35 @@ static void onCharacterData(void *userData, const XML_Char *s, int len)
 	}
 }
 
+// Expat recognizes "US-ASCII" but NOT the bare "ASCII" that many mod XML files
+// declare (Mod Core ships 11 of 33 files as <?xml ... encoding='ASCII'?>). Left
+// unhandled, XML_Parse aborts with "unknown encoding" and XMLTree::parse throws --
+// and the catalog's parseObjectFile / parseHardpointFile swallow that throw, silently
+// dropping EVERY game object in the file (and any Variant_Of parent defined there).
+// The game tolerates "ASCII"; mirror it. Map the name (case-insensitive ASCII /
+// US-ASCII) to an identity byte->codepoint table -- ASCII is a strict subset, and a
+// stray high byte degrades to Latin-1 rather than aborting the whole file. Decline
+// other unknown names so genuine UTF-16 / Latin-1 declarations keep expat's handling.
+static int onUnknownEncoding(void* /*data*/, const XML_Char* name, XML_Encoding* info)
+{
+	auto ieq = [](const XML_Char* a, const wchar_t* b) -> bool {
+		for (; *a && *b; ++a, ++b)
+		{
+			const wchar_t ca = (*a >= L'A' && *a <= L'Z') ? (wchar_t)(*a + 32) : (wchar_t)*a;
+			const wchar_t cb = (*b >= L'A' && *b <= L'Z') ? (wchar_t)(*b + 32) : *b;
+			if (ca != cb) return false;
+		}
+		return *a == 0 && *b == 0;
+	};
+	if (!ieq(name, L"ascii") && !ieq(name, L"us-ascii"))
+		return XML_STATUS_ERROR;   // not ours -> let expat reject genuinely unknown encodings
+	for (int i = 0; i < 256; ++i) info->map[i] = i;   // identity byte->codepoint (ASCII subset; Latin-1 fallback)
+	info->data    = NULL;
+	info->convert = NULL;
+	info->release = NULL;
+	return XML_STATUS_OK;
+}
+
 void XMLTree::parse(IFile* file)
 {
 	// Reset tree
@@ -138,6 +167,7 @@ void XMLTree::parse(IFile* file)
 	XML_SetUserData(parser, this);
 	XML_SetElementHandler(parser, onStartElement, onEndElement);
 	XML_SetCharacterDataHandler(parser, onCharacterData);
+	XML_SetUnknownEncodingHandler(parser, onUnknownEncoding, NULL);   // tolerate encoding='ASCII'
 
 	try
 	{

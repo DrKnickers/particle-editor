@@ -11,7 +11,7 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
-#include <cstdio>
+#include <cstdio>     // also: #ifndef NDEBUG diagnostics for silently-dropped (unparseable) files
 #include <cstdlib>
 #include <map>
 #include <set>
@@ -250,6 +250,12 @@ namespace
         {
             if (mem) mem->Release();   // throw before the explicit Release -> no leak
             entries.clear();           // partial list from a mid-loop throw -> file contributes nothing
+#ifndef NDEBUG
+            // Surface the otherwise-SILENT drop -- this is what hid the encoding='ASCII'
+            // bug (1/3 of Core files threw -> their units + Variant_Of parents vanished with
+            // no signal). Debug-only; a brief stderr interleave from parallel workers is harmless.
+            fprintf(stderr, "[Catalog] object file dropped (XML parse failed): %s\n", fileName.c_str());
+#endif
         }
     }
 
@@ -337,7 +343,13 @@ namespace
 
         XMLTree xml;
         try { xml.parse(f); }
-        catch (...) { f->Release(); return; }
+        catch (...)
+        {
+#ifndef NDEBUG
+            fprintf(stderr, "[Catalog] hardpoint file dropped (XML parse failed): %s\n", fileName.c_str());  // see parseObjectFile
+#endif
+            f->Release(); return;
+        }
         f->Release();
 
         const XMLNode* root = xml.getRoot();
@@ -369,6 +381,12 @@ namespace
     // (no attachments; graceful).
     void readHardpointTable(IFileManager& fm, std::map<std::string, HardPointDef>& out)
     {
+        // The game REPLACES per file by precedence (never merges), so the single
+        // highest-precedence HardPointDataFiles.xml wins -- exactly what getFile
+        // returns. (This is correct only because the content-root order is faithful:
+        // the active submod's index outranks the mod root's stale one -- see
+        // FileManager::BuildModContentRoots. With the old mod-root-first order this
+        // resolved to a stale index and the table came out empty.)
         IFile* f = fm.getFile("Data\\XML\\HardPointDataFiles.xml");
         if (f == nullptr) return;
 

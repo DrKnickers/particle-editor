@@ -220,7 +220,9 @@ const MOCK_MISSING_MODELS = new Set<string>(["Sensor_Array_NoModel"]);
 
 // Synthetic submods surfaced under an active mod (mirrors Mod's
 // Mod/GCW/Rev/TR). The mods/set-submods handler validates against this set.
-const MOCK_SUBMODS: readonly string[] = ["Mod", "GCW", "Rev", "TR"];
+// Core is now a normal selectable/orderable layer (no longer auto-loaded),
+// so it appears in the discovered set too -- alphabetical, mirroring native ScanSubmods.
+const MOCK_SUBMODS: readonly string[] = ["Core", "Mod", "GCW", "Rev", "TR"];
 
 // Browser mode can't load a real .alo, so these canned dome Names stand in
 // for "chosen but the .alo wouldn't load" — selecting one drives the picker's

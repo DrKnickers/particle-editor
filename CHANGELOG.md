@@ -17,6 +17,36 @@ Conventions:
 ## Changelog
 
 
+### Submods — Core is a selectable, orderable layer (not auto-loaded)
+
+*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+<!-- TODO: backfill merge-commit short hash + PR number once merged (lands with the hardpoint PR). -->
+
+The **Mods ▸ Submods…** dialog now lists **Core** (Mod's shared core) as a normal layer you tick and
+order, instead of it being silently auto-loaded under every submod. This lets the editor reproduce any Mod
+launch chain exactly: Mod / Imperial Reign / Mod's Revenge chain Core in *after* their campaign and
+*above* the mod root (`Modpath=…\Mod Modpath=…\Core Modpath=…`), while **Revan's Revenge omits Core
+entirely** (`Modpath=…\Rev Modpath=…`). Your existing submod stack is **migrated automatically** — Core
+is kept the first time you launch — so nothing changes until you choose to remove it (e.g. to mirror Rev).
+
+**How we tackled it.** `ScanSubmods` ([`src/ModManager.cpp`](src/ModManager.cpp)) stops excluding Core,
+so it appears in the discovered set; `FileManager::BuildModContentRoots` ([`src/managers.cpp`](src/managers.cpp))
+drops the dedicated Core append — it's a regular entry in the selected stack now, placed wherever the
+user orders it. A one-time registry flag (`CoreLayerMigrated`) appends Core to a legacy *non-empty*
+selection on the first restore after the update; from then on the saved list is authoritative (remove
+Core for a Rev stack and it stays removed). The Submods dialog + bridge already render the discovered
+set generically, so no per-Core UI special-casing was needed.
+
+**Issues encountered and resolutions.** The migration must be exactly *once* and must not fight a deliberate
+removal — the flag is written on every path through the restore block (including the no-op cases) and again
+on any explicit `SelectSubmods`, so a user who removes Core keeps it removed. Verified end-to-end on the
+live Mod install: a saved `LastSubmods=[Mod]` migrated to `[Mod, Core]` with the flag set on first
+launch, and a follow-up review confirmed all five migration scenarios (existing / removed / fresh / already-
+present / no-Core-folder).
+
+---
+
 ### Reference-object hardpoints — mount weapons/turrets, hide damaged-state geometry
 
 *2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
@@ -64,6 +94,31 @@ feel-testing. The hardpoint *resolution* is verified against a real vanilla inst
 resolves `Star_Destroyer` → 10 hardpoints with every field decoded); the rendered *composition* is the
 user's live test — computer-use can't drive the dev `.exe`, and the existing `--capture` headless mode
 loads an `.alo` as a particle system, not as a composed reference object.
+
+**Making it work on real mod content (Mod + Mod).** Live-testing on Mod with its
+Mod submod exposed that the feature, correct on vanilla, was inert on the actual content the user runs:
+a unit's damage decals stayed visible because its hide-bone set came out empty — for **two independent
+reasons, both upstream of the (correct) hide logic.** **(1)** The shared XML parser
+([`src/xml.cpp`](src/xml.cpp)) rejected `encoding='ASCII'`: expat only recognises `US-ASCII`, so the bare
+`ASCII` that 11 of 33 Core files declare threw "unknown encoding", `XMLTree::parse` propagated it, and
+`parseObjectFile`/`parseHardpointFile` **silently swallowed** the throw — erasing every object in the file
+(and any `Variant_Of` parent, e.g. `Template_Venator_Star_Destroyer`, so its hero variant inherited no
+hardpoints). Fixed with an `XML_SetUnknownEncodingHandler` that maps `ASCII`/`US-ASCII` to an identity
+byte→codepoint table and declines other unknown names (purely additive — it only fires where expat would
+otherwise fatally reject; two adversarial reviewers confirmed it against expat's source). This also
+un-hides units that were missing from the picker entirely. **(2)** the content-root precedence was
+**inverted**. The game replaces files by precedence and never merges; Mod's own launch parameters rank the
+mod root **last** (`Modpath=…\Mod Modpath=…\Core Modpath=…\Mod`, left = highest), but
+[`FileManager::BuildModContentRoots`](src/managers.cpp) put the mod **root first** — a latent bug from the
+#180/#184 submod work that only ever mis-resolves a file present in *both* the mod root and a submod.
+`HardPointDataFiles.xml` is the first such conflict: the mod root ships a stale copy listing files that no
+longer exist, so root-first let it **shadow** Mod's real index → an empty hardpoint table. Fixed by
+correcting the order to `[submods…, Core, mod root]` (mod root lowest), after which `getFile`'s plain
+first-match replacement is faithful — no merge needed. (An interim merge-the-index approach was tried and
+reverted once the author clarified the game's replacement semantics.) Validated against the live install:
+hardpoint table **0 → 3292**, `Autem_Venator` resolves its 14 hardpoints with full bone data. A
+`#ifndef NDEBUG` `[Catalog]` diagnostic now reports any file dropped to a parse failure — the silent
+swallow is exactly what hid bug (1).
 
 ---
 

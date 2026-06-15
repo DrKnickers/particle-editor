@@ -96,14 +96,13 @@ public:
     bool SelectMod(const std::wstring& modPath);
 
     // Submods — subfolders of the active mod that carry their own Data\Art
-    // (e.g. Mod's Mod/GCW/Rev/TR), layered on top of the shared Core. Several
-    // can be stacked at once in explicit precedence order (front wins) — the user
-    // arranges them to mirror their game launch stack.
+    // (e.g. Mod's Mod/GCW/Rev/TR). The shared Core core is one of them now
+    // too — a normal selectable layer, no longer auto-loaded. Several can be stacked in
+    // explicit precedence order (front wins) — the user mirrors their game launch stack.
     //
-    // DiscoverSubmods() scans the active mod root for immediate subdirectories
-    // with a Data\Art tree (Core excluded — it's always loaded), sorted
-    // alphabetically. Call after SelectMod / RestoreLastSelectedMod. Pure
-    // discovery; doesn't change the selection.
+    // DiscoverSubmods() scans the active mod root for immediate subdirectories with a
+    // Data\Art tree (Core INCLUDED), sorted alphabetically. Call after
+    // SelectMod / RestoreLastSelectedMod. Pure discovery; doesn't change the selection.
     void DiscoverSubmods();
 
     // Activate the ordered submod stack (folder names, highest precedence first;

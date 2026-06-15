@@ -69,15 +69,14 @@ class FileManager : public IFileManager
 	std::vector<MegaFile*>    megafiles;
 	std::wstring              modpath;     // the active mod root (or empty = Unmodded)
 	// Ordered stack of selected submod folder names under `modpath` (e.g.
-	// {"GCW","Mod"}), highest precedence first. Each layers between the mod root
-	// and Core in modContentRoots, in this order. Empty = no submods.
+	// {"GCW","Mod"}), highest precedence first. Core is just one of these
+	// names now (placed where the user ordered it), not a separate layer. Empty = none.
 	std::vector<std::wstring> submods;
-	// Loose-file search roots for the active mod: the mod root PLUS the
-	// selected submod stack (, in precedence order) PLUS its shared `Core`
-	// core folder (Mod keeps hundreds of loose .alo there, shared across its
-	// submods). Rebuilt by SetModPath/SetSubmods; searched before the base paths.
-	// Root-first, so existing lookups are unchanged and only previously-unreachable
-	// content becomes resolvable.
+	// Loose-file search roots for the active mod, in PRECEDENCE order (front
+	// wins): the selected submod stack (, Core among them where chosen)
+	// first, then the mod root LAST (-- the game ranks the mod root lowest; see
+	// BuildModContentRoots). Rebuilt by SetModPath/SetSubmods; searched before the base
+	// paths. First match wins (the engine replaces a file by precedence, never merges).
 	std::vector<std::wstring> modContentRoots;
 
 	// Populate modContentRoots from `modpath`: the root + each selected submod

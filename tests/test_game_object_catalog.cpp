@@ -15,12 +15,15 @@
 #include "GameObjectCatalog.h"
 #include "managers.h"
 #include "files.h"
+#include "AloModel.h"   // dbg] --dumpalo: decode bones/connections/meshes
+#include "xml.h"        // dbg] --xmltest: does a raw XML file parse?
 
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -116,26 +119,33 @@ static const GameObjectRef* find(const GameObjectCatalog& cat, const std::string
 // any "Data\Art\Models\*" -> <forcedAlo> when set (probe mode). Misses -> null.
 struct RealDirFM : IFileManager
 {
-    std::wstring xmlDir;
-    std::wstring forcedAlo;
+    std::wstring              xmlDir;    // single-dir convenience (back-compat)
+    std::vector<std::wstring> xmlDirs;   // dbg] multi-root: searched in PRECEDENCE order, first hit wins
+    std::wstring              forcedAlo;
     IFile* getFile(const std::string& path) override
     {
-        std::wstring wpath;
         const std::string xmlPfx = "Data\\XML\\";
         const std::string modPfx = "Data\\Art\\Models\\";
         if (!forcedAlo.empty() && path.rfind(modPfx, 0) == 0)
         {
-            wpath = forcedAlo;
+            try { return new PhysicalFile(forcedAlo, PhysicalFile::READ); }
+            catch (...) { return nullptr; }
         }
-        else if (!xmlDir.empty() && path.rfind(xmlPfx, 0) == 0)
+        if (path.rfind(xmlPfx, 0) == 0)
         {
             std::string leaf = path.substr(xmlPfx.size());
-            wpath = xmlDir + L"\\" + std::wstring(leaf.begin(), leaf.end());
+            std::wstring wleaf(leaf.begin(), leaf.end());
+            // Mirror the editor's content-root precedence (root, submod..., Core):
+            // try each Data\XML dir in order, first that has the file wins.
+            std::vector<std::wstring> dirs = xmlDirs;
+            if (!xmlDir.empty()) dirs.push_back(xmlDir);
+            for (const std::wstring& d : dirs)
+            {
+                try { return new PhysicalFile(d + L"\\" + wleaf, PhysicalFile::READ); }
+                catch (...) { /* miss -> try next root */ }
+            }
         }
-        else return nullptr;
-
-        try { return new PhysicalFile(wpath, PhysicalFile::READ); }
-        catch (...) { return nullptr; }
+        return nullptr;
     }
 };
 
@@ -246,9 +256,152 @@ static int dumpProbe(const char* aloPath)
     return 0;
 }
 
+// dbg] Decode one .alo and print its skeleton + per-mesh connection bone +
+// hidden flag -- so a hardpoint's Damage_*/Collision_Mesh bone can be cross-checked
+// against the model the unit actually renders (the Autem_Venator damage-decal bug:
+// hardpoints authored for EV_Venator.alo, unit renders Venator_OFC.alo).
+static int dumpAlo(const char* aloPath)
+{
+    std::wstring wpath(aloPath, aloPath + std::strlen(aloPath));
+    IFile* f = nullptr;
+    try { f = new PhysicalFile(wpath, PhysicalFile::READ); }
+    catch (...) { std::printf("open FAILED: %s\n", aloPath); return 2; }
+
+    AloModel m;
+    try { m = LoadAloModel(f); }
+    catch (...) { std::printf("decode FAILED: %s\n", aloPath); f->Release(); return 3; }
+    f->Release();
+
+    std::printf("=== %s ===\n", aloPath);
+    std::printf("bones=%zu  connections=%zu  meshes=%zu\n",
+                m.bones.size(), m.connections.size(), m.meshes.size());
+
+    std::printf("-- bones --\n");
+    for (size_t i = 0; i < m.bones.size(); ++i)
+        std::printf("  [%2zu] %-28s parent=%u\n", i, m.bones[i].name.c_str(), m.bones[i].parentIndex);
+
+    std::printf("-- meshes (idx name hidden coll -> connected bone | shader) --\n");
+    for (size_t mi = 0; mi < m.meshes.size(); ++mi)
+    {
+        const char* boneName = "(unconnected)";
+        for (const AloConnection& c : m.connections)
+            if (c.objectIndex == mi)
+            {
+                boneName = (c.boneIndex < m.bones.size()) ? m.bones[c.boneIndex].name.c_str() : "(oob)";
+                break;
+            }
+        const char* shader = m.meshes[mi].subMeshes.empty()
+                           ? "(none)" : m.meshes[mi].subMeshes[0].shaderName.c_str();
+        std::printf("  [%2zu] %-30s h=%d c=%d -> %-24s | %s\n",
+                    mi, m.meshes[mi].name.c_str(),
+                    m.meshes[mi].hidden ? 1 : 0, m.meshes[mi].collision ? 1 : 0,
+                    boneName, shader);
+    }
+    return 0;
+}
+
+// dbg] Build the catalog over MULTIPLE content roots (root, submod..., Core)
+// and print one unit's resolved model + hardpointNames + the hide-bones the engine
+// would compute -- the authoritative check for "why are Autem_Venator's damage decals
+// still visible" (does the Variant_Of-inherited hardpoint list resolve at all?).
+static int dumpUnit(const char* unitName, const std::vector<std::string>& dirs)
+{
+    RealDirFM fm;
+    for (const std::string& d : dirs) fm.xmlDirs.emplace_back(d.begin(), d.end());
+
+    GameObjectCatalog cat;
+    bool ok = BuildGameObjectCatalog(fm, cat);
+    std::printf("catalog build=%s objects=%zu hardpoint-table=%zu\n",
+                ok ? "true" : "false", cat.objects.size(), cat.hardpoints.size());
+    if (!ok) return 2;
+
+    // List every catalog object whose name contains `unitName` (case-insensitive) so
+    // "which Venators are listed + their hardpoint counts" is answered in one shot.
+    {
+        std::string needle = unitName; for (char& c : needle) if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
+        std::printf("-- catalog objects matching '%s' --\n", unitName);
+        size_t hits = 0;
+        for (const GameObjectRef& o : cat.objects)
+        {
+            std::string lname = o.name; for (char& c : lname) if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
+            if (lname.find(needle) == std::string::npos) continue;
+            ++hits;
+            std::printf("  %-44s [%-9s] hp=%-2zu model=%s\n",
+                        o.name.c_str(), GameObjectCategoryName(o.category),
+                        o.hardpointNames.size(), o.modelPath.c_str());
+        }
+        std::printf("  (%zu matches)\n", hits);
+    }
+
+    const GameObjectRef* r = find(cat, unitName);
+    if (!r) { std::printf("UNIT '%s' NOT in catalog (filtered / parent not parsed / no model)\n", unitName); return 3; }
+    std::printf("unit '%s'  model=%s  category=%s  source=%s\n",
+                r->name.c_str(), r->modelPath.c_str(),
+                GameObjectCategoryName(r->category), r->sourceFile.c_str());
+
+    auto lower = [](std::string s) { for (char& c : s) if (c >= 'A' && c <= 'Z') c = (char)(c + 32); return s; };
+    std::printf("hardpointNames: %zu\n", r->hardpointNames.size());
+    std::set<std::string> hideBones, attachBones;
+    for (const std::string& hp : r->hardpointNames)
+    {
+        auto it = cat.hardpoints.find(lower(hp));
+        if (it == cat.hardpoints.end()) { std::printf("  %-30s -> (def MISSING from hardpoint table)\n", hp.c_str()); continue; }
+        const HardPointDef& d = it->second;
+        std::printf("  %-30s model=%-20s bone=%-16s dmgD=%-18s dmgP=%-16s coll=%s\n",
+                    hp.c_str(),
+                    d.modelToAttach.empty()  ? "(none)" : d.modelToAttach.c_str(),
+                    d.attachmentBone.empty() ? "(none)" : d.attachmentBone.c_str(),
+                    d.damageDecalBone.empty()     ? "-" : d.damageDecalBone.c_str(),
+                    d.damageParticlesBone.empty() ? "-" : d.damageParticlesBone.c_str(),
+                    d.collisionMeshBone.empty()   ? "-" : d.collisionMeshBone.c_str());
+        if (!d.damageDecalBone.empty())     hideBones.insert(lower(d.damageDecalBone));
+        if (!d.damageParticlesBone.empty()) hideBones.insert(lower(d.damageParticlesBone));
+        if (!d.collisionMeshBone.empty())   hideBones.insert(lower(d.collisionMeshBone));
+        if (!d.modelToAttach.empty() && !d.attachmentBone.empty()) attachBones.insert(lower(d.attachmentBone));
+    }
+    for (const std::string& a : attachBones) hideBones.erase(a);   // mount points never hidden ()
+    std::printf("=> resulting hide-bone set (lower-cased, mount bones erased): %zu\n", hideBones.size());
+    for (const std::string& b : hideBones) std::printf("     %s\n", b.c_str());
+    return 0;
+}
+
+// dbg] Parse a raw XML file path directly (no FM) and report success + root
+// element + direct-child count -- to classify "object file silently dropped from the
+// catalog": is it a parse FAILURE (XMLTree::parse throws) or a content/find issue?
+static int dumpXmlTest(const char* path)
+{
+    std::wstring wpath(path, path + std::strlen(path));
+    IFile* f = nullptr;
+    try { f = new PhysicalFile(wpath, PhysicalFile::READ); }
+    catch (...) { std::printf("OPEN FAILED: %s\n", path); return 2; }
+
+    XMLTree xml;
+    try { xml.parse(f); }
+    catch (const std::exception& e) { std::printf("PARSE THREW (std::exception: %s): %s\n", e.what(), path); f->Release(); return 3; }
+    catch (...) { std::printf("PARSE THREW (unknown): %s\n", path); f->Release(); return 3; }
+    f->Release();
+
+    const XMLNode* root = xml.getRoot();
+    if (!root) { std::printf("PARSED but NO ROOT: %s\n", path); return 4; }
+    unsigned named = 0;
+    for (unsigned i = 0; i < root->getNumChildren(); ++i)
+        if (!root->getChild(i)->getAttribute(L"Name").empty()) ++named;
+    std::printf("PARSE OK: root=<%ls> children=%u named-children=%u  %s\n",
+                root->getName().c_str(), root->getNumChildren(), named, path);
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
-    if (argc >= 3 && std::strcmp(argv[1], "--probe") == 0) return dumpProbe(argv[2]);
+    if (argc >= 3 && std::strcmp(argv[1], "--probe") == 0)   return dumpProbe(argv[2]);
+    if (argc >= 3 && std::strcmp(argv[1], "--xmltest") == 0) return dumpXmlTest(argv[2]);
+    if (argc >= 3 && std::strcmp(argv[1], "--dumpalo") == 0) return dumpAlo(argv[2]);
+    if (argc >= 4 && std::strcmp(argv[1], "--unit") == 0)
+    {
+        std::vector<std::string> dirs;
+        for (int i = 3; i < argc; ++i) dirs.push_back(argv[i]);
+        return dumpUnit(argv[2], dirs);
+    }
     if (argc >= 2) return dumpRealCatalog(argv[1]);
 
     MockFM fm;
@@ -442,6 +595,25 @@ int main(int argc, char** argv)
         const GameObjectRef* ovr = find(hc, "HP_Tank_Override");
         CHECK(ovr && ovr->hardpointNames.size() == 1 && ovr->hardpointNames[0] == "HP_Tank_Shield",
               "Variant_Of with its own <HardPoints> REPLACES (not merges) the parent's list");
+    }
+
+    // ---- BUG-2: the parser tolerates encoding='ASCII' ----------------
+    // Many mod XML files declare <?xml ... encoding='ASCII'?>, which expat only knows
+    // as "US-ASCII" -> without the unknown-encoding handler the parse threw and the
+    // whole file (every object in it) was silently dropped from the catalog.
+    std::printf("[encoding ascii]\n");
+    {
+        MockFM efm;
+        efm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<?xml version='1.0' encoding='ASCII'?>\n"
+            "<Game_Object_Files><File>Asc.xml</File></Game_Object_Files>";
+        efm.files["Data\\XML\\Asc.xml"] =
+            "<?xml version='1.0' encoding='ASCII'?>\n"
+            "<Objects><SpaceUnit Name=\"Ascii_Unit\"><Space_Model_Name>EV_Ascii.alo</Space_Model_Name></SpaceUnit></Objects>";
+        GameObjectCatalog ec;
+        bool eok = BuildGameObjectCatalog(efm, ec);
+        CHECK(eok, "catalog builds from an encoding='ASCII' GameObjectFiles.xml");
+        CHECK(find(ec, "Ascii_Unit") != nullptr, "object in an encoding='ASCII' file is parsed (not silently dropped)");
     }
 
     // ---- missing GameObjectFiles.xml ---------------------------------------
