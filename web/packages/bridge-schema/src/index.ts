@@ -1005,6 +1005,11 @@ export type Request =
   | { kind: "mods/list";                  params: Record<string, never> }
   | { kind: "mods/select";                params: { path: string | null } }
   | { kind: "mods/refresh";               params: Record<string, never> }
+  // Set the ordered submod stack under the active mod (e.g. Mod's
+  // Mod/GCW/Rev/TR), layered on top of the shared Core. `names` are folder
+  // names in precedence order, highest first; [] = no submods. Emits
+  // engine/state/changed and persists to HKCU\Software\AloParticleEditor\LastSubmods.
+  | { kind: "mods/set-submods";           params: { names: string[] } }
 
   // Autosave crash-recovery (). React-initiated on mount (no host→React
   // startup event, so there's no fire-before-subscribe race): `check-recovery`
@@ -1042,9 +1047,10 @@ type ResponseForA<R extends Request> =
     ? { ok: true } :
 
   // Mods (D6)
-  R extends { kind: "mods/list" }                 ? { mods: ModDescriptor[]; activePath: string | null } :
+  R extends { kind: "mods/list" }                 ? { mods: ModDescriptor[]; activePath: string | null; submods: string[]; activeSubmods: string[] } :
   R extends { kind: "mods/select" }               ? { ok: true; activePath: string | null } | { ok: false; error: string } :
-  R extends { kind: "mods/refresh" }              ? { mods: ModDescriptor[]; activePath: string | null } :
+  R extends { kind: "mods/refresh" }              ? { mods: ModDescriptor[]; activePath: string | null; submods: string[]; activeSubmods: string[] } :
+  R extends { kind: "mods/set-submods" }          ? { ok: boolean; activeSubmods: string[] } | { ok: false; error: string } :
 
   // Autosave crash-recovery ()
   R extends { kind: "autosave/check-recovery" }   ? { orphan: AutosaveOrphan | null } :

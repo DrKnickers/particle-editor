@@ -17,9 +17,48 @@ Conventions:
 ## Changelog
 
 
-### Reference-object picker — "model file not found" vs "couldn't load"
+### Per-submod selection — stack Mod submods in precedence order
 
 *2026-06-14 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+A mod whose content is split into submods — like Mod, which keeps `Mod`/`GCW`/`Rev`/`TR` campaign
+folders layered on a shared `Core` core — can now **stack several submods in explicit precedence
+order**, mirroring how mods are stacked in the game's launch parameters. **Mods ▸ Submods…** (shown
+only when the active mod has submods) opens a reorderable checklist: tick the submods to include and
+use ↑/↓ to order them — **the top of the list wins** on a shared asset name. Each ticked submod's
+`Data\Art` layers on top of the shared core (and the mod root still wins over all of them). The stack
+persists across sessions; picking a different mod resets it.
+
+**How we tackled it.** `FileManager` ([`src/managers.cpp`](src/managers.cpp)) holds an ordered submod
+stack; `BuildModContentRoots()` resolves `[mod root, submod₁…submodₙ, Core]` (first match wins, so
+front = highest precedence) — an empty stack is byte-identical to the prior behaviour. `ModManager`
+([`src/ModManager.cpp`](src/ModManager.cpp)) discovers submods by scanning the active mod root for
+immediate subfolders with a `Data\Art` tree (excluding `Core`) — generalised, not hardcoded to
+Mod's names — and `SelectSubmods` validates the requested list against the discovered set (drops
+unknowns + dups, adopts on-disk casing, preserves order) then reuses the mod-select reload chain
+(rebuild → persist `LastSubmods` as `REG_MULTI_SZ` → thumbnail-cache clear → engine reload). The wire
+surface adds `submods`/`activeSubmods` to `mods/list` plus a `mods/set-submods` request; the React
+**Mods** menu opens a new reorderable
+[`SubmodsDialog`](web/apps/editor/src/screens/SubmodsDialog.tsx) that batches the final order into one
+`mods/set-submods` (one engine reload) on **Apply**.
+
+**Issues encountered and resolutions.** Why "top wins" + user-ordered: a web check confirmed FoC's
+official `MODPATH` loads one mod at a time and multi-mod stacking is a community technique with no
+single documented precedence rule — so making the editor's stack a user-ordered, first-match-wins list
+lets the user reproduce *whatever* precedence their launch setup uses rather than the editor hardcoding
+one. Submods + the active stack ride the `mods/list` payload (not the engine snapshot), so the menu
+re-fetches after a mod change rather than on every `engine/state/changed`. Switching mods resets the
+persisted stack; on launch, a persisted stack is filtered to the submods still present under the
+restored mod, preserving order and adopting on-disk casing. `SelectSubmods` no-ops when Unmodded
+(submods only mean something under an active mod, keeping native/mock in lockstep). The legacy Win32
+Mods menu does not get the affordance (legacy is opt-out, slated for removal) — the
+FileManager/ModManager core serves both modes regardless.
+
+---
+
+### Reference-object picker — "model file not found" vs "couldn't load"
+
+*2026-06-14 · [`53a49ef`](https://github.com/DrKnickers/particle-editor/commit/53a49ef) · #183*
 
 Selecting an imported game object whose model file is genuinely **absent** from the active mod/base —
 a Name listed in `GameObjectFiles.xml` whose `.alo` isn't shipped (e.g. Mod's `Prop_ElectricBox_00`)

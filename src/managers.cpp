@@ -137,6 +137,16 @@ void FileManager::SetModPath(const wstring& path)
 	{
 		modpath += L'\\';
 	}
+	submods.clear();   // a new mod has its own submods; reset the stack
+	BuildModContentRoots();
+}
+
+// Select the ordered submod stack under the active mod (empty to clear) and
+// rebuild the content roots. Each submod's Data\Art layers on top of Core, in
+// precedence order (front wins).
+void FileManager::SetSubmods(const vector<wstring>& names)
+{
+	submods = names;
 	BuildModContentRoots();
 }
 
@@ -148,18 +158,38 @@ void FileManager::SetModPath(const wstring& path)
 // Data\Art tree). Root goes first (override content wins), so existing lookups are
 // byte-for-byte unchanged -- purely additive.
 //
-// We deliberately DON'T pull in the per-submod folders: a mod loads ONE submod at a
-// time (they cross-contaminate on shared asset names). Selecting a specific submod
-// is a separate follow-up.
+// A mod can stack several submods explicitly, in precedence order. We add
+// the SELECTED submod stack -- between the mod root and Core so each chosen
+// campaign wins over the shared core, and earlier submods win over later ones.
+// Search order (first match wins in getFile):
+//   mod root      (user/override content wins)
+//   submods[0..n] (the selected stack, front = highest precedence; each needs a Data\Art tree)
+//   Core      (shared core)
+//   ...base game  (appended later in getFile)
+// An empty submod stack reproduces the prior [mod root, Core] behaviour exactly.
 void FileManager::BuildModContentRoots()
 {
 	modContentRoots.clear();
 	if (modpath.empty()) return;
 	modContentRoots.push_back(modpath);
 
+	auto hasArtTree = [](const wstring& root) -> bool {
+		const DWORD attr = GetFileAttributesW((root + L"Data\\Art").c_str());
+		return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY);
+	};
+
+	// The selected submod stack (e.g. {"GCW","Mod"}), in precedence order; each
+	// only if it carries content.
+	for (const wstring& sub : submods)
+	{
+		if (sub.empty()) continue;
+		const wstring subRoot = modpath + sub + L"\\";
+		if (hasArtTree(subRoot))
+			modContentRoots.push_back(subRoot);
+	}
+
 	// The shared core folder (Mod convention: "Core"), if present with content.
 	const wstring core = modpath + L"Core\\";
-	const DWORD attr = GetFileAttributesW((core + L"Data\\Art").c_str());
-	if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY))
+	if (hasArtTree(core))
 		modContentRoots.push_back(core);
 }

@@ -19,6 +19,13 @@ public:
 	// Default is a no-op so simple test mocks don't have to implement
 	// it; FileManager overrides with the real basepath swap.
 	virtual void SetModPath(const std::wstring& /*path*/) {}
+
+	// Select an ORDERED stack of submod folders under the active mod (e.g.
+	// Mod's Mod/GCW/Rev/TR) whose Data\Art layers on top of the shared Core.
+	// Order is precedence, highest first (front of the vector wins a shared name).
+	// Empty clears the stack. Default no-op for simple mocks; FileManager rebuilds
+	// its content roots.
+	virtual void SetSubmods(const std::vector<std::wstring>& /*names*/) {}
 };
 
 class ITextureManager
@@ -50,15 +57,20 @@ class FileManager : public IFileManager
 	std::vector<std::wstring> basepaths;
 	std::vector<MegaFile*>    megafiles;
 	std::wstring              modpath;     // the active mod root (or empty = Unmodded)
-	// Loose-file search roots for the active mod: the mod root PLUS its shared
-	// `Core` core folder (Mod keeps hundreds of loose .alo there, shared across
-	// its one-at-a-time submods). Rebuilt by SetModPath; searched before the base
-	// paths. Root-first, so existing lookups are unchanged and only previously-
-	// unreachable core content becomes resolvable.
+	// Ordered stack of selected submod folder names under `modpath` (e.g.
+	// {"GCW","Mod"}), highest precedence first. Each layers between the mod root
+	// and Core in modContentRoots, in this order. Empty = no submods.
+	std::vector<std::wstring> submods;
+	// Loose-file search roots for the active mod: the mod root PLUS the
+	// selected submod stack (, in precedence order) PLUS its shared `Core`
+	// core folder (Mod keeps hundreds of loose .alo there, shared across its
+	// submods). Rebuilt by SetModPath/SetSubmods; searched before the base paths.
+	// Root-first, so existing lookups are unchanged and only previously-unreachable
+	// content becomes resolvable.
 	std::vector<std::wstring> modContentRoots;
 
-	// Populate modContentRoots from `modpath`: the root + a `Core` core
-	// sub-folder if present (with a Data\Art tree).
+	// Populate modContentRoots from `modpath`: the root + each selected submod
+	// (in order, those with a Data\Art tree) + a `Core` core sub-folder if present.
 	void BuildModContentRoots();
 
 public:
@@ -66,9 +78,16 @@ public:
 
 	// Hot-swap the active "mod": its content roots (mod folder + bundled
 	// sub-content folders) are checked before the regular basepaths during
-	// loose-file lookups. Pass an empty string to clear (Unmodded).
+	// loose-file lookups. Pass an empty string to clear (Unmodded). Clears the
+	// selected submod stack (a new mod has its own submods).
 	void SetModPath(const std::wstring& path) override;
 	const std::wstring& GetModPath() const { return modpath; }
+
+	// Select the ordered submod stack under the active mod (empty for none)
+	// and rebuild the content roots. Front = highest precedence. No-op effect if
+	// no mod is active.
+	void SetSubmods(const std::vector<std::wstring>& names) override;
+	const std::vector<std::wstring>& GetSubmods() const { return submods; }
 
 	FileManager(const std::vector<std::wstring>& basepaths);
 	~FileManager();

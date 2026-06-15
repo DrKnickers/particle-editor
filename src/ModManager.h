@@ -95,11 +95,32 @@ public:
     // Unmodded explicitly.
     bool SelectMod(const std::wstring& modPath);
 
+    // Submods — subfolders of the active mod that carry their own Data\Art
+    // (e.g. Mod's Mod/GCW/Rev/TR), layered on top of the shared Core. Several
+    // can be stacked at once in explicit precedence order (front wins) — the user
+    // arranges them to mirror their game launch stack.
+    //
+    // DiscoverSubmods() scans the active mod root for immediate subdirectories
+    // with a Data\Art tree (Core excluded — it's always loaded), sorted
+    // alphabetically. Call after SelectMod / RestoreLastSelectedMod. Pure
+    // discovery; doesn't change the selection.
+    void DiscoverSubmods();
+
+    // Activate the ordered submod stack (folder names, highest precedence first;
+    // empty = none). Names not in the discovered set are dropped; the discovered
+    // on-disk casing is adopted. Side-effect chain mirrors SelectMod's tail:
+    // FileManager::SetSubmods (rebuild content roots) -> WriteLastSubmods (persist)
+    // -> thumbnail-cache clear -> engine reload. Returns false if the engine shader
+    // reload failed (state still rolls forward). No-op when no mod is active.
+    bool SelectSubmods(const std::vector<std::wstring>& names);
+
     // Read-only accessors. Pointers/references are stable as long as
     // no concurrent mutation is in flight (this class is not
     // thread-safe; all calls must come from the UI thread).
     const std::vector<ModEntry>& GetMods() const { return m_mods; }
     const std::wstring& GetSelectedModPath() const { return m_selectedModPath; }
+    const std::vector<std::wstring>& GetSubmods() const { return m_submods; }
+    const std::vector<std::wstring>& GetSelectedSubmods() const { return m_selectedSubmods; }
 
 private:
     IFileManager*             m_fileManager;
@@ -107,6 +128,8 @@ private:
     std::vector<std::wstring> m_gameRoots;
     std::vector<ModEntry>     m_mods;
     std::wstring              m_selectedModPath;
+    std::vector<std::wstring> m_submods;          // available under the active mod
+    std::vector<std::wstring> m_selectedSubmods;  // ordered stack, highest precedence first
 };
 
 // Registry helpers, exposed for the legacy nickname dialog. Both

@@ -245,7 +245,9 @@ describe("MenuBar — Mods menu (D6)", () => {
     { path: "C:/test/GameData/Mods/Beta", folderName: "Beta", nickname: "Beta Mod", isFoC: false },
   ];
 
-  function makeModsStubBridge(opts: { activeModPath?: string | null } = {}): Bridge & { request: ReturnType<typeof vi.fn> } {
+  function makeModsStubBridge(
+    opts: { activeModPath?: string | null; submods?: string[]; activeSubmods?: string[] } = {},
+  ): Bridge & { request: ReturnType<typeof vi.fn> } {
     const snapshot = {
       activeModPath: opts.activeModPath ?? null,
       // Minimum surface the MenuBar reads — other fields default sensibly
@@ -254,11 +256,17 @@ describe("MenuBar — Mods menu (D6)", () => {
       bloom: false,
       paused: false,
     };
-    const modsListResp = { mods: fixtureMods, activePath: opts.activeModPath ?? null };
+    const modsListResp = {
+      mods: fixtureMods,
+      activePath: opts.activeModPath ?? null,
+      submods: opts.submods ?? [],              //
+      activeSubmods: opts.activeSubmods ?? [],   //
+    };
     const request = vi.fn().mockImplementation((req: { kind: string }) => {
       if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
       if (req.kind === "mods/list" || req.kind === "mods/refresh") return Promise.resolve(modsListResp);
       if (req.kind === "mods/select") return Promise.resolve({ ok: true, activePath: null });
+      if (req.kind === "mods/set-submods") return Promise.resolve({ ok: true, activeSubmods: [] });
       return Promise.resolve({});
     });
     return {
@@ -312,5 +320,40 @@ describe("MenuBar — Mods menu (D6)", () => {
         params: {},
       });
     });
+  });
+
+  // Submod submenu — shown only when the active mod has submods.
+  it("shows the Submods… item when the active mod has submods", async () => {
+    const bridge = makeModsStubBridge({
+      activeModPath: "C:/test/corruption/Mods/Alpha",
+      submods: ["Mod", "GCW"],
+    });
+    renderMenuBar(bridge);
+    await openModsMenu();
+    expect(screen.getByRole("menuitem", { name: "Submods…" })).toBeTruthy();
+  });
+
+  it("hides the Submods… item when there are no submods", async () => {
+    const bridge = makeModsStubBridge();  // no submods
+    renderMenuBar(bridge);
+    await openModsMenu();
+    expect(screen.queryByRole("menuitem", { name: "Submods…" })).toBeNull();
+  });
+
+  it("clicking Submods… opens the reorderable stack dialog", async () => {
+    const bridge = makeModsStubBridge({
+      activeModPath: "C:/test/corruption/Mods/Alpha",
+      submods: ["Mod", "GCW"],
+      activeSubmods: ["Mod"],
+    });
+    renderMenuBar(bridge);
+    await openModsMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Submods…" }));
+    // The dialog mounts and fetches mods/list, rendering the checklist.
+    await waitFor(() => {
+      expect(screen.getByRole("list", { name: "Submod load order" })).toBeTruthy();
+    });
+    expect(screen.getByRole("checkbox", { name: "Include Mod" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Include GCW" })).toBeTruthy();
   });
 });

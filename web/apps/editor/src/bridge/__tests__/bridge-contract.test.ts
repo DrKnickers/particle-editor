@@ -322,6 +322,56 @@ describe("MockBridge contract", () => {
     expect(turret?.category).toBe("Turret");
   });
 
+  // Submods: mods/list surfaces them under the active mod; set-submods
+  // stacks them in precedence order; selecting a different mod resets the stack;
+  // unmodded => none + a set-submods is inert.
+  it("mods/list surfaces submods only under an active mod; set-submods round-trips in order", async () => {
+    const b = new MockBridge();
+
+    // Unmodded: no submods.
+    await b.request({ kind: "mods/select", params: { path: null } });
+    let list = await b.request({ kind: "mods/list", params: {} });
+    expect(list.submods).toEqual([]);
+    expect(list.activeSubmods).toEqual([]);
+
+    // A set-submods while unmodded is inert — submods belong to an active mod
+    // (matches the native ModManager::SelectSubmods no-mod guard).
+    await b.request({ kind: "mods/set-submods", params: { names: ["Mod"] } });
+    list = await b.request({ kind: "mods/list", params: {} });
+    expect(list.activeSubmods).toEqual([]);
+
+    // Activate a mod: submods appear, none selected yet.
+    await b.request({ kind: "mods/select", params: { path: "C:/mock/corruption/Mods/FoCMod" } });
+    list = await b.request({ kind: "mods/list", params: {} });
+    expect(list.submods.length).toBeGreaterThan(1);
+    expect(list.activeSubmods).toEqual([]);
+
+    // Stack two submods in a specific precedence order; the order round-trips.
+    const a = list.submods[0];
+    const c = list.submods[1];
+    const r = await b.request({ kind: "mods/set-submods", params: { names: [c, a] } });
+    expect(r).toMatchObject({ ok: true, activeSubmods: [c, a] });
+    list = await b.request({ kind: "mods/list", params: {} });
+    expect(list.activeSubmods).toEqual([c, a]);
+
+    // Unknown / duplicate names are dropped; order of the valid ones is kept.
+    await b.request({ kind: "mods/set-submods", params: { names: [a, "Bogus", a, c] } });
+    list = await b.request({ kind: "mods/list", params: {} });
+    expect(list.activeSubmods).toEqual([a, c]);
+
+    // Case-insensitive: a lower-cased request canonicalizes to the on-disk casing
+    // (mirrors native ModManager::SelectSubmods, which the strict menu check needs).
+    expect(a).not.toBe(a.toLowerCase());   // guard: the fixture name has upper-case
+    await b.request({ kind: "mods/set-submods", params: { names: [a.toLowerCase()] } });
+    list = await b.request({ kind: "mods/list", params: {} });
+    expect(list.activeSubmods).toEqual([a]);
+
+    // Switching mods resets the stack.
+    await b.request({ kind: "mods/select", params: { path: "C:/mock/GameData/Mods/BaseGameMod" } });
+    list = await b.request({ kind: "mods/list", params: {} });
+    expect(list.activeSubmods).toEqual([]);
+  });
+
   it("engine/action/step-frames resolves with an empty body in browser mode", async () => {
     const b = new MockBridge();
     // Pause first; the request is a response-only no-op either way, but

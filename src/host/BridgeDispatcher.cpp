@@ -1401,9 +1401,18 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             });
         }
         const std::wstring& sel = m_modManager->GetSelectedModPath();
+        // Submods available under the active mod + the selected ordered stack.
+        json submodsArr = json::array();
+        for (const auto& s : m_modManager->GetSubmods())
+            submodsArr.push_back(WideToUtf8(s));
+        json activeSubmodsArr = json::array();
+        for (const auto& s : m_modManager->GetSelectedSubmods())
+            activeSubmodsArr.push_back(WideToUtf8(s));
         return json{
-            {"mods",       arr},
-            {"activePath", sel.empty() ? json(nullptr) : json(WideToUtf8(sel))},
+            {"mods",          arr},
+            {"activePath",    sel.empty() ? json(nullptr) : json(WideToUtf8(sel))},
+            {"submods",       submodsArr},
+            {"activeSubmods", activeSubmodsArr},
         };
     };
 
@@ -1414,6 +1423,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             sendOk(json{
                 {"mods", json::array()},
                 {"activePath", json(nullptr)},
+                {"submods", json::array()},
+                {"activeSubmods", json::array()},
             });
             return res;
         }
@@ -1428,6 +1439,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             sendOk(json{
                 {"mods", json::array()},
                 {"activePath", json(nullptr)},
+                {"submods", json::array()},
+                {"activeSubmods", json::array()},
             });
             return res;
         }
@@ -1470,6 +1483,36 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         sendOk(json{
             {"ok",         ok},
             {"activePath", sel.empty() ? json(nullptr) : json(WideToUtf8(sel))},
+        });
+        return res;
+    }
+
+    // Set the ordered submod stack under the active mod (empty = none).
+    if (kind == "mods/set-submods")
+    {
+        if (!m_modManager)
+        {
+            sendOk(json{{"ok", false}, {"error", "ModManager not bound"}});
+            return res;
+        }
+        // params.names is `string[]` (precedence order, highest first); missing /
+        // non-array = clear. Non-string entries are skipped.
+        std::vector<std::wstring> names;
+        auto nit = params.find("names");
+        if (nit != params.end() && nit->is_array())
+            for (const auto& e : *nit)
+                if (e.is_string()) names.push_back(Utf8ToWide(e.get<std::string>()));
+        bool ok = m_modManager->SelectSubmods(names);
+        // A submod stack swaps content (same-named assets differ); clear the bridge
+        // thumbnail cache like mods/select does.
+        TexturePalette::ClearBridgeThumbCache();
+        EmitEngineStateChanged();
+        json activeSubmodsArr = json::array();
+        for (const auto& s : m_modManager->GetSelectedSubmods())
+            activeSubmodsArr.push_back(WideToUtf8(s));
+        sendOk(json{
+            {"ok",            ok},
+            {"activeSubmods", activeSubmodsArr},
         });
         return res;
     }

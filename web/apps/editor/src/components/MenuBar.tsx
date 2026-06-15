@@ -47,6 +47,7 @@ import { toggleDock } from "@/lib/right-dock";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { Modal } from "@/components/Modal";
 import { PreferencesDialog } from "@/screens/PreferencesDialog";
+import { SubmodsDialog } from "@/screens/SubmodsDialog";
 
 // follow-up: each MenubarContent needs to register itself with the
 // host as a viewport occlusion while open so the popup punches a
@@ -179,23 +180,32 @@ export function MenuBar({
   // snapshot so the menu's check mark stays reactive without a second
   // round-trip after a select.
   const [mods, setMods] = useState<ModDescriptor[]>([]);
+  // Whether the active mod has any submods (drives showing the "Submods…"
+  // item). Rides the mods/list payload (not the engine snapshot), so we re-fetch
+  // after a mod change. The ordered stack itself is edited in SubmodsDialog.
+  const [hasSubmods, setHasSubmods] = useState(false);
+  const [submodsOpen, setSubmodsOpen] = useState(false);
   const refreshModsList = async () => {
     try {
       const r = await bridge.request({ kind: "mods/list", params: {} });
-      // Defensive: a partial / mocked response that omits `mods`
-      // shouldn't crash the menu's filter step. Fall back to [].
+      // Defensive: a partial / mocked response that omits a field
+      // shouldn't crash the menu's filter step. Fall back to defaults.
       setMods(Array.isArray(r?.mods) ? r.mods : []);
+      setHasSubmods(Array.isArray(r?.submods) && r.submods.length > 0);
     } catch (err) {
       console.warn("[MenuBar] mods/list failed:", err);
     }
   };
-  const handleModSelect = (path: string | null) => {
-    void bridge.request({ kind: "mods/select", params: { path } });
+  const handleModSelect = async (path: string | null) => {
+    await bridge.request({ kind: "mods/select", params: { path } });
+    // The submod list belongs to the newly-active mod; re-fetch it.
+    await refreshModsList();
   };
   const handleModRefresh = async () => {
     try {
       const r = await bridge.request({ kind: "mods/refresh", params: {} });
       setMods(Array.isArray(r?.mods) ? r.mods : []);
+      setHasSubmods(Array.isArray(r?.submods) && r.submods.length > 0);
     } catch (err) {
       console.warn("[MenuBar] mods/refresh failed:", err);
     }
@@ -630,7 +640,7 @@ export function MenuBar({
             {/* Unmodded is always first; selected when activeModPath is null. */}
             <Menubar.Item
               className={ITEM}
-              onSelect={() => handleModSelect(null)}
+              onSelect={() => { void handleModSelect(null); }}
             >
               <CheckSlot active={state?.activeModPath == null} />
               <span>Unmodded</span>
@@ -662,7 +672,7 @@ export function MenuBar({
                       <Menubar.Item
                         key={m.path}
                         className={ITEM}
-                        onSelect={() => handleModSelect(m.path)}
+                        onSelect={() => { void handleModSelect(m.path); }}
                       >
                         <CheckSlot active={state?.activeModPath === m.path} />
                         <span>{label}</span>
@@ -672,6 +682,22 @@ export function MenuBar({
                 </div>
               ));
             })()}
+
+            {/* Submods… — only when the active mod has submods (e.g. Mod's
+                Mod/GCW/Rev/TR). Opens a reorderable checklist to stack several in
+                precedence order on top of Core. */}
+            {hasSubmods && (
+              <>
+                <Menubar.Separator className={SEPARATOR} />
+                <Menubar.Item
+                  className={ITEM}
+                  onSelect={() => setSubmodsOpen(true)}
+                >
+                  <CheckSlot active={false} />
+                  <span>Submods…</span>
+                </Menubar.Item>
+              </>
+            )}
 
             <Menubar.Separator className={SEPARATOR} />
             <Menubar.Item
@@ -838,6 +864,9 @@ export function MenuBar({
     </Menubar.Root>
 
     <PreferencesDialog bridge={bridge} open={prefsOpen} onOpenChange={setPrefsOpen} />
+
+    {/* Submod stack editor — opened from Mods ▸ Submods… */}
+    <SubmodsDialog bridge={bridge} open={submodsOpen} onOpenChange={setSubmodsOpen} />
 
     {/* Group D: confirm prompt for View → Reset View Settings.
         Body copy mirrors the legacy MessageBox at main.cpp:1734.

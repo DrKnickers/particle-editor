@@ -215,6 +215,10 @@ const MOCK_SKINNED_REFS = new Set<string>(["Stormtrooper_Squad"]);
 // path (distinct from skinned / corrupt). Must match a Name in the catalog list.
 const MOCK_MISSING_MODELS = new Set<string>(["Prop_ElectricBox_00"]);
 
+// Synthetic submods surfaced under an active mod (mirrors Mod's
+// Mod/GCW/Rev/TR). The mods/set-submods handler validates against this set.
+const MOCK_SUBMODS: readonly string[] = ["Mod", "GCW", "Rev", "TR"];
+
 // Browser mode can't load a real .alo, so these canned dome Names stand in
 // for "chosen but the .alo wouldn't load" — selecting one drives the picker's
 // load-failed status path + the solid-colour fallback indicator.
@@ -238,6 +242,11 @@ export class MockBridge implements Bridge {
   // [guard-config] Last engine/set/overload-guard params received —
   // test-observable; no mock behavior depends on it.
   lastOverloadGuard: { enabled: boolean; maxParticles: number } | null = null;
+
+  // Selected submod folder under the active mod (null = none). Not part of
+  // the engine-state snapshot DTO — surfaced only via the mods/list payload.
+  // Ordered stack, highest precedence first.
+  private activeSubmods: string[] = [];
 
   async request<R extends Request>(req: R): Promise<ResponseFor<R>> {
     // Capture pre-mutation root order for move-many, whose dirtiness depends on
@@ -637,14 +646,47 @@ export class MockBridge implements Bridge {
           { path: "C:/mock/corruption/Mods/FoCMod",        folderName: "FoCMod",        nickname: "",         isFoC: true  },
           { path: "C:/mock/GameData/Mods/BaseGameMod",     folderName: "BaseGameMod",   nickname: "Demo Mod", isFoC: false },
         ];
-        return { mods: fixture, activePath: snapshotEngineState().activeModPath };
+        // Synthetic submods only when a mod is active (mirrors the native
+        // side: submods are discovered under the active mod root).
+        const active = snapshotEngineState().activeModPath;
+        const submods = active ? [...MOCK_SUBMODS] : [];
+        return {
+          mods: fixture,
+          activePath: active,
+          submods,
+          activeSubmods: active ? this.activeSubmods : [],
+        };
       }
 
       case "mods/select": {
         const params = req.params as { path: string | null };
         useMockEngineState.getState().applyPatch({ activeModPath: params.path });
+        this.activeSubmods = [];   // a new mod resets the submod stack
         this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
         return { ok: true, activePath: params.path } as { ok: true; activePath: string | null };
+      }
+
+      // Set the ordered submod stack under the active mod ([] = none).
+      // Mirrors native: only valid (discovered) submods, deduped, order preserved;
+      // a no-active-mod request clears the stack.
+      case "mods/set-submods": {
+        const params = req.params as { names: string[] };
+        const active = snapshotEngineState().activeModPath;
+        if (!active) {
+          this.activeSubmods = [];
+        } else {
+          // Mirror native ModManager::SelectSubmods: match case-insensitively,
+          // emit the canonical (discovered) casing, drop unknowns + dups, keep order.
+          const seen = new Set<string>();
+          const canon: string[] = [];
+          for (const n of params.names ?? []) {
+            const c = MOCK_SUBMODS.find((s) => s.toLowerCase() === n.toLowerCase());
+            if (c && !seen.has(c)) { seen.add(c); canon.push(c); }
+          }
+          this.activeSubmods = canon;
+        }
+        this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
+        return { ok: true, activeSubmods: this.activeSubmods };
       }
 
       // ---------------- host plumbing: accepted no-ops ----------------
