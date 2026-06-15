@@ -19,7 +19,7 @@ Conventions:
 
 ### Gizmo polish — screen-uniform handles, precision drags, grid/angle snapping, in-drag guides
 
-*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+*2026-06-15 · [`aa2137d`](https://github.com/DrKnickers/particle-editor/commit/aa2137d) · #197*
 
 The in-viewport manipulator for a reference object gains four placement refinements (the first
 batch of). **The gizmo now holds a constant on-screen size** as you resize the window or
