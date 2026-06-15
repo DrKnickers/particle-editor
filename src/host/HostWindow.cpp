@@ -875,6 +875,12 @@ void HostWindowImpl::RenderD3D9()
     engine->Update();
     const double perfUpdateUs = PerfUsSince(perfT0);
 
+    // The game-object catalog builds off the UI thread; when Update() just
+    // swapped a finished one in, broadcast engine/state/changed so an open reference
+    // picker re-queries its now-ready object list (drops the "Loading objects…" state).
+    if (dispatcher && engine->ConsumeCatalogReadyFlag())
+        dispatcher->EmitEngineStateChanged();
+
     // [Item 3] Advance the dock-slide viewport interpolation to THIS frame's
     // wall-clock, so the engine below paints the time-lerped scene rect. Placed
     // before perfT1 so the (cheap, no-op-when-idle) advance stays OUTSIDE the
@@ -2107,10 +2113,13 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         }
                     }
 
-                    // Imported reference object + unit grid (). Runs
-                    // after the device is up so SetReferenceObject resolves +
-                    // uploads the mesh now. Transform / grid spacing are
-                    // REG_BINARY floats; visibility / grid toggle are REG_DWORD.
+                    // Imported reference object + unit grid (). At
+                    // startup the catalog isn't built yet, so SetReferenceObject DEFERS:
+                    // it kicks the off-thread catalog build and the mesh resolves/uploads
+                    // a frame or more later, once Update() harvests the catalog and reruns
+                    // the deferred rebuild (so a restored object isn't on the first frame).
+                    // Transform / grid spacing are REG_BINARY floats; visibility / grid
+                    // toggle are REG_DWORD.
                     {
                         auto readFloats = [&](const wchar_t* name, float* out, DWORD count) -> bool {
                             DWORD t = 0, cb = count * sizeof(float);

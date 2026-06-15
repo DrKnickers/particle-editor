@@ -245,6 +245,9 @@ export type EngineStateDto = {
   // up (Z), pitch = tilt about X, roll = bank about Y (yaw applied last).
   referenceObjectRotation: Vec3;           // GetReferenceRotation()
   referenceObjectStatus: ReferenceObjectStatus;  // lazy probe of the selected .alo
+  // true while the units/structures catalog is (re)building off the UI thread;
+  // the picker shows "Loading objects…" and re-queries its list on the true->false edge.
+  referenceCatalogBuilding: boolean;       // IsReferenceCatalogBuilding()
   gridVisible: boolean;                    // GetGridVisible()
   gridSpacing: number;                     // GetGridSpacing() — world units between lines
 
@@ -1101,7 +1104,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/query/ground-slot-empty" }   ? boolean :
   R extends { kind: "engine/query/skydome-slot-empty" }  ? boolean :
   R extends { kind: "engine/query/skydome-list" }        ? { primary: string[]; secondary: string[] } :
-  R extends { kind: "engine/query/reference-object-list" } ? { objects: ReferenceObjectEntry[] } :
+  R extends { kind: "engine/query/reference-object-list" } ? { objects: ReferenceObjectEntry[]; building?: boolean } :
   R extends { kind: "engine/query/bloom-available" }     ? boolean :
 
   // Settings (cross-mode registry persistence)

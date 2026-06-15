@@ -213,7 +213,9 @@ const MOCK_SKINNED_REFS = new Set<string>(["Stormtrooper_Squad"]);
 // Names that resolve in the catalog but whose model file is absent from the
 // mod/base (getFile miss) — selecting one drives the "model file not found" status
 // path (distinct from skinned / corrupt). Must match a Name in the catalog list.
-const MOCK_MISSING_MODELS = new Set<string>(["Prop_ElectricBox_00"]);
+// A structure (the picker now lists units + structures only; the s49 prop
+// example would be filtered out, so the missing-model case rides a kept category).
+const MOCK_MISSING_MODELS = new Set<string>(["Sensor_Array_NoModel"]);
 
 // Synthetic submods surfaced under an active mod (mirrors Mod's
 // Mod/GCW/Rev/TR). The mods/set-submods handler validates against this set.
@@ -615,17 +617,21 @@ export class MockBridge implements Bridge {
       // Enumerate selectable game objects. Browser mode has no disk to read
       // GameObjectFiles.xml from, so return a small canned set (real vanilla Names
       // across categories) to exercise the picker dispatch + grouping surface.
+      // Units + structures only — mirrors Engine::EnumerateReferenceObjects
+      // (props/projectiles/uncategorized are filtered out engine-side); `building`
+      // is always false here (browser mode has no off-thread catalog build).
       case "engine/query/reference-object-list":
         return {
+          building: false,
           objects: [
             { name: "AT_AT_Walker", category: "Vehicle" },
             { name: "AT_ST_Walker", category: "Vehicle" },
             { name: "Empire_Anti_Aircraft_Turret", category: "Turret" },
             { name: "Rebel_Barracks", category: "Structure" },
             { name: "Star_Destroyer", category: "Space" },
-            { name: "Asteroid_Field", category: "Prop" },
-            { name: "Stormtrooper_Squad", category: "Infantry" },   // MOCK_SKINNED_REFS
-            { name: "Prop_ElectricBox_00", category: "Prop" },      // MOCK_MISSING_MODELS
+            { name: "Stormtrooper_Squad", category: "Infantry" },        // MOCK_SKINNED_REFS
+            { name: "Sensor_Array_NoModel", category: "Structure" },     // MOCK_MISSING_MODELS
+            { name: "Imperial_Bunker_Capturable", category: "Other" },   // unrecognised-tag unit/structure -> Other, still listed
           ],
         };
 

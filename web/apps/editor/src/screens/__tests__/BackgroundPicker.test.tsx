@@ -93,7 +93,10 @@ describe("BackgroundPicker — skydome load status", () => {
     render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
 
     const indicator = await screen.findByRole("status", { name: "Active background" });
-    expect(within(indicator).getByText("Game dome")).toBeInTheDocument();
+    // The indicator renders at mount as "Solid colour" and flips to "Game dome" only
+    // after the async snapshot resolves -> AWAIT the text (a sync getByText here races
+    // the snapshot resolution and flakes under CI load).
+    await within(indicator).findByText("Game dome");
     expect(screen.queryByText("Couldn't load this dome's model.")).toBeNull();
     expect(screen.queryByText(/selected dome didn't load/)).toBeNull();
   });
@@ -107,9 +110,10 @@ describe("BackgroundPicker — skydome load status", () => {
 
     // The chosen Name still shows in the dropdown (controlled by the name)...
     const primary = await screen.findByRole("combobox", { name: "Primary dome" });
+    // ...but the load failure is surfaced rather than read as applied. Await a
+    // snapshot-derived element first so the sync assertions below don't race the fetch.
+    await screen.findByText("Couldn't load this dome's model.");
     expect((primary as HTMLSelectElement).value).toBe("Broken_Sky");
-    // ...but the load failure is surfaced rather than read as applied.
-    expect(screen.getByText("Couldn't load this dome's model.")).toBeInTheDocument();
     const indicator = screen.getByRole("status", { name: "Active background" });
     expect(within(indicator).getByText("Solid colour")).toBeInTheDocument();
     expect(within(indicator).getByText(/selected dome didn't load/)).toBeInTheDocument();
@@ -123,8 +127,8 @@ describe("BackgroundPicker — skydome load status", () => {
     render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
 
     const secondary = await screen.findByRole("combobox", { name: "Secondary dome" });
+    await screen.findByText("Couldn't load this dome's model.");
     expect((secondary as HTMLSelectElement).value).toBe("Broken_Sky");
-    expect(screen.getByText("Couldn't load this dome's model.")).toBeInTheDocument();
     const indicator = screen.getByRole("status", { name: "Active background" });
     expect(within(indicator).getByText("Solid colour")).toBeInTheDocument();
   });
@@ -137,7 +141,7 @@ describe("BackgroundPicker — skydome load status", () => {
     render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
 
     const indicator = await screen.findByRole("status", { name: "Active background" });
-    expect(within(indicator).getByText("Game dome")).toBeInTheDocument();
+    await within(indicator).findByText("Game dome");
     expect(screen.queryByText("Couldn't load this dome's model.")).toBeNull();
   });
 
@@ -148,7 +152,7 @@ describe("BackgroundPicker — skydome load status", () => {
     render(<BackgroundPicker bridge={bridge} onClose={() => {}} />);
 
     const indicator = await screen.findByRole("status", { name: "Active background" });
-    expect(within(indicator).getByText("Custom texture")).toBeInTheDocument();
+    await within(indicator).findByText("Custom texture");
     expect(within(indicator).queryByText("Solid colour")).toBeNull();
     // The solid swatch must NOT read as the active/selected background.
     const solid = screen.getByRole("button", { name: "Solid colour" });

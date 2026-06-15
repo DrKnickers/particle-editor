@@ -630,9 +630,25 @@ void Engine::ReloadTextures()
 	{
 		RebuildSkydomeMeshes();
 	}
-	// A mod switch changes both the object catalog and the selected .alo /
-	// textures / .fxo; drop the cached catalog and rebuild the reference object.
-	m_referenceCatalogBuilt = false;
+	///S50] A mod/submod switch changes the object catalog -> invalidate it so the
+	// next Update() rebuilds it OFF the UI thread (++generation discards any in-flight
+	// build started under the OLD context). But ReloadTextures ALSO runs on texture-only
+	// paths (F5 reload, every file open) where the mod context is UNCHANGED -- invalidating
+	// there would needlessly rebuild an identical catalog AND make the selected reference
+	// object vanish for the async rebuild. So invalidate ONLY when the active mod/submod
+	// roots actually differ from what the current/in-flight catalog reflects.
+	const bool modContextChanged =
+		m_fileManager.GetModPath() != m_catalogContextModPath ||
+		m_fileManager.GetSubmods() != m_catalogContextSubmods;
+	if (modContextChanged)
+	{
+		m_referenceCatalogBuilt = false;
+		++m_catalogGeneration;
+	}
+	// Re-resolve the selected reference object either way: on a context change it defers
+	// onto the fresh async catalog; on a texture-only reload the catalog is still valid so
+	// it re-Loads in place from the cached model path (refreshing the object's textures --
+	// one .alo load, no vanish), matching the in-place skydome behaviour above.
 	if (!m_referenceObjectName.empty())
 	{
 		RebuildReferenceObjectMesh();
@@ -643,6 +659,36 @@ void Engine::ReloadTextures()
 void Engine::Update()
 {
 	TimeF currentTime = GetTimeF();
+
+	// Harvest a finished background catalog build (worker -> UI handoff) and
+	// (re)kick one when wanted but missing. This swap is on the UI thread, so the other
+	// catalog readers (EnumerateReferenceObjects / RebuildReferenceObjectMesh, also UI
+	// thread) never race the worker -- the worker only touched its OWN FileManager.
+	{
+		std::unique_ptr<GameObjectCatalog> ready;
+		uint64_t readyGen = 0;
+		{
+			std::lock_guard<std::mutex> lock(m_catalogMutex);
+			if (m_pendingCatalog) { ready = std::move(m_pendingCatalog); readyGen = m_pendingCatalogGen; }
+		}
+		if (ready)
+		{
+			if (m_catalogThread.joinable()) m_catalogThread.join();   // worker published + cleared building
+			if (readyGen == m_catalogGeneration)                       // not stale (no mod switch mid-build)
+			{
+				m_referenceCatalog      = std::move(*ready);
+				m_referenceCatalogBuilt = true;
+				m_catalogJustReady      = true;                        // host -> emit state-changed (picker re-queries)
+				if (m_referenceMeshDeferred)                            // a restored/selected object was waiting
+				{
+					m_referenceMeshDeferred = false;
+					RebuildReferenceObjectMesh();
+				}
+			}
+			// else: stale build (mod switched mid-flight) -> discard; the kick below rebuilds.
+		}
+		StartCatalogBuildIfNeeded();
+	}
 
 	// Overload guard: refill the per-frame spawn budget. Hysteresis: once
 	// overloaded, spawning stays suppressed until the population decays
@@ -3393,22 +3439,85 @@ void Engine::EnumerateSkydomeNames(SkydomeContext context,
         for (const SkydomeRef& r : refs) outSecondary.push_back(r.name);
 }
 
-// Build the game-object catalog once per active mod. The catalog is XML-
-// only (no .alo decode), so this is cheap; it's invalidated on a mod switch
-// (ReloadTextures clears m_referenceCatalogBuilt).
-void Engine::EnsureReferenceCatalog()
+// Kick a background catalog (re)build when one is wanted and not already
+// built or in flight. BuildGameObjectCatalog parses every object XML the active
+// content exposes (O(content)); on a big mod that froze the whole window when run
+// synchronously on the WebView2 UI thread. Snapshot the FileManager's content roots
+// on THIS (UI) thread, then build on a worker with an ISOLATED FileManager (its own
+// MEG handles -> no seek-race against the UI thread's FileManager). Update() harvests
+// the finished catalog. Safe to call every frame; early-returns when built/building.
+void Engine::StartCatalogBuildIfNeeded()
 {
-    if (m_referenceCatalogBuilt) return;
-    m_referenceCatalog = GameObjectCatalog();
-    BuildGameObjectCatalog(m_fileManager, m_referenceCatalog);
-    m_referenceCatalogBuilt = true;
+    if (!m_catalogWanted || m_referenceCatalogBuilt || m_catalogBuilding.load())
+        return;
+
+    const std::vector<std::wstring> basepaths = m_fileManager.GetBasepaths();
+    const std::wstring              modpath   = m_fileManager.GetModPath();
+    const std::vector<std::wstring> submods   = m_fileManager.GetSubmods();
+    const uint64_t                  gen       = m_catalogGeneration;
+
+    // Record the mod context this build reflects, so a later texture-only
+    // ReloadTextures (F5 / file open) sees an unchanged context and does NOT invalidate.
+    m_catalogContextModPath = modpath;
+    m_catalogContextSubmods = submods;
+
+    if (m_catalogThread.joinable()) m_catalogThread.join();   // a prior build, already harvested
+    m_catalogBuilding.store(true);
+    m_catalogThread = std::thread([this, basepaths, modpath, submods, gen]()
+    {
+        auto cat = std::make_unique<GameObjectCatalog>();
+        try
+        {
+            FileManager isoFm(basepaths);          // own MEG handles; ctor throws on empty MEGs
+            isoFm.SetModPath(modpath);             // replicate the active mod...
+            isoFm.SetSubmods(submods);             // ...and its submod stack (rebuilds content roots)
+            BuildGameObjectCatalog(isoFm, *cat);   // O(content) XML parse, OFF the UI thread
+        }
+        catch (...)
+        {
+            // Isolated-FM construction / parse failed -> publish an empty catalog
+            // (the picker shows an empty list, never a crash in the worker).
+        }
+        {
+            std::lock_guard<std::mutex> lock(m_catalogMutex);
+            m_pendingCatalog    = std::move(cat);
+            m_pendingCatalogGen = gen;
+        }
+        m_catalogBuilding.store(false);
+    });
+}
+
+// Host calls this right after Update(): true once when a finished catalog was
+// just swapped in, so the host fires engine/state/changed (the picker re-queries).
+// React/composition path only: legacy main.cpp never sets m_catalogWanted (no picker),
+// so no worker runs and the flag is never set there. Even unconsumed it's a harmless
+// one-shot bool (only ever re-set to true on the next install -- no accumulation).
+bool Engine::ConsumeCatalogReadyFlag()
+{
+    if (!m_catalogJustReady) return false;
+    m_catalogJustReady = false;
+    return true;
 }
 
 // Enumerate selectable game objects (Name + category) for the picker.
+// Filtered to units + structures (IsPickerListedCategory) -- props /
+// projectiles / uncategorized are dropped so the list isn't thousands of
+// entries. The catalog itself still holds every category (so a hardpoint /
+// variant lookup against the full set is unaffected); only the picker payload
+// is trimmed.
 void Engine::EnumerateReferenceObjects(std::vector<GameObjectRef>& out)
 {
-    EnsureReferenceCatalog();
-    out = m_referenceCatalog.objects;
+    // Mark the catalog wanted; the actual (re)build is launched ONLY by Update()
+    // -- AFTER it harvests any finished build -- so a build is never started outside the
+    // harvest path (which would let a second worker spawn and the next harvest's join()
+    // block the UI thread on it, reintroducing the freeze). Return whatever's ready:
+    // while still building, out is empty + IsReferenceCatalogReady() is false, so the
+    // bridge reports "building" and the picker shows "Loading objects…".
+    m_catalogWanted = true;
+    out.clear();
+    for (const GameObjectRef& r : m_referenceCatalog.objects)
+        if (IsPickerListedCategory(r.category))
+            out.push_back(r);
 }
 
 // Select a reference object by its in-game Name; clears it when empty.
@@ -3436,10 +3545,24 @@ void Engine::RebuildReferenceObjectMesh()
     {
         m_referenceObjectMesh.Clear();
         m_referenceObjectStatus = ReferenceObjectStatus::None;
+        m_referenceMeshDeferred = false;
         return;
     }
 
-    EnsureReferenceCatalog();
+    // The catalog resolves Name -> model path; if it isn't built yet (startup
+    // restore, or just-invalidated on a mod/submod switch), DEFER until the background
+    // build finishes -- Update() retries this once the catalog is ready. Never build
+    // synchronously here, or a submod switch with a selected object would freeze the UI.
+    if (!m_referenceCatalogBuilt)
+    {
+        m_catalogWanted         = true;   // Update() launches the build after its harvest
+        m_referenceMeshDeferred = true;
+        m_referenceObjectMesh.Clear();
+        m_referenceObjectStatus = ReferenceObjectStatus::None;   // nothing renders until ready
+        return;
+    }
+    m_referenceMeshDeferred = false;
+
     // Case-INSENSITIVE match: the catalog folds Names to lower-case keys (the
     // Alamo engine resolves Names case-insensitively) but stores original casing
     // for display, so a persisted/cross-mod name with different casing must still
@@ -4023,6 +4146,12 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 
 Engine::~Engine()
 {
+	// Join the catalog worker BEFORE any member is torn down -- the worker
+	// captures `this` and writes m_pendingCatalog / m_catalogMutex on completion, so
+	// it must finish before those members are destroyed. (Blocks until the in-flight
+	// build returns; at most the cost of one catalog parse, only at shutdown.)
+	if (m_catalogThread.joinable()) m_catalogThread.join();
+
 	ReleaseBloomTargets();
 	SAFE_RELEASE(m_pBloomEffect);
     for (int i = 0; i < NUM_SHADERS; i++)

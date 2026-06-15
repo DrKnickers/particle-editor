@@ -88,6 +88,8 @@ static const char* kFileA =
     "  <StarBase Name=\"Home_One_Starbase\"><Space_Model_Name>EV_StarBase.ALO</Space_Model_Name></StarBase>\n"  // tag 'starbase' must beat 'base'
     "  <TransportUnit Name=\"Hauler\"><Land_Model_Name>EV_Hauler.ALO</Land_Model_Name></TransportUnit>\n"  // 'transport' -> Vehicle
     "  <GroundVehicle Name=\"CaseDupA\"><Land_Model_Name>EV_CaseA.ALO</Land_Model_Name></GroundVehicle>\n"  // case-insensitive dedup (FileB lists 'casedupa')
+    "  <GroundCompany Name=\"Clone_Company\"><Land_Model_Name>EI_Clone.ALO</Land_Model_Name></GroundCompany>\n"  // unrecognised unit tag -> Other, but LISTED
+    "  <Marker Name=\"Spawn_Marker_01\"><Land_Model_Name>w_flag_marker.alo</Land_Model_Name></Marker>\n"  // model-bearing non-unit -> Excluded
     "</Objects>\n";
 
 static const char* kFileB =
@@ -146,16 +148,23 @@ static int dumpRealCatalog(const char* xmlDir)
     std::printf("build=%s  objects=%zu\n", ok ? "true" : "false", cat.objects.size());
     if (!ok) return 2;
 
-    size_t hist[9] = { 0 };
+    size_t hist[10] = { 0 };
     for (const auto& r : cat.objects) hist[(int)r.category]++;
     static const GameObjectCategory cats[] = {
         GameObjectCategory::Vehicle, GameObjectCategory::Infantry, GameObjectCategory::Structure,
         GameObjectCategory::Turret, GameObjectCategory::Hero, GameObjectCategory::Prop,
-        GameObjectCategory::Space, GameObjectCategory::Projectile, GameObjectCategory::Other
+        GameObjectCategory::Space, GameObjectCategory::Projectile, GameObjectCategory::Other,
+        GameObjectCategory::Excluded
     };
     std::printf("category histogram:\n");
+    size_t pickerListed = 0;
     for (GameObjectCategory c : cats)
-        std::printf("  %-12s %zu\n", GameObjectCategoryName(c), hist[(int)c]);
+    {
+        std::printf("  %-12s %zu%s\n", GameObjectCategoryName(c), hist[(int)c],
+                    IsPickerListedCategory(c) ? "  [picker]" : "");
+        if (IsPickerListedCategory(c)) pickerListed += hist[(int)c];
+    }
+    std::printf("picker-listed (units+structures) total: %zu of %zu\n", pickerListed, cat.objects.size());
 
     static const char* samples[] = {
         "AT_AT_Walker", "AT_AT_Walker_REB09", "AT_ST_Walker", "Star_Destroyer"
@@ -206,7 +215,7 @@ int main(int argc, char** argv)
     // ---- enumeration + skips -----------------------------------------------
     std::printf("[enumerate]\n");
     CHECK(ok, "build ok");
-    CHECK(cat.objects.size() == 22, "22 resolvable objects (no-model / anon / cyclic / orphan / case-dup skipped)");
+    CHECK(cat.objects.size() == 24, "24 resolvable objects (no-model / anon / cyclic / orphan / case-dup skipped; +Clone_Company +Spawn_Marker_01)");
     CHECK(find(cat, "Company_NoModel") == nullptr, "no-model object skipped");
     CHECK(find(cat, "Orphan") == nullptr, "missing-parent variant skipped");
     bool anyEmptyName = false, anyEmptyModel = false;
@@ -274,7 +283,52 @@ int main(int argc, char** argv)
         CHECK(catOf("Empire_Anti_Aircraft_Turret") == GameObjectCategory::Turret, "GroundStructure named *_Turret -> Turret (name escalation)");
         CHECK(catOf("Home_One_Starbase") == GameObjectCategory::Space, "StarBase -> Space (precedence: starbase beats 'base'->Structure)");
         CHECK(catOf("Hauler") == GameObjectCategory::Vehicle, "TransportUnit -> Vehicle ('transport')");
-        CHECK(catOf("Tatooine") == GameObjectCategory::Other, "Planet -> Other (fallthrough)");
+        CHECK(catOf("Tatooine") == GameObjectCategory::Excluded, "Planet -> Excluded (model-bearing non-unit, S50)");
+        CHECK(catOf("Clone_Company") == GameObjectCategory::Other, "GroundCompany -> Other (unrecognised unit tag, shown)");
+        CHECK(catOf("Spawn_Marker_01") == GameObjectCategory::Excluded, "Marker -> Excluded (model-bearing non-unit)");
+    }
+
+    // ---- picker category filter (exclusion-based: units+structures + the
+    //      Other catch-all IN; Prop/Projectile/Excluded OUT) ------------------
+    std::printf("[picker filter]\n");
+    {
+        // The predicate: everything listed EXCEPT Prop / Projectile / Excluded.
+        CHECK(IsPickerListedCategory(GameObjectCategory::Vehicle),    "Vehicle is picker-listed");
+        CHECK(IsPickerListedCategory(GameObjectCategory::Infantry),   "Infantry is picker-listed");
+        CHECK(IsPickerListedCategory(GameObjectCategory::Structure),  "Structure is picker-listed");
+        CHECK(IsPickerListedCategory(GameObjectCategory::Turret),     "Turret is picker-listed");
+        CHECK(IsPickerListedCategory(GameObjectCategory::Hero),       "Hero is picker-listed");
+        CHECK(IsPickerListedCategory(GameObjectCategory::Space),      "Space is picker-listed");
+        CHECK(IsPickerListedCategory(GameObjectCategory::Other),       "Other IS picker-listed (unrecognised units shown)");
+        CHECK(!IsPickerListedCategory(GameObjectCategory::Prop),       "Prop is NOT picker-listed");
+        CHECK(!IsPickerListedCategory(GameObjectCategory::Projectile), "Projectile is NOT picker-listed");
+        CHECK(!IsPickerListedCategory(GameObjectCategory::Excluded),   "Excluded is NOT picker-listed");
+
+        // Filtering the built catalog drops Prop/Projectile/Excluded and keeps every
+        // unit/structure INCLUDING the unrecognised-tag Other ones (mirrors
+        // Engine::EnumerateReferenceObjects).
+        std::vector<GameObjectRef> listed;
+        for (const auto& r : cat.objects)
+            if (IsPickerListedCategory(r.category)) listed.push_back(r);
+        auto inListed = [&](const char* n) {
+            for (const auto& r : listed) if (r.name == n) return true;
+            return false;
+        };
+        CHECK(!inListed("Bolt"),       "Projectile 'Bolt' filtered out of the picker list");
+        CHECK(!inListed("Asteroid"),   "Prop 'Asteroid' filtered out of the picker list");
+        CHECK(!inListed("Tatooine"),   "Excluded 'Tatooine' (planet) filtered out");
+        CHECK(!inListed("Spawn_Marker_01"), "Excluded 'Spawn_Marker_01' (marker) filtered out");
+        CHECK(inListed("Tank"),         "Vehicle 'Tank' kept in the picker list");
+        CHECK(inListed("Frigate"),      "Space 'Frigate' kept in the picker list");
+        CHECK(inListed("Trooper"),      "Infantry 'Trooper' kept in the picker list");
+        CHECK(inListed("LaserTurret"),  "Turret 'LaserTurret' kept in the picker list");
+        CHECK(inListed("Vader"),        "Hero 'Vader' kept in the picker list");
+        CHECK(inListed("Barracks"),     "Structure 'Barracks' kept in the picker list");
+        CHECK(inListed("Clone_Company"),"Other 'Clone_Company' (unrecognised unit tag) KEPT -- the Mod-units-missing fix");
+        bool anyExcluded = false;
+        for (const auto& r : listed)
+            if (!IsPickerListedCategory(r.category)) anyExcluded = true;
+        CHECK(!anyExcluded, "filtered list contains ONLY units/structures");
     }
 
     // ---- sorted by name ----------------------------------------------------

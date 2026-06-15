@@ -90,6 +90,7 @@ export function makeDefaultEngineState(): EngineStateDto {
     referenceObjectPosition: [0, 0, 0],
     referenceObjectRotation: [0, 0, 0],
     referenceObjectStatus: "none",
+    referenceCatalogBuilding: false,   // browser mode has no off-thread build
     gridVisible: false,
     gridSpacing: 20,
 

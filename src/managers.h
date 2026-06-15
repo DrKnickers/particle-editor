@@ -26,6 +26,17 @@ public:
 	// Empty clears the stack. Default no-op for simple mocks; FileManager rebuilds
 	// its content roots.
 	virtual void SetSubmods(const std::vector<std::wstring>& /*names*/) {}
+
+	// Snapshot the active roots so a background thread can construct an
+	// ISOLATED FileManager over the same content (own MEG handles -> no seek-race)
+	// and rebuild the game-object catalog off the UI thread. Default empties so
+	// simple mocks compile; FileManager overrides with the real roots.
+	virtual const std::vector<std::wstring>& GetBasepaths() const
+	{ static const std::vector<std::wstring> kEmpty; return kEmpty; }
+	virtual const std::wstring& GetModPath() const
+	{ static const std::wstring kEmpty; return kEmpty; }
+	virtual const std::vector<std::wstring>& GetSubmods() const
+	{ static const std::vector<std::wstring> kEmpty; return kEmpty; }
 };
 
 class ITextureManager
@@ -81,13 +92,19 @@ public:
 	// loose-file lookups. Pass an empty string to clear (Unmodded). Clears the
 	// selected submod stack (a new mod has its own submods).
 	void SetModPath(const std::wstring& path) override;
-	const std::wstring& GetModPath() const { return modpath; }
+	const std::wstring& GetModPath() const override { return modpath; }
 
 	// Select the ordered submod stack under the active mod (empty for none)
 	// and rebuild the content roots. Front = highest precedence. No-op effect if
 	// no mod is active.
 	void SetSubmods(const std::vector<std::wstring>& names) override;
-	const std::vector<std::wstring>& GetSubmods() const { return submods; }
+	const std::vector<std::wstring>& GetSubmods() const override { return submods; }
+
+	// The base install search paths, so a background thread can construct an
+	// ISOLATED FileManager over the same roots (own MEG handles -> no seek-race with
+	// this instance) and rebuild the game-object catalog off the UI thread. Replicate
+	// the active mod/submod stack with SetModPath(GetModPath()) + SetSubmods(GetSubmods()).
+	const std::vector<std::wstring>& GetBasepaths() const override { return basepaths; }
 
 	FileManager(const std::vector<std::wstring>& basepaths);
 	~FileManager();

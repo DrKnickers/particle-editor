@@ -17,6 +17,50 @@ Conventions:
 ## Changelog
 
 
+### Reference-object picker — units & structures only, built off the UI thread
+
+*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+The reference-object picker now lists **units and structures** instead of every game object — the noise
+(props, projectiles, planets, markers, dummies, death-clone debris) is hidden, so the list isn't
+thousands of prop-dominated entries. A **search box** narrows it further by name. And the object
+catalog — which parses every object XML the active content exposes — now **builds on a background
+thread** instead of on the UI thread, so opening the picker after stacking a large submod (e.g. Mod) no
+longer **freezes the whole window** for several seconds; the picker shows "Loading objects…" while the
+catalog builds and fills in the moment it's ready.
+
+**How we tackled it.** A new `IsPickerListedCategory` predicate ([`src/GameObjectCatalog.cpp`](src/GameObjectCatalog.cpp))
+filters `Engine::EnumerateReferenceObjects`. It's **exclusion-based** — list everything with a model
+*except* props, projectiles, and the explicit model-bearing non-units (planets / markers / dummies /
+death-clones / particles, the new `Excluded` category). Crucially the `Other` catch-all is now *shown*:
+a first cut kept only the recognised unit categories and dropped `Other`, which silently lost every unit
+whose container tag `categorize()` didn't recognise (Mod's `flagshipunit` capital ships, `groundcompany`,
+capturable bunkers, …). The catalog itself still holds every category, so hardpoint/variant lookups are
+unaffected. For the freeze: `BuildGameObjectCatalog`
+now runs on a worker `std::thread` with an **isolated `FileManager`** (its own MEG handles, so no
+seek-race against the UI thread's `FileManager`); `Engine::Update()` ([`src/engine.cpp`](src/engine.cpp:648))
+is the *sole* launcher — it harvests the finished catalog (generation-checked, so a build started under a
+now-changed mod context is discarded) and only then (re)launches, which is what makes the worker/UI
+hand-off race-free. The bridge reference-object-list query reports `building`, and a new
+`referenceCatalogBuilding` engine-state field drives the picker's "Loading…" state; the picker re-queries
+the list **level-triggered** (while it doesn't yet have a ready list), not on every `engine/state/changed`,
+so a gizmo drag doesn't trigger a fetch storm.
+
+**Issues encountered and resolutions.** Two adversarial-review rounds caught design flaws a green build
++ test pass missed (see): (1) launching the worker from the bridge handlers (not just
+`Update()`) opened a timing window where a second worker could spawn and the next harvest's `join()`
+would block the UI thread on it — *reintroducing the freeze*; fixed by making `Update()` the sole
+launcher. (2) `ReloadTextures` runs on F5 / every file-open, not just mod switches, so invalidating the
+catalog there made the selected object **vanish** for the async rebuild; fixed by invalidating only when
+the mod/submod roots actually change (the texture-only path re-resolves the object in place). (3)
+edge-triggering the picker's re-query on `referenceCatalogBuilding` `true→false` hung the picker on
+first open, because the snapshot is fetched before the list query sets the engine's "wanted" flag, so the
+rising edge is never observed — fixed by level-triggering. The freeze fix itself is the user's live test
+(a real Mod + Mod install); the filter, search, and "Loading…" state are covered by Vitest + a
+browser-preview check.
+
+---
+
 ### Per-submod selection — stack Mod submods in precedence order
 
 *2026-06-14 · [`05d0baf`](https://github.com/DrKnickers/particle-editor/commit/05d0baf) · #184*

@@ -80,15 +80,32 @@ namespace
         auto nameOrTag = [&](const char* s) { return n.find(s) != std::string::npos || t.find(s) != std::string::npos; };
         auto tagHas    = [&](const char* s) { return t.find(s) != std::string::npos; };
 
+        // EXCLUSION FIRST: model-bearing objects that are NOT units/structures.
+        // Checked BEFORE the keyword rules so a "...marker"/"...dummy" tag that also
+        // contains "structure" (e.g. multiplayerstructuremarker, w_dummystructure)
+        // doesn't slip into Structure. The model-LESS noise (events, abilities, trade
+        // routes, campaigns, ...) is already dropped by the no-model skip in the build,
+        // so only the model-bearing non-units need naming here: planets, markers/spawn
+        // zones, dummy structures, death clones, and particle props. (Planets + death
+        // clones are user-chosen exclusions; capturable structures are deliberately NOT
+        // here -- they fall through to Other and are shown.)
+        if (tagHas("planet") || tagHas("marker") || tagHas("dummy") ||
+            tagHas("death_clone") || tagHas("particle"))
+            return GameObjectCategory::Excluded;
+
+        // Units + structures. The keyword set is generous on purpose -- the filter
+        // fails toward SHOWING, so an unrecognised unit tag falls through to Other
+        // (which IS listed) rather than vanishing.
         if (nameOrTag("turret"))                                         return GameObjectCategory::Turret;   // name or tag
         if (tagHas("infantry") || tagHas("trooper"))                     return GameObjectCategory::Infantry;
-        if (tagHas("prop"))                                              return GameObjectCategory::Prop;     // SpaceProp / Props_* / Prop_*
-        if (tagHas("hero"))                                              return GameObjectCategory::Hero;
-        if (tagHas("projectile"))                                        return GameObjectCategory::Projectile;
+        if (tagHas("prop"))                                              return GameObjectCategory::Prop;     // SpaceProp / Props_* / Prop_* -> hidden
+        if (tagHas("projectile"))                                        return GameObjectCategory::Projectile; // hidden
+        if (tagHas("hero") || tagHas("unique") || tagHas("commander"))   return GameObjectCategory::Hero;     // herounit / uniqueunit / genericcommander
         if (tagHas("vehicle") || tagHas("transport"))                    return GameObjectCategory::Vehicle;
-        if (tagHas("starbase") || tagHas("squadron") || tagHas("space")) return GameObjectCategory::Space;
-        if (tagHas("structure") || tagHas("building") || tagHas("base")) return GameObjectCategory::Structure;
-        return GameObjectCategory::Other;
+        if (tagHas("flagship") || tagHas("starbase") ||
+            tagHas("squadron") || tagHas("space"))                       return GameObjectCategory::Space;    // flagship* / factional_starbase / spaceunit / squadron
+        if (tagHas("structure") || tagHas("building") || tagHas("base")) return GameObjectCategory::Structure; // groundstructure / specialstructure / groundbase
+        return GameObjectCategory::Other;   // unrecognised unit/structure tags (groundcompany, groundbuildable, groundwar*, indigenous_unit, capturables) -> SHOWN
     }
 
     // One parsed object before Variant_Of resolution. Keyed in `byName` by the
@@ -266,6 +283,30 @@ const char* GameObjectCategoryName(GameObjectCategory c)
         case GameObjectCategory::Prop:       return "Prop";
         case GameObjectCategory::Space:      return "Space";
         case GameObjectCategory::Projectile: return "Projectile";
+        case GameObjectCategory::Excluded:   return "Excluded";
         default:                             return "Other";
+    }
+}
+
+// Exclusion-based: list everything EXCEPT Prop, Projectile, and Excluded
+// (model-bearing non-units). `Other` is LISTED -- it holds unrecognised unit/structure
+// tags, which must not vanish (fail toward showing).
+bool IsPickerListedCategory(GameObjectCategory c)
+{
+    switch (c)
+    {
+        case GameObjectCategory::Vehicle:
+        case GameObjectCategory::Infantry:
+        case GameObjectCategory::Structure:
+        case GameObjectCategory::Turret:
+        case GameObjectCategory::Hero:
+        case GameObjectCategory::Space:
+        case GameObjectCategory::Other:       // unrecognised units -> shown
+            return true;
+        case GameObjectCategory::Prop:
+        case GameObjectCategory::Projectile:
+        case GameObjectCategory::Excluded:
+        default:
+            return false;
     }
 }

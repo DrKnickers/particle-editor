@@ -11,6 +11,9 @@
 #include "ReferenceObjectMesh.h"  // imported game-object render core
 #include "GameObjectCatalog.h"    // enumerate game objects by Name
 #include <memory>
+#include <atomic>    // off-UI-thread catalog build
+#include <mutex>
+#include <thread>
 
 // Renderability verdict for the currently-selected reference object,
 // surfaced in the engine-state snapshot so the picker can show "skinned -- not
@@ -549,8 +552,25 @@ public:
 	const D3DXVECTOR3&    GetReferenceRotation()      const { return m_referenceRotation; }
 	ReferenceObjectStatus GetReferenceObjectStatus()  const { return m_referenceObjectStatus; }
 	// Enumerate selectable game objects (Name + category) for the active mod/base.
-	// Builds + caches the catalog on first call (invalidated on mod switch).
+	// Kicks the background build on first call; returns the units/structures
+	// subset that's ready (empty while still building).
 	void EnumerateReferenceObjects(std::vector<GameObjectRef>& out);
+
+	// Whether the game-object catalog has finished building. The bridge returns
+	// "building" (picker shows "Loading objects…") until this is true; it flips false
+	// again on a mod/submod switch while the background rebuild runs.
+	bool IsReferenceCatalogReady() const { return m_referenceCatalogBuilt; }
+
+	// Whether a catalog build is wanted but not yet ready -- surfaced in the
+	// engine-state snapshot (referenceCatalogBuilding) so the picker shows "Loading
+	// objects…" AND knows when to re-query (the build-ready transition), without
+	// re-querying on every unrelated engine/state/changed event.
+	bool IsReferenceCatalogBuilding() const { return m_catalogWanted && !m_referenceCatalogBuilt; }
+
+	// Called by the host right after Update(): returns (and clears) true once
+	// when a finished catalog was just swapped in, so the host emits engine/state/changed
+	// and an open picker re-queries its now-ready object list.
+	bool ConsumeCatalogReadyFlag();
 
 	// Unit grid. State + setters land here (); RenderUnitGrid is.
 	void  SetGridVisible(bool visible) { m_gridVisible = visible; }
@@ -678,10 +698,16 @@ private:
 
 	// Resolve m_referenceObjectName -> catalog model path -> lazy skinned
 	// probe -> Load/Resolve/CreateBuffers (clone of RebuildSkydomeMeshes). Sets
-	// m_referenceObjectStatus. EnsureReferenceCatalog builds the catalog once per
-	// active mod (invalidated in ReloadTextures on a mod switch).
+	// m_referenceObjectStatus. If the catalog isn't built yet (startup restore
+	// / just-invalidated on a mod switch), defers until the background build finishes
+	// (Update() retries) -- never builds synchronously, so it can't freeze the UI thread.
 	void				RebuildReferenceObjectMesh();
-	void				EnsureReferenceCatalog();
+
+	// Kick a background catalog (re)build if one is wanted and not already
+	// built/in-flight. Snapshots the FileManager roots on the calling (UI) thread and
+	// spawns a worker with an ISOLATED FileManager. Called from Update() once a build
+	// is wanted; safe to call every frame (early-returns when built/building).
+	void				StartCatalogBuildIfNeeded();
 
 	// Draw the imported reference object in two phases (opaque then
 	// transparent) -- each rigid sub-mesh placed by its bone, running its own game
@@ -875,6 +901,28 @@ private:
 	ManipHandle              m_hoverManip;                       // handle under the cursor (highlight), kind=NONE = none
 	GameObjectCatalog        m_referenceCatalog;               // lazily built; invalidated on mod switch
 	bool                     m_referenceCatalogBuilt = false;
+	// Off-UI-thread catalog build. BuildGameObjectCatalog parses every object
+	// XML (O(content)) -- on a big mod that froze the whole window when run on the
+	// WebView2 UI thread (BridgeDispatcher::Dispatch). It now runs on a worker thread
+	// with an ISOLATED FileManager (its own MEG handles -> no seek-race against the UI
+	// thread's FileManager, files.cpp:89); the finished catalog is swapped in on the UI
+	// thread in Update(). A generation counter (bumped on each invalidation) discards a
+	// build whose mod/submod context changed mid-flight.
+	bool                     m_catalogWanted = false;           // someone needs the catalog (keep it warm across mod switches)
+	std::atomic<bool>        m_catalogBuilding{ false };         // a worker build is in flight
+	std::mutex               m_catalogMutex;                     // guards m_pendingCatalog + m_pendingCatalogGen
+	std::unique_ptr<GameObjectCatalog> m_pendingCatalog;        // worker -> UI handoff slot
+	uint64_t                 m_catalogGeneration = 0;            // current valid generation (bumped on invalidation)
+	uint64_t                 m_pendingCatalogGen = 0;            // generation the pending build was started at
+	std::thread              m_catalogThread;                    // the worker (joined on harvest / in ~Engine)
+	bool                     m_catalogJustReady = false;         // set on swap; ConsumeCatalogReadyFlag() -> host emits state-changed
+	bool                     m_referenceMeshDeferred = false;    // a ref-object rebuild waiting on the catalog
+	// The mod/submod context the current/in-flight catalog reflects (captured
+	// at build launch). ReloadTextures invalidates the catalog ONLY when the active
+	// roots differ from this -- so a texture-only reload (F5 / file open), which keeps
+	// the mod context, neither rebuilds an identical catalog nor drops the ref object.
+	std::wstring              m_catalogContextModPath;
+	std::vector<std::wstring> m_catalogContextSubmods;
 
 	// unit-grid state (RenderUnitGrid is).
 	bool                     m_gridVisible = false;

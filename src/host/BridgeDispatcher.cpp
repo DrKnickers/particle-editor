@@ -832,6 +832,10 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"referenceObjectPosition", Vec3ToJson(engine->GetReferencePosition())},
         {"referenceObjectRotation", Vec3ToJson(engine->GetReferenceRotation())},
         {"referenceObjectStatus",   RefStatusToString(engine->GetReferenceObjectStatus())},
+        // True while the units/structures catalog is (re)building off the UI thread;
+        // the picker shows "Loading objects…" and re-queries its list on the true->false
+        // transition (catalog ready / mod-switch rebuild) -- not on every state change.
+        {"referenceCatalogBuilding", engine->IsReferenceCatalogBuilding()},
         {"gridVisible",             engine->GetGridVisible()},
         {"gridSpacing",             engine->GetGridSpacing()},
 
@@ -2029,11 +2033,14 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     {
         if (!requireEngine(kind.c_str())) return res;
         std::vector<GameObjectRef> objs;
-        m_engine->EnumerateReferenceObjects(objs);
+        m_engine->EnumerateReferenceObjects(objs);   // kicks the off-thread build
         json arr = json::array();
         for (const GameObjectRef& r : objs)
             arr.push_back(json{ {"name", r.name}, {"category", GameObjectCategoryName(r.category)} });
-        sendOk(json{ {"objects", arr} });
+        // While the catalog builds off the UI thread, `objs` is empty and
+        // `building` is true -> the picker shows "Loading objects…" and re-queries when
+        // the catalog-ready engine/state/changed event fires (see HostWindow RenderD3D9).
+        sendOk(json{ {"objects", arr}, {"building", !m_engine->IsReferenceCatalogReady()} });
         return res;
     }
     if (kind == "engine/query/skydome-slot-empty")

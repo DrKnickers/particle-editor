@@ -30,9 +30,14 @@
 class IFileManager;
 
 // Coarse grouping for the picker, derived from the object's container tag.
+// `Excluded` = a model-bearing object that is NOT a unit/structure (planet,
+// marker/spawn zone, dummy, death clone, particle prop) -- never listed in the
+// picker. `Other` is now the catch-all for UNRECOGNISED unit/structure tags and IS
+// listed (the filter fails toward showing, so a unit type we don't recognise is
+// never silently dropped -- see IsPickerListedCategory).
 enum class GameObjectCategory
 {
-    Vehicle, Infantry, Structure, Turret, Hero, Prop, Space, Projectile, Other
+    Vehicle, Infantry, Structure, Turret, Hero, Prop, Space, Projectile, Other, Excluded
 };
 
 // One enumerated game object that resolved to a renderable model.
@@ -81,5 +86,14 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
 
 // Stable display string for a category (picker headers / dump mode).
 const char* GameObjectCategoryName(GameObjectCategory c);
+
+// Categories surfaced in the reference-object picker: UNITS + STRUCTURES.
+// EXCLUSION-based (fails toward SHOWING): everything is listed EXCEPT Prop,
+// Projectile, and Excluded (explicit model-bearing non-units -- planets / markers /
+// dummies / death clones / particles). Crucially `Other` (unrecognised unit/structure
+// tags like groundcompany, groundbuildable, flagship*, capturables) IS listed -- an
+// earlier keep-only-known-categories filter dropped real units whose tags weren't
+// recognised (e.g. Mod's flagshipunit capital ships landed in Other and vanished).
+bool IsPickerListedCategory(GameObjectCategory c);
 
 #endif

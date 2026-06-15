@@ -279,7 +279,7 @@ describe("MockBridge contract", () => {
     await b.request({ kind: "engine/set/reference-object", params: { name: "Stormtrooper_Squad" } });
     expect(last!.referenceObjectStatus).toBe("skinned");
     // A Name whose model file is absent reports "model-missing".
-    await b.request({ kind: "engine/set/reference-object", params: { name: "Prop_ElectricBox_00" } });
+    await b.request({ kind: "engine/set/reference-object", params: { name: "Sensor_Array_NoModel" } });
     expect(last!.referenceObjectStatus).toBe("model-missing");
     // Empty clears the selection.
     await b.request({ kind: "engine/set/reference-object", params: { name: "" } });
