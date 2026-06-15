@@ -3,6 +3,9 @@
 #include <vector>
 #include <cstdint>
 #include <cmath>     // [hard-guard] std::isfinite for the estimate clamp
+#include <cctype>    // tolower for case-insensitive hardpoint bone matching
+#include <set>       // hardpoint damage-bone hide set
+#include <string>
 #include "engine.h"
 #include "exceptions.h"
 #include "resource.h"
@@ -1630,6 +1633,7 @@ void Engine::Reset()
 	m_skydomePrimaryMesh.OnLostDevice();
 	m_skydomeSecondaryMesh.OnLostDevice();
 	m_referenceObjectMesh.OnLostDevice();   // same DEFAULT-pool dance
+	for (auto& a : m_referenceAttachments) if (a) a->mesh.OnLostDevice();   // hardpoint attach models
 	SAFE_RELEASE(m_pGroundTexture);
 	//: the compositor's off-screen RT is D3DPOOL_DEFAULT, so
 	// it must be released before m_pDevice->Reset — otherwise Reset
@@ -1673,6 +1677,7 @@ void Engine::Reset()
 	m_skydomePrimaryMesh.OnResetEffects();
 	m_skydomeSecondaryMesh.OnResetEffects();
 	m_referenceObjectMesh.OnResetEffects();   // phase 1
+	for (auto& a : m_referenceAttachments) if (a) a->mesh.OnResetEffects();   // attachments, phase 1
 	//: recreate the D3DPOOL_DEFAULT ground normal textures post-Reset.
 	CreateGroundFlatNormal();
 	// Phase 3 Stage 1: rebuild the previously-managed-pool
@@ -1689,6 +1694,7 @@ void Engine::Reset()
 	m_skydomePrimaryMesh.CreateBuffers(m_pDevice, m_fileManager);
 	m_skydomeSecondaryMesh.CreateBuffers(m_pDevice, m_fileManager);
 	m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);   // phase 2
+	for (auto& a : m_referenceAttachments) if (a) a->mesh.CreateBuffers(m_pDevice, m_fileManager);   // attachments, phase 2
 
 	ResetParameters();
 
@@ -2748,7 +2754,17 @@ void Engine::RenderReferenceObject()
     for (int phase = 0; phase < 2; ++phase)
     {
       const bool opaquePhase = (phase == 0);
-      for (RefSubMeshGpu& sub : m_referenceObjectMesh.SubMeshes())
+      // Draw the unit (mi == 0) then each hardpoint attach model, both in this
+      // phase. worldBase = objectWorld for the unit, or attachBone * objectWorld for an
+      // attachment (mounting the attach model at the unit's named Attachment_Bone), so
+      // its own additive/alpha layers (turret glows) blend over the assembled unit.
+      for (size_t mi = 0; mi <= m_referenceAttachments.size(); ++mi)
+      {
+      ReferenceObjectMesh& refMesh = (mi == 0) ? m_referenceObjectMesh
+                                               : m_referenceAttachments[mi - 1]->mesh;
+      const D3DXMATRIX worldBase   = (mi == 0) ? objectWorld
+                                               : (m_referenceAttachments[mi - 1]->boneMatrix * objectWorld);
+      for (RefSubMeshGpu& sub : refMesh.SubMeshes())
       {
         if (sub.effect == NULL || sub.vb == NULL || sub.ib == NULL || sub.decl == NULL)
             continue;
@@ -2780,7 +2796,7 @@ void Engine::RenderReferenceObject()
             }
         }
 
-        D3DXMATRIX world = sub.placement * objectWorld;
+        D3DXMATRIX world = sub.placement * worldBase;
         D3DXMATRIX wvp   = world * m_view * m_projection;
 
         // Object-space eye + light for the bump shader's tangent-space lighting
@@ -2877,6 +2893,7 @@ void Engine::RenderReferenceObject()
         fx->End();
         fx->Release();
       }   // sub-mesh loop
+      }   // mesh loop (unit + attachments)
     }     // phase loop
 
     m_pDevice->SetVertexDeclaration(oldDecl);
@@ -3567,6 +3584,8 @@ void Engine::SetReferenceObject(const std::string& name)
 // Resolve + CreateBuffers no-op until the device is valid; Load (CPU) always runs.
 void Engine::RebuildReferenceObjectMesh()
 {
+    m_referenceAttachments.clear();   // rebuilt below iff the unit mounts hardpoint models
+
     if (m_referenceObjectName.empty())
     {
         m_referenceObjectMesh.Clear();
@@ -3594,11 +3613,13 @@ void Engine::RebuildReferenceObjectMesh()
     // for display, so a persisted/cross-mod name with different casing must still
     // resolve. Adopt the catalog's canonical casing so the snapshot converges.
     std::string modelPath;
+    const GameObjectRef* selected = nullptr;
     for (const GameObjectRef& r : m_referenceCatalog.objects)
         if (_stricmp(r.name.c_str(), m_referenceObjectName.c_str()) == 0)
         {
             modelPath = r.modelPath;
             m_referenceObjectName = r.name;
+            selected = &r;
             break;
         }
     if (modelPath.empty())
@@ -3608,8 +3629,40 @@ void Engine::RebuildReferenceObjectMesh()
         return;
     }
 
+    // Gather this unit's hardpoint geometry from the catalog: bones whose meshes
+    // are damaged-state (hide them so the unit renders intact) + the attach models to
+    // mount. Bone names match the .alo CASE-INSENSITIVELY -> fold to lower for the
+    // ReferenceObjectMesh hide-set + bone lookup.
+    auto lower = [](std::string s) { for (char& c : s) c = (char)tolower((unsigned char)c); return s; };
+    std::set<std::string> hideBones;
+    struct AttachReq { std::string model; std::string bone; };
+    std::vector<AttachReq> attach;
+    if (selected)
+        for (const std::string& hpName : selected->hardpointNames)
+        {
+            auto it = m_referenceCatalog.hardpoints.find(lower(hpName));
+            if (it == m_referenceCatalog.hardpoints.end()) continue;
+            const HardPointDef& d = it->second;
+            if (!d.damageDecalBone.empty())     hideBones.insert(lower(d.damageDecalBone));
+            if (!d.damageParticlesBone.empty()) hideBones.insert(lower(d.damageParticlesBone));
+            if (!d.collisionMeshBone.empty())   hideBones.insert(lower(d.collisionMeshBone));
+            // A hardpoint with no Model_To_Attach mounts nothing; one with no
+            // Attachment_Bone has nowhere to mount (GetBoneObjectMatrix("") would
+            // also alias an unnamed .alo bone) -- skip both rather than push a useless
+            // or mis-placeable request.
+            if (!d.modelToAttach.empty() && !d.attachmentBone.empty())
+                attach.push_back({ d.modelToAttach, d.attachmentBone });
+        }
+    // A bone that is a live mount point (some hardpoint's Attachment_Bone) must
+    // never be hidden -- even when another hardpoint lists the SAME bone as its
+    // Collision_Mesh/Damage_* bone. Vanilla FoC does exactly this: the Star Destroyer
+    // fighter-bay/tractor hardpoints set Collision_Mesh == Attachment_Bone (SPAWN_00 /
+    // HP_trac_bone). Hiding a mount bone would drop the hull geometry the attach model
+    // sits on. Mount points win, so subtract them from the hide-set after gathering.
+    for (const AttachReq& a : attach) hideBones.erase(lower(a.bone));
+
     const std::string aloPath = "Data\\Art\\Models\\" + modelPath;
-    if (m_referenceObjectMesh.Load(m_fileManager, aloPath))
+    if (m_referenceObjectMesh.Load(m_fileManager, aloPath, hideBones))
     {
         if (m_pDevice != NULL)
         {
@@ -3628,6 +3681,52 @@ void Engine::RebuildReferenceObjectMesh()
             }
             m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);
         }
+
+        // Mount each hardpoint's attach model at its Attachment_Bone on the unit.
+        // Graceful: skip a hardpoint whose bone isn't in the unit skeleton, or whose
+        // attach .alo is missing / corrupt / skinned-only / unresolvable (the unit still
+        // renders; that attachment just doesn't). childPlacement * boneMatrix * objectWorld
+        // places each attach sub-mesh (RenderReferenceObject).
+        for (const AttachReq& a : attach)
+        {
+            D3DXMATRIX boneMat;
+            if (!m_referenceObjectMesh.GetBoneObjectMatrix(a.bone, boneMat))
+            {
+                // The single highest-value diagnostic: a bone that SHOULD match but
+                // doesn't (case/whitespace/encoding skew, or a stale XML bone name)
+                // leaves the unit silently weaponless. Surface it in Debug feel-tests.
+#ifndef NDEBUG
+                fprintf(stderr, "[RefObj] attach '%s': Attachment_Bone '%s' not in unit skeleton -- skipped\n",
+                        a.model.c_str(), a.bone.c_str());
+#endif
+                continue;
+            }
+            auto att = std::make_unique<ReferenceAttachment>();
+            if (!att->mesh.Load(m_fileManager, "Data\\Art\\Models\\" + a.model))
+            {
+#ifndef NDEBUG
+                fprintf(stderr, "[RefObj] attach '%s' failed to load (missing/corrupt/skinned-only) -- skipped\n",
+                        a.model.c_str());
+#endif
+                continue;
+            }
+            if (m_pDevice != NULL)
+            {
+                if (!att->mesh.Resolve(m_shaderManager, m_pDevice))
+                    continue;   // nothing resolved -> don't mount an invisible attachment (Resolve logs per-sub-mesh in Debug)
+                att->mesh.CreateBuffers(m_pDevice, m_fileManager);
+            }
+            att->boneMatrix = boneMat;
+            m_referenceAttachments.push_back(std::move(att));
+        }
+        // Aggregate signal for feel-testing: a unit that should be fully armed but
+        // mounted fewer than expected models is visible at a glance without per-skip noise.
+#ifndef NDEBUG
+        if (!attach.empty())
+            fprintf(stderr, "[RefObj] '%s': mounted %zu of %zu hardpoint attach model(s)\n",
+                    m_referenceObjectName.c_str(), m_referenceAttachments.size(), attach.size());
+#endif
+
         m_referenceObjectStatus = ReferenceObjectStatus::Ok;
         return;
     }

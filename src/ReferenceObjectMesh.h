@@ -27,6 +27,7 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -86,7 +87,14 @@ public:
     // phase/blend class + bone placement, and the object-space AABB over the kept
     // geometry. Returns false (mesh left empty) on a FileManager miss, a parse
     // failure, or zero renderable rigid sub-meshes.
-    bool Load(IFileManager& fm, const std::string& aloPath);
+    //
+    // `hideBoneNamesLower` (already lower-cased) names UNIT bones whose meshes
+    // are damaged-state geometry the engine shows only when a hardpoint is destroyed
+    // (a hardpoint's Damage_Decal / Damage_Particles / Collision_Mesh bones). A mesh
+    // whose 0x602 connection bone is in the set is dropped, so the intact unit renders
+    // without it. Empty set (the default) = no extra hiding.
+    bool Load(IFileManager& fm, const std::string& aloPath,
+              const std::set<std::string>& hideBoneNamesLower = {});
 
     // Release all GPU + cached CPU data and empty the mesh.
     void Clear();
@@ -112,12 +120,21 @@ public:
     // the visual box == the pickable region. False (box untouched) when empty.
     bool GetBoundingBox(D3DXVECTOR3& outMin, D3DXVECTOR3& outMax) const;
 
+    // Object-space matrix of a bone by name (CASE-INSENSITIVE -- hardpoint XML
+    // is all-caps, the .alo is mixed-case). Used to mount a hardpoint's attach model
+    // at its Attachment_Bone. False (out untouched) if the bone isn't in the skeleton.
+    bool GetBoneObjectMatrix(const std::string& boneName, D3DXMATRIX& out) const;
+
     std::vector<RefSubMeshGpu>&       SubMeshes()       { return m_subMeshes; }
     const std::vector<RefSubMeshGpu>& SubMeshes() const { return m_subMeshes; }
 
 private:
     std::vector<RefSubMeshGpu> m_subMeshes;
     std::map<std::string, IDirect3DVertexDeclaration9*> m_decls;  // per-format, shared
+    // Object-space matrix per bone, keyed by LOWER-CASED name -- retained from
+    // Load (computeBoneObjectMatrices) so an attach model can be mounted at a named
+    // Attachment_Bone. Empty when the model has no skeleton.
+    std::map<std::string, D3DXMATRIX> m_boneObjByName;
     bool m_skippedSkinned = false;
     D3DXVECTOR3 m_boundMin = D3DXVECTOR3(0, 0, 0);   // object-space AABB over kept geometry
     D3DXVECTOR3 m_boundMax = D3DXVECTOR3(0, 0, 0);

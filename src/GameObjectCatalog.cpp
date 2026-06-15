@@ -117,12 +117,31 @@ namespace
     // lower-cased Name; `name` keeps the original casing for the picker label.
     struct RawEntry
     {
-        std::string name;        // original-cased Name= (display label)
-        std::string variantOf;   // Variant_Of_Existing_Type (trimmed), or empty
-        std::string ownModel;    // this entry's own model, or empty (then inherit via variantOf)
-        std::string tag;         // container element name
-        std::string sourceFile;  // listed XML it came from
+        std::string name;            // original-cased Name= (display label)
+        std::string variantOf;       // Variant_Of_Existing_Type (trimmed), or empty
+        std::string ownModel;        // this entry's own model, or empty (then inherit via variantOf)
+        std::string tag;             // container element name
+        std::string sourceFile;      // listed XML it came from
+        std::string hardpointsList;  // raw <HardPoints> comma list (empty = inherit via variantOf)
     };
+
+    // Split a comma-separated list into trimmed, non-empty tokens (the <HardPoints>
+    // value, e.g. "HP_A, HP_B , HP_C").
+    std::vector<std::string> splitCsv(const std::string& s)
+    {
+        std::vector<std::string> out;
+        size_t start = 0;
+        for (;;)
+        {
+            const size_t comma = s.find(',', start);
+            const size_t end   = (comma == std::string::npos) ? s.size() : comma;
+            std::string token = trim(s.substr(start, end - start));
+            if (!token.empty()) out.push_back(token);
+            if (comma == std::string::npos) break;
+            start = comma + 1;
+        }
+        return out;
+    }
 
     // Read GameObjectFiles.xml -> the ordered list of object-file names.
     bool readFileList(IFileManager& fm, std::vector<std::string>& files)
@@ -218,11 +237,12 @@ namespace
                 if (name.empty()) continue;             // comment / anonymous / <File> include -> not an object
 
                 RawEntry re;
-                re.name       = name;
-                re.tag        = WideToAnsi(e->getName());
-                re.sourceFile = fileName;
-                re.variantOf  = trim(WideToAnsi(childData(e, L"Variant_Of_Existing_Type")));
-                re.ownModel   = firstModel(e);
+                re.name          = name;
+                re.tag           = WideToAnsi(e->getName());
+                re.sourceFile    = fileName;
+                re.variantOf     = trim(WideToAnsi(childData(e, L"Variant_Of_Existing_Type")));
+                re.ownModel      = firstModel(e);
+                re.hardpointsList = trim(WideToAnsi(childData(e, L"HardPoints")));   // resolved in phase 4
                 entries.push_back(re);
             }
         }
@@ -283,6 +303,95 @@ namespace
         }
         return std::string();
     }
+
+    // Phase 2 for HardPoints: an object's own <HardPoints> list wins; otherwise
+    // INHERIT the first ancestor's list up the Variant_Of chain (replace-or-inherit,
+    // NOT merge -- a variant that declares <HardPoints> overrides its parent's entirely;
+    // one that declares none uses the parent's). Mirrors resolveModel (cross-file +
+    // cyclic-safe, case-folded keys). Empty if the chain dead-ends with no list.
+    std::vector<std::string> resolveHardpoints(const std::string& startKey,
+                                               const std::map<std::string, RawEntry>& byName)
+    {
+        std::set<std::string> visited;
+        std::string cur = startKey;
+        while (!cur.empty())
+        {
+            auto it = byName.find(cur);
+            if (it == byName.end())                  return {};   // missing parent
+            if (!it->second.hardpointsList.empty())  return splitCsv(it->second.hardpointsList);
+            if (it->second.variantOf.empty())        return {};   // no list, not a variant
+            if (!visited.insert(cur).second)         return {};   // cycle
+            cur = asciiLower(it->second.variantOf);
+        }
+        return {};
+    }
+
+    // Parse one hardpoint file's <HardPoint Name="..."> children into `out`
+    // (first-wins on a duplicate Name, like objects -- so a higher-precedence root's
+    // override shadows a lower one through `fm`). Missing / malformed -> no-op.
+    void parseHardpointFile(IFileManager& fm, const std::string& fileName,
+                            std::map<std::string, HardPointDef>& out)
+    {
+        IFile* f = fm.getFile(std::string("Data\\XML\\") + fileName);
+        if (f == nullptr) return;
+
+        XMLTree xml;
+        try { xml.parse(f); }
+        catch (...) { f->Release(); return; }
+        f->Release();
+
+        const XMLNode* root = xml.getRoot();
+        if (root == nullptr) return;
+
+        for (unsigned i = 0; i < root->getNumChildren(); ++i)
+        {
+            const XMLNode* e = root->getChild(i);
+            if (e->getName() != L"HardPoint") continue;          // tolerate comments / other
+            std::string name = trim(WideToAnsi(e->getAttribute(L"Name")));
+            if (name.empty()) continue;
+            std::string key = asciiLower(name);
+            if (out.find(key) != out.end()) continue;            // first-wins (mod precedence via getFile)
+
+            HardPointDef def;
+            def.modelToAttach       = trim(WideToAnsi(childData(e, L"Model_To_Attach")));
+            def.attachmentBone      = trim(WideToAnsi(childData(e, L"Attachment_Bone")));
+            def.damageDecalBone     = trim(WideToAnsi(childData(e, L"Damage_Decal")));
+            def.damageParticlesBone = trim(WideToAnsi(childData(e, L"Damage_Particles")));
+            def.collisionMeshBone   = trim(WideToAnsi(childData(e, L"Collision_Mesh")));
+            out[key] = def;
+        }
+    }
+
+    // Read HardPointDataFiles.xml (<Hard_Point_Files> -> <File> list; entries may
+    // carry a subdir prefix like "HardPoints\\Foo.xml") and parse each listed file into
+    // the table. getFile resolves the manifest + each file through `fm`'s mod->base order
+    // (so a submod's hardpoint files take precedence). Missing manifest -> empty table
+    // (no attachments; graceful).
+    void readHardpointTable(IFileManager& fm, std::map<std::string, HardPointDef>& out)
+    {
+        IFile* f = fm.getFile("Data\\XML\\HardPointDataFiles.xml");
+        if (f == nullptr) return;
+
+        XMLTree xml;
+        try { xml.parse(f); }
+        catch (...) { f->Release(); return; }
+        f->Release();
+
+        const XMLNode* root = xml.getRoot();
+        if (root == nullptr) return;
+
+        std::vector<std::string> files;
+        std::set<std::string> seen;
+        for (unsigned i = 0; i < root->getNumChildren(); ++i)
+        {
+            const XMLNode* c = root->getChild(i);
+            if (c->getName() != L"File") continue;
+            std::string fn = trim(WideToAnsi(c->getData()));
+            if (!fn.empty() && seen.insert(fn).second) files.push_back(fn);
+        }
+        for (const std::string& fn : files)
+            parseHardpointFile(fm, fn, out);
+    }
 }
 
 // Parses the object XMLs across threads (each file is independent), keeping
@@ -297,6 +406,7 @@ namespace
 bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
 {
     out.objects.clear();
+    out.hardpoints.clear();
 
     std::vector<std::string> files;
     if (!readFileList(fm, files)) return false;          // GameObjectFiles.xml unreadable
@@ -376,6 +486,10 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
         for (const RawEntry& re : perFile[i])
             byName.emplace(asciiLower(re.name), re);
 
+    // Parse the hardpoint table once (serial -- it touches fm, which the parallel
+    // parse must NOT; the per-unit name lists below index into it at select time).
+    readHardpointTable(fm, out.hardpoints);
+
     // Phase 4 -- RESOLVE (serial, unchanged): Variant_Of chain + categorize + sort.
     for (const auto& kv : byName)
     {
@@ -383,11 +497,12 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
         if (model.empty()) continue;                      // no renderable model -> not pickable
 
         GameObjectRef ref;
-        ref.name       = kv.second.name;               // original casing for the picker label
-        ref.modelPath  = model;
-        ref.tag        = kv.second.tag;
-        ref.sourceFile = kv.second.sourceFile;
-        ref.category   = categorize(kv.second.name, kv.second.tag);
+        ref.name           = kv.second.name;           // original casing for the picker label
+        ref.modelPath      = model;
+        ref.tag            = kv.second.tag;
+        ref.sourceFile     = kv.second.sourceFile;
+        ref.category       = categorize(kv.second.name, kv.second.tag);
+        ref.hardpointNames = resolveHardpoints(kv.first, byName);   // Variant_Of-resolved
         out.objects.push_back(ref);
     }
 

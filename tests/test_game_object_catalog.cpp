@@ -202,6 +202,29 @@ static int dumpRealCatalog(const char* xmlDir)
                            GameObjectCategoryName(r->category), r->sourceFile.c_str());
         else   std::printf("  %-28s -> (not found)\n", s);
     }
+    // PR2] Hardpoint resolution against the real content.
+    std::printf("hardpoint table size: %zu\n", cat.hardpoints.size());
+    std::printf("sample unit hardpoints (Name -> Model_To_Attach @ Attachment_Bone; damage/collision bones):\n");
+    for (const char* s : samples)
+    {
+        const GameObjectRef* r = find(cat, s);
+        if (!r || r->hardpointNames.empty()) continue;
+        std::printf("  %s (%zu hardpoints):\n", r->name.c_str(), r->hardpointNames.size());
+        for (const std::string& hpName : r->hardpointNames)
+        {
+            std::string k = hpName;
+            for (char& c : k) if (c >= 'A' && c <= 'Z') c = (char)(c + 32);   // ASCII lower
+            auto it = cat.hardpoints.find(k);
+            if (it == cat.hardpoints.end()) { std::printf("    %-34s -> (def missing)\n", hpName.c_str()); continue; }
+            const HardPointDef& d = it->second;
+            std::printf("    %-34s model=%-28s bone=%-16s dmg=%s|%s coll=%s\n",
+                        hpName.c_str(),
+                        d.modelToAttach.empty()  ? "(none)" : d.modelToAttach.c_str(),
+                        d.attachmentBone.empty() ? "(none)" : d.attachmentBone.c_str(),
+                        d.damageDecalBone.c_str(), d.damageParticlesBone.c_str(), d.collisionMeshBone.c_str());
+        }
+    }
+
     std::printf("first 12 objects:\n");
     for (size_t i = 0; i < cat.objects.size() && i < 12; ++i)
         std::printf("  %-28s -> %-28s [%s]\n",
@@ -362,6 +385,63 @@ int main(int argc, char** argv)
         for (size_t i = 1; i < cat.objects.size(); ++i)
             if (cat.objects[i - 1].name > cat.objects[i].name) sorted = false;
         CHECK(sorted, "objects sorted by name");
+    }
+
+    // ---- hardpoint table + per-unit hardpoint names (PR2) ------------
+    std::printf("[hardpoints]\n");
+    {
+        MockFM hpfm;
+        hpfm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<Game_Object_Files><File>Units.xml</File></Game_Object_Files>";
+        hpfm.files["Data\\XML\\Units.xml"] =
+            "<Objects>"
+            "  <GroundVehicle Name=\"HP_Tank\"><Land_Model_Name>EV_HPTank.ALO</Land_Model_Name>"
+            "    <HardPoints>HP_Tank_Cannon, HP_Tank_Shield</HardPoints></GroundVehicle>"
+            "  <GroundVehicle Name=\"HP_Tank_Inherit\"><Variant_Of_Existing_Type>HP_Tank</Variant_Of_Existing_Type></GroundVehicle>"
+            "  <GroundVehicle Name=\"HP_Tank_Override\"><Variant_Of_Existing_Type>HP_Tank</Variant_Of_Existing_Type>"
+            "    <HardPoints>HP_Tank_Shield</HardPoints></GroundVehicle>"
+            "</Objects>";
+        hpfm.files["Data\\XML\\HardPointDataFiles.xml"] =
+            "<Hard_Point_Files><File>HardPoints_Test.xml</File><File>Missing.xml</File></Hard_Point_Files>";  // missing file non-fatal
+        hpfm.files["Data\\XML\\HardPoints_Test.xml"] =
+            "<HardPoints>"
+            "  <HardPoint Name=\"HP_Tank_Cannon\"><Type>HARD_POINT_WEAPON_LASER</Type>"
+            "    <Model_To_Attach>EV_Tank_Cannon.alo</Model_To_Attach><Attachment_Bone>HP_Cannon_BONE</Attachment_Bone>"
+            "    <Damage_Decal>HP_Cannon_BLAST</Damage_Decal><Damage_Particles>HP_Cannon_EMIT</Damage_Particles>"
+            "    <Collision_Mesh>HP_Cannon_COLL</Collision_Mesh></HardPoint>"
+            "  <HardPoint Name=\"HP_Tank_Shield\"><Type>HARD_POINT_SHIELD_GENERATOR</Type>"
+            "    <Attachment_Bone>HP_Shield_BONE</Attachment_Bone></HardPoint>"  // no Model_To_Attach (mod omitted)
+            "</HardPoints>";
+
+        GameObjectCatalog hc;
+        bool hok = BuildGameObjectCatalog(hpfm, hc);
+        CHECK(hok, "hardpoint-test catalog builds");
+
+        // Hardpoint table parsed (lower-cased keys; all five geometry/bone tags; optional model).
+        auto hp = [&](const char* k) -> const HardPointDef* {
+            auto it = hc.hardpoints.find(k); return it == hc.hardpoints.end() ? nullptr : &it->second;
+        };
+        const HardPointDef* cannon = hp("hp_tank_cannon");
+        CHECK(cannon && cannon->modelToAttach == "EV_Tank_Cannon.alo", "Model_To_Attach parsed");
+        CHECK(cannon && cannon->attachmentBone == "HP_Cannon_BONE", "Attachment_Bone parsed");
+        CHECK(cannon && cannon->damageDecalBone == "HP_Cannon_BLAST", "Damage_Decal parsed");
+        CHECK(cannon && cannon->damageParticlesBone == "HP_Cannon_EMIT", "Damage_Particles parsed");
+        CHECK(cannon && cannon->collisionMeshBone == "HP_Cannon_COLL", "Collision_Mesh parsed");
+        const HardPointDef* shield = hp("hp_tank_shield");
+        CHECK(shield && shield->modelToAttach.empty(), "absent Model_To_Attach -> empty (mod omitted)");
+        CHECK(shield && shield->attachmentBone == "HP_Shield_BONE", "shield Attachment_Bone parsed");
+
+        // Per-unit hardpoint name lists, with Variant_Of inherit-vs-override.
+        const GameObjectRef* tank = find(hc, "HP_Tank");
+        CHECK(tank && tank->hardpointNames.size() == 2 &&
+              tank->hardpointNames[0] == "HP_Tank_Cannon" && tank->hardpointNames[1] == "HP_Tank_Shield",
+              "unit <HardPoints> comma list parsed + ordered");
+        const GameObjectRef* inh = find(hc, "HP_Tank_Inherit");
+        CHECK(inh && inh->hardpointNames.size() == 2 && inh->hardpointNames[0] == "HP_Tank_Cannon",
+              "Variant_Of with no <HardPoints> INHERITS the parent's list");
+        const GameObjectRef* ovr = find(hc, "HP_Tank_Override");
+        CHECK(ovr && ovr->hardpointNames.size() == 1 && ovr->hardpointNames[0] == "HP_Tank_Shield",
+              "Variant_Of with its own <HardPoints> REPLACES (not merges) the parent's list");
     }
 
     // ---- missing GameObjectFiles.xml ---------------------------------------

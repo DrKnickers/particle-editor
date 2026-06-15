@@ -7,6 +7,7 @@
 
 #include "ReferenceObjectMesh.h"
 
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 
@@ -18,6 +19,14 @@
 namespace
 {
     template <typename T> void relptr(T*& p) { if (p) { p->Release(); p = nullptr; } }
+
+    // ASCII lower-case for case-insensitive bone-name matching (hardpoint XML is
+    // all-caps; the .alo stores mixed/inconsistent case -- see the s50 investigation).
+    std::string toLower(std::string s)
+    {
+        for (char& c : s) c = (char)std::tolower((unsigned char)c);
+        return s;
+    }
 
     // Runtime vertex layouts the unit shaders consume. On-disk is always the
     // fixed 144B MASTER_VERTEX (pos@0, normal@12, uv0@24, tangent@56, binormal@68,
@@ -219,12 +228,14 @@ void ReferenceObjectMesh::Clear()
     ReleaseEffects();
     ReleaseDecls();
     m_subMeshes.clear();
+    m_boneObjByName.clear();
     m_skippedSkinned = false;
     m_boundMin = m_boundMax = D3DXVECTOR3(0, 0, 0);
     m_hasBounds = false;
 }
 
-bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
+bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath,
+                               const std::set<std::string>& hideBoneNamesLower)
 {
     Clear();
 
@@ -244,6 +255,11 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
     std::vector<D3DXMATRIX> boneObj;
     computeBoneObjectMatrices(model.bones, boneObj);
 
+    // Retain each bone's object-space matrix by lower-cased name so a hardpoint
+    // attach model can be mounted at a named Attachment_Bone (GetBoneObjectMatrix).
+    for (size_t i = 0; i < model.bones.size() && i < boneObj.size(); ++i)
+        m_boneObjByName[toLower(model.bones[i].name)] = boneObj[i];
+
     for (size_t meshIdx = 0; meshIdx < model.meshes.size(); ++meshIdx)
     {
         const AloMesh& mesh = model.meshes[meshIdx];
@@ -258,14 +274,24 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath)
         // if no skeleton / no connection / out-of-range bone).
         D3DXMATRIX placement;
         D3DXMatrixIdentity(&placement);
+        bool hideByHardpoint = false;
         for (const AloConnection& c : model.connections)
         {
-            if (c.objectIndex == meshIdx && c.boneIndex < boneObj.size())
+            if (c.objectIndex == meshIdx)
             {
-                placement = boneObj[c.boneIndex];
+                if (c.boneIndex < boneObj.size())
+                    placement = boneObj[c.boneIndex];
+                // Drop damaged-state geometry: a mesh whose connection bone is
+                // named by one of the unit's hardpoints' Damage_*/Collision_Mesh bones
+                // (direct 0x602 connection only -- damage geometry rides its own leaf bone).
+                if (!hideBoneNamesLower.empty() && c.boneIndex < model.bones.size() &&
+                    hideBoneNamesLower.count(toLower(model.bones[c.boneIndex].name)))
+                    hideByHardpoint = true;
                 break;
             }
         }
+        if (hideByHardpoint)
+            continue;
 
         for (const AloSubMesh& sm : mesh.subMeshes)
         {
@@ -359,6 +385,19 @@ bool ReferenceObjectMesh::GetBoundingBox(D3DXVECTOR3& outMin, D3DXVECTOR3& outMa
     if (!m_hasBounds) return false;
     outMin = m_boundMin;
     outMax = m_boundMax;
+    return true;
+}
+
+// Case-insensitive bone object-space matrix lookup (for mounting a hardpoint's
+// attach model at its Attachment_Bone).
+bool ReferenceObjectMesh::GetBoneObjectMatrix(const std::string& boneName, D3DXMATRIX& out) const
+{
+    // Never match an empty request: an unnamed .alo bone is stored under key ""
+    // (a bone with no CHUNK_BONE_NAME), so an empty lookup would silently alias it.
+    if (boneName.empty()) return false;
+    auto it = m_boneObjByName.find(toLower(boneName));
+    if (it == m_boneObjByName.end()) return false;
+    out = it->second;
     return true;
 }
 

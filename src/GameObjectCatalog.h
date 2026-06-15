@@ -26,6 +26,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 class IFileManager;
 
@@ -40,6 +41,22 @@ enum class GameObjectCategory
     Vehicle, Infantry, Structure, Turret, Hero, Prop, Space, Projectile, Other, Excluded
 };
 
+// One hardpoint definition (a <HardPoint> in the hardpoint files). EaW units
+// reference these by Name in their <HardPoints> list; the editor mounts the optional
+// `modelToAttach` .alo at `attachmentBone` (a bone in the UNIT model) to render the
+// unit complete, and hides the meshes on the damage/collision bones (the damaged-state
+// geometry the engine shows only when a hardpoint is destroyed). All fields optional
+// (may be empty) -- mods frequently omit Model_To_Attach. Bone names match the .alo's
+// AloBone names CASE-INSENSITIVELY (XML is all-caps; the .alo is mixed-case).
+struct HardPointDef
+{
+    std::string modelToAttach;       // <Model_To_Attach> -- ".alo" to mount, or empty (nothing to attach)
+    std::string attachmentBone;      // <Attachment_Bone> -- bone in the UNIT model where the model mounts
+    std::string damageDecalBone;     // <Damage_Decal>     -- unit bone whose mesh is damaged-state (hide intact)
+    std::string damageParticlesBone; // <Damage_Particles> -- unit bone whose mesh is damaged-state (hide intact)
+    std::string collisionMeshBone;   // <Collision_Mesh>   -- unit bone whose mesh is the collision hull (hide)
+};
+
 // One enumerated game object that resolved to a renderable model.
 struct GameObjectRef
 {
@@ -48,11 +65,18 @@ struct GameObjectRef
     GameObjectCategory category = GameObjectCategory::Other;
     std::string        tag;         // raw container tag, e.g. "GroundVehicle" (grouping / diagnostics)
     std::string        sourceFile;  // listed XML it came from (diagnostics)
+    // HardPoint Names this object references (its <HardPoints> comma list, with
+    // Variant_Of inheritance resolved). Looked up in GameObjectCatalog::hardpoints at
+    // select-time to mount attach models + collect the damage bones to hide.
+    std::vector<std::string> hardpointNames;
 };
 
 struct GameObjectCatalog
 {
     std::vector<GameObjectRef> objects;  // every object with a resolvable model, sorted by name
+    // HardPoint table for the whole active content, keyed by lower-cased Name
+    // (parsed once per build from HardPointDataFiles.xml -> the listed hardpoint files).
+    std::map<std::string, HardPointDef> hardpoints;
 };
 
 // Build the catalog from "Data\\XML\\GameObjectFiles.xml" via `fm`. Clears `out`

@@ -17,6 +17,56 @@ Conventions:
 ## Changelog
 
 
+### Reference-object hardpoints — mount weapons/turrets, hide damaged-state geometry
+
+*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+<!-- TODO: backfill merge-commit short hash + PR number once merged (see #184/#187 prior art). -->
+
+A game unit dropped into the preview as a scale reference now **composes the way the engine assembles
+it**. Every unit declares *hardpoints* — the mount points for its weapons, turrets, shield generator,
+and engines — and each hardpoint's attach model is now **loaded and mounted at the right bone on the
+hull** (a Star Destroyer arrives with its six turret barrels, shield dome, and engine block in place).
+At the same time the unit's **damaged-state geometry is hidden**: the meshes the game shows only after a
+hardpoint is destroyed (the `Damage_Decal` / `Damage_Particles` bones) plus the invisible collision
+hulls (`Collision_Mesh`) no longer show through the intact ship. Before this, a unit rendered as just its
+base hull — no weapons, with damage-stub and flat-blue collision geometry poking out.
+
+**How we tackled it.** The catalog ([`src/GameObjectCatalog.cpp`](src/GameObjectCatalog.cpp)) now parses
+the hardpoint table — `HardPointDataFiles.xml` → per-file `<HardPoint>` defs (`Model_To_Attach`,
+`Attachment_Bone`, `Damage_Decal`, `Damage_Particles`, `Collision_Mesh`) — and resolves each unit's
+`<HardPoints>` comma list with the same cross-file, cycle-safe, replace-or-inherit `Variant_Of` semantics
+the model field already uses. `ReferenceObjectMesh::Load` ([`src/ReferenceObjectMesh.cpp`](src/ReferenceObjectMesh.cpp))
+gained a lower-cased *hide-bone set* (it drops any mesh whose direct `0x602` connection bone is named)
+and retains a by-name **case-insensitive** bone object-space matrix map exposed via `GetBoneObjectMatrix`
+(hardpoint XML is all-caps, the `.alo` is mixed-case). In the engine, a `ReferenceAttachment`
+([`src/engine.h`](src/engine.h)) pairs an attach mesh with its mount matrix; `RebuildReferenceObjectMesh`
+([`src/engine.cpp`](src/engine.cpp:3559)) gathers the hide-bones + attach requests from the catalog,
+loads the unit with the hide-set, then mounts each attach `.alo` at `placement * boneMatrix * objectWorld`
+(graceful skip on a missing bone / `.alo` / shader). `RenderReferenceObject` draws the unit then each
+attachment in the same opaque-then-transparent phase loop; all three device-reset sites loop the
+attachments.
+
+**Issues encountered and resolutions.** Three parallel adversarial reviewers () confirmed the
+threading hand-off, `selected`-pointer lifetime, matrix order, device-reset parity, and the
+destructor/leak chain all safe *by construction*, and caught three real defects a green build + leaf-test
+pass missed: **(MAJOR, corpus-confirmed)** a `Collision_Mesh` bone can be the *same* bone as some
+hardpoint's `Attachment_Bone` — vanilla FoC does exactly this (the Star Destroyer fighter-bay and
+tractor hardpoints both set `Collision_Mesh == Attachment_Bone`, `SPAWN_00` / `HP_trac_bone`) — so
+unconditionally hiding every collision/damage bone could hide a *live mount point's* hull geometry; fixed
+by subtracting all attach bones from the hide-set after gathering (a mount point always wins). **(MINOR)**
+a hardpoint with a `Model_To_Attach` but an empty `Attachment_Bone` would call `GetBoneObjectMatrix("")`,
+which could alias an unnamed (`CHUNK_BONE_NAME`-less) `.alo` bone stored under the empty key and
+mis-mount; guarded at the source and in the lookup. **(MINOR, silent-failure)** the bone-miss and
+attach-load skips were silent, so a unit could render weaponless yet report `Ok`; added the project's
+`#ifndef NDEBUG` `[RefObj]` diagnostics on both plus an aggregate `mounted N of M` line for Debug
+feel-testing. The hardpoint *resolution* is verified against a real vanilla install (the catalog dump
+resolves `Star_Destroyer` → 10 hardpoints with every field decoded); the rendered *composition* is the
+user's live test — computer-use can't drive the dev `.exe`, and the existing `--capture` headless mode
+loads an `.alo` as a particle system, not as a composed reference object.
+
+---
+
 ### Lighting panel writes its settings back to the registry
 
 *2026-06-15 · [`be20df4`](https://github.com/DrKnickers/particle-editor/commit/be20df4) · #192*

@@ -28,6 +28,17 @@ enum class ReferenceObjectStatus { None, Ok, Skinned, LoadFailed, ModelMissing }
 // Domes are always rigid, so there is no Skinned case.
 enum class SkydomeSlotStatus { None, Ok, LoadFailed };
 
+// One hardpoint attach model mounted on the selected reference object: its own
+// rigid mesh + the UNIT Attachment_Bone's object-space matrix. Each of the attach
+// mesh's sub-meshes draws at `sub.placement * boneMatrix * objectWorld`. Held by
+// unique_ptr because ReferenceObjectMesh owns D3D resources (non-copyable/non-movable).
+struct ReferenceAttachment
+{
+    ReferenceObjectMesh mesh;
+    D3DXMATRIX          boneMatrix;
+    ReferenceAttachment() { D3DXMatrixIdentity(&boneMatrix); }
+};
+
 namespace host { class AlphaCompositor; }
 
 class Object3D
@@ -892,6 +903,10 @@ private:
 	// for scale). Rigid multi-part: each sub-mesh placed by its skeleton bone.
 	// is the render path only; the picker/transform/persistence are.
 	ReferenceObjectMesh      m_referenceObjectMesh;
+	// Hardpoint attach models mounted on the selected object (turrets / weapons
+	// the unit references via its <HardPoints> list). Rebuilt in RebuildReferenceObjectMesh;
+	// drawn after the unit in RenderReferenceObject; looped at every device-reset site.
+	std::vector<std::unique_ptr<ReferenceAttachment>> m_referenceAttachments;
 
 	// selection + placement state driving m_referenceObjectMesh.
 	std::string              m_referenceObjectName;            // "" = none selected
