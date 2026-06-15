@@ -29,6 +29,7 @@ import type {
   EmitterTreeDto,
   EmitterTreeNode,
   LightDto,
+  LightingSettingsDto,
   ReferenceObjectStatus,
   SkydomeSlotStatus,
   SpawnParamsDto,
@@ -240,6 +241,13 @@ export class MockBridge implements Bridge {
    *  memory, defaulting to the legacy `kLightForceAlignDefault = true`.
    *  Read by `settings/lighting-force-align`, written by `…/set`. */
   private lightingForceAlign = true;
+
+  /** Cross-mode raw lighting split. The native host persists this in the
+   *  registry; browser mode keeps the last `settings/lighting/set` payload
+   *  in memory so the panel's edits + Reset round-trip within a session.
+   *  `null` until first written → `settings/lighting` returns the canonical
+   *  defaults (with the live `lightingForceAlign` flag). */
+  private lightingOverride: LightingSettingsDto | null = null;
 
   // [guard-config] Last engine/set/overload-guard params received —
   // test-observable; no mock behavior depends on it.
@@ -1566,6 +1574,11 @@ export class MockBridge implements Bridge {
       // flag. No event is emitted — the constraint is enforced UI-side
       // in LightingPanel, and lighting isn't part of EngineStateDto.
       case "settings/lighting": {
+        if (this.lightingOverride) {
+          // Last written snapshot wins; forceAlign tracks the live flag so a
+          // standalone `…/force-align/set` after a full write is still seen.
+          return { ...this.lightingOverride, forceAlign: this.lightingForceAlign };
+        }
         const rgb = (r: number, g: number, b: number) => r | (g << 8) | (b << 16);
         return {
           sun:   { intensity: 0.5, az: 0,   alt: 45,  diffuse: rgb(180, 180, 190), specular: rgb(190, 190, 200) },
@@ -1576,6 +1589,11 @@ export class MockBridge implements Bridge {
           forceAlign: this.lightingForceAlign,
         };
       }
+
+      case "settings/lighting/set":
+        this.lightingOverride = req.params;
+        this.lightingForceAlign = req.params.forceAlign;
+        return {};
 
       case "settings/lighting-force-align/set":
         this.lightingForceAlign = req.params.enabled;

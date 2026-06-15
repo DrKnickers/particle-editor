@@ -705,14 +705,19 @@ export type Request =
   //     (intensity/colour kept separate, angles in degrees) the panel
   //     seeds its displayed controls from — incl. the Force Align flag.
   //   - `settings/lighting-force-align/set` writes just the
-  //     `LightingForceFillAlignment` REG_DWORD on toggle (the one flag the
-  //     new UI persists back; lighting-value write-back is a separate item).
-  // Host returns canonical defaults (get) / no-ops the write (set) under
+  //     `LightingForceFillAlignment` REG_DWORD on toggle.
+  //   - `settings/lighting/set` writes the FULL raw split back to the
+  //     registry (all 16 light values + the flag) so the new UI's edits
+  //     and its Reset persist — otherwise a value the legacy dialog wrote
+  //     (e.g. a stale ambient) reappears on every reopen/restart and the
+  //     new UI can never overwrite it. Same key names as the GET above.
+  // Host returns canonical defaults (get) / no-ops the writes (set) under
   // `--test-host` so the dialog-lighting a11y golden stays deterministic —
   // unless ALO_SETTINGS_LIVE is set (the test seam that drives the real
   // registry over CDP without disturbing the a11y harness).
   | { kind: "settings/lighting";                 params: Record<string, never> }
   | { kind: "settings/lighting-force-align/set"; params: { enabled: boolean } }
+  | { kind: "settings/lighting/set";             params: LightingSettingsDto }
 
   // Emitters (Phase 3+)
   | { kind: "emitters/list";              params: Record<string, never> }
@@ -1110,6 +1115,7 @@ type ResponseForA<R extends Request> =
   // Settings (cross-mode registry persistence)
   R extends { kind: "settings/lighting" }                 ? LightingSettingsDto :
   R extends { kind: "settings/lighting-force-align/set" } ? Record<string, never> :
+  R extends { kind: "settings/lighting/set" }             ? Record<string, never> :
 
   never;
 

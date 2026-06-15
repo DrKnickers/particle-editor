@@ -2168,6 +2168,71 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
+    // -------- settings/lighting/set ----------------------------------
+    //
+    // Full write-back of the raw lighting split the new-UI LightingPanel
+    // holds in state. Writes the SAME 16 value names the GET handler reads
+    // (and the legacy dialog reads/writes, src/main.cpp:6398-6433 /
+    // 6742-6779) so edits + Reset in the new UI survive a reopen/restart
+    // and stay in sync with legacy. Without this, anything the legacy
+    // dialog persisted (e.g. a stale ambient COLORREF) reappears on every
+    // load and the new UI can't overwrite it.
+    //
+    // Same --test-host gate as the force-align write above: no-op under the
+    // a11y harness unless ALO_SETTINGS_LIVE lifts it (the CDP test seam),
+    // so the dialog-lighting golden never mutates the dev box's registry.
+    if (kind == "settings/lighting/set")
+    {
+        const bool gated = m_testHost && !m_settingsLive;
+        if (!gated)
+        {
+            HKEY hKey = nullptr;
+            if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                                REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
+                                &hKey, nullptr) == ERROR_SUCCESS)
+            {
+                // Floats persist as REG_BINARY (matches ReadLightingFloat);
+                // colours + the flag as REG_DWORD (matches ReadLightingColor /
+                // ReadLightingBool).
+                auto writeF = [&](const wchar_t* name, float v) {
+                    RegSetValueExW(hKey, name, 0, REG_BINARY,
+                                   reinterpret_cast<const BYTE*>(&v), sizeof(v));
+                };
+                auto writeDw = [&](const wchar_t* name, DWORD v) {
+                    RegSetValueExW(hKey, name, 0, REG_DWORD,
+                                   reinterpret_cast<const BYTE*>(&v), sizeof(v));
+                };
+                auto lf = [&](const char* k) { return params.value(k, json::object()); };
+                const json sun   = lf("sun");
+                const json fill1 = lf("fill1");
+                const json fill2 = lf("fill2");
+
+                writeF(L"LightSunIntensity",     sun.value("intensity", 0.5f));
+                writeF(L"LightSunZAngle",        sun.value("az", 0.0f));
+                writeF(L"LightSunTilt",          sun.value("alt", 45.0f));
+                writeDw(L"LightSunDiffuseColor",  static_cast<DWORD>(sun.value("diffuse",  static_cast<int>(RGB(180,180,190)))));
+                writeDw(L"LightSunSpecularColor", static_cast<DWORD>(sun.value("specular", static_cast<int>(RGB(190,190,200)))));
+                writeDw(L"LightSunAmbientColor",  static_cast<DWORD>(params.value("ambient", static_cast<int>(RGB(40,40,50)))));
+                writeDw(L"LightSunShadowColor",   static_cast<DWORD>(params.value("shadow",  static_cast<int>(RGB(100,100,110)))));
+
+                writeF(L"LightFill1Intensity",   fill1.value("intensity", 0.5f));
+                writeF(L"LightFill1ZAngle",      fill1.value("az", 120.0f));
+                writeF(L"LightFill1Tilt",        fill1.value("alt", -10.0f));
+                writeDw(L"LightFill1DiffuseColor", static_cast<DWORD>(fill1.value("diffuse", static_cast<int>(RGB(60,80,160)))));
+
+                writeF(L"LightFill2Intensity",   fill2.value("intensity", 0.5f));
+                writeF(L"LightFill2ZAngle",      fill2.value("az", 210.0f));
+                writeF(L"LightFill2Tilt",        fill2.value("alt", -10.0f));
+                writeDw(L"LightFill2DiffuseColor", static_cast<DWORD>(fill2.value("diffuse", static_cast<int>(RGB(60,80,160)))));
+
+                writeDw(L"LightingForceFillAlignment", params.value("forceAlign", true) ? 1u : 0u);
+                RegCloseKey(hKey);
+            }
+        }
+        sendOk(json::object());
+        return res;
+    }
+
     // -------- undo/perform --------
     //
     // New-UI mutation handlers call captureUndo() PRE-mutation, so the

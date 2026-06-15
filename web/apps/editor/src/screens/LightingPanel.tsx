@@ -51,6 +51,7 @@ import type {
   Bridge,
   Color,
   LightDto,
+  LightingSettingsDto,
   LightSettingsDto,
   LightWhich,
   Vec4,
@@ -153,6 +154,24 @@ function colorrefToRgb(c: Color): RgbColor {
   };
 }
 
+/** Pack an RgbColor into a COLORREF (`Color`, low byte = R) — the inverse
+ *  of colorrefToRgb, for the registry write-back. */
+function rgbToColorref(rgb: RgbColor): Color {
+  return (rgb.r & 0xff) | ((rgb.g & 0xff) << 8) | ((rgb.b & 0xff) << 16);
+}
+
+/** LightFormState → the registry's raw-split DTO (intensity/colour kept
+ *  separate, angles in degrees, colours as packed COLORREFs). */
+function toLightSettings(s: LightFormState): LightSettingsDto {
+  return {
+    intensity: s.intensity,
+    az: s.az,
+    alt: s.alt,
+    diffuse: rgbToColorref(s.diffuse),
+    specular: rgbToColorref(s.specular),
+  };
+}
+
 export function LightingPanel({ bridge, onClose, closing }: Props) {
   const [sun, setSun] = useState<LightFormState>(SUN_DEFAULTS);
   const [fill1, setFill1] = useState<LightFormState>(FILL1_DEFAULTS);
@@ -222,6 +241,33 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
     });
   };
 
+  // Persist the FULL raw split to the registry (native host) / in-memory
+  // store (mock). The pushLight/engine-set calls above only touch the live
+  // engine; without this write-back the panel's edits and Reset vanish on
+  // reopen/restart and a value the legacy dialog persisted (e.g. a stale
+  // ambient) would keep re-applying. Callers MUST pass freshly-resolved
+  // next-state — never read it back from the `sun`/`fill1`/… closures,
+  // which are stale until the next render. Fire-and-forget; the host
+  // no-ops under --test-host so a11y goldens are untouched.
+  const persistLighting = (next: {
+    sun: LightFormState;
+    fill1: LightFormState;
+    fill2: LightFormState;
+    ambient: RgbColor;
+    shadow: RgbColor;
+    forceAlign: boolean;
+  }) => {
+    const dto: LightingSettingsDto = {
+      sun: toLightSettings(next.sun),
+      fill1: toLightSettings(next.fill1),
+      fill2: toLightSettings(next.fill2),
+      ambient: rgbToColorref(next.ambient),
+      shadow: rgbToColorref(next.shadow),
+      forceAlign: next.forceAlign,
+    };
+    void bridge.request({ kind: "settings/lighting/set", params: dto });
+  };
+
   // Group D: cascade helper. When forceAlign is ON, fill1/fill2
   // azimuth follow sun.az with the canonical offsets; altitude is
   // pinned to FORCE_ALIGN_FILL_ALT. Called from updateSun (when sun
@@ -254,17 +300,22 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
       setFill2(nextFill2);
       pushLight("fill1", nextFill1);
       pushLight("fill2", nextFill2);
+      persistLighting({ sun: next, fill1: nextFill1, fill2: nextFill2, ambient, shadow, forceAlign });
+    } else {
+      persistLighting({ sun: next, fill1, fill2, ambient, shadow, forceAlign });
     }
   };
   const updateFill1 = (patch: Partial<LightFormState>) => {
     const next = { ...fill1, ...patch };
     setFill1(next);
     pushLight("fill1", next);
+    persistLighting({ sun, fill1: next, fill2, ambient, shadow, forceAlign });
   };
   const updateFill2 = (patch: Partial<LightFormState>) => {
     const next = { ...fill2, ...patch };
     setFill2(next);
     pushLight("fill2", next);
+    persistLighting({ sun, fill1, fill2: next, ambient, shadow, forceAlign });
   };
 
   const handleForceAlignToggle = (enabled: boolean) => {
@@ -287,6 +338,12 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
       setFill2(nextFill2);
       pushLight("fill1", nextFill1);
       pushLight("fill2", nextFill2);
+      persistLighting({ sun, fill1: nextFill1, fill2: nextFill2, ambient, shadow, forceAlign: enabled });
+    } else {
+      // Disengaging keeps the fills where force-align left them; only the
+      // flag changes. (The `…/force-align/set` above already wrote the flag,
+      // but persist the full snapshot too so a reopen reads a consistent set.)
+      persistLighting({ sun, fill1, fill2, ambient, shadow, forceAlign: enabled });
     }
   };
 
@@ -299,6 +356,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
       kind: "engine/set/ambient",
       params: { color: rgbToVec4(rgb) },
     });
+    persistLighting({ sun, fill1, fill2, ambient: rgb, shadow, forceAlign });
   };
   const updateShadow = (rgb: RgbColor) => {
     setShadow(rgb);
@@ -306,6 +364,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
       kind: "engine/set/shadow",
       params: { color: rgbToVec4(rgb) },
     });
+    persistLighting({ sun, fill1, fill2, ambient, shadow: rgb, forceAlign });
   };
 
   const handleMirrorSun = () => {
@@ -327,6 +386,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
     setFill2(newFill2);
     pushLight("fill1", newFill1);
     pushLight("fill2", newFill2);
+    persistLighting({ sun, fill1: newFill1, fill2: newFill2, ambient, shadow, forceAlign });
   };
 
   const handleReset = () => {
@@ -338,8 +398,19 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
     pushLight("sun", SUN_DEFAULTS);
     pushLight("fill1", FILL1_DEFAULTS);
     pushLight("fill2", FILL2_DEFAULTS);
-    updateAmbient(AMBIENT_DEFAULT);
-    updateShadow(SHADOW_DEFAULT);
+    // Push ambient/shadow to the live engine directly — NOT via
+    // updateAmbient/updateShadow, whose persist would capture the stale
+    // (pre-reset) sun/fill closures. Persist the full default snapshot once.
+    void bridge.request({ kind: "engine/set/ambient", params: { color: rgbToVec4(AMBIENT_DEFAULT) } });
+    void bridge.request({ kind: "engine/set/shadow",  params: { color: rgbToVec4(SHADOW_DEFAULT) } });
+    persistLighting({
+      sun: SUN_DEFAULTS,
+      fill1: FILL1_DEFAULTS,
+      fill2: FILL2_DEFAULTS,
+      ambient: AMBIENT_DEFAULT,
+      shadow: SHADOW_DEFAULT,
+      forceAlign,
+    });
   };
 
   return (

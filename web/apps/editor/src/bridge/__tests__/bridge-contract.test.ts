@@ -1513,6 +1513,28 @@ describe("MockBridge contract", () => {
     expect(after.forceAlign).toBe(false);
   });
 
+  it("settings/lighting/set persists the full raw split for the next get", async () => {
+    const b = new MockBridge();
+    const rgb = (r: number, g: number, bl: number) => r | (g << 8) | (bl << 16);
+    const dto = {
+      sun:   { intensity: 0.8, az: 30, alt: 60, diffuse: rgb(10, 20, 30), specular: rgb(40, 50, 60) },
+      fill1: { intensity: 0.3, az: 90, alt: -5, diffuse: rgb(1, 2, 3),    specular: 0 },
+      fill2: { intensity: 0.2, az: 270, alt: -5, diffuse: rgb(4, 5, 6),   specular: 0 },
+      ambient: rgb(7, 8, 9),
+      shadow:  rgb(11, 12, 13),
+      forceAlign: false,
+    };
+    const setRes = await b.request({ kind: "settings/lighting/set", params: dto });
+    expect(setRes).toEqual({});
+    const after = await b.request({ kind: "settings/lighting", params: {} });
+    // The written ambient (the field that regressed in the field report) and
+    // the rest of the split round-trip verbatim.
+    expect(after.ambient).toBe(rgb(7, 8, 9));
+    expect(after.sun).toEqual(dto.sun);
+    expect(after.shadow).toBe(rgb(11, 12, 13));
+    expect(after.forceAlign).toBe(false);
+  });
+
   it("on() returns a working unsubscribe", async () => {
     const b = new MockBridge();
     const seen: Event[] = [];

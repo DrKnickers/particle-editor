@@ -17,6 +17,47 @@ Conventions:
 ## Changelog
 
 
+### Lighting panel writes its settings back to the registry
+
+*2026-06-15 · [`TODO`](https://github.com/DrKnickers/particle-editor/commit/TODO) · [#TODO](https://github.com/DrKnickers/particle-editor/pull/TODO)*
+
+The new-UI Lighting panel now **persists** its changes. Previously it only read the saved
+lighting on open and pushed edits to the live engine — it never wrote them back. So any value the
+legacy Win32 lighting dialog had saved (a stale Sun **Ambient** of `#E92727`, in the report that
+prompted this) reappeared on every panel reopen and every editor restart, and nothing you did in
+the new UI could overwrite it: the panel's **Reset** restored the correct defaults *for that
+session only*, then the ghost value came back. Now every edit (sun / fill / ambient / shadow /
+Mirror Sun / Force Align) and **Reset** writes the full lighting split to the registry, so changes
+survive a reopen/restart and stay in sync with the legacy dialog. The defaults the Reset button
+restores — Ambient `#282832`, Shadow `#64646E`, Sun diffuse `#B4B4BE` — are unchanged; they were
+always correct, they just couldn't stick.
+
+**How we tackled it.** A new `settings/lighting/set` bridge request carrying the full
+[`LightingSettingsDto`](web/packages/bridge-schema/src/index.ts:716) — the same raw split (intensity
++ colour kept separate, angles in degrees, colours as packed COLORREFs) the existing
+`settings/lighting` *get* already returns. The host handler
+([`BridgeDispatcher.cpp`](src/host/BridgeDispatcher.cpp:2171)) writes all sixteen light values plus
+the Force-Align flag under the **same registry value names** the get handler and the legacy dialog
+share (`LightSunAmbientColor`, `LightFill1ZAngle`, …), so the two UIs round-trip losslessly. It sits
+behind the same `--test-host` gate as the force-align write, leaving the a11y goldens untouched. The
+panel ([`LightingPanel.tsx`](web/apps/editor/src/screens/LightingPanel.tsx:332)) fires the write from
+every mutator and from Reset; the mock round-trips the snapshot in memory for browser-mode tests. We
+chose to persist the **whole** snapshot on each change rather than per-field deltas — it's
+idempotent, reuses the get shape, and matches the legacy dialog, which also writes on every change.
+
+**Issues encountered and resolutions.** The one real trap was a stale-closure bug in **Reset**: the
+obvious implementation reused the existing `updateAmbient` / `updateShadow` helpers, but their
+write-back reads `sun` / `fill1` / `fill2` from the render closure — still the *pre-reset* values
+when called synchronously after `setSun(SUN_DEFAULTS)`. Reset would have persisted default ambient
+and shadow alongside the *old* sun and fills. Fixed by having Reset push ambient/shadow to the
+engine directly and persist the fully-resolved default snapshot in one call. The same discipline
+(pass freshly-computed `next` values, never read state back) applies to every mutator that cascades
+to more than one light (sun-azimuth → fills under Force Align). The stale `#E92727` already in the
+dev box's registry was cleared by hand; the write-back is what stops it — or any future ghost
+value — from recurring.
+
+---
+
 ### Reference-object catalog — eager prefetch + parallel parse
 
 *2026-06-15 · [`0d98d46`](https://github.com/DrKnickers/particle-editor/commit/0d98d46) · #189*
