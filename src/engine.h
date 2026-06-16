@@ -653,6 +653,9 @@ public:
 		if (!m_referenceObjectSelected) { m_hoverManip = ManipHandle(); m_activeManip = ManipHandle(); }
 	}
 	bool IsReferenceLocked() const { return m_referenceLocked; }
+	// [gizmo-drag-teardown] So the host can self-abort an in-flight gizmo drag when
+	// an out-of-band mutation (clear / deselect / lock) deselects the object.
+	bool IsReferenceObjectSelected() const { return m_referenceObjectSelected; }
 	// freeze/lock] Setting the lock re-resolves the CURRENT selection under the
 	// new state: locking deselects (hides the gizmo + clears manip hover/active);
 	// unlocking leaves the object deselected until the user clicks it again.

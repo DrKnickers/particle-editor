@@ -3155,6 +3155,24 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // track live; persistence is deferred to LMB-up.
         if (m_dragMode == DragMode::MANIPULATE && m_manipAxis >= 0)
         {
+            // [gizmo-drag-teardown] A drag continues only while the object is still
+            // selected AND unlocked. An out-of-band clear / mod-switch / new-file /
+            // deselect / lock deselects it (lock deselects too), so self-abort here
+            // before reading or applying any move — we must never drag a stale/gone/
+            // frozen object. Fully end the gesture like the per-site drag-end tail, but
+            // WITHOUT committing (we must not persist a stale transform): ResetManipDragState
+            // zeroes accumulators + clears the engine active-drag guides; clear m_dragMode +
+            // ReleaseCapture so the eventual LBUTTONUP doesn't commit a phantom dirty/registry
+            // write. Set m_dragMode=NONE BEFORE ReleaseCapture so the WM_CAPTURECHANGED it posts
+            // sees NONE and no-ops. Reuses the unit-tested freeze/lock predicate (RefLock.h).
+            if (!RefLockResolveSelected(engine->IsReferenceObjectSelected(),
+                                        engine->IsReferenceLocked()))
+            {
+                ResetManipDragState();
+                m_dragMode = DragMode::NONE;
+                ReleaseCapture();
+                return 0;
+            }
             const float factor = (wp & MK_SHIFT) ? 0.2f : 1.0f;   //: read wParam, NOT GetKeyState
             bool moved = false;
             if (m_manipKind == Engine::ManipHandle::TRANSLATE)
