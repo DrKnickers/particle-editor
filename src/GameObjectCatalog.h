@@ -30,20 +30,8 @@
 
 class IFileManager;
 
-// Coarse grouping for the picker, derived from the object's container tag.
-// `Excluded` = a model-bearing object that is NOT a unit/structure (planet,
-// marker/spawn zone, dummy, death clone, particle prop) -- never listed in the
-// picker. `Other` is now the catch-all for UNRECOGNISED unit/structure tags and IS
-// listed (the filter fails toward showing, so a unit type we don't recognise is
-// never silently dropped -- see IsPickerListedCategory).
-enum class GameObjectCategory
-{
-    Vehicle, Infantry, Structure, Turret, Hero, Prop, Space, Projectile, Other, Excluded
-};
-
-// The profile-based classifier (replaces the tag-keyword heuristic for the
-// picker keep/group decision; the legacy `GameObjectCategory` above is retained as a
-// compat field for the unchanged bridge wire). Three orthogonal axes derived from a
+// The profile-based classifier (replaced the old tag-keyword `categorize()`
+// heuristic for the picker keep/group decision). Three orthogonal axes derived from a
 // multi-signal ObjectProfile via the pure, unit-tested ClassifyObject():
 //   domain  -- ground vs space, from the resolved MODEL FIELD-NAME (Land vs Space),
 //              the one signal present across every mod (CategoryMask is absent in base
@@ -86,9 +74,7 @@ struct ObjectProfile
     std::vector<std::string> maskTokens;      // <CategoryMask> tokens, UPPER-cased (Anti*/All/None kept; classifier ignores)
     std::vector<std::string> behaviorTokens;  // Behavior + Land/SpaceBehavior tokens, UPPER-cased
     bool                     hasMovementClass = false;
-    bool                     isDummy          = false;
-    bool                     inBackground     = false;           // In_Background || Is_Decoration
-    std::string              affiliation;      // (captured for a future faction sub-group)
+    std::string              affiliation;      // <Affiliation> -- surfaced as the picker's faction filter
 };
 
 struct Classification
@@ -123,7 +109,6 @@ struct GameObjectRef
 {
     std::string        name;        // Name= attribute (in-game key; picker label)
     std::string        modelPath;   // resolved bare ".alo" filename (after Variant_Of inheritance)
-    GameObjectCategory category = GameObjectCategory::Other;
     std::string        tag;         // raw container tag, e.g. "GroundVehicle" (grouping / diagnostics)
     std::string        sourceFile;  // listed XML it came from (diagnostics)
     // HardPoint Names this object references (its <HardPoints> comma list, with
@@ -132,7 +117,6 @@ struct GameObjectRef
     std::vector<std::string> hardpointNames;
 
     // Profile classification (from ClassifyObject) + the fieldable attribute.
-    // `category` above stays the legacy bridge-compat value; these drive the picker.
     ObjDomain domain      = ObjDomain::Unknown;
     ObjRole   role        = ObjRole::Excluded;
     ObjBucket bucket      = ObjBucket::None;
@@ -145,8 +129,7 @@ struct GameObjectRef
 // them) -- the hard gate that trims the roster. HEROES are EXEMPT: Mod grants many heroes
 // via galactic/lua scripts invisible to the static fieldable graph (a hard gate hid 197 of
 // Mod's 320 heroes -- Ahsoka, Anakin, ...), so the bounded, curated hero set is shown in
-// full once the name/tag junk (death-clones etc.) is excluded. Replaces IsPickerListedCategory
-// at the engine enumerate site; the legacy predicate is retained for the bridge-compat path.
+// full once the name/tag junk (death-clones etc.) is excluded.
 inline bool IsPickerListed(const GameObjectRef& r)
 {
     if (r.role == ObjRole::Excluded) return false;
@@ -191,21 +174,9 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out);
 enum class ModelProbeResult { Renderable, SkinnedUnsupported, LoadFailed, NotFound };
 ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPath);
 
-// Stable display string for a category (picker headers / dump mode).
-const char* GameObjectCategoryName(GameObjectCategory c);
-
-// Stable display strings for the new classification axes (dump / picker).
+// Stable display strings for the classification axes (dump / picker).
 const char* ObjDomainName(ObjDomain d);
 const char* ObjRoleName(ObjRole r);
 const char* ObjBucketName(ObjBucket b);
-
-// Categories surfaced in the reference-object picker: UNITS + STRUCTURES.
-// EXCLUSION-based (fails toward SHOWING): everything is listed EXCEPT Prop,
-// Projectile, and Excluded (explicit model-bearing non-units -- planets / markers /
-// dummies / death clones / particles). Crucially `Other` (unrecognised unit/structure
-// tags like groundcompany, groundbuildable, flagship*, capturables) IS listed -- an
-// earlier keep-only-known-categories filter dropped real units whose tags weren't
-// recognised (e.g. Mod's flagshipunit capital ships landed in Other and vanished).
-bool IsPickerListedCategory(GameObjectCategory c);
 
 #endif

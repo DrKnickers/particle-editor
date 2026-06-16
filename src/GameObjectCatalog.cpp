@@ -84,13 +84,6 @@ namespace
         return out;
     }
 
-    // A boolean XML field is true iff it reads yes/true/1 (case/space-insensitive).
-    bool isYes(const std::string& s)
-    {
-        const std::string t = asciiLower(trim(s));
-        return t == "yes" || t == "true" || t == "1";
-    }
-
     // The model field varies by object type. Land first (most objects, and the
     // form the user sizes effects against on the ground), then Space, then the
     // strategic-layer Galactic, then the generic Model_Name. First present wins.
@@ -111,48 +104,6 @@ namespace
         return std::string();
     }
 
-    // Category is primarily the container tag. The one exception is turrets:
-    // vanilla declares them as <GroundStructure Name="..._Turret">, so the
-    // "turret-ness" lives in the Name -- we escalate to Turret when either the
-    // name or the tag says turret, then fall back to tag-based buckets. The
-    // tag-based rules are ORDER-SENSITIVE substring tests (e.g. "Starbase" hits
-    // the Space rule before the "base"->Structure rule); the leaf test pins the
-    // collisions present in the real corpus so a reorder fails CI.
-    GameObjectCategory categorize(const std::string& name, const std::string& tag)
-    {
-        const std::string n = asciiLower(name);
-        const std::string t = asciiLower(tag);
-        auto nameOrTag = [&](const char* s) { return n.find(s) != std::string::npos || t.find(s) != std::string::npos; };
-        auto tagHas    = [&](const char* s) { return t.find(s) != std::string::npos; };
-
-        // EXCLUSION FIRST: model-bearing objects that are NOT units/structures.
-        // Checked BEFORE the keyword rules so a "...marker"/"...dummy" tag that also
-        // contains "structure" (e.g. multiplayerstructuremarker, w_dummystructure)
-        // doesn't slip into Structure. The model-LESS noise (events, abilities, trade
-        // routes, campaigns, ...) is already dropped by the no-model skip in the build,
-        // so only the model-bearing non-units need naming here: planets, markers/spawn
-        // zones, dummy structures, death clones, and particle props. (Planets + death
-        // clones are user-chosen exclusions; capturable structures are deliberately NOT
-        // here -- they fall through to Other and are shown.)
-        if (tagHas("planet") || tagHas("marker") || tagHas("dummy") ||
-            tagHas("death_clone") || tagHas("particle"))
-            return GameObjectCategory::Excluded;
-
-        // Units + structures. The keyword set is generous on purpose -- the filter
-        // fails toward SHOWING, so an unrecognised unit tag falls through to Other
-        // (which IS listed) rather than vanishing.
-        if (nameOrTag("turret"))                                         return GameObjectCategory::Turret;   // name or tag
-        if (tagHas("infantry") || tagHas("trooper"))                     return GameObjectCategory::Infantry;
-        if (tagHas("prop"))                                              return GameObjectCategory::Prop;     // SpaceProp / Props_* / Prop_* -> hidden
-        if (tagHas("projectile"))                                        return GameObjectCategory::Projectile; // hidden
-        if (tagHas("hero") || tagHas("unique") || tagHas("commander"))   return GameObjectCategory::Hero;     // herounit / uniqueunit / genericcommander
-        if (tagHas("vehicle") || tagHas("transport"))                    return GameObjectCategory::Vehicle;
-        if (tagHas("flagship") || tagHas("starbase") ||
-            tagHas("squadron") || tagHas("space"))                       return GameObjectCategory::Space;    // flagship* / factional_starbase / spaceunit / squadron
-        if (tagHas("structure") || tagHas("building") || tagHas("base")) return GameObjectCategory::Structure; // groundstructure / specialstructure / groundbase
-        return GameObjectCategory::Other;   // unrecognised unit/structure tags (groundcompany, groundbuildable, groundwar*, indigenous_unit, capturables) -> SHOWN
-    }
-
     // One parsed object before Variant_Of resolution. Keyed in `byName` by the
     // lower-cased Name; `name` keeps the original casing for the picker label.
     struct RawEntry
@@ -169,8 +120,6 @@ namespace
         std::string    maskRaw;        // <CategoryMask>
         std::string    behaviorRaw;    // <Behavior> + <LandBehavior> + <SpaceBehavior> (joined)
         std::string    movementRaw;    // <MovementClass>
-        std::string    dummyRaw;       // <Is_Dummy>
-        std::string    backgroundRaw;  // <In_Background> | <Is_Decoration>
         std::string    affiliationRaw; // <Affiliation>
         // fieldable reference-graph SOURCE lists (this object references others).
         std::string    costRaw;          // <Build_Cost_Credits> (fallback <Required_Star_Base_Level>) -> buildable
@@ -303,10 +252,6 @@ namespace
                                          childDataAll(e, L"LandBehavior") + " " +
                                          childDataAll(e, L"SpaceBehavior"));
                 re.movementRaw    = trim(WideToAnsi(childData(e, L"MovementClass")));
-                re.dummyRaw       = trim(WideToAnsi(childData(e, L"Is_Dummy")));
-                re.backgroundRaw  = trim(WideToAnsi(childData(e, L"In_Background")));
-                if (re.backgroundRaw.empty())
-                    re.backgroundRaw = trim(WideToAnsi(childData(e, L"Is_Decoration")));
                 re.affiliationRaw = trim(WideToAnsi(childData(e, L"Affiliation")));
                 // fieldable source lists.
                 re.costRaw        = trim(WideToAnsi(childData(e, L"Build_Cost_Credits")));
@@ -734,7 +679,6 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
         ref.modelPath      = rm.path;
         ref.tag            = kv.second.tag;
         ref.sourceFile     = kv.second.sourceFile;
-        ref.category       = categorize(kv.second.name, kv.second.tag);   // legacy bridge-compat
         ref.hardpointNames = resolveHardpoints(kv.first, byName);   // Variant_Of-resolved
 
         // assemble the profile (signals resolved through Variant_Of) + classify.
@@ -746,8 +690,6 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
         prof.maskTokens       = tokenizeUpper(resolveRaw(kv.first, byName, &RawEntry::maskRaw));
         prof.behaviorTokens   = tokenizeUpper(resolveRaw(kv.first, byName, &RawEntry::behaviorRaw));
         prof.hasMovementClass = !resolveRaw(kv.first, byName, &RawEntry::movementRaw).empty();
-        prof.isDummy          = isYes(resolveRaw(kv.first, byName, &RawEntry::dummyRaw));
-        prof.inBackground     = isYes(resolveRaw(kv.first, byName, &RawEntry::backgroundRaw));
         prof.affiliation      = resolveRaw(kv.first, byName, &RawEntry::affiliationRaw);
         const Classification cl = ClassifyObject(prof);
         ref.domain   = cl.domain;
@@ -812,45 +754,6 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
     return ModelProbeResult::SkinnedUnsupported;
 }
 
-const char* GameObjectCategoryName(GameObjectCategory c)
-{
-    switch (c)
-    {
-        case GameObjectCategory::Vehicle:    return "Vehicle";
-        case GameObjectCategory::Infantry:   return "Infantry";
-        case GameObjectCategory::Structure:  return "Structure";
-        case GameObjectCategory::Turret:     return "Turret";
-        case GameObjectCategory::Hero:       return "Hero";
-        case GameObjectCategory::Prop:       return "Prop";
-        case GameObjectCategory::Space:      return "Space";
-        case GameObjectCategory::Projectile: return "Projectile";
-        case GameObjectCategory::Excluded:   return "Excluded";
-        default:                             return "Other";
-    }
-}
-
-// Exclusion-based: list everything EXCEPT Prop, Projectile, and Excluded
-// (model-bearing non-units). `Other` is LISTED -- it holds unrecognised unit/structure
-// tags, which must not vanish (fail toward showing).
-bool IsPickerListedCategory(GameObjectCategory c)
-{
-    switch (c)
-    {
-        case GameObjectCategory::Vehicle:
-        case GameObjectCategory::Infantry:
-        case GameObjectCategory::Structure:
-        case GameObjectCategory::Turret:
-        case GameObjectCategory::Hero:
-        case GameObjectCategory::Space:
-        case GameObjectCategory::Other:       // unrecognised units -> shown
-            return true;
-        case GameObjectCategory::Prop:
-        case GameObjectCategory::Projectile:
-        case GameObjectCategory::Excluded:
-        default:
-            return false;
-    }
-}
 
 // ===================== profile classifier =========================
 // Pure cascade over an ObjectProfile: EXCLUDE (renderable non-units) -> DOMAIN (from the

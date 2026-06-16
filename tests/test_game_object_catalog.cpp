@@ -201,23 +201,13 @@ static int dumpRealCatalog(const char* xmlDir)
     std::printf("build=%s  objects=%zu\n", ok ? "true" : "false", cat.objects.size());
     if (!ok) return 2;
 
-    size_t hist[10] = { 0 };
-    for (const auto& r : cat.objects) hist[(int)r.category]++;
-    static const GameObjectCategory cats[] = {
-        GameObjectCategory::Vehicle, GameObjectCategory::Infantry, GameObjectCategory::Structure,
-        GameObjectCategory::Turret, GameObjectCategory::Hero, GameObjectCategory::Prop,
-        GameObjectCategory::Space, GameObjectCategory::Projectile, GameObjectCategory::Other,
-        GameObjectCategory::Excluded
-    };
-    std::printf("category histogram:\n");
+    size_t roleHist[4] = { 0 };   // indexed by ObjRole (Excluded, Unit, Structure, Hero)
     size_t pickerListed = 0;
-    for (GameObjectCategory c : cats)
-    {
-        std::printf("  %-12s %zu%s\n", GameObjectCategoryName(c), hist[(int)c],
-                    IsPickerListedCategory(c) ? "  [picker]" : "");
-        if (IsPickerListedCategory(c)) pickerListed += hist[(int)c];
-    }
-    std::printf("picker-listed (units+structures) total: %zu of %zu\n", pickerListed, cat.objects.size());
+    for (const auto& r : cat.objects) { roleHist[(int)r.role]++; if (IsPickerListed(r)) ++pickerListed; }
+    std::printf("role histogram: Excluded=%zu Unit=%zu Structure=%zu Hero=%zu\n",
+                roleHist[0], roleHist[1], roleHist[2], roleHist[3]);
+    std::printf("picker-listed (fieldable units+structures + all heroes) total: %zu of %zu\n",
+                pickerListed, cat.objects.size());
 
     static const char* samples[] = {
         "AT_AT_Walker", "AT_AT_Walker_REB09", "AT_ST_Walker", "Star_Destroyer"
@@ -226,9 +216,10 @@ static int dumpRealCatalog(const char* xmlDir)
     for (const char* s : samples)
     {
         const GameObjectRef* r = find(cat, s);
-        if (r) std::printf("  %-28s -> %-28s [%s] (%s)\n",
+        if (r) std::printf("  %-28s -> %-28s [%s/%s/%s] (%s)\n",
                            r->name.c_str(), r->modelPath.c_str(),
-                           GameObjectCategoryName(r->category), r->sourceFile.c_str());
+                           ObjDomainName(r->domain), ObjRoleName(r->role), ObjBucketName(r->bucket),
+                           r->sourceFile.c_str());
         else   std::printf("  %-28s -> (not found)\n", s);
     }
     // PR2] Hardpoint resolution against the real content.
@@ -258,7 +249,7 @@ static int dumpRealCatalog(const char* xmlDir)
     for (size_t i = 0; i < cat.objects.size() && i < 12; ++i)
         std::printf("  %-28s -> %-28s [%s]\n",
                     cat.objects[i].name.c_str(), cat.objects[i].modelPath.c_str(),
-                    GameObjectCategoryName(cat.objects[i].category));
+                    ObjBucketName(cat.objects[i].bucket));
     return 0;
 }
 
@@ -346,7 +337,7 @@ static int dumpUnit(const char* unitName, const std::vector<std::string>& dirs)
             if (lname.find(needle) == std::string::npos) continue;
             ++hits;
             std::printf("  %-44s [%-9s] hp=%-2zu model=%s\n",
-                        o.name.c_str(), GameObjectCategoryName(o.category),
+                        o.name.c_str(), ObjBucketName(o.bucket),
                         o.hardpointNames.size(), o.modelPath.c_str());
         }
         std::printf("  (%zu matches)\n", hits);
@@ -354,9 +345,10 @@ static int dumpUnit(const char* unitName, const std::vector<std::string>& dirs)
 
     const GameObjectRef* r = find(cat, unitName);
     if (!r) { std::printf("UNIT '%s' NOT in catalog (filtered / parent not parsed / no model)\n", unitName); return 3; }
-    std::printf("unit '%s'  model=%s  category=%s  source=%s\n",
+    std::printf("unit '%s'  model=%s  class=%s/%s/%s  source=%s\n",
                 r->name.c_str(), r->modelPath.c_str(),
-                GameObjectCategoryName(r->category), r->sourceFile.c_str());
+                ObjDomainName(r->domain), ObjRoleName(r->role), ObjBucketName(r->bucket),
+                r->sourceFile.c_str());
 
     auto lower = [](std::string s) { for (char& c : s) if (c >= 'A' && c <= 'Z') c = (char)(c + 32); return s; };
     std::printf("hardpointNames: %zu\n", r->hardpointNames.size());
@@ -566,68 +558,9 @@ int main(int argc, char** argv)
         CHECK(find(cat, "casedupa") == nullptr, "the lower-cased duplicate is not emitted as a second object");
     }
 
-    // ---- category mapping --------------------------------------------------
-    std::printf("[category]\n");
-    {
-        auto catOf = [&](const char* n) { const GameObjectRef* r = find(cat, n); return r ? r->category : GameObjectCategory::Other; };
-        CHECK(catOf("Tank") == GameObjectCategory::Vehicle, "GroundVehicle -> Vehicle");
-        CHECK(catOf("Frigate") == GameObjectCategory::Space, "SpaceUnit -> Space");
-        CHECK(catOf("Trooper") == GameObjectCategory::Infantry, "GroundInfantry -> Infantry");
-        CHECK(catOf("LaserTurret") == GameObjectCategory::Turret, "GroundTurret -> Turret");
-        CHECK(catOf("Bolt") == GameObjectCategory::Projectile, "Projectile -> Projectile");
-        CHECK(catOf("Asteroid") == GameObjectCategory::Prop, "SpaceProp -> Prop (prop beats space)");
-        CHECK(catOf("Vader") == GameObjectCategory::Hero, "HeroUnit -> Hero");
-        CHECK(catOf("Barracks") == GameObjectCategory::Structure, "GroundStructure -> Structure");
-        CHECK(catOf("Empire_Anti_Aircraft_Turret") == GameObjectCategory::Turret, "GroundStructure named *_Turret -> Turret (name escalation)");
-        CHECK(catOf("Home_One_Starbase") == GameObjectCategory::Space, "StarBase -> Space (precedence: starbase beats 'base'->Structure)");
-        CHECK(catOf("Hauler") == GameObjectCategory::Vehicle, "TransportUnit -> Vehicle ('transport')");
-        CHECK(catOf("Tatooine") == GameObjectCategory::Excluded, "Planet -> Excluded (model-bearing non-unit, S50)");
-        CHECK(catOf("Clone_Company") == GameObjectCategory::Other, "GroundCompany -> Other (unrecognised unit tag, shown)");
-        CHECK(catOf("Spawn_Marker_01") == GameObjectCategory::Excluded, "Marker -> Excluded (model-bearing non-unit)");
-    }
-
-    // ---- picker category filter (exclusion-based: units+structures + the
-    //      Other catch-all IN; Prop/Projectile/Excluded OUT) ------------------
-    std::printf("[picker filter]\n");
-    {
-        // The predicate: everything listed EXCEPT Prop / Projectile / Excluded.
-        CHECK(IsPickerListedCategory(GameObjectCategory::Vehicle),    "Vehicle is picker-listed");
-        CHECK(IsPickerListedCategory(GameObjectCategory::Infantry),   "Infantry is picker-listed");
-        CHECK(IsPickerListedCategory(GameObjectCategory::Structure),  "Structure is picker-listed");
-        CHECK(IsPickerListedCategory(GameObjectCategory::Turret),     "Turret is picker-listed");
-        CHECK(IsPickerListedCategory(GameObjectCategory::Hero),       "Hero is picker-listed");
-        CHECK(IsPickerListedCategory(GameObjectCategory::Space),      "Space is picker-listed");
-        CHECK(IsPickerListedCategory(GameObjectCategory::Other),       "Other IS picker-listed (unrecognised units shown)");
-        CHECK(!IsPickerListedCategory(GameObjectCategory::Prop),       "Prop is NOT picker-listed");
-        CHECK(!IsPickerListedCategory(GameObjectCategory::Projectile), "Projectile is NOT picker-listed");
-        CHECK(!IsPickerListedCategory(GameObjectCategory::Excluded),   "Excluded is NOT picker-listed");
-
-        // Filtering the built catalog drops Prop/Projectile/Excluded and keeps every
-        // unit/structure INCLUDING the unrecognised-tag Other ones (mirrors
-        // Engine::EnumerateReferenceObjects).
-        std::vector<GameObjectRef> listed;
-        for (const auto& r : cat.objects)
-            if (IsPickerListedCategory(r.category)) listed.push_back(r);
-        auto inListed = [&](const char* n) {
-            for (const auto& r : listed) if (r.name == n) return true;
-            return false;
-        };
-        CHECK(!inListed("Bolt"),       "Projectile 'Bolt' filtered out of the picker list");
-        CHECK(!inListed("Asteroid"),   "Prop 'Asteroid' filtered out of the picker list");
-        CHECK(!inListed("Tatooine"),   "Excluded 'Tatooine' (planet) filtered out");
-        CHECK(!inListed("Spawn_Marker_01"), "Excluded 'Spawn_Marker_01' (marker) filtered out");
-        CHECK(inListed("Tank"),         "Vehicle 'Tank' kept in the picker list");
-        CHECK(inListed("Frigate"),      "Space 'Frigate' kept in the picker list");
-        CHECK(inListed("Trooper"),      "Infantry 'Trooper' kept in the picker list");
-        CHECK(inListed("LaserTurret"),  "Turret 'LaserTurret' kept in the picker list");
-        CHECK(inListed("Vader"),        "Hero 'Vader' kept in the picker list");
-        CHECK(inListed("Barracks"),     "Structure 'Barracks' kept in the picker list");
-        CHECK(inListed("Clone_Company"),"Other 'Clone_Company' (unrecognised unit tag) KEPT -- the Mod-units-missing fix");
-        bool anyExcluded = false;
-        for (const auto& r : listed)
-            if (!IsPickerListedCategory(r.category)) anyExcluded = true;
-        CHECK(!anyExcluded, "filtered list contains ONLY units/structures");
-    }
+    // (Legacy [category] + [picker filter] sections retired with the GameObjectCategory
+    // enum in fu]; the profile classifier's keep/group is covered by [classify]
+    // (role/bucket) + [fieldable] (IsPickerListed) below.)
 
     // ---- sorted by name ----------------------------------------------------
     std::printf("[sorted]\n");
@@ -753,20 +686,12 @@ int main(int argc, char** argv)
               "Projectile -> Excluded");
         CHECK(ClassifyObject(P("Squadron", ModelFieldKind::None)).role == ObjRole::Excluded,
               "no model (Squadron wrapper) -> Excluded");
-        {
-            // Is_Dummy=Yes is NOT a non-unit signal in EaW -- real buildable structures carry it
-            // (E_Gravity_Well_Station, mining facilities), so it must NOT exclude.
-            ObjectProfile d = P("GroundVehicle", ModelFieldKind::Land); d.isDummy = true;
-            CHECK(ClassifyObject(d).role == ObjRole::Unit, "Is_Dummy=Yes does NOT exclude (real structures set it)");
-        }
-        {
-            // In_Background does NOT gate either (Eclipse SSD sets it); a SpaceProp is excluded by
-            // its TAG, not the flag.
-            ObjectProfile bg = P("SpaceProp", ModelFieldKind::Space); bg.inBackground = true;
-            CHECK(ClassifyObject(bg).role == ObjRole::Excluded, "SpaceProp -> Excluded by TAG (not the In_Background flag)");
-            ObjectProfile u = P("SpaceUnit", ModelFieldKind::Space); u.inBackground = true;
-            CHECK(ClassifyObject(u).role == ObjRole::Unit, "In_Background alone does NOT exclude a unit-tagged object (Eclipse)");
-        }
+        // Backdrops are excluded by TAG (SpaceProp), not by an Is_Dummy / In_Background flag —
+        // EaW puts those flags on real units/structures, so the classifier no longer reads them
+        // (the field was retired with fu]); a real Is_Dummy structure staying listed is
+        // covered by the --dumpcat audit on the real mods.
+        CHECK(ClassifyObject(P("SpaceProp", ModelFieldKind::Space)).role == ObjRole::Excluded,
+              "SpaceProp -> Excluded by tag");
         {
             ObjectProfile b = P("SpaceUnit", ModelFieldKind::Space); b.behaviorTokens = {"SKY_DOME"};
             CHECK(ClassifyObject(b).role == ObjRole::Excluded, "behavior SKY_DOME -> Excluded");
