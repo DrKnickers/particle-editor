@@ -20,6 +20,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Added
 
+- Lock the reference object — a "Lock object" checkbox in the object popup freezes its placement; while locked it can't be selected, dragged, or nudged, and the lock persists across object swaps and editor restarts
 - Ground-plane handle on the reference-object gizmo — drag the object across the floor (X/Y) at a fixed height; respects grid snap and Shift-precision, and is undoable
 - Undo and Redo buttons in the toolbar
 - Reference-object moves, gizmo drags, Reset, and position spinners are now undoable on the same Ctrl+Z timeline as particle edits

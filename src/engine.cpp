@@ -3752,7 +3752,7 @@ void Engine::SetReferenceObject(const std::string& name)
         m_referenceObjectVisible = true;
     // Auto-select on pick so the manipulator gizmo appears immediately; clearing
     // the selection deselects. (Click the object body to re-select, empty to clear.)
-    m_referenceObjectSelected = !name.empty();
+    m_referenceObjectSelected = RefLockResolveSelected(!name.empty(), m_referenceLocked);
     m_hoverManip = ManipHandle();
     RebuildReferenceObjectMesh();
 }
@@ -4434,7 +4434,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 			{
 				m_referenceObjectMesh.Resolve(m_shaderManager, m_pDevice);
 				m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);
-				m_referenceObjectSelected = true;   // show the gizmo for the bring-up object
+				m_referenceObjectSelected = RefLockResolveSelected(true, m_referenceLocked);   // gizmo for bring-up (honours lock)
 				fprintf(stderr, "[RefObj] loaded: %zu sub-meshes, skippedSkinned=%d\n",
 				        m_referenceObjectMesh.SubMeshes().size(),
 				        m_referenceObjectMesh.SkippedSkinned() ? 1 : 0);

@@ -425,7 +425,14 @@ export class MockBridge implements Bridge {
         this.patchAndBroadcast({ referenceObjectVisible: req.params.visible });
         return {};
 
+      case "engine/set/reference-object-lock":
+        this.patchAndBroadcast({ referenceObjectLocked: req.params.locked });
+        return {};
+
       case "engine/set/reference-object-transform":
+        // freeze/lock] Mirror the native bridge: a locked object drops
+        // UI-routed transform requests (the picker also disables the inputs).
+        if (useMockEngineState.getState().referenceObjectLocked) return {};
         this.patchAndBroadcast({
           referenceObjectPosition: req.params.position,
           referenceObjectRotation: req.params.rotation,

@@ -8,11 +8,22 @@
 // toggle, a numeric transform commit, the "Loading objects…" building
 // state, and the search filter (which force-expands so matches stay visible).
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { ReferenceObjectPicker } from "../ReferenceObjectPicker";
 import { MockBridge } from "@/bridge/mock";
+import { useMockEngineState, makeDefaultEngineState } from "@/bridge/mock-state";
 import type { Bridge } from "@particle-editor/bridge-schema";
+
+// The MockBridge reads/writes the module-level Zustand engine store, which is
+// shared across every MockBridge instance in this file. Reset it to defaults
+// before each test so state (selected object, lock flag) can't leak between
+// tests — mirrors BackgroundPicker.test.tsx. Without this, the lock tests that
+// assert on the pristine "no object selected" / "unlocked" defaults pick up the
+// previous test's selection + lock state and fail.
+beforeEach(() => {
+  useMockEngineState.setState(makeDefaultEngineState());
+});
 
 describe("ReferenceObjectPicker — selection + status", () => {
   it("enumerates objects into Heroes/Ground/Space sections and dispatches on click-select", async () => {
@@ -271,5 +282,109 @@ describe("ReferenceObjectPicker — async build + search", () => {
     );
     expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: "AT_ST_Walker" })).toBeInTheDocument();
+  });
+});
+
+// Freeze/lock: the Lock checkbox reflects + dispatches referenceObjectLocked,
+// and a locked object disables the Transform inputs (Reset + spinners).
+describe("ReferenceObjectPicker — lock", () => {
+  it("reflects referenceObjectLocked and dispatches engine/set/reference-object-lock on toggle", async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("tree", { name: "Reference object" });
+    await waitFor(() =>
+      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole("treeitem", { name: "AT_AT_Walker" }));
+
+    const lock = await screen.findByRole("checkbox", { name: "Lock object" });
+    expect((lock as HTMLInputElement).checked).toBe(false); // mock default
+    fireEvent.click(lock);
+    await waitFor(async () => {
+      const s = await bridge.request({ kind: "engine/state/snapshot", params: {} });
+      expect(s.referenceObjectLocked).toBe(true);
+    });
+    await waitFor(() => expect((lock as HTMLInputElement).checked).toBe(true));
+  });
+
+  it("disables the Transform spinners + Reset when locked", async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("tree", { name: "Reference object" });
+    await waitFor(() =>
+      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole("treeitem", { name: "AT_AT_Walker" }));
+
+    // Enabled before locking.
+    expect(((await screen.findByLabelText("Position X")) as HTMLInputElement).disabled).toBe(false);
+    // Lock -> round-trips -> inputs disable.
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Lock object" }));
+    await waitFor(() =>
+      expect((screen.getByLabelText("Position X") as HTMLInputElement).disabled).toBe(true)
+    );
+    expect((screen.getByLabelText("Position Y") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Position Z") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Rotation Yaw") as HTMLInputElement).disabled).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Reset transform to origin" }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("disables the Lock checkbox when no object is selected", async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("tree", { name: "Reference object" });
+    // Default mock has no reference object selected (name === NONE) -> Lock disabled.
+    const lock = await screen.findByRole("checkbox", { name: "Lock object" });
+    expect((lock as HTMLInputElement).disabled).toBe(true);
+  });
+
+  // Unlocking re-enables the inputs — the symmetric return path (a stuck
+  // disabled={locked} would regress this without the lock->unlock round-trip).
+  it("re-enables the Transform inputs after unlock", async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("tree", { name: "Reference object" });
+    await waitFor(() =>
+      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole("treeitem", { name: "AT_AT_Walker" }));
+
+    const lock = await screen.findByRole("checkbox", { name: "Lock object" });
+    fireEvent.click(lock); // lock
+    await waitFor(() =>
+      expect((screen.getByLabelText("Position X") as HTMLInputElement).disabled).toBe(true)
+    );
+    fireEvent.click(lock); // unlock
+    await waitFor(() =>
+      expect((screen.getByLabelText("Position X") as HTMLInputElement).disabled).toBe(false)
+    );
+    expect((screen.getByLabelText("Rotation Yaw") as HTMLInputElement).disabled).toBe(false);
+    expect(
+      (screen.getByRole("button", { name: "Reset transform to origin" }) as HTMLButtonElement).disabled
+    ).toBe(false);
+  });
+
+  // The freeze holds at the (mock) bridge: a transform request against a locked
+  // object is dropped, mirroring the native BridgeDispatcher no-op. Guards the
+  // mock from silently encoding the wrong contract.
+  it("drops a transform request while locked (bridge-level freeze)", async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByLabelText("Position X");
+    // Seed a known transform, lock, then attempt to move it via the bridge.
+    await bridge.request({
+      kind: "engine/set/reference-object-transform",
+      params: { position: [5, 6, 7], rotation: [0, 0, 0] },
+    });
+    await bridge.request({ kind: "engine/set/reference-object-lock", params: { locked: true } });
+    await bridge.request({
+      kind: "engine/set/reference-object-transform",
+      params: { position: [99, 99, 99], rotation: [45, 0, 0] },
+    });
+    const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.referenceObjectPosition).toEqual([5, 6, 7]);   // unchanged — frozen
+    expect(snap.referenceObjectRotation).toEqual([0, 0, 0]);
   });
 });

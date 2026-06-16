@@ -87,6 +87,7 @@ export function makeDefaultEngineState(): EngineStateDto {
     // imported reference object + unit grid (nothing selected by default)
     referenceObjectName: "",
     referenceObjectVisible: true,
+    referenceObjectLocked: false,
     referenceObjectPosition: [0, 0, 0],
     referenceObjectRotation: [0, 0, 0],
     referenceObjectStatus: "none",

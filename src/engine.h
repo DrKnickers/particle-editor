@@ -10,6 +10,7 @@
 #include "SkydomeMesh.h"          // game-faithful dome render core
 #include "ReferenceObjectMesh.h"  // imported game-object render core
 #include "GameObjectCatalog.h"    // enumerate game objects by Name
+#include "RefLock.h"
 #include <memory>
 #include <atomic>    // off-UI-thread catalog build
 #include <mutex>
@@ -637,7 +638,18 @@ public:
 	// empty to deselect). PickReferenceObject (S46) ray-tests the object's
 	// object-space AABB for the body-click. SetManipulatorHover lets the host
 	// highlight the handle under the cursor (set each idle mouse-move; NONE = none).
-	void SetReferenceObjectSelected(bool selected) { m_referenceObjectSelected = selected; if (!selected) { m_hoverManip = ManipHandle(); m_activeManip = ManipHandle(); } }
+	void SetReferenceObjectSelected(bool selected) {
+		m_referenceObjectSelected = RefLockResolveSelected(selected, m_referenceLocked);
+		if (!m_referenceObjectSelected) { m_hoverManip = ManipHandle(); m_activeManip = ManipHandle(); }
+	}
+	bool IsReferenceLocked() const { return m_referenceLocked; }
+	// freeze/lock] Setting the lock re-resolves the CURRENT selection under the
+	// new state: locking deselects (hides the gizmo + clears manip hover/active);
+	// unlocking leaves the object deselected until the user clicks it again.
+	void SetReferenceLocked(bool locked) {
+		m_referenceLocked = locked;
+		SetReferenceObjectSelected(m_referenceObjectSelected);
+	}
 	void SetManipulatorHover(ManipHandle h)         { m_hoverManip = h; }
 	// The host pushes the active drag handle on grab + per rotate-move so the renderer can draw
 	// the axis guide line / rotate sweep and dim the other handles; cleared (NONE) at every drag-end.
@@ -937,7 +949,8 @@ private:
 	D3DXVECTOR3              m_referencePosition = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
 	D3DXVECTOR3              m_referenceRotation = D3DXVECTOR3(0.0f, 0.0f, 0.0f);  // degrees [yaw,pitch,roll]
 	ReferenceObjectStatus    m_referenceObjectStatus = ReferenceObjectStatus::None;
-	bool                     m_referenceObjectSelected = false;  // gizmo visible/grabbable only when selected
+	bool                     m_referenceObjectSelected = false;  // gizmo visible/grabbable only when selected; assign ONLY via RefLockResolveSelected so the lock is honoured (see RefLock.h)
+	bool                     m_referenceLocked = false;  // freeze: non-selectable/grabbable; transform frozen at the bridge (UI path), not the engine setter (undo restore must write)
 	ManipHandle              m_hoverManip;                       // handle under the cursor (highlight), kind=NONE = none
 	ManipHandle              m_activeManip;            // the handle currently being DRAGGED (NONE = idle); drives guide/sweep/dim
 	float                    m_activeGrabAngle   = 0.0f;  // rotate: ring angle (rad) at grab

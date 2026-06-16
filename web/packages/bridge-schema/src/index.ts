@@ -251,6 +251,7 @@ export type EngineStateDto = {
   // Imported reference object (scale reference) + unit grid.
   referenceObjectName: string;             // GetReferenceObjectName() — "" = none
   referenceObjectVisible: boolean;         // GetReferenceObjectVisible()
+  referenceObjectLocked: boolean;          // IsReferenceLocked() — placement frozen
   referenceObjectPosition: Vec3;           // GetReferencePosition() — world units
   // degrees [yaw,pitch,roll]; the engine is Z-up, so yaw = heading about world
   // up (Z), pitch = tilt about X, roll = bank about Y (yaw applied last).
@@ -651,6 +652,7 @@ export type Request =
   // clamps to > 0).
   | { kind: "engine/set/reference-object";           params: { name: string } }
   | { kind: "engine/set/reference-object-visible";   params: { visible: boolean } }
+  | { kind: "engine/set/reference-object-lock";      params: { locked: boolean } }
   | { kind: "engine/set/reference-object-transform"; params: { position: Vec3; rotation: Vec3 } }
   | { kind: "engine/set/grid-visible";               params: { visible: boolean } }
   | { kind: "engine/set/grid-spacing";               params: { spacing: number } }
@@ -1091,6 +1093,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/set/skydome-environment" }     ? Record<string, never> :
   R extends { kind: "engine/set/reference-object" }           ? Record<string, never> :
   R extends { kind: "engine/set/reference-object-visible" }   ? Record<string, never> :
+  R extends { kind: "engine/set/reference-object-lock" }      ? Record<string, never> :
   R extends { kind: "engine/set/reference-object-transform" } ? Record<string, never> :
   R extends { kind: "engine/set/grid-visible" }               ? Record<string, never> :
   R extends { kind: "engine/set/grid-spacing" }               ? Record<string, never> :

@@ -435,6 +435,19 @@ static void PersistReferenceObjectVisible(bool visible)
     }
 }
 
+static void PersistReferenceObjectLock(bool locked)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
+    {
+        DWORD v = locked ? 1u : 0u;
+        RegSetValueExW(hKey, L"ReferenceObjectLocked", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
+        RegCloseKey(hKey);
+    }
+}
+
 static void PersistReferenceObjectTransform(const D3DXVECTOR3& pos, const D3DXVECTOR3& rot)
 {
     HKEY hKey = nullptr;
@@ -845,6 +858,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         // imported reference object + unit grid
         {"referenceObjectName",     engine->GetReferenceObjectName()},
         {"referenceObjectVisible",  engine->GetReferenceObjectVisible()},
+        {"referenceObjectLocked",   engine->IsReferenceLocked()},
         {"referenceObjectPosition", Vec3ToJson(engine->GetReferencePosition())},
         {"referenceObjectRotation", Vec3ToJson(engine->GetReferenceRotation())},
         {"referenceObjectStatus",   RefStatusToString(engine->GetReferenceObjectStatus())},
@@ -1678,9 +1692,30 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         EmitEngineStateChanged();
         return res;
     }
+    if (kind == "engine/set/reference-object-lock")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        bool locked = params.value("locked", false);
+        m_engine->SetReferenceLocked(locked);
+        if (!(m_testHost && !m_settingsLive))
+            PersistReferenceObjectLock(locked);
+        sendOk(json::object());
+        markDirty();
+        EmitEngineStateChanged();
+        return res;
+    }
     if (kind == "engine/set/reference-object-transform")
     {
         if (!requireEngine(kind.c_str())) return res;
+        // freeze/lock] Drop a UI-routed transform request against a locked
+        // object — the picker already disables the spinners + Reset, so this is the
+        // backstop for a stale/racing request. Returning BEFORE the undo capture
+        // below means a dropped request also pushes no phantom undo step. This gates
+        // only the UI path: the gizmo-drag path can't reach a locked object (it isn't
+        // selectable, so no handle is grabbable), and engine-internal restores
+        // (ApplyUndoSnapshot) intentionally still move it, so SetReferenceObjectTransform
+        // itself stays ungated.
+        if (m_engine->IsReferenceLocked()) { sendOk(json::object()); return res; }
         D3DXVECTOR3 pos = JsonToVec3(params.value("position", json::array()));
         D3DXVECTOR3 rot = JsonToVec3(params.value("rotation", json::array()));
         // s52] PRE-mutation undo capture, keyed PER changed component

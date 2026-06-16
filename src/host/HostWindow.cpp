@@ -2184,6 +2184,13 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         // Persistent gizmo snap toggle (REG_DWORD, like GridVisible).
                         if (readDword(L"SnapEnabled", dw))
                             engine->SetSnapEnabled(dw != 0);
+                        // freeze/lock] Restore the persisted lock so a frozen
+                        // object comes back frozen. (Ordering vs. the Name read isn't
+                        // load-bearing: the silent restore force-deselects below
+                        // regardless, so the object lands deselected either way — the
+                        // lock flag just needs to be set before the user can interact.)
+                        if (readDword(L"ReferenceObjectLocked", dw))
+                            engine->SetReferenceLocked(dw != 0);
                         // Name LAST so the mesh loads once with the transform in
                         // place; guard on non-empty so an unset selection doesn't
                         // clobber a debug ALO_LT7_TEST_OBJECT env-hook mesh.

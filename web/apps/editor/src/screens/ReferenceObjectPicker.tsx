@@ -159,6 +159,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
 
   const name = snapshot?.referenceObjectName ?? NONE;
   const visible = snapshot?.referenceObjectVisible ?? true;
+  const locked = snapshot?.referenceObjectLocked ?? false;
   const status = snapshot?.referenceObjectStatus ?? "none";
   const pos: Vec3 = snapshot?.referenceObjectPosition ?? [0, 0, 0];
   const rot: Vec3 = snapshot?.referenceObjectRotation ?? [0, 0, 0];
@@ -196,6 +197,11 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const setVisible = (v: boolean) =>
     void bridge.request({ kind: "engine/set/reference-object-visible", params: { visible: v } });
 
+  const setLocked = (v: boolean) =>
+    void bridge.request({ kind: "engine/set/reference-object-lock", params: { locked: v } });
+
+  // Persistent gizmo snap toggle. Ticking it persists/round-trips now; the
+  // drag-time apply (reads the engine's snap state) lands in a separate task.
   const setSnapEnabled = (v: boolean) =>
     void bridge.request({ kind: "engine/set/snap-enabled", params: { enabled: v } });
 
@@ -393,7 +399,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
           <button
             type="button"
             onClick={() => setTransform([0, 0, 0], [0, 0, 0])}
-            disabled={name === NONE}
+            disabled={name === NONE || locked}
             className="rounded px-2 py-0.5 text-xs text-text-2 transition hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none"
             aria-label="Reset transform to origin"
             title="Reset position + rotation to 0"
@@ -401,6 +407,19 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
             Reset
           </button>
         </div>
+        <label
+          className="flex items-center gap-2 text-xs text-text-2"
+          title="Freeze the object's placement — it can't be selected, dragged, or nudged until unlocked."
+        >
+          <input
+            type="checkbox"
+            checked={locked}
+            onChange={(e) => setLocked(e.target.checked)}
+            disabled={name === NONE}
+            aria-label="Lock object"
+          />
+          Lock object
+        </label>
         <div className="grid grid-cols-3 gap-2">
           {(["X", "Y", "Z"] as const).map((axis, i) => (
             <label key={axis} className="flex flex-col gap-1 text-xs text-text-2">
@@ -410,6 +429,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                 onChange={(v) => setPosAxis(i, v)}
                 step={1}
                 decimals={1}
+                disabled={locked}
                 aria-label={`Position ${axis}`}
               />
             </label>
@@ -425,6 +445,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                 step={5}
                 decimals={0}
                 unit="°"
+                disabled={locked}
                 aria-label={`Rotation ${axis}`}
               />
             </label>
