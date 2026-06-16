@@ -114,9 +114,11 @@ IDR_SKYDOME_INDOOR      RCDATA                  "Resources\\skydomes\\indoor.tga
 // Version
 //
 
+#include "version.h"
+
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,5,0,0
- PRODUCTVERSION 1,5,0,0
+ FILEVERSION PE_VERSION_MAJOR,PE_VERSION_MINOR,PE_VERSION_PATCH,0
+ PRODUCTVERSION PE_VERSION_MAJOR,PE_VERSION_MINOR,PE_VERSION_PATCH,0
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x5L
@@ -133,12 +135,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Mike Lankamp"
             VALUE "FileDescription", "Particle Editor"
-            VALUE "FileVersion", "1, 5, 0, 0"
+            VALUE "FileVersion", PE_VERSION_STR
             VALUE "InternalName", "Particle Editor"
             VALUE "LegalCopyright", "Copyright (C) 2009 Mike Lankamp"
             VALUE "OriginalFilename", "ParticleEditor.exe"
             VALUE "ProductName", "Particle Editor"
-            VALUE "ProductVersion", "1, 5, 0, 0"
+            VALUE "ProductVersion", PE_VERSION_STR
         END
     END
     BLOCK "VarFileInfo"

@@ -4,13 +4,15 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { readAppVersion } from "./app-version";
 
-// Build-time constants for the About dialog. Hand-bumped to match the
-// canonical version constants in src/main.cpp:43-44
-// (VERSION_MAJOR / VERSION_MINOR). When those change, update the string
-// here too — it's two ints, not worth a codegen step. Vite injects these
-// into `import.meta.env` via the `define` block below.
-const APP_VERSION = "1.5";
+// Build-time app version for the About dialog. Single source of truth is the
+// C header src/version.h (PE_VERSION_STR), shared with the binary's
+// VS_VERSION_INFO and the legacy Win32 About — so the React About always
+// matches the download. vitest.config.ts mirrors this via the same parser.
+const APP_VERSION = readAppVersion(
+  path.resolve(__dirname, "../../../src/version.h"),
+);
 
 // BUILD_DATE: the committer date of HEAD in YYYY-MM-DD form. Stable
 // across rebuilds of the same commit, so the About dialog's

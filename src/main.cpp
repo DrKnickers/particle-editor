@@ -49,8 +49,9 @@
 #include <commdlg.h>
 using namespace std;
 
-static const int VERSION_MAJOR = 1;
-static const int VERSION_MINOR = 5;
+// Application version — single source of truth (also drives the binary's
+// VS_VERSION_INFO in ParticleEditor.rc and the React About via vite.config.ts).
+#include "version.h"
 
 // Show up to this amount of files in the File menu
 static const int NUM_HISTORY_ITEMS = 9;
@@ -426,7 +427,7 @@ static INT_PTR CALLBACK AboutProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         {
             HWND hVersion = GetDlgItem(hWnd, IDC_VERSION);
             wstring text = GetWindowStr(hVersion);
-            text = FormatString(text.c_str(), VERSION_MAJOR, VERSION_MINOR);
+            text = FormatString(text.c_str(), PE_VERSION_MAJOR, PE_VERSION_MINOR, PE_VERSION_PATCH);
             SetWindowText(hVersion, text.c_str());
             
             HWND hBuildDate = GetDlgItem(hWnd, IDC_BUILDDATE);

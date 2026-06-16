@@ -517,7 +517,7 @@ CAPTION "About"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,191,184,50,14
-    LTEXT           "Particle Editor %d.%d",IDC_VERSION,7,7,137,8
+    LTEXT           "Particle Editor %d.%d.%d",IDC_VERSION,7,7,137,8
     LTEXT           "Build date: %hs",IDC_BUILDDATE,7,16,137,8
     LTEXT           "Copyright (c) 2008 Mike Lankamp",IDC_STATIC,7,25,137,8
     LTEXT           "<disclaimer>",IDC_DISCLAIMER,7,136,422,42

@@ -1,9 +1,12 @@
 # Changelog
 
 All notable user-facing changes to the Particle Editor are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project ships continuously, one pull
-request at a time, rather than in tagged releases — so changes are grouped by **merge date** (newest
-first) and each entry links its PR.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Day to day the project merges one pull
+request at a time, so changes are grouped by **merge date** (newest first) and each entry links its
+PR. Periodically those merges are rolled up into a tagged [SemVer](https://semver.org) release
+([tags](https://github.com/DrKnickers/particle-editor/tags) ·
+[Releases](https://github.com/DrKnickers/particle-editor/releases)); the versioning policy lives
+in [`VERSIONING.md`](VERSIONING.md).
 
 For the per-PR engineering diary (design decisions, implementation detail, and issues-and-resolutions),
 see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work, see [`ROADMAP.md`](ROADMAP.md).
@@ -18,6 +21,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Changed
 
+- About dialog now shows the editor's own version (0.3.0) instead of the upstream 1.5, which is kept as a fork credit line
 - Gizmo gains screen-uniform handles, Shift-for-precision drags, grid/angle snapping, and in-drag guide lines
 - Core is now a selectable, orderable submod layer instead of being silently auto-loaded
 - Object catalog now prefetches eagerly and parses in parallel, so the picker rarely waits on loading
