@@ -1,7 +1,7 @@
 - dialog "About Particle Editor":
   - heading "About Particle Editor" [level=2]
   - button "Close"
-  - text: "Particle Editor Version 1.5 Build date: <DATE> Forked from Mike.NL's GlyphX Particle Editor v1.5"
+  - text: "Particle Editor Version 0.3.0 Build date: <DATE> Forked from Mike.NL's GlyphX Particle Editor v1.5"
   - paragraph: "Particle editor for the Petroglyph Alamo engine (Star Wars: Empire at War / Forces of Corruption). Distributed under the MIT licence. This software is provided \"as is\", without warranty of any kind."
   - link "https://github.com/DrKnickers/particle-editor":
     - /url: https://github.com/DrKnickers/particle-editor

@@ -1,5 +1,5 @@
 {
-  "Name": "AloParticleEditor",
+  "Name": "a11y-base-state.alo — Particle Editor",
   "ControlType": "Window",
   "AutomationId": "",
   "ClassName": "AloHostMain",
@@ -26,57 +26,6 @@
       "IsEnabled": true,
       "IsOffscreen": false,
       "children": [
-        {
-          "Name": "Untitled",
-          "ControlType": "Text",
-          "AutomationId": "view_9",
-          "ClassName": "Label",
-          "IsKeyboardFocusable": false,
-          "IsEnabled": true,
-          "IsOffscreen": false,
-          "children": []
-        },
-        {
-          "Name": "",
-          "ControlType": "Pane",
-          "AutomationId": "",
-          "ClassName": "BrowserCaptionButtonContainer",
-          "IsKeyboardFocusable": false,
-          "IsEnabled": true,
-          "IsOffscreen": false,
-          "children": [
-            {
-              "Name": "Minimize",
-              "ControlType": "Button",
-              "AutomationId": "view_2",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            },
-            {
-              "Name": "Maximize",
-              "ControlType": "Button",
-              "AutomationId": "view_3",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            },
-            {
-              "Name": "Close",
-              "ControlType": "Button",
-              "AutomationId": "view_7",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            }
-          ]
-        },
         {
           "Name": "",
           "ControlType": "Pane",
@@ -142,7 +91,7 @@
                               "IsOffscreen": false,
                               "children": [
                                 {
-                                  "Name": "a11y-base-state.alo — AloParticleEditor",
+                                  "Name": "a11y-base-state.alo — Particle Editor",
                                   "ControlType": "Document",
                                   "AutomationId": "RootWebArea",
                                   "ClassName": "",
@@ -162,8 +111,8 @@
                                         {
                                           "Name": "Set Link Group",
                                           "ControlType": "Window",
-                                          "AutomationId": "radix-_r_2c_",
-                                          "ClassName": "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[320px] max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+                                          "AutomationId": "radix-_r_3f_",
+                                          "ClassName": "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[320px] max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none modal-animate",
                                           "IsKeyboardFocusable": true,
                                           "IsEnabled": true,
                                           "IsOffscreen": false,
@@ -171,58 +120,8 @@
                                             {
                                               "Name": "Set Link Group",
                                               "ControlType": "Text",
-                                              "AutomationId": "radix-_r_2d_",
+                                              "AutomationId": "radix-_r_3g_",
                                               "ClassName": "text-sm font-semibold text-text",
-                                              "IsKeyboardFocusable": false,
-                                              "IsEnabled": true,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
-                                              "Name": " emitter",
-                                              "ControlType": "Text",
-                                              "AutomationId": "",
-                                              "ClassName": "",
-                                              "IsKeyboardFocusable": false,
-                                              "IsEnabled": true,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
-                                              "Name": " selected",
-                                              "ControlType": "Text",
-                                              "AutomationId": "",
-                                              "ClassName": "",
-                                              "IsKeyboardFocusable": false,
-                                              "IsEnabled": true,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
-                                              "Name": " will be linked.",
-                                              "ControlType": "Text",
-                                              "AutomationId": "",
-                                              "ClassName": "",
-                                              "IsKeyboardFocusable": false,
-                                              "IsEnabled": true,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
-                                              "Name": "1",
-                                              "ControlType": "Text",
-                                              "AutomationId": "",
-                                              "ClassName": "",
-                                              "IsKeyboardFocusable": false,
-                                              "IsEnabled": true,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
-                                              "Name": "All ",
-                                              "ControlType": "Text",
-                                              "AutomationId": "",
-                                              "ClassName": "",
                                               "IsKeyboardFocusable": false,
                                               "IsEnabled": true,
                                               "IsOffscreen": false,
@@ -293,7 +192,17 @@
                                               "ControlType": "Button",
                                               "AutomationId": "",
                                               "ClassName": "rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-50",
-                                              "IsKeyboardFocusable": true,
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": false,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Select at least 2 emitters to create a group.",
+                                              "ControlType": "Text",
+                                              "AutomationId": "",
+                                              "ClassName": "",
+                                              "IsKeyboardFocusable": false,
                                               "IsEnabled": true,
                                               "IsOffscreen": false,
                                               "children": []

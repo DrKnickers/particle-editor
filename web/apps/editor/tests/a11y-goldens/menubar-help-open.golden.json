@@ -1,5 +1,5 @@
 {
-  "Name": "AloParticleEditor",
+  "Name": "a11y-base-state.alo — Particle Editor",
   "ControlType": "Window",
   "AutomationId": "",
   "ClassName": "AloHostMain",
@@ -26,57 +26,6 @@
       "IsEnabled": true,
       "IsOffscreen": false,
       "children": [
-        {
-          "Name": "Untitled",
-          "ControlType": "Text",
-          "AutomationId": "view_9",
-          "ClassName": "Label",
-          "IsKeyboardFocusable": false,
-          "IsEnabled": true,
-          "IsOffscreen": false,
-          "children": []
-        },
-        {
-          "Name": "",
-          "ControlType": "Pane",
-          "AutomationId": "",
-          "ClassName": "BrowserCaptionButtonContainer",
-          "IsKeyboardFocusable": false,
-          "IsEnabled": true,
-          "IsOffscreen": false,
-          "children": [
-            {
-              "Name": "Minimize",
-              "ControlType": "Button",
-              "AutomationId": "view_2",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            },
-            {
-              "Name": "Maximize",
-              "ControlType": "Button",
-              "AutomationId": "view_3",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            },
-            {
-              "Name": "Close",
-              "ControlType": "Button",
-              "AutomationId": "view_7",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            }
-          ]
-        },
         {
           "Name": "",
           "ControlType": "Pane",
@@ -142,7 +91,7 @@
                               "IsOffscreen": false,
                               "children": [
                                 {
-                                  "Name": "a11y-base-state.alo — AloParticleEditor",
+                                  "Name": "a11y-base-state.alo — Particle Editor",
                                   "ControlType": "Document",
                                   "AutomationId": "RootWebArea",
                                   "ClassName": "",
@@ -192,7 +141,7 @@
                                             {
                                               "Name": "",
                                               "ControlType": "Thumb",
-                                              "AutomationId": "_r_15_",
+                                              "AutomationId": "_r_22_",
                                               "ClassName": "ce-splitter ce-splitter-h",
                                               "IsKeyboardFocusable": true,
                                               "IsEnabled": true,
@@ -202,7 +151,7 @@
                                             {
                                               "Name": "",
                                               "ControlType": "Thumb",
-                                              "AutomationId": "_r_1b_",
+                                              "AutomationId": "_r_28_",
                                               "ClassName": "ce-splitter ce-splitter-v",
                                               "IsKeyboardFocusable": true,
                                               "IsEnabled": true,
@@ -212,7 +161,7 @@
                                             {
                                               "Name": "",
                                               "ControlType": "Thumb",
-                                              "AutomationId": "_r_1f_",
+                                              "AutomationId": "_r_2c_",
                                               "ClassName": "ce-splitter ce-splitter-h",
                                               "IsKeyboardFocusable": true,
                                               "IsEnabled": true,
@@ -222,7 +171,7 @@
                                             {
                                               "Name": "",
                                               "ControlType": "Thumb",
-                                              "AutomationId": "_r_1i_",
+                                              "AutomationId": "_r_2l_",
                                               "ClassName": "ce-splitter ce-splitter-v",
                                               "IsKeyboardFocusable": true,
                                               "IsEnabled": true,
@@ -264,8 +213,8 @@
                                             {
                                               "Name": "Basic",
                                               "ControlType": "Pane",
-                                              "AutomationId": "radix-_r_17_-content-basic",
-                                              "ClassName": "flex-1 min-h-0 overflow-y-auto outline-none",
+                                              "AutomationId": "radix-_r_24_-content-basic",
+                                              "ClassName": "flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable",
                                               "IsKeyboardFocusable": true,
                                               "IsEnabled": true,
                                               "IsOffscreen": false,
@@ -308,7 +257,7 @@
                                                   "ClassName": "curve-row",
                                                   "IsKeyboardFocusable": true,
                                                   "IsEnabled": true,
-                                                  "IsOffscreen": false,
+                                                  "IsOffscreen": true,
                                                   "children": [
                                                     {
                                                       "Name": "Alpha",
@@ -541,26 +490,6 @@
                                               "children": []
                                             },
                                             {
-                                              "Name": "Dark theme",
-                                              "ControlType": "Button",
-                                              "AutomationId": "",
-                                              "ClassName": "grid place-items-center w-6 h-5 rounded text-text-3",
-                                              "IsKeyboardFocusable": true,
-                                              "IsEnabled": true,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
-                                              "Name": "Delete selected keys",
-                                              "ControlType": "Button",
-                                              "AutomationId": "",
-                                              "ClassName": "grid h-6 w-6 place-items-center rounded border border-border bg-bg-2/60 text-text-3",
-                                              "IsKeyboardFocusable": false,
-                                              "IsEnabled": false,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
                                               "Name": "Emitter property tabs",
                                               "ControlType": "Tab",
                                               "AutomationId": "",
@@ -572,7 +501,7 @@
                                                 {
                                                   "Name": "Appearance",
                                                   "ControlType": "TabItem",
-                                                  "AutomationId": "radix-_r_17_-trigger-appearance",
+                                                  "AutomationId": "radix-_r_24_-trigger-appearance",
                                                   "ClassName": "flex-1 cursor-pointer border-b-2 border-transparent px-3 py-2 text-xs text-text-2 outline-none transition data-[state=active]:border-accent data-[state=active]:text-text hover:text-text focus-visible:bg-bg-2",
                                                   "IsKeyboardFocusable": true,
                                                   "IsEnabled": true,
@@ -582,7 +511,7 @@
                                                 {
                                                   "Name": "Basic",
                                                   "ControlType": "TabItem",
-                                                  "AutomationId": "radix-_r_17_-trigger-basic",
+                                                  "AutomationId": "radix-_r_24_-trigger-basic",
                                                   "ClassName": "flex-1 cursor-pointer border-b-2 border-transparent px-3 py-2 text-xs text-text-2 outline-none transition data-[state=active]:border-accent data-[state=active]:text-text hover:text-text focus-visible:bg-bg-2",
                                                   "IsKeyboardFocusable": true,
                                                   "IsEnabled": true,
@@ -592,7 +521,7 @@
                                                 {
                                                   "Name": "Physics",
                                                   "ControlType": "TabItem",
-                                                  "AutomationId": "radix-_r_17_-trigger-physics",
+                                                  "AutomationId": "radix-_r_24_-trigger-physics",
                                                   "ClassName": "flex-1 cursor-pointer border-b-2 border-transparent px-3 py-2 text-xs text-text-2 outline-none transition data-[state=active]:border-accent data-[state=active]:text-text hover:text-text focus-visible:bg-bg-2",
                                                   "IsKeyboardFocusable": true,
                                                   "IsEnabled": true,
@@ -606,16 +535,6 @@
                                               "ControlType": "Button",
                                               "AutomationId": "",
                                               "ClassName": "tb-btn",
-                                              "IsKeyboardFocusable": true,
-                                              "IsEnabled": true,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
-                                              "Name": "Insert tool",
-                                              "ControlType": "Button",
-                                              "AutomationId": "",
-                                              "ClassName": "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2",
                                               "IsKeyboardFocusable": true,
                                               "IsEnabled": true,
                                               "IsOffscreen": false,
@@ -656,16 +575,6 @@
                                               "ControlType": "Button",
                                               "AutomationId": "",
                                               "ClassName": "tb-btn",
-                                              "IsKeyboardFocusable": true,
-                                              "IsEnabled": true,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
-                                              "Name": "Light theme",
-                                              "ControlType": "Button",
-                                              "AutomationId": "",
-                                              "ClassName": "grid place-items-center w-6 h-5 rounded bg-accent-soft text-accent",
                                               "IsKeyboardFocusable": true,
                                               "IsEnabled": true,
                                               "IsOffscreen": false,
@@ -722,6 +631,26 @@
                                               "children": []
                                             },
                                             {
+                                              "Name": "Redo",
+                                              "ControlType": "Button",
+                                              "AutomationId": "",
+                                              "ClassName": "tb-btn",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": false,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Reference object picker",
+                                              "ControlType": "Button",
+                                              "AutomationId": "",
+                                              "ClassName": "tb-btn",
+                                              "IsKeyboardFocusable": true,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
                                               "Name": "Save As",
                                               "ControlType": "Button",
                                               "AutomationId": "",
@@ -752,16 +681,6 @@
                                               "children": []
                                             },
                                             {
-                                              "Name": "Select tool",
-                                              "ControlType": "Button",
-                                              "AutomationId": "",
-                                              "ClassName": "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent",
-                                              "IsKeyboardFocusable": true,
-                                              "IsEnabled": true,
-                                              "IsOffscreen": false,
-                                              "children": []
-                                            },
-                                            {
                                               "Name": "Selected key time",
                                               "ControlType": "Edit",
                                               "AutomationId": "",
@@ -778,6 +697,16 @@
                                               "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-not-allowed opacity-40 ",
                                               "IsKeyboardFocusable": false,
                                               "IsEnabled": false,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Show grid",
+                                              "ControlType": "Button",
+                                              "AutomationId": "",
+                                              "ClassName": "tb-btn",
+                                              "IsKeyboardFocusable": true,
+                                              "IsEnabled": true,
                                               "IsOffscreen": false,
                                               "children": []
                                             },
@@ -822,6 +751,16 @@
                                               "children": []
                                             },
                                             {
+                                              "Name": "Toggle Lighting panel",
+                                              "ControlType": "Button",
+                                              "AutomationId": "",
+                                              "ClassName": "tb-btn",
+                                              "IsKeyboardFocusable": true,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
                                               "Name": "Toggle Spawner panel",
                                               "ControlType": "Button",
                                               "AutomationId": "",
@@ -838,6 +777,16 @@
                                               "ClassName": "tb-btn",
                                               "IsKeyboardFocusable": true,
                                               "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": []
+                                            },
+                                            {
+                                              "Name": "Undo",
+                                              "ControlType": "Button",
+                                              "AutomationId": "",
+                                              "ClassName": "tb-btn",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": false,
                                               "IsOffscreen": false,
                                               "children": []
                                             },
@@ -860,16 +809,6 @@
                                               "IsEnabled": true,
                                               "IsOffscreen": false,
                                               "children": [
-                                                {
-                                                  "Name": "AloParticleEditor",
-                                                  "ControlType": "Text",
-                                                  "AutomationId": "",
-                                                  "ClassName": "",
-                                                  "IsKeyboardFocusable": false,
-                                                  "IsEnabled": true,
-                                                  "IsOffscreen": false,
-                                                  "children": []
-                                                },
                                                 {
                                                   "Name": "",
                                                   "ControlType": "MenuBar",
@@ -962,26 +901,6 @@
                                                   "IsOffscreen": false,
                                                   "children": [
                                                     {
-                                                      "Name": "Delete emitter",
-                                                      "ControlType": "Button",
-                                                      "AutomationId": "",
-                                                      "ClassName": "flex h-6 w-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none",
-                                                      "IsKeyboardFocusable": false,
-                                                      "IsEnabled": false,
-                                                      "IsOffscreen": false,
-                                                      "children": []
-                                                    },
-                                                    {
-                                                      "Name": "Duplicate emitter",
-                                                      "ControlType": "Button",
-                                                      "AutomationId": "",
-                                                      "ClassName": "flex h-6 w-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none",
-                                                      "IsKeyboardFocusable": false,
-                                                      "IsEnabled": false,
-                                                      "IsOffscreen": false,
-                                                      "children": []
-                                                    },
-                                                    {
                                                       "Name": "Emitters",
                                                       "ControlType": "Tree",
                                                       "AutomationId": "",
@@ -991,7 +910,7 @@
                                                       "IsOffscreen": false,
                                                       "children": [
                                                         {
-                                                          "Name": "death child default Hide emitter",
+                                                          "Name": "Hide emitter default death child",
                                                           "ControlType": "TreeItem",
                                                           "AutomationId": "",
                                                           "ClassName": "relative",
@@ -1000,10 +919,10 @@
                                                           "IsOffscreen": false,
                                                           "children": [
                                                             {
-                                                              "Name": "death child default Hide emitter",
+                                                              "Name": "Hide emitter default death child",
                                                               "ControlType": "Button",
                                                               "AutomationId": "",
-                                                              "ClassName": "grid w-full items-center gap-1.5 py-1 pr-2 text-left text-sm transition-colors border-l-2 border-transparent text-text-2 hover:bg-bg-2/40    ",
+                                                              "ClassName": "grid w-full items-center gap-1.5 py-0.5 pr-2 text-left text-sm transition-colors border-l-2 border-transparent text-text-2 hover:bg-bg-2/40    ",
                                                               "IsKeyboardFocusable": true,
                                                               "IsEnabled": true,
                                                               "IsOffscreen": false,
@@ -1022,7 +941,7 @@
                                                                   "Name": "death child",
                                                                   "ControlType": "Group",
                                                                   "AutomationId": "",
-                                                                  "ClassName": "inline-block w-3 shrink-0 text-center font-mono text-xs text-text-3",
+                                                                  "ClassName": "inline-block w-full shrink-0 text-center font-mono text-xs text-text-3",
                                                                   "IsKeyboardFocusable": false,
                                                                   "IsEnabled": true,
                                                                   "IsOffscreen": false,
@@ -1033,7 +952,7 @@
                                                           ]
                                                         },
                                                         {
-                                                          "Name": "lifetime child default Hide emitter",
+                                                          "Name": "Hide emitter default lifetime child",
                                                           "ControlType": "TreeItem",
                                                           "AutomationId": "",
                                                           "ClassName": "relative",
@@ -1042,10 +961,10 @@
                                                           "IsOffscreen": false,
                                                           "children": [
                                                             {
-                                                              "Name": "lifetime child default Hide emitter",
+                                                              "Name": "Hide emitter default lifetime child",
                                                               "ControlType": "Button",
                                                               "AutomationId": "",
-                                                              "ClassName": "grid w-full items-center gap-1.5 py-1 pr-2 text-left text-sm transition-colors border-l-2 border-transparent text-text-2 hover:bg-bg-2/40    ",
+                                                              "ClassName": "grid w-full items-center gap-1.5 py-0.5 pr-2 text-left text-sm transition-colors border-l-2 border-transparent text-text-2 hover:bg-bg-2/40    ",
                                                               "IsKeyboardFocusable": true,
                                                               "IsEnabled": true,
                                                               "IsOffscreen": false,
@@ -1064,7 +983,7 @@
                                                                   "Name": "lifetime child",
                                                                   "ControlType": "Group",
                                                                   "AutomationId": "",
-                                                                  "ClassName": "inline-block w-3 shrink-0 text-center font-mono text-xs text-text-3",
+                                                                  "ClassName": "inline-block w-full shrink-0 text-center font-mono text-xs text-text-3",
                                                                   "IsKeyboardFocusable": false,
                                                                   "IsEnabled": true,
                                                                   "IsOffscreen": false,
@@ -1075,7 +994,7 @@
                                                           ]
                                                         },
                                                         {
-                                                          "Name": "root emitter default Hide emitter",
+                                                          "Name": "Hide emitter default",
                                                           "ControlType": "TreeItem",
                                                           "AutomationId": "",
                                                           "ClassName": "relative",
@@ -1084,10 +1003,10 @@
                                                           "IsOffscreen": false,
                                                           "children": [
                                                             {
-                                                              "Name": "root emitter default Hide emitter",
+                                                              "Name": "Hide emitter default",
                                                               "ControlType": "Button",
                                                               "AutomationId": "",
-                                                              "ClassName": "grid w-full items-center gap-1.5 py-1 pr-2 text-left text-sm transition-colors border-l-2 border-transparent text-text-2 hover:bg-bg-2/40    ",
+                                                              "ClassName": "grid w-full items-center gap-1.5 py-0.5 pr-2 text-left text-sm transition-colors border-l-2 border-transparent text-text-2 hover:bg-bg-2/40    ",
                                                               "IsKeyboardFocusable": true,
                                                               "IsEnabled": true,
                                                               "IsOffscreen": false,
@@ -1098,16 +1017,6 @@
                                                                   "AutomationId": "",
                                                                   "ClassName": "grid place-items-center w-4 h-4 shrink-0 rounded text-text-3 hover:bg-panel-2 hover:text-text cursor-pointer",
                                                                   "IsKeyboardFocusable": true,
-                                                                  "IsEnabled": true,
-                                                                  "IsOffscreen": false,
-                                                                  "children": []
-                                                                },
-                                                                {
-                                                                  "Name": "root emitter",
-                                                                  "ControlType": "Group",
-                                                                  "AutomationId": "",
-                                                                  "ClassName": "inline-block w-3 shrink-0 text-center font-mono text-xs text-text-3",
-                                                                  "IsKeyboardFocusable": false,
                                                                   "IsEnabled": true,
                                                                   "IsOffscreen": false,
                                                                   "children": []
@@ -1122,29 +1031,9 @@
                                                       "Name": "Hide all emitters",
                                                       "ControlType": "Button",
                                                       "AutomationId": "",
-                                                      "ClassName": "flex h-6 w-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none",
+                                                      "ClassName": "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 outline-none",
                                                       "IsKeyboardFocusable": true,
                                                       "IsEnabled": true,
-                                                      "IsOffscreen": false,
-                                                      "children": []
-                                                    },
-                                                    {
-                                                      "Name": "Move emitter down",
-                                                      "ControlType": "Button",
-                                                      "AutomationId": "",
-                                                      "ClassName": "flex h-6 w-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none",
-                                                      "IsKeyboardFocusable": false,
-                                                      "IsEnabled": false,
-                                                      "IsOffscreen": false,
-                                                      "children": []
-                                                    },
-                                                    {
-                                                      "Name": "Move emitter up",
-                                                      "ControlType": "Button",
-                                                      "AutomationId": "",
-                                                      "ClassName": "flex h-6 w-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none",
-                                                      "IsKeyboardFocusable": false,
-                                                      "IsEnabled": false,
                                                       "IsOffscreen": false,
                                                       "children": []
                                                     },
@@ -1152,11 +1041,95 @@
                                                       "Name": "Show all emitters",
                                                       "ControlType": "Button",
                                                       "AutomationId": "",
-                                                      "ClassName": "flex h-6 w-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none",
+                                                      "ClassName": "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 outline-none",
                                                       "IsKeyboardFocusable": true,
                                                       "IsEnabled": true,
                                                       "IsOffscreen": false,
                                                       "children": []
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "inline-block",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Duplicate emitter",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 outline-none",
+                                                          "IsKeyboardFocusable": false,
+                                                          "IsEnabled": false,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "inline-block",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Delete emitter",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 outline-none",
+                                                          "IsKeyboardFocusable": false,
+                                                          "IsEnabled": false,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "inline-block",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Move emitter up",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 outline-none",
+                                                          "IsKeyboardFocusable": false,
+                                                          "IsEnabled": false,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "inline-block",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Move emitter down",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 outline-none",
+                                                          "IsKeyboardFocusable": false,
+                                                          "IsEnabled": false,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
                                                     },
                                                     {
                                                       "Name": "",
@@ -1170,8 +1143,8 @@
                                                         {
                                                           "Name": "New Emitter",
                                                           "ControlType": "MenuItem",
-                                                          "AutomationId": "radix-_r_12_",
-                                                          "ClassName": "flex h-6 w-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none",
+                                                          "AutomationId": "radix-_r_1o_",
+                                                          "ClassName": "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 outline-none",
                                                           "IsKeyboardFocusable": true,
                                                           "IsEnabled": true,
                                                           "IsOffscreen": false,
@@ -1187,7 +1160,70 @@
                                               "Name": "",
                                               "ControlType": "Group",
                                               "AutomationId": "",
-                                              "ClassName": "h-full w-full overflow-hidden border-l border-border bg-panel",
+                                              "ClassName": "inline-block",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": [
+                                                {
+                                                  "Name": "Select tool",
+                                                  "ControlType": "Button",
+                                                  "AutomationId": "",
+                                                  "ClassName": "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent disabled:cursor-not-allowed disabled:opacity-40",
+                                                  "IsKeyboardFocusable": true,
+                                                  "IsEnabled": true,
+                                                  "IsOffscreen": false,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "Name": "",
+                                              "ControlType": "Group",
+                                              "AutomationId": "",
+                                              "ClassName": "inline-block",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": [
+                                                {
+                                                  "Name": "Insert tool",
+                                                  "ControlType": "Button",
+                                                  "AutomationId": "",
+                                                  "ClassName": "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40",
+                                                  "IsKeyboardFocusable": true,
+                                                  "IsEnabled": true,
+                                                  "IsOffscreen": false,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "Name": "",
+                                              "ControlType": "Group",
+                                              "AutomationId": "",
+                                              "ClassName": "inline-block",
+                                              "IsKeyboardFocusable": false,
+                                              "IsEnabled": true,
+                                              "IsOffscreen": false,
+                                              "children": [
+                                                {
+                                                  "Name": "Delete selected keys",
+                                                  "ControlType": "Button",
+                                                  "AutomationId": "",
+                                                  "ClassName": "grid h-6 w-6 place-items-center rounded border border-border bg-bg-2/60 text-text-3",
+                                                  "IsKeyboardFocusable": false,
+                                                  "IsEnabled": false,
+                                                  "IsOffscreen": false,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "Name": "",
+                                              "ControlType": "Group",
+                                              "AutomationId": "",
+                                              "ClassName": "h-full w-full overflow-hidden",
                                               "IsKeyboardFocusable": false,
                                               "IsEnabled": true,
                                               "IsOffscreen": false,
@@ -1201,6 +1237,16 @@
                                                   "IsEnabled": true,
                                                   "IsOffscreen": false,
                                                   "children": [
+                                                    {
+                                                      "Name": "ACCELERATION (ARC)",
+                                                      "ControlType": "Button",
+                                                      "AutomationId": "",
+                                                      "ClassName": "panel-section-header",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
                                                     {
                                                       "Name": "Active instance count",
                                                       "ControlType": "Group",
@@ -1221,6 +1267,56 @@
                                                           "children": []
                                                         }
                                                       ]
+                                                    },
+                                                    {
+                                                      "Name": "BURST",
+                                                      "ControlType": "Button",
+                                                      "AutomationId": "",
+                                                      "ClassName": "panel-section-header",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Burst interval",
+                                                      "ControlType": "Edit",
+                                                      "AutomationId": "",
+                                                      "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Burst size",
+                                                      "ControlType": "Edit",
+                                                      "AutomationId": "",
+                                                      "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Burst size",
+                                                      "ControlType": "Text",
+                                                      "AutomationId": "",
+                                                      "ClassName": "",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Burst spacing",
+                                                      "ControlType": "Edit",
+                                                      "AutomationId": "",
+                                                      "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
                                                     },
                                                     {
                                                       "Name": "Close Spawner",
@@ -1248,6 +1344,26 @@
                                                       "AutomationId": "",
                                                       "ClassName": "",
                                                       "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Interval",
+                                                      "ControlType": "Text",
+                                                      "AutomationId": "",
+                                                      "ClassName": "",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "JITTER POSITION",
+                                                      "ControlType": "Button",
+                                                      "AutomationId": "",
+                                                      "ClassName": "panel-section-header",
+                                                      "IsKeyboardFocusable": true,
                                                       "IsEnabled": true,
                                                       "IsOffscreen": false,
                                                       "children": []
@@ -1284,6 +1400,76 @@
                                                     },
                                                     {
                                                       "Name": "Max lifetime",
+                                                      "ControlType": "Text",
+                                                      "AutomationId": "",
+                                                      "ClassName": "",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "POSITION",
+                                                      "ControlType": "Button",
+                                                      "AutomationId": "",
+                                                      "ClassName": "panel-section-header",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Position X",
+                                                      "ControlType": "Edit",
+                                                      "AutomationId": "",
+                                                      "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Position Y",
+                                                      "ControlType": "Edit",
+                                                      "AutomationId": "",
+                                                      "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Position Z",
+                                                      "ControlType": "Edit",
+                                                      "AutomationId": "",
+                                                      "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "SQUIGGLE AMPLITUDE",
+                                                      "ControlType": "Button",
+                                                      "AutomationId": "",
+                                                      "ClassName": "panel-section-header",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "SQUIGGLE FREQUENCY",
+                                                      "ControlType": "Button",
+                                                      "AutomationId": "",
+                                                      "ClassName": "panel-section-header",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Spacing",
                                                       "ControlType": "Text",
                                                       "AutomationId": "",
                                                       "ClassName": "",
@@ -1364,565 +1550,110 @@
                                                       "children": []
                                                     },
                                                     {
-                                                      "Name": "",
-                                                      "ControlType": "Group",
+                                                      "Name": "VELOCITY",
+                                                      "ControlType": "Button",
                                                       "AutomationId": "",
-                                                      "ClassName": "panel-section",
+                                                      "ClassName": "panel-section-header",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Velocity X",
+                                                      "ControlType": "Edit",
+                                                      "AutomationId": "",
+                                                      "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Velocity Y",
+                                                      "ControlType": "Edit",
+                                                      "AutomationId": "",
+                                                      "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Velocity Z",
+                                                      "ControlType": "Edit",
+                                                      "AutomationId": "",
+                                                      "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
+                                                      "IsKeyboardFocusable": true,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "X",
+                                                      "ControlType": "Text",
+                                                      "AutomationId": "",
+                                                      "ClassName": "",
                                                       "IsKeyboardFocusable": false,
                                                       "IsEnabled": true,
                                                       "IsOffscreen": false,
-                                                      "children": [
-                                                        {
-                                                          "Name": "BURST",
-                                                          "ControlType": "Button",
-                                                          "AutomationId": "",
-                                                          "ClassName": "panel-section-header",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "BURST",
-                                                              "ControlType": "Text",
-                                                              "AutomationId": "",
-                                                              "ClassName": "",
-                                                              "IsKeyboardFocusable": false,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        },
-                                                        {
-                                                          "Name": "Burst interval",
-                                                          "ControlType": "Edit",
-                                                          "AutomationId": "",
-                                                          "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Burst size",
-                                                          "ControlType": "Edit",
-                                                          "AutomationId": "",
-                                                          "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Burst size",
-                                                          "ControlType": "Text",
-                                                          "AutomationId": "",
-                                                          "ClassName": "",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Burst spacing",
-                                                          "ControlType": "Edit",
-                                                          "AutomationId": "",
-                                                          "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Interval",
-                                                          "ControlType": "Text",
-                                                          "AutomationId": "",
-                                                          "ClassName": "",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Spacing",
-                                                          "ControlType": "Text",
-                                                          "AutomationId": "",
-                                                          "ClassName": "",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "",
-                                                          "ControlType": "Group",
-                                                          "AutomationId": "",
-                                                          "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "Decrement",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            },
-                                                            {
-                                                              "Name": "Increment",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        },
-                                                        {
-                                                          "Name": "",
-                                                          "ControlType": "Group",
-                                                          "AutomationId": "",
-                                                          "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "Decrement",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            },
-                                                            {
-                                                              "Name": "Increment",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        },
-                                                        {
-                                                          "Name": "",
-                                                          "ControlType": "Group",
-                                                          "AutomationId": "",
-                                                          "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "Decrement",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            },
-                                                            {
-                                                              "Name": "Increment",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        }
-                                                      ]
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "X",
+                                                      "ControlType": "Text",
+                                                      "AutomationId": "",
+                                                      "ClassName": "",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Y",
+                                                      "ControlType": "Text",
+                                                      "AutomationId": "",
+                                                      "ClassName": "",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Y",
+                                                      "ControlType": "Text",
+                                                      "AutomationId": "",
+                                                      "ClassName": "",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Z",
+                                                      "ControlType": "Text",
+                                                      "AutomationId": "",
+                                                      "ClassName": "",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
+                                                    },
+                                                    {
+                                                      "Name": "Z",
+                                                      "ControlType": "Text",
+                                                      "AutomationId": "",
+                                                      "ClassName": "",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": []
                                                     },
                                                     {
                                                       "Name": "",
                                                       "ControlType": "Group",
                                                       "AutomationId": "",
-                                                      "ClassName": "panel-section",
-                                                      "IsKeyboardFocusable": false,
-                                                      "IsEnabled": true,
-                                                      "IsOffscreen": false,
-                                                      "children": [
-                                                        {
-                                                          "Name": "POSITION",
-                                                          "ControlType": "Button",
-                                                          "AutomationId": "",
-                                                          "ClassName": "panel-section-header",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "POSITION",
-                                                              "ControlType": "Text",
-                                                              "AutomationId": "",
-                                                              "ClassName": "",
-                                                              "IsKeyboardFocusable": false,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        },
-                                                        {
-                                                          "Name": "Position X",
-                                                          "ControlType": "Edit",
-                                                          "AutomationId": "",
-                                                          "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Position Y",
-                                                          "ControlType": "Edit",
-                                                          "AutomationId": "",
-                                                          "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Position Z",
-                                                          "ControlType": "Edit",
-                                                          "AutomationId": "",
-                                                          "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "X",
-                                                          "ControlType": "Text",
-                                                          "AutomationId": "",
-                                                          "ClassName": "",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Y",
-                                                          "ControlType": "Text",
-                                                          "AutomationId": "",
-                                                          "ClassName": "",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Z",
-                                                          "ControlType": "Text",
-                                                          "AutomationId": "",
-                                                          "ClassName": "",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "",
-                                                          "ControlType": "Group",
-                                                          "AutomationId": "",
-                                                          "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "Decrement",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            },
-                                                            {
-                                                              "Name": "Increment",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        },
-                                                        {
-                                                          "Name": "",
-                                                          "ControlType": "Group",
-                                                          "AutomationId": "",
-                                                          "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "Decrement",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            },
-                                                            {
-                                                              "Name": "Increment",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        },
-                                                        {
-                                                          "Name": "",
-                                                          "ControlType": "Group",
-                                                          "AutomationId": "",
-                                                          "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "Decrement",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            },
-                                                            {
-                                                              "Name": "Increment",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        }
-                                                      ]
-                                                    },
-                                                    {
-                                                      "Name": "",
-                                                      "ControlType": "Group",
-                                                      "AutomationId": "",
-                                                      "ClassName": "panel-section",
-                                                      "IsKeyboardFocusable": false,
-                                                      "IsEnabled": true,
-                                                      "IsOffscreen": false,
-                                                      "children": [
-                                                        {
-                                                          "Name": "VELOCITY",
-                                                          "ControlType": "Button",
-                                                          "AutomationId": "",
-                                                          "ClassName": "panel-section-header",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "VELOCITY",
-                                                              "ControlType": "Text",
-                                                              "AutomationId": "",
-                                                              "ClassName": "",
-                                                              "IsKeyboardFocusable": false,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        },
-                                                        {
-                                                          "Name": "Velocity X",
-                                                          "ControlType": "Edit",
-                                                          "AutomationId": "",
-                                                          "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Velocity Y",
-                                                          "ControlType": "Edit",
-                                                          "AutomationId": "",
-                                                          "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Velocity Z",
-                                                          "ControlType": "Edit",
-                                                          "AutomationId": "",
-                                                          "ClassName": "w-full rounded border border-border-2 bg-bg-2 pl-2 text-xs text-text outline-none transition focus:border-accent cursor-text ",
-                                                          "IsKeyboardFocusable": true,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "X",
-                                                          "ControlType": "Text",
-                                                          "AutomationId": "",
-                                                          "ClassName": "",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Y",
-                                                          "ControlType": "Text",
-                                                          "AutomationId": "",
-                                                          "ClassName": "",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "Z",
-                                                          "ControlType": "Text",
-                                                          "AutomationId": "",
-                                                          "ClassName": "",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": []
-                                                        },
-                                                        {
-                                                          "Name": "",
-                                                          "ControlType": "Group",
-                                                          "AutomationId": "",
-                                                          "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "Decrement",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            },
-                                                            {
-                                                              "Name": "Increment",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        },
-                                                        {
-                                                          "Name": "",
-                                                          "ControlType": "Group",
-                                                          "AutomationId": "",
-                                                          "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "Decrement",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            },
-                                                            {
-                                                              "Name": "Increment",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        },
-                                                        {
-                                                          "Name": "",
-                                                          "ControlType": "Group",
-                                                          "AutomationId": "",
-                                                          "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
-                                                          "IsKeyboardFocusable": false,
-                                                          "IsEnabled": true,
-                                                          "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "Decrement",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            },
-                                                            {
-                                                              "Name": "Increment",
-                                                              "ControlType": "Button",
-                                                              "AutomationId": "",
-                                                              "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
-                                                              "IsKeyboardFocusable": true,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
-                                                        }
-                                                      ]
-                                                    },
-                                                    {
-                                                      "Name": "",
-                                                      "ControlType": "Group",
-                                                      "AutomationId": "",
-                                                      "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
                                                       "IsKeyboardFocusable": false,
                                                       "IsEnabled": true,
                                                       "IsOffscreen": false,
@@ -1931,7 +1662,7 @@
                                                           "Name": "Decrement",
                                                           "ControlType": "Button",
                                                           "AutomationId": "",
-                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
                                                           "IsKeyboardFocusable": true,
                                                           "IsEnabled": true,
                                                           "IsOffscreen": false,
@@ -1941,7 +1672,7 @@
                                                           "Name": "Increment",
                                                           "ControlType": "Button",
                                                           "AutomationId": "",
-                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
                                                           "IsKeyboardFocusable": true,
                                                           "IsEnabled": true,
                                                           "IsOffscreen": false,
@@ -1953,31 +1684,30 @@
                                                       "Name": "",
                                                       "ControlType": "Group",
                                                       "AutomationId": "",
-                                                      "ClassName": "panel-section",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
                                                       "IsKeyboardFocusable": false,
                                                       "IsEnabled": true,
                                                       "IsOffscreen": false,
                                                       "children": [
                                                         {
-                                                          "Name": "JITTER POSITION",
+                                                          "Name": "Decrement",
                                                           "ControlType": "Button",
                                                           "AutomationId": "",
-                                                          "ClassName": "panel-section-header",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
                                                           "IsKeyboardFocusable": true,
                                                           "IsEnabled": true,
                                                           "IsOffscreen": false,
-                                                          "children": [
-                                                            {
-                                                              "Name": "JITTER POSITION",
-                                                              "ControlType": "Text",
-                                                              "AutomationId": "",
-                                                              "ClassName": "",
-                                                              "IsKeyboardFocusable": false,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": false,
-                                                              "children": []
-                                                            }
-                                                          ]
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "Name": "Increment",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
                                                         }
                                                       ]
                                                     },
@@ -1985,31 +1715,247 @@
                                                       "Name": "",
                                                       "ControlType": "Group",
                                                       "AutomationId": "",
-                                                      "ClassName": "panel-section",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
                                                       "IsKeyboardFocusable": false,
                                                       "IsEnabled": true,
-                                                      "IsOffscreen": true,
+                                                      "IsOffscreen": false,
                                                       "children": [
                                                         {
-                                                          "Name": "JITTER VELOCITY",
+                                                          "Name": "Decrement",
                                                           "ControlType": "Button",
                                                           "AutomationId": "",
-                                                          "ClassName": "panel-section-header",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
                                                           "IsKeyboardFocusable": true,
                                                           "IsEnabled": true,
-                                                          "IsOffscreen": true,
-                                                          "children": [
-                                                            {
-                                                              "Name": "JITTER VELOCITY",
-                                                              "ControlType": "Text",
-                                                              "AutomationId": "",
-                                                              "ClassName": "",
-                                                              "IsKeyboardFocusable": false,
-                                                              "IsEnabled": true,
-                                                              "IsOffscreen": true,
-                                                              "children": []
-                                                            }
-                                                          ]
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "Name": "Increment",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Decrement",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "Name": "Increment",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Decrement",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "Name": "Increment",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Decrement",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "Name": "Increment",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Decrement",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "Name": "Increment",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Decrement",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "Name": "Increment",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Decrement",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "Name": "Increment",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "Name": "",
+                                                      "ControlType": "Group",
+                                                      "AutomationId": "",
+                                                      "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
+                                                      "IsKeyboardFocusable": false,
+                                                      "IsEnabled": true,
+                                                      "IsOffscreen": false,
+                                                      "children": [
+                                                        {
+                                                          "Name": "Decrement",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "Name": "Increment",
+                                                          "ControlType": "Button",
+                                                          "AutomationId": "",
+                                                          "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
+                                                          "IsKeyboardFocusable": true,
+                                                          "IsEnabled": true,
+                                                          "IsOffscreen": false,
+                                                          "children": []
                                                         }
                                                       ]
                                                     }
@@ -2058,6 +2004,16 @@
                                                 },
                                                 {
                                                   "Name": "Instances",
+                                                  "ControlType": "Text",
+                                                  "AutomationId": "",
+                                                  "ClassName": "",
+                                                  "IsKeyboardFocusable": false,
+                                                  "IsEnabled": true,
+                                                  "IsOffscreen": false,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "Name": "PAUSED",
                                                   "ControlType": "Text",
                                                   "AutomationId": "",
                                                   "ClassName": "",
@@ -2158,6 +2114,16 @@
                                                 },
                                                 {
                                                   "Name": "—",
+                                                  "ControlType": "Text",
+                                                  "AutomationId": "",
+                                                  "ClassName": "",
+                                                  "IsKeyboardFocusable": false,
+                                                  "IsEnabled": true,
+                                                  "IsOffscreen": false,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "Name": "⇧ Shift: spawn instance",
                                                   "ControlType": "Text",
                                                   "AutomationId": "",
                                                   "ClassName": "",

@@ -10,16 +10,20 @@
 - button "Open"
 - button "Save"
 - button "Save As"
+- button "Undo" [disabled]
+- button "Redo" [disabled]
 - button "Play"
 - button "Step"
 - button "Step 10"
 - button "Show ground" [pressed]
+- button "Show grid"
 - button "Toggle bloom"
 - button "Leave particles after instance death" [pressed]
 - button "Toggle Spawner panel" [pressed]
 - button "Toggle Lighting panel"
 - button "Ground": "Ground:"
 - button "Background": "Background:"
+- button "Reference object picker": "Object: None"
 - text: Particle System
 - complementary:
   - tree "Emitters":
@@ -201,5 +205,7 @@
   - button "Increment": ▲
   - button "Decrement": ▼
   - button "Jitter position"
-  - button "Jitter velocity"
+  - button "Acceleration (arc)"
+  - button "Squiggle amplitude"
+  - button "Squiggle frequency"
 - contentinfo: "FPS — · Emitters — · Particles — · Instances — · Cursor — PAUSED ⇧ Shift: spawn instance"

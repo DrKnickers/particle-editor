@@ -1,5 +1,5 @@
 {
-  "Name": "AloParticleEditor",
+  "Name": "Particle Editor",
   "ControlType": "Window",
   "AutomationId": "",
   "ClassName": "AloHostMain",
@@ -26,57 +26,6 @@
       "IsEnabled": true,
       "IsOffscreen": false,
       "children": [
-        {
-          "Name": "Untitled",
-          "ControlType": "Text",
-          "AutomationId": "view_9",
-          "ClassName": "Label",
-          "IsKeyboardFocusable": false,
-          "IsEnabled": true,
-          "IsOffscreen": false,
-          "children": []
-        },
-        {
-          "Name": "",
-          "ControlType": "Pane",
-          "AutomationId": "",
-          "ClassName": "BrowserCaptionButtonContainer",
-          "IsKeyboardFocusable": false,
-          "IsEnabled": true,
-          "IsOffscreen": false,
-          "children": [
-            {
-              "Name": "Minimize",
-              "ControlType": "Button",
-              "AutomationId": "view_2",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            },
-            {
-              "Name": "Maximize",
-              "ControlType": "Button",
-              "AutomationId": "view_3",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            },
-            {
-              "Name": "Close",
-              "ControlType": "Button",
-              "AutomationId": "view_7",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            }
-          ]
-        },
         {
           "Name": "",
           "ControlType": "Pane",
@@ -142,7 +91,7 @@
                               "IsOffscreen": false,
                               "children": [
                                 {
-                                  "Name": "AloParticleEditor",
+                                  "Name": "Particle Editor",
                                   "ControlType": "Document",
                                   "AutomationId": "RootWebArea",
                                   "ClassName": "",
@@ -163,7 +112,7 @@
                                           "Name": "Set mod nickname",
                                           "ControlType": "Window",
                                           "AutomationId": "radix-_r_0_",
-                                          "ClassName": "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[320px] max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+                                          "ClassName": "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[320px] max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none modal-animate",
                                           "IsKeyboardFocusable": true,
                                           "IsEnabled": true,
                                           "IsOffscreen": false,

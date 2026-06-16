@@ -1,5 +1,5 @@
 {
-  "Name": "AloParticleEditor",
+  "Name": "a11y-base-state.alo — Particle Editor",
   "ControlType": "Window",
   "AutomationId": "",
   "ClassName": "AloHostMain",
@@ -26,57 +26,6 @@
       "IsEnabled": true,
       "IsOffscreen": false,
       "children": [
-        {
-          "Name": "Untitled",
-          "ControlType": "Text",
-          "AutomationId": "view_9",
-          "ClassName": "Label",
-          "IsKeyboardFocusable": false,
-          "IsEnabled": true,
-          "IsOffscreen": false,
-          "children": []
-        },
-        {
-          "Name": "",
-          "ControlType": "Pane",
-          "AutomationId": "",
-          "ClassName": "BrowserCaptionButtonContainer",
-          "IsKeyboardFocusable": false,
-          "IsEnabled": true,
-          "IsOffscreen": false,
-          "children": [
-            {
-              "Name": "Minimize",
-              "ControlType": "Button",
-              "AutomationId": "view_2",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            },
-            {
-              "Name": "Maximize",
-              "ControlType": "Button",
-              "AutomationId": "view_3",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            },
-            {
-              "Name": "Close",
-              "ControlType": "Button",
-              "AutomationId": "view_7",
-              "ClassName": "EdgeWindowsCaptionButton",
-              "IsKeyboardFocusable": true,
-              "IsEnabled": true,
-              "IsOffscreen": false,
-              "children": []
-            }
-          ]
-        },
         {
           "Name": "",
           "ControlType": "Pane",
@@ -142,7 +91,7 @@
                               "IsOffscreen": false,
                               "children": [
                                 {
-                                  "Name": "a11y-base-state.alo — AloParticleEditor",
+                                  "Name": "a11y-base-state.alo — Particle Editor",
                                   "ControlType": "Document",
                                   "AutomationId": "RootWebArea",
                                   "ClassName": "",
@@ -162,8 +111,8 @@
                                         {
                                           "Name": "Rescale Particle System",
                                           "ControlType": "Window",
-                                          "AutomationId": "radix-_r_1n_",
-                                          "ClassName": "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[320px] max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+                                          "AutomationId": "radix-_r_2q_",
+                                          "ClassName": "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[320px] max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none modal-animate",
                                           "IsKeyboardFocusable": true,
                                           "IsEnabled": true,
                                           "IsOffscreen": false,
@@ -171,7 +120,7 @@
                                             {
                                               "Name": "Rescale Particle System",
                                               "ControlType": "Text",
-                                              "AutomationId": "radix-_r_1o_",
+                                              "AutomationId": "radix-_r_2r_",
                                               "ClassName": "text-sm font-semibold text-text",
                                               "IsKeyboardFocusable": false,
                                               "IsEnabled": true,
@@ -292,7 +241,7 @@
                                               "Name": "",
                                               "ControlType": "Group",
                                               "AutomationId": "",
-                                              "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
+                                              "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
                                               "IsKeyboardFocusable": false,
                                               "IsEnabled": true,
                                               "IsOffscreen": false,
@@ -301,7 +250,7 @@
                                                   "Name": "Decrement",
                                                   "ControlType": "Button",
                                                   "AutomationId": "",
-                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
                                                   "IsKeyboardFocusable": true,
                                                   "IsEnabled": true,
                                                   "IsOffscreen": false,
@@ -311,7 +260,7 @@
                                                   "Name": "Increment",
                                                   "ControlType": "Button",
                                                   "AutomationId": "",
-                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
                                                   "IsKeyboardFocusable": true,
                                                   "IsEnabled": true,
                                                   "IsOffscreen": false,
@@ -323,7 +272,7 @@
                                               "Name": "",
                                               "ControlType": "Group",
                                               "AutomationId": "",
-                                              "ClassName": "absolute right-0 top-0 flex flex-col border-l border-border-2 ",
+                                              "ClassName": "absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 cursor-ns-resize",
                                               "IsKeyboardFocusable": false,
                                               "IsEnabled": true,
                                               "IsOffscreen": false,
@@ -332,7 +281,7 @@
                                                   "Name": "Decrement",
                                                   "ControlType": "Button",
                                                   "AutomationId": "",
-                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
                                                   "IsKeyboardFocusable": true,
                                                   "IsEnabled": true,
                                                   "IsOffscreen": false,
@@ -342,7 +291,7 @@
                                                   "Name": "Increment",
                                                   "ControlType": "Button",
                                                   "AutomationId": "",
-                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed",
+                                                  "ClassName": "flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed",
                                                   "IsKeyboardFocusable": true,
                                                   "IsEnabled": true,
                                                   "IsOffscreen": false,
