@@ -27,6 +27,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Changed
 
+- Object picker now lists only the units and structures a player can actually build or field (heroes always shown), instead of thousands of entries
 - Gizmo drag guide lines are now dimmed during a translate or plane drag, for less visual noise
 - About dialog now shows the editor's own version (0.3.0) instead of the upstream 1.5, which is kept as a fork credit line
 - Gizmo gains screen-uniform handles, Shift-for-precision drags, grid/angle snapping, and in-drag guide lines
@@ -36,6 +37,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Fixed
 
+- Object picker no longer leaks planet and skydome backdrops (e.g. low-orbit planet models) into the unit list
 - Lighting panel changes now persist to the registry and survive reopen and restart
 
 ## 2026-06-14

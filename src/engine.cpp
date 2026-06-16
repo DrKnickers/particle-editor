@@ -3722,11 +3722,11 @@ bool Engine::ConsumeCatalogReadyFlag()
 }
 
 // Enumerate selectable game objects (Name + category) for the picker.
-// Filtered to units + structures (IsPickerListedCategory) -- props /
-// projectiles / uncategorized are dropped so the list isn't thousands of
-// entries. The catalog itself still holds every category (so a hardpoint /
-// variant lookup against the full set is unaffected); only the picker payload
-// is trimmed.
+// Filtered to FIELDABLE units + structures via IsPickerListed (profile role !=
+// Excluded && fieldable; heroes exempt) -- backdrops / props / projectiles / templates /
+// non-fieldable variants are dropped so the list isn't thousands of entries. The catalog
+// itself still holds every object (so a hardpoint / variant lookup against the full set is
+// unaffected); only the picker payload is trimmed.
 void Engine::EnumerateReferenceObjects(std::vector<GameObjectRef>& out)
 {
     // Mark the catalog wanted; the actual (re)build is launched ONLY by Update()
@@ -3738,7 +3738,7 @@ void Engine::EnumerateReferenceObjects(std::vector<GameObjectRef>& out)
     m_catalogWanted = true;
     out.clear();
     for (const GameObjectRef& r : m_referenceCatalog.objects)
-        if (IsPickerListedCategory(r.category))
+        if (IsPickerListed(r))   // profile role != Excluded && fieldable (heroes exempt)
             out.push_back(r);
 }
 

@@ -41,6 +41,67 @@ enum class GameObjectCategory
     Vehicle, Infantry, Structure, Turret, Hero, Prop, Space, Projectile, Other, Excluded
 };
 
+// The profile-based classifier (replaces the tag-keyword heuristic for the
+// picker keep/group decision; the legacy `GameObjectCategory` above is retained as a
+// compat field for the unchanged bridge wire). Three orthogonal axes derived from a
+// multi-signal ObjectProfile via the pure, unit-tested ClassifyObject():
+//   domain  -- ground vs space, from the resolved MODEL FIELD-NAME (Land vs Space),
+//              the one signal present across every mod (CategoryMask is absent in base
+//              FoC + Mod). Corroborated by CategoryMask/behavior; disagreement or a
+//              dual-env (Land+Space) object sets `conflict`.
+//   role    -- Excluded / Unit / Structure / Hero. Excluded = a renderable object that
+//              is NOT a unit/structure (skydome/planet backdrop, prop, marker, particle,
+//              projectile, death-clone, dummy, template, formation wrapper). The picker
+//              keeps role != Excluded.
+//   bucket  -- the fine sub-group for the future collapsible sections.
+enum class ModelFieldKind { None, Land, Space, Galactic, Generic };
+enum class ObjDomain      { Unknown, Ground, Space };
+enum class ObjRole        { Excluded, Unit, Structure, Hero };
+enum class ObjBucket {
+    None,
+    Infantry, Vehicle, Air,                                   // ground units
+    Fighter, Bomber, Corvette, Frigate, Capital, Transport,   // space units
+    Structure, Hero, Other                                    // shared
+};
+
+// Why an object counts as "fieldable" (a player can actually field it). Bit flags so a
+// single object can be reached more than one way. NotFieldable = 0.
+enum FieldSource : unsigned
+{
+    FS_None           = 0,
+    FS_Buildable      = 1u << 0,   // has Build_Cost_Credits (fallback Required_Star_Base_Level)
+    FS_StructureBuilt = 1u << 1,   // named in a structure's Tactical_Buildable_Objects_* list
+    FS_Spawned        = 1u << 2,   // named in a carrier/structure spawn list (Reserve/Starting_Spawned_Units_Tech_*)
+    FS_Roster         = 1u << 3,   // present in a mod's GameObjectList.lua roster allow-list
+};
+
+// The signals gathered per object (own value merged with the Variant_Of parent's), fed
+// to ClassifyObject. Pure data so the classifier is unit-testable in isolation.
+struct ObjectProfile
+{
+    std::string              name;            // object Name= (some junk is only recognizable by name)
+    std::string              tag;             // container element name, exact as-read (classifier lower-cases internally)
+    ModelFieldKind           modelField = ModelFieldKind::None;  // which model field won
+    bool                     dualEnv    = false;                 // both Land AND Space model present
+    std::vector<std::string> maskTokens;      // <CategoryMask> tokens, UPPER-cased (Anti*/All/None kept; classifier ignores)
+    std::vector<std::string> behaviorTokens;  // Behavior + Land/SpaceBehavior tokens, UPPER-cased
+    bool                     hasMovementClass = false;
+    bool                     isDummy          = false;
+    bool                     inBackground     = false;           // In_Background || Is_Decoration
+    std::string              affiliation;      // (captured for a future faction sub-group)
+};
+
+struct Classification
+{
+    ObjDomain domain   = ObjDomain::Unknown;
+    ObjRole   role     = ObjRole::Excluded;
+    ObjBucket bucket   = ObjBucket::None;
+    bool      conflict = false;   // model/mask domain disagreement or dual-env: surfaced, not hidden
+};
+
+// Pure classifier: profile -> {domain, role, bucket, conflict}. No FileManager / I/O.
+Classification ClassifyObject(const ObjectProfile& p);
+
 // One hardpoint definition (a <HardPoint> in the hardpoint files). EaW units
 // reference these by Name in their <HardPoints> list; the editor mounts the optional
 // `modelToAttach` .alo at `attachmentBone` (a bone in the UNIT model) to render the
@@ -69,7 +130,29 @@ struct GameObjectRef
     // Variant_Of inheritance resolved). Looked up in GameObjectCatalog::hardpoints at
     // select-time to mount attach models + collect the damage bones to hide.
     std::vector<std::string> hardpointNames;
+
+    // Profile classification (from ClassifyObject) + the fieldable attribute.
+    // `category` above stays the legacy bridge-compat value; these drive the picker.
+    ObjDomain domain      = ObjDomain::Unknown;
+    ObjRole   role        = ObjRole::Excluded;
+    ObjBucket bucket      = ObjBucket::None;
+    bool      conflict    = false;
+    bool      fieldable   = false;        // player can build/spawn it -> hard picker keep-gate
+    unsigned  fieldSource = FS_None;      // FieldSource bits explaining why (diagnostics)
 };
+
+// Picker keep-gate. Units/structures must be fieldable (a player can build/spawn
+// them) -- the hard gate that trims the roster. HEROES are EXEMPT: Mod grants many heroes
+// via galactic/lua scripts invisible to the static fieldable graph (a hard gate hid 197 of
+// Mod's 320 heroes -- Ahsoka, Anakin, ...), so the bounded, curated hero set is shown in
+// full once the name/tag junk (death-clones etc.) is excluded. Replaces IsPickerListedCategory
+// at the engine enumerate site; the legacy predicate is retained for the bridge-compat path.
+inline bool IsPickerListed(const GameObjectRef& r)
+{
+    if (r.role == ObjRole::Excluded) return false;
+    if (r.role == ObjRole::Hero)     return true;     // heroes exempt from the fieldable gate
+    return r.fieldable;
+}
 
 struct GameObjectCatalog
 {
@@ -110,6 +193,11 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
 
 // Stable display string for a category (picker headers / dump mode).
 const char* GameObjectCategoryName(GameObjectCategory c);
+
+// Stable display strings for the new classification axes (dump / picker).
+const char* ObjDomainName(ObjDomain d);
+const char* ObjRoleName(ObjRole r);
+const char* ObjBucketName(ObjBucket b);
 
 // Categories surfaced in the reference-object picker: UNITS + STRUCTURES.
 // EXCLUSION-based (fails toward SHOWING): everything is listed EXCEPT Prop,

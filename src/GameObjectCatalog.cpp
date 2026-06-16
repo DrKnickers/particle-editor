@@ -33,6 +33,19 @@ namespace
         return std::wstring();
     }
 
+    // All child elements named `tag`, data joined by single spaces (an object
+    // may carry several <Behavior> children; we want every token). ANSI, empty if none.
+    std::string childDataAll(const XMLNode* node, const wchar_t* tag)
+    {
+        std::wstring acc;
+        for (unsigned i = 0; i < node->getNumChildren(); ++i)
+        {
+            const XMLNode* c = node->getChild(i);
+            if (c->getName() == tag) { if (!acc.empty()) acc += L' '; acc += c->getData(); }
+        }
+        return WideToAnsi(acc);
+    }
+
     std::string trim(const std::string& s)
     {
         const char* ws = " \t\r\n";
@@ -54,20 +67,47 @@ namespace
         return s;
     }
 
+    // Split on commas / whitespace / '|' and UPPER-case each token. CategoryMask
+    // uses '|' separators, behavior lists use commas or separate elements; the classifier
+    // matches upper-cased type tokens. Empty input -> empty.
+    std::vector<std::string> tokenizeUpper(const std::string& s)
+    {
+        std::vector<std::string> out;
+        std::string cur;
+        for (char ch : s)
+        {
+            if (ch == ',' || ch == '|' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n')
+            { if (!cur.empty()) { out.push_back(cur); cur.clear(); } }
+            else cur += (char)std::toupper((unsigned char)ch);
+        }
+        if (!cur.empty()) out.push_back(cur);
+        return out;
+    }
+
+    // A boolean XML field is true iff it reads yes/true/1 (case/space-insensitive).
+    bool isYes(const std::string& s)
+    {
+        const std::string t = asciiLower(trim(s));
+        return t == "yes" || t == "true" || t == "1";
+    }
+
     // The model field varies by object type. Land first (most objects, and the
     // form the user sizes effects against on the ground), then Space, then the
-    // strategic-layer Galactic, then the generic Model_Name. First present wins;
-    // the rare object carrying more than one only changes which mesh we show.
-    std::string firstModel(const XMLNode* e)
+    // strategic-layer Galactic, then the generic Model_Name. First present wins.
+    // also reports WHICH field won (the domain signal) and whether BOTH a
+    // Land and a Space model are present (dual-env -> the classifier flags a conflict).
+    std::string firstModel(const XMLNode* e, ModelFieldKind& kind, bool& dualEnv)
     {
-        static const wchar_t* kModelTags[] = {
-            L"Land_Model_Name", L"Space_Model_Name", L"Galactic_Model_Name", L"Model_Name"
-        };
-        for (const wchar_t* tag : kModelTags)
-        {
-            std::string m = trim(WideToAnsi(childData(e, tag)));
-            if (!m.empty()) return m;
-        }
+        const std::string land  = trim(WideToAnsi(childData(e, L"Land_Model_Name")));
+        const std::string space = trim(WideToAnsi(childData(e, L"Space_Model_Name")));
+        dualEnv = !land.empty() && !space.empty();
+        if (!land.empty())  { kind = ModelFieldKind::Land;  return land;  }
+        if (!space.empty()) { kind = ModelFieldKind::Space; return space; }
+        const std::string gal = trim(WideToAnsi(childData(e, L"Galactic_Model_Name")));
+        if (!gal.empty())   { kind = ModelFieldKind::Galactic; return gal; }
+        const std::string gen = trim(WideToAnsi(childData(e, L"Model_Name")));
+        if (!gen.empty())   { kind = ModelFieldKind::Generic; return gen; }
+        kind = ModelFieldKind::None;
         return std::string();
     }
 
@@ -123,6 +163,20 @@ namespace
         std::string tag;             // container element name
         std::string sourceFile;      // listed XML it came from
         std::string hardpointsList;  // raw <HardPoints> comma list (empty = inherit via variantOf)
+        // profile signals (own value; resolved own-else-parent up the Variant_Of chain).
+        ModelFieldKind ownModelField = ModelFieldKind::None;  // which field ownModel came from
+        bool           ownDualEnv    = false;                 // both Land & Space model on THIS entry
+        std::string    maskRaw;        // <CategoryMask>
+        std::string    behaviorRaw;    // <Behavior> + <LandBehavior> + <SpaceBehavior> (joined)
+        std::string    movementRaw;    // <MovementClass>
+        std::string    dummyRaw;       // <Is_Dummy>
+        std::string    backgroundRaw;  // <In_Background> | <Is_Decoration>
+        std::string    affiliationRaw; // <Affiliation>
+        // fieldable reference-graph SOURCE lists (this object references others).
+        std::string    costRaw;          // <Build_Cost_Credits> (fallback <Required_Star_Base_Level>) -> buildable
+        std::string    buildMenuRaw;     // <Tactical_Buildable_Objects_Campaign/_Multiplayer> -> names it builds
+        std::string    spawnRaw;         // <{Starting,Reserve}_Spawned_Units_Tech_0..5> -> squadrons it spawns
+        std::string    squadronUnitsRaw; // <Squadron_Units> + <Company_Units> -> member units (model-bearing)
     };
 
     // Split a comma-separated list into trimmed, non-empty tokens (the <HardPoints>
@@ -241,8 +295,40 @@ namespace
                 re.tag           = WideToAnsi(e->getName());
                 re.sourceFile    = fileName;
                 re.variantOf     = trim(WideToAnsi(childData(e, L"Variant_Of_Existing_Type")));
-                re.ownModel      = firstModel(e);
+                re.ownModel      = firstModel(e, re.ownModelField, re.ownDualEnv);
                 re.hardpointsList = trim(WideToAnsi(childData(e, L"HardPoints")));   // resolved in phase 4
+                // profile signals (resolved through Variant_Of in phase 4).
+                re.maskRaw        = trim(WideToAnsi(childData(e, L"CategoryMask")));
+                re.behaviorRaw    = trim(childDataAll(e, L"Behavior") + " " +
+                                         childDataAll(e, L"LandBehavior") + " " +
+                                         childDataAll(e, L"SpaceBehavior"));
+                re.movementRaw    = trim(WideToAnsi(childData(e, L"MovementClass")));
+                re.dummyRaw       = trim(WideToAnsi(childData(e, L"Is_Dummy")));
+                re.backgroundRaw  = trim(WideToAnsi(childData(e, L"In_Background")));
+                if (re.backgroundRaw.empty())
+                    re.backgroundRaw = trim(WideToAnsi(childData(e, L"Is_Decoration")));
+                re.affiliationRaw = trim(WideToAnsi(childData(e, L"Affiliation")));
+                // fieldable source lists.
+                re.costRaw        = trim(WideToAnsi(childData(e, L"Build_Cost_Credits")));
+                if (re.costRaw.empty())
+                    re.costRaw    = trim(WideToAnsi(childData(e, L"Required_Star_Base_Level")));
+                re.buildMenuRaw   = trim(WideToAnsi(childData(e, L"Tactical_Buildable_Objects_Campaign")) + " " +
+                                         WideToAnsi(childData(e, L"Tactical_Buildable_Objects_Multiplayer")));
+                {
+                    std::string spawn;
+                    for (int tier = 0; tier <= 5; ++tier)
+                    {
+                        const std::wstring sa = L"Starting_Spawned_Units_Tech_" + std::to_wstring(tier);
+                        const std::wstring sb = L"Reserve_Spawned_Units_Tech_"  + std::to_wstring(tier);
+                        const std::string  a  = WideToAnsi(childData(e, sa.c_str()));
+                        const std::string  b  = WideToAnsi(childData(e, sb.c_str()));
+                        if (!a.empty()) { spawn += " "; spawn += a; }
+                        if (!b.empty()) { spawn += " "; spawn += b; }
+                    }
+                    re.spawnRaw = trim(spawn);
+                }
+                re.squadronUnitsRaw = trim(childDataAll(e, L"Squadron_Units") + " " +
+                                           childDataAll(e, L"Company_Units"));
                 entries.push_back(re);
             }
         }
@@ -293,21 +379,150 @@ namespace
     // chain dead-ends (no model), references a missing parent, or is cyclic.
     // Keys are folded to lower case so a variant that references its parent with
     // different casing (common in vanilla) still resolves -- matching the engine.
-    std::string resolveModel(const std::string& startKey,
-                             const std::map<std::string, RawEntry>& byName)
+    // also carries the supplying entry's model field-kind + dual-env so the
+    // classifier's domain follows the model that actually renders.
+    struct ResolvedModel { std::string path; ModelFieldKind kind = ModelFieldKind::None; bool dualEnv = false; };
+    ResolvedModel resolveModel(const std::string& startKey,
+                               const std::map<std::string, RawEntry>& byName)
     {
         std::set<std::string> visited;
         std::string cur = startKey;                    // already a folded key
         while (!cur.empty())
         {
             auto it = byName.find(cur);
-            if (it == byName.end())            return std::string();  // missing parent
-            if (!it->second.ownModel.empty())  return it->second.ownModel;
-            if (it->second.variantOf.empty())  return std::string();  // no model, not a variant
-            if (!visited.insert(cur).second)   return std::string();  // cycle
+            if (it == byName.end())            return {};  // missing parent
+            if (!it->second.ownModel.empty())  return { it->second.ownModel, it->second.ownModelField, it->second.ownDualEnv };
+            if (it->second.variantOf.empty())  return {};  // no model, not a variant
+            if (!visited.insert(cur).second)   return {};  // cycle
             cur = asciiLower(it->second.variantOf);    // next key, folded
         }
+        return {};
+    }
+
+    // Resolve a raw string field own-else-parent up the Variant_Of chain (first
+    // non-empty wins; cyclic-safe, case-folded), mirroring resolveModel. For CategoryMask /
+    // behavior / MovementClass / Is_Dummy / etc. that sit on a base template and are
+    // inherited by its variants.
+    std::string resolveRaw(const std::string& startKey,
+                           const std::map<std::string, RawEntry>& byName,
+                           std::string RawEntry::* field)
+    {
+        std::set<std::string> visited;
+        std::string cur = startKey;
+        while (!cur.empty())
+        {
+            auto it = byName.find(cur);
+            if (it == byName.end())            return std::string();
+            const std::string& v = it->second.*field;
+            if (!v.empty())                    return v;
+            if (it->second.variantOf.empty())  return std::string();
+            if (!visited.insert(cur).second)   return std::string();
+            cur = asciiLower(it->second.variantOf);
+        }
         return std::string();
+    }
+
+    // Split a list on commas / whitespace / '|' and LOWER-case each token (object
+    // Names are matched case-INSENSITIVELY -- Mod references `Tie_*` against `TIE_*`).
+    std::vector<std::string> tokenizeCommaLower(const std::string& s)
+    {
+        std::vector<std::string> out;
+        std::string cur;
+        for (char ch : s)
+        {
+            if (ch == ',' || ch == '|' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n')
+            { if (!cur.empty()) { out.push_back(cur); cur.clear(); } }
+            else cur += (char)std::tolower((unsigned char)ch);
+        }
+        if (!cur.empty()) out.push_back(cur);
+        return out;
+    }
+    // A spawn-list token like "...Squadron, 1" -- the count is numeric, the name is not.
+    bool isNumericToken(const std::string& t)
+    {
+        if (t.empty()) return false;
+        for (char c : t) if (!(c >= '0' && c <= '9') && c != '-' && c != '+') return false;
+        return true;
+    }
+
+    // Read a mod's GameObjectList.lua roster allow-list (Mod submods ship one,
+    // e.g. Mod 382 / TR 887 entries) -- `["NAME"] = true,` lines. Lower-cased names into
+    // `out`. Missing file -> empty (base FoC / Mod have none; the fieldable union then
+    // falls back to the XML graph). Not lua-evaluated: a literal `["` ... `"]` scan.
+    void readRosterLua(IFileManager& fm, std::set<std::string>& out)
+    {
+        IFile* f = fm.getFile("Data\\Scripts\\Library\\GameObjectList.lua");
+        if (!f) return;
+        std::string text;
+        const unsigned long sz = f->size();
+        if (sz > 0)
+        {
+            text.resize(sz); f->seek(0);
+            const unsigned long got = f->read(&text[0], sz);
+            text.resize(got);
+#ifndef NDEBUG
+            if (got < sz)   // short read -> the roster scan sees a truncated allow-list (under-marks fieldable)
+                fprintf(stderr, "[Catalog] GameObjectList.lua short read: %lu of %lu bytes\n", got, sz);
+#endif
+        }
+        f->Release();
+        size_t i = 0;
+        while ((i = text.find("[\"", i)) != std::string::npos)
+        {
+            const size_t s = i + 2;
+            const size_t e = text.find("\"]", s);
+            if (e == std::string::npos) break;
+            out.insert(asciiLower(text.substr(s, e - s)));
+            i = e + 2;
+        }
+    }
+
+    // Mark each catalog object `fieldable` = a player can build or spawn it. The
+    // UNION of: the GameObjectList.lua roster; objects with a build cost (resolved through
+    // Variant_Of -- cost sits on templates); names listed in any structure's build menu;
+    // and names in any carrier/structure spawn list -> whose Squadron_Units/Company_Units
+    // members (the model-bearing fighters) are then ALSO marked. Case-insensitive
+    // throughout (the catalog keys are already folded). A HARD picker keep-gate
+    // (IsPickerListed); the --dump-catalog audit lists kept-but-non-fieldable so a real
+    // unit can never silently vanish ().
+    void markFieldable(IFileManager& fm,
+                       const std::map<std::string, RawEntry>& byName,
+                       std::vector<GameObjectRef>& objects)
+    {
+        std::map<std::string, unsigned> bits;   // folded name -> FieldSource bits
+
+        std::set<std::string> roster;
+        readRosterLua(fm, roster);
+        for (const std::string& n : roster) bits[n] |= FS_Roster;
+
+        for (const auto& kv : byName)
+        {
+            const std::string& key = kv.first;   // already folded
+            if (!resolveRaw(key, byName, &RawEntry::costRaw).empty())
+                bits[key] |= FS_Buildable;
+            for (const std::string& t : tokenizeCommaLower(resolveRaw(key, byName, &RawEntry::buildMenuRaw)))
+                bits[t] |= FS_StructureBuilt;
+            for (const std::string& t : tokenizeCommaLower(resolveRaw(key, byName, &RawEntry::spawnRaw)))
+                if (!isNumericToken(t)) bits[t] |= FS_Spawned;
+        }
+
+        // Expand wrappers: a fieldable Squadron/Company's members become fieldable too
+        // (collect first -- don't mutate `bits` mid-iteration).
+        std::vector<std::pair<std::string, unsigned>> expand;
+        for (const auto& kv : byName)
+        {
+            auto it = bits.find(kv.first);
+            if (it == bits.end()) continue;
+            for (const std::string& m : tokenizeCommaLower(resolveRaw(kv.first, byName, &RawEntry::squadronUnitsRaw)))
+                expand.emplace_back(m, it->second);
+        }
+        for (const auto& e : expand) bits[e.first] |= e.second;
+
+        for (GameObjectRef& r : objects)
+        {
+            auto it = bits.find(asciiLower(r.name));
+            if (it != bits.end()) { r.fieldable = true; r.fieldSource = it->second; }
+        }
     }
 
     // Phase 2 for HardPoints: an object's own <HardPoints> list wins; otherwise
@@ -511,21 +726,44 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
     // Phase 4 -- RESOLVE (serial, unchanged): Variant_Of chain + categorize + sort.
     for (const auto& kv : byName)
     {
-        std::string model = resolveModel(kv.first, byName);
-        if (model.empty()) continue;                      // no renderable model -> not pickable
+        ResolvedModel rm = resolveModel(kv.first, byName);
+        if (rm.path.empty()) continue;                    // no renderable model -> not pickable
 
         GameObjectRef ref;
         ref.name           = kv.second.name;           // original casing for the picker label
-        ref.modelPath      = model;
+        ref.modelPath      = rm.path;
         ref.tag            = kv.second.tag;
         ref.sourceFile     = kv.second.sourceFile;
-        ref.category       = categorize(kv.second.name, kv.second.tag);
+        ref.category       = categorize(kv.second.name, kv.second.tag);   // legacy bridge-compat
         ref.hardpointNames = resolveHardpoints(kv.first, byName);   // Variant_Of-resolved
+
+        // assemble the profile (signals resolved through Variant_Of) + classify.
+        ObjectProfile prof;
+        prof.name             = kv.second.name;
+        prof.tag              = kv.second.tag;
+        prof.modelField       = rm.kind;
+        prof.dualEnv          = rm.dualEnv;
+        prof.maskTokens       = tokenizeUpper(resolveRaw(kv.first, byName, &RawEntry::maskRaw));
+        prof.behaviorTokens   = tokenizeUpper(resolveRaw(kv.first, byName, &RawEntry::behaviorRaw));
+        prof.hasMovementClass = !resolveRaw(kv.first, byName, &RawEntry::movementRaw).empty();
+        prof.isDummy          = isYes(resolveRaw(kv.first, byName, &RawEntry::dummyRaw));
+        prof.inBackground     = isYes(resolveRaw(kv.first, byName, &RawEntry::backgroundRaw));
+        prof.affiliation      = resolveRaw(kv.first, byName, &RawEntry::affiliationRaw);
+        const Classification cl = ClassifyObject(prof);
+        ref.domain   = cl.domain;
+        ref.role     = cl.role;
+        ref.bucket   = cl.bucket;
+        ref.conflict = cl.conflict;
+        // ref.fieldable / fieldSource filled by the fieldable pass below.
         out.objects.push_back(ref);
     }
 
     std::sort(out.objects.begin(), out.objects.end(),
               [](const GameObjectRef& a, const GameObjectRef& b) { return a.name < b.name; });
+
+    // Fieldable reference-graph + lua roster pass (after objects exist; reads `fm`
+    // for GameObjectList.lua). Marks the player-fieldable units/structures for the picker.
+    markFieldable(fm, byName, out.objects);
 
     if (timing)
     {
@@ -611,5 +849,214 @@ bool IsPickerListedCategory(GameObjectCategory c)
         case GameObjectCategory::Excluded:
         default:
             return false;
+    }
+}
+
+// ===================== profile classifier =========================
+// Pure cascade over an ObjectProfile: EXCLUDE (renderable non-units) -> DOMAIN (from the
+// model field-name, corroborated by CategoryMask) -> ROLE + BUCKET. No I/O, so it is
+// unit-tested directly (tests/test_game_object_catalog.cpp [classify]). The signal
+// vocabulary was established by a 5-mod first-party sweep (base FoC + Mod + Mod);
+// CategoryMask is a REFINEMENT only (absent on every unit in base FoC + Mod), never a
+// gate -- domain/keep come from the model field + tag + behavior, which exist everywhere.
+namespace
+{
+    // A renderable object that is NOT a selectable unit/structure -> Excluded. Tag-DENY
+    // (never tag-allow: an unrecognised real unit must fall through to kept, not vanish --
+    //) + a few behavior tokens. Substring match on the lower-cased tag.
+    bool isExcludedTag(const std::string& tl)
+    {
+        static const char* kDeny[] = {
+            "skydome", "loworbit", "planet", "particle", "projectile", "marker",
+            "death_clone", "container", "upgrade", "ability", "template", "defunct",
+            "mission_object", "indigenous_passive", "squadron", "company", "formation",
+            "dummy", "prop", "obstacle", "cinematic", "mov_", "cin_"
+        };
+        for (const char* d : kDeny) if (tl.find(d) != std::string::npos) return true;
+        return false;
+    }
+    // Some junk carries a unit/structure TAG but is recognizable only by NAME: destruction
+    // clones, captured AI variants, cinematic dialogue actors, debug + abstract templates.
+    // Conservative substrings (avoid "clone" -- it would hit Clone_Trooper; "mission" -- it
+    // would hit Mission_Vao). Crucial because heroes are exempt from the fieldable gate, so a
+    // hero death-clone must be Excluded here or it would surface.
+    bool isExcludedName(const std::string& nl)
+    {
+        static const char* kDeny[] = { "death_clone", "_captured", "dialogue_", "debug", "abstract_" };
+        for (const char* d : kDeny) if (nl.find(d) != std::string::npos) return true;
+        return false;
+    }
+    // Behavior tokens that mark a non-unit. Deliberately NARROW -- two classes of behavior
+    // that LOOK like non-unit markers are NOT here because real units/structures carry them:
+    //   - `DUMMY_<type>` is a normal engine AI-hook (DUMMY_STARSHIP on every Star Destroyer,
+    //     DUMMY_GROUND_STRUCTURE on every barracks) -- excluding it dropped ~296 base-FoC units.
+    //   - `SPACE_OBSTACLE`/`LAND_OBSTACLE` is collision geometry that real structures + asteroids
+    //     carry -- excluding it dropped ~160 base-FoC structures (E_Ground_Barracks, StarBases).
+    // The genuine non-units those would have caught are already covered by tag (Upgrade/Company/
+    // Squadron/Prop/Obstacle) + the no-model skip. SKY_DOME/PLANET/PARTICLE/PROJECTILE/MARKER are
+    // safe (mostly redundant with the tag, but catch a backdrop whose tag isn't obvious).
+    bool hasExcludeBehavior(const std::vector<std::string>& b)
+    {
+        for (const std::string& t : b)
+            if (t == "SKY_DOME" || t == "PLANET" || t == "PARTICLE" || t == "PROJECTILE" || t == "MARKER")
+                return true;
+        return false;
+    }
+
+    // Domain implied by the CategoryMask type tokens (Anti* are targeting roles -> skip).
+    // TRANSPORT is deliberately ABSENT -- it is domain-ambiguous (ground troop transports
+    // and space transports both carry it), so reading it as Space mis-flagged ~344 ground
+    // vehicles as conflicts; the model field-name decides their domain instead.
+    ObjDomain maskDomain(const std::vector<std::string>& m)
+    {
+        for (const std::string& t : m)
+        {
+            if (t.rfind("ANTI", 0) == 0) continue;
+            if (t == "FIGHTER" || t == "BOMBER" || t == "GUNSHIP" || t == "CORVETTE" ||
+                t == "FRIGATE" || t == "CAPITAL" || t == "SUPERCAPITAL" || t == "SUPER" ||
+                t == "SPACESTRUCTURE" || t == "SPACEHERO")
+                return ObjDomain::Space;
+            if (t == "INFANTRY" || t == "VEHICLE" || t == "AIR" || t == "AIRSPEEDER" ||
+                t == "AIRGUNSHIP" || t == "STRUCTURE" || t == "WALL" || t == "LANDHERO" ||
+                t == "INFANTRYHERO" || t == "VEHICLEHERO")
+                return ObjDomain::Ground;
+        }
+        return ObjDomain::Unknown;
+    }
+    // Domain implied by the container TAG -- the fallback when the model field is Galactic or
+    // generic (real units, esp. base-FoC capitals, resolve their mesh via Galactic_Model_Name,
+    // so the field-name gives no ground/space hint). Conservative substrings.
+    ObjDomain domainFromTag(const std::string& tl)
+    {
+        if (tl.find("ground") != std::string::npos || tl.find("infantry") != std::string::npos ||
+            tl.find("vehicle") != std::string::npos)
+            return ObjDomain::Ground;
+        if (tl.find("space")    != std::string::npos || tl.find("squadron") != std::string::npos ||
+            tl.find("starbase") != std::string::npos || tl.find("shipyard") != std::string::npos ||
+            tl.find("flagship") != std::string::npos)
+            return ObjDomain::Space;
+        return ObjDomain::Unknown;
+    }
+    bool maskHasHero(const std::vector<std::string>& m)
+    {
+        for (const std::string& t : m)
+            if (t == "SPACEHERO" || t == "LANDHERO" || t == "INFANTRYHERO" ||
+                t == "VEHICLEHERO" || t == "NONCOMBATHERO") return true;
+        return false;
+    }
+    bool maskHasStructure(const std::vector<std::string>& m)
+    {
+        for (const std::string& t : m)
+            if (t == "STRUCTURE" || t == "WALL" || t == "SPACESTRUCTURE") return true;
+        return false;
+    }
+    bool tagIsHero(const std::string& tl)       // HeroUnit / GenericHeroUnit / GenericCommander
+    { return tl.find("hero") != std::string::npos || tl.find("commander") != std::string::npos; }
+    bool tagIsStructure(const std::string& tl)
+    {
+        return tl.find("structure") != std::string::npos || tl.find("starbase") != std::string::npos
+            || tl.find("shipyard")   != std::string::npos || tl.find("buildable") != std::string::npos
+            || tl.find("base")       != std::string::npos || tl.find("wall")      != std::string::npos
+            || tl.find("turret")     != std::string::npos;
+    }
+    // Fine bucket from a CategoryMask token (domain disambiguates Transport), else None.
+    ObjBucket bucketFromMask(const std::vector<std::string>& m, ObjDomain dom)
+    {
+        for (const std::string& t : m)
+        {
+            if (t.rfind("ANTI", 0) == 0) continue;
+            if (t == "FIGHTER")                                   return ObjBucket::Fighter;
+            if (t == "BOMBER" || t == "GUNSHIP")                  return ObjBucket::Bomber;
+            if (t == "CORVETTE")                                  return ObjBucket::Corvette;
+            if (t == "FRIGATE")                                   return ObjBucket::Frigate;
+            if (t == "CAPITAL" || t == "SUPERCAPITAL" || t == "SUPER") return ObjBucket::Capital;
+            if (t == "TRANSPORT") return (dom == ObjDomain::Space) ? ObjBucket::Transport : ObjBucket::Vehicle;
+            if (t == "INFANTRY")                                  return ObjBucket::Infantry;
+            if (t == "VEHICLE")                                   return ObjBucket::Vehicle;
+            if (t == "AIR" || t == "AIRSPEEDER" || t == "AIRGUNSHIP") return ObjBucket::Air;
+        }
+        return ObjBucket::None;
+    }
+    // Fallback bucket from the container tag when no usable mask (ground tags carry a hint;
+    // generic space tags like SpaceUnit/UniqueUnit do not -> None -> "Other").
+    ObjBucket bucketFromTag(const std::string& tl)
+    {
+        if (tl.find("infantry") != std::string::npos || tl.find("trooper") != std::string::npos) return ObjBucket::Infantry;
+        if (tl.find("vehicle")  != std::string::npos)                                            return ObjBucket::Vehicle;
+        return ObjBucket::None;
+    }
+}
+
+Classification ClassifyObject(const ObjectProfile& p)
+{
+    Classification c;
+    const std::string tl = asciiLower(p.tag);
+    const std::string nl = asciiLower(p.name);
+
+    // 1. EXCLUDE -- no renderable model, or a model-bearing non-unit, recognised by TAG / NAME /
+    //    a narrow behavior set. Deliberately does NOT gate on the model field-kind, Is_Dummy, or
+    //    In_Background: each LOOKS like a non-unit signal but real units carry it in EaW --
+    //    capitals resolve their mesh via Galactic_Model_Name (Star_Destroyer); real buildable
+    //    structures set Is_Dummy=Yes (E_Gravity_Well_Station, mining facilities); a story unit can
+    //    set In_Background=Yes (Eclipse SSD). Backdrops are caught by their Planet/Skydome/Prop TAG
+    //    (fail-toward-showing,), and the fieldable gate hides any non-fieldable straggler.
+    //    (isDummy/inBackground stay captured on the profile for diagnostics; they do not gate here.)
+    if (p.modelField == ModelFieldKind::None ||
+        isExcludedTag(tl) || isExcludedName(nl) || hasExcludeBehavior(p.behaviorTokens))
+    {
+        c.role = ObjRole::Excluded;
+        return c;
+    }
+
+    // 2. DOMAIN -- model field-name decides for Land/Space; Galactic/Generic fall back to the
+    //    tag then the mask. Mask corroborates / flags conflict.
+    switch (p.modelField)
+    {
+        case ModelFieldKind::Land:  c.domain = ObjDomain::Ground; break;
+        case ModelFieldKind::Space: c.domain = ObjDomain::Space;  break;
+        default:                    c.domain = domainFromTag(tl); break;   // Galactic / Generic
+    }
+    const ObjDomain md = maskDomain(p.maskTokens);
+    if (p.dualEnv) c.conflict = true;
+    if (md != ObjDomain::Unknown && c.domain != ObjDomain::Unknown && md != c.domain) c.conflict = true;
+    if (c.domain == ObjDomain::Unknown) c.domain = (md != ObjDomain::Unknown) ? md : ObjDomain::Ground;
+
+    // 3. ROLE + BUCKET.
+    if (maskHasHero(p.maskTokens) || tagIsHero(tl))
+    {
+        c.role = ObjRole::Hero; c.bucket = ObjBucket::Hero; return c;
+    }
+    if (maskHasStructure(p.maskTokens) || (!p.hasMovementClass && tagIsStructure(tl)))
+    {
+        c.role = ObjRole::Structure; c.bucket = ObjBucket::Structure; return c;
+    }
+    c.role = ObjRole::Unit;
+    ObjBucket b = bucketFromMask(p.maskTokens, c.domain);
+    if (b == ObjBucket::None) b = bucketFromTag(tl);
+    if (b == ObjBucket::None) { b = ObjBucket::Other; c.conflict = true; }   // unresolved -> shown as Other, never dropped
+    c.bucket = b;
+    return c;
+}
+
+const char* ObjDomainName(ObjDomain d)
+{
+    switch (d) { case ObjDomain::Ground: return "Ground"; case ObjDomain::Space: return "Space"; default: return "Unknown"; }
+}
+const char* ObjRoleName(ObjRole r)
+{
+    switch (r) { case ObjRole::Unit: return "Unit"; case ObjRole::Structure: return "Structure";
+                 case ObjRole::Hero: return "Hero"; default: return "Excluded"; }
+}
+const char* ObjBucketName(ObjBucket b)
+{
+    switch (b)
+    {
+        case ObjBucket::Infantry:  return "Infantry";  case ObjBucket::Vehicle:   return "Vehicle";
+        case ObjBucket::Air:       return "Air";       case ObjBucket::Fighter:   return "Fighter";
+        case ObjBucket::Bomber:    return "Bomber";    case ObjBucket::Corvette:  return "Corvette";
+        case ObjBucket::Frigate:   return "Frigate";   case ObjBucket::Capital:   return "Capital";
+        case ObjBucket::Transport: return "Transport"; case ObjBucket::Structure: return "Structure";
+        case ObjBucket::Hero:      return "Hero";      case ObjBucket::Other:     return "Other";
+        default:                   return "None";
     }
 }

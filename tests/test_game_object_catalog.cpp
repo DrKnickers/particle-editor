@@ -131,6 +131,25 @@ struct RealDirFM : IFileManager
             try { return new PhysicalFile(forcedAlo, PhysicalFile::READ); }
             catch (...) { return nullptr; }
         }
+        // non-XML "Data\..." paths (the GameObjectList.lua roster lives at
+        // Data\Scripts\Library\) resolve against each root's MOD ROOT (the configured dir
+        // minus its trailing \Data\XML), first hit wins -- mirrors the editor's roots.
+        if (path.rfind("Data\\", 0) == 0 && path.rfind(xmlPfx, 0) != 0)
+        {
+            std::wstring wp(path.begin(), path.end());
+            std::vector<std::wstring> dirs = xmlDirs;
+            if (!xmlDir.empty()) dirs.push_back(xmlDir);
+            const std::wstring suf = L"\\Data\\XML";
+            for (std::wstring modRoot : dirs)
+            {
+                if (modRoot.size() >= suf.size() &&
+                    _wcsicmp(modRoot.c_str() + modRoot.size() - suf.size(), suf.c_str()) == 0)
+                    modRoot = modRoot.substr(0, modRoot.size() - suf.size());
+                try { return new PhysicalFile(modRoot + L"\\" + wp, PhysicalFile::READ); }
+                catch (...) { /* miss -> next root */ }
+            }
+            return nullptr;
+        }
         if (path.rfind(xmlPfx, 0) == 0)
         {
             std::string leaf = path.substr(xmlPfx.size());
@@ -391,8 +410,87 @@ static int dumpXmlTest(const char* path)
     return 0;
 }
 
+// Build the catalog over one or more content roots (submod, Core, Mod-base,
+// base FoC -- in precedence order) and emit a TSV of every object's profile classification
+// + fieldable attribute, plus the verification summary: the leak check (zero picker-listed
+// 'loworbit' backdrops) and the SAFETY AUDIT (kept-but-non-fieldable -- exactly what the
+// hard gate would HIDE, so a real unit can't silently vanish). This is the headline proof
+// that the data-driven classifier behaves on the real mods.
+static int dumpClassified(const char* outPath, const std::vector<std::string>& dirs)
+{
+    RealDirFM fm;
+    for (const std::string& d : dirs) fm.xmlDirs.emplace_back(d.begin(), d.end());
+
+    GameObjectCatalog cat;
+    if (!BuildGameObjectCatalog(fm, cat)) { std::printf("catalog build FAILED (GameObjectFiles.xml unreadable)\n"); return 2; }
+
+    FILE* out = std::fopen(outPath, "w");
+    if (!out) { std::printf("cannot open output: %s\n", outPath); return 2; }
+    std::fprintf(out, "name\ttag\tdomain\trole\tbucket\tconflict\tfieldable\tsource\tmodel\n");
+
+    size_t kept = 0, fieldable = 0, listed = 0, leak = 0;
+    std::vector<const GameObjectRef*> hidden;   // kept unit/structure but NOT fieldable -> the audit
+    std::vector<const GameObjectRef*> exclFieldable;   // Excluded BUT fieldable -> the TRUE silent-drop signal
+    for (const GameObjectRef& r : cat.objects)
+    {
+        char src[8] = { 0 }; size_t si = 0;
+        if (r.fieldSource & FS_Buildable)      src[si++] = 'B';
+        if (r.fieldSource & FS_StructureBuilt) src[si++] = 'S';
+        if (r.fieldSource & FS_Spawned)        src[si++] = 'P';
+        if (r.fieldSource & FS_Roster)         src[si++] = 'R';
+        if (si == 0) src[si++] = '-';
+        std::fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\n",
+                     r.name.c_str(), r.tag.c_str(), ObjDomainName(r.domain), ObjRoleName(r.role),
+                     ObjBucketName(r.bucket), r.conflict ? 1 : 0, r.fieldable ? 1 : 0, src, r.modelPath.c_str());
+
+        const bool isKept   = (r.role != ObjRole::Excluded);
+        const bool isListed = IsPickerListed(r);   // heroes exempt from the fieldable gate
+        if (isKept)              ++kept;
+        if (r.fieldable)         ++fieldable;
+        if (isListed)            ++listed;
+        if (isKept && !isListed) hidden.push_back(&r);   // the real "would be hidden" set (non-hero, non-fieldable)
+        if (!isKept && r.fieldable) exclFieldable.push_back(&r);   // a player-fieldable object the classifier DROPPED -> investigate
+
+        std::string ln = r.name; for (char& c : ln) if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
+        if (IsPickerListed(r) && ln.find("loworbit") != std::string::npos) ++leak;
+    }
+    std::fclose(out);
+
+    std::printf("objects=%zu  kept(units+structures)=%zu  fieldable=%zu  PICKER-LISTED(IsPickerListed)=%zu\n",
+                cat.objects.size(), kept, fieldable, listed);
+    std::printf("LEAK CHECK: picker-listed objects with 'loworbit' in name = %zu  (expect 0)\n", leak);
+    std::printf("SILENT-DROP CHECK: EXCLUDED-but-FIELDABLE (a fieldable object the classifier dropped -- INVESTIGATE) = %zu\n",
+                exclFieldable.size());
+    {
+        size_t shownE = 0;
+        for (const GameObjectRef* e : exclFieldable)
+        {
+            if (shownE++ >= 30) { std::printf("   ... (%zu more)\n", exclFieldable.size() - 30); break; }
+            std::printf("   %-44s <%s>  src=%c%c%c%c\n", e->name.c_str(), e->tag.c_str(),
+                        (e->fieldSource & FS_Buildable) ? 'B' : '-', (e->fieldSource & FS_StructureBuilt) ? 'S' : '-',
+                        (e->fieldSource & FS_Spawned) ? 'P' : '-', (e->fieldSource & FS_Roster) ? 'R' : '-');
+        }
+    }
+    std::printf("SAFETY AUDIT: kept-but-NON-fieldable (would be HIDDEN by the hard gate) = %zu\n", hidden.size());
+    size_t shown = 0;
+    for (const GameObjectRef* h : hidden)
+    {
+        if (shown++ >= 50) { std::printf("   ... (%zu more -- see TSV, filter fieldable==0 && role!=Excluded)\n", hidden.size() - 50); break; }
+        std::printf("   %-44s [%s/%s/%s]  <%s>\n", h->name.c_str(),
+                    ObjDomainName(h->domain), ObjRoleName(h->role), ObjBucketName(h->bucket), h->tag.c_str());
+    }
+    std::printf("wrote TSV: %s\n", outPath);
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
+    if (argc >= 4 && std::strcmp(argv[1], "--dumpcat") == 0)
+    {
+        std::vector<std::string> dirs;
+        for (int i = 3; i < argc; ++i) dirs.push_back(argv[i]);
+        return dumpClassified(argv[2], dirs);
+    }
     if (argc >= 3 && std::strcmp(argv[1], "--probe") == 0)   return dumpProbe(argv[2]);
     if (argc >= 3 && std::strcmp(argv[1], "--xmltest") == 0) return dumpXmlTest(argv[2]);
     if (argc >= 3 && std::strcmp(argv[1], "--dumpalo") == 0) return dumpAlo(argv[2]);
@@ -631,6 +729,206 @@ int main(int argc, char** argv)
     {
         CHECK(ProbeModelSkinned(fm, "") == ModelProbeResult::LoadFailed, "empty modelPath -> LoadFailed");
         CHECK(ProbeModelSkinned(fm, "nope.alo") == ModelProbeResult::NotFound, "missing file -> NotFound");
+    }
+
+    // ---- profile classifier (pure ClassifyObject) ------------------
+    std::printf("[classify]\n");
+    {
+        auto P = [](const char* tag, ModelFieldKind mf) {
+            ObjectProfile p; p.tag = tag; p.modelField = mf; return p;
+        };
+        // EXCLUDE: renderable non-units.
+        {
+            ObjectProfile sky = P("SpacePrimarySkydome", ModelFieldKind::Space);
+            Classification c = ClassifyObject(sky);
+            CHECK(c.role == ObjRole::Excluded, "skydome backdrop -> Excluded");
+        }
+        CHECK(ClassifyObject(P("LowOrbit", ModelFieldKind::Space)).role == ObjRole::Excluded,
+              "LowOrbit backdrop tag -> Excluded");
+        CHECK(ClassifyObject(P("Planet", ModelFieldKind::Galactic)).role == ObjRole::Excluded,
+              "Planet (galactic model) -> Excluded");
+        CHECK(ClassifyObject(P("Props_Buildings_Generic", ModelFieldKind::Land)).role == ObjRole::Excluded,
+              "Props_* -> Excluded");
+        CHECK(ClassifyObject(P("Projectile", ModelFieldKind::Generic)).role == ObjRole::Excluded,
+              "Projectile -> Excluded");
+        CHECK(ClassifyObject(P("Squadron", ModelFieldKind::None)).role == ObjRole::Excluded,
+              "no model (Squadron wrapper) -> Excluded");
+        {
+            // Is_Dummy=Yes is NOT a non-unit signal in EaW -- real buildable structures carry it
+            // (E_Gravity_Well_Station, mining facilities), so it must NOT exclude.
+            ObjectProfile d = P("GroundVehicle", ModelFieldKind::Land); d.isDummy = true;
+            CHECK(ClassifyObject(d).role == ObjRole::Unit, "Is_Dummy=Yes does NOT exclude (real structures set it)");
+        }
+        {
+            // In_Background does NOT gate either (Eclipse SSD sets it); a SpaceProp is excluded by
+            // its TAG, not the flag.
+            ObjectProfile bg = P("SpaceProp", ModelFieldKind::Space); bg.inBackground = true;
+            CHECK(ClassifyObject(bg).role == ObjRole::Excluded, "SpaceProp -> Excluded by TAG (not the In_Background flag)");
+            ObjectProfile u = P("SpaceUnit", ModelFieldKind::Space); u.inBackground = true;
+            CHECK(ClassifyObject(u).role == ObjRole::Unit, "In_Background alone does NOT exclude a unit-tagged object (Eclipse)");
+        }
+        {
+            ObjectProfile b = P("SpaceUnit", ModelFieldKind::Space); b.behaviorTokens = {"SKY_DOME"};
+            CHECK(ClassifyObject(b).role == ObjRole::Excluded, "behavior SKY_DOME -> Excluded");
+        }
+
+        // KEEP: ground units (bucket from mask, else tag fallback).
+        {
+            ObjectProfile inf = P("GroundInfantry", ModelFieldKind::Land);
+            Classification c = ClassifyObject(inf);
+            CHECK(c.domain == ObjDomain::Ground && c.role == ObjRole::Unit && c.bucket == ObjBucket::Infantry,
+                  "GroundInfantry+Land -> Ground/Unit/Infantry (tag fallback, no mask)");
+        }
+        {
+            ObjectProfile v = P("GroundVehicle", ModelFieldKind::Land); v.maskTokens = {"VEHICLE", "ANTIVEHICLE"};
+            Classification c = ClassifyObject(v);
+            CHECK(c.domain == ObjDomain::Ground && c.bucket == ObjBucket::Vehicle,
+                  "GroundVehicle+mask VEHICLE -> Ground/Vehicle (Anti* ignored)");
+        }
+        // KEEP: space units, fine bucket from mask.
+        {
+            ObjectProfile cap = P("SpaceUnit", ModelFieldKind::Space); cap.maskTokens = {"CAPITAL", "ANTICAPITAL"};
+            Classification c = ClassifyObject(cap);
+            CHECK(c.domain == ObjDomain::Space && c.role == ObjRole::Unit && c.bucket == ObjBucket::Capital,
+                  "SpaceUnit+mask CAPITAL -> Space/Unit/Capital");
+        }
+        {
+            ObjectProfile fig = P("SpaceUnit", ModelFieldKind::Space); fig.maskTokens = {"FIGHTER", "ANTIFIGHTER"};
+            CHECK(ClassifyObject(fig).bucket == ObjBucket::Fighter, "SpaceUnit+mask FIGHTER -> Fighter");
+        }
+        // KEEP: structures (ground + space) by mask or no-MovementClass + structure tag.
+        {
+            ObjectProfile s = P("SpecialStructure", ModelFieldKind::Land);   // no MovementClass
+            Classification c = ClassifyObject(s);
+            CHECK(c.domain == ObjDomain::Ground && c.role == ObjRole::Structure,
+                  "SpecialStructure+Land+no-MovementClass -> Ground/Structure");
+        }
+        {
+            ObjectProfile sb = P("StarBase", ModelFieldKind::Space); sb.maskTokens = {"SPACESTRUCTURE"};
+            Classification c = ClassifyObject(sb);
+            CHECK(c.domain == ObjDomain::Space && c.role == ObjRole::Structure,
+                  "StarBase+SpaceStructure mask -> Space/Structure");
+        }
+        // KEEP: heroes (own top-level role).
+        {
+            ObjectProfile h = P("HeroUnit", ModelFieldKind::Land); h.maskTokens = {"INFANTRYHERO"};
+            CHECK(ClassifyObject(h).role == ObjRole::Hero, "HeroUnit+InfantryHero mask -> Hero");
+        }
+        CHECK(ClassifyObject(P("HeroUnit", ModelFieldKind::Space)).role == ObjRole::Hero,
+              "HeroUnit tag (no mask) -> Hero");
+        // TRANSPORT is domain-ambiguous: bucket follows the (model-derived) domain, no conflict.
+        {
+            ObjectProfile spt = P("SpaceUnit", ModelFieldKind::Space); spt.maskTokens = { "TRANSPORT" };
+            CHECK(ClassifyObject(spt).bucket == ObjBucket::Transport, "Space + mask TRANSPORT -> Transport bucket");
+            ObjectProfile gpt = P("GroundVehicle", ModelFieldKind::Land); gpt.maskTokens = { "TRANSPORT" };
+            Classification gc = ClassifyObject(gpt);
+            CHECK(gc.domain == ObjDomain::Ground && gc.bucket == ObjBucket::Vehicle && !gc.conflict,
+                  "Ground + mask TRANSPORT -> Vehicle bucket, NO conflict (TRANSPORT domain-ambiguous)");
+        }
+        // A structure-ish tag that is MOBILE (has MovementClass) classifies as Unit, not Structure.
+        {
+            ObjectProfile ms = P("GroundBase", ModelFieldKind::Land); ms.hasMovementClass = true;
+            CHECK(ClassifyObject(ms).role == ObjRole::Unit, "structure-ish tag WITH MovementClass -> Unit, not Structure");
+        }
+        // Name-pattern junk (carries a unit tag but is not a selectable unit).
+        {
+            ObjectProfile dc; dc.name = "AT_AT_Walker_Death_Clone"; dc.tag = "GroundVehicle"; dc.modelField = ModelFieldKind::Land;
+            CHECK(ClassifyObject(dc).role == ObjRole::Excluded, "name '*_Death_Clone' -> Excluded despite unit tag");
+        }
+        {
+            ObjectProfile ct; ct.name = "Republic_Clone_Trooper"; ct.tag = "GroundInfantry"; ct.modelField = ModelFieldKind::Land;
+            Classification c = ClassifyObject(ct);
+            CHECK(c.role == ObjRole::Unit && c.bucket == ObjBucket::Infantry,
+                  "'Clone_Trooper' NOT excluded (name 'clone' must not over-match death_clone)");
+        }
+        // Conflict surfacing: dual-env + mask-unresolved.
+        {
+            ObjectProfile dual = P("TransportUnit", ModelFieldKind::Land); dual.dualEnv = true;
+            CHECK(ClassifyObject(dual).conflict, "dual-env (Land+Space) object -> conflict flagged");
+        }
+        {
+            ObjectProfile uk = P("SpaceUnit", ModelFieldKind::Space);   // no mask, generic space tag
+            Classification c = ClassifyObject(uk);
+            CHECK(c.role == ObjRole::Unit && c.bucket == ObjBucket::Other && c.conflict,
+                  "mask-unresolved space unit -> Unit/Other + conflict (never dropped)");
+        }
+    }
+
+    // ---- fieldable reference-graph + lua roster --------------------
+    std::printf("[fieldable]\n");
+    {
+        MockFM ffm;
+        ffm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<Game_Object_Files><File>Fld.xml</File></Game_Object_Files>";
+        ffm.files["Data\\XML\\Fld.xml"] =
+            "<Objects>"
+            "  <SpaceUnit Name=\"Carrier\"><Space_Model_Name>EV_Carrier.ALO</Space_Model_Name>"
+            "    <Build_Cost_Credits>5000</Build_Cost_Credits>"
+            "    <Reserve_Spawned_Units_Tech_0>Tie_Fighter_Squadron, 4</Reserve_Spawned_Units_Tech_0></SpaceUnit>"
+            "  <Squadron Name=\"TIE_Fighter_Squadron\"><Squadron_Units>TIE_Fighter, TIE_Fighter</Squadron_Units></Squadron>"
+            "  <SpaceUnit Name=\"TIE_Fighter\"><Space_Model_Name>EV_TIE.ALO</Space_Model_Name></SpaceUnit>"   // spawned-only, no cost
+            "  <SpaceUnit Name=\"Template_Frigate\"><Space_Model_Name>EV_Frig.ALO</Space_Model_Name>"
+            "    <Build_Cost_Credits>3000</Build_Cost_Credits></SpaceUnit>"
+            "  <SpaceUnit Name=\"Frigate_Variant\"><Variant_Of_Existing_Type>Template_Frigate</Variant_Of_Existing_Type></SpaceUnit>"  // cost inherited
+            "  <SpaceUnit Name=\"Orphan_Ship\"><Space_Model_Name>EV_Orphan.ALO</Space_Model_Name></SpaceUnit>"  // no build/spawn/roster ref
+            "  <GroundInfantry Name=\"Roster_Trooper\"><Land_Model_Name>EI_RT.ALO</Land_Model_Name></GroundInfantry>"  // roster-only
+            "  <HeroUnit Name=\"Lua_Hero\"><Land_Model_Name>EI_Hero.ALO</Land_Model_Name></HeroUnit>"  // hero, no fieldable signal (lua-granted)
+            "  <HeroUnit Name=\"Lua_Hero_Death_Clone\"><Land_Model_Name>EI_HeroDC.ALO</Land_Model_Name></HeroUnit>"  // hero death-clone
+            // Profile-signal inheritance through Variant_Of (resolveRaw wiring for mask + behavior):
+            "  <SpaceUnit Name=\"Sky_Template\"><Space_Model_Name>EV_Sky.ALO</Space_Model_Name><Behavior>SKY_DOME</Behavior></SpaceUnit>"
+            "  <SpaceUnit Name=\"Sky_Variant\"><Variant_Of_Existing_Type>Sky_Template</Variant_Of_Existing_Type></SpaceUnit>"  // inherits SKY_DOME -> Excluded
+            "  <SpaceUnit Name=\"Cap_Template\"><Space_Model_Name>EV_Cap.ALO</Space_Model_Name><CategoryMask>CAPITAL | ANTICAPITAL</CategoryMask><Build_Cost_Credits>9000</Build_Cost_Credits></SpaceUnit>"
+            "  <SpaceUnit Name=\"Cap_Variant\"><Variant_Of_Existing_Type>Cap_Template</Variant_Of_Existing_Type></SpaceUnit>"  // inherits CAPITAL mask + cost
+            // Ground Company_Units member expansion (the ground twin of Squadron_Units):
+            "  <GroundCompany Name=\"Inf_Company\"><Build_Cost_Credits>500</Build_Cost_Credits><Company_Units>Inf_Member, Inf_Member</Company_Units></GroundCompany>"
+            "  <GroundInfantry Name=\"Inf_Member\"><Land_Model_Name>EI_M.ALO</Land_Model_Name></GroundInfantry>"  // fieldable via Company_Units
+            "</Objects>";
+        ffm.files["Data\\Scripts\\Library\\GameObjectList.lua"] =
+            "return {\n[\"ROSTER_TROOPER\"] = true,\n}\n";
+
+        GameObjectCatalog fc;
+        bool fok = BuildGameObjectCatalog(ffm, fc);
+        CHECK(fok, "fieldable-test catalog builds");
+        auto fld = [&](const char* n){ const GameObjectRef* r = find(fc, n); return r && r->fieldable; };
+        auto src = [&](const char* n){ const GameObjectRef* r = find(fc, n); return r ? r->fieldSource : 0u; };
+
+        CHECK(fld("Carrier"), "buildable carrier (Build_Cost_Credits) -> fieldable");
+        CHECK((src("Carrier") & FS_Buildable) != 0, "carrier fieldSource = Buildable");
+        CHECK(fld("TIE_Fighter"), "carrier-spawned member (Tie_*->TIE_* case-mismatch via Squadron_Units) -> fieldable");
+        CHECK((src("TIE_Fighter") & FS_Spawned) != 0, "TIE_Fighter fieldSource = Spawned");
+        CHECK(fld("Frigate_Variant"), "variant inheriting Build_Cost from template -> fieldable");
+        CHECK(fld("Template_Frigate"), "template with Build_Cost -> fieldable");
+        CHECK(fld("Roster_Trooper"), "GameObjectList.lua roster entry -> fieldable");
+        CHECK((src("Roster_Trooper") & FS_Roster) != 0, "Roster_Trooper fieldSource = Roster");
+        CHECK(!fld("Orphan_Ship"), "model-bearing object with no build/spawn/roster ref -> NOT fieldable");
+        CHECK(find(fc, "TIE_Fighter_Squadron") == nullptr, "Squadron wrapper (no model) not in catalog");
+
+        // The hard picker keep-gate for UNITS: IsPickerListed = role != Excluded && fieldable.
+        const GameObjectRef* tie  = find(fc, "TIE_Fighter");
+        const GameObjectRef* orph = find(fc, "Orphan_Ship");
+        CHECK(tie && IsPickerListed(*tie),   "fieldable unit is picker-listed");
+        CHECK(orph && !IsPickerListed(*orph), "non-fieldable unit is NOT picker-listed (hard gate)");
+
+        // HEROES are exempt from the fieldable gate (Mod grants many via lua) -- but a hero
+        // death-clone is still excluded by name, so the exemption never surfaces junk.
+        const GameObjectRef* hero = find(fc, "Lua_Hero");
+        CHECK(hero && hero->role == ObjRole::Hero && !hero->fieldable, "lua-only hero: role Hero, NOT fieldable");
+        CHECK(hero && IsPickerListed(*hero), "non-fieldable HERO IS picker-listed (heroes exempt)");
+        const GameObjectRef* hdc = find(fc, "Lua_Hero_Death_Clone");
+        CHECK(hdc && hdc->role == ObjRole::Excluded, "hero death-clone -> Excluded (name junk keeps the exemption safe)");
+        CHECK(hdc && !IsPickerListed(*hdc), "hero death-clone NOT picker-listed");
+
+        // Profile-signal inheritance through Variant_Of (the resolveRaw wiring for ALL six signals,
+        // not just costRaw): a variant inherits its template's behavior + mask.
+        const GameObjectRef* skv = find(fc, "Sky_Variant");
+        CHECK(skv && skv->role == ObjRole::Excluded, "variant inherits parent's SKY_DOME behavior -> Excluded");
+        const GameObjectRef* cpv = find(fc, "Cap_Variant");
+        CHECK(cpv && cpv->bucket == ObjBucket::Capital, "variant inherits parent's CAPITAL mask -> Capital bucket");
+        CHECK(cpv && cpv->fieldable, "variant inherits parent's Build_Cost -> fieldable");
+
+        // Company_Units member expansion (ground twin of Squadron_Units).
+        const GameObjectRef* im = find(fc, "Inf_Member");
+        CHECK(im && im->fieldable && IsPickerListed(*im), "Company_Units member of a buildable company -> fieldable + listed");
     }
 
     std::printf("\n=== GameObjectCatalog: %s ===\n", g_failed == 0 ? "ALL PASS" : "FAILURES");
