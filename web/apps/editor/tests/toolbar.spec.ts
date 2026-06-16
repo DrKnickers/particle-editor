@@ -44,6 +44,7 @@ test("Toolbar renders the 2026 button set", async () => {
   // Viewport engine toggles (moved from the old ViewportPill).
   expect(labels).toEqual(expect.arrayContaining([
     "Show ground",
+    "Show grid",
     "Toggle bloom",
     "Leave particles after instance death",
   ]));

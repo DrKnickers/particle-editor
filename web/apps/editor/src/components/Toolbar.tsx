@@ -4,7 +4,7 @@
 // Group 1 (file actions):       New · Open · Save · Save As
 // Group 2 (edit):               Undo · Redo
 // Group 3 (playback):           Play|Pause · Step · Step 10
-// Group 4 (viewport toggles):   Show ground · Toggle bloom · Leave particles
+// Group 4 (viewport toggles):   Show ground · Show grid · Toggle bloom · Leave particles
 // Group 5 (panels):             Spawner toggle
 //   spacer
 // Group 6 (environment):        Ground dropdown · Background dropdown
@@ -22,7 +22,7 @@ import {
   FilePlus, FolderOpen, Save, SaveAll,
   Undo2, Redo2,
   Play, Pause, ChevronRight, ChevronsRight,
-  Grid2x2, Sun, Sparkles, CirclePlus, Lightbulb,
+  Grid2x2, PanelBottom, Sun, Sparkles, CirclePlus, Lightbulb,
 } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { BackgroundDropdown } from "@/components/BackgroundDropdown";
@@ -55,6 +55,7 @@ export function Toolbar({ bridge }: Props) {
   // Viewport engine toggles (formerly the floating ViewportPill). Defaults
   // match the pill: ground/bloom off, leave-particles on.
   const ground = state?.ground ?? false;
+  const gridVisible = state?.gridVisible ?? false;
   const bloom = state?.bloom ?? false;
   const leaveParticles = state?.leaveParticles ?? true;
   const dock = useRightDock();
@@ -199,6 +200,17 @@ export function Toolbar({ bridge }: Props) {
             aria-label="Show ground"
             aria-pressed={ground}
             onClick={() => { void bridge.request({ kind: "engine/set/ground", params: { enabled: !ground } }); }}
+          >
+            <PanelBottom {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Show grid" occlusionId="tip:toolbar:show-grid">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Show grid"
+            aria-pressed={gridVisible}
+            onClick={() => { void bridge.request({ kind: "engine/set/grid-visible", params: { visible: !gridVisible } }); }}
           >
             <Grid2x2 {...ICON} />
           </button>

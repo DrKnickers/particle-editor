@@ -357,3 +357,48 @@ describe("MenuBar — Mods menu (D6)", () => {
     expect(screen.getByRole("checkbox", { name: "Include GCW" })).toBeTruthy();
   });
 });
+
+describe("MenuBar — View menu Grid item", () => {
+  function makeViewStubBridge(
+    gridVisible: boolean,
+  ): Bridge & { request: ReturnType<typeof vi.fn> } {
+    const snapshot = { ground: false, gridVisible, bloom: false, paused: false };
+    const request = vi.fn().mockImplementation((req: { kind: string }) => {
+      if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
+      return Promise.resolve({});
+    });
+    return {
+      request,
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+  }
+
+  it("View menu shows a Grid item", async () => {
+    const bridge = makeViewStubBridge(false);
+    renderMenuBar(bridge);
+    const trigger = screen.getByRole("menuitem", { name: "View" });
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
+    fireEvent.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Grid" })).toBeTruthy();
+    });
+  });
+
+  it("View > Grid dispatches engine/set/grid-visible with the inverted value", async () => {
+    const bridge = makeViewStubBridge(false);
+    renderMenuBar(bridge);
+    const trigger = screen.getByRole("menuitem", { name: "View" });
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
+    fireEvent.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole("menuitem", { name: "Grid" })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Grid" }));
+    await waitFor(() => {
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "engine/set/grid-visible",
+        params: { visible: true },
+      });
+    });
+  });
+});

@@ -239,6 +239,7 @@ export function MenuBar({
   }, [bridge]);
 
   const ground = state?.ground ?? false;
+  const gridVisible = state?.gridVisible ?? false;
   // Bloom enable/disable lives on the toolbar's "Toggle bloom" button, not
   // the View menu (session 11 follow-up), so no bloom state is read here.
   const paused = state?.paused ?? false;
@@ -733,6 +734,16 @@ export function MenuBar({
             >
               <CheckSlot active={ground} />
               Ground
+            </Menubar.Item>
+            <Menubar.Item
+              className={ITEM}
+              onSelect={send({
+                kind: "engine/set/grid-visible",
+                params: { visible: !gridVisible },
+              })}
+            >
+              <CheckSlot active={gridVisible} />
+              Grid
             </Menubar.Item>
             {/* Lighting opens the docked right-dock pane (shared with the
                 Spawner; session 11). Bloom is fully handled elsewhere:

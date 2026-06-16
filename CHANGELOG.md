@@ -21,11 +21,13 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 ### Added
 
 - A live readout appears next to the gizmo while you drag a reference object, showing its position (units) or rotation (degrees)
+- A "Show grid" toggle for the unit grid is now on the toolbar (next to "Show ground") and in the View menu, alongside the existing Ground dropdown checkbox
 - Antialiasing for the 3D viewport, with a quality setting in Preferences → Rendering (Off / 2× / 4× / 8×, limited to what your GPU supports) — applied instantly and remembered
 
 ### Changed
 
 - Object picker now remembers your faction filter, expanded/collapsed groups, and scroll position when you reopen it
+- The toolbar's "Show ground" button now uses a floor icon instead of a grid icon (the grid icon moved to the new "Show grid" toggle)
 - Object picker's faction chips now scroll within a bounded row instead of overflowing the popup when a mod has many factions
 - Reference-object gizmo restyled for readability — thicker outlined handles that read on any background, camera-faded rotation rings that sit back until hovered, a corner-bracket selection box, and a filled sweep wedge while rotating
 - The reference object and its gizmo now glide smoothly to their target, including snapped grid positions and angles (the saved values stay exact)

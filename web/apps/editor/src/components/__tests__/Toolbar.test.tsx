@@ -24,6 +24,7 @@ function makeBridge() {
     bloom: false,
     bloomAvailable: true,
     ground: true,
+    gridVisible: true,
     heatDebug: false,
     canUndo: true,
     canRedo: false,
@@ -217,6 +218,42 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     expect(b.request).toHaveBeenCalledWith({
       kind: "engine/set/leave-particles",
       params: { enabled: false },
+    });
+  });
+
+  it("renders a 'Show grid' viewport toggle", async () => {
+    const b = makeBridge();
+    renderToolbar(b);
+    expect(
+      await screen.findByRole("button", { name: "Show grid" }),
+    ).toBeInTheDocument();
+  });
+
+  it("reflects gridVisible on the 'Show grid' toggle via aria-pressed", async () => {
+    // makeBridge snapshot: gridVisible=true
+    const b = makeBridge();
+    renderToolbar(b);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Show grid" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+  });
+
+  it("'Show grid' dispatches engine/set/grid-visible with the inverted value (visible key, not enabled)", async () => {
+    const b = makeBridge();
+    renderToolbar(b);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Show grid" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show grid" }));
+    expect(b.request).toHaveBeenCalledWith({
+      kind: "engine/set/grid-visible",
+      params: { visible: false },
     });
   });
 });
