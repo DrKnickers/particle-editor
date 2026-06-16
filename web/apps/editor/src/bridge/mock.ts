@@ -517,6 +517,10 @@ export class MockBridge implements Bridge {
         this.lastOverloadGuard = { ...req.params };
         return {};
 
+      case "engine/set/msaa-level":
+        // MockBridge: no GPU to configure — accept as a no-op.
+        return {};
+
       case "engine/set/estimated-load":
         // [hard-guard] The browser preview has no engine sim, so the
         // estimated-load value has no effect here; accept as a no-op so
@@ -664,6 +668,11 @@ export class MockBridge implements Bridge {
 
       case "engine/query/bloom-available":
         return snapshotEngineState().bloomAvailable;
+
+      case "engine/query/msaa-levels":
+        // MockBridge: report 0/2/4 as supported (8 deliberately excluded
+        // so tests can verify that the UI clamps/hides unsupported levels).
+        return { levels: [0, 2, 4], current: 4 };
 
       // ---------------- mods (D6) -------------------------------
       //

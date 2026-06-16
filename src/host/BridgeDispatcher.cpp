@@ -1931,6 +1931,19 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         sendOk(json::object());
         return res;
     }
+    // -------- engine/set/msaa-level ----------------------------------
+    // View-only display preference: never marks the document dirty.
+    // Delegates directly to Engine::SetMsaaLevel; no caching needed
+    // because MSAA capability is hardware-fixed and the level is
+    // re-applied each time the engine rebuilds its swap chain.
+    if (kind == "engine/set/msaa-level")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        const int level = params.value("level", 0);
+        m_engine->SetMsaaLevel(level);
+        sendOk(json::object());
+        return res;
+    }
     // -------- engine/set/estimated-load (hard-guard) -----------------
     // Web-computed estimate of alive particles per placed instance
     // (chain-load.ts owns the formula — see the hard-guard spec). Cached
@@ -2140,6 +2153,15 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     {
         if (!requireEngine(kind.c_str())) return res;
         sendOk(json(m_engine->IsBloomAvailable()));
+        return res;
+    }
+    if (kind == "engine/query/msaa-levels")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        std::vector<int> supported = m_engine->GetSupportedMsaaLevels();
+        json levels = json::array();
+        for (int s : supported) levels.push_back(s);
+        sendOk(json{ {"levels", levels}, {"current", m_engine->GetCurrentMsaaLevel()} });
         return res;
     }
 

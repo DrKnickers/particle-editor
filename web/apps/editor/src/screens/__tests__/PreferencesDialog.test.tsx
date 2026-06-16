@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Bridge } from "@particle-editor/bridge-schema";
+import type { Bridge, Request } from "@particle-editor/bridge-schema";
 import { PreferencesDialog } from "../PreferencesDialog";
 import { readConfirmDelete } from "@/lib/delete-emitters";
 
-function makeBridgeStub() {
-  const request = vi.fn().mockResolvedValue({});
+function makeBridgeStub(msaaLevels: number[] = [0, 2, 4]) {
+  const request = vi.fn().mockImplementation((req: Request) => {
+    if (req.kind === "engine/query/msaa-levels") {
+      return Promise.resolve({ levels: msaaLevels, current: 4 });
+    }
+    return Promise.resolve({});
+  });
   return { bridge: { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge, request };
 }
 
@@ -85,4 +90,81 @@ describe("PreferencesDialog", () => {
       params: { enabled: true, maxParticles: 60_000 },
     });
   });
+
+  it("renders the Antialiasing select disabled while query is in-flight", () => {
+    // The stub resolves on the next microtask — before that the select should be disabled.
+    const { bridge } = makeBridgeStub();
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
+    const sel = screen.getByRole("combobox", { name: /antialiasing/i });
+    // Initially disabled (query not yet resolved)
+    expect(sel).toBeDisabled();
+  });
+
+  it("populates Antialiasing options from the query result and defaults to saved level", async () => {
+    localStorage.setItem("alo:msaa-quality", "2");
+    const { bridge } = makeBridgeStub([0, 2, 4]);
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
+    const sel = await screen.findByRole("combobox", { name: /antialiasing/i });
+    await waitFor(() => expect(sel).toBeEnabled());
+    expect((sel as HTMLSelectElement).value).toBe("2");
+    const options = Array.from((sel as HTMLSelectElement).options).map((o) => o.text);
+    expect(options).toEqual(["Off", "2× MSAA", "4× MSAA"]);
+  });
+
+  it("selecting a different MSAA level persists and sends the bridge call", async () => {
+    localStorage.setItem("alo:msaa-quality", "0");
+    const { bridge, request } = makeBridgeStub([0, 2, 4]);
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
+    const sel = await screen.findByRole("combobox", { name: /antialiasing/i });
+    await waitFor(() => expect(sel).toBeEnabled());
+    fireEvent.change(sel, { target: { value: "2" } });
+    expect(request).toHaveBeenCalledWith({
+      kind: "engine/set/msaa-level",
+      params: { level: 2 },
+    });
+    expect(localStorage.getItem("alo:msaa-quality")).toBe("2");
+  });
+
+  it("displays the engine's current level when saved level isn't offered, without writing localStorage or sending the bridge", async () => {
+    // Saved 8× but the GPU only reports [0, 2, 4]; engine's current is 4.
+    localStorage.setItem("alo:msaa-quality", "8");
+    const { bridge, request } = makeBridgeStub([0, 2, 4]); // stub returns current: 4
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
+    const sel = await screen.findByRole("combobox", { name: /antialiasing/i });
+    await waitFor(() => expect(sel).toBeEnabled());
+    // Should display the engine's authoritative current (4), not Off (0).
+    expect((sel as HTMLSelectElement).value).toBe("4");
+    // Must NOT have persisted or sent on mount — only onChange does that.
+    expect(localStorage.getItem("alo:msaa-quality")).toBe("8"); // saved intent preserved
+    expect(request).not.toHaveBeenCalledWith({
+      kind: "engine/set/msaa-level",
+      params: expect.anything(),
+    });
+  });
+
+  it("query failure leaves the control showing the saved level without persisting or sending", async () => {
+    localStorage.setItem("alo:msaa-quality", "4");
+    // Bridge rejects the query entirely.
+    const request = vi.fn().mockImplementation((req: Request) => {
+      if (req.kind === "engine/query/msaa-levels") {
+        return Promise.reject(new Error("bridge down"));
+      }
+      return Promise.resolve({});
+    });
+    const bridge = { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge;
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
+    // The query will resolve (to the unknown fallback) on the next microtask.
+    // Let it settle, then verify the control stayed as-is.
+    await waitFor(() => {});
+    const sel = screen.getByRole("combobox", { name: /antialiasing/i });
+    // select stays disabled (msaaLevels never set) but shows saved value in the seed option.
+    expect((sel as HTMLSelectElement).value).toBe("4");
+    // No persist, no send.
+    expect(localStorage.getItem("alo:msaa-quality")).toBe("4");
+    expect(request).not.toHaveBeenCalledWith({
+      kind: "engine/set/msaa-level",
+      params: expect.anything(),
+    });
+  });
+
 });

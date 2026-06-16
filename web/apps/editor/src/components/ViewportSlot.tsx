@@ -320,7 +320,7 @@ export function ViewportSlot({ bridge }: Props) {
   return (
     <div
       ref={ref}
-      className="absolute inset-0 bg-transparent flex items-center justify-center text-text-3 text-sm"
+      className="absolute inset-0 overflow-hidden bg-transparent flex items-center justify-center text-text-3 text-sm"
     >
       {archCEnabled ? (
         <>

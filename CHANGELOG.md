@@ -21,15 +21,19 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 ### Added
 
 - A live readout appears next to the gizmo while you drag a reference object, showing its position (units) or rotation (degrees)
+- Antialiasing for the 3D viewport, with a quality setting in Preferences → Rendering (Off / 2× / 4× / 8×, limited to what your GPU supports) — applied instantly and remembered
 
 ### Changed
 
 - Object picker now remembers your faction filter, expanded/collapsed groups, and scroll position when you reopen it
 - Object picker's faction chips now scroll within a bounded row instead of overflowing the popup when a mod has many factions
+- Reference-object gizmo restyled for readability — thicker outlined handles that read on any background, camera-faded rotation rings that sit back until hovered, a corner-bracket selection box, and a filled sweep wedge while rotating
+- The reference object and its gizmo now glide smoothly to their target, including snapped grid positions and angles (the saved values stay exact)
 
 ### Fixed
 
 - Switching mods or submods is snappier — the editor no longer re-scans the skydome list multiple times per switch
+- A scrollbar no longer flashes when dragging a reference object to the right edge of the viewport
 
 ## 2026-06-15
 

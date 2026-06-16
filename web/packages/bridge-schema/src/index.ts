@@ -686,6 +686,7 @@ export type Request =
   // Engine setters — view state (preview clock)
   | { kind: "engine/set/paused";              params: { paused: boolean } }
   | { kind: "engine/set/overload-guard";      params: { enabled: boolean; maxParticles: number } }
+  | { kind: "engine/set/msaa-level";          params: { level: number } }
   // [hard-guard] Estimated alive particles per placed instance, pushed by
   // the web (chain-load.ts). The engine multiplies by its live placed-
   // instance count for the preemptive overload gate.
@@ -715,6 +716,7 @@ export type Request =
   // object picker, read from the active mod/base via GameObjectFiles.xml.
   | { kind: "engine/query/reference-object-list"; params: Record<string, never> }
   | { kind: "engine/query/bloom-available";    params: Record<string, never> }
+  | { kind: "engine/query/msaa-levels";        params: Record<string, never> }
 
   // Settings (cross-mode registry persistence). Legacy persists lighting
   // under HKCU\Software\AloParticleEditor; the new UI reads it back so
@@ -1114,6 +1116,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/set/shadow" }                  ? Record<string, never> :
   R extends { kind: "engine/set/paused" }                  ? Record<string, never> :
   R extends { kind: "engine/set/overload-guard" }          ? Record<string, never> :
+  R extends { kind: "engine/set/msaa-level" }              ? Record<string, never> :
   R extends { kind: "engine/set/estimated-load" }          ? Record<string, never> :
   R extends { kind: "stats/set-frozen" }                   ? Record<string, never> :
 
@@ -1131,6 +1134,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/query/skydome-list" }        ? { primary: string[]; secondary: string[] } :
   R extends { kind: "engine/query/reference-object-list" } ? { objects: ReferenceObjectEntry[]; building?: boolean } :
   R extends { kind: "engine/query/bloom-available" }     ? boolean :
+  R extends { kind: "engine/query/msaa-levels" }         ? { levels: number[]; current: number } :
 
   // Settings (cross-mode registry persistence)
   R extends { kind: "settings/lighting" }                 ? LightingSettingsDto :

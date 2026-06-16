@@ -2,6 +2,7 @@
 #define ENGINE_H
 
 #include <string>
+#include <vector>
 
 #include "managers.h"
 #include "ParticleSystem.h"
@@ -676,6 +677,18 @@ public:
 	void SetBloomCutoff(float v);
 	void SetBloomSize(float v);
 
+	// [runtime-MSAA] Store the user's preferred MSAA sample count and mark
+	// surfaces dirty for rebuild on the next render frame. Safe to call from
+	// any thread — no D3D calls made here. Valid values: 0 (off), 2, 4, 8;
+	// any other value is silently treated as 0.
+	void             SetMsaaLevel(int samples);
+	// [runtime-MSAA] Returns {0} (Off always) plus each of {2,4,8} that the
+	// device supports for both D3DFMT_A8R8G8B8 colour and the current depth
+	// format, in ascending order. Returns {0} if m_pDirect3D is null.
+	std::vector<int> GetSupportedMsaaLevels() const;
+	// [runtime-MSAA] Currently-applied sample count (0 = off / not yet applied).
+	int              GetCurrentMsaaLevel() const { return m_currentMsaaLevel; }
+
 	void				Reset();
 
 	// [resize-perf revised Fix A] Cheap RESIZE-ONLY reset via
@@ -702,6 +715,9 @@ private:
 	D3DMULTISAMPLE_TYPE GetMultiSampleType(DWORD* MultiSampleQuality, D3DFORMAT DisplayFormat, D3DFORMAT DepthStencilFormat, BOOL Windowed);
 	D3DFORMAT           GetDepthStencilFormat(D3DFORMAT AdapterFormat, bool withStencilBuffer);
 	void				ResetParameters();
+	// [runtime-MSAA] Release + recreate MSAA surfaces resolving m_msaaPreferredLevel
+	// to the highest supported level <= the preference. Render-thread only.
+	void				ApplyMsaaLevelNow();
 
 	///Screen-uniform gizmo handle length (world units), sized so the
 	// reference-object gizmo holds a constant on-screen pixel size at its origin.
@@ -781,9 +797,13 @@ private:
 	// shader 1:1, blended per its phase/blend class. No-op when empty/unresolved.
 	void				RenderReferenceObject();
 
-	// Live reference-object world (Z-up yaw/pitch/roll then translate),
-	// shared by the render, the selection box, and the pick so all three agree.
-	D3DXMATRIX			ReferenceObjectWorld() const;
+	// Live reference-object world (Z-up yaw/pitch/roll then translate). The
+	// PICK uses the committed transform (ReferenceObjectWorld); the RENDER uses the
+	// eased "display" transform (ReferenceObjectDisplayWorld) -- smooth motion.
+	D3DXMATRIX			ReferenceObjectWorld() const;          // committed (pick)
+	D3DXMATRIX			ReferenceObjectDisplayWorld() const;   // eased (render)
+	D3DXMATRIX			ReferenceObjectWorldFrom(const D3DXVECTOR3& pos, const D3DXVECTOR3& rotDeg) const;
+	void				EaseReferenceDisplay();                // per-frame ease display -> committed
 
 	// Draw the object's AABB as a depth-tested wireframe when selected -- the
 	// same box the click-pick (PickReferenceObject) hit-tests. No-op when unselected.
@@ -978,6 +998,12 @@ private:
 	bool                     m_referenceObjectVisible = true;
 	D3DXVECTOR3              m_referencePosition = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
 	D3DXVECTOR3              m_referenceRotation = D3DXVECTOR3(0.0f, 0.0f, 0.0f);  // degrees [yaw,pitch,roll]
+	// Render-only "display" transform eased toward the committed transform above
+	// each frame so gizmo/object motion is smooth (incl. under snap). Committed values
+	// stay exact (undo / spinners / saved file). See Engine::EaseReferenceDisplay.
+	D3DXVECTOR3              m_displayPosition = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
+	D3DXVECTOR3              m_displayRotation = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
+	long long               m_displayLastQpc = 0;        // QPC of last ease (0 = uninit -> snap); QPC not GetTickCount so the ease stays smooth on high-refresh displays
 	ReferenceObjectStatus    m_referenceObjectStatus = ReferenceObjectStatus::None;
 	bool                     m_referenceObjectSelected = false;  // gizmo visible/grabbable only when selected; assign ONLY via RefLockResolveSelected so the lock is honoured (see RefLock.h)
 	bool                     m_referenceLocked = false;  // freeze: non-selectable/grabbable; transform frozen at the bridge (UI path), not the engine setter (undo restore must write)
@@ -1039,6 +1065,19 @@ private:
 	IDirect3DTexture9*	m_pSceneTexture;
     IDirect3DSurface9*  m_pDepthStencilSurface;
 	IDirect3DTexture9*	m_pDistortTexture;
+	// Offscreen MSAA surfaces. When m_msaaActive the scene draws into these;
+	// StretchRect resolves m_pMsaaColor into m_pSceneTexture (non-MS) before the
+	// bloom/distort/compose post-process chain reads it. D3DPOOL_DEFAULT — released
+	// and recreated on every device reset / resize alongside the other scene RTs.
+	IDirect3DSurface9*  m_pMsaaColor  = NULL;  // multisampled scene RT
+	IDirect3DSurface9*  m_pMsaaDepth  = NULL;  // matching multisampled depth-stencil
+	bool                m_msaaActive  = false; // false => non-MSAA path (behavior-identical to pre-MSAA)
+	// [runtime-MSAA] Preferred level set by SetMsaaLevel (0=off, 2/4/8 samples).
+	// m_msaaDirty triggers ApplyMsaaLevelNow() on the render thread; m_currentMsaaLevel
+	// reflects what was actually allocated (may be < preferred due to driver caps).
+	int                 m_msaaPreferredLevel = 4;  // user pref: 0=off, else target samples (2/4/8)
+	int                 m_currentMsaaLevel   = 0;  // actual level in use (0 = off)
+	bool                m_msaaDirty          = false; // set by SetMsaaLevel; applied on the render thread
 	Effect*             m_pDistortShader;
     Effect*             m_pShaders[NUM_SHADERS];
 

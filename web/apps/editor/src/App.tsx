@@ -27,6 +27,7 @@ import { useBackingColorSync } from "@/lib/backing-color-sync";
 import { useAppAccelerators } from "@/lib/use-app-accelerators";
 import { applyMode, readStoredMode } from "@/lib/theme";
 import { applyOverloadGuard, readOverloadGuard } from "@/lib/overload-guard";
+import { applyMsaaLevel, readMsaaLevel } from "@/lib/msaa-quality";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
 // Evaluated once at module load; a page navigation to ?demo=primitives
@@ -96,6 +97,13 @@ function AppShell() {
   // first opens Preferences.
   useEffect(() => {
     applyOverloadGuard(bridge, readOverloadGuard());
+  }, [bridge]);
+
+  // Push the persisted MSAA level to the engine once at startup so the
+  // saved quality preference applies immediately without requiring the
+  // user to open Preferences first.
+  useEffect(() => {
+    applyMsaaLevel(bridge, readMsaaLevel());
   }, [bridge]);
 
   // Screen 8 Batch 3: subscribe to file-state events (dirty/changed,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { applyMode, readStoredMode, type ThemeMode } from "@/lib/theme";
@@ -12,6 +12,13 @@ import {
   MAX_MAX_PARTICLES,
   type OverloadGuardConfig,
 } from "@/lib/overload-guard";
+import {
+  applyMsaaLevel,
+  queryMsaaLevels,
+  readMsaaLevel,
+  writeMsaaLevel,
+  type MsaaLevel,
+} from "@/lib/msaa-quality";
 
 type Props = { bridge: Bridge; open: boolean; onOpenChange: (open: boolean) => void };
 
@@ -37,6 +44,45 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
     setCapDraft(String(clamped.maxParticles));
     writeOverloadGuard(clamped);
     applyOverloadGuard(bridge, clamped);
+  };
+
+  // Antialiasing: hardware-gated level list from the engine; persisted
+  // selection in localStorage. Seeded with null until the query resolves
+  // so we only show what the GPU actually supports.
+  const [msaaLevels, setMsaaLevels] = useState<number[] | null>(null);
+  const [msaaLevel, setMsaaLevel] = useState<MsaaLevel>(() => readMsaaLevel());
+
+  useEffect(() => {
+    let cancelled = false;
+    void queryMsaaLevels(bridge).then(({ levels, current }) => {
+      if (cancelled) return;
+      // Unknown/failed query (levels === []) — leave everything as-is.
+      // Do NOT collapse to "Off-only", do NOT persist, do NOT send.
+      if (levels.length === 0) return;
+      // Filter to only the valid set to avoid unvalidated casts downstream.
+      const validLevels = levels.filter((l): l is MsaaLevel =>
+        l === 0 || l === 2 || l === 4 || l === 8,
+      );
+      if (validLevels.length === 0) return;
+      setMsaaLevels(validLevels);
+      // Reconcile displayed value — READ-ONLY: never writeMsaaLevel or
+      // applyMsaaLevel here.  Priority: saved (if still offered) → engine's
+      // authoritative current (if known and offered) → Off (floor).
+      const saved = readMsaaLevel();
+      const displayed: MsaaLevel = validLevels.includes(saved)
+        ? saved
+        : current >= 0 && validLevels.includes(current as MsaaLevel)
+          ? (current as MsaaLevel)
+          : 0;
+      setMsaaLevel(displayed);
+    });
+    return () => { cancelled = true; };
+  }, [bridge]);
+
+  const commitMsaaLevel = (level: MsaaLevel) => {
+    setMsaaLevel(level);
+    writeMsaaLevel(level);
+    applyMsaaLevel(bridge, level);
   };
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Preferences" size="sm">
@@ -115,6 +161,30 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                 unsaved changes are at risk.
               </div>
             )}
+          </div>
+          {/* Antialiasing: hardware-gated MSAA level. The select is
+              disabled while the query is in-flight (msaaLevels===null). */}
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            <div className="text-text-2">Rendering</div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="pref-msaa-level" className="text-text-2">
+                Antialiasing
+              </label>
+              <select
+                id="pref-msaa-level"
+                aria-label="Antialiasing"
+                value={msaaLevel}
+                disabled={msaaLevels === null}
+                onChange={(e) => commitMsaaLevel(Number(e.target.value) as MsaaLevel)}
+                className="rounded border border-border-2 bg-bg px-2 py-1 text-xs text-text disabled:opacity-50"
+              >
+                {(msaaLevels ?? [msaaLevel]).map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {lvl === 0 ? "Off" : `${lvl}× MSAA`}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </Modal.Body>

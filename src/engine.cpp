@@ -16,6 +16,9 @@
 #include "host/AlphaCompositor.h"
 #include "GizmoSizing.h"   ///pure screen-uniform gizmo-handle formula
 #include "PlaneHandle.h"   // pure ground-plane handle math (RayPlaneOffset, HandleHit, etc.)
+#include "GizmoRibbon.h"   // aesthetics: camera-facing ribbon quad expansion
+#include "RingFade.h"      // aesthetics: ring back-face alpha falloff
+#include "SelectionBoxStyle.h" // aesthetics: selection-box bracket/dash geometry
 using namespace std;
 
 static const char* ShaderNames[Engine::NUM_SHADERS] = {
@@ -665,6 +668,8 @@ void Engine::Update()
 {
 	TimeF currentTime = GetTimeF();
 
+	EaseReferenceDisplay();   // ease the render-only display transform (smooth gizmo/object motion)
+
 	// Harvest a finished background catalog build (worker -> UI handoff) and
 	// (re)kick one when wanted but missing. This swap is on the UI thread, so the other
 	// catalog readers (EnumerateReferenceObjects / RebuildReferenceObjectMesh, also UI
@@ -808,6 +813,11 @@ bool Engine::Render()
 			break;
 	}
 
+	// [runtime-MSAA] Apply a pending MSAA level change on the render thread.
+	// The setter (SetMsaaLevel) stores the preference and raises this flag;
+	// all D3D surface work happens here, where device ownership is known safe.
+	if (m_msaaDirty) { ApplyMsaaLevelNow(); m_msaaDirty = false; }
+
     // Set all effect parameters
     for (int i = 0; i < NUM_SHADERS; i++)
     {
@@ -869,14 +879,27 @@ bool Engine::Render()
 	m_pDevice->GetRenderTarget(0, &pScreenSurface);
     m_pDevice->GetDepthStencilSurface(&pDepthSurface);
 
-    // Set the new depth buffer
-    m_pDevice->SetDepthStencilSurface(m_pDepthStencilSurface);
-
-	// Render to the scene texture
+	// Render to the scene texture (or the MSAA RT when antialiasing is active).
+	// pSceneSurface is kept alive until after the resolve so StretchRect has a
+	// valid non-MS destination; it is released exactly once at the resolve block.
 	IDirect3DSurface9* pSceneSurface;
 	m_pSceneTexture->GetSurfaceLevel(0, &pSceneSurface);
-	m_pDevice->SetRenderTarget(0, pSceneSurface);
-	SAFE_RELEASE(pSceneSurface);
+	// RT + depth must share the same multisample type AT ALL TIMES. The
+	// compositor's non-MSAA RT is bound just above, so we must unbind depth (NULL is
+	// always legal) BEFORE swapping to the MSAA RT, then bind the matching MSAA depth.
+	// Setting an MSAA depth while a non-MSAA RT is still bound fails the match check and
+	// leaves the scene rendering nowhere -> black viewport.
+	if (m_msaaActive)
+	{
+		m_pDevice->SetDepthStencilSurface(NULL);
+		m_pDevice->SetRenderTarget(0, m_pMsaaColor);
+		m_pDevice->SetDepthStencilSurface(m_pMsaaDepth);
+	}
+	else
+	{
+		m_pDevice->SetDepthStencilSurface(m_pDepthStencilSurface);
+		m_pDevice->SetRenderTarget(0, pSceneSurface);
+	}
 
     D3DCOLOR clearColor = D3DCOLOR_XRGB(GetRValue(m_background), GetGValue(m_background), GetBValue(m_background));
 	m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clearColor, 1.0f, 0);
@@ -980,6 +1003,24 @@ bool Engine::Render()
         instance->RenderNormal(m_pDevice);
 	}
     m_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+
+	// Resolve the multisampled scene surface into the non-MS scene texture
+	// so the post-process chain (bloom/distort/compose) and --capture readback —
+	// which require a non-multisampled source — work unchanged.  StretchRect from
+	// a MS surface to a same-size non-MS surface performs the hardware MSAA resolve.
+	// After resolve, rebind slot-0 RT to pSceneSurface so the post-process passes
+	// below write into the (non-MS) scene texture, converging both paths.
+	if (m_msaaActive)
+	{
+		m_pDevice->StretchRect(m_pMsaaColor, NULL, pSceneSurface, NULL, D3DTEXF_NONE);
+		// Same match rule on the way back: drop the MSAA depth before binding the
+		// non-MS scene surface, then restore the non-MS depth (converges to the
+		// non-MSAA path's post-scene RT/depth state for the post-process passes).
+		m_pDevice->SetDepthStencilSurface(NULL);
+		m_pDevice->SetRenderTarget(0, pSceneSurface);
+		m_pDevice->SetDepthStencilSurface(m_pDepthStencilSurface);
+	}
+	SAFE_RELEASE(pSceneSurface);
 
 	// Phase 3 Stage 5 D12 — restore full-RT viewport before the
 	// bloom + distort post-process passes. They read+write at full-RT
@@ -1527,6 +1568,89 @@ void Engine::SetBloom(bool enable)                  { m_bloomEnabled  = enable; 
 void Engine::SetBloomStrength(float v)              { m_bloomStrength = v; }
 void Engine::SetBloomCutoff(float v)                { m_bloomCutoff   = v; }
 void Engine::SetBloomSize(float v)                  { m_bloomSize     = v; }
+
+// [runtime-MSAA] Store the preferred sample count and mark the MSAA surfaces
+// dirty for rebuild on the next render frame. Safe to call from any thread —
+// the actual D3D work happens in ApplyMsaaLevelNow(), called from Render().
+void Engine::SetMsaaLevel(int samples)
+{
+    if (samples != 0 && samples != 2 && samples != 4 && samples != 8) samples = 0;
+    m_msaaPreferredLevel = samples;
+    m_msaaDirty = true;
+}
+
+// [runtime-MSAA] Returns ascending list of supported sample counts: always
+// includes 0 (Off), plus each of {2,4,8} for which BOTH the colour format
+// (D3DFMT_A8R8G8B8) and the current depth-stencil format pass
+// CheckDeviceMultiSampleType. Returns {0} if the D3D object is null.
+std::vector<int> Engine::GetSupportedMsaaLevels() const
+{
+    std::vector<int> result;
+    result.push_back(0);  // Off is always available
+    if (!m_pDirect3D) return result;
+    const D3DFORMAT depthFmt = m_presentationParameters.AutoDepthStencilFormat;
+    const BOOL      windowed = m_presentationParameters.Windowed;
+    for (int n : {2, 4, 8})
+    {
+        const D3DMULTISAMPLE_TYPE type = (D3DMULTISAMPLE_TYPE)n;
+        DWORD colorQ = 0, depthQ = 0;
+        if (SUCCEEDED(m_pDirect3D->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL,
+                D3DFMT_A8R8G8B8, windowed, type, &colorQ))
+         && SUCCEEDED(m_pDirect3D->CheckDeviceMultiSampleType(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL,
+                depthFmt, windowed, type, &depthQ)))
+        {
+            result.push_back(n);
+        }
+    }
+    return result;
+}
+
+// [runtime-MSAA] Release existing MSAA surfaces and recreate at the highest
+// supported level <= m_msaaPreferredLevel. Render-thread only — calls D3D.
+// On any allocation failure both surfaces are released and m_msaaActive stays
+// false (byte-identical to the pre-MSAA path).
+void Engine::ApplyMsaaLevelNow()
+{
+    SAFE_RELEASE(m_pMsaaColor);
+    SAFE_RELEASE(m_pMsaaDepth);
+    m_msaaActive = false;
+    m_currentMsaaLevel = 0;
+
+    // Resolve the preference to the highest SUPPORTED level <= the request.
+    int target = 0;
+    if (m_msaaPreferredLevel > 0)
+    {
+        std::vector<int> sup = GetSupportedMsaaLevels();  // ascending, includes 0
+        for (int lv : sup)
+            if (lv > 0 && lv <= m_msaaPreferredLevel) target = lv;  // highest <= pref
+    }
+    if (target <= 0) return;  // Off (or nothing supported)
+
+    const UINT w = m_presentationParameters.BackBufferWidth;
+    const UINT h = m_presentationParameters.BackBufferHeight;
+    if (w == 0 || h == 0) return;
+
+    const D3DMULTISAMPLE_TYPE type     = (D3DMULTISAMPLE_TYPE)target;
+    const D3DFORMAT           depthFmt = m_presentationParameters.AutoDepthStencilFormat;
+    const bool colorOk = SUCCEEDED(m_pDevice->CreateRenderTarget(
+        w, h, D3DFMT_A8R8G8B8, type, 0, FALSE /*lockable*/, &m_pMsaaColor, NULL));
+    const bool depthOk = colorOk && SUCCEEDED(m_pDevice->CreateDepthStencilSurface(
+        w, h, depthFmt, type, 0, TRUE /*discard*/, &m_pMsaaDepth, NULL));
+    if (colorOk && depthOk)
+    {
+        m_msaaActive       = true;
+        m_currentMsaaLevel = target;
+    }
+    else
+    {
+        // Partial failure — release whatever was allocated and stay on the non-MSAA path.
+        SAFE_RELEASE(m_pMsaaColor);
+        SAFE_RELEASE(m_pMsaaDepth);
+        m_msaaActive       = false;
+        m_currentMsaaLevel = 0;
+    }
+}
+
 void Engine::SetWind(const D3DXVECTOR3& wind)       { m_wind = wind; }
 void Engine::SetGravity(const D3DXVECTOR3& gravity) { D3DXVec3Normalize(&m_gravity, &gravity); }
 void Engine::SetLight(LightType which, const Light& light)
@@ -1593,6 +1717,10 @@ void Engine::Reset()
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
     SAFE_RELEASE(m_pDepthStencilSurface);
+	// MSAA surfaces are D3DPOOL_DEFAULT — must be released before device Reset.
+	SAFE_RELEASE(m_pMsaaColor);
+	SAFE_RELEASE(m_pMsaaDepth);
+	m_msaaActive = false;
 
 	// Reset device
 	m_presentationParameters.BackBufferWidth  = 0;
@@ -1778,6 +1906,10 @@ bool Engine::ResetForResize()
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
 	SAFE_RELEASE(m_pDepthStencilSurface);
+	// MSAA surfaces are D3DPOOL_DEFAULT — must be released before ResetEx.
+	SAFE_RELEASE(m_pMsaaColor);
+	SAFE_RELEASE(m_pMsaaDepth);
+	m_msaaActive = false;
 	SAFE_RELEASE(m_pEndFrameQuery);
 
 	m_presentationParameters.BackBufferWidth  = 0;   // size to the HWND client
@@ -2139,6 +2271,12 @@ void Engine::ResetParameters()
 			SAFE_RELEASE(m_pSceneTexture);
 			throw runtime_error("Unable to create depth buffer");
         }
+
+		// [runtime-MSAA] Recreate MSAA surfaces honoring m_msaaPreferredLevel
+		// (default 4, set via SetMsaaLevel). The helper resolves the preference
+		// to the highest SUPPORTED level <= the request, so default-4 behaves
+		// identically to the old inline block on hardware that supports 4×.
+		ApplyMsaaLevelNow();
 
 		// Full-resolution ping-pong RTs for the bloom blur. The
 		// shader's blur kernel is measured in source-texel units
@@ -2706,15 +2844,62 @@ void Engine::RenderSkydomes()
 // turns the already-tilted object about world up. Wire convention is
 // [yaw,pitch,roll] in degrees (schema + BridgeDispatcher). Shared by the render,
 // the selection box, and the pick so all three agree on placement.
-D3DXMATRIX Engine::ReferenceObjectWorld() const
+D3DXMATRIX Engine::ReferenceObjectWorldFrom(const D3DXVECTOR3& pos, const D3DXVECTOR3& rotDeg) const
 {
     const float deg2rad = D3DX_PI / 180.0f;
     D3DXMATRIX mYaw, mPitch, mRoll, trans;
-    D3DXMatrixRotationZ(&mYaw,   m_referenceRotation.x * deg2rad);   // yaw   = heading about world up (Z)
-    D3DXMatrixRotationX(&mPitch, m_referenceRotation.y * deg2rad);   // pitch = tilt about X
-    D3DXMatrixRotationY(&mRoll,  m_referenceRotation.z * deg2rad);   // roll  = bank about Y
-    D3DXMatrixTranslation(&trans, m_referencePosition.x, m_referencePosition.y, m_referencePosition.z);
+    D3DXMatrixRotationZ(&mYaw,   rotDeg.x * deg2rad);   // yaw   = heading about world up (Z)
+    D3DXMatrixRotationX(&mPitch, rotDeg.y * deg2rad);   // pitch = tilt about X
+    D3DXMatrixRotationY(&mRoll,  rotDeg.z * deg2rad);   // roll  = bank about Y
+    D3DXMatrixTranslation(&trans, pos.x, pos.y, pos.z);
     return mRoll * mPitch * mYaw * trans;
+}
+
+// Committed transform -> the PICK uses this (the exact, snapped value).
+D3DXMATRIX Engine::ReferenceObjectWorld() const
+{ return ReferenceObjectWorldFrom(m_referencePosition, m_referenceRotation); }
+
+// Eased "display" transform -> the RENDER uses this (smooth motion).
+D3DXMATRIX Engine::ReferenceObjectDisplayWorld() const
+{ return ReferenceObjectWorldFrom(m_displayPosition, m_displayRotation); }
+
+// Ease the render-only display transform toward the committed one once per
+// frame (exponential smoothing off WallTimeF, so it stays smooth even when the
+// particle preview is paused). Snaps on a discontinuity larger than any plausible
+// drag/undo step (e.g. a file load that teleports the transform) -- scene-scale aware
+// via the screen-uniform gizmo length. Rotation eases each Euler component along the
+// shortest angular path so a 359 deg -> 1 deg change doesn't spin the long way.
+void Engine::EaseReferenceDisplay()
+{
+    // QPC (microsecond) clock, NOT GetTickCount/WallTimeF (~15.6 ms) -- on a
+    // high-refresh display the frame interval is below GetTickCount's resolution,
+    // so consecutive frames would read dt==0 and collapse the ease to an instant snap.
+    const long long nowQpc = EngQpcNow();
+    float dt = (m_displayLastQpc == 0) ? 0.0f : (float)(EngQpcUs(m_displayLastQpc, nowQpc) * 1.0e-6);
+    m_displayLastQpc = nowQpc;
+    if (dt < 0.0f) dt = 0.0f;
+    if (dt > 0.1f) dt = 0.1f;
+
+    constexpr float kEaseTau = 0.09f;   // time constant (s); ~95% caught up in ~3*tau
+    const float k = (dt <= 0.0f) ? 0.0f : (1.0f - expf(-dt / kEaseTau));
+
+    D3DXVECTOR3 dp = m_referencePosition - m_displayPosition;
+    const float snapGap = 8.0f * ReferenceGizmoHandleLength();
+    if (k <= 0.0f || D3DXVec3Length(&dp) > snapGap) {        // first frame / paused / teleport -> snap
+        m_displayPosition = m_referencePosition;
+        m_displayRotation = m_referenceRotation;
+        return;
+    }
+    m_displayPosition += dp * k;
+    auto easeAngle = [k](float disp, float target) -> float {
+        float d = target - disp;
+        while (d >  180.0f) d -= 360.0f;
+        while (d < -180.0f) d += 360.0f;
+        return disp + d * k;
+    };
+    m_displayRotation.x = easeAngle(m_displayRotation.x, m_referenceRotation.x);
+    m_displayRotation.y = easeAngle(m_displayRotation.y, m_referenceRotation.y);
+    m_displayRotation.z = easeAngle(m_displayRotation.z, m_referenceRotation.z);
 }
 
 // Draw the imported reference object in two phases (opaque then
@@ -2729,7 +2914,7 @@ void Engine::RenderReferenceObject()
     if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved())
         return;
 
-    const D3DXMATRIX objectWorld = ReferenceObjectWorld();
+    const D3DXMATRIX objectWorld = ReferenceObjectDisplayWorld();   // eased (render)
 
     DWORD oldAlphaBlend, oldSrcBlend, oldDestBlend, oldZWrite, oldZEnable, oldCull;
     m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
@@ -3034,6 +3219,94 @@ static void DrawWorldTris(IDirect3DDevice9* dev, IDirect3DVertexDeclaration9* de
     dev->SetRenderState(D3DRS_CULLMODE,         oldCull);
 }
 
+// Camera-facing thick lines with a dark outline + per-segment colour/alpha.
+// Each RibbonSeg becomes a billboarded quad (2 tris) via gizmoribbon::ExpandSegment.
+// Two passes inside one state bracket: a dark underlay at (hw+outline) whose alpha
+// tracks each seg (so faded ring segments fade their outline too), then the colour
+// at hw. Alpha-blend ON like DrawWorldTris; depthTest=false => always-on-top.
+struct RibbonSeg { D3DXVECTOR3 a, b; D3DCOLOR color; };
+
+static void DrawWorldRibbons(IDirect3DDevice9* dev, IDirect3DVertexDeclaration9* decl,
+                             const RibbonSeg* segs, int n, const D3DXVECTOR3& camPos,
+                             float hw, float outline, D3DCOLOR outlineRGB, bool depthTest,
+                             float globalAlpha = 1.0f)
+{
+    if (dev == NULL || decl == NULL || segs == NULL || n <= 0) return;
+
+    DWORD oZ,oZW,oAB,oSrc,oDst,oLit,oCull,oCop,oCa1,oAop,oAa1;
+    dev->GetRenderState(D3DRS_ZENABLE,          &oZ);
+    dev->GetRenderState(D3DRS_ZWRITEENABLE,     &oZW);
+    dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &oAB);
+    dev->GetRenderState(D3DRS_SRCBLEND,         &oSrc);
+    dev->GetRenderState(D3DRS_DESTBLEND,        &oDst);
+    dev->GetRenderState(D3DRS_LIGHTING,         &oLit);
+    dev->GetRenderState(D3DRS_CULLMODE,         &oCull);
+    dev->GetTextureStageState(0, D3DTSS_COLOROP,   &oCop);
+    dev->GetTextureStageState(0, D3DTSS_COLORARG1, &oCa1);
+    dev->GetTextureStageState(0, D3DTSS_ALPHAOP,   &oAop);
+    dev->GetTextureStageState(0, D3DTSS_ALPHAARG1, &oAa1);
+    IDirect3DBaseTexture9* oTex = NULL; dev->GetTexture(0, &oTex);
+    IDirect3DVertexDeclaration9* oDecl = NULL; dev->GetVertexDeclaration(&oDecl);
+
+    D3DXMATRIX ident; D3DXMatrixIdentity(&ident);
+    dev->SetTransform(D3DTS_WORLD, &ident);
+    dev->SetVertexDeclaration(decl);
+    dev->SetTexture(0, NULL);
+    dev->SetRenderState(D3DRS_LIGHTING,         FALSE);
+    dev->SetRenderState(D3DRS_ZENABLE,          depthTest ? D3DZB_TRUE : D3DZB_FALSE);
+    dev->SetRenderState(D3DRS_ZWRITEENABLE,     FALSE);
+    dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    dev->SetRenderState(D3DRS_SRCBLEND,         D3DBLEND_SRCALPHA);
+    dev->SetRenderState(D3DRS_DESTBLEND,        D3DBLEND_INVSRCALPHA);
+    dev->SetRenderState(D3DRS_CULLMODE,         D3DCULL_NONE);
+    dev->SetTextureStageState(0, D3DTSS_COLOROP,   D3DTOP_SELECTARG1);
+    dev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG1);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+
+    auto emit = [&](float halfW, bool dark) {
+        std::vector<EmitterInstance::Vertex> v; v.reserve(n * 6);
+        for (int i = 0; i < n; ++i) {
+            float q[4][3];
+            gizmoribbon::ExpandSegment(&segs[i].a.x, &segs[i].b.x, &camPos.x, halfW, q);
+            D3DCOLOR c = segs[i].color;
+            // dark outline: soft grey RGB; halo alpha = seg alpha scaled by the outline
+            // colour's own alpha (so the halo is gentler than the line, not a hard keyline).
+            if (dark) { const BYTE A = (BYTE)((((c >> 24) & 0xFF) * ((outlineRGB >> 24) & 0xFF)) / 255);
+                        c = (outlineRGB & 0x00FFFFFF) | ((DWORD)A << 24); }
+            // global gizmo translucency: scale the (possibly fade/outline-set) alpha
+            const BYTE ga = (BYTE)(((c >> 24) & 0xFF) * globalAlpha);
+            c = (c & 0x00FFFFFF) | ((DWORD)ga << 24);
+            const int tri[6] = { 0, 1, 2,  0, 2, 3 };
+            for (int t = 0; t < 6; ++t) {
+                EmitterInstance::Vertex vert = {};
+                vert.Position = D3DXVECTOR3(q[tri[t]][0], q[tri[t]][1], q[tri[t]][2]);
+                vert.Color = c;
+                v.push_back(vert);
+            }
+        }
+        dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, n * 2, v.data(), sizeof(EmitterInstance::Vertex));
+    };
+    emit(hw + outline, /*dark=*/true);   // outline underlay first
+    emit(hw,           /*dark=*/false);  // colour on top
+
+    dev->SetVertexDeclaration(oDecl);
+    if (oDecl) oDecl->Release();
+    dev->SetTexture(0, oTex);
+    if (oTex) oTex->Release();
+    dev->SetTextureStageState(0, D3DTSS_COLOROP,   oCop);
+    dev->SetTextureStageState(0, D3DTSS_COLORARG1, oCa1);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAOP,   oAop);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, oAa1);
+    dev->SetRenderState(D3DRS_ZENABLE,          oZ);
+    dev->SetRenderState(D3DRS_ZWRITEENABLE,     oZW);
+    dev->SetRenderState(D3DRS_ALPHABLENDENABLE, oAB);
+    dev->SetRenderState(D3DRS_SRCBLEND,         oSrc);
+    dev->SetRenderState(D3DRS_DESTBLEND,        oDst);
+    dev->SetRenderState(D3DRS_LIGHTING,         oLit);
+    dev->SetRenderState(D3DRS_CULLMODE,         oCull);
+}
+
 // Unit grid: axis-aligned world lines on the ground plane (the engine's
 // first D3DPT_LINELIST primitive). Spacing = m_gridSpacing over a fixed extent,
 // with a brighter major line every 5 cells from centre. Co-planar with the
@@ -3112,8 +3385,22 @@ namespace
     constexpr float kHoverGrow       = 1.3f;    // hovered arrow grows (visual + pick)
     constexpr float kRingRadiusScale = 1.15f;   // ring radius   = baseLen * this
     constexpr float kRingPickBand    = 0.14f;   // ring pick band = ringRadius * this
-    constexpr float kPlaneInner = 0.30f;   // ground-plane square near edge (* baseLen, per in-plane axis)
-    constexpr float kPlaneOuter = 0.58f;   //          far edge -> side 0.28*baseLen, in the +X/+Y quadrant
+    constexpr float kPlaneInner = 0.0f;    // ground-plane square near edge (* baseLen) -- 0 => the
+                                           //         quad runs from the origin, inner edges sit on the X/Y axes
+    constexpr float kPlaneOuter = 0.58f;   //          far edge -> side 0.58*baseLen, in the +X/+Y quadrant
+
+    // aesthetics pass. Ribbon width/outline are fractions of baseLen so they
+    // stay ~constant px (baseLen is screen-uniform). Palette coordinated with the
+    // accent #4ea3ff; the cyan-teal box is a non-axis hue ("selection chrome").
+    // kGizmoAlpha fades the whole overlay back so it reads without dominating the scene.
+    constexpr float kGizmoAlpha    = 0.72f;   // global translucency on every ribbon
+    constexpr float kRibbonWidth   = 0.009f;  // half-width = baseLen * this
+    constexpr float kRibbonOutline = 0.010f;  // dark underlay extra half-width (kept wide; softness is in the alpha)
+    constexpr float kRingBackAlpha = 0.16f;   // camera-far ring fade floor
+    constexpr float kRingIdle      = 0.42f;   // rotation rings sit back at rest; full on hover/active drag
+    constexpr float kBracketFrac   = 0.067f;  // corner-bracket length = boxDiagonal * this (clamped to each edge)
+    const D3DCOLOR kOutlineRGB  = D3DCOLOR_RGBA(30,33,42,130);    // soft dark-grey halo; alpha = halo translucency (~0.51)
+    const D3DCOLOR kSelBoxColor = D3DCOLOR_RGBA(53,210,210,255);  // #35d2d2 cyan-teal
 
     D3DXVECTOR3 unitAxis(int axis)
     {
@@ -3319,19 +3606,24 @@ void Engine::RenderReferenceManipulator()
     if (!m_referenceObjectVisible) return;
     if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return;
 
-    const D3DXVECTOR3 o = m_referencePosition;
+    const D3DXVECTOR3 o = m_displayPosition;   // eased origin so the gizmo glides with the object
     const float baseLen = ReferenceGizmoHandleLength();
     const bool dragging = (m_activeManip.kind != ManipHandle::NONE);
-    const D3DCOLOR axisCol[3]  = { D3DCOLOR_RGBA(230,  60,  60, 255),
-                                   D3DCOLOR_RGBA( 60, 210,  60, 255),
-                                   D3DCOLOR_RGBA( 70, 120, 255, 255) };
+    const D3DCOLOR axisCol[3]  = { D3DCOLOR_RGBA(255,  91,  91, 255),   // X #ff5b5b
+                                   D3DCOLOR_RGBA( 73, 227,  95, 255),   // Y #49e35f
+                                   D3DCOLOR_RGBA( 78, 163, 255, 255) }; // Z #4ea3ff (accent)
     const D3DCOLOR hoverCol[3] = { D3DCOLOR_RGBA(255, 150, 150, 255),
-                                   D3DCOLOR_RGBA(170, 255, 170, 255),
-                                   D3DCOLOR_RGBA(170, 200, 255, 255) };
+                                   D3DCOLOR_RGBA(150, 255, 170, 255),
+                                   D3DCOLOR_RGBA(150, 200, 255, 255) };
+    const D3DXVECTOR3 camPos = m_eye.Position;          // for ribbon billboarding + ring fade
+    const float ribHalf = baseLen * kRibbonWidth;
+    const float ribOut  = baseLen * kRibbonOutline;
+    std::vector<RibbonSeg> rib;                          // accumulate all always-on-top ribbons
+    auto rseg = [&](const D3DXVECTOR3& a, const D3DXVECTOR3& b, D3DCOLOR c){ rib.push_back({a,b,c}); };
 
     constexpr int kRingSegs = 48;
     std::vector<EmitterInstance::Vertex> v;
-    v.reserve((3 * 5 + 3 * kRingSegs + 3) * 2);   // arrows (shaft + 4 head) + rings + active guide/2 sweep radials
+    v.reserve((4 + 2) * 2);   // up to 2 drag-guide lines (PLANE); arrows/rings/sweep radials/plane-border are ribbons
     auto line = [&](const D3DXVECTOR3& a, const D3DXVECTOR3& b, D3DCOLOR c)
     {
         EmitterInstance::Vertex v0 = {}, v1 = {};
@@ -3340,11 +3632,12 @@ void Engine::RenderReferenceManipulator()
         v.push_back(v0);
         v.push_back(v1);
     };
-    // During a drag, dim the non-active handles (RGB *0.4; alpha unused -- DrawWorldLines runs
-    // with alpha-blend OFF, so dropping alpha would be a no-op). The dragged handle keeps full color.
+    ///During a drag, FADE the non-active handles via alpha (hue kept) so
+    // they ghost out softly instead of darkening toward black. The alpha-blended
+    // ribbon/tri paths make alpha the right lever now (the old RGB*0.4 darkened).
     auto dim = [&](D3DCOLOR c) -> D3DCOLOR {
-        const BYTE A=(c>>24)&0xFF, R=(BYTE)(((c>>16)&0xFF)*0.4f), G=(BYTE)(((c>>8)&0xFF)*0.4f), B=(BYTE)((c&0xFF)*0.4f);
-        return D3DCOLOR_RGBA(R,G,B,A);
+        const BYTE A=(BYTE)(((c>>24)&0xFF)*0.30f);
+        return (c & 0x00FFFFFF) | ((DWORD)A<<24);
     };
 
     // Translate arrows.
@@ -3361,36 +3654,57 @@ void Engine::RenderReferenceManipulator()
         const D3DXVECTOR3 tip  = o + dir * len;
         const D3DXVECTOR3 base = o + dir * (len * 0.82f);
         const float r = len * 0.06f;
-        line(o, tip, c);                 // shaft
-        line(tip, base + p1 * r, c);     // 4-sided arrowhead
-        line(tip, base - p1 * r, c);
-        line(tip, base + p2 * r, c);
-        line(tip, base - p2 * r, c);
+        rseg(o, tip, c);                 // shaft
+        rseg(tip, base + p1 * r, c);     // 4-sided arrowhead
+        rseg(tip, base - p1 * r, c);
+        rseg(tip, base + p2 * r, c);
+        rseg(tip, base - p2 * r, c);
+    }
+
+    {   // faint neutral reference ring (ground plane), behind the rotate arcs
+        const D3DCOLOR refc = D3DCOLOR_RGBA(200,205,210, 80);
+        const float ringR = baseLen * kRingRadiusScale;
+        const D3DXVECTOR3 ax = unitAxis(0), ay = unitAxis(1);
+        D3DXVECTOR3 prevp = o + ax * ringR;
+        for (int s = 1; s <= kRingSegs; ++s)
+        {
+            const float a = (2.0f * D3DX_PI) * s / kRingSegs;
+            const D3DXVECTOR3 cur = o + (ax * cosf(a) + ay * sinf(a)) * ringR;
+            rseg(prevp, cur, refc);
+            prevp = cur;
+        }
     }
 
     // Rotate rings: a closed world-axis circle of radius R in the plane perpendicular
     // to each axis, built from the same (a,b) in-plane basis the angle pick uses.
+    // Each segment goes through rseg with camera-facing alpha fade so the
+    // back-facing half of each ring fades to kRingBackAlpha instead of full opacity.
     const float R = baseLen * kRingRadiusScale;
     for (int i = 0; i < 3; ++i)
     {
         const bool hot = (m_hoverManip.kind == ManipHandle::ROTATE && m_hoverManip.axis == i);
-        D3DCOLOR c = hot ? hoverCol[i] : axisCol[i];
+        D3DCOLOR base = hot ? hoverCol[i] : axisCol[i];
         const bool isActive = (m_activeManip.kind == ManipHandle::ROTATE && m_activeManip.axis == i);
-        if (dragging && !isActive) c = dim(c);
-        const D3DXVECTOR3 a = unitAxis((i + 1) % 3);
-        const D3DXVECTOR3 b = unitAxis((i + 2) % 3);
-        D3DXVECTOR3 prev = o + a * R;   // angle 0
+        if (dragging && !isActive) base = dim(base);
+        // idle rings sit back; the hovered (or actively-dragged) ring comes
+        // forward to full clarity. Arrows/plane keep full presence -- rings only.
+        const float idleK = (!dragging && !hot) ? kRingIdle : 1.0f;
+        const D3DXVECTOR3 a = unitAxis((i+1)%3), b = unitAxis((i+2)%3);
+        D3DXVECTOR3 prev = o + a * R;
         for (int s = 1; s <= kRingSegs; ++s)
         {
-            const float ang = (2.0f * D3DX_PI) * (float)s / (float)kRingSegs;
-            const D3DXVECTOR3 cur = o + (a * cosf(ang) + b * sinf(ang)) * R;
-            line(prev, cur, c);
+            const float ang = (2.0f*D3DX_PI)*(float)s/(float)kRingSegs;
+            const D3DXVECTOR3 cur = o + (a*cosf(ang)+b*sinf(ang))*R;
+            const D3DXVECTOR3 midp = (prev+cur)*0.5f;
+            const float fa = ringfade::FacingAlpha(&midp.x, &o.x, &camPos.x, kRingBackAlpha);
+            const BYTE A=(BYTE)(((base>>24)&0xFF)*fa*idleK);
+            rseg(prev, cur, (base & 0x00FFFFFF) | ((DWORD)A<<24));
             prev = cur;
         }
     }
 
     // Ground-plane (XY) handle: filled translucent quad (alpha-blended,
-    // its own draw call) + a line border (appended to v, drawn in the final pass).
+    // its own draw call) + a ribbon border (4 segments via rseg, drawn in the always-on-top ribbon pass).
     // Sits in the +X/+Y quadrant, [kPlaneInner,kPlaneOuter]*baseLen on each axis.
     {
         const int planeN = 2;   // normal = world Z (ground); only this plane ships now
@@ -3403,18 +3717,18 @@ void Engine::RenderReferenceManipulator()
         const D3DXVECTOR3 c10(qc[1][0], qc[1][1], qc[1][2]);     // (out,in)
         const D3DXVECTOR3 c11(qc[2][0], qc[2][1], qc[2][2]);     // (out,out)
         const D3DXVECTOR3 c01(qc[3][0], qc[3][1], qc[3][2]);     // (in,out)
-        const BYTE fillA = hot ? 115 : 64;                              // ~0.45 / ~0.25
-        D3DCOLOR fill   = D3DCOLOR_RGBA(220, 210, 74, fillA);           // neutral warm yellow
-        D3DCOLOR border = hot ? D3DCOLOR_RGBA(255, 245, 140, 255)
-                              : D3DCOLOR_RGBA(220, 210,  74, 255);
+        const BYTE fillA = hot ? 75 : 40;                               // softer now the quad reaches the origin
+        D3DCOLOR fill   = D3DCOLOR_RGBA(120, 200, 255, fillA);          // cool translucent blue (Z-normal family)
+        D3DCOLOR border = hot ? D3DCOLOR_RGBA(170, 220, 255, 255)
+                              : D3DCOLOR_RGBA(120, 200, 255, 255);
         if (dragging && !isActive) { fill = dim(fill); border = dim(border); }
         // Fill: 2 triangles in their own buffer, alpha-blended, always-on-top.
         EmitterInstance::Vertex q[6];
         const D3DXVECTOR3 tri[6] = { c00, c10, c11,  c00, c11, c01 };
         for (int i = 0; i < 6; ++i) { q[i] = EmitterInstance::Vertex{}; q[i].Position = tri[i]; q[i].Color = fill; }
         DrawWorldTris(m_pDevice, m_pDeclaration, q, 2, /*depthTest=*/false);
-        // Border: 4 segments into the existing line buffer (drawn on top of the fill).
-        line(c00, c10, border); line(c10, c11, border); line(c11, c01, border); line(c01, c00, border);
+        // Border: 4 ribbon segments (routed through rseg so they match arrow/ring stroke width).
+        rseg(c00, c10, border); rseg(c10, c11, border); rseg(c11, c01, border); rseg(c01, c00, border);
     }
 
     ///Active-drag guides. faint() dims the RGB (lines draw alpha-blend
@@ -3442,20 +3756,46 @@ void Engine::RenderReferenceManipulator()
         const int ax = m_activeManip.axis;
         const D3DXVECTOR3 a = unitAxis((ax + 1) % 3);
         const D3DXVECTOR3 b = unitAxis((ax + 2) % 3);
-        auto radial = [&](float ang){ line(o, o + (a * cosf(ang) + b * sinf(ang)) * R, axisCol[ax]); };
+        // translucent "pie slice" of the swept angle (grab -> applied): a
+        // triangle fan from the origin, alpha-blended (DrawWorldTris) UNDER the radial
+        // lines, which flush later via the ribbon batch.
+        const float delta = m_activeAppliedAngle - m_activeGrabAngle;
+        int segn = (int)(fabsf(delta) / (D3DX_PI / 90.0f)); if (segn < 1) segn = 1;   // ~2deg steps
+        const float Rf = R * 0.92f;
+        const D3DCOLOR pie = (axisCol[ax] & 0x00FFFFFF) | ((DWORD)(BYTE)(70.0f * kGizmoAlpha) << 24);
+        std::vector<EmitterInstance::Vertex> fan; fan.reserve(segn * 3);
+        for (int s = 0; s < segn; ++s) {
+            const float t0 = m_activeGrabAngle + delta * (float)s / (float)segn;
+            const float t1 = m_activeGrabAngle + delta * (float)(s + 1) / (float)segn;
+            const D3DXVECTOR3 p0 = o + (a*cosf(t0) + b*sinf(t0)) * Rf;
+            const D3DXVECTOR3 p1 = o + (a*cosf(t1) + b*sinf(t1)) * Rf;
+            EmitterInstance::Vertex v0 = {}, v1 = {}, v2 = {};
+            v0.Position = o;  v0.Color = pie;
+            v1.Position = p0; v1.Color = pie;
+            v2.Position = p1; v2.Color = pie;
+            fan.push_back(v0); fan.push_back(v1); fan.push_back(v2);
+        }
+        if (!fan.empty())
+            DrawWorldTris(m_pDevice, m_pDeclaration, fan.data(), (int)fan.size() / 3, /*depthTest=*/false);
+        auto radial = [&](float ang){ rseg(o, o + (a*cosf(ang)+b*sinf(ang))*R, axisCol[ax]); };
         radial(m_activeGrabAngle);
         radial(m_activeAppliedAngle);
     }
+
+    if (!rib.empty())
+        DrawWorldRibbons(m_pDevice, m_pDeclaration, rib.data(), (int)rib.size(),
+                         camPos, ribHalf, ribOut, kOutlineRGB, /*depthTest=*/false, kGizmoAlpha);
 
     DrawWorldLines(m_pDevice, m_pDeclaration, v.data(), (int)(v.size() / 2), /*depthTest=*/false);
 }
 
 // Selection box: the object's object-space AABB (over the kept/drawn
-// geometry) transformed by the live world, drawn as a 12-edge wireframe via the
-// shared line renderer. Depth-tested (it's part of the scene -- the object's near
+// geometry) transformed by the live world, drawn as dashed edges plus bright corner
+// brackets via the camera-facing ribbon renderer (DrawWorldRibbons), depth-tested.
+// Depth-tested (it's part of the scene -- the object's near
 // faces occlude the far box edges), drawn before the always-on-top gizmo. Shown
 // only when the object is selected. The SAME AABB + world drive PickReferenceObject
-// below, so the drawn box == the clickable region.
+// below, so the same AABB drives the pick region.
 void Engine::RenderReferenceSelectionBox()
 {
     if (!m_referenceObjectSelected) return;
@@ -3464,7 +3804,7 @@ void Engine::RenderReferenceSelectionBox()
     D3DXVECTOR3 mn, mx;
     if (!m_referenceObjectMesh.GetBoundingBox(mn, mx)) return;
 
-    const D3DXMATRIX world = ReferenceObjectWorld();
+    const D3DXMATRIX world = ReferenceObjectDisplayWorld();   // eased (render); pick uses committed
     D3DXVECTOR3 c[8];   // corner i: bit0=x, bit1=y, bit2=z (min/max)
     for (int i = 0; i < 8; ++i)
     {
@@ -3478,14 +3818,32 @@ void Engine::RenderReferenceSelectionBox()
         {4,5},{5,7},{7,6},{6,4},   // max-z face loop
         {0,4},{1,5},{2,6},{3,7},   // verticals
     };
-    const D3DCOLOR col = D3DCOLOR_RGBA(255, 220, 60, 255);   // amber selection
-    EmitterInstance::Vertex v[24] = {};
-    for (int e = 0; e < 12; ++e)
-    {
-        v[e * 2 + 0].Position = c[edges[e][0]]; v[e * 2 + 0].Color = col;
-        v[e * 2 + 1].Position = c[edges[e][1]]; v[e * 2 + 1].Color = col;
+    const D3DXVECTOR3 camPos = m_eye.Position;
+    const float ribHalf = ReferenceGizmoHandleLength() * kRibbonWidth;
+    const float ribOut  = ReferenceGizmoHandleLength() * kRibbonOutline;
+    // box scale for dash/bracket sizing: the AABB diagonal (corner 0 -> corner 7)
+    D3DXVECTOR3 diag = c[7] - c[0]; const float dlen = D3DXVec3Length(&diag);
+    std::vector<RibbonSeg> rib;
+
+    // faint SOLID edges (full box outline at the faded opacity the dashes used)
+    const D3DCOLOR edgec = D3DCOLOR_RGBA(53,210,210, 70);
+    for (int e=0;e<12;++e)
+        rib.push_back({ c[edges[e][0]], c[edges[e][1]], edgec });
+
+    // bright corner brackets: each corner's 3 neighbours differ in exactly one bit
+    for (int i=0;i<8;++i) {
+        D3DXVECTOR3 nb[3]; int k=0;
+        for (int bit=0;bit<3;++bit) nb[k++] = c[i ^ (1<<bit)];
+        std::vector<selboxstyle::Seg> br;
+        selboxstyle::CornerBracketSegs(&c[i].x, &nb[0].x, &nb[1].x, &nb[2].x, dlen*kBracketFrac, br);
+        for (size_t s=0;s<br.size();++s)
+            rib.push_back({ D3DXVECTOR3(br[s].a[0],br[s].a[1],br[s].a[2]),
+                            D3DXVECTOR3(br[s].b[0],br[s].b[1],br[s].b[2]), kSelBoxColor });
     }
-    DrawWorldLines(m_pDevice, m_pDeclaration, v, 12, /*depthTest=*/true);
+
+    if (!rib.empty())
+        DrawWorldRibbons(m_pDevice, m_pDeclaration, rib.data(), (int)rib.size(),
+                         camPos, ribHalf, ribOut, kOutlineRGB, /*depthTest=*/true, kGizmoAlpha);
 }
 
 // Body pick for click-to-select: ray vs the object's object-space AABB (the
@@ -4483,6 +4841,10 @@ Engine::~Engine()
         SAFE_RELEASE(m_pShaders[i]);
     }
     SAFE_RELEASE(m_pDepthStencilSurface);
+	// MSAA surfaces
+	SAFE_RELEASE(m_pMsaaColor);
+	SAFE_RELEASE(m_pMsaaDepth);
+	m_msaaActive = false;
 	SAFE_RELEASE(m_pDistortShader);
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
