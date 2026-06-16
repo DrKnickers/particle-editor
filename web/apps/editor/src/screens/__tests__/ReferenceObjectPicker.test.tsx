@@ -388,3 +388,70 @@ describe("ReferenceObjectPicker — lock", () => {
     expect(snap.referenceObjectRotation).toEqual([0, 0, 0]);
   });
 });
+
+describe("ReferenceObjectPicker — fu] keyboard navigation + persisted-selection expand", () => {
+  const ready = async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("tree", { name: "Reference object" });
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
+    return bridge;
+  };
+  const tabbable = () =>
+    screen.getAllByRole("treeitem").filter((el) => el.getAttribute("tabindex") === "0");
+
+  it("keeps exactly one tree row tabbable (roving tabindex), starting at None", async () => {
+    await ready();
+    const t = tabbable();
+    expect(t).toHaveLength(1);
+    expect(t[0]).toHaveAttribute("aria-selected", "true"); // None is selected by default
+    expect(t[0].textContent).toBe("None");
+  });
+
+  it("ArrowDown moves the active row to the next visible row", async () => {
+    await ready();
+    const none = screen.getByRole("treeitem", { name: "None" });
+    none.focus();
+    fireEvent.keyDown(none, { key: "ArrowDown" });
+    // First section after None is Heroes.
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "Heroes" })).toHaveAttribute("tabindex", "0"));
+    expect(none).toHaveAttribute("tabindex", "-1");
+    expect(tabbable()).toHaveLength(1);
+  });
+
+  it("ArrowLeft collapses a focused open section; ArrowRight re-expands it", async () => {
+    await ready();
+    const space = screen.getByRole("treeitem", { name: "Space" });
+    space.focus();
+    expect(space).toHaveAttribute("aria-expanded", "true");
+    fireEvent.keyDown(space, { key: "ArrowLeft" });
+    await waitFor(() =>
+      expect(screen.getByRole("treeitem", { name: "Space" })).toHaveAttribute("aria-expanded", "false")
+    );
+    expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("treeitem", { name: "Space" }), { key: "ArrowRight" });
+    expect(await screen.findByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument();
+  });
+
+  it("Enter on a focused leaf selects it", async () => {
+    const bridge = await ready();
+    const item = screen.getByRole("treeitem", { name: "AT_AT_Walker" });
+    fireEvent.keyDown(item, { key: "Enter" });
+    await waitFor(async () => {
+      const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
+      expect(snap.referenceObjectName).toBe("AT_AT_Walker");
+    });
+  });
+
+  it("auto-expands the ancestor groups of a selection that lands in a collapsed group", async () => {
+    const bridge = await ready();
+    // User collapses Ground (hiding AT_AT_Walker under Ground ▸ Vehicles).
+    fireEvent.click(screen.getByRole("treeitem", { name: "Ground" }));
+    await waitFor(() => expect(screen.queryByRole("treeitem", { name: "AT_AT_Walker" })).not.toBeInTheDocument());
+    // A selection lands inside the collapsed group (e.g. persisted from a prior session).
+    await bridge.request({ kind: "engine/set/reference-object", params: { name: "AT_AT_Walker" } });
+    // Its ancestors re-open so it's visible + selected.
+    const item = await screen.findByRole("treeitem", { name: "AT_AT_Walker" });
+    expect(item).toHaveAttribute("aria-selected", "true");
+  });
+});

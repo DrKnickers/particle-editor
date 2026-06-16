@@ -117,6 +117,10 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const [query, setQuery] = useState("");
   // Collapsed group keys (default = everything expanded; collapse is opt-in).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  // fu] Roving-tabindex: exactly one tree row is tabbable at a time; arrow
+  // keys move the active row + focus it. `itemRefs` maps a row key -> its DOM node.
+  const [activeKey, setActiveKey] = useState<string>("none");
+  const itemRefs = useRef(new Map<string, HTMLDivElement | null>());
   // LEVEL-triggered (not edge-triggered): re-query the list whenever we don't yet have a
   // ready list (readyRef avoids the stale closure). Once ready we STOP re-querying on
   // engine/state/changed, so a ~30 Hz gizmo drag doesn't thrash the UI thread.
@@ -183,13 +187,116 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
       else next.add(key);
       return next;
     });
+  const setCollapsedKey = (key: string, c: boolean) =>
+    setCollapsed((prev) => {
+      if (c === prev.has(key)) return prev;
+      const next = new Set(prev);
+      if (c) next.add(key); else next.delete(key);
+      return next;
+    });
 
-  // The persisted/active selection may be absent from the visible list (mod
-  // object, async load, or filtered by the search); surface it as a standalone
-  // row so the tree doesn't silently lose it.
+  // The persisted/active selection may be absent from the visible list (mod object,
+  // async load, or filtered by the search); surface it as a standalone row so the tree
+  // doesn't silently lose it.
   const known =
     name === NONE ||
     (objects.some((o) => o.name === name) && matches(name));
+
+  // fu] The flat list of VISIBLE tree rows in DOM order — drives roving-tabindex
+  // arrow navigation. Each row carries enough to move (kind/expanded/parent).
+  type Row =
+    | { key: string; kind: "leaf"; name: string; parentKey?: string }
+    | { key: string; kind: "exp"; collapseKey: string; expanded: boolean; parentKey?: string };
+  const rows = useMemo<Row[]>(() => {
+    const out: Row[] = [{ key: "none", kind: "leaf", name: NONE }];
+    if (name !== NONE && !known) out.push({ key: `leaf:${name}`, kind: "leaf", name });
+    for (const sec of sections) {
+      const secKey = `sec:${sec.key}`;
+      const openSec = isOpen(secKey);
+      out.push({ key: secKey, kind: "exp", collapseKey: secKey, expanded: openSec });
+      if (!openSec) continue;
+      if (sec.key === "Heroes") {
+        for (const n of sec.flat) out.push({ key: `leaf:${n}`, kind: "leaf", name: n, parentKey: secKey });
+      } else {
+        for (const b of sec.buckets) {
+          const bk = `buc:${sec.key}/${b.key}`;
+          const openBuc = isOpen(bk);
+          out.push({ key: bk, kind: "exp", collapseKey: bk, expanded: openBuc, parentKey: secKey });
+          if (openBuc) for (const n of b.items) out.push({ key: `leaf:${n}`, kind: "leaf", name: n, parentKey: bk });
+        }
+      }
+    }
+    return out;
+  }, [sections, collapsed, searching, name, known]);
+
+  // Keep the active (tabbable) row valid as the visible set changes (search / collapse).
+  useEffect(() => {
+    if (rows.some((r) => r.key === activeKey)) return;
+    const selKey = name !== NONE ? `leaf:${name}` : "none";
+    setActiveKey(rows.some((r) => r.key === selKey) ? selKey : (rows[0]?.key ?? "none"));
+  }, [rows, activeKey, name]);
+
+  // fu #2] Force-open the ancestor groups of the active selection so a
+  // selection persisted from a prior session (into a group the user had collapsed)
+  // is always visible. Runs on selection / list change, never re-collapsing on its own.
+  useEffect(() => {
+    if (name === NONE || !ready) return;
+    const obj = objects.find((o) => o.name === name);
+    if (!obj) return;
+    const domainKey = obj.domain === "Space" ? "Space" : "Ground";
+    const keys = obj.role === "Hero"
+      ? ["sec:Heroes"]
+      : [`sec:${domainKey}`, `buc:${domainKey}/${obj.bucket === "None" ? "Other" : obj.bucket}`];
+    setCollapsed((prev) => {
+      if (!keys.some((k) => prev.has(k))) return prev;
+      const next = new Set(prev);
+      keys.forEach((k) => next.delete(k));
+      return next;
+    });
+  }, [name, objects, ready]);
+
+  const setRowRef = (key: string) => (el: HTMLDivElement | null) => {
+    if (el) itemRefs.current.set(key, el);
+    else itemRefs.current.delete(key);
+  };
+  const focusRow = (key: string) => {
+    setActiveKey(key);
+    itemRefs.current.get(key)?.focus();
+  };
+  // Arrow-key navigation per the WAI-ARIA tree pattern (↑/↓ move, →/← dive/collapse,
+  // Home/End, Enter/Space activate). Type-ahead is covered by the search box above.
+  const onTreeKeyDown = (e: ReactKeyboardEvent, key: string) => {
+    const NAV = ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "];
+    if (!NAV.includes(e.key)) return;
+    e.stopPropagation(); // a focused child must not let its ancestor treeitem re-handle the key
+    const idx = rows.findIndex((r) => r.key === key);
+    if (idx < 0) return;
+    const row = rows[idx];
+    switch (e.key) {
+      case "ArrowDown": e.preventDefault(); if (idx < rows.length - 1) focusRow(rows[idx + 1].key); break;
+      case "ArrowUp":   e.preventDefault(); if (idx > 0) focusRow(rows[idx - 1].key); break;
+      case "Home":      e.preventDefault(); focusRow(rows[0].key); break;
+      case "End":       e.preventDefault(); focusRow(rows[rows.length - 1].key); break;
+      case "ArrowRight":
+        if (row.kind === "exp") {
+          e.preventDefault();
+          if (!row.expanded) setCollapsedKey(row.collapseKey, false);
+          else if (idx < rows.length - 1) focusRow(rows[idx + 1].key);
+        }
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        if (row.kind === "exp" && row.expanded) setCollapsedKey(row.collapseKey, true);
+        else if (row.parentKey) focusRow(row.parentKey);
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault(); e.stopPropagation();
+        if (row.kind === "leaf") selectObject(row.name);
+        else toggle(row.collapseKey);
+        break;
+    }
+  };
 
   const selectObject = (n: string) =>
     void bridge.request({ kind: "engine/set/reference-object", params: { name: n } });
@@ -232,23 +339,19 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
           : null;
 
   // ── tree (role="tree") renderers ──────────────────────────────────
-  // Activate on Enter/Space; stopPropagation so a child treeitem's key event
-  // doesn't bubble up and also toggle its ancestor section/bucket.
-  const onActivate = (e: ReactKeyboardEvent, fn: () => void) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); fn(); }
-  };
-
   // A selectable leaf (an object name).
   const itemRow = (n: string) => {
     const selected = n === name;
+    const rowKey = `leaf:${n}`;
     return (
       <div
         key={n}
         role="treeitem"
         aria-selected={selected}
-        tabIndex={0}
-        onClick={(e) => { e.stopPropagation(); selectObject(n); }}
-        onKeyDown={(e) => onActivate(e, () => selectObject(n))}
+        ref={setRowRef(rowKey)}
+        tabIndex={activeKey === rowKey ? 0 : -1}
+        onClick={(e) => { e.stopPropagation(); setActiveKey(rowKey); selectObject(n); }}
+        onKeyDown={(e) => onTreeKeyDown(e, rowKey)}
         className={
           "cursor-pointer truncate rounded px-2 py-0.5 text-sm outline-none transition focus-visible:ring-1 focus-visible:ring-accent " +
           (selected ? "bg-accent/20 text-text" : "text-text hover:bg-panel-2")
@@ -306,9 +409,10 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
               <div
                 role="treeitem"
                 aria-selected={name === NONE}
-                tabIndex={0}
-                onClick={() => selectObject(NONE)}
-                onKeyDown={(e) => onActivate(e, () => selectObject(NONE))}
+                ref={setRowRef("none")}
+                tabIndex={activeKey === "none" ? 0 : -1}
+                onClick={() => { setActiveKey("none"); selectObject(NONE); }}
+                onKeyDown={(e) => onTreeKeyDown(e, "none")}
                 className={
                   "cursor-pointer rounded px-2 py-0.5 text-sm outline-none transition focus-visible:ring-1 focus-visible:ring-accent " +
                   (name === NONE ? "bg-accent/20 text-text" : "text-text-2 hover:bg-panel-2")
@@ -329,9 +433,10 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                     role="treeitem"
                     aria-label={sec.label}
                     aria-expanded={openSec}
-                    tabIndex={0}
-                    onClick={(e) => { e.stopPropagation(); toggle(secKey); }}
-                    onKeyDown={(e) => onActivate(e, () => toggle(secKey))}
+                    ref={setRowRef(secKey)}
+                    tabIndex={activeKey === secKey ? 0 : -1}
+                    onClick={(e) => { e.stopPropagation(); setActiveKey(secKey); toggle(secKey); }}
+                    onKeyDown={(e) => onTreeKeyDown(e, secKey)}
                     className="flex flex-col rounded outline-none focus-visible:ring-1 focus-visible:ring-accent"
                   >
                     {labelRow(sec.label, sec.total, openSec, false)}
@@ -349,9 +454,10 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                               role="treeitem"
                               aria-label={b.label}
                               aria-expanded={openBuc}
-                              tabIndex={0}
-                              onClick={(e) => { e.stopPropagation(); toggle(bk); }}
-                              onKeyDown={(e) => onActivate(e, () => toggle(bk))}
+                              ref={setRowRef(bk)}
+                              tabIndex={activeKey === bk ? 0 : -1}
+                              onClick={(e) => { e.stopPropagation(); setActiveKey(bk); toggle(bk); }}
+                              onKeyDown={(e) => onTreeKeyDown(e, bk)}
                               className="flex flex-col rounded outline-none focus-visible:ring-1 focus-visible:ring-accent"
                             >
                               {labelRow(b.label, b.items.length, openBuc, true)}
