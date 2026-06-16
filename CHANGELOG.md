@@ -11,6 +11,11 @@ in [`VERSIONING.md`](VERSIONING.md).
 For the per-PR engineering diary (design decisions, implementation detail, and issues-and-resolutions),
 see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work, see [`ROADMAP.md`](ROADMAP.md).
 
+> **Unreleased** — heading toward `0.3.0`. Everything from here down to the
+> **v0.2.0** marker (at 2026-05-16) is merged but not yet in a tagged release.
+> The inline release markers below show where each tagged [SemVer](https://semver.org)
+> release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
+
 ## 2026-06-15
 
 ### Added
@@ -362,6 +367,9 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 - Viewport chrome edges now blend with soft, feathered alpha instead of a hard pixel seam
 
+> ### ▾ Released as v0.2.0 — [2026-05-16](https://github.com/DrKnickers/particle-editor/releases/tag/v0.2.0)
+> Everything below this line shipped in **v0.2.0** or earlier.
+
 ## 2026-05-16
 
 ### Added
@@ -418,6 +426,9 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 ### Fixed
 
 - Curve-editor RGB color tracks now tint bump-mapped particles like every other blend mode
+
+> ### ▾ Released as v0.1.0 — [2026-05-10](https://github.com/DrKnickers/particle-editor/releases/tag/v0.1.0) · first release
+> The 2026-05-10 section above is the split day: the Spawner dialog was the v0.1.0 release; the rest of that day landed later and shipped in v0.2.0. Everything below this line shipped in **v0.1.0**.
 
 ## 2026-05-09
 
