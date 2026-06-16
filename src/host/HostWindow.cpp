@@ -56,6 +56,7 @@
 
 #include "HostWindow.h"
 #include "Run.h"
+#include "CacheBust.h"   // app.local index.html cache-bust query (workaround)
 
 #include "AcceleratorBridge.h"
 #include "AlphaCompositor.h"
@@ -1472,17 +1473,55 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // so the React app loads from a stable virtual origin.
     // Dev mode (--dev-ui): skip the mapping; Vite's own
     // dev server serves everything from localhost:5174.
+    std::wstring prodNavUrl = L"https://app.local/index.html";
     if (!useDevUi)
     {
+        std::wstring distPath = ComputeEditorDistPath();
+        Log("[host] editor dist: %ls\n", distPath.c_str());
+
         ComPtr<ICoreWebView2_3> wv3;
         webView.As(&wv3);
         if (wv3)
         {
-            std::wstring distPath = ComputeEditorDistPath();
-            Log("[host] editor dist: %ls\n", distPath.c_str());
             wv3->SetVirtualHostNameToFolderMapping(
                 kVirtualHostName, distPath.c_str(),
                 COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
+        }
+
+        // Cache-bust the (unhashed) entry document so a rebuilt dist is
+        // served fresh — see CacheBust.h / for why we can't set a
+        // Cache-Control header on the mapped host. Append the build's
+        // index.html mtime as ?v=…; it changes on every rebuild and is
+        // stable across relaunches of the same build (unchanged hashed
+        // assets stay cache-warm).
+        std::error_code ec;
+        std::filesystem::path indexPath =
+            std::filesystem::path(distPath) / L"index.html";
+        auto wt = std::filesystem::last_write_time(indexPath, ec);
+        if (ec)
+        {
+            Log("[host] cache-bust: index.html mtime unavailable (%s); "
+                "navigating without ?v=\n", ec.message().c_str());
+        }
+        else
+        {
+            long long ticks =
+                static_cast<long long>(wt.time_since_epoch().count());
+            std::wstring token = host::CacheBustToken(ticks);
+            if (!token.empty())
+            {
+                prodNavUrl = host::AppendCacheBustQuery(prodNavUrl, token);
+                Log("[host] cache-bust: %ls\n", prodNavUrl.c_str());
+            }
+            else
+            {
+                // Read succeeded but the tick count was non-positive (only
+                // possible on a non-FILETIME file_clock epoch) — distinct
+                // from the read-failure case above, so log it separately
+                // instead of silently dropping the bust.
+                Log("[host] cache-bust: index.html mtime read OK but ticks "
+                    "non-positive (%lld); navigating without ?v=\n", ticks);
+            }
         }
     }
 
@@ -1593,13 +1632,13 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 return S_OK;
             }).Get(), &permissionTok);
 
-    //: The WebResourceRequested route was
-    // tried mid-spike and abandoned because
-    // SetVirtualHostNameToFolderMapping short-circuits
-    // user handlers for the mapped host. The transport
-    // now ships the JPEG bytes inline in the
-    // viewport/frame-ready postMessage payload — see
-    // FramePublisher.cpp + in tasks/lessons.md.
+    //: a WebResourceRequested handler will NOT fire for the
+    // mapped app.local host (SetVirtualHostNameToFolderMapping short-circuits
+    // user handlers), so we can neither serve engine frames from that origin
+    // (the transport ships JPEG bytes inline in the viewport/frame-ready
+    // postMessage payload — see FramePublisher.cpp) NOR inject a Cache-Control
+    // response header to keep a rebuilt bundle fresh. The cache-bust above
+    // (prodNavUrl's ?v=<mtime>) is the header-free workaround.
 
     // Navigate to the React app.
     if (useDevUi)
@@ -1609,7 +1648,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     }
     else
     {
-        webView->Navigate(L"https://app.local/index.html");
+        webView->Navigate(prodNavUrl.c_str());
     }
     Log("[host] Navigate dispatched\n");
     return S_OK;
