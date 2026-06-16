@@ -41,7 +41,7 @@ export function ReferenceObjectDropdown({ bridge }: Props) {
           occlusionId="popover:reference-object"
           align="end"
           sideOffset={6}
-          className="bg-panel border border-border-2 rounded-token shadow-[var(--shadow)] p-3 min-w-[280px] z-50"
+          className="bg-panel border border-border-2 rounded-token shadow-[var(--shadow)] p-3 min-w-[280px] max-w-md z-50"
         >
           <ReferenceObjectPickerBody bridge={bridge} />
         </OccludingPopover>

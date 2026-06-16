@@ -16,6 +16,17 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 > The inline release markers below show where each tagged [SemVer](https://semver.org)
 > release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
 
+## 2026-06-16
+
+### Changed
+
+- Object picker now remembers your faction filter, expanded/collapsed groups, and scroll position when you reopen it
+- Object picker's faction chips now scroll within a bounded row instead of overflowing the popup when a mod has many factions
+
+### Fixed
+
+- Switching mods or submods is snappier — the editor no longer re-scans the skydome list multiple times per switch
+
 ## 2026-06-15
 
 ### Added

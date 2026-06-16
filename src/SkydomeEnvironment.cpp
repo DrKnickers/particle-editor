@@ -163,6 +163,41 @@ namespace
         }
         return true;
     }
+
+    // Harvest the <entryTag> entries of one parsed list `root` into `out`, deduped
+    // by Name against `seen` (first-seen wins; a model-less entry un-claims its Name
+    // so a later-listed file can still supply a real one). Shared by LoadSkydomeList
+    // (single axis) and LoadAllSkydomeLists (one-pass, all axes).
+    void harvestSkydomeEntries(const XMLNode* root, const AxisConfig& cfg,
+                               std::set<std::string>& seen, std::vector<SkydomeRef>& out)
+    {
+        for (unsigned i = 0; i < root->getNumChildren(); ++i)
+        {
+            const XMLNode* e = root->getChild(i);
+            if (e->getName() != cfg.entryTag) continue;   // tolerate comments / non-dome elements
+
+            std::string name = WideToAnsi(e->getAttribute(L"Name"));
+            if (name.empty()) continue;                   // unnamed entry can't be referenced -> skip
+            if (!seen.insert(name).second) continue;      // already supplied by an earlier file -> skip
+
+            std::wstring model = childData(e, cfg.modelTag);
+            if (model.empty()) model = childData(e, cfg.altModelTag);
+            // No renderable model -> not a usable dome. Un-claim the Name (erase) so a
+            // later-listed file can still supply a real one (a real model in an earlier
+            // file already wins via the dedup `continue` above).
+            if (model.empty()) { seen.erase(name); continue; }
+
+            SkydomeRef ref;
+            ref.name      = name;
+            ref.modelPath = WideToAnsi(model);
+            const float scale   = wtofSafe(childData(e, L"Scale_Factor"));
+            ref.scaleFactor     = (scale > 0.0f) ? scale : 1.0f;  // absent / junk / <=0 -> 1.0 (avoid invisible dome)
+            ref.sortOrderAdjust = wtoiSafe(childData(e, L"Sort_Order_Adjust"));
+            ref.layerZAdjust    = wtofSafe(childData(e, L"Layer_Z_Adjust"));
+            ref.inBackground    = isYes(childData(e, L"In_Background"));
+            out.push_back(ref);
+        }
+    }
 }
 
 bool LoadSkydomeList(IFileManager& fm, SkydomeAxis axis, std::vector<SkydomeRef>& out)
@@ -196,36 +231,7 @@ bool LoadSkydomeList(IFileManager& fm, SkydomeAxis axis, std::vector<SkydomeRef>
         const XMLNode* root = xml.getRoot();
         if (root == nullptr) continue;
         anyRead = true;
-
-        for (unsigned i = 0; i < root->getNumChildren(); ++i)
-        {
-            const XMLNode* e = root->getChild(i);
-            if (e->getName() != cfg.entryTag) continue;   // tolerate comments / non-dome elements
-
-            std::string name = WideToAnsi(e->getAttribute(L"Name"));
-            if (name.empty()) continue;                   // unnamed entry can't be referenced -> skip
-            if (!seen.insert(name).second) continue;      // already supplied by an earlier file -> skip
-
-            std::wstring model = childData(e, cfg.modelTag);
-            if (model.empty()) model = childData(e, cfg.altModelTag);
-            // No renderable model -> not a usable dome. Un-claim the Name (erase) so a
-            // later-listed file can still supply a real one. This intentionally lets a
-            // lower-precedence file's renderable dome surface past a higher-precedence
-            // model-less placeholder -- an unrenderable entry shouldn't shadow a real
-            // one in the picker. (A real model in an earlier file already wins via the
-            // dedup `continue` above.)
-            if (model.empty()) { seen.erase(name); continue; }
-
-            SkydomeRef ref;
-            ref.name      = name;
-            ref.modelPath = WideToAnsi(model);
-            const float scale   = wtofSafe(childData(e, L"Scale_Factor"));
-            ref.scaleFactor     = (scale > 0.0f) ? scale : 1.0f;  // absent / junk / <=0 -> 1.0 (avoid invisible dome)
-            ref.sortOrderAdjust = wtoiSafe(childData(e, L"Sort_Order_Adjust"));
-            ref.layerZAdjust    = wtofSafe(childData(e, L"Layer_Z_Adjust"));
-            ref.inBackground    = isYes(childData(e, L"In_Background"));
-            out.push_back(ref);
-        }
+        harvestSkydomeEntries(root, cfg, seen, out);
     }
     // GameObjectFiles readable -> success even if no dome matched (a valid empty
     // picker); otherwise success iff the canonical fallback file was read.
@@ -275,4 +281,106 @@ bool LoadMapEnvironment(IFileManager& fm, SkydomeContext ctx,
         else ok = false;
     }
     return ok;
+}
+
+void LoadAllSkydomeLists(IFileManager& fm, std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& out)
+{
+    for (auto& v : out) v.clear();
+
+    const AxisConfig cfg[kNumSkydomeAxes] = {
+        configFor(SkydomeAxis::LandPrimary),  configFor(SkydomeAxis::LandSecondary),
+        configFor(SkydomeAxis::SpacePrimary), configFor(SkydomeAxis::SpaceSecondary),
+    };
+    std::set<std::string> seen[kNumSkydomeAxes];   // per-axis Name dedup
+
+    // Gather the candidate <File> paths from GameObjectFiles.xml in ONE parse.
+    std::vector<std::string> files;
+    bool gofPresent = false;
+    {
+        IFile* gof = fm.getFile("Data\\XML\\GameObjectFiles.xml");
+        if (gof != nullptr)
+        {
+            XMLTree xml;
+            bool parsed = false;
+            try { xml.parse(gof); parsed = true; } catch (...) {}
+            gof->Release();
+            const XMLNode* root = parsed ? xml.getRoot() : nullptr;
+            if (root != nullptr)   // readable + has a root -> drive enumeration from it
+            {
+                gofPresent = true;
+                for (unsigned i = 0; i < root->getNumChildren(); ++i)
+                {
+                    const XMLNode* c = root->getChild(i);
+                    if (c->getName() != L"File") continue;
+                    const std::string rel = trim(WideToAnsi(c->getData()));
+                    if (!rel.empty()) files.push_back(std::string("Data\\XML\\") + rel);
+                }
+            }
+        }
+    }
+
+    if (!gofPresent)
+    {
+        // No (readable) GameObjectFiles.xml -> each axis falls back to its canonical
+        // filename (mirrors LoadSkydomeList's fallback), harvested directly per axis.
+        for (int a = 0; a < kNumSkydomeAxes; ++a)
+        {
+            IFile* f = fm.getFile(std::string("Data\\XML\\") + cfg[a].file);
+            if (f == nullptr) continue;
+            XMLTree xml; bool parsed = false;
+            try { xml.parse(f); parsed = true; } catch (...) {}
+            f->Release();
+            const XMLNode* root = parsed ? xml.getRoot() : nullptr;
+            if (root != nullptr) harvestSkydomeEntries(root, cfg[a], seen[a], out[a]);
+        }
+        return;
+    }
+
+    // GOF present: route each listed file to the axis whose rootTag it matches,
+    // sniffing the root cheaply first so the dozens of large unit/prop XMLs the GOF
+    // also references are never fully parsed -- only the handful of skydome files are.
+    for (const std::string& path : files)
+    {
+        int axisIdx = -1;
+        const std::string sniffed = sniffRootElementName(fm, path);
+        if (!sniffed.empty())
+        {
+            for (int a = 0; a < kNumSkydomeAxes; ++a)
+                if (sniffed == cfg[a].rootTag) { axisIdx = a; break; }
+            if (axisIdx < 0) continue;   // a definite non-skydome root -> skip, no full parse
+        }
+        // Open + parse once (needed to harvest; also resolves an inconclusive sniff).
+        IFile* f = fm.getFile(path);
+        if (f == nullptr) continue;
+        XMLTree xml; bool parsed = false;
+        try { xml.parse(f); parsed = true; } catch (...) {}
+        f->Release();
+        const XMLNode* root = parsed ? xml.getRoot() : nullptr;
+        if (root == nullptr) continue;
+        if (axisIdx < 0)   // sniff was inconclusive (UTF-16 / long header) -> classify from the parse
+        {
+            const std::string rn = WideToAnsi(root->getName());
+            for (int a = 0; a < kNumSkydomeAxes; ++a)
+                if (rn == cfg[a].rootTag) { axisIdx = a; break; }
+            if (axisIdx < 0) continue;
+        }
+        harvestSkydomeEntries(root, cfg[axisIdx], seen[axisIdx], out[axisIdx]);
+    }
+}
+
+void ResolveMapEnvironment(const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& lists,
+                           SkydomeContext ctx,
+                           const std::string& primaryName, const std::string& secondaryName,
+                           MapEnvironment& out)
+{
+    out = MapEnvironment();
+    const int primAxis = (ctx == SkydomeContext::Land) ? (int)SkydomeAxis::LandPrimary   : (int)SkydomeAxis::SpacePrimary;
+    const int secAxis  = (ctx == SkydomeContext::Land) ? (int)SkydomeAxis::LandSecondary : (int)SkydomeAxis::SpaceSecondary;
+
+    if (!primaryName.empty())
+        for (const SkydomeRef& r : lists[primAxis])
+            if (r.name == primaryName) { out.primary = r; out.hasPrimary = true; break; }
+    if (!secondaryName.empty())
+        for (const SkydomeRef& r : lists[secAxis])
+            if (r.name == secondaryName) { out.secondary = r; out.hasSecondary = true; break; }
 }

@@ -11,6 +11,7 @@
 #include "managers.h"
 #include "files.h"
 
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -338,6 +339,61 @@ int main(int argc, char** argv)
         CHECK(fok, "malformed GameObjectFiles.xml -> ok via canonical fallback");
         CHECK(find(flist, "Star_Backdrop_Blue") != nullptr,
               "malformed GameObjectFiles.xml -> canonical domes still listed (no silent empty)");
+    }
+
+    // ---- LoadAllSkydomeLists: one GOF pass == per-axis LoadSkydomeList ----
+    std::printf("[load-all one-pass]\n");
+    {
+        MockFM all_fm;
+        all_fm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<?xml version=\"1.0\" ?>\n<Game_Object_Files>\n"
+            "  <File>GroundUnits.xml</File>\n"                       // non-skydome -> ignored
+            "  <File>SpacePrimarySkydomes.xml</File>\n"
+            "  <File>Props\\Skydomes_Space_Secondary.xml</File>\n"   // Mod renamed secondary
+            "  <File>LandPrimarySkydomes.xml</File>\n"
+            "</Game_Object_Files>\n";
+        all_fm.files["Data\\XML\\GroundUnits.xml"]                     = kGroundUnits;
+        all_fm.files["Data\\XML\\SpacePrimarySkydomes.xml"]            = kSpacePrimary;
+        all_fm.files["Data\\XML\\Props\\Skydomes_Space_Secondary.xml"] = kModSecondary;
+        all_fm.files["Data\\XML\\LandPrimarySkydomes.xml"]             = kLandPrimary;
+
+        std::array<std::vector<SkydomeRef>, kNumSkydomeAxes> all;
+        LoadAllSkydomeLists(all_fm, all);
+
+        // Per-axis equivalence with LoadSkydomeList (same FM).
+        const SkydomeAxis axes[4] = { SkydomeAxis::LandPrimary, SkydomeAxis::LandSecondary,
+                                      SkydomeAxis::SpacePrimary, SkydomeAxis::SpaceSecondary };
+        bool allEqual = true;
+        for (int a = 0; a < kNumSkydomeAxes; ++a) {
+            std::vector<SkydomeRef> per;
+            LoadSkydomeList(all_fm, axes[a], per);
+            if (per.size() != all[a].size()) { allEqual = false; break; }
+            for (size_t i = 0; i < per.size(); ++i)
+                if (per[i].name != all[a][i].name || per[i].modelPath != all[a][i].modelPath) { allEqual = false; break; }
+        }
+        CHECK(allEqual, "LoadAllSkydomeLists matches LoadSkydomeList for every axis");
+        CHECK(find(all[(int)SkydomeAxis::SpaceSecondary], "Mod_Nebula") != nullptr, "all: Mod renamed secondary -> SpaceSecondary bucket");
+        CHECK(find(all[(int)SkydomeAxis::SpacePrimary], "Stars_Low") != nullptr, "all: SpacePrimary bucketed");
+        CHECK(find(all[(int)SkydomeAxis::LandPrimary], "Day_Blue_Sky") != nullptr, "all: LandPrimary bucketed");
+        CHECK(find(all[(int)SkydomeAxis::SpacePrimary], "X_Wing") == nullptr, "all: non-skydome (GroundUnits) not bucketed anywhere");
+
+        // No GameObjectFiles.xml -> canonical fallback for every axis.
+        MockFM fb_fm;
+        fb_fm.files["Data\\XML\\SpaceSecondarySkydomes.xml"] = kSpaceSecondary;
+        fb_fm.files["Data\\XML\\LandPrimarySkydomes.xml"]    = kLandPrimary;
+        std::array<std::vector<SkydomeRef>, kNumSkydomeAxes> allf;
+        LoadAllSkydomeLists(fb_fm, allf);
+        CHECK(find(allf[(int)SkydomeAxis::SpaceSecondary], "Star_Backdrop_Blue") != nullptr, "all fallback: SpaceSecondary via canonical");
+        CHECK(find(allf[(int)SkydomeAxis::LandPrimary], "Day_Blue_Sky") != nullptr, "all fallback: LandPrimary via canonical");
+
+        // ResolveMapEnvironment from pre-loaded lists (no file I/O).
+        MapEnvironment env;
+        ResolveMapEnvironment(all, SkydomeContext::Space, "Stars_Low", "Mod_Nebula", env);
+        CHECK(env.hasPrimary && env.primary.name == "Stars_Low", "resolve-from-lists: primary resolved");
+        CHECK(env.hasSecondary && env.secondary.modelPath == "Mod_nebula.alo", "resolve-from-lists: renamed secondary resolved");
+        MapEnvironment env2;
+        ResolveMapEnvironment(all, SkydomeContext::Space, "Stars_Low", "DoesNotExist", env2);
+        CHECK(env2.hasPrimary && !env2.hasSecondary, "resolve-from-lists: missing secondary unset");
     }
 
     std::printf("\n=== SkydomeEnvironment: %s ===\n", g_failed == 0 ? "ALL PASS" : "FAILURES");

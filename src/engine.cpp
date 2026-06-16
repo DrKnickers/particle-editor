@@ -3548,8 +3548,8 @@ bool Engine::PickReferenceObject(short screenX, short screenY) const
 void Engine::RebuildSkydomeMeshes()
 {
     MapEnvironment env;
-    LoadMapEnvironment(m_fileManager, m_skydomeContext,
-                       m_skydomePrimaryName, m_skydomeSecondaryName, env);
+    ResolveMapEnvironment(EnsureSkydomeLists(), m_skydomeContext,
+                          m_skydomePrimaryName, m_skydomeSecondaryName, env);
 
     SkydomeMesh* meshes[2]    = { &m_skydomePrimaryMesh, &m_skydomeSecondaryMesh };
     const SkydomeRef* refs[2]  = { &env.primary, &env.secondary };
@@ -3617,22 +3617,42 @@ void Engine::SetSkydomeEnvironment(SkydomeContext context,
 }
 
 // Enumerate the primary + secondary dome Names for a battle context from
-// the game/mod's *Skydomes.xml (device-free; safe before the device exists).
+// the game/mod's skydome lists (device-free; safe before the device exists). Reads
+// the EnsureSkydomeLists() cache so a picker-open right after a mod switch costs no
+// extra GameObjectFiles scan.
 void Engine::EnumerateSkydomeNames(SkydomeContext context,
                                    std::vector<std::string>& outPrimary,
-                                   std::vector<std::string>& outSecondary) const
+                                   std::vector<std::string>& outSecondary)
 {
     outPrimary.clear();
     outSecondary.clear();
-    const SkydomeAxis primAxis = (context == SkydomeContext::Land) ? SkydomeAxis::LandPrimary   : SkydomeAxis::SpacePrimary;
-    const SkydomeAxis secAxis  = (context == SkydomeContext::Land) ? SkydomeAxis::LandSecondary : SkydomeAxis::SpaceSecondary;
+    const int primAxis = (context == SkydomeContext::Land) ? (int)SkydomeAxis::LandPrimary   : (int)SkydomeAxis::SpacePrimary;
+    const int secAxis  = (context == SkydomeContext::Land) ? (int)SkydomeAxis::LandSecondary : (int)SkydomeAxis::SpaceSecondary;
 
-    std::vector<SkydomeRef> refs;
-    if (LoadSkydomeList(m_fileManager, primAxis, refs))
-        for (const SkydomeRef& r : refs) outPrimary.push_back(r.name);
-    refs.clear();
-    if (LoadSkydomeList(m_fileManager, secAxis, refs))
-        for (const SkydomeRef& r : refs) outSecondary.push_back(r.name);
+    const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& lists = EnsureSkydomeLists();
+    for (const SkydomeRef& r : lists[primAxis]) outPrimary.push_back(r.name);
+    for (const SkydomeRef& r : lists[secAxis])  outSecondary.push_back(r.name);
+}
+
+// [#NN] Build (one LoadAllSkydomeLists pass) and cache the four axis skydome lists,
+// rebuilding only when the FileManager's mod/submod context has changed since the
+// cache was last built. This collapses #224's ~4 GameObjectFiles scans per mod switch
+// (RebuildSkydomeMeshes' two axes + the picker query's two) into a single pass.
+// Context is re-checked every call, so it's correct regardless of which consumer runs
+// first after a switch (RebuildSkydomeMeshes runs before ReloadTextures' catalog
+// invalidation, so a flag set there alone would be one switch stale).
+const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& Engine::EnsureSkydomeLists()
+{
+    const std::wstring& mod = m_fileManager.GetModPath();
+    const std::vector<std::wstring>& subs = m_fileManager.GetSubmods();
+    if (!m_skydomeListsValid || mod != m_skydomeListsCtxMod || subs != m_skydomeListsCtxSubmods)
+    {
+        LoadAllSkydomeLists(m_fileManager, m_skydomeLists);
+        m_skydomeListsCtxMod     = mod;
+        m_skydomeListsCtxSubmods = subs;
+        m_skydomeListsValid      = true;
+    }
+    return m_skydomeLists;
 }
 
 // [PERF] Composition mode (/ DComp); see the header for the render-path

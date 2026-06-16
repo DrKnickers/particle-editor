@@ -2013,6 +2013,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (kind == "engine/action/reload-shaders")
     {
         if (!requireEngine(kind.c_str())) return res;
+        m_engine->InvalidateSkydomeListCache();   // explicit disk re-read -> refresh skydome XML too
         m_engine->ReloadShaders();
         sendOk(json::object());
         // No dirty: reload-shaders re-reads disk; user state is unchanged.
@@ -2022,6 +2023,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (kind == "engine/action/reload-textures")
     {
         if (!requireEngine(kind.c_str())) return res;
+        m_engine->InvalidateSkydomeListCache();   // explicit disk re-read -> refresh skydome XML too
         m_engine->ReloadTextures();
         sendOk(json::object());
         // No dirty: reload-textures re-reads disk; user state is unchanged.

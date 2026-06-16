@@ -534,9 +534,15 @@ public:
 	SkydomeSlotStatus  GetSkydomePrimaryStatus()   const { return m_skydomePrimaryStatus; }
 	SkydomeSlotStatus  GetSkydomeSecondaryStatus() const { return m_skydomeSecondaryStatus; }
 	// Enumerate selectable dome Names for a battle context (primary + secondary).
+	// Non-const: reads the lazily-built EnsureSkydomeLists() cache.
 	void EnumerateSkydomeNames(SkydomeContext context,
 	                           std::vector<std::string>& outPrimary,
-	                           std::vector<std::string>& outSecondary) const;
+	                           std::vector<std::string>& outSecondary);
+	// Drop the cached skydome lists so the next access re-reads the skydome XML from
+	// disk. The cache otherwise rebuilds only on a mod/submod switch; the explicit
+	// reload-shaders/reload-textures actions call this so a modder who edited a
+	// *Skydomes.xml (or GameObjectFiles.xml) sees the change without a mod switch.
+	void InvalidateSkydomeListCache() { m_skydomeListsValid = false; }
 	const std::wstring& GetSkydomeCustomPath(int slot) const;
 	bool SetSkydomeCustomPath(int slot, const std::wstring& path);
 	bool IsSkydomeSlotEmpty(int slot) const;
@@ -743,6 +749,13 @@ private:
 	void				RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world);
 	void				RenderSkydomes();
 
+	// [#NN] Return the cached per-axis skydome lists, rebuilding them (one
+	// GameObjectFiles pass via LoadAllSkydomeLists) only when the FileManager's
+	// mod/submod context has changed since the cache was last built. Order-
+	// independent: re-checks context on every call, so it is safe whether the first
+	// post-switch caller is RebuildSkydomeMeshes or EnumerateSkydomeNames.
+	const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& EnsureSkydomeLists();
+
 	// Resolve m_referenceObjectName -> catalog model path -> lazy skinned
 	// probe -> Load/Resolve/CreateBuffers (clone of RebuildSkydomeMeshes). Sets
 	// m_referenceObjectStatus. If the catalog isn't built yet (startup restore
@@ -933,6 +946,16 @@ private:
 	// RebuildSkydomeMeshes alongside the mesh state it gates the render on.
 	SkydomeSlotStatus        m_skydomePrimaryStatus   = SkydomeSlotStatus::None;
 	SkydomeSlotStatus        m_skydomeSecondaryStatus = SkydomeSlotStatus::None;
+	// [#NN] Cached per-axis skydome lists (LoadAllSkydomeLists), rebuilt only when the
+	// mod/submod context changes. Without this, #224's GameObjectFiles locator re-parsed
+	// GameObjectFiles.xml + re-sniffed every referenced file ~4x per mod switch (the two
+	// RebuildSkydomeMeshes axes + the two picker-query axes), on the UI thread -> mod-switch
+	// lag. Built lazily + context-checked by EnsureSkydomeLists(); both EnumerateSkydomeNames
+	// and RebuildSkydomeMeshes read it.
+	std::array<std::vector<SkydomeRef>, kNumSkydomeAxes> m_skydomeLists;
+	bool                      m_skydomeListsValid = false;
+	std::wstring              m_skydomeListsCtxMod;       // mod/submod context the cache reflects
+	std::vector<std::wstring> m_skydomeListsCtxSubmods;
 
 	// Imported reference object (a game-object .alo placed in the preview
 	// for scale). Rigid multi-part: each sub-mesh placed by its skeleton bone.

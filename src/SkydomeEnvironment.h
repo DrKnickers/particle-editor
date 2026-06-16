@@ -13,6 +13,7 @@
 // The XML carries only a Name + a model path + scale / sort hints; textures and
 // cloud-scroll params live inside the `.alo` material (decoded by AloModel).
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -44,17 +45,40 @@ struct MapEnvironment
     bool hasSecondary = false;
 };
 
-// Enumerate every skydome GameObject for `axis` from "Data\\XML\\<file>.xml"
-// (resolved mod -> base -> MEG via `fm`). Clears `out` first. Returns false if
-// the list file can't be read or parsed (out left empty); true otherwise (out
-// may still be empty -- which drives the picker's empty state). Never throws.
+// Number of skydome axes (index space for the `LoadAllSkydomeLists` arrays).
+constexpr int kNumSkydomeAxes = 4;   // == enum SkydomeAxis size
+
+// Enumerate every skydome GameObject for `axis`, deduped by Name. Clears `out`
+// first. Returns false if no list file could be read (out left empty); true
+// otherwise (out may still be empty -- which drives the picker's empty state).
+// Never throws.
 //
-// This resolves the canonical vanilla filenames, which resolve from the base
-// game's config.meg even under a mod, so the picker is populated out of the
-// box. Mods that register skydome XML under non-canonical names/paths via
-// GameObjectFiles.xml are a follow-up (a GameObjectFiles-driven locator); their
-// custom domes won't appear until then, but the vanilla domes do.
+// [#224] Discovers the list files via `Data\\XML\\GameObjectFiles.xml`
+// (mod-resolved), classifying each referenced file by its ROOT element -- so a
+// mod's domes registered under non-canonical names/paths (e.g. Mod's
+// `Props\\Skydomes_Space_Secondary.xml`) are found, not just the canonical
+// vanilla filenames. Falls back to the canonical filename when there is no
+// GameObjectFiles.xml.
 bool LoadSkydomeList(IFileManager& fm, SkydomeAxis axis, std::vector<SkydomeRef>& out);
+
+// [#NN] Build ALL FOUR axis lists in a single GameObjectFiles pass -- parse
+// GameObjectFiles.xml once, sniff each referenced file's root once, and bucket
+// its entries into the matching axis (`out[(int)axis]`). Equivalent per-axis
+// output to calling `LoadSkydomeList` four times, but ~4x cheaper (no repeated
+// GOF parse + per-axis re-sniff of every file). Falls back to the four canonical
+// filenames when there is no GameObjectFiles.xml. The Engine caches the result
+// and rebuilds it only on a mod/submod switch. Never throws.
+void LoadAllSkydomeLists(IFileManager& fm,
+                         std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& out);
+
+// Resolve a primary+secondary pair (by Name, first match wins) for `ctx` from
+// PRE-LOADED axis lists (e.g. the Engine's cached `LoadAllSkydomeLists` output) --
+// no file I/O. An empty name leaves that slot unset. The file-reading sibling is
+// `LoadMapEnvironment`.
+void ResolveMapEnvironment(const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& lists,
+                           SkydomeContext ctx,
+                           const std::string& primaryName, const std::string& secondaryName,
+                           MapEnvironment& out);
 
 // Slurp a dome's model bytes from "Data\\Art\\Models\\<modelPath>" via `fm`.
 // Returns false on empty modelPath, a miss, or an empty file. Separated from
