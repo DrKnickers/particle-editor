@@ -15,6 +15,7 @@
 #include "utils.h"     // follow-up: WideToAnsi for custom-slot path bridging
 #include "host/AlphaCompositor.h"
 #include "GizmoSizing.h"   ///pure screen-uniform gizmo-handle formula
+#include "PlaneHandle.h"   // pure ground-plane handle math (RayPlaneOffset, HandleHit, etc.)
 using namespace std;
 
 static const char* ShaderNames[Engine::NUM_SHADERS] = {
@@ -2970,6 +2971,69 @@ static void DrawWorldLines(IDirect3DDevice9* dev, IDirect3DVertexDeclaration9* d
     dev->SetRenderState(D3DRS_CULLMODE,         oldCull);
 }
 
+// Sibling of DrawWorldLines for the ground-plane handle's translucent
+// fill: identical device-state bracketing, but ALPHA-BLEND ON (vertex-alpha *
+// SRCALPHA/INVSRCALPHA) and a TRIANGLELIST. depthTest=false => always-on-top like
+// the rest of the gizmo. triCount = number of triangles (verts = 3*triCount).
+static void DrawWorldTris(IDirect3DDevice9* dev, IDirect3DVertexDeclaration9* decl,
+                          const EmitterInstance::Vertex* verts, int triCount,
+                          bool depthTest = false)
+{
+    if (dev == NULL || decl == NULL || verts == NULL || triCount <= 0) return;
+
+    DWORD oldZEnable, oldZWrite, oldAlphaBlend, oldLighting, oldCull, oldSrc, oldDst;
+    DWORD oldColorOp, oldColorArg1, oldAlphaOp, oldAlphaArg1;
+    dev->GetRenderState(D3DRS_ZENABLE,          &oldZEnable);
+    dev->GetRenderState(D3DRS_ZWRITEENABLE,     &oldZWrite);
+    dev->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
+    dev->GetRenderState(D3DRS_SRCBLEND,         &oldSrc);
+    dev->GetRenderState(D3DRS_DESTBLEND,        &oldDst);
+    dev->GetRenderState(D3DRS_LIGHTING,         &oldLighting);
+    dev->GetRenderState(D3DRS_CULLMODE,         &oldCull);
+    dev->GetTextureStageState(0, D3DTSS_COLOROP,   &oldColorOp);
+    dev->GetTextureStageState(0, D3DTSS_COLORARG1, &oldColorArg1);
+    dev->GetTextureStageState(0, D3DTSS_ALPHAOP,   &oldAlphaOp);
+    dev->GetTextureStageState(0, D3DTSS_ALPHAARG1, &oldAlphaArg1);
+    IDirect3DBaseTexture9* oldTex0 = NULL;
+    dev->GetTexture(0, &oldTex0);
+    IDirect3DVertexDeclaration9* oldDecl = NULL;
+    dev->GetVertexDeclaration(&oldDecl);
+
+    D3DXMATRIX ident; D3DXMatrixIdentity(&ident);
+    dev->SetTransform(D3DTS_WORLD, &ident);
+    dev->SetVertexDeclaration(decl);
+    dev->SetTexture(0, NULL);
+    dev->SetRenderState(D3DRS_LIGHTING,         FALSE);
+    dev->SetRenderState(D3DRS_ZENABLE,          depthTest ? D3DZB_TRUE : D3DZB_FALSE);
+    dev->SetRenderState(D3DRS_ZWRITEENABLE,     FALSE);
+    dev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    dev->SetRenderState(D3DRS_SRCBLEND,         D3DBLEND_SRCALPHA);
+    dev->SetRenderState(D3DRS_DESTBLEND,        D3DBLEND_INVSRCALPHA);
+    dev->SetRenderState(D3DRS_CULLMODE,         D3DCULL_NONE);
+    dev->SetTextureStageState(0, D3DTSS_COLOROP,   D3DTOP_SELECTARG1);
+    dev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG1);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+
+    dev->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triCount, verts, sizeof(EmitterInstance::Vertex));
+
+    dev->SetVertexDeclaration(oldDecl);
+    if (oldDecl) oldDecl->Release();
+    dev->SetTexture(0, oldTex0);
+    if (oldTex0) oldTex0->Release();
+    dev->SetTextureStageState(0, D3DTSS_COLOROP,   oldColorOp);
+    dev->SetTextureStageState(0, D3DTSS_COLORARG1, oldColorArg1);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAOP,   oldAlphaOp);
+    dev->SetTextureStageState(0, D3DTSS_ALPHAARG1, oldAlphaArg1);
+    dev->SetRenderState(D3DRS_ZENABLE,          oldZEnable);
+    dev->SetRenderState(D3DRS_ZWRITEENABLE,     oldZWrite);
+    dev->SetRenderState(D3DRS_ALPHABLENDENABLE, oldAlphaBlend);
+    dev->SetRenderState(D3DRS_SRCBLEND,         oldSrc);
+    dev->SetRenderState(D3DRS_DESTBLEND,        oldDst);
+    dev->SetRenderState(D3DRS_LIGHTING,         oldLighting);
+    dev->SetRenderState(D3DRS_CULLMODE,         oldCull);
+}
+
 // Unit grid: axis-aligned world lines on the ground plane (the engine's
 // first D3DPT_LINELIST primitive). Spacing = m_gridSpacing over a fixed extent,
 // with a brighter major line every 5 cells from centre. Co-planar with the
@@ -3048,6 +3112,8 @@ namespace
     constexpr float kHoverGrow       = 1.3f;    // hovered arrow grows (visual + pick)
     constexpr float kRingRadiusScale = 1.15f;   // ring radius   = baseLen * this
     constexpr float kRingPickBand    = 0.14f;   // ring pick band = ringRadius * this
+    constexpr float kPlaneInner = 0.30f;   // ground-plane square near edge (* baseLen, per in-plane axis)
+    constexpr float kPlaneOuter = 0.58f;   //          far edge -> side 0.28*baseLen, in the +X/+Y quadrant
 
     D3DXVECTOR3 unitAxis(int axis)
     {
@@ -3159,6 +3225,27 @@ Engine::ManipHandle Engine::PickManipulatorHandle(short screenX, short screenY) 
         const float score = fabsf(rho - R) / band;
         if (score < bestScore) { bestScore = score; hit.kind = ManipHandle::ROTATE; hit.axis = i; }
     }
+
+    // --- ground-plane (XY) handle: STRICT FALLBACK. Considered only when no arrow or
+    // ring was picked above (hit.kind still NONE). The square sits in the +X/+Y
+    // diagonal, spatially clear of the on-axis arrows and the 1.15*baseLen rings, so a
+    // genuine square click never puts an axis candidate within threshold -- which is
+    // exactly why "axes always win, the plane catches the rest" can neither steal an
+    // axis click nor be stolen from. No score contest: inside the square == picked.
+    // (A score-based contest mis-fires because the pick ray pierces the INFINITE
+    // ground plane: an oblique click on an arrow tip / ring arc can land inside the
+    // square footprint and a centred hit would win wrongly. Fallback avoids that.)
+    if (hit.kind == ManipHandle::NONE)
+    {
+        float pu, pv, pscore;
+        // hit-test against the CURRENT object position (A) -- no drag in progress here.
+        if (ManipulatorPlaneOffset(screenX, screenY, /*normalAxis=*/2, A, pu, pv) &&
+            planehandle::HandleHit(pu, pv, baseLen * kPlaneInner, baseLen * kPlaneOuter, pscore))
+        {
+            hit.kind = ManipHandle::PLANE; hit.axis = 2;   // pscore unused for selection (sole candidate)
+        }
+    }
+
     return hit;
 }
 
@@ -3204,6 +3291,20 @@ bool Engine::ManipulatorRingAngle(short screenX, short screenY, int axis,
     const D3DXVECTOR3 b = unitAxis((axis + 2) % 3);
     outAngleRad = atan2f(D3DXVec3Dot(&g, &b), D3DXVec3Dot(&g, &a));
     return true;
+}
+
+// See header. BuildCursorRay (engine-space ray) then the pure
+// planehandle::RayPlaneOffset against the EXPLICIT `anchor` (NOT m_referencePosition --
+// a drag must anchor to the fixed grab position, else the moving origin flickers).
+// D3DXVECTOR3 is {float x,y,z} so &v.x is a float[3].
+bool Engine::ManipulatorPlaneOffset(short screenX, short screenY, int normalAxis,
+                                    const D3DXVECTOR3& anchor, float& outU, float& outV) const
+{
+    if (normalAxis < 0 || normalAxis > 2) return false;
+    D3DXVECTOR3 P, d;
+    BuildCursorRay(screenX, screenY, P, d);
+    return planehandle::RayPlaneOffset(&P.x, &d.x, &anchor.x,
+                                       normalAxis, outU, outV);
 }
 
 // Draw the combined manipulator (X=red/Y=green/Z=blue), ALWAYS-ON-TOP
@@ -3288,16 +3389,54 @@ void Engine::RenderReferenceManipulator()
         }
     }
 
-    // Active-drag guides. Translate: a long axis line through the origin. The extent (700) is
-    // a readability choice -- long enough to read as an axis, not absurdly long; comparable to the
-    // grid's +/-800. (The projection's _33=-1/_43=-2n override puts the far plane at infinity, so the
-    // line never far-clips at any length.) Rotate: two radials at the grab + applied angle in the
-    // ring's (a,b) basis, marking the swept arc.
+    // Ground-plane (XY) handle: filled translucent quad (alpha-blended,
+    // its own draw call) + a line border (appended to v, drawn in the final pass).
+    // Sits in the +X/+Y quadrant, [kPlaneInner,kPlaneOuter]*baseLen on each axis.
+    {
+        const int planeN = 2;   // normal = world Z (ground); only this plane ships now
+        const bool hot      = (m_hoverManip.kind  == ManipHandle::PLANE && m_hoverManip.axis  == planeN);
+        const bool isActive = (m_activeManip.kind == ManipHandle::PLANE && m_activeManip.axis == planeN);
+        const float inL = baseLen * kPlaneInner, outL = baseLen * kPlaneOuter;
+        float qc[4][3];
+        planehandle::QuadCorners(&o.x, planeN, inL, outL, qc);   // the unit-tested placement math
+        const D3DXVECTOR3 c00(qc[0][0], qc[0][1], qc[0][2]);     // (in,in)
+        const D3DXVECTOR3 c10(qc[1][0], qc[1][1], qc[1][2]);     // (out,in)
+        const D3DXVECTOR3 c11(qc[2][0], qc[2][1], qc[2][2]);     // (out,out)
+        const D3DXVECTOR3 c01(qc[3][0], qc[3][1], qc[3][2]);     // (in,out)
+        const BYTE fillA = hot ? 115 : 64;                              // ~0.45 / ~0.25
+        D3DCOLOR fill   = D3DCOLOR_RGBA(220, 210, 74, fillA);           // neutral warm yellow
+        D3DCOLOR border = hot ? D3DCOLOR_RGBA(255, 245, 140, 255)
+                              : D3DCOLOR_RGBA(220, 210,  74, 255);
+        if (dragging && !isActive) { fill = dim(fill); border = dim(border); }
+        // Fill: 2 triangles in their own buffer, alpha-blended, always-on-top.
+        EmitterInstance::Vertex q[6];
+        const D3DXVECTOR3 tri[6] = { c00, c10, c11,  c00, c11, c01 };
+        for (int i = 0; i < 6; ++i) { q[i] = EmitterInstance::Vertex{}; q[i].Position = tri[i]; q[i].Color = fill; }
+        DrawWorldTris(m_pDevice, m_pDeclaration, q, 2, /*depthTest=*/false);
+        // Border: 4 segments into the existing line buffer (drawn on top of the fill).
+        line(c00, c10, border); line(c10, c11, border); line(c11, c01, border); line(c01, c00, border);
+    }
+
+    ///Active-drag guides. faint() dims the RGB (lines draw alpha-blend
+    // OFF, so alpha is a no-op -- scale the colour, as dim() does). TRANSLATE: one
+    // faint axis line. PLANE: both in-plane (X,Y) axis lines, faint. ROTATE sweep
+    // unchanged (full colour).
+    constexpr float kGuideExtent = 700.0f;   // readability, not a clip bound (infinite far plane)
+    auto faint = [](D3DCOLOR c, float k) -> D3DCOLOR {
+        const BYTE A=(c>>24)&0xFF, R=(BYTE)(((c>>16)&0xFF)*k), G=(BYTE)(((c>>8)&0xFF)*k), B=(BYTE)((c&0xFF)*k);
+        return D3DCOLOR_RGBA(R,G,B,A);
+    };
     if (dragging && m_activeManip.kind == ManipHandle::TRANSLATE) {
-        const int ax = m_activeManip.axis;
-        const D3DXVECTOR3 dir = unitAxis(ax);
-        constexpr float kGuideExtent = 700.0f;
-        line(o - dir * kGuideExtent, o + dir * kGuideExtent, axisCol[ax]);
+        const D3DXVECTOR3 dir = unitAxis(m_activeManip.axis);
+        line(o - dir * kGuideExtent, o + dir * kGuideExtent, faint(axisCol[m_activeManip.axis], 0.55f));
+    }
+    else if (dragging && m_activeManip.kind == ManipHandle::PLANE) {
+        const int n = m_activeManip.axis;                       // normal axis (2 = ground)
+        for (int k = 1; k <= 2; ++k) {                          // the two in-plane axes
+            const int ax = (n + k) % 3;
+            const D3DXVECTOR3 dir = unitAxis(ax);
+            line(o - dir * kGuideExtent, o + dir * kGuideExtent, faint(axisCol[ax], 0.55f));
+        }
     }
     else if (dragging && m_activeManip.kind == ManipHandle::ROTATE) {
         const int ax = m_activeManip.axis;

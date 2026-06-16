@@ -601,7 +601,7 @@ public:
 	// identified by a (kind, axis) pair; axis 0=X/1=Y/2=Z.
 	struct ManipHandle
 	{
-		enum Kind { NONE, TRANSLATE, ROTATE };
+		enum Kind { NONE, TRANSLATE, ROTATE, PLANE };   // PLANE: ground-plane (XY) drag; axis = NORMAL axis
 		Kind kind = NONE;
 		int  axis = -1;
 	};
@@ -622,6 +622,14 @@ public:
 	                          const D3DXVECTOR3& anchor, float& outParam) const;
 	bool ManipulatorRingAngle(short screenX, short screenY, int axis,
 	                          float& outAngleRad) const;
+	// In-plane offset (u,v) of the cursor ray's intersection with the plane
+	// through `anchor` whose normal is world axis `normalAxis`, in that plane's
+	// (normalAxis+1, normalAxis+2) basis. False on grazing / behind-camera. Like
+	// ManipulatorAxisParam, the anchor is EXPLICIT: pick passes the current object
+	// position, but a drag MUST pass the FIXED grab position (m_manipStartPos) -- using
+	// the live, moving object origin feeds its own motion back in and flickers.
+	bool ManipulatorPlaneOffset(short screenX, short screenY, int normalAxis,
+	                            const D3DXVECTOR3& anchor, float& outU, float& outV) const;
 	void BuildCursorRay(short screenX, short screenY,
 	                    D3DXVECTOR3& outOrigin, D3DXVECTOR3& outDir) const;
 	// polish] The gizmo only shows + is grabbable when the object is

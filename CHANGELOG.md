@@ -15,12 +15,14 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Added
 
+- Ground-plane handle on the reference-object gizmo — drag the object across the floor (X/Y) at a fixed height; respects grid snap and Shift-precision, and is undoable
 - Undo and Redo buttons in the toolbar
 - Reference-object moves, gizmo drags, Reset, and position spinners are now undoable on the same Ctrl+Z timeline as particle edits
 - Reference units now mount their hardpoint weapons and turrets, and hide damaged-state and collision geometry
 
 ### Changed
 
+- Gizmo drag guide lines are now dimmed during a translate or plane drag, for less visual noise
 - About dialog now shows the editor's own version (0.3.0) instead of the upstream 1.5, which is kept as a fork credit line
 - Gizmo gains screen-uniform handles, Shift-for-precision drags, grid/angle snapping, and in-drag guide lines
 - Core is now a selectable, orderable submod layer instead of being silently auto-loaded

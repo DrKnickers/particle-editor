@@ -70,6 +70,7 @@
 #include "LayoutBroker.h"
 
 #include "../engine.h"
+#include "../PlaneHandle.h"
 #include "../managers.h"
 #include "../ModManager.h"
 #include "../MouseCursor.h"
@@ -543,6 +544,10 @@ struct HostWindowImpl
     float           m_manipGrabT0      = 0.0f;
     float           m_manipPrevT       = 0.0f;   // translate accumulate-per-move: last raw axis param
     float           m_manipAccumT      = 0.0f;   // accumulated (precision-scaled) translate offset from grab
+    float           m_manipPrevU       = 0.0f;   // plane drag: last raw in-plane U
+    float           m_manipPrevV       = 0.0f;   //                     last raw in-plane V
+    float           m_manipAccumU      = 0.0f;   //   accumulated (precision-scaled) U offset from grab
+    float           m_manipAccumV      = 0.0f;   //   accumulated V offset from grab
     float           m_manipGrabAngle   = 0.0f;   // ring angle at grab (rad)
     float           m_manipPrevAngle   = 0.0f;   // previous-move ring angle (rad)
     float           m_manipAccumAngle  = 0.0f;   // accumulated rotation (rad)
@@ -564,6 +569,8 @@ struct HostWindowImpl
         m_manipKind = Engine::ManipHandle::NONE;
         m_manipAccumT = 0.0f;
         m_manipAccumAngle = 0.0f;
+        m_manipAccumU = 0.0f;
+        m_manipAccumV = 0.0f;
         m_manipUndoCaptured = false;   // s52] next grab starts a fresh gesture
         if (engine) engine->SetManipulatorActiveDrag(Engine::ManipHandle(), 0.0f, 0.0f);
     }
@@ -2945,6 +2952,17 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     m_manipPrevT  = m_manipGrabT0;   // seed accumulate-per-move (first move delta = 0 -> no jump)
                     m_manipAccumT = 0.0f;
                 }
+                else if (h.kind == Engine::ManipHandle::PLANE)
+                {
+                    // Seed prev from the in-plane offset at press so the first move
+                    // delta is 0 (no jump); accumulators start at 0. Anchor to the FIXED
+                    // grab position (m_manipStartPos) for the whole drag -- see below.
+                    if (!engine->ManipulatorPlaneOffset((short)LOWORD(lp), (short)HIWORD(lp),
+                                                        h.axis, m_manipStartPos, m_manipPrevU, m_manipPrevV))
+                    { m_manipPrevU = 0.0f; m_manipPrevV = 0.0f; }
+                    m_manipAccumU = 0.0f;
+                    m_manipAccumV = 0.0f;
+                }
                 else   // ROTATE
                 {
                     // Grab angle on the ring; the accumulator starts at 0 so the
@@ -3149,6 +3167,49 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         m_manipUndoCaptured = true;
                     }
                     engine->SetReferenceObjectTransform(newPos, m_manipStartRot);
+                    moved = true;
+                }
+            }
+            else if (m_manipKind == Engine::ManipHandle::PLANE)
+            {
+                float uNow, vNow;
+                // Anchor to the FIXED grab position (m_manipStartPos), NOT the live object
+                // origin -- decomposing against the moving object fed its own motion back
+                // into the delta and oscillated the position (mirrors the arrow's
+                // ManipulatorAxisParam, which also anchors to m_manipStartPos).
+                if (engine->ManipulatorPlaneOffset((short)mx, (short)my, m_manipAxis, m_manipStartPos, uNow, vNow))
+                {
+                    m_manipAccumU += (uNow - m_manipPrevU) * factor;   // precision-scaled per-move
+                    m_manipAccumV += (vNow - m_manipPrevV) * factor;
+                    m_manipPrevU = uNow;  m_manipPrevV = vNow;
+                    // Compose via the unit-tested pure helper (basis = (normal+1,normal+2);
+                    // ground normal 2 -> (X,Y); Z stays == start, structurally).
+                    float np[3];
+                    planehandle::ComposePlanePos(&m_manipStartPos.x, m_manipAxis,
+                                                 m_manipAccumU, m_manipAccumV, np);
+                    D3DXVECTOR3 newPos(np[0], np[1], np[2]);
+                    if (engine->GetSnapEnabled())
+                    {
+                        // NOTE: snapping .x/.y is correct ONLY for the ground (normal-Z)
+                        // plane, whose free axes ARE X and Y. A future YZ/ZX plane would
+                        // need to snap ITS in-plane components -- revisit snap when adding
+                        // those (see the design spec §4, "Out": YZ/ZX deferred).
+                        const float step = engine->GetGridSpacing() * factor;
+                        if (step > 0.0f) { newPos.x = roundf(newPos.x / step) * step;
+                                           newPos.y = roundf(newPos.y / step) * step; }
+                    }
+                    if (!m_manipUndoCaptured && newPos != m_manipStartPos) {
+                        if (dispatcher) dispatcher->CaptureReferenceTransformUndoPoint();
+                        m_manipUndoCaptured = true;
+#ifndef NDEBUG
+                        Log("[Plane] grab-capture axis=%d accumUV=(%.3f,%.3f) newPos=(%.3f,%.3f,%.3f)\n",
+                            m_manipAxis, m_manipAccumU, m_manipAccumV, newPos.x, newPos.y, newPos.z);
+#endif
+                    }
+                    engine->SetReferenceObjectTransform(newPos, m_manipStartRot);
+                    // active-drag (which drives the dim + faint X/Y guides) was set once at
+                    // grab and never changes for a plane drag -- no per-move re-set needed
+                    // (matches the TRANSLATE branch; only ROTATE re-sets, to feed live angles).
                     moved = true;
                 }
             }
