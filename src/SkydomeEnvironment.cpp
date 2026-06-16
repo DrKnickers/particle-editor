@@ -6,13 +6,17 @@
 #include "utils.h"        // WideToAnsi
 
 #include <cwctype>        // towlower
+#include <cstring>        // memchr (root-element sniff)
 #include <string>
+#include <set>            // dedup of dome Names across listed files
+#include <vector>
 
 namespace
 {
     struct AxisConfig
     {
-        const char*    file;        // canonical Data\XML filename
+        const char*    file;        // canonical Data\XML filename (fallback)
+        const char*    rootTag;     // container element name (GameObjectFiles match, ASCII)
         const wchar_t* entryTag;    // per-entry element name
         const wchar_t* modelTag;    // preferred model-path element
         const wchar_t* altModelTag; // fallback model-path element (other context)
@@ -22,12 +26,12 @@ namespace
     {
         switch (axis)
         {
-            case SkydomeAxis::LandPrimary:    return { "LandPrimarySkydomes.xml",    L"LandPrimarySkydome",    L"Land_Model_Name",  L"Space_Model_Name" };
-            case SkydomeAxis::LandSecondary:  return { "LandSecondarySkydomes.xml",  L"LandSecondarySkydome",  L"Land_Model_Name",  L"Space_Model_Name" };
-            case SkydomeAxis::SpacePrimary:   return { "SpacePrimarySkydomes.xml",   L"SpacePrimarySkydome",   L"Space_Model_Name", L"Land_Model_Name" };
-            case SkydomeAxis::SpaceSecondary: return { "SpaceSecondarySkydomes.xml", L"SpaceSecondarySkydome", L"Space_Model_Name", L"Land_Model_Name" };
+            case SkydomeAxis::LandPrimary:    return { "LandPrimarySkydomes.xml",    "LandPrimarySkydomes",    L"LandPrimarySkydome",    L"Land_Model_Name",  L"Space_Model_Name" };
+            case SkydomeAxis::LandSecondary:  return { "LandSecondarySkydomes.xml",  "LandSecondarySkydomes",  L"LandSecondarySkydome",  L"Land_Model_Name",  L"Space_Model_Name" };
+            case SkydomeAxis::SpacePrimary:   return { "SpacePrimarySkydomes.xml",   "SpacePrimarySkydomes",   L"SpacePrimarySkydome",   L"Space_Model_Name", L"Land_Model_Name" };
+            case SkydomeAxis::SpaceSecondary: return { "SpaceSecondarySkydomes.xml", "SpaceSecondarySkydomes", L"SpaceSecondarySkydome", L"Space_Model_Name", L"Land_Model_Name" };
         }
-        return { "", L"", L"", L"" };
+        return { "", "", L"", L"", L"" };
     }
 
     // First child element named `tag`, or empty. (XMLNode has no by-name lookup.)
@@ -54,6 +58,111 @@ namespace
         for (wchar_t& ch : s) ch = (wchar_t)towlower(ch);
         return s == L"yes" || s == L"true" || s == L"1";
     }
+
+    // Trim ASCII whitespace from both ends (GameObjectFiles <File> text).
+    std::string trim(const std::string& s)
+    {
+        size_t a = 0, b = s.size();
+        while (a < b && (unsigned char)s[a]     <= ' ') ++a;
+        while (b > a && (unsigned char)s[b - 1] <= ' ') --b;
+        return s.substr(a, b - a);
+    }
+
+    // Cheaply read just the ROOT element name from a list file (bounded prefix
+    // read, no XML parse) so the GameObjectFiles locator can skip the dozens of
+    // large unit/prop XMLs it references without fully parsing them. Tolerates a
+    // leading <?xml?> decl and <!-- comment -->/<!DOCTYPE>. Returns "" on miss.
+    std::string sniffRootElementName(IFileManager& fm, const std::string& path)
+    {
+        IFile* f = fm.getFile(path);
+        if (f == nullptr) return std::string();
+        char buf[1024];
+        unsigned long n = 0;
+        // PhysicalFile::read throws ReadException on a real I/O error; one bad file
+        // referenced by GameObjectFiles.xml must not leak `f` or abort the whole
+        // picker enumeration -- swallow + release, the caller's full-parse fallback
+        // (and the empty-root result) handle it.
+        try { n = f->read(buf, (unsigned long)sizeof(buf)); }
+        catch (...) { f->Release(); return std::string(); }
+        f->Release();
+        const char* p   = buf;
+        const char* end = buf + (n < sizeof(buf) ? n : sizeof(buf));
+        while (p < end)
+        {
+            if (*p != '<') { ++p; continue; }
+            if (p + 1 < end && (p[1] == '?' || p[1] == '!'))   // <?xml?> / <!-- --> / <!DOCTYPE>
+            {
+                const char* gt = static_cast<const char*>(memchr(p, '>', end - p));
+                if (gt == nullptr) break;
+                p = gt + 1;
+                continue;
+            }
+            ++p;                                                // first real element: read its name
+            const char* nameStart = p;
+            while (p < end && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n'
+                   && *p != '>' && *p != '/')
+                ++p;
+            return std::string(nameStart, p);
+        }
+        return std::string();
+    }
+
+    // Robustness fallback for sniffRootElementName: a full XML parse + root-name
+    // check, used only when the cheap sniff can't determine a root (a UTF-16 list
+    // file, or a leading comment longer than the sniff window). Rare path -- the
+    // sniff resolves the vast majority. Returns true iff the root element is `rootTag`.
+    bool fullParseRootMatches(IFileManager& fm, const std::string& path, const char* rootTag)
+    {
+        IFile* f = fm.getFile(path);
+        if (f == nullptr) return false;
+        XMLTree xml;
+        try { xml.parse(f); }
+        catch (...) { f->Release(); return false; }
+        const XMLNode* r = xml.getRoot();
+        const bool ok = (r != nullptr && WideToAnsi(r->getName()) == rootTag);
+        f->Release();
+        return ok;
+    }
+
+    // Discover the Data\XML-relative list files for `rootTag` via GameObjectFiles.xml
+    // (mod-resolved). Each <File> whose target's ROOT element is `rootTag` is kept,
+    // in GameObjectFiles order (= mod precedence; getFile already replaced the file by
+    // mod->base precedence). Returns false if GameObjectFiles.xml can't be read OR is
+    // structurally broken (no root) -- both mean "couldn't read the registry", so the
+    // caller falls back to the canonical filename rather than show an empty picker.
+    // Returns true with a possibly-empty list when the GOF is readable but registers
+    // no dome for this axis.
+    bool gatherSkydomeFiles(IFileManager& fm, const char* rootTag, std::vector<std::string>& outFiles)
+    {
+        outFiles.clear();
+        IFile* gof = fm.getFile("Data\\XML\\GameObjectFiles.xml");
+        if (gof == nullptr) return false;
+        XMLTree xml;
+        try { xml.parse(gof); }
+        catch (...) { gof->Release(); return false; }
+        gof->Release();
+
+        const XMLNode* root = xml.getRoot();
+        if (root == nullptr) return false;   // broken GOF -> treat as unreadable, fall back
+
+        for (unsigned i = 0; i < root->getNumChildren(); ++i)
+        {
+            const XMLNode* c = root->getChild(i);
+            if (c->getName() != L"File") continue;
+            const std::string rel = trim(WideToAnsi(c->getData()));
+            if (rel.empty()) continue;
+            const std::string full = std::string("Data\\XML\\") + rel;
+            // Fast path: sniff the root from the first bytes. Only when the sniff is
+            // inconclusive (empty) do we pay a full parse -- a sniff that returns a
+            // non-matching root is a definitive skip (no full parse needed).
+            const std::string sniffed = sniffRootElementName(fm, full);
+            const bool match = sniffed.empty() ? fullParseRootMatches(fm, full, rootTag)
+                                               : (sniffed == rootTag);
+            if (match)
+                outFiles.push_back(full);
+        }
+        return true;
+    }
 }
 
 bool LoadSkydomeList(IFileManager& fm, SkydomeAxis axis, std::vector<SkydomeRef>& out)
@@ -62,40 +171,65 @@ bool LoadSkydomeList(IFileManager& fm, SkydomeAxis axis, std::vector<SkydomeRef>
     const AxisConfig cfg = configFor(axis);
     if (cfg.file[0] == '\0') return false;
 
-    IFile* f = fm.getFile(std::string("Data\\XML\\") + cfg.file);
-    if (f == nullptr) return false;
+    // Discover the list file(s) via GameObjectFiles.xml (mod-resolved) so a mod's
+    // domes are found regardless of the file's name/path -- e.g. Mod registers
+    // Data\XML\Props\Skydomes_Space_Secondary.xml. Fall back to the canonical
+    // vanilla filename when there is no GameObjectFiles.xml (bare install / unit
+    // test / odd mod), which preserves the original out-of-the-box behavior.
+    std::vector<std::string> files;
+    const bool gofPresent = gatherSkydomeFiles(fm, cfg.rootTag, files);
+    if (!gofPresent)
+        files.push_back(std::string("Data\\XML\\") + cfg.file);
 
-    XMLTree xml;
-    try { xml.parse(f); }
-    catch (...) { f->Release(); return false; }
-    f->Release();
-
-    const XMLNode* root = xml.getRoot();
-    if (root == nullptr) return false;
-
-    for (unsigned i = 0; i < root->getNumChildren(); ++i)
+    std::set<std::string> seen;   // first listed file wins on a duplicate Name
+    bool anyRead = false;
+    for (const std::string& path : files)
     {
-        const XMLNode* e = root->getChild(i);
-        if (e->getName() != cfg.entryTag) continue;   // tolerate comments / other elements
+        IFile* f = fm.getFile(path);
+        if (f == nullptr) continue;
+        XMLTree xml;
+        bool parsed = false;
+        try { xml.parse(f); parsed = true; }
+        catch (...) { parsed = false; }
+        f->Release();
+        if (!parsed) continue;
+        const XMLNode* root = xml.getRoot();
+        if (root == nullptr) continue;
+        anyRead = true;
 
-        std::string name = WideToAnsi(e->getAttribute(L"Name"));
-        if (name.empty()) continue;                   // unnamed entry can't be referenced -> skip
+        for (unsigned i = 0; i < root->getNumChildren(); ++i)
+        {
+            const XMLNode* e = root->getChild(i);
+            if (e->getName() != cfg.entryTag) continue;   // tolerate comments / non-dome elements
 
-        std::wstring model = childData(e, cfg.modelTag);
-        if (model.empty()) model = childData(e, cfg.altModelTag);
-        if (model.empty()) continue;                  // no renderable model -> skip
+            std::string name = WideToAnsi(e->getAttribute(L"Name"));
+            if (name.empty()) continue;                   // unnamed entry can't be referenced -> skip
+            if (!seen.insert(name).second) continue;      // already supplied by an earlier file -> skip
 
-        SkydomeRef ref;
-        ref.name      = name;
-        ref.modelPath = WideToAnsi(model);
-        const float scale   = wtofSafe(childData(e, L"Scale_Factor"));
-        ref.scaleFactor     = (scale > 0.0f) ? scale : 1.0f;  // absent / junk / <=0 -> 1.0 (avoid invisible dome)
-        ref.sortOrderAdjust = wtoiSafe(childData(e, L"Sort_Order_Adjust"));
-        ref.layerZAdjust    = wtofSafe(childData(e, L"Layer_Z_Adjust"));
-        ref.inBackground    = isYes(childData(e, L"In_Background"));
-        out.push_back(ref);
+            std::wstring model = childData(e, cfg.modelTag);
+            if (model.empty()) model = childData(e, cfg.altModelTag);
+            // No renderable model -> not a usable dome. Un-claim the Name (erase) so a
+            // later-listed file can still supply a real one. This intentionally lets a
+            // lower-precedence file's renderable dome surface past a higher-precedence
+            // model-less placeholder -- an unrenderable entry shouldn't shadow a real
+            // one in the picker. (A real model in an earlier file already wins via the
+            // dedup `continue` above.)
+            if (model.empty()) { seen.erase(name); continue; }
+
+            SkydomeRef ref;
+            ref.name      = name;
+            ref.modelPath = WideToAnsi(model);
+            const float scale   = wtofSafe(childData(e, L"Scale_Factor"));
+            ref.scaleFactor     = (scale > 0.0f) ? scale : 1.0f;  // absent / junk / <=0 -> 1.0 (avoid invisible dome)
+            ref.sortOrderAdjust = wtoiSafe(childData(e, L"Sort_Order_Adjust"));
+            ref.layerZAdjust    = wtofSafe(childData(e, L"Layer_Z_Adjust"));
+            ref.inBackground    = isYes(childData(e, L"In_Background"));
+            out.push_back(ref);
+        }
     }
-    return true;
+    // GameObjectFiles readable -> success even if no dome matched (a valid empty
+    // picker); otherwise success iff the canonical fallback file was read.
+    return gofPresent ? true : anyRead;
 }
 
 bool ResolveSkydomeModel(IFileManager& fm, const SkydomeRef& ref, std::vector<unsigned char>& outBytes)

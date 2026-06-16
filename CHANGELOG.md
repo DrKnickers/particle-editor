@@ -41,6 +41,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Fixed
 
+- Mod skydomes now appear in the background picker — domes a mod registers under non-standard filenames (e.g. Mod) are listed and selectable, not just the base-game ones
 - Object picker no longer leaks planet and skydome backdrops (e.g. low-orbit planet models) into the unit list
 - Lighting panel changes now persist to the registry and survive reopen and restart
 

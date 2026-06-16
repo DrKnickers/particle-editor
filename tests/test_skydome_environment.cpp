@@ -88,6 +88,45 @@ static const char* kLandPrimary =
     "  </LandPrimarySkydome>\n"
     "</LandPrimarySkydomes>\n";
 
+// --- GameObjectFiles-driven locator fixtures (mod domes under non-canonical
+//     filenames; Mod registers e.g. Props\Skydomes_Space_Secondary.xml) -------
+static const char* kGameObjectFiles =
+    "<?xml version=\"1.0\" ?>\n"
+    "<Game_Object_Files>\n"
+    "  <File>GroundUnits.xml</File>\n"                       // non-skydome -> ignored
+    "  <File>Props\\Skydomes_Space_Secondary.xml</File>\n"   // Mod renamed/relocated
+    "  <File>Extra_Space_Secondary.xml</File>\n"             // second listed file (dedup)
+    "</Game_Object_Files>\n";
+
+static const char* kGroundUnits =
+    "<?xml version=\"1.0\" ?>\n"
+    "<Units>\n"
+    "  <SpaceUnit Name=\"X_Wing\"><Space_Model_Name>xwing.alo</Space_Model_Name></SpaceUnit>\n"
+    "</Units>\n";
+
+static const char* kModSecondary =
+    "<?xml version=\"1.0\" ?>\n"
+    "<SpaceSecondarySkydomes>\n"
+    "  <SpaceSecondarySkydome Name=\"Mod_Nebula\">\n"
+    "    <Space_Model_Name>Mod_nebula.alo</Space_Model_Name>\n"
+    "    <Scale_Factor>25.0</Scale_Factor>\n"
+    "  </SpaceSecondarySkydome>\n"
+    "  <SpaceSecondarySkydome Name=\"Dup_Dome\">\n"
+    "    <Space_Model_Name>dup_first.alo</Space_Model_Name>\n"
+    "  </SpaceSecondarySkydome>\n"
+    "</SpaceSecondarySkydomes>\n";
+
+static const char* kExtraSecondary =
+    "<?xml version=\"1.0\" ?>\n"
+    "<SpaceSecondarySkydomes>\n"
+    "  <SpaceSecondarySkydome Name=\"Dup_Dome\">\n"             // duplicate Name -> first wins
+    "    <Space_Model_Name>dup_second.alo</Space_Model_Name>\n"
+    "  </SpaceSecondarySkydome>\n"
+    "  <SpaceSecondarySkydome Name=\"Extra_Nebula\">\n"
+    "    <Space_Model_Name>extra_nebula.alo</Space_Model_Name>\n"
+    "  </SpaceSecondarySkydome>\n"
+    "</SpaceSecondarySkydomes>\n";
+
 static const SkydomeRef* find(const std::vector<SkydomeRef>& v, const std::string& name)
 {
     for (const auto& r : v) if (r.name == name) return &r;
@@ -219,6 +258,86 @@ int main(int argc, char** argv)
         bool ok3 = LoadMapEnvironment(fm, SkydomeContext::Space, "Stars_Low", "", env3);
         CHECK(ok3, "empty secondary: load returns ok");
         CHECK(env3.hasPrimary && !env3.hasSecondary, "empty secondary name -> primary only");
+    }
+
+    // ---- GameObjectFiles-driven locator (mod domes under non-canonical names) ----
+    std::printf("[gameobjectfiles locator]\n");
+    {
+        MockFM mod;
+        mod.files["Data\\XML\\GameObjectFiles.xml"]                 = kGameObjectFiles;
+        mod.files["Data\\XML\\GroundUnits.xml"]                     = kGroundUnits;
+        mod.files["Data\\XML\\Props\\Skydomes_Space_Secondary.xml"] = kModSecondary;
+        mod.files["Data\\XML\\Extra_Space_Secondary.xml"]           = kExtraSecondary;
+        // No canonical Data\XML\SpaceSecondarySkydomes.xml -> proves the locator
+        // does NOT depend on the hardcoded filename, only on the root element.
+
+        std::vector<SkydomeRef> list;
+        bool ok = LoadSkydomeList(mod, SkydomeAxis::SpaceSecondary, list);
+        CHECK(ok, "GOF: SpaceSecondary load ok");
+        CHECK(find(list, "Mod_Nebula") != nullptr,
+              "GOF: renamed/relocated mod dome found (Props\\Skydomes_Space_Secondary.xml)");
+        CHECK(find(list, "Extra_Nebula") != nullptr, "GOF: second listed skydome file harvested");
+        CHECK(find(list, "X_Wing") == nullptr, "GOF: non-skydome file (root <Units>) ignored");
+        const SkydomeRef* dup = find(list, "Dup_Dome");
+        CHECK(dup != nullptr, "GOF: Dup_Dome present");
+        CHECK(dup != nullptr && dup->modelPath == "dup_first.alo",
+              "GOF: duplicate Name across files -> first listed file wins");
+        int dupCount = 0; for (const auto& r : list) if (r.name == "Dup_Dome") ++dupCount;
+        CHECK(dupCount == 1, "GOF: duplicate Name deduped to a single entry");
+    }
+
+    // ---- fallback: no GameObjectFiles.xml -> canonical filename (today's behavior) ----
+    std::printf("[locator fallback]\n");
+    {
+        MockFM fb;
+        fb.files["Data\\XML\\SpaceSecondarySkydomes.xml"] = kSpaceSecondary;  // no GameObjectFiles.xml
+        std::vector<SkydomeRef> list;
+        bool ok = LoadSkydomeList(fb, SkydomeAxis::SpaceSecondary, list);
+        CHECK(ok, "fallback: load ok via canonical filename when no GameObjectFiles.xml");
+        CHECK(find(list, "Star_Backdrop_Blue") != nullptr,
+              "fallback: canonical dome found when no GameObjectFiles.xml");
+    }
+
+    // ---- robustness: sniff-miss falls back to a full parse (root past 1KB) ----
+    std::printf("[locator robustness]\n");
+    {
+        // Root element sits past the 1KB sniff window (huge leading comment), so the
+        // cheap sniff can't see it -> must fall back to a full parse, not drop the file.
+        std::string deep =
+            "<?xml version=\"1.0\" ?>\n<!-- " + std::string(1500, 'x') + " -->\n"
+            "<SpaceSecondarySkydomes>\n"
+            "  <SpaceSecondarySkydome Name=\"Deep_Root_Nebula\">\n"
+            "    <Space_Model_Name>deep.alo</Space_Model_Name>\n"
+            "  </SpaceSecondarySkydome>\n"
+            "</SpaceSecondarySkydomes>\n";
+        MockFM big;
+        big.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<?xml version=\"1.0\" ?>\n<Game_Object_Files>\n  <File>Deep.xml</File>\n</Game_Object_Files>\n";
+        big.files["Data\\XML\\Deep.xml"] = deep;
+        std::vector<SkydomeRef> list;
+        LoadSkydomeList(big, SkydomeAxis::SpaceSecondary, list);
+        CHECK(find(list, "Deep_Root_Nebula") != nullptr,
+              "sniff-miss (root past 1KB comment) -> full-parse fallback still finds the dome");
+
+        // UTF-8 BOM before the <?xml?> decl: sniff skips the BOM bytes; dome found.
+        MockFM bom;
+        bom.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<?xml version=\"1.0\" ?>\n<Game_Object_Files>\n  <File>Bom.xml</File>\n</Game_Object_Files>\n";
+        bom.files["Data\\XML\\Bom.xml"] = std::string("\xEF\xBB\xBF") + kSpaceSecondary;
+        std::vector<SkydomeRef> blist;
+        LoadSkydomeList(bom, SkydomeAxis::SpaceSecondary, blist);
+        CHECK(find(blist, "Star_Backdrop_Blue") != nullptr, "UTF-8 BOM before <?xml?> -> dome still found");
+
+        // GameObjectFiles.xml present but malformed -> fall back to canonical (no
+        // silent empty picker that hides the vanilla domes that DO exist).
+        MockFM badGof;
+        badGof.files["Data\\XML\\GameObjectFiles.xml"]      = "not even xml <<<";
+        badGof.files["Data\\XML\\SpaceSecondarySkydomes.xml"] = kSpaceSecondary;
+        std::vector<SkydomeRef> flist;
+        bool fok = LoadSkydomeList(badGof, SkydomeAxis::SpaceSecondary, flist);
+        CHECK(fok, "malformed GameObjectFiles.xml -> ok via canonical fallback");
+        CHECK(find(flist, "Star_Backdrop_Blue") != nullptr,
+              "malformed GameObjectFiles.xml -> canonical domes still listed (no silent empty)");
     }
 
     std::printf("\n=== SkydomeEnvironment: %s ===\n", g_failed == 0 ? "ALL PASS" : "FAILURES");
