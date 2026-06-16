@@ -238,6 +238,8 @@ public:
     // WebView2 message channel isn't saturated.
     void EmitCursorPosition3D(float x, float y, float z);
 
+    void EmitManipulatorDrag(const nlohmann::json& payload);   // readout pill
+
 private:
     // Builds the response envelope for one parsed `req` envelope. Single
     // source of truth for the kind-string ladder — both the async

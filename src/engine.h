@@ -175,6 +175,10 @@ public:
 	void OnParticleSystemChanged(int track);
 
 	const D3DXMATRIX& GetProjectionMatrix()   const { return m_projection; }
+	// Combined view*projection (recomputed wherever view or projection
+	// changes — SetCamera, SetSceneViewport). Used to project the gizmo origin to
+	// the React overlay for the in-drag readout pill.
+	const D3DXMATRIX& GetViewProjection()     const { return m_viewProjection; }
 	const D3DXMATRIX& GetViewMatrix()         const { return m_view; }
 	const D3DXMATRIX& GetViewRotationMatrix() const { return m_viewRotation; }
 	const D3DXMATRIX& GetBillboardMatrix()    const { return m_billboard; }

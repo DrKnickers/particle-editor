@@ -1269,6 +1269,15 @@ export type Event =
   // ground plane in world coords. Host throttles to ~30 Hz so the
   // status bar update doesn't saturate the bridge.
   | { kind: "cursor/position-3d";     payload: { x: number; y: number; z: number } }
+  // In-drag readout: host emits at ~30 Hz while a reference-object
+  // gizmo is being dragged. `nx`/`ny` are NORMALIZED [0,1] viewport coords
+  // (origin top-left) for the projected gizmo origin; the React pill floats
+  // up-right of it and hides on active:false / visible:false. MockBridge
+  // never emits this (no engine in browser-mode).
+  | { kind: "engine/manipulator/drag"; payload:
+      | { active: false }
+      | { active: true; kind: "translate" | "plane" | "rotate"; nx: number; ny: number;
+          visible: boolean; labels: string[]; values: number[]; decimals: number } }
   // Phase 1: engine frame delivered as base64-encoded JPEG
   // for in-DOM <canvas> compositing. Host emits one per composited
   // frame when ALO_VIEWPORT_TRANSPORT=canvas-jpeg; MockBridge never

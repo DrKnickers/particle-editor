@@ -18,6 +18,10 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ## 2026-06-16
 
+### Added
+
+- A live readout appears next to the gizmo while you drag a reference object, showing its position (units) or rotation (degrees)
+
 ### Changed
 
 - Object picker now remembers your faction filter, expanded/collapsed groups, and scroll position when you reopen it

@@ -5623,6 +5623,13 @@ void BridgeDispatcher::EmitCursorPosition3D(float x, float y, float z)
     m_emit(env.dump());
 }
 
+void BridgeDispatcher::EmitManipulatorDrag(const json& payload)
+{
+    if (!m_emit) return;
+    json env = { {"type", "evt"}, {"kind", "engine/manipulator/drag"}, {"payload", payload} };
+    m_emit(env.dump());
+}
+
 void BridgeDispatcher::EmitEmittersTreeChanged()
 {
     if (!m_emit) return;

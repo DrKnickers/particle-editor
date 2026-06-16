@@ -10,6 +10,7 @@ import {
 import { computeSceneRect } from "../lib/scene-rect";
 import { isLegacyMode } from "../lib/hosting-mode";
 import { useDockAnim } from "../lib/dock-anim";
+import { ManipulatorReadout } from "./ManipulatorReadout";
 
 type Props = { bridge: Bridge };
 
@@ -386,6 +387,12 @@ export function ViewportSlot({ bridge }: Props) {
            to the height of its content. */
         <span className="select-none pointer-events-none">D3D9 viewport</span>
       )}
+      {/* In-drag readout pill. Floats up-right of the projected
+          gizmo origin while a reference-object gizmo is being dragged.
+          `pointer-events-none` (set on the pill itself) so it never steals
+          input from the canvas overlay below it. `ref` is this root div —
+          the overlay box the pill positions within. */}
+      <ManipulatorReadout bridge={bridge} overlayRef={ref} />
     </div>
   );
 }

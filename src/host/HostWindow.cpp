@@ -70,6 +70,7 @@
 #include "LayoutBroker.h"
 
 #include "../engine.h"
+#include "../ManipReadout.h"   // pure projection/label helpers for the readout pill
 #include "../PlaneHandle.h"
 #include "../managers.h"
 #include "../ModManager.h"
@@ -559,6 +560,14 @@ struct HostWindowImpl
     // heavy; the gizmo render still moves every frame via SetReferenceObjectTransform).
     DWORD           m_lastManipEmitTick = 0;
 
+    // Readout pill scratch: each MANIPULATE branch fills these post-snap;
+    // the throttle gate projects the gizmo origin and emits one event.
+    std::string m_readoutKind;                 // "translate" | "plane" | "rotate"
+    std::string m_readoutLabels[2];            // axis / euler names
+    float       m_readoutValues[2] = {0,0};    // absolute values
+    int         m_readoutN = 0;                // 1 or 2
+    int         m_readoutDecimals = 1;         // 1 for units, 0 for degrees
+
     // The invariant tail every MANIPULATE drag-end shares: drop the grabbed handle, zero the
     // accumulators, and clear the engine's active-drag (guide/sweep/dim) state. Per-site Commit /
     // ReleaseCapture / m_dragMode handling stays at the call site -- only this shared tail is factored
@@ -573,6 +582,9 @@ struct HostWindowImpl
         m_manipAccumV = 0.0f;
         m_manipUndoCaptured = false;   // s52] next grab starts a fresh gesture
         if (engine) engine->SetManipulatorActiveDrag(Engine::ManipHandle(), 0.0f, 0.0f);
+        // hide the readout pill (ResetManipDragState is called from the 4
+        // capture-drag-end sites: LBUTTONUP, RBUTTONDOWN, CAPTURECHANGED, KILLFOCUS).
+        if (dispatcher) dispatcher->EmitManipulatorDrag({ {"active", false} });
     }
 
     // shift-click-to-spawn. Mirror of legacy
@@ -3174,6 +3186,10 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         m_manipUndoCaptured = true;
                     }
                     engine->SetReferenceObjectTransform(newPos, m_manipStartRot);
+                    m_readoutKind = "translate";
+                    m_readoutLabels[0] = manipreadout::AxisName(m_manipAxis);
+                    m_readoutValues[0] = (&newPos.x)[m_manipAxis];
+                    m_readoutN = 1; m_readoutDecimals = 1;
                     moved = true;
                 }
             }
@@ -3214,6 +3230,11 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 #endif
                     }
                     engine->SetReferenceObjectTransform(newPos, m_manipStartRot);
+                    { int pu, pv; manipreadout::InPlaneAxes(m_manipAxis, pu, pv);
+                      m_readoutKind = "plane";
+                      m_readoutLabels[0] = manipreadout::AxisName(pu); m_readoutValues[0] = (&newPos.x)[pu];
+                      m_readoutLabels[1] = manipreadout::AxisName(pv); m_readoutValues[1] = (&newPos.x)[pv];
+                      m_readoutN = 2; m_readoutDecimals = 1; }
                     // active-drag (which drives the dim + faint X/Y guides) was set once at
                     // grab and never changes for a plane drag -- no per-move re-set needed
                     // (matches the TRANSLATE branch; only ROTATE re-sets, to feed live angles).
@@ -3254,6 +3275,12 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         m_manipUndoCaptured = true;
                     }
                     engine->SetReferenceObjectTransform(m_manipStartPos, newRot);
+                    m_readoutKind = "rotate";
+                    // Label = the WORLD AXIS the ring spins about (X/Y/Z); the value is the
+                    // rotation about that axis = the Euler component RingComp(axis) selects.
+                    m_readoutLabels[0] = manipreadout::AxisName(m_manipAxis);
+                    m_readoutValues[0] = (&newRot.x)[comp];
+                    m_readoutN = 1; m_readoutDecimals = 0;
                     // Push the active-drag AFTER snap so the rotate sweep's "applied" radial
                     // tracks the orientation the object ACTUALLY shows (snapped / precision-scaled),
                     // not the raw accumulator -- under snap the two would diverge by up to the snap
@@ -3275,6 +3302,25 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 if (dispatcher && (now - m_lastManipEmitTick) >= 33)
                 {
                     dispatcher->EmitEngineStateChanged();
+                    // readout pill: project the gizmo origin to normalized
+                    // viewport coords, emit the live value. Hidden when no scene
+                    // viewport yet (cold boot) or behind camera (visible:false).
+                    int vx, vy, vw, vh;
+                    manipreadout::ViewportPoint vp{0,0,false};
+                    if (engine->GetSceneViewport(vx, vy, vw, vh))
+                        vp = manipreadout::ProjectToViewport(engine->GetReferencePosition(),
+                                                             engine->GetViewProjection(), vw, vh);
+                    nlohmann::json vals = nlohmann::json::array(), labels = nlohmann::json::array();
+                    for (int i = 0; i < m_readoutN; ++i) { vals.push_back(m_readoutValues[i]); labels.push_back(m_readoutLabels[i]); }
+                    dispatcher->EmitManipulatorDrag({
+                        {"active", true}, {"kind", m_readoutKind},
+                        {"nx", vp.nx}, {"ny", vp.ny}, {"visible", vp.visible},
+                        {"labels", labels}, {"values", vals}, {"decimals", m_readoutDecimals},
+                    });
+#ifndef NDEBUG
+                    printf("[readout] kind=%s nx=%.3f ny=%.3f vis=%d v0=%.2f\n",
+                           m_readoutKind.c_str(), vp.nx, vp.ny, (int)vp.visible, m_readoutValues[0]);
+#endif
                     m_lastManipEmitTick = now;
                 }
             }
