@@ -95,14 +95,13 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
     },
     teardown: async (page) => { await dismissModals(page); },
   },
-  {
-    id: "menubar-mods-open",
-    setup: async (page) => {
-      await page.locator('button:has-text("Mods")').click();
-      await page.waitForSelector('[role="menu"]');
-    },
-    teardown: async (page) => { await dismissModals(page); },
-  },
+  // menubar-mods-open is intentionally NOT a golden surface: the Mods menu
+  // lists mods scanned asynchronously from disk, so its captured tree depends
+  // on this machine's installed mod set AND on how complete the scan was when
+  // the snapshot was taken (the menu appears before the scan settles). That
+  // makes it a non-deterministic, machine-coupled golden — the weekly drift
+  // check surfaced it as recurring false drift. The mods menu's behaviour is
+  // covered functionally by menu-bar.spec.ts instead.
   {
     id: "menubar-view-open",
     setup: async (page) => {
