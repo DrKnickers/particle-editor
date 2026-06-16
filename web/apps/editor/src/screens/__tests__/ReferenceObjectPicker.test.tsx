@@ -1,12 +1,12 @@
-// Vitest unit tests for ReferenceObjectPicker. Driven by the real
+// / Vitest unit tests for ReferenceObjectPicker. Driven by the real
 // MockBridge so the canned reference-object-list + the set handlers (including
 // the skinned-status path) are exercised end-to-end against the schema.
 //
-// Covered: object enumeration + category grouping, selection dispatch, the
+// Covered: object enumeration into the collapsible Heroes / Ground / Space tree,
+// selection dispatch (click a tree item), section + bucket collapse/expand, the
 // "skinned — not supported" + "model-missing" status notes, the visibility
 // toggle, a numeric transform commit, the "Loading objects…" building
-// state, and the search filter. (The unit-grid toggle moved to the Ground panel
-// in S48 — see GroundTexturePanel.test.tsx.)
+// state, and the search filter (which force-expands so matches stay visible).
 
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
@@ -15,20 +15,23 @@ import { MockBridge } from "@/bridge/mock";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 describe("ReferenceObjectPicker — selection + status", () => {
-  it("enumerates objects grouped by category and dispatches on select", async () => {
+  it("enumerates objects into Heroes/Ground/Space sections and dispatches on click-select", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
 
-    // The object list renders once the (mock-instant) catalog query resolves.
-    const select = await screen.findByRole("listbox", { name: "Reference object" });
+    const tree = await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => {
-      expect(screen.getByRole("option", { name: "AT_AT_Walker" })).toBeInTheDocument();
+      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
     });
-    // Category <optgroup>s render as groups.
-    expect(screen.getByRole("group", { name: "Vehicle" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Turret" })).toBeInTheDocument();
+    // Top-level sections render as disclosure headers (default expanded).
+    expect(screen.getByRole("treeitem", { name: /Ground/ })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /Space/ })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /Heroes/ })).toBeInTheDocument();
+    // A space capital and a hero land in their sections.
+    expect(within(tree).getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument();
+    expect(within(tree).getByRole("treeitem", { name: "Darth_Vader" })).toBeInTheDocument();
 
-    fireEvent.change(select, { target: { value: "AT_AT_Walker" } });
+    fireEvent.click(screen.getByRole("treeitem", { name: "AT_AT_Walker" }));
     await waitFor(async () => {
       const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
       expect(snap.referenceObjectName).toBe("AT_AT_Walker");
@@ -36,28 +39,43 @@ describe("ReferenceObjectPicker — selection + status", () => {
     });
   });
 
-  it("lists unrecognised-tag units under the Other group (the Mod-units-missing fix)", async () => {
-    // The engine now sends Other-categorised objects (unrecognised unit/structure
-    // tags like Mod's groundcompany / capturable bunkers); the picker must show
-    // them under an "Other" optgroup, not drop them.
+  it("collapses a section to hide its items, and expands it again", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
-    await screen.findByRole("listbox", { name: "Reference object" });
-    expect(await screen.findByRole("group", { name: "Other" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "Imperial_Bunker_Capturable" })
-    ).toBeInTheDocument();
+    await screen.findByRole("tree", { name: "Reference object" });
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument());
+
+    const spaceHeader = screen.getByRole("treeitem", { name: /Space/ });
+    expect(spaceHeader).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(spaceHeader); // collapse
+    await waitFor(() =>
+      expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole("treeitem", { name: /Space/ })).toHaveAttribute("aria-expanded", "false");
+    // Ground items are unaffected.
+    expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("treeitem", { name: /Space/ })); // expand again
+    expect(await screen.findByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument();
+  });
+
+  it("lists an unrecognised-tag unit under Ground ▸ Other (the Mod-units-missing fix)", async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("tree", { name: "Reference object" });
+    // bucket "Other" header + the item both render (Imperial_Bunker_Capturable is Ground/Unit/Other).
+    expect(await screen.findByRole("treeitem", { name: /Other/ })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "Imperial_Bunker_Capturable" })).toBeInTheDocument();
   });
 
   it("shows the skinned-unsupported note for a skinned object", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
-
-    const select = await screen.findByRole("listbox", { name: "Reference object" });
+    await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => {
-      expect(screen.getByRole("option", { name: "Stormtrooper_Squad" })).toBeInTheDocument();
+      expect(screen.getByRole("treeitem", { name: "Stormtrooper_Squad" })).toBeInTheDocument();
     });
-    fireEvent.change(select, { target: { value: "Stormtrooper_Squad" } });
+    fireEvent.click(screen.getByRole("treeitem", { name: "Stormtrooper_Squad" }));
 
     const note = await screen.findByRole("alert");
     expect(note.textContent).toMatch(/skinned/i);
@@ -66,12 +84,11 @@ describe("ReferenceObjectPicker — selection + status", () => {
   it("shows the model-missing note for an object whose file is absent", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
-
-    const select = await screen.findByRole("listbox", { name: "Reference object" });
+    await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() => {
-      expect(screen.getByRole("option", { name: "Sensor_Array_NoModel" })).toBeInTheDocument();
+      expect(screen.getByRole("treeitem", { name: "Sensor_Array_NoModel" })).toBeInTheDocument();
     });
-    fireEvent.change(select, { target: { value: "Sensor_Array_NoModel" } });
+    fireEvent.click(screen.getByRole("treeitem", { name: "Sensor_Array_NoModel" }));
 
     const note = await screen.findByRole("alert");
     expect(note.textContent).toMatch(/not found/i);
@@ -93,16 +110,13 @@ describe("ReferenceObjectPicker — selection + status", () => {
   it("surfaces a selected name absent from the enumerated list (mod-only object)", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
-    // Select a Name NOT in the canned list — the case exists for (a mod
-    // object absent from a partial/async list). The picker must show it as the
-    // active selection via the standalone <option>, not snap back to "None".
-    await screen.findByRole("listbox", { name: "Reference object" });
+    await screen.findByRole("tree", { name: "Reference object" });
     await bridge.request({ kind: "engine/set/reference-object", params: { name: "Mod_Only_Object" } });
-    const opt = await screen.findByRole("option", { name: "Mod_Only_Object" });
-    expect((opt as HTMLOptionElement).selected).toBe(true);
+    // The picker shows it as a standalone selected row, not snapping back to None.
+    const opt = await screen.findByRole("treeitem", { name: "Mod_Only_Object" });
+    expect(opt).toHaveAttribute("aria-selected", "true");
   });
 
-  // The Transform "Snap to grid" checkbox reflects + dispatches snapEnabled.
   it("reflects snapEnabled and dispatches engine/set/snap-enabled on toggle", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
@@ -115,7 +129,6 @@ describe("ReferenceObjectPicker — selection + status", () => {
       const s = await bridge.request({ kind: "engine/state/snapshot", params: {} });
       expect(s.snapEnabled).toBe(true);
     });
-    // The controlled checkbox follows the round-tripped engine state.
     await waitFor(() => expect((snap as HTMLInputElement).checked).toBe(true));
   });
 
@@ -123,7 +136,6 @@ describe("ReferenceObjectPicker — selection + status", () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
     await screen.findByLabelText("Position X");
-    // Seed a known transform, then edit only Position Y.
     await bridge.request({
       kind: "engine/set/reference-object-transform",
       params: { position: [1, 2, 3], rotation: [10, 20, 30] },
@@ -150,19 +162,13 @@ describe("ReferenceObjectPicker — async build + search", () => {
     referenceCatalogBuilding: building,
   });
 
-  // A stub bridge modelling the REAL host ordering: the mount snapshot is fetched
-  // BEFORE the list query (which is what sets the engine's "wanted" flag), so the
-  // snapshot reports referenceCatalogBuilding:FALSE even while the catalog is still
-  // building. The list query is what reports building:true. This is the ordering the
-  // picker must survive — an edge-triggered (building true->false) re-query would hang
-  // here because the rising edge is never observed. finishBuild() fires the ready event.
+  const ENTRY = { name: "AT_AT_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle" };
+
   function makeBuildingBridge() {
     let listBuilding = true;
     let handler: ((e: { kind: string; payload: unknown }) => void) | null = null;
     const list = () =>
-      listBuilding
-        ? { objects: [], building: true }
-        : { objects: [{ name: "AT_AT_Walker", category: "Vehicle" }], building: false };
+      listBuilding ? { objects: [], building: true } : { objects: [ENTRY], building: false };
     const bridge = {
       request: (req: { kind: string }) => {
         if (req.kind === "engine/query/reference-object-list") return Promise.resolve(list());
@@ -182,22 +188,18 @@ describe("ReferenceObjectPicker — async build + search", () => {
   }
 
   it("shows 'Loading objects…' while building, then renders the list when the build finishes", async () => {
-    // The snapshot reports NOT building (real ordering) -> proves the re-query is
-    // level-triggered (driven by !ready), not the never-observed rising edge.
     const { bridge, finishBuild } = makeBuildingBridge();
     render(<ReferenceObjectPicker bridge={bridge} onClose={() => {}} />);
 
-    // Building: the loading note shows, the list box is absent, the search is disabled.
     expect(await screen.findByText(/loading objects/i)).toBeInTheDocument();
-    expect(screen.queryByRole("listbox", { name: "Reference object" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tree", { name: "Reference object" })).not.toBeInTheDocument();
     expect(
       (screen.getByLabelText("Search reference objects") as HTMLInputElement).disabled
     ).toBe(true);
 
-    // Build finishes -> engine/state/changed (building:false) -> !ready re-query -> list.
     act(() => finishBuild());
-    const select = await screen.findByRole("listbox", { name: "Reference object" });
-    expect(within(select).getByRole("option", { name: "AT_AT_Walker" })).toBeInTheDocument();
+    const tree = await screen.findByRole("tree", { name: "Reference object" });
+    expect(within(tree).getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
     expect(screen.queryByText(/loading objects/i)).not.toBeInTheDocument();
     expect(
       (screen.getByLabelText("Search reference objects") as HTMLInputElement).disabled
@@ -205,19 +207,13 @@ describe("ReferenceObjectPicker — async build + search", () => {
   });
 
   it("does NOT re-query the list on unrelated state changes once loaded (no fetch storm)", async () => {
-    // Guards finding-3: a ~30 Hz gizmo drag emits engine/state/changed with
-    // referenceCatalogBuilding=false; the loaded picker must issue ZERO extra list
-    // queries (the level-triggered re-fetch is gated on !ready).
     let listCalls = 0;
     let handler: ((e: { kind: string; payload: unknown }) => void) | null = null;
     const bridge = {
       request: (req: { kind: string }) => {
         if (req.kind === "engine/query/reference-object-list") {
           listCalls++;
-          return Promise.resolve({
-            objects: [{ name: "AT_AT_Walker", category: "Vehicle" }],
-            building: false,
-          });
+          return Promise.resolve({ objects: [ENTRY], building: false });
         }
         if (req.kind === "engine/state/snapshot") return Promise.resolve(SNAP(false));
         return Promise.resolve({});
@@ -228,12 +224,9 @@ describe("ReferenceObjectPicker — async build + search", () => {
       },
     } as unknown as Bridge;
     render(<ReferenceObjectPicker bridge={bridge} onClose={() => {}} />);
-    await screen.findByRole("listbox", { name: "Reference object" });
+    await screen.findByRole("tree", { name: "Reference object" });
     const afterLoad = listCalls;
 
-    // Simulate a gizmo drag: 10 building=false events, each MOVING the object so the
-    // position delta proves they were actually delivered to the picker (otherwise
-    // "no extra query" could false-pass on an unwired handler).
     act(() => {
       for (let i = 1; i <= 10; i++)
         handler?.({
@@ -241,11 +234,9 @@ describe("ReferenceObjectPicker — async build + search", () => {
           payload: { ...SNAP(false), referenceObjectPosition: [i, 0, 0] },
         });
     });
-    // Delivered — the X spinner tracked the last event...
     await waitFor(() =>
       expect((screen.getByLabelText("Position X") as HTMLInputElement).value).toBe("10.0")
     );
-    // ...yet ZERO extra list queries (the level-triggered re-fetch is gated on !ready).
     expect(listCalls).toBe(afterLoad);
   });
 
@@ -253,35 +244,32 @@ describe("ReferenceObjectPicker — async build + search", () => {
     const { bridge, finishBuild, startRebuild } = makeBuildingBridge();
     render(<ReferenceObjectPicker bridge={bridge} onClose={() => {}} />);
     act(() => finishBuild());
-    await screen.findByRole("listbox", { name: "Reference object" });
+    await screen.findByRole("tree", { name: "Reference object" });
 
-    // Mod switch while open: referenceCatalogBuilding flips true -> back to Loading.
     act(() => startRebuild());
     expect(await screen.findByText(/loading objects/i)).toBeInTheDocument();
-    expect(screen.queryByRole("listbox", { name: "Reference object" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tree", { name: "Reference object" })).not.toBeInTheDocument();
 
-    // Rebuild completes -> the new list loads again.
     act(() => finishBuild());
-    const select = await screen.findByRole("listbox", { name: "Reference object" });
-    expect(within(select).getByRole("option", { name: "AT_AT_Walker" })).toBeInTheDocument();
+    const tree = await screen.findByRole("tree", { name: "Reference object" });
+    expect(within(tree).getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
   });
 
   it("search narrows the listed objects (case-insensitive substring on Name)", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
-    await screen.findByRole("listbox", { name: "Reference object" });
+    await screen.findByRole("tree", { name: "Reference object" });
     await waitFor(() =>
-      expect(screen.getByRole("option", { name: "Star_Destroyer" })).toBeInTheDocument()
+      expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument()
     );
 
     fireEvent.change(screen.getByLabelText("Search reference objects"), {
       target: { value: "at_" },
     });
-    // Only the AT_* vehicles remain; Star_Destroyer is filtered out.
     await waitFor(() =>
-      expect(screen.queryByRole("option", { name: "Star_Destroyer" })).not.toBeInTheDocument()
+      expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument()
     );
-    expect(screen.getByRole("option", { name: "AT_AT_Walker" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "AT_ST_Walker" })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "AT_ST_Walker" })).toBeInTheDocument();
   });
 });

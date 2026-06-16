@@ -637,15 +637,21 @@ export class MockBridge implements Bridge {
       case "engine/query/reference-object-list":
         return {
           building: false,
+          // Stage 2] {domain, role, bucket} drive the collapsible Heroes / Ground / Space tree.
           objects: [
-            { name: "AT_AT_Walker", category: "Vehicle" },
-            { name: "AT_ST_Walker", category: "Vehicle" },
-            { name: "Empire_Anti_Aircraft_Turret", category: "Turret" },
-            { name: "Rebel_Barracks", category: "Structure" },
-            { name: "Star_Destroyer", category: "Space" },
-            { name: "Stormtrooper_Squad", category: "Infantry" },        // MOCK_SKINNED_REFS
-            { name: "Sensor_Array_NoModel", category: "Structure" },     // MOCK_MISSING_MODELS
-            { name: "Imperial_Bunker_Capturable", category: "Other" },   // unrecognised-tag unit/structure -> Other, still listed
+            { name: "AT_AT_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle" },
+            { name: "AT_ST_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle" },
+            { name: "Stormtrooper_Squad", domain: "Ground", role: "Unit", bucket: "Infantry" },     // MOCK_SKINNED_REFS
+            { name: "Rebel_Barracks", domain: "Ground", role: "Structure", bucket: "Structure" },
+            { name: "Empire_Anti_Aircraft_Turret", domain: "Ground", role: "Structure", bucket: "Structure" },
+            { name: "Sensor_Array_NoModel", domain: "Ground", role: "Structure", bucket: "Structure" }, // MOCK_MISSING_MODELS
+            { name: "Imperial_Bunker_Capturable", domain: "Ground", role: "Unit", bucket: "Other" },    // unrecognised-tag unit, still listed
+            { name: "Star_Destroyer", domain: "Space", role: "Unit", bucket: "Capital" },
+            { name: "Nebulon_B_Frigate", domain: "Space", role: "Unit", bucket: "Frigate" },
+            { name: "TIE_Fighter", domain: "Space", role: "Unit", bucket: "Fighter" },
+            { name: "Imperial_Star_Base", domain: "Space", role: "Structure", bucket: "Structure" },
+            { name: "Darth_Vader", domain: "Ground", role: "Hero", bucket: "Hero" },
+            { name: "Emperor_Palpatine", domain: "Space", role: "Hero", bucket: "Hero" },
           ],
         };
 

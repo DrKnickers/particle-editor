@@ -191,10 +191,21 @@ export type EmitterTreeNode = {
 // (GameObjectCatalog.h); the picker groups the Name list by it. Status is the
 // lazy .alo probe verdict for the CURRENTLY-selected object — "skinned" and
 // "load-failed" mean the object can't render (skinned units are a v1 deferral).
-export type ReferenceObjectCategory =
-  | "Vehicle" | "Infantry" | "Structure" | "Turret"
-  | "Hero" | "Prop" | "Space" | "Projectile" | "Other";
-export type ReferenceObjectEntry = { name: string; category: ReferenceObjectCategory };
+// The profile-classifier axes that drive the picker's collapsible tree.
+// `domain` = which top-level section (Heroes go under their own section regardless of
+// domain; everything else by Ground/Space). `bucket` = the sub-group within a domain.
+export type ReferenceObjectDomain = "Ground" | "Space" | "Unknown";
+export type ReferenceObjectRole = "Unit" | "Structure" | "Hero" | "Excluded";
+export type ReferenceObjectBucket =
+  | "Infantry" | "Vehicle" | "Air"                                           // ground units
+  | "Fighter" | "Bomber" | "Corvette" | "Frigate" | "Capital" | "Transport"  // space units
+  | "Structure" | "Hero" | "Other" | "None";                                 // shared
+export type ReferenceObjectEntry = {
+  name: string;
+  domain: ReferenceObjectDomain;
+  role: ReferenceObjectRole;
+  bucket: ReferenceObjectBucket;
+};
 // "model-missing" = the model file is genuinely absent from the current
 // mod/base (distinct from "load-failed" = present but undecodable), so the
 // picker can say "model file not found" rather than "couldn't load".

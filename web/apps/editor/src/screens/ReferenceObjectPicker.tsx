@@ -2,31 +2,31 @@
 // preview as a scale reference, with a numeric transform + a unit grid toggle.
 //
 // The object list is enumerated live from the active mod/base's
-// GameObjectFiles.xml via `engine/query/reference-object-list` (Name + category);
-// selection drives `engine/set/reference-object`. The engine probes the chosen
-// `.alo` lazily on select and reports `referenceObjectStatus` so the picker can
-// warn when an object is skinned (a v1 deferral) or fails to load — we can't
-// pre-grey the whole list without decoding thousands of meshes at open time.
+// GameObjectFiles.xml via `engine/query/reference-object-list` (Name + the
+// profile classification {domain, role, bucket}); selection drives
+// `engine/set/reference-object`. The engine probes the chosen `.alo` lazily on
+// select and reports `referenceObjectStatus` so the picker can warn when an
+// object is skinned (a v1 deferral) or fails to load.
 //
-// The list shows UNITS + STRUCTURES only (props/projectiles are filtered
-// engine-side), and is built off the UI thread; while it builds the query returns
-// `building:true` and the picker shows "Loading objects…", re-querying when the
-// catalog-ready engine/state/changed event fires. A search box narrows the
-// (now-much-smaller) list; the scrollable <select> is sized as a list box.
+// The list shows only FIELDABLE units + structures + all heroes
+// (filtered engine-side), and is built off the UI thread; while it builds the
+// query returns `building:true` and the picker shows "Loading objects…". A
+// search box narrows the list. The objects are presented as a COLLAPSIBLE TREE
+// (Stage 2): top-level **Heroes / Ground / Space** sections, each Ground/Space
+// section sub-grouped into bucket disclosures (Infantry, Vehicles, …, Fighters,
+// Capitals, …). Searching force-expands so matches are always visible.
 //
 // The transform is six `Spinner`s (position X/Y/Z + rotation yaw/pitch/roll in
-// degrees) → `engine/set/reference-object-transform`. This numeric entry is the
-// precise / fallback path; the in-viewport drag manipulator is.
+// degrees) → `engine/set/reference-object-transform`.
 //
-// Browser/mock mode: the list query returns a small canned set and the transform
-// round-trips through the mock store — enough to validate the dispatch surface
-// and grouping against the schema without a real install.
+// Browser/mock mode: the list query returns a small canned set spanning the
+// sections and the transform round-trips through the mock store.
 
-import { useEffect, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Bridge,
   EngineStateDto,
-  ReferenceObjectCategory,
+  ReferenceObjectBucket,
   ReferenceObjectEntry,
   Vec3,
 } from "@particle-editor/bridge-schema";
@@ -44,33 +44,82 @@ type BodyProps = {
 
 const NONE = ""; // empty Name = no object selected
 
-// Display order for the category <optgroup>s. Props / Projectiles / the
-// model-bearing non-units ("Excluded") are filtered out engine-side
-// (Engine::EnumerateReferenceObjects), so they never reach here. "Other" IS shown
-// last: it's the catch-all for unrecognised unit/structure tags (e.g. Mod's
-// groundcompany / flagship variants / capturable bunkers) -- the filter fails toward
-// showing, so a unit type the engine didn't recognise isn't silently dropped.
-const CATEGORY_ORDER: readonly ReferenceObjectCategory[] = [
-  "Vehicle", "Infantry", "Structure", "Turret", "Hero", "Space", "Other",
+// Bucket display order + plural labels, per domain. "None" folds into
+// "Other" so an object whose fine bucket didn't resolve is still grouped, never
+// dropped (the engine never lists Excluded objects, so role is Unit/Structure/Hero).
+const GROUND_BUCKETS: readonly ReferenceObjectBucket[] = [
+  "Infantry", "Vehicle", "Air", "Structure", "Other",
 ];
+const SPACE_BUCKETS: readonly ReferenceObjectBucket[] = [
+  "Fighter", "Bomber", "Corvette", "Frigate", "Capital", "Transport", "Structure", "Other",
+];
+const BUCKET_LABEL: Record<ReferenceObjectBucket, string> = {
+  Infantry: "Infantry", Vehicle: "Vehicles", Air: "Air",
+  Fighter: "Fighters", Bomber: "Bombers", Corvette: "Corvettes", Frigate: "Frigates",
+  Capital: "Capitals", Transport: "Transports", Structure: "Structures",
+  Hero: "Heroes", Other: "Other", None: "Other",
+};
+
+type BucketGroup = { key: string; label: string; items: string[] };
+type Section = {
+  key: string;       // "Heroes" | "Ground" | "Space"
+  label: string;
+  total: number;
+  flat: string[];    // Heroes: the names directly (no bucket sub-headers)
+  buckets: BucketGroup[]; // Ground/Space: bucket sub-groups
+};
+
+// Build the Heroes / Ground / Space sections from the (search-filtered) entries.
+// Heroes (role === "Hero") go to their own top-level section regardless of domain;
+// everything else groups by domain then bucket, in the fixed bucket order.
+function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => boolean): Section[] {
+  const heroes: string[] = [];
+  const ground = new Map<ReferenceObjectBucket, string[]>();
+  const space = new Map<ReferenceObjectBucket, string[]>();
+  const push = (m: Map<ReferenceObjectBucket, string[]>, b: ReferenceObjectBucket, n: string) => {
+    const key: ReferenceObjectBucket = b === "None" ? "Other" : b;
+    const arr = m.get(key) ?? [];
+    arr.push(n);
+    m.set(key, arr);
+  };
+  for (const o of objects) {
+    if (!matches(o.name)) continue;
+    if (o.role === "Hero") heroes.push(o.name);
+    else if (o.domain === "Space") push(space, o.bucket, o.name);
+    else push(ground, o.bucket, o.name); // Ground + Unknown fall here
+  }
+  const bucketGroups = (m: Map<ReferenceObjectBucket, string[]>, order: readonly ReferenceObjectBucket[]): BucketGroup[] =>
+    order
+      .filter((b) => (m.get(b)?.length ?? 0) > 0)
+      .map((b) => ({ key: `${b}`, label: BUCKET_LABEL[b], items: m.get(b)!.slice().sort() }));
+
+  const sections: Section[] = [];
+  if (heroes.length)
+    sections.push({ key: "Heroes", label: "Heroes", total: heroes.length, flat: heroes.slice().sort(), buckets: [] });
+  const g = bucketGroups(ground, GROUND_BUCKETS);
+  if (g.length)
+    sections.push({ key: "Ground", label: "Ground", total: g.reduce((a, b) => a + b.items.length, 0), flat: [], buckets: g });
+  const s = bucketGroups(space, SPACE_BUCKETS);
+  if (s.length)
+    sections.push({ key: "Space", label: "Space", total: s.reduce((a, b) => a + b.items.length, 0), flat: [], buckets: s });
+  return sections;
+}
 
 /**
- * ReferenceObjectPickerBody — the picker content (object list + status + numeric
- * transform + grid controls). Extracted so both the ToolPanel wrapper and the
- * toolbar dropdown mount the same markup (mirrors BackgroundPickerBody).
+ * ReferenceObjectPickerBody — the picker content (collapsible object tree +
+ * status + numeric transform + grid controls). Extracted so both the ToolPanel
+ * wrapper and the toolbar dropdown mount the same markup.
  */
 export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const [snapshot, setSnapshot] = useState<EngineStateDto | null>(null);
   const [objects, setObjects] = useState<ReferenceObjectEntry[]>([]);
   const [ready, setReady] = useState(false); // got a non-building object list for the active catalog
   const [query, setQuery] = useState("");
+  // Collapsed group keys (default = everything expanded; collapse is opt-in).
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   // LEVEL-triggered (not edge-triggered): re-query the list whenever we don't yet have a
   // ready list (readyRef avoids the stale closure). Once ready we STOP re-querying on
-  // engine/state/changed, so a ~30 Hz gizmo drag doesn't thrash the UI thread. A mod /
-  // submod switch flips referenceCatalogBuilding true again -> we reset ready and reload.
-  // (Edge-triggering on building true->false is fragile: on first open the snapshot is
-  // fetched before the list query sets the engine's "wanted" flag, so the rising edge is
-  // never observed and the picker would hang on "Loading objects…".)
+  // engine/state/changed, so a ~30 Hz gizmo drag doesn't thrash the UI thread.
   const readyRef = useRef(false);
 
   useEffect(() => {
@@ -115,25 +164,28 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const rot: Vec3 = snapshot?.referenceObjectRotation ?? [0, 0, 0];
   const snapEnabled = snapshot?.snapEnabled ?? false;
 
-  // Live search: case-insensitive substring on Name. The category filter
-  // already shrank the list (props gone); this narrows it the rest of the way.
+  // Live search: case-insensitive substring on Name.
   const ql = query.trim().toLowerCase();
-  const matches = (n: string) => ql === "" || n.toLowerCase().includes(ql);
+  const matches = useMemo(() => (n: string) => ql === "" || n.toLowerCase().includes(ql), [ql]);
 
-  // Group the (search-filtered) objects by category for the <optgroup>s.
-  const byCategory = new Map<ReferenceObjectCategory, string[]>();
-  for (const o of objects) {
-    if (!matches(o.name)) continue;
-    const arr = byCategory.get(o.category) ?? [];
-    arr.push(o.name);
-    byCategory.set(o.category, arr);
-  }
-  let visibleCount = 0;
-  for (const arr of byCategory.values()) visibleCount += arr.length;
+  const sections = useMemo(() => buildSections(objects, matches), [objects, matches]);
+  const visibleCount = useMemo(() => sections.reduce((a, s) => a + s.total, 0), [sections]);
+
+  // While searching, force every group open so matches are always visible; otherwise
+  // honor the user's collapse choices. (A group is open unless explicitly collapsed.)
+  const searching = ql !== "";
+  const isOpen = (key: string) => searching || !collapsed.has(key);
+  const toggle = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   // The persisted/active selection may be absent from the visible list (mod
   // object, async load, or filtered by the search); surface it as a standalone
-  // option so the <select> doesn't silently fall back to "None".
+  // row so the tree doesn't silently lose it.
   const known =
     name === NONE ||
     (objects.some((o) => o.name === name) && matches(name));
@@ -144,8 +196,6 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const setVisible = (v: boolean) =>
     void bridge.request({ kind: "engine/set/reference-object-visible", params: { visible: v } });
 
-  // Persistent gizmo snap toggle. Ticking it persists/round-trips now; the
-  // drag-time apply (reads the engine's snap state) lands in a separate task.
   const setSnapEnabled = (v: boolean) =>
     void bridge.request({ kind: "engine/set/snap-enabled", params: { enabled: v } });
 
@@ -175,6 +225,51 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
           ? "Couldn't load this object's model."
           : null;
 
+  // ── tree (role="tree") renderers ──────────────────────────────────
+  // Activate on Enter/Space; stopPropagation so a child treeitem's key event
+  // doesn't bubble up and also toggle its ancestor section/bucket.
+  const onActivate = (e: ReactKeyboardEvent, fn: () => void) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); fn(); }
+  };
+
+  // A selectable leaf (an object name).
+  const itemRow = (n: string) => {
+    const selected = n === name;
+    return (
+      <div
+        key={n}
+        role="treeitem"
+        aria-selected={selected}
+        tabIndex={0}
+        onClick={(e) => { e.stopPropagation(); selectObject(n); }}
+        onKeyDown={(e) => onActivate(e, () => selectObject(n))}
+        className={
+          "cursor-pointer truncate rounded px-2 py-0.5 text-sm outline-none transition focus-visible:ring-1 focus-visible:ring-accent " +
+          (selected ? "bg-accent/20 text-text" : "text-text hover:bg-panel-2")
+        }
+      >
+        {n}
+      </div>
+    );
+  };
+
+  // The visual label row of an expandable treeitem (chevron + label + count). The
+  // click/key handling lives on the treeitem wrapper, so this is presentational.
+  const labelRow = (label: string, count: number, open: boolean, indent: boolean) => (
+    <div
+      className={
+        "flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 transition hover:bg-panel-2 " +
+        (indent ? "pl-3 text-xs text-text-2" : "text-xs font-medium uppercase tracking-wide text-text-3")
+      }
+    >
+      <span aria-hidden className={"inline-block w-3 text-text-3 transition-transform " + (open ? "rotate-90" : "")}>
+        ▸
+      </span>
+      <span className="flex-1">{label}</span>
+      <span className="text-text-3">{count}</span>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4">
       {/* ── Object selection ─────────────────────────────────────────── */}
@@ -197,27 +292,76 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
           <p role="status" className="text-xs text-text-2">Loading objects…</p>
         ) : (
           <>
-            <label className="flex flex-col gap-1 text-xs text-text-2">
-              Object
-              <select
-                value={name}
-                onChange={(e) => selectObject(e.target.value)}
-                aria-label="Reference object"
-                size={8}
-                className="rounded-md border border-border bg-bg-2 px-2 py-1 text-sm text-text"
+            <div
+              role="tree"
+              aria-label="Reference object"
+              className="flex max-h-72 flex-col gap-0.5 overflow-auto rounded-md border border-border bg-bg-2 p-1"
+            >
+              <div
+                role="treeitem"
+                aria-selected={name === NONE}
+                tabIndex={0}
+                onClick={() => selectObject(NONE)}
+                onKeyDown={(e) => onActivate(e, () => selectObject(NONE))}
+                className={
+                  "cursor-pointer rounded px-2 py-0.5 text-sm outline-none transition focus-visible:ring-1 focus-visible:ring-accent " +
+                  (name === NONE ? "bg-accent/20 text-text" : "text-text-2 hover:bg-panel-2")
+                }
               >
-                <option value={NONE}>None</option>
-                {name !== NONE && !known && <option value={name}>{name}</option>}
-                {CATEGORY_ORDER.filter((c) => byCategory.has(c)).map((cat) => (
-                  <optgroup key={cat} label={cat}>
-                    {byCategory.get(cat)!.map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
-            {ql !== "" && visibleCount === 0 && (
+                None
+              </div>
+
+              {/* A persisted selection filtered out of the visible tree. */}
+              {name !== NONE && !known && itemRow(name)}
+
+              {sections.map((sec) => {
+                const secKey = `sec:${sec.key}`;
+                const openSec = isOpen(secKey);
+                return (
+                  <div
+                    key={sec.key}
+                    role="treeitem"
+                    aria-label={sec.label}
+                    aria-expanded={openSec}
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); toggle(secKey); }}
+                    onKeyDown={(e) => onActivate(e, () => toggle(secKey))}
+                    className="flex flex-col rounded outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                  >
+                    {labelRow(sec.label, sec.total, openSec, false)}
+                    {openSec && sec.key === "Heroes" && (
+                      <div role="group" className="flex flex-col pl-3">{sec.flat.map(itemRow)}</div>
+                    )}
+                    {openSec && sec.key !== "Heroes" && (
+                      <div role="group" className="flex flex-col">
+                        {sec.buckets.map((b) => {
+                          const bk = `buc:${sec.key}/${b.key}`;
+                          const openBuc = isOpen(bk);
+                          return (
+                            <div
+                              key={bk}
+                              role="treeitem"
+                              aria-label={b.label}
+                              aria-expanded={openBuc}
+                              tabIndex={0}
+                              onClick={(e) => { e.stopPropagation(); toggle(bk); }}
+                              onKeyDown={(e) => onActivate(e, () => toggle(bk))}
+                              className="flex flex-col rounded outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                            >
+                              {labelRow(b.label, b.items.length, openBuc, true)}
+                              {openBuc && (
+                                <div role="group" className="flex flex-col pl-6">{b.items.map(itemRow)}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {searching && visibleCount === 0 && (
               <p className="text-xs text-text-3">No objects match “{query}”.</p>
             )}
           </>
@@ -287,8 +431,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
           ))}
         </div>
 
-        {/* Persistent snap toggle. State + plumbing only — the drag-time
-            snap apply (reads the engine snap state) lands in a separate task. */}
+        {/* Persistent snap toggle. */}
         <label
           className="flex items-center gap-2 text-xs text-text-2"
           title="Snaps X/Y to the grid spacing (set in the Ground popup, default 20u) and rotation to 15°. Hold Shift while dragging for a finer ×0.2 step."

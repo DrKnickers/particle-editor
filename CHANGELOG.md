@@ -27,6 +27,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Changed
 
+- Object picker now groups objects into a collapsible Heroes / Ground / Space tree with sub-categories (Infantry, Vehicles, Fighters, Capitals, …) for easier browsing
 - Object picker now lists only the units and structures a player can actually build or field (heroes always shown), instead of thousands of entries
 - Gizmo drag guide lines are now dimmed during a translate or plane drag, for less visual noise
 - About dialog now shows the editor's own version (0.3.0) instead of the upstream 1.5, which is kept as a fork credit line

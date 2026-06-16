@@ -2080,7 +2080,12 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         m_engine->EnumerateReferenceObjects(objs);   // kicks the off-thread build
         json arr = json::array();
         for (const GameObjectRef& r : objs)
-            arr.push_back(json{ {"name", r.name}, {"category", GameObjectCategoryName(r.category)} });
+            // Stage 2] domain/role/bucket from the profile classifier drive the
+            // picker's collapsible Heroes / Ground / Space tree (legacy `category` retired).
+            arr.push_back(json{ {"name", r.name},
+                                {"domain", ObjDomainName(r.domain)},
+                                {"role",   ObjRoleName(r.role)},
+                                {"bucket", ObjBucketName(r.bucket)} });
         // While the catalog builds off the UI thread, `objs` is empty and
         // `building` is true -> the picker shows "Loading objects…" and re-queries when
         // the catalog-ready engine/state/changed event fires (see HostWindow RenderD3D9).
