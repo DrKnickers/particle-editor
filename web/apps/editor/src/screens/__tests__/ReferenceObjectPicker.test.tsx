@@ -173,7 +173,7 @@ describe("ReferenceObjectPicker — async build + search", () => {
     referenceCatalogBuilding: building,
   });
 
-  const ENTRY = { name: "AT_AT_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle" };
+  const ENTRY = { name: "AT_AT_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle", affiliation: "Empire" };
 
   function makeBuildingBridge() {
     let listBuilding = true;
@@ -453,5 +453,46 @@ describe("ReferenceObjectPicker — fu] keyboard navigation + persisted-selectio
     // Its ancestors re-open so it's visible + selected.
     const item = await screen.findByRole("treeitem", { name: "AT_AT_Walker" });
     expect(item).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+describe("ReferenceObjectPicker — fu] faction filter chips", () => {
+  const ready = async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("tree", { name: "Reference object" });
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
+    return bridge;
+  };
+
+  it("renders All + faction chips and narrows the tree to the chosen faction", async () => {
+    await ready();
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Empire" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rebel" })).toBeInTheDocument();
+    // Default (All): both an Empire-only and a Rebel object are visible.
+    expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();   // Empire
+    expect(screen.getByRole("treeitem", { name: "Rebel_Barracks" })).toBeInTheDocument(); // Rebel
+
+    fireEvent.click(screen.getByRole("button", { name: "Rebel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("treeitem", { name: "AT_AT_Walker" })).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole("button", { name: "Rebel" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("treeitem", { name: "Rebel_Barracks" })).toBeInTheDocument();
+    // A multi-faction object ("Rebel, Empire") shows under Rebel too.
+    expect(screen.getByRole("treeitem", { name: "Nebulon_B_Frigate" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(await screen.findByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
+  });
+
+  it("shows a multi-faction object under each of its factions", async () => {
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Empire" }));
+    // Nebulon_B_Frigate is "Rebel, Empire" -> visible under Empire as well.
+    expect(await screen.findByRole("treeitem", { name: "Nebulon_B_Frigate" })).toBeInTheDocument();
+    // A Rebel-only object is hidden under the Empire filter.
+    expect(screen.queryByRole("treeitem", { name: "Rebel_Barracks" })).not.toBeInTheDocument();
   });
 });

@@ -2120,7 +2120,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             arr.push_back(json{ {"name", r.name},
                                 {"domain", ObjDomainName(r.domain)},
                                 {"role",   ObjRoleName(r.role)},
-                                {"bucket", ObjBucketName(r.bucket)} });
+                                {"bucket", ObjBucketName(r.bucket)},
+                                {"affiliation", r.affiliation} });   // fu] picker faction filter
         // While the catalog builds off the UI thread, `objs` is empty and
         // `building` is true -> the picker shows "Loading objects…" and re-queries when
         // the catalog-ready engine/state/changed event fires (see HostWindow RenderD3D9).

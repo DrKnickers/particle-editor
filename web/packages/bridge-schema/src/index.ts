@@ -205,6 +205,9 @@ export type ReferenceObjectEntry = {
   domain: ReferenceObjectDomain;
   role: ReferenceObjectRole;
   bucket: ReferenceObjectBucket;
+  // Raw <Affiliation> (may be a comma list, e.g. "Rebel, Trade_Federation", or empty).
+  // Drives the picker's faction filter chips; the picker tokenises it on commas.
+  affiliation: string;
 };
 // "model-missing" = the model file is genuinely absent from the current
 // mod/base (distinct from "load-failed" = present but undecodable), so the

@@ -123,6 +123,7 @@ struct GameObjectRef
     bool      conflict    = false;
     bool      fieldable   = false;        // player can build/spawn it -> hard picker keep-gate
     unsigned  fieldSource = FS_None;      // FieldSource bits explaining why (diagnostics)
+    std::string affiliation;              // <Affiliation> (raw, may be a comma list) -> picker faction filter
 };
 
 // Picker keep-gate. Units/structures must be fieldable (a player can build/spawn

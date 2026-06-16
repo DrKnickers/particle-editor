@@ -321,15 +321,19 @@ describe("MockBridge contract", () => {
     expect(snap.snapEnabled).toBe(true);
   });
 
-  it("engine/query/reference-object-list returns Name + {domain,role,bucket} entries", async () => {
+  it("engine/query/reference-object-list returns Name + {domain,role,bucket,affiliation} entries", async () => {
     const b = new MockBridge();
     const r = await b.request({ kind: "engine/query/reference-object-list", params: {} });
     expect(Array.isArray(r.objects)).toBe(true);
     const turret = r.objects.find((o) => o.name === "Empire_Anti_Aircraft_Turret");
     expect(turret?.domain).toBe("Ground");
     expect(turret?.role).toBe("Structure");
+    expect(turret?.affiliation).toBe("Empire");
     const vader = r.objects.find((o) => o.name === "Darth_Vader");
     expect(vader?.role).toBe("Hero");
+    // affiliation may be a comma list, or empty for unaffiliated objects.
+    expect(r.objects.find((o) => o.name === "Nebulon_B_Frigate")?.affiliation).toBe("Rebel, Empire");
+    expect(r.objects.find((o) => o.name === "Imperial_Bunker_Capturable")?.affiliation).toBe("");
   });
 
   // Submods: mods/list surfaces them under the active mod; set-submods

@@ -644,21 +644,21 @@ export class MockBridge implements Bridge {
       case "engine/query/reference-object-list":
         return {
           building: false,
-          // Stage 2] {domain, role, bucket} drive the collapsible Heroes / Ground / Space tree.
+          // {domain, role, bucket} drive the collapsible tree; affiliation drives the faction chips.
           objects: [
-            { name: "AT_AT_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle" },
-            { name: "AT_ST_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle" },
-            { name: "Stormtrooper_Squad", domain: "Ground", role: "Unit", bucket: "Infantry" },     // MOCK_SKINNED_REFS
-            { name: "Rebel_Barracks", domain: "Ground", role: "Structure", bucket: "Structure" },
-            { name: "Empire_Anti_Aircraft_Turret", domain: "Ground", role: "Structure", bucket: "Structure" },
-            { name: "Sensor_Array_NoModel", domain: "Ground", role: "Structure", bucket: "Structure" }, // MOCK_MISSING_MODELS
-            { name: "Imperial_Bunker_Capturable", domain: "Ground", role: "Unit", bucket: "Other" },    // unrecognised-tag unit, still listed
-            { name: "Star_Destroyer", domain: "Space", role: "Unit", bucket: "Capital" },
-            { name: "Nebulon_B_Frigate", domain: "Space", role: "Unit", bucket: "Frigate" },
-            { name: "TIE_Fighter", domain: "Space", role: "Unit", bucket: "Fighter" },
-            { name: "Imperial_Star_Base", domain: "Space", role: "Structure", bucket: "Structure" },
-            { name: "Darth_Vader", domain: "Ground", role: "Hero", bucket: "Hero" },
-            { name: "Emperor_Palpatine", domain: "Space", role: "Hero", bucket: "Hero" },
+            { name: "AT_AT_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle", affiliation: "Empire" },
+            { name: "AT_ST_Walker", domain: "Ground", role: "Unit", bucket: "Vehicle", affiliation: "Empire" },
+            { name: "Stormtrooper_Squad", domain: "Ground", role: "Unit", bucket: "Infantry", affiliation: "Empire" }, // MOCK_SKINNED_REFS
+            { name: "Rebel_Barracks", domain: "Ground", role: "Structure", bucket: "Structure", affiliation: "Rebel" },
+            { name: "Empire_Anti_Aircraft_Turret", domain: "Ground", role: "Structure", bucket: "Structure", affiliation: "Empire" },
+            { name: "Sensor_Array_NoModel", domain: "Ground", role: "Structure", bucket: "Structure", affiliation: "Rebel" }, // MOCK_MISSING_MODELS
+            { name: "Imperial_Bunker_Capturable", domain: "Ground", role: "Unit", bucket: "Other", affiliation: "" }, // no affiliation -> only under "All"
+            { name: "Star_Destroyer", domain: "Space", role: "Unit", bucket: "Capital", affiliation: "Empire" },
+            { name: "Nebulon_B_Frigate", domain: "Space", role: "Unit", bucket: "Frigate", affiliation: "Rebel, Empire" }, // multi-faction
+            { name: "TIE_Fighter", domain: "Space", role: "Unit", bucket: "Fighter", affiliation: "Empire" },
+            { name: "Imperial_Star_Base", domain: "Space", role: "Structure", bucket: "Structure", affiliation: "Empire" },
+            { name: "Darth_Vader", domain: "Ground", role: "Hero", bucket: "Hero", affiliation: "Empire" },
+            { name: "Emperor_Palpatine", domain: "Space", role: "Hero", bucket: "Hero", affiliation: "Empire" },
           ],
         };
 

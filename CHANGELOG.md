@@ -28,6 +28,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Changed
 
+- Object picker gains faction filter chips (All · Empire · Rebel · …) above the tree to narrow the list by allegiance
 - Object picker tree is now keyboard-navigable — arrow keys move between rows, ←/→ collapse/expand groups, Home/End jump, Enter selects — and a restored selection inside a collapsed group auto-expands so it's visible
 - Object picker now groups objects into a collapsible Heroes / Ground / Space tree with sub-categories (Infantry, Vehicles, Fighters, Capitals, …) for easier browsing
 - Object picker now lists only the units and structures a player can actually build or field (heroes always shown), instead of thousands of entries

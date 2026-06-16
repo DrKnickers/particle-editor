@@ -692,10 +692,11 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
         prof.hasMovementClass = !resolveRaw(kv.first, byName, &RawEntry::movementRaw).empty();
         prof.affiliation      = resolveRaw(kv.first, byName, &RawEntry::affiliationRaw);
         const Classification cl = ClassifyObject(prof);
-        ref.domain   = cl.domain;
-        ref.role     = cl.role;
-        ref.bucket   = cl.bucket;
-        ref.conflict = cl.conflict;
+        ref.domain      = cl.domain;
+        ref.role        = cl.role;
+        ref.bucket      = cl.bucket;
+        ref.conflict    = cl.conflict;
+        ref.affiliation = prof.affiliation;   // fu] surfaced as the picker's faction filter
         // ref.fieldable / fieldSource filled by the fieldable pass below.
         out.objects.push_back(ref);
     }

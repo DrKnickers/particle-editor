@@ -115,6 +115,8 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const [objects, setObjects] = useState<ReferenceObjectEntry[]>([]);
   const [ready, setReady] = useState(false); // got a non-building object list for the active catalog
   const [query, setQuery] = useState("");
+  // fu] Faction filter (null = All); narrows the tree to objects affiliated with it.
+  const [faction, setFaction] = useState<string | null>(null);
   // Collapsed group keys (default = everything expanded; collapse is opt-in).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   // fu] Roving-tabindex: exactly one tree row is tabbable at a time; arrow
@@ -173,7 +175,22 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const ql = query.trim().toLowerCase();
   const matches = useMemo(() => (n: string) => ql === "" || n.toLowerCase().includes(ql), [ql]);
 
-  const sections = useMemo(() => buildSections(objects, matches), [objects, matches]);
+  // fu] Faction filter. `affiliation` may be a comma list ("Rebel, Empire"); the chip
+  // set is every distinct token across all objects, and an object passes when it carries the
+  // selected faction. (Objects with no affiliation appear only under "All".)
+  const factionsOf = (o: ReferenceObjectEntry) =>
+    (o.affiliation ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const factions = useMemo(() => {
+    const set = new Set<string>();
+    for (const o of objects) for (const f of factionsOf(o)) set.add(f);
+    return [...set].sort();
+  }, [objects]);
+  const visibleObjects = useMemo(
+    () => (faction === null ? objects : objects.filter((o) => factionsOf(o).includes(faction))),
+    [objects, faction],
+  );
+
+  const sections = useMemo(() => buildSections(visibleObjects, matches), [visibleObjects, matches]);
   const visibleCount = useMemo(() => sections.reduce((a, s) => a + s.total, 0), [sections]);
 
   // While searching, force every group open so matches are always visible; otherwise
@@ -200,7 +217,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   // doesn't silently lose it.
   const known =
     name === NONE ||
-    (objects.some((o) => o.name === name) && matches(name));
+    (visibleObjects.some((o) => o.name === name) && matches(name));
 
   // fu] The flat list of VISIBLE tree rows in DOM order — drives roving-tabindex
   // arrow navigation. Each row carries enough to move (kind/expanded/parent).
@@ -401,6 +418,30 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
           <p role="status" className="text-xs text-text-2">Loading objects…</p>
         ) : (
           <>
+            {/* fu] Faction filter chips (only when the active content has affiliations). */}
+            {factions.length > 0 && (
+              <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by faction">
+                {[null, ...factions].map((f) => {
+                  const active = faction === f;
+                  return (
+                    <button
+                      key={f ?? "__all__"}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setFaction(f)}
+                      className={
+                        "rounded-full border px-2 py-0.5 text-xs outline-none transition focus-visible:ring-1 focus-visible:ring-accent " +
+                        (active
+                          ? "border-accent bg-accent/20 text-text"
+                          : "border-border text-text-2 hover:bg-panel-2")
+                      }
+                    >
+                      {f === null ? "All" : f.replace(/_/g, " ")}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div
               role="tree"
               aria-label="Reference object"
@@ -473,8 +514,11 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                 );
               })}
             </div>
-            {searching && visibleCount === 0 && (
-              <p className="text-xs text-text-3">No objects match “{query}”.</p>
+            {visibleCount === 0 && (searching || faction !== null) && (
+              <p className="text-xs text-text-3">
+                {searching ? <>No objects match “{query}”{faction !== null ? <> in {faction.replace(/_/g, " ")}</> : null}.</>
+                           : <>No {faction!.replace(/_/g, " ")} objects.</>}
+              </p>
             )}
           </>
         )}
