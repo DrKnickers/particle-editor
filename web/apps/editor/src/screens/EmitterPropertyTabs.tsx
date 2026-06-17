@@ -1349,17 +1349,18 @@ export function PhysicsTab({
 
   return (
     <div className="inspector">
-      <Section title="Initial position">
+      <Section title="Initial position" unit="units">
         <GroupBody index={2} group={properties.groups[2]} onChange={(p) => updateGroup(2, p)} />
       </Section>
 
-      <Section title="Initial speed">
+      <Section title="Initial speed" unit="units/s">
         <GroupBody index={0} group={properties.groups[0]} onChange={(p) => updateGroup(0, p)} />
+        {/* No per-field unit — the "Initial speed" section header carries
+            "units/s" for every speed field in the section. */}
         <FieldSpinner
           label="Inward speed:"
           value={properties.inwardSpeed}
           step={0.1}
-          unit="units/s"
           onCommit={(v) => onCommit({ inwardSpeed: v })}
         />
         {/* Parent speed inherit — schema field is float in [0,1]; legacy
@@ -1386,12 +1387,15 @@ export function PhysicsTab({
         />
       </Section>
 
-      <Section title="Acceleration">
+      <Section title="Acceleration" unit="units/s²">
         {/* Acceleration X/Y/Z — 3-spinner cluster. Spans the .form-row
             input + unit columns since 3 spinners don't fit in 92px.
             Combined "X / Y / Z:" label per legacy IDD_EMITTER_PROPS3
             (.rc:350). */}
         <div className="form-row form-row-cluster items-start">
+          {/* No unit here — the "Acceleration" section header carries
+              "units/s²" for every field in the section (keeping this label short
+              so the fixed-width label column doesn't truncate it). */}
           <span className="lbl pt-1">X / Y / Z:</span>
           <div className="grid grid-cols-3 gap-1">
             <div className="axis-cell">
@@ -1426,11 +1430,12 @@ export function PhysicsTab({
             </div>
           </div>
         </div>
+        {/* No per-field unit — the "Acceleration" section header carries
+            "units/s²" for every acceleration field in the section. */}
         <FieldSpinner
           label="Gravity acceleration:"
           value={properties.gravity}
           step={0.1}
-          unit="units/s²"
           disabled={!nonWeather}
           onCommit={(v) => onCommit({ gravity: v })}
         />
@@ -1438,7 +1443,6 @@ export function PhysicsTab({
           label="Inward acceleration:"
           value={properties.inwardAcceleration}
           step={0.1}
-          unit="units/s²"
           disabled={!nonWeather}
           onCommit={(v) => onCommit({ inwardAcceleration: v })}
         />

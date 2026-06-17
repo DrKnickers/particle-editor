@@ -19,6 +19,7 @@
 #include "GizmoRibbon.h"   // aesthetics: camera-facing ribbon quad expansion
 #include "RingFade.h"      // aesthetics: ring back-face alpha falloff
 #include "SelectionBoxStyle.h" // aesthetics: selection-box bracket/dash geometry
+#include "ReferenceObjectWorld.h" // pure reference-object world-matrix builder (scale+rot+trans)
 using namespace std;
 
 static const char* ShaderNames[Engine::NUM_SHADERS] = {
@@ -2857,13 +2858,11 @@ void Engine::RenderSkydomes()
 // the selection box, and the pick so all three agree on placement.
 D3DXMATRIX Engine::ReferenceObjectWorldFrom(const D3DXVECTOR3& pos, const D3DXVECTOR3& rotDeg) const
 {
-    const float deg2rad = D3DX_PI / 180.0f;
-    D3DXMATRIX mYaw, mPitch, mRoll, trans;
-    D3DXMatrixRotationZ(&mYaw,   rotDeg.x * deg2rad);   // yaw   = heading about world up (Z)
-    D3DXMatrixRotationX(&mPitch, rotDeg.y * deg2rad);   // pitch = tilt about X
-    D3DXMatrixRotationY(&mRoll,  rotDeg.z * deg2rad);   // roll  = bank about Y
-    D3DXMatrixTranslation(&trans, pos.x, pos.y, pos.z);
-    return mRoll * mPitch * mYaw * trans;
+    // Delegate to the pure header so the scale/rotation math is unit-tested
+    // headlessly (tests/test_reference_world.cpp). m_referenceScaleFactor (the
+    // per-object <Scale_Factor>) is applied LEFTMOST = first, about the object origin,
+    // and rides through render / pick / selection-box / hardpoint mounts unchanged.
+    return ReferenceObjectWorldMatrix(pos, rotDeg, m_referenceScaleFactor);
 }
 
 // Committed transform -> the PICK uses this (the exact, snapped value).
@@ -4153,6 +4152,12 @@ void Engine::SetReferenceObject(const std::string& name)
 void Engine::RebuildReferenceObjectMesh()
 {
     m_referenceAttachments.clear();   // rebuilt below iff the unit mounts hardpoint models
+    // Reset the render scale at the TOP so every exit path (empty-name clear,
+    // deferred catalog-not-built return, LoadFailed, successful resolve) leaves no
+    // stale scale from a previously-selected object -- a mid-session mod/submod switch
+    // hits the deferred return before any GameObjectRef resolves (S-M1). Overwritten
+    // from the catalog only on a successful resolve below.
+    m_referenceScaleFactor = 1.0f;
 
     if (m_referenceObjectName.empty())
     {
@@ -4188,6 +4193,11 @@ void Engine::RebuildReferenceObjectMesh()
             modelPath = r.modelPath;
             m_referenceObjectName = r.name;
             selected = &r;
+            // Successful catalog resolve -> adopt the per-object render scale.
+            m_referenceScaleFactor = r.scaleFactor;
+#ifndef NDEBUG
+            fprintf(stderr, "[refscale] '%s' Scale_Factor=%.3f\n", r.name.c_str(), r.scaleFactor);
+#endif
             break;
         }
     if (modelPath.empty())

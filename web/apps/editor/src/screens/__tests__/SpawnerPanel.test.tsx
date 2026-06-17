@@ -58,6 +58,17 @@ describe("SpawnerPanel", () => {
     expect(screen.getByLabelText("Max lifetime")).toBeInTheDocument();
   });
 
+  it("labels the distance/velocity/accel section headers with units", () => {
+    const bridge = makeStubBridge("manual");
+    render(<SpawnerPanel bridge={bridge} />);
+    // Velocity + acceleration carry the compound units (each unique);
+    // the distance sections (Position / Jitter position / Squiggle amplitude)
+    // each show the bare "units" word.
+    expect(screen.getByText("units/s")).toBeInTheDocument();   // Velocity
+    expect(screen.getByText("units/s²")).toBeInTheDocument();  // Acceleration (arc)
+    expect(screen.getAllByText("units").length).toBeGreaterThanOrEqual(3);
+  });
+
   it("switching Mode from Manual to Auto reveals the Interval Spinner + Enabled checkbox", async () => {
     // Start in manual; snapshot is async so wait for the panel to
     // settle into the snapshot's mode before asserting the initial

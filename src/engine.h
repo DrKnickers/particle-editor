@@ -1005,6 +1005,12 @@ private:
 	bool                     m_referenceObjectVisible = true;
 	D3DXVECTOR3              m_referencePosition = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
 	D3DXVECTOR3              m_referenceRotation = D3DXVECTOR3(0.0f, 0.0f, 0.0f);  // degrees [yaw,pitch,roll]
+	// Per-object <Scale_Factor> render multiplier for the selected reference
+	// object (1.0 = native; trooper 1.5, AT-AT 1.8). Applied as a leftmost uniform
+	// scale in ReferenceObjectWorldFrom so render/pick/selection-box agree. Reset to
+	// 1.0 at the TOP of RebuildReferenceObjectMesh (all exit paths) and set from the
+	// catalog only on a successful resolve, so a mod/submod switch never leaves it stale.
+	float                    m_referenceScaleFactor = 1.0f;
 	// Render-only "display" transform eased toward the committed transform above
 	// each frame so gizmo/object motion is smooth (incl. under snap). Committed values
 	// stay exact (undo / spinners / saved file). See Engine::EaseReferenceDisplay.

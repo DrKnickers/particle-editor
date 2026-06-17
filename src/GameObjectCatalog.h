@@ -124,6 +124,12 @@ struct GameObjectRef
     bool      fieldable   = false;        // player can build/spawn it -> hard picker keep-gate
     unsigned  fieldSource = FS_None;      // FieldSource bits explaining why (diagnostics)
     std::string affiliation;              // <Affiliation> (raw, may be a comma list) -> picker faction filter
+
+    // <Scale_Factor> uniform render multiplier (Variant_Of-inherited, resolved
+    // in BuildGameObjectCatalog phase 4); 1.0 when absent / non-positive / non-finite.
+    // The game draws the model at scaleFactor x its native .alo size; the reference-
+    // object renderer applies it so an imported unit matches its in-game size.
+    float     scaleFactor = 1.0f;
 };
 
 // Picker keep-gate. Units/structures must be fieldable (a player can build/spawn

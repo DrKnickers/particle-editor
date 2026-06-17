@@ -200,6 +200,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
           decimals={1}
           disabled={!groundOn}
           density="tight"
+          unit="units"
           aria-label="Ground height"
         />
       </div>

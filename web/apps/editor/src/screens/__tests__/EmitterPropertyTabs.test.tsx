@@ -13,7 +13,7 @@
 //     with `patch: { lifetime: <new value> }`.
 
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen, waitFor, within } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
 import type {
@@ -261,7 +261,7 @@ describe("EmitterPropertyTabs", () => {
     const props = makeFixtureProperties(0);
     render(<PhysicsTab properties={props} onCommit={() => {}} />);
     // Acceleration row is a 3-spinner cluster with a combined
-    // "X / Y / Z:" label.
+    // "X / Y / Z:" label (unit lives on the section header, not here).
     expect(screen.getByText("X / Y / Z:")).toBeInTheDocument();
     expect(screen.getByLabelText("Acceleration X")).toBeInTheDocument();
     expect(screen.getByLabelText("Acceleration Y")).toBeInTheDocument();
@@ -299,6 +299,22 @@ describe("EmitterPropertyTabs", () => {
     expect(pos.compareDocumentPosition(speed)   & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(speed.compareDocumentPosition(accel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(accel.compareDocumentPosition(ground) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("PhysicsTab: each unit-bearing section carries its unit in the header, not per-field", () => {
+    const props = makeFixtureProperties(0);
+    render(<PhysicsTab properties={props} onCommit={() => {}} />);
+    // The data-testid sits on the .panel-section-header div itself, so scoping the
+    // lookup to it isolates the header's unit span (the unit is its own leaf span,
+    // gapped from the title via CSS).
+    expect(within(screen.getByTestId("section-initial-position")).getByText("units")).toBeInTheDocument();
+    expect(within(screen.getByTestId("section-initial-speed")).getByText("units/s")).toBeInTheDocument();
+    expect(within(screen.getByTestId("section-acceleration")).getByText("units/s²")).toBeInTheDocument();
+    // The section header carries the unit ONCE — the speed/accel fields below it no
+    // longer repeat it, so each compound unit appears exactly once (its header).
+    expect(screen.getAllByText("units/s")).toHaveLength(1);   // Initial speed header only (not Inward speed)
+    expect(screen.getAllByText("units/s²")).toHaveLength(1);  // Acceleration header only (not Gravity/Inward)
+    expect(screen.getByText("%")).toBeInTheDocument();        // Parent speed inherit — "otherwise indicated"
   });
 
   it("PhysicsTab: removed fields are not rendered (Emit From Mesh*, Weather*, weather fadeout)", () => {

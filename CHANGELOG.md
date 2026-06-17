@@ -21,10 +21,12 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 ### Added
 
 - A "Smooth skydome seams" toggle (Preferences → Rendering, on by default) hides the seam baked into stock skydome backgrounds; turn it off to show the dome exactly as the game renders it
+- Imported reference objects now render at their true in-game size — the game's per-object scale factor is applied, so a particle effect can be sized against a faithful reference instead of one that was undersized
 
 ### Changed
 
 - Reference models and the ground now render with the game's ambient lighting, matching their in-game brightness instead of appearing darker
+- Distance, velocity, and acceleration fields now show their units (units, units/s, units/s²)
 
 ### Fixed
 

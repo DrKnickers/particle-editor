@@ -50,9 +50,14 @@ export function ManipulatorReadout({
   // Iterate the shorter of the two arrays so a (host-impossible but schema-allowed)
   // labels/values length mismatch can't render "NaN" silently.
   const n = Math.min(drag.labels.length, drag.values.length);
-  const text = Array.from({ length: n }, (_, i) =>
-    `${drag.labels[i]} ${fmt(drag.values[i], drag.decimals)}${drag.kind === "rotate" ? "°" : ""}`,
-  ).join("   ");
+  const isRotate = drag.kind === "rotate";
+  // Unit suffix: rotate is degrees (° per value); translate/plane are
+  // distance, labelled once with a trailing "units" (the pill has room, unlike
+  // the cramped XYZ spinner grids that label via their section header).
+  const text =
+    Array.from({ length: n }, (_, i) =>
+      `${drag.labels[i]} ${fmt(drag.values[i], drag.decimals)}${isRotate ? "°" : ""}`,
+    ).join("   ") + (isRotate ? "" : "   units");
 
   return (
     <div

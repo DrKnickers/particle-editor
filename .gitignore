@@ -267,6 +267,10 @@ tests/*.exe
 # the test file via tests/make_chain_test_alo.exe). Never commit them.
 tests/*.ALO
 tests/*.alo
+# Measurement-tool generated reports (regenerated per run by measure_alo_bbox /
+# dump_max_verts / measure_max_bbox; the producing scripts ARE committed).
+tests/max_report.txt
+tests/max_verts.txt
 
 # Superpowers brainstorming sessions: per-session HTML mockups
 # rendered into the visual-companion browser. Transient working

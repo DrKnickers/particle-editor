@@ -301,7 +301,7 @@ export function SpawnerPanel({ bridge }: Props) {
         )}
       </ToolPanel.Section>
 
-      <ToolPanel.Section title="Position" defaultOpen>
+      <ToolPanel.Section title="Position" unit="units" defaultOpen>
         <div className="grid grid-cols-3 gap-1">
           <div className="axis-cell">
             <span className="axis-lbl">X</span>
@@ -333,7 +333,7 @@ export function SpawnerPanel({ bridge }: Props) {
         </div>
       </ToolPanel.Section>
 
-      <ToolPanel.Section title="Velocity" defaultOpen>
+      <ToolPanel.Section title="Velocity" unit="units/s" defaultOpen>
         <div className="grid grid-cols-3 gap-1">
           <div className="axis-cell">
             <span className="axis-lbl">X</span>
@@ -380,7 +380,7 @@ export function SpawnerPanel({ bridge }: Props) {
         </ToolPanel.Row>
       </ToolPanel.Section>
 
-      <ToolPanel.Section title="Jitter position">
+      <ToolPanel.Section title="Jitter position" unit="units">
         <div className="grid grid-cols-3 gap-1">
           <div className="axis-cell">
             <span className="axis-lbl">X</span>
@@ -412,7 +412,7 @@ export function SpawnerPanel({ bridge }: Props) {
         </div>
       </ToolPanel.Section>
 
-      <ToolPanel.Section title="Acceleration (arc)">
+      <ToolPanel.Section title="Acceleration (arc)" unit="units/s²">
         <div className="grid grid-cols-3 gap-1">
           <div className="axis-cell">
             <span className="axis-lbl">X</span>
@@ -444,7 +444,7 @@ export function SpawnerPanel({ bridge }: Props) {
         </div>
       </ToolPanel.Section>
 
-      <ToolPanel.Section title="Squiggle amplitude">
+      <ToolPanel.Section title="Squiggle amplitude" unit="units">
         <div className="grid grid-cols-3 gap-1">
           <div className="axis-cell">
             <span className="axis-lbl">X</span>

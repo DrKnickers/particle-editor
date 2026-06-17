@@ -121,6 +121,11 @@ type ToolPanelSectionProps = {
   /** When true, the section renders flat (no <details>/<summary>); use
    *  for sections that are always visible like Ambient / Shadow. */
   alwaysOpen?: boolean;
+  /** Optional unit annotation shown muted next to the title (e.g.
+   *  "units", "units/s", "units/s²"). Labels the measurement of a section's
+   *  bare numeric fields once, instead of per-spinner suffixes that truncate
+   *  in dense / resizable XYZ grids. */
+  unit?: string;
   children?: ReactNode;
 };
 
@@ -128,6 +133,7 @@ function ToolPanelSection({
   title,
   defaultOpen = false,
   alwaysOpen = false,
+  unit,
   children,
 }: ToolPanelSectionProps) {
   // B1.3.2: shared `.panel-section` class set with Section.tsx so both
@@ -140,7 +146,7 @@ function ToolPanelSection({
     return (
       <section className="panel-section">
         <div className="panel-section-header" style={{ cursor: "default" }}>
-          {title}
+          <SectionTitle title={title} unit={unit} />
         </div>
         <div className="panel-section-body">{children}</div>
       </section>
@@ -150,16 +156,31 @@ function ToolPanelSection({
   // details toggles content instantly and can't tween. Header matches
   // Section.tsx (div role=button) so both controlled disclosures expose
   // the same a11y shape + chevron behaviour.
-  return <CollapsibleSection title={title} defaultOpen={defaultOpen}>{children}</CollapsibleSection>;
+  return <CollapsibleSection title={title} defaultOpen={defaultOpen} unit={unit}>{children}</CollapsibleSection>;
+}
+
+// Shared section-header label: title + optional muted unit annotation.
+// The unit overrides the header's uppercase/letter-spacing so "units/s²" stays
+// readable, and is aria-hidden so the header button's accessible name stays the
+// bare `title` (the unit is decorative context, mirroring the Spinner unit span).
+function SectionTitle({ title, unit }: { title: string; unit?: string }) {
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <span>{title}</span>
+      {unit && <span className="font-normal normal-case tracking-normal text-text-3" aria-hidden="true">{unit}</span>}
+    </span>
+  );
 }
 
 function CollapsibleSection({
   title,
   defaultOpen,
+  unit,
   children,
 }: {
   title: string;
   defaultOpen: boolean;
+  unit?: string;
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -179,7 +200,7 @@ function CollapsibleSection({
         }}
         aria-expanded={open}
       >
-        <span>{title}</span>
+        <SectionTitle title={title} unit={unit} />
         <ChevronDown className="chev size-3" />
       </div>
       <div className="collapse-anim" data-open={open}>

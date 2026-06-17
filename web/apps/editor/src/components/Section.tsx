@@ -18,10 +18,15 @@ import { ChevronDown } from "lucide-react";
 type Props = {
   title: string;
   defaultOpen?: boolean;
+  /** Optional unit annotation shown muted next to the title (e.g.
+   *  "units", "units/s", "units/s²"). Lets a section label the measurement
+   *  of its bare numeric fields once, instead of per-spinner suffixes that
+   *  truncate in dense / resizable grids. Not part of the test-id / a11y name. */
+  unit?: string;
   children: ReactNode;
 };
 
-export function Section({ title, defaultOpen = true, children }: Props) {
+export function Section({ title, defaultOpen = true, unit, children }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const toggle = () => setOpen((o) => !o);
   return (
@@ -40,7 +45,10 @@ export function Section({ title, defaultOpen = true, children }: Props) {
         aria-expanded={open}
         data-testid={`section-${title.toLowerCase().replace(/\s+/g, "-")}`}
       >
-        <span>{title}</span>
+        <span className="flex items-baseline gap-1.5">
+          <span>{title}</span>
+          {unit && <span className="font-normal normal-case tracking-normal text-text-3" aria-hidden="true">{unit}</span>}
+        </span>
         <ChevronDown className="chev size-3" />
       </div>
       {/* Body stays mounted (animated collapse via .collapse-anim); the

@@ -647,6 +647,39 @@ int main(int argc, char** argv)
         CHECK(find(ec, "Ascii_Unit") != nullptr, "object in an encoding='ASCII' file is parsed (not silently dropped)");
     }
 
+    // ---- Scale_Factor parse + Variant_Of inheritance + degenerate guard ----
+    std::printf("[scale-factor]\n");
+    {
+        MockFM sf;
+        sf.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<?xml version='1.0' ?><Game_Object_Files><File>SF.xml</File></Game_Object_Files>";
+        sf.files["Data\\XML\\SF.xml"] =
+            "<?xml version='1.0' ?>\n<Objects>\n"
+            "  <GroundVehicle Name=\"SF_Base\"><Land_Model_Name>EV_B.ALO</Land_Model_Name><Scale_Factor>1.5</Scale_Factor></GroundVehicle>\n"
+            "  <GroundVehicle Name=\"SF_Inherit\"><Variant_Of_Existing_Type>SF_Base</Variant_Of_Existing_Type></GroundVehicle>\n"
+            "  <GroundVehicle Name=\"SF_Override\"><Variant_Of_Existing_Type>SF_Base</Variant_Of_Existing_Type><Land_Model_Name>EV_O.ALO</Land_Model_Name><Scale_Factor>2.0</Scale_Factor></GroundVehicle>\n"
+            "  <GroundVehicle Name=\"SF_WS\"><Land_Model_Name>EV_W.ALO</Land_Model_Name><Scale_Factor> 1.80 </Scale_Factor></GroundVehicle>\n"
+            "  <GroundVehicle Name=\"SF_Missing\"><Land_Model_Name>EV_M.ALO</Land_Model_Name></GroundVehicle>\n"
+            "  <GroundVehicle Name=\"SF_Zero\"><Land_Model_Name>EV_Z.ALO</Land_Model_Name><Scale_Factor>0</Scale_Factor></GroundVehicle>\n"
+            "  <GroundVehicle Name=\"SF_Neg\"><Land_Model_Name>EV_N.ALO</Land_Model_Name><Scale_Factor>-1</Scale_Factor></GroundVehicle>\n"
+            "  <GroundVehicle Name=\"SF_NaN\"><Land_Model_Name>EV_NA.ALO</Land_Model_Name><Scale_Factor>nan</Scale_Factor></GroundVehicle>\n"
+            "  <GroundVehicle Name=\"SF_Bad\"><Variant_Of_Existing_Type>SF_Base</Variant_Of_Existing_Type><Scale_Factor>abc</Scale_Factor></GroundVehicle>\n"
+            "</Objects>\n";
+        GameObjectCatalog c;
+        bool ok = BuildGameObjectCatalog(sf, c);
+        CHECK(ok, "[sf] catalog builds");
+        auto sfv = [&](const char* n) -> float { const GameObjectRef* r = find(c, n); return r ? r->scaleFactor : -999.0f; };
+        CHECK(sfv("SF_Base")     == 1.5f, "explicit Scale_Factor 1.5");
+        CHECK(sfv("SF_Inherit")  == 1.5f, "variant inherits parent Scale_Factor");
+        CHECK(sfv("SF_Override") == 2.0f, "variant own Scale_Factor overrides parent");
+        CHECK(sfv("SF_WS") > 1.79f && sfv("SF_WS") < 1.81f, "whitespace <Scale_Factor> 1.80 > parses to 1.8");
+        CHECK(sfv("SF_Missing")  == 1.0f, "missing Scale_Factor -> 1.0 default");
+        CHECK(sfv("SF_Zero")     == 1.0f, "Scale_Factor 0 -> 1.0 (singular-matrix guard)");
+        CHECK(sfv("SF_Neg")      == 1.0f, "negative Scale_Factor -> 1.0");
+        CHECK(sfv("SF_NaN")      == 1.0f, "non-finite Scale_Factor -> 1.0");
+        CHECK(sfv("SF_Bad")      == 1.0f, "malformed child -> 1.0, does NOT inherit parent (first-non-empty stops at child)");
+    }
+
     // ---- missing GameObjectFiles.xml ---------------------------------------
     std::printf("[total miss]\n");
     {

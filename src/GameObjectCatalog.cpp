@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdio>     // also: #ifndef NDEBUG diagnostics for silently-dropped (unparseable) files
 #include <cstdlib>
+#include <cmath>
 #include <map>
 #include <set>
 #include <string>
@@ -121,6 +122,7 @@ namespace
         std::string    behaviorRaw;    // <Behavior> + <LandBehavior> + <SpaceBehavior> (joined)
         std::string    movementRaw;    // <MovementClass>
         std::string    affiliationRaw; // <Affiliation>
+        std::string    scaleFactorRaw; // <Scale_Factor> raw string (parsed+guarded in phase 4)
         // fieldable reference-graph SOURCE lists (this object references others).
         std::string    costRaw;          // <Build_Cost_Credits> (fallback <Required_Star_Base_Level>) -> buildable
         std::string    buildMenuRaw;     // <Tactical_Buildable_Objects_Campaign/_Multiplayer> -> names it builds
@@ -253,6 +255,7 @@ namespace
                                          childDataAll(e, L"SpaceBehavior"));
                 re.movementRaw    = trim(WideToAnsi(childData(e, L"MovementClass")));
                 re.affiliationRaw = trim(WideToAnsi(childData(e, L"Affiliation")));
+                re.scaleFactorRaw = trim(WideToAnsi(childData(e, L"Scale_Factor")));  //
                 // fieldable source lists.
                 re.costRaw        = trim(WideToAnsi(childData(e, L"Build_Cost_Credits")));
                 if (re.costRaw.empty())
@@ -697,6 +700,22 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
         ref.bucket      = cl.bucket;
         ref.conflict    = cl.conflict;
         ref.affiliation = prof.affiliation;   // fu] surfaced as the picker's faction filter
+        // <Scale_Factor> render multiplier: inherit up the Variant_Of chain
+        // (first-non-empty), then guard-parse -- reject empty / non-finite / non-positive
+        // (a 0 or negative scale yields a singular world matrix -> un-pickable object;
+        // mirrors the skydome guard SkydomeEnvironment.cpp). A malformed child stops the
+        // inheritance walk at itself (first-non-empty) and falls back to 1.0 (does NOT
+        // inherit the parent) -- intended.
+        {
+            const std::string sfRaw = resolveRaw(kv.first, byName, &RawEntry::scaleFactorRaw);
+            float sf = 1.0f;
+            if (!sfRaw.empty())
+            {
+                const float v = std::strtof(sfRaw.c_str(), nullptr);
+                if (std::isfinite(v) && v > 0.0f) sf = v;
+            }
+            ref.scaleFactor = sf;
+        }
         // ref.fieldable / fieldSource filled by the fieldable pass below.
         out.objects.push_back(ref);
     }
