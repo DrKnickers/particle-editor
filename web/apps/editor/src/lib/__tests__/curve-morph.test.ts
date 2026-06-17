@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { TrackDto } from "@particle-editor/bridge-schema";
 import {
   sampleTrackY, buildMorphGrid, sampleTrackPx, resampleOntoGrid,
-  classifyTrackChange, matchKeys, easeOutCubic,
+  classifyTrackChange, matchKeys, buildSwitchKeyGlides, easeOutCubic,
   MORPH_MS, KEY_MATCH_EPS,
 } from "../curve-morph";
 import { movesMatch } from "../use-curve-morph";
@@ -167,6 +167,33 @@ describe("matchKeys", () => {
     expect(m.moved.map((p) => p.to.time)).toEqual([0, 100]);
     expect(m.added.map((k) => k.time)).toEqual([75]);
     expect(m.removed.map((k) => k.time)).toEqual([50]);
+  });
+});
+
+describe("buildSwitchKeyGlides", () => {
+  it("glides EVERY new key from the OLD curve's value at its time (no pop, any key)", () => {
+    // Old curve = a straight descending line 1→0 across t=0..100 with NO interior
+    // key. New curve adds an interior key at t=50. A time/ordinal match would pop
+    // the t=50 key; ride-the-line glides it from the old line's value at 50 (=0.5).
+    const prev = track([{ time: 0, value: 1 }, { time: 100, value: 0 }]);
+    const next = track([{ time: 0, value: 1 }, { time: 50, value: 0.2 }, { time: 100, value: 0 }]);
+    const g = buildSwitchKeyGlides(prev, next);
+    expect(g.map((x) => x.time)).toEqual([0, 50, 100]);     // one glide per NEW key
+    expect(g.map((x) => x.toValue)).toEqual([1, 0.2, 0]);
+    expect(g[1]!.fromValue).toBeCloseTo(0.5, 5);            // emerges from the old line, not a pop
+    expect(g[0]!.fromValue).toBeCloseTo(1, 5);
+    expect(g[2]!.fromValue).toBeCloseTo(0, 5);
+  });
+
+  it("returns one glide per NEW key even when the old curve has FEWER keys", () => {
+    const prev = track([{ time: 0, value: 0 }, { time: 100, value: 1 }]); // ascending line, 2 keys
+    const next = track([
+      { time: 0, value: 0 }, { time: 25, value: 0.9 }, { time: 60, value: 0.3 }, { time: 100, value: 1 },
+    ]);
+    const g = buildSwitchKeyGlides(prev, next);
+    expect(g).toHaveLength(4);                  // 4 new keys → 4 glides, none "added"/popped
+    expect(g[1]!.fromValue).toBeCloseTo(0.25, 5); // old line value at t=25
+    expect(g[2]!.fromValue).toBeCloseTo(0.6, 5);  // old line value at t=60
   });
 });
 

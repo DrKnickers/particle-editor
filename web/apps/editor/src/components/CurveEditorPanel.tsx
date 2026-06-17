@@ -431,6 +431,10 @@ export function CanvasWithAxisLabels({
 export function CurveEditorPanel({ bridge }: Props) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [tracks, setTracks] = useState<TrackDto[] | null>(null);
+  // The emitter id the CURRENT `tracks` belong to — set together with `tracks`
+  // so it never leads the async fetch the way `selectedId` does. Drives the
+  // curve morph's switch-vs-edit decision (a change ⇒ emitter switch ⇒ keys glide).
+  const [tracksOwnerId, setTracksOwnerId] = useState<number | null>(null);
   const [visible, setVisible] = useState<Record<string, boolean>>(defaultVisibility);
   // Focus channel — session-scoped. Defaults to "red", the first
   // channel visible by default. Picking "scale" (the first row in
@@ -498,6 +502,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   useEffect(() => {
     if (selectedId === null) {
       setTracks(null);
+      setTracksOwnerId(null);
       inFlightFor.current = null;
       return;
     }
@@ -510,11 +515,13 @@ export function CurveEditorPanel({ bridge }: Props) {
           if (cancelled) return;
           if (inFlightFor.current !== id) return;
           setTracks(res.tracks);
+          setTracksOwnerId(id);
         })
         .catch(() => {
           if (cancelled) return;
           if (inFlightFor.current !== id) return;
           setTracks([]);
+          setTracksOwnerId(id);
         });
     };
     fetchTracks(selectedId);
@@ -1625,6 +1632,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                   tracks={tracks}
                   channels={CHANNELS}
                   visibleChannels={visible}
+                  emitterId={tracksOwnerId}
                   focusChannel={focusChannel}
                   valueRange={unifiedRange}
                   selectedKeyTimes={selectedKeyTimes}

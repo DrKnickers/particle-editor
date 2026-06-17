@@ -178,3 +178,27 @@ export function matchKeys(prev: TrackDto, next: TrackDto): {
   const removed = prev.keys.filter((_, i) => !usedPrev.has(i));
   return { moved, added, removed };
 }
+
+/** "Ride-the-line" key choreography for an emitter SELECTION switch. Returns one
+ *  glide per NEW key: each glides from the OLD curve's value at that key's time
+ *  to the key's own value. Because the line morph tweens the old shape → new
+ *  shape per-x, a marker held at its (fixed) x with y lerped fromValue→toValue
+ *  stays ON the morphing line — so every key, matched or brand-new, EMERGES from
+ *  the old line and slides into place. No pop / add / ghost regardless of key
+ *  count. (matchKeys-by-time stays the default for in-curve edits, where an
+ *  inserted key SHOULD pop rather than slide in.)
+ *
+ *  Edge: an EMPTY prev track (e.g. the old emitter's get-tracks failed → []) has
+ *  no line to ride; sampleTrackY returns 0, so keys glide in from value 0 — a
+ *  uniform slide rather than a true ride, acceptable for that rare case and never
+ *  invisible/NaN. */
+export function buildSwitchKeyGlides(
+  prev: TrackDto,
+  next: TrackDto,
+): Array<{ time: number; fromValue: number; toValue: number }> {
+  return next.keys.map((k) => ({
+    time: k.time,
+    fromValue: sampleTrackY(prev.keys, prev.interpolation, k.time),
+    toValue: k.value,
+  }));
+}

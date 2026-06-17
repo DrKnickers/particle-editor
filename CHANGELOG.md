@@ -31,6 +31,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 ### Fixed
 
 - The Lighting panel's Reset now restores the same lighting the scene loads with, instead of unexpectedly brightening the render
+- Curve-editor keys now glide into place when you switch the selected emitter, instead of popping/blinking in (the curve lines already animated; the keys now match)
 
 ## 2026-06-16
 

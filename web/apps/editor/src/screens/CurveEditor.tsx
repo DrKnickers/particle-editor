@@ -88,6 +88,10 @@ type Props = {
   tracks?: TrackDto[] | null;
   channels?: readonly ChannelDef[];
   visibleChannels?: Record<string, boolean>;
+  /** Id of the emitter `tracks` belong to. A change between renders marks an
+   *  emitter SWITCH (vs an in-curve edit) so the morph rides keys along the line
+   *  into place instead of popping them by time. */
+  emitterId?: number | null;
   /** Hybrid focus-channel mode (restored edit surface). When set in the
    *  multi-channel branch, the renderer emphasises this channel (thick
    *  stroke + full opacity + key circles + interactive handlers) and
@@ -398,6 +402,7 @@ export function CurveEditor({
   tracks,
   channels,
   visibleChannels,
+  emitterId,
   focusChannel,
   marqueeRef,
   width = DEFAULT_WIDTH,
@@ -431,6 +436,7 @@ export function CurveEditor({
         tracks={tracks}
         channels={channels}
         visibleChannels={visibleChannels}
+        emitterId={emitterId}
         focusChannel={focusChannel}
         displayRange={valueRange}
         width={width}
@@ -1059,6 +1065,9 @@ type MultiProps = {
   tracks: TrackDto[] | null;
   channels: readonly ChannelDef[];
   visibleChannels: Record<string, boolean>;
+  /** Id of the emitter `tracks` belong to (drives the morph's switch-vs-edit
+   *  decision — see useCurveMorph). */
+  emitterId?: number | null;
   focusChannel?: string;
   /** Unified Y-axis range across all visible channels. When set, the
    *  renderer projects every channel into this single space and uses
@@ -1103,6 +1112,7 @@ function MultiChannelCurves({
   tracks,
   channels,
   visibleChannels,
+  emitterId,
   focusChannel,
   displayRange,
   width: propWidth,
@@ -1237,23 +1247,34 @@ function MultiChannelCurves({
   // declared before this hook so the isDragging closure captures it.
   const morphSuppressRef = useRef<SuppressedMove>(null);
   const morph = useCurveMorph({
-    channels: layers.map((l) => ({
-      channelId: l.channel.id,
-      color: l.channel.color,
-      track: l.track,
-      vMin: (displayRange ?? l.range).min,
-      vMax: (displayRange ?? l.range).max,
-      dashed: focusReadOnly && focusLayer !== null && l.channel.id === focusLayer.channel.id,
-      strokeWidth: focusEnabled && focusLayer !== null && l.channel.id === focusLayer.channel.id ? 3 : 2,
-      opacity: focusEnabled && (focusLayer === null || l.channel.id !== focusLayer.channel.id) ? 0.4 : 1,
-      isFocus: focusLayer !== null && l.channel.id === focusLayer.channel.id,
-    })),
+    channels: layers.map((l) => {
+      const isFocus = focusLayer !== null && l.channel.id === focusLayer.channel.id;
+      // Mirror the STATIC key-dot styling so a switch's gliding markers hand off
+      // to the static dots with no size/stroke jump: the focus channel's keys are
+      // r=5 / no stroke; background keys are r=3 / no stroke in focus mode and the
+      // full-fidelity r=4 / dark stroke in view-only mode (CurveEditor static layer).
+      return {
+        channelId: l.channel.id,
+        color: l.channel.color,
+        track: l.track,
+        vMin: (displayRange ?? l.range).min,
+        vMax: (displayRange ?? l.range).max,
+        dashed: focusReadOnly && isFocus,
+        strokeWidth: focusEnabled && isFocus ? 3 : 2,
+        opacity: focusEnabled && !isFocus ? 0.4 : 1,
+        isFocus,
+        markerRadius: isFocus ? 5 : focusEnabled ? 3 : 4,
+        markerStroke: isFocus || focusEnabled ? "none" : "#0a0a0a",
+        markerStrokeWidth: isFocus || focusEnabled ? 0 : 1,
+      };
+    }),
     width,
     height,
     timeMin,
     timeMax,
     isDragging: () => dragRef.current !== null,
     suppressRef: morphSuppressRef,
+    emitterId,
   });
 
   // ── Marquee state (mirrors the single-track branch).

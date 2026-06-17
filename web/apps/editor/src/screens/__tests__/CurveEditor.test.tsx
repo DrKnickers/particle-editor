@@ -785,7 +785,8 @@ const MORPH_GREEN_CHANNEL = {
  *  the given channel. Width/height are pinned to 600×300. */
 function mcCurve(
   tracks: TrackDto[],
-  focusId: string,
+  focusId: string | undefined,
+  emitterId?: number | null,
 ): React.ReactElement {
   const channelDefs = tracks.map((t) =>
     t.name === "green" ? MORPH_GREEN_CHANNEL : MORPH_RED_CHANNEL,
@@ -796,6 +797,7 @@ function mcCurve(
       tracks={tracks}
       channels={channelDefs}
       visibleChannels={visibleChannels}
+      emitterId={emitterId}
       focusChannel={focusId}
       valueRange={{ min: 0, max: 1 }}
       width={600}
@@ -1080,6 +1082,108 @@ describe("curve morph (structural changes)", () => {
     const circles4 = Array.from(overlay.querySelectorAll("circle"));
     const cxValues = new Set(circles4.map((c) => c.getAttribute("cx")));
     expect(cxValues.size, "all 4 marker circles must have distinct cx values").toBe(4);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("emitter switch: a NEW key (count mismatch) rides the line in, it does not pop", async () => {
+    // The video bug: switching from a 2-key emitter to a 3-key emitter left the
+    // extra key popping in. On a switch the morph must "ride the line" — one
+    // GLIDE marker per NEW key (no "in"/"out" pop), so every key (incl. the new
+    // interior one) emerges from the old line and slides into place.
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    // Emitter 1: red has 2 keys (a plain line, no interior key).
+    const a = [trk("red", [k(0, 1), k(100, 0)], "linear")];
+    const { rerender, container } = render(mcCurve(a, "red", 1));
+
+    // Switch to emitter 2: red now has a NEW interior key at t=50 (3 keys).
+    rerender(mcCurve([trk("red", [k(0, 1), k(50, 0.2), k(100, 0)], "linear")], "red", 2));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    // One marker per NEW key = 3, and ALL are "move" markers (full radius +
+    // opacity) — a popping key would be an "in" marker (r<5 / opacity<1).
+    await waitFor(() => {
+      const circles = Array.from(overlay.querySelectorAll("circle"));
+      expect(circles.length).toBe(3);
+      for (const c of circles) {
+        expect(c.getAttribute("r")).toBe("5");
+        expect(c.getAttribute("fill-opacity")).toBe("1");
+      }
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("emitter switch: NON-focus channel keys also glide (no border blink-in)", async () => {
+    // The reported bug: on a switch the focus (red) keys glided, but the dimmed
+    // follower keys (green/blue) vanished during the morph and blinked back at the
+    // end. Non-focus channels must ALSO get gliding markers on a switch — sized +
+    // dimmed to match their static dots (r=3, opacity 0.4).
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    // Emitter 1: green mirrors red (overlapping), 2 keys each.
+    const a = [trk("red", [k(0, 1), k(100, 0)], "linear"),
+               trk("green", [k(0, 1), k(100, 0)], "linear")];
+    const { rerender, container } = render(mcCurve(a, "red", 1));
+
+    // Switch to emitter 2: green separates to its own values.
+    rerender(mcCurve([trk("red", [k(0, 1), k(100, 0)], "linear"),
+                      trk("green", [k(0, 0.5), k(100, 0.5)], "linear")], "red", 2));
+
+    const green = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    // Green's 2 keys glide (BEFORE the fix this was 0 — they popped via the
+    // static layer at morph end). Dimmed non-focus styling, all "move".
+    await waitFor(() => {
+      const circles = Array.from(green.querySelectorAll("circle"));
+      expect(circles.length).toBe(2);
+      for (const c of circles) {
+        expect(c.getAttribute("r")).toBe("3");
+        expect(c.getAttribute("fill-opacity")).toBe("0.4");
+      }
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("emitter switch in VIEW-ONLY mode (no focus channel): markers match the r=4 stroked static dot", async () => {
+    // Guards the overlay→static handoff in view-only mode (no focusChannel): the
+    // static dots there are the full-fidelity r=4 + dark-stroke style, so the
+    // gliding markers must use the same — not the focus-mode r=3 / no-stroke.
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const a = [trk("red", [k(0, 1), k(100, 0)], "linear")];
+    const { rerender, container } = render(mcCurve(a, undefined, 1)); // no focus → view-only
+    rerender(mcCurve([trk("red", [k(0, 1), k(50, 0.2), k(100, 0)], "linear")], undefined, 2));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    await waitFor(() => {
+      const circles = Array.from(overlay.querySelectorAll("circle"));
+      expect(circles.length).toBe(3);
+      for (const c of circles) {
+        expect(c.getAttribute("r")).toBe("4");
+        expect(c.getAttribute("stroke")).toBe("#0a0a0a");
+        expect(c.getAttribute("fill-opacity")).toBe("1");
+      }
+    });
 
     await waitFor(() => {
       expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();

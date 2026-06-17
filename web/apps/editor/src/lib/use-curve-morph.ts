@@ -21,6 +21,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TrackDto } from "@particle-editor/bridge-schema";
 import {
   buildMorphGrid,
+  buildSwitchKeyGlides,
   classifyTrackChange,
   easeOutCubic,
   matchKeys,
@@ -39,7 +40,13 @@ export type MorphChannelInput = {
   dashed: boolean;    // READONLY_DASH carrier (locked focus channel)
   strokeWidth: number;
   opacity: number;    // dimmed background layers morph dimmed
-  isFocus: boolean;   // markers only on the focus channel (Task 3)
+  isFocus: boolean;   // edit-morph markers are focus-only; a switch glides every channel
+  // Static key-dot styling for THIS channel, so the morph overlay markers match
+  // it exactly (no size/stroke jump at the overlay→static handoff). Computed by
+  // the caller with the same logic as the static layer (CurveEditor.tsx).
+  markerRadius: number;
+  markerStroke: string;
+  markerStrokeWidth: number;
 };
 
 export type SuppressedMove = {
@@ -49,7 +56,8 @@ export type SuppressedMove = {
 
 /** A single key-marker descriptor. x0/y0 are pixel coords from the OLD
  *  projection; x1/y1 from the NEW projection. For "in" x0/y0 are unused;
- *  for "out" x1/y1 are unused. */
+ *  for "out" x1/y1 are unused. Radius / opacity / stroke are per-channel (read
+ *  from job.input.marker* in drawJob) so they match the static dot exactly. */
 type Marker = {
   mode: "move" | "in" | "out";
   x0: number;
@@ -69,7 +77,8 @@ type Job = {
   // imperative children, created on first tick:
   line?: SVGPolylineElement;
   fill?: SVGPathElement;
-  // Marker choreography (Task 3): only populated when input.isFocus.
+  // Marker choreography: the focus channel on any morph; every changed channel
+  // on an emitter switch (so a non-focus channel can populate this too).
   markers: Marker[];
   markerCircles: SVGCircleElement[];
 };
@@ -214,9 +223,11 @@ function projectKey(
   return { x, y };
 }
 
-/** Compute the marker list for a focus channel.
+/** Compute the marker list for a channel.
  *  prevTrack/prevProj describe the old shape; nextInput.track/vMin/vMax
- *  describe the new target. Returns [] for non-focus channels. */
+ *  describe the new target. For an emitter switch (forSwitch) EVERY visible
+ *  channel gets gliding markers (sized/dimmed to its static dot); for an
+ *  in-curve edit only the focus channel does. */
 function computeMarkers(
   prevTrack: TrackDto,
   prevProj: { vMin: number; vMax: number },
@@ -225,11 +236,30 @@ function computeMarkers(
   timeMax: number,
   width: number,
   height: number,
+  forSwitch: boolean,
 ): Marker[] {
-  if (!nextInput.isFocus) return [];
-
   const oldProj = { vMin: prevProj.vMin, vMax: prevProj.vMax, height };
   const newProj = { vMin: nextInput.vMin, vMax: nextInput.vMax, height };
+
+  // Emitter switch → "ride the line": every NEW key glides from the OLD curve's
+  // value at its time to its own value, so each key (matched or brand-new)
+  // emerges from the old line and slides into place along the morphing line —
+  // no pop/ghost regardless of key count. Applies to ALL CHANGED channels: a
+  // non-focus follower that mirrored the focus curve on the old emitter starts
+  // stacked under the focus key and glides out to its own value. (Radius/opacity/
+  // stroke come from job.input.marker* so the markers match each channel's static
+  // dot.) In-curve edits fall through to the focus-only time match below.
+  if (forSwitch) {
+    return buildSwitchKeyGlides(prevTrack, nextInput.track).map((g) => {
+      const p0 = projectKey(g.time, g.fromValue, timeMin, timeMax, width, oldProj);
+      const p1 = projectKey(g.time, g.toValue, timeMin, timeMax, width, newProj);
+      return { mode: "move", x0: p0.x, y0: p0.y, x1: p1.x, y1: p1.y };
+    });
+  }
+
+  // In-curve edit: markers on the focus channel only (original design — a
+  // follower's keys aren't the eye's target mid-edit).
+  if (!nextInput.isFocus) return [];
 
   const result = matchKeys(prevTrack, nextInput.track);
   const markers: Marker[] = [];
@@ -327,11 +357,13 @@ function drawJob(
   if (job.fill) job.fill.setAttribute("d", buildFillD(xs, ys, dims.height));
   job.line.setAttribute("points", buildPointsString(xs, ys));
 
-  // ── Marker circles (focus channel only) ─────────────────────────────────
-  // On the first tick (or after a retarget that changed the marker count),
-  // create/recreate the circle elements. On subsequent ticks, just update
-  // their attributes.
-  const { markers, input: { color } } = job;
+  // ── Marker circles ──────────────────────────────────────────────────────
+  // Focus channel always (edit + switch); non-focus channels only on a switch
+  // (`markers` is [] for a non-focus edit). On the first tick (or after a
+  // retarget that changed the marker count), create/recreate the circle
+  // elements with this channel's static-dot fill/stroke so the overlay→static
+  // handoff doesn't jump. On subsequent ticks, just update their geometry.
+  const { markers } = job;
   if (job.markerCircles.length !== markers.length) {
     // Remove any stale circles from the DOM and recreate.
     // Guard with try/catch: if the overlay <g> was re-created between ticks
@@ -343,31 +375,36 @@ function drawJob(
     job.markerCircles = [];
     for (let i = 0; i < markers.length; i++) {
       const circle = document.createElementNS(SVG_NS, "circle") as SVGCircleElement;
-      circle.setAttribute("fill", color);
-      circle.setAttribute("stroke", "none");
+      circle.setAttribute("fill", input.color);
+      circle.setAttribute("stroke", input.markerStroke);
+      circle.setAttribute("stroke-width", String(input.markerStrokeWidth));
       el.appendChild(circle);
       job.markerCircles.push(circle);
     }
   }
+  // Radius + opacity are per-channel (match the static dot): focus 5 / opacity 1,
+  // dimmed non-focus 3 / opacity 0.4 in focus mode, 4 / opacity 1 in view-only.
+  const mr = input.markerRadius;
+  const mo = input.opacity;
   for (let i = 0; i < markers.length; i++) {
     const m = markers[i]!;
     const circle = job.markerCircles[i]!;
     if (m.mode === "move") {
       circle.setAttribute("cx", String((m.x0 + (m.x1 - m.x0) * e).toFixed(2)));
       circle.setAttribute("cy", String((m.y0 + (m.y1 - m.y0) * e).toFixed(2)));
-      circle.setAttribute("r", "5");
-      circle.setAttribute("fill-opacity", "1");
+      circle.setAttribute("r", String(mr));
+      circle.setAttribute("fill-opacity", String(mo));
     } else if (m.mode === "in") {
       circle.setAttribute("cx", String(m.x1.toFixed(2)));
       circle.setAttribute("cy", String(m.y1.toFixed(2)));
-      circle.setAttribute("r", String((5 * e).toFixed(3)));
-      circle.setAttribute("fill-opacity", String(e.toFixed(3)));
+      circle.setAttribute("r", String((mr * e).toFixed(3)));
+      circle.setAttribute("fill-opacity", String((mo * e).toFixed(3)));
     } else {
       // "out"
       circle.setAttribute("cx", String(m.x0.toFixed(2)));
       circle.setAttribute("cy", String(m.y0.toFixed(2)));
-      circle.setAttribute("r", String((5 * (1 - e)).toFixed(3)));
-      circle.setAttribute("fill-opacity", String((1 - e).toFixed(3)));
+      circle.setAttribute("r", String((mr * (1 - e)).toFixed(3)));
+      circle.setAttribute("fill-opacity", String((mo * (1 - e)).toFixed(3)));
     }
   }
 }
@@ -382,14 +419,21 @@ export function useCurveMorph(args: {
   timeMax: number;
   isDragging: () => boolean;
   suppressRef: React.MutableRefObject<SuppressedMove>;
+  /** Id of the emitter the current `channels` tracks belong to. When it
+   *  differs from the previous render's, the track change is an emitter
+   *  SWITCH (not an in-curve edit) → keys ride the line in instead of popping. */
+  emitterId?: number | null;
 }): {
   activeIds: string[];
   attach: (channelId: string) => (el: SVGGElement | null) => void;
   isActive: (id: string) => boolean;
 } {
-  const { channels, width, height, timeMin, timeMax, isDragging, suppressRef } = args;
+  const { channels, width, height, timeMin, timeMax, isDragging, suppressRef, emitterId } = args;
   const jobs = useRef(new Map<string, Job>());
   const prev = useRef(new Map<string, { track: TrackDto; vMin: number; vMax: number }>());
+  // The emitter the `prev` tracks belong to. `undefined` until the first run
+  // so the very first classification is never mistaken for a switch.
+  const prevEmitterId = useRef<number | null | undefined>(undefined);
   const raf = useRef(0);
   const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeIds, setActiveIds] = useState<string[]>([]);
@@ -408,6 +452,12 @@ export function useCurveMorph(args: {
   useEffect(() => {
     const next = new Map<string, { track: TrackDto; vMin: number; vMax: number }>();
     let anyStarted = false;
+
+    // Emitter switch: the tracks now belong to a different emitter than the
+    // `prev` snapshot. Guarded against the first run (prevEmitterId undefined)
+    // so an initial mount never glides. Markers then ride the line, not pop by time.
+    const isEmitterSwitch =
+      prevEmitterId.current !== undefined && prevEmitterId.current !== emitterId;
 
     for (const c of channels) {
       next.set(c.channelId, { track: c.track, vMin: c.vMin, vMax: c.vMax });
@@ -460,6 +510,7 @@ export function useCurveMorph(args: {
         timeMax,
         width,
         height,
+        isEmitterSwitch,
       );
       // On retarget, clear existing marker circles so drawJob recreates them
       // (count may have changed).
@@ -495,6 +546,7 @@ export function useCurveMorph(args: {
     }
 
     prev.current = next;
+    prevEmitterId.current = emitterId;
 
     if (anyStarted) {
       setActiveIds(Array.from(jobs.current.keys()));
