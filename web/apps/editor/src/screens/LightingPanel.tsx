@@ -347,8 +347,18 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
     }
   };
 
+  // Ambient & shadow are pushed with w=0 — NOT 1.0 — to match the engine's
+  // as-loaded state. The host's startup lighting restore (HostWindow.cpp)
+  // and legacy `ColorToVec4` (src/main.cpp:6282) both push w=0, and the SPH
+  // lighting folds ambient in as `ambient.xyz * ambient.w`
+  // (src/SphericalHarmonics.cpp:76), so w gates the ambient floor. Pushing
+  // w=1 here would light a floor the load path leaves dark, so the whole
+  // scene brightened on Reset (and on any ambient edit) — the load≠Reset bug.
+  // Light diffuse/specular intentionally keep w=1 via buildLightDto; that
+  // asymmetry mirrors legacy MakeLight vs ColorToVec4. (Do not "restore" the
+  // opaque alpha — it is load-bearing.)
   const rgbToVec4 = (rgb: RgbColor): Vec4 =>
-    [rgb.r / 255, rgb.g / 255, rgb.b / 255, 1.0] as const;
+    [rgb.r / 255, rgb.g / 255, rgb.b / 255, 0.0] as const;
 
   const updateAmbient = (rgb: RgbColor) => {
     setAmbient(rgb);

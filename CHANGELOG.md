@@ -22,6 +22,10 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 - A "Smooth skydome seams" toggle (Preferences → Rendering, on by default) hides the seam baked into stock skydome backgrounds; turn it off to show the dome exactly as the game renders it
 
+### Fixed
+
+- The Lighting panel's Reset now restores the same lighting the scene loads with, instead of unexpectedly brightening the render
+
 ## 2026-06-16
 
 ### Added
