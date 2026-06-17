@@ -102,13 +102,15 @@ describe("LightingPanel", () => {
     expect(fill2Call).toBeDefined();
   });
 
-  it("Reset pushes ambient + shadow with alpha 0 (matches the as-loaded engine state)", () => {
-    // Regression guard for the load≠Reset brightness bug. The engine folds
-    // ambient into the SPH lighting as `ambient.xyz * ambient.w`
-    // (src/SphericalHarmonics.cpp:76), and the load path (host restore /
-    // legacy ColorToVec4) pushes ambient with w=0. Reset must push w=0 too,
-    // or it lights an ambient floor the as-loaded scene leaves dark and the
-    // whole render brightens. Pin the exact bit: color[3] === 0.
+  it("Reset pushes ambient with alpha 1 (game-faithful) and shadow with alpha 0", () => {
+    // Lockstep guard for the load==Reset invariant. The engine folds ambient
+    // into the SPH lighting as `ambient.xyz * ambient.w`
+    // (src/SphericalHarmonics.cpp:76), so w gates the mesh ambient floor; the
+    // game lights ambient only via that SPH path, so the faithful value is
+    // w=1. The load path (host `ambientToVec4` / legacy `AmbientToVec4`) pushes
+    // ambient with w=1 too, so Reset must match or it diverges from load.
+    // Shadow stays w=0: it is render-inert (echoed to the UI, never sampled),
+    // so its alpha gates nothing. Pin the exact bits.
     const bridge = makeStubBridge();
     render(<LightingPanel bridge={bridge} onClose={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
@@ -117,15 +119,15 @@ describe("LightingPanel", () => {
     const shadow = calls.find((c) => c.kind === "engine/set/shadow");
     expect(ambient).toBeDefined();
     expect(shadow).toBeDefined();
-    expect(ambient.params.color[3]).toBe(0);
+    expect(ambient.params.color[3]).toBe(1);
     expect(shadow.params.color[3]).toBe(0);
   });
 
   it("Reset keeps sun diffuse/specular at alpha 1 (no regression to the per-light round-trip)", () => {
-    // The ambient/shadow w=0 above is deliberate, but the lights must stay
-    // w=1 (buildLightDto folds intensity into rgb, alpha=1) — mirroring
-    // legacy MakeLight. Guard the asymmetry so a future "consistency" edit
-    // can't zero the light alpha too.
+    // The ambient/shadow alphas above (ambient w=1, shadow w=0) are deliberate,
+    // and the lights must stay w=1 (buildLightDto folds intensity into rgb,
+    // alpha=1) — mirroring legacy MakeLight. Guard the asymmetry so a future
+    // "consistency" edit can't zero the light alpha too.
     const bridge = makeStubBridge();
     render(<LightingPanel bridge={bridge} onClose={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));

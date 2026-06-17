@@ -347,16 +347,20 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
     }
   };
 
-  // Ambient & shadow are pushed with w=0 — NOT 1.0 — to match the engine's
-  // as-loaded state. The host's startup lighting restore (HostWindow.cpp)
-  // and legacy `ColorToVec4` (src/main.cpp:6282) both push w=0, and the SPH
-  // lighting folds ambient in as `ambient.xyz * ambient.w`
-  // (src/SphericalHarmonics.cpp:76), so w gates the ambient floor. Pushing
-  // w=1 here would light a floor the load path leaves dark, so the whole
-  // scene brightened on Reset (and on any ambient edit) — the load≠Reset bug.
-  // Light diffuse/specular intentionally keep w=1 via buildLightDto; that
-  // asymmetry mirrors legacy MakeLight vs ColorToVec4. (Do not "restore" the
-  // opaque alpha — it is load-bearing.)
+  // Ambient is pushed with alpha w=1 — game-faithful. The engine folds scene
+  // ambient into its SPH lighting as `ambient.xyz * ambient.w`
+  // (src/SphericalHarmonics.cpp:76), so w gates the per-vertex mesh ambient
+  // floor; per Petroglyph's shaders (reference/foc-shaders/AlamoEngine.fxh)
+  // production Mesh*/RSkin* light ambient ONLY via that SPH path, so w=1
+  // reproduces the game's mesh brightness. The host startup restore
+  // (HostWindow.cpp `ambientToVec4`) and legacy `AmbientToVec4` (src/main.cpp)
+  // push the same w=1, so load == Reset (all three stay in lockstep — flip
+  // them together or Reset diverges from load again).
+  const ambientToVec4 = (rgb: RgbColor): Vec4 =>
+    [rgb.r / 255, rgb.g / 255, rgb.b / 255, 1.0] as const;
+  // Shadow stays w=0: it is render-inert (the engine echoes it back to this
+  // panel via the DTO round-trip but never samples it in a shader), so its
+  // alpha gates nothing. Light diffuse/specular keep w=1 via buildLightDto.
   const rgbToVec4 = (rgb: RgbColor): Vec4 =>
     [rgb.r / 255, rgb.g / 255, rgb.b / 255, 0.0] as const;
 
@@ -364,7 +368,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
     setAmbient(rgb);
     void bridge.request({
       kind: "engine/set/ambient",
-      params: { color: rgbToVec4(rgb) },
+      params: { color: ambientToVec4(rgb) },
     });
     persistLighting({ sun, fill1, fill2, ambient: rgb, shadow, forceAlign });
   };
@@ -411,7 +415,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
     // Push ambient/shadow to the live engine directly — NOT via
     // updateAmbient/updateShadow, whose persist would capture the stale
     // (pre-reset) sun/fill closures. Persist the full default snapshot once.
-    void bridge.request({ kind: "engine/set/ambient", params: { color: rgbToVec4(AMBIENT_DEFAULT) } });
+    void bridge.request({ kind: "engine/set/ambient", params: { color: ambientToVec4(AMBIENT_DEFAULT) } });
     void bridge.request({ kind: "engine/set/shadow",  params: { color: rgbToVec4(SHADOW_DEFAULT) } });
     persistLighting({
       sun: SUN_DEFAULTS,

@@ -6279,13 +6279,28 @@ static Engine::Light MakeLight(float z_deg, float tilt_deg,
     return L;
 }
 
-// COLORREF → (R/255, G/255, B/255, 0) for scene-global ambient / shadow.
+// COLORREF → (R/255, G/255, B/255, 0) for scene-global shadow. Shadow is
+// render-inert (m_shadow is read only for the UI DTO round-trip, never sampled
+// by a shader), so its alpha gates nothing — keep w=0.
 static D3DXVECTOR4 ColorToVec4(COLORREF c)
 {
     return D3DXVECTOR4(GetRValue(c) / 255.0f,
                        GetGValue(c) / 255.0f,
                        GetBValue(c) / 255.0f,
                        0.0f);
+}
+
+// COLORREF → (R/255, G/255, B/255, 1) for scene-global ambient — game-faithful.
+// The engine folds ambient into its SPH lighting as ambient.xyz * ambient.w
+// (src/SphericalHarmonics.cpp:76); production Mesh*/RSkin* shaders light ambient
+// only via that SPH path, so w=1 lights the mesh ambient floor the game uses.
+// The host restore (HostWindow.cpp) and React ambientToVec4 push the same w=1.
+static D3DXVECTOR4 AmbientToVec4(COLORREF c)
+{
+    return D3DXVECTOR4(GetRValue(c) / 255.0f,
+                       GetGValue(c) / 255.0f,
+                       GetBValue(c) / 255.0f,
+                       1.0f);
 }
 
 // Registry helpers — same shape as ReadBloomFloat / WriteBloomFloat,
@@ -6444,7 +6459,7 @@ static void PushLightingToEngine(Engine* engine)
     engine->SetLight(Engine::LT_SUN,   MakeLight(sunZ,    sunTilt,    sunDiffuse,  sunSpecular,        sunIntensity));
     engine->SetLight(Engine::LT_FILL1, MakeLight(fill1Z,  fill1Tilt,  fill1Diffuse, RGB(0,0,0),         fill1Intensity));
     engine->SetLight(Engine::LT_FILL2, MakeLight(fill2Z,  fill2Tilt,  fill2Diffuse, RGB(0,0,0),         fill2Intensity));
-    engine->SetAmbient(ColorToVec4(sunAmbient));
+    engine->SetAmbient(AmbientToVec4(sunAmbient));
     engine->SetShadow (ColorToVec4(sunShadow));
 }
 
@@ -6600,7 +6615,7 @@ static void LightingDlg_PushAll(HWND hDlg, Engine* engine)
     engine->SetLight(Engine::LT_SUN,   MakeLight(sunZ,         sunTilt,         sunDiffuse,  sunSpecular,  sunIntensity));
     engine->SetLight(Engine::LT_FILL1, MakeLight(fill1Z_shown, fill1Tilt_shown, fill1Diffuse, RGB(0,0,0),  fill1Intensity));
     engine->SetLight(Engine::LT_FILL2, MakeLight(fill2Z_shown, fill2Tilt_shown, fill2Diffuse, RGB(0,0,0),  fill2Intensity));
-    engine->SetAmbient(ColorToVec4(sunAmbient));
+    engine->SetAmbient(AmbientToVec4(sunAmbient));
     engine->SetShadow (ColorToVec4(sunShadow));
 }
 

@@ -2293,6 +2293,21 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                                                   GetBValue(specular) / 255.0f * intensity, 1.0f);
                         return L;
                     };
+                    // Ambient pushes alpha w=1 — game-faithful. The engine folds
+                    // scene ambient into its SPH lighting as ambient.xyz * ambient.w
+                    // (src/SphericalHarmonics.cpp:76), so w gates the per-vertex mesh
+                    // ambient floor; per Petroglyph's shaders (reference/foc-shaders/
+                    // AlamoEngine.fxh) production Mesh*/RSkin* light ambient ONLY via
+                    // that SPH path, so w=1 reproduces the game's mesh brightness.
+                    // React ambientToVec4 (LightingPanel.tsx) and legacy
+                    // AmbientToVec4 (src/main.cpp) push the same w=1, so load == Reset.
+                    auto ambientToVec4 = [](COLORREF c) -> D3DXVECTOR4 {
+                        return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,
+                                           GetBValue(c) / 255.0f, 1.0f);
+                    };
+                    // Shadow keeps w=0: m_shadow is render-inert (read only by
+                    // GetShadow() for the UI DTO round-trip, BridgeDispatcher.cpp;
+                    // never sampled by a shader), so its alpha gates nothing.
                     auto colorToVec4 = [](COLORREF c) -> D3DXVECTOR4 {
                         return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,
                                            GetBValue(c) / 255.0f, 0.0f);
@@ -2329,7 +2344,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         makeLight(fill1Z, fill1Tilt, fill1Diffuse, RGB(0, 0, 0), fill1Intensity));
                     engine->SetLight(Engine::LT_FILL2,
                         makeLight(fill2Z, fill2Tilt, fill2Diffuse, RGB(0, 0, 0), fill2Intensity));
-                    engine->SetAmbient(colorToVec4(sunAmbient));
+                    engine->SetAmbient(ambientToVec4(sunAmbient));
                     engine->SetShadow (colorToVec4(sunShadow));
 
                     // The standing no-user verification channel for the
