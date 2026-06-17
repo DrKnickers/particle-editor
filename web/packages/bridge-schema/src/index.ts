@@ -687,6 +687,10 @@ export type Request =
   | { kind: "engine/set/paused";              params: { paused: boolean } }
   | { kind: "engine/set/overload-guard";      params: { enabled: boolean; maxParticles: number } }
   | { kind: "engine/set/msaa-level";          params: { level: number } }
+  // [seam fix] "Smooth skydome seams" view preference — re-maps the dome UVs to
+  // hide the asset's closure seam (deliberate non-faithful divergence). View-only;
+  // persisted web-side, re-applied at startup. The engine reloads the current dome.
+  | { kind: "engine/set/skydome-seam-fix";    params: { enabled: boolean } }
   // [hard-guard] Estimated alive particles per placed instance, pushed by
   // the web (chain-load.ts). The engine multiplies by its live placed-
   // instance count for the preemptive overload gate.
@@ -1117,6 +1121,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/set/paused" }                  ? Record<string, never> :
   R extends { kind: "engine/set/overload-guard" }          ? Record<string, never> :
   R extends { kind: "engine/set/msaa-level" }              ? Record<string, never> :
+  R extends { kind: "engine/set/skydome-seam-fix" }        ? Record<string, never> :
   R extends { kind: "engine/set/estimated-load" }          ? Record<string, never> :
   R extends { kind: "stats/set-frozen" }                   ? Record<string, never> :
 

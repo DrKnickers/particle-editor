@@ -1944,6 +1944,19 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         sendOk(json::object());
         return res;
     }
+    // -------- engine/set/skydome-seam-fix (view-only render preference) --------
+    // "Smooth skydome seams": re-maps the dome's UVs to erase the asset's closure
+    // seam (deliberate non-faithful divergence). Like msaa-level it is a view
+    // preference -- never marks the document dirty. Persisted web-side (localStorage)
+    // and re-applied at startup; the engine setter reloads the current dome.
+    if (kind == "engine/set/skydome-seam-fix")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        const bool enabled = params.value("enabled", true);
+        m_engine->SetSkydomeSeamFix(enabled);
+        sendOk(json::object());
+        return res;
+    }
     // -------- engine/set/estimated-load (hard-guard) -----------------
     // Web-computed estimate of alive particles per placed instance
     // (chain-load.ts owns the formula — see the hard-guard spec). Cached

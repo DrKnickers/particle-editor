@@ -1,6 +1,7 @@
 // Skydome render core implementation. See SkydomeMesh.h.
 
 #include "SkydomeMesh.h"
+#include "SkydomeDewrap.h"   // [seam fix] UV-closure de-wrap (toggle-gated by the caller)
 
 #include <cstdio>
 #include <cstring>
@@ -149,7 +150,7 @@ void SkydomeMesh::Clear()
     m_subMeshes.clear();
 }
 
-bool SkydomeMesh::Load(IFileManager& fm, const std::string& aloPath)
+bool SkydomeMesh::Load(IFileManager& fm, const std::string& aloPath, bool applySeamFix)
 {
     Clear();   // replace semantics: tear down any prior contents
 
@@ -191,6 +192,21 @@ bool SkydomeMesh::Load(IFileManager& fm, const std::string& aloPath)
                 transcodeVertex(f,
                                 sm.rawVertexBytes.data() + (size_t)v * kAloVertexStride,
                                 gpu.vertexBytes.data()   + (size_t)v * stride);
+            }
+
+            // [seam fix] When the "Smooth skydome seams" preference is on, re-map the
+            // dome's UVs to erase the asset's closure-meridian seam -- a DELIBERATE
+            // non-faithful divergence (the stock asset + game/alo-viewer show the seam;
+            // the authored UVs are incoherent, ~31% of shared edges mismatch, so no
+            // closure fix works -- we re-map from scratch; see SkydomeDewrap.h). Three
+            // passes: spherical re-UV from positions, collapse the pole-cap triangles
+            // (kill the lat-long pole streak), de-wrap the single atan2 meridian seam.
+            // Textured formats only (UV @24).
+            if (applySeamFix && (f == RF_NU2 || f == RF_NU2C))
+            {
+                skydome::SphericalReUV(gpu.vertexBytes, stride, 0, 24, 6.0f, 6.0f);
+                skydome::CollapsePoleUVs(gpu.vertexBytes, stride, 0, 24, gpu.indexBytes, 75.0f);
+                gpu.vertexCount = skydome::DewrapSphereUVs(gpu.vertexBytes, stride, 24, gpu.indexBytes);
             }
 
 #ifndef NDEBUG

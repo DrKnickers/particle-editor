@@ -16,6 +16,12 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 > The inline release markers below show where each tagged [SemVer](https://semver.org)
 > release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
 
+## 2026-06-17
+
+### Added
+
+- A "Smooth skydome seams" toggle (Preferences → Rendering, on by default) hides the seam baked into stock skydome backgrounds; turn it off to show the dome exactly as the game renders it
+
 ## 2026-06-16
 
 ### Added

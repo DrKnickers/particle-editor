@@ -19,6 +19,7 @@ import {
   writeMsaaLevel,
   type MsaaLevel,
 } from "@/lib/msaa-quality";
+import { applySkydomeSeamFix, readSkydomeSeamFix, writeSkydomeSeamFix } from "@/lib/skydome-seam-fix";
 
 type Props = { bridge: Bridge; open: boolean; onOpenChange: (open: boolean) => void };
 
@@ -83,6 +84,15 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
     setMsaaLevel(level);
     writeMsaaLevel(level);
     applyMsaaLevel(bridge, level);
+  };
+
+  // "Smooth skydome seams": re-maps the dome UVs to hide the asset's closure
+  // seam (default on). Persisted in localStorage; applied to the engine live.
+  const [seamFix, setSeamFix] = useState<boolean>(() => readSkydomeSeamFix());
+  const commitSeamFix = (enabled: boolean) => {
+    setSeamFix(enabled);
+    writeSkydomeSeamFix(enabled);
+    applySkydomeSeamFix(bridge, enabled);
   };
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Preferences" size="sm">
@@ -184,6 +194,22 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="pref-skydome-seam-fix" className="text-text-2">
+                Smooth skydome seams
+              </label>
+              <input
+                id="pref-skydome-seam-fix"
+                type="checkbox"
+                checked={seamFix}
+                onChange={(e) => commitSeamFix(e.target.checked)}
+                className="accent-[var(--accent)]"
+              />
+            </div>
+            <div className="text-[11px] text-text-3">
+              Hides the seam baked into stock skydome textures by re-mapping the dome.
+              Off shows the dome exactly as the game does (with the seam).
             </div>
           </div>
         </div>

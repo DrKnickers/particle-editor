@@ -28,6 +28,7 @@ import { useAppAccelerators } from "@/lib/use-app-accelerators";
 import { applyMode, readStoredMode } from "@/lib/theme";
 import { applyOverloadGuard, readOverloadGuard } from "@/lib/overload-guard";
 import { applyMsaaLevel, readMsaaLevel } from "@/lib/msaa-quality";
+import { applySkydomeSeamFix, readSkydomeSeamFix } from "@/lib/skydome-seam-fix";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
 // Evaluated once at module load; a page navigation to ?demo=primitives
@@ -104,6 +105,13 @@ function AppShell() {
   // user to open Preferences first.
   useEffect(() => {
     applyMsaaLevel(bridge, readMsaaLevel());
+  }, [bridge]);
+
+  // Push the persisted "Smooth skydome seams" preference to the engine at
+  // startup so a re-mapped (or asset-accurate) dome loads without opening
+  // Preferences first.
+  useEffect(() => {
+    applySkydomeSeamFix(bridge, readSkydomeSeamFix());
   }, [bridge]);
 
   // Screen 8 Batch 3: subscribe to file-state events (dirty/changed,

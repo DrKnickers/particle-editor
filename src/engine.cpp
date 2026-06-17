@@ -1332,6 +1332,17 @@ void Engine::SetCamera( const Camera& camera )
 }
 
 void Engine::SetGround(bool enable)			        { m_showGround = enable; }
+
+// [seam fix] Toggle the "Smooth skydome seams" UV re-map. Re-runs the current
+// dome through Load (which gates the re-map on the new flag) so the change is
+// immediate; a no-op when unchanged. Cheap: only the selected dome(s) reload.
+void Engine::SetSkydomeSeamFix(bool enable)
+{
+	if (m_skydomeSeamFix == enable) return;
+	m_skydomeSeamFix = enable;
+	RebuildSkydomeMeshes();
+}
+
 void Engine::SetGroundZ(float z)			        { m_groundZ    = z;      }
 void Engine::SetBackground(COLORREF color)		    { m_background = color; }
 void Engine::SetHeatDebug(bool debug)		        { m_debugHeat  = debug;  }
@@ -3935,7 +3946,7 @@ void Engine::RebuildSkydomeMeshes()
             continue;
         }
         const std::string aloPath = "Data\\Art\\Models\\" + refs[i]->modelPath;
-        if (!meshes[i]->Load(m_fileManager, aloPath))   // Load() Clear()s on failure
+        if (!meshes[i]->Load(m_fileManager, aloPath, m_skydomeSeamFix))   // Load() Clear()s on failure
         {
             *status[i] = SkydomeSlotStatus::LoadFailed;
             continue;

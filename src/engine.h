@@ -189,6 +189,10 @@ public:
 	void  SetCamera(const Camera& camera);
 
 	bool     GetGround() const		{ return m_showGround; }
+	// [seam fix] "Smooth skydome seams" preference. The setter re-applies to the
+	// currently-loaded dome (re-runs RebuildSkydomeMeshes) so the toggle is live.
+	bool     GetSkydomeSeamFix() const { return m_skydomeSeamFix; }
+	void     SetSkydomeSeamFix(bool enable);
 	float    GetGroundZ() const		{ return m_groundZ; }
 	int      GetGroundTexture() const { return m_groundTextureIndex; }
 	//: main.cpp's thumbnail generator needs the D3D9 device to
@@ -968,6 +972,9 @@ private:
 	std::string              m_skydomeSecondaryName;   // "" = none
 	SkydomeMesh              m_skydomePrimaryMesh;
 	SkydomeMesh              m_skydomeSecondaryMesh;
+	// [seam fix] "Smooth skydome seams" preference (default on). Gates the UV
+	// re-map in SkydomeMesh::Load; toggled live via SetSkydomeSeamFix (bridge).
+	bool                     m_skydomeSeamFix = true;
 	// Per-slot load outcome (None = no Name chosen, Ok = .alo loaded,
 	// LoadFailed = Name chosen but the .alo wouldn't load). Set in
 	// RebuildSkydomeMeshes alongside the mesh state it gates the render on.
