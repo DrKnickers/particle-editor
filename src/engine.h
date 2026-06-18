@@ -193,6 +193,10 @@ public:
 	// currently-loaded dome (re-runs RebuildSkydomeMeshes) so the toggle is live.
 	bool     GetSkydomeSeamFix() const { return m_skydomeSeamFix; }
 	void     SetSkydomeSeamFix(bool enable);
+	// [shadow] "Model shadows" render preference (default on). Pure view toggle —
+	// never marks the document dirty. Persisted web-side (localStorage).
+	bool     GetModelShadows() const { return m_modelShadowsEnabled; }
+	void     SetModelShadows(bool enable) { m_modelShadowsEnabled = enable; }
 	float    GetGroundZ() const		{ return m_groundZ; }
 	int      GetGroundTexture() const { return m_groundTextureIndex; }
 	//: main.cpp's thumbnail generator needs the D3D9 device to
@@ -580,6 +584,18 @@ public:
 	const D3DXVECTOR3&    GetReferencePosition()      const { return m_referencePosition; }
 	const D3DXVECTOR3&    GetReferenceRotation()      const { return m_referenceRotation; }
 	ReferenceObjectStatus GetReferenceObjectStatus()  const { return m_referenceObjectStatus; }
+	// [capture] Number of shadow-volume sub-meshes on the loaded reference object
+	// (plus any attachments). Used by --capture-ref to warn when the object has no
+	// shadow geometry so the operator knows the captured image will show no shadow.
+	size_t ReferenceShadowSubMeshCount() const;
+
+	// [capture] World-space AABB of the loaded reference object: takes the
+	// object-space AABB from ReferenceObjectMesh::GetBoundingBox, transforms all
+	// 8 corners by ReferenceObjectWorld(), and returns the enclosing world-space
+	// min/max. Used by --capture-ref to frame the whole object with a fit camera.
+	// False when no object is loaded / unresolved / has no bounds.
+	bool GetReferenceObjectBounds(D3DXVECTOR3& outMin, D3DXVECTOR3& outMax) const;
+
 	// Enumerate selectable game objects (Name + category) for the active mod/base.
 	// Kicks the background build on first call; returns the units/structures
 	// subset that's ready (empty while still building).
@@ -589,6 +605,14 @@ public:
 	// "building" (picker shows "Loading objects…") until this is true; it flips false
 	// again on a mod/submod switch while the background rebuild runs.
 	bool IsReferenceCatalogReady() const { return m_referenceCatalogBuilt; }
+
+	// [reference-model-shadows] Build the GameObject catalog SYNCHRONOUSLY on
+	// the calling thread (no worker, no UI handoff). For headless --capture-ref
+	// runs only: there's no UI thread to freeze and no concurrent FileManager
+	// access to race, so the isolated-FileManager dance the async path uses
+	// isn't needed. No-op once built. Lets SetReferenceObject resolve inline
+	// instead of deferring to a later Update() the one-shot run never reaches.
+	void BuildCatalogSync();
 
 	// Whether a catalog build is wanted but not yet ready -- surfaced in the
 	// engine-state snapshot (referenceCatalogBuilding) so the picker shows "Loading
@@ -800,6 +824,7 @@ private:
 	// transparent) -- each rigid sub-mesh placed by its bone, running its own game
 	// shader 1:1, blended per its phase/blend class. No-op when empty/unresolved.
 	void				RenderReferenceObject();
+	void				RenderReferenceShadows();        // [shadow] stencil shadow-volume pass
 
 	// Live reference-object world (Z-up yaw/pitch/roll then translate). The
 	// PICK uses the committed transform (ReferenceObjectWorld); the RENDER uses the
@@ -1003,6 +1028,7 @@ private:
 	// selection + placement state driving m_referenceObjectMesh.
 	std::string              m_referenceObjectName;            // "" = none selected
 	bool                     m_referenceObjectVisible = true;
+	bool                     m_modelShadowsEnabled = true;     // [shadow] "Model shadows" pref (default on)
 	D3DXVECTOR3              m_referencePosition = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
 	D3DXVECTOR3              m_referenceRotation = D3DXVECTOR3(0.0f, 0.0f, 0.0f);  // degrees [yaw,pitch,roll]
 	// Per-object <Scale_Factor> render multiplier for the selected reference

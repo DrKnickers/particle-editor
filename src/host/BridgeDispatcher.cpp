@@ -869,7 +869,6 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"gridVisible",             engine->GetGridVisible()},
         {"gridSpacing",             engine->GetGridSpacing()},
         {"snapEnabled",             engine->GetSnapEnabled()},
-
         // Background (COLORREF; low byte = blue)
         {"background",            static_cast<unsigned int>(engine->GetBackground())},
 
@@ -1954,6 +1953,17 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         const bool enabled = params.value("enabled", true);
         m_engine->SetSkydomeSeamFix(enabled);
+        sendOk(json::object());
+        return res;
+    }
+    // -------- engine/set/model-shadows (view-only render preference) --------
+    // "Model shadows": enables/disables the stencil shadow-volume pass for the
+    // reference object. Like skydome-seam-fix it is a view preference -- never
+    // marks the document dirty. Persisted web-side (localStorage).
+    if (kind == "engine/set/model-shadows")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        m_engine->SetModelShadows(params.value("enabled", true));
         sendOk(json::object());
         return res;
     }

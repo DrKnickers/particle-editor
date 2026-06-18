@@ -14,7 +14,7 @@ cl /nologo /EHsc /std:c++17 /MDd /Zi ^
    /I "%DXSDK_DIR%Include" /I "src" ^
    /Fe:tests\test_alo_model.exe /Fo:tests\obj\ ^
    tests\test_alo_model.cpp ^
-   src\AloModel.cpp src\ChunkReader.cpp src\files.cpp src\utils.cpp ^
+   src\AloModel.cpp src\ReferenceObjectMesh.cpp src\ChunkReader.cpp src\files.cpp src\utils.cpp ^
    /link /LIBPATH:"%DXSDK_DIR%Lib\x64" d3dx9.lib shlwapi.lib ole32.lib oleaut32.lib advapi32.lib user32.lib
 
 set ERR=%errorlevel%

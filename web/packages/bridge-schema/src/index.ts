@@ -691,6 +691,10 @@ export type Request =
   // hide the asset's closure seam (deliberate non-faithful divergence). View-only;
   // persisted web-side, re-applied at startup. The engine reloads the current dome.
   | { kind: "engine/set/skydome-seam-fix";    params: { enabled: boolean } }
+  // [model-shadows] "Model shadows" view preference — casts the game's stencil
+  // shadow for the reference model onto the ground (and self-shadows it).
+  // View-only; persisted web-side, re-applied at startup.
+  | { kind: "engine/set/model-shadows";       params: { enabled: boolean } }
   // [hard-guard] Estimated alive particles per placed instance, pushed by
   // the web (chain-load.ts). The engine multiplies by its live placed-
   // instance count for the preemptive overload gate.
@@ -1122,6 +1126,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/set/overload-guard" }          ? Record<string, never> :
   R extends { kind: "engine/set/msaa-level" }              ? Record<string, never> :
   R extends { kind: "engine/set/skydome-seam-fix" }        ? Record<string, never> :
+  R extends { kind: "engine/set/model-shadows" }           ? Record<string, never> :
   R extends { kind: "engine/set/estimated-load" }          ? Record<string, never> :
   R extends { kind: "stats/set-frozen" }                   ? Record<string, never> :
 

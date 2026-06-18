@@ -54,7 +54,13 @@ int Run(HINSTANCE hInstance,
         // rendering (0 = Off / solid colour). Lets a capture verify particles
         // render correctly over a background skydome (regression for the
         // RenderSkydome vertex-declaration leak — see lessons).
-        int captureSkydome = 0);
+        int captureSkydome = 0,
+        // --capture-ref <objectName>: render a game reference object (with its
+        // shadow) headlessly instead of a particle system. When non-empty (with
+        // capturePng), the host builds the GameObject catalog synchronously,
+        // selects the named reference object, renders captureFrames frames, and
+        // writes the engine RT to capturePng. Mutually exclusive with captureAlo.
+        const std::wstring& captureRef = L"");
 
 } // namespace host
 

@@ -6279,9 +6279,9 @@ static Engine::Light MakeLight(float z_deg, float tilt_deg,
     return L;
 }
 
-// COLORREF → (R/255, G/255, B/255, 0) for scene-global shadow. Shadow is
-// render-inert (m_shadow is read only for the UI DTO round-trip, never sampled
-// by a shader), so its alpha gates nothing — keep w=0.
+// COLORREF → (R/255, G/255, B/255, 0) for scene-global shadow. m_shadow.xyz
+// drives the reference-model shadow darken tint (Engine::RenderReferenceShadows),
+// so it IS sampled at render time. The alpha (w) is unused by the darken — keep w=0.
 static D3DXVECTOR4 ColorToVec4(COLORREF c)
 {
     return D3DXVECTOR4(GetRValue(c) / 255.0f,
@@ -8100,6 +8100,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// writes the engine's render target to <png>, exits. Implies the
 		// --new-ui host path (it owns the engine). See src/host/Run.h.
 		std::wstring captureAlo;
+		// --capture-ref <objectName> <png>: render a game reference object
+		// (with its shadow) headlessly instead of a particle system.
+		std::wstring captureRef;
 		std::wstring capturePng;
 		// Default ~180 frames ≈ 3 s of sim (loop paces ~16 ms/frame) so a
 		// freshly-spawned effect has time to fill before the snapshot.
@@ -8132,6 +8135,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				captureAlo = argv[i + 1];
 				capturePng = argv[i + 2];
 			}
+			if (argv[i] == L"--capture-ref" && i + 2 < argv.size())
+			{
+				captureRef = argv[i + 1];
+				capturePng = argv[i + 2];
+			}
 			if (argv[i] == L"--frames" && i + 1 < argv.size())
 			{
 				captureFrames = _wtoi(argv[i + 1].c_str());
@@ -8143,13 +8151,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				captureSkydome = _wtoi(argv[i + 1].c_str());
 			}
 		}
+		// Warn when both --capture and --capture-ref are supplied: --capture-ref
+		// wins (last write to capturePng, captureRef takes the branch in HostWindow).
+		// This used to be a silent surprise; make it explicit so operators notice.
+		if (!captureAlo.empty() && !captureRef.empty())
+			fprintf(stderr, "warning: both --capture and --capture-ref supplied; using --capture-ref\n");
 		// `--legacy` opts back into the classic chrome (clears the x64
 		// default-true). Applied before the --capture clamp so a headless
 		// --capture run — which needs the host to own the Engine — still wins.
 		if (legacy) newUi = false;
 		// --capture implies the new-UI host (it owns the Engine). Clamp a
 		// garbage/zero --frames back to the default.
-		if (!captureAlo.empty() && !capturePng.empty()) newUi = true;
+		if ((!captureAlo.empty() || !captureRef.empty()) && !capturePng.empty()) newUi = true;
 		if (captureFrames < 1) captureFrames = 180;
 		// A headless --capture must NEVER pop a modal CRT assert/abort dialog
 		// -- it hangs the run AND disrupts the user's screen (and tells us nothing).
@@ -8157,7 +8170,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// the redirect file) so a crash is diagnosable headlessly. Interactive Debug
 		// launches keep their dialogs.
 #ifndef NDEBUG
-		if (!captureAlo.empty() && !capturePng.empty())
+		if ((!captureAlo.empty() || !captureRef.empty()) && !capturePng.empty())
 		{
 			setvbuf(stderr, nullptr, _IONBF, 0);   // unbuffered: pre-crash traces survive a terminate
 			_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
@@ -8277,7 +8290,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			                           gameRoots,
 			                           devUi, testHost,
 			                           captureAlo, capturePng, captureFrames,
-			                           captureSkydome);
+			                           captureSkydome, captureRef);
 			delete fileManager;
 #ifndef NDEBUG
 			FreeConsole();

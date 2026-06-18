@@ -20,6 +20,7 @@ import {
   type MsaaLevel,
 } from "@/lib/msaa-quality";
 import { applySkydomeSeamFix, readSkydomeSeamFix, writeSkydomeSeamFix } from "@/lib/skydome-seam-fix";
+import { applyModelShadows, readModelShadows, writeModelShadows } from "@/lib/model-shadows";
 
 type Props = { bridge: Bridge; open: boolean; onOpenChange: (open: boolean) => void };
 
@@ -93,6 +94,16 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
     setSeamFix(enabled);
     writeSkydomeSeamFix(enabled);
     applySkydomeSeamFix(bridge, enabled);
+  };
+
+  // "Model shadows": casts the game's stencil shadow for the reference model
+  // onto the ground (and self-shadows it) (default on). Persisted in
+  // localStorage; applied to the engine live.
+  const [modelShadows, setModelShadows] = useState<boolean>(() => readModelShadows());
+  const commitModelShadows = (enabled: boolean) => {
+    setModelShadows(enabled);
+    writeModelShadows(enabled);
+    applyModelShadows(bridge, enabled);
   };
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Preferences" size="sm">
@@ -210,6 +221,21 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
             <div className="text-[11px] text-text-3">
               Hides the seam baked into stock skydome textures by re-mapping the dome.
               Off shows the dome exactly as the game does (with the seam).
+            </div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="pref-model-shadows" className="text-text-2">
+                Model shadows
+              </label>
+              <input
+                id="pref-model-shadows"
+                type="checkbox"
+                checked={modelShadows}
+                onChange={(e) => commitModelShadows(e.target.checked)}
+                className="accent-[var(--accent)]"
+              />
+            </div>
+            <div className="text-[11px] text-text-3">
+              Casts the game's stencil shadow for the reference model onto the ground (and self-shadows it).
             </div>
           </div>
         </div>

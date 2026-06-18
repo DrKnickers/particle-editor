@@ -82,11 +82,14 @@ public:
 
     // Decode + transcode the `.alo` at `aloPath` (resolved via `fm`). CPU only:
     // touches no device. Replaces any prior contents. Drops 0x402-hidden meshes +
-    // skinned + shadow/occluded/heat sub-meshes; KEEPS opaque (incl. collision =
-    // flat blue) + transparent (additive/alpha). Records each kept sub-mesh's
-    // phase/blend class + bone placement, and the object-space AABB over the kept
-    // geometry. Returns false (mesh left empty) on a FileManager miss, a parse
-    // failure, or zero renderable rigid sub-meshes.
+    // skinned + occluded/heat sub-meshes; KEEPS opaque (incl. collision = flat
+    // blue) + transparent (additive/alpha) in the visible SubMeshes() list, and
+    // keeps shadow-volume sub-meshes (MeshShadowVolume.fx / RSkinShadowVolume.fx)
+    // in a SEPARATE ShadowSubMeshes() bucket (for a later stencil-shadow pass --
+    // they must NOT be in the visible list or they'd draw as solid hulls). Records
+    // each kept sub-mesh's phase/blend class + bone placement, and the object-space
+    // AABB over the kept VISIBLE geometry. Returns false (mesh left empty) on a
+    // FileManager miss, a parse failure, or zero renderable rigid sub-meshes.
     //
     // `hideBoneNamesLower` (already lower-cased) names UNIT bones whose meshes
     // are damaged-state geometry the engine shows only when a hardpoint is destroyed
@@ -128,8 +131,15 @@ public:
     std::vector<RefSubMeshGpu>&       SubMeshes()       { return m_subMeshes; }
     const std::vector<RefSubMeshGpu>& SubMeshes() const { return m_subMeshes; }
 
+    // Shadow-volume sub-meshes (MeshShadowVolume.fx / RSkinShadowVolume.fx), kept
+    // OUT of the visible list so a later stencil-shadow pass can draw them without
+    // them appearing as solid hulls. Shares the full GPU lifecycle with m_subMeshes.
+    std::vector<RefSubMeshGpu>&       ShadowSubMeshes()       { return m_shadowSubMeshes; }
+    const std::vector<RefSubMeshGpu>& ShadowSubMeshes() const { return m_shadowSubMeshes; }
+
 private:
     std::vector<RefSubMeshGpu> m_subMeshes;
+    std::vector<RefSubMeshGpu> m_shadowSubMeshes;  // shadow-volume bucket (separate render pass)
     std::map<std::string, IDirect3DVertexDeclaration9*> m_decls;  // per-format, shared
     // Object-space matrix per bone, keyed by LOWER-CASED name -- retained from
     // Load (computeBoneObjectMatrices) so an attach model can be mounted at a named

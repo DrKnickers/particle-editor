@@ -903,7 +903,7 @@ bool Engine::Render()
 	}
 
     D3DCOLOR clearColor = D3DCOLOR_XRGB(GetRValue(m_background), GetGValue(m_background), GetBValue(m_background));
-	m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clearColor, 1.0f, 0);
+	m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, clearColor, 1.0f, 0);
 
 	// Phase 3 Stage 5 D12 — Clear-then-SetViewport ordering rule.
 	// The full-RT Clear above fills m_pSceneTexture with engine clear
@@ -982,6 +982,7 @@ bool Engine::Render()
 	// the ground and before the (depth-test-only) particles, so particles sort
 	// against it and it sits on the ground plane. No-op when none is loaded.
 	RenderReferenceObject();
+	RenderReferenceShadows();
 
 	// Selection box (depth-tested, part of the scene) when the object is
 	// selected -- shows the clickable region. Drawn before the on-top gizmo.
@@ -3104,6 +3105,226 @@ void Engine::RenderReferenceObject()
     m_pDevice->SetRenderState(D3DRS_CULLMODE,         oldCull);
 }
 
+void Engine::RenderReferenceShadows()
+{
+    if (!m_modelShadowsEnabled || !m_referenceObjectVisible) return;
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved()) return;
+
+    bool any = !m_referenceObjectMesh.ShadowSubMeshes().empty();
+    for (size_t i = 0; !any && i < m_referenceAttachments.size(); ++i)
+        any = !m_referenceAttachments[i]->mesh.ShadowSubMeshes().empty();
+    if (!any) return;
+
+    const D3DXMATRIX objectWorld = ReferenceObjectDisplayWorld();
+
+    // Extrusion distance for the silhouette volume. alo-viewer uses a large fixed
+    // 4000; scale up for big meshes so the volume reliably clears the ground plane.
+    float extrusionDist = 4000.0f;
+    {
+        D3DXVECTOR3 objMin, objMax;
+        if (m_referenceObjectMesh.GetBoundingBox(objMin, objMax)) {
+            D3DXVECTOR3 d = objMax - objMin;
+            extrusionDist = max(4000.0f, 2.0f * D3DXVec3Length(&d));
+        }
+    }
+
+    // Clip-space Z bias: z_clip' = z_clip + kBias * w_clip  (pushes the volume
+    // slightly DEEPER so coincident near-cap faces z-fail deterministically ->
+    // kills the self-shadow flicker. Matrix-only: NO depth-bias render state
+    // (those hang the WebView2 composite path). Sign/magnitude tunable: if the
+    // shadow detaches/peter-pans or the model's LIT faces self-shadow, this is
+    // the lever (flip sign or change magnitude).
+    const float kShadowZBias = 0.0001f;   // NDC depth units (~0.01% of [0,1] range)
+    D3DXMATRIX zbias; D3DXMatrixIdentity(&zbias);
+    zbias._43 = kShadowZBias;   // adds kBias*w to clip z (row-major: row 4 col 3)
+
+    // --- save every state we touch ---
+    DWORD oCW,oZF,oZW,oZE,oSE,oTSS,oSR,oSM,oSWM,oCull,oSFn,oSP,oSZF,oSFa,
+          oCcwFn,oCcwP,oCcwZF,oCcwFa,oAB,oSB,oDB,oLit,oFVF;
+    DWORD oTexCOP,oTexCA1,oTexAOP,oTexAA1;
+    m_pDevice->GetRenderState(D3DRS_COLORWRITEENABLE,&oCW); m_pDevice->GetRenderState(D3DRS_ZFUNC,&oZF);
+    m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE,&oZW); m_pDevice->GetRenderState(D3DRS_ZENABLE,&oZE);
+    m_pDevice->GetRenderState(D3DRS_STENCILENABLE,&oSE); m_pDevice->GetRenderState(D3DRS_TWOSIDEDSTENCILMODE,&oTSS);
+    m_pDevice->GetRenderState(D3DRS_STENCILREF,&oSR); m_pDevice->GetRenderState(D3DRS_STENCILMASK,&oSM);
+    m_pDevice->GetRenderState(D3DRS_STENCILWRITEMASK,&oSWM); m_pDevice->GetRenderState(D3DRS_CULLMODE,&oCull);
+    m_pDevice->GetRenderState(D3DRS_STENCILFUNC,&oSFn); m_pDevice->GetRenderState(D3DRS_STENCILPASS,&oSP);
+    m_pDevice->GetRenderState(D3DRS_STENCILZFAIL,&oSZF); m_pDevice->GetRenderState(D3DRS_STENCILFAIL,&oSFa);
+    m_pDevice->GetRenderState(D3DRS_CCW_STENCILFUNC,&oCcwFn); m_pDevice->GetRenderState(D3DRS_CCW_STENCILPASS,&oCcwP);
+    m_pDevice->GetRenderState(D3DRS_CCW_STENCILZFAIL,&oCcwZF); m_pDevice->GetRenderState(D3DRS_CCW_STENCILFAIL,&oCcwFa);
+    m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE,&oAB); m_pDevice->GetRenderState(D3DRS_SRCBLEND,&oSB);
+    m_pDevice->GetRenderState(D3DRS_DESTBLEND,&oDB); m_pDevice->GetRenderState(D3DRS_LIGHTING,&oLit);
+    m_pDevice->GetFVF(&oFVF);
+    m_pDevice->GetTextureStageState(0,D3DTSS_COLOROP,&oTexCOP); m_pDevice->GetTextureStageState(0,D3DTSS_COLORARG1,&oTexCA1);
+    m_pDevice->GetTextureStageState(0,D3DTSS_ALPHAOP,&oTexAOP); m_pDevice->GetTextureStageState(0,D3DTSS_ALPHAARG1,&oTexAA1);
+    IDirect3DVertexDeclaration9* oDecl=NULL; m_pDevice->GetVertexDeclaration(&oDecl);
+    IDirect3DVertexShader9* oVS=NULL; m_pDevice->GetVertexShader(&oVS);
+    IDirect3DPixelShader9*  oPS=NULL; m_pDevice->GetPixelShader(&oPS);
+    IDirect3DBaseTexture9*  oTex0=NULL; m_pDevice->GetTexture(0,&oTex0);
+    IDirect3DVertexBuffer9* oStream0=NULL; UINT oStreamOffset=0, oStreamStride=0;
+    m_pDevice->GetStreamSource(0, &oStream0, &oStreamOffset, &oStreamStride);
+    IDirect3DIndexBuffer9*  oIndices=NULL; m_pDevice->GetIndices(&oIndices);
+
+    // ============ VOLUME PASS — write stencil (single-pass two-sided z-fail) ============
+    // Mirrors alo-viewer: one CULLMODE=NONE pass with TWOSIDEDSTENCILMODE so CW faces
+    // INCR and CCW faces DECR the stencil on z-fail in a single draw.
+    m_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE,0);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE,D3DZB_TRUE);
+    m_pDevice->SetRenderState(D3DRS_ZFUNC,D3DCMP_LESS);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,FALSE);
+    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,FALSE);
+    m_pDevice->SetRenderState(D3DRS_CULLMODE,D3DCULL_NONE);
+    m_pDevice->SetRenderState(D3DRS_STENCILENABLE,TRUE);
+    m_pDevice->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE,TRUE);
+    m_pDevice->SetRenderState(D3DRS_STENCILREF,1);
+    m_pDevice->SetRenderState(D3DRS_STENCILMASK,0x3f);
+    m_pDevice->SetRenderState(D3DRS_STENCILWRITEMASK,0x3f);
+    m_pDevice->SetRenderState(D3DRS_STENCILFUNC,D3DCMP_ALWAYS);
+    m_pDevice->SetRenderState(D3DRS_STENCILPASS,D3DSTENCILOP_KEEP);
+    m_pDevice->SetRenderState(D3DRS_STENCILZFAIL,D3DSTENCILOP_INCR);   // CW faces incr on zfail
+    m_pDevice->SetRenderState(D3DRS_STENCILFAIL,D3DSTENCILOP_KEEP);
+    m_pDevice->SetRenderState(D3DRS_CCW_STENCILFUNC,D3DCMP_ALWAYS);
+    m_pDevice->SetRenderState(D3DRS_CCW_STENCILPASS,D3DSTENCILOP_KEEP);
+    m_pDevice->SetRenderState(D3DRS_CCW_STENCILZFAIL,D3DSTENCILOP_DECR);// CCW faces decr on zfail
+    m_pDevice->SetRenderState(D3DRS_CCW_STENCILFAIL,D3DSTENCILOP_KEEP);
+
+    // Lambda draws every shadow sub-mesh for the main mesh + all attachments.
+    // Technique t0_zfail is kept for its VS (extrudes silhouette to infinity);
+    // the technique's own stencil state-block is overridden by our hand-coded ops.
+    auto drawVolumes = [&]()
+    {
+        for (size_t mi = 0; mi <= m_referenceAttachments.size(); ++mi)
+        {
+            ReferenceObjectMesh& refMesh = (mi==0) ? m_referenceObjectMesh
+                                                   : m_referenceAttachments[mi-1]->mesh;
+            const D3DXMATRIX worldBase   = (mi==0) ? objectWorld
+                                                   : (m_referenceAttachments[mi-1]->boneMatrix * objectWorld);
+            for (RefSubMeshGpu& sub : refMesh.ShadowSubMeshes())
+            {
+                if (sub.effect==NULL || sub.vb==NULL || sub.ib==NULL || sub.decl==NULL) continue;
+                if (!sub.effect->isShadowVolume()) {
+#ifndef NDEBUG
+                    fprintf(stderr, "[shadow] '%s' resolved to a non-shadow effect - skipped\n", sub.shaderName.c_str());
+#endif
+                    continue;
+                }
+                D3DXMATRIX world = sub.placement * worldBase;
+                D3DXMATRIX wvp   = world * m_view * m_projection;
+                D3DXMATRIX invWorld;
+                if (!D3DXMatrixInverse(&invWorld,NULL,&world)) {
+#ifndef NDEBUG
+                    fprintf(stderr, "[shadow] '%s': singular world matrix — identity used for light direction (shadow direction will be wrong)\n", sub.shaderName.c_str());
+#endif
+                    D3DXMatrixIdentity(&invWorld);
+                }
+                const D3DXVECTOR3 lightDir3(m_lights[0].Position.x, m_lights[0].Position.y, m_lights[0].Position.z);
+                D3DXVECTOR3 lightObj3; D3DXVec3TransformNormal(&lightObj3,&lightDir3,&invWorld);
+                const D3DXVECTOR4 lightObj(lightObj3.x,lightObj3.y,lightObj3.z,0.0f);
+
+                ID3DXEffect* fx = sub.effect->getD3DEffect();
+                const Effect::Handles& h = sub.effect->getHandles();
+                if (FAILED(fx->SetTechnique("t0_zfail"))) {
+#ifndef NDEBUG
+                    fprintf(stderr, "[shadow] '%s' has no t0_zfail technique - skipped\n", sub.shaderName.c_str());
+#endif
+                    fx->Release(); continue;
+                }
+                // Bias the clip-space Z by post-multiplying the projection-bearing
+                // matrices with `zbias` (clip' = clip * zbias -> z' = z + w*kBias).
+                D3DXMATRIX wvpB = wvp * zbias;
+                D3DXMATRIX vpB  = m_viewProjection * zbias;
+                fx->SetMatrix(h.hWorldViewProjection, &wvpB);
+                fx->SetMatrix(h.hViewProjection,      &vpB);
+                fx->SetVector(h.hDirLightObjVec0,     &lightObj);
+                fx->SetVector(h.hDirLightVec0,        &m_lights[0].Position);
+                if (sub.skinned && h.hSkinMatrixArray) {
+                    D3DXMATRIX palette[24]; for (int b=0;b<24;++b) palette[b]=world;
+                    fx->SetMatrixArray(h.hSkinMatrixArray, palette, 24);
+                }
+                D3DXHANDLE hExtr = fx->GetParameterBySemantic(NULL, "SHADOW_EXTRUSION_DISTANCE");
+                if (hExtr) { D3DXVECTOR4 ex(extrusionDist,extrusionDist,extrusionDist,extrusionDist); fx->SetVector(hExtr, &ex); }
+
+                m_pDevice->SetVertexDeclaration(sub.decl);
+                m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
+                m_pDevice->SetIndices(sub.ib);
+                UINT passes=0;
+                if (FAILED(fx->Begin(&passes,0)) || passes==0) {
+#ifndef NDEBUG
+                    fprintf(stderr, "[shadow] '%s': fx->Begin failed or returned 0 passes — skipping sub-mesh\n", sub.shaderName.c_str());
+#endif
+                    fx->End(); fx->Release(); continue;
+                }
+                for (UINT p=0;p<passes;++p) {
+                    fx->BeginPass(p);
+                    m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST,0,0,sub.vertexCount,0,sub.primitiveCount);
+                    fx->EndPass();
+                }
+                fx->End(); fx->Release();
+            }
+        }
+    };
+
+    // Single two-sided pass: CW faces INCR, CCW faces DECR on z-fail (states set above).
+    drawVolumes();
+
+    // ============ DARKEN PASS ============
+    m_pDevice->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE,FALSE);
+    m_pDevice->SetRenderState(D3DRS_STENCILFUNC,D3DCMP_NOTEQUAL);
+    m_pDevice->SetRenderState(D3DRS_STENCILREF,0);
+    m_pDevice->SetRenderState(D3DRS_STENCILMASK,0x3f);
+    m_pDevice->SetRenderState(D3DRS_STENCILWRITEMASK,0);
+    m_pDevice->SetRenderState(D3DRS_STENCILPASS,D3DSTENCILOP_KEEP);
+    m_pDevice->SetRenderState(D3DRS_STENCILFAIL,D3DSTENCILOP_KEEP);
+    m_pDevice->SetRenderState(D3DRS_STENCILZFAIL,D3DSTENCILOP_KEEP);
+    m_pDevice->SetRenderState(D3DRS_ZENABLE,D3DZB_FALSE);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,FALSE);
+    m_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE,0x0f);
+    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,TRUE);
+    m_pDevice->SetRenderState(D3DRS_SRCBLEND,D3DBLEND_ZERO);
+    m_pDevice->SetRenderState(D3DRS_DESTBLEND,D3DBLEND_SRCCOLOR);
+    m_pDevice->SetRenderState(D3DRS_LIGHTING,FALSE);
+    m_pDevice->SetTextureStageState(0,D3DTSS_COLOROP,D3DTOP_SELECTARG1);
+    m_pDevice->SetTextureStageState(0,D3DTSS_COLORARG1,D3DTA_DIFFUSE);
+    m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAOP,D3DTOP_SELECTARG1);
+    m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAARG1,D3DTA_DIFFUSE);
+
+    D3DVIEWPORT9 vp; m_pDevice->GetViewport(&vp);
+    const float x0=(float)vp.X-0.5f, y0=(float)vp.Y-0.5f;
+    const float x1=(float)(vp.X+vp.Width)-0.5f, y1=(float)(vp.Y+vp.Height)-0.5f;
+    const DWORD tint = D3DCOLOR_COLORVALUE(m_shadow.x,m_shadow.y,m_shadow.z,1.0f);
+    struct PTVtx { float x,y,z,rhw; DWORD c; };
+    const PTVtx quad[4] = { {x0,y0,0,1,tint},{x1,y0,0,1,tint},{x0,y1,0,1,tint},{x1,y1,0,1,tint} };
+    m_pDevice->SetVertexShader(NULL);
+    m_pDevice->SetPixelShader(NULL);
+    m_pDevice->SetTexture(0,NULL);
+    m_pDevice->SetFVF(D3DFVF_XYZRHW|D3DFVF_DIFFUSE);
+    m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,2,quad,sizeof(PTVtx));
+
+    // --- restore ---
+    m_pDevice->SetRenderState(D3DRS_STENCILENABLE,oSE);
+    m_pDevice->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE,oTSS);
+    m_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE,oCW); m_pDevice->SetRenderState(D3DRS_ZFUNC,oZF);
+    m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,oZW); m_pDevice->SetRenderState(D3DRS_ZENABLE,oZE);
+    m_pDevice->SetRenderState(D3DRS_STENCILREF,oSR); m_pDevice->SetRenderState(D3DRS_STENCILMASK,oSM);
+    m_pDevice->SetRenderState(D3DRS_STENCILWRITEMASK,oSWM); m_pDevice->SetRenderState(D3DRS_CULLMODE,oCull);
+    m_pDevice->SetRenderState(D3DRS_STENCILFUNC,oSFn); m_pDevice->SetRenderState(D3DRS_STENCILPASS,oSP);
+    m_pDevice->SetRenderState(D3DRS_STENCILZFAIL,oSZF); m_pDevice->SetRenderState(D3DRS_STENCILFAIL,oSFa);
+    m_pDevice->SetRenderState(D3DRS_CCW_STENCILFUNC,oCcwFn); m_pDevice->SetRenderState(D3DRS_CCW_STENCILPASS,oCcwP);
+    m_pDevice->SetRenderState(D3DRS_CCW_STENCILZFAIL,oCcwZF); m_pDevice->SetRenderState(D3DRS_CCW_STENCILFAIL,oCcwFa);
+    m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,oAB); m_pDevice->SetRenderState(D3DRS_SRCBLEND,oSB);
+    m_pDevice->SetRenderState(D3DRS_DESTBLEND,oDB); m_pDevice->SetRenderState(D3DRS_LIGHTING,oLit);
+    m_pDevice->SetTextureStageState(0,D3DTSS_COLOROP,oTexCOP); m_pDevice->SetTextureStageState(0,D3DTSS_COLORARG1,oTexCA1);
+    m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAOP,oTexAOP); m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAARG1,oTexAA1);
+    if (oDecl) { m_pDevice->SetVertexDeclaration(oDecl); oDecl->Release(); }
+    m_pDevice->SetFVF(oFVF);
+    m_pDevice->SetVertexShader(oVS); if (oVS) oVS->Release();
+    m_pDevice->SetPixelShader(oPS);  if (oPS) oPS->Release();
+    m_pDevice->SetTexture(0, oTex0); if (oTex0) oTex0->Release();
+    m_pDevice->SetStreamSource(0, oStream0, oStreamOffset, oStreamStride);
+    if (oStream0) oStream0->Release();
+    m_pDevice->SetIndices(oIndices);
+    if (oIndices) oIndices->Release();
+}
+
 // Reusable fixed-function world-space line-list draw. Uses the passed
 // EmitterInstance::Vertex decl (Position + diffuse Color; the FF view/proj are
 // already set this frame). Depth test ON (so a placed object occludes lines
@@ -4049,6 +4270,21 @@ void Engine::SetCompositionMode(bool on)
         m_catalogWanted = true;
 }
 
+// [reference-model-shadows] Synchronous catalog build for headless --capture-ref.
+// Unlike StartCatalogBuildIfNeeded (which builds on a worker with an ISOLATED
+// FileManager to avoid freezing the UI thread / racing its MEG handles), a
+// one-shot headless run has no UI thread and no concurrent FileManager access,
+// so we build directly against m_fileManager on the calling thread. No-op once
+// built. Lets SetReferenceObject resolve INLINE rather than deferring to a later
+// Update() that the one-shot run exits before reaching.
+void Engine::BuildCatalogSync()
+{
+    if (m_referenceCatalogBuilt) return;
+    BuildGameObjectCatalog(m_fileManager, m_referenceCatalog);
+    m_referenceCatalogBuilt = true;
+    m_catalogWanted         = false;
+}
+
 // Kick a background catalog (re)build when one is wanted and not already
 // built or in flight. BuildGameObjectCatalog parses every object XML the active
 // content exposes (O(content)); on a big mod that froze the whole window when run
@@ -4143,6 +4379,49 @@ void Engine::SetReferenceObject(const std::string& name)
     m_referenceObjectSelected = RefLockResolveSelected(!name.empty(), m_referenceLocked);
     m_hoverManip = ManipHandle();
     RebuildReferenceObjectMesh();
+}
+
+// [capture] Sum of shadow-volume sub-meshes across the primary mesh and all
+// hardpoint attachments. Used by --capture-ref to warn when the loaded object
+// carries no shadow geometry (so the operator knows the image will show no shadow).
+size_t Engine::ReferenceShadowSubMeshCount() const
+{
+    size_t count = m_referenceObjectMesh.ShadowSubMeshes().size();
+    for (const auto& att : m_referenceAttachments)
+        count += att->mesh.ShadowSubMeshes().size();
+    return count;
+}
+
+// [capture] World-space AABB of the loaded reference object. The mesh's
+// GetBoundingBox is OBJECT-space; transform all 8 corners by ReferenceObjectWorld()
+// (scale + rotation + translation) and take the enclosing min/max so a fit camera
+// can frame the actual on-screen extent (rotation/scale-aware).
+bool Engine::GetReferenceObjectBounds(D3DXVECTOR3& outMin, D3DXVECTOR3& outMax) const
+{
+    if (m_referenceObjectMesh.IsEmpty() || !m_referenceObjectMesh.HasResolved())
+        return false;
+    D3DXVECTOR3 omin, omax;
+    if (!m_referenceObjectMesh.GetBoundingBox(omin, omax)) return false;
+
+    const D3DXMATRIX world = ReferenceObjectWorld();
+    const D3DXVECTOR3 corners[8] = {
+        D3DXVECTOR3(omin.x, omin.y, omin.z), D3DXVECTOR3(omax.x, omin.y, omin.z),
+        D3DXVECTOR3(omin.x, omax.y, omin.z), D3DXVECTOR3(omax.x, omax.y, omin.z),
+        D3DXVECTOR3(omin.x, omin.y, omax.z), D3DXVECTOR3(omax.x, omin.y, omax.z),
+        D3DXVECTOR3(omin.x, omax.y, omax.z), D3DXVECTOR3(omax.x, omax.y, omax.z),
+    };
+    D3DXVECTOR3 wmin( 1e30f,  1e30f,  1e30f);
+    D3DXVECTOR3 wmax(-1e30f, -1e30f, -1e30f);
+    for (const auto& c : corners)
+    {
+        D3DXVECTOR3 w;
+        D3DXVec3TransformCoord(&w, &c, &world);
+        wmin.x = (std::min)(wmin.x, w.x); wmin.y = (std::min)(wmin.y, w.y); wmin.z = (std::min)(wmin.z, w.z);
+        wmax.x = (std::max)(wmax.x, w.x); wmax.y = (std::max)(wmax.y, w.y); wmax.z = (std::max)(wmax.z, w.z);
+    }
+    outMin = wmin;
+    outMax = wmax;
+    return true;
 }
 
 // Resolve the selected Name -> model path -> load. The probe (only on the
@@ -4304,6 +4583,34 @@ void Engine::RebuildReferenceObjectMesh()
             fprintf(stderr, "[RefObj] '%s': mounted %zu of %zu hardpoint attach model(s)\n",
                     m_referenceObjectName.c_str(), m_referenceAttachments.size(), attach.size());
 #endif
+
+        // [Fix A] Load-time warning: if the primary object has shadow sub-meshes but
+        // none resolved to a real shadow-volume effect, the stencil pass will silently
+        // draw nothing. Emit once here (not per-frame) so it appears in host.log /
+        // OutputDebugStringA without spamming. Primary object only; attachments are a
+        // follow-up if needed. Uses OutputDebugStringA + printf — the same Release-visible
+        // pair BloomLog uses (printf reaches the Debug console; OutputDebugStringA reaches
+        // any attached debugger / DebugView in Release).
+        {
+            const auto& shadowSubs = m_referenceObjectMesh.ShadowSubMeshes();
+            if (!shadowSubs.empty())
+            {
+                size_t resolved = 0;
+                for (const RefSubMeshGpu& s : shadowSubs)
+                    if (s.effect && s.effect->isShadowVolume()) ++resolved;
+                if (resolved == 0)
+                {
+                    char buf[512];
+                    snprintf(buf, sizeof(buf),
+                        "[shadow] reference object '%s': %zu shadow-volume sub-mesh(es) but none "
+                        "resolved (MeshShadowVolume.fx/RSkinShadowVolume.fx not found in active "
+                        "content) - no model shadow will render\n",
+                        m_referenceObjectName.c_str(), shadowSubs.size());
+                    OutputDebugStringA(buf);
+                    printf("%s", buf);
+                }
+            }
+        }
 
         m_referenceObjectStatus = ReferenceObjectStatus::Ok;
         return;
@@ -4631,7 +4938,10 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
     m_numEmitters    = 0;
     m_numParticles   = 0;
     m_ambient        = D3DXVECTOR4(0,0,0,0);
-    m_shadow         = D3DXVECTOR4(0,0,0,0);
+    // [shadow] Grey default matching the registry default (RGB 100,100,110 / 255).
+    // m_shadow.xyz is the darken tint (result = dest * m_shadow.rgb); pure-black
+    // would make shadows fully opaque black if SetShadow is ever skipped.
+    m_shadow         = D3DXVECTOR4(100.0f/255.0f, 100.0f/255.0f, 110.0f/255.0f, 0.0f);
     m_background     = RGB(0x14,0x08,0x34);
 
 	//
@@ -4668,10 +4978,10 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 		throw runtime_error("Unable to get current display mode");
 	}
 
-	if ((m_presentationParameters.AutoDepthStencilFormat = GetDepthStencilFormat(DisplayMode.Format, false)) == D3DFMT_UNKNOWN)
+	if ((m_presentationParameters.AutoDepthStencilFormat = GetDepthStencilFormat(DisplayMode.Format, true)) == D3DFMT_UNKNOWN)
 	{
 		SAFE_RELEASE(m_pDirect3D);
-		throw runtime_error("Unable to find a matching depth buffer format");
+		throw runtime_error("Unable to find a matching depth/stencil buffer format (D24S8 required for model shadows)");
 	}
 
 	m_presentationParameters.MultiSampleType = GetMultiSampleType(&m_presentationParameters.MultiSampleQuality, DisplayMode.Format, m_presentationParameters.AutoDepthStencilFormat, m_presentationParameters.Windowed);

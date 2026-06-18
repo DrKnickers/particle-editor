@@ -20,6 +20,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Added
 
+- Reference objects (imported game units/structures) now cast stencil shadows onto the ground and self-shadow, using the game's own shadow technique; shadow darkness is driven by the existing "Sun Shadow Color" swatch in the Lighting panel, and the effect can be disabled via Preferences → Rendering → "Model shadows"
 - A "Smooth skydome seams" toggle (Preferences → Rendering, on by default) hides the seam baked into stock skydome backgrounds; turn it off to show the dome exactly as the game renders it
 - Imported reference objects now render at their true in-game size — the game's per-object scale factor is applied, so a particle effect can be sized against a faithful reference instead of one that was undersized
 

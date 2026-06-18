@@ -45,7 +45,8 @@ public:
                const std::wstring& captureAlo = L"",
                const std::wstring& capturePng = L"",
                int captureFrames = 60,
-               int captureSkydome = 0);
+               int captureSkydome = 0,
+               const std::wstring& captureRef = L"");
     ~HostWindow();
 
     HostWindow(const HostWindow&)            = delete;

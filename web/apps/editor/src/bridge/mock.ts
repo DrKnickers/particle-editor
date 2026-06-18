@@ -525,6 +525,10 @@ export class MockBridge implements Bridge {
         // MockBridge: no engine/dome to re-map — accept as a no-op.
         return {};
 
+      case "engine/set/model-shadows":
+        // MockBridge: no engine renderer — accept as a no-op.
+        return {};
+
       case "engine/set/estimated-load":
         // [hard-guard] The browser preview has no engine sim, so the
         // estimated-load value has no effect here; accept as a no-op so

@@ -678,6 +678,10 @@ struct HostWindowImpl
     // render m_captureFrames frames, write engine RT to m_capturePng,
     // then quit. Both paths empty = normal interactive run.
     std::wstring m_captureAlo;
+    // --capture-ref <objectName>: render a game reference object (with its
+    // shadow) headlessly instead of a particle system. Mutually exclusive
+    // with m_captureAlo in practice; the capture branch checks it first.
+    std::wstring m_captureRef;
     std::wstring m_capturePng;
     int          m_captureFrames = 60;
     // --skydome <slot>: apply this skydome slot in --capture mode before
@@ -696,7 +700,8 @@ struct HostWindowImpl
                    const std::wstring& captureAlo = L"",
                    const std::wstring& capturePng = L"",
                    int captureFrames = 60,
-                   int captureSkydome = 0)
+                   int captureSkydome = 0,
+                   const std::wstring& captureRef = L"")
         : hInstance(inst)
         , textureManager(tex)
         , shaderManager(shd)
@@ -704,6 +709,7 @@ struct HostWindowImpl
         , useDevUi(devUi)
         , useTestHost(testHost)
         , m_captureAlo(captureAlo)
+        , m_captureRef(captureRef)
         , m_capturePng(capturePng)
         , m_captureFrames(captureFrames)
         , m_captureSkydomeSlot(captureSkydome)
@@ -2305,9 +2311,9 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,
                                            GetBValue(c) / 255.0f, 1.0f);
                     };
-                    // Shadow keeps w=0: m_shadow is render-inert (read only by
-                    // GetShadow() for the UI DTO round-trip, BridgeDispatcher.cpp;
-                    // never sampled by a shader), so its alpha gates nothing.
+                    // Shadow keeps w=0: m_shadow.xyz drives the reference-model shadow
+                    // darken tint (Engine::RenderReferenceShadows), so it IS sampled at
+                    // render time. The alpha (w) is unused by the darken — only .xyz is read.
                     auto colorToVec4 = [](COLORREF c) -> D3DXVECTOR4 {
                         return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,
                                            GetBValue(c) / 255.0f, 0.0f);
@@ -4006,7 +4012,8 @@ int HostWindowImpl::Run(int nCmdShow)
     // bound &particleSystem to the dispatcher, so this slot is what the
     // render loop below reads via particleSystem.get()). The loop then
     // renders m_captureFrames frames and writes the engine RT to a PNG.
-    const bool captureMode = !m_captureAlo.empty() && !m_capturePng.empty();
+    const bool captureMode = (!m_captureAlo.empty() || !m_captureRef.empty())
+                             && !m_capturePng.empty();
     bool captureFailed = false;
     if (captureMode)
     {
@@ -4014,6 +4021,103 @@ int HostWindowImpl::Run(int nCmdShow)
         {
             Log("[capture] no engine available — cannot capture\n");
             captureFailed = true;
+        }
+        else if (!m_captureRef.empty())
+        {
+            // [reference-model-shadows] --capture-ref: build the GameObject
+            // catalog SYNCHRONOUSLY (no UI thread to freeze headlessly, and
+            // no concurrent FileManager access to race), then select the
+            // reference object so it resolves INLINE — the normal async path
+            // defers SetReferenceObject until Update() harvests the worker
+            // build, which a one-shot headless run would exit before. The
+            // active mod was already restored at startup (WM_CREATE), so the
+            // catalog builds against the user's active content automatically.
+            engine->BuildCatalogSync();
+            engine->SetReferenceObject(WideToAnsi(m_captureRef));
+            engine->SetReferenceObjectVisible(true);
+            {
+                const ReferenceObjectStatus refStatus = engine->GetReferenceObjectStatus();
+                if (refStatus == ReferenceObjectStatus::Ok)
+                {
+                    // Status Ok but GetReferenceObjectBounds returning false
+                    // means no sub-mesh actually resolved renderable geometry
+                    // (e.g. device was NULL during Resolve, or every sub-mesh
+                    // failed the shader step). The capture would be a blank
+                    // image — fail with exit 2 instead.
+                    D3DXVECTOR3 wmin, wmax;
+                    if (!engine->GetReferenceObjectBounds(wmin, wmax))
+                    {
+                        Log("[capture] reference object '%ls' resolved status Ok but no renderable geometry (device/resolve issue)\n",
+                            m_captureRef.c_str());
+                        captureFailed = true;
+                    }
+                    else
+                    {
+                        Log("[capture] reference object '%ls' resolved ok; rendering %d frames -> %ls\n",
+                            m_captureRef.c_str(), m_captureFrames, m_capturePng.c_str());
+
+                        // [capture] Frame the whole object: fit the camera to the
+                        // world-space AABB so the captured image shows the entire
+                        // model (+ surrounding ground), not the zoomed-in default.
+                        // The capture render uses the full-RT projection at 45deg
+                        // FOV (D3DXToRadian(45), see engine.cpp SetSceneViewport /
+                        // ResetParameters), so size dist off that same fovY.
+                        {
+                            D3DXVECTOR3 center((wmin.x + wmax.x) * 0.5f,
+                                               (wmin.y + wmax.y) * 0.5f,
+                                               (wmin.z + wmax.z) * 0.5f);
+                            D3DXVECTOR3 diag = wmax - wmin;
+                            float radius = 0.5f * D3DXVec3Length(&diag);
+                            if (radius < 1.0f) radius = 1.0f;   // degenerate-bounds guard
+
+                            const float fovY = D3DXToRadian(45.0f);
+                            float dist = radius / tanf(0.5f * fovY) * 1.6f;  // 1.6 = framing margin
+
+                            // 3/4 view in the editor's Z-up RH space: look down at an
+                            // angle from -Y so the ground plane (z=0) is visible.
+                            D3DXVECTOR3 dir(0.7f, -0.7f, 0.5f);
+                            D3DXVec3Normalize(&dir, &dir);
+
+                            Engine::Camera cam;
+                            cam.Position = center + dir * dist;
+                            cam.Target   = center;
+                            cam.Up       = D3DXVECTOR3(0.0f, 0.0f, 1.0f);
+                            engine->SetCamera(cam);
+                            Log("[capture] fit camera: center=(%.1f,%.1f,%.1f) radius=%.1f dist=%.1f eye=(%.1f,%.1f,%.1f)\n",
+                                center.x, center.y, center.z, radius, dist,
+                                cam.Position.x, cam.Position.y, cam.Position.z);
+                        }
+                        const size_t shadowCount = engine->ReferenceShadowSubMeshCount();
+                        if (shadowCount > 0)
+                        {
+                            Log("[capture] reference object '%ls' has %zu shadow-volume sub-mesh(es)\n",
+                                m_captureRef.c_str(), shadowCount);
+                        }
+                        else
+                        {
+                            Log("[capture] WARNING: reference object '%ls' has NO shadow-volume sub-meshes - captured image will show no model shadow\n",
+                                m_captureRef.c_str());
+                        }
+                    }  // else (bounds resolved)
+                }
+                else
+                {
+                    const char* reason =
+                        (refStatus == ReferenceObjectStatus::Skinned)      ? "skinned mesh — not supported" :
+                        (refStatus == ReferenceObjectStatus::ModelMissing) ? "model file not found in the active mod/base" :
+                        (refStatus == ReferenceObjectStatus::LoadFailed)   ? "model failed to load (corrupt or non-mesh .alo)" :
+                                                                             "unknown name / mod not active";
+                    Log("[capture] ERROR: reference object '%ls' did not resolve (%s)\n",
+                        m_captureRef.c_str(), reason);
+                    captureFailed = true;
+                }
+            }
+            if (m_captureSkydomeSlot > 0)
+            {
+                const bool sok = engine->SetSkydomeSlot(m_captureSkydomeSlot);
+                Log("[capture] skydome slot %d -> %s\n",
+                    m_captureSkydomeSlot, sok ? "ok" : "FAILED");
+            }
         }
         else
         {
@@ -4260,10 +4364,12 @@ HostWindow::HostWindow(HINSTANCE hInstance,
                        const std::wstring& captureAlo,
                        const std::wstring& capturePng,
                        int captureFrames,
-                       int captureSkydome)
+                       int captureSkydome,
+                       const std::wstring& captureRef)
     : m_impl(new HostWindowImpl(hInstance, textureManager, shaderManager, fileManager,
                                 gameRoots, useDevUi, useTestHost,
-                                captureAlo, capturePng, captureFrames, captureSkydome))
+                                captureAlo, capturePng, captureFrames, captureSkydome,
+                                captureRef))
 {
 }
 
@@ -4293,11 +4399,13 @@ int Run(HINSTANCE hInstance,
         const std::wstring& captureAlo,
         const std::wstring& capturePng,
         int captureFrames,
-        int captureSkydome)
+        int captureSkydome,
+        const std::wstring& captureRef)
 {
     HostWindow host(hInstance, textureManager, shaderManager, fileManager,
                     gameRoots, useDevUi, useTestHost,
-                    captureAlo, capturePng, captureFrames, captureSkydome);
+                    captureAlo, capturePng, captureFrames, captureSkydome,
+                    captureRef);
     return host.Run(nCmdShow);
 }
 

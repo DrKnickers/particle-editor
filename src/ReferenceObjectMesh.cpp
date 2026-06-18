@@ -228,6 +228,7 @@ void ReferenceObjectMesh::Clear()
     ReleaseEffects();
     ReleaseDecls();
     m_subMeshes.clear();
+    m_shadowSubMeshes.clear();
     m_boneObjByName.clear();
     m_skippedSkinned = false;
     m_boundMin = m_boundMax = D3DXVECTOR3(0, 0, 0);
@@ -298,12 +299,15 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath,
             if (sm.rawVertexBytes.empty() || sm.vertexCount == 0 || sm.primitiveCount == 0)
                 continue;
 
-            // Phase/blend class. Shadow + occluded are never visible geometry.
-            // Heat is a deferred two-stage scene-composite (D3) -> log + skip in v1.
-            // Opaque (incl. MeshCollision = flat blue) + additive/alpha are KEPT and
-            // drawn (the latter two in the transparent pass).
+            // Phase/blend class. Occluded is never visible geometry. Heat is
+            // a deferred two-stage scene-composite (D3) -> log + skip in v1. Opaque
+            // (incl. MeshCollision = flat blue) + additive/alpha are KEPT and drawn
+            // (the latter two in the transparent pass). Shadow-volume sub-meshes fall
+            // through to build a RefSubMeshGpu but are routed into m_shadowSubMeshes
+            // below (a later stencil pass draws them; they'd be solid hulls if drawn
+            // as visible geometry).
             const AloRenderClass rc = AloClassifyShader(sm.shaderName);
-            if (rc == ALO_RC_SHADOW || rc == ALO_RC_OCCLUDED)
+            if (rc == ALO_RC_OCCLUDED)
                 continue;
             if (rc == ALO_RC_HEAT)
             {
@@ -348,7 +352,10 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath,
                                 sm.rawVertexBytes.data() + (size_t)v * kAloVertexStride,
                                 gpu.vertexBytes.data()   + (size_t)v * stride);
             }
-            m_subMeshes.push_back(std::move(gpu));
+            // Shadow volumes go to their own bucket (separate stencil pass); all
+            // other kept sub-meshes are visible geometry.
+            if (rc == ALO_RC_SHADOW) m_shadowSubMeshes.push_back(std::move(gpu));
+            else                     m_subMeshes.push_back(std::move(gpu));
         }
     }
 
@@ -405,8 +412,7 @@ bool ReferenceObjectMesh::Resolve(IShaderManager& sm, IDirect3DDevice9* dev)
 {
     if (dev == nullptr) return false;
 
-    bool anyResolved = false;
-    for (RefSubMeshGpu& gpu : m_subMeshes)
+    auto resolveOne = [&](RefSubMeshGpu& gpu)
     {
         relptr(gpu.effect);
         // getShader (a missing/uncompilable .fxo) and GetOrCreateDecl can
@@ -418,7 +424,7 @@ bool ReferenceObjectMesh::Resolve(IShaderManager& sm, IDirect3DDevice9* dev)
         try
         {
             gpu.effect = sm.getShader(dev, gpu.shaderName);   // ext-tolerant .fx -> .FXO; cached + AddRef'd
-            if (gpu.effect == nullptr) continue;
+            if (gpu.effect == nullptr) return;
 
             gpu.decl = GetOrCreateDecl(dev, gpu.vertexFormatName);
 
@@ -434,7 +440,6 @@ bool ReferenceObjectMesh::Resolve(IShaderManager& sm, IDirect3DDevice9* dev)
                     gpu.shaderName.c_str(), gpu.vertexFormatName.c_str(), td.Name ? td.Name : "(none)");
 #endif
             fx->Release();
-            anyResolved = true;
         }
         catch (wexception& we)
         {
@@ -446,17 +451,22 @@ bool ReferenceObjectMesh::Resolve(IShaderManager& sm, IDirect3DDevice9* dev)
 #endif
             relptr(gpu.effect);   // leave effect/decl null -> skipped at draw
         }
-    }
-    return anyResolved;
+    };
+    for (RefSubMeshGpu& gpu : m_subMeshes)       resolveOne(gpu);
+    for (RefSubMeshGpu& gpu : m_shadowSubMeshes) resolveOne(gpu);
+    // Return whether a VISIBLE sub-mesh resolved. HasResolved() iterates
+    // m_subMeshes only, so a shadow-only resolve does not mask a load failure.
+    // Shadow sub-meshes are still resolved above; only the return value changes.
+    return HasResolved();
 }
 
 void ReferenceObjectMesh::CreateBuffers(IDirect3DDevice9* dev, IFileManager& fm)
 {
     if (dev == nullptr) return;
 
-    for (RefSubMeshGpu& gpu : m_subMeshes)
+    auto createOne = [&](RefSubMeshGpu& gpu)
     {
-        if (gpu.effect == nullptr) continue;
+        if (gpu.effect == nullptr) return;
 
         relptr(gpu.vb);
         relptr(gpu.ib);
@@ -465,7 +475,7 @@ void ReferenceObjectMesh::CreateBuffers(IDirect3DDevice9* dev, IFileManager& fm)
 
         const UINT vbBytes = (UINT)gpu.vertexBytes.size();
         const UINT ibBytes = (UINT)gpu.indexBytes.size();
-        if (vbBytes == 0 || ibBytes == 0) continue;
+        if (vbBytes == 0 || ibBytes == 0) return;
 
         if (SUCCEEDED(dev->CreateVertexBuffer(vbBytes, D3DUSAGE_WRITEONLY, 0,
                                               D3DPOOL_DEFAULT, &gpu.vb, nullptr)))
@@ -486,42 +496,50 @@ void ReferenceObjectMesh::CreateBuffers(IDirect3DDevice9* dev, IFileManager& fm)
         for (size_t i = 0; i < gpu.params.size(); ++i)
             if (gpu.params[i].kind == AloShaderParam::TEXTURE)
                 gpu.matTextures[i] = loadMaterialTexture(dev, fm, gpu.params[i].tex);
-    }
+    };
+    for (RefSubMeshGpu& gpu : m_subMeshes)       createOne(gpu);
+    for (RefSubMeshGpu& gpu : m_shadowSubMeshes) createOne(gpu);
 }
 
 void ReferenceObjectMesh::OnLostDevice()
 {
-    for (RefSubMeshGpu& gpu : m_subMeshes)
+    auto lostOne = [](RefSubMeshGpu& gpu)
     {
         relptr(gpu.vb);
         relptr(gpu.ib);
         for (IDirect3DTexture9*& t : gpu.matTextures) relptr(t);
         gpu.matTextures.clear();
         if (gpu.effect) gpu.effect->OnLostDevice();
-    }
+    };
+    for (RefSubMeshGpu& gpu : m_subMeshes)       lostOne(gpu);
+    for (RefSubMeshGpu& gpu : m_shadowSubMeshes) lostOne(gpu);
 }
 
 void ReferenceObjectMesh::OnResetEffects()
 {
     for (RefSubMeshGpu& gpu : m_subMeshes)
         if (gpu.effect) gpu.effect->OnResetDevice();
+    for (RefSubMeshGpu& gpu : m_shadowSubMeshes)
+        if (gpu.effect) gpu.effect->OnResetDevice();
 }
 
 void ReferenceObjectMesh::ReleaseGpuBuffers()
 {
-    for (RefSubMeshGpu& gpu : m_subMeshes)
+    auto releaseOne = [](RefSubMeshGpu& gpu)
     {
         relptr(gpu.vb);
         relptr(gpu.ib);
         for (IDirect3DTexture9*& t : gpu.matTextures) relptr(t);
         gpu.matTextures.clear();
-    }
+    };
+    for (RefSubMeshGpu& gpu : m_subMeshes)       releaseOne(gpu);
+    for (RefSubMeshGpu& gpu : m_shadowSubMeshes) releaseOne(gpu);
 }
 
 void ReferenceObjectMesh::ReleaseEffects()
 {
-    for (RefSubMeshGpu& gpu : m_subMeshes)
-        relptr(gpu.effect);
+    for (RefSubMeshGpu& gpu : m_subMeshes)       relptr(gpu.effect);
+    for (RefSubMeshGpu& gpu : m_shadowSubMeshes) relptr(gpu.effect);
 }
 
 void ReferenceObjectMesh::ReleaseDecls()

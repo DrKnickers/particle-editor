@@ -8,9 +8,12 @@
 // tests/build_test_alo_model.bat.
 
 #include "AloModel.h"
+#include "ReferenceObjectMesh.h"   // [refmesh] shadow-bucket routing test
+#include "managers.h"              // IFileManager (StubFileManager below)
 #include "files.h"
 #include "exceptions.h"
 
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -102,6 +105,26 @@ static Bytes geometry(uint32_t n, uint32_t prims, const std::string& fmt) {
     kids.push_back(countsChunk(n, prims));
     Bytes f; cstr(f, fmt); kids.push_back(leaf(0x10002, f));
     kids.push_back(leaf(0x10007, vertexBlob(n, true)));
+    kids.push_back(leaf(0x10004, indexBlob(prims)));
+    return container(0x10000, kids);
+}
+// Build a geometry chunk with explicit float3 positions for each vertex (all in
+// the 144B MASTER_VERTEX stride). positions.size() must equal nVerts; other
+// fields (normal, uv, …) are zeroed. Used by the AABB-exclusion test to place
+// shadow-volume verts at a known far distance so we can assert they don't widen
+// the visible bounding box.
+static Bytes geometryWithPositions(const std::vector<std::array<float,3>>& positions,
+                                   uint32_t prims, const std::string& fmt)
+{
+    const uint32_t n = (uint32_t)positions.size();
+    Bytes vdata; vdata.resize((size_t)n * 144, 0);
+    for (uint32_t i = 0; i < n; ++i)
+        std::memcpy(&vdata[(size_t)i * 144], positions[i].data(), 12);   // pos @0
+
+    std::vector<Bytes> kids;
+    kids.push_back(countsChunk(n, prims));
+    Bytes f; cstr(f, fmt); kids.push_back(leaf(0x10002, f));
+    kids.push_back(leaf(0x10007, vdata));
     kids.push_back(leaf(0x10004, indexBlob(prims)));
     return container(0x10000, kids);
 }
@@ -199,6 +222,23 @@ static const AloShaderParam* findParam(const AloSubMesh& sm, const std::string& 
     for (const auto& p : sm.params) if (p.name == name) return &p;
     return nullptr;
 }
+
+// [refmesh] Minimal IFileManager returning an in-memory IFile over a fixed byte
+// blob, for the device-free ReferenceObjectMesh::Load path (Load calls only
+// getFile). Each getFile hands back a FRESH MemoryFile at refcount 1 so Load's
+// single Release() frees it.
+class StubFileManager : public IFileManager {
+public:
+    explicit StubFileManager(Bytes bytes) : m_bytes(std::move(bytes)) {}
+    IFile* getFile(const std::string& /*path*/) override {
+        MemoryFile* mf = new MemoryFile();
+        if (!m_bytes.empty()) mf->write(m_bytes.data(), (unsigned long)m_bytes.size());
+        mf->seek(0);
+        return mf;
+    }
+private:
+    Bytes m_bytes;
+};
 
 // Dump mode (argv[1] = path to a real .alo): parse + print, no assertions.
 // Validates the decoder against real install assets (dev-box only; not run in CI).
@@ -498,6 +538,144 @@ int main(int argc, char** argv) {
         CHECK(!threw, "wrong-size bone data tolerated (no throw)");
         CHECK(!threw && m2.bones.size() == 1 && m2.bones[0].name == "Weird", "tolerant bone still recorded (name)");
         CHECK(!threw && m2.bones.size() == 1 && m2.bones[0].parentIndex == 0 && m2.bones[0].matrix[0] == 1.0f, "tolerant bone keeps identity defaults");
+    }
+
+    // ---- [refmesh] ReferenceObjectMesh::Load shadow-volume routing ----------
+    // A shadow sub-mesh (MeshShadowVolume.fx -> ALO_RC_SHADOW) must be KEPT in a
+    // SEPARATE ShadowSubMeshes() bucket (for a later stencil-shadow pass), NOT in
+    // the visible SubMeshes() list (it would draw as a solid hull).
+    std::printf("[refmesh-shadow-routing]\n");
+    {
+        std::pair<Bytes, Bytes> visible = { material("MeshGloss.fx", { texParam("BaseTexture", "hull.dds") }),
+                                            geometry(8, 4, "alD3dVertN") };
+        std::pair<Bytes, Bytes> shadow  = { material("MeshShadowVolume.fx", {}),
+                                            geometry(6, 2, "alD3dVertN") };
+        Bytes file = assemble({ mesh("unit", { visible, shadow }) });
+
+        StubFileManager fm(file);
+        ReferenceObjectMesh rom;
+        bool ok = rom.Load(fm, "unit.alo");
+        CHECK(ok, "Load returns true (has visible geometry)");
+        CHECK(rom.SubMeshes().size() == 1, "1 visible sub-mesh (shadow excluded from visible list)");
+        CHECK(rom.ShadowSubMeshes().size() == 1, "1 shadow sub-mesh kept in separate bucket");
+        CHECK(rom.ShadowSubMeshes().size() == 1 &&
+              rom.ShadowSubMeshes()[0].shaderName == "MeshShadowVolume.fx",
+              "shadow bucket holds the MeshShadowVolume.fx sub-mesh");
+    }
+    // A model with NO shadow sub-meshes yields an EMPTY shadow bucket.
+    std::printf("[refmesh-no-shadow]\n");
+    {
+        Bytes file = assemble({ mesh("plain", { { material("MeshGloss.fx", { texParam("BaseTexture", "hull.dds") }),
+                                                  geometry(8, 4, "alD3dVertN") } }) });
+        StubFileManager fm(file);
+        ReferenceObjectMesh rom;
+        bool ok = rom.Load(fm, "plain.alo");
+        CHECK(ok, "Load returns true (no-shadow model)");
+        CHECK(rom.SubMeshes().size() == 1, "1 visible sub-mesh");
+        CHECK(rom.ShadowSubMeshes().empty(), "no-shadow model -> empty shadow bucket");
+    }
+
+    // ---- [refmesh-clear-reuse] Clear()-on-reuse drains the shadow bucket ---------
+    // Loading a shadow-bearing model into a ReferenceObjectMesh then reloading a
+    // shadow-free model into the SAME instance must yield an empty shadow bucket.
+    // Guards stale-bucket regression on object switch (Load calls Clear internally).
+    std::printf("[refmesh-clear-reuse]\n");
+    {
+        // First load: model WITH a MeshShadowVolume.fx sub-mesh.
+        std::pair<Bytes, Bytes> vis1   = { material("MeshGloss.fx", {}), geometry(4, 2, "alD3dVertN") };
+        std::pair<Bytes, Bytes> shad1  = { material("MeshShadowVolume.fx", {}), geometry(3, 1, "alD3dVertN") };
+        Bytes file1 = assemble({ mesh("with_shadow", { vis1, shad1 }) });
+
+        StubFileManager fm1(file1);
+        ReferenceObjectMesh rom;
+        rom.Load(fm1, "with_shadow.alo");
+        CHECK(rom.ShadowSubMeshes().size() == 1, "clear-reuse: first load populates shadow bucket");
+
+        // Second load: a DIFFERENT model with NO shadow sub-mesh into the same instance.
+        Bytes file2 = assemble({ mesh("no_shadow", { { material("MeshGloss.fx", {}), geometry(6, 2, "alD3dVertN") } }) });
+        StubFileManager fm2(file2);
+        bool ok2 = rom.Load(fm2, "no_shadow.alo");
+
+        CHECK(ok2, "clear-reuse: second load returns true (has visible geometry)");
+        CHECK(rom.ShadowSubMeshes().empty(), "clear-reuse: shadow bucket drained after reloading shadow-free model");
+        CHECK(rom.SubMeshes().size() == 1, "clear-reuse: visible bucket reflects new (shadow-free) model");
+    }
+
+    // ---- [refmesh-rskin-shadow] RSkinShadowVolume.fx routes to shadow bucket ----
+    // RSkinShadowVolume.fx is classified ALO_RC_SHADOW by AloClassifyShader, so it
+    // must land in ShadowSubMeshes() (not SubMeshes(), not dropped). The vertex format
+    // "alD3dVertRSkinN" makes isRSkinFormat() true, so gpu.skinned == true as well.
+    std::printf("[refmesh-rskin-shadow]\n");
+    {
+        std::pair<Bytes, Bytes> vis    = { material("MeshGloss.fx", {}), geometry(4, 2, "alD3dVertN") };
+        // RSkin shadow: shader = RSkinShadowVolume.fx, format = alD3dVertRSkinN
+        // (1-bone rigid-skinning prefix -> isRSkinFormat true -> skinned flag set).
+        std::pair<Bytes, Bytes> rskin  = { material("RSkinShadowVolume.fx", {}),
+                                           geometry(3, 1, "alD3dVertRSkinN") };
+        Bytes file = assemble({ mesh("rskin_shad", { vis, rskin }) });
+
+        StubFileManager fm(file);
+        ReferenceObjectMesh rom;
+        bool ok = rom.Load(fm, "rskin_shad.alo");
+
+        CHECK(ok, "rskin-shadow: Load returns true (visible sub-mesh present)");
+        CHECK(rom.SubMeshes().size() == 1, "rskin-shadow: RSkinShadowVolume.fx NOT in visible list");
+        CHECK(rom.ShadowSubMeshes().size() == 1, "rskin-shadow: RSkinShadowVolume.fx lands in shadow bucket");
+        CHECK(rom.ShadowSubMeshes().size() == 1 &&
+              rom.ShadowSubMeshes()[0].shaderName == "RSkinShadowVolume.fx",
+              "rskin-shadow: shader name preserved in shadow bucket");
+        // The alD3dVertRSkinN format triggers isRSkinFormat -> skinned flag set.
+        // Asserting skinned==true verifies the RSkin path (not just shader-name routing).
+        CHECK(rom.ShadowSubMeshes().size() == 1 &&
+              rom.ShadowSubMeshes()[0].skinned == true,
+              "rskin-shadow: shadow sub-mesh has skinned==true (alD3dVertRSkin* format)");
+    }
+
+    // ---- [refmesh-aabb-excludes-shadow] AABB excludes shadow-volume geometry ---
+    // GetBoundingBox must be computed over VISIBLE geometry only; a shadow hull
+    // whose verts extend FAR beyond the visible mesh must NOT widen the AABB.
+    // Vertex positions are controllable via geometryWithPositions, so this test runs.
+    std::printf("[refmesh-aabb-excludes-shadow]\n");
+    {
+        // Visible sub-mesh: 3 vertices tightly clustered within [-1,1]^3.
+        std::vector<std::array<float,3>> visPos = {
+            {{  0.5f,  0.5f,  0.5f }},
+            {{ -0.5f,  0.0f,  0.0f }},
+            {{  0.0f, -0.5f,  0.5f }},
+        };
+        // Shadow sub-mesh: 3 vertices placed FAR outside -- at ±100 on every axis.
+        // If the AABB loop accidentally includes shadow verts, the bounds blow up.
+        std::vector<std::array<float,3>> shadPos = {
+            {{ 100.0f,  100.0f,  100.0f }},
+            {{-100.0f, -100.0f, -100.0f }},
+            {{ 100.0f, -100.0f,  100.0f }},
+        };
+        std::pair<Bytes, Bytes> vis  = { material("MeshGloss.fx", {}),
+                                         geometryWithPositions(visPos,  1, "alD3dVertN") };
+        std::pair<Bytes, Bytes> shad = { material("MeshShadowVolume.fx", {}),
+                                         geometryWithPositions(shadPos, 1, "alD3dVertN") };
+        Bytes file = assemble({ mesh("aabb_test", { vis, shad }) });
+
+        StubFileManager fm(file);
+        ReferenceObjectMesh rom;
+        bool ok = rom.Load(fm, "aabb_test.alo");
+        CHECK(ok, "aabb-excludes-shadow: Load returns true");
+
+        D3DXVECTOR3 mn, mx;
+        bool hasBounds = rom.GetBoundingBox(mn, mx);
+        CHECK(hasBounds, "aabb-excludes-shadow: GetBoundingBox returns true");
+        // The AABB must reflect the VISIBLE extent only (no bone transform -> identity).
+        // Expected min = (-0.5, -0.5, 0.0), max = (0.5, 0.5, 0.5) (within epsilon).
+        const float eps = 1e-5f;
+        CHECK(hasBounds && mn.x > -1.0f && mn.y > -1.0f && mn.z > -1.0f,
+              "aabb-excludes-shadow: min not blown out by shadow verts (all > -1)");
+        CHECK(hasBounds && mx.x <  1.0f && mx.y <  1.0f && mx.z <  1.0f,
+              "aabb-excludes-shadow: max not blown out by shadow verts (all < 1)");
+        CHECK(hasBounds && std::abs(mn.x - (-0.5f)) < eps && std::abs(mn.y - (-0.5f)) < eps,
+              "aabb-excludes-shadow: min.xy == visible extent min (-0.5, -0.5)");
+        CHECK(hasBounds && std::abs(mx.x -   0.5f)  < eps && std::abs(mx.y -  0.5f) < eps,
+              "aabb-excludes-shadow: max.xy == visible extent max (0.5, 0.5)");
+        (void)eps;
     }
 
     std::printf("\n=== AloModel: %s ===\n", g_failed == 0 ? "ALL PASS" : "FAILURES");
