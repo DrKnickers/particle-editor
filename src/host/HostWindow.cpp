@@ -289,8 +289,17 @@ std::wstring ComputeEditorDistPath()
 // WebView2 user-data folder under %LOCALAPPDATA%. We use a stable,
 // production-quality location (not %TEMP%) so the runtime can persist
 // IndexedDB / cache across launches.
-std::wstring ComputeUserDataFolder()
+//
+// `isolated` = headless --capture mode: a capture instance must NOT share the
+// daily-driver editor's WebView2 profile. The runtime LOCKS the user-data
+// folder, so a capture launched alongside the live editor fails env-creation
+// ("unable to open file") and pops a modal on the user's screen. Give capture
+// runs a throwaway, per-process profile so they never contend with the editor.
+std::wstring ComputeUserDataFolder(bool isolated = false)
 {
+    wchar_t pidSuffix[32] = {};
+    if (isolated) swprintf(pidSuffix, 32, L"-capture-%lu", GetCurrentProcessId());
+
     PWSTR localAppData = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData))
         && localAppData)
@@ -298,13 +307,14 @@ std::wstring ComputeUserDataFolder()
         std::wstring folder = localAppData;
         CoTaskMemFree(localAppData);
         folder += L"\\AloParticleEditor\\WebView2";
+        folder += pidSuffix;
         SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr); // best-effort
         return folder;
     }
     // Fallback to temp.
     wchar_t tempDir[MAX_PATH] = {};
     GetTempPathW(MAX_PATH, tempDir);
-    return std::wstring(tempDir) + L"AloParticleEditor_WebView2";
+    return std::wstring(tempDir) + L"AloParticleEditor_WebView2" + pidSuffix;
 }
 
 // Log file under %LOCALAPPDATA%\AloParticleEditor\host.log — handy for
@@ -1181,8 +1191,10 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
 
 HRESULT HostWindowImpl::InitWebView2()
 {
-    std::wstring userDataFolder = ComputeUserDataFolder();
-    Log("[host] WebView2 user-data folder: %ls\n", userDataFolder.c_str());
+    const bool captureIsolation = !m_captureAlo.empty() || !m_captureRef.empty();
+    std::wstring userDataFolder = ComputeUserDataFolder(captureIsolation);
+    Log("[host] WebView2 user-data folder: %ls%s\n", userDataFolder.c_str(),
+        captureIsolation ? " (isolated capture profile)" : "");
 
     // Task 2.2: when --test-host is set, pass --remote-debugging-port=9222
     // to the underlying Chromium runtime so Playwright (and any CDP client)
@@ -2251,7 +2263,18 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         // Name LAST so the mesh loads once with the transform in
                         // place; guard on non-empty so an unset selection doesn't
                         // clobber a debug ALO_LT7_TEST_OBJECT env-hook mesh.
-                        std::wstring nameW = readSz(L"ReferenceObjectName");
+                        //
+                        // In headless --capture mode NEVER restore the persisted
+                        // reference object: the capture supplies its own object (the
+                        // ALO_LT7_TEST_OBJECT env hook, or --capture-ref via
+                        // SetReferenceObject below), and restoring here would both
+                        // clobber that mesh AND force the capture script to mutate the
+                        // registry to suppress it — which, if the script is interrupted,
+                        // wipes the user's saved selection. Skipping makes captures
+                        // registry-inert and crash-safe by construction.
+                        const bool inCaptureMode = !m_captureAlo.empty() || !m_captureRef.empty();
+                        std::wstring nameW = inCaptureMode ? std::wstring()
+                                                           : readSz(L"ReferenceObjectName");
                         if (!nameW.empty())
                         {
                             engine->SetReferenceObject(WideToAnsi(nameW));
@@ -3969,7 +3992,13 @@ int HostWindowImpl::Run(int nCmdShow)
         swprintf(msg, 256,
                  L"WebView2 initialisation failed (0x%08lx).\n"
                  L"Is the Evergreen runtime installed?", hr);
-        MessageBoxW(hMain, msg, L"Particle Editor", MB_ICONERROR);
+        // A headless --capture run must never pop a modal (it disrupts the user's
+        // screen and tells them nothing) — log + bail instead. The isolated capture
+        // profile above should prevent this failure, but guard the dialog regardless.
+        if (m_captureAlo.empty() && m_captureRef.empty())
+            MessageBoxW(hMain, msg, L"Particle Editor", MB_ICONERROR);
+        else
+            Log("[capture] WebView2 init failed (0x%08lx) — bailing headlessly\n", hr);
         DestroyWindow(hMain);
         g_self = nullptr;
         CoUninitialize();
@@ -4191,6 +4220,65 @@ int HostWindowImpl::Run(int nCmdShow)
                     m_captureAlo.c_str(), m_captureFrames, m_capturePng.c_str());
             }
         }
+
+        // [shadow-repro] Optional camera-distance override for headless bug
+        // characterisation: ALO_CAPTURE_CAM_DIST_MULT scales a fit-camera distance
+        // so the SAME reference object can be rendered at near/mid/far — the axis
+        // the camera-distance shadow drift lives on. Inert unless the env is set
+        // AND a reference object resolved renderable bounds. Reuses the
+        // --capture-ref 3/4 fit framing so the shadow contact is clearly visible.
+        if (!captureFailed && engine)
+        {
+            char mbuf[64];
+            if (GetEnvironmentVariableA("ALO_CAPTURE_CAM_DIST_MULT", mbuf, sizeof(mbuf)) > 0)
+            {
+                float mult = (float)atof(mbuf);
+                D3DXVECTOR3 wmin, wmax;
+                if (mult > 0.0f && engine->GetReferenceObjectBounds(wmin, wmax))
+                {
+                    D3DXVECTOR3 center((wmin.x + wmax.x) * 0.5f,
+                                       (wmin.y + wmax.y) * 0.5f,
+                                       (wmin.z + wmax.z) * 0.5f);
+                    D3DXVECTOR3 diag = wmax - wmin;
+                    float radius = 0.5f * D3DXVec3Length(&diag);
+                    if (radius < 1.0f) radius = 1.0f;
+                    const float fovY = D3DXToRadian(45.0f);
+                    float dist = radius / tanf(0.5f * fovY) * 1.6f * mult;
+                    D3DXVECTOR3 dir(0.7f, -0.7f, 0.5f);
+                    D3DXVec3Normalize(&dir, &dir);
+                    Engine::Camera cam;
+                    cam.Position = center + dir * dist;
+                    cam.Target   = center;
+                    cam.Up       = D3DXVECTOR3(0.0f, 0.0f, 1.0f);
+                    engine->SetCamera(cam);
+                    Log("[shadow-repro] cam-dist-mult=%.2f -> dist=%.1f eye=(%.1f,%.1f,%.1f)\n",
+                        mult, dist, cam.Position.x, cam.Position.y, cam.Position.z);
+                }
+            }
+        }
+
+#ifndef NDEBUG
+        // [shadow-repro] ALO_CAPTURE_SUBVIEWPORT=1 insets the scene viewport to a
+        // sub-rect of the backbuffer, mimicking the live editor's panel-inset 3D view
+        // — the condition under which the soft-shadow composite's mask-UV mapping
+        // matters (the "floating silhouette" bug is invisible at a full-RT viewport).
+        if (!captureFailed && engine)
+        {
+            char sv[8];
+            if (GetEnvironmentVariableA("ALO_CAPTURE_SUBVIEWPORT", sv, sizeof(sv)) > 0 && atoi(sv) != 0)
+            {
+                D3DVIEWPORT9 fv = {};
+                engine->GetViewPort(&fv);
+                const int ix = fv.X + (int)(0.27f * fv.Width);
+                const int iy = fv.Y + (int)(0.10f * fv.Height);
+                const int iw = (int)(0.66f * fv.Width);
+                const int ih = (int)(0.62f * fv.Height);
+                engine->SetSceneViewport(ix, iy, iw, ih);
+                Log("[shadow-repro] sub-viewport x=%d y=%d w=%d h=%d (was %ux%u)\n",
+                    ix, iy, iw, ih, fv.Width, fv.Height);
+            }
+        }
+#endif
     }
 
     // main loop: switched from blocking GetMessage to PeekMessage

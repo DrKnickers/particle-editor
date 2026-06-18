@@ -16,6 +16,16 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 > The inline release markers below show where each tagged [SemVer](https://semver.org)
 > release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
 
+## 2026-06-18
+
+### Added
+
+- Model shadows can now be soft-edged, matching the game's blurred look; a "Soft shadows" toggle (Preferences → Rendering, on by default) switches between the soft and hard-edged shadow
+
+### Fixed
+
+- Model shadows now stay anchored to the object as the camera zooms out, instead of sliding out of position at a distance
+
 ## 2026-06-17
 
 ### Added

@@ -30,6 +30,7 @@ import { applyOverloadGuard, readOverloadGuard } from "@/lib/overload-guard";
 import { applyMsaaLevel, readMsaaLevel } from "@/lib/msaa-quality";
 import { applySkydomeSeamFix, readSkydomeSeamFix } from "@/lib/skydome-seam-fix";
 import { applyModelShadows, readModelShadows } from "@/lib/model-shadows";
+import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
 // Evaluated once at module load; a page navigation to ?demo=primitives
@@ -119,6 +120,12 @@ function AppShell() {
   // so the saved shadow setting applies immediately without opening Preferences.
   useEffect(() => {
     applyModelShadows(bridge, readModelShadows());
+  }, [bridge]);
+
+  // Push the persisted "Soft shadows" preference to the engine at startup
+  // so the saved shadow-blur setting applies immediately without opening Preferences.
+  useEffect(() => {
+    applySoftShadows(bridge, readSoftShadows());
   }, [bridge]);
 
   // Screen 8 Batch 3: subscribe to file-state events (dirty/changed,

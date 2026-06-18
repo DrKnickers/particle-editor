@@ -695,6 +695,10 @@ export type Request =
   // shadow for the reference model onto the ground (and self-shadows it).
   // View-only; persisted web-side, re-applied at startup.
   | { kind: "engine/set/model-shadows";       params: { enabled: boolean } }
+  // [soft-shadows] "Soft shadows" view preference — blurs the stencil shadow
+  // edges to match the game's soft-shadow rendering.
+  // View-only; persisted web-side, re-applied at startup.
+  | { kind: "engine/set/soft-shadows";        params: { enabled: boolean } }
   // [hard-guard] Estimated alive particles per placed instance, pushed by
   // the web (chain-load.ts). The engine multiplies by its live placed-
   // instance count for the preemptive overload gate.
@@ -1127,6 +1131,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/set/msaa-level" }              ? Record<string, never> :
   R extends { kind: "engine/set/skydome-seam-fix" }        ? Record<string, never> :
   R extends { kind: "engine/set/model-shadows" }           ? Record<string, never> :
+  R extends { kind: "engine/set/soft-shadows" }            ? Record<string, never> :
   R extends { kind: "engine/set/estimated-load" }          ? Record<string, never> :
   R extends { kind: "stats/set-frozen" }                   ? Record<string, never> :
 

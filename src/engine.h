@@ -197,6 +197,12 @@ public:
 	// never marks the document dirty. Persisted web-side (localStorage).
 	bool     GetModelShadows() const { return m_modelShadowsEnabled; }
 	void     SetModelShadows(bool enable) { m_modelShadowsEnabled = enable; }
+	// [soft-shadows] "Soft shadows" render preference (default on). Pure view
+	// toggle — never marks the document dirty. Persisted web-side (localStorage).
+	// Only meaningful when model shadows are on; falls back to the hard darken
+	// path when off, or when the blur effect / mask RT is unavailable.
+	bool     GetSoftShadows() const { return m_softShadowsEnabled; }
+	void     SetSoftShadows(bool enable) { m_softShadowsEnabled = enable; }
 	float    GetGroundZ() const		{ return m_groundZ; }
 	int      GetGroundTexture() const { return m_groundTextureIndex; }
 	//: main.cpp's thumbnail generator needs the D3D9 device to
@@ -774,6 +780,17 @@ private:
 	// from ResetParameters() before reallocation.
 	void				ReleaseBloomTargets();
 
+	// [soft-shadows] Introspects the freshly-loaded StencilDarkenFinalBlur
+	// effect: verifies it isn't the ShaderManager default, caches the blurAmt /
+	// WORLDVIEWPROJECTION handles + the first technique that validates, and sets
+	// m_shadowBlurReady. Mirrors InitBloomEffect's all-or-nothing handle gate.
+	void				InitShadowBlurEffect();
+
+	// [soft-shadows] Releases the screen-space shadow-mask render targets.
+	// Mirrors ReleaseBloomTargets; called from every site that releases the
+	// bloom targets (Reset / ResetForResize / ResetParameters / dtor).
+	void				ReleaseShadowMaskTargets();
+
 	//: build the UV sphere VB/IB/Decl once at engine init.
 	void				InitSkydomeMesh();
 	// Phase 3 Stage 1: split out the VB/IB allocation + fill so
@@ -1029,6 +1046,7 @@ private:
 	std::string              m_referenceObjectName;            // "" = none selected
 	bool                     m_referenceObjectVisible = true;
 	bool                     m_modelShadowsEnabled = true;     // [shadow] "Model shadows" pref (default on)
+	bool                     m_softShadowsEnabled  = true;     // [soft-shadows] "Soft shadows" pref (default on)
 	D3DXVECTOR3              m_referencePosition = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
 	D3DXVECTOR3              m_referenceRotation = D3DXVECTOR3(0.0f, 0.0f, 0.0f);  // degrees [yaw,pitch,roll]
 	// Per-object <Scale_Factor> render multiplier for the selected reference
@@ -1146,6 +1164,23 @@ private:
 	D3DXHANDLE          m_hBloomResolutionConstants;
 	D3DXHANDLE          m_hBloomTechnique;
 	UINT                m_bloomPassCount;
+
+	// [soft-shadows] Screen-space shadow mask + the FoC blur-composite effect.
+	// Mirrors the bloom RT plumbing exactly: m_pShadowMask is a full-backbuffer
+	// A8R8G8B8 D3DPOOL_DEFAULT render-target texture, created/released alongside
+	// the bloom ping/pong targets and on every device reset/resize. When MSAA is
+	// active the stencil-driven mask is rendered into m_pShadowMaskMsaa (a
+	// matching-MSAA render-target surface, the same trick as m_pMsaaColor) then
+	// StretchRect-resolved into m_pShadowMask so the blur pass can sample it.
+	// m_pShadowBlurEffect = getShader("Engine\\StencilDarkenFinalBlur.fx"); NULL
+	// (or any cached handle missing) => soft shadows unavailable => hard fallback.
+	IDirect3DTexture9*  m_pShadowMask     = nullptr;
+	IDirect3DSurface9*  m_pShadowMaskMsaa = nullptr;
+	Effect*             m_pShadowBlurEffect = nullptr;
+	D3DXHANDLE          m_hShadowBlurAmt   = nullptr;  // float blurAmt
+	D3DXHANDLE          m_hShadowBlurWvp   = nullptr;  // m_worldViewProj (WORLDVIEWPROJECTION)
+	D3DXHANDLE          m_hShadowBlurTech  = nullptr;  // first technique that validates
+	bool                m_shadowBlurReady  = false;    // effect loaded + handles bound
 
 	ITextureManager&				m_textureManager;
 	IShaderManager&					m_shaderManager;

@@ -568,6 +568,75 @@ void Engine::ReleaseBloomTargets()
 	SAFE_RELEASE(m_pBloomPong);
 }
 
+// [soft-shadows] Release the screen-space shadow-mask render targets. Both are
+// D3DPOOL_DEFAULT (texture + matching-MSAA surface) so they must be released
+// before any device Reset/ResetEx, mirroring the bloom + MSAA RT lifecycle.
+void Engine::ReleaseShadowMaskTargets()
+{
+	SAFE_RELEASE(m_pShadowMask);
+	SAFE_RELEASE(m_pShadowMaskMsaa);
+}
+
+// [soft-shadows] Introspect the freshly-loaded StencilDarkenFinalBlur effect.
+// Mirrors InitBloomEffect's all-or-nothing handle gate: cache the blurAmt scalar
+// + the WORLDVIEWPROJECTION matrix (the blur VS transforms the full-screen quad
+// by it — we drive it to identity) + the first technique that validates on this
+// device. Any missing piece => m_shadowBlurReady=false => soft falls back to hard.
+void Engine::InitShadowBlurEffect()
+{
+	m_shadowBlurReady = false;
+	m_hShadowBlurAmt  = NULL;
+	m_hShadowBlurWvp  = NULL;
+	m_hShadowBlurTech = NULL;
+
+	if (m_pShadowBlurEffect == NULL)
+	{
+		printf("[soft-shadow] StencilDarkenFinalBlur.fx not loaded — soft shadows unavailable (hard fallback)\n");
+		fflush(stdout);
+		return;
+	}
+
+	ID3DXEffect* pFx = m_pShadowBlurEffect->getD3DEffect();   // AddRef'd
+	if (pFx == NULL) { printf("[soft-shadow] null ID3DXEffect — hard fallback\n"); fflush(stdout); return; }
+
+	D3DXEFFECT_DESC desc;
+	if (FAILED(pFx->GetDesc(&desc)))
+	{
+		printf("[soft-shadow] GetDesc failed — hard fallback\n"); fflush(stdout);
+		SAFE_RELEASE(pFx);
+		return;
+	}
+
+	m_hShadowBlurAmt = pFx->GetParameterByName(NULL, "blurAmt");
+	m_hShadowBlurWvp = pFx->GetParameterBySemantic(NULL, "WORLDVIEWPROJECTION");
+
+	for (UINT i = 0; i < desc.Techniques; ++i)
+	{
+		D3DXHANDLE hTech = pFx->GetTechnique(i);
+		if (hTech && SUCCEEDED(pFx->ValidateTechnique(hTech)))
+		{
+			m_hShadowBlurTech = hTech;
+			break;
+		}
+	}
+
+	SAFE_RELEASE(pFx);
+
+	// blurAmt + the WVP matrix + a valid technique are all required. blurAmt
+	// doubles as a fingerprint: the ShaderManager default placeholder lacks it,
+	// so requiring it rejects a fallback-to-default (which would render garbage).
+	m_shadowBlurReady = (m_hShadowBlurAmt != NULL)
+	                 && (m_hShadowBlurWvp != NULL)
+	                 && (m_hShadowBlurTech != NULL);
+
+	printf("[soft-shadow] StencilDarkenFinalBlur: blurAmt=%s wvp=%s tech=%s -> %s\n",
+	       m_hShadowBlurAmt  ? "found" : "MISSING",
+	       m_hShadowBlurWvp  ? "found" : "MISSING",
+	       m_hShadowBlurTech ? "found" : "MISSING",
+	       m_shadowBlurReady ? "READY (soft available)" : "UNAVAILABLE (hard fallback)");
+	fflush(stdout);
+}
+
 // Hot-reload all 14 entries from ShaderNames[]. All-or-nothing: load every
 // new shader into a temporary array first, only swap into m_pShaders[] once
 // every one succeeds. On failure the previous set stays alive untouched, so
@@ -610,6 +679,14 @@ bool Engine::ReloadShaders()
 	SAFE_RELEASE(m_pBloomEffect);
 	m_pBloomEffect = m_shaderManager.getShader(m_pDevice, "Engine\\SceneBloom.fx");
 	InitBloomEffect();
+
+	// [soft-shadows] Optional blur-composite effect for soft model shadows.
+	// Same resolution chain + graceful-NULL contract as bloom. Already in the
+	// shader manifest, but we hold a dedicated handle with cached params so the
+	// soft path doesn't depend on a manifest-index lookup.
+	SAFE_RELEASE(m_pShadowBlurEffect);
+	m_pShadowBlurEffect = m_shaderManager.getShader(m_pDevice, "Engine\\StencilDarkenFinalBlur.fx");
+	InitShadowBlurEffect();
 
 	printf("[Shaders] Reload complete: %d ok\n", NUM_SHADERS); fflush(stdout);
 	return true;
@@ -1727,6 +1804,7 @@ void Engine::Reset()
 	const LONGLONG _rpT0 = EngQpcNow();
 
 	ReleaseBloomTargets();
+	ReleaseShadowMaskTargets();   // [soft-shadows] DEFAULT-pool mask RTs
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
     SAFE_RELEASE(m_pDepthStencilSurface);
@@ -1747,6 +1825,7 @@ void Engine::Reset()
         m_pShaders[i]->OnLostDevice();
     }
 	if (m_pBloomEffect != NULL) m_pBloomEffect->OnLostDevice();
+	if (m_pShadowBlurEffect != NULL) m_pShadowBlurEffect->OnLostDevice();   // [soft-shadows] distinct ID3DXEffect
 	// skydome effect needs the same OnLost/OnReset dance — without it,
 	// the effect's internal D3DPOOL_DEFAULT state-cache references survive
 	// past Reset and cause D3DERR_INVALIDCALL on any later size change.
@@ -1813,6 +1892,7 @@ void Engine::Reset()
         m_pShaders[i]->OnResetDevice();
     }
 	if (m_pBloomEffect != NULL) m_pBloomEffect->OnResetDevice();
+	if (m_pShadowBlurEffect != NULL) m_pShadowBlurEffect->OnResetDevice();   // [soft-shadows]
 	if (m_pSkydomeEffect != NULL) m_pSkydomeEffect->OnResetDevice();
 	if (m_pGroundEffect  != NULL) m_pGroundEffect->OnResetDevice();
 	// two-phase like the rest of the dance: all effects OnReset here,
@@ -1916,6 +1996,7 @@ bool Engine::ResetForResize()
 	// ResetEx itself — DEFAULT-pool resources persist — purely lifetime
 	// hygiene for the recreate.
 	ReleaseBloomTargets();
+	ReleaseShadowMaskTargets();   // [soft-shadows] DEFAULT-pool mask RTs
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
 	SAFE_RELEASE(m_pDepthStencilSurface);
@@ -2307,6 +2388,29 @@ void Engine::ResetParameters()
 			// Don't throw — bloom is an optional post-process. Just
 			// disable it for this device-reset cycle and continue.
 			ReleaseBloomTargets();
+		}
+
+		// [soft-shadows] Full-backbuffer shadow-mask RT (mirrors the bloom RTs).
+		// When MSAA is active also allocate a matching-MSAA surface: the mask is
+		// rendered there (the stencil test needs the multisampled depth-stencil)
+		// then StretchRect-resolved into the non-MS m_pShadowMask the blur samples
+		// — the same resolve trick as m_pMsaaColor. Any failure here just disables
+		// soft shadows for this device cycle (hard fallback); never blocks render.
+		ReleaseShadowMaskTargets();
+		if (FAILED(m_pDevice->CreateTexture(bloomW, bloomH, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &m_pShadowMask, NULL)))
+		{
+			ReleaseShadowMaskTargets();
+		}
+		else if (m_msaaActive && m_currentMsaaLevel > 0)
+		{
+			if (FAILED(m_pDevice->CreateRenderTarget(bloomW, bloomH, D3DFMT_A8R8G8B8,
+			            (D3DMULTISAMPLE_TYPE)m_currentMsaaLevel, 0, FALSE /*lockable*/, &m_pShadowMaskMsaa, NULL)))
+			{
+				// Mask MSAA surface failed: drop only the MSAA surface. We could
+				// still soft-shade on the non-MS path, but on an MSAA device the
+				// blur would sample a never-written mask -> fall back fully.
+				ReleaseShadowMaskTargets();
+			}
 		}
 
 		// Reset states
@@ -3128,19 +3232,55 @@ void Engine::RenderReferenceShadows()
         }
     }
 
-    // Clip-space Z bias: z_clip' = z_clip + kBias * w_clip  (pushes the volume
-    // slightly DEEPER so coincident near-cap faces z-fail deterministically ->
-    // kills the self-shadow flicker. Matrix-only: NO depth-bias render state
-    // (those hang the WebView2 composite path). Sign/magnitude tunable: if the
-    // shadow detaches/peter-pans or the model's LIT faces self-shadow, this is
-    // the lever (flip sign or change magnitude).
-    const float kShadowZBias = 0.0001f;   // NDC depth units (~0.01% of [0,1] range)
-    D3DXMATRIX zbias; D3DXMatrixIdentity(&zbias);
-    zbias._43 = kShadowZBias;   // adds kBias*w to clip z (row-major: row 4 col 3)
+    // Eye-space depth push for the shadow volume (replaces the old clip-space NDC
+    // bias). The volume is shoved a CONSTANT distance DEEPER in EYE space before
+    // projection, so coincident near-cap faces z-fail deterministically (kills the
+    // self-shadow flicker) WITHOUT the camera-distance drift the clip-Z bias caused.
+    //
+    // Why eye-space, not clip-space: the old `z_clip += kBias*w` was a CONSTANT
+    // offset in NDC. But under this editor's fixed-near=1 / infinite-far projection
+    // (z_ndc = 1 - 2/d), a constant NDC nudge maps to a WORLD-depth recession of the
+    // volume of ~ (d^2/2)*kBias — QUADRATIC in camera distance d. So the shadow
+    // contact held position up close but slid/peter-panned as the camera zoomed out
+    // (the reported bug). A constant eye-space translate is a constant WORLD-depth
+    // offset at every distance, so the contact holds position at all zooms. The push
+    // does introduce a sub-percent screen-space shift of the volume (a deeper vertex
+    // projects slightly toward the principal point) but it SHRINKS with distance and
+    // is negligible vs the d^2 drift it removes. (See tasks/lessons.md.)
+    //
+    // Sign/magnitude tunable: too small -> self-shadow flicker returns; too large ->
+    // the shadow visibly detaches from the model base up close.
+    float kShadowEyePush = 2.0f;   // world units to push the volume DEEPER (the fix)
+    float kOldClipZBias  = 0.0f;   // 0 = use the eye push (default, shipped behaviour)
+#ifndef NDEBUG
+    // [shadow-repro] Diagnostic overrides (Debug-only, inert unless set):
+    //   ALO_SHADOW_ZPUSH = eye-space push distance in world units (A/B the magnitude).
+    //   ALO_SHADOW_ZBIAS = revert to the OLD clip-Z NDC bias with this value, so the
+    //     pre-fix camera-distance drift can be reproduced for before/after capture.
+    //     ALO_SHADOW_ZBIAS=0 disables BOTH (the no-bias baseline; flicker expected).
+    { char b[64]; if (GetEnvironmentVariableA("ALO_SHADOW_ZPUSH", b, sizeof(b)) > 0) kShadowEyePush = (float)atof(b); }
+    { char b[64]; if (GetEnvironmentVariableA("ALO_SHADOW_ZBIAS", b, sizeof(b)) > 0) { kOldClipZBias = (float)atof(b); kShadowEyePush = 0.0f; } }
+#endif
+    // RH eye space looks down -Z, so DEEPER = more negative z_eye => translate by
+    // -push. Inserted between view and projection: vpPush = view * zpush * proj.
+    // (zbiasClip is identity in the shipped path; only the Debug A/B sets it.)
+    D3DXMATRIX zpush; D3DXMatrixTranslation(&zpush, 0.0f, 0.0f, -kShadowEyePush);
+    D3DXMATRIX zbiasClip; D3DXMatrixIdentity(&zbiasClip); zbiasClip._43 = kOldClipZBias;
+    D3DXMATRIX viewProjPush = m_view * zpush * m_projection * zbiasClip;
+
+    // Shadow tint (the multiplicative ZERO/SRCCOLOR darken colour, from m_shadow =
+    // the Lighting panel's Sun Shadow Color).
+    float shR = m_shadow.x, shG = m_shadow.y, shB = m_shadow.z;
+#ifndef NDEBUG
+    // [shadow-repro] Debug override so the faint default tint can be forced dark
+    // enough to MEASURE the edge feather / contact line in headless captures.
+    // ALO_SHADOW_TINT = a single grey level [0..1] (0 = black, fully dark shadow).
+    { char b[64]; if (GetEnvironmentVariableA("ALO_SHADOW_TINT", b, sizeof(b)) > 0) { float v=(float)atof(b); shR=shG=shB=v; } }
+#endif
 
     // --- save every state we touch ---
     DWORD oCW,oZF,oZW,oZE,oSE,oTSS,oSR,oSM,oSWM,oCull,oSFn,oSP,oSZF,oSFa,
-          oCcwFn,oCcwP,oCcwZF,oCcwFa,oAB,oSB,oDB,oLit,oFVF;
+          oCcwFn,oCcwP,oCcwZF,oCcwFa,oAB,oSB,oDB,oLit,oFVF,oATE;
     DWORD oTexCOP,oTexCA1,oTexAOP,oTexAA1;
     m_pDevice->GetRenderState(D3DRS_COLORWRITEENABLE,&oCW); m_pDevice->GetRenderState(D3DRS_ZFUNC,&oZF);
     m_pDevice->GetRenderState(D3DRS_ZWRITEENABLE,&oZW); m_pDevice->GetRenderState(D3DRS_ZENABLE,&oZE);
@@ -3153,6 +3293,7 @@ void Engine::RenderReferenceShadows()
     m_pDevice->GetRenderState(D3DRS_CCW_STENCILZFAIL,&oCcwZF); m_pDevice->GetRenderState(D3DRS_CCW_STENCILFAIL,&oCcwFa);
     m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE,&oAB); m_pDevice->GetRenderState(D3DRS_SRCBLEND,&oSB);
     m_pDevice->GetRenderState(D3DRS_DESTBLEND,&oDB); m_pDevice->GetRenderState(D3DRS_LIGHTING,&oLit);
+    m_pDevice->GetRenderState(D3DRS_ALPHATESTENABLE,&oATE);
     m_pDevice->GetFVF(&oFVF);
     m_pDevice->GetTextureStageState(0,D3DTSS_COLOROP,&oTexCOP); m_pDevice->GetTextureStageState(0,D3DTSS_COLORARG1,&oTexCA1);
     m_pDevice->GetTextureStageState(0,D3DTSS_ALPHAOP,&oTexAOP); m_pDevice->GetTextureStageState(0,D3DTSS_ALPHAARG1,&oTexAA1);
@@ -3163,6 +3304,35 @@ void Engine::RenderReferenceShadows()
     IDirect3DVertexBuffer9* oStream0=NULL; UINT oStreamOffset=0, oStreamStride=0;
     m_pDevice->GetStreamSource(0, &oStream0, &oStreamOffset, &oStreamStride);
     IDirect3DIndexBuffer9*  oIndices=NULL; m_pDevice->GetIndices(&oIndices);
+
+    // [soft-shadows] Soft path is available only when the toggle is on AND the
+    // blur effect + mask RT both came up. Otherwise fall back to the shipped hard
+    // darken quad (no regression). Decided once, up front, so the save/restore of
+    // the extra resources (RT / depth-stencil / viewport / samplers 0-3) is paired.
+    const bool soft = m_softShadowsEnabled && m_shadowBlurReady
+                   && m_pShadowBlurEffect != NULL && m_pShadowMask != NULL;
+
+    // Extra save for the soft path's RT detour + sampler binds. AddRef'd handles
+    // released in the restore tail; sampler filter/address states restored too.
+    IDirect3DSurface9* oRT0 = NULL;  IDirect3DSurface9* oDS = NULL;
+    D3DVIEWPORT9 oViewport;
+    IDirect3DBaseTexture9* oTexS[4] = { NULL,NULL,NULL,NULL };
+    DWORD oMinF[4], oMagF[4], oMipF[4], oAddrU[4], oAddrV[4];
+    if (soft)
+    {
+        m_pDevice->GetRenderTarget(0, &oRT0);          // AddRef'd
+        m_pDevice->GetDepthStencilSurface(&oDS);       // AddRef'd (may be NULL)
+        m_pDevice->GetViewport(&oViewport);
+        for (DWORD s = 0; s < 4; ++s)
+        {
+            m_pDevice->GetTexture(s, &oTexS[s]);       // AddRef'd
+            m_pDevice->GetSamplerState(s, D3DSAMP_MINFILTER, &oMinF[s]);
+            m_pDevice->GetSamplerState(s, D3DSAMP_MAGFILTER, &oMagF[s]);
+            m_pDevice->GetSamplerState(s, D3DSAMP_MIPFILTER, &oMipF[s]);
+            m_pDevice->GetSamplerState(s, D3DSAMP_ADDRESSU, &oAddrU[s]);
+            m_pDevice->GetSamplerState(s, D3DSAMP_ADDRESSV, &oAddrV[s]);
+        }
+    }
 
     // ============ VOLUME PASS — write stencil (single-pass two-sided z-fail) ============
     // Mirrors alo-viewer: one CULLMODE=NONE pass with TWOSIDEDSTENCILMODE so CW faces
@@ -3208,7 +3378,6 @@ void Engine::RenderReferenceShadows()
                     continue;
                 }
                 D3DXMATRIX world = sub.placement * worldBase;
-                D3DXMATRIX wvp   = world * m_view * m_projection;
                 D3DXMATRIX invWorld;
                 if (!D3DXMatrixInverse(&invWorld,NULL,&world)) {
 #ifndef NDEBUG
@@ -3228,10 +3397,12 @@ void Engine::RenderReferenceShadows()
 #endif
                     fx->Release(); continue;
                 }
-                // Bias the clip-space Z by post-multiplying the projection-bearing
-                // matrices with `zbias` (clip' = clip * zbias -> z' = z + w*kBias).
-                D3DXMATRIX wvpB = wvp * zbias;
-                D3DXMATRIX vpB  = m_viewProjection * zbias;
+                // Eye-space-pushed transforms (constant world-depth recession — see
+                // the kShadowEyePush note above; replaces the old clip-Z bias that
+                // drifted ~d^2 with camera distance). Rigid VS reads WorldViewProjection,
+                // skinned VS reads ViewProjection; both ride the same pushed projection.
+                D3DXMATRIX wvpB = world * viewProjPush;
+                D3DXMATRIX vpB  = viewProjPush;
                 fx->SetMatrix(h.hWorldViewProjection, &wvpB);
                 fx->SetMatrix(h.hViewProjection,      &vpB);
                 fx->SetVector(h.hDirLightObjVec0,     &lightObj);
@@ -3266,7 +3437,201 @@ void Engine::RenderReferenceShadows()
     // Single two-sided pass: CW faces INCR, CCW faces DECR on z-fail (states set above).
     drawVolumes();
 
-    // ============ DARKEN PASS ============
+    if (soft)
+    {
+        // ============ SOFT PATH — mask-to-alpha + blurred multiply composite ============
+        // Port of FoC's doSoftShadows: bake the stencil region into a screen-space
+        // mask's ALPHA, then run StencilDarkenFinalBlur (4-tap blur + tint) as a
+        // ZERO/SRCCOLOR multiply onto the scene. NO depth-bias states anywhere.
+        const DWORD tint = D3DCOLOR_COLORVALUE(shR, shG, shB, 1.0f);
+
+        // The mask RT to render the stencil mask into: the matching-MSAA surface
+        // when MSAA is active (the stencil test needs the multisampled depth still
+        // bound), else the non-MS mask texture's top surface.
+        IDirect3DSurface9* pMaskTop  = NULL;       // m_pShadowMask L0, AddRef'd
+        m_pShadowMask->GetSurfaceLevel(0, &pMaskTop);
+        IDirect3DSurface9* pRenderInto = NULL;     // borrowed (no extra ref to release)
+        if (m_msaaActive && m_pShadowMaskMsaa) { pRenderInto = m_pShadowMaskMsaa; }
+        else                                    { pRenderInto = pMaskTop; }
+
+        // --- mask-to-alpha (hand-coded StencilDarkenToAlpha state block) ---
+        // Bind the mask RT but KEEP the current depth-stencil (the stencil written
+        // by the volume pass must persist for the NOTEQUAL test).
+        m_pDevice->SetRenderTarget(0, pRenderInto);
+        D3DVIEWPORT9 maskVp = { 0, 0,
+            m_presentationParameters.BackBufferWidth,
+            m_presentationParameters.BackBufferHeight, 0.0f, 1.0f };
+        m_pDevice->SetViewport(&maskVp);
+        // Clear ALPHA to white (=1, "no shadow") everywhere; the gated quad punches
+        // alpha=0 ("shadow") into the stencil region. RGB is irrelevant (blur reads
+        // only .a) but a full white clear keeps the target well-defined.
+        m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+
+        m_pDevice->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE,FALSE);
+        m_pDevice->SetRenderState(D3DRS_STENCILENABLE,TRUE);
+        m_pDevice->SetRenderState(D3DRS_STENCILFUNC,D3DCMP_NOTEQUAL);   // shadow where stencil != 0
+        m_pDevice->SetRenderState(D3DRS_STENCILREF,0);
+        m_pDevice->SetRenderState(D3DRS_STENCILMASK,0x3f);
+        m_pDevice->SetRenderState(D3DRS_STENCILWRITEMASK,0);
+        m_pDevice->SetRenderState(D3DRS_STENCILPASS,D3DSTENCILOP_KEEP);
+        m_pDevice->SetRenderState(D3DRS_STENCILFAIL,D3DSTENCILOP_KEEP);
+        m_pDevice->SetRenderState(D3DRS_STENCILZFAIL,D3DSTENCILOP_KEEP);
+        m_pDevice->SetRenderState(D3DRS_ZENABLE,D3DZB_FALSE);
+        m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,FALSE);
+        m_pDevice->SetRenderState(D3DRS_ZFUNC,D3DCMP_ALWAYS);
+        m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,FALSE);
+        m_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE,FALSE);
+        m_pDevice->SetRenderState(D3DRS_LIGHTING,FALSE);
+        m_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE,D3DCOLORWRITEENABLE_ALPHA); // ALPHA only
+        m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAOP,D3DTOP_SELECTARG1);
+        m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAARG1,D3DTA_DIFFUSE);
+
+        // Full-screen XYZRHW quad whose diffuse ALPHA = 0 -> writes alpha 0 into the
+        // shadow region (stencil != 0), leaving the cleared white (1) elsewhere.
+        const float mx0 = -0.5f, my0 = -0.5f;
+        const float mx1 = (float)m_presentationParameters.BackBufferWidth  - 0.5f;
+        const float my1 = (float)m_presentationParameters.BackBufferHeight - 0.5f;
+        struct PTVtx { float x,y,z,rhw; DWORD c; };
+        const DWORD shadowAlpha0 = 0x00000000;   // RGBA, alpha 0
+        const PTVtx maskQuad[4] = {
+            {mx0,my0,0,1,shadowAlpha0},{mx1,my0,0,1,shadowAlpha0},
+            {mx0,my1,0,1,shadowAlpha0},{mx1,my1,0,1,shadowAlpha0} };
+        m_pDevice->SetVertexShader(NULL);
+        m_pDevice->SetPixelShader(NULL);
+        m_pDevice->SetTexture(0,NULL);
+        m_pDevice->SetFVF(D3DFVF_XYZRHW|D3DFVF_DIFFUSE);
+        m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,2,maskQuad,sizeof(PTVtx));
+
+        // --- MSAA resolve: multisampled mask surface -> the sampled texture ---
+        if (m_msaaActive && m_pShadowMaskMsaa && pMaskTop)
+        {
+            m_pDevice->StretchRect(m_pShadowMaskMsaa, NULL, pMaskTop, NULL, D3DTEXF_NONE);
+        }
+
+        // --- restore scene RT + depth-stencil + viewport before the composite ---
+        m_pDevice->SetRenderTarget(0, oRT0);
+        m_pDevice->SetDepthStencilSurface(oDS);
+        m_pDevice->SetViewport(&oViewport);
+
+        // --- blur composite (StencilDarkenFinalBlur, ZERO/SRCCOLOR multiply) ---
+        // Bind the resolved mask to sampler stages 0-3 (the .fx's sampler0..3 all
+        // read the same mask; the VS spreads 4 tap offsets across them). LINEAR
+        // filtering + clamp: the mask alpha is a HARD 0/1 step, so POINT-sampled
+        // taps land on discrete texels and stair-step the edge (reads crisp/hard
+        // even with a wide blurAmt). Bilinear lets each tap straddle the edge texel
+        // so the 4-tap cross resolves into a smooth feather (bug-1 fix; pairs with
+        // the wider blurAmt below). MinF/MagF are saved/restored in the tail.
+        for (DWORD s = 0; s < 4; ++s)
+        {
+            m_pDevice->SetTexture(s, m_pShadowMask);
+            m_pDevice->SetSamplerState(s, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+            m_pDevice->SetSamplerState(s, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+            m_pDevice->SetSamplerState(s, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+            m_pDevice->SetSamplerState(s, D3DSAMP_ADDRESSU,  D3DTADDRESS_CLAMP);
+            m_pDevice->SetSamplerState(s, D3DSAMP_ADDRESSV,  D3DTADDRESS_CLAMP);
+        }
+
+        m_pDevice->SetRenderState(D3DRS_STENCILENABLE,FALSE);
+        // Depth-test the composite so the shadow only darkens SCENE GEOMETRY, never
+        // the cleared-far background. The blurred mask bleeds the shadow a few texels
+        // past the model/ground silhouette; without this, that bleed darkened the
+        // empty background (black bands in the sky around the model). The quad sits at
+        // NDC z=1.0 (far) with ZFUNC=GREATER, so it passes only where the depth buffer
+        // holds geometry (depth < 1.0) and is rejected on the cleared background
+        // (depth == 1.0). ZWRITE stays off (the depth-stencil oDS is bound here).
+        m_pDevice->SetRenderState(D3DRS_ZENABLE,D3DZB_TRUE);
+        m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE,FALSE);
+        m_pDevice->SetRenderState(D3DRS_ZFUNC,D3DCMP_GREATER);
+        m_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE,0x0f);
+        m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,TRUE);
+        m_pDevice->SetRenderState(D3DRS_SRCBLEND,D3DBLEND_ZERO);
+        m_pDevice->SetRenderState(D3DRS_DESTBLEND,D3DBLEND_SRCCOLOR);
+        m_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE,FALSE);
+        m_pDevice->SetRenderState(D3DRS_LIGHTING,FALSE);
+
+        // Clip-space full-screen quad (the VS multiplies by m_worldViewProj, which
+        // we drive to identity). Vertex COLOR0 = tint (the ps lerps tint<->white by
+        // the mask alpha). UV v increases downward (top of screen = v 0).
+        //
+        // CRITICAL: the shadow mask was rendered into the FULL backbuffer (the
+        // mask-to-alpha viewport is 0,0..W,H), but this composite draws into the
+        // SCENE VIEWPORT (oViewport) — a SUB-RECT of the backbuffer in the live
+        // editor (the React panels inset the 3D view). So the quad's UVs must span
+        // the scene viewport's sub-region of the mask, NOT 0..1, or the shadow is
+        // scaled+offset off the object (the "floating silhouette" bug). With an
+        // edge-to-edge clip(±1)→viewport and UV→sub-rect mapping, pixel centers land
+        // on texel centers exactly — no separate half-texel nudge needed. In
+        // --capture the viewport IS the full backbuffer, so this reduces to 0..1
+        // (which is why the bug never showed in headless capture).
+        const float Wbb = (float)m_presentationParameters.BackBufferWidth;
+        const float Hbb = (float)m_presentationParameters.BackBufferHeight;
+        float u0 = (float)oViewport.X / Wbb;
+        float u1 = (float)(oViewport.X + oViewport.Width)  / Wbb;
+        float v0 = (float)oViewport.Y / Hbb;
+        float v1 = (float)(oViewport.Y + oViewport.Height) / Hbb;
+#ifndef NDEBUG
+        // [shadow-repro] ALO_SHADOW_VPFIX=0 reverts to the old full-mask 0..1 UVs
+        // (the pre-fix "floating silhouette" behaviour) for a before/after A/B.
+        { char b[8]; if (GetEnvironmentVariableA("ALO_SHADOW_VPFIX", b, sizeof(b)) > 0 && atof(b) == 0.0) { u0=0.0f; u1=1.0f; v0=0.0f; v1=1.0f; } }
+#endif
+        struct BlurVtx { float x,y,z; float nx,ny,nz; DWORD c; float u,v; };
+        // z = 1.0 (NDC far) so the ZFUNC=GREATER depth test above darkens only
+        // geometry pixels (depth < 1.0), not the cleared-far background.
+        const BlurVtx blurQuad[4] = {
+            { -1.0f,  1.0f, 1.0f, 0,0,1, tint, u0, v0 },  // top-left
+            {  1.0f,  1.0f, 1.0f, 0,0,1, tint, u1, v0 },  // top-right
+            { -1.0f, -1.0f, 1.0f, 0,0,1, tint, u0, v1 },  // bottom-left
+            {  1.0f, -1.0f, 1.0f, 0,0,1, tint, u1, v1 },  // bottom-right
+        };
+
+        ID3DXEffect* bfx = m_pShadowBlurEffect->getD3DEffect();   // AddRef'd
+        D3DXMATRIX ident; D3DXMatrixIdentity(&ident);
+        if (m_hShadowBlurWvp)  bfx->SetMatrix(m_hShadowBlurWvp, &ident);
+        // blurAmt is the 4-tap cross half-spread in UV. The game's authored 0.0015
+        // is only ~2 texels at the editor's RT size — reads HARD with POINT sampling.
+        // The shader is only a 4-tap cross, so a WIDE spread (e.g. 0.009 ≈ 11 texels)
+        // makes the 4 taps read as discrete offset copies — a plus-shaped GHOST/halo.
+        // ~0.003 (≈4 texels) keeps the taps blending; paired with the LINEAR sampling
+        // above that gives a soft edge without ghosting. (For a genuinely WIDE soft
+        // shadow the 4-tap must become multi-pass / more taps — a separate change.)
+        // Tunable via ALO_SHADOW_BLURAMT.
+        float blurAmt = 0.003f;
+#ifndef NDEBUG
+        // [shadow-repro] Diagnostic blur-width override (A/B the feather width
+        // without recompiling). Inert unless ALO_SHADOW_BLURAMT is set; Debug-only.
+        { char b[64]; if (GetEnvironmentVariableA("ALO_SHADOW_BLURAMT", b, sizeof(b)) > 0) blurAmt = (float)atof(b); }
+#endif
+        if (m_hShadowBlurAmt)  bfx->SetFloat(m_hShadowBlurAmt, blurAmt);
+        bfx->SetTechnique(m_hShadowBlurTech);
+        // The blur uses a vertex shader (vs_1_1) reading POSITION/COLOR0/TEXCOORD0,
+        // so emit via an FVF with a NON-transformed float4 POSITION (the VS applies
+        // the identity m_worldViewProj). D3DFVF_XYZRHW would skip the VS entirely.
+        // The NORMAL slot is required: the game's compiled vs_1_1 was authored
+        // against the VERTEX_MESH_NU2C layout (pos/normal/uv/color), so its input
+        // declaration expects a normal between POSITION and TEXCOORD0. Omitting it
+        // shifts the texcoord register the VS reads, so every pixel sampled one
+        // mask texel -> the whole frame got the shadow tint instead of just the
+        // cast region. (Matches alo-viewer's m_sceneQuad FVF.)
+        m_pDevice->SetVertexShader(NULL);   // FVF path -> fixed-function VS slot; effect's VS binds in BeginPass
+        m_pDevice->SetFVF(D3DFVF_XYZ|D3DFVF_NORMAL|D3DFVF_DIFFUSE|D3DFVF_TEX1);
+        UINT bpasses = 0;
+        if (SUCCEEDED(bfx->Begin(&bpasses, 0)) && bpasses > 0)
+        {
+            for (UINT bp = 0; bp < bpasses; ++bp)
+            {
+                bfx->BeginPass(bp);
+                m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, blurQuad, sizeof(BlurVtx));
+                bfx->EndPass();
+            }
+        }
+        bfx->End();
+        bfx->Release();
+
+        SAFE_RELEASE(pMaskTop);
+    }
+    else
+    {
+    // ============ DARKEN PASS (hard fallback) ============
     m_pDevice->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE,FALSE);
     m_pDevice->SetRenderState(D3DRS_STENCILFUNC,D3DCMP_NOTEQUAL);
     m_pDevice->SetRenderState(D3DRS_STENCILREF,0);
@@ -3290,7 +3655,7 @@ void Engine::RenderReferenceShadows()
     D3DVIEWPORT9 vp; m_pDevice->GetViewport(&vp);
     const float x0=(float)vp.X-0.5f, y0=(float)vp.Y-0.5f;
     const float x1=(float)(vp.X+vp.Width)-0.5f, y1=(float)(vp.Y+vp.Height)-0.5f;
-    const DWORD tint = D3DCOLOR_COLORVALUE(m_shadow.x,m_shadow.y,m_shadow.z,1.0f);
+    const DWORD tint = D3DCOLOR_COLORVALUE(shR,shG,shB,1.0f);
     struct PTVtx { float x,y,z,rhw; DWORD c; };
     const PTVtx quad[4] = { {x0,y0,0,1,tint},{x1,y0,0,1,tint},{x0,y1,0,1,tint},{x1,y1,0,1,tint} };
     m_pDevice->SetVertexShader(NULL);
@@ -3298,6 +3663,7 @@ void Engine::RenderReferenceShadows()
     m_pDevice->SetTexture(0,NULL);
     m_pDevice->SetFVF(D3DFVF_XYZRHW|D3DFVF_DIFFUSE);
     m_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,2,quad,sizeof(PTVtx));
+    }
 
     // --- restore ---
     m_pDevice->SetRenderState(D3DRS_STENCILENABLE,oSE);
@@ -3312,6 +3678,7 @@ void Engine::RenderReferenceShadows()
     m_pDevice->SetRenderState(D3DRS_CCW_STENCILZFAIL,oCcwZF); m_pDevice->SetRenderState(D3DRS_CCW_STENCILFAIL,oCcwFa);
     m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,oAB); m_pDevice->SetRenderState(D3DRS_SRCBLEND,oSB);
     m_pDevice->SetRenderState(D3DRS_DESTBLEND,oDB); m_pDevice->SetRenderState(D3DRS_LIGHTING,oLit);
+    m_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE,oATE);
     m_pDevice->SetTextureStageState(0,D3DTSS_COLOROP,oTexCOP); m_pDevice->SetTextureStageState(0,D3DTSS_COLORARG1,oTexCA1);
     m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAOP,oTexAOP); m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAARG1,oTexAA1);
     if (oDecl) { m_pDevice->SetVertexDeclaration(oDecl); oDecl->Release(); }
@@ -3323,6 +3690,31 @@ void Engine::RenderReferenceShadows()
     if (oStream0) oStream0->Release();
     m_pDevice->SetIndices(oIndices);
     if (oIndices) oIndices->Release();
+
+    // [soft-shadows] Restore the extra resources the soft path detoured through:
+    // RT(0) + depth-stencil + viewport (already re-bound before the composite, but
+    // re-assert here for the case the composite was skipped), sampler stages 0-3
+    // textures + filter/address states. Stage-0 texture is owned by the existing
+    // tail above; here we restore stages 1-3 + every stage's sampler states, and
+    // release every AddRef'd handle. No-op when the hard path ran.
+    if (soft)
+    {
+        m_pDevice->SetRenderTarget(0, oRT0);
+        m_pDevice->SetDepthStencilSurface(oDS);
+        m_pDevice->SetViewport(&oViewport);
+        for (DWORD s = 0; s < 4; ++s)
+        {
+            if (s != 0) m_pDevice->SetTexture(s, oTexS[s]);   // stage 0 done above
+            m_pDevice->SetSamplerState(s, D3DSAMP_MINFILTER, oMinF[s]);
+            m_pDevice->SetSamplerState(s, D3DSAMP_MAGFILTER, oMagF[s]);
+            m_pDevice->SetSamplerState(s, D3DSAMP_MIPFILTER, oMipF[s]);
+            m_pDevice->SetSamplerState(s, D3DSAMP_ADDRESSU, oAddrU[s]);
+            m_pDevice->SetSamplerState(s, D3DSAMP_ADDRESSV, oAddrV[s]);
+            if (oTexS[s]) oTexS[s]->Release();
+        }
+        if (oRT0) oRT0->Release();
+        if (oDS)  oDS->Release();
+    }
 }
 
 // Reusable fixed-function world-space line-list draw. Uses the passed
@@ -4887,6 +5279,10 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	m_pBloomEffect = NULL;
 	m_pBloomPing   = NULL;
 	m_pBloomPong   = NULL;
+	// [soft-shadows] mask RTs + blur effect (zeroed for safe partial-failure cleanup)
+	m_pShadowMask       = NULL;
+	m_pShadowMaskMsaa   = NULL;
+	m_pShadowBlurEffect = NULL;
 	//: skydome geometry — pre-init so partial-failure cleanup is safe
 	m_pSkydomeVB        = NULL;
 	m_pSkydomeIB        = NULL;
@@ -5167,6 +5563,9 @@ Engine::~Engine()
 
 	ReleaseBloomTargets();
 	SAFE_RELEASE(m_pBloomEffect);
+	// [soft-shadows] mask RTs + the dedicated blur effect handle
+	ReleaseShadowMaskTargets();
+	SAFE_RELEASE(m_pShadowBlurEffect);
     for (int i = 0; i < NUM_SHADERS; i++)
     {
         SAFE_RELEASE(m_pShaders[i]);

@@ -195,4 +195,18 @@ describe("PreferencesDialog", () => {
     expect(localStorage.getItem("alo:model-shadows")).toBe("0");
   });
 
+  it("Soft shadows defaults on; unchecking sends enabled:false and persists", () => {
+    const { bridge, request } = makeBridgeStub();
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
+    const box = screen.getByRole("checkbox", { name: /soft shadows/i }) as HTMLInputElement;
+    expect(box.checked).toBe(true); // default on
+    fireEvent.click(box);
+    expect(box.checked).toBe(false);
+    expect(request).toHaveBeenCalledWith({
+      kind: "engine/set/soft-shadows",
+      params: { enabled: false },
+    });
+    expect(localStorage.getItem("alo:soft-shadows")).toBe("0");
+  });
+
 });

@@ -21,6 +21,7 @@ import {
 } from "@/lib/msaa-quality";
 import { applySkydomeSeamFix, readSkydomeSeamFix, writeSkydomeSeamFix } from "@/lib/skydome-seam-fix";
 import { applyModelShadows, readModelShadows, writeModelShadows } from "@/lib/model-shadows";
+import { applySoftShadows, readSoftShadows, writeSoftShadows } from "@/lib/soft-shadows";
 
 type Props = { bridge: Bridge; open: boolean; onOpenChange: (open: boolean) => void };
 
@@ -104,6 +105,16 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
     setModelShadows(enabled);
     writeModelShadows(enabled);
     applyModelShadows(bridge, enabled);
+  };
+
+  // "Soft shadows": blurs the stencil shadow edges to match the game's
+  // soft-shadow rendering (default on). Persisted in localStorage; applied
+  // to the engine live.
+  const [softShadows, setSoftShadows] = useState<boolean>(() => readSoftShadows());
+  const commitSoftShadows = (enabled: boolean) => {
+    setSoftShadows(enabled);
+    writeSoftShadows(enabled);
+    applySoftShadows(bridge, enabled);
   };
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Preferences" size="sm">
@@ -236,6 +247,21 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
             </div>
             <div className="text-[11px] text-text-3">
               Casts the game's stencil shadow for the reference model onto the ground (and self-shadows it).
+            </div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="pref-soft-shadows" className="text-text-2">
+                Soft shadows
+              </label>
+              <input
+                id="pref-soft-shadows"
+                type="checkbox"
+                checked={softShadows}
+                onChange={(e) => commitSoftShadows(e.target.checked)}
+                className="accent-[var(--accent)]"
+              />
+            </div>
+            <div className="text-[11px] text-text-3">
+              Softens (blurs) the model shadow&apos;s edges, matching the game; off = hard-edged.
             </div>
           </div>
         </div>

@@ -1967,6 +1967,18 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         sendOk(json::object());
         return res;
     }
+    // -------- engine/set/soft-shadows (view-only render preference) --------
+    // "Soft shadows": blurred shadow-mask composite vs the hard stencil darken.
+    // Like model-shadows it is a view preference -- never marks the document dirty,
+    // no DTO field. Persisted web-side (localStorage). Only meaningful when model
+    // shadows are on; the engine falls back to hard when off/unavailable.
+    if (kind == "engine/set/soft-shadows")
+    {
+        if (!requireEngine(kind.c_str())) return res;
+        m_engine->SetSoftShadows(params.value("enabled", true));
+        sendOk(json::object());
+        return res;
+    }
     // -------- engine/set/estimated-load (hard-guard) -----------------
     // Web-computed estimate of alive particles per placed instance
     // (chain-load.ts owns the formula — see the hard-guard spec). Cached
