@@ -934,15 +934,26 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
 				NormDbg("[norm-dbg]   normalTex %ux%u fmt=%d levels=%lu\n",
 				        d.Width, d.Height, (int)d.Format, (unsigned long)m_pNormalTexture->GetLevelCount());
 				D3DLOCKED_RECT lr;
+				// The texel dump uses 4-byte/pixel (BGRA) indexing, valid only for the
+				// 32-bit uncompressed formats; for a DXT/compressed normal map the locked
+				// data is block-compressed and *4 indexing reads garbage, so dump only when
+				// the format is 32bpp BGRA-style and report otherwise.
+				const bool is32bpp = (d.Format == D3DFMT_A8R8G8B8 || d.Format == D3DFMT_X8R8G8B8 ||
+				                      d.Format == D3DFMT_A8B8G8R8 || d.Format == D3DFMT_X8B8G8R8);
 				if (SUCCEEDED(m_pNormalTexture->LockRect(0, &lr, NULL, D3DLOCK_READONLY)))
 				{
-					unsigned char* b = (unsigned char*)lr.pBits;
-					int cx = d.Width/2, cy = d.Height/2;
-					unsigned char* c = b + cy*lr.Pitch + cx*4;
-					unsigned char* l = b + cy*lr.Pitch + 10*4;
-					unsigned char* r = b + cy*lr.Pitch + (d.Width-10)*4;
-					NormDbg("[norm-dbg]   texels BGRA center=%u,%u,%u left=%u,%u,%u right=%u,%u,%u\n",
-					        c[0],c[1],c[2], l[0],l[1],l[2], r[0],r[1],r[2]);
+					if (is32bpp)
+					{
+						unsigned char* b = (unsigned char*)lr.pBits;
+						int cx = d.Width/2, cy = d.Height/2;
+						unsigned char* c = b + cy*lr.Pitch + cx*4;
+						unsigned char* l = b + cy*lr.Pitch + 10*4;
+						unsigned char* r = b + cy*lr.Pitch + (d.Width-10)*4;
+						NormDbg("[norm-dbg]   texels BGRA center=%u,%u,%u left=%u,%u,%u right=%u,%u,%u\n",
+						        c[0],c[1],c[2], l[0],l[1],l[2], r[0],r[1],r[2]);
+					}
+					else
+						NormDbg("[norm-dbg]   texel dump skipped (fmt=%d not 32bpp BGRA)\n", (int)d.Format);
 					m_pNormalTexture->UnlockRect(0);
 				}
 				else NormDbg("[norm-dbg]   LockRect FAILED (texture not in a lockable pool)\n");

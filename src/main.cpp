@@ -8226,6 +8226,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f",
 				              &captureAmbient[0], &captureAmbient[1], &captureAmbient[2]) == 3)
 					captureHasAmbient = true;
+				else
+					fwprintf(stderr, L"--ambient: expected r,g,b floats, got '%s' -- ignored\n", argv[i + 1].c_str());
 			}
 			// [world-lit] --sun r,g,b: sun diffuse colour (0..1 floats).
 			if (argv[i] == L"--sun" && i + 1 < argv.size())
@@ -8233,12 +8235,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f",
 				              &captureSun[0], &captureSun[1], &captureSun[2]) == 3)
 					captureHasSun = true;
+				else
+					fwprintf(stderr, L"--sun: expected r,g,b floats, got '%s' -- ignored\n", argv[i + 1].c_str());
 			}
 			// [world-lit] --sun-intensity f: scalar folded into the sun colour.
+			// Validate with swscanf_s (not _wtof, which silently returns 0.0 on
+			// garbage -> a black sun with no warning).
 			if (argv[i] == L"--sun-intensity" && i + 1 < argv.size())
 			{
-				captureSunIntensity = (float)_wtof(argv[i + 1].c_str());
-				captureHasSunI = true;
+				float sunI = 0.0f;
+				if (swscanf_s(argv[i + 1].c_str(), L"%f", &sunI) == 1)
+				{
+					captureSunIntensity = sunI;
+					captureHasSunI = true;
+				}
+				else
+					fwprintf(stderr, L"--sun-intensity: expected a float, got '%s' -- ignored\n", argv[i + 1].c_str());
 			}
 		}
 		// Warn when both --capture and --capture-ref are supplied: --capture-ref
@@ -8333,8 +8345,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			e->randomRotation      = true;     // varied spin angles -> per-sprite rotation visible
 			e->noDepthTest         = true;     // smoke: no depth test -> overlapping soft orbs composite
 			                                   // cleanly (depth-test in mode 5 hard-intersects quad footprints)
-			e->randomRotationAverage  = 0.0f;
-			e->randomRotationVariance = 3.0f;  // ~+/-172 deg spread (default 0 = no rotation!)
+			// Engine: m_baseRotation = average * (1 + rand(-variance, variance)), in TURNS
+			// (angle = 2*PI*rotation). With average 0 the variance is moot -> every sprite
+			// starts at angle 0. average 0.5 / variance 1.0 => baseRotation in [0,1] turn =
+			// a full 0..360 deg random start-angle spread. (randomRotation=true means the
+			// rotation-SPEED track is ignored, so the start angle is the only spin source.)
+			e->randomRotationAverage  = 0.5f;
+			e->randomRotationVariance = 1.0f;
 			e->textureSize         = 1;       // ATLAS FRAME COUNT (textureSizeSqrt=floor(sqrt)), NOT pixels!
 			                                   // 1 => 1x1 atlas => quad UVs span the FULL 0..1. (256 gave a
 			                                   // 16x16 atlas => each particle sampled a 1/16 UV tile => the
@@ -8531,7 +8548,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				fwprintf(stderr, L"gen-smoke-test: SaveParticleSystem failed: %hs\n", err.c_str());
 				return 2;
 			}
-			fwprintf(stderr, L"gen-smoke-test: wrote %s (blendMode 5, randomRotation, color ramp)\n", genSmokeTestPath.c_str());
+			// Report the ACTUAL root blendMode (the bump flags override it to 11; the base
+			// smoke is 2 -- the old hardcoded "blendMode 5" was stale) and the emitter count
+			// (the grid produces 12).
+			fwprintf(stderr, L"gen-smoke-test: wrote %s (root blendMode %d, %zu emitter(s))\n",
+			         genSmokeTestPath.c_str(), (int)e->blendMode, sys->getEmitters().size());
 			return 0;
 		}
 		// T9.2] --gen-a11y-fixture <path>: one-shot CLI to produce a
