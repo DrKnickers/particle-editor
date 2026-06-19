@@ -9,6 +9,7 @@
 // method.
 
 #include "ModManager.h"
+#include "ModScan.h"   // ScanModNestedLayers / ModRootHasArt (transitively ModLayers.h)
 
 #include "engine.h"
 #include "managers.h"
@@ -100,44 +101,61 @@ static void WriteLastMod(const wstring& modPath)
     }
 }
 
-// Last selected submod stack: an ORDERED list of folder NAMES (not paths;
-// resolved under whatever mod is active at restore time, applied in order, each
-// only if still present). Stored as REG_MULTI_SZ.
-static vector<wstring> ReadLastSubmods()
+// Persisted ordered layer stack: absolute slash-free paths, front = highest.
+// Stored as REG_MULTI_SZ. Read with a size-query + dynamic buffer — a multi-path
+// stack easily exceeds any fixed buffer (the old fixed wchar[1024] would silently
+// truncate to empty -> Unmodded).
+static vector<wstring> ReadLastLayers()
 {
     vector<wstring> out;
     HKEY hKey;
     if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
     {
-        wchar_t buf[1024] = {0};   // ample for a handful of short folder names
-        DWORD   type = 0;
-        DWORD   size = sizeof(buf);
-        if (RegQueryValueEx(hKey, L"LastSubmods", NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_MULTI_SZ)
+        DWORD type = 0, bytes = 0;
+        if (RegQueryValueEx(hKey, L"LastLayers", NULL, &type, NULL, &bytes) == ERROR_SUCCESS
+            && type == REG_MULTI_SZ && bytes >= sizeof(wchar_t))
         {
-            for (const wchar_t* p = buf; *p; p += wcslen(p) + 1)
-                out.push_back(p);
+            std::vector<wchar_t> buf(bytes / sizeof(wchar_t));
+            if (RegQueryValueEx(hKey, L"LastLayers", NULL, &type, (LPBYTE)buf.data(), &bytes) == ERROR_SUCCESS)
+                out = modlayers::ParseMultiSz(buf.data(), buf.size());
         }
         RegCloseKey(hKey);
     }
     return out;
 }
 
-static void WriteLastSubmods(const vector<wstring>& names)
+static void WriteLastLayers(const vector<wstring>& layers)
 {
     HKEY hKey;
     if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
                        REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
     {
-        // Build a double-null-terminated REG_MULTI_SZ block. An empty list is a
-        // single terminating null.
-        wstring blob;
-        for (const wstring& n : names) { blob += n; blob.push_back(L'\0'); }
-        blob.push_back(L'\0');
-        RegSetValueEx(hKey, L"LastSubmods", 0, REG_MULTI_SZ,
-                      (const BYTE*)blob.data(),
-                      (DWORD)(blob.size() * sizeof(wchar_t)));
+        const std::wstring blob = modlayers::SerializeMultiSz(layers);
+        RegSetValueEx(hKey, L"LastLayers", 0, REG_MULTI_SZ,
+                      (const BYTE*)blob.data(), (DWORD)(blob.size() * sizeof(wchar_t)));
         RegCloseKey(hKey);
     }
+}
+
+// Migration-only reader of the legacy LastSubmods (ordered folder NAMES).
+// Dynamic buffer + ParseMultiSz (never the old fixed wchar[1024]).
+static vector<wstring> ReadLastSubmodsLegacy()
+{
+    vector<wstring> out;
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD type = 0, bytes = 0;
+        if (RegQueryValueEx(hKey, L"LastSubmods", NULL, &type, NULL, &bytes) == ERROR_SUCCESS
+            && type == REG_MULTI_SZ && bytes >= sizeof(wchar_t))
+        {
+            std::vector<wchar_t> buf(bytes / sizeof(wchar_t));
+            if (RegQueryValueEx(hKey, L"LastSubmods", NULL, &type, (LPBYTE)buf.data(), &bytes) == ERROR_SUCCESS)
+                out = modlayers::ParseMultiSz(buf.data(), buf.size());
+        }
+        RegCloseKey(hKey);
+    }
+    return out;
 }
 
 // One-time migration marker. Core used to be auto-loaded; it is now a normal
@@ -204,44 +222,6 @@ static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& o
     FindClose(hFind);
 }
 
-// Scan a mod root for submod folders: immediate subdirectories that carry
-// their own Data\Art tree. Core (the shared core) is INCLUDED -- it's now a
-// normal selectable/orderable layer in the Submods dialog, not auto-loaded, so the user
-// can place it (Mod/IR/TR put it after their campaign; Rev omits it). Returns folder
-// names (not paths), sorted case-insensitively.
-static void ScanSubmods(const wstring& modRoot, vector<wstring>& out)
-{
-    out.clear();
-    if (modRoot.empty()) return;
-
-    wstring base = modRoot;
-    if (base.back() != L'\\' && base.back() != L'/') base += L'\\';
-
-    WIN32_FIND_DATA fd;
-    HANDLE hFind = FindFirstFile((base + L"*").c_str(), &fd);
-    if (hFind == INVALID_HANDLE_VALUE) return;
-
-    do
-    {
-        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
-        if (fd.cFileName[0] == L'.') continue;
-        if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) continue;
-
-        // Only count folders that actually carry content (a Data\Art tree).
-        const wstring art = base + fd.cFileName + L"\\Data\\Art";
-        const DWORD attr = GetFileAttributesW(art.c_str());
-        if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) continue;
-
-        out.push_back(fd.cFileName);
-    }
-    while (FindNextFile(hFind, &fd));
-    FindClose(hFind);
-
-    std::sort(out.begin(), out.end(), [](const wstring& a, const wstring& b) {
-        return _wcsicmp(a.c_str(), b.c_str()) < 0;
-    });
-}
-
 // ---------------------------------------------------------------------------
 // ModManager.
 // ---------------------------------------------------------------------------
@@ -289,188 +269,100 @@ void ModManager::DiscoverMods()
         return _wcsicmp(a.folderName.c_str(), b.folderName.c_str()) < 0;
     });
 
+    // Per mod, discover its nested layers + whether its own root has Data\Art.
+    for (ModEntry& e : m_mods)
+    {
+        e.rootHasArt = ModRootHasArt(e.path);
+        ScanModNestedLayers(e.path, e.nested);
+    }
+
     printf("[Mods] DiscoverMods: scanned %zu game roots, found %zu mods\n",
            m_gameRoots.size(), m_mods.size()); fflush(stdout);
 }
 
-void ModManager::RestoreLastSelectedMod()
+void ModManager::RestoreLastLayerStack()
 {
-    wstring savedMod = ReadLastMod();
-    if (!savedMod.empty() && PathIsDirectory(savedMod.c_str()))
+    std::vector<wstring> stack = ReadLastLayers();
+
+    // One-time migration: no LastLayers yet but a legacy LastMod/LastSubmods exists.
+    if (stack.empty())
     {
-        m_selectedModPath = savedMod;
-        if (m_fileManager) m_fileManager->SetModPath(savedMod);
-        printf("[Mods] Restored from registry: %S\n", savedMod.c_str()); fflush(stdout);
-    }
-    else
-    {
-        m_selectedModPath.clear();
-        if (!savedMod.empty())
+        const wstring lastMod = ReadLastMod();
+        if (!lastMod.empty())
         {
-            printf("[Mods] Saved mod path no longer exists, falling back to unmodded: %S\n", savedMod.c_str()); fflush(stdout);
+            const std::vector<wstring> lastSubmods = ReadLastSubmodsLegacy();
+            stack = modlayers::MigrateLegacySelection(lastMod, lastSubmods, ReadCoreMigrated());
+            WriteCoreMigrated();   // the Core decision is now baked into LastLayers
         }
     }
 
-    // — palette must follow whatever mod we settled on so its
-    // INI state matches the active mod's textures from frame one.
-    // Safe to call before the palette popup exists (--new-ui has no
-    // popup; SetActiveMod is just a data-side state mutation).
-    TexturePalette::Store::Instance().SetActiveMod(m_selectedModPath);
+    // Drop layers whose folder no longer exists (the existing ghost-drop behaviour);
+    // SetLayerStack persists the validated stack + applies it (no engine reload yet —
+    // the engine isn't bound at restore; SetLayerStack tolerates m_engine == null).
+    std::vector<wstring> present;
+    for (const wstring& p : stack)
+        if (PathIsDirectory(modlayers::CanonicalizeLayerPath(p).c_str()))
+            present.push_back(p);
 
-    // Submods live under the restored mod; discover them, then re-apply a
-    // persisted submod selection if it still exists (SetModPath cleared it).
-    // Lightweight (no engine reload — the engine isn't bound yet at restore):
-    // just set the FileManager content root so first-frame lookups see it.
-    DiscoverSubmods();
-    m_selectedSubmods.clear();
-    const vector<wstring> savedSubmods = ReadLastSubmods();
-    for (const wstring& saved : savedSubmods)
+    SetLayerStack(present);
+    printf("[Mods] Restored %zu layer(s)\n", present.size()); fflush(stdout);
+}
+
+bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers)
+{
+    // Canonicalise, drop non-existent folders, and dedup (case-insensitive),
+    // preserving order. The existence filter keeps m_layerStack / GetLayerStack()
+    // / the persisted LastLayers free of ghost paths — matching what
+    // FileManager::SetLayers already does for content roots and what
+    // RestoreLastLayerStack's own pre-filter did (now redundant but harmless).
+    // A migration-appended candidate (e.g. MigrateLegacySelection's
+    // mod\Core) is dropped here too when that folder is absent.
+    m_layerStack.clear();
+    for (const wstring& raw : absoluteLayers)
     {
-        // Match case-insensitively but adopt the DISCOVERED on-disk casing (the
-        // menu compares strictly, so a case-only rename must not hide the check);
-        // preserve the saved precedence order; drop names no longer present + dups.
-        auto it = std::find_if(m_submods.begin(), m_submods.end(),
-            [&](const wstring& s){ return _wcsicmp(s.c_str(), saved.c_str()) == 0; });
-        if (it != m_submods.end() &&
-            std::find(m_selectedSubmods.begin(), m_selectedSubmods.end(), *it) == m_selectedSubmods.end())
-        {
-            m_selectedSubmods.push_back(*it);
-        }
+        const wstring c = modlayers::CanonicalizeLayerPath(raw);
+        if (c.empty()) continue;
+        if (!PathIsDirectory(c.c_str())) continue;
+        bool dup = false;
+        for (const wstring& s : m_layerStack)
+            if (modlayers::LayerPathsEqual(s, c)) { dup = true; break; }
+        if (!dup) m_layerStack.push_back(c);
     }
 
-    // One-time Core migration: it used to be auto-loaded but is now a normal
-    // layer, so a legacy stack saved without it would silently lose Core. Append it
-    // (after the campaign submods, matching the launch order) to a non-empty legacy
-    // selection that doesn't already list it; persist so it sticks. The flag makes this
-    // happen ONCE -- after that the saved list is authoritative (a user who removes
-    // Core, e.g. for Rev, keeps it removed).
-    if (!ReadCoreMigrated())
-    {
-        auto coreIt = std::find_if(m_submods.begin(), m_submods.end(),
-            [](const wstring& s){ return _wcsicmp(s.c_str(), L"Core") == 0; });
-        const bool coreSelected = std::find_if(m_selectedSubmods.begin(), m_selectedSubmods.end(),
-            [](const wstring& s){ return _wcsicmp(s.c_str(), L"Core") == 0; }) != m_selectedSubmods.end();
-        if (!m_selectedSubmods.empty() && coreIt != m_submods.end() && !coreSelected)
-        {
-            m_selectedSubmods.push_back(*coreIt);   // discovered casing
-            WriteLastSubmods(m_selectedSubmods);
-            printf("[Mods] Migrated legacy submod stack -> appended Core\n"); fflush(stdout);
-        }
-        WriteCoreMigrated();
-    }
+    const wstring primary = GetPrimaryLayerPath();
 
-    if (!m_selectedSubmods.empty())
+    // 1. FileManager content roots (slash re-added by BuildContentRoots).
+    if (m_fileManager) m_fileManager->SetLayers(m_layerStack);
+
+    // 2. Persist: LastLayers is authoritative; LastMod = primary keeps the
+    //    --legacy single-mod restore current (it still reads LastMod).
+    WriteLastLayers(m_layerStack);
+    WriteLastMod(primary);
+
+    // 3. Texture palette follows the primary layer; thumbnails keyed by filename
+    //    must drop so a layer swap doesn't show the previous stack's art.
+    TexturePalette::Store::Instance().SetActiveMod(primary);
+    TexturePalette::ClearThumbnailCache();
+    TexturePalette::RefreshPopup();
+
+    printf("[Mods] Layer stack: %zu layer(s), primary=%S\n",
+           m_layerStack.size(), primary.empty() ? L"(unmodded)" : primary.c_str());
+    fflush(stdout);
+
+    // 4. Engine hot-swap (if bound).
+    bool ok = true;
+    if (m_engine != NULL)
     {
-        if (m_fileManager) m_fileManager->SetSubmods(m_selectedSubmods);
-        printf("[Mods] Restored %zu submod(s)\n", m_selectedSubmods.size()); fflush(stdout);
+        if (!m_engine->ReloadShaders()) ok = false;
+        m_engine->ReloadTextures();
     }
+    return ok;
 }
 
 bool ModManager::SelectMod(const wstring& modPath)
 {
-    // 1. Internal state.
-    m_selectedModPath = modPath;
-
-    // 2. FileManager priority basepath. Empty path = Unmodded (clears).
-    if (m_fileManager) m_fileManager->SetModPath(modPath);
-
-    // 3. Registry persist so the next launch picks up where we left off.
-    WriteLastMod(modPath);
-
-    // 4–6. Texture palette + thumbnail cache. SetActiveMod flushes
-    // dirty state from the previous mod and lazy-loads the new mod's
-    // INI section. ClearThumbnailCache drops bitmaps that are keyed
-    // by filename — a same-named texture in a different mod would
-    // otherwise show the old mod's thumbnail. RefreshPopup is a
-    // no-op when the legacy popup doesn't exist (--new-ui mode).
-    TexturePalette::Store::Instance().SetActiveMod(modPath);
-    TexturePalette::ClearThumbnailCache();
-    TexturePalette::RefreshPopup();
-
-    printf("[Mods] Selected: %S\n", modPath.empty() ? L"(unmodded)" : modPath.c_str()); fflush(stdout);
-
-    // 7. Engine shader + texture hot-swap so the new mod takes effect
-    // without restart. Shader reload may fail on a malformed mod
-    // shader; we keep the previous shader set and return false so the
-    // caller can surface the failure (legacy on status bar, new-UI on
-    // engine/state/changed with a separate channel).
-    // A new mod has its own submods; re-discover and reset the stack
-    // (SetModPath already cleared the FileManager's submods). Persist the empty
-    // stack so a relaunch on this mod starts with no submods.
-    DiscoverSubmods();
-    m_selectedSubmods.clear();
-    WriteLastSubmods({});
-
-    bool ok = true;
-    if (m_engine != NULL)
-    {
-        if (!m_engine->ReloadShaders())
-        {
-            ok = false;
-        }
-        m_engine->ReloadTextures();
-    }
-    return ok;
-}
-
-// Populate m_submods from the active mod root. Pure discovery — doesn't
-// touch the selection (SelectMod / RestoreLastSelectedMod own that).
-void ModManager::DiscoverSubmods()
-{
-    ScanSubmods(m_selectedModPath, m_submods);
-    printf("[Mods] DiscoverSubmods: %zu under %S\n", m_submods.size(),
-           m_selectedModPath.empty() ? L"(none)" : m_selectedModPath.c_str()); fflush(stdout);
-}
-
-// Activate the ordered submod stack (empty = none): validate against the
-// discovered set (drop unknowns + dups, adopt on-disk casing, keep order), rebuild
-// content roots, persist, drop cached thumbnails, reload engine assets. Mirrors
-// SelectMod's tail.
-bool ModManager::SelectSubmods(const vector<wstring>& names)
-{
-    // Submods are only meaningful under an active mod. When Unmodded, ignore the
-    // request and keep the stack cleared, so native matches the "submods belong to
-    // the active mod" invariant the mock + UI assume (the FileManager stack is
-    // already empty here -- SetModPath cleared it). Without this, a stray
-    // select-submods while Unmodded would leave GetSelectedSubmods() non-empty and
-    // the next mods/list would report submods that aren't really loadable.
-    if (m_selectedModPath.empty())
-    {
-        m_selectedSubmods.clear();
-        return true;
-    }
-    // Keep only discovered submods, in the requested precedence order, adopting the
-    // on-disk casing and dropping unknowns + duplicates.
-    m_selectedSubmods.clear();
-    for (const wstring& n : names)
-    {
-        auto it = std::find_if(m_submods.begin(), m_submods.end(),
-            [&](const wstring& s){ return _wcsicmp(s.c_str(), n.c_str()) == 0; });
-        if (it != m_submods.end() &&
-            std::find(m_selectedSubmods.begin(), m_selectedSubmods.end(), *it) == m_selectedSubmods.end())
-        {
-            m_selectedSubmods.push_back(*it);
-        }
-    }
-    if (m_fileManager) m_fileManager->SetSubmods(m_selectedSubmods);
-    WriteLastSubmods(m_selectedSubmods);
-    WriteCoreMigrated();   // explicit selection -> past legacy: respect the list exactly (incl. a deliberate no-Core)
-
-    // Same-named textures can differ between submods; drop cached thumbnails so
-    // a switch doesn't render the previous stack's art.
-    TexturePalette::ClearThumbnailCache();
-    TexturePalette::RefreshPopup();
-
-    printf("[Mods] Selected %zu submod(s)\n", m_selectedSubmods.size()); fflush(stdout);
-
-    bool ok = true;
-    if (m_engine != NULL)
-    {
-        if (!m_engine->ReloadShaders())
-        {
-            ok = false;
-        }
-        m_engine->ReloadTextures();
-    }
-    return ok;
+    // Quick-switch = replace the whole stack with this single layer
+    // (empty = Unmodded). Used by the legacy menu + the new-UI quick-switch.
+    return SetLayerStack(modPath.empty() ? std::vector<wstring>{}
+                                         : std::vector<wstring>{ modPath });
 }

@@ -2617,7 +2617,7 @@ static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     {
                         if (info->modManager) info->modManager->DiscoverMods();
                         // If our currently-selected mod no longer exists, fall back to Unmodded
-                        const std::wstring& sel = info->modManager ? info->modManager->GetSelectedModPath() : std::wstring();
+                        const std::wstring sel = info->modManager ? info->modManager->GetPrimaryLayerPath() : std::wstring();
                         bool stillExists = sel.empty();
                         if (info->modManager)
                         {
@@ -7004,7 +7004,7 @@ static void RebuildModsMenu(APPLICATION_INFO* info)
 
 	// Read mod state from ModManager (single source of truth post-D6).
 	const std::vector<ModEntry>& mods = info->modManager ? info->modManager->GetMods() : std::vector<ModEntry>{};
-	const std::wstring& selectedPath = info->modManager ? info->modManager->GetSelectedModPath() : std::wstring{};
+	const std::wstring selectedPath = info->modManager ? info->modManager->GetPrimaryLayerPath() : std::wstring{};
 
 	// Top: Unmodded radio item
 	UINT noneFlags = MF_STRING | (selectedPath.empty() ? MF_CHECKED : MF_UNCHECKED);
@@ -7690,13 +7690,13 @@ void main( APPLICATION_INFO* info, const vector<wstring>& argv )
 		// both UI modes. Stack-local lifetime matches textureManager /
 		// shaderManager (live until main() returns). Setting m_engine
 		// happens AFTER `info->engine = new Engine(...)` below.
-		// RestoreLastSelectedMod() applies the registry path to
+		// RestoreLastLayerStack() applies the persisted layer stack to
 		// FileManager + TexturePalette internally so this block no
 		// longer needs the inline ReadLastMod / SetActiveMod chain.
 		ModManager modManager(fileManager, gameRoots);
 		info->modManager = &modManager;
 		modManager.DiscoverMods();
-		modManager.RestoreLastSelectedMod();
+		modManager.RestoreLastLayerStack();
 		RebuildModsMenu(info);
 
 		// Create the rendering engine

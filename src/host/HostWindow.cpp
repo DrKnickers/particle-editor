@@ -500,7 +500,7 @@ struct HostWindowImpl
     bool      m_inSizeMove       = false;
 
     // D6: mod state shared with React. ModManager constructed in
-    // the impl ctor (DiscoverMods + RestoreLastSelectedMod run before
+    // the impl ctor (DiscoverMods + RestoreLastLayerStack run before
     // any UI shows); SetEngine called in WM_CREATE once the Engine
     // exists. Passed to BridgeDispatcher via SetModManager.
     std::unique_ptr<::ModManager>      modManager;
@@ -746,7 +746,7 @@ struct HostWindowImpl
         // Both calls are quick; they don't touch GPU / WebView2 state.
         // Engine pointer is bound later via SetEngine() in WM_CREATE.
         modManager->DiscoverMods();
-        modManager->RestoreLastSelectedMod();
+        modManager->RestoreLastLayerStack();
 
         // Default rendering path is architecture C (DXGI
         // composition + DComp engine visual + WebView2 composition

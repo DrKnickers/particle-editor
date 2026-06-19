@@ -723,9 +723,10 @@ void Engine::ReloadTextures()
 	// there would needlessly rebuild an identical catalog AND make the selected reference
 	// object vanish for the async rebuild. So invalidate ONLY when the active mod/submod
 	// roots actually differ from what the current/in-flight catalog reflects.
+	// Compare the full content-root stack (was mod path + submods) so a
+	// same-mod layer REORDER also invalidates, not just a mod/submod-set change.
 	const bool modContextChanged =
-		m_fileManager.GetModPath() != m_catalogContextModPath ||
-		m_fileManager.GetSubmods() != m_catalogContextSubmods;
+		m_fileManager.GetContentRoots() != m_catalogContextRoots;
 	if (modContextChanged)
 	{
 		m_referenceCatalogBuilt = false;
@@ -4624,14 +4625,13 @@ void Engine::EnumerateSkydomeNames(SkydomeContext context,
 // invalidation, so a flag set there alone would be one switch stale).
 const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& Engine::EnsureSkydomeLists()
 {
-    const std::wstring& mod = m_fileManager.GetModPath();
-    const std::vector<std::wstring>& subs = m_fileManager.GetSubmods();
-    if (!m_skydomeListsValid || mod != m_skydomeListsCtxMod || subs != m_skydomeListsCtxSubmods)
+    // Key the cache on the full content-root stack (was mod + submods).
+    const std::vector<std::wstring>& roots = m_fileManager.GetContentRoots();
+    if (!m_skydomeListsValid || roots != m_skydomeListsCtxRoots)
     {
         LoadAllSkydomeLists(m_fileManager, m_skydomeLists);
-        m_skydomeListsCtxMod     = mod;
-        m_skydomeListsCtxSubmods = subs;
-        m_skydomeListsValid      = true;
+        m_skydomeListsCtxRoots = roots;
+        m_skydomeListsValid    = true;
     }
     return m_skydomeLists;
 }
@@ -4645,8 +4645,8 @@ const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& Engine::EnsureSkydom
 // (the switch invalidates the catalog, the latch stays set, Update() re-kicks) with
 // no picker-open needed.
 //
-// Ordering invariant (HostWindow): ModManager::RestoreLastSelectedMod() runs in the
-// host impl ctor and applies the saved mod path + submod stack to the FileManager
+// Ordering invariant (HostWindow): ModManager::RestoreLastLayerStack() runs in the
+// host impl ctor and applies the saved layer stack to the FileManager
 // SYNCHRONOUSLY, BEFORE the host calls SetCompositionMode(true). So the first build
 // this arms snapshots the FileManager already reflecting the then-selected mod +
 // submods -- it prioritizes the active content, not a wasted base-game pass. If a
@@ -4690,25 +4690,23 @@ void Engine::StartCatalogBuildIfNeeded()
         return;
 
     const std::vector<std::wstring> basepaths = m_fileManager.GetBasepaths();
-    const std::wstring              modpath   = m_fileManager.GetModPath();
-    const std::vector<std::wstring> submods   = m_fileManager.GetSubmods();
+    const std::vector<std::wstring> roots     = m_fileManager.GetContentRoots();
     const uint64_t                  gen       = m_catalogGeneration;
 
-    // Record the mod context this build reflects, so a later texture-only
-    // ReloadTextures (F5 / file open) sees an unchanged context and does NOT invalidate.
-    m_catalogContextModPath = modpath;
-    m_catalogContextSubmods = submods;
+    // Record the content-root stack this build reflects, so a later
+    // texture-only ReloadTextures (F5 / file open) sees an unchanged context and
+    // does NOT invalidate.
+    m_catalogContextRoots = roots;
 
     if (m_catalogThread.joinable()) m_catalogThread.join();   // a prior build, already harvested
     m_catalogBuilding.store(true);
-    m_catalogThread = std::thread([this, basepaths, modpath, submods, gen]()
+    m_catalogThread = std::thread([this, basepaths, roots, gen]()
     {
         auto cat = std::make_unique<GameObjectCatalog>();
         try
         {
             FileManager isoFm(basepaths);          // own MEG handles; ctor throws on empty MEGs
-            isoFm.SetModPath(modpath);             // replicate the active mod...
-            isoFm.SetSubmods(submods);             // ...and its submod stack (rebuilds content roots)
+            isoFm.SetLayers(roots);                // replicate the FULL content-root stack
             BuildGameObjectCatalog(isoFm, *cat);   // O(content) XML parse, OFF the UI thread
         }
         catch (...)

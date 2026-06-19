@@ -5,6 +5,7 @@
 #include "crc32.h"
 #include "xml.h"
 #include "utils.h"
+#include "ModLayers.h"
 using namespace std;
 
 //
@@ -196,4 +197,16 @@ void FileManager::BuildModContentRoots()
 
 	// The mod root is the LOWEST-precedence mod layer (the game lists it last).
 	modContentRoots.push_back(modpath);
+}
+
+// Stack-aware content-root setter (see managers.h). Delegates the
+// canonicalize + existence-filter + dedup + slash-terminate logic to the pure
+// modlayers::BuildContentRoots, supplying a real directory-existence predicate.
+void FileManager::SetLayers(const vector<wstring>& absoluteLayers)
+{
+	modContentRoots = modlayers::BuildContentRoots(absoluteLayers,
+		[](const wstring& dir) -> bool {
+			const DWORD a = GetFileAttributesW(dir.c_str());
+			return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
+		});
 }

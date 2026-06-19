@@ -1409,44 +1409,54 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- mods/list, mods/select, mods/refresh (D6) --------
+    // -------- mods/list, mods/refresh, mods/set-layers (D6 /) --------
     //
     // Three thin wrappers around ModManager. ModManager owns the
-    // canonical state (mods vector + selectedModPath) and the
-    // side-effect chain on selection (FileManager swap, registry
-    // persist, palette swap, thumbnail cache clear, engine shader/
-    // texture reload). The dispatcher's job is JSON in / JSON out plus
-    // a single engine/state/changed emit on `select` so subscribed
-    // React components see the new activeModPath without a separate
-    // request.
+    // canonical state (mods catalog + the ordered layer stack) and the
+    // side-effect chain on a stack change (FileManager content-root swap,
+    // registry persist of LastLayers, palette swap to the primary layer,
+    // thumbnail cache clear, engine shader/texture reload). The dispatcher's
+    // job is JSON in / JSON out plus a single engine/state/changed emit on
+    // `set-layers` so subscribed React components see the new activePath
+    // (the primary layer) without a separate request.
     //
     // Helper closure for serialising a mods/list payload (used by both
     // mods/list and mods/refresh — same response shape).
     auto buildModsListPayload = [this]() -> json {
-        json arr = json::array();
+        json modsArr = json::array();
+        json layersArr = json::array();   // flat catalog: mods (with Data\Art) + nested
         const auto& mods = m_modManager->GetMods();
         for (const auto& m : mods)
         {
-            arr.push_back(json{
-                {"path",       WideToUtf8(m.path)},
+            const std::string modPath = WideToUtf8(m.path);
+            modsArr.push_back(json{
+                {"path",       modPath},
                 {"folderName", WideToUtf8(m.folderName)},
                 {"nickname",   WideToUtf8(m.nickname)},
                 {"isFoC",      m.isFoC},
+                {"rootHasArt", m.rootHasArt},
             });
+            const std::string label = m.nickname.empty() ? WideToUtf8(m.folderName)
+                                                          : WideToUtf8(m.nickname);
+            if (m.rootHasArt)
+                layersArr.push_back(json{{"path", modPath}, {"label", label},
+                                         {"isFoC", m.isFoC}, {"kind", "mod"}});
+            for (const auto& n : m.nested)
+                layersArr.push_back(json{{"path", WideToUtf8(n.path)},
+                                         {"label", WideToUtf8(n.label)},
+                                         {"parentLabel", label},
+                                         {"parentPath", modPath},
+                                         {"isFoC", m.isFoC}, {"kind", "nested"}});
         }
-        const std::wstring& sel = m_modManager->GetSelectedModPath();
-        // Submods available under the active mod + the selected ordered stack.
-        json submodsArr = json::array();
-        for (const auto& s : m_modManager->GetSubmods())
-            submodsArr.push_back(WideToUtf8(s));
-        json activeSubmodsArr = json::array();
-        for (const auto& s : m_modManager->GetSelectedSubmods())
-            activeSubmodsArr.push_back(WideToUtf8(s));
+        json stackArr = json::array();
+        for (const auto& p : m_modManager->GetLayerStack())
+            stackArr.push_back(WideToUtf8(p));
+        const std::wstring primary = m_modManager->GetPrimaryLayerPath();
         return json{
-            {"mods",          arr},
-            {"activePath",    sel.empty() ? json(nullptr) : json(WideToUtf8(sel))},
-            {"submods",       submodsArr},
-            {"activeSubmods", activeSubmodsArr},
+            {"mods",       modsArr},
+            {"layers",     layersArr},
+            {"stack",      stackArr},
+            {"activePath", primary.empty() ? json(nullptr) : json(WideToUtf8(primary))},
         };
     };
 
@@ -1456,9 +1466,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         {
             sendOk(json{
                 {"mods", json::array()},
+                {"layers", json::array()},
+                {"stack", json::array()},
                 {"activePath", json(nullptr)},
-                {"submods", json::array()},
-                {"activeSubmods", json::array()},
             });
             return res;
         }
@@ -1472,9 +1482,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         {
             sendOk(json{
                 {"mods", json::array()},
+                {"layers", json::array()},
+                {"stack", json::array()},
                 {"activePath", json(nullptr)},
-                {"submods", json::array()},
-                {"activeSubmods", json::array()},
             });
             return res;
         }
@@ -1488,66 +1498,20 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    if (kind == "mods/select")
+    if (kind == "mods/set-layers")
     {
-        if (!m_modManager)
-        {
-            sendOk(json{{"ok", false}, {"error", "ModManager not bound"}});
-            return res;
-        }
-        // params.path is `string | null` — JSON null means Unmodded.
-        // Treat missing / non-string as Unmodded too (defensive).
-        std::wstring path;
-        auto pit = params.find("path");
-        if (pit != params.end() && pit->is_string())
-        {
-            path = Utf8ToWide(pit->get<std::string>());
-        }
-        bool ok = m_modManager->SelectMod(path);
-        // Drop cached palette thumbnails so a new mod's same-named textures
-        // (e.g. p_smoke_atlas.dds) don't render the previous mod's art.
-        // SelectMod already repointed Store::SetActiveMod + the legacy popup
-        // cache; this clears the new-UI bridge cache (todo.md Risk 1).
-        TexturePalette::ClearBridgeThumbCache();
-        // Whether shader-reload failed or not, the FileManager + registry
-        // + palette updates have rolled forward — broadcast the new
-        // active path so the menu re-ticks even if shaders complain.
-        EmitEngineStateChanged();
-        const std::wstring& sel = m_modManager->GetSelectedModPath();
-        sendOk(json{
-            {"ok",         ok},
-            {"activePath", sel.empty() ? json(nullptr) : json(WideToUtf8(sel))},
-        });
-        return res;
-    }
-
-    // Set the ordered submod stack under the active mod (empty = none).
-    if (kind == "mods/set-submods")
-    {
-        if (!m_modManager)
-        {
-            sendOk(json{{"ok", false}, {"error", "ModManager not bound"}});
-            return res;
-        }
-        // params.names is `string[]` (precedence order, highest first); missing /
-        // non-array = clear. Non-string entries are skipped.
-        std::vector<std::wstring> names;
-        auto nit = params.find("names");
-        if (nit != params.end() && nit->is_array())
-            for (const auto& e : *nit)
-                if (e.is_string()) names.push_back(Utf8ToWide(e.get<std::string>()));
-        bool ok = m_modManager->SelectSubmods(names);
-        // A submod stack swaps content (same-named assets differ); clear the bridge
-        // thumbnail cache like mods/select does.
+        if (!m_modManager) { sendOk(json{{"ok", false}, {"error", "ModManager not bound"}}); return res; }
+        std::vector<std::wstring> paths;
+        auto pit = params.find("paths");
+        if (pit != params.end() && pit->is_array())
+            for (const auto& e : *pit)
+                if (e.is_string()) paths.push_back(Utf8ToWide(e.get<std::string>()));
+        bool ok = m_modManager->SetLayerStack(paths);
         TexturePalette::ClearBridgeThumbCache();
         EmitEngineStateChanged();
-        json activeSubmodsArr = json::array();
-        for (const auto& s : m_modManager->GetSelectedSubmods())
-            activeSubmodsArr.push_back(WideToUtf8(s));
-        sendOk(json{
-            {"ok",            ok},
-            {"activeSubmods", activeSubmodsArr},
-        });
+        json stackArr = json::array();
+        for (const auto& p : m_modManager->GetLayerStack()) stackArr.push_back(WideToUtf8(p));
+        sendOk(json{{"ok", ok}, {"stack", stackArr}});
         return res;
     }
 
@@ -1562,7 +1526,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         json spawnerJson = m_spawnerDriver
             ? SpawnerConfigToJson(m_spawnerDriver->GetConfig())
             : m_spawnerConfig;
-        const std::wstring& activeModPath = m_modManager ? m_modManager->GetSelectedModPath() : std::wstring();
+        const std::wstring activeModPath = m_modManager ? m_modManager->GetPrimaryLayerPath() : std::wstring();
         const bool leaveParticles = (m_pParticleSystem != nullptr && *m_pParticleSystem)
             ? (*m_pParticleSystem)->getLeaveParticles()
             : true;
@@ -2529,7 +2493,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         std::wstring initialDir;
         if (m_modManager)
         {
-            const std::wstring& mod = m_modManager->GetSelectedModPath();
+            const std::wstring mod = m_modManager->GetPrimaryLayerPath();
             if (!mod.empty())
             {
                 auto isDir = [](const std::wstring& p) -> bool {
@@ -2724,7 +2688,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             std::wstring initialDir;
             if (filterId.empty() && m_modManager)
             {
-                const std::wstring& mod = m_modManager->GetSelectedModPath();
+                const std::wstring mod = m_modManager->GetPrimaryLayerPath();
                 if (!mod.empty())
                 {
                     auto isDir = [](const std::wstring& p) -> bool {
@@ -5777,7 +5741,7 @@ void BridgeDispatcher::EmitEngineStateChanged()
     json spawnerJson = m_spawnerDriver
         ? SpawnerConfigToJson(m_spawnerDriver->GetConfig())
         : m_spawnerConfig;
-    const std::wstring& activeModPath = m_modManager ? m_modManager->GetSelectedModPath() : std::wstring();
+    const std::wstring activeModPath = m_modManager ? m_modManager->GetPrimaryLayerPath() : std::wstring();
     const bool leaveParticles = (m_pParticleSystem != nullptr && *m_pParticleSystem)
         ? (*m_pParticleSystem)->getLeaveParticles()
         : true;

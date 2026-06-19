@@ -16,6 +16,18 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 > The inline release markers below show where each tagged [SemVer](https://semver.org)
 > release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
 
+## 2026-06-19
+
+### Added
+
+- Stack multiple mod layers in any load order — compose the stack from the Mods menu (add layers via **Add mod…**, drag rows to reorder, **Reset** to unmodded) or the full **Load Order** dialog (**Expand to full editor**); the top layer wins. Replaces picking a single mod + submods
+- Drag-to-reorder the mod stack with a live glide preview — a make-room gap opens at the drop point while a floating chip glides to it — in both the Mods menu's active stack and the Load Order dialog (matching the Emitter tree's feel)
+
+### Changed
+
+- Redesigned the **Preferences** and **Load Order** dialogs — grouped section cards, clearer dependency nesting (dependent controls dim/disable under their parent), tree-style rows, a search box, and a top-wins precedence rail
+- The Mods menu is now the primary mod-stack editor (compose and reorder in place), with the Load Order dialog as the **Expand to full editor** fallback
+
 ## 2026-06-18
 
 ### Added

@@ -17,16 +17,17 @@
 //      created the FileManager.
 //   2. `DiscoverMods()` scans the gameRoots' Mods\ subdirectories.
 //      Idempotent — safe to call again on a Refresh.
-//   3. `RestoreLastSelectedMod()` reads HKCU\Software\AloParticleEditor\
-//      LastMod; if the path still exists on disk it becomes active
-//      (calls FileManager::SetModPath + TexturePalette::SetActiveMod
-//      so startup behaviour matches the legacy boot sequence).
+//   3. `RestoreLastLayerStack()` reads HKCU\Software\AloParticleEditor\
+//      LastLayers (with a one-time migration from the legacy LastMod +
+//      LastSubmods) and applies the persisted ordered content-layer
+//      stack so startup behaviour matches the prior session.
 //   4. `SetEngine(Engine*)` after the Engine is built. Required for
-//      the shader/texture reload inside SelectMod. In --new-ui mode
+//      the shader/texture reload inside SetLayerStack. In --new-ui mode
 //      the Engine doesn't exist at ModManager-construction time, so
 //      this is a separate step.
-//   5. `SelectMod(modPath)` is the atomic activation chain. Empty
-//      path means Unmodded. Callers add their own per-mode
+//   5. `SetLayerStack(layers)` is the atomic activation chain (an empty
+//      stack means Unmodded). `SelectMod(modPath)` is the one-layer
+//      quick-switch shorthand. Callers add their own per-mode
 //      finalisation: legacy rebuilds the HMENU + invalidates the
 //      render window; --new-ui fires `engine/state/changed`.
 //
@@ -40,17 +41,21 @@
 #include <string>
 #include <vector>
 
+#include "ModScan.h"   // LayerRef + the Win32 nested-layer scan
+
 class Engine;
 class IFileManager;
 
-// A single discovered mod entry. Mirrors the legacy struct that lived
-// at src/main.cpp:421-427 before D6 extracted it here.
+// A single discovered mod entry + its nested layers (immediate child folders
+// that carry a Data\Art tree, e.g. Mod's Mod/GCW/Rev/TR/Core).
 struct ModEntry
 {
     std::wstring path;        // full path, e.g. D:\...\corruption\Mods\Mod
     std::wstring folderName;  // "Mod"
     std::wstring nickname;    // user-set, may be empty (read from registry)
     bool         isFoC;       // true if under corruption\Mods, false if under GameData\Mods
+    bool         rootHasArt;  // the mod root itself carries a Data\Art tree
+    std::vector<LayerRef> nested;  // child folders with a Data\Art tree
 };
 
 class ModManager
@@ -70,65 +75,40 @@ public:
     // Idempotent — safe to call on Refresh.
     void DiscoverMods();
 
-    // Reads HKCU\Software\AloParticleEditor\LastMod. If the stored path
-    // exists on disk, activates it (FileManager::SetModPath +
-    // TexturePalette::SetActiveMod). If the path is missing or stale,
-    // leaves state in the Unmodded position. Idempotent.
-    void RestoreLastSelectedMod();
+    // Reads HKCU\Software\AloParticleEditor\LastLayers and applies the
+    // persisted ordered content-layer stack (one-time migration from the legacy
+    // LastMod + LastSubmods when LastLayers is absent). Layers whose folder no
+    // longer exists are dropped. Idempotent.
+    void RestoreLastLayerStack();
 
-    // Atomic mod activation. The side-effect chain in order:
-    //   1. m_selectedModPath = modPath
-    //   2. fileManager->SetModPath(modPath)
-    //   3. WriteLastMod(modPath) (registry persist)
-    //   4. TexturePalette::Store::Instance().SetActiveMod(modPath)
-    //   5. TexturePalette::ClearThumbnailCache()
-    //   6. TexturePalette::RefreshPopup() (no-op if no popup exists)
-    //   7. engine->ReloadShaders() + ReloadTextures() (if engine is bound)
-    //
-    // Returns true on full success. Returns false if shader reload
-    // failed; state is still updated (matches legacy behaviour —
-    // partial-success rolls forward, legacy reports the shader
-    // failure on its status bar).
-    //
-    // Empty `modPath` means Unmodded. The registry entry is still
-    // written (as an empty string) so the next launch restores
-    // Unmodded explicitly.
+    // Quick-switch shorthand: replace the whole stack with a single layer
+    // (empty `modPath` = Unmodded). Delegates to SetLayerStack — see that method for
+    // the full side-effect chain and the partial-success (false) semantics.
     bool SelectMod(const std::wstring& modPath);
 
-    // Submods — subfolders of the active mod that carry their own Data\Art
-    // (e.g. Mod's Mod/GCW/Rev/TR). The shared Core core is one of them now
-    // too — a normal selectable layer, no longer auto-loaded. Several can be stacked in
-    // explicit precedence order (front wins) — the user mirrors their game launch stack.
-    //
-    // DiscoverSubmods() scans the active mod root for immediate subdirectories with a
-    // Data\Art tree (Core INCLUDED), sorted alphabetically. Call after
-    // SelectMod / RestoreLastSelectedMod. Pure discovery; doesn't change the selection.
-    void DiscoverSubmods();
+    // Set the ordered content-layer stack (absolute paths, front = highest
+    // precedence; [] = Unmodded). Canonicalised + de-duplicated; drives
+    // FileManager::SetLayers, persists LastLayers (+ a best-effort LastMod = primary
+    // for the legacy --legacy restore), swaps the texture palette to the primary
+    // layer, clears the thumbnail cache, and reloads engine assets (if bound).
+    // Returns false if the engine shader reload failed (state still rolls forward).
+    bool SetLayerStack(const std::vector<std::wstring>& absoluteLayers);
 
-    // Activate the ordered submod stack (folder names, highest precedence first;
-    // empty = none). Names not in the discovered set are dropped; the discovered
-    // on-disk casing is adopted. Side-effect chain mirrors SelectMod's tail:
-    // FileManager::SetSubmods (rebuild content roots) -> WriteLastSubmods (persist)
-    // -> thumbnail-cache clear -> engine reload. Returns false if the engine shader
-    // reload failed (state still rolls forward). No-op when no mod is active.
-    bool SelectSubmods(const std::vector<std::wstring>& names);
-
-    // Read-only accessors. Pointers/references are stable as long as
-    // no concurrent mutation is in flight (this class is not
-    // thread-safe; all calls must come from the UI thread).
+    // Read-only accessors.
     const std::vector<ModEntry>& GetMods() const { return m_mods; }
-    const std::wstring& GetSelectedModPath() const { return m_selectedModPath; }
-    const std::vector<std::wstring>& GetSubmods() const { return m_submods; }
-    const std::vector<std::wstring>& GetSelectedSubmods() const { return m_selectedSubmods; }
+    const std::vector<std::wstring>& GetLayerStack() const { return m_layerStack; }
+    // Primary layer = top of the stack (highest precedence), or empty when Unmodded.
+    // The single-path "active mod" view for the texture palette, file dialogs, and
+    // the snapshot's activeModPath (the quick-switch checkmark).
+    std::wstring GetPrimaryLayerPath() const
+    { return m_layerStack.empty() ? std::wstring() : m_layerStack.front(); }
 
 private:
     IFileManager*             m_fileManager;
     Engine*                   m_engine = nullptr;
     std::vector<std::wstring> m_gameRoots;
     std::vector<ModEntry>     m_mods;
-    std::wstring              m_selectedModPath;
-    std::vector<std::wstring> m_submods;          // available under the active mod
-    std::vector<std::wstring> m_selectedSubmods;  // ordered stack, highest precedence first
+    std::vector<std::wstring> m_layerStack;   // absolute slash-free, [0]=highest
 };
 
 // Registry helpers, exposed for the legacy nickname dialog. Both

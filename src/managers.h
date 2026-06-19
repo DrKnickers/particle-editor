@@ -37,6 +37,18 @@ public:
 	{ static const std::wstring kEmpty; return kEmpty; }
 	virtual const std::vector<std::wstring>& GetSubmods() const
 	{ static const std::vector<std::wstring> kEmpty; return kEmpty; }
+
+	// Set the loose-file content roots directly from an ORDERED layer stack
+	// (absolute paths, front = highest precedence). The stack-aware successor to
+	// SetModPath()+SetSubmods(): ModManager::SetLayerStack drives this. Default no-op
+	// so simple test mocks don't have to implement it; FileManager overrides.
+	virtual void SetLayers(const std::vector<std::wstring>& /*absoluteLayers*/) {}
+
+	// The active loose-file content roots in precedence order (front wins),
+	// slash-terminated. The stack-aware successor to GetModPath()+GetSubmods() for
+	// snapshotting/replicating the active content. Default empty for simple mocks.
+	virtual const std::vector<std::wstring>& GetContentRoots() const
+	{ static const std::vector<std::wstring> kEmpty; return kEmpty; }
 };
 
 class ITextureManager
@@ -101,9 +113,17 @@ public:
 
 	// The base install search paths, so a background thread can construct an
 	// ISOLATED FileManager over the same roots (own MEG handles -> no seek-race with
-	// this instance) and rebuild the game-object catalog off the UI thread. Replicate
-	// the active mod/submod stack with SetModPath(GetModPath()) + SetSubmods(GetSubmods()).
+	// this instance) and rebuild the game-object catalog off the UI thread.
+	// Replicate the active content with SetLayers(GetContentRoots()).
 	const std::vector<std::wstring>& GetBasepaths() const override { return basepaths; }
+
+	// Set the loose-file content roots directly from an ORDERED layer stack
+	// (absolute paths, front = highest precedence). Each path is kept if the folder
+	// exists (existence only — NOT Data\Art-gated, matching the old unconditional
+	// mod-root push) and de-duplicated case-insensitively; rebuilds modContentRoots.
+	// Additive — SetModPath/SetSubmods remain the active mutators in Phase 1.
+	void SetLayers(const std::vector<std::wstring>& absoluteLayers) override;
+	const std::vector<std::wstring>& GetContentRoots() const override { return modContentRoots; }
 
 	FileManager(const std::vector<std::wstring>& basepaths);
 	~FileManager();

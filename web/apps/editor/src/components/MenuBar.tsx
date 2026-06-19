@@ -19,14 +19,16 @@
 // All items wired to existing bridge calls + atoms; deferred items
 // log a `[Menu] X — TODO` marker and render as `disabled`.
 
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { Fragment, useEffect, useRef, useState, type ComponentProps } from "react";
 import * as Menubar from "@radix-ui/react-menubar";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, X, Layers, GripVertical, Search, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useStackReorder } from "@/lib/use-stack-reorder";
 import type {
   Bridge,
   EngineStateDto,
   EmitterTreeNode,
-  ModDescriptor,
+  LayerRef,
 } from "@particle-editor/bridge-schema";
 import { promptSaveChanges, useFileState } from "@/lib/file-state";
 import { runFileOp } from "@/lib/file-op";
@@ -47,7 +49,7 @@ import { toggleDock } from "@/lib/right-dock";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { Modal } from "@/components/Modal";
 import { PreferencesDialog } from "@/screens/PreferencesDialog";
-import { SubmodsDialog } from "@/screens/SubmodsDialog";
+import { LoadOrderDialog } from "@/screens/LoadOrderDialog";
 
 // follow-up: each MenubarContent needs to register itself with the
 // host as a viewport occlusion while open so the popup punches a
@@ -141,6 +143,22 @@ function CheckSlot({ active }: { active: boolean }) {
   );
 }
 
+// Small inline glyphs from the Mods-menu design (kept inline to avoid lucide
+// name churn): a refresh arc, an expand-to-modal arrow, a filled "top wins"
+// triangle.
+const RefreshIcon = () => (
+  <svg aria-hidden width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5" /><path d="M13 2.5V5h-2.5" /></svg>
+);
+const ExpandIcon = () => (
+  <svg aria-hidden width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2.5h4v4M13.5 2.5l-5 5M7 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9" /></svg>
+);
+const TopWinsBadge = () => (
+  <span aria-hidden className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-accent">
+    <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3l5 6H3z" /></svg>
+    top wins
+  </span>
+);
+
 // Depth-first search for a node by id in the emitter tree returned by
 // `emitters/list`. Used by Emitters → Toggle Visibility to read the
 // primary emitter's current `visible` flag at click time (one-shot, so the
@@ -179,37 +197,72 @@ export function MenuBar({
   // shifts on Refresh or disk mutation). The *active* mod is on the
   // snapshot so the menu's check mark stays reactive without a second
   // round-trip after a select.
-  const [mods, setMods] = useState<ModDescriptor[]>([]);
-  // Whether the active mod has any submods (drives showing the "Submods…"
-  // item). Rides the mods/list payload (not the engine snapshot), so we re-fetch
-  // after a mod change. The ordered stack itself is edited in SubmodsDialog.
-  const [hasSubmods, setHasSubmods] = useState(false);
-  const [submodsOpen, setSubmodsOpen] = useState(false);
+  // The flat layer catalog (`layers` — mods with Data\Art + their nested
+  // layers, what the Add mod… flyout lists) and the ordered content-layer stack
+  // (`stack`, front = highest precedence). Both ride the mods/list payload (a
+  // separate, low-cadence channel from the engine snapshot); we re-fetch after
+  // every set-layers so the active-stack block + Add-mod checks stay current.
+  const [layers, setLayers] = useState<LayerRef[]>([]);
+  const [stack, setStack] = useState<string[]>([]);
+  const [loadOrderOpen, setLoadOrderOpen] = useState(false);
+  const [addQuery, setAddQuery] = useState(""); // [Option D] Add mod… flyout search
   const refreshModsList = async () => {
     try {
       const r = await bridge.request({ kind: "mods/list", params: {} });
       // Defensive: a partial / mocked response that omits a field
-      // shouldn't crash the menu's filter step. Fall back to defaults.
-      setMods(Array.isArray(r?.mods) ? r.mods : []);
-      setHasSubmods(Array.isArray(r?.submods) && r.submods.length > 0);
+      // shouldn't crash the menu. Fall back to empty defaults.
+      setLayers(Array.isArray(r?.layers) ? r.layers : []);
+      setStack(Array.isArray(r?.stack) ? r.stack : []);
     } catch (err) {
       console.warn("[MenuBar] mods/list failed:", err);
     }
   };
-  const handleModSelect = async (path: string | null) => {
-    await bridge.request({ kind: "mods/select", params: { path } });
-    // The submod list belongs to the newly-active mod; re-fetch it.
+  // Compare canonical paths case-insensitively, ignoring trailing slashes.
+  const eqPath = (a: string, b: string) =>
+    a.replace(/[\\/]+$/, "").toLowerCase() === b.replace(/[\\/]+$/, "").toLowerCase();
+  const setLayerStack = async (paths: string[]) => {
+    await bridge.request({ kind: "mods/set-layers", params: { paths } });
+    // The snapshot carries activePath but not the full stack list, so re-fetch
+    // mods/list to refresh the summary + per-layer checkmarks.
     await refreshModsList();
   };
   const handleModRefresh = async () => {
     try {
       const r = await bridge.request({ kind: "mods/refresh", params: {} });
-      setMods(Array.isArray(r?.mods) ? r.mods : []);
-      setHasSubmods(Array.isArray(r?.submods) && r.submods.length > 0);
+      setLayers(Array.isArray(r?.layers) ? r.layers : []);
+      setStack(Array.isArray(r?.stack) ? r.stack : []);
     } catch (err) {
       console.warn("[MenuBar] mods/refresh failed:", err);
     }
   };
+  const labelFor = (p: string) =>
+    layers.find((l) => eqPath(l.path, p))?.label ?? basename(p);
+  // The menu composes the stack via TOGGLES (the modal owns ordering):
+  // clicking a layer adds it (appended) if absent, or removes it if present.
+  // toggle-add from an empty stack == the old quick-switch, but a composed
+  // multi-layer stack is preserved instead of being replaced.
+  const inStack = (p: string) => stack.some((s) => eqPath(s, p));
+  const toggleLayer = (p: string) =>
+    void setLayerStack(inStack(p) ? stack.filter((s) => !eqPath(s, p)) : [...stack, p]);
+  const removeFromStack = (p: string) =>
+    void setLayerStack(stack.filter((s) => !eqPath(s, p)));
+  // [Option D] In-menu stack reorder via the shared glide engine — live-commits
+  // each reorder (the menu IS the editor; the modal is the "Expand" fallback). No
+  // scroll container (the dropdown list is short; big stacks use Expand).
+  const reorderStack = (from: number, target: number) => {
+    if (from < 0 || from >= stack.length || from === target) return;
+    const n = stack.slice();
+    const [m] = n.splice(from, 1);
+    const t = from < target ? target - 1 : target;
+    n.splice(Math.max(0, Math.min(t, n.length)), 0, m);
+    void setLayerStack(n);
+  };
+  const menuDrag = useStackReorder({
+    order: stack,
+    labelFor,
+    onReorder: reorderStack,
+    getScrollContainer: () => null,
+  });
   const handleResetViewConfirm = async () => {
     setResetViewOpen(false);
     await bridge.request({
@@ -390,6 +443,32 @@ export function MenuBar({
       console.warn("[MenuBar] toggle-visibility failed:", err);
     }
   };
+
+  // [Option D] Add mod… catalog — the layer catalog grouped by parent, searchable
+  // (membership lives here now, out of the top-level menu). Mirrors the modal's
+  // available pane: keyed by parentPath so duplicate-label mods stay separate.
+  const addGroups: { key: string; label: string; items: LayerRef[] }[] = [];
+  for (const l of layers) {
+    const key = l.kind === "nested" ? (l.parentPath ?? l.path) : l.path;
+    const headerLabel = l.kind === "nested" ? (l.parentLabel ?? l.label) : l.label;
+    let grp = addGroups.find((x) => eqPath(x.key, key));
+    if (!grp) { grp = { key, label: headerLabel, items: [] }; addGroups.push(grp); }
+    grp.items.push(l);
+  }
+  const aq = addQuery.trim().toLowerCase();
+  const addVisibleGroups = aq
+    ? addGroups.map((g) => ({ ...g, items: g.items.filter((l) => l.label.toLowerCase().includes(aq)) })).filter((g) => g.items.length > 0)
+    : addGroups;
+  // Make-room spacer for the in-menu drag (matches the modal); role=presentation so
+  // it never counts as a stack listitem.
+  const menuGapSpacer = (
+    <li
+      aria-hidden
+      role="presentation"
+      className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-sky-400"
+      style={{ height: `${menuDrag.gapHeight}px` }}
+    />
+  );
 
   return (
     <>
@@ -627,92 +706,180 @@ export function MenuBar({
         </Menubar.Portal>
       </Menubar.Menu>
 
-      {/* ─── Mods (D6: dynamic detected-mod list) ─── */}
+      {/* ─── Mods (Option D: in-place reorder; catalog in "Add mod…"; modal demoted) ─── */}
       <Menubar.Menu>
         <Menubar.Trigger className={TRIGGER}>Mods</Menubar.Trigger>
         <Menubar.Portal>
           <OccludingMenubarContent
             bridge={bridge}
             occlusionId="menu:mods"
-            className={CONTENT}
+            className={`${CONTENT} w-72`}
             align="start"
             sideOffset={4}
+            // [Option D guardrail] suppress the dropdown's auto-dismiss while a drag
+            // is live, so a drag that strays past the menu edge can't close it
+            // mid-gesture (the designer's #1 risk for in-popover drag).
+            onEscapeKeyDown={(e) => { if (menuDrag.dragging) e.preventDefault(); }}
+            onPointerDownOutside={(e) => { if (menuDrag.dragging) e.preventDefault(); }}
+            onFocusOutside={(e) => { if (menuDrag.dragging) e.preventDefault(); }}
+            onInteractOutside={(e) => { if (menuDrag.dragging) e.preventDefault(); }}
           >
-            {/* Unmodded is always first; selected when activeModPath is null. */}
+            {/* Active load order — the menu IS the editor: drag rows by the grip to
+                reorder in place (live-committed). Expand opens the full modal (kept
+                as the demoted fallback + the keyboard/AT reorder path). */}
+            <div className="mb-1 rounded-md border border-border bg-bg p-2">
+              <div className="mb-1.5 flex items-center gap-1.5 px-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-text-3">
+                  Active load order
+                </span>
+                {stack.length > 0 && <TopWinsBadge />}
+                <span className="flex-1" />
+                {/* Expand → the full modal: the demoted fallback AND the keyboard/AT
+                    reorder path (the modal has ↑/↓ + tabbable remove). A real
+                    Menubar.Item so it's in the roving tab order + AT-announced
+                    (the menu's drag/× are mouse conveniences on top of this). */}
+                <Menubar.Item
+                  aria-label="Expand to full editor"
+                  title="Expand to full editor"
+                  onSelect={() => setLoadOrderOpen(true)}
+                  className="flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded text-text-3 outline-none hover:bg-hover hover:text-text focus:bg-hover focus:text-text data-[highlighted]:bg-hover data-[highlighted]:text-text"
+                >
+                  <ExpandIcon />
+                </Menubar.Item>
+              </div>
+              {stack.length === 0 ? (
+                <div className="flex h-[26px] items-center rounded-[5px] border border-dashed border-border-2 px-2 text-[11px] text-text-3">
+                  Unmodded — base game only.
+                </div>
+              ) : (
+                <div className="flex gap-1.5">
+                  <div className="my-0.5 w-[3px] shrink-0 rounded-[2px] bg-gradient-to-b from-accent via-accent-2 to-border-2" />
+                  <ul ref={menuDrag.listRef} className="flex min-w-0 flex-1 flex-col gap-[3px]" aria-label="Active load order">
+                    {stack.map((p, i) => (
+                      <Fragment key={p}>
+                        {menuDrag.gap === i && menuDrag.dragIndex !== null && menuGapSpacer}
+                        <li
+                          data-flip-key={p}
+                          onPointerDown={menuDrag.startDrag(i)}
+                          className={cn(
+                            "relative flex h-[26px] touch-none select-none items-center gap-1.5 rounded-[5px] border border-border-2 bg-bg-3 pl-1 pr-1 text-xs",
+                            menuDrag.dragIndex === i ? "cursor-grabbing opacity-40 saturate-50" : "cursor-grab",
+                          )}
+                        >
+                          <span className="flex w-3.5 shrink-0 items-center justify-center text-text-3" aria-hidden>
+                            <GripVertical className="size-2.5" />
+                          </span>
+                          <span className="min-w-[11px] shrink-0 text-right text-[11px] font-semibold tabular-nums text-text-3" aria-hidden="true">{i + 1}</span>
+                          <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
+                          <span className="min-w-0 flex-1 truncate text-text">{labelFor(p)}</span>
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            aria-label={`Remove ${labelFor(p)} from stack`}
+                            onClick={() => removeFromStack(p)}
+                            className="flex size-[18px] shrink-0 items-center justify-center rounded text-text-3 hover:bg-hover hover:text-danger"
+                          >
+                            <X className="size-2.5" strokeWidth={1.6} />
+                          </button>
+                        </li>
+                      </Fragment>
+                    ))}
+                    {menuDrag.gap === stack.length && menuDrag.dragIndex !== null && menuGapSpacer}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <Menubar.Separator className={SEPARATOR} />
+
+            {/* Add mod… — the catalog + search lives here now (out of the top-level
+                menu). Adding appends to the stack; removal is the × on a stack row.
+                preventDefault keeps the flyout open so you can add several. */}
+            <Menubar.Sub>
+              <Menubar.SubTrigger className={ITEM}>
+                <span className="flex size-3.5 shrink-0 items-center justify-center text-accent"><Plus className="size-3.5" strokeWidth={1.8} /></span>
+                <span className="flex-1">Add mod…</span>
+                <ChevronRight className="size-3.5 text-text-3" />
+              </Menubar.SubTrigger>
+              <Menubar.Portal>
+                <OccludingMenubarSubContent
+                  bridge={bridge}
+                  occlusionId="menu:mods:add"
+                  className={`${CONTENT} w-60`}
+                  sideOffset={2}
+                  alignOffset={-4}
+                >
+                  <div className="mb-1 flex h-[26px] items-center gap-1.5 rounded-[5px] border border-border-2 bg-bg-3 px-2">
+                    <Search className="size-3 shrink-0 text-text-3" strokeWidth={1.5} />
+                    <input
+                      value={addQuery}
+                      onChange={(e) => setAddQuery(e.target.value)}
+                      placeholder="Search mods…"
+                      aria-label="Search mods"
+                      // Let typing reach the input rather than Radix's menu typeahead.
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="min-w-0 flex-1 border-none bg-transparent text-xs text-text outline-none placeholder:text-text-3"
+                    />
+                  </div>
+                  {addVisibleGroups.map((g) => (
+                    <div key={g.key}>
+                      <div className="px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-text-3">{g.label}</div>
+                      {g.items.map((l) => {
+                        const added = inStack(l.path);
+                        const nested = l.kind === "nested";
+                        return added ? (
+                          <div key={l.path} className={cn("flex h-[26px] items-center gap-1.5 px-2 text-xs text-text-3", nested && "pl-5")}>
+                            <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
+                            <span className="min-w-0 flex-1 truncate">{l.label}</span>
+                            <span className="flex shrink-0 items-center gap-1 text-[10px]"><Check className="size-2.5 text-success" strokeWidth={1.8} />in stack</span>
+                          </div>
+                        ) : (
+                          <Menubar.Item
+                            key={l.path}
+                            className={cn(ITEM, nested && "pl-5")}
+                            onSelect={(e) => { e.preventDefault(); toggleLayer(l.path); }}
+                          >
+                            <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
+                            <span className="flex-1 truncate">{l.label}</span>
+                            <Plus className="size-3 shrink-0 text-accent" strokeWidth={1.8} />
+                          </Menubar.Item>
+                        );
+                      })}
+                    </div>
+                  ))}
+                  {addVisibleGroups.length === 0 && (
+                    <div className="px-2 py-2 text-[11px] text-text-3">No mods match.</div>
+                  )}
+                </OccludingMenubarSubContent>
+              </Menubar.Portal>
+            </Menubar.Sub>
+
+            <Menubar.Separator className={SEPARATOR} />
+
+            {/* Reset — clears the stack (Unmodded). Stacked-layers glyph + dotted
+                divider per the Option-D design. preventDefault keeps the menu open
+                so the cleared state shows live above. */}
             <Menubar.Item
               className={ITEM}
-              onSelect={() => { void handleModSelect(null); }}
+              onSelect={(e) => { e.preventDefault(); void setLayerStack([]); }}
             >
-              <CheckSlot active={state?.activeModPath == null} />
-              <span>Unmodded</span>
+              <Layers className="size-3.5 shrink-0 text-text-3" strokeWidth={1.3} />
+              <span aria-hidden className="h-3.5 w-0 border-l border-dotted border-border-2" />
+              <span className="flex-1">Reset</span>
             </Menubar.Item>
-
-            {(() => {
-              // Group mods by isFoC (FoC first, Base Game second), each
-              // group already alphabetised by the host. Render with a
-              // separator before each non-empty group. Display label
-              // prefers nickname when set, else folder name — matches
-              // the legacy owner-drawn entry's "folderName (nickname)"
-              // shape, minus the parenthetical (the Radix menu doesn't
-              // do owner-draw, so we collapse to a single label).
-              const fyi = mods.filter((m) => m.isFoC);
-              const baseGame = mods.filter((m) => !m.isFoC);
-              const groups: Array<{ label: string; items: ModDescriptor[] }> = [];
-              if (fyi.length > 0) groups.push({ label: "Forces of Corruption", items: fyi });
-              if (baseGame.length > 0) groups.push({ label: "Base Game", items: baseGame });
-              return groups.map((g) => (
-                <div key={g.label}>
-                  <Menubar.Separator className={SEPARATOR} />
-                  {/* Group header — a disabled item rendered subtly. */}
-                  <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-text-3 select-none">
-                    {g.label}
-                  </div>
-                  {g.items.map((m) => {
-                    const label = m.nickname || m.folderName;
-                    return (
-                      <Menubar.Item
-                        key={m.path}
-                        className={ITEM}
-                        onSelect={() => { void handleModSelect(m.path); }}
-                      >
-                        <CheckSlot active={state?.activeModPath === m.path} />
-                        <span>{label}</span>
-                      </Menubar.Item>
-                    );
-                  })}
-                </div>
-              ));
-            })()}
-
-            {/* Submods… — only when the active mod has submods (e.g. Mod's
-                Mod/GCW/Rev/TR + the shared Core layer). Opens a reorderable
-                checklist to stack several in precedence order. */}
-            {hasSubmods && (
-              <>
-                <Menubar.Separator className={SEPARATOR} />
-                <Menubar.Item
-                  className={ITEM}
-                  onSelect={() => setSubmodsOpen(true)}
-                >
-                  <CheckSlot active={false} />
-                  <span>Submods…</span>
-                </Menubar.Item>
-              </>
-            )}
 
             <Menubar.Separator className={SEPARATOR} />
             <Menubar.Item
               className={ITEM}
-              onSelect={() => {
-                void handleModRefresh();
-              }}
+              onSelect={() => { void handleModRefresh(); }}
             >
-              <CheckSlot active={false} />
-              <span>Refresh Mod List</span>
+              <span className="flex w-3.5 shrink-0 justify-center text-text-2"><RefreshIcon /></span>
+              <span className="flex-1">Refresh Mod List</span>
             </Menubar.Item>
           </OccludingMenubarContent>
         </Menubar.Portal>
       </Menubar.Menu>
+      {menuDrag.chipNode}
 
       {/* ─── View ─── */}
       <Menubar.Menu>
@@ -876,8 +1043,13 @@ export function MenuBar({
 
     <PreferencesDialog bridge={bridge} open={prefsOpen} onOpenChange={setPrefsOpen} />
 
-    {/* Submod stack editor — opened from Mods ▸ Submods… */}
-    <SubmodsDialog bridge={bridge} open={submodsOpen} onOpenChange={setSubmodsOpen} />
+    {/* Mod load-order editor — opened from Mods ▸ Edit Load Order… */}
+    <LoadOrderDialog
+      bridge={bridge}
+      open={loadOrderOpen}
+      onOpenChange={setLoadOrderOpen}
+      onApplied={() => void refreshModsList()}
+    />
 
     {/* Group D: confirm prompt for View → Reset View Settings.
         Body copy mirrors the legacy MessageBox at main.cpp:1734.

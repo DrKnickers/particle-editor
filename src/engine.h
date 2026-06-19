@@ -1030,8 +1030,7 @@ private:
 	// and RebuildSkydomeMeshes read it.
 	std::array<std::vector<SkydomeRef>, kNumSkydomeAxes> m_skydomeLists;
 	bool                      m_skydomeListsValid = false;
-	std::wstring              m_skydomeListsCtxMod;       // mod/submod context the cache reflects
-	std::vector<std::wstring> m_skydomeListsCtxSubmods;
+	std::vector<std::wstring> m_skydomeListsCtxRoots;     // content roots the cache reflects
 
 	// Imported reference object (a game-object .alo placed in the preview
 	// for scale). Rigid multi-part: each sub-mesh placed by its skeleton bone.
@@ -1090,8 +1089,7 @@ private:
 	// at build launch). ReloadTextures invalidates the catalog ONLY when the active
 	// roots differ from this -- so a texture-only reload (F5 / file open), which keeps
 	// the mod context, neither rebuilds an identical catalog nor drops the ref object.
-	std::wstring              m_catalogContextModPath;
-	std::vector<std::wstring> m_catalogContextSubmods;
+	std::vector<std::wstring> m_catalogContextRoots;      // content roots the catalog reflects
 
 	// unit-grid state (RenderUnitGrid is).
 	bool                     m_gridVisible = false;

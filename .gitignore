@@ -283,3 +283,4 @@ tests/max_verts.txt
 # cleans up, but leaves behind on an interrupted build. The VS template's
 # *.tmp / *.aps rules miss these because the temps have no extension.
 /src/RC[0-9A-Fa-f]*
+.playwright-mcp/

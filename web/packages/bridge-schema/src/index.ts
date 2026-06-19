@@ -357,6 +357,17 @@ export type ModDescriptor = {
   folderName: string;
   nickname: string;
   isFoC: boolean;
+  rootHasArt?: boolean;   // mod root itself carries Data\Art (optional; default false)
+};
+
+// A stackable content layer (a top-level mod with Data\Art, or a nested folder).
+export type LayerRef = {
+  path: string;            // absolute, slash-free
+  label: string;
+  parentLabel?: string;    // present for kind === "nested"
+  parentPath?: string;     // owning mod's absolute slash-free path; present for kind === "nested"
+  isFoC: boolean;
+  kind: "mod" | "nested";
 };
 
 // ─── Viewport input (Phase 2) ────────────────────────────────
@@ -1034,22 +1045,19 @@ export type Request =
   // confirmation dialog lives React-side via Radix AlertDialog;
   // the dispatcher's job is purely to apply the defaults.
   | { kind: "engine/action/reset-view-settings"; params: Record<string, never> }
-  // D6 — Mods menu surface. `mods/list` returns the discovered
-  // list + active path; the React menu calls it once at mount and
-  // again after `mods/refresh`. `mods/select` activates a mod (empty/
-  // null path = Unmodded), emits engine/state/changed so the menu's
-  // check mark updates, and persists to HKCU\Software\AloParticleEditor
-  // \LastMod for the next launch. `mods/refresh` re-scans the on-disk
-  // Mods\ directories — returns the same shape as `mods/list` so the
-  // caller can replace its local cache atomically.
+  // D6 / — Mods menu surface. `mods/list` returns the discovered
+  // mod catalog (each mod + its nested layers as a flat `layers` list), the
+  // ordered `stack`, and `activePath` (= primary layer); the React menu calls
+  // it once at mount and again after `mods/refresh`. `mods/refresh` re-scans
+  // the on-disk Mods\ directories — returns the same shape as `mods/list` so
+  // the caller can replace its local cache atomically. `mods/set-layers`
+  // replaces the whole content-layer stack (see below).
   | { kind: "mods/list";                  params: Record<string, never> }
-  | { kind: "mods/select";                params: { path: string | null } }
   | { kind: "mods/refresh";               params: Record<string, never> }
-  // Set the ordered submod stack under the active mod (e.g. Mod's
-  // Mod/GCW/Rev/TR; the shared Core core is one of the selectable layers
-  // too). `names` are folder names in precedence order, highest first; [] = no submods.
-  // Emits engine/state/changed and persists to HKCU\Software\AloParticleEditor\LastSubmods.
-  | { kind: "mods/set-submods";           params: { names: string[] } }
+  // Set the ordered content-layer stack (absolute paths, front = highest;
+  // [] = Unmodded). Replaces mods/select + mods/set-submods. Emits engine/state/changed
+  // and persists to HKCU\Software\AloParticleEditor\LastLayers.
+  | { kind: "mods/set-layers";            params: { paths: string[] } }
 
   // Autosave crash-recovery (). React-initiated on mount (no host→React
   // startup event, so there's no fire-before-subscribe race): `check-recovery`
@@ -1086,11 +1094,10 @@ type ResponseForA<R extends Request> =
   R extends { kind: "textures/palette/touch-recent" }
     ? { ok: true } :
 
-  // Mods (D6)
-  R extends { kind: "mods/list" }                 ? { mods: ModDescriptor[]; activePath: string | null; submods: string[]; activeSubmods: string[] } :
-  R extends { kind: "mods/select" }               ? { ok: true; activePath: string | null } | { ok: false; error: string } :
-  R extends { kind: "mods/refresh" }              ? { mods: ModDescriptor[]; activePath: string | null; submods: string[]; activeSubmods: string[] } :
-  R extends { kind: "mods/set-submods" }          ? { ok: boolean; activeSubmods: string[] } | { ok: false; error: string } :
+  // Mods (D6 /)
+  R extends { kind: "mods/list" }    ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
+  R extends { kind: "mods/refresh" } ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
+  R extends { kind: "mods/set-layers" } ? { ok: boolean; stack: string[] } | { ok: false; error: string } :
 
   // Autosave crash-recovery ()
   R extends { kind: "autosave/check-recovery" }   ? { orphan: AutosaveOrphan | null } :

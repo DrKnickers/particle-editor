@@ -209,4 +209,38 @@ describe("PreferencesDialog", () => {
     expect(localStorage.getItem("alo:soft-shadows")).toBe("0");
   });
 
+  // The Max-particles ▲/▼ steppers must step from the value VISIBLE in the
+  // field (the uncommitted draft), not the last-committed guard value — else a
+  // typed-but-unblurred edit is silently discarded (the s63 stepper regression).
+  it("stepper ▲/▼ step from the visible draft, not the committed value", () => {
+    const { bridge, request } = makeBridgeStub(); // default cap 10000
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
+    const num = screen.getByRole("spinbutton", { name: /max preview particles/i }) as HTMLInputElement;
+    // Type a new value but do NOT commit (no blur / Enter).
+    fireEvent.change(num, { target: { value: "5000" } });
+    // ▲ steps from the visible 5000 → 6000 (NOT from committed 10000 → 11000).
+    fireEvent.click(screen.getByRole("button", { name: /increase max preview particles/i }));
+    expect(request).toHaveBeenCalledWith({
+      kind: "engine/set/overload-guard",
+      params: { enabled: true, maxParticles: 6_000 },
+    });
+    expect(num.value).toBe("6000");
+    // ▼ steps back from the now-committed 6000 → 5000.
+    fireEvent.click(screen.getByRole("button", { name: /decrease max preview particles/i }));
+    expect(num.value).toBe("5000");
+  });
+
+  it("Soft shadows depends on Model shadows: disabled when off, stored pref not clobbered", () => {
+    const { bridge } = makeBridgeStub(); // both default on
+    render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
+    const soft = screen.getByRole("checkbox", { name: /soft shadows/i }) as HTMLInputElement;
+    expect(soft).toBeEnabled();
+    expect(soft.checked).toBe(true);
+    // Turn Model shadows off — the Soft-shadows control disables…
+    fireEvent.click(screen.getByRole("checkbox", { name: /model shadows/i }));
+    expect(soft).toBeDisabled();
+    // …but the parent toggle must never overwrite the stored soft preference.
+    expect(localStorage.getItem("alo:soft-shadows")).not.toBe("0");
+  });
+
 });

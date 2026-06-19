@@ -136,9 +136,9 @@ export function makeDefaultEngineState(): EngineStateDto {
     // in Batch A; multi-select is Batch B.
     selectedEmitterId: null,
 
-    // D6: no active mod by default. Browser-mode MockBridge has
-    // no disk to scan; selecting a mock entry updates this field via
-    // mods/select for menu check-mark parity.
+    // D6 /: no active mod by default. Browser-mode MockBridge has
+    // no disk to scan; the primary layer (front of the stack) updates this field
+    // via mods/set-layers for menu check-mark parity.
     activeModPath: null,
 
     // Browser-mode mock has no undo stack today (undo/perform is a

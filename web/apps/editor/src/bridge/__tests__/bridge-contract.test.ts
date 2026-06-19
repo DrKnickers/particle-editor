@@ -336,54 +336,35 @@ describe("MockBridge contract", () => {
     expect(r.objects.find((o) => o.name === "Imperial_Bunker_Capturable")?.affiliation).toBe("");
   });
 
-  // Submods: mods/list surfaces them under the active mod; set-submods
-  // stacks them in precedence order; selecting a different mod resets the stack;
-  // unmodded => none + a set-submods is inert.
-  it("mods/list surfaces submods only under an active mod; set-submods round-trips in order", async () => {
+  // Layer stacking: mods/list surfaces a flat layer catalog + the
+  // ordered stack; set-layers replaces the whole stack in precedence order,
+  // dropping unknown paths + deduping; [] = Unmodded.
+  it("mods/list surfaces a layer catalog + stack; set-layers round-trips in order", async () => {
     const b = new MockBridge();
-
-    // Unmodded: no submods.
-    await b.request({ kind: "mods/select", params: { path: null } });
     let list = await b.request({ kind: "mods/list", params: {} });
-    expect(list.submods).toEqual([]);
-    expect(list.activeSubmods).toEqual([]);
+    expect(Array.isArray(list.layers)).toBe(true);
+    expect(list.layers.length).toBeGreaterThan(1);
+    expect(list.stack).toEqual([]);
+    expect(list.activePath).toBe(null);
 
-    // A set-submods while unmodded is inert — submods belong to an active mod
-    // (matches the native ModManager::SelectSubmods no-mod guard).
-    await b.request({ kind: "mods/set-submods", params: { names: ["Mod"] } });
+    const a = list.layers[0].path;  // "C:/mock/corruption/Mods/FoCMod"
+    const c = list.layers[1].path;  // a nested layer
+    const r = await b.request({ kind: "mods/set-layers", params: { paths: [c, a] } });
+    expect(r).toMatchObject({ ok: true, stack: [c, a] });
     list = await b.request({ kind: "mods/list", params: {} });
-    expect(list.activeSubmods).toEqual([]);
+    expect(list.stack).toEqual([c, a]);
+    expect(list.activePath).toBe(c);
 
-    // Activate a mod: submods appear, none selected yet.
-    await b.request({ kind: "mods/select", params: { path: "C:/mock/corruption/Mods/FoCMod" } });
+    // Unknown paths dropped; dedup; order preserved.
+    await b.request({ kind: "mods/set-layers", params: { paths: [a, "C:/bogus", a, c] } });
     list = await b.request({ kind: "mods/list", params: {} });
-    expect(list.submods.length).toBeGreaterThan(1);
-    expect(list.activeSubmods).toEqual([]);
+    expect(list.stack).toEqual([a, c]);
 
-    // Stack two submods in a specific precedence order; the order round-trips.
-    const a = list.submods[0];
-    const c = list.submods[1];
-    const r = await b.request({ kind: "mods/set-submods", params: { names: [c, a] } });
-    expect(r).toMatchObject({ ok: true, activeSubmods: [c, a] });
+    // [] = Unmodded.
+    await b.request({ kind: "mods/set-layers", params: { paths: [] } });
     list = await b.request({ kind: "mods/list", params: {} });
-    expect(list.activeSubmods).toEqual([c, a]);
-
-    // Unknown / duplicate names are dropped; order of the valid ones is kept.
-    await b.request({ kind: "mods/set-submods", params: { names: [a, "Bogus", a, c] } });
-    list = await b.request({ kind: "mods/list", params: {} });
-    expect(list.activeSubmods).toEqual([a, c]);
-
-    // Case-insensitive: a lower-cased request canonicalizes to the on-disk casing
-    // (mirrors native ModManager::SelectSubmods, which the strict menu check needs).
-    expect(a).not.toBe(a.toLowerCase());   // guard: the fixture name has upper-case
-    await b.request({ kind: "mods/set-submods", params: { names: [a.toLowerCase()] } });
-    list = await b.request({ kind: "mods/list", params: {} });
-    expect(list.activeSubmods).toEqual([a]);
-
-    // Switching mods resets the stack.
-    await b.request({ kind: "mods/select", params: { path: "C:/mock/GameData/Mods/BaseGameMod" } });
-    list = await b.request({ kind: "mods/list", params: {} });
-    expect(list.activeSubmods).toEqual([]);
+    expect(list.stack).toEqual([]);
+    expect(list.activePath).toBe(null);
   });
 
   it("engine/action/step-frames resolves with an empty body in browser mode", async () => {

@@ -3,7 +3,7 @@
 // The Mods menu's UI is exercised in vitest (jsdom can render Radix
 // menus); these specs verify the wire contract holds end-to-end:
 // schema-declared response shapes match what the C++ dispatcher
-// emits, and mods/select round-trips through ModManager into the
+// emits, and mods/set-layers round-trips through ModManager into the
 // snapshot's activeModPath field.
 //
 // The dev machine's installed-mod list is not fixed (whatever you
@@ -39,33 +39,24 @@ test.afterAll(async () => {
 
 test("mods/list returns the expected shape", async () => {
   const r = await page.evaluate(async () => {
-    type AnyBridge = {
-      request(r: { kind: string; params: object }): Promise<unknown>;
-    };
+    type AnyBridge = { request(r: { kind: string; params: object }): Promise<unknown> };
     const b = (window as { bridge?: AnyBridge }).bridge;
     if (!b) throw new Error("window.bridge not attached");
     return b.request({ kind: "mods/list", params: {} });
   });
-  // Shape: { mods: ModDescriptor[]; activePath: string | null }.
-  expect(r).toHaveProperty("mods");
-  expect(r).toHaveProperty("activePath");
-  const typed = r as { mods: unknown; activePath: unknown };
-  expect(Array.isArray(typed.mods)).toBe(true);
-  expect(typed.activePath === null || typeof typed.activePath === "string").toBe(true);
+  for (const k of ["mods", "layers", "stack", "activePath"]) expect(r).toHaveProperty(k);
+  const t = r as { mods: unknown; layers: unknown; stack: unknown; activePath: unknown };
+  expect(Array.isArray(t.mods) && Array.isArray(t.layers) && Array.isArray(t.stack)).toBe(true);
+  expect(t.activePath === null || typeof t.activePath === "string").toBe(true);
 });
 
-test("mods/select with path:null lands as activeModPath:null in snapshot", async () => {
+test("mods/set-layers [] lands as activeModPath:null in snapshot", async () => {
   const after = await page.evaluate(async () => {
-    type AnyBridge = {
-      request(r: { kind: string; params: object }): Promise<unknown>;
-    };
+    type AnyBridge = { request(r: { kind: string; params: object }): Promise<unknown> };
     const b = (window as { bridge?: AnyBridge }).bridge;
     if (!b) throw new Error("window.bridge not attached");
-    await b.request({ kind: "mods/select", params: { path: null } });
-    const snap = (await b.request({
-      kind: "engine/state/snapshot",
-      params: {},
-    })) as { activeModPath: string | null };
+    await b.request({ kind: "mods/set-layers", params: { paths: [] } });
+    const snap = (await b.request({ kind: "engine/state/snapshot", params: {} })) as { activeModPath: string | null };
     return snap.activeModPath;
   });
   expect(after).toBe(null);
@@ -80,6 +71,5 @@ test("mods/refresh returns the same shape as mods/list", async () => {
     if (!b) throw new Error("window.bridge not attached");
     return b.request({ kind: "mods/refresh", params: {} });
   });
-  expect(r).toHaveProperty("mods");
-  expect(r).toHaveProperty("activePath");
+  for (const k of ["mods", "layers", "stack", "activePath"]) expect(r).toHaveProperty(k);
 });
