@@ -46,7 +46,11 @@ public:
                const std::wstring& capturePng = L"",
                int captureFrames = 60,
                int captureSkydome = 0,
-               const std::wstring& captureRef = L"");
+               const std::wstring& captureRef = L"",
+               // [world-lit] headless --capture lighting drivers (opt-in).
+               bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,
+               bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
+               bool hasSunI = false, float sunIntensity = 1.0f);
     ~HostWindow();
 
     HostWindow(const HostWindow&)            = delete;

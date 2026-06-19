@@ -14,6 +14,8 @@
 #include <cstdlib>     // _set_abort_behavior (headless --capture: no abort dialog)
 #include <crtdbg.h>    // _CrtSetReportMode/File (route Debug asserts to stderr)
 #include <exception>   // std::set_terminate (log unhandled exceptions headlessly)
+#include <cstdio>      // [shader-gate] headless diagnostic logging (stdout)
+#include <cstdarg>     // [shader-gate] va_list for ShaderLog
 
 #include "exceptions.h"
 #include "UI/UI.h"
@@ -108,6 +110,32 @@ public:
     }
 };
 
+// [shader-gate] Headless diagnostic logger (stdout-flushed + debugger). Defined here so both
+// TextureManager and ShaderManager can use it; HostWindowImpl::Log is not reachable from here.
+static void ShaderLog(const char* fmt, ...)
+{
+	char buf[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	_vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, ap);
+	va_end(ap);
+	OutputDebugStringA(buf);
+	fputs(buf, stdout);
+	fflush(stdout);
+}
+
+// [shader-gate] Gate for the *verbose* per-asset diagnostics (every getTexture /
+// getShader fetch, successful texture loads). Behind the ALO_SHADER_DIAG env var
+// (matches the repo's ALO_* test hooks) so normal interactive use stays silent.
+// Genuine failures (load/compile FAILED) call ShaderLog unconditionally and keep
+// surfacing regardless of this gate.
+static bool ShaderDiagEnabled()
+{
+	static int s_diag = -1;
+	if (s_diag < 0) { char b[8]; s_diag = (GetEnvironmentVariableA("ALO_SHADER_DIAG", b, sizeof(b)) > 0) ? 1 : 0; }
+	return s_diag != 0;
+}
+
 class TextureManager : public ITextureManager
 {
 	typedef map<string,IDirect3DTexture9*> TextureMap;
@@ -123,9 +151,16 @@ class TextureManager : public ITextureManager
 	static IDirect3DTexture9* createTexture(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
 	{
 		IDirect3DTexture9* pTexture = NULL;
-		if (D3DXCreateTextureFromFileInMemory( pDevice, bytes.data(), (unsigned long)bytes.size(), &pTexture ) != D3D_OK)
+		HRESULT thr = D3DXCreateTextureFromFileInMemory( pDevice, bytes.data(), (unsigned long)bytes.size(), &pTexture );
+		if (thr != D3D_OK)
 		{
+			ShaderLog("[tex-gate] D3DXCreateTextureFromFileInMemory FAILED hr=0x%08lx (%u bytes)\n",
+			          (unsigned long)thr, (unsigned)bytes.size());
 			return NULL;
+		}
+		{
+			D3DSURFACE_DESC d; if (ShaderDiagEnabled() && pTexture && SUCCEEDED(pTexture->GetLevelDesc(0, &d)))
+				ShaderLog("[tex-gate] loaded %ux%u fmt=%d\n", d.Width, d.Height, (int)d.Format);
 		}
 		return pTexture;
 	}
@@ -161,7 +196,7 @@ public:
 	{
 		size_t pos;
 		transform(filename.begin(), filename.end(), filename.begin(), toupper);
-		
+		if (ShaderDiagEnabled()) ShaderLog("[tex-gate] getTexture(%s)\n", filename.c_str());
 		IDirect3DTexture9* pTexture = NULL;
 
 		// See if the file exists as specified
@@ -276,10 +311,23 @@ class ShaderManager : public IShaderManager
 	static Effect* createShader(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
 	{
 		ID3DXEffect* pShader = NULL;
-		if (FAILED(D3DXCreateEffect( pDevice, bytes.data(), (unsigned long)bytes.size(), NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pShader, NULL )))
+		ID3DXBuffer* pErrors = NULL;
+		// [shader-gate] capture + surface D3DX compile errors (was swallowed: last arg NULL).
+		if (FAILED(D3DXCreateEffect( pDevice, bytes.data(), (unsigned long)bytes.size(), NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pShader, &pErrors )))
 		{
+			if (pErrors != NULL)
+			{
+				ShaderLog("[shader-gate] D3DXCreateEffect FAILED: %.*s\n",
+				          (int)pErrors->GetBufferSize(), (const char*)pErrors->GetBufferPointer());
+				pErrors->Release();
+			}
+			else
+			{
+				ShaderLog("[shader-gate] D3DXCreateEffect FAILED (no error text)\n");
+			}
 			return NULL;
 		}
+		if (pErrors != NULL) pErrors->Release();
         
         D3DXHANDLE technique;
         pShader->FindNextValidTechnique(NULL, &technique);
@@ -321,6 +369,7 @@ public:
 	{
 		size_t pos;
 		transform(filename.begin(), filename.end(), filename.begin(), toupper);
+		if (ShaderDiagEnabled()) ShaderLog("[shader-gate] getShader(%s)\n", filename.c_str());
 		Effect* pShader = NULL;
 
 		// See if the file exists as specified
@@ -8095,6 +8144,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// ParticleSystem API + SaveParticleSystem.
 		std::wstring genNt5FixturePath;
 		std::wstring genA11yFixturePath;
+		std::wstring genSmokeTestPath;   // [shaded-smoke] all-three test particle
+		// [shaded-smoke] --smoke-color <warm|grey>: color ramp for the gen-smoke-test
+		// plume. warm (default) = white->orange->red (proves vivid tint); grey =
+		// light->dark grey (reads as real CoH-style smoke). Shader is tint-agnostic;
+		// this only sets the demo fixture's per-life RGB tracks.
+		int          smokeColorMode = 0;   // 0 = warm, 1 = grey
+		// [shaded-smoke] --smoke-spin <on|off>: per-sprite rotation for the gen-smoke-test
+		// plume. on (default) keeps randomRotation; off zeroes the spin so a directional
+		// (lit-from-the-right) shader stays anchored across all puffs (option (c) demo).
+		int          smokeSpin = 1;        // 1 = spin (default), 0 = no spin
 		// rendering-fidelity] --capture <alo> <png> [--frames N]:
 		// headless render-fidelity capture. Loads <alo>, renders N frames,
 		// writes the engine's render target to <png>, exits. Implies the
@@ -8110,6 +8169,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// --skydome <slot>: render the capture with a background skydome
 		// (0 = Off / solid colour — the default; 1-8 bundled scenes).
 		int          captureSkydome = 0;
+		// [world-lit] --ambient r,g,b / --sun r,g,b / --sun-intensity f:
+		// drive scene lighting in a headless --capture run so a lit shader's
+		// response can be verified offline. Each is opt-in; unset leaves the
+		// engine's ctor-default lighting untouched.
+		bool         captureHasAmbient = false; float captureAmbient[3] = {0,0,0};
+		bool         captureHasSun = false;     float captureSun[3] = {0,0,0};
+		bool         captureHasSunI = false;    float captureSunIntensity = 1.0f;
 		for (size_t i = 1; i < argv.size(); ++i)
 		{
 			if (argv[i] == L"--new-ui")    newUi    = true;  // no-op: now the default
@@ -8130,6 +8196,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			{
 				genA11yFixturePath = argv[i + 1];
 			}
+			if (argv[i] == L"--gen-smoke-test" && i + 1 < argv.size())
+			{
+				genSmokeTestPath = argv[i + 1];
+			}
 			if (argv[i] == L"--capture" && i + 2 < argv.size())
 			{
 				captureAlo = argv[i + 1];
@@ -8149,6 +8219,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			if (argv[i] == L"--skydome" && i + 1 < argv.size())
 			{
 				captureSkydome = _wtoi(argv[i + 1].c_str());
+			}
+			// [world-lit] --ambient r,g,b: scene ambient (0..1 floats).
+			if (argv[i] == L"--ambient" && i + 1 < argv.size())
+			{
+				if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f",
+				              &captureAmbient[0], &captureAmbient[1], &captureAmbient[2]) == 3)
+					captureHasAmbient = true;
+			}
+			// [world-lit] --sun r,g,b: sun diffuse colour (0..1 floats).
+			if (argv[i] == L"--sun" && i + 1 < argv.size())
+			{
+				if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f",
+				              &captureSun[0], &captureSun[1], &captureSun[2]) == 3)
+					captureHasSun = true;
+			}
+			// [world-lit] --sun-intensity f: scalar folded into the sun colour.
+			if (argv[i] == L"--sun-intensity" && i + 1 < argv.size())
+			{
+				captureSunIntensity = (float)_wtof(argv[i + 1].c_str());
+				captureHasSunI = true;
 			}
 		}
 		// Warn when both --capture and --capture-ref are supplied: --capture-ref
@@ -8221,6 +8311,229 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			         genNt5FixturePath.c_str());
 			return 0;
 		}
+		// [shaded-smoke] --gen-smoke-test <path>: one root emitter set up to exercise the
+		// all-three shaded-smoke shader -- blendMode 5 (Depth Transparent -> PrimDepthSpriteAlpha.fx),
+		// big scale, several particles spread across a box, randomRotation on (so a single capture
+		// shows varied sprite angles), and a per-life color ramp (young warm -> old red) on UN-aliased
+		// R/G/B/A tracks (so per-particle tint is visible). Textures keep the default names so a mod
+		// can override them (color + dome normal). Bypasses BridgeDispatcher; uses the API directly.
+		if (!genSmokeTestPath.empty())
+		{
+			typedef ParticleSystem PS;
+			typedef PS::Emitter::Track Track;
+			auto sys = std::make_unique<ParticleSystem>();
+			PS::Emitter* e = sys->addRootEmitter();
+			if (e == nullptr) { fwprintf(stderr, L"gen-smoke-test: failed to add root emitter\n"); return 2; }
+			e->blendMode           = PS::BLEND_TRANSPARENT;   // 2 -> PrimAlpha.fx (plain alpha blend, honors
+			                                                   // per-pixel output alpha; depth-transparent
+			                                                   // mode 5 squared the soft overlap)
+			e->lifetime            = 4.0f;
+			e->nParticlesPerSecond = 6;
+			e->useBursts           = false;
+			e->randomRotation      = true;     // varied spin angles -> per-sprite rotation visible
+			e->noDepthTest         = true;     // smoke: no depth test -> overlapping soft orbs composite
+			                                   // cleanly (depth-test in mode 5 hard-intersects quad footprints)
+			e->randomRotationAverage  = 0.0f;
+			e->randomRotationVariance = 3.0f;  // ~+/-172 deg spread (default 0 = no rotation!)
+			e->textureSize         = 1;       // ATLAS FRAME COUNT (textureSizeSqrt=floor(sqrt)), NOT pixels!
+			                                   // 1 => 1x1 atlas => quad UVs span the FULL 0..1. (256 gave a
+			                                   // 16x16 atlas => each particle sampled a 1/16 UV tile => the
+			                                   // near-constant-UV bug that broke all per-pixel lighting.)
+			// spawn spread across the view (wide in X, tall in Z, thin in depth Y)
+			e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+			e->groups[PS::GROUP_POSITION].minX = -90.0f; e->groups[PS::GROUP_POSITION].maxX = 90.0f;
+			e->groups[PS::GROUP_POSITION].minY = -10.0f; e->groups[PS::GROUP_POSITION].maxY = 10.0f;
+			e->groups[PS::GROUP_POSITION].minZ = -50.0f; e->groups[PS::GROUP_POSITION].maxZ = 50.0f;
+
+			// [shaded-smoke] DENSE RISING PLUME override (later writes win). A compact
+			// source slab at the bottom of frame + upward Z speed + zero gravity makes a
+			// tapering smoke column; high spawn rate + growing scale make it read dense.
+			// Kept within the capture camera's framed band (X ~+/-90, Z ~-50..+50).
+			e->lifetime            = 4.0f;
+			e->nParticlesPerSecond = 40;     // was 6 -> dense overlap into a column
+			e->gravity             = 0.0f;   // rising smoke must not fall back down
+			e->groups[PS::GROUP_POSITION].minX = -16.0f; e->groups[PS::GROUP_POSITION].maxX = 16.0f;
+			e->groups[PS::GROUP_POSITION].minY = -10.0f; e->groups[PS::GROUP_POSITION].maxY = 10.0f;
+			e->groups[PS::GROUP_POSITION].minZ = -46.0f; e->groups[PS::GROUP_POSITION].maxZ = -34.0f;
+			// initial velocity: mostly up (Z), small lateral drift -> natural turbulence.
+			// rise over 4 s life ~= Z*4 = 48..72 units, so from base ~-40 the column tops
+			// out around +10..+30 (in frame) before the particle dies.
+			e->groups[PS::GROUP_SPEED].type = PS::GT_BOX;
+			e->groups[PS::GROUP_SPEED].minX = -4.0f; e->groups[PS::GROUP_SPEED].maxX = 4.0f;
+			e->groups[PS::GROUP_SPEED].minY = -3.0f; e->groups[PS::GROUP_SPEED].maxY = 3.0f;
+			e->groups[PS::GROUP_SPEED].minZ = 12.0f; e->groups[PS::GROUP_SPEED].maxZ = 18.0f;
+			auto setTrack = [&](int id, float v0, float v1, Track::InterpolationType it)
+			{
+				e->trackContents[id].keys.clear();
+				e->trackContents[id].interpolation = it;
+				e->trackContents[id].keys.insert(Track::Key(0.0f, v0));
+				e->trackContents[id].keys.insert(Track::Key(100.0f, v1));
+				e->tracks[id] = &e->trackContents[id];   // un-alias from the Red channel
+			};
+			setTrack(PS::TRACK_SCALE,          35.0f, 50.0f, Track::IT_LINEAR);
+			setTrack(PS::TRACK_RED_CHANNEL,     1.0f, 1.0f,  Track::IT_LINEAR);
+			setTrack(PS::TRACK_GREEN_CHANNEL,   1.0f, 0.15f, Track::IT_LINEAR);
+			setTrack(PS::TRACK_BLUE_CHANNEL,    0.7f, 0.05f, Track::IT_LINEAR);
+			setTrack(PS::TRACK_ALPHA_CHANNEL,   0.9f, 0.9f,  Track::IT_LINEAR);
+			setTrack(PS::TRACK_ROTATION_SPEED,  0.0f, 0.0f,  Track::IT_LINEAR);
+			// [shaded-smoke] plume overrides of the tracks set above (later writes win):
+			setTrack(PS::TRACK_SCALE,         25.0f, 90.0f, Track::IT_LINEAR);  // billow wider as it rises
+			setTrack(PS::TRACK_ALPHA_CHANNEL,  0.85f, 0.0f, Track::IT_LINEAR);  // dissipate at the top
+			// color mode from --smoke-color (parsed here to avoid touching the arg loop):
+			// 0/warm (default, white->orange->red, set above) vs 1/grey (real-smoke look).
+			for (size_t a = 1; a < argv.size(); ++a)
+				if (argv[a] == L"--smoke-color" && a + 1 < argv.size())
+					smokeColorMode = (argv[a + 1] == L"grey" || argv[a + 1] == L"gray") ? 1 : 0;
+			if (smokeColorMode == 1)
+			{
+				setTrack(PS::TRACK_RED_CHANNEL,   0.90f, 0.40f, Track::IT_LINEAR);
+				setTrack(PS::TRACK_GREEN_CHANNEL, 0.90f, 0.40f, Track::IT_LINEAR);
+				setTrack(PS::TRACK_BLUE_CHANNEL,  0.92f, 0.42f, Track::IT_LINEAR);
+			}
+			// spin mode from --smoke-spin (parsed here like --smoke-color): on (default) vs
+			// off. off zeroes per-sprite rotation so a directional shader's lit side stays
+			// anchored across every puff -- the option (c) demo for "light from the right".
+			for (size_t a = 1; a < argv.size(); ++a)
+				if (argv[a] == L"--smoke-spin" && a + 1 < argv.size())
+					smokeSpin = (argv[a + 1] == L"off" || argv[a + 1] == L"0") ? 0 : 1;
+			if (smokeSpin == 0)
+			{
+				e->randomRotation         = false;
+				e->randomRotationVariance = 0.0f;
+			}
+			// [bump-spin test] --bumpspin: reconfigure the generated emitter into a clean
+			// GEOMETRIC-SPIN bump test -- mode 11, textureSize=1, the arrow+dome test textures,
+			// a few large stationary sprites spinning continuously via the rotation-speed track
+			// (randomRotation=false). Proves bump + spin + world-light headlessly (capture two frames:
+			// the arrow turns; whether the dome's lit crescent stays sun-anchored answers the (B) Q).
+			bool bumpSpin = false;
+			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin") bumpSpin = true;
+			if (bumpSpin)
+			{
+				e->blendMode           = 11;                       // Bump -> PrimParticleBumpAlpha.fx
+				e->colorTexture        = "zz_bumptest_base0.tga";  // arrow base (shows spin)
+				e->normalTexture       = "zz_bumptest_nm.tga";     // dome normal (shows bump)
+				e->textureSize         = 1;
+				e->lifetime            = 12.0f;
+				e->nParticlesPerSecond = 2;
+				e->gravity             = 0.0f;
+				e->noDepthTest         = true;
+				e->randomRotation      = false;                    // continuous spin from the speed track
+				e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+				e->groups[PS::GROUP_POSITION].minX = -70; e->groups[PS::GROUP_POSITION].maxX = 70;
+				e->groups[PS::GROUP_POSITION].minY =  -5; e->groups[PS::GROUP_POSITION].maxY =  5;
+				e->groups[PS::GROUP_POSITION].minZ = -35; e->groups[PS::GROUP_POSITION].maxZ = 35;
+				e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
+				e->groups[PS::GROUP_SPEED].valX = 0; e->groups[PS::GROUP_SPEED].valY = 0; e->groups[PS::GROUP_SPEED].valZ = 0;
+				setTrack(PS::TRACK_SCALE,         40.0f, 40.0f, Track::IT_LINEAR);
+				setTrack(PS::TRACK_RED_CHANNEL,    1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_GREEN_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_BLUE_CHANNEL,   1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_ALPHA_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_ROTATION_SPEED, 1.0f,  1.0f,  Track::IT_LINEAR);  // continuous spin
+			}
+			// [bump-spin SINGLE] --bumpspin1: like --bumpspin but exactly ONE large, centered,
+			// long-lived sprite (single burst of 1 at the EXACT origin). Two captures at different
+			// --frames then show the SAME sprite at two clean, NON-overlapping spin phases -> the
+			// decisive §6 test (does the lit crescent track the spin or stay sun-anchored?).
+			bool bumpSpin1 = false;
+			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin1") bumpSpin1 = true;
+			if (bumpSpin1)
+			{
+				e->blendMode           = 11;                       // Bump -> PrimParticleBumpAlpha.fx
+				e->colorTexture        = "zz_bumptest_base0.tga";  // arrow base (shows spin phase)
+				e->normalTexture       = "zz_bumptest_nm.tga";     // dome normal (the lit crescent)
+				e->textureSize         = 1;
+				e->lifetime            = 600.0f;                   // persists across the whole capture
+				e->initialDelay        = 0.0f;
+				e->gravity             = 0.0f;
+				e->noDepthTest         = true;
+				e->randomRotation      = false;                    // continuous spin from the speed track
+				e->useBursts           = true;                     // a single burst...
+				e->nBursts             = 1;                        // ...fired once...
+				e->nParticlesPerBurst  = 1;                        // ...of exactly one particle
+				e->burstDelay          = 10000.0f;                 // no second burst during any capture
+				e->groups[PS::GROUP_POSITION].type = PS::GT_EXACT; // single centered point at origin
+				e->groups[PS::GROUP_POSITION].valX = 0; e->groups[PS::GROUP_POSITION].valY = 0; e->groups[PS::GROUP_POSITION].valZ = 0;
+				e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
+				e->groups[PS::GROUP_SPEED].valX = 0; e->groups[PS::GROUP_SPEED].valY = 0; e->groups[PS::GROUP_SPEED].valZ = 0;
+				setTrack(PS::TRACK_SCALE,         60.0f, 60.0f, Track::IT_LINEAR);  // large, fills the frame
+				setTrack(PS::TRACK_RED_CHANNEL,    1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_GREEN_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_BLUE_CHANNEL,   1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_ALPHA_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_ROTATION_SPEED, 1.0f,  1.0f,  Track::IT_LINEAR);  // continuous spin
+			}
+			// [bump-spin GRID] --bumpspin-grid: a DETERMINISTIC 4x3 constellation of large,
+			// OFF-CENTER, overlapping, continuously-spinning mode-11 sprites at FIXED positions.
+			// Camera-orbit flicker only manifests on off-center / reprojecting sprites (a centered
+			// billboard at the look-at target is invariant under yaw -- proven empirically), so this
+			// is the harness's PRIMARY flicker scene. Fixed positions + single burst-of-1 per cell =>
+			// identical particle layout at every camera-yaw step (no random spawn churn to pollute
+			// the inter-frame difference metric).
+			bool bumpGrid = false;
+			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin-grid") bumpGrid = true;
+			if (bumpGrid)
+			{
+				const float gx[4] = { -52.0f, -17.0f, 17.0f, 52.0f };
+				const float gz[3] = { -30.0f, 0.0f, 30.0f };
+				auto cfgCell = [](PS::Emitter* em, float x, float z)
+				{
+					em->blendMode          = 11;                       // Bump -> PrimParticleBumpAlpha.fx
+					em->colorTexture       = "zz_bumptest_base0.tga";  // arrow base (spin landmark)
+					em->normalTexture      = "zz_bumptest_nm.tga";     // dome normal (puffy relief)
+					em->textureSize        = 1;
+					em->lifetime           = 600.0f;                   // persists across the whole capture
+					em->initialDelay       = 0.0f;
+					em->gravity            = 0.0f;
+					em->noDepthTest        = true;
+					em->randomRotation     = false;                    // continuous spin from the speed track
+					em->useBursts          = true;
+					em->nBursts            = 1;
+					em->nParticlesPerBurst = 1;
+					em->burstDelay         = 10000.0f;                 // no second burst during any capture
+					em->groups[PS::GROUP_POSITION].type = PS::GT_EXACT;
+					em->groups[PS::GROUP_POSITION].valX = x; em->groups[PS::GROUP_POSITION].valY = 0.0f; em->groups[PS::GROUP_POSITION].valZ = z;
+					em->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
+					em->groups[PS::GROUP_SPEED].valX = 0.0f; em->groups[PS::GROUP_SPEED].valY = 0.0f; em->groups[PS::GROUP_SPEED].valZ = 0.0f;
+					const int   ids[6] = { PS::TRACK_SCALE, PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL,
+					                       PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL, PS::TRACK_ROTATION_SPEED };
+					const float val[6] = { 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };  // scale, rgb, alpha, spin
+					for (int t = 0; t < 6; ++t)
+					{
+						int id = ids[t];
+						em->trackContents[id].keys.clear();
+						em->trackContents[id].interpolation = Track::IT_LINEAR;
+						em->trackContents[id].keys.insert(Track::Key(0.0f,   val[t]));
+						em->trackContents[id].keys.insert(Track::Key(100.0f, val[t]));
+						em->tracks[id] = &em->trackContents[id];
+					}
+				};
+				bool first = true;
+				for (int ix = 0; ix < 4; ++ix)
+					for (int iz = 0; iz < 3; ++iz)
+					{
+						PS::Emitter* em = first ? e : sys->addRootEmitter();
+						first = false;
+						if (em == nullptr)
+						{
+							// A short grid silently invalidates the flicker metric (it relies on
+							// the full fixed 4x3 layout) -- fail loudly like the single path above.
+							fwprintf(stderr, L"gen-smoke-test: --bumpspin-grid failed to add root emitter (cell %d,%d)\n", ix, iz);
+							return 2;
+						}
+						cfgCell(em, gx[ix], gz[iz]);
+					}
+			}
+			std::string err;
+			if (!SaveParticleSystem(sys.get(), genSmokeTestPath, &err))
+			{
+				fwprintf(stderr, L"gen-smoke-test: SaveParticleSystem failed: %hs\n", err.c_str());
+				return 2;
+			}
+			fwprintf(stderr, L"gen-smoke-test: wrote %s (blendMode 5, randomRotation, color ramp)\n", genSmokeTestPath.c_str());
+			return 0;
+		}
 		// T9.2] --gen-a11y-fixture <path>: one-shot CLI to produce a
 		// .alo file with a 3-emitter tree (1 root + 1 lifetime child + 1
 		// death child). Used by the T9 a11y specs so every surface driver's
@@ -8290,7 +8603,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			                           gameRoots,
 			                           devUi, testHost,
 			                           captureAlo, capturePng, captureFrames,
-			                           captureSkydome, captureRef);
+			                           captureSkydome, captureRef,
+			                           captureHasAmbient, captureAmbient[0], captureAmbient[1], captureAmbient[2],
+			                           captureHasSun, captureSun[0], captureSun[1], captureSun[2],
+			                           captureHasSunI, captureSunIntensity);
 			delete fileManager;
 #ifndef NDEBUG
 			FreeConsole();

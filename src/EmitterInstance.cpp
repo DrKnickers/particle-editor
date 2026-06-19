@@ -1,8 +1,30 @@
 #include <cassert>
 #include <cstdio>
+#include <cstdarg>
+#include <windows.h>
 #include "EmitterInstance.h"
 #include "ParticleSystemInstance.h"
 using namespace std;
+
+// [norm-dbg] Gated behind the ALO_SHADER_DIAG env var (matches the repo's ALO_*
+// test hooks) so normal interactive use stays silent and skips the diagnostic
+// block's per-draw texture LockRect; set it for a capture run.
+static bool NormDiagEnabled()
+{
+	static int s_diag = -1;
+	if (s_diag < 0) { char b[8]; s_diag = (GetEnvironmentVariableA("ALO_SHADER_DIAG", b, sizeof(b)) > 0) ? 1 : 0; }
+	return s_diag != 0;
+}
+
+// [norm-dbg] one-shot diagnostic logger for the shaded-smoke s1 normal investigation.
+static void NormDbg(const char* fmt, ...)
+{
+	if (!NormDiagEnabled()) return;
+	char buf[1024];
+	va_list ap; va_start(ap, fmt);
+	_vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, ap); va_end(ap);
+	OutputDebugStringA(buf); fputs(buf, stdout); fflush(stdout);
+}
 
 struct EmitterInstance::Particle : public Object3D
 {
@@ -900,6 +922,32 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
 	{
 		pDevice->SetTexture(0, m_pColorTexture);
 		pDevice->SetTexture(1, m_pNormalTexture);
+		static int s_normDbg = 0;
+		const bool dbg = NormDiagEnabled() && (s_normDbg < 3);
+		if (dbg)
+		{
+			NormDbg("[norm-dbg] colorTex=%p normalTex=%p blendMode=%lu\n",
+			        (void*)m_pColorTexture, (void*)m_pNormalTexture, m_emitter.blendMode);
+			if (m_pNormalTexture)
+			{
+				D3DSURFACE_DESC d; m_pNormalTexture->GetLevelDesc(0, &d);
+				NormDbg("[norm-dbg]   normalTex %ux%u fmt=%d levels=%lu\n",
+				        d.Width, d.Height, (int)d.Format, (unsigned long)m_pNormalTexture->GetLevelCount());
+				D3DLOCKED_RECT lr;
+				if (SUCCEEDED(m_pNormalTexture->LockRect(0, &lr, NULL, D3DLOCK_READONLY)))
+				{
+					unsigned char* b = (unsigned char*)lr.pBits;
+					int cx = d.Width/2, cy = d.Height/2;
+					unsigned char* c = b + cy*lr.Pitch + cx*4;
+					unsigned char* l = b + cy*lr.Pitch + 10*4;
+					unsigned char* r = b + cy*lr.Pitch + (d.Width-10)*4;
+					NormDbg("[norm-dbg]   texels BGRA center=%u,%u,%u left=%u,%u,%u right=%u,%u,%u\n",
+					        c[0],c[1],c[2], l[0],l[1],l[2], r[0],r[1],r[2]);
+					m_pNormalTexture->UnlockRect(0);
+				}
+				else NormDbg("[norm-dbg]   LockRect FAILED (texture not in a lockable pool)\n");
+			}
+		}
 		pDevice->SetRenderState(D3DRS_ZENABLE,     !m_emitter.noDepthTest);
 		if (IsHeatEmitter())
 		{
@@ -927,6 +975,20 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
             for (UINT i = 0; i < nPasses; i++)
             {
                 pEffect->BeginPass(i);
+                if (dbg && i == 0)
+                {
+                    IDirect3DBaseTexture9* bt = NULL; pDevice->GetTexture(1, &bt);
+                    DWORD minf=0,magf=0,mipf=0,maxml=0,lodb=0;
+                    pDevice->GetSamplerState(1, D3DSAMP_MINFILTER,    &minf);
+                    pDevice->GetSamplerState(1, D3DSAMP_MAGFILTER,    &magf);
+                    pDevice->GetSamplerState(1, D3DSAMP_MIPFILTER,    &mipf);
+                    pDevice->GetSamplerState(1, D3DSAMP_MAXMIPLEVEL,  &maxml);
+                    pDevice->GetSamplerState(1, D3DSAMP_MIPMAPLODBIAS,&lodb);
+                    NormDbg("[norm-dbg] @draw stage1 boundTex=%p (want normalTex=%p) MIN=%lu MAG=%lu MIP=%lu MAXMIP=%lu LODbiasRaw=%lu texSqrt=%d (textureSize=%lu)\n",
+                            (void*)bt, (void*)m_pNormalTexture, minf, magf, mipf, maxml, lodb, m_textureSizeSqrt, (unsigned long)m_emitter.textureSize);
+                    if (bt) bt->Release();
+                    s_normDbg++;
+                }
     		    pDevice->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, (UINT)m_vertices.size(), 2 * (UINT)m_primitives.size(), &m_primitives[0], D3DFMT_INDEX16, &m_vertices[0], sizeof(Vertex));
                 pEffect->EndPass();
             }

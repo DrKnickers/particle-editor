@@ -697,6 +697,10 @@ struct HostWindowImpl
     // --skydome <slot>: apply this skydome slot in --capture mode before
     // rendering (0 = Off / solid colour, the default).
     int          m_captureSkydomeSlot = 0;
+    // [world-lit] --ambient / --sun / --sun-intensity capture lighting drivers.
+    bool         m_captureHasAmbient = false; float m_captureAmbient[3] = {0,0,0};
+    bool         m_captureHasSun = false;     float m_captureSun[3] = {0,0,0};
+    bool         m_captureHasSunI = false;    float m_captureSunIntensity = 1.0f;
     FILE*       logFile = nullptr;
     std::mutex  logMutex;
 
@@ -711,7 +715,10 @@ struct HostWindowImpl
                    const std::wstring& capturePng = L"",
                    int captureFrames = 60,
                    int captureSkydome = 0,
-                   const std::wstring& captureRef = L"")
+                   const std::wstring& captureRef = L"",
+                   bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,
+                   bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
+                   bool hasSunI = false, float sunIntensity = 1.0f)
         : hInstance(inst)
         , textureManager(tex)
         , shaderManager(shd)
@@ -723,10 +730,17 @@ struct HostWindowImpl
         , m_capturePng(capturePng)
         , m_captureFrames(captureFrames)
         , m_captureSkydomeSlot(captureSkydome)
+        , m_captureHasAmbient(hasAmbient)
+        , m_captureHasSun(hasSun)
+        , m_captureHasSunI(hasSunI)
+        , m_captureSunIntensity(sunIntensity)
         , layout(nullptr)
         , accelerator()
         , modManager(std::make_unique<ModManager>(&fil, gameRoots_))
     {
+        // [world-lit] capture lighting colours (arrays can't init in list).
+        m_captureAmbient[0] = ambR; m_captureAmbient[1] = ambG; m_captureAmbient[2] = ambB;
+        m_captureSun[0] = sunR; m_captureSun[1] = sunG; m_captureSun[2] = sunB;
         // D6: discover installed mods and restore the
         // previously-active one from the registry before any UI shows.
         // Both calls are quick; they don't touch GPU / WebView2 state.
@@ -4216,6 +4230,111 @@ int HostWindowImpl::Run(int nCmdShow)
                     Log("[capture] skydome slot %d -> %s\n",
                         m_captureSkydomeSlot, sok ? "ok" : "FAILED");
                 }
+                // Honor the persisted ShowGround setting in headless --capture too.
+                // The host path (unlike main.cpp startup) never read it, so the
+                // ground was always drawn; a clean background (registry ShowGround=0)
+                // lets a capture isolate the sprite — e.g. the §6 spin test, where
+                // terrain-through-transparency otherwise contaminates the read.
+                {
+                    HKEY hKey; DWORD gval = 1, gsz = sizeof(gval), gtype = 0;
+                    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
+                                      0, KEY_READ, &hKey) == ERROR_SUCCESS)
+                    {
+                        if (RegQueryValueExW(hKey, L"ShowGround", NULL, &gtype,
+                                             (LPBYTE)&gval, &gsz) == ERROR_SUCCESS
+                            && gtype == REG_DWORD)
+                        {
+                            engine->SetGround(gval != 0);
+                            Log("[capture] ShowGround=%lu (from registry)\n", gval);
+                        }
+                        RegCloseKey(hKey);
+                    }
+                }
+                // Harness: orbit the capture camera by CaptureCamYaw (about Up) then
+                // CaptureCamPitch (about camera-right), and optionally scale distance by
+                // CaptureCamDist (x1000). Yaw/pitch are signed centidegrees stored as the
+                // raw uint32 bit pattern (read back via (int)). Absent keys = no change.
+                // Lets a headless sweep render R(theta) for the de-flicker metric.
+                {
+                    HKEY hKey; DWORD raw, gsz, gtype;
+                    int yawC = 0, pitchC = 0; DWORD distR = 0;
+                    bool haveYaw = false, havePitch = false, haveDist = false;
+                    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
+                                      0, KEY_READ, &hKey) == ERROR_SUCCESS)
+                    {
+                        gsz = sizeof(raw);
+                        if (RegQueryValueExW(hKey, L"CaptureCamYaw",   NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { yawC   = (int)raw; haveYaw   = true; }
+                        gsz = sizeof(raw);
+                        if (RegQueryValueExW(hKey, L"CaptureCamPitch", NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { pitchC = (int)raw; havePitch = true; }
+                        gsz = sizeof(raw);
+                        if (RegQueryValueExW(hKey, L"CaptureCamDist",  NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { distR  = raw;      haveDist  = true; }
+                        RegCloseKey(hKey);
+                    }
+                    if (haveYaw || havePitch || haveDist)
+                    {
+                        Engine::Camera cam = engine->GetCamera();
+                        D3DXVECTOR3 up = cam.Up; D3DXVec3Normalize(&up, &up);
+                        D3DXVECTOR3 diff = cam.Position - cam.Target;
+                        if (haveDist && distR > 0) diff *= (float)distR / 1000.0f;
+                        if (haveYaw)
+                        {
+                            D3DXMATRIX r; D3DXMatrixRotationAxis(&r, &up, D3DXToRadian((float)yawC / 100.0f));
+                            D3DXVec3TransformCoord(&diff, &diff, &r);
+                        }
+                        if (havePitch)
+                        {
+                            // right = up x diff; degenerate (zero-length) when the view is
+                            // (near-)parallel to Up, i.e. looking straight down/up -- pitch is
+                            // then undefined, so skip it rather than normalize a garbage/NaN axis.
+                            D3DXVECTOR3 right; D3DXVec3Cross(&right, &up, &diff);
+                            if (D3DXVec3Length(&right) > 1e-4f)
+                            {
+                                D3DXVec3Normalize(&right, &right);
+                                D3DXMATRIX r; D3DXMatrixRotationAxis(&r, &right, D3DXToRadian((float)pitchC / 100.0f));
+                                D3DXVec3TransformCoord(&diff, &diff, &r);
+                            }
+                            else
+                                Log("[capture] pitch skipped: view parallel to Up (gimbal singularity)\n");
+                        }
+                        cam.Position = cam.Target + diff;
+                        engine->SetCamera(cam);
+                        Log("[capture] cam yaw=%.2f pitch=%.2f dist=x%.3f\n",
+                            (float)yawC / 100.0f, (float)pitchC / 100.0f, haveDist ? distR / 1000.0f : 1.0f);
+                    }
+                }
+                // [world-lit] Drive scene lighting from the --ambient / --sun /
+                // --sun-intensity flags. Mirrors the registry [lighting-restore]
+                // shape: ambient pushes w=1; the sun Light folds intensity into
+                // Diffuse/Specular and derives Position from a fixed z/tilt
+                // (z=0, tilt=45 — same default the restore block uses), so a lit
+                // shader's per-vertex response can be verified offline.
+                if (m_captureHasAmbient)
+                {
+                    engine->SetAmbient(D3DXVECTOR4(m_captureAmbient[0],
+                                                   m_captureAmbient[1],
+                                                   m_captureAmbient[2], 1.0f));
+                    Log("[capture] ambient %.3f,%.3f,%.3f\n",
+                        m_captureAmbient[0], m_captureAmbient[1], m_captureAmbient[2]);
+                }
+                if (m_captureHasSun)
+                {
+                    const float intensity = m_captureHasSunI ? m_captureSunIntensity : 1.0f;
+                    const float zr = D3DXToRadian(0.0f);
+                    const float tr = D3DXToRadian(45.0f);
+                    const float c  = cosf(tr);
+                    Engine::Light L = {};
+                    L.Position  = D3DXVECTOR4(c * cosf(zr), c * sinf(zr), sinf(tr), 0.0f);
+                    L.Direction = D3DXVECTOR4(0, 0, 0, 0);
+                    L.Diffuse   = D3DXVECTOR4(m_captureSun[0] * intensity,
+                                              m_captureSun[1] * intensity,
+                                              m_captureSun[2] * intensity, 1.0f);
+                    L.Specular  = D3DXVECTOR4(m_captureSun[0] * intensity,
+                                              m_captureSun[1] * intensity,
+                                              m_captureSun[2] * intensity, 1.0f);
+                    engine->SetLight(Engine::LT_SUN, L);
+                    Log("[capture] sun %.3f,%.3f,%.3f intensity=%.3f\n",
+                        m_captureSun[0], m_captureSun[1], m_captureSun[2], intensity);
+                }
                 Log("[capture] loaded %ls; spawned instance; rendering %d frames -> %ls\n",
                     m_captureAlo.c_str(), m_captureFrames, m_capturePng.c_str());
             }
@@ -4453,11 +4572,17 @@ HostWindow::HostWindow(HINSTANCE hInstance,
                        const std::wstring& capturePng,
                        int captureFrames,
                        int captureSkydome,
-                       const std::wstring& captureRef)
+                       const std::wstring& captureRef,
+                       bool hasAmbient, float ambR, float ambG, float ambB,
+                       bool hasSun, float sunR, float sunG, float sunB,
+                       bool hasSunI, float sunIntensity)
     : m_impl(new HostWindowImpl(hInstance, textureManager, shaderManager, fileManager,
                                 gameRoots, useDevUi, useTestHost,
                                 captureAlo, capturePng, captureFrames, captureSkydome,
-                                captureRef))
+                                captureRef,
+                                hasAmbient, ambR, ambG, ambB,
+                                hasSun, sunR, sunG, sunB,
+                                hasSunI, sunIntensity))
 {
 }
 
@@ -4488,12 +4613,18 @@ int Run(HINSTANCE hInstance,
         const std::wstring& capturePng,
         int captureFrames,
         int captureSkydome,
-        const std::wstring& captureRef)
+        const std::wstring& captureRef,
+        bool hasAmbient, float ambR, float ambG, float ambB,
+        bool hasSun, float sunR, float sunG, float sunB,
+        bool hasSunI, float sunIntensity)
 {
     HostWindow host(hInstance, textureManager, shaderManager, fileManager,
                     gameRoots, useDevUi, useTestHost,
                     captureAlo, capturePng, captureFrames, captureSkydome,
-                    captureRef);
+                    captureRef,
+                    hasAmbient, ambR, ambG, ambB,
+                    hasSun, sunR, sunG, sunB,
+                    hasSunI, sunIntensity);
     return host.Run(nCmdShow);
 }
 

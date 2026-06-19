@@ -60,7 +60,13 @@ int Run(HINSTANCE hInstance,
         // capturePng), the host builds the GameObject catalog synchronously,
         // selects the named reference object, renders captureFrames frames, and
         // writes the engine RT to capturePng. Mutually exclusive with captureAlo.
-        const std::wstring& captureRef = L"");
+        const std::wstring& captureRef = L"",
+        // [world-lit] --ambient / --sun / --sun-intensity: drive scene
+        // lighting in a headless --capture run. Each *has* flag is opt-in;
+        // when false the engine's ctor-default lighting is left untouched.
+        bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,
+        bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
+        bool hasSunI = false, float sunIntensity = 1.0f);
 
 } // namespace host
 
