@@ -303,7 +303,7 @@ public:
     // multi-member source link groups. `makeUniqueName` returns a collision-
     // free name for a clone given its source name — injected so the data layer
     // stays independent of the UI's GenerateDuplicateName. Returns the count
-    // imported. Shared by the legacy import dialog and the bridge handler.
+    // imported. Used by the host's import/duplicate bridge handler.
     size_t ImportEmittersFrom(
         ParticleSystem& source,
         const std::vector<size_t>& picks,

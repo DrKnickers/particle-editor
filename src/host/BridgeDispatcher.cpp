@@ -87,10 +87,10 @@ static bool ParseCssColorToColorRef(const std::string& in, COLORREF& out)
     return true;
 }
 
-// Defined in src/UI/EmitterList.cpp; reused by the new-UI Phase 3
-// Screen 4 Batch B1 emitter-mutation handlers. Stays non-static so the
-// host's dispatcher can link against it without a header dependency on
-// EmitterList.cpp (which still belongs to the legacy --legacy-ui chrome).
+// Defined in src/main.cpp (relocated there when arch-A's EmitterList.cpp
+// was removed in); reused by the host's emitter-mutation handlers.
+// Declared extern here so the dispatcher can link against it without a
+// header dependency on main.cpp.
 extern std::string GenerateDuplicateName(const ParticleSystem* system,
                                           const std::string&     sourceName);
 
@@ -2412,11 +2412,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // tracking, dirty flag, recent-files registry, native picker
     // round-trip — but skip the engine-level ParticleSystem read/write
     // until that pointer exists. Same forward-compatible no-op pattern
-    // as engine/action/rescale-system in Batch 1. Legacy `DoNewFile` /
-    // `DoOpenFile` / `DoSaveFile` at [src/main.cpp:1289-1393] continue
-    // to serve `--legacy-ui` unchanged — they're coupled to
-    // `APPLICATION_INFO*` which doesn't exist in --new-ui mode, so
-    // calling them directly from here isn't possible.
+    // as engine/action/rescale-system in Batch 1. (The arch-A `DoNewFile` /
+    // `DoOpenFile` / `DoSaveFile` handlers in src/main.cpp were removed in
+    //; these bridge handlers are now the only file-operation path.)
 
     // -------- file/new --------
     //: replace the host-owned ParticleSystem with a fresh empty
@@ -2955,9 +2953,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- file/recent/list --------
     //
-    // Re-reads the registry on every call. Cheap (≤ 9 entries) and
-    // means the list stays in lockstep with legacy AppendHistory writes
-    // that happen in --legacy-ui sessions.
+    // Re-reads the registry on every call. Cheap (≤ 9 entries) and keeps
+    // the in-memory list in lockstep with the on-disk recent-files registry
+    // (e.g. writes from another running instance).
     if (kind == "file/recent/list")
     {
         m_recentFiles = ReadRecentFiles();

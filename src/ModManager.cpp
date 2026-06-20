@@ -4,9 +4,8 @@
 // Internal helpers (ScanModsDir, ReadLastMod, WriteLastMod) are file-
 // scope statics — they were `static` in main.cpp and stay private here.
 // ReadModNickname / WriteModNickname are exposed in the header because
-// the legacy nickname dialog calls them directly from a WM_COMMAND
-// handler, and there's no benefit in routing that through a ModManager
-// method.
+// the host bridge reads/writes mod nicknames directly, and there's no
+// benefit in routing that through a ModManager method.
 
 #include "ModManager.h"
 #include "ModScan.h"   // ScanModNestedLayers / ModRootHasArt (transitively ModLayers.h)
@@ -334,16 +333,17 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers)
     // 1. FileManager content roots (slash re-added by BuildContentRoots).
     if (m_fileManager) m_fileManager->SetLayers(m_layerStack);
 
-    // 2. Persist: LastLayers is authoritative; LastMod = primary keeps the
-    //    --legacy single-mod restore current (it still reads LastMod).
+    // 2. Persist: LastLayers is authoritative; LastMod = primary is kept
+    //    in sync so the one-time legacy-selection migration (ReadLastMod feeds
+    //    MigrateLegacySelection) has a sane value if LastLayers is ever cleared.
     WriteLastLayers(m_layerStack);
     WriteLastMod(primary);
 
-    // 3. Texture palette follows the primary layer; thumbnails keyed by filename
-    //    must drop so a layer swap doesn't show the previous stack's art.
+    // 3. Texture palette follows the primary layer. (busts its own
+    //    base64 thumbnail cache via the bridge palette refresh —
+    //    BridgeDispatcher ClearBridgeThumbCache; the legacy GDI popup
+    //    cache-clear / refresh was removed with arch-A —.)
     TexturePalette::Store::Instance().SetActiveMod(primary);
-    TexturePalette::ClearThumbnailCache();
-    TexturePalette::RefreshPopup();
 
     printf("[Mods] Layer stack: %zu layer(s), primary=%S\n",
            m_layerStack.size(), primary.empty() ? L"(unmodded)" : primary.c_str());
@@ -362,7 +362,7 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers)
 bool ModManager::SelectMod(const wstring& modPath)
 {
     // Quick-switch = replace the whole stack with this single layer
-    // (empty = Unmodded). Used by the legacy menu + the new-UI quick-switch.
+    // (empty = Unmodded). Used by the host's mod quick-switch.
     return SetLayerStack(modPath.empty() ? std::vector<wstring>{}
                                          : std::vector<wstring>{ modPath });
 }

@@ -1,7 +1,8 @@
 // GroundTexturePanel — modeless tool window for the ground plane:
-// show/hide master toggle plus a grid of texture slots. Replaces the
-// legacy `GroundTexturePickerProc` at src/main.cpp:3799 for the React
-// UI; the Win32 dialog stays for `--legacy-ui` until Phase 4.2.
+// show/hide master toggle plus a grid of texture slots. Ported from the
+// native `GroundTexturePickerProc` at src/main.cpp:3799; the Win32 dialog
+// and the `--legacy-ui` opt-out were removed in, so this React panel
+// is now the sole ground-texture surface.
 //
 // Slot layout (mirrors Engine::kGroundTextureCount=8 / kGroundSolidColorSlot=4):
 //   - Slot 0: Dirt   (bundled, default)

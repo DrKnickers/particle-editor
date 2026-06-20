@@ -10,9 +10,8 @@
 // Both helpers swallow `wexception` from the loader/writer machinery
 // internally and report success/failure via the return value — callers
 // that need to surface an error message can capture it via the optional
-// `errorOut` parameter (UTF-8 narrow string for cross-channel use).
-// Legacy paths in main.cpp keep their MessageBox UI side-effects; they
-// translate the bool/nullptr return into their own dialogs.
+// `errorOut` parameter (UTF-8 narrow string for cross-channel use). The
+// host translates that return into its own bridge-level error reporting.
 
 #include <memory>
 #include <string>

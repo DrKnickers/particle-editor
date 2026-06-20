@@ -92,8 +92,8 @@ async function main() {
     killTestHost();
     await sleep(300);
 
-    console.log(`[verify-force-align] launching ${exe} --new-ui --test-host (ALO_SETTINGS_LIVE=1) ...`);
-    child = spawn(exe, ["--new-ui", "--test-host"], {
+    console.log(`[verify-force-align] launching ${exe} --test-host (ALO_SETTINGS_LIVE=1) ...`);
+    child = spawn(exe, ["--test-host"], {
       cwd: repoRoot,
       stdio: ["ignore", "ignore", "ignore"],
       env: { ...process.env, ALO_SETTINGS_LIVE: "1" },

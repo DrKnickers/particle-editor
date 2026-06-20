@@ -4,7 +4,6 @@
 //
 // Every place that displays or embeds the editor's version reads from here:
 //   - src/ParticleEditor.rc  (binary VS_VERSION_INFO: file/product version)
-//   - src/main.cpp           (legacy Win32 "About" dialog)
 //   - web/apps/editor/app-version.ts  (shared parser, regex on PE_VERSION_STR)
 //       consumed by vite.config.ts   (default React UI "About", build-time)
 //       and        vitest.config.ts  (test-time mirror of that inject)

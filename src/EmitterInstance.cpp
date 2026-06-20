@@ -771,8 +771,8 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 	}
 	// Cursor reseat runs for BOTH the `-1` (reseat-everything) path and a
 	// specific `track`. For `-1` we reseat EVERY track: callers like
-	// BridgeDispatcher::propagateLinkGroup (and the legacy main.cpp link path)
-	// reassign a sibling's track multisets via copySharedParamsFrom, then call
+	// BridgeDispatcher::propagateLinkGroup reassign a sibling's track
+	// multisets via copySharedParamsFrom, then call
 	// OnParticleSystemChanged(-1) to fix the orphaned cursors. Previously this
 	// reseat lived only in the `else` branch, so the `-1` path left them
 	// singular → xtree:181 deref on the next Engine::Update.

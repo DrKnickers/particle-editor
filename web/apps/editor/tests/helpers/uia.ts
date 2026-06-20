@@ -119,7 +119,7 @@ export async function discoverHostHwnd(
       if (!v || v === "0") {
         reject(new Error(
           `Could not find window with class "${viewportClass}". ` +
-          `Is the editor running with --new-ui? stderr: ${err}`
+          `Is the editor running with --test-host? stderr: ${err}`
         ));
       } else {
         resolve(BigInt(v));

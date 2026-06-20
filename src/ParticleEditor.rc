@@ -26,52 +26,21 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 //
 // Bitmap
 //
+// IDB_MISSING is the placeholder texture the shared TextureManager
+// (src/main.cpp) hands back when a particle's texture file can't be loaded —
+// live code, not legacy UI, so it stays.
 
 IDB_MISSING             BITMAP                  "resources/missing.bmp"
-IDR_TOOLBAR1            BITMAP                  "resources/toolbar1.bmp"
-IDB_EMITTER_LIST        BITMAP                  "Resources\\emitter_list.bmp"
-IDR_EMITTER_TOOLBAR     BITMAP                  "resources/toolbar2.bmp"
-IDB_PALETTE_GLYPH       BITMAP                  "Resources\\palette_glyph.bmp"
-IDB_PIN_BADGE           BITMAP                  "Resources\\pin_badge.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
 //
 // Icon
 //
 
-// Icon with lowest ID value placed first to ensure application icon
-// remains consistent on all systems.
+// IDI_LOGO is the application icon (loaded by the host window class,
+// src/host/HostWindow.cpp). The legacy curve-editor icons were removed with
+// the native UI ().
 IDI_LOGO                ICON                    "resources/logo.ico"
-IDI_EDITOR_SELECT       ICON                    "resources/curve_mode_select.ico"
-IDI_EDITOR_INSERT       ICON                    "resources/curve_mode_insert.ico"
-IDI_EDITOR_LINEAR       ICON                    "resources/curve_interpolate_linear.ico"
-IDI_EDITOR_STEP         ICON                    "resources/curve_interpolate_step.ico"
-IDI_EDITOR_SMOOTH       ICON                    "resources/curve_interpolate_smooth.ico"
-IDI_EDITOR_DELETE       ICON                    "resources/curve_key_delete.ico"
-
-/////////////////////////////////////////////////////////////////////////////
-//
-// Toolbar
-//
-
-IDR_TOOLBAR1 TOOLBAR  16, 16
-BEGIN
-    BUTTON      ID_BUTTON40016
-    BUTTON      ID_BUTTON40017
-    BUTTON      ID_BUTTON40018
-    BUTTON      ID_BUTTON40019
-    BUTTON      ID_BUTTON40022
-END
-
-IDR_EMITTER_TOOLBAR TOOLBAR  16, 15
-BEGIN
-    BUTTON      ID_BUTTON40026
-    BUTTON      ID_BUTTON40027
-    BUTTON      ID_BUTTON40028
-    BUTTON      ID_BUTTON40077
-    BUTTON      ID_BUTTON40081
-END
-
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -149,6 +118,31 @@ BEGIN
     END
 END
 
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+//: the shared error/query strings the surviving engine/IO/host code
+// LoadString()s, migrated here (LANG_NEUTRAL, so they resolve under any
+// system locale) from the now-deleted ParticleEditor.en.rc when the legacy
+// localized .rc/.h files were removed. Ids are defined in Resources\resource.h.
+//
+
+STRINGTABLE
+BEGIN
+    IDS_ERROR_FILE_READ         "Unable to read file"
+    IDS_ERROR_FILE_FIND         "Unable to find file:\n%ls"
+    IDS_ERROR_FILE_WRITE        "Unable to write file"
+    IDS_ERROR_FILE_CORRUPT      "Bad or corrupted file"
+    IDS_ERROR_FILE_FORMAT       "The file is not a particle file"
+    IDS_ERROR_XML_PARSER_CREATE "Unable to create XML parser"
+    IDS_ERROR_XML               "%ls at line %d"
+    IDS_QUERY_DATA_PATH         "Please select the Star Wars Empire at War or Forces of Corruption folder that contains the Data folder."
+    IDS_ERROR_FILE_OPEN         "Unable to open file:\n%ls"
+    IDS_ERROR_FILE_CREATE       "Unable to create file:\n%ls"
+    IDS_ERROR_RENDERER_RESET    "Unable to reset rendering window"
+END
+
 #endif    // Neutral resources
 /////////////////////////////////////////////////////////////////////////////
 
@@ -170,7 +164,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 1 TEXTINCLUDE 
 BEGIN
-    "Resources\\resource.\0"
+    "Resources\\resource.h\0"
 END
 
 2 TEXTINCLUDE 

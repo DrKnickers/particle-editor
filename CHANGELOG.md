@@ -16,6 +16,12 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 > The inline release markers below show where each tagged [SemVer](https://semver.org)
 > release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
 
+## 2026-06-20
+
+### Removed
+
+- Removed the legacy classic (Win32) editor interface and its `--legacy` / `--legacy-ui` opt-out — the WebView2/React UI is now the only interface (x64-only)
+
 ## 2026-06-19
 
 ### Added

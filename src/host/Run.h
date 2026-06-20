@@ -1,7 +1,8 @@
-// Entry point for the new-UI host. Invoked from WinMain when the
-// `--new-ui` command-line flag is present. Constructs the hybrid
-// WebView2 + D3D9 composition window, owns the Engine instance for
-// the session, and runs the host message pump.
+// Entry point for the WebView2/React host. Invoked unconditionally from
+// WinMain (the sole UI since removed the legacy Win32 UI and the
+// `--new-ui`/`--legacy` flags). Constructs the hybrid WebView2 + D3D9
+// composition window, owns the Engine instance for the session, and runs
+// the host message pump.
 //
 // useDevUi — when true, probe http://localhost:5174 (Vite dev server)
 // and navigate there instead of the bundled app.local build. If the

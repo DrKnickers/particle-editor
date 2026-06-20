@@ -1,5 +1,5 @@
 // Task 2.2 / 2.2.1 contract tests: drive the *real* native bridge inside
-// ParticleEditor.exe --new-ui --test-host via CDP. These specs exist to
+// ParticleEditor.exe --test-host via CDP. These specs exist to
 // catch schema drift between the TypeScript MockBridge (covered by
 // Vitest in Task 2.1) and the C++ BridgeDispatcher — the failure mode
 // the plan called out as Risk #2.

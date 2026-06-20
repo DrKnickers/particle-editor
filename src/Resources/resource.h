@@ -108,6 +108,27 @@
 // the game's TerrainMeshBump.fx (reference/foc-shaders/) minus cloud/FOW.
 #define IDR_SHADER_GROUND_LIT           159
 
+// — shared error/query STRINGTABLE ids migrated here from the now-deleted
+// Resources/resource.en.h when the legacy localized .rc/.h files were removed.
+// These are the ONLY IDS_* the surviving engine/IO/host code LoadString()s
+// (engine.cpp, files.cpp, xml.cpp, exceptions.h, main.cpp); their runtime
+// strings live in the STRINGTABLE in ParticleEditor.rc (LANG_NEUTRAL). Numeric
+// values are preserved from the original en.h. They share values with the
+// like-numbered ICON/BITMAP ids above, but that is harmless: Win32 keys
+// resources by (type, id, language), so a STRINGTABLE entry never collides
+// with an ICON/BITMAP of the same numeric id.
+#define IDS_ERROR_FILE_READ             101
+#define IDS_ERROR_FILE_FIND             102
+#define IDS_ERROR_FILE_WRITE            103
+#define IDS_ERROR_FILE_CORRUPT          104
+#define IDS_ERROR_FILE_FORMAT           105
+#define IDS_ERROR_XML_PARSER_CREATE     106
+#define IDS_ERROR_XML                   107
+#define IDS_QUERY_DATA_PATH             109
+#define IDS_ERROR_FILE_OPEN             134
+#define IDS_ERROR_FILE_CREATE           136
+#define IDS_ERROR_RENDERER_RESET        137
+
 
 // Next default values for new objects
 //

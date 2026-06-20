@@ -1,5 +1,5 @@
 // Task 2.4 contract tests: Background picker wired against the *real*
-// native bridge inside ParticleEditor.exe --new-ui --test-host. Sibling
+// native bridge inside ParticleEditor.exe --test-host. Sibling
 // of bridge-native.spec.ts (Task 2.2.1) — same CDP-attach harness, same
 // `window.bridge` host-object channel.
 //
@@ -9,8 +9,8 @@
 //   - undo/perform                   (handler dispatch, Task 2.4 surface)
 //
 // skydome-slot / skydome-custom-path are exercised here purely as a
-// native-bridge contract (legacy Win32 UI + registry startup-restore still
-// drive them); the new-UI BackgroundPicker no longer does — its custom
+// native-bridge contract (the host's registry startup-restore still drives
+// them); the React BackgroundPicker no longer does — its custom
 // skydome-texture slots were removed (it's Game dome + Solid colour only).
 //
 // Notes on TestHostBridge.on(): the host-object channel doesn't carry

@@ -5,8 +5,9 @@
 // Bridge call: engine/action/rescale-system { durationScalePercent,
 // sizeScalePercent }. Returns Record<string, never>.
 //
-// Legacy chrome: src/main.cpp's WM_COMMAND launcher for IDD_RESCALE_SYSTEM
-// (line 1524) stays for `--legacy-ui`; this is the new-UI counterpart.
+// Ported from src/main.cpp's WM_COMMAND launcher for IDD_RESCALE_SYSTEM
+// (line 1524). The native Win32 dialog and the `--legacy-ui` opt-out were
+// removed in; this React modal is now the sole Rescale surface.
 
 import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";

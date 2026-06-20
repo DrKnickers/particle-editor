@@ -1,7 +1,7 @@
 // Phase 3 Screen 8 Batch 2 contract tests: the Lighting tool pane (now
 // docked, with Bloom folded in as a section — session 11) + the Ground /
 // Background toolbar popovers, wired against the real native bridge inside
-// ParticleEditor.exe --new-ui --test-host. Same CDP-attach harness as
+// ParticleEditor.exe --test-host. Same CDP-attach harness as
 // sibling specs.
 //
 // What the specs cover:

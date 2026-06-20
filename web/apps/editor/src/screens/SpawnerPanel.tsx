@@ -1,7 +1,8 @@
 // SpawnerPanel — modeless tool window for the programmable particle
-// spawner (Phase 3 Screen 8 Batch 4). Replaces the legacy
-// `SpawnerDlgProc` at [src/main.cpp:5824] for the React UI; the Win32
-// dialog stays for `--legacy-ui` until Phase 4.2.
+// spawner (Phase 3 Screen 8 Batch 4). Ported from the native
+// `SpawnerDlgProc` at [src/main.cpp:5824]; the Win32 dialog and the
+// `--legacy-ui` opt-out were removed in, so this React panel is now
+// the sole spawner surface.
 //
 // Sections (top-to-bottom):
 //   1. Mode      — Manual / Auto radio.
@@ -17,8 +18,8 @@
 //   8. Spawn now — manual-only button (fires spawner/trigger).
 //
 // State sync. The panel reads `snapshot.spawner` on mount and listens
-// to `engine/state/changed` for external mutations (legacy `--legacy-ui`
-// edits, devtools). Local edits commit immediately via
+// to `engine/state/changed` for external mutations (devtools pokes,
+// post-mutation cleanup). Local edits commit immediately via
 // `spawner/start { params: <full config> }` — matches the host's
 // `SpawnerDriver::SetConfig` semantics (full-config replace, not patch).
 //

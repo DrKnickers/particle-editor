@@ -1,5 +1,6 @@
-// a11y-goldens drift check (Phase 1). Regenerates both golden lanes on the
-// current tree and reports drift. Reuses run-native-tests.mjs for capture.
+// a11y-goldens drift check (Phase 1). Regenerates the composition golden
+// lane on the current tree and reports drift. Reuses run-native-tests.mjs for
+// capture. (The legacy `[hwnd]` lane was removed in with the legacy UI.)
 //
 //   node scripts/a11y-drift-check.mjs [--no-build]
 //   exit 0 = no stable drift  ·  2 = drift (files on stdout)  ·  1 = error
@@ -127,11 +128,10 @@ function runLane(extraArgs, label) {
   }
 }
 
-// Regenerate both lanes (legacy first, composition last -> dist ends default).
-// Anchored greps select only golden tests (titles END in the suffix), excluding
+// Regenerate the composition golden lane. The anchored grep selects only the
+// golden tests (titles END in the suffix), excluding
 // a11y-uia-composition-reachable.spec.ts whose describe contains [composition].
-function regenerateBothLanes() {
-  runLane(["--legacy", "--update", "--rebuild", "--grep", "\\[hwnd\\]$"], "legacy");
+function regenerateGoldens() {
   runLane(["--update", "--rebuild", "--grep", "\\[composition\\]$"], "composition");
 }
 
@@ -165,7 +165,7 @@ function main() {
   if (g.error) die("git not found on PATH.");
 
   console.log("[a11y-drift] Pass 1 ...");
-  regenerateBothLanes();
+  regenerateGoldens();
   const first = changedGoldens();
   if (first.length === 0) {
     console.log("A11Y-DRIFT: none");
@@ -174,7 +174,7 @@ function main() {
 
   // Drift seen — re-capture once and keep only stable drift.
   console.log("[a11y-drift] Drift detected; re-capturing to filter noise ...");
-  regenerateBothLanes();
+  regenerateGoldens();
   const second = changedGoldens();
   const v = verdict(stableDrift(first, second));
   if (v.kind === "noise") restoreGoldens();

@@ -245,7 +245,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
   const [conflicts, setConflicts] = useState<{ id: number; fields: string[] }[]>([]);
 
   // Fetch the current exempt set when the dialog opens. Each open is a
-  // fresh fetch so external edits (legacy --legacy-ui session writing
+  // fresh fetch so external edits (e.g. another bridge client writing
   // through) are reflected immediately.
   useEffect(() => {
     if (!open || groupId === null) {

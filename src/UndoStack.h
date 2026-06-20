@@ -92,8 +92,8 @@ public:
     // with a pointer to the buffer to restore from (owned by this
     // stack — copy or use immediately) and outSelectedIndex with the
     // selection-index at capture time.
-    // outAux is defaulted to nullptr so the legacy arch-A callers in
-    // src/main.cpp (which pass 2 args to Undo/Redo) compile untouched.
+    // outAux is defaulted to nullptr so callers that don't need the
+    // EditorAux side-channel can call Undo/Redo with two args.
     bool Undo(const std::vector<char>** outSnapshot,
               size_t* outSelectedIndex, EditorAux* outAux = nullptr);
     bool Redo(const std::vector<char>** outSnapshot,

@@ -1,7 +1,7 @@
 // LightingPanel — modeless tool window for the three engine lights,
-// ambient tint, and shadow tint. Replaces the legacy `LightingDlgProc`
-// at src/main.cpp:6574 for the React UI; the Win32 dialog stays for
-// `--legacy-ui` until Phase 4.2.
+// ambient tint, and shadow tint. Ported from the native `LightingDlgProc`
+// at src/main.cpp:6574; the Win32 dialog and the `--legacy-ui` opt-out
+// were removed in, so this React panel is now the sole lighting surface.
 //
 // Sections (top-to-bottom):
 //   1. Sun light (expanded by default, <details> collapsible):

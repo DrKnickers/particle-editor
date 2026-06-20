@@ -4,13 +4,15 @@
 // — frequently-used textures palette.
 //
 // PaletteStore is a process-global singleton holding the per-mod palette
-// state (pinned + recent texture filenames, last-used Color/Bump filter)
-// and the popup window position. Persisted to %APPDATA%\AloParticleEditor\
-// texture-palettes.ini, with one [mod=<crc32-of-path>] section per mod
-// plus a single [ui] section for cross-mod popup state.
+// state (pinned + recent texture filenames, last-used Color/Bump filter).
+// Persisted to %APPDATA%\AloParticleEditor\texture-palettes.ini, with one
+// [mod=<crc32-of-path>] section per mod plus a single [ui] section for
+// cross-mod state. The GetPopupPos/SetPopupPos [ui] slot is retained for INI
+// compatibility; the palette UI lives in React (WebView2).
 //
-// This header declares the data layer only. The popup window class and
-// content owner-draw control are wired in a follow-up commit.
+// This header declares the data layer (PaletteStore) plus the bridge
+// thumbnail helpers (GetThumbnail / GetTexturePreview) the React palette
+// consumes. The legacy native popup was removed with arch-A ().
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -126,62 +128,6 @@ private:
     mutable bool                                       m_iniPathChecked;
     mutable std::wstring                               m_iniPathCache;
 };
-
-// ============================================================================
-// Popup window
-//
-// The palette UI lives in a modeless popup window owned by the main
-// editor window. The popup is created lazily on first toggle and stays
-// hidden between shows so its content control's state survives.
-//
-// Communication with the EmitterProps window is via a custom message
-// posted to the registered commit target — see WM_PALETTE_COMMIT below.
-
-// Custom message: popup → commit target.
-//   WPARAM = SlotMask (Color or Bump) for which slot to write.
-//   LPARAM = const wchar_t* pointing to the filename string.
-//            Sent synchronously via SendMessage so the pointer is
-//            valid for the duration of the call only — copy it if
-//            you need it after returning.
-#define WM_PALETTE_COMMIT (WM_APP + 50)
-
-// Visibility-change callback signature. Fires from any path that
-// shows or hides the popup (button toggle, X button, Esc key).
-typedef void (*VisibilityCallback)(bool visible);
-
-// Initialize: register window classes. Call once in app init,
-// after InitCommonControls.
-bool Initialize(HINSTANCE hInst);
-
-// Wire the popup to the engine's services. Both pointers must be
-// valid for the lifetime of the editor.
-void SetServices(IFileManager* fileManager, IDirect3DDevice9* device);
-
-// Set the HWND that should receive WM_PALETTE_COMMIT messages.
-// The EmitterProps window does the actual emitter-state mutation.
-void SetCommitTarget(HWND emitterPropsWnd);
-
-// Set a callback that fires when the popup hides or shows.
-void SetVisibilityCallback(VisibilityCallback cb);
-
-// Show/hide the popup (toggles).
-//   ownerEditor:      main editor HWND, used as popup's owner.
-//   buttonRectScreen: screen-coords rect of the palette button —
-//                     used for first-show position (just below it).
-void TogglePopup(HWND ownerEditor, const RECT& buttonRectScreen);
-
-// Returns true if the popup is currently visible.
-bool IsPopupVisible();
-
-// Force the popup to refresh its content (e.g., after mod switch
-// or after a commit that re-orders the recents).
-// No-op if the popup hasn't been created yet.
-void RefreshPopup();
-
-// Drop the in-memory thumbnail cache. Called on mod switch so stale
-// per-mod texture mappings (different mods with same-named files)
-// don't leak across.
-void ClearThumbnailCache();
 
 // ============================================================================
 // New-UI bridge thumbnails (sub-feature B)

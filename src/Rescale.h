@@ -3,9 +3,6 @@
 
 #include "ParticleSystem.h"
 
-bool RescaleParticleSystem(HWND hOwner, ParticleSystem* system);
-bool RescaleEmitter(HWND hOwner, ParticleSystem::Emitter* emitter);
-
 // Pure-IO scaling of a single emitter (no UI, no UndoStack). Exposed so
 // the new-UI BridgeDispatcher can iterate over a ParticleSystem and
 // rescale each emitter in response to `engine/action/rescale-system`.

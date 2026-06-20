@@ -1,7 +1,7 @@
 // ModManager — single source of truth for mod discovery and active-mod
-// state. Shared between the legacy Win32 menu (src/main.cpp) and the
-// new-UI bridge (src/host/BridgeDispatcher.cpp); extracted in D6
-// from the inline mod-discovery code that previously lived in main.cpp.
+// state. Driven by the host bridge (src/host/BridgeDispatcher.cpp);
+// extracted in D6 from the inline mod-discovery code that previously
+// lived in main.cpp.
 //
 // Why a separate class:
 //   - The new-UI host doesn't construct APPLICATION_INFO (legacy WinMain
@@ -89,7 +89,7 @@ public:
     // Set the ordered content-layer stack (absolute paths, front = highest
     // precedence; [] = Unmodded). Canonicalised + de-duplicated; drives
     // FileManager::SetLayers, persists LastLayers (+ a best-effort LastMod = primary
-    // for the legacy --legacy restore), swaps the texture palette to the primary
+    // kept in sync for the one-time legacy-selection migration), swaps the texture palette to the primary
     // layer, clears the thumbnail cache, and reloads engine assets (if bound).
     // Returns false if the engine shader reload failed (state still rolls forward).
     bool SetLayerStack(const std::vector<std::wstring>& absoluteLayers);
@@ -111,9 +111,9 @@ private:
     std::vector<std::wstring> m_layerStack;   // absolute slash-free, [0]=highest
 };
 
-// Registry helpers, exposed for the legacy nickname dialog. Both
-// modes can call these without going through ModManager — they're
-// trivially side-effect-free and don't carry mutable state.
+// Registry helpers for mod nicknames, exposed for direct use by the host
+// bridge without going through ModManager — they're trivially
+// side-effect-free and don't carry mutable state.
 std::wstring ReadModNickname(const std::wstring& modPath);
 void         WriteModNickname(const std::wstring& modPath,
                               const std::wstring& nickname);

@@ -7,9 +7,9 @@
 // and whose velocity is derived from `QueryPerformanceCounter` deltas in
 // `UpdateVelocity()` (called once per frame from the render loop).
 //
-// Both `--legacy-ui` and `--new-ui` use this header. Factored out of
-// `src/main.cpp` (was a TU-local static class) so the host's
-// `ViewportWndProc` can wire the same object into `Engine::SpawnParticleSystem`.
+// Factored out of `src/main.cpp` (was a TU-local static class) so the
+// host's `ViewportWndProc` can wire the same object into
+// `Engine::SpawnParticleSystem`.
 // Class is small + entirely inline; no .cpp.
 
 #include "engine.h"
@@ -49,8 +49,7 @@ public:
 // Calculates the 3D position of the intersection of the cursor with Z = 0.
 // Unproject the screen-space (x, y) at two depths (near + far) to get a
 // world-space ray, then intersect with the z=0 plane. Used by:
-//   - legacy WM_MOUSEMOVE / WM_KEYDOWN VK_SHIFT in src/main.cpp,
-//   - new-UI host's ViewportWndProc.
+//   - the host's ViewportWndProc (WM_MOUSEMOVE / WM_KEYDOWN VK_SHIFT).
 //
 // / handoff item 14] Under architecture C, the engine renders into
 // a SCENE sub-rect of the popup HWND and m_projection is built at

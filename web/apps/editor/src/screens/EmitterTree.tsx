@@ -1465,8 +1465,7 @@ export function EmitterTree({ bridge }: Props) {
   // Initial selected-id seed from snapshot + live updates from
   // emitters/selected events. The server tracks only the primary; we
   // sync that into the React-side selection atom whenever a new
-  // selection arrives from outside (legacy --legacy-ui edit, devtools
-  // poke, post-mutation cleanup).
+  // selection arrives from outside (devtools poke, post-mutation cleanup).
   useEffect(() => {
     let cancelled = false;
     bridge

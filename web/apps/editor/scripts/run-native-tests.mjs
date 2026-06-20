@@ -1,7 +1,7 @@
 // Task 2.2 test harness: orchestrates the native bridge Playwright run.
 //
 // 1. Kill any stale ParticleEditor.exe (best-effort).
-// 2. Launch x64\Debug\ParticleEditor.exe --new-ui --test-host.
+// 2. Launch x64\Debug\ParticleEditor.exe --test-host.
 // 3. Poll http://localhost:9222/json/version until CDP is ready
 //    (≤ 30 s; WebView2 init plus DPI/COM startup can take 5–10 s).
 // 4. Spawn Playwright against tests/bridge-native.spec.ts.
@@ -24,14 +24,15 @@ const buildMetaPath = join(editorDir, "dist", "build-meta.json");
 
 // [handoff item 4] dist/ build-mode gate.
 //
-// The editor has two hosting modes that MUST agree across a runtime
-// knob and a build knob:
-//   - ALO_HOSTING_MODE  (runtime; set below from --legacy)
-//   - VITE_HOSTING_MODE  (build-time; baked into dist/ by `pnpm build`)
-// This harness owns the runtime knob but historically trusted that
-// whoever built dist/ matched the build knob. When they disagreed the
-// editor rendered broken yet every spec still executed, producing a
-// meaningless pass/fail number — the silent failure this gate kills.
+// The harness runs the composition hosting mode, so dist/ MUST have been
+// built for it via the build knob:
+//   - VITE_HOSTING_MODE  (build-time; baked into dist/ by `pnpm build`).
+//     The default (unset) build is composition; a dist/ built with
+//     VITE_HOSTING_MODE=legacy renders broken under this harness.
+// This gate historically trusted that whoever built dist/ matched the
+// expected mode. When they disagreed the editor rendered broken yet every
+// spec still executed, producing a meaningless pass/fail number — the
+// silent failure this gate kills.
 //
 // vite.config.ts's buildMetaPlugin stamps dist/build-meta.json with the
 // baked hostingMode; we read it here and refuse to launch on mismatch
@@ -47,13 +48,10 @@ function readDistMode() {
   }
 }
 
-// PowerShell remediation command for a given lane — quoted in the
-// fail-fast message AND mirrored by the --rebuild spawn below.
-function buildCmdFor(mode) {
-  const build = "pnpm --filter @particle-editor/editor build";
-  return mode === "legacy"
-    ? `$env:VITE_HOSTING_MODE="legacy"; ${build}; Remove-Item Env:VITE_HOSTING_MODE`
-    : build;
+// Remediation command — quoted in the fail-fast message AND mirrored by
+// the --rebuild spawn below.
+function buildCmd() {
+  return "pnpm --filter @particle-editor/editor build";
 }
 
 // Run the editor's two-step build (`tsc -b && vite build`) shell-free,
@@ -73,17 +71,15 @@ function runBuildStep(jsBin, args, env) {
   });
 }
 
-async function rebuildDist(requestedMode) {
-  // Mirror the documented manual flow: set VITE_HOSTING_MODE for the
-  // legacy lane, delete it for composition (cf. handoff "How to run
-  // modes locally"). The build inherits this env.
+async function rebuildDist() {
+  // Build the composition dist/. Clear VITE_HOSTING_MODE so the build
+  // bakes the default (composition) hosting mode.
   const env = { ...process.env };
-  if (requestedMode === "legacy") env.VITE_HOSTING_MODE = "legacy";
-  else delete env.VITE_HOSTING_MODE;
+  delete env.VITE_HOSTING_MODE;
 
   const tsc = join(editorDir, "node_modules", "typescript", "bin", "tsc");
   const vite = join(editorDir, "node_modules", "vite", "bin", "vite.js");
-  console.log(`[run-native-tests] --rebuild → building ${requestedMode} dist/ ...`);
+  console.log(`[run-native-tests] --rebuild → building composition dist/ ...`);
   const tscCode = await runBuildStep(tsc, ["-b"], env);
   if (tscCode !== 0) return tscCode;
   return runBuildStep(vite, ["build"], env);
@@ -112,7 +108,7 @@ async function ensureDistMode(requestedMode, allowRebuild) {
       `[run-native-tests] dist/ mode mismatch (requested ${requestedMode}, ` +
         `found ${found}) — rebuilding (--rebuild).`,
     );
-    const code = await rebuildDist(requestedMode);
+    const code = await rebuildDist();
     if (code !== 0) {
       console.error(`[run-native-tests] rebuild failed (exit ${code}).`);
       process.exit(1);
@@ -137,7 +133,7 @@ async function ensureDistMode(requestedMode, allowRebuild) {
       `  dist/ was built: ${found}\n\n` +
       `  Running the suite now would test the wrong hosting mode (broken\n` +
       `  viewport, meaningless pass/fail). Rebuild dist/ for this lane:\n\n` +
-      `    ${buildCmdFor(requestedMode)}\n\n` +
+      `    ${buildCmd()}\n\n` +
       `  ...or re-run this command with --rebuild to do it automatically.\n`,
   );
   process.exit(1);
@@ -155,7 +151,7 @@ async function probeCdp() {
 function killAny() {
   return new Promise((resolve) => {
     // Scope the cleanup to ONLY the test-host instances this harness spawns
-    // (ParticleEditor.exe --new-ui --test-host). A blanket
+    // (ParticleEditor.exe --test-host). A blanket
     // `taskkill /F /IM ParticleEditor.exe` matches by image name, so it would
     // also kill a legacy editor build the user is daily-driving in parallel —
     // same exe name, different binary. Filter on the command line instead:
@@ -194,25 +190,17 @@ async function main() {
   // dropped (the Playwright spawn below had a hard-coded arg list),
   // which made every "scoped" refresh regenerate ALL goldens —
   // the exact footgun handoff item 16 R7 warned about. Recognised
-  // flags (--update, --legacy) are consumed above; anything else
+  // flags (--update, --rebuild) are consumed above/below; anything else
   // gets forwarded as-is.
-  const RECOGNISED_FLAGS = new Set(["--update", "--legacy", "--rebuild"]);
+  const RECOGNISED_FLAGS = new Set(["--update", "--rebuild"]);
   const forwardedArgs = process.argv.slice(2).filter((a) => !RECOGNISED_FLAGS.has(a));
 
-  // `--legacy` flag: run the host + Playwright tests in
-  // architecture A (legacy AlphaCompositor popup + HWND-hosted
-  // WebView2) instead of the new default (architecture C / composition).
-  // Caller is responsible for having a matching dist/ baked with
-  // `VITE_HOSTING_MODE=legacy`; the boot-time consistency log in
-  // App.tsx + the host's [host] hosting mode line surface mismatches
-  // immediately. Used by `pnpm test:native:legacy` for the legacy
-  // regression lane (132/0/56 baseline pre-; same lane still
-  // exists, just opt-in now).
-  const requestedMode = process.argv.includes("--legacy") ? "legacy" : "composition";
-  if (requestedMode === "legacy") {
-    process.env.ALO_HOSTING_MODE = "legacy";
-    console.log("[run-native-tests] --legacy flag → ALO_HOSTING_MODE=legacy");
-  }
+  // The harness runs the composition hosting mode only. (The legacy
+  // `--legacy` lane — architecture A: AlphaCompositor popup + HWND-hosted
+  // WebView2, ALO_HOSTING_MODE=legacy — was removed in with the
+  // legacy UI; the legacy hosting-mode code itself is slated for a
+  // follow-up removal.)
+  const requestedMode = "composition";
 
   // [handoff item 4] Verify dist/ was built for this lane before
   // launching the host. Fail-fast on mismatch unless --rebuild.
@@ -222,7 +210,7 @@ async function main() {
   // Give Windows a moment to release file locks.
   await sleep(300);
 
-  console.log(`[run-native-tests] Launching ${exe} --new-ui --test-host ...`);
+  console.log(`[run-native-tests] Launching ${exe} --test-host ...`);
   // Phase 3 Stage 4f hardening — DON'T inherit stdio. The
   // previous `stdio: "inherit"` caused a real footgun: ParticleEditor.exe
   // is a SUBSYSTEM:Windows app, but node attaches an inherited console
@@ -250,7 +238,7 @@ async function main() {
   // ["ignore", "pipe", "pipe"] + pipe child.stderr to a log file
   // (NOT process.stderr, which has the same QuickEdit risk if an
   // inherited console is present).
-  const child = spawn(exe, ["--new-ui", "--test-host"], {
+  const child = spawn(exe, ["--test-host"], {
     cwd: repoRoot,
     stdio: ["ignore", "ignore", "ignore"],
     detached: false,
@@ -384,18 +372,9 @@ async function main() {
       // Asserts [COMP-engine-transform] log lines fire on
       // layout/scene-rect dispatch with the expected absolute clip.
       "tests/dxgi-scene-rect.spec.ts",
-      // Phase 3 a11y T9.1 — HWND Win32 UIA snapshot specs.
-      // Each parametrizes over its surface-driver array (T5–T8) and
-      // golden-compares the normalized UIA tree. Auto-skip under
-      // ALO_HOSTING_MODE != legacy (default) (T10 covers that lane).
-      // Goldens are generated separately (UPDATE_A11Y_GOLDENS=1 run
-      // in T9.3); without goldens these specs fail — run via
-      // pnpm test:native only after T9.3 has landed the golden files.
-      "tests/a11y-chrome.spec.ts",
-      "tests/a11y-dialogs.spec.ts",
-      "tests/a11y-keyboard.spec.ts",
-      "tests/a11y-curve-spinner.spec.ts",
       // Phase 3 a11y T10 — composition-mode DOM-snapshot specs.
+      // (The T9 HWND/UIA `[hwnd]` quartet + their `.golden.json` goldens
+      // were removed in along with the legacy `--legacy` lane.)
       // Mirror the T9 HWND quartet but capture via
       // page.accessibility.snapshot() (CDP) instead of Win32 UIA.
       // Auto-skip under default HWND mode (T9 covers that lane);

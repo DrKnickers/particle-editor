@@ -117,17 +117,8 @@
     <ClInclude Include="host\third_party\nlohmann\json.hpp">
       <Filter>Header Files\host</Filter>
     </ClInclude>
-    <ClInclude Include="Resources\resource.de.h">
-      <Filter>Resource Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Resources\resource.en.h">
-      <Filter>Resource Files</Filter>
-    </ClInclude>
     <ClInclude Include="Resources\resource.h">
       <Filter>Resource Files</Filter>
-    </ClInclude>
-    <ClInclude Include="UI\UI.h">
-      <Filter>Header Files\UI</Filter>
     </ClInclude>
     <ClInclude Include="UI\TexturePalette.h">
       <Filter>Header Files\UI</Filter>
@@ -209,71 +200,20 @@
     <ClCompile Include="host\LayoutBroker.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
-    <ClCompile Include="UI\ColorButton.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\CurveEditor.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\Emitter.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\EmitterList.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\RandomParam.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\Spinner.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\TexturePalette.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
     <ClCompile Include="UI\PaletteStore.cpp">
       <Filter>Source Files\UI</Filter>
     </ClCompile>
     <ClCompile Include="UI\PaletteThumbs.cpp">
       <Filter>Source Files\UI</Filter>
     </ClCompile>
-    <ClCompile Include="UI\TrackEditor.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="ParticleEditor.de.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
-    <ResourceCompile Include="ParticleEditor.en.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
     <ResourceCompile Include="ParticleEditor.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="Resources\curve_interpolate_linear.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_interpolate_smooth.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_interpolate_step.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_key_delete.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_mode_insert.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_mode_select.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="Resources\dirt.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\emitter_list.bmp">
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="Resources\grass.dds">
@@ -285,22 +225,10 @@
     <Image Include="Resources\missing.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="Resources\palette_glyph.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\pin_badge.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="Resources\sand.dds">
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="Resources\snow.dds">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\toolbar1.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\toolbar2.bmp">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

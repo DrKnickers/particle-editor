@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test";
 
-// Each surface is a "drive the app to this state" recipe shared by the
-// HWND UIA specs (T9, captures via uia_inspector) and the composition
-// DOM-snapshot specs (T10, captures via page.accessibility.snapshot()).
-// id matches the golden filename: a11y-goldens/<id>.golden.json
-//                                 a11y-goldens/<id>.composition.golden.json
+// Each surface is a "drive the app to this state" recipe used by the
+// composition DOM-snapshot specs (T10, captures via
+// page.accessibility.snapshot()). id matches the golden filename:
+// a11y-goldens/<id>.composition.golden.yaml. (The legacy HWND UIA specs
+// (T9) + their <id>.golden.json goldens were removed in.)
 export type SurfaceCapture = {
   id: string;
   setup: (page: Page) => Promise<void>;

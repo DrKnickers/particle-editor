@@ -2,8 +2,9 @@
 // credits, and GitHub link. No bridge call; version + build date are baked
 // at build time via Vite `define` (see vite.config.ts).
 //
-// Legacy chrome: src/main.cpp's AboutProc stays for `--legacy-ui`; this is
-// the new-UI counterpart, not a replacement.
+// Ported from src/main.cpp's AboutProc. The native Win32 About dialog and
+// the `--legacy-ui` opt-out were removed in; this React modal is now
+// the sole About surface.
 
 import { Modal } from "@/components/Modal";
 

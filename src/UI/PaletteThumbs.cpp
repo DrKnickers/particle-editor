@@ -6,7 +6,7 @@
 // into a scratch A8R8G8B8 surface, LockRect, copy out the BGRA pixels — but
 // targets a PNG byte stream (GDI+) instead of an HBITMAP, and is parameterised
 // with the FileManager + device rather than the popup's file-static services.
-// The legacy popup TU is left untouched.
+// (The legacy popup TU, TexturePalette.cpp, was removed with arch-A in.)
 //
 // The PNG-encoder-CLSID lookup and base64 encoder are copied verbatim (into a
 // private anonymous namespace) from AlphaCompositor.cpp's proven
