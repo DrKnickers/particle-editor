@@ -71,10 +71,8 @@ export function TexturePalette({
           <ContextMenu.Root key={item.path}>
             {/* Tip wraps the ContextMenu.Trigger (not the button inside it) —
                 Tooltip.Trigger asChild around another Radix trigger is the
-                blessed nesting; both forward their props down to the button.
-                Static occlusionId on grid cells is safe: only ONE tooltip is
-                ever open at a time (app-level Radix Tooltip.Provider). */}
-            <Tip content={item.label ?? item.path} occlusionId="tip:texpal:item">
+                blessed nesting; both forward their props down to the button. */}
+            <Tip content={item.label ?? item.path}>
               <ContextMenu.Trigger asChild>
                 <button
                   type="button"

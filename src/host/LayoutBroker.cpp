@@ -80,9 +80,9 @@ namespace host {
 void LayoutBroker::SetAlphaCompositor(AlphaCompositor* compositor)
 {
     m_alphaCompositor = compositor;
-    // If we acquired a compositor and already have occlusions cached,
-    // replay them so the first paint after attach is correct.
-    if (m_alphaCompositor) ReemitOcclusions();
+    // Replay the cached scene rect so the snapshot crop is correct on the
+    // first capture after attach.
+    if (m_alphaCompositor) ReemitSceneRect();
 }
 
 void LayoutBroker::SetCompositor(Compositor* compositor)
@@ -92,13 +92,7 @@ void LayoutBroker::SetCompositor(Compositor* compositor)
     // so the first frame post-attach is sized correctly — avoids a
     // 1-3 frame full-client glitch before React's first
     // layout/scene-rect dispatch arrives (sub-plan §3.5).
-    //
-    // T2 lands the setter; T4 extends ReemitOcclusions to actually
-    // exercise Compositor::SetEngineVisualTransform (and Engine::
-    // SetSceneViewport via the Compositor-gated path). Until T4 lands
-    // this call is a no-op for the new Compositor path — the existing
-    // AlphaCompositor replay continues to work unchanged.
-    if (m_dcompCompositor) ReemitOcclusions();
+    if (m_dcompCompositor) ReemitSceneRect();
 }
 
 void LayoutBroker::SetBackingColor(COLORREF color)
@@ -137,7 +131,7 @@ void LayoutBroker::Apply(int x, int y, int w, int h)
         m_lastY = y;
         m_lastW = 0;
         m_lastH = 0;
-        ReemitOcclusions();
+        ReemitSceneRect();
         return;
     }
 
@@ -173,7 +167,7 @@ void LayoutBroker::Apply(int x, int y, int w, int h)
         m_lastClientH = mc.bottom - mc.top;
     }
 
-    ReemitOcclusions();
+    ReemitSceneRect();
 }
 
 void LayoutBroker::PredictAndApply()
@@ -239,7 +233,7 @@ void LayoutBroker::PredictAndApply()
         ResetEngineForResize(newW, newH);
     }
 
-    ReemitOcclusions();
+    ReemitSceneRect();
 }
 
 void LayoutBroker::ResetEngineForResize(int w, int h)
@@ -322,33 +316,6 @@ void LayoutBroker::RefreshScreenPosition()
     // are unchanged either. Skip re-emit.
 }
 
-void LayoutBroker::SetOcclusion(const std::string& id, int x, int y, int w, int h, int feather)
-{
-    if (w <= 0 || h <= 0)
-    {
-        RemoveOcclusion(id);
-        return;
-    }
-    m_occlusions[id] = { x, y, w, h, feather };
-
-    if (m_alphaCompositor && m_lastW > 0 && m_lastH > 0)
-    {
-        const RECT popupRect = {
-            x - m_lastX,
-            y - m_lastY,
-            x - m_lastX + w,
-            y - m_lastY + h
-        };
-        m_alphaCompositor->SetOcclusion(id, popupRect, feather);
-    }
-}
-
-void LayoutBroker::RemoveOcclusion(const std::string& id)
-{
-    m_occlusions.erase(id);
-    if (m_alphaCompositor) m_alphaCompositor->RemoveOcclusion(id);
-}
-
 void LayoutBroker::SetSceneRect(int x, int y, int w, int h)
 {
     // [Item 3] Self-defense: while a dock-slide anim owns the scene rect, drop
@@ -394,7 +361,7 @@ void LayoutBroker::ApplySceneRect(int x, int y, int w, int h, bool animFrame)
     if (m_alphaCompositor && m_lastW > 0 && m_lastH > 0)
     {
         // Translate main-client coords to popup-client. Same
-        // arithmetic as SetOcclusion above.
+        // arithmetic as the scene-rect path above.
         m_alphaCompositor->SetSceneRect(x - m_lastX, y - m_lastY, w, h);
     }
 
@@ -546,73 +513,49 @@ bool LayoutBroker::CaptureSnapshotToFile(const std::wstring& path)
     return m_alphaCompositor->CaptureSnapshotToFile(path);
 }
 
-void LayoutBroker::ReemitOcclusions()
+// Re-emit the cached scene rect onto both consumers whenever the popup
+// origin or attachment changes:
+//   - the AlphaCompositor, which crops its on-demand snapshot (the modal
+//     frosted-glass backdrop) to the scene rect — popup-client coords, so
+//     the popup-origin translation applies here;
+//   - the DComp Compositor + Engine (the live render transform), which
+//     consume main-client coords directly (no translation).
+void LayoutBroker::ReemitSceneRect()
 {
     if (!m_alphaCompositor && !m_dcompCompositor) return;
 
     if (m_lastW <= 0 || m_lastH <= 0)
     {
-        // Viewport collapsed — nothing to stamp on the AlphaCompositor;
-        // clear everything so a stale set doesn't persist into the
-        // next non-degenerate Apply.
-        if (m_alphaCompositor)
-        {
-            for (const auto& kv : m_occlusions)
-                m_alphaCompositor->RemoveOcclusion(kv.first);
-            m_alphaCompositor->SetSceneRect(0, 0, 0, 0);
-        }
-        // Phase 3 Stage 5 — DComp Compositor + Engine on
-        // collapsed-popup: leave at their current state. The DComp
-        // engine visual is sized to host-client which hasn't changed;
-        // engine RT same. No-op intentional (idempotence on the next
-        // SetSceneRect dispatch picks up the right state).
+        // Viewport collapsed — disable the AlphaCompositor's snapshot crop
+        // so a stale rect doesn't persist into the next non-degenerate
+        // Apply. The DComp engine visual is sized to host-client (unchanged),
+        // so leave it as-is — idempotent on the next SetSceneRect dispatch.
+        if (m_alphaCompositor) m_alphaCompositor->SetSceneRect(0, 0, 0, 0);
         return;
     }
 
+    // AlphaCompositor snapshot crop (popup-client coords). Zeros disable the
+    // crop until React dispatches the first scene rect.
     if (m_alphaCompositor)
     {
-        for (const auto& [id, occ] : m_occlusions)
-        {
-            const RECT popupRect = {
-                occ.x - m_lastX,
-                occ.y - m_lastY,
-                occ.x - m_lastX + occ.w,
-                occ.y - m_lastY + occ.h
-            };
-            m_alphaCompositor->SetOcclusion(id, popupRect, occ.feather);
-        }
-
-        // B1.4 T4c: re-stamp the scene rect with a fresh translation
-        // whenever the popup origin changes. If the React side hasn't
-        // dispatched a scene rect yet (m_sceneW == 0), forward zeros to
-        // keep the compositor mask disabled.
         if (m_sceneW > 0 && m_sceneH > 0)
-        {
             m_alphaCompositor->SetSceneRect(
                 m_sceneX - m_lastX, m_sceneY - m_lastY, m_sceneW, m_sceneH);
-        }
         else
-        {
             m_alphaCompositor->SetSceneRect(0, 0, 0, 0);
-        }
     }
 
     // Phase 3 Stage 5 — re-emit the cached scene-rect onto the
-    // DComp Compositor + Engine. Both consume main-client coords
-    // directly so the popup-origin translation above doesn't apply.
-    // SetCompositor (T2) calls ReemitOcclusions to replay state onto
-    // a newly-attached compositor; idempotence guards inside
-    // SetEngineVisualTransform + SetSceneViewport make repeated calls
-    // from popup-origin-changes effectively free.
+    // DComp Compositor + Engine. Both consume main-client coords directly.
+    // SetCompositor replays state onto a newly-attached compositor;
+    // idempotence guards inside SetEngineVisualTransform + SetSceneViewport
+    // make repeated calls from popup-origin changes effectively free.
     if (m_dcompCompositor && m_sceneW > 0 && m_sceneH > 0)
     {
         m_dcompCompositor->SetEngineVisualTransform(
             m_sceneX, m_sceneY, m_sceneW, m_sceneH);
         if (m_engine)
-        {
-            m_engine->SetSceneViewport(
-                m_sceneX, m_sceneY, m_sceneW, m_sceneH);
-        }
+            m_engine->SetSceneViewport(m_sceneX, m_sceneY, m_sceneW, m_sceneH);
     }
 }
 

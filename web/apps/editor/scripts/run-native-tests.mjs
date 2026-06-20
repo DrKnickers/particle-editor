@@ -14,130 +14,11 @@ import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const editorDir = resolve(__dirname, "..");
 const repoRoot = resolve(__dirname, "../../../..");
 const exe = join(repoRoot, "x64", "Debug", "ParticleEditor.exe");
-const buildMetaPath = join(editorDir, "dist", "build-meta.json");
-
-// [handoff item 4] dist/ build-mode gate.
-//
-// The harness runs the composition hosting mode, so dist/ MUST have been
-// built for it via the build knob:
-//   - VITE_HOSTING_MODE  (build-time; baked into dist/ by `pnpm build`).
-//     The default (unset) build is composition; a dist/ built with
-//     VITE_HOSTING_MODE=legacy renders broken under this harness.
-// This gate historically trusted that whoever built dist/ matched the
-// expected mode. When they disagreed the editor rendered broken yet every
-// spec still executed, producing a meaningless pass/fail number — the
-// silent failure this gate kills.
-//
-// vite.config.ts's buildMetaPlugin stamps dist/build-meta.json with the
-// baked hostingMode; we read it here and refuse to launch on mismatch
-// (or missing/unmarked dist/) unless --rebuild was passed.
-
-// Read the baked hosting mode, or null if dist/ is missing / unmarked
-// (a pre-gate build, or a Rollup failure that left no marker).
-function readDistMode() {
-  try {
-    return JSON.parse(readFileSync(buildMetaPath, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-// Remediation command — quoted in the fail-fast message AND mirrored by
-// the --rebuild spawn below.
-function buildCmd() {
-  return "pnpm --filter @particle-editor/editor build";
-}
-
-// Run the editor's two-step build (`tsc -b && vite build`) shell-free,
-// matching the Playwright-CLI invocation pattern below (pnpm is a .CMD
-// shim that shell-free spawn refuses; the local node bins don't have
-// that problem). Returns the child's exit code.
-function runBuildStep(jsBin, args, env) {
-  return new Promise((resolveStep) => {
-    const p = spawn(process.execPath, [jsBin, ...args], {
-      cwd: editorDir,
-      stdio: "inherit",
-      shell: false,
-      env,
-    });
-    p.on("exit", (code) => resolveStep(code ?? 1));
-    p.on("error", () => resolveStep(1));
-  });
-}
-
-async function rebuildDist() {
-  // Build the composition dist/. Clear VITE_HOSTING_MODE so the build
-  // bakes the default (composition) hosting mode.
-  const env = { ...process.env };
-  delete env.VITE_HOSTING_MODE;
-
-  const tsc = join(editorDir, "node_modules", "typescript", "bin", "tsc");
-  const vite = join(editorDir, "node_modules", "vite", "bin", "vite.js");
-  console.log(`[run-native-tests] --rebuild → building composition dist/ ...`);
-  const tscCode = await runBuildStep(tsc, ["-b"], env);
-  if (tscCode !== 0) return tscCode;
-  return runBuildStep(vite, ["build"], env);
-}
-
-// Pre-flight: ensure dist/ was built for the requested lane, else
-// fail-fast (or rebuild). Runs BEFORE the host launch so a wrong-mode
-// run never burns time. Calls process.exit(1) on an unrecoverable
-// mismatch.
-async function ensureDistMode(requestedMode, allowRebuild) {
-  let meta = readDistMode();
-  if (meta && meta.hostingMode === requestedMode) {
-    console.log(
-      `[run-native-tests] dist/ build mode OK: ${requestedMode} ` +
-        `(commit ${meta.commit ?? "?"}, built ${meta.builtAt ?? "?"})`,
-    );
-    return;
-  }
-
-  const found = meta
-    ? `${meta.hostingMode} (commit ${meta.commit ?? "?"}, built ${meta.builtAt ?? "?"})`
-    : "<no dist/build-meta.json — dist/ is missing or was built before this gate>";
-
-  if (allowRebuild) {
-    console.log(
-      `[run-native-tests] dist/ mode mismatch (requested ${requestedMode}, ` +
-        `found ${found}) — rebuilding (--rebuild).`,
-    );
-    const code = await rebuildDist();
-    if (code !== 0) {
-      console.error(`[run-native-tests] rebuild failed (exit ${code}).`);
-      process.exit(1);
-    }
-    // Don't trust exit 0 — re-read the marker and confirm it flipped
-    // (a build can silently no-op; cf. lessons).
-    meta = readDistMode();
-    if (!meta || meta.hostingMode !== requestedMode) {
-      console.error(
-        `[run-native-tests] rebuild did not produce a ${requestedMode} dist/ ` +
-          `(marker now: ${meta ? meta.hostingMode : "<missing>"}). Aborting.`,
-      );
-      process.exit(1);
-    }
-    console.log(`[run-native-tests] rebuild OK: dist/ is now ${requestedMode}.`);
-    return;
-  }
-
-  console.error(
-    `\n[run-native-tests] dist/ build-mode mismatch — refusing to run.\n` +
-      `  Requested lane : ${requestedMode}\n` +
-      `  dist/ was built: ${found}\n\n` +
-      `  Running the suite now would test the wrong hosting mode (broken\n` +
-      `  viewport, meaningless pass/fail). Rebuild dist/ for this lane:\n\n` +
-      `    ${buildCmd()}\n\n` +
-      `  ...or re-run this command with --rebuild to do it automatically.\n`,
-  );
-  process.exit(1);
-}
 
 async function probeCdp() {
   try {
@@ -189,22 +70,11 @@ async function main() {
   // actually filter the suite. Previously these args were silently
   // dropped (the Playwright spawn below had a hard-coded arg list),
   // which made every "scoped" refresh regenerate ALL goldens —
-  // the exact footgun handoff item 16 R7 warned about. Recognised
-  // flags (--update, --rebuild) are consumed above/below; anything else
-  // gets forwarded as-is.
-  const RECOGNISED_FLAGS = new Set(["--update", "--rebuild"]);
+  // the exact footgun handoff item 16 R7 warned about. The only
+  // recognised flag (--update) is consumed above; anything else gets
+  // forwarded as-is.
+  const RECOGNISED_FLAGS = new Set(["--update"]);
   const forwardedArgs = process.argv.slice(2).filter((a) => !RECOGNISED_FLAGS.has(a));
-
-  // The harness runs the composition hosting mode only. (The legacy
-  // `--legacy` lane — architecture A: AlphaCompositor popup + HWND-hosted
-  // WebView2, ALO_HOSTING_MODE=legacy — was removed in with the
-  // legacy UI; the legacy hosting-mode code itself is slated for a
-  // follow-up removal.)
-  const requestedMode = "composition";
-
-  // [handoff item 4] Verify dist/ was built for this lane before
-  // launching the host. Fail-fast on mismatch unless --rebuild.
-  await ensureDistMode(requestedMode, process.argv.includes("--rebuild"));
 
   await killAny();
   // Give Windows a moment to release file locks.

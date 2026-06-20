@@ -155,9 +155,7 @@ public:
     // Phase 2: inject the InputDispatcher that owns the hidden
     // viewport popup HWND. The `viewport/input` request arm forwards
     // its params object to InputDispatcher::Dispatch. Null is tolerated
-    // — that's the legacy-popup path where input flows directly from
-    // the OS and the request should never fire. Wired once in
-    // HostWindow when m_archCMode is true.
+    // (the request just no-ops). Wired once in HostWindow at startup.
     void SetInputDispatcher(InputDispatcher* input) { m_input = input; }
 
     // Called from the WebView2 WebMessageReceived handler. The string is

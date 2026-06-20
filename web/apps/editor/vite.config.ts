@@ -1,15 +1,14 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
 import { readAppVersion } from "./app-version";
 
 // Build-time app version for the About dialog. Single source of truth is the
 // C header src/version.h (PE_VERSION_STR), shared with the binary's
-// VS_VERSION_INFO and the legacy Win32 About — so the React About always
-// matches the download. vitest.config.ts mirrors this via the same parser.
+// VS_VERSION_INFO — so the React About always matches the download.
+// vitest.config.ts mirrors this via the same parser.
 const APP_VERSION = readAppVersion(
   path.resolve(__dirname, "../../../src/version.h"),
 );
@@ -38,42 +37,8 @@ const BUILD_DATE = (() => {
   }
 })();
 
-// Stamp dist/build-meta.json after the bundle is written so the native
-// test harness (scripts/run-native-tests.mjs) can verify the baked
-// hosting mode matches the lane it's about to run. The mode is otherwise
-// constant-folded inline into the minified bundle (not greppable), so an
-// explicit marker is the only robust source of truth for "which mode is
-// this dist/?". `hostingMode` is the field the harness compares; `commit`
-// + `builtAt` are diagnostic-only (surfaced in the gate's fail-fast
-// message). `builtAt` is intentionally volatile — it's never byte-
-// compared by any golden (it lives in a gitignored file), so unlike the
-// About dialog's BUILD_DATE it needs no normalizer (cf.).
-function buildMetaPlugin(): Plugin {
-  return {
-    name: "alo-build-meta",
-    closeBundle() {
-      const hostingMode =
-        process.env.VITE_HOSTING_MODE === "legacy" ? "legacy" : "composition";
-      let commit = "unknown";
-      try {
-        commit = execSync("git rev-parse --short HEAD", {
-          encoding: "utf8",
-          cwd: __dirname,
-        }).trim();
-      } catch {
-        // Release tarball / detached build without .git — leave "unknown".
-      }
-      const meta = { hostingMode, commit, builtAt: new Date().toISOString() };
-      writeFileSync(
-        path.resolve(__dirname, "dist/build-meta.json"),
-        JSON.stringify(meta, null, 2) + "\n",
-      );
-    },
-  };
-}
-
 export default defineConfig({
-  plugins: [react(), tailwindcss(), buildMetaPlugin()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },

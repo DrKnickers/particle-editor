@@ -225,24 +225,18 @@ public:
 	// every frame.
 	bool RecoverDeviceIfNeeded();
 
-	//: install/clear the layered-window alpha compositor. When
-	// non-null, Render() redirects slot-0 RT to the compositor's
-	// off-screen ARGB surface and replaces Present() with
-	// Composite(viewport HWND). Pass nullptr to fall back to the
-	// legacy swap-chain Present path (used by viewport_poc and any
-	// host that doesn't enable the layered popup).
+	// install/clear the shared-RT compositor. When non-null, Render()
+	// redirects slot-0 RT to the compositor's off-screen ARGB surface (the
+	// shared-handle source the host's DComp path presents) and skips the
+	// engine-side Present(). Pass nullptr to fall back to the swap-chain
+	// Present path (used by viewport_poc / --capture and any host without a
+	// compositor).
 	void SetAlphaCompositor(host::AlphaCompositor* c) { m_pAlphaCompositor = c; }
 
-	// [PERF] Composition mode (/ DComp). When set, Render() skips the
-	// per-frame AlphaCompositor::Composite() readback — the visible pixels
-	// reach the screen via the host's DComp shared-texture path, so the
-	// layered-window readback + ~19 MB memcpy is pure redundant per-frame
-	// work (measured at ~98-99% of Render(), scaling with window area). The
-	// engine still renders INTO the AlphaCompositor RT (the shared source);
-	// only the layered transport is skipped. See tasks/todo.md round-3.
-	// Also arms the eager game-object-catalog prefetch (composition mode ==
-	// the new-UI path where a reference-object picker exists). Defined in engine.cpp.
-	void SetCompositionMode(bool on);
+	// Arm the eager game-object-catalog prefetch. The host calls this
+	// once at startup so the reference-object picker's catalog builds in the
+	// background before it's first opened. Defined in engine.cpp.
+	void ArmCatalogPrefetch();
 
 	// Phase 3 Stage 2: NT-handle alias of the engine's primary
 	// render-target texture, openable from a parallel D3D11 device via
@@ -1206,15 +1200,12 @@ private:
 	// in the public section for usage.
 	IDirect3DQuery9*				m_pEndFrameQuery = NULL;
 
-	//: non-owning. When non-null, Render targets its off-screen
-	// RT and Composite() replaces Present(). Lifetime managed by
-	// HostWindowImpl; detached via SetAlphaCompositor(nullptr) on
-	// WM_DESTROY before the compositor is destroyed.
+	// non-owning. When non-null, Render targets its off-screen
+	// shared-RT and skips the engine-side Present() (the host's DComp
+	// path presents). Lifetime managed by HostWindowImpl; detached via
+	// SetAlphaCompositor(nullptr) on WM_DESTROY before the compositor
+	// is destroyed.
 	host::AlphaCompositor*			m_pAlphaCompositor = nullptr;
-
-	// [PERF] composition mode — gates the layered Composite() readback
-	// out of Render() (set by the host via SetCompositionMode).
-	bool							m_compositionMode = false;
 
 	static D3DVERTEXELEMENT9 ParticleElements[];
     

@@ -310,8 +310,6 @@ export function BackgroundPicker({ bridge, onClose }: Props) {
     <ToolPanel
       title="Background picker"
       onClose={onClose}
-      bridge={bridge}
-      occlusionId="tool-panel:background"
     >
       <BackgroundPickerBody bridge={bridge} />
     </ToolPanel>

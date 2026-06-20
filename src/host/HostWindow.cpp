@@ -44,7 +44,7 @@
 #include <cstdarg>
 #include <cmath>       ///roundf for drag-time grid/angle snap
 #include <cstdio>
-#include <cstdlib>     // _wgetenv / _wtoi for ALO_HOSTING_MODE etc.
+#include <cstdlib>     // C runtime helpers
 #include <cstring>
 #include <share.h>     // Stage 4f: _SH_DENYNO for _wfsopen sharing
 #include <filesystem>
@@ -61,7 +61,6 @@
 #include "AcceleratorBridge.h"
 #include "AlphaCompositor.h"
 #include "Compositor.h"
-#include "FramePublisher.h"
 #include "InputDispatcher.h"
 
 #include <objbase.h>
@@ -364,14 +363,12 @@ std::wstring Utf8ToUtf16(const std::string& s)
 LRESULT CALLBACK HostMainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
-// Custom message dispatched from OnCompositionControllerReady when async
-// composition setup fails. wParam carries the failure HRESULT. Handled
-// in MainWndProc to tear down partial composition state and re-dispatch
-// to HWND mode via the stashed webEnv. The pre-dispatch sync failures
-// (Compositor::Init, QI Environment3) already fall back inline; this
-// message closes the analogous hole for failures that happen AFTER
-// CreateCoreWebView2CompositionController has been dispatched. (Post-
-// audit F8.)
+// Custom message posted when composition setup fails AFTER the async
+// CreateCoreWebView2CompositionController dispatch (OnCompositionController-
+// Ready). wParam carries the failure HRESULT. Composition is a hard
+// requirement — there is no HWND fallback — so the handler surfaces a clear
+// fatal error and exits (FailFatalComposition). PostMessage'd rather than
+// acting inline so the WebView2 callback stack unwinds first.
 static const UINT WM_APP_COMPOSITION_FALLBACK = WM_APP + 1;
 
 } // namespace
@@ -628,42 +625,24 @@ struct HostWindowImpl
     // bridge a 33 ms minimum interval is a good compromise.
     DWORD                   m_lastCursorEmitTick = 0;
 
-    // Phase 1: canvas-in-DOM transport state.
-    //
-    // m_archCMode is the env-var-gated kill switch; when true and the
-    // AlphaCompositor is up, m_framePublisher is constructed alongside
-    // it in WM_CREATE. Camera input still flows through the visible
-    // popup HWND during Phase 1 (Phase 2 will route input through the
-    // canvas + a new viewport/input bridge surface).
-    bool                                m_archCMode    = false;
-    int                                 m_archCQuality = 70;  // JPEG quality 1..100
-    std::unique_ptr<host::FramePublisher> m_framePublisher;
-
     // Phase 2: viewport/input bridge surface owner. Constructed
-    // alongside FramePublisher when m_archCMode is true; holds a raw
-    // HWND for the popup it PostMessages to. BridgeDispatcher gets a
-    // borrow via SetInputDispatcher.
+    // alongside the AlphaCompositor in WM_CREATE; holds a raw HWND for the
+    // viewport popup it PostMessages camera/keyboard input to. BridgeDispatcher
+    // gets a borrow via SetInputDispatcher.
     std::unique_ptr<host::InputDispatcher> m_inputDispatcher;
 
-    // Phase 3 Stage 3: WebView2 composition hosting.
+    // Phase 3 Stage 3: WebView2 composition hosting. The host always
+    // takes the CreateCoreWebView2CompositionController path, and a
+    // host::Compositor owns the DirectComposition visual tree WebView2 plugs
+    // into via put_RootVisualTarget.
     //
-    // m_compositionMode is the env-var-gated mode flag (set in the
-    // ctor from ALO_HOSTING_MODE; defaults to true under, opt
-    // out via ALO_HOSTING_MODE=legacy). When true, InitWebView2 takes
-    // the CreateCoreWebView2CompositionController path instead of
-    // CreateCoreWebView2Controller, and a host::Compositor owns the
-    // DirectComposition visual tree that WebView2 plugs into via
-    // put_RootVisualTarget.
-    //
-    // m_compositionController is the composition-mode controller
-    // returned by CreateCoreWebView2CompositionController. We also QI
-    // it to ICoreWebView2Controller and store in `webController` so
-    // every existing wire-up (put_Bounds, AcceleratorKeyPressed, etc.)
-    // works unchanged. Kept here so WM_DESTROY can release the
-    // composition-specific reference before releasing the base
-    // controller (the teardown ordering matters per the spike's
-    // Shutdown sequence in dxgi_spike.cpp:783).
-    bool                                       m_compositionMode = false;
+    // m_compositionController is the controller returned by
+    // CreateCoreWebView2CompositionController. We also QI it to
+    // ICoreWebView2Controller and store in `webController` so every existing
+    // wire-up (put_Bounds, AcceleratorKeyPressed, etc.) works unchanged. Kept
+    // here so WM_DESTROY can release the composition-specific reference before
+    // releasing the base controller (the teardown ordering matters per the
+    // spike's Shutdown sequence in dxgi_spike.cpp:783).
     std::unique_ptr<host::Compositor>          m_compositor;
     ComPtr<ICoreWebView2CompositionController> m_compositionController;
 
@@ -747,70 +726,6 @@ struct HostWindowImpl
         // Engine pointer is bound later via SetEngine() in WM_CREATE.
         modManager->DiscoverMods();
         modManager->RestoreLastLayerStack();
-
-        // Default rendering path is architecture C (DXGI
-        // composition + DComp engine visual + WebView2 composition
-        // hosting). Opt out via ALO_HOSTING_MODE=legacy → architecture
-        // A (AlphaCompositor popup + HWND-hosted WebView2, the
-        // pre-default). Unknown values warn and fall through to
-        // default. See ROADMAP §5.x (architecture-C wire-up)
-        // and (default flip + dual-env-var retirement).
-        m_archCMode = true;
-        m_compositionMode = true;
-        if (const wchar_t* v = _wgetenv(L"ALO_HOSTING_MODE"))
-        {
-            if (wcscmp(v, L"legacy") == 0)
-            {
-                m_archCMode = false;
-                m_compositionMode = false;
-            }
-            else if (v[0] != L'\0' && wcscmp(v, L"composition") != 0)
-            {
-                fprintf(stderr,
-                    "[host] WARNING: ALO_HOSTING_MODE=\"%ls\" unrecognized; "
-                    "valid values: \"composition\" (default) or \"legacy\". "
-                    "Falling through to default (composition).\n", v);
-                fflush(stderr);
-            }
-        }
-
-        // Boot-mode log line — unconditional (release builds
-        // too) so issue reports include the active mode in their
-        // first log line. Cost: one printf per process launch.
-        fprintf(stderr, "[host] hosting mode: %s\n",
-                m_compositionMode ? "composition (architecture C, default)"
-                                  : "legacy (architecture A, opt-out)");
-        fflush(stderr);
-
-        // Deprecated env-var detection (R7 mitigation). The
-        // four-var toggle (ALO_WEBVIEW2_HOSTING + ALO_VIEWPORT_TRANSPORT
-        // and their VITE_* twins) was retired by; warn loudly
-        // if any is still set so users update muscle memory and shell
-        // scripts. Remove in the future-style cleanup that
-        // deletes architecture A entirely.
-        for (const wchar_t* deprecated : { L"ALO_WEBVIEW2_HOSTING",
-                                           L"ALO_VIEWPORT_TRANSPORT" })
-        {
-            if (const wchar_t* v = _wgetenv(deprecated))
-            {
-                if (v[0] != L'\0')
-                {
-                    fprintf(stderr,
-                        "[host] WARNING: %ls=\"%ls\" is set, but this env "
-                        "var was retired by. Use ALO_HOSTING_MODE "
-                        "(values: \"composition\" default or \"legacy\") "
-                        "instead. Ignoring %ls.\n",
-                        deprecated, v, deprecated);
-                    fflush(stderr);
-                }
-            }
-        }
-
-        if (const wchar_t* q = _wgetenv(L"ALO_VIEWPORT_JPEG_Q"))
-        {
-            int n = _wtoi(q);
-            if (n >= 1 && n <= 100) m_archCQuality = n;
-        }
     }
 
     void Log(const char* fmt, ...);
@@ -836,13 +751,11 @@ struct HostWindowImpl
     HRESULT OnCompositionControllerReady(HRESULT chr, ICoreWebView2CompositionController* ctl);
     // Phase 3 Stage 3c: forward a Win32 mouse message arriving
     // at hMain into the WebView2 composition surface via
-    // ICoreWebView2CompositionController::SendMouseInput. Under HWND
-    // hosting, WebView2's child HWND received WM_MOUSE* directly from
-    // the OS — under composition hosting the host HWND owns input and
-    // must forward. Also handles SetCapture/ReleaseCapture for
-    // drag-past-window-edge continuity. No-op when m_compositionMode
-    // is false. The caller (MainWndProc) returns 0 after this so
-    // DefWindowProc doesn't double-process the message.
+    // ICoreWebView2CompositionController::SendMouseInput. The host HWND
+    // owns input under composition hosting and must forward. Also handles
+    // SetCapture/ReleaseCapture for drag-past-window-edge continuity. The
+    // caller (MainWndProc) returns 0 after this so DefWindowProc doesn't
+    // double-process the message.
     void    ForwardMouseToCompositionWebView2(UINT msg, WPARAM wp, LPARAM lp);
     void    ResizeWebViewToClient();
 
@@ -853,13 +766,12 @@ struct HostWindowImpl
 
     void OnWebMessage(const std::wstring& json);
 
-    // Extracted HWND-mode controller dispatch. Originally inline in the
-    // env-creation callback; pulled out so the F8 async-fallback handler
-    // (WM_APP_COMPOSITION_FALLBACK) can reuse it after tearing down a
-    // failed composition setup. Returns the synchronous HRESULT of
-    // CreateCoreWebView2Controller; the actual controller is delivered
-    // via the inner async callback.
-    HRESULT DispatchHwndModeController(ICoreWebView2Environment* env);
+    // Composition is a hard requirement (there is no HWND fallback). On any
+    // composition-setup failure — Compositor::Init, the Environment3 QI, or
+    // the async composition-controller completion — surface a clear error
+    // (MessageBox) and exit the process rather than leave a black window.
+    // [[noreturn]]: flushes host.log, shows the dialog, then ExitProcess.
+    [[noreturn]] void FailFatalComposition(HRESULT hr);
 
     LRESULT MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     LRESULT ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -880,7 +792,7 @@ void HostWindowImpl::OpenLog()
     // Get-Content -Wait, etc.) can open the file while the host is
     // writing to it. The host is the only writer so deny-no is safe.
     logFile = _wfsopen(path.c_str(), L"w", _SH_DENYNO);
-    if (logFile) Log("[host] === --new-ui session started ===\n");
+    if (logFile) Log("[host] === host session started ===\n");
 }
 
 void HostWindowImpl::CloseLog()
@@ -888,7 +800,7 @@ void HostWindowImpl::CloseLog()
     std::lock_guard<std::mutex> lock(logMutex);
     if (logFile)
     {
-        fputs("[host] === --new-ui session ending ===\n", logFile);
+        fputs("[host] === host session ending ===\n", logFile);
         fclose(logFile);
         logFile = nullptr;
     }
@@ -908,6 +820,33 @@ void HostWindowImpl::Log(const char* fmt, ...)
         fputs(buf, logFile);
         fflush(logFile);
     }
+}
+
+// Composition is the editor's only render transport — there is no HWND
+// fallback (decision A, hosting-mode removal). When DirectComposition
+// or the WebView2 composition controller can't be brought up, the viewport
+// would be a permanent black window, so we surface a clear modal error and
+// exit cleanly instead. Reached from the synchronous env-setup failures
+// (Compositor::Init / Environment3 QI) and the async
+// WM_APP_COMPOSITION_FALLBACK handler. host.log is flushed first so the
+// failure HRESULT survives the hard exit.
+void HostWindowImpl::FailFatalComposition(HRESULT hr)
+{
+    Log("[host] FATAL: composition unavailable (hr=0x%08lx) — exiting\n", hr);
+    CloseLog();
+
+    wchar_t msg[640];
+    _snwprintf_s(msg, _TRUNCATE,
+        L"Particle Editor could not initialize its DirectComposition "
+        L"rendering surface (error 0x%08lX).\n\n"
+        L"This build renders the viewport through DirectComposition + WebView2 "
+        L"composition hosting and cannot run without it. Make sure your GPU "
+        L"drivers are up to date and that the WebView2 runtime is installed.\n\n"
+        L"The editor will now close.",
+        static_cast<unsigned long>(hr));
+    MessageBoxW(nullptr, msg, L"Particle Editor — composition unavailable",
+                MB_OK | MB_ICONERROR);
+    ExitProcess(1);
 }
 
 // ---------- D3D9 ----------
@@ -979,7 +918,7 @@ void HostWindowImpl::RenderD3D9()
 
     fpsMeasurer.measure();
 
-    // Phase 3 Stage 4c — composition-mode per-frame composite.
+    // Phase 3 Stage 4c — per-frame composite.
     // engine->Render() above issued D3D9 draws into the AlphaCompositor's
     // shared texture. IssueEndFrameQuery markers the D3D9 command stream
     // after those draws; WaitEndFrameQuery spins until the GPU has
@@ -988,13 +927,12 @@ void HostWindowImpl::RenderD3D9()
     // the engine's DXGI swapchain back buffer and Present1's it. DComp
     // picks up the new content on its next composition cycle.
     //
-    // Gated on composition-mode + Compositor::IsReady (Stage 3
-    // attachment committed) + engineVisualAttached (Stage 4b attach
-    // succeeded). When AttachEngineVisual failed (LUID mismatch,
-    // D3D11 device, etc.), CompositeEngineFrame returns S_FALSE and
-    // this block is a per-frame no-op; composition mode stays intact
-    // with viewport area empty per sub-plan §3.8.
-    if (m_compositionMode && m_compositor && m_compositor->IsReady())
+    // Gated on Compositor::IsReady (Stage 3 attachment committed) +
+    // engineVisualAttached (Stage 4b attach succeeded). When
+    // AttachEngineVisual failed (LUID mismatch, D3D11 device, etc.),
+    // CompositeEngineFrame returns S_FALSE and this block is a per-frame
+    // no-op with the viewport area empty per sub-plan §3.8.
+    if (m_compositor && m_compositor->IsReady())
     {
         engine->IssueEndFrameQuery();
         // [PERF] WaitEndFrameQuery is the suspected hot stage — time the
@@ -1067,24 +1005,6 @@ void HostWindowImpl::RenderD3D9()
         perfRCompose.reset(); perfRPresent.reset();
         perfWaitSpinsSum = 0; perfWaitSpinsMax = 0;
     }
-
-    // Phase 1: hand the just-composited frame to FramePublisher
-    // for encode + base64 + emit. Lifecycle is gated on m_framePublisher
-    // being non-null. See for why the transport is
-    // inline-in-payload rather than WebResourceRequested.
-    //
-    // follow-up — items 13+15] Skip under composition mode: the
-    // React-side <img> consumer of viewport/frame-ready early-returns in
-    // composition (ViewportSlot.tsx isLegacyMode() check) because DXGI
-    // is the actual engine-pixel source, so the per-frame JPEG encode is
-    // pure wasted work. Previously left running ("harmless until
-    // architecture-A deletion"), but the encode cost scales with frame
-    // area — at 3440x1440 maximized the ~5 MP/frame encode visibly
-    // dropped FPS vs legacy mode. Construction stays coupled to
-    // m_archCMode for now (less surgery); the per-frame call is the
-    // hot path that mattered. Full FramePublisher removal still belongs
-    // in the architecture-A deletion dispatch.
-    if (m_framePublisher && !m_compositionMode) m_framePublisher->OnFrameComposited();
 
     // spawner/active-count: emit when GetNumInstances() differs from the
     // last emitted value. Polled per-frame, debounced to avoid WebMessage
@@ -1252,64 +1172,46 @@ HRESULT HostWindowImpl::InitWebView2()
                 // Phase 0: stash for WebResourceRequested.
                 webEnv = env;
 
-                // Phase 3 Stage 3b: composition hosting branch.
-                // Gate is m_compositionMode (default true under,
-                // false only when ALO_HOSTING_MODE=legacy). Stand up the
-                // host::Compositor (DComp V1 device only, no tree yet —
-                // tree assembly is deferred until inside the composition-
-                // controller completion callback, per v3 lesson) and
-                // create a CompositionController instead of the legacy
-                // HWND-mode controller. Falls back to HWND mode on any
-                // failure so the rest of the path still works.
-                if (m_compositionMode)
+                // Phase 3 Stage 3b: composition hosting. Stand up the
+                // host::Compositor (DComp V1 device only, no tree yet — tree
+                // assembly is deferred until inside the composition-controller
+                // completion callback, per v3 lesson) and create a
+                // CompositionController. Composition is a hard requirement
+                // (decision A): on Compositor::Init or the Environment3 QI
+                // failing there is NO HWND fallback — fail with a clear error
+                // and exit rather than leave a black window.
+                m_compositor = std::make_unique<host::Compositor>(
+                    hMain,
+                    [this](const std::string& s) { Log("%s\n", s.c_str()); });
+                HRESULT chr = m_compositor->Init();
+                if (FAILED(chr))
                 {
-                    m_compositor = std::make_unique<host::Compositor>(
-                        hMain,
-                        [this](const std::string& s) { Log("%s\n", s.c_str()); });
-                    HRESULT chr = m_compositor->Init();
-                    if (FAILED(chr))
-                    {
-                        Log("[host] composition: Compositor::Init failed hr=0x%08lx — falling back to HWND mode\n", chr);
-                        m_compositor.reset();
-                        m_compositionMode = false;
-                    }
+                    Log("[host] composition: Compositor::Init failed hr=0x%08lx\n", chr);
+                    FailFatalComposition(chr);
                 }
 
-                if (m_compositionMode && m_compositor)
+                // QI for Environment3 — exposes
+                // CreateCoreWebView2CompositionController. Confirmed
+                // available in SDK 1.0.3967.48 (WebView2.h:42610).
+                ComPtr<ICoreWebView2Environment3> env3;
+                HRESULT qihr = env->QueryInterface(IID_PPV_ARGS(&env3));
+                if (FAILED(qihr) || !env3)
                 {
-                    // QI for Environment3 — exposes
-                    // CreateCoreWebView2CompositionController. Confirmed
-                    // available in SDK 1.0.3967.48 (WebView2.h:42610).
-                    ComPtr<ICoreWebView2Environment3> env3;
-                    HRESULT qihr = env->QueryInterface(IID_PPV_ARGS(&env3));
-                    if (FAILED(qihr) || !env3)
-                    {
-                        Log("[host] composition: QI Environment3 failed hr=0x%08lx — falling back to HWND mode\n", qihr);
-                        m_compositor.reset();
-                        m_compositionMode = false;
-                    }
-                    else
-                    {
-                        Log("[host] composition: CreateCoreWebView2CompositionController dispatching\n");
-                        return env3->CreateCoreWebView2CompositionController(
-                            hMain,
-                            Callback<ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler>(
-                                [this](HRESULT cHr, ICoreWebView2CompositionController* ctl) -> HRESULT
-                                {
-                                    return OnCompositionControllerReady(cHr, ctl);
-                                }).Get());
-                    }
+                    Log("[host] composition: QI Environment3 failed hr=0x%08lx\n", qihr);
+                    FailFatalComposition(qihr);
                 }
 
-                // Default HWND-mode path. Extracted to
-                // DispatchHwndModeController so the F8 async-fallback
-                // handler can reuse it after tearing down a failed
-                // composition setup.
-                DispatchHwndModeController(env);
-                return S_OK;
+                Log("[host] composition: CreateCoreWebView2CompositionController dispatching\n");
+                return env3->CreateCoreWebView2CompositionController(
+                    hMain,
+                    Callback<ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler>(
+                        [this](HRESULT cHr, ICoreWebView2CompositionController* ctl) -> HRESULT
+                        {
+                            return OnCompositionControllerReady(cHr, ctl);
+                        }).Get());
             }).Get());
-    Log("[host] CreateCoreWebView2EnvironmentWithOptions returned 0x%08lx (testHost=%d composition=%d)\n",
-        envCreateHr, useTestHost ? 1 : 0, m_compositionMode ? 1 : 0);
+    Log("[host] CreateCoreWebView2EnvironmentWithOptions returned 0x%08lx (testHost=%d)\n",
+        envCreateHr, useTestHost ? 1 : 0);
     return envCreateHr;
 }
 
@@ -1666,11 +1568,9 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
 
     //: a WebResourceRequested handler will NOT fire for the
     // mapped app.local host (SetVirtualHostNameToFolderMapping short-circuits
-    // user handlers), so we can neither serve engine frames from that origin
-    // (the transport ships JPEG bytes inline in the viewport/frame-ready
-    // postMessage payload — see FramePublisher.cpp) NOR inject a Cache-Control
-    // response header to keep a rebuilt bundle fresh. The cache-bust above
-    // (prodNavUrl's ?v=<mtime>) is the header-free workaround.
+    // user handlers), so we cannot inject a Cache-Control response header to
+    // keep a rebuilt bundle fresh. The cache-bust above (prodNavUrl's
+    // ?v=<mtime>) is the header-free workaround.
 
     // Navigate to the React app.
     if (useDevUi)
@@ -1684,30 +1584,6 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     }
     Log("[host] Navigate dispatched\n");
     return S_OK;
-}
-
-// ---------------------------------------------------------------------
-// [F8] Extracted HWND-mode dispatch. Originally inline in
-// the env-creation callback's else branch; pulled out so the async-
-// fallback handler (WM_APP_COMPOSITION_FALLBACK) can reuse it after
-// tearing down a failed composition setup. The inner callback body is
-// byte-identical to the original.
-// ---------------------------------------------------------------------
-HRESULT HostWindowImpl::DispatchHwndModeController(ICoreWebView2Environment* env)
-{
-    if (!env) return E_POINTER;
-    return env->CreateCoreWebView2Controller(
-        hMain,
-        Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-            [this](HRESULT ctlHr, ICoreWebView2Controller* controller) -> HRESULT
-            {
-                if (FAILED(ctlHr) || !controller)
-                {
-                    Log("[host] WebView2 controller failed 0x%08lx\n", ctlHr);
-                    return E_FAIL;
-                }
-                return FinishWebView2ControllerSetup(controller);
-            }).Get());
 }
 
 // ---------------------------------------------------------------------
@@ -1733,8 +1609,9 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     {
         Log("[host] composition: controller completion FAILED hr=0x%08lx ctl=%p\n",
             chr, static_cast<void*>(ctl));
-        // [F8] Schedule HWND-mode fallback on next message-
-        // loop iteration. PostMessage so this callback can unwind first.
+        // Composition is required (no HWND fallback): signal a fatal error
+        // on the next message-loop iteration. PostMessage so this callback
+        // can unwind first.
         HRESULT failHr = (chr == S_OK) ? E_FAIL : chr;
         PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK, static_cast<WPARAM>(failHr), 0);
         return failHr;
@@ -1753,7 +1630,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     if (FAILED(qihr) || !baseController)
     {
         Log("[host] composition: QI to ICoreWebView2Controller failed hr=0x%08lx\n", qihr);
-        // [F8] Schedule HWND-mode fallback.
+        // Composition is required (no HWND fallback): signal a fatal error.
         PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK, static_cast<WPARAM>(qihr), 0);
         return qihr;
     }
@@ -1762,7 +1639,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     if (FAILED(setupHr))
     {
         Log("[host] composition: shared controller setup failed hr=0x%08lx\n", setupHr);
-        // [F8] Schedule HWND-mode fallback.
+        // Composition is required (no HWND fallback): signal a fatal error.
         PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK, static_cast<WPARAM>(setupHr), 0);
         return setupHr;
     }
@@ -1842,7 +1719,15 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         HRESULT bhr = m_compositor->AttachWebView2(ctl);
         if (FAILED(bhr))
         {
-            Log("[host] composition: Compositor::AttachWebView2 FAILED hr=0x%08lx —-class failure?\n", bhr);
+            //-class failure: the WebView2 RootVisualTarget couldn't be
+            // plugged into the DComp tree, so nothing composites — a black
+            // window, exactly what decision A's hard-requirement exists to
+            // prevent. There is no HWND fallback: signal a fatal error.
+            // PostMessage so this callback unwinds before the modal + exit.
+            // (Engine-visual attach below is DIFFERENT — that failure keeps
+            // the chrome usable, so it stays soft.)
+            Log("[host] composition: Compositor::AttachWebView2 FAILED hr=0x%08lx —-class failure\n", bhr);
+            PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK, static_cast<WPARAM>(bhr), 0);
             return bhr;
         }
         // Seed the tree to the current client size so the first paint
@@ -1887,7 +1772,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         // LayoutBroker so React-side layout/scene-rect dispatches start
         // routing into Compositor::SetEngineVisualTransform + Engine::
         // SetSceneViewport. The setter also replays the cached scene-
-        // rect onto the newly-attached compositor via ReemitOcclusions
+        // rect onto the newly-attached compositor via ReemitSceneRect
         // (sub-plan §3.5), so if React HAS already dispatched a scene-
         // rect by this point, the engine visual + engine viewport
         // immediately match it. (In practice React's first dispatch
@@ -2442,37 +2327,19 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 GetClientRect(hViewport, &vrc);
                 alphaCompositor->Resize(vrc.right - vrc.left, vrc.bottom - vrc.top);
                 engine->SetAlphaCompositor(alphaCompositor.get());
-                // [PERF] In composition mode the DComp shared-texture path is
-                // the transport; tell the engine to skip the redundant
-                // per-frame layered Composite() readback (round-3 fix).
-                engine->SetCompositionMode(m_compositionMode);
+                // Arm the eager reference-object catalog prefetch now
+                // that the new-UI render path is up.
+                engine->ArmCatalogPrefetch();
                 layout.SetAlphaCompositor(alphaCompositor.get());
                 Log("[host] AlphaCompositor up (%ldx%ld)\n",
                     vrc.right - vrc.left, vrc.bottom - vrc.top);
 
-                // Phase 1: when mode is enabled, stand up
-                // the FramePublisher on top of the compositor. Emit
-                // callback wraps PostWebMessageAsJson with the UTF-16
-                // conversion already established by the bridge dispatcher;
-                // logger fans through Log() at 1 Hz. Constructed AFTER the
-                // compositor so EncodeFrameJpeg has somewhere to read.
-                if (m_archCMode && alphaCompositor)
+                // Phase 2: stand up the InputDispatcher on the
+                // viewport popup so DOM-routed camera/keyboard input reaches
+                // the engine. Bound to BridgeDispatcher below in Run() once
+                // `dispatcher` exists.
+                if (alphaCompositor)
                 {
-                    auto emit = [this](const std::string& json) {
-                        if (!webView) return;
-                        std::wstring w = Utf8ToUtf16(json);
-                        webView->PostWebMessageAsJson(w.c_str());
-                    };
-                    m_framePublisher = std::make_unique<host::FramePublisher>(
-                        alphaCompositor.get(), emit, m_archCQuality);
-                    m_framePublisher->SetLogger([this](const std::string& line) {
-                        Log("%s\n", line.c_str());
-                    });
-                    Log("[ArchC] FramePublisher up (mode=canvas-jpeg, q=%d)\n", m_archCQuality);
-
-                    // Phase 2: stand up the InputDispatcher on the
-                    // hidden viewport popup. Bound to BridgeDispatcher
-                    // below in Run() once `dispatcher` exists.
                     m_inputDispatcher = std::make_unique<host::InputDispatcher>(hViewport);
                     m_inputDispatcher->SetLogger([this](const std::string& line) {
                         Log("%s\n", line.c_str());
@@ -2483,9 +2350,9 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             catch (const std::exception& e)
             {
-                Log("[host] AlphaCompositor init failed: %s — falling back to legacy Present\n", e.what());
+                Log("[host] AlphaCompositor init failed: %s — engine will Present directly\n", e.what());
                 alphaCompositor.reset();
-                m_framePublisher.reset();
+                m_inputDispatcher.reset();
             }
         }
 
@@ -2552,10 +2419,10 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     case WM_SIZE:
         ResizeWebViewToClient();
-        // Phase 3 Stage 3b: under composition hosting, the
-        // DComp tree's root visual clip needs to track the host
-        // client size or chrome gets clipped on resize.
-        if (m_compositionMode && m_compositor && m_compositor->IsReady())
+        // Phase 3 Stage 3b: the DComp tree's root visual clip
+        // needs to track the host client size or chrome gets clipped on
+        // resize.
+        if (m_compositor && m_compositor->IsReady())
         {
             RECT r;
             GetClientRect(hwnd, &r);
@@ -2579,10 +2446,9 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     // sees WM_KEY*/WM_IME_*. Without this, after Alt-Tab away and
     // back the host owns focus, WebView2 doesn't, and keyboard
     // silently breaks until the next mouse click happens to
-    // re-trigger something. Gated on m_compositionMode — under
-    // HWND mode WebView2 owns its own HWND focus chain.
+    // re-trigger something.
     case WM_SETFOCUS:
-        if (m_compositionMode && webController)
+        if (webController)
         {
             webController->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
         }
@@ -2594,10 +2460,9 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     // composition controller's rasterization scale so chrome
     // re-rasterises crisp at the new DPI, then resize/reposition
     // the host HWND to Windows's suggested rect (recommended
-    // per-monitor-v2 best practice). Gated on m_compositionMode —
-    // under HWND mode WebView2 handles DPI on its own HWND.
+    // per-monitor-v2 best practice).
     case WM_DPICHANGED:
-        if (m_compositionMode && m_compositionController)
+        if (m_compositionController)
         {
             ComPtr<ICoreWebView2Controller3> ctrl3;
             if (webController && SUCCEEDED(webController.As(&ctrl3)) && ctrl3)
@@ -2619,62 +2484,22 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
 
-    // [F8] Async composition setup failed — tear down partial
-    // state and re-dispatch to HWND mode via the stashed webEnv. wParam
-    // is the original failure HRESULT (informational; we don't act on
-    // it differently per code). PostMessage'd from OnCompositionController-
-    // Ready so the WebView2 callback can unwind before we touch its state.
+    // Async composition setup failed (controller completion / QI / shared
+    // setup). Composition is a hard requirement — there is no HWND fallback —
+    // so surface a clear error and exit. wParam is the original failure
+    // HRESULT. PostMessage'd from OnCompositionControllerReady so the WebView2
+    // callback unwinds before we tear down (the modal + exit happens here on
+    // the message-loop thread, off the callback stack).
     case WM_APP_COMPOSITION_FALLBACK:
-    {
-        HRESULT failHr = static_cast<HRESULT>(wp);
-        Log("[host] composition: async failure hr=0x%08lx — tearing down + falling back to HWND mode\n", failHr);
-
-        // Tear down composition state. webController may be partly set
-        // if FinishWebView2ControllerSetup got far enough; Close it
-        // before reset so WebView2's internal state unwinds cleanly.
-        if (webController)
-        {
-            webController->Close();
-            webController.Reset();
-        }
-        m_compositionController.Reset();
-        // Phase 3 Stage 5 — clear LayoutBroker's pointer BEFORE
-        // releasing the Compositor so any late SetSceneRect dispatch
-        // that slips through (e.g. an in-flight BridgeDispatcher message
-        // queued before the fallback) doesn't dereference a freed
-        // Compositor. Mirrors the SetAlphaCompositor(nullptr) pattern
-        // and the symmetric WM_DESTROY teardown below.
-        layout.SetCompositor(nullptr);
-        m_compositor.reset();
-        m_compositionMode = false;
-
-        // Re-dispatch via the stashed webEnv. Same env, new controller
-        // path — no need to re-create CoreWebView2EnvironmentWithOptions.
-        if (webEnv)
-        {
-            HRESULT hr = DispatchHwndModeController(webEnv.Get());
-            if (FAILED(hr))
-            {
-                Log("[host] composition: HWND fallback dispatch failed hr=0x%08lx\n", hr);
-            }
-        }
-        else
-        {
-            Log("[host] composition: webEnv not stashed; cannot fall back\n");
-        }
-        return 0;
-    }
+        FailFatalComposition(static_cast<HRESULT>(wp));   // [[noreturn]]
 
     // Phase 3 Stage 3d: cursor sync. Under composition the
     // host HWND owns WM_SETCURSOR; consult the cached cursor that
     // the composition controller's add_CursorChanged handler last
     // delivered. Returning TRUE tells Windows we set the cursor
-    // ourselves — skip default class-arrow behaviour. Gated on
-    // m_compositionMode + cached cursor existing so default new-UI
-    // paths fall through unchanged.
+    // ourselves — skip default class-arrow behaviour.
     case WM_SETCURSOR:
-        if (m_compositionMode && m_webViewCursor &&
-            LOWORD(lp) == HTCLIENT)
+        if (m_webViewCursor && LOWORD(lp) == HTCLIENT)
         {
             SetCursor(m_webViewCursor);
             return TRUE;
@@ -2682,17 +2507,14 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
 
     // Phase 3 Stage 3c: forward mouse input to WebView2's
-    // composition controller. Under HWND mode, WebView2's child HWND
-    // gets WM_MOUSE* directly from the OS — under composition the
-    // host owns input and forwards via SendMouseInput. Gated on
-    // m_compositionMode so the default new-UI path falls through to
-    // DefWindowProc unchanged.
+    // composition controller. The host owns input and forwards via
+    // SendMouseInput.
     case WM_MOUSEMOVE:
     case WM_LBUTTONDOWN: case WM_LBUTTONUP: case WM_LBUTTONDBLCLK:
     case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_RBUTTONDBLCLK:
     case WM_MBUTTONDOWN: case WM_MBUTTONUP: case WM_MBUTTONDBLCLK:
     case WM_MOUSEWHEEL:  case WM_MOUSEHWHEEL:
-        if (m_compositionMode && m_compositionController)
+        if (m_compositionController)
         {
             // F10: arm TME_LEAVE on each fresh WM_MOUSEMOVE
             // so WM_MOUSELEAVE fires when the pointer exits the host
@@ -2717,7 +2539,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     // virtual-key state — use POINT{-1, -1} per WebView2 docs.
     case WM_MOUSELEAVE:
         m_mouseTracked = false;
-        if (m_compositionMode && m_compositionController)
+        if (m_compositionController)
         {
             // WebView2 SDK 1.0.3967.48 doesn't expose a named
             // COREWEBVIEW2_MOUSE_EVENT_KIND_MOUSE_LEAVE constant — the
@@ -2929,16 +2751,10 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // the queue) can't dereference a freed compositor. Drop the
         // compositor first since Engine owns the D3D9 device the
         // compositor's resources are bound to.
-        // Phase 1: drop the FramePublisher first — it holds a
-        // raw pointer back into the compositor, so this MUST go before
-        // alphaCompositor.reset().
-        m_framePublisher.reset();
-        // Phase 2: drop InputDispatcher too. It holds the
-        // popup HWND raw; the popup itself is destroyed below as part
-        // of the standard WM_DESTROY cleanup. Order between the two
-        // archC publishers doesn't matter — neither references the
-        // other — but tearing them down before the engine/compositor
-        // matches the FramePublisher pattern.
+        // Phase 2: drop the InputDispatcher before the engine /
+        // compositor. It holds the viewport popup HWND raw; the popup
+        // itself is destroyed below as part of the standard WM_DESTROY
+        // cleanup.
         m_inputDispatcher.reset();
         if (engine) engine->SetAlphaCompositor(nullptr);
         layout.SetAlphaCompositor(nullptr);
@@ -3004,16 +2820,13 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             particleSystem ? 1 : 0,
             particleSystem ? particleSystem->getEmitters().size() : 0,
             m_attachedParticleSystem ? 1 : 0);
-        // Phase 2: in archC mode the popup is hidden and WebView2
-        // owns keyboard routing; we forward keystrokes through the bridge.
-        // SetFocus on the hidden popup briefly succeeds (visibility isn't
-        // a precondition; WS_EX_NOACTIVATE only blocks user-driven
+        // Phase 2: the viewport popup is hidden and WebView2 owns
+        // keyboard routing; we forward keystrokes through the bridge. We do
+        // NOT SetFocus the hidden popup — that briefly succeeds (visibility
+        // isn't a precondition; WS_EX_NOACTIVATE only blocks user-driven
         // activation), then OS focus management snaps it back, firing a
-        // spurious WM_KILLFOCUS that the defensive kill below interprets
-        // as "user Alt-Tab'd, drop the spawn." Skip SetFocus to break
-        // the focus-thrash → kill loop. Legacy mode keeps the original
-        // semantic (popup must own focus for WM_KEYDOWN VK_SHIFT spawn).
-        if (!m_archCMode) SetFocus(hwnd);
+        // spurious WM_KILLFOCUS the defensive kill below would read as "user
+        // Alt-Tab'd, drop the spawn."
         // polish: Shift+LMB also triggers cursor-bound spawn. The
         // legacy keydown-only path (case WM_KEYDOWN below) requires the
         // viewport HWND to have focus when Shift is pressed, but
@@ -3173,9 +2986,8 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         m_dragStartX   = (short)LOWORD(lp);
         m_dragStartY   = (short)HIWORD(lp);
         SetCapture(hwnd);
-        // Phase 2: see WM_LBUTTONDOWN — skip SetFocus in archC
-        // to avoid the spurious WM_KILLFOCUS → defensive-kill loop.
-        if (!m_archCMode) SetFocus(hwnd);
+        // Phase 2: see WM_LBUTTONDOWN — we don't SetFocus the hidden
+        // popup, which would trigger the spurious WM_KILLFOCUS → kill loop.
         return 0;
     }
     case WM_LBUTTONUP:
@@ -3649,28 +3461,17 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // (Alt-Tab away, foreign focus steal), WM_KEYUP may never arrive
         // and the attached instance leaks. Drop it here.
         //
-        // Phase 2: in archC mode the popup is hidden, never
-        // genuinely owns focus, but receives spurious WM_KILLFOCUS from
-        // Win32 focus churn whenever ANY focus assignment touches it
-        // (other apps activating, modal dialogs, etc.). Treating those
-        // as user-Alt-Tab triggers and killing the cursor-bound spawn
-        // is a regression. The legitimate Alt-Tab case is now covered
-        // by the window.blur → viewport/input { type: "blur" } bridge
-        // path (renderer-side), which goes through THIS handler too —
-        // so we still need the kill, just not unconditionally. Gate
-        // the kill on legacy mode for now; a future refinement could
-        // distinguish bridge-routed blur from spurious OS focus events
-        // via a sentinel wParam from InputDispatcher.
-        if (!m_archCMode && m_attachedParticleSystem && engine)
+        // Phase 2: the viewport popup is hidden and never genuinely
+        // owns focus, but receives spurious WM_KILLFOCUS from Win32 focus
+        // churn whenever ANY focus assignment touches it (other apps
+        // activating, modal dialogs, etc.). Treating those as user-Alt-Tab
+        // triggers and killing the cursor-bound spawn is a regression, so we
+        // suppress the OS-driven kill here. (The legitimate blur case is
+        // handled renderer-side via the window.blur → viewport/input
+        // { type: "blur" } bridge path.)
+        if (m_attachedParticleSystem)
         {
-            Log("[ArchC-kill] WM_KILLFOCUS killing attached=%p\n",
-                static_cast<void*>(m_attachedParticleSystem));
-            engine->KillParticleSystem(m_attachedParticleSystem);
-            m_attachedParticleSystem = nullptr;
-        }
-        else if (m_archCMode && m_attachedParticleSystem)
-        {
-            Log("[ArchC-kill] WM_KILLFOCUS suppressed (archC mode, attached=%p preserved)\n",
+            Log("[ArchC-kill] WM_KILLFOCUS suppressed (attached=%p preserved)\n",
                 static_cast<void*>(m_attachedParticleSystem));
         }
         return 0;
@@ -3814,7 +3615,7 @@ int HostWindowImpl::Run(int nCmdShow)
                 L"Start the dev server in one terminal:\n"
                 L"    cd web/apps/editor\n"
                 L"    pnpm dev\n\n"
-                L"Then relaunch ParticleEditor.exe --new-ui --dev-ui.",
+                L"Then relaunch ParticleEditor.exe --dev-ui.",
                 L"Dev UI server not detected",
                 MB_OK | MB_ICONERROR);
             return 1;
@@ -4030,17 +3831,12 @@ int HostWindowImpl::Run(int nCmdShow)
     // the resize cleanly.
     layout.ApplyFullClient();
 
-    // Phase 2: in (canvas-in-DOM) mode, hide the
-    // viewport popup. The popup still spans the full main client
-    // (ApplyFullClient above), the D3D9 swapchain on its hidden HWND
-    // keeps rendering at the popup-client size, and FramePublisher
-    // continues reading the AlphaCompositor's pre-stamp DIB —
-    // `UpdateLayeredWindow` becomes a no-op since the window is
-    // hidden (cleanup of that wasted call is a Phase 5 follow-up).
-    // The canvas in the WebView2 DOM is now the visible viewport;
-    // input flows through InputDispatcher rather than the OS-routed
-    // path.
-    if (m_archCMode)
+    // Phase 2: hide the viewport popup. It still spans the full
+    // main client (ApplyFullClient above) and the D3D9 swapchain on its
+    // hidden HWND keeps rendering into the AlphaCompositor's shared RT,
+    // which the host's DComp path presents — the WebView2 DOM canvas is the
+    // visible viewport, and input flows through InputDispatcher rather than
+    // the OS-routed path.
     {
         HWND hPopup = layout.GetViewport();
         if (hPopup) ShowWindow(hPopup, SW_HIDE);

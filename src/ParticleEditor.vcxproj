@@ -125,7 +125,6 @@
     <ClInclude Include="host\AlphaCompositor.h" />
     <ClInclude Include="host\BridgeDispatcher.h" />
     <ClInclude Include="host\Compositor.h" />
-    <ClInclude Include="host\FramePublisher.h" />
     <ClInclude Include="host\InputDispatcher.h" />
     <ClInclude Include="host\HostBridgeProxy.h" />
     <ClInclude Include="host\HostWindow.h" />
@@ -183,8 +182,6 @@
            doesn't use d3dx9 or any other DXSDK-only API so isolation is
            safe. Other files in the project keep DXSDK first as before. -->
       <AdditionalIncludeDirectories>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;$(SolutionDir)src</AdditionalIncludeDirectories>
-    </ClCompile>
-    <ClCompile Include="host\FramePublisher.cpp">
     </ClCompile>
     <ClCompile Include="host\InputDispatcher.cpp">
     </ClCompile>

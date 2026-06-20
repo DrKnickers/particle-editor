@@ -71,7 +71,7 @@ export function Toolbar({ bridge }: Props) {
           being replaced (same gate the MenuBar uses). Save + Save As are
           themselves the save path so they don't need the gate. */}
       <div className="tb-group">
-        <Tip content="New" occlusionId="tip:toolbar:new">
+        <Tip content="New">
           <button
             type="button"
             className="tb-btn"
@@ -85,7 +85,7 @@ export function Toolbar({ bridge }: Props) {
             <FilePlus {...ICON} />
           </button>
         </Tip>
-        <Tip content="Open" occlusionId="tip:toolbar:open">
+        <Tip content="Open">
           <button
             type="button"
             className="tb-btn"
@@ -99,7 +99,7 @@ export function Toolbar({ bridge }: Props) {
             <FolderOpen {...ICON} />
           </button>
         </Tip>
-        <Tip content="Save" occlusionId="tip:toolbar:save">
+        <Tip content="Save">
           <button
             type="button"
             className="tb-btn"
@@ -109,7 +109,7 @@ export function Toolbar({ bridge }: Props) {
             <Save {...ICON} />
           </button>
         </Tip>
-        <Tip content="Save As" occlusionId="tip:toolbar:save-as">
+        <Tip content="Save As">
           <button
             type="button"
             className="tb-btn"
@@ -127,7 +127,7 @@ export function Toolbar({ bridge }: Props) {
           kind + `canUndo`/`canRedo` engine-state the Edit menu uses; each
           button is disabled when there's nothing to undo / redo. */}
       <div className="tb-group">
-        <Tip content="Undo" occlusionId="tip:toolbar:undo">
+        <Tip content="Undo">
           <button
             type="button"
             className="tb-btn"
@@ -138,7 +138,7 @@ export function Toolbar({ bridge }: Props) {
             <Undo2 {...ICON} />
           </button>
         </Tip>
-        <Tip content="Redo" occlusionId="tip:toolbar:redo">
+        <Tip content="Redo">
           <button
             type="button"
             className="tb-btn"
@@ -155,7 +155,7 @@ export function Toolbar({ bridge }: Props) {
 
       {/* Group 3: playback */}
       <div className="tb-group">
-        <Tip content={paused ? "Play" : "Pause"} occlusionId="tip:toolbar:play-pause">
+        <Tip content={paused ? "Play" : "Pause"}>
           <button
             type="button"
             className="tb-btn"
@@ -166,7 +166,7 @@ export function Toolbar({ bridge }: Props) {
             {paused ? <Play {...ICON} /> : <Pause {...ICON} />}
           </button>
         </Tip>
-        <Tip content="Step one frame" occlusionId="tip:toolbar:step">
+        <Tip content="Step one frame">
           <button
             type="button"
             className="tb-btn"
@@ -176,7 +176,7 @@ export function Toolbar({ bridge }: Props) {
             <ChevronRight {...ICON} />
           </button>
         </Tip>
-        <Tip content="Step 10 frames" occlusionId="tip:toolbar:step-10">
+        <Tip content="Step 10 frames">
           <button
             type="button"
             className="tb-btn"
@@ -195,7 +195,7 @@ export function Toolbar({ bridge }: Props) {
           preserved. Each reads the live engine snapshot and dispatches the
           matching engine/set/* with the inverted value. */}
       <div className="tb-group">
-        <Tip content="Show ground" occlusionId="tip:toolbar:show-ground">
+        <Tip content="Show ground">
           <button
             type="button"
             className="tb-btn"
@@ -206,7 +206,7 @@ export function Toolbar({ bridge }: Props) {
             <PanelBottom {...ICON} />
           </button>
         </Tip>
-        <Tip content="Show grid" occlusionId="tip:toolbar:show-grid">
+        <Tip content="Show grid">
           <button
             type="button"
             className="tb-btn"
@@ -217,7 +217,7 @@ export function Toolbar({ bridge }: Props) {
             <Grid2x2 {...ICON} />
           </button>
         </Tip>
-        <Tip content="Toggle bloom" occlusionId="tip:toolbar:toggle-bloom">
+        <Tip content="Toggle bloom">
           <button
             type="button"
             className="tb-btn"
@@ -228,7 +228,7 @@ export function Toolbar({ bridge }: Props) {
             <Sun {...ICON} />
           </button>
         </Tip>
-        <Tip content="Leave particles after instance death" occlusionId="tip:toolbar:leave-particles">
+        <Tip content="Leave particles after instance death">
           <button
             type="button"
             className="tb-btn"
@@ -247,7 +247,7 @@ export function Toolbar({ bridge }: Props) {
           one exclusive slot (opening one closes the others — see lib/right-dock.ts),
           so their aria-pressed states are mutually exclusive. */}
       <div className="tb-group">
-        <Tip content="Toggle Spawner panel" occlusionId="tip:toolbar:toggle-spawner">
+        <Tip content="Toggle Spawner panel">
           <button
             type="button"
             className="tb-btn"
@@ -258,7 +258,7 @@ export function Toolbar({ bridge }: Props) {
             <CirclePlus {...ICON} />
           </button>
         </Tip>
-        <Tip content="Toggle Lighting panel" occlusionId="tip:toolbar:toggle-lighting">
+        <Tip content="Toggle Lighting panel">
           <button
             type="button"
             className="tb-btn"
@@ -269,7 +269,7 @@ export function Toolbar({ bridge }: Props) {
             <Lightbulb {...ICON} />
           </button>
         </Tip>
-        <Tip content="Toggle Atlas frame picker" occlusionId="tip:toolbar:toggle-atlas">
+        <Tip content="Toggle Atlas frame picker">
           <button
             type="button"
             className="tb-btn"

@@ -9,11 +9,9 @@
 // and decodes coords from MAKEPOINTS(lParam), so the host-side
 // reconstruction is mechanical.
 //
-// Constructed when the host runs in architecture-C mode (default
-// under, opt-out via ALO_HOSTING_MODE=legacy), alongside
-// FramePublisher. In legacy mode the popup is visible and receives
-// input directly from the OS — InputDispatcher is unused and
-// BridgeDispatcher's `viewport/input` arm returns ok with a no-op.
+// Constructed alongside the AlphaCompositor in WM_CREATE: the viewport
+// popup is hidden, so all camera/keyboard input arrives via the DOM
+// <canvas> and is forwarded here rather than routed directly by the OS.
 //
 // All operations are UI-thread only. PostMessage on a window owned by
 // the calling thread queues the message on that thread's message
@@ -42,8 +40,8 @@ namespace host {
 class InputDispatcher
 {
 public:
-    // Optional logger callback (mirrors FramePublisher). HostWindow
-    // binds a lambda that fans through Log() so diagnostic lines land
+    // Optional logger callback. HostWindow binds a lambda that fans
+    // through Log() so diagnostic lines land
     // in %LOCALAPPDATA%\AloParticleEditor\host.log.
     using LogFn = std::function<void(const std::string& line)>;
 

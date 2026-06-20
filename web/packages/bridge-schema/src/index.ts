@@ -1002,16 +1002,6 @@ export type Request =
   // first paint and on every theme change. No-op in legacy (arch-A) and
   // browser (MockBridge) modes.
   | { kind: "host/backing-color";         params: { color: string } }
-  // Tell the host that a chrome region overlaps the viewport rect (a
-  // menu, tool panel, dialog…).: the host's AlphaCompositor stamps
-  // alpha into the popup's DIB in this rect, with a `feather` px
-  // smoothstep falloff at the rect's unclipped edges (so the chrome's
-  // drop shadow blends naturally into the viewport instead of producing
-  // a hard cut). `rect: null` removes the occlusion for that id. Rect
-  // is in MAIN-HWND-CLIENT coords, same convention as
-  // layout/viewport-rect. `feather` defaults to 0 (hard cut) when
-  // omitted — match it to the chrome's shadow extent.
-  | { kind: "viewport/occlude";           params: { id: string; rect: { x: number; y: number; w: number; h: number } | null; feather?: number } }
   // B1.3.1.1: capture the current engine viewport as a base64-encoded
   // PNG. React's Modal calls this on open to grab a frozen snapshot
   // of the engine output, renders the PNG as an <img> portaled into
@@ -1263,7 +1253,6 @@ type ResponseForB<R extends Request> =
   R extends { kind: "layout/scene-rect" }         ? Record<string, never> :
   R extends { kind: "animate-scene-rect" }        ? Record<string, never> :
   R extends { kind: "host/backing-color" }        ? Record<string, never> :
-  R extends { kind: "viewport/occlude" }          ? Record<string, never> :
   R extends { kind: "viewport/capture-snapshot" } ? { imageBase64: string; w: number; h: number } :
   R extends { kind: "viewport/input" }            ? Record<string, never> :
   R extends { kind: "spawner/start" }             ? Record<string, never> :

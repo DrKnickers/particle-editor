@@ -12,9 +12,7 @@
 //
 // What we lock here is the WEB CONTRACT only; the actual smooth interpolation
 // is host-side and verified in the real editor ():
-//   - gating: under --legacy, NO suppression signal + NO
-//     animate-scene-rect (the legacy-regression refinement).
-//   - the suppression-signal lifecycle (raised on an slide, cleared at
+//   - the suppression-signal lifecycle (raised on a dock slide, cleared at
 //     the settle, and NOT stranded by a rapid re-toggle).
 //   - reduced-motion: the panel snaps (no animate-scene-rect).
 //
@@ -47,10 +45,8 @@ describe("PanelLayout — dock-slide animation (Item 3)", () => {
     localStorage.clear();
     __resetRightDockForTests();
     useDockAnim.setState({ animating: false });
-    vi.unstubAllEnvs();
   });
   afterEach(() => {
-    vi.unstubAllEnvs();
     useDockAnim.setState({ animating: false });
   });
 
@@ -78,20 +74,7 @@ describe("PanelLayout — dock-slide animation (Item 3)", () => {
     });
   }
 
-  it("under --legacy: closing the dock raises NO suppression signal and sends NO animate-scene-rect", async () => {
-    vi.stubEnv("VITE_HOSTING_MODE", "legacy");
-    const bridge = makeSpyBridge();
-    renderLayout(bridge); // default dock = spawner (open)
-    await act(async () => {
-      setDock(null); // close — under legacy this must stay today's behaviour
-    });
-    await flushRaf();
-    expect(useDockAnim.getState().animating).toBe(false);
-    expect(animateCalls(bridge).length).toBe(0);
-  });
-
-  it("under: opening a previously-closed dock raises the suppression signal, then clears it", async () => {
-    vi.stubEnv("VITE_HOSTING_MODE", ""); // architecture C
+  it("opening a previously-closed dock raises the suppression signal, then clears it", async () => {
     const bridge = makeSpyBridge();
     renderLayout(bridge); // open at mount
     await act(async () => {
@@ -110,8 +93,7 @@ describe("PanelLayout — dock-slide animation (Item 3)", () => {
     });
   });
 
-  it("under: opening sends EXACTLY ONE animate-scene-rect with the new contract shape", async () => {
-    vi.stubEnv("VITE_HOSTING_MODE", "");
+  it("opening sends EXACTLY ONE animate-scene-rect with the new contract shape", async () => {
     const bridge = makeSpyBridge();
     renderLayout(bridge);
     await act(async () => {
@@ -141,7 +123,6 @@ describe("PanelLayout — dock-slide animation (Item 3)", () => {
     // effect cleanup cancels. If the superseding run then early-returns at the
     // `need` guard, the signal must STILL be cleared (by the cleanup) — else
     // ViewportSlot's ResizeObserver is silenced indefinitely.
-    vi.stubEnv("VITE_HOSTING_MODE", "");
     const bridge = makeSpyBridge();
     renderLayout(bridge); // open at mount
     await act(async () => {
@@ -161,8 +142,7 @@ describe("PanelLayout — dock-slide animation (Item 3)", () => {
     });
   });
 
-  it("under reduced-motion (): opening sends NO animate-scene-rect (panel snaps)", async () => {
-    vi.stubEnv("VITE_HOSTING_MODE", "");
+  it("under reduced-motion: opening sends NO animate-scene-rect (panel snaps)", async () => {
     const realMM = window.matchMedia;
     Object.defineProperty(window, "matchMedia", {
       configurable: true,

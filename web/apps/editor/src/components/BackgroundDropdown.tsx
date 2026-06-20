@@ -10,7 +10,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
-import { OccludingPopover } from "@/components/OccludingPopover";
+import { AnimatedPopover } from "@/components/AnimatedPopover";
 import { BackgroundPickerBody } from "@/screens/BackgroundPicker";
 import { colorrefToHex } from "@/lib/colorref";
 
@@ -60,15 +60,13 @@ export function BackgroundDropdown({ bridge }: Props) {
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <OccludingPopover
-          bridge={bridge}
-          occlusionId="popover:background"
+        <AnimatedPopover
           align="end"
           sideOffset={6}
           className="bg-panel border border-border-2 rounded-token shadow-[var(--shadow)] p-3 min-w-[280px] z-50"
         >
           <BackgroundPickerBody bridge={bridge} />
-        </OccludingPopover>
+        </AnimatedPopover>
       </Popover.Portal>
     </Popover.Root>
   );

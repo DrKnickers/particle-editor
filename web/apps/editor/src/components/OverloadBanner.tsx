@@ -25,14 +25,6 @@
 // the viewport's top-center with zero extra geometry plumbing, and the
 // PanelLayout render site already has `bridge` in scope.
 //
-// Plan risk 4: the banner overlaps the D3D-composited viewport popup —
-// without registering a viewport occlusion the popup OVERPAINTS the
-// DOM. The visible body therefore registers `useViewportOcclusion`
-// (the OccludingContextMenuContent precedent in EmitterTree.tsx). The
-// hook requires the element to exist when its effect runs (refs, not
-// state), so the occluding body is a child component that mounts only
-// while overloaded — mount registers the rect, unmount releases it.
-//
 // The browser MockBridge emits no stats/tick at all, so in browser dev
 // the banner never appears; component tests drive it with a stub
 // bridge.
@@ -43,13 +35,10 @@
 // so the wrapper goes through the usePresence shim: on the falling
 // edge the body stays mounted in data-state="closed" while banner-out
 // plays, then unmounts on animationend (or the timeout fallback under
-// reduced motion). Consequence: the viewport occlusion now outlives
-// the latch by one ~150ms exit — invisible, and release still fires on
-// unmount as before.
+// reduced motion).
 
 import { useEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
-import { useViewportOcclusion } from "@/lib/viewport-occlusion";
 import { usePresence } from "@/lib/use-presence";
 import { fmtCount } from "@/lib/chain-load";
 
@@ -66,27 +55,16 @@ const REFUSAL_MS = 5_000;
 type RefusalState = { estimated: number; cap: number };
 
 function OverloadBannerBody({
-  bridge,
   state,
   onAnimationEnd,
   refusal,
 }: {
-  bridge: Bridge;
   state: "open" | "closed";
   onAnimationEnd: () => void;
   refusal: RefusalState | null;
 }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  // pad=12 / feather=12 — modest ring (smaller than the context menu's
-  // 24: the banner has no shadow-xl spread to feather across).
-  // observeParent: the banner is content-sized but centered with
-  // left-1/2, so a splitter drag resizes the CONTAINER and moves the
-  // banner without resizing it — without this the alpha cut-out goes
-  // stale at the old coordinates and the viewport overpaints us.
-  useViewportOcclusion(bridge, "banner:preview-overload", ref, 12, 12, true);
   return (
     <div
-      ref={ref}
       role="status"
       aria-live="polite"
       data-testid="preview-overload-banner"
@@ -170,7 +148,6 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
   if (!mounted) return null;
   return (
     <OverloadBannerBody
-      bridge={bridge}
       state={state}
       onAnimationEnd={onAnimationEnd}
       refusal={shownRefusal}

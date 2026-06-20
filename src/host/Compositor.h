@@ -73,7 +73,7 @@ public:
     // Optional logger callback. HostWindowImpl binds a lambda that
     // fans through Log() so [COMP] lines land in
     // %LOCALAPPDATA%\AloParticleEditor\host.log. Mirrors the
-    // InputDispatcher / FramePublisher pattern.
+    // InputDispatcher pattern.
     using LogFn = std::function<void(const std::string& line)>;
 
     // ctor stores the host HWND; no DComp work yet. Init() does the

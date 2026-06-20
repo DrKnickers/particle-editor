@@ -19,7 +19,7 @@
 // All items wired to existing bridge calls + atoms; deferred items
 // log a `[Menu] X — TODO` marker and render as `disabled`.
 
-import { Fragment, useEffect, useRef, useState, type ComponentProps } from "react";
+import { Fragment, useEffect, useState } from "react";
 import * as Menubar from "@radix-ui/react-menubar";
 import { Check, ChevronRight, X, Layers, GripVertical, Search, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,69 +44,11 @@ import {
 } from "@/lib/emitter-clipboard";
 import { useTreeContextStore } from "@/lib/tree-context";
 import { requestEmitterRename } from "@/lib/tree-action";
-import { useViewportOcclusion } from "@/lib/viewport-occlusion";
 import { toggleDock } from "@/lib/right-dock";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { Modal } from "@/components/Modal";
 import { PreferencesDialog } from "@/screens/PreferencesDialog";
 import { LoadOrderDialog } from "@/screens/LoadOrderDialog";
-
-// follow-up: each MenubarContent needs to register itself with the
-// host as a viewport occlusion while open so the popup punches a
-// SetWindowRgn hole over the menu rect and the menu HTML shows
-// through. This wrapper uses a ref + the useViewportOcclusion hook,
-// scoped to the time the menu is mounted (Radix only mounts content
-// while the menu is open, so the hook auto-cleans on close).
-type MenuContentProps = ComponentProps<typeof Menubar.Content> & {
-  bridge: Bridge;
-  occlusionId: string;
-};
-
-function OccludingMenubarContent({
-  bridge,
-  occlusionId,
-  children,
-  ...rest
-}: MenuContentProps) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  //: pad the occlusion rect outward by ~24 CSS px to enclose
-  // the menu's shadow-xl drop shadow + rounded-md corners, AND set
-  // the compositor's smoothstep feather to the same 24 px. The popup
-  // alpha then ramps from full-viewport at the padded outer edge to
-  // full-cut at the menu's actual outline — no purple halo where
-  // alpha=0 would otherwise expose the parent HWND brush past where
-  // the WebView shadow has faded.
-  useViewportOcclusion(bridge, occlusionId, ref, 24, 24);
-  return (
-    <Menubar.Content {...rest}>
-      <div ref={ref}>{children}</div>
-    </Menubar.Content>
-  );
-}
-
-// SubContent analogue. Menubar.SubContent renders in its OWN portal
-// when the SubMenu opens (e.g. File → Recent Files); without an
-// occlusion registration the engine viewport renders over it and the
-// user sees only the drop shadow leaking through. Pattern + 24 px
-// pad/feather match OccludingMenubarContent verbatim.
-type MenuSubContentProps = ComponentProps<typeof Menubar.SubContent> & {
-  bridge: Bridge;
-  occlusionId: string;
-};
-function OccludingMenubarSubContent({
-  bridge,
-  occlusionId,
-  children,
-  ...rest
-}: MenuSubContentProps) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  useViewportOcclusion(bridge, occlusionId, ref, 24, 24);
-  return (
-    <Menubar.SubContent {...rest}>
-      <div ref={ref}>{children}</div>
-    </Menubar.SubContent>
-  );
-}
 
 type Props = {
   bridge: Bridge;
@@ -120,11 +62,6 @@ type Props = {
 // class strings don't drift between menus.
 const TRIGGER =
   "px-2 py-1 text-xs font-medium text-text-2 hover:bg-bg-2 rounded data-[state=open]:bg-bg-2 data-[state=open]:text-text outline-none select-none cursor-default";
-// restores the drop shadow. The layered viewport now stamps a
-// smoothstep-feathered alpha hole at each occlusion rect (with
-//'s edge padding sized to enclose the shadow), so shadow-xl
-// blends naturally against the D3D9 scene instead of leaving the
-// dark halo the prior HRGN cut produced.
 const CONTENT =
   "min-w-[200px] bg-bg-2 border border-border rounded-md shadow-xl p-1 z-50";
 const ITEM =
@@ -477,9 +414,7 @@ export function MenuBar({
       <Menubar.Menu>
         <Menubar.Trigger className={TRIGGER}>File</Menubar.Trigger>
         <Menubar.Portal>
-          <OccludingMenubarContent
-            bridge={bridge}
-            occlusionId="menu:file"
+          <Menubar.Content
             className={CONTENT}
             align="start"
             sideOffset={4}
@@ -510,9 +445,7 @@ export function MenuBar({
                 <ChevronRight className="ml-auto size-3.5" />
               </Menubar.SubTrigger>
               <Menubar.Portal>
-                <OccludingMenubarSubContent
-                  bridge={bridge}
-                  occlusionId="menu:file:recent"
+                <Menubar.SubContent
                   className={CONTENT}
                   sideOffset={2}
                   alignOffset={-4}
@@ -532,14 +465,14 @@ export function MenuBar({
                       </Menubar.Item>
                     ))
                   )}
-                </OccludingMenubarSubContent>
+                </Menubar.SubContent>
               </Menubar.Portal>
             </Menubar.Sub>
             <Menubar.Separator className={SEPARATOR} />
             <Menubar.Item className={ITEM} onSelect={handleExit}>
               Exit<Hint>Alt+F4</Hint>
             </Menubar.Item>
-          </OccludingMenubarContent>
+          </Menubar.Content>
         </Menubar.Portal>
       </Menubar.Menu>
 
@@ -547,9 +480,7 @@ export function MenuBar({
       <Menubar.Menu>
         <Menubar.Trigger className={TRIGGER}>Edit</Menubar.Trigger>
         <Menubar.Portal>
-          <OccludingMenubarContent
-            bridge={bridge}
-            occlusionId="menu:edit"
+          <Menubar.Content
             className={CONTENT}
             align="start"
             sideOffset={4}
@@ -620,7 +551,7 @@ export function MenuBar({
             <Menubar.Item className={ITEM} onSelect={() => setPrefsOpen(true)}>
               Preferences…
             </Menubar.Item>
-          </OccludingMenubarContent>
+          </Menubar.Content>
         </Menubar.Portal>
       </Menubar.Menu>
 
@@ -628,9 +559,7 @@ export function MenuBar({
       <Menubar.Menu>
         <Menubar.Trigger className={TRIGGER}>Emitters</Menubar.Trigger>
         <Menubar.Portal>
-          <OccludingMenubarContent
-            bridge={bridge}
-            occlusionId="menu:emitters"
+          <Menubar.Content
             className={CONTENT}
             align="start"
             sideOffset={4}
@@ -702,7 +631,7 @@ export function MenuBar({
             <Menubar.Item className={ITEM} onSelect={() => toggleDock("spawner")}>
               Spawner<Hint>F7</Hint>
             </Menubar.Item>
-          </OccludingMenubarContent>
+          </Menubar.Content>
         </Menubar.Portal>
       </Menubar.Menu>
 
@@ -710,9 +639,7 @@ export function MenuBar({
       <Menubar.Menu>
         <Menubar.Trigger className={TRIGGER}>Mods</Menubar.Trigger>
         <Menubar.Portal>
-          <OccludingMenubarContent
-            bridge={bridge}
-            occlusionId="menu:mods"
+          <Menubar.Content
             className={`${CONTENT} w-72`}
             align="start"
             sideOffset={4}
@@ -802,9 +729,7 @@ export function MenuBar({
                 <ChevronRight className="size-3.5 text-text-3" />
               </Menubar.SubTrigger>
               <Menubar.Portal>
-                <OccludingMenubarSubContent
-                  bridge={bridge}
-                  occlusionId="menu:mods:add"
+                <Menubar.SubContent
                   className={`${CONTENT} w-60`}
                   sideOffset={2}
                   alignOffset={-4}
@@ -850,7 +775,7 @@ export function MenuBar({
                   {addVisibleGroups.length === 0 && (
                     <div className="px-2 py-2 text-[11px] text-text-3">No mods match.</div>
                   )}
-                </OccludingMenubarSubContent>
+                </Menubar.SubContent>
               </Menubar.Portal>
             </Menubar.Sub>
 
@@ -876,7 +801,7 @@ export function MenuBar({
               <span className="flex w-3.5 shrink-0 justify-center text-text-2"><RefreshIcon /></span>
               <span className="flex-1">Refresh Mod List</span>
             </Menubar.Item>
-          </OccludingMenubarContent>
+          </Menubar.Content>
         </Menubar.Portal>
       </Menubar.Menu>
       {menuDrag.chipNode}
@@ -885,9 +810,7 @@ export function MenuBar({
       <Menubar.Menu>
         <Menubar.Trigger className={TRIGGER}>View</Menubar.Trigger>
         <Menubar.Portal>
-          <OccludingMenubarContent
-            bridge={bridge}
-            occlusionId="menu:view"
+          <Menubar.Content
             className={CONTENT}
             align="start"
             sideOffset={4}
@@ -1025,7 +948,7 @@ export function MenuBar({
               <CheckSlot active={false} />
               Reset panel layout
             </Menubar.Item>
-          </OccludingMenubarContent>
+          </Menubar.Content>
         </Menubar.Portal>
       </Menubar.Menu>
 
@@ -1033,9 +956,7 @@ export function MenuBar({
       <Menubar.Menu>
         <Menubar.Trigger className={TRIGGER}>Help</Menubar.Trigger>
         <Menubar.Portal>
-          <OccludingMenubarContent
-            bridge={bridge}
-            occlusionId="menu:help"
+          <Menubar.Content
             className={CONTENT}
             align="start"
             sideOffset={4}
@@ -1043,7 +964,7 @@ export function MenuBar({
             <Menubar.Item className={ITEM} onSelect={() => onOpenAboutDialog()}>
               About
             </Menubar.Item>
-          </OccludingMenubarContent>
+          </Menubar.Content>
         </Menubar.Portal>
       </Menubar.Menu>
     </Menubar.Root>

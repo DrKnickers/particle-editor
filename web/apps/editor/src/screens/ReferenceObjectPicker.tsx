@@ -670,8 +670,6 @@ export function ReferenceObjectPicker({ bridge, onClose }: Props) {
     <ToolPanel
       title="Reference object"
       onClose={onClose}
-      bridge={bridge}
-      occlusionId="tool-panel:reference-object"
     >
       <ReferenceObjectPickerBody bridge={bridge} />
     </ToolPanel>

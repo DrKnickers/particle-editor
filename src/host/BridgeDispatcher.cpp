@@ -1227,8 +1227,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // into the shell instead of showing the black host backing. `color`
     // is a CSS string from getComputedStyle ("#rrggbb" / "rgb(r,g,b)").
     // Unparseable strings answer ok:false and leave the backing as-is —
-    // never throw into the dispatch path. No-op in legacy (arch-A) mode
-    // where LayoutBroker has no DComp compositor attached.
+    // never throw into the dispatch path. No-op until LayoutBroker has a
+    // DComp compositor attached.
     if (kind == "host/backing-color")
     {
         const std::string colorStr = params.value("color", std::string{});
@@ -1262,52 +1262,14 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- viewport/occlude --------
-    // Register/clear a chrome-rectangle that overlaps the viewport
-    // popup.: LayoutBroker translates the main-client rect to
-    // popup-client coords and forwards to AlphaCompositor, which
-    // per-frame stamps a smoothstep-feathered alpha hole into the
-    // layered popup's DIB before UpdateLayeredWindow. Chrome HTML
-    // (menus, panels) underneath shows through with soft edges.
-    if (kind == "viewport/occlude")
-    {
-        const std::string id = params.value("id", std::string{});
-        if (id.empty())
-        {
-            sendErr("viewport/occlude requires a non-empty id");
-            return res;
-        }
-        if (params.contains("rect") && params["rect"].is_object())
-        {
-            const auto& r = params["rect"];
-            int x = r.value("x", 0);
-            int y = r.value("y", 0);
-            int w = r.value("w", 0);
-            int h = r.value("h", 0);
-            int feather = params.value("feather", 0);
-            printf("[Occlude] SET id=%s rect=(%d,%d,%d,%d) feather=%d\n",
-                   id.c_str(), x, y, w, h, feather); fflush(stdout);
-            m_layout.SetOcclusion(id, x, y, w, h, feather);
-        }
-        else
-        {
-            printf("[Occlude] CLEAR id=%s\n", id.c_str()); fflush(stdout);
-            // rect=null or missing → remove the occlusion.
-            m_layout.RemoveOcclusion(id);
-        }
-        sendOk(json::object());
-        return res;
-    }
-
     // -------- viewport/capture-snapshot --------
     // B1.3.1.1: React's Modal primitive calls this on open to grab a
-    // frozen image of the engine viewport. It then renders the PNG as
-    // an <img> portaled into the WebView2 viewport DOM and full-occludes
-    // the engine popup — so Dialog.Overlay's `backdrop-blur-sm` can
-    // blur engine + panels uniformly without any popup-boundary seam.
-    // The compositor caches the most-recent pre-stamp frame, so the
-    // capture sees the raw engine output without chrome cut-outs and
-    // without any modal-mask dim that might already be active.
+    // frozen image of the engine viewport. It renders the JPEG as an
+    // opaque <img> portaled into the WebView2 viewport DOM, covering the
+    // live DComp engine visual beneath the transparent WebView2 — so
+    // Dialog.Overlay's `backdrop-blur-sm` can blur engine + panels
+    // uniformly. The compositor reads the engine RT back on demand, so
+    // the capture sees the raw engine output.
     //
     // Returns `{ imageBase64, w, h }` — base64 of a JPEG (the
     // backdrop is shown blurred, so lossy is invisible and far cheaper to
@@ -1370,10 +1332,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // DOM mouse/wheel/key events on the in-DOM <canvas> arrive here
     // and are forwarded to InputDispatcher, which PostMessages the
     // synthesized Win32 message to the (hidden) viewport popup HWND.
-    // When InputDispatcher is null (legacy-popup mode) the request is
-    // a silent no-op — the renderer shouldn't be dispatching these at
-    // all in that mode, but ack rather than error so a stray event
-    // doesn't surface as a noisy reject.
+    // When InputDispatcher is null (compositor init failed) the request
+    // is a silent no-op — ack rather than error so a stray event doesn't
+    // surface as a noisy reject.
     if (kind == "viewport/input")
     {
         if (m_input) m_input->Dispatch(params);

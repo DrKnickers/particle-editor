@@ -44,7 +44,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator, usePanelRef, type Layout } from "react-resizable-panels";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useRightDock, setDock } from "@/lib/right-dock";
-import { isLegacyMode } from "@/lib/hosting-mode";
 import { computeSceneRect, dockSlideTarget } from "@/lib/scene-rect";
 import { useDockAnim } from "@/lib/dock-anim";
 import { ViewportSlot } from "./ViewportSlot";
@@ -220,9 +219,9 @@ export function PanelLayout({ bridge }: Props) {
   // frame so the class is committed before flex changes (else the first
   // frame jumps with nothing to tween).
   const dockPanelRef = usePanelRef();
-  // Drives the `.dock-animating` CSS class (the flex-grow tween) — needed in
-  // BOTH hosting modes. Distinct from the dock-anim STORE signal used below,
-  // which suppresses ViewportSlot's RO sends and is raised ONLY under.
+  // Drives the `.dock-animating` CSS class (the flex-grow tween). Distinct from
+  // the dock-anim STORE signal used below, which suppresses ViewportSlot's RO
+  // sends during the host-interpolated slide.
   const [dockAnimating, setDockAnimating] = useState(false);
   // Shadow of react-resizable-panels' internal `expandToSize`: the dock's
   // SETTLED pixel width, captured at the open-SETTLE (not at the toggle), so
@@ -240,16 +239,10 @@ export function PanelLayout({ bridge }: Props) {
 
     setDockAnimating(true);
 
-    // [Item 3] Under, drive a host-side time-interpolated viewport rect
-    // synced to the CSS flex-grow tween, so the D3D9 viewport edge glides with
-    // the panel instead of juddering against the clumpy per-frame scene-rect
-    // stream. No-op under --legacy: there the host has no DComp anim path, so we
-    // leave ViewportSlot's per-frame sends running (today's behaviour) and never
-    // raise the suppression signal.
-    const arch = !isLegacyMode();
-    const vpEl = arch
-      ? (document.querySelector('[data-testid="quadrant-viewport"]') as HTMLElement | null)
-      : null;
+    // [Item 3] Drive a host-side time-interpolated viewport rect synced to the
+    // CSS flex-grow tween, so the engine viewport edge glides with the panel
+    // instead of juddering against the clumpy per-frame scene-rect stream.
+    const vpEl = document.querySelector('[data-testid="quadrant-viewport"]') as HTMLElement | null;
 
     // Dock width (CSS px) that transfers to/from the centre column. Prefer the
     // remembered SETTLED width (captured at the last open-settle). OPEN with no
@@ -257,12 +250,9 @@ export function PanelLayout({ bridge }: Props) {
     // read the live width, which is accurate because a first close happens from
     // a settled-open dock (the only residual is a first-open immediately
     // re-closed mid-transition, which the authoritative settle send corrects).
-    let dockWidthCss = 0;
-    if (arch) {
-      dockWidthCss = dockVisible
-        ? lastDockWidthCssRef.current ?? DOCK_MIN_PX
-        : lastDockWidthCssRef.current ?? p.getSize().inPixels;
-    }
+    const dockWidthCss = dockVisible
+      ? lastDockWidthCssRef.current ?? DOCK_MIN_PX
+      : lastDockWidthCssRef.current ?? p.getSize().inPixels;
 
     // [dock-mount fix] expand() restores the library's remembered
     // pre-collapse size (`expandToSize`), falling back to minSize when
@@ -298,7 +288,7 @@ export function PanelLayout({ bridge }: Props) {
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    const animate = arch && vpEl !== null && dockWidthCss > 0 && !reducedMotion;
+    const animate = vpEl !== null && dockWidthCss > 0 && !reducedMotion;
     if (animate) useDockAnim.getState().setAnimating(true);
 
     let raf = 0;
@@ -326,7 +316,7 @@ export function PanelLayout({ bridge }: Props) {
           .catch(() => {});
       });
     } else {
-      // Legacy, reduced-motion, or unknown width → no host anim. Snap the panel
+      // Reduced-motion or unknown width → no host anim. Snap the panel
       // (under reduced-motion the CSS transition is `none`, so it jumps and
       // `transitionend` never fires); the settle send below pins the host.
       raf = requestAnimationFrame(() => {
@@ -338,21 +328,19 @@ export function PanelLayout({ bridge }: Props) {
     // Reuse the existing post-toggle window (260ms > the 200ms tween) to (a)
     // end the CSS class + suppression signal, (b) record the dock's now-SETTLED
     // width for the next slide (getSize is accurate once the tween has ended;
-    // 0 on a close-settle, so guard >0), and (c) under send ONE
-    // authoritative layout/scene-rect at the REAL settled rect so host and web
-    // agree on rest (any from/to prediction error snaps out here — by now the
-    // host anim is done, so its self-defense no longer drops this send).
+    // 0 on a close-settle, so guard >0), and (c) send ONE authoritative
+    // layout/scene-rect at the REAL settled rect so host and web agree on rest
+    // (any from/to prediction error snaps out here — by now the host anim is
+    // done, so its self-defense no longer drops this send).
     const t = setTimeout(() => {
       setDockAnimating(false);
       if (animate) useDockAnim.getState().setAnimating(false);
-      if (arch) {
-        const settledDockW = p.getSize().inPixels;
-        if (settledDockW > 0) lastDockWidthCssRef.current = settledDockW;
-        if (vpEl) {
-          void bridge
-            .request({ kind: "layout/scene-rect", params: computeSceneRect(vpEl) })
-            .catch(() => {});
-        }
+      const settledDockW = p.getSize().inPixels;
+      if (settledDockW > 0) lastDockWidthCssRef.current = settledDockW;
+      if (vpEl) {
+        void bridge
+          .request({ kind: "layout/scene-rect", params: computeSceneRect(vpEl) })
+          .catch(() => {});
       }
     }, 260);
 

@@ -14,7 +14,7 @@
 import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useState, type ReactElement } from "react";
 import type { Bridge, PaletteEntry } from "@particle-editor/bridge-schema";
-import { OccludingPopover } from "@/components/OccludingPopover";
+import { AnimatedPopover } from "@/components/AnimatedPopover";
 import { Tip } from "@/primitives/Tip";
 
 type Slot = "color" | "bump";
@@ -38,22 +38,20 @@ export function TexturePalettePopover({ bridge, slot, onApply, tip, children }: 
   return (
     <Popover.Root>
       {tip ? (
-        <Tip content={tip} side="left" occlusionId="tip:props:texture-palette">
+        <Tip content={tip} side="left">
           {trigger}
         </Tip>
       ) : (
         trigger
       )}
       <Popover.Portal>
-        <OccludingPopover
-          bridge={bridge}
-          occlusionId="popover:texture-palette"
+        <AnimatedPopover
           align="end"
           sideOffset={6}
           className="z-50 w-[560px] rounded-token border border-border-2 bg-panel p-3 shadow-[var(--shadow)]"
         >
           <PaletteBody bridge={bridge} initialSlot={slot} onApply={onApply} />
-        </OccludingPopover>
+        </AnimatedPopover>
       </Popover.Portal>
     </Popover.Root>
   );
@@ -253,10 +251,8 @@ function PaletteCell({
     <div className="relative">
       {/* Tip wraps the Popover.Close (not the button inside it) — Tooltip
           trigger around another Radix asChild trigger is the blessed
-          nesting; both forward their props down to the button. Static
-          occlusionId across grid cells is safe: only one tooltip is ever
-          open at a time (app-level Tooltip.Provider). */}
-      <Tip content={entry.filename} occlusionId="tip:texpop:entry">
+          nesting; both forward their props down to the button. */}
+      <Tip content={entry.filename}>
         <Popover.Close asChild>
           <button
             type="button"

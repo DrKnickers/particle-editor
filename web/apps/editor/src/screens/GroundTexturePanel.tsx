@@ -364,8 +364,6 @@ export function GroundTexturePanel({ bridge, onClose }: Props) {
     <ToolPanel
       title="Ground Texture"
       onClose={onClose}
-      bridge={bridge}
-      occlusionId="tool-panel:ground"
     >
       <GroundTexturePanelBody bridge={bridge} />
     </ToolPanel>

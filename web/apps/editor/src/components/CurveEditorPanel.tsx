@@ -1356,7 +1356,6 @@ export function CurveEditorPanel({ bridge }: Props) {
               the channel is locked, mirroring the Delete button pattern. */}
           <Tip
             content={focusLocked ? "Channel is locked — unlock to edit" : "Select (click a key to select; click empty area to clear)"}
-            occlusionId="tip:curve:select"
           >
             <span className="inline-block">
               <button
@@ -1379,7 +1378,6 @@ export function CurveEditorPanel({ bridge }: Props) {
           </Tip>
           <Tip
             content={focusLocked ? "Channel is locked — unlock to edit" : "Insert (click empty canvas to add a key)"}
-            occlusionId="tip:curve:insert"
           >
             <span className="inline-block">
               <button
@@ -1409,7 +1407,7 @@ export function CurveEditorPanel({ bridge }: Props) {
             const isActive = focusedTrack?.interpolation === kind;
             const label = kind[0]!.toUpperCase() + kind.slice(1);
             return (
-              <Tip key={kind} content={`${label} interpolation`} occlusionId={`tip:curve:interp-${kind}`}>
+              <Tip key={kind} content={`${label} interpolation`}>
                 <button
                   type="button"
                   disabled={interpDisabled}
@@ -1486,7 +1484,6 @@ export function CurveEditorPanel({ bridge }: Props) {
           {focusLocked && (
             <Tip
               content={`${focusedChannel.label} is locked to ${lockToValue} and shows ${lockToValue}'s curve. Unlock to edit.`}
-              occlusionId="tip:curve:lock"
             >
               <span
                 data-testid="ce-lock-glyph"
@@ -1509,7 +1506,6 @@ export function CurveEditorPanel({ bridge }: Props) {
               events, so the Tip rides an inline-block span wrapper. */}
           <Tip
             content={deleteDisabled ? "Select a non-border key first" : "Delete selected key(s)"}
-            occlusionId="tip:curve:delete"
           >
             <span className="inline-block">
               <button
@@ -1798,7 +1794,6 @@ function KeyContextMenu({
           the menu item full-width). */}
       <Tip
         content={isBorder ? "Border keys cannot be deleted" : undefined}
-        occlusionId="tip:curve:key-menu-delete"
       >
         <span className="block w-full">
           <button

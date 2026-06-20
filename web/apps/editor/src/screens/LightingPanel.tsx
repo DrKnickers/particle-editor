@@ -611,7 +611,6 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
             flex item; the button keeps its own box). */}
         <Tip
           content={forceAlign ? "Disabled while Force Align is on" : undefined}
-          occlusionId="tip:lighting:force-align"
         >
           <span className="inline-block">
             <button

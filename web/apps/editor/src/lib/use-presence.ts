@@ -5,8 +5,7 @@
 //
 // The unmount fires on animationend OR a timeout fallback (exitMs +
 // 50ms slack) — reduced-motion sets `animation: none`, which fires NO
-// animationend, and a dropped event must never leak a mounted ghost
-// (or its viewport-occlusion registration).
+// animationend, and a dropped event must never leak a mounted ghost.
 
 import { useEffect, useRef, useState } from "react";
 

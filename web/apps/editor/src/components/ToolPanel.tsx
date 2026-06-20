@@ -26,27 +26,15 @@
 // Background pill again, picking a different Tools-menu entry).
 
 import { ChevronDown, X } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
-import type { Bridge } from "@particle-editor/bridge-schema";
-import { useViewportOcclusion } from "@/lib/viewport-occlusion";
+import { useState, type ReactNode } from "react";
 
 type ToolPanelProps = {
   title: string;
   onClose: () => void;
   children?: ReactNode;
-  /** follow-up: when provided, the panel registers itself with
-   *  the host as an occlusion. The host punches a SetWindowRgn hole
-   *  in the viewport popup over this panel's rect so the panel HTML
-   *  shows through. Each panel needs a stable, unique id.
-   *
-   *  Only meaningful for `variant="overlay"` (a panel floating over the
-   *  engine popup). A `docked` panel sits in its own layout column
-   *  beside the viewport, not over it, so it needs no hole-punch. */
-  bridge?: Bridge;
-  occlusionId?: string;
   /** "overlay" (default) floats over the viewport, absolute-right, 320px.
    *  "docked" fills its parent layout column (the right-dock slot, shared
-   *  with the Spawner) and skips viewport occlusion. */
+   *  with the Spawner). */
   variant?: "overlay" | "docked";
   /** True while the dock is sliding shut (logically closed but still mounted
    *  for the exit animation). Stamps data-state="closing" on the dialog so it
@@ -64,20 +52,12 @@ export function ToolPanel({
   title,
   onClose,
   children,
-  bridge,
-  occlusionId,
   variant = "overlay",
   closing = false,
 }: ToolPanelProps) {
-  const ref = useRef<HTMLDivElement | null>(null);
   const docked = variant === "docked";
-  // The hook is a no-op when bridge or id is missing (browser-mode,
-  // tests, or panels that haven't opted in yet). A docked panel never
-  // overlays the engine, so we pass an empty id to skip the hole-punch.
-  useViewportOcclusion(bridge, docked ? "" : occlusionId ?? "", ref);
   return (
     <div
-      ref={ref}
       className={
         docked
           ? "flex h-full w-full flex-col border-l border-border bg-bg text-text"

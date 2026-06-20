@@ -168,11 +168,8 @@ export function ColorButton({
           <div className="mb-2">
             <div className="mb-1 text-[10px] text-text-3">Basic colors</div>
             <div className="grid grid-cols-8 gap-0.5">
-              {/* Static occlusionIds on grid cells are safe: only ONE
-                  tooltip is ever open at a time (app-level Radix
-                  Tooltip.Provider), so the ids never coexist. */}
               {BASIC_COLORS.map((color, i) => (
-                <Tip key={i} content={rgbToHex(color).toUpperCase()} occlusionId="tip:color:swatch">
+                <Tip key={i} content={rgbToHex(color).toUpperCase()}>
                   <button
                     type="button"
                     aria-label={`Basic color ${rgbToHex(color).toUpperCase()}`}
@@ -190,7 +187,7 @@ export function ColorButton({
             <div className="mb-1 text-[10px] text-text-3">Custom colors</div>
             <div className="grid grid-cols-8 gap-0.5">
               {slots.map((color, i) => (
-                <Tip key={i} content={color ? rgbToHex(color).toUpperCase() : "Empty"} occlusionId="tip:color:slot">
+                <Tip key={i} content={color ? rgbToHex(color).toUpperCase() : "Empty"}>
                   <button
                     type="button"
                     aria-label={color ? `Custom color ${rgbToHex(color).toUpperCase()}` : `Custom slot ${i + 1} (empty)`}

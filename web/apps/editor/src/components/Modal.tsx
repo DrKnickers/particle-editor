@@ -52,26 +52,23 @@ export function Modal({
   children,
 }: ModalProps) {
   // B1.3.1.1: frosted-glass modal backdrop via engine-snapshot capture.
-  // The engine viewport is a layered Win32 popup composited above
-  // WebView2 by DWM — its pixels can't be reached by CSS effects
+  // The engine renders into a DComp visual UNDER the transparent
+  // WebView2 — its pixels can't be reached by CSS effects
   // (backdrop-filter, opacity, blur) applied to HTML elements (see
   // tasks/lessons.md for the structural reason and the failed
   // server-side modal-mask approach this replaces). The fix lifts the
   // engine output INTO the WebView2 DOM as a frozen <img>:
   //
-  //   1. Open: request a PNG snapshot from AlphaCompositor's pre-stamp
-  //      cache and render it as an <img> portaled into the viewport
-  //      quadrant DOM. Send `viewport/occlude` with the FULL quadrant
-  //      rect so the engine popup goes fully alpha-transparent — the
-  //      snapshot is the only thing the user sees behind Dialog.Overlay.
+  //   1. Open: request a JPEG snapshot of the engine viewport and render
+  //      it as an opaque <img> portaled into the viewport-quadrant DOM.
+  //      The <img> covers the live DComp engine visual beneath the
+  //      transparent WebView2, so the user sees the frozen snapshot.
   //   2. Dialog.Overlay's `bg-black/60 backdrop-blur-sm` then dims +
   //      blurs everything in its DOM background uniformly (panels AND
-  //      the snapshot img), with no visible popup boundary because both
-  //      sides of it are now WebView2-rendered pixels.
-  //   3. Close: clear the snapshot state, restore the engine popup by
-  //      sending `viewport/occlude { rect: null }`. The engine keeps
-  //      rendering through the modal lifecycle (a known cost — see
-  //      todo.md §4 risk 4).
+  //      the snapshot img) -- both are now WebView2-rendered pixels.
+  //   3. Close: clear the snapshot state; the viewport quadrant goes
+  //      transparent again and the live DComp engine visual shows
+  //      through. The engine keeps rendering through the modal lifecycle.
   //
   // Bridge comes from BridgeContext (NOT `window.bridge` — see).
   const bridge = useBridge();
@@ -129,43 +126,20 @@ export function Modal({
 
     let cancelled = false;
 
-    // One-shot capture + occlude on modal open. NO re-capture during
-    // the modal's lifetime — by design:
+    // One-shot snapshot capture on modal open. NO re-capture during the
+    // modal's lifetime -- by design:
     //
-    //   1. The occlude uses a sentinel rect that's far larger than any
-    //      realistic popup, so ApplyOcclusion always clips it to the
-    //      current popup bounds and zeroes every pixel. The popup
-    //      stays fully alpha-cut across any resize without needing a
-    //      fresh viewport/occlude — important because the Win32
-    //      drag-resize modal loop starves WebView2 IPC, so renderer→
-    //      host messages can't reliably land during the drag anyway.
+    //   1. The snapshot img sits at position:absolute; inset:0 inside the
+    //      quadrant, so CSS scales it to fill the current bounds as the
+    //      window resizes. The content is mildly stale during a drag (the
+    //      engine keeps rendering but we don't re-encode), but it sits
+    //      behind Dialog.Overlay's `bg-black/60 backdrop-blur-sm` so
+    //      particle motion blurs to mush -- staleness is invisible.
     //
-    //   2. The snapshot img sits at position:absolute; inset:0 inside
-    //      the quadrant, so CSS scales it to fill the current bounds
-    //      as the window resizes. The content is mildly stale during
-    //      a drag (engine keeps rendering but we don't re-encode),
-    //      but it's behind Dialog.Overlay's `bg-black/60
-    //      backdrop-blur-sm` — particle motion blurs to mush at that
-    //      treatment, so staleness is invisible. The visual model
-    //      (modal = frozen backdrop) matches user mental model.
-    //
-    //   3. Re-capturing during drag would force a ~10-30 ms GDI+ PNG
-    //      encode per frame plus base64 transit, on top of the
-    //      engine's already-expensive D3D9 device Reset per WM_SIZE.
-    //      Stacking both produces visible stutter; dropping the
-    //      re-capture eliminates the modal's contribution to it
-    //      entirely.
-    // Phase 3 Stage 1 follow-up: capture FIRST, then occlude.
-    // Pre-deferral (cache-hit at ~0.1 ms) the order didn't matter
-    // user-perceptibly because the snapshot arrived inside the same
-    // paint frame as the modal-open render. Post-deferral the capture
-    // takes ~50-500 ms (on-demand GPU readback + PNG encode + IPC +
-    // PNG decode at 3440×1369), so if we send the occlude first the
-    // user sees the engine viewport go alpha-cut (empty) for the
-    // entire capture window before the snapshot + dialog mount.
-    // Reordering to "capture → setSnapshot → occlude → setSnapshot
-    // Ready" keeps the engine viewport live until everything else is
-    // ready, then everything mounts in one render pass.
+    //   2. Re-capturing during drag would force a ~10-30 ms JPEG encode
+    //      per frame plus base64 transit, on top of the engine's
+    //      already-expensive D3D9 device Reset per WM_SIZE -- visible
+    //      stutter. Dropping the re-capture removes the modal's share.
     void bridge
       .request({ kind: "viewport/capture-snapshot", params: {} })
       .then((res) => {
@@ -173,26 +147,9 @@ export function Modal({
         const snap = res as { imageBase64: string; w: number; h: number };
         setSnapshot(snap);
 
-        // Engine layer goes transparent now that the DOM snapshot is
-        // ready to take over. Fire-and-forget — the next Composite
-        // tick applies the alpha cut.
-        if (el)
-        {
-          void bridge
-            .request({
-              kind: "viewport/occlude",
-              params: {
-                id: "modal",
-                rect: { x: -100000, y: -100000, w: 200000, h: 200000 },
-                feather: 0,
-              },
-            })
-            .catch(() => { /* ignore */ });
-        }
-
         // Open the Dialog on the next animation frame so React has
         // mounted the portaled <img> + Chromium has had a chance to
-        // start the PNG decode. Dialog.Overlay's fade-in then starts
+        // start the JPEG decode. Dialog.Overlay's fade-in then starts
         // with stable backdrop content, and backdrop-filter blurs it
         // correctly from frame one.
         window.requestAnimationFrame(() => {
@@ -210,12 +167,6 @@ export function Modal({
       cancelled = true;
       setSnapshot(null);
       setViewportEl(null);
-      void bridge
-        .request({
-          kind: "viewport/occlude",
-          params: { id: "modal", rect: null },
-        })
-        .catch(() => { /* ignore */ });
     };
   }, [open, bridge]);
 

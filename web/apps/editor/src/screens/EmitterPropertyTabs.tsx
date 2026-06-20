@@ -749,7 +749,7 @@ export function TexturePickerField({
       <span className="lbl">{label}</span>
       <FieldText wide label={label} value={value} onCommit={commit} />
       <div className="texture-btns">
-        <Tip content="Browse for a texture file" side="left" occlusionId="tip:props:texture-browse">
+        <Tip content="Browse for a texture file" side="left">
           <button
             type="button"
             className="btn-texture-browse"

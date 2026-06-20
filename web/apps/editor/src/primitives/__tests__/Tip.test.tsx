@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
+import { render, screen, act } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Tip } from "../Tip";
 import { BridgeContext } from "@/lib/bridge-context";
@@ -14,12 +14,6 @@ function renderTip(ui: React.ReactElement, bridge: Bridge | null = null) {
       <Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>
     </BridgeContext.Provider>,
   );
-}
-
-function makeBridge() {
-  const request = vi.fn().mockResolvedValue({ ok: true });
-  const on = vi.fn().mockReturnValue(() => {});
-  return { bridge: { request, on } as unknown as Bridge, request };
 }
 
 describe("Tip", () => {
@@ -52,42 +46,6 @@ describe("Tip", () => {
     );
     act(() => screen.getByRole("button", { name: "Plain" }).focus());
     expect(document.querySelector(".tip-surface")).toBeNull();
-  });
-
-  it("registers a viewport occlusion while open when occlusionId is set, and releases on close", async () => {
-    const { bridge, request } = makeBridge();
-    renderTip(
-      <Tip content="hint" occlusionId="tip:test:x"><button aria-label="T">T</button></Tip>,
-      bridge,
-    );
-    const btn = screen.getByRole("button", { name: "T" });
-    act(() => btn.focus());
-    await act(async () => {}); // flush the occlusion request effect
-    const occlude = request.mock.calls
-      .map((c) => c[0] as { kind: string; params: { id: string; rect: unknown } })
-      .filter((r) => r.kind === "viewport/occlude");
-    expect(occlude.length).toBeGreaterThan(0);
-    expect(occlude[0]!.params.id).toBe("tip:test:x");
-    expect(occlude[0]!.params.rect).not.toBeNull();
-
-    request.mockClear();
-    act(() => { btn.blur(); fireEvent.pointerLeave(btn); });
-    await act(async () => {});
-    const release = request.mock.calls
-      .map((c) => c[0] as { kind: string; params: { id: string; rect: unknown } })
-      .filter((r) => r.kind === "viewport/occlude" && r.params.rect === null);
-    expect(release.length).toBe(1);
-  });
-
-  it("makes no bridge traffic without an occlusionId", async () => {
-    const { bridge, request } = makeBridge();
-    renderTip(
-      <Tip content="hint"><button aria-label="T">T</button></Tip>,
-      bridge,
-    );
-    act(() => screen.getByRole("button", { name: "T" }).focus());
-    await act(async () => {});
-    expect(request).not.toHaveBeenCalled();
   });
 
   it("forwards side and align to the content", () => {

@@ -7,7 +7,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
-import { OccludingPopover } from "@/components/OccludingPopover";
+import { AnimatedPopover } from "@/components/AnimatedPopover";
 import {
   GroundTexturePanelBody,
   BUNDLED_GROUND_SLOTS,
@@ -56,15 +56,13 @@ export function GroundDropdown({ bridge }: Props) {
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <OccludingPopover
-          bridge={bridge}
-          occlusionId="popover:ground"
+        <AnimatedPopover
           align="end"
           sideOffset={6}
           className="bg-panel border border-border-2 rounded-token shadow-[var(--shadow)] p-3 min-w-[280px] z-50"
         >
           <GroundTexturePanelBody bridge={bridge} />
-        </OccludingPopover>
+        </AnimatedPopover>
       </Popover.Portal>
     </Popover.Root>
   );

@@ -103,7 +103,7 @@
 
 /* ---- Popover entrance / exit (Background / Ground / texture picker) ----
    Self-contained keyframes keyed off Radix's data-state, applied via the
-   shared OccludingPopover wrapper. The `animate-in`/`zoom-in-95` Tailwind
+   shared AnimatedPopover wrapper. The `animate-in`/`zoom-in-95` Tailwind
    utilities are NOT available in this build (no tailwindcss-animate plugin),
    so we define the fade+slight-zoom here. Radix keeps Popover.Content mounted
    through the closing animation (Presence), so the exit actually plays.

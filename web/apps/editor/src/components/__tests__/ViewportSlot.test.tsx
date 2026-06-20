@@ -1,30 +1,16 @@
-// Vitest tests for ViewportSlot — Phase 1.4 + flip.
+// Vitest tests for ViewportSlot.
 //
 // Two surfaces locked down here:
 //
-// 1. The dual render path. Under default (VITE_HOSTING_MODE unset or
-//    anything other than "legacy"), the slot mounts a <canvas
-//    data-testid="viewport-canvas"> ready for architecture-C engine
-//    pixels (DXGI via DComp; the canvas overlay is the input target,
-//    not the paint surface). Under VITE_HOSTING_MODE="legacy" the
-//    slot renders the placeholder span (architecture A — pre-
-//    default; legacy WS_EX_LAYERED popup paints engine pixels above
-//    the WebView).
+// 1. The render surface. The slot mounts a transparent <canvas
+//    data-testid="viewport-canvas"> as the input target; engine pixels
+//    reach the screen via the DComp engine visual UNDER the WebView2,
+//    not the DOM, so the canvas itself is never painted.
 //
 // 2. The bridge contract. ViewportSlot dispatches `layout/scene-rect`
-//    on mount; under architecture C it also subscribes to
-//    `viewport/frame-ready` and tears the subscription down on
-//    unmount. (Architecture A skips the subscription — popup HWND
-//    is the engine-pixel source, not the JPEG path.)
-//
-// The actual paint loop (Image() decode + drawImage) is exercised at
-// runtime via the C++ host — see Phase 1.5 smoke notes in the
-// archived todo. jsdom has neither a real canvas backing-store
-// nor a real Image decoder, so unit-testing the paint path here
-// would be all mocks and no real signal.
-//
-// The mode flag is read inside the component (via `isLegacyMode()`)
-// so `vi.stubEnv` controls it per-test without any module-reset dance.
+//    on mount and forwards DOM pointer/keyboard input as
+//    `viewport/input`; it never subscribes to `viewport/frame-ready`
+//    (there is no DOM-side engine-pixel consumer).
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, cleanup } from "@testing-library/react";
@@ -45,20 +31,17 @@ function makeStubBridge(): Bridge & {
   };
 }
 
-describe("ViewportSlot — legacy path (VITE_HOSTING_MODE='legacy')", () => {
-  beforeEach(() => {
-    vi.stubEnv("VITE_HOSTING_MODE", "legacy");
-  });
+describe("ViewportSlot — render surface", () => {
   afterEach(() => {
     cleanup();
-    vi.unstubAllEnvs();
   });
 
-  it("renders the 'D3D9 viewport' placeholder span, no canvas", () => {
+  it("mounts a <canvas data-testid='viewport-canvas'> as the input target", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
-    expect(screen.getByText("D3D9 viewport")).toBeInTheDocument();
-    expect(screen.queryByTestId("viewport-canvas")).not.toBeInTheDocument();
+    const canvas = screen.getByTestId("viewport-canvas");
+    expect(canvas).toBeInTheDocument();
+    expect(canvas.tagName).toBe("CANVAS");
   });
 
   it("dispatches layout/scene-rect on mount with DPR-scaled w/h", () => {
@@ -75,47 +58,7 @@ describe("ViewportSlot — legacy path (VITE_HOSTING_MODE='legacy')", () => {
     });
   });
 
-  it("does NOT subscribe to viewport/frame-ready in legacy mode", () => {
-    const bridge = makeStubBridge();
-    render(<ViewportSlot bridge={bridge} />);
-    const subscribedKinds = bridge.on.mock.calls.map((c) => c[0]);
-    expect(subscribedKinds).not.toContain("viewport/frame-ready");
-  });
-});
-
-describe("ViewportSlot — default path (VITE_HOSTING_MODE unset, architecture C)", () => {
-  beforeEach(() => {
-    vi.stubEnv("VITE_HOSTING_MODE", "");
-  });
-  afterEach(() => {
-    cleanup();
-    vi.unstubAllEnvs();
-  });
-
-  it("mounts a <canvas data-testid='viewport-canvas'> instead of the placeholder", () => {
-    const bridge = makeStubBridge();
-    render(<ViewportSlot bridge={bridge} />);
-    const canvas = screen.getByTestId("viewport-canvas");
-    expect(canvas).toBeInTheDocument();
-    expect(canvas.tagName).toBe("CANVAS");
-    expect(screen.queryByText("D3D9 viewport")).not.toBeInTheDocument();
-  });
-
-  it("does NOT subscribe to viewport/frame-ready under architecture C (DXGI is the engine-pixel source, not the JPEG path)", () => {
-    // Pre-flip, this describe block stubbed
-    // VITE_VIEWPORT_TRANSPORT="canvas-jpeg" without setting the
-    // WEBVIEW2_HOSTING twin — that produced the intermediate
-    // architecture-B state where ViewportSlot DID subscribe to
-    // frame-ready and JPEG-decoded engine frames into the <img>.
-    // Post-the single VITE_HOSTING_MODE env var collapses that
-    // matrix: unset / non-"legacy" → full architecture C, where
-    // engine pixels reach the screen via DXGI swapchain → DComp
-    // engine visual UNDER the WebView2 visual, and the frame-ready
-    // subscription is skipped (see ViewportSlot.tsx isLegacyMode +
-    // the compositionMode early-return at the frame-ready effect).
-    // The host-side FramePublisher continues publishing frames
-    // (wasted work, kept until a future architecture-A deletion
-    // dispatch); we just don't consume them.
+  it("never subscribes to viewport/frame-ready (engine pixels come from the DComp visual, not the DOM)", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
     const subscribedKinds = bridge.on.mock.calls.map((c) => c[0]);
@@ -138,13 +81,9 @@ function findViewportInputCalls(
     .filter((req) => req.kind === "viewport/input");
 }
 
-describe("ViewportSlot — Phase 2 input forwarding (architecture C only)", () => {
-  beforeEach(() => {
-    vi.stubEnv("VITE_HOSTING_MODE", "");
-  });
+describe("ViewportSlot — input forwarding", () => {
   afterEach(() => {
     cleanup();
-    vi.unstubAllEnvs();
   });
 
   it("pointerdown on canvas dispatches viewport/input { type: 'mousedown' }", () => {
@@ -236,19 +175,9 @@ describe("ViewportSlot — Phase 2 input forwarding (architecture C only)", () =
     const inputs = findViewportInputCalls(bridge);
     expect(inputs.some((r) => r.params.type === "blur")).toBe(true);
   });
-
-  it("does NOT attach listeners in legacy mode (VITE_HOSTING_MODE='legacy')", () => {
-    vi.stubEnv("VITE_HOSTING_MODE", "legacy");
-    const bridge = makeStubBridge();
-    render(<ViewportSlot bridge={bridge} />);
-    // Canvas isn't even rendered; window-level keydown should be a no-op.
-    fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
-    const inputs = findViewportInputCalls(bridge);
-    expect(inputs.length).toBe(0);
-  });
 });
 
-describe("ViewportSlot — dock-slide RO suppression (Item 3, architecture C)", () => {
+describe("ViewportSlot — dock-slide RO suppression (Item 3)", () => {
   // Capture the ResizeObserver callback so we can fire it manually — jsdom's
   // setup stub has a no-op observe(), so the RO never fires on its own. The
   // real RO mechanics aren't under test; the suppression GATE on the callback
@@ -257,7 +186,6 @@ describe("ViewportSlot — dock-slide RO suppression (Item 3, architecture C)", 
   let roCallbacks: Array<() => void>;
 
   beforeEach(() => {
-    vi.stubEnv("VITE_HOSTING_MODE", ""); // architecture C
     roCallbacks = [];
     globalThis.ResizeObserver = class {
       constructor(cb: () => void) {
@@ -271,7 +199,6 @@ describe("ViewportSlot — dock-slide RO suppression (Item 3, architecture C)", 
   });
   afterEach(() => {
     cleanup();
-    vi.unstubAllEnvs();
     globalThis.ResizeObserver = RealRO;
     useDockAnim.setState({ animating: false });
   });

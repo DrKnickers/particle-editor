@@ -776,10 +776,6 @@ export class MockBridge implements Bridge {
         // Mock: no native DComp backing visual to recolour.
         return {};
 
-      case "viewport/occlude":
-        // Mock: no native HWND to clip. Acknowledge silently.
-        return {};
-
       case "viewport/capture-snapshot":
         // Mock: no engine to snapshot. Empty image + zero dims so the
         // React Modal's render guard (`snapshot && snapshot.imageBase64`)

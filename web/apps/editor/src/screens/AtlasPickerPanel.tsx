@@ -214,7 +214,7 @@ export function AtlasPickerPanel({
   const showMeta = eligible && !tooLarge && !!colorTexture;
 
   return (
-    <ToolPanel title="Atlas Frames" onClose={onClose} variant="docked" bridge={bridge} closing={closing}>
+    <ToolPanel title="Atlas Frames" onClose={onClose} variant="docked" closing={closing}>
       {/* Full-height flex column that negates ToolPanel's body padding so
           the pinned preview and scrollable grid can fill the available space. */}
       <div className="-m-3 flex h-full flex-col overflow-hidden">

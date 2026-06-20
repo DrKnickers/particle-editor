@@ -1335,26 +1335,12 @@ bool Engine::Render()
 	const LONGLONG _ptComposite1 = EngQpcNow();  // composite ends / present begins
 	m_pDevice->EndScene();
 
-	//: route the final frame either through the layered-window
-	// compositor (UpdateLayeredWindow on the off-screen ARGB RT we
-	// targeted at the top of this function) or through the legacy
-	// swap-chain Present.
-	if (m_pAlphaCompositor)
-	{
-		// [PERF]: the engine renders into the AlphaCompositor's RT,
-		// but the visible pixels reach the screen via the host's DComp
-		// shared-texture path (CompositeEngineFrame reads the same RT
-		// GPU-side). The layered Composite() here is a synchronous
-		// GetRenderTargetData readback + ~19 MB memcpy every frame — pure
-		// redundant work under composition (it fed only arch-B's invisible
-		// UpdateLayeredWindow and the FramePublisher cache, which is itself
-		// gated off in composition mode). Measured at ~98-99% of Render(),
-		// scaling linearly with window area. Modal snapshots do their own
-		// on-demand readback, so they're unaffected. See tasks/todo.md.
-		if (!m_compositionMode)
-			m_pAlphaCompositor->Composite(m_presentationParameters.hDeviceWindow);
-	}
-	else
+	// When an AlphaCompositor is attached the engine renders into its
+	// shared-handle RT and the host's DComp path
+	// (host::Compositor::CompositeEngineFrame) presents those pixels GPU-side
+	// — the engine itself does NOT present. Without a compositor (--capture /
+	// headless / poc) we present the swap chain directly.
+	if (!m_pAlphaCompositor)
 	{
 		m_pDevice->Present(NULL, NULL, NULL, NULL);
 	}
@@ -4636,30 +4622,24 @@ const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& Engine::EnsureSkydom
     return m_skydomeLists;
 }
 
-// [PERF] Composition mode (/ DComp); see the header for the render-path
-// rationale. Composition mode is also the "new-UI path, a reference-object
-// picker exists" signal, so turning it on ARMS the eager catalog prefetch: set the
-// persistent m_catalogWanted latch and the next Update()->StartCatalogBuildIfNeeded()
-// kicks a background build immediately -- so the catalog is likely ready before the
-// user ever opens the picker, and every later mod/submod switch rebuilds eagerly
-// (the switch invalidates the catalog, the latch stays set, Update() re-kicks) with
-// no picker-open needed.
+// The host calls this once at startup to ARM the eager reference-object
+// catalog prefetch: set the persistent m_catalogWanted latch and the next
+// Update()->StartCatalogBuildIfNeeded() kicks a background build immediately --
+// so the catalog is likely ready before the user ever opens the picker, and
+// every later mod/submod switch rebuilds eagerly (the switch invalidates the
+// catalog, the latch stays set, Update() re-kicks) with no picker-open needed.
 //
 // Ordering invariant (HostWindow): ModManager::RestoreLastLayerStack() runs in the
 // host impl ctor and applies the saved layer stack to the FileManager
-// SYNCHRONOUSLY, BEFORE the host calls SetCompositionMode(true). So the first build
+// SYNCHRONOUSLY, BEFORE the host calls ArmCatalogPrefetch(). So the first build
 // this arms snapshots the FileManager already reflecting the then-selected mod +
 // submods -- it prioritizes the active content, not a wasted base-game pass. If a
 // future refactor moves the mod restore AFTER this call, the startup build would
 // target base game and a later ReloadTextures would rebuild for the mod (correct,
-// just one wasted pass) -- keep restore before SetCompositionMode.
-// Legacy (--legacy) never calls this with true, so the latch stays false and no
-// catalog is ever built there (no picker to consume it).
-void Engine::SetCompositionMode(bool on)
+// just one wasted pass) -- keep restore before ArmCatalogPrefetch().
+void Engine::ArmCatalogPrefetch()
 {
-    m_compositionMode = on;
-    if (on)
-        m_catalogWanted = true;
+    m_catalogWanted = true;
 }
 
 // [reference-model-shadows] Synchronous catalog build for headless --capture-ref.
@@ -4725,9 +4705,9 @@ void Engine::StartCatalogBuildIfNeeded()
 
 // Host calls this right after Update(): true once when a finished catalog was
 // just swapped in, so the host fires engine/state/changed (the picker re-queries).
-// React/composition path only: legacy main.cpp never sets m_catalogWanted (no picker),
-// so no worker runs and the flag is never set there. Even unconsumed it's a harmless
-// one-shot bool (only ever re-set to true on the next install -- no accumulation).
+// Only ever set when ArmCatalogPrefetch() ran (a worker built a catalog); a harmless
+// one-shot bool even if unconsumed (only re-set to true on the next install -- no
+// accumulation).
 bool Engine::ConsumeCatalogReadyFlag()
 {
     if (!m_catalogJustReady) return false;

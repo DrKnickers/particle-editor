@@ -70,7 +70,6 @@ import {
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Menubar from "@radix-ui/react-menubar";
 import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, Plus, Trash2, TriangleAlert } from "lucide-react";
-import { useViewportOcclusion } from "@/lib/viewport-occlusion";
 import type {
   Bridge,
   EmitterTreeDto,
@@ -352,58 +351,27 @@ type RowProps = {
   chainWarning: ChainWarning | null;
 };
 
-// (Group A): mirror of MenuBar's OccludingMenubarContent for
-// ContextMenu. When the row's context menu mounts, we register its
-// bounding rect as a viewport occlusion so the AlphaCompositor's
-// alpha stamp opens a hole in the layered viewport popup at that
-// location — without it the right side of the menu gets overpainted
-// by the popup wherever it crosses the viewport rect.
-function OccludingContextMenuContent({
-  bridge,
-  occlusionId,
-  children,
-  ...rest
-}: ComponentProps<typeof ContextMenu.Content> & {
-  bridge: Bridge;
-  occlusionId: string;
-}) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  // pad=24, feather=24 — matches the menubar dropdown's shadow-xl ring
-  // so the popup alpha smoothly transitions from full-viewport at the
-  // padded outer edge to full-cut at the menu's actual outline.
-  useViewportOcclusion(bridge, occlusionId, ref, 24, 24);
+// Styled ContextMenu.Content for the emitter-tree row context menu --
+// shared border/shadow chrome matching the menubar dropdowns.
+function StyledContextMenuContent({ children, ...rest }: ComponentProps<typeof ContextMenu.Content>) {
   return (
     <ContextMenu.Content
       className="z-50 min-w-[220px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-xl"
       {...rest}
     >
-      <div ref={ref}>{children}</div>
+      {children}
     </ContextMenu.Content>
   );
 }
 
-// A submenu (e.g. "Paste As ▸") renders in its OWN portal at a different
-// screen location than its parent menu, so it needs its OWN viewport
-// occlusion rect — otherwise the layered D3D viewport popup overpaints the
-// part of the submenu that crosses the viewport, exactly as it would the
-// top-level menu without OccludingContextMenuContent. Same pad/feather.
-function OccludingContextSubContent({
-  bridge,
-  occlusionId,
-  children,
-  ...rest
-}: ComponentProps<typeof ContextMenu.SubContent> & {
-  bridge: Bridge;
-  occlusionId: string;
-}) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  useViewportOcclusion(bridge, occlusionId, ref, 24, 24);
+// Styled ContextMenu.SubContent (e.g. the "Paste As" submenu), same chrome.
+function StyledContextSubContent({ children, ...rest }: ComponentProps<typeof ContextMenu.SubContent>) {
   return (
     <ContextMenu.SubContent
       className="z-50 min-w-[200px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-xl"
       {...rest}
     >
-      <div ref={ref}>{children}</div>
+      {children}
     </ContextMenu.SubContent>
   );
 }
@@ -754,7 +722,6 @@ function EmitterRow({
             <Tip
               content={node.visible ? "Hide emitter" : "Show emitter"}
               side="right"
-              occlusionId={`tip:tree-eye:${node.id}`}
             >
               <span
                 role="button"
@@ -854,7 +821,6 @@ function EmitterRow({
                 <Tip
                   content={`Select link group ${node.linkGroup}`}
                   side="right"
-                  occlusionId={`tip:link-badge:${node.id}`}
                 >
                   <span
                     aria-hidden
@@ -901,14 +867,12 @@ function EmitterRow({
                 identical and the a11y goldens hold.: the rich
                 ChainWarningTip carries the root→offender breakdown for
                 sighted users; the aria-label keeps the FULL plain-text
-                breakdown for screen readers (spec §4). side="right" +
-                occlusion because tree tooltips open toward the D3D
-                viewport. */}
+                breakdown for screen readers (spec §4). side="right" so
+                tree tooltips open toward the viewport. */}
             {chainWarning !== null && (
               <Tip
                 content={<ChainWarningTip warning={chainWarning} />}
                 side="right"
-                occlusionId={`tip:chain-warn:${node.id}`}
               >
                 <span
                   style={{ gridColumn: 4, gridRow: 1 }}
@@ -923,9 +887,7 @@ function EmitterRow({
           </button>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
-          <OccludingContextMenuContent
-            bridge={bridge}
-            occlusionId="context-menu:emitter-tree"
+          <StyledContextMenuContent
             data-testid={`emitter-context-menu-${node.id}`}
           >
             <ContextMenu.Item onSelect={handleRename} className={menuItemClass}>
@@ -959,9 +921,7 @@ function EmitterRow({
                 Paste As
               </ContextMenu.SubTrigger>
               <ContextMenu.Portal>
-                <OccludingContextSubContent
-                  bridge={bridge}
-                  occlusionId="context-menu:emitter-tree:paste-as"
+                <StyledContextSubContent
                 >
                   <ContextMenu.Item
                     onSelect={handlePasteAsLifetime}
@@ -977,7 +937,7 @@ function EmitterRow({
                   >
                     Death Child
                   </ContextMenu.Item>
-                </OccludingContextSubContent>
+                </StyledContextSubContent>
               </ContextMenu.Portal>
             </ContextMenu.Sub>
             <ContextMenu.Separator className={separatorClass} />
@@ -1049,7 +1009,7 @@ function EmitterRow({
             >
               Link Group Settings…
             </ContextMenu.Item>
-          </OccludingContextMenuContent>
+          </StyledContextMenuContent>
         </ContextMenu.Portal>
       </ContextMenu.Root>
       {/* Spine hit-strip: 8px wide invisible strip over the row's left
@@ -1061,7 +1021,6 @@ function EmitterRow({
         <Tip
           content={`Select link group ${node.linkGroup}`}
           side="right"
-          occlusionId={`tip:link-spine:${node.id}`}
         >
           <span
             aria-hidden
@@ -1201,7 +1160,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
     >
       <Menubar.Root>
         <Menubar.Menu>
-          <Tip content="New Emitter" occlusionId="tip:tree-footer:new-emitter">
+          <Tip content="New Emitter">
             <Menubar.Trigger
               className={TOOLBAR_BTN}
               aria-label="New Emitter"
@@ -1242,7 +1201,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
       {/* T6 span shims: disabled buttons fire no pointer events, so the Tip
           listens on a wrapping span that stays interactive while the button
           inside is disabled. */}
-      <Tip content="Duplicate" occlusionId="tip:tree-footer:duplicate">
+      <Tip content="Duplicate">
         <span className="inline-block">
           <button
             type="button"
@@ -1255,7 +1214,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </button>
         </span>
       </Tip>
-      <Tip content="Delete" occlusionId="tip:tree-footer:delete">
+      <Tip content="Delete">
         <span className="inline-block">
           <button
             type="button"
@@ -1268,7 +1227,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </button>
         </span>
       </Tip>
-      <Tip content="Move Up" occlusionId="tip:tree-footer:move-up">
+      <Tip content="Move Up">
         <span className="inline-block">
           <button
             type="button"
@@ -1281,7 +1240,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </button>
         </span>
       </Tip>
-      <Tip content="Move Down" occlusionId="tip:tree-footer:move-down">
+      <Tip content="Move Down">
         <span className="inline-block">
           <button
             type="button"
@@ -1294,7 +1253,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </button>
         </span>
       </Tip>
-      <Tip content="Show All Emitters" occlusionId="tip:tree-footer:show-all-emitters">
+      <Tip content="Show All Emitters">
         <button
           type="button"
           className={TOOLBAR_BTN}
@@ -1304,7 +1263,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           <Eye className="size-4" />
         </button>
       </Tip>
-      <Tip content="Hide All Emitters" occlusionId="tip:tree-footer:hide-all-emitters">
+      <Tip content="Hide All Emitters">
         <button
           type="button"
           className={TOOLBAR_BTN}

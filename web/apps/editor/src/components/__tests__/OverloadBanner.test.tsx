@@ -1,8 +1,6 @@
 // Vitest: OverloadBanner (preview spawn-overload guard, plan part 2 §3).
 // The banner subscribes to the 4 Hz stats/tick bridge event and shows a
-// fixed warning over the viewport while `overload` is latched. It must
-// also register a viewport occlusion (plan risk 4) — without it the
-// D3D-composited viewport popup overpaints the DOM banner.
+// fixed warning over the viewport while `overload` is latched.
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
@@ -70,34 +68,6 @@ describe("OverloadBanner", () => {
       await new Promise((r) => setTimeout(r, 250));
     });
     expect(screen.queryByTestId("preview-overload-banner")).not.toBeInTheDocument();
-  });
-
-  it("registers a viewport occlusion while visible and releases it on clear (plan risk 4)", async () => {
-    const { bridge, emit, request } = makeBridge();
-    render(<OverloadBanner bridge={bridge} />);
-    expect(request).not.toHaveBeenCalled();
-
-    emit("stats/tick", tick(true));
-    const occlude = request.mock.calls
-      .map((c) => c[0] as { kind: string; params: { id: string; rect: unknown } })
-      .filter((r) => r.kind === "viewport/occlude");
-    expect(occlude.length).toBeGreaterThan(0);
-    expect(occlude[0]!.params.id).toBe("banner:preview-overload");
-    expect(occlude[0]!.params.rect).not.toBeNull();
-
-    request.mockClear();
-    emit("stats/tick", tick(false));
-    // The occlusion release fires on UNMOUNT, which the
-    // presence shim defers until the exit finishes (timeout fallback
-    // in jsdom — see the clear test above).
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 250));
-    });
-    const release = request.mock.calls
-      .map((c) => c[0] as { kind: string; params: { id: string; rect: unknown } })
-      .filter((r) => r.kind === "viewport/occlude" && r.params.rect === null);
-    expect(release.length).toBe(1);
-    expect(release[0]!.params.id).toBe("banner:preview-overload");
   });
 
   it("wears the soft-shadow motion class instead of shadow-xl", () => {

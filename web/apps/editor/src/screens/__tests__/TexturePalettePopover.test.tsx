@@ -280,7 +280,7 @@ describe("TexturePalettePopover", () => {
       </TexturePalettePopover>,
     );
     open();
-    // The portaled Radix Popover.Content (via OccludingPopover) gets the
+    // The portaled Radix Popover.Content (via AnimatedPopover) gets the
     // `popover-animate` class + Radix's open state, so the fade+zoom
     // keyframes in components.css apply. Guards against the caller's
     // className silently overriding the shared animation.

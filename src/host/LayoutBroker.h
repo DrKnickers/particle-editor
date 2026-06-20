@@ -8,14 +8,10 @@
 // by DWM as its own layer, above any child HWND including WebView2 —
 // that's what makes the viewport visible.
 //
-// (May 2026): the popup is also WS_EX_LAYERED. Occlusion updates
-// from React (`viewport/occlude`) used to drive a SetWindowRgn HRGN
-// cut-out; they now translate the occlusion rect into popup-client
-// coords and forward to AlphaCompositor::SetOcclusion, which
-// per-frame stamps alpha (with a smoothstep feather) into the
-// readback DIB before UpdateLayeredWindow. LayoutBroker keeps the
-// main-client-coord map so it can re-emit translated rects whenever
-// the popup moves or resizes.
+// Under composition the popup is hidden; LayoutBroker keeps the cached
+// scene rect in sync (ReemitSceneRect) so the AlphaCompositor's snapshot
+// crop (modal backdrops) and the DComp engine-visual transform both track
+// popup moves and resizes.
 #ifndef HOST_LAYOUT_BROKER_H
 #define HOST_LAYOUT_BROKER_H
 
@@ -23,7 +19,6 @@
 #include <windows.h>
 
 #include <string>
-#include <unordered_map>
 
 class Engine;
 
@@ -50,11 +45,10 @@ public:
     // but skips the D3D9 swap-chain reset.
     void SetEngine(Engine* engine) { m_engine = engine; }
 
-    //: inject the layered-window compositor. SetOcclusion /
-    // RemoveOcclusion forward to it after translating the rect from
-    // main-client coords to popup-client coords. Null is treated as
-    // "compositor not installed" — occlusion updates are recorded
-    // (so a later attach can replay them) but no stamping happens.
+    // inject the shared-RT compositor (owns the off-screen RT the
+    // engine renders into and the on-demand snapshot used by modal
+    // backdrops). On attach the cached scene rect is replayed so the
+    // snapshot crop is correct on the first capture. Null = not installed.
     void SetAlphaCompositor(AlphaCompositor* compositor);
 
     // Phase 3 Stage 5 — inject the DComp-tree compositor (the
@@ -100,8 +94,8 @@ public:
     // React no longer dispatches a popup-rect via layout/viewport-rect.
     // The host sizes the popup HWND to the OWNER MAIN HWND's full
     // client rect on WM_CREATE / WM_SIZE / WM_WINDOWPOSCHANGED. The
-    // scene-rect (from React via layout/scene-rect) masks everything
-    // outside the centre quadrant via AlphaCompositor band stamps.
+    // scene-rect (from React via layout/scene-rect) bounds the DComp
+    // engine visual to the centre quadrant via SetEngineVisualTransform.
     //
     // ApplyFullClient is equivalent to Apply(0, 0, clientW, clientH)
     // using the owner's current GetClientRect — wrapped here so
@@ -110,27 +104,15 @@ public:
     // in one place.
     void ApplyFullClient();
 
-    // Register an occlusion rect (in main-client coords) from React.
-    // `id` is a stable handle the React side uses (e.g.
-    // "tool-panel:background", "menu:file"). Passing a null rect
-    // (w<=0 or h<=0) removes the occlusion for that id. `feather` is
-    // the AlphaCompositor smoothstep band width (in physical pixels)
-    // at the rect's unclipped edges — 0 for a hard cut, ~padding-px
-    // when the React caller padded the rect to absorb a shadow.
-    void SetOcclusion(const std::string& id, int x, int y, int w, int h, int feather = 0);
-    void RemoveOcclusion(const std::string& id);
-
-    // B1.4 T4c: set the scene rect (the visible centre-quadrant
-    // sub-rect inside the popup) in MAIN-HWND-CLIENT coords. LayoutBroker
-    // translates to popup-client coords (using the current popup origin)
-    // and forwards to AlphaCompositor. The compositor stamps alpha=0
-    // for the four bands outside this rect each frame.
+    // B1.4 T4c: set the scene rect (the visible viewport sub-region)
+    // in MAIN-HWND-CLIENT coords. LayoutBroker caches it and re-emits it
+    // (ReemitSceneRect) to the AlphaCompositor (which crops its snapshot —
+    // the modal backdrop — to it, in popup-client coords) and to the DComp
+    // Compositor + Engine (the live render transform, in main-client coords)
+    // whenever the popup moves or resizes.
     //
-    // The rect is cached so it can be re-emitted with a fresh translation
-    // whenever the popup moves or resizes (Apply / PredictAndApply).
-    //
-    // Passing w<=0 or h<=0 clears the scene rect (the compositor's
-    // mask becomes a no-op — the full popup shows rendered scene).
+    // Passing w<=0 or h<=0 clears the scene rect (snapshot crop disabled —
+    // the full RT is captured).
     void SetSceneRect(int x, int y, int w, int h);
 
     // Phase 3 Stage 5 — read the cached scene rect (in
@@ -212,12 +194,11 @@ public:
     void SettleDeferredReset();
 
 private:
-    //: forward all currently-registered occlusions to the
-    // compositor, translated to popup-client coords using the current
-    // popup origin (m_lastX, m_lastY). Called after Apply /
-    // PredictAndApply / RefreshScreenPosition because moving the
-    // popup changes the popup-client coord of every occlusion.
-    void ReemitOcclusions();
+    // Re-emit the cached scene rect to the AlphaCompositor (snapshot crop,
+    // popup-client coords) and the DComp Compositor + Engine (render
+    // transform, main-client coords). Called after Apply / PredictAndApply /
+    // attach because moving the popup changes the popup-client translation.
+    void ReemitSceneRect();
 
     // [Item 3] The real scene-rect application (compositor mask + engine
     // viewport + DComp clip). SetSceneRect is now a thin guard that drops
@@ -248,10 +229,6 @@ private:
     // SetEngineVisualTransform + Engine::SetSceneViewport calls (per
     // sub-plan §3.3 + R9 mitigation c). Owned by HostWindow.
     Compositor* m_dcompCompositor = nullptr;
-    // Occlusion rects from React (main-client coords). Each id maps
-    // to one rect; null/zero-size removes the entry.
-    struct Occlusion { int x, y, w, h; int feather; };
-    std::unordered_map<std::string, Occlusion> m_occlusions;
     // B1.4 T4c: scene rect in MAIN-HWND-CLIENT coords. (0/0/0/0)
     // disables the compositor mask.
     int     m_sceneX = 0;
