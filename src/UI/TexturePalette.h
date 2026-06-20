@@ -206,6 +206,29 @@ ThumbnailResult GetThumbnail(const std::wstring& filename,
                              IDirect3DDevice9* device);
 void            ClearBridgeThumbCache();
 
+// ============================================================================
+// — Atlas frame picker preview
+//
+// GetTexturePreview decodes a texture at (close to) its native resolution
+// rather than the fixed square thumbnail size, so the atlas frame picker can
+// render the full sheet and overlay a frame grid. Unlike GetThumbnail it does
+// NOT square the image — it preserves aspect ratio and only downscales when a
+// dimension exceeds `maxBound`. The reported srcW/srcH are the texture's true
+// source dimensions (pre-clamp), which the picker needs to lay out the grid.
+//   status: "ok"      — dataUri holds a data:image/png;base64,... preview
+//           "missing" — file couldn't be resolved (typo'd/absent path, no device)
+//           "broken"  — file present but unusable (empty, won't decode, cube/volume)
+struct PreviewResult {
+    std::string status;   // "ok" | "missing" | "broken"
+    std::string dataUri;  // valid only when status == "ok"
+    int srcW = 0;
+    int srcH = 0;
+};
+PreviewResult GetTexturePreview(const std::wstring& filename,
+                                IFileManager* fileManager,
+                                IDirect3DDevice9* device,
+                                int maxBound = 1024);
+
 } // namespace TexturePalette
 
 #endif

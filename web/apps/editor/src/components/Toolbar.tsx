@@ -22,7 +22,7 @@ import {
   FilePlus, FolderOpen, Save, SaveAll,
   Undo2, Redo2,
   Play, Pause, ChevronRight, ChevronsRight,
-  Grid2x2, PanelBottom, Sun, Sparkles, CirclePlus, Lightbulb,
+  Grid2x2, PanelBottom, Sun, Sparkles, CirclePlus, Lightbulb, LayoutGrid,
 } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { BackgroundDropdown } from "@/components/BackgroundDropdown";
@@ -61,6 +61,8 @@ export function Toolbar({ bridge }: Props) {
   const dock = useRightDock();
   const spawnerVisible = dock === "spawner";
   const lightingVisible = dock === "lighting";
+  const atlasVisible = dock === "atlas";
+  const hasSelectedEmitter = state != null && state.selectedEmitterId != null;
 
   return (
     <div data-testid="toolbar" className="toolbar">
@@ -241,8 +243,8 @@ export function Toolbar({ bridge }: Props) {
 
       <span className="tb-divider" />
 
-      {/* Group 5: right-dock panel toggles. Spawner + Lighting share one
-          exclusive slot (opening one closes the other — see lib/right-dock.ts),
+      {/* Group 5: right-dock panel toggles. Spawner, Lighting, and Atlas share
+          one exclusive slot (opening one closes the others — see lib/right-dock.ts),
           so their aria-pressed states are mutually exclusive. */}
       <div className="tb-group">
         <Tip content="Toggle Spawner panel" occlusionId="tip:toolbar:toggle-spawner">
@@ -265,6 +267,18 @@ export function Toolbar({ bridge }: Props) {
             onClick={() => toggleDock("lighting")}
           >
             <Lightbulb {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Toggle Atlas frame picker" occlusionId="tip:toolbar:toggle-atlas">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Toggle Atlas frame picker"
+            aria-pressed={atlasVisible}
+            disabled={!hasSelectedEmitter}
+            onClick={() => toggleDock("atlas")}
+          >
+            <LayoutGrid {...ICON} />
           </button>
         </Tip>
       </div>

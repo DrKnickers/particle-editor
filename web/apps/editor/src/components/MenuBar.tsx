@@ -925,6 +925,13 @@ export function MenuBar({
               <CheckSlot active={false} />
               Lighting…
             </Menubar.Item>
+            <Menubar.Item
+              className={ITEM}
+              onSelect={() => toggleDock("atlas")}
+            >
+              <CheckSlot active={false} />
+              Atlas Frame Picker…
+            </Menubar.Item>
             <Menubar.Separator className={SEPARATOR} />
             <Menubar.Item
               className={ITEM}

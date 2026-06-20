@@ -35,6 +35,8 @@ import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
 } from "@/lib/curve-key-clipboard";
+import { __resetAtlasContext } from "@/lib/atlas-context";
+import { __resetRightDockForTests } from "@/lib/right-dock";
 
 function fixtureTracks(): TrackDto[] {
   return TRACK_NAMES.map((name) => ({
@@ -72,6 +74,11 @@ function makeStubBridge(initialSelectedId: number | null, tracks?: TrackDto[]) {
       if (req.kind === "emitters/get-tracks") {
         return Promise.resolve({ tracks: tracks ?? fixtureTracks() });
       }
+      if (req.kind === "emitters/get-properties") {
+        // textureSize=1 → ineligible for atlas auto-open; keeps the
+        // controller inert in these tests (same as before).
+        return Promise.resolve({ properties: { textureSize: 1 } });
+      }
       return Promise.resolve({});
     }),
     on: vi.fn().mockImplementation((kind: string, h: SelectionListener) => {
@@ -97,6 +104,14 @@ function selectChannel(id: string) {
 }
 
 describe("CurveEditorPanel", () => {
+  //: CurveEditorPanel now publishes to the module-singleton atlas
+  // context + mounts the auto-open controller (which writes the right-dock
+  // store). Both stores survive across tests, so reset them per-test.
+  beforeEach(() => {
+    localStorage.clear();
+    __resetAtlasContext();
+    __resetRightDockForTests();
+  });
 
   it("renders the .panel chrome + 7 channel rows regardless of selection", async () => {
     const { bridge } = makeStubBridge(null);

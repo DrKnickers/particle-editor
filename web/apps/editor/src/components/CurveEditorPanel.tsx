@@ -57,6 +57,9 @@ import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
 } from "@/lib/curve-key-clipboard";
+import { isAtlasEligible } from "@/lib/atlas-grid";
+import { publishAtlasContext } from "@/lib/atlas-context";
+import { useAtlasAutoOpen } from "@/lib/use-atlas-autoopen";
 
 /** Channel registry. Order matches the design's left-column list. The
  *  `trackName` field bridges the UI-facing id (e.g. "rotation") to the
@@ -543,6 +546,58 @@ export function CurveEditorPanel({ bridge }: Props) {
     if (tracks === null) return null;
     return tracks.find((t) => t.name === focusedChannel.trackName) ?? null;
   }, [tracks, focusedChannel]);
+
+  // Atlas eligibility (): the picker only auto-opens when the emitter's
+  // texture is an atlas (gridSide ≥ 2). CurveEditorPanel doesn't otherwise
+  // read emitter properties, so fetch just `textureSize` keyed on the
+  // selection. Default 1 (ineligible) until the fetch resolves; a failed /
+  // unanswered fetch leaves it ineligible so the controller stays inert.
+  const [textureSize, setTextureSize] = useState<number>(1);
+  useEffect(() => {
+    if (selectedId === null) { setTextureSize(1); return; }
+    let live = true;
+    bridge
+      .request({ kind: "emitters/get-properties", params: { id: selectedId } })
+      .then((res) => { if (live) setTextureSize(res.properties.textureSize); })
+      .catch(() => { /* leave at default (ineligible) */ });
+    return () => { live = false; };
+  }, [bridge, selectedId]);
+  const atlasEligible = isAtlasEligible(textureSize);
+
+  // Publish the curve-editor-owned slice of atlas context (focus / selection /
+  // emitter / interpolation). `frame` is the shared floor(value) when every
+  // selected key floors to the same integer, else null.
+  // Both `frame` and `keyTimes` are derived from the same resolved set
+  // (times that actually exist on the focused track after any emitter switch)
+  // so stale selections from a previous emitter can never leak into the picker.
+  const lastKeyTimesRef = useRef<number[]>([]);
+  useEffect(() => {
+    const resolved = [...selectedKeyTimes].filter(
+      (t) => focusedTrack?.keys.some((k) => k.time === t),
+    );
+    const floors = resolved
+      .map((t) => focusedTrack?.keys.find((k) => k.time === t)?.value)
+      .filter((v): v is number => v !== undefined)
+      .map((v) => Math.floor(v));
+    const frame = floors.length > 0 && floors.every((f) => f === floors[0]) ? floors[0]! : null;
+    // Stabilise the array reference: reuse the previous array when the contents
+    // are identical so atlas-context consumers don't re-render unnecessarily
+    // on every tree/changed refetch that produces a fresh focusedTrack object.
+    const prev = lastKeyTimesRef.current;
+    const same =
+      prev.length === resolved.length && prev.every((v, i) => v === resolved[i]);
+    const resolvedStable = same ? prev : resolved;
+    lastKeyTimesRef.current = resolvedStable;
+    publishAtlasContext({
+      emitterId: selectedId,
+      focusedTrack: focusedChannel.trackName,
+      interpolation: focusedTrack?.interpolation ?? null,
+      selection: { frame, keyTimes: resolvedStable },
+    });
+  }, [selectedId, focusedChannel.trackName, focusedTrack, selectedKeyTimes]);
+
+  // Mount the auto-open controller (reads the published context + dock store).
+  useAtlasAutoOpen({ atlasEligible });
 
   // Locked-now flag: when the focus channel is currently a read-only
   // alias of another channel, every edit affordance (Insert mode,

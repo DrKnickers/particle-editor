@@ -638,6 +638,12 @@ export type Request =
   // No active mod ⇒ list is empty and mutations are no-ops. sub-feature B]
   | { kind: "textures/palette/list";         params: { slot: "color" | "bump" } }
   | { kind: "textures/palette/thumbnail";    params: { filename: string } }
+  | {
+      kind: "textures/get-preview";
+      // bare basename as stored in EmitterDto.colorTexture; host prepends
+      // Data\Art\Textures\ and forces a .DDS swap (no .tga fallback — spec §7).
+      params: { filename: string };
+    }
   | { kind: "textures/palette/toggle-pin";   params: { filename: string } }
   | { kind: "textures/palette/touch-recent"; params: { filename: string; slot: "color" | "bump" } }
 
@@ -1089,6 +1095,11 @@ type ResponseForA<R extends Request> =
     ? { hasMod: boolean; filter: "color" | "bump"; pins: PaletteEntry[]; recents: PaletteEntry[] } :
   R extends { kind: "textures/palette/thumbnail" }
     ? { dataUri: string | null; status: "ok" | "missing" | "broken" } :
+  R extends { kind: "textures/get-preview" }
+    ? // discriminated on status so illegal states are unrepresentable
+      | { status: "ok"; dataUri: string; srcW: number; srcH: number } // srcW/H = ORIGINAL DDS dims (pre-downsample)
+      | { status: "missing" }
+      | { status: "broken" } :
   R extends { kind: "textures/palette/toggle-pin" }
     ? { ok: true; pinned: boolean } | { ok: false; reason: "pins-full" } :
   R extends { kind: "textures/palette/touch-recent" }

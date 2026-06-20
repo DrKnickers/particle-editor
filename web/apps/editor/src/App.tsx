@@ -20,6 +20,7 @@ import { FileOpErrorModal } from "@/components/FileOpErrorModal";
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
 import { SaveChangesPrompt } from "@/screens/SaveChangesPrompt";
 import { useFileState, useSeedFileState } from "@/lib/file-state";
+import { useSeedModStack } from "@/lib/mod-stack";
 import { formatWindowTitle } from "@/lib/window-title";
 import { promptModNickname } from "@/lib/mod-nickname";
 import { BridgeContext } from "@/lib/bridge-context";
@@ -132,6 +133,10 @@ function AppShell() {
   // recent/changed, engine/state/changed) and seed from snapshot +
   // file/recent/list on mount. Stays mounted for the app's lifetime.
   useSeedFileState(bridge);
+
+  // Task 12: seed the mod-stack store from mods/list and subscribe to
+  // engine/state/changed so the preview cache is invalidated on mod switches.
+  useSeedModStack(bridge);
 
   // Window title — single source of truth for the titlebar. The host
   // mirrors document.title into the Win32 titlebar (DocumentTitleChanged

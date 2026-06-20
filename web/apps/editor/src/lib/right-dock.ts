@@ -8,7 +8,7 @@
 // the other.
 //
 // Persists to localStorage('alo:right-dock') as "spawner" | "lighting" |
-// "none". Migrates the legacy 'alo:spawner-visible' boolean on first read
+// "atlas" | "none". Migrates the legacy 'alo:spawner-visible' boolean on first read
 // so existing users keep their column: "true" → "spawner", "false" → none.
 // Default: "spawner" (matches the legacy spawner-visible=true default).
 //
@@ -19,7 +19,7 @@
 
 import { create } from "zustand";
 
-export type RightDock = "spawner" | "lighting" | null;
+export type RightDock = "spawner" | "lighting" | "atlas" | null;
 /** The non-null dock targets — what a toggle can open. */
 export type DockTarget = Exclude<RightDock, null>;
 
@@ -30,6 +30,7 @@ function readInitial(): RightDock {
   if (typeof localStorage === "undefined") return "spawner";
   const v = localStorage.getItem(KEY);
   if (v === "spawner" || v === "lighting") return v;
+  if (v === "atlas") return null; // atlas needs live selection context; never boot into it
   if (v === "none") return null;
   // No new-key value yet — migrate the legacy spawner-visible boolean so
   // a user who had the Spawner open (or closed) keeps that state.

@@ -64,3 +64,35 @@ describe("right-dock store", () => {
     expect(useRightDockStoreForTests().getState().dock).toBe("lighting");
   });
 });
+
+describe("right-dock atlas value", () => {
+  beforeEach(() => reseed());
+
+  it("setDock('atlas') is accepted and persisted", () => {
+    setDock("atlas");
+    expect(useRightDockStoreForTests().getState().dock).toBe("atlas");
+    expect(localStorage.getItem("alo:right-dock")).toBe("atlas");
+  });
+
+  it("a persisted 'atlas' boots to null (no selection context at startup)", () => {
+    // reseed with atlas: readInitial() should reject 'atlas' and return null
+    reseed({ "alo:right-dock": "atlas" });
+    expect(useRightDockStoreForTests().getState().dock).toBeNull();
+  });
+
+  it("persisted lighting still restores after atlas is added", () => {
+    reseed({ "alo:right-dock": "lighting" });
+    expect(useRightDockStoreForTests().getState().dock).toBe("lighting");
+  });
+
+  it("toggleDock('atlas') opens the atlas panel", () => {
+    toggleDock("atlas");
+    expect(useRightDockStoreForTests().getState().dock).toBe("atlas");
+  });
+
+  it("toggleDock('atlas') when already open closes it", () => {
+    setDock("atlas");
+    toggleDock("atlas");
+    expect(useRightDockStoreForTests().getState().dock).toBeNull();
+  });
+});

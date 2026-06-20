@@ -54,6 +54,7 @@ import { EmitterPropertyTabs } from "@/screens/EmitterPropertyTabs";
 import { EmitterTree } from "@/screens/EmitterTree";
 import { LightingPanel } from "@/screens/LightingPanel";
 import { SpawnerPanel } from "@/screens/SpawnerPanel";
+import { AtlasPickerPanel } from "@/screens/AtlasPickerPanel";
 
 export type { Layout };
 
@@ -575,6 +576,8 @@ export function PanelLayout({ bridge }: Props) {
             <SpawnerPanel bridge={bridge} />
           ) : displayDock === "lighting" ? (
             <LightingPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+          ) : displayDock === "atlas" ? (
+            <AtlasPickerPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
           ) : null}
         </aside>
       </Panel>

@@ -1814,3 +1814,23 @@ describe("emitter tree spawn params ()", () => {
     expect(node?.spawn.nParticlesPerSecond).toBe(4242);
   });
 });
+
+describe("textures/get-preview (mock parity)", () => {
+  it("ok for a normal filename, with data URI + source dims", async () => {
+    const b = new MockBridge();
+    const res = await b.request({ kind: "textures/get-preview", params: { filename: "fire.dds" } });
+    // Unconditional: a regression to a non-ok status fails loudly instead of
+    // silently skipping the inner asserts below.
+    expect(res.status).toBe("ok");
+    if (res.status === "ok") {
+      expect(res.dataUri.startsWith("data:image/png;base64,")).toBe(true);
+      expect(res.srcW).toBeGreaterThan(0);
+      expect(res.srcH).toBeGreaterThan(0);
+    }
+  });
+  it("missing/broken sentinels", async () => {
+    const b = new MockBridge();
+    expect((await b.request({ kind: "textures/get-preview", params: { filename: "__missing__.dds" } })).status).toBe("missing");
+    expect((await b.request({ kind: "textures/get-preview", params: { filename: "__broken__.dds" } })).status).toBe("broken");
+  });
+});

@@ -2589,6 +2589,27 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
+    if (kind == "textures/get-preview")
+    {
+        std::string filename;
+        if (auto it = params.find("filename"); it != params.end() && it->is_string())
+            filename = it->get<std::string>();
+
+        IDirect3DDevice9* dev = m_engine ? m_engine->GetDevice() : nullptr;
+        const TexturePalette::PreviewResult p = TexturePalette::GetTexturePreview(
+            Utf8ToWide(filename), m_fileManager, dev);
+        if (p.status == "ok")
+            sendOk(json{
+                {"status", "ok"},
+                {"dataUri", p.dataUri},
+                {"srcW",   p.srcW},
+                {"srcH",   p.srcH},
+            });
+        else
+            sendOk(json{{"status", p.status}});
+        return res;
+    }
+
     if (kind == "textures/palette/toggle-pin")
     {
         std::string filename;

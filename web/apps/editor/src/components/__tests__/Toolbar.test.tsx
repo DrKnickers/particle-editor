@@ -256,4 +256,32 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
       params: { visible: false },
     });
   });
+
+  it("atlas button is disabled when no emitter selected", async () => {
+    // Default makeBridge snapshot has no selectedEmitterId → button disabled.
+    const b = makeBridge();
+    renderToolbar(b);
+    const atlasBtn = await screen.findByRole("button", { name: "Toggle Atlas frame picker" });
+    // Wait for the async snapshot to settle, then confirm disabled.
+    await waitFor(() => expect(atlasBtn).toBeDisabled());
+  });
+
+  it("atlas button is enabled when an emitter is selected", async () => {
+    // Build a bridge whose snapshot already carries selectedEmitterId: 1.
+    const snap = {
+      paused: false, bloom: false, bloomAvailable: true,
+      ground: true, gridVisible: true, heatDebug: false,
+      canUndo: true, canRedo: false,
+      selectedEmitterId: 1,
+    };
+    const request = vi.fn().mockImplementation((req: { kind: string }) => {
+      if (req.kind === "engine/state/snapshot") return Promise.resolve(snap);
+      return Promise.resolve({});
+    });
+    const on = vi.fn().mockReturnValue(() => {});
+    const b = { request, on } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+    renderToolbar(b);
+    const atlasBtn = await screen.findByRole("button", { name: "Toggle Atlas frame picker" });
+    await waitFor(() => expect(atlasBtn).not.toBeDisabled());
+  });
 });

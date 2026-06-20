@@ -22,6 +22,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 - Stack multiple mod layers in any load order — compose the stack from the Mods menu (add layers via **Add mod…**, drag rows to reorder, **Reset** to unmodded) or the full **Load Order** dialog (**Expand to full editor**); the top layer wins. Replaces picking a single mod + submods
 - Drag-to-reorder the mod stack with a live glide preview — a make-room gap opens at the drop point while a floating chip glides to it — in both the Mods menu's active stack and the Load Order dialog (matching the Emitter tree's feel)
+- Pick atlas frames visually — a right-dock **Atlas Frame Picker** shows the selected emitter’s texture as its frame grid; the active `index` key’s frame is highlighted, hovering previews a frame, and clicking a cell assigns it (with a confirm before overwriting keys that hold different frames). It opens automatically when you select a key on the index channel, or via the toolbar ⊞ Atlas button
 
 ### Changed
 
