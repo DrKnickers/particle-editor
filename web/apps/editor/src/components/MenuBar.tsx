@@ -33,6 +33,7 @@ import type {
 import { promptSaveChanges, useFileState } from "@/lib/file-state";
 import { runFileOp } from "@/lib/file-op";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
+import { bumpTextureEpoch } from "@/lib/atlas-preview-cache";
 import {
   useEmitterSelectionPrimary,
   useEmitterSelectionIds,
@@ -904,10 +905,11 @@ export function MenuBar({
             </Menubar.Item>
             <Menubar.Item
               className={ITEM}
-              onSelect={send({
-                kind: "engine/action/reload-textures",
-                params: {},
-              })}
+              onSelect={() => {
+                void bridge
+                  .request({ kind: "engine/action/reload-textures", params: {} })
+                  .then(() => bumpTextureEpoch()); // re-fetch atlas previews with fresh content
+              }}
             >
               <CheckSlot active={false} />
               Reload Textures

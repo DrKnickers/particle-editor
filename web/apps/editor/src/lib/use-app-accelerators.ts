@@ -27,6 +27,7 @@ import { toggleDock } from "@/lib/right-dock";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import { moveEmitters } from "@/lib/emitter-reorder";
 import { RESET_CAMERA } from "@/lib/reset-camera";
+import { bumpTextureEpoch } from "@/lib/atlas-preview-cache";
 
 const ACCEL_COMBOS = [
   "Ctrl+N",
@@ -151,7 +152,9 @@ export function useAppAccelerators(bridge: Bridge): void {
           void bridge.request({ kind: "engine/set/camera", params: RESET_CAMERA });
           break;
         case "F5":
-          void bridge.request({ kind: "engine/action/reload-textures", params: {} });
+          void bridge
+            .request({ kind: "engine/action/reload-textures", params: {} })
+            .then(() => bumpTextureEpoch()); // re-fetch atlas previews with fresh content
           break;
         case "F6":
           void bridge.request({ kind: "engine/action/reload-shaders", params: {} });

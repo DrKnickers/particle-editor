@@ -18,6 +18,10 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ## 2026-06-20
 
+### Changed
+
+- Atlas Frame Picker: the thumbnail grid reflows to fill the panel width, the preview shows the selected frame's number, hovering a thumbnail highlights it, and you can navigate frames with the arrow keys and assign with Enter/Space
+
 ### Removed
 
 - Removed the legacy classic (Win32) editor interface and its `--legacy` / `--legacy-ui` opt-out — the WebView2/React UI is now the only interface (x64-only)
