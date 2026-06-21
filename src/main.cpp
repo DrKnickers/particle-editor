@@ -38,6 +38,7 @@
 // awareness v2, WebView2) and is x64-only (the only platform the build
 // exposes).
 #include "host/Run.h"
+#include "host/WindowCapture.h"
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -830,6 +831,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// (with its shadow) headlessly instead of a particle system.
 		std::wstring captureRef;
 		std::wstring capturePng;
+		std::wstring snapWindowPath;   // --snap-window <png>: screenshot the running editor, then exit
+		bool         snapWindowFlagSeen = false;  // --snap-window present (with or without a path)
 		// Default ~180 frames ≈ 3 s of sim (loop paces ~16 ms/frame) so a
 		// freshly-spawned effect has time to fill before the snapshot.
 		int          captureFrames = 180;
@@ -868,6 +871,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			{
 				captureRef = argv[i + 1];
 				capturePng = argv[i + 2];
+			}
+			if (argv[i] == L"--snap-window")
+			{
+				snapWindowFlagSeen = true;
+				if (i + 1 < argv.size()) snapWindowPath = argv[i + 1];
 			}
 			if (argv[i] == L"--frames" && i + 1 < argv.size())
 			{
@@ -1255,6 +1263,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			         genA11yFixturePath.c_str(),
 			         emitters.size());
 			return 0;
+		}
+		// --snap-window <png>: capture the already-running editor's composed window
+		// (PrintWindow PW_RENDERFULLCONTENT on the AloHostMain top-level window) to a
+		// PNG, then exit. No engine/WebView2 is created — it only screenshots an
+		// existing window. Class literal kept in lockstep with kHostWindowClassName
+		// (HostWindow.cpp).
+		//
+		// A bare --snap-window (flag present, no <png> path arg) must error out
+		// rather than silently fall through and boot the full interactive editor.
+		if (snapWindowFlagSeen && snapWindowPath.empty())
+		{
+			fwprintf(stderr, L"--snap-window requires a <png> path\n");
+			return 2;
+		}
+		if (!snapWindowPath.empty())
+		{
+			return host::SnapWindowOneShot(L"AloHostMain", snapWindowPath);
 		}
 		// D6: capture gameRoots so the host can build its
 		// ModManager. createFileManager already discovers them

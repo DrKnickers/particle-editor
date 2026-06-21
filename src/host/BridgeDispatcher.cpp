@@ -3,6 +3,7 @@
 #include "AcceleratorBridge.h"
 #include "InputDispatcher.h"
 #include "LayoutBroker.h"
+#include "WindowCapture.h"
 #include "third_party/nlohmann/json.hpp"
 
 #include "../engine.h"
@@ -1324,6 +1325,42 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         const bool ok = m_layout.CaptureSnapshotToFile(Utf8ToWide(path));
         if (ok) sendOk(json{{"path", path}});
         else    sendErr("capture failed (no composited frame yet, no render target, or file write failed)");
+        return res;
+    }
+
+    // -------- debug/capture-window ([composed-capture] Track C) --------
+    // Capture the FULL composed window (the DWM/DirectComposition flatten of the
+    // React UI visual + the engine viewport) to a PNG at `path` — the whole-app
+    // analogue of debug/capture-frame (which is engine-RT only). Uses the host's
+    // top-level HWND (m_hostHwnd, set via SetHostHwnd at HostWindow.cpp) +
+    // PrintWindow(PW_RENDERFULLCONTENT). Same gating as capture-frame: Debug
+    // always, Release only under --test-host (it writes a caller-chosen path).
+    if (kind == "debug/capture-window")
+    {
+#ifdef NDEBUG
+        const bool allowed = m_testHost;
+#else
+        const bool allowed = true;
+#endif
+        if (!allowed)
+        {
+            sendErr("debug/capture-window is gated to debug builds / --test-host");
+            return res;
+        }
+        const std::string path = params.value("path", std::string{});
+        if (path.empty())
+        {
+            sendErr("debug/capture-window requires a non-empty 'path'");
+            return res;
+        }
+        if (!m_hostHwnd)
+        {
+            sendErr("debug/capture-window: no host window");
+            return res;
+        }
+        const bool ok = host::CaptureWindowToPng(m_hostHwnd, Utf8ToWide(path));
+        if (ok) sendOk(json{{"path", path}});
+        else    sendErr("composed-window capture failed (PrintWindow or file write failed)");
         return res;
     }
 

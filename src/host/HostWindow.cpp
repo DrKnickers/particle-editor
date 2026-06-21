@@ -56,6 +56,7 @@
 
 #include "HostWindow.h"
 #include "Run.h"
+#include "WindowCapture.h"  // host::CaptureWindowToPng (factored out for --capture/--snap-window)
 #include "CacheBust.h"   // app.local index.html cache-bust query (workaround)
 
 #include "AcceleratorBridge.h"
@@ -3581,60 +3582,10 @@ LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProc(hwnd, msg, wp, lp);
 }
 
-// rendering-fidelity] Composite-output capture for --capture. The
-// engine-RT capture (AlphaCompositor::CaptureSnapshotToFile) shows the
-// engine's pre-composite pixels; this captures the FINAL DWM/Direct-
-// Composition-composited window — what the user actually sees — so the
-// composition-only darkening class (d9b690f) is testable offline.
-#ifndef PW_RENDERFULLCONTENT
-#define PW_RENDERFULLCONTENT 0x00000002
-#endif
-
-static bool GetPngClsidHW(CLSID& out)
-{
-    UINT num = 0, bytes = 0;
-    if (Gdiplus::GetImageEncodersSize(&num, &bytes) != Gdiplus::Ok || bytes == 0) return false;
-    std::vector<BYTE> buf(bytes);
-    auto* info = reinterpret_cast<Gdiplus::ImageCodecInfo*>(buf.data());
-    if (Gdiplus::GetImageEncoders(num, bytes, info) != Gdiplus::Ok) return false;
-    for (UINT i = 0; i < num; ++i)
-        if (wcscmp(info[i].MimeType, L"image/png") == 0) { out = info[i].Clsid; return true; }
-    return false;
-}
-
-// PrintWindow with PW_RENDERFULLCONTENT (Win8.1+) is required to capture
-// DirectComposition / WebView2 composited content; plain BitBlt or
-// PrintWindow(0) returns black for composed swapchain surfaces.
-static bool CaptureWindowToPng(HWND hwnd, const std::wstring& path)
-{
-    RECT rc = {};
-    if (!GetWindowRect(hwnd, &rc)) return false;
-    const int w = rc.right - rc.left;
-    const int h = rc.bottom - rc.top;
-    if (w <= 0 || h <= 0) return false;
-
-    HDC     screen = GetDC(nullptr);
-    HDC     mem    = CreateCompatibleDC(screen);
-    HBITMAP bmp    = CreateCompatibleBitmap(screen, w, h);
-    HGDIOBJ oldb   = SelectObject(mem, bmp);
-    const BOOL pw  = PrintWindow(hwnd, mem, PW_RENDERFULLCONTENT);
-    SelectObject(mem, oldb);
-
-    bool saved = false;
-    if (pw)
-    {
-        CLSID clsid = {};
-        if (GetPngClsidHW(clsid))
-        {
-            Gdiplus::Bitmap gb(bmp, nullptr);
-            saved = (gb.Save(path.c_str(), &clsid, nullptr) == Gdiplus::Ok);
-        }
-    }
-    DeleteObject(bmp);
-    DeleteDC(mem);
-    ReleaseDC(nullptr, screen);
-    return saved && pw;
-}
+// Composite-output capture for --capture (and the --snap-window CLI) now lives
+// in host/WindowCapture.{h,cpp} — host::CaptureWindowToPng captures the FINAL
+// DWM/DirectComposition-composited window (engine RT + WebView2 visual), which
+// the engine-RT-only AlphaCompositor::CaptureSnapshotToFile can't see.
 
 // Elapsed milliseconds from a QPC tick delta. Guarded for freq<=0 (QPC
 // unavailable) — mirrors PerfUsSince's discipline; callers treat 0.0 as
@@ -4480,7 +4431,7 @@ int HostWindowImpl::Run(int nCmdShow)
                     // failed) — the diagnostic composite is most valuable exactly
                     // when a render broke. quit is set AFTER it so the loop exits
                     // via `if (quit) break;` before the captureFailed bail.
-                    const bool okc = CaptureWindowToPng(hMain, compPath);
+                    const bool okc = host::CaptureWindowToPng(hMain, compPath);
                     Log("[capture] frame %d: engine-RT %ls -> %s; composite %ls -> %s "
                         "(ui-ready=%d waited=%.0fms%s)\n",
                         capturedFrames, m_capturePng.c_str(), ok ? "ok" : "FAILED",

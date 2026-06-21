@@ -108,6 +108,9 @@
     <ClInclude Include="host\HostWindow.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\WindowCapture.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\LayoutBroker.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -195,6 +198,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\HostWindow.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\WindowCapture.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\LayoutBroker.cpp">
