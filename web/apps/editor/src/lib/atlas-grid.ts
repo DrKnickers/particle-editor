@@ -18,18 +18,6 @@ export function cellRect(k: number, side: number, srcW: number, srcH: number): C
   const col = k % side, row = Math.floor(k / side), cw = srcW / side, ch = srcH / side;
   return { left: col * cw, top: row * ch, width: cw, height: ch };
 }
-// Live display-column count from the CSS-resolved `grid-template-columns`.
-// The browser resolves `repeat(auto-fill, ...)` to a list of `<len>px` tracks
-// whose count is the real column count — correct even before any second row is
-// painted. Unresolved values (jsdom, pre-paint, "none", or a still-functional
-// "repeat(...)"/"minmax(...)" token) fall back to `fallback` (the atlas side).
-// Clamped to the cell count and to a floor of 1. Pure: takes a string, no DOM.
-export function columnsFromTemplate(template: string, cellCount: number, fallback: number): number {
-  const tracks = (template ?? "").trim().split(/\s+/).filter(Boolean);
-  const resolved = tracks.length > 0 && tracks.every((t) => /^[0-9.]+px$/.test(t));
-  const cols = resolved ? tracks.length : Math.max(1, Math.floor(fallback));
-  return Math.max(1, Math.min(cols, Math.max(1, Math.floor(cellCount))));
-}
 // Width-only, count-aware grid sizing for the picker (Approach A). Aim for a
 // balanced grid (~sqrt(n) columns — and since a real atlas has n = side², that
 // is the atlas `side`), but never use so many columns that the square cell

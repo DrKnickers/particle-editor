@@ -2590,10 +2590,16 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         std::string filename;
         if (auto it = params.find("filename"); it != params.end() && it->is_string())
             filename = it->get<std::string>();
+        // Default true: force every pixel fully opaque (alpha=255) so ADDITIVE
+        // atlas frames (RGB content, alpha ~0) are visible. The picker passes
+        // false to honor the texture's real alpha.
+        bool flattenAlpha = true;
+        if (auto it = params.find("flattenAlpha"); it != params.end() && it->is_boolean())
+            flattenAlpha = it->get<bool>();
 
         IDirect3DDevice9* dev = m_engine ? m_engine->GetDevice() : nullptr;
         const TexturePalette::PreviewResult p = TexturePalette::GetTexturePreview(
-            Utf8ToWide(filename), m_fileManager, dev);
+            Utf8ToWide(filename), m_fileManager, dev, 1024, flattenAlpha);
         if (p.status == "ok")
             sendOk(json{
                 {"status", "ok"},

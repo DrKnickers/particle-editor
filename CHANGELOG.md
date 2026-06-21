@@ -18,8 +18,13 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ## 2026-06-21
 
+### Changed
+
+- Atlas Frame Picker: every thumbnail now shows its frame index at all times (previously only on hover), and the grid's scrollbar matches the rest of the editor
+
 ### Fixed
 
+- Atlas Frame Picker: the thumbnail grid no longer reflows or jumps on the first open after launch and now sits centered in the panel; the curve editor no longer jumps during the panel slide; and the first Alpha toggle is instant
 - Enabling a reference model's cast shadows no longer makes additive and transparent particles vanish or turn black — particles render correctly with reference-model shadows on
 
 ## 2026-06-20

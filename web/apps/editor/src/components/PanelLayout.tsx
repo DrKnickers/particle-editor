@@ -291,19 +291,51 @@ export function PanelLayout({ bridge }: Props) {
     const animate = vpEl !== null && dockWidthCss > 0 && !reducedMotion;
     if (animate) useDockAnim.getState().setAnimating(true);
 
-    let raf = 0;
+    // Pre-compute the scene rects (only when animating) BEFORE scheduling the
+    // rAF, so the slide-start callback is pure scheduling.
+    const dpr = window.devicePixelRatio || 1;
+    let from: ReturnType<typeof computeSceneRect> | null = null;
+    let to: ReturnType<typeof computeSceneRect> | null = null;
     if (animate && vpEl) {
-      const dpr = window.devicePixelRatio || 1;
-      const from = computeSceneRect(vpEl);
+      from = computeSceneRect(vpEl);
       const deltaDev = Math.round(dockWidthCss * dpr);
       // `dockVisible` true here means we are OPENING (the dock becomes visible);
       // the viewport shrinks by the dock width. CLOSE grows it. (The narrow-
       // window edge where the LEFT pane also moves is corrected by the
       // authoritative settle send below, which reads the real settled rect.)
-      const to = dockSlideTarget(from, deltaDev, dockVisible);
-      raf = requestAnimationFrame((rafTs) => {
-        if (dockVisible) expandDock();
-        else p.collapse();
+      to = dockSlideTarget(from, deltaDev, dockVisible);
+    }
+
+    // The settle window (260ms > the 200ms tween) ends the CSS class + the
+    // suppression signal, records the SETTLED dock width for the next slide, and
+    // sends ONE authoritative layout/scene-rect at the real rest rect. CRITICAL:
+    // it is armed when the slide ACTUALLY STARTS (inside startSlide), NOT at
+    // effect-run — the atlas cold-start gate can delay startSlide by up to ~280ms,
+    // and a settle anchored to effect-run would fire mid-tween, flipping
+    // `animating` false while the panel is still moving. That un-freezes the
+    // atlas grid (→ the live column reflow) and un-holds the curve editor.
+    let settleTimer = 0;
+    const scheduleSettle = () => {
+      settleTimer = window.setTimeout(() => {
+        setDockAnimating(false);
+        if (animate) useDockAnim.getState().setAnimating(false);
+        const settledDockW = p.getSize().inPixels;
+        if (settledDockW > 0) lastDockWidthCssRef.current = settledDockW;
+        if (vpEl) {
+          void bridge
+            .request({ kind: "layout/scene-rect", params: computeSceneRect(vpEl) })
+            .catch(() => {});
+        }
+      }, 260);
+    };
+
+    // Flip the flex-grow (expand/collapse) and, if animating, send the host the
+    // synced viewport-rect tween, then arm the settle relative to THIS moment.
+    // Reduced-motion / unknown width → snap only (the CSS transition is `none`).
+    const startSlide = (rafTs: number) => {
+      if (dockVisible) expandDock();
+      else p.collapse();
+      if (animate && from && to) {
         // Stamp ms since the flex actually changed (this rAF) so the host can
         // back-date its QPC clock to the CSS origin across the IPC hop;
         // performance.now() and rafTs share the same clock.
@@ -314,39 +346,74 @@ export function PanelLayout({ bridge }: Props) {
             params: { from, to, durationMs: 200, easing: "ease", msElapsedAtSend },
           })
           .catch(() => {});
+      }
+      scheduleSettle();
+    };
+
+    let raf = 0;
+    let raf2 = 0;
+    // Cold-start gate for the ATLAS open only: wait until its cell grid is in the
+    // DOM before the tween (see below). Tracked here so cleanup can tear them down.
+    let readySub: (() => void) | null = null;
+    let readyTimeout = 0;
+    if (dockVisible && dock === "atlas") {
+      // OPEN (atlas): gate the slide START on the grid being mounted (atlasReady).
+      // A RE-OPEN renders the grid synchronously from the props/preview caches, so
+      // atlasReady is already true here → start immediately (one rAF for a fresh
+      // rafTs). A COLD first open renders the grid only after async round-trips, so
+      // we start the slide on the false→true edge — eliminating the centre-column
+      // overlap from the grid mount landing mid-tween. A max-timeout fallback
+      // starts the slide regardless, so a grid that never mounts can't hang it.
+      const fire = () => {
+        if (raf) return; // already started (edge + timeout race, or re-entry)
+        if (readyTimeout) { clearTimeout(readyTimeout); readyTimeout = 0; }
+        raf = requestAnimationFrame(startSlide);
+      };
+      // READ readiness BEFORE clearing it. On a RE-OPEN the AtlasPickerPanel
+      // (a child) mounts its grid synchronously from the caches and its
+      // gridMounted effect runs BEFORE this parent effect (React runs child
+      // effects first), so atlasReady is already true here → start immediately.
+      // Otherwise (cold open) clear any stale readiness and wait for THIS grid
+      // mount's false→true edge.
+      const readyAtRun = useDockAnim.getState().atlasReady;
+      if (readyAtRun) {
+        fire(); // re-open: grid already mounted via the caches → start now
+      } else {
+        useDockAnim.getState().setAtlasReady(false); // defensive: clear stale
+        readySub = useDockAnim.subscribe((s) => {
+          if (s.atlasReady) { readySub?.(); readySub = null; fire(); }
+        });
+        // Fallback: never let the slide HANG if the grid never mounts. This is a
+        // pathological-case net (a real grid mounts in well under this), so its
+        // exact value isn't tween-critical — it only guarantees the dock still
+        // opens and the flags still clear. The normal cold-open path is the
+        // false→true edge above, which fires the moment the grid renders.
+        readyTimeout = window.setTimeout(() => {
+          readySub?.(); readySub = null; fire();
+        }, 280);
+      }
+    } else if (dockVisible) {
+      // OPEN (lighting/spawner): DOUBLE rAF. The panel mounts NOW; frame 1 lets
+      // that content render + paint, then frame 2 starts the slide tween
+      // uncontended — eliminating the centre-column lag/snap that came from the
+      // mount landing in the middle of the flex tween.
+      raf = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(startSlide);
       });
     } else {
-      // Reduced-motion or unknown width → no host anim. Snap the panel
-      // (under reduced-motion the CSS transition is `none`, so it jumps and
-      // `transitionend` never fires); the settle send below pins the host.
-      raf = requestAnimationFrame(() => {
-        if (dockVisible) expandDock();
-        else p.collapse();
-      });
+      // CLOSE: single rAF — nothing is mounting, so no extra paint frame needed.
+      raf = requestAnimationFrame(startSlide);
     }
-
-    // Reuse the existing post-toggle window (260ms > the 200ms tween) to (a)
-    // end the CSS class + suppression signal, (b) record the dock's now-SETTLED
-    // width for the next slide (getSize is accurate once the tween has ended;
-    // 0 on a close-settle, so guard >0), and (c) send ONE authoritative
-    // layout/scene-rect at the REAL settled rect so host and web agree on rest
-    // (any from/to prediction error snaps out here — by now the host anim is
-    // done, so its self-defense no longer drops this send).
-    const t = setTimeout(() => {
-      setDockAnimating(false);
-      if (animate) useDockAnim.getState().setAnimating(false);
-      const settledDockW = p.getSize().inPixels;
-      if (settledDockW > 0) lastDockWidthCssRef.current = settledDockW;
-      if (vpEl) {
-        void bridge
-          .request({ kind: "layout/scene-rect", params: computeSceneRect(vpEl) })
-          .catch(() => {});
-      }
-    }, 260);
 
     return () => {
       cancelAnimationFrame(raf);
-      clearTimeout(t);
+      cancelAnimationFrame(raf2);
+      clearTimeout(settleTimer);
+      // Tear down the atlas cold-start readiness gate (no-ops on the other
+      // branches): cancel the subscription and the fallback timeout so a
+      // superseding toggle / unmount can't start a stale slide or leak a timer.
+      readySub?.();
+      if (readyTimeout) clearTimeout(readyTimeout);
       // A superseding toggle (or unmount) cancels the settle timer above — the
       // ONLY happy-path clear. Drop the in-flight slide's flags here too, else
       // a re-toggle that early-returns (or takes the non-animate branch) leaves

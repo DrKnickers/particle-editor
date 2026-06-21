@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ATLAS_MAX_SIDE, gridSide, frameCount, isAtlasEligible, isAtlasTooLarge,
-  resolveFrame, cellRect, classifySelection, columnsFromTemplate, fitGridLayout } from "../atlas-grid";
+  resolveFrame, cellRect, classifySelection, fitGridLayout } from "../atlas-grid";
 
 describe("gridSide mirrors floor(sqrt(max(1,n)))", () => {
   it.each([[1,1],[2,1],[3,1],[4,2],[5,2],[9,3],[16,4],[20,4],[25,5],[0,1],[-7,1]])(
@@ -39,28 +39,6 @@ describe("classifySelection", () => {
     expect(classifySelection([0.1], 99)).toBe("single");
     expect(classifySelection([0.1,0.5], 7)).toBe("multi-same");
     expect(classifySelection([0.1,0.5], null)).toBe("multi-diff");
-  });
-});
-describe("columnsFromTemplate (resolved grid-template-columns -> live column count)", () => {
-  it("counts resolved px tracks", () => {
-    expect(columnsFromTemplate("46px 46px 46px 46px 46px", 16, 4)).toBe(5);
-    expect(columnsFromTemplate("300px", 16, 4)).toBe(1);
-  });
-  it("clamps to the cell count (fewer frames than columns)", () => {
-    expect(columnsFromTemplate("46px 46px 46px 46px 46px 46px", 4, 2)).toBe(4);
-  });
-  it("exact-fit", () => {
-    expect(columnsFromTemplate("46px 46px 46px 46px", 16, 4)).toBe(4);
-  });
-  it("unresolved / degenerate -> fallback (clamped)", () => {
-    expect(columnsFromTemplate("", 16, 4)).toBe(4);          // pre-paint / jsdom
-    expect(columnsFromTemplate("none", 16, 4)).toBe(4);
-    expect(columnsFromTemplate("repeat(auto-fill, minmax(46px, 1fr))", 16, 4)).toBe(4);
-    expect(columnsFromTemplate("  ", 16, 8)).toBe(8);
-  });
-  it("never returns < 1, even with 0 cells / 0 fallback", () => {
-    expect(columnsFromTemplate("", 0, 0)).toBe(1);
-    expect(columnsFromTemplate("46px", 0, 4)).toBe(1);
   });
 });
 describe("fitGridLayout (Approach A: width-only, ~sqrt(n) columns, dense floor)", () => {

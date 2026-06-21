@@ -72,6 +72,34 @@ describe("ToolPanel", () => {
     expect(dialog.className).toContain("absolute");
   });
 
+  it("default body scrolls and reserves a scrollbar gutter", () => {
+    render(
+      <ToolPanel title="Lighting" onClose={() => {}} variant="docked">
+        body
+      </ToolPanel>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Lighting" });
+    const body = dialog.children[1] as HTMLElement; // [0]=header, [1]=body
+    expect(body.className).toContain("overflow-y-auto");
+    expect(body.className).toContain("scrollbar-stable");
+  });
+
+  it("bodyScroll={false} drops the body's overflow + reserved gutter (panel owns its scroll)", () => {
+    // AtlasPickerPanel scrolls its grid in its own container, so the ToolPanel
+    // body must NOT reserve a gutter — that wasted right strip pushes the
+    // centred grid off-centre in the panel.
+    render(
+      <ToolPanel title="Atlas Frames" onClose={() => {}} variant="docked" bodyScroll={false}>
+        body
+      </ToolPanel>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Atlas Frames" });
+    const body = dialog.children[1] as HTMLElement;
+    expect(body.className).toContain("overflow-hidden");
+    expect(body.className).not.toContain("scrollbar-stable");
+    expect(body.className).not.toContain("overflow-y-auto");
+  });
+
   it("closing marks data-state='closing' so a sliding-out panel is excluded from the open-dialog selector", () => {
     // Regression guard (session 24): while the dock slides shut, the panel
     // stays mounted for the exit animation but must NOT present as an open,

@@ -22,9 +22,19 @@ type DockAnimStore = {
   /** True while a host-interpolated dock slide is in flight (only). */
   animating: boolean;
   setAnimating: (v: boolean) => void;
+  /** True exactly while the Atlas picker's cell grid is mounted in the DOM.
+   *  AtlasPickerPanel sets it; PanelLayout's OPEN-slide effect (atlas dock only)
+   *  gates the slide START on the false→true edge so a COLD first open waits for
+   *  the grid to render before the tween, avoiding the mid-slide centre-column
+   *  overlap. A max-timeout fallback in PanelLayout starts the slide regardless,
+   *  so this can never hang the slide if the grid never mounts. */
+  atlasReady: boolean;
+  setAtlasReady: (v: boolean) => void;
 };
 
 export const useDockAnim = create<DockAnimStore>((set) => ({
   animating: false,
   setAnimating: (v) => set({ animating: v }),
+  atlasReady: false,
+  setAtlasReady: (v) => set({ atlasReady: v }),
 }));

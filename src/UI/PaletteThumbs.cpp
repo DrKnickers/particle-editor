@@ -270,7 +270,8 @@ void ClearBridgeThumbCache()
 PreviewResult GetTexturePreview(const std::wstring& filename,
                                 IFileManager* fileManager,
                                 IDirect3DDevice9* device,
-                                int maxBound)
+                                int maxBound,
+                                bool flattenAlpha)
 {
     PreviewResult out;
     if (device == nullptr || filename.empty() || fileManager == nullptr) { out.status = "missing"; return out; }
@@ -310,6 +311,31 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
         D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
         D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &tex);
     if (FAILED(hr) || tex == nullptr) { if (tex) tex->Release(); out.status = "broken"; return out; }
+
+    // [atlas-picker] "Color channel" preview mode. Particle atlases are commonly
+    // ADDITIVE (a frame's content lives in RGB with alpha 0), so honoring alpha would
+    // render those frames transparent ("missing"). When flattenAlpha is set, force
+    // every pixel fully OPAQUE so the raw RGB colour channel shows on its own black —
+    // every frame is visible. Done HERE (before PNG encode) because a browser canvas
+    // premultiplies and would lose alpha-0 RGB. flattenAlpha=false leaves the texture's
+    // real alpha so the picker can show the alpha cut-outs (and the legitimately empty
+    // frames of textures that carry no alpha).
+    if (flattenAlpha)
+    {
+        D3DSURFACE_DESC sd = {};
+        D3DLOCKED_RECT  lr = {};
+        if (SUCCEEDED(tex->GetLevelDesc(0, &sd)) &&
+            SUCCEEDED(tex->LockRect(0, &lr, NULL, 0)))
+        {
+            for (UINT y = 0; y < sd.Height; ++y)
+            {
+                uint8_t* prow = (uint8_t*)lr.pBits + (size_t)y * lr.Pitch;
+                for (UINT x = 0; x < sd.Width; ++x)
+                    prow[(size_t)x * 4 + 3] = 255;   // A8R8G8B8 in memory = B,G,R,A; force opaque
+            }
+            tex->UnlockRect(0);
+        }
+    }
 
     vector<uint8_t> png;
     const bool ok = EncodeTextureToPngBytes(tex, tw, th, png);

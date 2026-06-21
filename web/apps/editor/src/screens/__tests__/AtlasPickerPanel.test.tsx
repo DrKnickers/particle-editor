@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, createEvent, act } from "@testing-library/react";
-import { AtlasPickerPanel } from "../AtlasPickerPanel";
+import { AtlasPickerPanel, __resetAtlasPropsCache } from "../AtlasPickerPanel";
 import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas-context";
 import { MockBridge } from "@/bridge/mock";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
@@ -17,28 +17,12 @@ beforeEach(() => {
   useMockEmitterProperties.getState().reset();
   __resetPreviewCache();
   __resetModStackForTests();
+  // The seeded-props cache is module-level; clear it so a textureSize/colorTexture
+  // cached by one case can't leak into the next case's synchronous first render.
+  __resetAtlasPropsCache();
 });
 
 afterEach(() => { vi.restoreAllMocks(); });
-
-// jsdom does not resolve `repeat(auto-fill, ...)`, so stub getComputedStyle to
-// report a known column count for the listbox grid. We proxy the REAL computed
-// style (so getPropertyValue and everything RTL/jsdom calls internally still
-// works) and override only gridTemplateColumns for the listbox element.
-function stubColumns(cols: number) {
-  const real = window.getComputedStyle.bind(window);
-  return vi.spyOn(window, "getComputedStyle").mockImplementation((el: Element) => {
-    const base = real(el);
-    if ((el as HTMLElement).getAttribute?.("role") !== "listbox") return base;
-    return new Proxy(base, {
-      get(target, prop) {
-        if (prop === "gridTemplateColumns") return Array(cols).fill("46px").join(" ");
-        const v = Reflect.get(target, prop);
-        return typeof v === "function" ? v.bind(target) : v;
-      },
-    });
-  });
-}
 
 function setup(p?: { textureSize?: number; colorTexture?: string }) {
   useMockEmitterProperties.getState().patch(1, {
@@ -138,24 +122,32 @@ describe("AtlasPickerPanel", () => {
     });
   });
 
-  it("grid container is a labelled listbox with computed column tracks", async () => {
-    setup({ textureSize: 16 });
+  it("grid container is a labelled listbox with fixed-px column tracks", async () => {
+    setup({ textureSize: 16 }); // 16 cells (side = 4)
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     expect(grid).toBeTruthy();
-    // smart sizing emits explicit `repeat(<cols>, <cell>px)` tracks
-    expect(grid.style.gridTemplateColumns).toMatch(/repeat\(\d+, \d+px\)/);
+    // The grid reflows responsively to the measured width via fitGridLayout. In
+    // jsdom `clientWidth` is 0, so the ResizeObserver never updates `gridW` and it
+    // stays at the init default COLD_START_GRIDW (215 — the deterministic dock-min
+    // content width) → fitGridLayout(16, 215, 4, 44, 160) = 4 columns × 50px cells.
+    // Tracks are FIXED-px (not 1fr) so the grid is a static block the dock's
+    // overflow:hidden clips as it widens (no live reflow).
+    expect(grid.style.gridTemplateColumns).toMatch(/^repeat\(\d+, \d+px\)$/);
+    expect(grid.style.gridTemplateColumns).toBe("repeat(4, 50px)");
   });
 
-  it("reflow keeps the crop side-driven (Risk 1: not display-column-driven)", async () => {
+  it("crop is side-driven and references the shared --atlas-url", async () => {
     setup({ textureSize: 16 }); // side = 4
-    // wait for the preview to load so cropStyle is applied
+    // wait for the preview to load so the crop style is applied
     const cell = await waitFor(() => {
       const c = screen.getAllByTestId("atlas-cell").find((x) => x.getAttribute("data-frame") === "6")!;
       expect(c.style.backgroundImage).not.toBe("");
       return c;
     });
-    // backgroundSize is side*100% (4 -> "400% 400%") regardless of the auto-fill
-    // display column count — proves the reflow didn't change the crop.
+    // The cell paints the SHARED atlas image (a CSS var on the container), not an
+    // embedded dataUri — so an alpha toggle swaps the var, not the cell.
+    expect(cell.style.backgroundImage).toBe("var(--atlas-url)");
+    // backgroundSize is side*100% (4 -> "400% 400%") — the crop is side-driven.
     expect(cell.style.backgroundSize).toBe("400% 400%");
   });
 
@@ -173,6 +165,25 @@ describe("AtlasPickerPanel", () => {
     expect(five.getAttribute("tabindex")).toBe("0");
     const other = cells.find((c) => c.getAttribute("data-frame") === "0")!;
     expect(other.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("shows an always-visible frame-index badge on every cell", async () => {
+    setup({ textureSize: 16 }); // 16 cells, assigned frame 5
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
+    for (const c of screen.getAllByTestId("atlas-cell")) {
+      const k = c.getAttribute("data-frame")!;
+      const badge = c.querySelector("span")!;
+      expect(badge.textContent).toBe(k); // labels its atlas index…
+      expect(badge.className).not.toContain("opacity-0"); // …and is NOT hover-gated
+    }
+  });
+
+  it("centres the grid tracks horizontally (justify-center)", async () => {
+    setup({ textureSize: 16 });
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    // Fixed-px tracks would left-pack in the full-width grid box; justify-center
+    // centres them so the grid sits centred in the panel.
+    expect(grid.className).toContain("justify-center");
   });
 
   it("resets the roving cursor when switching to a smaller atlas (stale-index)", async () => {
@@ -195,43 +206,40 @@ describe("AtlasPickerPanel", () => {
     expect(tabbable[0].getAttribute("data-frame")).toBe("3");
   });
 
-  it("arrow keys move the roving cursor geometrically (5 columns)", async () => {
-    const spy = stubColumns(5);
-    setup({ textureSize: 16 }); // assigned 5 -> cursor starts at 5
+  it("arrow keys move the roving cursor geometrically (side columns)", async () => {
+    setup({ textureSize: 16 }); // side = 4 columns, assigned 5 -> cursor starts at 5
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     const tabbed = () => screen.getAllByTestId("atlas-cell").find((c) => c.getAttribute("tabindex") === "0")!.getAttribute("data-frame");
     fireEvent.keyDown(grid, { key: "ArrowRight" }); // 5 -> 6
     await waitFor(() => expect(tabbed()).toBe("6"));
-    fireEvent.keyDown(grid, { key: "ArrowDown" });  // 6 -> 11 (+5)
-    await waitFor(() => expect(tabbed()).toBe("11"));
-    fireEvent.keyDown(grid, { key: "ArrowUp" });    // 11 -> 6
+    fireEvent.keyDown(grid, { key: "ArrowDown" });  // 6 -> 10 (+4)
+    await waitFor(() => expect(tabbed()).toBe("10"));
+    fireEvent.keyDown(grid, { key: "ArrowUp" });    // 10 -> 6
     await waitFor(() => expect(tabbed()).toBe("6"));
     fireEvent.keyDown(grid, { key: "Home" });       // -> 0
     await waitFor(() => expect(tabbed()).toBe("0"));
     fireEvent.keyDown(grid, { key: "End" });        // -> 15
     await waitFor(() => expect(tabbed()).toBe("15"));
-    spy.mockRestore();
   });
 
-  it("ArrowDown is a no-op into a missing partial-row target; down-then-up is reversible", async () => {
-    const spy = stubColumns(5); // 16 cells, rows: 0-4,5-9,10-14,15
-    setup({ textureSize: 16 });
+  it("ArrowDown is a no-op into a missing target past the last row; down-then-up reversible", async () => {
+    setup({ textureSize: 16 }); // side = 4, 16 cells, rows: 0-3,4-7,8-11,12-15
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     const tabbed = () => screen.getAllByTestId("atlas-cell").find((c) => c.getAttribute("tabindex") === "0")!.getAttribute("data-frame");
     fireEvent.keyDown(grid, { key: "Home" }); // 0
     fireEvent.keyDown(grid, { key: "ArrowRight" }); // 1
     await waitFor(() => expect(tabbed()).toBe("1"));
-    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 1 -> 6
-    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 6 -> 11
-    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 11 -> 16? missing -> no-op, stays 11
-    await waitFor(() => expect(tabbed()).toBe("11"));
-    fireEvent.keyDown(grid, { key: "ArrowUp" });   // 11 -> 6 (reversible)
-    await waitFor(() => expect(tabbed()).toBe("6"));
-    spy.mockRestore();
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 1 -> 5
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 5 -> 9
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 9 -> 13
+    await waitFor(() => expect(tabbed()).toBe("13"));
+    fireEvent.keyDown(grid, { key: "ArrowDown" }); // 13 -> 17? past last cell -> no-op, stays 13
+    await waitFor(() => expect(tabbed()).toBe("13"));
+    fireEvent.keyDown(grid, { key: "ArrowUp" });   // 13 -> 9 (reversible)
+    await waitFor(() => expect(tabbed()).toBe("9"));
   });
 
   it("Enter assigns the focused frame; Space too and prevents default", async () => {
-    const spy = stubColumns(4);
     const bridge = new MockBridge();
     const req = vi.spyOn(bridge, "request");
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
@@ -247,18 +255,15 @@ describe("AtlasPickerPanel", () => {
     const ev = createEvent.keyDown(grid, { key: " " });
     fireEvent(grid, ev);
     expect(ev.defaultPrevented).toBe(true); // Space must not scroll the panel
-    spy.mockRestore();
   });
 
   it("hero shows the assigned frame number and reflects keyboard focus", async () => {
-    const spy = stubColumns(4);
     setup({ textureSize: 16 }); // assigned 5
     // assigned frame number is visible in the hero caption
     await waitFor(() => expect(screen.getByTestId("atlas-hero").textContent).toMatch(/frame 5/i));
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     fireEvent.keyDown(grid, { key: "Home" }); // focus 0 -> hero follows focus
     await waitFor(() => expect(screen.getByTestId("atlas-hero").textContent).toMatch(/frame 0/i));
-    spy.mockRestore();
   });
 
   it("has an aria-live region", async () => {
@@ -266,34 +271,47 @@ describe("AtlasPickerPanel", () => {
     await waitFor(() => expect(document.querySelector('[aria-live="polite"]')).toBeTruthy());
   });
 
-  it("reserves a stable scrollbar gutter (anti-flicker mitigation)", async () => {
+  it("reserves a symmetric scrollbar gutter (anti-flicker + centring)", async () => {
     // Presence guard only — proves the mitigation is wired; the actual loop
-    // needs real layout (a Playwright check) to observe.
+    // and the centring need real layout (a Playwright check) to observe.
+    // `both-edges` keeps the width stable AND centres the grid in the panel (a
+    // one-sided gutter pushes the centred tracks off-centre vs the hero).
     setup({ textureSize: 16 });
     await screen.findByRole("listbox", { name: /atlas frames/i });
-    expect(screen.getByTestId("atlas-scroll").style.scrollbarGutter).toBe("stable");
+    expect(screen.getByTestId("atlas-scroll").style.scrollbarGutter).toBe("stable both-edges");
   });
 
-  it("sizes the grid to multiple columns from the measured width (smart-sizing wiring)", async () => {
-    // Guards the 1-column measurement regression: jsdom has no ResizeObserver
-    // and clientWidth 0, so without this the sizing path is never exercised.
-    const RealRO = globalThis.ResizeObserver;
-    let roCb: (() => void) | null = null;
-    globalThis.ResizeObserver = class {
-      constructor(cb: () => void) { roCb = cb; }
-      observe() {}
-      disconnect() {}
-    } as unknown as typeof ResizeObserver;
-    try {
-      setup({ textureSize: 16 }); // 4×4 = 16 cells
-      const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
-      const scroll = screen.getByTestId("atlas-scroll");
-      Object.defineProperty(scroll, "clientWidth", { configurable: true, value: 250 });
-      act(() => { roCb?.(); }); // fire the observer → re-measure (250 − 24 padding = 226)
-      await waitFor(() => expect(grid.style.gridTemplateColumns).toMatch(/repeat\(4, \d+px\)/));
-    } finally {
-      globalThis.ResizeObserver = RealRO;
-    }
+  it("column count tracks the atlas via fitGridLayout at the (slide-frozen) width", async () => {
+    // The grid reflows from the measured width via fitGridLayout. In jsdom
+    // `clientWidth` is 0, so the ResizeObserver never updates `gridW` and it holds
+    // the init default COLD_START_GRIDW (215). At that narrow cold-start width the
+    // 44px min-cell floor caps columns at 4 (maxColsForMin = floor((215+4)/48) = 4),
+    // so the column count is driven by the atlas's √n ideal under that cap: a
+    // 16-cell atlas → min(16,4,4)=4 cols, a 4-cell atlas → min(4,2,4)=2 cols. The
+    // count follows the layout, never a 1-column mid-slide transient (the slide
+    // freezes the measure → no snap). (Wider docks showing MORE columns is the
+    // responsive width path, exercised by the real-layout Playwright check.)
+    const bridge = new MockBridge();
+    const handlers: Array<(e: unknown) => void> = [];
+    const realOn = bridge.on.bind(bridge);
+    vi.spyOn(bridge, "on").mockImplementation((kind, cb) => {
+      if (kind === "emitters/tree/changed") handlers.push(cb as (e: unknown) => void);
+      return realOn(kind, cb as never);
+    });
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    // 16 cells @ w=215 → 4 cols × 50px (fitGridLayout(16,215,4,44,160)); fixed-px.
+    expect(grid.style.gridTemplateColumns).toBe("repeat(4, 50px)");
+    // Swap to a 4-cell (2×2) atlas in place — the column count drops to the √n
+    // ideal (2) and the cell grows to fill (fitGridLayout(4,215,4,44,160) → 2 cols
+    // × 105px), never a single-column snap.
+    useMockEmitterProperties.getState().patch(1, { textureSize: 4, colorTexture: "smoke.dds" });
+    handlers.forEach((h) => h({ kind: "emitters/tree/changed" }));
+    await waitFor(() =>
+      expect(screen.getByRole("listbox", { name: /atlas frames/i }).style.gridTemplateColumns).toBe("repeat(2, 105px)"),
+    );
   });
 
   it("refreshes the atlas when the emitter's texture changes (tree/changed)", async () => {
@@ -323,13 +341,132 @@ describe("AtlasPickerPanel", () => {
     useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
     publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [33] } });
     render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
-    await waitFor(() => expect(previewCalls()).toBe(1)); // initial fetch (then cached)
+    await waitFor(() => expect(previewCalls()).toBe(2)); // both alpha modes prefetched (then cached)
     act(() => { bumpTextureEpoch(); }); // simulate a "reload textures"
-    await waitFor(() => expect(previewCalls()).toBe(2)); // cache dropped → re-fetch fresh content
+    await waitFor(() => expect(previewCalls()).toBe(4)); // cache dropped → both modes re-fetch fresh content
+  });
+
+  it("alpha toggle: defaults OFF (additive RGB), flips, and persists", async () => {
+    setup({ textureSize: 16 });
+    const toggle = await screen.findByTestId("atlas-alpha-toggle");
+    // default OFF → honoring real alpha is not pressed
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(window.localStorage.getItem("atlas.showAlpha")).toBe("0");
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle.getAttribute("aria-pressed")).toBe("true"));
+    expect(window.localStorage.getItem("atlas.showAlpha")).toBe("1");
+  });
+
+  it("alpha toggle: reads the persisted ON preference on mount", async () => {
+    window.localStorage.setItem("atlas.showAlpha", "1");
+    setup({ textureSize: 16 });
+    const toggle = await screen.findByTestId("atlas-alpha-toggle");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("prefetches BOTH alpha modes upfront so the toggle needs no new fetch", async () => {
+    const bridge = new MockBridge();
+    const req = vi.spyOn(bridge, "request");
+    const previewParams = () =>
+      req.mock.calls
+        .map(([r]) => r as { kind: string; params: { flattenAlpha?: boolean } })
+        .filter((r) => r.kind === "textures/get-preview")
+        .map((r) => r.params.flattenAlpha);
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
+    // Both modes fetch upfront on load: flattenAlpha true (color, the default
+    // active mode) AND false (real alpha) — order-independent, so sort.
+    await waitFor(() => expect([...previewParams()].sort()).toEqual([false, true]));
+    const before = previewParams().length;
+    // Flipping the toggle is a SYNCHRONOUS swap of the already-loaded mode — it
+    // must NOT trigger another get-preview round-trip (that was the ~3s lag).
+    fireEvent.click(await screen.findByTestId("atlas-alpha-toggle"));
+    await waitFor(() => expect(screen.getByTestId("atlas-alpha-toggle").getAttribute("aria-pressed")).toBe("true"));
+    expect(previewParams().length).toBe(before);
+  });
+
+  it("renders the full grid unconditionally (no dock-slide deferral)", async () => {
+    // The grid mounts immediately rather than deferring behind the slide — it
+    // seeds `gridW` from the cached/default width and reflows once measured, so
+    // the full grid + hero are present from the first frame (no gate). The hero
+    // shows too.
+    setup({ textureSize: 16 });
+    await screen.findByTestId("atlas-alpha-toggle"); // header is up
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16)); // full grid mounted
+    expect(screen.queryByTestId("atlas-scroll")).not.toBeNull();   // scroll region present
+    expect(screen.queryByTestId("atlas-hero")).not.toBeNull();     // hero preview present
+  });
+
+  it("backing is contained: scroll container never carries bg-black", async () => {
+    // The dark backing now lives on each cell/hero (cropStyle), not on the
+    // panel containers — so the scroll region must not slab a black surface in
+    // either alpha mode.
+    setup({ textureSize: 16 });
+    const scroll = await screen.findByTestId("atlas-scroll");
+    expect(scroll.className).not.toContain("bg-black");
+    // flip alpha ON — still must not gain bg-black
+    fireEvent.click(await screen.findByTestId("atlas-alpha-toggle"));
+    await waitFor(() => expect(screen.getByTestId("atlas-alpha-toggle").getAttribute("aria-pressed")).toBe("true"));
+    expect(screen.getByTestId("atlas-scroll").className).not.toContain("bg-black");
+  });
+
+  it("color mode (default): container backing is the uniform gray (bg-bg-2); cells are cheap", async () => {
+    setup({ textureSize: 16 });
+    // wait for the preview to load so the crop style + container var are applied
+    const cell = await waitFor(() => {
+      const c = screen.getAllByTestId("atlas-cell").find((x) => x.getAttribute("data-frame") === "6")!;
+      expect(c.style.backgroundImage).not.toBe("");
+      return c;
+    });
+    // The backing is now the SAME gray as the cells (bg-bg-2), applied via class —
+    // no inline per-mode background, no checkerboard.
+    const grid = screen.getByRole("listbox", { name: /atlas frames/i });
+    expect(grid.className).toContain("bg-bg-2");
+    expect(grid.style.background).toBe("");
+    expect(grid.style.backgroundImage).toBe("");
+    // The shared atlas image is exposed on the container as --atlas-url.
+    expect(grid.style.getPropertyValue("--atlas-url")).toMatch(/^url\(/);
+    // Cells are cheap + mode-independent: they reference the shared var, carry NO
+    // inline background-color and NO per-cell checker layers (the gray is bg-bg-2).
+    expect(cell.style.backgroundImage).toBe("var(--atlas-url)");
+    expect(cell.style.backgroundColor).toBe("");
+    expect(cell.className).toContain("bg-bg-2");
+    expect(cell.style.backgroundImage).not.toContain("var(--atlas-checker-");
+    // the hero is now a <canvas> crop (no CSS background raster) — assert the
+    // canvas is present rather than a background token. The crop is painted into
+    // the canvas; transparent pixels reveal the hero element's bg-bg-2 (a no-op
+    // under jsdom's contextless canvas).
+    const hero = screen.getByTestId("atlas-hero");
+    expect(hero.querySelector("canvas")).not.toBeNull();
+  });
+
+  it("alpha mode: the CONTAINER stays the uniform gray (no checkerboard); cells unchanged", async () => {
+    setup({ textureSize: 16 });
+    // capture a cell's crop style BEFORE the toggle…
+    const cellBefore = await waitFor(() => {
+      const c = screen.getAllByTestId("atlas-cell").find((x) => x.getAttribute("data-frame") === "6")!;
+      expect(c.style.backgroundImage).not.toBe("");
+      return c.style.cssText;
+    });
+    fireEvent.click(screen.getByTestId("atlas-alpha-toggle"));
+    await waitFor(() => expect(screen.getByTestId("atlas-alpha-toggle").getAttribute("aria-pressed")).toBe("true"));
+    // No checkerboard anywhere: the container keeps its uniform bg-bg-2 gray in
+    // alpha mode too (transparent frame pixels reveal that same gray). No inline
+    // checker gradients, no checker base colour.
+    const grid = screen.getByRole("listbox", { name: /atlas frames/i });
+    expect(grid.className).toContain("bg-bg-2");
+    expect(grid.style.backgroundImage).not.toContain("var(--atlas-checker-");
+    expect(grid.style.backgroundColor).not.toBe("var(--atlas-checker-l)");
+    // …the cell's crop style is UNCHANGED across the toggle (mode-independent):
+    // still just the shared var crop, no checker, no inline background-color.
+    const cellAfter = screen.getAllByTestId("atlas-cell").find((x) => x.getAttribute("data-frame") === "6")!;
+    expect(cellAfter.style.cssText).toBe(cellBefore);
+    expect(cellAfter.style.backgroundImage).toBe("var(--atlas-url)");
+    expect(cellAfter.style.backgroundImage).not.toContain("var(--atlas-checker-");
   });
 
   it("keeps keyboard focus in the grid when the atlas shrinks under it", async () => {
-    const spy = stubColumns(8);
     const bridge = new MockBridge();
     const handlers: Array<(e: unknown) => void> = [];
     const realOn = bridge.on.bind(bridge);
@@ -341,6 +478,10 @@ describe("AtlasPickerPanel", () => {
     publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [33] } });
     render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    // The cells render only after the preview prefetch resolves; press End only
+    // once they exist, else focusCell(63) finds no element and focus never lands
+    // (a pre-existing race — the keydown fires once and isn't retried by waitFor).
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(64));
     fireEvent.keyDown(grid, { key: "End" }); // focus the last cell (63)
     await waitFor(() =>
       expect((document.activeElement as HTMLElement | null)?.getAttribute("data-frame")).toBe("63"),
@@ -351,6 +492,5 @@ describe("AtlasPickerPanel", () => {
     await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(4));
     // focus did NOT fall to <body> — it was re-homed into the grid
     expect((document.activeElement as HTMLElement | null)?.getAttribute("data-testid")).toBe("atlas-cell");
-    spy.mockRestore();
   });
 });

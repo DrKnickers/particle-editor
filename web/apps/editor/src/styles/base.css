@@ -47,7 +47,8 @@ input[type="radio"] {
 .link-settings-scroll::-webkit-scrollbar,
 [data-testid="tab-basic-content"]::-webkit-scrollbar,
 [data-testid="tab-appearance-content"]::-webkit-scrollbar,
-[data-testid="tab-physics-content"]::-webkit-scrollbar { width: 10px; height: 10px; }
+[data-testid="tab-physics-content"]::-webkit-scrollbar,
+[data-testid="atlas-scroll"]::-webkit-scrollbar { width: 10px; height: 10px; }
 
 .panel-body::-webkit-scrollbar-track,
 .curve-list::-webkit-scrollbar-track,
@@ -55,7 +56,8 @@ input[type="radio"] {
 .link-settings-scroll::-webkit-scrollbar-track,
 [data-testid="tab-basic-content"]::-webkit-scrollbar-track,
 [data-testid="tab-appearance-content"]::-webkit-scrollbar-track,
-[data-testid="tab-physics-content"]::-webkit-scrollbar-track { background: transparent; }
+[data-testid="tab-physics-content"]::-webkit-scrollbar-track,
+[data-testid="atlas-scroll"]::-webkit-scrollbar-track { background: transparent; }
 
 .panel-body::-webkit-scrollbar-thumb,
 .curve-list::-webkit-scrollbar-thumb,
@@ -63,7 +65,8 @@ input[type="radio"] {
 .link-settings-scroll::-webkit-scrollbar-thumb,
 [data-testid="tab-basic-content"]::-webkit-scrollbar-thumb,
 [data-testid="tab-appearance-content"]::-webkit-scrollbar-thumb,
-[data-testid="tab-physics-content"]::-webkit-scrollbar-thumb {
+[data-testid="tab-physics-content"]::-webkit-scrollbar-thumb,
+[data-testid="atlas-scroll"]::-webkit-scrollbar-thumb {
   background: var(--border-2);
   border-radius: 5px;
   border: 2px solid var(--panel);
@@ -75,7 +78,8 @@ input[type="radio"] {
 .link-settings-scroll::-webkit-scrollbar-thumb:hover,
 [data-testid="tab-basic-content"]::-webkit-scrollbar-thumb:hover,
 [data-testid="tab-appearance-content"]::-webkit-scrollbar-thumb:hover,
-[data-testid="tab-physics-content"]::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+[data-testid="tab-physics-content"]::-webkit-scrollbar-thumb:hover,
+[data-testid="atlas-scroll"]::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
 /* Reserve the scrollbar gutter so a panel whose collapsible section is
    expanded (and overflows into a scrollbar) doesn't shove its content

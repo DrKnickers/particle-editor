@@ -173,7 +173,8 @@ struct PreviewResult {
 PreviewResult GetTexturePreview(const std::wstring& filename,
                                 IFileManager* fileManager,
                                 IDirect3DDevice9* device,
-                                int maxBound = 1024);
+                                int maxBound = 1024,
+                                bool flattenAlpha = true);
 
 } // namespace TexturePalette
 

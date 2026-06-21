@@ -16,7 +16,7 @@
 //   6. focusedTrack !== "index"  → "Select keys on the index channel…"
 //   happy path                  → grid + preview box
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useAtlasContext } from "@/lib/atlas-context";
 import { ToolPanel } from "@/components/ToolPanel";
@@ -27,17 +27,67 @@ import {
   isAtlasTooLarge,
   resolveFrame,
   cellRect,
-  columnsFromTemplate,
   fitGridLayout,
 } from "@/lib/atlas-grid";
+import { useDockAnim } from "@/lib/dock-anim";
 
 // Smart-grid sizing constants (§ "maximize available space"): cell gap (matches
-// the grid's `gap-1` = 4px), and the min/max square thumbnail size.
+// the grid's `gap-1` = 4px) and the min/max square thumbnail size. The grid
+// reflows RESPONSIVELY to the measured panel width (~√n columns capped so a cell
+// never falls below GRID_MIN_CELL), so a wide dock shows more columns and a
+// narrow one fewer — see fitGridLayout. The width is FROZEN during the dock
+// slide (see the ResizeObserver's animating-guard below) so it lays out at the
+// settled width, never the narrow mid-slide width.
 const GRID_GAP = 4;
 const GRID_MIN_CELL = 44;
 const GRID_MAX_CELL = 160;
 import { getPreviewCached, useTextureEpoch } from "@/lib/atlas-preview-cache";
 import { useModStack } from "@/lib/mod-stack";
+
+// Module-level cache of the last settled grid width. The panel UNMOUNTS when the
+// dock closes, so component state is lost; persisting the width here lets a
+// re-open render at its prior settled width immediately (no first-frame narrow
+// transient before the ResizeObserver fires). null until the first real measure.
+let lastAtlasGridW: number | null = null;
+
+// First-ever-open default for the grid content width, used ONLY before any real
+// measure exists (the cache above is null). It must equal the width the cold-start
+// slide will SETTLE at, or the grid lays out at the wrong column count and snaps
+// when the settle measure lands (the reported "first open reflows, fixed after"):
+// a too-wide seed picks an extra column for a 64-cell atlas, then the settle drops
+// it — a visible column snap. The cold-start width is DETERMINISTIC: on a fresh
+// session the panel library has no remembered dock size, so the slide always
+// expands the dock to its pixel floor (DOCK_MIN_PX = 260 in PanelLayout). Inside
+// that 260px panel the usable grid width is 260 − ToolPanel left border (1) − this
+// scroll region's p-3 (SCROLL_PAD = 24) − its two `scrollbar-gutter: both-edges`
+// gutters (2 × the themed 10px scrollbar = 20) ≈ 215. (The ToolPanel body reserves
+// NO gutter — AtlasPickerPanel passes bodyScroll={false} since it owns its scroll —
+// so it doesn't shift the width.) Seeding 215 makes the first render pick the
+// settle's column count (4 for a 64-cell atlas) at the settle's exact cell size, so
+// there's no snap and no nudge; re-opens seed from the cached real width above —
+// this only governs the first-ever open before any measure. Verified empirically
+// (faithful DOM replica in real Chromium): min-dock settle = 215px, 4 cols, +1px
+// of panel-centre.
+const COLD_START_GRIDW = 215;
+
+// Module-level cache of the last fetched emitter props (textureSize/colorTexture).
+// The panel UNMOUNTS on dock close, so the first render of a RE-OPEN would
+// otherwise show the loading placeholder until the emitters/get-properties
+// round-trip resolves — and that grid mount lands DURING the dock-slide tween,
+// contending with it. Seeding the initial state from this cache (when the id
+// matches) renders the grid SYNCHRONOUSLY on the first frame, before the slide
+// starts, so the tween runs uncontended. The fetch still runs to confirm/refresh.
+// null until the first successful fetch.
+let lastEmitterProps: { id: number; textureSize: number; colorTexture: string } | null = null;
+
+/** Test-only: clear the module-level caches (seeded emitter props + the last
+ *  settled grid width) so neither can leak across independent test cases — a
+ *  width-mocking test would otherwise seed gridW (→ a different column count)
+ *  into a later keyboard-nav test. */
+export function __resetAtlasPropsCache(): void {
+  lastEmitterProps = null;
+  lastAtlasGridW = null;
+}
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +96,30 @@ type PreviewState =
   | { kind: "ok"; dataUri: string; srcW: number; srcH: number }
   | { kind: "missing" }
   | { kind: "broken" };
+
+// ─── persisted "show texture alpha" preference ────────────────────────────────
+// Mirrors the localStorage pref pattern (e.g. skydome-seam-fix.ts). Default OFF:
+// additive frames (alpha ~0) are visible by default, which is the common need.
+
+const SHOW_ALPHA_KEY = "atlas.showAlpha";
+
+/** Read the persisted toggle; defaults to OFF (false) when absent/unreadable. */
+function readShowAlpha(): boolean {
+  try {
+    return localStorage.getItem(SHOW_ALPHA_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Persist the toggle (stored as "1"/"0"); silent on private-mode/quota errors. */
+function writeShowAlpha(on: boolean): void {
+  try {
+    localStorage.setItem(SHOW_ALPHA_KEY, on ? "1" : "0");
+  } catch {
+    /* private-mode / quota — in-memory UI state still reflects the choice */
+  }
+}
 
 // ─── component ───────────────────────────────────────────────────────────────
 
@@ -66,43 +140,91 @@ export function AtlasPickerPanel({
   const stack         = useModStack();
   const textureEpoch  = useTextureEpoch((s) => s.epoch); // re-fetch preview on a texture reload
 
-  const [textureSize, setTextureSize]   = useState(1);
-  const [colorTexture, setColorTexture] = useState("");
-  const [preview, setPreview]           = useState<PreviewState>({ kind: "loading" });
+  // Seed from the module-level cache when it matches the CURRENT emitter, so a
+  // RE-OPEN renders the grid synchronously on the first frame (before the dock
+  // slide) instead of waiting on the get-properties round-trip. A FIRST open of
+  // an emitter (no matching cache) falls back to the defaults and the grid
+  // renders once the fetch resolves.
+  const [textureSize, setTextureSize]   = useState(() =>
+    lastEmitterProps && lastEmitterProps.id === emitterId ? lastEmitterProps.textureSize : 1);
+  const [colorTexture, setColorTexture] = useState(() =>
+    lastEmitterProps && lastEmitterProps.id === emitterId ? lastEmitterProps.colorTexture : "");
+  // Both alpha modes are prefetched and held independently so flipping the Alpha
+  // toggle is a synchronous swap — no per-toggle bridge round-trip and no loading
+  // flash (that uncached host re-decode was the reported ~3s lag). The displayed
+  // `preview` is derived from these two + showAlpha (below).
+  const [flatPrev, setFlatPrev]         = useState<PreviewState>({ kind: "loading" }); // alpha OFF (color channel)
+  const [rawPrev,  setRawPrev]          = useState<PreviewState>({ kind: "loading" }); // alpha ON  (real alpha)
+  // Honor-alpha toggle. Default OFF: particle atlases are usually ADDITIVE (the
+  // visible content lives in RGB while alpha ~0), so with normal blending those
+  // frames look "missing". OFF forces every pixel fully opaque (alpha=255) so the
+  // additive RGB shows; ON renders the texture's real alpha. Persisted like other
+  // UI prefs.
+  const [showAlpha, setShowAlpha]       = useState<boolean>(readShowAlpha);
   const [hover, setHover]               = useState<number | null>(null);
   const [focusIndex, setFocusIndex]     = useState<number | null>(null); // keyboard cursor
   const [confirmTarget, setConfirmTarget] = useState<{ frame: number; emitterId: number; keyTimes: number[] } | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [pulse, setPulse] = useState(false);
+  // Measured content width the responsive grid sizes from. Seeded from the
+  // module-level cache so a re-open lays out at the prior settled width on the
+  // first frame; COLD_START_GRIDW (the deterministic dock-min content width) is
+  // the first-ever-open default so even that first open picks the settle's column
+  // count — no 5→4 snap (see COLD_START_GRIDW above).
+  const [gridW, setGridW] = useState<number>(() => lastAtlasGridW ?? COLD_START_GRIDW);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const focusInGridRef = useRef(false);   // does a grid cell currently hold focus?
   const restoreFocusRef = useRef(false);  // re-home focus after an atlas change?
   const roRef = useRef<ResizeObserver | null>(null);
-  const [gridW, setGridW] = useState(0); // measured content width of the scroll region
+  const lastMeasureRef = useRef<(() => void) | null>(null); // latest measure fn, called at slide settle
   const pulseTimer = useRef<number | undefined>(undefined);
   const emitterIdRef = useRef<number | null>(emitterId);
   useEffect(() => { emitterIdRef.current = emitterId; }, [emitterId]);
+  useEffect(() => { writeShowAlpha(showAlpha); }, [showAlpha]);
   useEffect(() => () => { if (pulseTimer.current) clearTimeout(pulseTimer.current); }, []);
   useEffect(() => () => roRef.current?.disconnect(), []);
 
-  // Measure the scroll region's content width so the grid can size thumbnails to
-  // fill the dock (re-fires on dock resize). A *callback ref* (not an effect)
-  // attaches the observer when the scroll element actually mounts — the grid is
-  // conditionally rendered (only once the preview loads), so an effect with []
-  // deps would run before the element exists and never re-attach. `clientWidth`
-  // includes the `p-3` padding — subtract it. jsdom lacks ResizeObserver (tests
-  // stub the column count for keyboard nav and don't depend on this).
+  // Measure the scroll region's content width so the grid reflows to fill the
+  // dock. A *callback ref* (not an effect) attaches the observer when the scroll
+  // element actually mounts — the grid is conditionally rendered (only once the
+  // preview loads), so an effect with [] deps would run before the element
+  // exists and never re-attach. `clientWidth` includes the `p-3` padding (12px
+  // each side) — subtract it. While a dock slide is in flight the measure NO-OPs
+  // (holds the cached final width) so the grid never re-fits to the narrow
+  // mid-slide width and snaps; it re-fits once at the settle (see the dock-anim
+  // subscription below). jsdom lacks ResizeObserver (and reports clientWidth 0),
+  // so the init `gridW` is kept there.
   const SCROLL_PAD = 24; // p-3 => 12px each side
   const setScrollEl = useCallback((el: HTMLDivElement | null) => {
     roRef.current?.disconnect();
     roRef.current = null;
+    lastMeasureRef.current = null;
     if (!el) return;
-    const measure = () => setGridW(Math.max(0, el.clientWidth - SCROLL_PAD));
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      // SLIDE: hold the cached final width; do not re-fit to the narrow
+      // mid-slide width (that collapse-then-snap is the bug this guards).
+      if (useDockAnim.getState().animating) return;
+      const w = Math.max(0, el.clientWidth - SCROLL_PAD);
+      if (w > 0) { setGridW(w); lastAtlasGridW = w; } // cache the settled width for the next open
+    };
+    lastMeasureRef.current = measure;
+    measure(); // initial fit at attach (suppressed if mounting mid-slide → keeps the cached init)
+    if (typeof ResizeObserver === "undefined") return; // jsdom — keep init gridW
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     roRef.current = ro;
+  }, []);
+
+  // Re-fit ONCE at the slide settle. During the slide the RO callbacks no-op
+  // (the animating guard above), so the grid shows the cached final layout the
+  // whole time — no single-column, no snap. On the animating true→false edge we
+  // call the latest measure() so the grid lands at the real settled width.
+  useEffect(() => {
+    let wasAnimating = useDockAnim.getState().animating;
+    return useDockAnim.subscribe((s) => {
+      if (wasAnimating && !s.animating) lastMeasureRef.current?.();
+      wasAnimating = s.animating;
+    });
   }, []);
 
   function firePulse() {
@@ -129,6 +251,9 @@ export function AtlasPickerPanel({
           if (!live) return;
           setTextureSize(r.properties.textureSize);
           setColorTexture(r.properties.colorTexture);
+          // Cache for the next RE-OPEN's synchronous first-render seed (above).
+          if (emitterId !== null)
+            lastEmitterProps = { id: emitterId, textureSize: r.properties.textureSize, colorTexture: r.properties.colorTexture };
           if (again) { again = false; fetchProps(); } // trailing fetch for events that arrived mid-flight
         })
         .catch(() => { inFlight = false; /* leave defaults → no-texture placeholder */ });
@@ -153,33 +278,67 @@ export function AtlasPickerPanel({
   const tooLarge = isAtlasTooLarge(textureSize);
   const eligible = side >= 2;
 
+  // Prefetch BOTH alpha modes whenever the texture/atlas (or mod-stack/epoch)
+  // changes — NOT on the showAlpha toggle. Each mode paints into its own state as
+  // soon as it resolves; the toggle then selects between two in-hand previews
+  // (instant, no fetch). showAlpha is read here only to PRIORITISE the active
+  // mode's fetch for first paint, and is intentionally absent from the deps so a
+  // toggle never re-runs this effect (no ESLint here, so no exhaustive-deps note).
   useEffect(() => {
     if (!eligible || tooLarge || !colorTexture) {
-      setPreview({ kind: "loading" });
+      setFlatPrev({ kind: "loading" });
+      setRawPrev({ kind: "loading" });
       return;
     }
     let live = true;
-    setPreview({ kind: "loading" });
-    void getPreviewCached(
-      stack,
-      colorTexture,
-      () => bridge.request({ kind: "textures/get-preview", params: { filename: colorTexture } }),
-    )
-      .then((r) => {
-        if (!live) return;
-        if (r.status === "ok") {
-          setPreview({ kind: "ok", dataUri: r.dataUri, srcW: r.srcW, srcH: r.srcH });
-        } else {
-          setPreview({ kind: r.status });
-        }
-      })
-      .catch(() => {
-        if (live) setPreview({ kind: "broken" });
-      });
-    return () => {
-      live = false;
-    };
+    setFlatPrev({ kind: "loading" });
+    setRawPrev({ kind: "loading" });
+    const load = (flattenAlpha: boolean, set: (p: PreviewState) => void) =>
+      getPreviewCached(
+        stack,
+        // Fold the alpha mode into the cache key so flattened and raw previews of
+        // the same texture don't collide.
+        `${flattenAlpha ? "flat" : "raw"}::${colorTexture}`,
+        () => bridge.request({ kind: "textures/get-preview", params: { filename: colorTexture, flattenAlpha } }),
+      )
+        .then((r) => {
+          if (!live) return;
+          set(r.status === "ok"
+            ? { kind: "ok", dataUri: r.dataUri, srcW: r.srcW, srcH: r.srcH }
+            : { kind: r.status });
+        })
+        .catch((err) => {
+          // Log the failing mode — the two modes resolve independently and only
+          // the ACTIVE mode's status reaches the placeholder cascade, so an
+          // inactive-mode failure is otherwise invisible until the user toggles
+          // into it. (Mirrors assignAll's console.warn for partial failures.)
+          console.warn(`[atlas] preview fetch failed (${flattenAlpha ? "color" : "alpha"} mode) for ${colorTexture}:`, err);
+          if (live) set({ kind: "broken" });
+        });
+    // Active mode first so first paint isn't gated behind the other mode's decode.
+    if (showAlpha) { void load(false, setRawPrev); void load(true, setFlatPrev); }
+    else           { void load(true, setFlatPrev); void load(false, setRawPrev); }
+    return () => { live = false; };
   }, [bridge, colorTexture, eligible, stack, tooLarge, textureEpoch]);
+
+  // The displayed preview is the active mode's prefetched result — a synchronous
+  // pick, so toggling Alpha is instant (no bridge round-trip, no loading flash).
+  const preview: PreviewState = showAlpha ? rawPrev : flatPrev;
+
+  // Warm the browser's image DECODE cache for BOTH modes as soon as their data
+  // URIs load. The data is already prefetched, but the browser only decodes a
+  // PNG the first time it's painted — so the very first Alpha toggle would pay a
+  // one-off decode for the not-yet-shown mode. Decoding both off-screen up front
+  // makes that first toggle instant. Best-effort (ignored if decode is absent).
+  useEffect(() => {
+    for (const p of [flatPrev, rawPrev]) {
+      if (p.kind === "ok") {
+        const img = new Image();
+        img.src = p.dataUri;
+        void img.decode?.().catch(() => {});
+      }
+    }
+  }, [flatPrev, rawPrev]);
 
   // ── stale-index reset (Risk 3) ─────────────────────────────────────────────
   // On emitter / texture / atlas-size change, reset the keyboard cursor to the
@@ -196,6 +355,20 @@ export function AtlasPickerPanel({
   // ── derived display values ────────────────────────────────────────────────
 
   const offIndex     = focusedTrack !== "index";
+
+  // ── cold-start slide readiness (atlasReady) ────────────────────────────────
+  // Signal the dock-slide whether the cell grid is actually mounted. This is the
+  // EXACT condition under which the <div role="listbox"> + cells render below
+  // (okPreview truthy ⇒ preview.kind === "ok" ⇒ colorTexture present). On a COLD
+  // first open the grid mounts only after the async get-properties + preview
+  // round-trips resolve; PanelLayout's OPEN slide (atlas dock only) waits on the
+  // false→true edge so the tween runs uncontended. Cleared on unmount so the next
+  // open starts from a clean "not ready" state and re-waits.
+  const gridMounted = preview.kind === "ok" && eligible && !tooLarge && !offIndex;
+  useEffect(() => {
+    useDockAnim.getState().setAtlasReady(gridMounted);
+  }, [gridMounted]);
+  useEffect(() => () => { useDockAnim.getState().setAtlasReady(false); }, []);
 
   // ── click-to-assign ──────────────────────────────────────────────────────
 
@@ -236,6 +409,14 @@ export function AtlasPickerPanel({
     }
     void commitAssign(k, emitterId, keyTimes);
   }
+  // STABLE click handler passed to cells so React.memo(Cell) can skip ALL cells
+  // on an alpha toggle (which re-renders only the grid container). A "latest
+  // ref" keeps the wrapper identity fixed while always invoking the current
+  // onCellClick (no stale closure over frame/keyTimes/emitterId). `setHover`
+  // (onHover) is already stable, so with this both cell callbacks are stable.
+  const onCellClickRef = useRef(onCellClick);
+  onCellClickRef.current = onCellClick;
+  const stableCellClick = useRef((k: number) => onCellClickRef.current(k)).current;
 
   const totalCells   = side * side;
   const fc           = frameCount(textureSize);
@@ -252,8 +433,8 @@ export function AtlasPickerPanel({
   // The single tabbable cell: cursor, else the assigned frame, else 0 (never null).
   const rovingTarget = safeFocus ?? highlight ?? 0;
   const previewFrame = safeHover ?? safeFocus ?? highlight; // §3.1 precedence (?? — frame 0 valid)
-  // Smart grid sizing (Approach A): ~sqrt(n) columns filling the measured width,
-  // with a min-cell floor so large atlases stay dense.
+  // Responsive grid sizing (Approach A): ~sqrt(n) columns filling the measured
+  // (and slide-frozen) width, with a min-cell floor so large atlases stay dense.
   const layout = fitGridLayout(totalCells, gridW, GRID_GAP, GRID_MIN_CELL, GRID_MAX_CELL);
 
   // ── keyboard navigation (§4.2) ─────────────────────────────────────────────
@@ -281,15 +462,13 @@ export function AtlasPickerPanel({
     focusCell(next);
   }
 
-  function liveColumns(): number {
-    const tpl = gridRef.current ? getComputedStyle(gridRef.current).gridTemplateColumns : "";
-    return columnsFromTemplate(tpl, totalCells, side);
-  }
-
   function onGridKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (offIndex) return;
     const cur = rovingTarget;
-    const cols = liveColumns();
+    // The grid reflows responsively, so up/down must move by the LIVE column
+    // count — the same `layout.cols` the grid renders with (its fixed
+    // `${layout.cell}px` tracks are exactly this many columns).
+    const cols = layout.cols;
     let next: number | null = null;
     switch (e.key) {
       case "ArrowLeft":  next = Math.max(0, cur - 1); break;
@@ -329,9 +508,26 @@ export function AtlasPickerPanel({
       <Placeholder>Select keys on the index channel to assign frames.</Placeholder>
     );
   } else {
+    // The hero renders ONE frame via a <canvas> crop (no giant CSS raster). The
+    // cell grid reflows responsively to the measured panel width (more columns
+    // when wide, fewer when narrow). During the dock slide the measure is frozen
+    // at the cached FINAL width and re-fit once at settle, so there's no
+    // single-column transient and no settle-snap.
+    //
+    // The active mode's atlas image lives on the GRID CONTAINER (one element),
+    // exposed via the --atlas-url custom property the cells reference. Toggling
+    // alpha re-renders ONLY this container — the N cells' props are unchanged, so
+    // React.memo skips them and the browser just re-resolves --atlas-url and
+    // repaints the shared cell raster once.
+    const okPreview = preview.kind === "ok" ? preview : null;
+    // The container carries the SAME gray as the cells (bg-bg-2). Its gap-1 gaps
+    // therefore match the cells, and in alpha mode the transparent frame pixels
+    // reveal that uniform gray. bg-bg-2 is a theme token, so the gray adapts to
+    // dark/light automatically — no per-mode backing, no checkerboard.
     body = (
       <>
-        {/* Pinned preview box */}
+        {/* Pinned preview box. Its bg-bg-2 backing shows through the canvas's
+            transparent (non-frame) pixels, matching the cells' uniform gray. */}
         <div className="shrink-0 p-3">
           <PreviewBox
             preview={preview}
@@ -342,17 +538,25 @@ export function AtlasPickerPanel({
             pulse={pulse}
           />
         </div>
-        {/* Scrollable cell grid */}
-        {/* `scrollbar-gutter: stable` reserves the scrollbar space at all times
-            so the measured width doesn't change when the vertical scrollbar
-            appears/disappears — without it the ResizeObserver re-fit loops
-            (grid grows -> scrollbar -> narrower -> smaller grid -> no scrollbar
-            -> wider -> repeat), which reads as flicker. */}
+        {/* Scrollable cell grid. The grid reflows responsively to this region's
+            measured width (via the callback-ref ResizeObserver). During a dock
+            slide the measure no-ops and the grid holds its cached FINAL width,
+            re-fitting once at the settle — so it never collapses to a single
+            column mid-slide and snaps. `scrollbar-gutter: stable BOTH-EDGES`
+            reserves the scrollbar space SYMMETRICALLY (a matching empty strip on
+            the left mirrors the scrollbar on the right). Two reasons: (1) the
+            width stays constant whether or not the vertical scrollbar is showing,
+            so the RO never re-fit-loops (grid grows → scrollbar → narrower →
+            smaller grid → no scrollbar → wider → repeat = flicker); (2) the
+            symmetric reservation centres the grid in the panel — a one-sided
+            `stable` gutter pushes the centred tracks ~half a gutter off-centre
+            (and a full gutter when no scrollbar shows), visibly misaligning the
+            grid from the full-width hero above it (measured: −7px vs 0px). */}
         <div
           ref={setScrollEl}
           data-testid="atlas-scroll"
           className="min-h-0 flex-1 overflow-y-auto p-3"
-          style={{ scrollbarGutter: "stable" }}
+          style={{ scrollbarGutter: "stable both-edges" }}
         >
           <div
             ref={gridRef}
@@ -367,21 +571,42 @@ export function AtlasPickerPanel({
               // which we keep so the restore effect can re-home focus.
               if (e.relatedTarget) focusInGridRef.current = false;
             }}
-            className="grid justify-center gap-1"
-            style={{ gridTemplateColumns: `repeat(${layout.cols}, ${layout.cell}px)` }}
+            className="mx-auto grid justify-center gap-1 bg-bg-2"
+            // Responsive column count (`layout.cols`, ~√n capped to the measured
+            // width — frozen during the dock slide). Cells are FIXED-px
+            // (layout.cell, from the same frozen fit), so the grid is a STATIC
+            // block: during the slide its size doesn't change, and the dock
+            // panel's overflow:hidden simply CLIPS it as it widens (revealing it)
+            // instead of 1fr cells resizing/reflowing live. max-width caps the
+            // grid to GRID_MAX_CELL per column so small atlases get big,
+            // space-filling cells. The fixed-px column tracks would otherwise
+            // left-pack inside the full-width grid box, so `justify-center`
+            // centres the tracks horizontally and `mx-auto` centres the box once
+            // the max-width cap makes it narrower than the region. The active
+            // atlas image is exposed as --atlas-url for the cells; the container's
+            // own bg-bg-2 (matching the cells) fills the gaps in both modes.
+            style={{
+              gridTemplateColumns: `repeat(${layout.cols}, ${layout.cell}px)`,
+              maxWidth: `${layout.cols * GRID_MAX_CELL + (layout.cols - 1) * GRID_GAP}px`,
+              ...(okPreview
+                ? ({ ["--atlas-url"]: `url(${okPreview.dataUri})` } as React.CSSProperties)
+                : {}),
+            }}
           >
-            {Array.from({ length: totalCells }, (_, k) => (
-              <Cell
-                key={k}
-                k={k}
-                side={side}
-                preview={preview}
-                selected={k === highlight}
-                focused={k === rovingTarget}
-                onHover={setHover}
-                onClick={onCellClick}
-              />
-            ))}
+            {okPreview &&
+              Array.from({ length: totalCells }, (_, k) => (
+                <Cell
+                  key={k}
+                  k={k}
+                  side={side}
+                  srcW={okPreview.srcW}
+                  srcH={okPreview.srcH}
+                  selected={k === highlight}
+                  focused={k === rovingTarget}
+                  onHover={setHover}
+                  onClick={stableCellClick}
+                />
+              ))}
           </div>
         </div>
       </>
@@ -393,7 +618,7 @@ export function AtlasPickerPanel({
   const showMeta = eligible && !tooLarge && !!colorTexture;
 
   return (
-    <ToolPanel title="Atlas Frames" onClose={onClose} variant="docked" closing={closing}>
+    <ToolPanel title="Atlas Frames" onClose={onClose} variant="docked" closing={closing} bodyScroll={false}>
       {/* Full-height flex column that negates ToolPanel's body padding so
           the pinned preview and scrollable grid can fill the available space. */}
       <div className="-m-3 flex h-full flex-col overflow-hidden">
@@ -404,6 +629,20 @@ export function AtlasPickerPanel({
             <span data-testid="atlas-meta" className="min-w-0 flex-1 truncate">
               {meta}
             </span>
+            <button
+              type="button"
+              data-testid="atlas-alpha-toggle"
+              aria-pressed={showAlpha}
+              title="Show texture alpha (off shows additive RGB)"
+              onClick={() => setShowAlpha((v) => !v)}
+              className={`shrink-0 rounded border px-1 transition-colors hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] ${
+                showAlpha
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-black"
+                  : "border-border text-text-3"
+              }`}
+            >
+              Alpha
+            </button>
             {interpolation && (
               <span className="shrink-0 rounded border border-border px-1">
                 {interpolation}
@@ -443,35 +682,44 @@ function Placeholder({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Compute CSS background-* properties to crop the texture to cell k. */
+/** Compute the cell's CSS background-* crop for frame k.
+ *
+ * The atlas image is NOT embedded here — it lives on the grid container as the
+ * --atlas-url custom property (one image element shared by every cell). The cell
+ * only positions that shared raster to its frame, with NO background-color of its
+ * own: the uniform gray backing (bg-bg-2) is on the cell element + the container.
+ * In color mode the opaque flat crop covers it; in alpha mode the crop's
+ * transparent frame pixels reveal the gray. Because srcW/srcH are identical
+ * across both alpha modes (same texture dims), this style is STABLE across an
+ * alpha toggle — the cell never re-renders on toggle. */
 function cropStyle(
   k: number,
   side: number,
-  p: Extract<PreviewState, { kind: "ok" }>,
+  srcW: number,
+  srcH: number,
 ): React.CSSProperties {
-  const r = cellRect(k, side, p.srcW, p.srcH);
+  const r = cellRect(k, side, srcW, srcH);
   // backgroundSize: the full image is `side` cells wide/tall.
   // backgroundPosition: position the relevant cell into view.
-  const posX =
-    side > 1
-      ? `${(r.left / (p.srcW - r.width)) * 100}%`
-      : "0%";
-  const posY =
-    side > 1
-      ? `${(r.top / (p.srcH - r.height)) * 100}%`
-      : "0%";
+  const posX = side > 1 ? `${(r.left / (srcW - r.width)) * 100}%` : "0%";
+  const posY = side > 1 ? `${(r.top / (srcH - r.height)) * 100}%` : "0%";
   return {
-    backgroundImage:    `url(${p.dataUri})`,
-    backgroundRepeat:   "no-repeat",
-    backgroundSize:     `${side * 100}% ${side * 100}%`,
+    backgroundImage: "var(--atlas-url)",
+    backgroundRepeat: "no-repeat",
+    backgroundSize: `${side * 100}% ${side * 100}%`,
     backgroundPosition: `${posX} ${posY}`,
   };
 }
 
-function Cell({
+// React.memo so a grid-container re-render on the alpha toggle (which only swaps
+// --atlas-url and the container backing) SKIPS every cell — the cell's props
+// (k, side, srcW, srcH, selected, focused) don't change across a toggle, so the
+// browser just re-resolves var(--atlas-url) and repaints the shared raster once.
+const Cell = memo(function Cell({
   k,
   side,
-  preview,
+  srcW,
+  srcH,
   selected,
   focused,
   onHover,
@@ -479,14 +727,14 @@ function Cell({
 }: {
   k: number;
   side: number;
-  preview: PreviewState;
+  srcW: number;
+  srcH: number;
   selected: boolean;
   focused: boolean;
   onHover: (k: number | null) => void;
   onClick?: (k: number) => void;
 }) {
-  const style: React.CSSProperties =
-    preview.kind === "ok" ? cropStyle(k, side, preview) : {};
+  const style: React.CSSProperties = cropStyle(k, side, srcW, srcH);
   if (selected) {
     // amber via border + box-shadow ring so the blue focus OUTLINE can nest (§4.4)
     style.borderColor = "var(--atlas-selected)";
@@ -510,18 +758,50 @@ function Cell({
       onMouseLeave={() => onHover(null)}
       onClick={() => onClick?.(k)}
     >
-      {/* Frame number: hidden by default, revealed on hover; amber badge when assigned */}
+      {/* Frame-index badge: ALWAYS visible on every cell so each thumbnail names
+          its atlas index at a glance (not only on hover / in the hero). Amber pill
+          when assigned; a translucent dark pill otherwise, darkening on hover so it
+          stays legible over the cell's brightening sprite. */}
       <span
-        className={`pointer-events-none absolute bottom-0.5 left-0.5 rounded-sm px-1 text-[9px] leading-tight transition-opacity ${
+        className={`pointer-events-none absolute bottom-0.5 left-0.5 rounded-sm px-1 text-[9px] leading-tight transition-colors ${
           selected
-            ? "bg-[var(--atlas-selected)] font-bold text-black opacity-100"
-            : "bg-black/70 text-[#eee] opacity-0 group-hover:opacity-100"
+            ? "bg-[var(--atlas-selected)] font-bold text-black"
+            : "bg-black/55 text-[#eee] group-hover:bg-black/80"
         }`}
       >
         {k}
       </span>
     </div>
   );
+});
+
+/** Paint frame `frame`'s crop of the atlas image onto the hero canvas at its
+ *  display size — drawing ONLY the one frame (vs the old CSS background that
+ *  rasterized the whole atlas upscaled to `side × hero`). The canvas is left
+ *  TRANSPARENT where the frame isn't drawn (clearRect, no backing fill), so the
+ *  hero element's own bg-bg-2 shows through transparent frame pixels — matching
+ *  the cells' uniform gray in both modes (no checkerboard).
+ *  No-ops gracefully if there's no 2d context (jsdom) or no image yet. */
+function drawHero(
+  canvas: HTMLCanvasElement,
+  img: HTMLImageElement,
+  frame: number,
+  side: number,
+) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return; // jsdom has no real 2d context — no-op
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssW = canvas.clientWidth || canvas.width;
+  const cssH = canvas.clientHeight || canvas.height;
+  const w = Math.max(1, Math.round(cssW * dpr));
+  const h = Math.max(1, Math.round(cssH * dpr));
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+  ctx.clearRect(0, 0, w, h); // transparent → reveals the hero element's bg-bg-2
+  // Source rect = frame's cell in the atlas (same maths as the CSS crop).
+  const r = cellRect(frame, side, img.naturalWidth, img.naturalHeight);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(img, r.left, r.top, r.width, r.height, 0, 0, w, h);
 }
 
 function PreviewBox({
@@ -539,20 +819,62 @@ function PreviewBox({
   total: number;
   pulse: boolean;
 }) {
-  const style: React.CSSProperties =
-    preview.kind === "ok" && frame !== null
-      ? cropStyle(frame, side, preview)
-      : {};
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const imgUriRef = useRef<string | null>(null); // dataUri the loaded img belongs to
+  const [imgReady, setImgReady] = useState(false);
+
+  const dataUri = preview.kind === "ok" ? preview.dataUri : null;
+
+  // Load the active preview's dataUri into an HTMLImageElement once per dataUri
+  // (cached via imgUriRef so the same atlas isn't reloaded on a frame / alpha
+  // toggle). decode() resolves when the bitmap is ready to draw.
+  useEffect(() => {
+    if (!dataUri) { imgRef.current = null; imgUriRef.current = null; setImgReady(false); return; }
+    if (imgUriRef.current === dataUri && imgRef.current) { setImgReady(true); return; }
+    let live = true;
+    setImgReady(false);
+    const img = new Image();
+    img.src = dataUri;
+    const ready = () => { if (!live) return; imgRef.current = img; imgUriRef.current = dataUri; setImgReady(true); };
+    if (typeof img.decode === "function") {
+      img.decode().then(ready).catch(() => { /* fall back to onload below */ });
+    }
+    img.onload = ready;
+    return () => { live = false; };
+  }, [dataUri]);
+
+  // (Re)draw when the image is ready, the frame, or the preview changes. (An
+  // alpha toggle swaps the active preview's dataUri, which re-runs the img-load
+  // effect → imgReady toggles → this redraws — so no showAlpha dep is needed.)
+  // Guarded inside drawHero against a missing 2d context (jsdom).
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    if (!canvas || !img || !imgReady) return;
+    if (preview.kind !== "ok" || frame === null) return;
+    drawHero(canvas, img, frame, side);
+  }, [imgReady, frame, side, preview.kind]);
+
   const pulseStyle: React.CSSProperties = pulse
     ? { boxShadow: "0 0 0 2px var(--atlas-selected), 0 0 16px rgba(255,176,0,.6)" }
     : {};
+
+  const showCanvas = preview.kind === "ok" && frame !== null;
 
   return (
     <div
       data-testid="atlas-hero"
       className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded border border-border bg-bg-2 text-center text-xs text-text-3"
-      style={{ ...style, ...pulseStyle, transition: "box-shadow 250ms ease" }}
+      style={{ ...pulseStyle, transition: "box-shadow 250ms ease" }}
     >
+      {showCanvas && (
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0"
+          style={{ width: "100%", height: "100%" }}
+        />
+      )}
       {frame !== null ? (
         <>
           <span className="absolute left-1.5 top-1.5 rounded bg-[var(--atlas-selected)] px-1.5 text-[11px] font-bold text-black">

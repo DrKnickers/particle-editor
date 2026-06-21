@@ -1151,6 +1151,12 @@ function MultiChannelCurves({
   const [measured, setMeasured] = useState<{ width: number; height: number }>(
     { width: propWidth, height: propHeight },
   );
+  // Track the SVG's box size every frame — INCLUDING during the dock slide — so
+  // the viewBox follows the container and the curve/grid re-projects crisply at
+  // each width. (We do NOT hold the viewBox during the slide: a held viewBox is
+  // stretched via the 100%-size SVG and then snaps at the settle — the visible
+  // "jump". The per-frame re-measure is cheap now that the atlas grid is frozen
+  // + pre-mounted, so it no longer contends with the flex tween.)
   useLayoutEffect(() => {
     const el = svgRef.current;
     if (el === null) return;

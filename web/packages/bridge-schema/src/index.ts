@@ -642,7 +642,10 @@ export type Request =
       kind: "textures/get-preview";
       // bare basename as stored in EmitterDto.colorTexture; host prepends
       // Data\Art\Textures\ and forces a .DDS swap (no .tga fallback — spec §7).
-      params: { filename: string };
+      // flattenAlpha (default true on the host) forces every pixel fully opaque
+      // (alpha=255) so ADDITIVE frames (RGB content, alpha ~0) are visible; pass
+      // false to honor the texture's real alpha.
+      params: { filename: string; flattenAlpha?: boolean };
     }
   | { kind: "textures/palette/toggle-pin";   params: { filename: string } }
   | { kind: "textures/palette/touch-recent"; params: { filename: string; slot: "color" | "bump" } }

@@ -44,6 +44,13 @@ type ToolPanelProps = {
    *  this window. Together they stop a click that lands in the ~260ms
    *  slide-out from targeting the shrinking/detaching Close button. */
   closing?: boolean;
+  /** When false, the body does NOT scroll or reserve a scrollbar gutter. For
+   *  panels that own an INTERNAL scroll region (e.g. AtlasPickerPanel, whose
+   *  cell grid scrolls in its own container) the body never overflows, so the
+   *  default reserved `scrollbar-gutter` is pure waste — a 15px empty strip on
+   *  the right that pushes the panel's content (and its centred grid) off-centre.
+   *  Default true (Lighting / Spawner scroll their bodies and need the gutter). */
+  bodyScroll?: boolean;
 };
 
 const HEADER_HEIGHT_PX = 48;
@@ -54,6 +61,7 @@ export function ToolPanel({
   children,
   variant = "overlay",
   closing = false,
+  bodyScroll = true,
 }: ToolPanelProps) {
   const docked = variant === "docked";
   return (
@@ -84,9 +92,13 @@ export function ToolPanel({
       </div>
       {/* Body — scrolls independently when content overflows the panel
           height. The 48 px subtraction keeps the scrollbar inside the
-          body so the header stays pinned to the top. */}
+          body so the header stays pinned to the top. `bodyScroll={false}`
+          (panels with their own internal scroll) drops the overflow + reserved
+          gutter so the body doesn't waste a 15px right strip. */}
       <div
-        className="flex-1 overflow-y-auto p-3 scrollbar-stable"
+        className={`flex-1 p-3 ${
+          bodyScroll ? "overflow-y-auto scrollbar-stable" : "overflow-hidden"
+        }`}
         style={{ height: `calc(100% - ${HEADER_HEIGHT_PX}px)` }}
       >
         {children}
