@@ -420,6 +420,11 @@ struct HostWindowImpl
     EventRegistrationToken          navStartingTok = {};
     EventRegistrationToken          newWindowTok   = {};
     EventRegistrationToken          permissionTok  = {};
+    // --capture diagnosability: logs when app.local finishes loading so a
+    // ui-ready timeout is attributable to "navigation never finished" vs
+    // "loaded but never signaled". Registered in FinishWebView2ControllerSetup,
+    // removed in WM_DESTROY (same lifecycle as the tokens above).
+    EventRegistrationToken          navCompletedTok = {};
     // F10: TME_LEAVE arming state. WebView2 needs a
     // COREWEBVIEW2_MOUSE_EVENT_KIND_MOUSE_LEAVE input when the pointer
     // exits the host HWND so CSS :hover / cursor state clears. Re-arm
@@ -680,6 +685,13 @@ struct HostWindowImpl
     bool         m_captureHasAmbient = false; float m_captureAmbient[3] = {0,0,0};
     bool         m_captureHasSun = false;     float m_captureSun[3] = {0,0,0};
     bool         m_captureHasSunI = false;    float m_captureSunIntensity = 1.0f;
+    // --capture: set true when the React app posts its `app/ready` first-paint
+    // signal (OnWebMessage). The capture loop gates the composite-window
+    // screenshot on this. Written in OnWebMessage and read in the capture wait
+    // loop — BOTH on the STA UI pump thread (WebView2 marshals
+    // WebMessageReceived to this thread's message pump), so a plain non-atomic
+    // bool is correct: no atomic/volatile needed.
+    bool         m_uiReady = false;
     FILE*       logFile = nullptr;
     std::mutex  logMutex;
 
@@ -1078,6 +1090,19 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
                 ++perfMsgKinds[msgKind];
             }
         }
+    }
+
+    // --capture first-paint handshake: the React app posts {"kind":"app/ready"}
+    // (web/apps/editor/src/lib/app-ready.ts — keep this literal in lockstep)
+    // after its first meaningful paint. Intercept it here, BEFORE the
+    // per-message log + dispatcher: it's a host-lifecycle signal, not a typed
+    // request the dispatcher handles. Set the flag the capture loop waits on and
+    // return. Harmless in normal runs (the flag is only read in --capture mode).
+    if (msgKind == L"app/ready")
+    {
+        m_uiReady = true;
+        Log("[capture] app/ready received (React first paint)\n");
+        return;
     }
 
     // [resize-perf C2] Per-message log hygiene: the interactive streams
@@ -1571,6 +1596,27 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // user handlers), so we cannot inject a Cache-Control response header to
     // keep a rebuilt bundle fresh. The cache-bust above (prodNavUrl's
     // ?v=<mtime>) is the header-free workaround.
+
+    // --capture diagnosability: log when the app document finishes loading, so a
+    // ui-ready timeout in the capture loop is attributable ("navigation never
+    // finished" vs "loaded but React never signaled app/ready"). Registered
+    // before Navigate so the first load is observed; token removed in WM_DESTROY.
+    webView->add_NavigationCompleted(
+        Callback<ICoreWebView2NavigationCompletedEventHandler>(
+            [this](ICoreWebView2*,
+                   ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT
+            {
+                BOOL ok = FALSE;
+                COREWEBVIEW2_WEB_ERROR_STATUS err = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
+                if (args)
+                {
+                    args->get_IsSuccess(&ok);
+                    args->get_WebErrorStatus(&err);
+                }
+                Log("[capture] NavigationCompleted (success=%d webErrorStatus=%d)\n",
+                    ok ? 1 : 0, static_cast<int>(err));
+                return S_OK;
+            }).Get(), &navCompletedTok);
 
     // Navigate to the React app.
     if (useDevUi)
@@ -2693,6 +2739,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 webView->remove_NewWindowRequested(newWindowTok);
                 newWindowTok = {};
             }
+            if (navCompletedTok.value != 0)
+            {
+                webView->remove_NavigationCompleted(navCompletedTok);
+                navCompletedTok = {};
+            }
             if (permissionTok.value != 0)
             {
                 webView->remove_PermissionRequested(permissionTok);
@@ -3585,6 +3636,34 @@ static bool CaptureWindowToPng(HWND hwnd, const std::wstring& path)
     return saved && pw;
 }
 
+// Elapsed milliseconds from a QPC tick delta. Guarded for freq<=0 (QPC
+// unavailable) — mirrors PerfUsSince's discipline; callers treat 0.0 as
+// "no time elapsed" and fall back to an iteration counter.
+static double QpcMs(LONGLONG deltaTicks, LONGLONG freq)
+{
+    return freq > 0
+        ? static_cast<double>(deltaTicks) * 1000.0 / static_cast<double>(freq)
+        : 0.0;
+}
+
+// Insert `suffix` before the filename's extension, e.g. ("C:\\a\\b.png",
+// "-composite") -> "C:\\a\\b-composite.png". The last dot is accepted as an
+// extension only if it falls after the last path separator, so a dot in a
+// directory name (C:\\my.dir\\refobj) isn't mistaken for an extension; a
+// dotless filename gets ".png" appended.
+static std::wstring DeriveSibling(const std::wstring& path, const std::wstring& suffix)
+{
+    const size_t sep = path.find_last_of(L"\\/");
+    const size_t dot = path.find_last_of(L'.');
+    if (dot != std::wstring::npos && (sep == std::wstring::npos || dot > sep))
+    {
+        std::wstring out = path;
+        out.insert(dot, suffix);
+        return out;
+    }
+    return path + suffix + L".png";
+}
+
 } // namespace
 
 // ---------- Run ----------
@@ -3843,7 +3922,18 @@ int HostWindowImpl::Run(int nCmdShow)
         Log("[ArchC] viewport popup hidden (canvas-in-DOM is the visible surface)\n");
     }
 
-    ShowWindow(hMain, nCmdShow);
+    // --capture loads a scene + screenshots headlessly. Computed before the
+    // window is shown so the show can avoid stealing focus in that mode.
+    const bool captureMode = (!m_captureAlo.empty() || !m_captureRef.empty())
+                             && !m_capturePng.empty();
+
+    // In --capture mode show the window WITHOUT activating it: PrintWindow
+    // (PW_RENDERFULLCONTENT) captures a non-foreground DComp/WebView2 window
+    // fine, and the ui-ready gate below now keeps the window up for seconds — a
+    // normal ShowWindow would pop a focus-stealing editor onto the user's screen
+    // every capture. NOT SW_HIDE / SW_SHOWMINNOACTIVE: a hidden/minimized window
+    // can stop DComp compositing and yield a black composite.
+    ShowWindow(hMain, captureMode ? SW_SHOWNOACTIVATE : nCmdShow);
     UpdateWindow(hMain);
 
     // rendering-fidelity] --capture: load the requested .alo now,
@@ -3851,8 +3941,6 @@ int HostWindowImpl::Run(int nCmdShow)
     // bound &particleSystem to the dispatcher, so this slot is what the
     // render loop below reads via particleSystem.get()). The loop then
     // renders m_captureFrames frames and writes the engine RT to a PNG.
-    const bool captureMode = (!m_captureAlo.empty() || !m_captureRef.empty())
-                             && !m_capturePng.empty();
     bool captureFailed = false;
     if (captureMode)
     {
@@ -4309,20 +4397,101 @@ int HostWindowImpl::Run(int nCmdShow)
                 Sleep(16);
                 if (++capturedFrames >= m_captureFrames)
                 {
-                    // (1) engine RT — the engine's own pre-composite pixels.
+                    // (1) engine RT — UNCHANGED: the engine's own pre-composite
+                    // pixels, captured at the exact frame target via the exact
+                    // method. Only the composite below is gated on the UI.
                     const bool ok = alphaCompositor &&
                                     alphaCompositor->CaptureSnapshotToFile(m_capturePng);
-                    // (2) composite — the final DWM/DComp-composited window
-                    // (what the user sees). Derive "<name>-composite.<ext>".
-                    std::wstring compPath = m_capturePng;
-                    const size_t dot = compPath.find_last_of(L'.');
-                    if (dot != std::wstring::npos) compPath.insert(dot, L"-composite");
-                    else                            compPath += L"-composite.png";
-                    const bool okc = CaptureWindowToPng(hMain, compPath);
-                    Log("[capture] frame %d: engine-RT %ls -> %s; composite %ls -> %s\n",
-                        capturedFrames, m_capturePng.c_str(), ok ? "ok" : "FAILED",
-                        compPath.c_str(), okc ? "ok" : "FAILED");
                     if (!ok) captureFailed = true;
+
+                    // (2) composite — the final DWM/DComp-composited window
+                    // (engine viewport framed by React chrome). Gate it on the
+                    // app/ready first-paint signal so it captures real chrome,
+                    // not a blank WebView surface. The per-PID-isolated WebView2
+                    // profile makes every run a genuine browser cold start, so
+                    // the wait is real: pump + render while waiting; cap at 30s
+                    // so a hung UI still yields a best-effort (clearly-named) image.
+                    const LONGLONG qf = PerfQpcFreq();          // cache once (freq==0 guard)
+                    const LONGLONG waitStart = PerfQpcNow();
+                    const double   kUiTimeoutMs = 30000.0;
+                    bool timedOut = false;
+                    int  waitIters = 0;
+                    while (!m_uiReady && !quit)
+                    {
+                        // Drain FIRST — DispatchMessage is what delivers WebView2's
+                        // WebMessageReceived → OnWebMessage → m_uiReady.
+                        MSG mw;
+                        while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
+                        {
+                            TranslateMessage(&mw);
+                            DispatchMessage(&mw);
+                            if (mw.message == WM_QUIT) quit = true;
+                        }
+                        if (m_uiReady || quit) break;
+                        const double elapsedMs = qf > 0
+                            ? QpcMs(PerfQpcNow() - waitStart, qf)
+                            : static_cast<double>(++waitIters) * 16.0;  // QPC-dead fallback
+                        if (elapsedMs >= kUiTimeoutMs) { timedOut = true; break; }
+                        RenderD3D9();  // keep the composed surface coherent while waiting
+                        MsgWaitForMultipleObjectsEx(0, nullptr, 16,
+                                                    QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+                    }
+
+                    // Settle: after a positive signal, pump + render ~150 ms so
+                    // DComp has committed the WebView visual AND the deferred
+                    // scene-rect crop (SetEngineVisualTransform immediate=false,
+                    // applied at the next CompositeEngineFrame) has landed before
+                    // the snapshot. app/ready proves React painted, not that the
+                    // host-side composition has caught up.
+                    if (m_uiReady && !quit)
+                    {
+                        const LONGLONG settleStart = PerfQpcNow();
+                        for (int i = 0; !quit; ++i)
+                        {
+                            MSG mw;
+                            while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
+                            {
+                                TranslateMessage(&mw);
+                                DispatchMessage(&mw);
+                                if (mw.message == WM_QUIT) quit = true;
+                            }
+                            if (quit) break;
+                            const double settleMs = qf > 0
+                                ? QpcMs(PerfQpcNow() - settleStart, qf)
+                                : static_cast<double>(i) * 16.0;
+                            if (settleMs >= 150.0) break;
+                            RenderD3D9();
+                            Sleep(16);
+                        }
+                    }
+
+                    const double waitedMs = qf > 0
+                        ? QpcMs(PerfQpcNow() - waitStart, qf)
+                        : static_cast<double>(waitIters) * 16.0;
+                    // Success name only when React actually signalled first
+                    // paint; a timeout OR an external WM_QUIT before the signal
+                    // yields a degraded image under a DISTINCT name so it can
+                    // never be mistaken for a good one (the harness greps for the
+                    // non-TIMEOUT name + requires ui-ready=1).
+                    const wchar_t* suffix = m_uiReady ? L"-composite" : L"-composite-TIMEOUT";
+                    const char*    state  = m_uiReady ? "" : (timedOut ? " TIMEOUT" : " ABORTED");
+                    const std::wstring compPath = DeriveSibling(m_capturePng, suffix);
+                    // Composite is UNCONDITIONAL (attempted even if engine-RT
+                    // failed) — the diagnostic composite is most valuable exactly
+                    // when a render broke. quit is set AFTER it so the loop exits
+                    // via `if (quit) break;` before the captureFailed bail.
+                    const bool okc = CaptureWindowToPng(hMain, compPath);
+                    Log("[capture] frame %d: engine-RT %ls -> %s; composite %ls -> %s "
+                        "(ui-ready=%d waited=%.0fms%s)\n",
+                        capturedFrames, m_capturePng.c_str(), ok ? "ok" : "FAILED",
+                        compPath.c_str(), okc ? "ok" : "FAILED",
+                        m_uiReady ? 1 : 0, waitedMs, state);
+                    if (!m_uiReady)
+                        Log("[capture] WARNING: app/ready not received (%s) — composite "
+                            "may show an unpainted React surface\n",
+                            timedOut ? "30s timeout" : "window closed mid-wait");
+                    // Exit code stays engine-RT-driven (captureFailed set above);
+                    // a UI timeout is a host.log WARNING, not a process failure.
                     quit = true;
                 }
             }

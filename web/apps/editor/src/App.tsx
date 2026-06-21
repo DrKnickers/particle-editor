@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { makeBridge } from "@/bridge";
+import { signalAppReady } from "@/lib/app-ready";
 import { exposeBridgeForTests } from "@/bridge/expose";
 import { PanelLayout, resetPanelLayoutStorage } from "@/components/PanelLayout";
 import { StatusBar } from "@/components/StatusBar";
@@ -153,6 +154,24 @@ function AppShell() {
   // the registered combos and emits `accelerator/pressed`; the hook routes
   // each to the same bridge call the matching menu item uses.
   useAppAccelerators(bridge);
+
+  // Signal the native host once the editor chrome has actually painted. Headless
+  // --capture mode gates its composite-window screenshot on this so it captures
+  // real chrome (menubar/toolbar/docks) instead of a blank React surface. A
+  // double requestAnimationFrame deterministically puts us past at least one real
+  // browser frame — useEffect fires after commit but its timing relative to the
+  // host's screenshot isn't guaranteed, so we don't rely on it alone; the host
+  // adds its own settle, making this the belt to its suspenders. No-op without WebView2.
+  useEffect(() => {
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => signalAppReady());
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      if (inner) cancelAnimationFrame(inner);
+    };
+  }, []);
 
   // Task 2.1 verification hook: log the initial engine snapshot at mount.
   // Confirms the bridge round-trip is producing a real EngineStateDto,
