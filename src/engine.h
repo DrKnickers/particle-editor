@@ -203,6 +203,23 @@ public:
 	// path when off, or when the blur effect / mask RT is unavailable.
 	bool     GetSoftShadows() const { return m_softShadowsEnabled; }
 	void     SetSoftShadows(bool enable) { m_softShadowsEnabled = enable; }
+
+	// [shadow-leak hunt] Env-gated diagnostic: dump a COMPREHENSIVE D3D9
+	// device-state snapshot to the file named by ALO_DUMP_RSTATE, throttled
+	// to ~every 30th frame, then return. No-op when the env var is unset, so
+	// it's Release-safe (gated by env, not NDEBUG). Called at the particle
+	// draw (EmitterInstance::Render) to capture the exact state the particle
+	// is about to draw with — so a fresh-clean frame can be diffed against a
+	// shadow-enable-then-disable LEAKED frame to find the leaked render state.
+	// [texture-content hunt] colorTex/normalTex are the particle's bound stage-0/1
+	// textures (m_pColorTexture / m_pNormalTexture); the probe now also samples
+	// their descriptors + center-pixel CONTENT so a "texture went black" leak
+	// (additive vanish / transparent black = src color -> 0) is distinguishable
+	// from a render-state leak.
+	void DumpParticleDrawStateIfRequested(unsigned long blendMode,
+	                                      IDirect3DTexture9* colorTex,
+	                                      IDirect3DTexture9* normalTex);
+
 	float    GetGroundZ() const		{ return m_groundZ; }
 	int      GetGroundTexture() const { return m_groundTextureIndex; }
 	//: main.cpp's thumbnail generator needs the D3D9 device to

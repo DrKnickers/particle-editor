@@ -981,6 +981,13 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
             ID3DXEffect* pEffect = pShader->getD3DEffect();
             pEffect->SetVector(handles.hEyeObjPosition, &eyeObjPosition);
 
+            // [shadow-leak hunt] Env-gated (ALO_DUMP_RSTATE) snapshot of the FULL
+            // device state the particle is ABOUT to draw with — captured here, before
+            // the shader's Begin/passes set their own state, so a fresh-clean frame
+            // can be diffed against a shadow-enable-then-disable LEAKED frame. No-op
+            // when the env var is unset; the method self-throttles to ~every 30th frame.
+            m_engine.DumpParticleDrawStateIfRequested(m_emitter.blendMode, m_pColorTexture, m_pNormalTexture);
+
             UINT nPasses;
             pEffect->Begin(&nPasses, 0);
             for (UINT i = 0; i < nPasses; i++)

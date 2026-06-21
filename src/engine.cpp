@@ -6,6 +6,7 @@
 #include <cctype>    // tolower for case-insensitive hardpoint bone matching
 #include <set>       // hardpoint damage-bone hide set
 #include <string>
+#include <cstdio>    // [shadow-leak hunt] fopen/fprintf for the ALO_DUMP_RSTATE probe
 #include "engine.h"
 #include "exceptions.h"
 #include "resource.h"
@@ -3004,6 +3005,323 @@ void Engine::EaseReferenceDisplay()
     m_displayRotation.z = easeAngle(m_displayRotation.z, m_referenceRotation.z);
 }
 
+// [shadow-leak hunt] Env-gated full device-state snapshot at the particle draw.
+// Writes to the file named by ALO_DUMP_RSTATE (append), throttled to ~every 30th
+// frame. No-op when the env var is unset, so it costs nothing in normal use and is
+// Release-safe (gated by env, not NDEBUG). Pointer VALUES (rt/ds/vs/ps/tex) are
+// printed as %p so a diff can show WHICH resource is bound across frames. The goal:
+// snapshot a fresh-clean frame vs a shadow-enable-then-disable frame and diff to
+// find the render state Engine::RenderReferenceShadows leaks and never restores.
+void Engine::DumpParticleDrawStateIfRequested(unsigned long blendMode,
+                                              IDirect3DTexture9* colorTex,
+                                              IDirect3DTexture9* normalTex)
+{
+    char path[512];
+    if (GetEnvironmentVariableA("ALO_DUMP_RSTATE", path, sizeof(path)) == 0)
+        return;
+
+    static int s_frame = 0;
+    if ((s_frame++ % 30) != 0)
+        return;
+
+    if (m_pDevice == NULL)
+        return;
+
+    FILE* f = fopen(path, "a");
+    if (!f)
+        return;
+
+    fprintf(f, "=== frame=%d shadows=%d blendMode=%lu ===\n",
+            s_frame, m_modelShadowsEnabled ? 1 : 0, blendMode);
+
+    // --- Render states (broad coverage; one fprintf per state) ---
+    {
+        struct RSEntry { D3DRENDERSTATETYPE rs; const char* name; };
+        static const RSEntry kStates[] = {
+            { D3DRS_COLORWRITEENABLE,         "COLORWRITEENABLE" },
+            { D3DRS_COLORWRITEENABLE1,        "COLORWRITEENABLE1" },
+            { D3DRS_COLORWRITEENABLE2,        "COLORWRITEENABLE2" },
+            { D3DRS_COLORWRITEENABLE3,        "COLORWRITEENABLE3" },
+            { D3DRS_ALPHABLENDENABLE,         "ALPHABLENDENABLE" },
+            { D3DRS_SRCBLEND,                 "SRCBLEND" },
+            { D3DRS_DESTBLEND,                "DESTBLEND" },
+            { D3DRS_BLENDOP,                  "BLENDOP" },
+            { D3DRS_SEPARATEALPHABLENDENABLE, "SEPARATEALPHABLENDENABLE" },
+            { D3DRS_SRCBLENDALPHA,            "SRCBLENDALPHA" },
+            { D3DRS_DESTBLENDALPHA,           "DESTBLENDALPHA" },
+            { D3DRS_BLENDOPALPHA,             "BLENDOPALPHA" },
+            { D3DRS_ALPHATESTENABLE,          "ALPHATESTENABLE" },
+            { D3DRS_ALPHAREF,                 "ALPHAREF" },
+            { D3DRS_ALPHAFUNC,                "ALPHAFUNC" },
+            { D3DRS_ZENABLE,                  "ZENABLE" },
+            { D3DRS_ZWRITEENABLE,             "ZWRITEENABLE" },
+            { D3DRS_ZFUNC,                    "ZFUNC" },
+            { D3DRS_STENCILENABLE,            "STENCILENABLE" },
+            { D3DRS_TWOSIDEDSTENCILMODE,      "TWOSIDEDSTENCILMODE" },
+            { D3DRS_STENCILREF,               "STENCILREF" },
+            { D3DRS_STENCILMASK,              "STENCILMASK" },
+            { D3DRS_STENCILWRITEMASK,         "STENCILWRITEMASK" },
+            { D3DRS_STENCILFUNC,              "STENCILFUNC" },
+            { D3DRS_STENCILPASS,              "STENCILPASS" },
+            { D3DRS_STENCILFAIL,              "STENCILFAIL" },
+            { D3DRS_STENCILZFAIL,             "STENCILZFAIL" },
+            { D3DRS_CULLMODE,                 "CULLMODE" },
+            { D3DRS_LIGHTING,                 "LIGHTING" },
+            { D3DRS_FOGENABLE,                "FOGENABLE" },
+            { D3DRS_COLORVERTEX,              "COLORVERTEX" },
+            { D3DRS_DIFFUSEMATERIALSOURCE,    "DIFFUSEMATERIALSOURCE" },
+            { D3DRS_SHADEMODE,                "SHADEMODE" },
+            { D3DRS_FILLMODE,                 "FILLMODE" },
+            { D3DRS_TEXTUREFACTOR,            "TEXTUREFACTOR" },
+            { D3DRS_MULTISAMPLEANTIALIAS,     "MULTISAMPLEANTIALIAS" },
+            { D3DRS_SCISSORTESTENABLE,        "SCISSORTESTENABLE" },
+            { D3DRS_CLIPPLANEENABLE,          "CLIPPLANEENABLE" },
+            { D3DRS_SRGBWRITEENABLE,          "SRGBWRITEENABLE" },
+            // [texture-content hunt] previously-omitted states — a leak from the
+            // shadow pass might live in fixed-function lighting / fog / depth-bias
+            // that the original table didn't capture. FOGENABLE is already above.
+            { D3DRS_AMBIENT,                  "AMBIENT" },
+            { D3DRS_AMBIENTMATERIALSOURCE,    "AMBIENTMATERIALSOURCE" },
+            { D3DRS_SPECULARMATERIALSOURCE,   "SPECULARMATERIALSOURCE" },
+            { D3DRS_EMISSIVEMATERIALSOURCE,   "EMISSIVEMATERIALSOURCE" },
+            { D3DRS_SPECULARENABLE,           "SPECULARENABLE" },
+            { D3DRS_NORMALIZENORMALS,         "NORMALIZENORMALS" },
+            { D3DRS_LOCALVIEWER,              "LOCALVIEWER" },
+            { D3DRS_VERTEXBLEND,              "VERTEXBLEND" },
+            { D3DRS_INDEXEDVERTEXBLENDENABLE, "INDEXEDVERTEXBLENDENABLE" },
+            { D3DRS_CLIPPING,                 "CLIPPING" },
+            { D3DRS_LASTPIXEL,                "LASTPIXEL" },
+            { D3DRS_DITHERENABLE,             "DITHERENABLE" },
+            { D3DRS_ANTIALIASEDLINEENABLE,    "ANTIALIASEDLINEENABLE" },
+            { D3DRS_DEPTHBIAS,                "DEPTHBIAS" },
+            { D3DRS_SLOPESCALEDEPTHBIAS,      "SLOPESCALEDEPTHBIAS" },
+            { D3DRS_WRAP0,                    "WRAP0" },
+            { D3DRS_POINTSPRITEENABLE,        "POINTSPRITEENABLE" },
+            { D3DRS_RANGEFOGENABLE,           "RANGEFOGENABLE" },
+            { D3DRS_FOGCOLOR,                 "FOGCOLOR" },
+            { D3DRS_FOGTABLEMODE,             "FOGTABLEMODE" },
+            { D3DRS_FOGVERTEXMODE,            "FOGVERTEXMODE" },
+        };
+        for (const RSEntry& e : kStates)
+        {
+            DWORD v = 0;
+            m_pDevice->GetRenderState(e.rs, &v);
+            fprintf(f, "  RS_%s = %lu\n", e.name, (unsigned long)v);
+        }
+    }
+
+    // --- Texture stage states + bound texture pointer (stages 0,1) ---
+    {
+        struct TSSEntry { D3DTEXTURESTAGESTATETYPE ts; const char* name; };
+        static const TSSEntry kStageStates[] = {
+            { D3DTSS_COLOROP,               "COLOROP" },
+            { D3DTSS_COLORARG1,             "COLORARG1" },
+            { D3DTSS_COLORARG2,             "COLORARG2" },
+            { D3DTSS_ALPHAOP,               "ALPHAOP" },
+            { D3DTSS_ALPHAARG1,             "ALPHAARG1" },
+            { D3DTSS_ALPHAARG2,             "ALPHAARG2" },
+            { D3DTSS_RESULTARG,             "RESULTARG" },
+            { D3DTSS_TEXCOORDINDEX,         "TEXCOORDINDEX" },
+            { D3DTSS_TEXTURETRANSFORMFLAGS, "TEXTURETRANSFORMFLAGS" },
+        };
+        for (DWORD stage = 0; stage <= 1; ++stage)
+        {
+            for (const TSSEntry& e : kStageStates)
+            {
+                DWORD v = 0;
+                m_pDevice->GetTextureStageState(stage, e.ts, &v);
+                fprintf(f, "  TSS%lu_%s = %lu\n", (unsigned long)stage, e.name, (unsigned long)v);
+            }
+            IDirect3DBaseTexture9* t = NULL;
+            m_pDevice->GetTexture(stage, &t);
+            fprintf(f, "  TEX%lu_ptr = %p\n", (unsigned long)stage, (void*)t);
+            if (t) t->Release();
+        }
+    }
+
+    // --- Sampler states (samplers 0,1) ---
+    {
+        struct SampEntry { D3DSAMPLERSTATETYPE ss; const char* name; };
+        static const SampEntry kSamplerStates[] = {
+            { D3DSAMP_MINFILTER,    "MINFILTER" },
+            { D3DSAMP_MAGFILTER,    "MAGFILTER" },
+            { D3DSAMP_MIPFILTER,    "MIPFILTER" },
+            { D3DSAMP_ADDRESSU,     "ADDRESSU" },
+            { D3DSAMP_ADDRESSV,     "ADDRESSV" },
+            { D3DSAMP_SRGBTEXTURE,  "SRGBTEXTURE" },
+            { D3DSAMP_MAXMIPLEVEL,  "MAXMIPLEVEL" },
+            { D3DSAMP_MIPMAPLODBIAS,"MIPMAPLODBIAS" },
+        };
+        for (DWORD s = 0; s <= 1; ++s)
+        {
+            for (const SampEntry& e : kSamplerStates)
+            {
+                DWORD v = 0;
+                m_pDevice->GetSamplerState(s, e.ss, &v);
+                fprintf(f, "  SAMP%lu_%s = %lu\n", (unsigned long)s, e.name, (unsigned long)v);
+            }
+        }
+    }
+
+    // --- Bindings: render target, depth/stencil, shaders, FVF, vertex decl, viewport ---
+    {
+        IDirect3DSurface9* rt = NULL;
+        m_pDevice->GetRenderTarget(0, &rt);
+        fprintf(f, "  RT0_ptr = %p\n", (void*)rt);
+        if (rt) rt->Release();
+
+        IDirect3DSurface9* ds = NULL;
+        m_pDevice->GetDepthStencilSurface(&ds);
+        fprintf(f, "  DEPTHSTENCIL_ptr = %p\n", (void*)ds);
+        if (ds) ds->Release();
+
+        D3DVIEWPORT9 vp;
+        ZeroMemory(&vp, sizeof(vp));
+        m_pDevice->GetViewport(&vp);
+        fprintf(f, "  VIEWPORT = X=%lu Y=%lu W=%lu H=%lu MinZ=%f MaxZ=%f\n",
+                (unsigned long)vp.X, (unsigned long)vp.Y,
+                (unsigned long)vp.Width, (unsigned long)vp.Height,
+                vp.MinZ, vp.MaxZ);
+
+        IDirect3DVertexShader9* vs = NULL;
+        m_pDevice->GetVertexShader(&vs);
+        fprintf(f, "  VERTEXSHADER_ptr = %p\n", (void*)vs);
+        if (vs) vs->Release();
+
+        IDirect3DPixelShader9* ps = NULL;
+        m_pDevice->GetPixelShader(&ps);
+        fprintf(f, "  PIXELSHADER_ptr = %p\n", (void*)ps);
+        if (ps) ps->Release();
+
+        DWORD fvf = 0;
+        m_pDevice->GetFVF(&fvf);
+        fprintf(f, "  FVF = 0x%08lx\n", (unsigned long)fvf);
+
+        IDirect3DVertexDeclaration9* decl = NULL;
+        m_pDevice->GetVertexDeclaration(&decl);
+        fprintf(f, "  VERTEXDECL_ptr = %p\n", (void*)decl);
+        if (decl) {
+            // [red-bug confirm] Dump the element LAYOUT, not just the pointer. The
+            // shadow-toggle leak swaps the particle's 5-element 44B ParticleElements
+            // decl for an empty FVF-derived layout; the element array is run-invariant
+            // so it confirms the leak/fix across separate --capture runs.
+            D3DVERTEXELEMENT9 elems[MAXD3DDECLLENGTH + 1];
+            UINT nel = 0;
+            if (SUCCEEDED(decl->GetDeclaration(elems, &nel))) {
+                UINT real = 0;
+                for (UINT i = 0; i < nel && i <= MAXD3DDECLLENGTH; i++) {
+                    if (elems[i].Stream == 0xFF) break;  // D3DDECL_END sentinel
+                    real++;
+                }
+                fprintf(f, "  VERTEXDECL_elements = %u\n", (unsigned)real);
+                for (UINT i = 0; i < real; i++)
+                    fprintf(f, "    elem[%u] stream=%u off=%u type=%u usage=%u uidx=%u\n",
+                            i, elems[i].Stream, elems[i].Offset, elems[i].Type,
+                            elems[i].Usage, elems[i].UsageIndex);
+            } else {
+                fprintf(f, "  VERTEXDECL_elements = (GetDeclaration FAILED)\n");
+            }
+            decl->Release();
+        }
+    }
+
+    // [texture-content hunt] The particle's COLOR/NORMAL textures: descriptor +
+    // a few center-row pixel samples. New hypothesis for the shadow leak — the
+    // particle's TEXTURE CONTENT goes black (additive vanish / transparent black
+    // = the sampled src color reads 0), which the render-state dump can't see.
+    //
+    // These particle textures come from D3DXCreateTextureFromFileInMemory, which
+    // silently allocates D3DPOOL_DEFAULT (main.cpp createTexture) — so a direct
+    // LockRect FAILS (D3DERR_INVALIDCALL on a non-managed, non-dynamic texture).
+    // To read the content anyway we copy level-0 into a SYSTEMMEM scratch surface
+    // via D3DXLoadSurfaceFromSurface (which reads through the device, default pool
+    // and all) and lock THAT. A managed/system-mem texture is still locked in
+    // place (fast path). Several points across the center row separate a
+    // uniformly-black texture from a sparse one whose center happens to be empty.
+    {
+        // Sample the center row of a locked 32bpp surface at 1/4, 1/2, 3/4 across.
+        // Bytes are in the texture's native channel order (B,G,R,A for the *R8G8B8
+        // formats; R,G,B,A for the *B8G8R8 formats) — labelled BGRA as the common
+        // A8R8G8B8 case; the format field disambiguates.
+        auto sampleRow = [f](const char* label, const D3DLOCKED_RECT& lr,
+                             UINT width, UINT height, const char* via)
+        {
+            const UINT cy = height / 2;
+            const BYTE* row = (const BYTE*)lr.pBits + (size_t)cy * lr.Pitch;
+            const UINT xs[3] = { width / 4, width / 2, (width * 3) / 4 };
+            for (int i = 0; i < 3; ++i)
+            {
+                const BYTE* px = row + (size_t)xs[i] * 4;
+                fprintf(f, "  %s px(x=%u,y=%u) BGRA=%u,%u,%u,%u [%s]\n",
+                        label, xs[i], cy,
+                        (unsigned)px[0], (unsigned)px[1], (unsigned)px[2], (unsigned)px[3], via);
+            }
+        };
+
+        struct TexProbe { IDirect3DTexture9* tex; const char* label; };
+        const TexProbe probes[] = { { colorTex, "COLORTEX" }, { normalTex, "NORMALTEX" } };
+        for (const TexProbe& p : probes)
+        {
+            if (!p.tex)
+            {
+                fprintf(f, "  %s = (null)\n", p.label);
+                continue;
+            }
+
+            D3DSURFACE_DESC d;
+            ZeroMemory(&d, sizeof(d));
+            p.tex->GetLevelDesc(0, &d);
+            fprintf(f, "  %s desc=%ux%u fmt=%d pool=%d usage=%lu levels=%lu\n",
+                    p.label, d.Width, d.Height, (int)d.Format, (int)d.Pool,
+                    (unsigned long)d.Usage, (unsigned long)p.tex->GetLevelCount());
+
+            const bool is32bppArgb =
+                (d.Format == D3DFMT_A8R8G8B8 || d.Format == D3DFMT_X8R8G8B8 ||
+                 d.Format == D3DFMT_A8B8G8R8 || d.Format == D3DFMT_X8B8G8R8);
+            if (!is32bppArgb)
+            {
+                fprintf(f, "  %s content sample skipped (fmt=%d)\n", p.label, (int)d.Format);
+                continue;
+            }
+
+            // Fast path: managed/sysmem textures lock in place.
+            D3DLOCKED_RECT lr;
+            if (SUCCEEDED(p.tex->LockRect(0, &lr, NULL, D3DLOCK_READONLY)))
+            {
+                sampleRow(p.label, lr, d.Width, d.Height, "direct");
+                p.tex->UnlockRect(0);
+                continue;
+            }
+
+            // Fallback: copy level-0 into a SYSTEMMEM scratch surface so a
+            // D3DPOOL_DEFAULT texture's content is still readable.
+            IDirect3DSurface9* src = NULL;
+            IDirect3DSurface9* scratch = NULL;
+            HRESULT hr = p.tex->GetSurfaceLevel(0, &src);
+            if (SUCCEEDED(hr))
+                hr = m_pDevice->CreateOffscreenPlainSurface(
+                         d.Width, d.Height, d.Format, D3DPOOL_SYSTEMMEM, &scratch, NULL);
+            if (SUCCEEDED(hr))
+                hr = D3DXLoadSurfaceFromSurface(scratch, NULL, NULL, src, NULL, NULL,
+                                                D3DX_FILTER_NONE, 0);
+            if (SUCCEEDED(hr) && SUCCEEDED(scratch->LockRect(&lr, NULL, D3DLOCK_READONLY)))
+            {
+                sampleRow(p.label, lr, d.Width, d.Height, "scratch");
+                scratch->UnlockRect();
+            }
+            else
+            {
+                fprintf(f, "  %s content sample FAILED hr=0x%08lx (pool=%d, scratch copy)\n",
+                        p.label, (unsigned long)hr, (int)d.Pool);
+            }
+            if (scratch) scratch->Release();
+            if (src) src->Release();
+        }
+    }
+
+    fclose(f);
+}
+
 // Draw the imported reference object in two phases (opaque then
 // transparent). Each rigid sub-mesh is placed by its bone's object-space matrix
 // (sub.placement) times the live object world, and runs its OWN game shader 1:1
@@ -3205,6 +3523,27 @@ void Engine::RenderReferenceShadows()
     for (size_t i = 0; !any && i < m_referenceAttachments.size(); ++i)
         any = !m_referenceAttachments[i]->mesh.ShadowSubMeshes().empty();
     if (!any) return;
+
+    // [redbug] One-shot marker proving the shadow pass actually DRAWS volumes (not
+    // merely that the shadow-volume shader was loaded during ref-object resolution,
+    // which happens regardless of whether this pass runs). The regression guard
+    // tasks/redbug-shadow-decl-check.ps1 greps for this so it can't false-PASS on a
+    // shader-load-without-draw. Past the early-returns above the function always
+    // draws, so this fires exactly when a real shadow pass executes. Gated by
+    // ALO_SHADER_DIAG + once-per-process so production stays silent.
+    {
+        static int  s_diag   = -1;
+        static bool s_logged = false;
+        if (s_diag < 0) s_diag = (getenv("ALO_SHADER_DIAG") != nullptr) ? 1 : 0;
+        if (s_diag && !s_logged) {
+            size_t vols = m_referenceObjectMesh.ShadowSubMeshes().size();
+            for (size_t i = 0; i < m_referenceAttachments.size(); ++i)
+                vols += m_referenceAttachments[i]->mesh.ShadowSubMeshes().size();
+            printf("[redbug-shadow] RenderReferenceShadows drawing %zu shadow volume(s)\n", vols);
+            fflush(stdout);
+            s_logged = true;
+        }
+    }
 
     const D3DXMATRIX objectWorld = ReferenceObjectDisplayWorld();
 
@@ -3668,8 +4007,23 @@ void Engine::RenderReferenceShadows()
     m_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE,oATE);
     m_pDevice->SetTextureStageState(0,D3DTSS_COLOROP,oTexCOP); m_pDevice->SetTextureStageState(0,D3DTSS_COLORARG1,oTexCA1);
     m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAOP,oTexAOP); m_pDevice->SetTextureStageState(0,D3DTSS_ALPHAARG1,oTexAA1);
+    // [red-bug fix] FVF and an explicit vertex declaration share ONE device slot in
+    // D3D9, and GetFVF reports the SAME code (0x252) for BOTH the engine's explicit
+    // ParticleElements decl (COLOR at offset 40) and the FVF-canonical layout
+    // (COLOR at offset 24) because they share a component set (XYZ|NORMAL|DIFFUSE|TEX2).
+    // The old unconditional SetFVF(oFVF) therefore overwrote the just-restored explicit
+    // particle decl with the FVF-canonical layout, whose offsets do NOT match the
+    // 44-byte EmitterInstance::Vertex. The inheriting particle DrawIndexedPrimitiveUP
+    // (EmitterInstance::Render binds no decl/FVF of its own) then read the particle
+    // COLOR out of the UV0 bytes -> additive source ~= 0 -> the additive emitter
+    // vanished, and it persisted until a device reset because nothing rebinds
+    // m_pDeclaration. Restore whichever vertex format was actually active, never both:
+    // at the shadow-pass entry this engine always has an explicit decl bound, so oDecl
+    // is non-null in practice; the SetFVF branch is a fallback for a pure-FVF device
+    // (where GetVertexDeclaration returns null). Guarded headless by
+    // tasks/redbug-shadow-decl-check.ps1 (ALO_DUMP_RSTATE decl-element dump).
     if (oDecl) { m_pDevice->SetVertexDeclaration(oDecl); oDecl->Release(); }
-    m_pDevice->SetFVF(oFVF);
+    else       { m_pDevice->SetFVF(oFVF); }
     m_pDevice->SetVertexShader(oVS); if (oVS) oVS->Release();
     m_pDevice->SetPixelShader(oPS);  if (oPS) oPS->Release();
     m_pDevice->SetTexture(0, oTex0); if (oTex0) oTex0->Release();

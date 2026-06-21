@@ -4175,6 +4175,58 @@ int HostWindowImpl::Run(int nCmdShow)
             }
         }
 
+        // [redbug-diag] Optionally compose a CATALOG reference object + its cast shadow with
+        // the particle system, so the particle-over-reference-shadow interaction can be
+        // measured headlessly. ALO_CAPTURE_REFOBJECT=<GameObject name> (e.g. AT_AT_Walker);
+        // ALO_CAPTURE_SHADOWS=0/1 toggles model shadows (default leaves engine default = on).
+        {
+            char refName[256];
+            if (engine && GetEnvironmentVariableA("ALO_CAPTURE_REFOBJECT", refName, sizeof(refName)) > 0)
+            {
+                engine->BuildCatalogSync();
+                engine->SetReferenceObject(refName);
+                engine->SetReferenceObjectVisible(true);
+                const ReferenceObjectStatus rs = engine->GetReferenceObjectStatus();
+                Log("[redbug] ref object '%s' status=%d shadowSubMeshes=%zu\n",
+                    refName, (int)rs, engine->ReferenceShadowSubMeshCount());
+                D3DXVECTOR3 wmin, wmax;
+                if (rs == ReferenceObjectStatus::Ok && engine->GetReferenceObjectBounds(wmin, wmax))
+                {
+                    // Fit camera to the ref-object AABB (mirrors the --capture-ref framing) so
+                    // both the model+shadow and the origin-spawned particles are in view.
+                    D3DXVECTOR3 center((wmin.x+wmax.x)*0.5f,(wmin.y+wmax.y)*0.5f,(wmin.z+wmax.z)*0.5f);
+                    D3DXVECTOR3 diag = wmax - wmin;
+                    float radius = 0.5f * D3DXVec3Length(&diag); if (radius < 1.0f) radius = 1.0f;
+                    const float fovY = D3DXToRadian(45.0f);
+                    float dist = radius / tanf(0.5f * fovY) * 1.6f;
+                    D3DXVECTOR3 dir(0.7f,-0.7f,0.5f); D3DXVec3Normalize(&dir,&dir);
+                    Engine::Camera cam; cam.Position = center + dir*dist; cam.Target = center; cam.Up = D3DXVECTOR3(0,0,1);
+                    engine->SetCamera(cam);
+                    Log("[redbug] fit camera center=(%.1f,%.1f,%.1f) radius=%.1f dist=%.1f\n",
+                        center.x,center.y,center.z,radius,dist);
+                }
+                else
+                {
+                    // Startup-time status only: the catalog mesh resolves a frame or more later
+                    // (deferred), so a non-Ok status HERE is not necessarily a failure — the
+                    // camera fit is skipped (default camera) and the object resolves during the
+                    // render loop. A truly-bogus ref that NEVER resolves is caught downstream:
+                    // RenderReferenceShadows never draws, so its [redbug-shadow] marker is absent
+                    // and tasks/redbug-shadow-decl-check.ps1 (the durable guard) fails. Don't
+                    // hard-fail here — that would also kill a valid-but-still-resolving object.
+                    Log("[redbug] ref object '%s' not resolved at startup (status=%d); camera fit "
+                        "skipped, will resolve during the render loop\n", refName, (int)rs);
+                }
+            }
+            char shadowBuf[8];
+            if (engine && GetEnvironmentVariableA("ALO_CAPTURE_SHADOWS", shadowBuf, sizeof(shadowBuf)) > 0)
+            {
+                const bool on = atoi(shadowBuf) != 0;
+                engine->SetModelShadows(on);
+                Log("[redbug] model shadows forced %s\n", on ? "ON" : "OFF");
+            }
+        }
+
         // [shadow-repro] Optional camera-distance override for headless bug
         // characterisation: ALO_CAPTURE_CAM_DIST_MULT scales a fit-camera distance
         // so the SAME reference object can be rendered at near/mid/far — the axis

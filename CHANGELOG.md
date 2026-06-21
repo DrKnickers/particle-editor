@@ -16,6 +16,12 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 > The inline release markers below show where each tagged [SemVer](https://semver.org)
 > release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
 
+## 2026-06-21
+
+### Fixed
+
+- Enabling a reference model's cast shadows no longer makes additive and transparent particles vanish or turn black — particles render correctly with reference-model shadows on
+
 ## 2026-06-20
 
 ### Changed
