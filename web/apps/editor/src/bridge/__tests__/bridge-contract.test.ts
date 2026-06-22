@@ -70,9 +70,10 @@ describe("MockBridge contract", () => {
     expect(s.camera.position).toHaveLength(3);
     expect(s).toHaveProperty("wind");
     expect(s).toHaveProperty("gravity");
-    // Screen 4 Batch A: selected-emitter scalar.
+    // Screen 4 Batch A: selected-emitter scalar. Legacy parity: the default
+    // root emitter (id 0) is selected on boot, so the editor opens populated.
     expect(s).toHaveProperty("selectedEmitterId");
-    expect(s.selectedEmitterId).toBeNull();
+    expect(s.selectedEmitterId).toBe(0);
   });
 
   it("engine/set/ground-z patches state and fires state/changed", async () => {
@@ -414,10 +415,15 @@ describe("MockBridge contract", () => {
   // implemented" assertion has been replaced by round-trip specs below
   // covering file/new, file/save-as, recent/changed.
 
-  it("file/new round-trips through MockBridge and returns {}", async () => {
+  it("file/new round-trips, resets state, and re-selects the default root (legacy parity)", async () => {
     const b = new MockBridge();
-    // Pre-dirty the state so file/new has something to clear.
+    let lastSelected: { id: number | null } | null = null;
+    b.on("emitters/selected", (e) => { lastSelected = e.payload; });
+
+    // Pre-dirty + move selection OFF the default root, so file/new's reset to 0
+    // is observable (not a coincidence of the default).
     await b.request({ kind: "engine/set/ground-z", params: { z: 12 } });
+    await b.request({ kind: "emitters/select", params: { id: 1 } });
     expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty)
       .toBe(true);
 
@@ -427,6 +433,11 @@ describe("MockBridge contract", () => {
     expect(snap.dirty).toBe(false);
     expect(snap.currentFilePath).toBeNull();
     expect(snap.groundZ).toBe(0);  // reset to default
+    // Legacy parity: file/new re-selects the seeded root (id 0) AND announces it
+    // via emitters/selected (so the EmitterTree's selection atom updates live).
+    expect(snap.selectedEmitterId).toBe(0);
+    expect(lastSelected).not.toBeNull();
+    expect(lastSelected!.id).toBe(0);
   });
 
   it("file/save-as round-trips and returns { ok: true, path }", async () => {
@@ -660,16 +671,18 @@ describe("MockBridge contract", () => {
     let lastEvent: { id: number | null } | null = null;
     const off = b.on("emitters/selected", (e) => { lastEvent = e.payload; });
 
-    // Initial snapshot: no selection.
+    // Initial snapshot: the default root emitter (id 0) is selected on boot
+    // (legacy parity — see makeDefaultEngineState in mock-state).
     const before = await b.request({ kind: "engine/state/snapshot", params: {} });
-    expect(before.selectedEmitterId).toBeNull();
+    expect(before.selectedEmitterId).toBe(0);
 
-    // Select Smoke (id=0).
-    await b.request({ kind: "emitters/select", params: { id: 0 } });
+    // Select a different emitter (Smoke embers, id=1) — proves select changes
+    // the scalar AND fires emitters/selected.
+    await b.request({ kind: "emitters/select", params: { id: 1 } });
     expect(lastEvent).not.toBeNull();
-    expect(lastEvent!.id).toBe(0);
+    expect(lastEvent!.id).toBe(1);
     const after = await b.request({ kind: "engine/state/snapshot", params: {} });
-    expect(after.selectedEmitterId).toBe(0);
+    expect(after.selectedEmitterId).toBe(1);
 
     // Selecting null clears.
     await b.request({ kind: "emitters/select", params: { id: null } });

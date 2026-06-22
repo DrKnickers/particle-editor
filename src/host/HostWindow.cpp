@@ -3793,6 +3793,11 @@ int HostWindowImpl::Run(int nCmdShow)
     particleSystem->addRootEmitter();
     spawnerDriver  = std::make_unique<SpawnerDriver>();
     dispatcher->BindHostState(&particleSystem, spawnerDriver.get(), &fileManager);
+    // Legacy parity (DoNewFile started with the default emitter selected):
+    // the boot system above was seeded with one root emitter at index 0, so
+    // select it. React reads selectedEmitterId from the boot snapshot on mount,
+    // so the Inspector + curve panel open populated instead of "Select an emitter…".
+    dispatcher->SetSelectedEmitterId(0);
     // Seed the dirty-bit baseline against the freshly-bound boot-state
     // ParticleSystem so Ctrl+Z back to it clears dirty without needing
     // a File → New first. file/new + file/open + file/save re-seed via

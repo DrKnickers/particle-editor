@@ -816,6 +816,11 @@ export class MockBridge implements Bridge {
         });
         this.markClean();
         this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
+        // Legacy parity: the default root (id 0) is selected after New. The
+        // snapshot (above) carries it, but EmitterTree tracks selection via the
+        // `emitters/selected` event (it doesn't re-read the snapshot post-mount),
+        // so fire it explicitly — mirrors the native host's file/new.
+        this.emit({ kind: "emitters/selected", payload: { id: 0 } });
         return {};
 
       case "file/open": {

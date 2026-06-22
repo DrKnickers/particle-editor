@@ -2413,6 +2413,10 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         {
             *m_pParticleSystem = std::make_unique<ParticleSystem>();
             (*m_pParticleSystem)->addRootEmitter();
+            // Legacy parity (DoNewFile): start with the seeded root emitter
+            // (index 0) SELECTED, so the Inspector/curve panel open populated.
+            // The emitters/selected emit below syncs React's selection atom.
+            m_selectedEmitterId = 0;
         }
         // render loop: notify Engine that the ParticleSystem pointer
         // it knows about is now stale. Mirrors legacy DoNewFile at
@@ -2442,6 +2446,20 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         // its pre-file/new state even after the ParticleSystem has
         // been swapped under it.
         EmitEmittersTreeChanged();
+        // Legacy parity: announce the default selection so React's selection
+        // atom (and thus the Inspector + curve panel) updates — the snapshot's
+        // selectedEmitterId alone isn't re-read post-mount; the EmitterTree
+        // tracks the `emitters/selected` event.
+        if (m_emit)
+        {
+            json env = {
+                {"type",    "evt"},
+                {"kind",    "emitters/selected"},
+                {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr)
+                                                                 : json(m_selectedEmitterId)}}},
+            };
+            m_emit(env.dump());
+        }
         return res;
     }
 

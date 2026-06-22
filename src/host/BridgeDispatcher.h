@@ -133,6 +133,13 @@ public:
         m_fileManager     = fileManager;
     }
 
+    // Seed the initial emitter selection (editor state, an index into
+    // getEmitters()). Used by HostWindow at boot to select the seeded root
+    // emitter so the editor opens on a populated Inspector/curve panel —
+    // legacy parity: DoNewFile started with the default emitter SELECTED.
+    // No event is emitted (React reads it from the boot snapshot on mount).
+    void SetSelectedEmitterId(int id) { m_selectedEmitterId = id; }
+
     // shift-click-to-spawn: the host owns a single attached
     // cursor-bound ParticleSystemInstance pointer (nulled when no Shift
     // is held). file/new + file/open need to kill any in-flight attached

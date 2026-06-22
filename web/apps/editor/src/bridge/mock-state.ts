@@ -132,9 +132,12 @@ export function makeDefaultEngineState(): EngineStateDto {
 
     spawner: makeDefaultSpawnerParams(),
 
-    // Screen 4 Batch A: nothing selected by default. Single-select only
-    // in Batch A; multi-select is Batch B.
-    selectedEmitterId: null,
+    // Legacy parity (host DoNewFile / boot): start with the default root
+    // emitter (id 0) SELECTED, so the editor opens on a populated Inspector
+    // + curve panel rather than "Select an emitter…". Mirrors the native host,
+    // which seeds + selects the root at boot and on file/new. Drives both the
+    // initial mock state and file/new (both apply makeDefaultEngineState()).
+    selectedEmitterId: 0,
 
     // D6 /: no active mod by default. Browser-mode MockBridge has
     // no disk to scan; the primary layer (front of the stack) updates this field
