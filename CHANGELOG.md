@@ -24,6 +24,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Fixed
 
+- Atlas Frame Picker: a failed frame assignment is now announced to screen readers instead of silently doing nothing
 - Atlas Frame Picker: the thumbnail grid no longer reflows or jumps on the first open after launch and now sits centered in the panel; the curve editor no longer jumps during the panel slide; and the first Alpha toggle is instant
 - Enabling a reference model's cast shadows no longer makes additive and transparent particles vanish or turn black — particles render correctly with reference-model shadows on
 

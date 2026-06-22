@@ -8,6 +8,7 @@ import { render, screen, waitFor, fireEvent, createEvent, act } from "@testing-l
 import { AtlasPickerPanel, __resetAtlasPropsCache } from "../AtlasPickerPanel";
 import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas-context";
 import { MockBridge } from "@/bridge/mock";
+import type { Request } from "@particle-editor/bridge-schema";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
 import { __resetPreviewCache, bumpTextureEpoch } from "@/lib/atlas-preview-cache";
 import { __resetModStackForTests } from "@/lib/mod-stack";
@@ -492,5 +493,98 @@ describe("AtlasPickerPanel", () => {
     await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(4));
     // focus did NOT fall to <body> — it was re-homed into the grid
     expect((document.activeElement as HTMLElement | null)?.getAttribute("data-testid")).toBe("atlas-cell");
+  });
+
+  // Reject every request whose kind/params match — delegate the rest to the real
+  // mock. The matcher is typed against the real `Request` union (not a loose
+  // `{kind:string}`) so a schema rename/widening fails to COMPILE here instead of
+  // silently never matching. The outer cast only bridges the impl to the generic
+  // `request<R>` spy shape — it does not weaken the matcher's kind-checking.
+  function rejectMatching(bridge: MockBridge, match: (r: Request) => boolean) {
+    const real = bridge.request.bind(bridge);
+    vi.spyOn(bridge, "request").mockImplementation(((req: Request) =>
+      match(req) ? Promise.reject(new Error("test-induced failure")) : real(req)) as typeof bridge.request);
+  }
+
+  it("announces a FAILED assign to the live region (no silent failure)", async () => {
+    const bridge = new MockBridge();
+    rejectMatching(bridge, (r) => r.kind === "emitters/set-track-key"); // host rejects the write
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    fireEvent.keyDown(grid, { key: "Home" });  // focus frame 0
+    fireEvent.keyDown(grid, { key: "Enter" }); // assign → set-track-key rejects → commit fails
+    // The aria-live region announces the failure (parity with the success path),
+    // rather than going silent for a screen-reader / keyboard user.
+    await waitFor(() =>
+      expect(document.querySelector('[aria-live="polite"]')!.textContent).toMatch(/could not assign frame 0/i),
+    );
+  });
+
+  it("re-open seeds the grid synchronously from the cache for the SAME emitter", async () => {
+    // First mount populates the module-level lastEmitterProps for emitter 1 (8×8).
+    useMockEmitterProperties.getState().patch(1, { textureSize: 64, colorTexture: "fire.dds" });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
+    const v1 = render(<AtlasPickerPanel bridge={new MockBridge()} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(64));
+    v1.unmount();
+
+    // Re-open the SAME emitter with get-properties BLOCKED: the grid must still seed
+    // 64 cells from lastEmitterProps (preview is served from the still-warm cache),
+    // not wait on the round-trip or fall back to the single-frame default.
+    const blocked = new MockBridge();
+    const real = blocked.request.bind(blocked);
+    const reqSpy = vi.spyOn(blocked, "request").mockImplementation(((req: Request) =>
+      req.kind === "emitters/get-properties"
+        ? new Promise<never>(() => {}) // never resolves
+        : real(req)) as typeof blocked.request);
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
+    render(<AtlasPickerPanel bridge={blocked} onClose={() => {}} />);
+    // Seeded from lastEmitterProps (id matches) → grid paints without waiting on the
+    // round-trip…
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(64));
+    // …and the confirming get-properties fetch STILL fires (the seed is a head-start,
+    // not a replacement — guards a regression that seeds and never re-validates).
+    expect(reqSpy).toHaveBeenCalledWith(expect.objectContaining({ kind: "emitters/get-properties" }));
+  });
+
+  it("re-open does NOT show stale frames for a DIFFERENT emitter (id-match guard)", async () => {
+    // Warm the cache for emitter 1 (8×8).
+    useMockEmitterProperties.getState().patch(1, { textureSize: 64, colorTexture: "fire.dds" });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
+    const v1 = render(<AtlasPickerPanel bridge={new MockBridge()} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(64));
+    v1.unmount();
+
+    // Re-open a DIFFERENT emitter (id 2) with get-properties BLOCKED. The cache is
+    // keyed to id 1, so the seed must NOT apply → defaults (no colorTexture) → the
+    // "No color texture set" placeholder, never emitter 1's 64 stale cells.
+    const blocked = new MockBridge();
+    const real = blocked.request.bind(blocked);
+    vi.spyOn(blocked, "request").mockImplementation(((req: Request) =>
+      req.kind === "emitters/get-properties"
+        ? new Promise<never>(() => {})
+        : real(req)) as typeof blocked.request);
+    publishAtlasContext({ emitterId: 2, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
+    render(<AtlasPickerPanel bridge={blocked} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText(/no color texture set/i)).toBeTruthy());
+    expect(screen.queryAllByTestId("atlas-cell")).toHaveLength(0); // no stale emitter-1 grid
+  });
+
+  it("surfaces an INACTIVE-mode preview failure when toggled into (not silent)", async () => {
+    // Default active mode is color (flattenAlpha=true). Fail the INACTIVE alpha mode
+    // (flattenAlpha=false) — its failure is otherwise invisible until toggled into.
+    const bridge = new MockBridge();
+    // `r.params.flattenAlpha` is now type-narrowed (no cast) once kind is checked.
+    rejectMatching(bridge, (r) => r.kind === "textures/get-preview" && r.params.flattenAlpha === false);
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
+    // active (color) mode renders fine…
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
+    // …toggle Alpha → the failed mode becomes active → the broken placeholder shows.
+    fireEvent.click(screen.getByTestId("atlas-alpha-toggle"));
+    await waitFor(() => expect(screen.getByText(/could not be read/i)).toBeTruthy());
   });
 });

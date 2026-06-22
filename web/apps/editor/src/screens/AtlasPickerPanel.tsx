@@ -390,14 +390,22 @@ export function AtlasPickerPanel({
   }
 
   // Gate the pulse + live-announce on a confirmed commit, guarded against an
-  // emitter switch mid-await (§4.5).
+  // emitter switch mid-await (§4.5). On a FAILED commit (a set-track-key write was
+  // rejected, or there was no resolvable target to write to), announce the failure
+  // too — otherwise a keyboard / screen-reader user gets silence where a sighted user
+  // at least sees no amber pulse. No toast infra in this project, so the aria-live
+  // region is the channel (parity with the success path). Both branches bail if the
+  // emitter switched mid-await.
   async function commitAssign(frameF: number, targetEmitterId: number | null, targetKeyTimes: number[]) {
     const started = targetEmitterId;
     const ok = await assignAll(frameF, targetEmitterId, targetKeyTimes);
-    if (ok && emitterIdRef.current === started) {
+    if (emitterIdRef.current !== started) return; // emitter switched mid-await — drop
+    if (ok) {
       setFocusIndex(frameF);
       firePulse();
       setAnnouncement(`Assigned frame ${frameF}`);
+    } else {
+      setAnnouncement(`Could not assign frame ${frameF}`);
     }
   }
 

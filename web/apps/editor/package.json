@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test": "vitest run",
+    "test:web": "playwright test -c playwright.web.config.ts",
     "test:native": "node ./scripts/run-native-tests.mjs",
     "a11y": "node ./scripts/run-native-tests.mjs",
     "a11y:update": "node ./scripts/run-native-tests.mjs --update",
