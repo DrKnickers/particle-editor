@@ -221,9 +221,12 @@ const DEFAULT_HEIGHT = 300;
 const DEFAULT_TIME_MIN = 0;
 const DEFAULT_TIME_MAX = 100;
 
-const UNSELECTED_FILL = "#e5e5e5";
-const BORDER_FILL = "#94A3B8";      // slate-400 — slightly darker than unselected
-const BORDER_STROKE = "#0EA5E9";    // accent ring on border (anchor) keys
+// Curve marker / line colours route through the --curve-* token family
+// (styles/tokens.css) so they flip with the theme — SVG presentation
+// attributes resolve var() natively, same as --curve-grid / --curve-axis.
+const UNSELECTED_FILL = "var(--curve-marker)";
+const BORDER_FILL = "var(--curve-marker-border)";        // anchor-key slate fill
+const BORDER_STROKE = "var(--curve-marker-border-stroke)"; // accent ring on anchor keys
 /** Stroke dash pattern for the locked-mirror curve. Visually distinguishes
  *  a read-only focus channel from an editable one. Feel-tunable. */
 const READONLY_DASH = "7 5";
@@ -933,7 +936,7 @@ export function CurveEditor({
         <path
           data-testid="curve-path"
           fill="none"
-          stroke="#e5e5e5"
+          stroke="var(--curve-marker)"
           strokeWidth={1.5}
           d={buildSmoothPath(renderPoints)}
           pointerEvents="none"
@@ -944,7 +947,7 @@ export function CurveEditor({
           data-testid="curve-polyline"
           data-interpolation="step"
           fill="none"
-          stroke="#e5e5e5"
+          stroke="var(--curve-marker)"
           strokeWidth={1.5}
           points={buildStepPolyline(renderPoints)}
           pointerEvents="none"
@@ -955,7 +958,7 @@ export function CurveEditor({
           data-testid="curve-polyline"
           data-interpolation="linear"
           fill="none"
-          stroke="#e5e5e5"
+          stroke="var(--curve-marker)"
           strokeWidth={1.5}
           points={renderPoints.map((p) => `${p.x},${p.y}`).join(" ")}
           pointerEvents="none"
@@ -1270,7 +1273,7 @@ function MultiChannelCurves({
         opacity: focusEnabled && !isFocus ? 0.4 : 1,
         isFocus,
         markerRadius: isFocus ? 5 : focusEnabled ? 3 : 4,
-        markerStroke: isFocus || focusEnabled ? "none" : "#0a0a0a",
+        markerStroke: isFocus || focusEnabled ? "none" : "var(--curve-marker-stroke)",
         markerStrokeWidth: isFocus || focusEnabled ? 0 : 1,
       };
     }),
@@ -1840,7 +1843,7 @@ function MultiChannelCurves({
         // the control points sit on the dim curve, quiet enough that
         // the focus channel's keys remain the eye's target.
         const markerR = focusEnabled ? 3 : 4;
-        const markerStroke = focusEnabled ? "none" : "#0a0a0a";
+        const markerStroke = focusEnabled ? "none" : "var(--curve-marker-stroke)";
         const markerStrokeW = focusEnabled ? 0 : 1;
         // In focus mode the markers are non-interactive scenery — no
         // testid (the `curve-key` testid means "an interactive key

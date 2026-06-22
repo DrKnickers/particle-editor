@@ -98,7 +98,7 @@ describe("CurveEditor", () => {
     const middle = container.querySelectorAll("[data-testid='curve-key']")[1]!;
     expect(middle.getAttribute("data-selected")).toBe("true");
     expect(middle.getAttribute("r")).toBe("6");
-    expect(middle.getAttribute("fill")).toBe("#e5e5e5");
+    expect(middle.getAttribute("fill")).toBe("var(--curve-marker)");
     // Sanity: the unselected siblings stay at r=4.
     const first = container.querySelectorAll("[data-testid='curve-key']")[0]!;
     expect(first.getAttribute("r")).toBe("4");
@@ -233,14 +233,14 @@ describe("CurveEditor", () => {
     expect(last.getAttribute("data-border")).toBe("true");
     expect(middle.getAttribute("data-border")).toBe("false");
     // Stroke + stroke-width attributes confirm the visual.
-    expect(first.getAttribute("stroke")).toBe("#0EA5E9");
+    expect(first.getAttribute("stroke")).toBe("var(--curve-marker-border-stroke)");
     expect(first.getAttribute("stroke-width")).toBe("1.5");
-    expect(first.getAttribute("fill")).toBe("#94A3B8");
-    expect(last.getAttribute("stroke")).toBe("#0EA5E9");
+    expect(first.getAttribute("fill")).toBe("var(--curve-marker-border)");
+    expect(last.getAttribute("stroke")).toBe("var(--curve-marker-border-stroke)");
     expect(last.getAttribute("stroke-width")).toBe("1.5");
     // Interior key has no outline stroke (drop-shadow via CSS) + lighter fill.
     expect(middle.getAttribute("stroke")).toBe("none");
-    expect(middle.getAttribute("fill")).toBe("#e5e5e5");
+    expect(middle.getAttribute("fill")).toBe("var(--curve-marker)");
   });
 
   it("pointer-down on empty canvas in Insert mode fires onCanvasAdd with the projected (time, value)", () => {
@@ -1180,7 +1180,7 @@ describe("curve morph (structural changes)", () => {
       expect(circles.length).toBe(3);
       for (const c of circles) {
         expect(c.getAttribute("r")).toBe("4");
-        expect(c.getAttribute("stroke")).toBe("#0a0a0a");
+        expect(c.getAttribute("stroke")).toBe("var(--curve-marker-stroke)");
         expect(c.getAttribute("fill-opacity")).toBe("1");
       }
     });
