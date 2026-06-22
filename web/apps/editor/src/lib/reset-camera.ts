@@ -5,7 +5,7 @@
 // the menu item and the shortcut can never silently drift apart ().
 //
 // The values mirror the legacy editor exactly:
-//   - ID_VIEW_RESETCAMERA handler            — src/main.cpp:1834
+//   - ID_VIEW_RESETCAMERA handler            — the legacy main.cpp
 //   - Engine constructor default (m_eye)     — src/engine.cpp:2190-2192
 //   eye (0,-250,125), target origin, up +Z.
 // The host's `engine/set/camera` handler (src/host/BridgeDispatcher.cpp:1347)

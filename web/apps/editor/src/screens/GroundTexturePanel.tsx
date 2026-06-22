@@ -1,6 +1,6 @@
 // GroundTexturePanel — modeless tool window for the ground plane:
 // show/hide master toggle plus a grid of texture slots. Ported from the
-// native `GroundTexturePickerProc` at src/main.cpp:3799; the Win32 dialog
+// native `GroundTexturePickerProc` in the legacy main.cpp; the Win32 dialog
 // and the `--legacy-ui` opt-out were removed in, so this React panel
 // is now the sole ground-texture surface.
 //
@@ -189,7 +189,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
 
       {/* Ground-plane height (legacy). Enabled only when the ground
           is shown, in lockstep with the toggle — matches the legacy
-          spinner (main.cpp:1662). */}
+          spinner. */}
       <div className="mb-3 flex items-center justify-between gap-2 text-xs text-text">
         <span className={groundOn ? "" : "opacity-40"}>Height</span>
         <Spinner

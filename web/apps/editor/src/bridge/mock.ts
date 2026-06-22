@@ -250,7 +250,7 @@ export class MockBridge implements Bridge {
 
   /** Cross-mode Force Align flag. The native host persists this as the
    *  REG_DWORD `LightingForceFillAlignment`; browser mode keeps it in
-   *  memory, defaulting to the legacy `kLightForceAlignDefault = true`.
+   *  memory, defaulting to true (the legacy Win32 UI's force-align default).
    *  Read by `settings/lighting-force-align`, written by `…/set`. */
   private lightingForceAlign = true;
 
@@ -1603,7 +1603,7 @@ export class MockBridge implements Bridge {
       //
       // `settings/lighting` returns the raw lighting split (the native
       // host reads it from the registry; browser mode returns the
-      // canonical defaults from src/main.cpp:6180-6195, with the live
+      // canonical defaults (matching the legacy Win32 dialog), with the live
       // in-memory `lightingForceAlign` flag). `…/set` writes just the
       // flag. No event is emitted — the constraint is enforced UI-side
       // in LightingPanel, and lighting isn't part of EngineStateDto.

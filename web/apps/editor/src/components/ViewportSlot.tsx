@@ -120,7 +120,7 @@ export function ViewportSlot({ bridge }: Props) {
   // DOM input forwarding. Pointer + wheel events on the canvas,
   // keyboard + blur events on window, all forwarded to the engine via
   // the bridge. (Engine pixels arrive via the DComp visual, not the
-  // DOM — there is no frame-ready/<img> consumer.)
+  // DOM — there is no DOM-side engine-pixel consumer.)
   //
   // Coordinate convention: popup-client physical pixels = clientX/Y *
   // devicePixelRatio. The popup spans the full main client (T4c.4) so

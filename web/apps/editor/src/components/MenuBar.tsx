@@ -982,7 +982,7 @@ export function MenuBar({
     />
 
     {/* Group D: confirm prompt for View → Reset View Settings.
-        Body copy mirrors the legacy MessageBox at main.cpp:1734.
+        Body copy mirrors the legacy MessageBox in the legacy main.cpp.
         Sits as a sibling of Menubar.Root rather than inside it so
         Radix's child-list semantics for keyboard nav aren't disturbed.
         Modal manages its own portal, so DOM position doesn't matter. */}

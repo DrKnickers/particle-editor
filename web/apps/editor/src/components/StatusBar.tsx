@@ -90,7 +90,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
       <span className="text-text-3">·</span>
       {cell("Cursor", cursorText, cursor === null)}
       {/* Right-aligned group: PAUSED state () + always-on spawn hint
-          (, legacy main.cpp:2036's permanent rightmost pane). */}
+          (, the legacy main.cpp's permanent rightmost pane). */}
       <div className="ml-auto flex items-center gap-3">
         {paused && (
           <span className="font-mono font-semibold tracking-wide text-amber-400">

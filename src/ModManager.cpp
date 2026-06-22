@@ -28,7 +28,7 @@ using std::vector;
 
 // ---------------------------------------------------------------------------
 // Registry helpers (file-scope private, plus the two exposed nickname ones).
-// All four were `static` in src/main.cpp:3136-3203 before this extraction.
+// All four were `static` in the legacy main.cpp before this extraction.
 // ---------------------------------------------------------------------------
 
 wstring ReadModNickname(const wstring& modPath)
@@ -189,7 +189,7 @@ static void WriteCoreMigrated()
 // ---------------------------------------------------------------------------
 
 // Scan a single Mods\ directory for subfolders and append entries.
-// Verbatim port from src/main.cpp:6872-6900 with the local `out`
+// Verbatim port from the legacy main.cpp implementation, with the local `out`
 // reference replaced by the caller-supplied vector.
 static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& out)
 {
@@ -262,7 +262,7 @@ void ModManager::DiscoverMods()
     }
 
     // Sort: FoC mods first, then base game; within each, alphabetical by
-    // folder name. Matches legacy ordering at src/main.cpp:6930-6933.
+    // folder name. Matches the legacy ordering.
     std::sort(m_mods.begin(), m_mods.end(), [](const ModEntry& a, const ModEntry& b) {
         if (a.isFoC != b.isFoC) return a.isFoC && !b.isFoC;
         return _wcsicmp(a.folderName.c_str(), b.folderName.c_str()) < 0;

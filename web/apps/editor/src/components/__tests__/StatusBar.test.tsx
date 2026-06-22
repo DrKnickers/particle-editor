@@ -1,5 +1,5 @@
 // Vitest: StatusBar parity elements (/7/8).
-//   — always-on "⇧ Shift: spawn instance" hint (legacy main.cpp:2036).
+//   — always-on "⇧ Shift: spawn instance" hint (legacy main.cpp).
 //   — "PAUSED" indicator shown ONLY while the preview is paused
 //           (driven by engine/state/changed, same signal the Toolbar uses).
 //   — cursor readout is 2 decimal places (legacy was 2dp).

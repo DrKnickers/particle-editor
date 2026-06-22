@@ -130,7 +130,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
   };
 
   const handleSelectAll = () => setPicks(new Set(allIds));
-  // Legacy IDC_IMPORT_CLEAR (main.cpp:7326): deselect every node.
+  // Legacy IDC_IMPORT_CLEAR: deselect every node.
   const handleClear = () => setPicks(new Set());
 
   const handleOk = async () => {

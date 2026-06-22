@@ -489,7 +489,7 @@ struct HostWindowImpl
 
     // render loop bookkeeping. m_lastRenderTime drives dt for the
     // per-frame SpawnerDriver::Tick — matches the legacy
-    // `g_spawnerLastFrameTime` flow in src/main.cpp:1572. First frame
+    // `g_spawnerLastFrameTime` flow in the legacy main.cpp. First frame
     // sees dt == 0 (sentinel value 0.0f means "not yet rendered"), same
     // as the legacy first-frame initialisation.
     //
@@ -501,8 +501,8 @@ struct HostWindowImpl
     float                              m_lastRenderTime        = 0.0f;
     int                                m_lastEmittedActiveCount = -1;
 
-    // viewport interaction (camera controls). Mirror of legacy
-    // src/main.cpp:2920-3060 drag-state. On WM_LBUTTONDOWN /
+    // viewport interaction (camera controls). Mirror of the legacy
+    // main.cpp drag-state. On WM_LBUTTONDOWN /
     // WM_RBUTTONDOWN we snapshot the camera + cursor XY, then
     // WM_MOUSEMOVE deltas are applied relative to the snapshot
     // (matches legacy "drag relative to start" feel — releasing and
@@ -511,7 +511,7 @@ struct HostWindowImpl
     // OBJECT_Z: cursor-bound preview is being dragged for placement.
     // Only Z (height) tracks the drag delta; X/Y stay frozen at the
     // click position. WM_LBUTTONUP detaches the preview (place it).
-    // Matches legacy src/main.cpp:2891-2898 + 2877-2883 + 2936-2948.
+    // Matches the legacy main.cpp.
     // MANIPULATE: / S47] a manipulator handle (translate arrow or rotate
     // ring) was grabbed; LMB drag moves/rotates the object (wins over camera orbit
     // only when a handle is actually under the cursor at press).
@@ -595,8 +595,8 @@ struct HostWindowImpl
     //
     // m_lastCursorX/Y: cache of the most recent (x,y) seen by
     // WM_MOUSEMOVE. Used as the spawn coords on WM_KEYDOWN VK_SHIFT
-    // because WM_KEYDOWN's lParam is NOT cursor coords (legacy bug at
-    // src/main.cpp:2960 passes garbage). Fallback if the cache is
+    // because WM_KEYDOWN's lParam is NOT cursor coords (a legacy
+    // main.cpp bug passed garbage). Fallback if the cache is
     // stale: GetCursorPos + ScreenToClient.
     MouseCursor             m_mouseCursor;
     ParticleSystemInstance* m_attachedParticleSystem = nullptr;
@@ -845,7 +845,7 @@ void HostWindowImpl::FailFatalComposition(HRESULT hr)
 
 // render loop + per-frame spawner tick. Replaces the prior
 // placeholder clear-to-background path. The per-frame sequence here
-// mirrors the legacy `Render` in src/main.cpp:1882 verbatim:
+// mirrors the legacy `Render` verbatim:
 //
 //   - Compute dt from the previous frame's timestamp (GetTimeF).
 //   - Tick the SpawnerDriver — emits any due burst instances into the
@@ -876,7 +876,7 @@ void HostWindowImpl::RenderD3D9()
     // QueryPerformanceCounter deltas before the engine sees it. The
     // attached ParticleSystemInstance reads MouseCursor::GetVelocity
     // through its Object3D parent chain during Update. Mirrors legacy
-    // src/main.cpp:1904 — the legacy render loop calls UpdateVelocity
+    // the legacy main.cpp — the legacy render loop calls UpdateVelocity
     // unconditionally each frame whether or not a system is attached.
     m_mouseCursor.UpdateVelocity();
 
@@ -2057,7 +2057,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     engine->SetBloomSize    (readF(L"BloomSize",     engine->GetBloomSize()));
 
                     // [view-settings-restore, session 11] Mirror legacy
-                    // main.cpp's startup restore (main.cpp:7614-7692) so the
+                    // main.cpp's startup restore so the
                     // new-UI viewport opens with the user's persisted
                     // background / ground / skydome instead of engine ctor
                     // defaults. Same value names/types legacy reads, so
@@ -2066,7 +2066,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     // dialog-lighting's "Show ground" toggle) must see
                     // deterministic ctor defaults. GroundZ is intentionally
                     // NOT restored — legacy resets it to 0 each launch by
-                    // design (main.cpp:7626).
+                    // design.
                     auto readDword = [&](const wchar_t* name, DWORD& out) -> bool {
                         DWORD t = 0, s = sizeof(out);
                         return RegQueryValueExW(hKey, name, nullptr, &t,
@@ -2214,8 +2214,8 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     // lighting (sun / fill1 / fill2 angles + colours +
                     // intensities, ambient, shadow) so the new-UI viewport
                     // opens with the user's saved lights instead of engine
-                    // ctor defaults. Mirrors legacy PushLightingToEngine
-                    // (src/main.cpp:6376-6410) field-for-field, including the
+                    // ctor defaults. Mirrors the legacy `PushLightingToEngine`
+                    // (native Win32 UI, removed in) field-for-field, including the
                     // Force-Align fill-angle computation: when the
                     // LightingForceFillAlignment flag is ON the fill azimuths
                     // are derived from the sun (sun.z + 120° / + 210°, both at
@@ -2225,8 +2225,8 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     // as the rest of this block (the engine snapshot the
                     // dialog-lighting a11y golden seeds from must show ctor
                     // defaults under --test-host). Intensity is folded into the
-                    // diffuse/specular channels exactly as legacy MakeLight
-                    // (src/main.cpp:6222); fills pass specular=black.
+                    // diffuse/specular channels exactly as the legacy `MakeLight`
+                    // (native Win32 UI, removed in) did; fills pass specular=black.
                     auto readColor = [&](const wchar_t* name, COLORREF def) -> COLORREF {
                         DWORD v = 0;
                         return readDword(name, v) ? static_cast<COLORREF>(v) : def;
@@ -2253,8 +2253,8 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     // ambient floor; per Petroglyph's shaders (reference/foc-shaders/
                     // AlamoEngine.fxh) production Mesh*/RSkin* light ambient ONLY via
                     // that SPH path, so w=1 reproduces the game's mesh brightness.
-                    // React ambientToVec4 (LightingPanel.tsx) and legacy
-                    // AmbientToVec4 (src/main.cpp) push the same w=1, so load == Reset.
+                    // This and the React `ambientToVec4` (LightingPanel.tsx) push the
+                    // same w=1, so load == Reset (keep both in lockstep).
                     auto ambientToVec4 = [](COLORREF c) -> D3DXVECTOR4 {
                         return D3DXVECTOR4(GetRValue(c) / 255.0f, GetGValue(c) / 255.0f,
                                            GetBValue(c) / 255.0f, 1.0f);
@@ -2286,7 +2286,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     const float    fill2Tiltp     = readF(L"LightFill2Tilt",      -10.0f);
                     const COLORREF fill2Diffuse   = readColor(L"LightFill2DiffuseColor", RGB(60, 80, 160));
 
-                    // Force-align fill angles (verbatim src/main.cpp:6400-6403).
+                    // Force-align fill angles (verbatim from the legacy dialog).
                     const float fill1Z    = forceAlign ? (sunZ + 120.0f) : fill1Zp;
                     const float fill1Tilt = forceAlign ? -10.0f          : fill1Tiltp;
                     const float fill2Z    = forceAlign ? (sunZ + 210.0f) : fill2Zp;
@@ -2391,7 +2391,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         SetTimer(hwnd, kStatsTimerId, 250, nullptr);
 
         //: two-tier autosave timers (30 s recent / 5 min stable),
-        // mirroring legacy main.cpp:2227. Gated on !useTestHost so harness
+        // mirroring the legacy main.cpp. Gated on !useTestHost so harness
         // runs never write autosave files — those would orphan into a
         // recovery prompt for the user's real editor. WM_TIMER writes the
         // live ParticleSystem (dirty-gated) below.
@@ -2822,7 +2822,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     // ---------------------------------------------------------------
     // viewport interaction — camera controls.
     //
-    // Mirrors the legacy handler at src/main.cpp:2917-3060. The math
+    // Mirrors the legacy handler in the legacy main.cpp. The math
     // for MOVE / ROTATE / ZOOM is lifted verbatim from legacy so the
     // user's muscle-memory carries over: drag delta scales /2.0f for
     // rotate (full-window-width drag ≈ 180°), distance/1000 for
@@ -2873,7 +2873,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // by an earlier WM_KEYDOWN VK_SHIFT or by the B1.3.1 fallback below),
         // LMB-down enters OBJECT_Z drag mode for height adjustment. LMB-up
         // will then detach the preview, placing it permanently in the scene.
-        // Matches legacy src/main.cpp:2891-2898. Do NOT enter a camera drag
+        // Matches the legacy main.cpp. Do NOT enter a camera drag
         // — placement is the entire intent of this click while a preview
         // is alive.
         if (m_attachedParticleSystem != nullptr)
@@ -3041,7 +3041,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // it is no longer parented to m_mouseCursor. The user can
         // then click again (while still holding Shift) to spawn a
         // fresh preview, repeating the click-to-place gesture.
-        // Matches legacy src/main.cpp:2877-2883.
+        // Matches the legacy main.cpp.
         if (m_attachedParticleSystem && engine)
         {
             Log("[ArchC-engine] LMB-up placing attached=%p (Detach, system stays alive)\n",
@@ -3294,7 +3294,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // Legacy parity: in OBJECT_Z drag (placing a cursor-bound preview),
         // only Z tracks the drag. X/Y stay frozen at the click position so
         // the user can rake the mouse vertically to set height without the
-        // preview sliding sideways. Matches legacy src/main.cpp:2939-2948.
+        // preview sliding sideways. Matches the legacy main.cpp.
         if (m_dragMode == DragMode::OBJECT_Z)
         {
             long y = my - m_dragStartY;
@@ -3307,12 +3307,12 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         }
 
         // shift-click-to-spawn: always-update cursor block, regardless
-        // of (non-OBJECT_Z) drag mode. Mirrors legacy src/main.cpp:2982-2987
+        // of (non-OBJECT_Z) drag mode. Mirrors the legacy main.cpp
         // — without this, the attached ParticleSystemInstance (parented to
         // m_mouseCursor via Object3D) wouldn't track the mouse during
         // Shift-hold. Cache the (x,y) so WM_KEYDOWN can use it for the
-        // spawn coords (WM_KEYDOWN's lParam is NOT mouse coords; legacy
-        // bug at src/main.cpp:2960).
+        // spawn coords (WM_KEYDOWN's lParam is NOT mouse coords; a
+        // legacy main.cpp bug).
         D3DXVECTOR3 cursorWorld;
         GetCursorPos3D(engine.get(), (short)mx, (short)my, cursorWorld);
         m_mouseCursor.SetPosition(cursorWorld);
@@ -3404,8 +3404,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     //
     // Hold Shift over the viewport to spawn an instance of the active
     // ParticleSystem parented to m_mouseCursor. Drag the mouse to fling
-    // it around; release Shift to kill it. Matches legacy
-    // src/main.cpp:2945-2966.
+    // it around; release Shift to kill it. Matches the legacy main.cpp.
     //
     // Cursor-coords-on-KEYDOWN: WM_KEYDOWN's lParam is repeat-count +
     // scan-code + flags — NOT mouse coords. Legacy reads `LOWORD(lParam),
@@ -4270,7 +4269,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // idle-render. The blocking variant produces no continuous WM_PAINT
     // events, so the per-frame spawner tick + engine render had no driver.
     // Now: drain queued messages, then render on idle, loop until
-    // WM_QUIT. Mirrors legacy src/main.cpp:8023.
+    // WM_QUIT. Mirrors the legacy main.cpp.
     //
     // No IsDialogMessage routing — the host has no modeless Win32
     // dialogs; tool panels live in React under WebView2 (which has its

@@ -292,8 +292,8 @@ std::vector<std::wstring> WriteRecentFile(const std::wstring& path)
 }
 
 // Persist the skydome selection to HKCU\Software\AloParticleEditor
-// using the SAME value names/types as legacy WriteSkydomeIndex /
-// WriteSkydomeCustomPath (src/main.cpp:5564,5598), so a dome chosen in the new
+// using the SAME value names/types as the legacy `WriteSkydomeIndex` /
+// `WriteSkydomeCustomPath` (legacy Win32 UI, removed in), so a dome chosen in the new
 // UI survives restart AND round-trips with the legacy picker. The new-UI
 // skydome handlers previously only marked the doc dirty (no registry write),
 // so a daily-driver selection was silently lost on restart — these close that
@@ -366,7 +366,7 @@ static void PersistSkydomeEnvironment(int context, const std::wstring& primaryNa
 }
 
 // Persist the solid-colour background (same BackgroundColor REG_DWORD as
-// legacy WriteBackgroundColor, src/main.cpp:3230). The solid-colour option lives
+// legacy WriteBackgroundColor). The solid-colour option lives
 // in the same Background picker as the skydome and had the identical new-UI gap.
 static void PersistBackgroundColor(COLORREF color)
 {
@@ -1959,7 +1959,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // -------- engine/action/reset-view-settings ----------------------
     //
     // (Group D): cascade reset for the View → Reset View Settings
-    // menu. Mirrors legacy main.cpp:1733-1808: pushes engine defaults
+    // menu. Mirrors the legacy main.cpp reset path: pushes engine defaults
     // for background, ground (visibility + Z + texture), bloom (off +
     // canonical strength/cutoff/size), and skydome (Off slot). Lighting
     // reset rides with D4 (separate handler around Force Align).
@@ -2144,9 +2144,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     //
     // Cross-mode read of the RAW lighting split the LightingPanel seeds
     // its displayed controls from — intensity/colour kept SEPARATE (the
-    // engine snapshot only carries the lossy folded Vec4). Mirrors legacy
-    // LightingDlgProc's registry reads (src/main.cpp:6479) field-for-field;
-    // same value names/types (floats REG_BINARY, colours + the flag
+    // engine snapshot only carries the lossy folded Vec4). Follows the value
+    // names/types the legacy `LightingDlgProc` registry reads used (native Win32
+    // UI, removed in): same names/types (floats REG_BINARY, colours + the flag
     // REG_DWORD). Colours go on the wire as packed COLORREF ints (`Color`).
     //
     // Gated under --test-host (returns the canonical defaults, NOT the live
@@ -2154,7 +2154,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // UNLESS ALO_SETTINGS_LIVE lifts the gate (the CDP test seam).
     if (kind == "settings/lighting")
     {
-        // Canonical defaults (src/main.cpp:6180-6195).
+        // Canonical defaults (matching the legacy Win32 dialog).
         float sunI = 0.50f, sunZ = 0.0f, sunT = 45.0f;
         DWORD sunDiff = RGB(180, 180, 190), sunSpec = RGB(190, 190, 200);
         DWORD ambient = RGB(40, 40, 50), shadow = RGB(100, 100, 110);
@@ -2227,7 +2227,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // -------- settings/lighting-force-align/set ----------------------
     //
     // Cross-mode write of the `LightingForceFillAlignment` REG_DWORD
-    // (WriteLightingBool, src/main.cpp:6328) so a toggle in the new UI is
+    // (WriteLightingBool) so a toggle in the new UI is
     // seen by legacy. No-op under --test-host (so the a11y harness never
     // mutates the dev box's registry) UNLESS ALO_SETTINGS_LIVE lifts the
     // gate for the CDP test seam.
@@ -2256,8 +2256,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     //
     // Full write-back of the raw lighting split the new-UI LightingPanel
     // holds in state. Writes the SAME 16 value names the GET handler reads
-    // (and the legacy dialog reads/writes, src/main.cpp:6398-6433 /
-    // 6742-6779) so edits + Reset in the new UI survive a reopen/restart
+    // (and the legacy dialog read/wrote) so edits + Reset in the new UI survive a reopen/restart
     // and stay in sync with legacy. Without this, anything the legacy
     // dialog persisted (e.g. a stale ambient COLORREF) reappears on every
     // load and the new UI can't overwrite it.
@@ -2780,8 +2779,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
         // render loop: same notification sequence as file/new —
         // the engine's cached per-instance / per-emitter state is now
-        // stale and must be cleared. Matches legacy DoOpenFile path
-        // at src/main.cpp:1341.
+        // stale and must be cleared. Matches the legacy DoOpenFile path.
         if (m_engine)
         {
             m_engine->Clear();
@@ -2954,7 +2952,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // null). Suppressed under --test-host (the harness must never get a
     // recovery prompt — it would pollute a11y captures, cf.) and when a
     // document is already loaded (a CLI file / any non-untitled state "wins"
-    // over recovery, matching legacy main.cpp:7739). Stash the live
+    // over recovery, matching the legacy main.cpp). Stash the live
     // OrphanSession so autosave/recover can consume its temp paths w/o re-scan.
     if (kind == "autosave/check-recovery")
     {
@@ -3589,7 +3587,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         // Coalesce rapid edits to the SAME field(s) on the SAME emitter
         // (scroll-wheel ticks, held arrow) within the time window into one
         // undo step; switching field starts a fresh step. Finer than legacy's
-        // per-emitter EP_CHANGE coalescing (main.cpp:2682) — a deliberate
+        // per-emitter EP_CHANGE coalescing — a deliberate
         // choice. Key layout: bit 31 set (never 0 = structural), bits
         // 16..30 an order-independent FNV-1a hash of the patch field names,
         // bits 0..15 the emitter id (so different emitters never fold).
@@ -4379,7 +4377,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         // pointing at the moved key, so the next Engine::Update would
         // dereference a singular iterator (xtree assert). OnParticleSystemChanged
         // with the specific track index reloads those cursors — mirrors the
-        // legacy editor's per-edit call at src/main.cpp:2695.
+        // legacy editor's per-edit call.
         if (m_engine != nullptr) m_engine->OnParticleSystemChanged(trackIdx);
         sendOk(json::object());
         markDirty();

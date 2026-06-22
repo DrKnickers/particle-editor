@@ -2,7 +2,7 @@
 // stray edit to one source can't silently diverge the menu item and the
 // Ctrl+Home accelerator from the legacy ID_VIEW_RESETCAMERA behaviour ().
 //
-// Legacy reference: src/main.cpp:1834 (ID_VIEW_RESETCAMERA) and the engine
+// Legacy reference: the legacy main.cpp (ID_VIEW_RESETCAMERA) and the engine
 // constructor default src/engine.cpp:2190-2192 — eye (0,-250,125), target
 // origin, up +Z. These vectors are identical at both legacy sites.
 

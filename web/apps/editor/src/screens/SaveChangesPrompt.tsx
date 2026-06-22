@@ -2,7 +2,7 @@
 // (New / Open / Recent) when the in-memory particle system is dirty.
 //
 // Phase 3 Screen 8 Batch 3. Mirrors the legacy `DoCheckChanges`
-// (`MessageBox MB_YESNOCANCEL`) at [src/main.cpp:1395-1409]:
+// (`MessageBox MB_YESNOCANCEL`) in the legacy main.cpp:
 //   - Save (Yes) → call file/save; if it succeeds, run the pending
 //     action. If save was cancelled (ok:false), abort.
 //   - Don't Save (No) → run the pending action immediately.

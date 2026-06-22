@@ -1,6 +1,6 @@
 // SpawnerPanel — modeless tool window for the programmable particle
 // spawner (Phase 3 Screen 8 Batch 4). Ported from the native
-// `SpawnerDlgProc` at [src/main.cpp:5824]; the Win32 dialog and the
+// `SpawnerDlgProc` (legacy Win32 UI); the Win32 dialog and the
 // `--legacy-ui` opt-out were removed in, so this React panel is now
 // the sole spawner surface.
 //

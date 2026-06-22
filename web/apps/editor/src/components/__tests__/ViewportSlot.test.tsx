@@ -9,8 +9,8 @@
 //
 // 2. The bridge contract. ViewportSlot dispatches `layout/scene-rect`
 //    on mount and forwards DOM pointer/keyboard input as
-//    `viewport/input`; it never subscribes to `viewport/frame-ready`
-//    (there is no DOM-side engine-pixel consumer).
+//    `viewport/input`. Engine pixels arrive via the DComp visual, not
+//    the DOM — there is no DOM-side engine-pixel consumer.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, cleanup } from "@testing-library/react";
@@ -56,13 +56,6 @@ describe("ViewportSlot — render surface", () => {
       w: expect.any(Number),
       h: expect.any(Number),
     });
-  });
-
-  it("never subscribes to viewport/frame-ready (engine pixels come from the DComp visual, not the DOM)", () => {
-    const bridge = makeStubBridge();
-    render(<ViewportSlot bridge={bridge} />);
-    const subscribedKinds = bridge.on.mock.calls.map((c) => c[0]);
-    expect(subscribedKinds).not.toContain("viewport/frame-ready");
   });
 });
 

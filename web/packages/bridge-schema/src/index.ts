@@ -66,7 +66,7 @@ export type LightSettingsDto = {
 
 /** The full raw lighting settings read from the registry — the source the
  *  LightingPanel seeds its displayed controls from. Mirrors legacy
- *  `PushLightingToEngine`'s registry reads (src/main.cpp:6376). `forceAlign`
+ *  `PushLightingToEngine`'s registry reads (legacy Win32 UI). `forceAlign`
  *  is the `LightingForceFillAlignment` flag. The host returns canonical
  *  defaults (not the live registry) under `--test-host` so the
  *  dialog-lighting a11y golden stays deterministic. */
@@ -1039,7 +1039,7 @@ export type Request =
   // (Group D): cascade reset for the View → Reset View Settings
   // menu. Pushes engine defaults for background, ground, bloom,
   // skydome, and lighting in one host-side action (one emit of
-  // engine/state/changed at the end). Mirrors legacy main.cpp:1733+
+  // engine/state/changed at the end). Mirrors the legacy main.cpp
   // which prompts Yes/No and then resets the same surface. The
   // confirmation dialog lives React-side via Radix AlertDialog;
   // the dispatcher's job is purely to apply the defaults.
@@ -1306,18 +1306,7 @@ export type Event =
   | { kind: "engine/manipulator/drag"; payload:
       | { active: false }
       | { active: true; kind: "translate" | "plane" | "rotate"; nx: number; ny: number;
-          visible: boolean; labels: string[]; values: number[]; decimals: number } }
-  // Phase 1: engine frame delivered as base64-encoded JPEG
-  // for in-DOM <canvas> compositing. Host emits one per composited
-  // frame when ALO_VIEWPORT_TRANSPORT=canvas-jpeg; MockBridge never
-  // emits this (no engine in browser-mode). `w` × `h` are scene-rect
-  // pixels (centre-quadrant size at current DPR); `frameId` is a
-  // host-side monotonic counter; `jpegBase64` is the JPEG payload
-  // without the `data:image/jpeg;base64,` URL prefix (the renderer
-  // adds it when building the data URL for Image()). See for
-  // why this is inline-in-payload rather than fetch'd via
-  // WebResourceRequested.
-  | { kind: "viewport/frame-ready";   payload: { w: number; h: number; frameId: number; jpegBase64: string } };
+          visible: boolean; labels: string[]; values: number[]; decimals: number } };
 
 export type EventKind = Event["kind"];
 export type EventOf<K extends EventKind> = Extract<Event, { kind: K }>;

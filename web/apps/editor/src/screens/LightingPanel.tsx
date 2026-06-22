@@ -1,7 +1,7 @@
 // LightingPanel — modeless tool window for the three engine lights,
 // ambient tint, and shadow tint. Ported from the native `LightingDlgProc`
-// at src/main.cpp:6574; the Win32 dialog and the `--legacy-ui` opt-out
-// were removed in, so this React panel is now the sole lighting surface.
+// Win32 dialog, which (along with the `--legacy-ui` opt-out) was removed in
+// — so this React panel is now the sole lighting surface.
 //
 // Sections (top-to-bottom):
 //   1. Sun light (expanded by default, <details> collapsible):
@@ -25,7 +25,7 @@
 // from the diffuse/specular COLORREFs and folds them at push time:
 //     L.Diffuse  = (R/255 * intensity, G/255 * intensity, B/255 * intensity, 1)
 //     L.Specular = (R/255 * intensity, G/255 * intensity, B/255 * intensity, 1)
-//                                                                (src/main.cpp:6196)
+// (the same fold the legacy `MakeLight` performed at push time).
 // The engine only stores the post-multiplied Vec4. The panel keeps a
 // local intensity (defaulted to 1 on first mount per light) plus the
 // colour value displayed in the ColorButton; on commit it multiplies
@@ -38,7 +38,7 @@
 // constraint is purely UI-side (engine just consumes the final
 // engine/set/light dispatches); flag is session-only — legacy
 // persists it as a REG_DWORD, that's a follow-up polish. Constants
-// come from src/main.cpp:6238-6240: fill1 += 120°, fill2 += 210°,
+// come from the legacy Win32 UI: fill1 += 120°, fill2 += 210°,
 // both at -10° altitude. When the checkbox is ON, fill az/alt
 // spinners are disabled and the sun's az drives fill az.
 const FORCE_ALIGN_FILL1_AZ_OFFSET = 120;
@@ -73,7 +73,7 @@ type Props = {
 };
 
 // (Z angle, tilt) → unit direction vector. Mirrors `DirectionFromZTilt`
-// at src/main.cpp:6183 — same convention so values entered in this panel
+// (legacy Win32 UI) — same convention so values entered in this panel
 // match the legacy dialog.
 function directionFromAzAlt(zDeg: number, tiltDeg: number): Vec4 {
   const z = (zDeg * Math.PI) / 180;
@@ -83,8 +83,8 @@ function directionFromAzAlt(zDeg: number, tiltDeg: number): Vec4 {
 }
 
 /** Build a `LightDto` from user-facing inputs, folding `intensity`
- *  into the diffuse/specular Vec4 channels exactly as legacy MakeLight
- *  does at src/main.cpp:6196. */
+ *  into the diffuse/specular Vec4 channels exactly as the legacy
+ *  `MakeLight` (native Win32 UI, removed in) did. */
 function buildLightDto(
   zDeg: number,
   tiltDeg: number,
@@ -114,9 +114,9 @@ type LightFormState = {
   specular: RgbColor; // unused for fills
 };
 
-// Defaults mirror src/main.cpp:6154 (kLightSunIntensityDefault etc.).
-// These drive the Reset button and also serve as the seed when the
-// engine snapshot hasn't arrived yet.
+// Defaults preserved from the legacy Win32 lighting dialog's constants
+// (e.g. its sun-intensity default). These drive the Reset button and also
+// serve as the seed when the engine snapshot hasn't arrived yet.
 const SUN_DEFAULTS: LightFormState = {
   intensity: 0.5,
   az: 0,
@@ -135,7 +135,7 @@ const FILL2_DEFAULTS: LightFormState = {
   ...FILL1_DEFAULTS,
   az: 210,
 };
-// Sun ambient/shadow defaults from src/main.cpp:6157-6160.
+// Sun ambient/shadow defaults preserved from the legacy Win32 dialog.
 const AMBIENT_DEFAULT: RgbColor = { r: 40, g: 40, b: 50 };
 const SHADOW_DEFAULT: RgbColor = { r: 100, g: 100, b: 110 };
 
@@ -178,8 +178,8 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
   const [fill2, setFill2] = useState<LightFormState>(FILL2_DEFAULTS);
   const [ambient, setAmbient] = useState<RgbColor>(AMBIENT_DEFAULT);
   const [shadow, setShadow] = useState<RgbColor>(SHADOW_DEFAULT);
-  // Group D: Force Align Fill Lights. Default ON to match legacy
-  // (kLightForceAlignDefault = true, src/main.cpp:6187). Seeded from the
+  // Group D: Force Align Fill Lights. Default ON to match the legacy
+  // Win32 UI's force-align default (true). Seeded from the
   // registry below (it rides in the `settings/lighting` DTO); the toggle
   // handler writes it back via `settings/lighting-force-align/set`.
   const [forceAlign, setForceAlign] = useState<boolean>(true);
@@ -187,8 +187,8 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
   // Seed the displayed controls from the RAW lighting settings the host
   // reads from the registry (`settings/lighting`) — intensity and colour
   // are the user's true saved split, not the lossy `intensity × colour`
-  // Vec4 recovered from the engine snapshot. Mirrors legacy LightingDlgProc,
-  // which reads the registry on every open (src/main.cpp:6479). The host
+  // Vec4 recovered from the engine snapshot. Mirrors the legacy `LightingDlgProc`,
+  // which read the registry on every open. The host
   // already restored the engine from the same registry at startup, so the
   // displayed values and the rendered scene agree.
   //
@@ -217,7 +217,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
         let nextFill2 = seed(s.fill2);
         // With Force Align on, the fill spinners SHOW the computed angles
         // (sun.az + offset @ FORCE_ALIGN_FILL_ALT) — matching the
-        // disabled-spinner display in legacy (src/main.cpp:6499-6502) and
+        // disabled-spinner display in the legacy UI and
         // the angles the host pushed to the engine.
         if (s.forceAlign) {
           nextFill1 = { ...nextFill1, az: nextSun.az + FORCE_ALIGN_FILL1_AZ_OFFSET, alt: FORCE_ALIGN_FILL_ALT };
@@ -353,9 +353,9 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
   // floor; per Petroglyph's shaders (reference/foc-shaders/AlamoEngine.fxh)
   // production Mesh*/RSkin* light ambient ONLY via that SPH path, so w=1
   // reproduces the game's mesh brightness. The host startup restore
-  // (HostWindow.cpp `ambientToVec4`) and legacy `AmbientToVec4` (src/main.cpp)
-  // push the same w=1, so load == Reset (all three stay in lockstep — flip
-  // them together or Reset diverges from load again).
+  // (HostWindow.cpp `ambientToVec4`) and this React `ambientToVec4` push the
+  // same w=1, so load == Reset (both stay in lockstep — flip them together or
+  // Reset diverges from load again).
   const ambientToVec4 = (rgb: RgbColor): Vec4 =>
     [rgb.r / 255, rgb.g / 255, rgb.b / 255, 1.0] as const;
   // Shadow stays w=0: it is render-inert (the engine echoes it back to this
