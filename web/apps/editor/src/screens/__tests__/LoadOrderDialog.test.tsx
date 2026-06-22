@@ -143,6 +143,109 @@ describe("LoadOrderDialog", () => {
     });
   });
 
+  // ── Phase 0: the drag-gesture abort/latch/teardown edge cases that
+  // were previously uncovered (only commit + sub-threshold + modal-close were
+  // tested). Each abort case PAIRS a positive control (the chip appears, so the
+  // drag genuinely activated on this fixture — a broken geometry mock would fail
+  // here, not pass vacuously) with the negative (Apply dispatches the UNCHANGED
+  // order, i.e. nothing committed). The stack starts Mod, Core throughout.
+  const ROWRECT = (top: number): DOMRect =>
+    ({ top, height: 26, bottom: top + 26, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+  async function startActivatedDrag(bridge: ReturnType<typeof makeBridge>) {
+    render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} onApplied={() => {}} />);
+    await waitFor(() => screen.getByRole("list", { name: "Load order" }));
+    const rows = within(screen.getByRole("list", { name: "Load order" })).getAllByRole("listitem");
+    rows[0].getBoundingClientRect = () => ROWRECT(0);   // Mod    y 0–26
+    rows[1].getBoundingClientRect = () => ROWRECT(26);  // Core y 26–52
+    fireEvent.pointerDown(rows[0], { button: 0, pointerId: 1, clientY: 13 });
+    fireEvent.pointerMove(rows[0], { pointerId: 1, clientY: 50 }); // cross threshold → activate
+    expect(screen.getByTestId("stack-drag-chip")).toBeTruthy();   // positive control
+    return rows;
+  }
+  async function expectUnchangedOrderOnApply(bridge: ReturnType<typeof makeBridge>) {
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() =>
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/m/Alpha/Mod", "C:/m/Alpha/Core"] },
+      }),
+    );
+  }
+
+  it("a pointercancel mid-drag aborts without reordering", async () => {
+    const bridge = makeBridge(["C:/m/Alpha/Mod", "C:/m/Alpha/Core"]);
+    const rows = await startActivatedDrag(bridge);
+    fireEvent.pointerCancel(rows[0], { pointerId: 1, clientY: 50 });
+    // Strong negative: a pointerup at the would-reorder position (clientY 50,
+    // below Core's mid → gap 2) must NOT commit. If the abort had failed,
+    // the live listener would finish(true) here and change the order.
+    fireEvent.pointerUp(document.body, { pointerId: 1, clientY: 50 });
+    await expectUnchangedOrderOnApply(bridge);
+  });
+
+  it("a window blur mid-drag aborts without reordering", async () => {
+    const bridge = makeBridge(["C:/m/Alpha/Mod", "C:/m/Alpha/Core"]);
+    await startActivatedDrag(bridge);
+    fireEvent.blur(window);
+    fireEvent.pointerUp(document.body, { pointerId: 1, clientY: 50 });
+    await expectUnchangedOrderOnApply(bridge);
+  });
+
+  it("a tab-hide (visibilitychange→hidden) mid-drag aborts without reordering", async () => {
+    const bridge = makeBridge(["C:/m/Alpha/Mod", "C:/m/Alpha/Core"]);
+    await startActivatedDrag(bridge);
+    // The handler reads document.visibilityState synchronously → define "hidden"
+    // BEFORE dispatching, then restore.
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    fireEvent(document, new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    fireEvent.pointerUp(document.body, { pointerId: 1, clientY: 50 });
+    await expectUnchangedOrderOnApply(bridge);
+  });
+
+  it("ignores a second pointerdown while a drag is live (re-entrancy latch)", async () => {
+    const bridge = makeBridge(["C:/m/Alpha/Mod", "C:/m/Alpha/Core"]);
+    const rows = await startActivatedDrag(bridge);
+    // The latch must reject the second pointer BEFORE it captures (startDrag
+    // returns at `dragPointerRef !== null`, before setPointerCapture). Spy the
+    // 2nd row's capture: with the latch it's never called; a broken latch would
+    // capture + arm a duplicate gesture (the +move below would activate it).
+    const row1Capture = vi.fn();
+    rows[1].setPointerCapture = row1Capture;
+    fireEvent.pointerDown(rows[1], { button: 0, pointerId: 2, clientY: 39 });
+    fireEvent.pointerMove(rows[1], { pointerId: 2, clientY: 5 }); // would activate gesture 2 if unlatched
+    expect(row1Capture).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId("stack-drag-chip")).toHaveLength(1);
+    // The ORIGINAL gesture still completes + commits (drag Mod below Core).
+    fireEvent.pointerUp(rows[0], { pointerId: 1, clientY: 50 });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() =>
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/m/Alpha/Core", "C:/m/Alpha/Mod"] },
+      }),
+    );
+  });
+
+  it("tears down an in-flight drag on unmount (no leaked listeners/rAF)", async () => {
+    const bridge = makeBridge(["C:/m/Alpha/Mod", "C:/m/Alpha/Core"]);
+    const cancelRaf = vi.spyOn(window, "cancelAnimationFrame");
+    const removeListener = vi.spyOn(document, "removeEventListener");
+    const { unmount } = render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} onApplied={() => {}} />);
+    await waitFor(() => screen.getByRole("list", { name: "Load order" }));
+    const rows = within(screen.getByRole("list", { name: "Load order" })).getAllByRole("listitem");
+    rows[0].getBoundingClientRect = () => ROWRECT(0);
+    rows[1].getBoundingClientRect = () => ROWRECT(26);
+    fireEvent.pointerDown(rows[0], { button: 0, pointerId: 1, clientY: 13 });
+    fireEvent.pointerMove(rows[0], { pointerId: 1, clientY: 50 }); // activate → rAF + listeners
+    expect(screen.getByTestId("stack-drag-chip")).toBeTruthy();    // positive control
+    unmount();  // the hook's unmount-effect must abort the live gesture
+    expect(cancelRaf).toHaveBeenCalled();
+    expect(removeListener).toHaveBeenCalledWith("pointermove", expect.any(Function));
+    cancelRaf.mockRestore();
+    removeListener.mockRestore();
+  });
+
   // A drag interrupted by the modal closing (Esc/overlay) must tear down the
   // gesture's document listeners + rAF loop — not leave a zombie loop running.
   it("tears down an in-flight drag when the modal closes", async () => {

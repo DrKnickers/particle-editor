@@ -348,6 +348,55 @@ describe("EmitterTree multi-drag preview", () => {
     expect(calls.find((c) => c.kind === "emitters/drop")).toBeUndefined();
   });
 
+  // ── Phase 0: the EmitterTree drag must also abort on window blur
+  // (alt-tab) and tab-hide (visibilitychange) — same teardown the tree/changed
+  // case proves, via the focus-loss listeners attached on activation. Each pairs
+  // the positive control (gap + dragging appear) with the negative (release
+  // after the abort commits nothing).
+  function activateFlashDrag(bridge: ReturnType<typeof makeStubBridge>) {
+    return (async () => {
+      renderWithTooltips(<EmitterTree bridge={bridge} />);
+      await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+      fireEvent.click(screen.getByText("Flash"));
+      const smokeBtn  = screen.getByText("Smoke").closest("button")!;
+      const sparksBtn = screen.getByText("Sparks").closest("button")!;
+      const flashBtn  = screen.getByText("Flash").closest("button")!;
+      stubRect(smokeBtn, 0, 24);
+      stubRect(sparksBtn, 24, 24);
+      stubRect(flashBtn, 48, 24);
+      fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
+      fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 40, clientY: 26 });
+      // Positive control: the drag genuinely activated.
+      expect(screen.getByTestId("drop-gap-at-1")).toBeInTheDocument();
+      expect(document.querySelector('button[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "true");
+      return flashBtn;
+    })();
+  }
+  function expectAbortedNoCommit(bridge: ReturnType<typeof makeStubBridge>, flashBtn: HTMLElement) {
+    expect(screen.queryByTestId("drop-gap-at-1")).toBeNull();
+    expect(document.querySelector('button[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "false");
+    fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 40, clientY: 26 });
+    const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(calls.find((c) => c.kind === "emitters/reorder-many")).toBeUndefined();
+    expect(calls.find((c) => c.kind === "emitters/drop")).toBeUndefined();
+  }
+
+  it("aborts an in-flight drag on window blur — no stale commit", async () => {
+    const bridge = makeStubBridge();
+    const flashBtn = await activateFlashDrag(bridge);
+    fireEvent.blur(window);
+    expectAbortedNoCommit(bridge, flashBtn);
+  });
+
+  it("aborts an in-flight drag on tab-hide (visibilitychange→hidden) — no stale commit", async () => {
+    const bridge = makeStubBridge();
+    const flashBtn = await activateFlashDrag(bridge);
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    fireEvent(document, new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    expectAbortedNoCommit(bridge, flashBtn);
+  });
+
   it("the cursor chip caps at 4 names + a '+k more' line for big selections", async () => {
     const manyRoots: EmitterTreeDto = {
       root: {

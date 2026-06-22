@@ -525,6 +525,11 @@ describe("AtlasPickerPanel", () => {
     publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
     render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    // Wait for the cells before firing keys: the listbox renders during
+    // preview-load with no cells yet, and Home would race the cursor-init
+    // effect (which seeds focus at the context frame, 5) — leaving focus at 5
+    // and Enter assigning frame 5 instead of 0. (Same flake class as #292.)
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
     fireEvent.keyDown(grid, { key: "Home" });  // focus frame 0
     fireEvent.keyDown(grid, { key: "Enter" }); // assign → set-track-key rejects → commit fails
     // The aria-live region announces the failure (parity with the success path),
