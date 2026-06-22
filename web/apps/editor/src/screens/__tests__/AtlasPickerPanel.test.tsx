@@ -211,6 +211,10 @@ describe("AtlasPickerPanel", () => {
     setup({ textureSize: 16 }); // side = 4 columns, assigned 5 -> cursor starts at 5
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     const tabbed = () => screen.getAllByTestId("atlas-cell").find((c) => c.getAttribute("tabindex") === "0")!.getAttribute("data-frame");
+    // The listbox renders while the preview is still loading (no cells yet); wait for
+    // the cells so the assigned-frame cursor has settled before firing keys — else the
+    // reset effect can clobber an early keypress (full-suite flake: '6' vs '1').
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
     fireEvent.keyDown(grid, { key: "ArrowRight" }); // 5 -> 6
     await waitFor(() => expect(tabbed()).toBe("6"));
     fireEvent.keyDown(grid, { key: "ArrowDown" });  // 6 -> 10 (+4)
@@ -227,6 +231,9 @@ describe("AtlasPickerPanel", () => {
     setup({ textureSize: 16 }); // side = 4, 16 cells, rows: 0-3,4-7,8-11,12-15
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
     const tabbed = () => screen.getAllByTestId("atlas-cell").find((c) => c.getAttribute("tabindex") === "0")!.getAttribute("data-frame");
+    // Wait for the cells (preview resolved → reset effect settled) before firing keys,
+    // else the reset effect can clobber an early keypress (full-suite flake: '6' vs '1').
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
     fireEvent.keyDown(grid, { key: "Home" }); // 0
     fireEvent.keyDown(grid, { key: "ArrowRight" }); // 1
     await waitFor(() => expect(tabbed()).toBe("1"));
@@ -247,6 +254,9 @@ describe("AtlasPickerPanel", () => {
     publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
     render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    // Wait for the cells (preview resolved → reset effect settled) before firing keys,
+    // else the reset effect can clobber Home and Enter assigns the wrong frame.
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
     fireEvent.keyDown(grid, { key: "Home" });   // focus 0
     fireEvent.keyDown(grid, { key: "Enter" });  // assign 0
     await waitFor(() => expect(req).toHaveBeenCalledWith(expect.objectContaining({
