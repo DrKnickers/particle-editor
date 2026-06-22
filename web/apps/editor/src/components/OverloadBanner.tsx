@@ -14,9 +14,9 @@
 // limited", never "budget exceeded".
 //
 // Styling: a FILLED amber pill (bg-warning is theme-independent #e0a14b)
-// with fixed near-black text. The first cut used `text-amber-400` on the
-// panel background, which was near-invisible in light mode (light yellow
-// on off-white). A solid fill with dark text reads clearly in BOTH
+// with fixed near-black text. The first cut used a plain amber text colour
+// on the panel background, which was near-invisible in light mode (light
+// yellow on off-white). A solid fill with dark text reads clearly in BOTH
 // themes because the fill colour doesn't flip.
 //
 // Mount point: inside PanelLayout's `quadrant-viewport` container, as

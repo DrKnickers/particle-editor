@@ -377,7 +377,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
           <div className="text-sm text-text-2">Loading…</div>
         )}
         {state.kind === "error" && (
-          <div data-testid="link-group-error" className="text-sm text-red-400">
+          <div data-testid="link-group-error" className="text-sm text-danger-fg">
             Could not load exempt fields: {state.message}
           </div>
         )}
@@ -398,14 +398,14 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
               return (
                 <div
                   data-testid="link-settings-conflict-inline"
-                  className="mb-2 rounded border border-amber-500/70 bg-amber-200 px-2 py-1.5 text-[11px] leading-relaxed text-amber-900"
+                  className="mb-2 rounded border border-warning/60 bg-warning/15 px-2 py-1.5 text-[11px] leading-relaxed text-warning-fg"
                 >
                   <p className="font-medium">
                     Sharing {n} {n === 1 ? "field" : "fields"} will overwrite{" "}
                     {m} {m === 1 ? "emitter" : "emitters"} with the canonical
                     (first-in-tree-order) value:
                   </p>
-                  <p className="mt-0.5 font-medium text-amber-800">
+                  <p className="mt-0.5 font-medium text-warning-fg">
                     {conflictFields.map((f) => FIELD_LABELS[f] ?? f).join(", ")}
                   </p>
                 </div>

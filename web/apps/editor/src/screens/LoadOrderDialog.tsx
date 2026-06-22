@@ -100,7 +100,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     <li
       aria-hidden
       role="presentation"
-      className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-sky-400"
+      className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-accent"
       style={{ height: `${drag.gapHeight}px` }}
     />
   );
@@ -153,7 +153,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                           <span className="min-w-0 flex-1 truncate">{l.label}</span>
                           {added ? (
                             <span className="flex shrink-0 items-center gap-1 text-[10px] text-text-3">
-                              <Check className="size-2.5 text-success" strokeWidth={1.8} />
+                              <Check className="size-2.5 text-success-fg" strokeWidth={1.8} />
                               in stack
                             </span>
                           ) : (
@@ -231,7 +231,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                               <ChevronDown className="size-3" strokeWidth={1.6} />
                             </button>
                             <button type="button" aria-label={`Remove ${labelFor(p)}`} onClick={() => remove(i)}
-                                    className={cn(iconBtn, "text-text-3 hover:text-danger")} title="Remove">
+                                    className={cn(iconBtn, "text-text-3 hover:text-danger-fg")} title="Remove">
                               <X className="size-3" strokeWidth={1.5} />
                             </button>
                           </div>

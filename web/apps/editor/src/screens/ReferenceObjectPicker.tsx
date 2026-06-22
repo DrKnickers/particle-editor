@@ -565,7 +565,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
         )}
 
         {statusNote && (
-          <p role="alert" className="text-xs text-warning">{statusNote}</p>
+          <p role="alert" className="text-xs text-warning-fg">{statusNote}</p>
         )}
 
         <label className="flex items-center gap-2 text-xs text-text-2">

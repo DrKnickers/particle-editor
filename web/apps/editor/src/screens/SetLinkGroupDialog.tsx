@@ -199,7 +199,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
           {conflictFields.length > 0 && (
             <div
               data-testid="link-conflict-inline"
-              className="rounded border border-amber-500/70 bg-amber-200 px-2 py-1.5 text-[11px] leading-relaxed text-amber-900"
+              className="rounded border border-warning/60 bg-warning/15 px-2 py-1.5 text-[11px] leading-relaxed text-warning-fg"
             >
               <p className="font-medium">
                 Joining overwrites {conflictFields.length}{" "}
@@ -208,7 +208,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
                 {conflictEmitterCount === 1 ? "emitter" : "emitters"} with the
                 group's values:
               </p>
-              <p className="mt-0.5 font-medium text-amber-800">
+              <p className="mt-0.5 font-medium text-warning-fg">
                 {conflictFields.join(", ")}
               </p>
             </div>

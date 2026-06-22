@@ -63,7 +63,7 @@ describe("ChainWarningTip", () => {
   it("highlights only the final cumulative", () => {
     render(<ChainWarningTip warning={warning} />);
     const final = screen.getByText("×1,200 → ~864,000");
-    expect(final.className).toContain("text-warning");
-    expect(screen.getByText("×60 → ~720").className).not.toContain("text-warning");
+    expect(final.className).toContain("text-warning-fg");
+    expect(screen.getByText("×60 → ~720").className).not.toContain("text-warning-fg");
   });
 });

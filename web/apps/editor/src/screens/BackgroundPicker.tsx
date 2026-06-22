@@ -197,7 +197,7 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
               : "Solid colour"}
         </span>
         {gameDomeSelected && !gameDomeRendering && (
-          <span className="text-warning">— selected dome didn't load</span>
+          <span className="text-warning-fg">— selected dome didn't load</span>
         )}
       </p>
 
@@ -240,7 +240,7 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
           </select>
         </label>
         {primaryNote && (
-          <p role="alert" className="text-xs text-warning">{primaryNote}</p>
+          <p role="alert" className="text-xs text-warning-fg">{primaryNote}</p>
         )}
 
         <label className="flex flex-col gap-1 text-xs text-text-2">
@@ -258,7 +258,7 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
           </select>
         </label>
         {secondaryNote && (
-          <p role="alert" className="text-xs text-warning">{secondaryNote}</p>
+          <p role="alert" className="text-xs text-warning-fg">{secondaryNote}</p>
         )}
       </section>
 

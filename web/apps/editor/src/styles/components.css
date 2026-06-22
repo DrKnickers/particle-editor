@@ -314,7 +314,7 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
-.tb-btn.playing { color: var(--success); }
+.tb-btn.playing { color: var(--success-fg); }
 /* F3: pressed (LMB-down) feedback — lighter bg + slight scale, distinct
    from the accent-soft toggled state. Wins during the press because it's
    declared last; skipped while disabled. */
@@ -560,7 +560,7 @@
 }
 .tree-row .vis:hover, .tree-row .lock:hover { background: var(--hover); color: var(--text); }
 .tree-row .vis.on { color: var(--text); }
-.tree-row .lock.on { color: var(--warning); }
+.tree-row .lock.on { color: var(--warning-fg); }
 .tree-row .swatch {
   width: 12px; height: 12px;
   border-radius: 2px;

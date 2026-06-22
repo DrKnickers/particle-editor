@@ -240,7 +240,7 @@ export function useStackReorder(opts: {
         <div
           aria-hidden
           data-testid="stack-drag-chip"
-          className="drag-chip-enter pointer-events-none fixed z-[60] rounded-md border border-sky-400 bg-bg-2/95 px-2 py-1 text-xs text-accent shadow-xl"
+          className="drag-chip-enter pointer-events-none fixed z-[60] rounded-md border border-accent bg-bg-2/95 px-2 py-1 text-xs text-accent shadow-xl"
           style={
             chip.exit
               ? {

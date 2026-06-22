@@ -576,7 +576,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
             type="checkbox"
             checked={forceAlign}
             onChange={(e) => handleForceAlignToggle(e.target.checked)}
-            className="size-3.5 accent-sky-500"
+            className="size-3.5 accent-[var(--accent)]"
             aria-label="Force Align Fill Lights"
           />
           Force Align Fill Lights

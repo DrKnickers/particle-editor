@@ -164,7 +164,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
             checked={checked}
             onChange={(e) => togglePick(node, e.target.checked)}
             aria-label={`Select ${node.name}`}
-            className="size-3 accent-sky-500"
+            className="size-3 accent-[var(--accent)]"
           />
           <span>{node.name}</span>
         </label>
@@ -207,7 +207,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               <div className="text-xs text-text-3">Loading preview…</div>
             )}
             {!loading && error && (
-              <div className="text-xs text-amber-400">{error}</div>
+              <div className="text-xs text-warning-fg">{error}</div>
             )}
             {!loading && !error && !tree && (
               <div className="text-xs text-text-3">
@@ -229,7 +229,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               checked={autoChildren}
               onChange={(e) => setAutoChildren(e.target.checked)}
               aria-label="Auto-include children"
-              className="size-3 accent-sky-500"
+              className="size-3 accent-[var(--accent)]"
             />
             <span>Auto-include children</span>
           </label>

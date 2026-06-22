@@ -1026,8 +1026,8 @@ export function CurveEditor({
       {/* Marquee rectangle (). Rendered last so it draws over the
           keys. `pointerEvents="none"` keeps the captured backdrop in
           control of the gesture — the rect is purely visual. The
-          fill colour follows the design lock: sky-500 at 15% opacity
-          with a dashed sky-500 border. */}
+          fill + dashed border use the accent token (--accent-soft fill,
+          --accent stroke) so the marquee themes with the rest of the UI. */}
       {marquee !== null && marquee.movedPastSlop && (
         <rect
           data-testid="curve-marquee"
@@ -1035,8 +1035,8 @@ export function CurveEditor({
           y={Math.min(marquee.startY, marquee.currY)}
           width={Math.abs(marquee.currX - marquee.startX)}
           height={Math.abs(marquee.currY - marquee.startY)}
-          fill="rgb(14 165 233 / 0.15)"
-          stroke="#0EA5E9"
+          fill="var(--accent-soft)"
+          stroke="var(--accent)"
           strokeDasharray="4 4"
           strokeWidth={1}
           pointerEvents="none"
@@ -2098,8 +2098,8 @@ function MultiChannelCurves({
           y={Math.min(marquee.startY, marquee.currY)}
           width={Math.abs(marquee.currX - marquee.startX)}
           height={Math.abs(marquee.currY - marquee.startY)}
-          fill="rgb(14 165 233 / 0.15)"
-          stroke="#0EA5E9"
+          fill="var(--accent-soft)"
+          stroke="var(--accent)"
           strokeDasharray="4 4"
           strokeWidth={1}
           pointerEvents="none"

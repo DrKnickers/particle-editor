@@ -374,12 +374,12 @@ describe("EmitterTree", () => {
     // Drag Flash; hover Sparks' middle third (y=84 in [80,88)) → onto ring.
     fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
     fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 0, clientY: 84 });
-    expect(sparksBtn.className).toContain("ring-sky-400");
+    expect(sparksBtn.className).toContain("ring-accent");
 
     // Move onto Flash's own footprint (y=135 → past all block mids → gap 3,
     // inside footprint [2,3] → no-op). Ring must clear; nothing latched.
     fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 0, clientY: 135 });
-    expect(sparksBtn.className).not.toContain("ring-sky-400");
+    expect(sparksBtn.className).not.toContain("ring-accent");
 
     fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 135 });
     const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);

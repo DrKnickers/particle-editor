@@ -602,7 +602,7 @@ function EmitterRow({
   // single-drag "onto" target. (Reorder uses the make-room gap, not a ring.)
   const reparentTintClass =
     indicator?.kind === "onto" && indicator.targetId === node.id
-      ? "bg-accent-soft ring-1 ring-sky-400"
+      ? "bg-accent-soft ring-1 ring-accent"
       : "";
 
   const menuItemClass =
@@ -878,7 +878,7 @@ function EmitterRow({
                   style={{ gridColumn: 4, gridRow: 1 }}
                   data-testid={`emitter-chain-warning-${node.id}`}
                   aria-label={formatChainWarning(chainWarning)}
-                  className="grid place-items-center w-4 h-4 shrink-0 justify-self-center text-amber-400"
+                  className="grid place-items-center w-4 h-4 shrink-0 justify-self-center text-warning-fg"
                 >
                   <TriangleAlert className="size-3" />
                 </span>
@@ -2224,7 +2224,7 @@ export function EmitterTree({ bridge }: Props) {
                 // ring-inset: render the ring INSIDE the element so it isn't
                 // clipped by the scroll container's overflow at the very top /
                 // bottom edge of the list.
-                className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-sky-400"
+                className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-accent"
                 style={{ height: `${indicator.gapHeight}px` }}
               />
             ) : null;
@@ -2268,7 +2268,7 @@ export function EmitterTree({ bridge }: Props) {
               aria-hidden
               role="presentation"
               data-testid={`drop-gap-at-${indicator.gapIndex}`}
-              className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-sky-400"
+              className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-accent"
               style={{ height: `${indicator.gapHeight}px` }}
             />
           )}
@@ -2305,7 +2305,7 @@ export function EmitterTree({ bridge }: Props) {
           // drag-chip-enter: pop-in on spawn (components.css; reduced-motion
           // disables it). Exit mode overrides position with the landing spot
           // + fades/shrinks via an inline transition — see finish().
-          className="drag-chip-enter pointer-events-none fixed z-50 rounded-md border border-sky-400 bg-bg-2/95 px-2 py-1 text-xs text-accent shadow-xl"
+          className="drag-chip-enter pointer-events-none fixed z-50 rounded-md border border-accent bg-bg-2/95 px-2 py-1 text-xs text-accent shadow-xl"
           style={
             dragChip.exit
               ? {

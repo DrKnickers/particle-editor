@@ -28,7 +28,7 @@ export function ChainWarningTip({ warning }: { warning: ChainWarning }) {
             <span>{i === 0 ? p.name : `→ ${p.name}`}</span>
             <span
               className={`font-mono text-[11px] tabular-nums ${
-                i === warning.path.length - 1 ? "text-warning font-semibold" : "text-text-2"
+                i === warning.path.length - 1 ? "text-warning-fg font-semibold" : "text-text-2"
               }`}
             >
               {i === 0

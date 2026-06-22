@@ -403,7 +403,7 @@ export function MenuBar({
     <li
       aria-hidden
       role="presentation"
-      className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-sky-400"
+      className="pointer-events-none mx-0.5 rounded bg-accent-soft ring-1 ring-inset ring-accent"
       style={{ height: `${menuDrag.gapHeight}px` }}
     />
   );
@@ -705,7 +705,7 @@ export function MenuBar({
                             tabIndex={-1}
                             aria-label={`Remove ${labelFor(p)} from stack`}
                             onClick={() => removeFromStack(p)}
-                            className="flex size-[18px] shrink-0 items-center justify-center rounded text-text-3 hover:bg-hover hover:text-danger"
+                            className="flex size-[18px] shrink-0 items-center justify-center rounded text-text-3 hover:bg-hover hover:text-danger-fg"
                           >
                             <X className="size-2.5" strokeWidth={1.6} />
                           </button>
@@ -757,7 +757,7 @@ export function MenuBar({
                           <div key={l.path} className={cn("flex h-[26px] items-center gap-1.5 px-2 text-xs text-text-3", nested && "pl-5")}>
                             <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
                             <span className="min-w-0 flex-1 truncate">{l.label}</span>
-                            <span className="flex shrink-0 items-center gap-1 text-[10px]"><Check className="size-2.5 text-success" strokeWidth={1.8} />in stack</span>
+                            <span className="flex shrink-0 items-center gap-1 text-[10px]"><Check className="size-2.5 text-success-fg" strokeWidth={1.8} />in stack</span>
                           </div>
                         ) : (
                           <Menubar.Item

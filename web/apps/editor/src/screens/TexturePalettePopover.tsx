@@ -160,7 +160,7 @@ function PaletteBody({
       )}
 
       {status && (
-        <p role="status" className="px-1 text-xs text-warning">
+        <p role="status" className="px-1 text-xs text-warning-fg">
           {status}
         </p>
       )}
@@ -268,7 +268,7 @@ function PaletteCell({
                 data-thumb-status={thumb ? thumb.status : "loading"}
                 className={`absolute inset-0 flex flex-col items-center justify-center gap-0.5 ${
                   thumb?.status === "broken"
-                    ? "bg-red-950/40 text-red-300"
+                    ? "bg-danger/10 text-danger-fg"
                     : thumb?.status === "missing"
                       ? "bg-bg-2 text-text-3"
                       : "bg-bg-2"
@@ -297,7 +297,7 @@ function PaletteCell({
         onClick={() => onTogglePin(entry.filename)}
         aria-label={`${entry.pinned ? "Unpin" : "Pin"} ${entry.filename}`}
         className={`absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded text-sm ${
-          entry.pinned ? "text-warning" : "text-text-3 hover:text-text"
+          entry.pinned ? "text-warning-fg" : "text-text-3 hover:text-text"
         }`}
       >
         {entry.pinned ? "★" : "☆"}

@@ -41,6 +41,14 @@
   --danger: #e06c75;
   --success: #6fbf7a;
   --warning: #e0a14b;
+  /* Foreground variants for semantic colours used as TEXT. The base tokens
+     above are tuned for dark backgrounds and FILLS; on the light theme they
+     fail WCAG AA as foreground text (~2.1:1). The -fg pair stays bright on dark
+     (passes) and darkens on light (>=4.5:1 on --panel). `text-danger/-success/
+     -warning` map to these; `bg-*` fills keep the base tokens. */
+  --danger-fg: #e06c75;
+  --success-fg: #6fbf7a;
+  --warning-fg: #e0a14b;
   --atlas-selected: #ffb000;
   --x-axis: #ef5350;
   --y-axis: #66bb6a;
@@ -123,6 +131,13 @@
   --accent: #2f7fd4;
   --accent-2: #1f63b0;
   --accent-soft: rgba(47, 127, 212, 0.14);
+  /* Semantic FOREGROUND variants, darkened to clear WCAG AA (>=4.5:1) as text
+     on the light --panel (#f7f7f7). The base --danger/-success/-warning stay
+     bright for FILLS. (warning-as-text can't be both bright-amber and AA on
+     white, so it necessarily goes brown.) */
+  --danger-fg: #b53224;
+  --success-fg: #2e7d32;
+  --warning-fg: #8a5a00;
   --atlas-selected: #c77700;
   /* Light-theme grid: ~8% black to match the dark-theme alpha so
      the grid is uniformly subtle across themes. */
@@ -158,6 +173,9 @@
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-danger-fg: var(--danger-fg);
+  --color-success-fg: var(--success-fg);
+  --color-warning-fg: var(--warning-fg);
   --color-x-axis: var(--x-axis);
   --color-y-axis: var(--y-axis);
   --color-z-axis: var(--z-axis);

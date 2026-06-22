@@ -235,7 +235,7 @@ export function ColorButton({
                   max={255}
                   value={pickerColor[ch]}
                   onChange={(e) => handleSliderChange(ch, parseInt(e.target.value, 10))}
-                  className="flex-1 accent-sky-500"
+                  className="flex-1 accent-[var(--accent)]"
                   aria-label={`${ch.toUpperCase()} channel`}
                 />
                 <input

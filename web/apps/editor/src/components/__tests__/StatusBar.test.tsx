@@ -68,10 +68,10 @@ describe("StatusBar", () => {
 
     emit("stats/tick", tick(true));
     const value = screen.getByText("16384");
-    expect(value.className).toContain("text-amber-400");
+    expect(value.className).toContain("text-warning-fg");
 
     emit("stats/tick", tick(false));
     const cleared = screen.getByText("16384");
-    expect(cleared.className).not.toContain("text-amber-400");
+    expect(cleared.className).not.toContain("text-warning-fg");
   });
 });

@@ -309,8 +309,8 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
             </div>
             {!guard.enabled && (
               <div className="mx-3 mb-[11px] flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-[9px] py-[7px]">
-                <AlertTriangle className="mt-px size-3 shrink-0 text-warning" strokeWidth={1.5} />
-                <span className="text-[11px] leading-snug text-warning">
+                <AlertTriangle className="mt-px size-3 shrink-0 text-warning-fg" strokeWidth={1.5} />
+                <span className="text-[11px] leading-snug text-warning-fg">
                   Unlimited spawning can crash the editor on extreme effects —
                   unsaved changes are at risk.
                 </span>

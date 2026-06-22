@@ -182,7 +182,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
           checked={groundOn}
           onChange={(e) => handleToggleGround(e.target.checked)}
           aria-label="Show ground"
-          className="size-3 accent-sky-500"
+          className="size-3 accent-[var(--accent)]"
         />
         <span>Show ground</span>
       </label>
@@ -328,7 +328,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
             void bridge.request({ kind: "engine/set/grid-visible", params: { visible: e.target.checked } })
           }
           aria-label="Grid visible"
-          className="size-3 accent-sky-500"
+          className="size-3 accent-[var(--accent)]"
         />
         <span>Show grid</span>
       </label>

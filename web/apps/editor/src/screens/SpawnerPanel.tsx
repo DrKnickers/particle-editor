@@ -219,7 +219,7 @@ export function SpawnerPanel({ bridge }: Props) {
               checked={config.mode === "manual"}
               onChange={() => setMode("manual")}
               aria-label="Manual mode"
-              className="size-3 accent-sky-500"
+              className="size-3 accent-[var(--accent)]"
             />
             <span>Manual</span>
           </label>
@@ -231,7 +231,7 @@ export function SpawnerPanel({ bridge }: Props) {
               checked={config.mode === "auto"}
               onChange={() => setMode("auto")}
               aria-label="Auto mode"
-              className="size-3 accent-sky-500"
+              className="size-3 accent-[var(--accent)]"
             />
             <span>Auto</span>
           </label>
@@ -244,7 +244,7 @@ export function SpawnerPanel({ bridge }: Props) {
               checked={config.enabled}
               onChange={(e) => setEnabled(e.target.checked)}
               aria-label="Enable spawner"
-              className="size-3 accent-sky-500"
+              className="size-3 accent-[var(--accent)]"
             />
             <span>Enabled</span>
           </label>

@@ -1517,7 +1517,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                 className={
                   deleteDisabled
                     ? "grid h-6 w-6 place-items-center rounded border border-border bg-bg-2/60 text-text-3"
-                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-rose-500 hover:text-rose-300"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-danger hover:text-danger-fg"
                 }
               >
                 <Trash2 className="size-3.5" aria-hidden="true" />

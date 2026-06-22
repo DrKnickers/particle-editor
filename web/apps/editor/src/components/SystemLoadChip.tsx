@@ -48,7 +48,7 @@ export function SystemLoadChip({
       data-testid="system-load-chip"
       className="mb-1 flex shrink-0 items-center gap-1.5 rounded-sm bg-warning/15 px-2 py-1 text-xs text-text-2"
     >
-      <TriangleAlert className="size-3.5 shrink-0 text-amber-400" aria-hidden />
+      <TriangleAlert className="size-3.5 shrink-0 text-warning-fg" aria-hidden />
       <span className="tabular-nums">
         {instances === 0 ? (
           <>This effect ≈ {fmtCount(systemLoad)} particles — over the {fmtCount(guard.maxParticles)} preview limit</>

@@ -65,7 +65,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
       <span className="text-text-3">{label}</span>
       <span
         className={`font-mono tabular-nums ${
-          warn ? "text-amber-400" : dim ? "text-text-3" : "text-text-2"
+          warn ? "text-warning-fg" : dim ? "text-text-3" : "text-text-2"
         }`}
       >
         {value}
@@ -93,7 +93,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
           (, the legacy main.cpp's permanent rightmost pane). */}
       <div className="ml-auto flex items-center gap-3">
         {paused && (
-          <span className="font-mono font-semibold tracking-wide text-amber-400">
+          <span className="font-mono font-semibold tracking-wide text-warning-fg">
             PAUSED
           </span>
         )}

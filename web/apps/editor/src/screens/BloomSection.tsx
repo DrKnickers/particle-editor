@@ -87,7 +87,7 @@ export function BloomSection({ bridge, defaultOpen = false }: Props) {
           onChange={(e) => setEnabled(e.target.checked)}
           disabled={disabled}
           aria-label="Enable bloom"
-          className="size-3 accent-sky-500"
+          className="size-3 accent-[var(--accent)]"
         />
         <span>Enable bloom</span>
       </label>
