@@ -129,6 +129,7 @@
     <ClInclude Include="host\HostBridgeProxy.h" />
     <ClInclude Include="host\HostWindow.h" />
     <ClInclude Include="host\WindowCapture.h" />
+    <ClInclude Include="host\StringConv.h" />
     <ClInclude Include="host\LayoutBroker.h" />
     <ClInclude Include="host\Run.h" />
     <ClInclude Include="host\third_party\nlohmann\json.hpp" />

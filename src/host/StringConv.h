@@ -1,9 +1,10 @@
 #pragma once
 // StringConv.h — the one UTF-8 ↔ UTF-16 (std::wstring) conversion pair for the
-// host layer. Consolidates three byte-identical copies that had drifted in name
-// only: BridgeDispatcher's Utf8ToWide/WideToUtf8, HostWindow's
-// Utf8ToUtf16/Utf16ToUtf8, and HostBridgeProxy's inlined BSTR conversions
-// (DRY audit 2026-06-22, cpp-host-0). `inline` so every translation unit shares
+// host layer (DRY audit 2026-06-22, cpp-host-0). Consolidates: BridgeDispatcher's
+// Utf8ToWide/WideToUtf8 and HostWindow's Utf8ToUtf16/Utf16ToUtf8 (two byte-identical
+// pairs that had drifted in NAME only), plus HostBridgeProxy's INLINED BSTR
+// conversions (same underlying MultiByteToWideChar/WideCharToMultiByte calls,
+// re-expressed here via std::wstring). `inline` so every translation unit shares
 // one definition with no ODR conflict.
 //
 // Canonical names: "Wide" == UTF-16 on Windows (std::wstring), matching the
