@@ -284,3 +284,8 @@ tests/max_verts.txt
 # *.tmp / *.aps rules miss these because the temps have no extension.
 /src/RC[0-9A-Fa-f]*
 .playwright-mcp/
+
+# Scratch output dir for local probe/capture harnesses (e.g.
+# web/apps/editor/scripts/probe-cdp-viewport.mjs --out-dir defaults here).
+# Transient PNG artifacts; regenerate via the harness — never committed.
+/tmp/
