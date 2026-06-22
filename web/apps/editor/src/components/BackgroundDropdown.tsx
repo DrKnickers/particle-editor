@@ -7,26 +7,17 @@
 // + Solid colour surface (the custom skydome-texture slots were removed).
 
 import * as Popover from "@radix-ui/react-popover";
-import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
+import type { Bridge } from "@particle-editor/bridge-schema";
 import { AnimatedPopover } from "@/components/AnimatedPopover";
+import { useEngineSnapshot } from "@/lib/use-engine-snapshot";
 import { BackgroundPickerBody } from "@/screens/BackgroundPicker";
 import { colorrefToHex } from "@/lib/colorref";
 
 type Props = { bridge: Bridge };
 
 export function BackgroundDropdown({ bridge }: Props) {
-  const [snap, setSnap] = useState<EngineStateDto | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    bridge.request({ kind: "engine/state/snapshot", params: {} })
-      .then((s) => { if (!cancelled) setSnap(s); })
-      .catch(() => { /* ignore */ });
-    const off = bridge.on("engine/state/changed", (e) => setSnap(e.payload));
-    return () => { cancelled = true; off(); };
-  }, [bridge]);
+  const snap = useEngineSnapshot(bridge);
 
   const slot = snap?.skydomeSlot ?? 0;
   ///S49] a game dome takes render precedence — but show the dome swatch

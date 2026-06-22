@@ -6,28 +6,19 @@
 // non-asset-accurate render divergence the engine applies at dome load).
 
 import type { Bridge } from "@particle-editor/bridge-schema";
+import { readBooleanPref, writeBooleanPref } from "./boolean-pref";
 
 const KEY = "alo:skydome-seam-fix";
 const DEFAULT = true;
 
 /** Read the persisted preference; defaults to ON when absent or unreadable. */
 export function readSkydomeSeamFix(): boolean {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw === null) return DEFAULT;
-    return raw === "1" || raw === "true";
-  } catch {
-    return DEFAULT;
-  }
+  return readBooleanPref(KEY, DEFAULT);
 }
 
 /** Persist the preference (stored as "1"/"0"). */
 export function writeSkydomeSeamFix(enabled: boolean): void {
-  try {
-    localStorage.setItem(KEY, enabled ? "1" : "0");
-  } catch {
-    /* private-mode / quota — the in-memory UI state still reflects the choice */
-  }
+  writeBooleanPref(KEY, enabled);
 }
 
 /** Push the preference to the engine — fire-and-forget so a failed send (mock
