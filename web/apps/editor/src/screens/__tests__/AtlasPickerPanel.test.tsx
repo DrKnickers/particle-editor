@@ -498,12 +498,14 @@ describe("AtlasPickerPanel", () => {
   // Reject every request whose kind/params match — delegate the rest to the real
   // mock. The matcher is typed against the real `Request` union (not a loose
   // `{kind:string}`) so a schema rename/widening fails to COMPILE here instead of
-  // silently never matching. The outer cast only bridges the impl to the generic
-  // `request<R>` spy shape — it does not weaken the matcher's kind-checking.
+  // silently never matching. The `as never` on the delegate + the outer cast only
+  // bridge the impl to the generic `request<R>` spy shape (passing the union to the
+  // generic directly trips TS2321 "excessive stack depth" under `tsc -b`); neither
+  // weakens the matcher's kind-checking.
   function rejectMatching(bridge: MockBridge, match: (r: Request) => boolean) {
     const real = bridge.request.bind(bridge);
     vi.spyOn(bridge, "request").mockImplementation(((req: Request) =>
-      match(req) ? Promise.reject(new Error("test-induced failure")) : real(req)) as typeof bridge.request);
+      match(req) ? Promise.reject(new Error("test-induced failure")) : real(req as never)) as typeof bridge.request);
   }
 
   it("announces a FAILED assign to the live region (no silent failure)", async () => {
@@ -538,7 +540,7 @@ describe("AtlasPickerPanel", () => {
     const reqSpy = vi.spyOn(blocked, "request").mockImplementation(((req: Request) =>
       req.kind === "emitters/get-properties"
         ? new Promise<never>(() => {}) // never resolves
-        : real(req)) as typeof blocked.request);
+        : real(req as never)) as typeof blocked.request);
     publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
     render(<AtlasPickerPanel bridge={blocked} onClose={() => {}} />);
     // Seeded from lastEmitterProps (id matches) → grid paints without waiting on the
@@ -565,7 +567,7 @@ describe("AtlasPickerPanel", () => {
     vi.spyOn(blocked, "request").mockImplementation(((req: Request) =>
       req.kind === "emitters/get-properties"
         ? new Promise<never>(() => {})
-        : real(req)) as typeof blocked.request);
+        : real(req as never)) as typeof blocked.request);
     publishAtlasContext({ emitterId: 2, focusedTrack: "index", interpolation: "step", selection: { frame: 0, keyTimes: [0.3] } });
     render(<AtlasPickerPanel bridge={blocked} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText(/no color texture set/i)).toBeTruthy());
