@@ -17,6 +17,7 @@
 
 #include <cstring>
 #include <stdexcept>
+#include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
 #include "third_party/nlohmann/json.hpp"
 
 #pragma comment(lib, "OleAut32.lib")
@@ -81,18 +82,10 @@ HRESULT STDMETHODCALLTYPE HostBridgeProxy::Invoke(DISPID dispIdMember, REFIID /*
     VARIANT arg = pDispParams->rgvarg[0];
     if (arg.vt != VT_BSTR || arg.bstrVal == nullptr) return DISP_E_TYPEMISMATCH;
 
-    // UTF-16 BSTR → UTF-8 std::string. SysStringLen excludes the
-    // terminator (BSTRs are length-prefixed, not NUL-terminated).
-    UINT srcLen = SysStringLen(arg.bstrVal);
-    std::string req;
-    if (srcLen > 0)
-    {
-        int u8len = WideCharToMultiByte(CP_UTF8, 0, arg.bstrVal, static_cast<int>(srcLen),
-                                        nullptr, 0, nullptr, nullptr);
-        req.resize(static_cast<size_t>(u8len));
-        WideCharToMultiByte(CP_UTF8, 0, arg.bstrVal, static_cast<int>(srcLen),
-                            req.data(), u8len, nullptr, nullptr);
-    }
+    // UTF-16 BSTR → UTF-8 std::string. SysStringLen excludes the terminator
+    // (BSTRs are length-prefixed, not NUL-terminated); host::WideToUtf8 returns
+    // {} for an empty input, matching the old srcLen==0 path.
+    const std::string req = host::WideToUtf8(std::wstring(arg.bstrVal, SysStringLen(arg.bstrVal)));
 
     std::string res;
     if (!m_dispatchSync)
@@ -125,21 +118,11 @@ HRESULT STDMETHODCALLTYPE HostBridgeProxy::Invoke(DISPID dispIdMember, REFIID /*
         }
     }
 
-    // UTF-8 → UTF-16 BSTR.
-    BSTR bres = nullptr;
-    if (res.empty())
-    {
-        bres = SysAllocStringLen(L"", 0);
-    }
-    else
-    {
-        int wlen = MultiByteToWideChar(CP_UTF8, 0, res.data(), static_cast<int>(res.size()),
-                                       nullptr, 0);
-        std::wstring wres(static_cast<size_t>(wlen), L'\0');
-        MultiByteToWideChar(CP_UTF8, 0, res.data(), static_cast<int>(res.size()),
-                            wres.data(), wlen);
-        bres = SysAllocStringLen(wres.data(), static_cast<UINT>(wres.size()));
-    }
+    // UTF-8 → UTF-16 BSTR via the shared converter. host::Utf8ToWide returns {}
+    // for empty input; SysAllocStringLen(data(), 0) yields a "" BSTR (data() on an
+    // empty std::wstring is a valid pointer to the NUL terminator).
+    const std::wstring wres = host::Utf8ToWide(res);
+    BSTR bres = SysAllocStringLen(wres.data(), static_cast<UINT>(wres.size()));
 
     if (pVarResult)
     {

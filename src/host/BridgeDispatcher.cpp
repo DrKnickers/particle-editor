@@ -4,6 +4,7 @@
 #include "InputDispatcher.h"
 #include "LayoutBroker.h"
 #include "WindowCapture.h"
+#include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
 #include "third_party/nlohmann/json.hpp"
 
 #include "../engine.h"
@@ -121,29 +122,6 @@ std::string BuildErrResponse(const std::string& id, const std::string& error)
         {"error", error},
     };
     return env.dump();
-}
-
-// UTF-8 ↔ UTF-16 helpers — kept local because the bridge only needs them
-// for the handful of `engine/*/custom-path` setters and the snapshot's
-// path arrays. Mirrors the equivalents in HostWindow.cpp.
-std::wstring Utf8ToWide(const std::string& s)
-{
-    if (s.empty()) return {};
-    int len = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
-    std::wstring out(static_cast<size_t>(len), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), out.data(), len);
-    return out;
-}
-
-std::string WideToUtf8(const std::wstring& w)
-{
-    if (w.empty()) return {};
-    int len = WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()),
-                                  nullptr, 0, nullptr, nullptr);
-    std::string out(static_cast<size_t>(len), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()),
-                        out.data(), len, nullptr, nullptr);
-    return out;
 }
 
 // Serialise a D3DXVECTOR3/4 / Engine::Camera / Engine::Light into the

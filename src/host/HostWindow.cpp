@@ -57,6 +57,7 @@
 #include "HostWindow.h"
 #include "Run.h"
 #include "WindowCapture.h"  // host::CaptureWindowToPng (factored out for --capture/--snap-window)
+#include "StringConv.h"     // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
 #include "CacheBust.h"   // app.local index.html cache-bust query (workaround)
 
 #include "AcceleratorBridge.h"
@@ -336,30 +337,8 @@ std::wstring ComputeHostLogPath()
     return std::wstring(tempDir) + L"AloParticleEditor_host.log";
 }
 
-// Convert UTF-16 → UTF-8 via WideCharToMultiByte. Used to hand WebView2
-// strings to BridgeDispatcher, and to hand the Win32 EXEPATH to
-// ComputeEditorDistPath's spdlog-style debug printf.
-std::string Utf16ToUtf8(const std::wstring& w)
-{
-    if (w.empty()) return {};
-    int len = WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()),
-                                  nullptr, 0, nullptr, nullptr);
-    std::string out(static_cast<size_t>(len), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()),
-                        out.data(), len, nullptr, nullptr);
-    return out;
-}
-
-std::wstring Utf8ToUtf16(const std::string& s)
-{
-    if (s.empty()) return {};
-    int len = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
-                                  nullptr, 0);
-    std::wstring out(static_cast<size_t>(len), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
-                        out.data(), len);
-    return out;
-}
+// UTF-8 ↔ UTF-16 conversions now live in StringConv.h (host::Utf8ToWide /
+// WideToUtf8), shared with BridgeDispatcher + HostBridgeProxy (DRY audit cpp-host-0).
 
 LRESULT CALLBACK HostMainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -1146,7 +1125,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     }
 
     if (dispatcher)
-        dispatcher->Dispatch(Utf16ToUtf8(json));
+        dispatcher->Dispatch(WideToUtf8(json));
 }
 
 HRESULT HostWindowImpl::InitWebView2()
@@ -3779,7 +3758,7 @@ int HostWindowImpl::Run(int nCmdShow)
     auto emitFn = [this](const std::string& js)
     {
         if (!webView) return;
-        std::wstring w = Utf8ToUtf16(js);
+        std::wstring w = Utf8ToWide(js);
         webView->PostWebMessageAsJson(w.c_str());
     };
     dispatcher = std::make_unique<BridgeDispatcher>(/*engine*/nullptr, layout, accelerator, emitFn,
