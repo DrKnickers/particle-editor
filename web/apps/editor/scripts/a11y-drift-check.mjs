@@ -10,7 +10,7 @@
 // nondeterministic normalizer gap doesn't masquerade as real drift.
 
 import { spawnSync } from "node:child_process";
-import { statSync, readdirSync } from "node:fs";
+import { statSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseChangedGoldens, stableDrift, verdict } from "./lib/drift-report.mjs";
@@ -105,6 +105,62 @@ function ensureDebugHost(msbuild) {
   if (b.code !== 0) die("Debug host build failed.");
 }
 
+// Build the web dist/ bundle (`tsc -b && vite build`), shell-free.
+//
+// The native a11y host serves the React UI from app.local -> web/apps/editor/dist;
+// with no dist/ it loads ERR_NAME_NOT_RESOLVED and the goldens would capture a
+// broken UI. This build used to be owned by run-native-tests' `--rebuild` path,
+// removed alongside the hosting-mode dist gate in d9db84e (legacy hosting mode
+// gone -> one mode -> nothing to gate) — with nothing left to build dist/. The
+// orchestrator now owns it: the weekly drift task runs on a FRESH worktree whose
+// gitignored dist/ is absent, so this build is load-bearing, not optional.
+//
+// Built UNCONDITIONALLY (not staleness-gated on web src) so the drift capture
+// always reflects current source — this also closes trap, where a
+// stale-but-present dist silently served the OLD UI and the run passed green
+// with zero golden diff. `--no-build` (NO_BUILD) skips it for fast local re-runs.
+//
+// pnpm is a Windows .CMD shim that shell:false cannot launch, so spawn the node
+// bins directly (mirroring the node-direct spawn pattern at run-native-tests.mjs
+// :176-178). Paths mirror the deleted rebuildDist — proven under this repo's
+// pnpm symlinked store.
+function buildWebDist() {
+  const tsc = join(editorDir, "node_modules", "typescript", "bin", "tsc");
+  const vite = join(editorDir, "node_modules", "vite", "bin", "vite.js");
+  const indexHtml = join(editorDir, "dist", "index.html");
+
+  // Report a skipped `pnpm install` clearly: run() spawns `node <bin>`, so a
+  // MISSING bin surfaces as node's MODULE_NOT_FOUND (exit 1, no spawn error) —
+  // indistinguishable from a compile failure. Check the bins up front instead.
+  for (const [pkg, bin] of [["typescript", tsc], ["vite", vite]]) {
+    if (!existsSync(bin)) {
+      die(`web dist/ build: ${pkg} bin missing (${bin}) — run \`pnpm install\` in web/.`);
+    }
+  }
+  const step = (label, jsBin, args) => {
+    if (run(process.execPath, [jsBin, ...args], { cwd: editorDir }).code !== 0) {
+      die(`web dist/ build failed (${label}).`);
+    }
+  };
+
+  console.log("[a11y-drift] Building web dist/ (tsc -b && vite build) ...");
+  // Snapshot dist/index.html's mtime before the build so we can prove vite
+  // actually (re)produced it. vite runs with emptyOutDir:true (it WIPES dist/
+  // first), so exit 0 alone doesn't prove output landed — a no-op or partial
+  // build could leave dist/ empty/stale and the goldens would capture the wrong
+  // UI green (the trap this build exists to close). Comparing two file
+  // mtimes (not wall-clock) sidesteps statSync-float vs Date.now-int skew.
+  let beforeMs = -1;
+  try { beforeMs = statSync(indexHtml).mtimeMs; } catch { /* no prior dist */ }
+  step("tsc -b", tsc, ["-b"]);
+  step("vite build", vite, ["build"]);
+  let afterMs = -1;
+  try { afterMs = statSync(indexHtml).mtimeMs; } catch { /* still missing */ }
+  if (afterMs <= beforeMs) {
+    die("vite build exited 0 but dist/index.html was not (re)produced (missing or unchanged).");
+  }
+}
+
 // Run one capture lane, retrying once on failure. The native host's CDP
 // startup occasionally exceeds run-native-tests' 30s window under the load of
 // back-to-back launches (the drift path runs four in a row); a clean-slate
@@ -132,7 +188,11 @@ function runLane(extraArgs, label) {
 // golden tests (titles END in the suffix), excluding
 // a11y-uia-composition-reachable.spec.ts whose describe contains [composition].
 function regenerateGoldens() {
-  runLane(["--update", "--rebuild", "--grep", "\\[composition\\]$"], "composition");
+  // No --rebuild: run-native-tests dropped the dist-mode gate (and that flag)
+  // in d9db84e; the web dist/ build is now owned by buildWebDist() below, run
+  // once up front. Passing --rebuild here would leak to Playwright as an
+  // unknown option and abort the lane.
+  runLane(["--update", "--grep", "\\[composition\\]$"], "composition");
 }
 
 function changedGoldens() {
@@ -156,6 +216,7 @@ function main() {
     const msbuild = findMsbuild();
     if (!msbuild) die("MSBuild not found via vswhere.");
     ensureDebugHost(msbuild);
+    buildWebDist();
   }
   // Preflight git only (a real .exe). `node` is process.execPath (always
   // present). Do NOT probe pnpm: it's a Windows .CMD shim that shell:false
