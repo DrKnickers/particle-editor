@@ -13,7 +13,6 @@
 // ships in this batch with no new bridge surface.
 //
 // Consumers:
-//   - `useOpenToolPanel()`            → current value (subscribes to changes)
 //   - `useSetOpenToolPanel()`         → setter (stable identity, no resubscribe)
 //   - `setOpenToolPanel(id)`          → imperative setter (for handlers
 //                                        outside React render, e.g. tests)
@@ -38,12 +37,6 @@ export const useToolPanelStore = create<ToolPanelStore>((set) => ({
   open: null,
   setOpen: (id) => set({ open: id }),
 }));
-
-/** Read the currently open panel id. Subscribes the calling component
- *  so it re-renders on changes. */
-export function useOpenToolPanel(): ToolPanelId {
-  return useToolPanelStore((s) => s.open);
-}
 
 /** Get the stable setter without subscribing to the current value.
  *  Use in handlers that mutate but don't need to read. */

@@ -74,12 +74,6 @@ export function useFileState(): {
   return { currentFilePath, dirty, recentFiles };
 }
 
-/** Open / close the SaveChangesPrompt. Read by the SaveChangesPrompt
- *  itself + by the destructive-op handlers that gate behind it. */
-export function usePendingAction(): PendingAction {
-  return useFileStateStore((s) => s.pendingAction);
-}
-
 // ─── Event subscription hook ─────────────────────────────────────────
 
 /** Mount once at app root. Wires the atom to the bridge's snapshot +
@@ -168,17 +162,3 @@ export function promptSaveChanges(action: () => void | Promise<void>): void {
   useFileStateStore.getState().setPendingAction(action);
 }
 
-/** Imperative accessor — same as `useFileStateStore.getState()` but
- *  scoped to the small surface destructive-op handlers care about. */
-export function getFileStateSnapshot(): {
-  currentFilePath: string | null;
-  dirty: boolean;
-  recentFiles: string[];
-} {
-  const s = useFileStateStore.getState();
-  return {
-    currentFilePath: s.currentFilePath,
-    dirty: s.dirty,
-    recentFiles: s.recentFiles,
-  };
-}

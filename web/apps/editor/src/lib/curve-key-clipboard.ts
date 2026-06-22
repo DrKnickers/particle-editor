@@ -25,7 +25,9 @@ type CurveKeyClipboardStore = {
   setKeys: (keys: CopiedCurveKey[]) => void;
 };
 
-export const useCurveKeyClipboardStore = create<CurveKeyClipboardStore>((set) => ({
+// Module-local store backing the imperative setter/getter below; not exported
+// (no external subscriber — the dead reactive hook was removed, DRY audit xcut-0).
+const useCurveKeyClipboardStore = create<CurveKeyClipboardStore>((set) => ({
   keys: [],
   setKeys: (keys) => set({ keys }),
 }));
@@ -39,9 +41,4 @@ export function setCurveKeysClipboard(keys: CopiedCurveKey[]): void {
 /** Imperative reader for non-render call sites (keyboard handlers). */
 export function getCurveKeysClipboard(): CopiedCurveKey[] {
   return useCurveKeyClipboardStore.getState().keys;
-}
-
-/** Reactive hook for a future menu/toolbar Paste item's `disabled` state. */
-export function useCurveKeyClipboardHasContent(): boolean {
-  return useCurveKeyClipboardStore((s) => s.keys.length > 0);
 }

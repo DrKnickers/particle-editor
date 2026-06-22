@@ -117,10 +117,6 @@ export function useEmitterSelectionPrimary(): number | null {
   return useEmitterSelectionStore((s) => s.primary);
 }
 
-export function useIsEmitterSelected(id: number): boolean {
-  return useEmitterSelectionStore((s) => s.ids.includes(id));
-}
-
 /** Imperative escape hatch — for handlers outside React render scope
  *  (e.g. tests, context-menu handlers reading current selection at
  *  click time). */

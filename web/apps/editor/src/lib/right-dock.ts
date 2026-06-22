@@ -74,11 +74,6 @@ export function useRightDock(): RightDock {
   return useStore((s) => s.dock);
 }
 
-/** Get the stable toggle function without subscribing to the value. */
-export function useToggleDock(): (t: DockTarget) => void {
-  return useStore((s) => s.toggle);
-}
-
 /** Imperative toggle for handlers outside React render (menu/toolbar). */
 export function toggleDock(target: DockTarget): void {
   useStore.getState().toggle(target);
