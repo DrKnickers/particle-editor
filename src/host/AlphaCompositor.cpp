@@ -1,6 +1,7 @@
 // AlphaCompositor implementation. See AlphaCompositor.h for the design.
 
 #include "AlphaCompositor.h"
+#include "GdiplusEncode.h"   // host::GdiplusEncoderClsid / host::Base64Encode (DRY cpp-host-1)
 
 #include <d3d9.h>
 #include <wrl/client.h>
@@ -173,108 +174,10 @@ void AlphaCompositor::SetSceneRect(int x, int y, int w, int h)
     m_impl->sceneH = h;
 }
 
-namespace {
-
-// B1.3.1.1: find the PNG encoder CLSID via Gdiplus::GetImageEncoders.
-// The encoder list is enumerated once on first use; the CLSID is then
-// cached statically. Returns false (and leaves outClsid untouched) if
-// the PNG encoder isn't available — should never happen on a system
-// with GDI+ initialized, but we fail soft anyway.
-bool GetPngEncoderClsid(CLSID& outClsid)
-{
-    static CLSID cached = {};
-    static bool  found  = false;
-    if (found) { outClsid = cached; return true; }
-
-    UINT numEncoders = 0;
-    UINT bytes       = 0;
-    if (Gdiplus::GetImageEncodersSize(&numEncoders, &bytes) != Gdiplus::Ok || bytes == 0)
-        return false;
-
-    std::vector<uint8_t> buf(bytes);
-    auto* info = reinterpret_cast<Gdiplus::ImageCodecInfo*>(buf.data());
-    if (Gdiplus::GetImageEncoders(numEncoders, bytes, info) != Gdiplus::Ok)
-        return false;
-
-    for (UINT i = 0; i < numEncoders; ++i)
-    {
-        if (wcscmp(info[i].MimeType, L"image/png") == 0)
-        {
-            cached  = info[i].Clsid;
-            outClsid = cached;
-            found   = true;
-            return true;
-        }
-    }
-    return false;
-}
-
-// B1.3.1.1: standard base64 encoder. 30 lines, no dep. Encodes the
-// PNG bytes the GDI+ encoder produced into the ASCII string the
-// React side reads via `data:image/png;base64,<payload>`.
-std::string Base64Encode(const uint8_t* data, size_t len)
-{
-    static const char alphabet[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
-    out.reserve(((len + 2) / 3) * 4);
-    size_t i = 0;
-    for (; i + 2 < len; i += 3)
-    {
-        const uint32_t v = (uint32_t(data[i]) << 16) |
-                           (uint32_t(data[i + 1]) << 8) |
-                           (uint32_t(data[i + 2]));
-        out.push_back(alphabet[(v >> 18) & 0x3F]);
-        out.push_back(alphabet[(v >> 12) & 0x3F]);
-        out.push_back(alphabet[(v >>  6) & 0x3F]);
-        out.push_back(alphabet[ v        & 0x3F]);
-    }
-    if (i < len)
-    {
-        uint32_t v = uint32_t(data[i]) << 16;
-        if (i + 1 < len) v |= uint32_t(data[i + 1]) << 8;
-        out.push_back(alphabet[(v >> 18) & 0x3F]);
-        out.push_back(alphabet[(v >> 12) & 0x3F]);
-        out.push_back((i + 1 < len) ? alphabet[(v >> 6) & 0x3F] : '=');
-        out.push_back('=');
-    }
-    return out;
-}
-
-} // namespace
-
-// Phase 0 spike. JPEG encoder CLSID lookup — same shape as
-// GetPngEncoderClsid above, just walks the encoder list for image/jpeg.
-namespace {
-bool GetJpegEncoderClsid(CLSID& outClsid)
-{
-    static CLSID cached = {};
-    static bool  found  = false;
-    if (found) { outClsid = cached; return true; }
-
-    UINT numEncoders = 0;
-    UINT bytes       = 0;
-    if (Gdiplus::GetImageEncodersSize(&numEncoders, &bytes) != Gdiplus::Ok || bytes == 0)
-        return false;
-
-    std::vector<uint8_t> buf(bytes);
-    auto* info = reinterpret_cast<Gdiplus::ImageCodecInfo*>(buf.data());
-    if (Gdiplus::GetImageEncoders(numEncoders, bytes, info) != Gdiplus::Ok)
-        return false;
-
-    for (UINT i = 0; i < numEncoders; ++i)
-    {
-        if (wcscmp(info[i].MimeType, L"image/jpeg") == 0)
-        {
-            cached  = info[i].Clsid;
-            outClsid = cached;
-            found   = true;
-            return true;
-        }
-    }
-    return false;
-}
-} // namespace
+// The GDI+ encoder-CLSID lookup (PNG + JPEG) and the base64 encoder now live in
+// host/GdiplusEncode.h (DRY audit cpp-host-1): host::GdiplusEncoderClsid(mime, …)
+// + host::Base64Encode(…). Was four copy-pasted CLSID lookups + two identical
+// Base64 copies across AlphaCompositor / WindowCapture / PaletteThumbs.
 
 bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH)
 {
@@ -309,7 +212,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     // the readback. (CaptureSnapshotToFile keeps PNG — the lossless --capture
     // offline-diff path.)
     CLSID jpegClsid = {};
-    if (!GetJpegEncoderClsid(jpegClsid)) return false;
+    if (!host::GdiplusEncoderClsid(L"image/jpeg", jpegClsid)) return false;
     constexpr int kBackdropJpegQuality = 82;  // blurred backdrop — fidelity is moot
 
 #ifndef NDEBUG
@@ -418,7 +321,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
         }
         stream->Release();
 
-        outBase64 = Base64Encode(img.data(), img.size());
+        outBase64 = host::Base64Encode(img.data(), img.size());
         outW = dstW;
         outH = dstH;
 
@@ -631,7 +534,7 @@ bool AlphaCompositor::CaptureSnapshotToFile(const std::wstring& path)
     if (m_impl->width <= 0 || m_impl->height <= 0)       return false;
 
     CLSID pngClsid = {};
-    if (!GetPngEncoderClsid(pngClsid)) return false;
+    if (!host::GdiplusEncoderClsid(L"image/png", pngClsid)) return false;
 
     HRESULT hr = m_impl->device->GetRenderTargetData(
         m_impl->offscreenRT.Get(), m_impl->sysMemSurface.Get());

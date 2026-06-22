@@ -14,29 +14,17 @@
 
 #include <objbase.h>   // IStream / IUnknown for GDI+ (matches HostWindow.cpp)
 #include <gdiplus.h>
+#include "GdiplusEncode.h"   // host::GdiplusEncoderClsid (DRY cpp-host-1)
 #include <cstdio>      // fwprintf / stderr for SnapWindowOneShot diagnostics
-#include <vector>
 
 #ifndef PW_RENDERFULLCONTENT
 #define PW_RENDERFULLCONTENT 0x00000002
 #endif
 
 namespace host {
-namespace {
 
-bool GetPngClsidHW(CLSID& out)
-{
-    UINT num = 0, bytes = 0;
-    if (Gdiplus::GetImageEncodersSize(&num, &bytes) != Gdiplus::Ok || bytes == 0) return false;
-    std::vector<BYTE> buf(bytes);
-    auto* info = reinterpret_cast<Gdiplus::ImageCodecInfo*>(buf.data());
-    if (Gdiplus::GetImageEncoders(num, bytes, info) != Gdiplus::Ok) return false;
-    for (UINT i = 0; i < num; ++i)
-        if (wcscmp(info[i].MimeType, L"image/png") == 0) { out = info[i].Clsid; return true; }
-    return false;
-}
-
-}  // namespace
+// PNG encoder-CLSID lookup now shared via host/GdiplusEncode.h
+// (DRY audit cpp-host-1) — this used to keep its own uncached copy.
 
 bool CaptureWindowToPng(HWND hwnd, const std::wstring& path)
 {
@@ -67,7 +55,7 @@ bool CaptureWindowToPng(HWND hwnd, const std::wstring& path)
     if (pw)
     {
         CLSID clsid = {};
-        if (GetPngClsidHW(clsid))
+        if (host::GdiplusEncoderClsid(L"image/png", clsid))
         {
             Gdiplus::Bitmap gb(bmp, nullptr);
             saved = (gb.Save(path.c_str(), &clsid, nullptr) == Gdiplus::Ok);

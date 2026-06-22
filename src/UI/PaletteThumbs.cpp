@@ -8,9 +8,9 @@
 // with the FileManager + device rather than the popup's file-static services.
 // (The legacy popup TU, TexturePalette.cpp, was removed with arch-A in.)
 //
-// The PNG-encoder-CLSID lookup and base64 encoder are copied verbatim (into a
-// private anonymous namespace) from AlphaCompositor.cpp's proven
-// implementations, so there is no cross-TU linkage coupling.
+// The PNG-encoder-CLSID lookup and base64 encoder are shared via
+// host/GdiplusEncode.h (host::GdiplusEncoderClsid / host::Base64Encode),
+// consolidated from AlphaCompositor's former copies by DRY audit cpp-host-1.
 
 #include "TexturePalette.h"
 #include "../utils.h"     // WideToAnsi
@@ -20,6 +20,7 @@
 #include <d3d9.h>
 #include <d3dx9.h>
 #include <gdiplus.h>
+#include "../host/GdiplusEncode.h"   // host::GdiplusEncoderClsid / host::Base64Encode (DRY cpp-host-1)
 #include <objidl.h>       // IStream / CreateStreamOnHGlobal
 #include <algorithm>
 #include <cassert>
@@ -49,65 +50,10 @@ const int THUMB_PNG_PX = 128;
 // popover open, and the missing/broken verdict is stable per mod.
 std::unordered_map<wstring, TexturePalette::ThumbnailResult> g_bridgeThumbCache;
 
-// --- copied verbatim from AlphaCompositor.cpp (anonymous namespace there) ---
-
-bool GetPngEncoderClsid(CLSID& outClsid)
-{
-    static CLSID cached = {};
-    static bool  found  = false;
-    if (found) { outClsid = cached; return true; }
-
-    UINT numEncoders = 0;
-    UINT bytes       = 0;
-    if (Gdiplus::GetImageEncodersSize(&numEncoders, &bytes) != Gdiplus::Ok || bytes == 0)
-        return false;
-
-    std::vector<uint8_t> buf(bytes);
-    auto* info = reinterpret_cast<Gdiplus::ImageCodecInfo*>(buf.data());
-    if (Gdiplus::GetImageEncoders(numEncoders, bytes, info) != Gdiplus::Ok)
-        return false;
-
-    for (UINT i = 0; i < numEncoders; ++i)
-    {
-        if (wcscmp(info[i].MimeType, L"image/png") == 0)
-        {
-            cached   = info[i].Clsid;
-            outClsid = cached;
-            found    = true;
-            return true;
-        }
-    }
-    return false;
-}
-
-string Base64Encode(const uint8_t* data, size_t len)
-{
-    static const char alphabet[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    string out;
-    out.reserve(((len + 2) / 3) * 4);
-    size_t i = 0;
-    for (; i + 2 < len; i += 3)
-    {
-        const uint32_t v = (uint32_t(data[i]) << 16) |
-                           (uint32_t(data[i + 1]) << 8) |
-                           (uint32_t(data[i + 2]));
-        out.push_back(alphabet[(v >> 18) & 0x3F]);
-        out.push_back(alphabet[(v >> 12) & 0x3F]);
-        out.push_back(alphabet[(v >>  6) & 0x3F]);
-        out.push_back(alphabet[ v        & 0x3F]);
-    }
-    if (i < len)
-    {
-        uint32_t v = uint32_t(data[i]) << 16;
-        if (i + 1 < len) v |= uint32_t(data[i + 1]) << 8;
-        out.push_back(alphabet[(v >> 18) & 0x3F]);
-        out.push_back(alphabet[(v >> 12) & 0x3F]);
-        out.push_back((i + 1 < len) ? alphabet[(v >> 6) & 0x3F] : '=');
-        out.push_back('=');
-    }
-    return out;
-}
+// PNG encoder-CLSID lookup + base64 encoder now shared via host/GdiplusEncode.h
+// (DRY audit cpp-host-1) — these were copied verbatim from AlphaCompositor.cpp.
+// Called qualified as host::GdiplusEncoderClsid / host::Base64Encode below
+// (this TU is in an anonymous namespace, not namespace host).
 
 // --- texture resolution: mirrors the legacy OpenTextureFile (TexturePalette.cpp) ---
 // FileManager::getFile resolves loose files AND .meg-packed entries, so this
@@ -177,7 +123,7 @@ bool EncodeTextureToPngBytes(IDirect3DTexture9* tex, int w, int h, vector<uint8_
     surf->Release();
 
     CLSID pngClsid = {};
-    if (!GetPngEncoderClsid(pngClsid)) return false;
+    if (!host::GdiplusEncoderClsid(L"image/png", pngClsid)) return false;
 
     // D3DFMT_A8R8G8B8 is BGRA in memory, matching GDI+ PixelFormat32bppARGB.
     Gdiplus::Bitmap bmp(w, h, stride, PixelFormat32bppARGB, dib.data());
@@ -252,7 +198,7 @@ ThumbnailResult GetThumbnail(const std::wstring& filename,
     ThumbnailResult result;
     result.status = status;
     if (status == ThumbStatus::Ok && !png.empty())
-        result.dataUri = "data:image/png;base64," + Base64Encode(png.data(), png.size());
+        result.dataUri = "data:image/png;base64," + host::Base64Encode(png.data(), png.size());
     else if (status == ThumbStatus::Ok)
         // Defensive: an "Ok" decode that produced no bytes is, to the user, a
         // broken texture (no image to show).
@@ -343,7 +289,7 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
     if (!ok) { out.status = "broken"; return out; }
 
     out.status  = "ok";
-    out.dataUri = "data:image/png;base64," + Base64Encode(png.data(), png.size());
+    out.dataUri = "data:image/png;base64," + host::Base64Encode(png.data(), png.size());
     return out;
 }
 
