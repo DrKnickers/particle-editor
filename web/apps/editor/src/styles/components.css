@@ -1082,56 +1082,6 @@
   transform-origin: top center;
 }
 
-.explosion {
-  position: absolute;
-  left: 50%; top: 50%;
-  width: 460px; height: 460px;
-  transform: translate(-50%, -55%);
-  pointer-events: none;
-}
-
-.explosion .core {
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(circle at 50% 55%, rgba(255, 255, 220, 0.95) 0%, rgba(255, 200, 90, 0.85) 8%, rgba(255, 130, 30, 0.6) 22%, rgba(220, 60, 10, 0.35) 38%, rgba(80, 20, 0, 0.15) 58%, rgba(0,0,0,0) 75%);
-  filter: blur(2px);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-.explosion .smoke {
-  position: absolute;
-  left: 10%; top: -10%; right: 10%; bottom: 30%;
-  background:
-    radial-gradient(ellipse at 30% 40%, rgba(60, 50, 50, 0.7) 0%, rgba(40, 35, 35, 0.4) 25%, rgba(0,0,0,0) 55%),
-    radial-gradient(ellipse at 70% 35%, rgba(80, 70, 65, 0.6) 0%, rgba(40, 35, 35, 0.3) 30%, rgba(0,0,0,0) 55%),
-    radial-gradient(ellipse at 50% 25%, rgba(70, 60, 55, 0.55) 0%, rgba(0,0,0,0) 55%);
-  filter: blur(8px);
-  animation: drift 6s ease-in-out infinite alternate;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); opacity: 0.96; }
-  50% { transform: scale(1.04); opacity: 1; }
-}
-@keyframes drift {
-  0% { transform: translateY(0) scale(1); }
-  100% { transform: translateY(-10px) scale(1.05); }
-}
-
-.spark {
-  position: absolute;
-  width: 2px; height: 2px;
-  border-radius: 50%;
-  background: #ffcc66;
-  box-shadow: 0 0 6px #ffaa33, 0 0 12px rgba(255, 140, 40, 0.6);
-  animation: spark linear infinite;
-}
-
-@keyframes spark {
-  0% { transform: translate(0,0) scale(1); opacity: 1; }
-  80% { opacity: 0.8; }
-  100% { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; }
-}
-
 .gizmo {
   position: absolute;
   left: 50%; top: 50%;
