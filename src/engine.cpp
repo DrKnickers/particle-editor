@@ -2750,6 +2750,42 @@ static SkydomeBlend SkydomeBlendFor(const std::string& shaderName)
     return SKYBLEND_OPAQUE;
 }
 
+// Apply a sub-mesh's authored material params (index-parallel handles) to the
+// effect: each param -> its sampler/uniform via the .fx Texture=(X) link;
+// params absent from this shader (NULL handle) are skipped. This loop was
+// byte-identical in RenderSkydomeMesh and RenderReferenceObject (DRY audit
+// cpp-engine-0) — extracted so the two stay in lockstep. ONLY the param loop is
+// shared; the surrounding uniform-bind blocks legitimately diverge (the
+// ref-object path binds object-space eye/light + a skinned bone palette) and
+// stay inline at each call site.
+static void ApplyAloMaterialParams(ID3DXEffect* fx,
+                                   const std::vector<AloShaderParam>& params,
+                                   const std::vector<D3DXHANDLE>& matHandles,
+                                   const std::vector<IDirect3DTexture9*>& matTextures)
+{
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+        D3DXHANDLE ph = (i < matHandles.size()) ? matHandles[i] : NULL;
+        if (ph == NULL) continue;
+        const AloShaderParam& p = params[i];
+        switch (p.kind)
+        {
+            case AloShaderParam::INT:    fx->SetInt(ph, p.i); break;
+            case AloShaderParam::FLOAT:  fx->SetFloat(ph, p.f[0]); break;
+            case AloShaderParam::FLOAT3: fx->SetFloatArray(ph, p.f, 3); break;
+            case AloShaderParam::FLOAT4:
+            {
+                D3DXVECTOR4 v(p.f[0], p.f[1], p.f[2], p.f[3]);
+                fx->SetVector(ph, &v);
+                break;
+            }
+            case AloShaderParam::TEXTURE:
+                if (i < matTextures.size()) fx->SetTexture(ph, matTextures[i]);
+                break;
+        }
+    }
+}
+
 // Draw one decoded .alo dome: each sub-mesh runs its OWN named game
 // shader 1:1 (Skydome.fx / MeshGloss.fxo / MeshAdditive.fx). Mirrors the
 // particle per-frame binding template (engine.cpp:746) but binds the REAL world
@@ -2833,27 +2869,7 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
 
         // Authored material params (index-parallel handles) -> samplers via the
         // .fx Texture=(X) link. Skips params absent from this shader (NULL handle).
-        for (size_t i = 0; i < sub.params.size(); ++i)
-        {
-            D3DXHANDLE ph = (i < sub.matHandles.size()) ? sub.matHandles[i] : NULL;
-            if (ph == NULL) continue;
-            const AloShaderParam& p = sub.params[i];
-            switch (p.kind)
-            {
-                case AloShaderParam::INT:    fx->SetInt(ph, p.i); break;
-                case AloShaderParam::FLOAT:  fx->SetFloat(ph, p.f[0]); break;
-                case AloShaderParam::FLOAT3: fx->SetFloatArray(ph, p.f, 3); break;
-                case AloShaderParam::FLOAT4:
-                {
-                    D3DXVECTOR4 v(p.f[0], p.f[1], p.f[2], p.f[3]);
-                    fx->SetVector(ph, &v);
-                    break;
-                }
-                case AloShaderParam::TEXTURE:
-                    if (i < sub.matTextures.size()) fx->SetTexture(ph, sub.matTextures[i]);
-                    break;
-            }
-        }
+        ApplyAloMaterialParams(fx, sub.params, sub.matHandles, sub.matTextures);
 
         m_pDevice->SetVertexDeclaration(sub.decl);
         m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
@@ -3453,27 +3469,7 @@ void Engine::RenderReferenceObject()
             fx->SetMatrixArray(h.hSkinMatrixArray, palette, 24);
         }
 
-        for (size_t i = 0; i < sub.params.size(); ++i)
-        {
-            D3DXHANDLE ph = (i < sub.matHandles.size()) ? sub.matHandles[i] : NULL;
-            if (ph == NULL) continue;
-            const AloShaderParam& p = sub.params[i];
-            switch (p.kind)
-            {
-                case AloShaderParam::INT:    fx->SetInt(ph, p.i); break;
-                case AloShaderParam::FLOAT:  fx->SetFloat(ph, p.f[0]); break;
-                case AloShaderParam::FLOAT3: fx->SetFloatArray(ph, p.f, 3); break;
-                case AloShaderParam::FLOAT4:
-                {
-                    D3DXVECTOR4 v(p.f[0], p.f[1], p.f[2], p.f[3]);
-                    fx->SetVector(ph, &v);
-                    break;
-                }
-                case AloShaderParam::TEXTURE:
-                    if (i < sub.matTextures.size()) fx->SetTexture(ph, sub.matTextures[i]);
-                    break;
-            }
-        }
+        ApplyAloMaterialParams(fx, sub.params, sub.matHandles, sub.matTextures);
 
         m_pDevice->SetVertexDeclaration(sub.decl);
         m_pDevice->SetStreamSource(0, sub.vb, 0, sub.stride);
