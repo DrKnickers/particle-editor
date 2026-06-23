@@ -34,6 +34,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 - Light theme: status messages (error / success / warning) now meet readable contrast, and the UI uses a single consistent accent blue
 - Light theme: menus, dialogs, and popovers cast a soft shadow instead of a hard-edged one, and the atlas selection highlight now matches the theme
 - Light theme: curve-editor key markers and lines no longer disappear
+- Atlas Frame Picker: cell badges and the hover cue now read correctly on the light theme (the previous hover highlight was invisible there), and the picker's styling matches the rest of the editor
 
 ## 2026-06-21
 

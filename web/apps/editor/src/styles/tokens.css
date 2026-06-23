@@ -48,6 +48,15 @@
   --success-fg: #6fbf7a;
   --warning-fg: #e0a14b;
   --atlas-selected: #ffb000;
+  /* Atlas-cell overlays. --overlay-scrim is a FIXED translucent scrim for the
+     index badge — it sits over arbitrary sprite imagery, so it must NOT
+     theme-flip (a dark scrim + light text reads on both themes). --overlay-hover
+     is the cell's quiet hover tint — the image-cell equivalent of --hover (the
+     sprite covers the background, so the tint rides on top): a subtle lift
+     toward the foreground, theme-aware (lightens on dark, darkens on light). */
+  --overlay-scrim: rgba(0, 0, 0, 0.55);
+  --overlay-scrim-fg: #ececec;
+  --overlay-hover: rgba(255, 255, 255, 0.08);
   --x-axis: #ef5350;
   --y-axis: #66bb6a;
   --z-axis: #42a5f5;
@@ -137,6 +146,9 @@
   --success-fg: #2e7d32;
   --warning-fg: #8a5a00;
   --atlas-selected: #c77700;
+  /* Cell hover tint darkens on light (the dark theme lightens). Scrim +
+     scrim-fg stay theme-independent (overlay on imagery). */
+  --overlay-hover: rgba(0, 0, 0, 0.06);
   /* Light-theme grid: ~8% black to match the dark-theme alpha so
      the grid is uniformly subtle across themes. */
   --curve-grid: rgba(0, 0, 0, 0.08);

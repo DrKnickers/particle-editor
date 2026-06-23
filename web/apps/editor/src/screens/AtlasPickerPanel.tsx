@@ -563,7 +563,7 @@ export function AtlasPickerPanel({
         <div
           ref={setScrollEl}
           data-testid="atlas-scroll"
-          className="min-h-0 flex-1 overflow-y-auto p-3"
+          className="atlas-grid-scroll min-h-0 flex-1 overflow-y-auto p-3"
           style={{ scrollbarGutter: "stable both-edges" }}
         >
           <div
@@ -643,10 +643,10 @@ export function AtlasPickerPanel({
               aria-pressed={showAlpha}
               title="Show texture alpha (off shows additive RGB)"
               onClick={() => setShowAlpha((v) => !v)}
-              className={`shrink-0 rounded border px-1 transition-colors hover:brightness-110 focus-ring ${
+              className={`shrink-0 rounded border px-1 transition-colors focus-ring ${
                 showAlpha
-                  ? "border-[var(--accent)] bg-[var(--accent)] text-black"
-                  : "border-border text-text-3"
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-black hover:bg-[var(--accent-2)]"
+                  : "border-border text-text-3 hover:bg-hover hover:text-text"
               }`}
             >
               Alpha
@@ -758,23 +758,32 @@ const Cell = memo(function Cell({
       aria-selected={selected}
       aria-label={`Frame ${k}`}
       tabIndex={focused ? 0 : -1}
-      className={`group relative aspect-square rounded bg-bg-2 transition ${
+      className={`group relative aspect-square rounded-[var(--radius-sm)] bg-bg-2 transition ${
         selected ? "border-2" : "border border-border"
-      } hover:z-10 hover:brightness-110 hover:scale-[1.08] motion-reduce:hover:scale-100 hover:shadow-[inset_0_0_0_2px_rgba(255,255,255,0.7)] focus-ring`}
+      } focus-ring`}
       style={style}
       onMouseEnter={() => onHover(k)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onClick?.(k)}
     >
-      {/* Frame-index badge: ALWAYS visible on every cell so each thumbnail names
-          its atlas index at a glance (not only on hover / in the hero). Amber pill
-          when assigned; a translucent dark pill otherwise, darkening on hover so it
-          stays legible over the cell's brightening sprite. */}
+      {/* Quiet hover tint — the image-cell equivalent of the app's bg→--hover
+          hover (the sprite IS the cell background, so the tint rides on top as an
+          overlay). Behind the badge; no scale / brightness / ring, which would
+          collide with the accent focus ring and the amber selection ring. */}
       <span
-        className={`pointer-events-none absolute bottom-0.5 left-0.5 rounded-sm px-1 text-[9px] leading-tight transition-colors ${
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[var(--overlay-hover)] opacity-0 transition-opacity group-hover:opacity-100 motion-reduce:transition-none"
+      />
+      {/* Frame-index badge: ALWAYS visible so each thumbnail names its atlas index
+          at a glance. Amber pill when assigned (matches the selection ring); a
+          FIXED translucent scrim otherwise — it sits over arbitrary sprite imagery,
+          so it must not theme-flip (dark scrim + light text reads on both themes). */}
+      <span
+        data-testid="atlas-cell-badge"
+        className={`pointer-events-none absolute bottom-0.5 left-0.5 rounded-sm px-1 text-[9px] leading-tight ${
           selected
-            ? "bg-[var(--atlas-selected)] font-bold text-black"
-            : "bg-black/55 text-[#eee] group-hover:bg-black/80"
+            ? "bg-[var(--atlas-selected)] font-semibold text-black"
+            : "bg-[var(--overlay-scrim)] text-[var(--overlay-scrim-fg)]"
         }`}
       >
         {k}
@@ -874,7 +883,7 @@ function PreviewBox({
     <div
       data-testid="atlas-hero"
       className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded border border-border bg-bg-2 text-center text-xs text-text-3"
-      style={{ ...pulseStyle, transition: "box-shadow 250ms ease" }}
+      style={{ ...pulseStyle, transition: "box-shadow var(--motion-slow-in) var(--ease-entrance)" }}
     >
       {showCanvas && (
         <canvas
@@ -885,10 +894,10 @@ function PreviewBox({
       )}
       {frame !== null ? (
         <>
-          <span className="absolute left-1.5 top-1.5 rounded bg-[var(--atlas-selected)] px-1.5 text-[11px] font-bold text-black">
+          <span className="absolute left-1.5 top-1.5 rounded bg-[var(--atlas-selected)] px-1.5 text-[11px] font-semibold text-black">
             {frame}
           </span>
-          <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1 pt-3 text-[13px] font-semibold text-white">
+          <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1 pt-3 text-xs font-semibold text-white">
             Frame {frame} / {total}
           </span>
         </>

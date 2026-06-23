@@ -173,7 +173,7 @@ describe("AtlasPickerPanel", () => {
     await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
     for (const c of screen.getAllByTestId("atlas-cell")) {
       const k = c.getAttribute("data-frame")!;
-      const badge = c.querySelector("span")!;
+      const badge = c.querySelector('[data-testid="atlas-cell-badge"]')!;
       expect(badge.textContent).toBe(k); // labels its atlas index…
       expect(badge.className).not.toContain("opacity-0"); // …and is NOT hover-gated
     }
