@@ -673,6 +673,7 @@ function EmitterRow({
             data-dragging={isDragging ? "true" : "false"}
             className={[
               "grid w-full items-center gap-1.5 py-0.5 pr-2 text-left text-sm transition-colors",
+              "focus-ring-inset",
               "border-l-2",
               borderClass,
               rowBgClass,
@@ -746,7 +747,7 @@ function EmitterRow({
                   }
                 }}
                 aria-label={node.visible ? "Hide emitter" : "Show emitter"}
-                className="grid place-items-center w-4 h-4 shrink-0 rounded text-text-3 hover:bg-panel-2 hover:text-text cursor-pointer"
+                className="grid place-items-center w-4 h-4 shrink-0 rounded text-text-3 hover:bg-panel-2 hover:text-text cursor-pointer focus-ring"
               >
                 {node.visible
                   ? <Eye className="size-3" />
@@ -1051,7 +1052,7 @@ function EmitterRow({
 // pressed state (lighter bg + slight scale) via Tailwind `active:`,
 // suppressed while disabled.
 const TOOLBAR_BTN =
-  "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 outline-none";
+  "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 focus-ring";
 
 const NEW_EMITTER_MENU_ITEM =
   "flex select-none items-center gap-2 rounded px-2 py-1 text-xs text-text hover:bg-panel-2 data-[highlighted]:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent";

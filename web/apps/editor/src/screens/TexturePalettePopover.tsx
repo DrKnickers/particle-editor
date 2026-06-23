@@ -125,7 +125,7 @@ function PaletteBody({
             type="button"
             onClick={() => setFilter(s)}
             aria-pressed={filter === s}
-            className={`rounded px-3 py-1 text-xs transition ${
+            className={`rounded px-3 py-1 text-xs transition focus-ring ${
               filter === s
                 ? "bg-accent text-white"
                 : "bg-bg-2 text-text-2 hover:bg-bg-3"
@@ -258,7 +258,7 @@ function PaletteCell({
             type="button"
             onClick={() => onApply(entry.filename)}
             aria-label={`Apply ${entry.filename}`}
-            className="relative block aspect-square w-full overflow-hidden rounded border border-border-2 transition hover:border-accent"
+            className="relative block aspect-square w-full overflow-hidden rounded border border-border-2 transition hover:border-accent focus-ring-inset"
           >
             {thumb?.dataUri ? (
               <img src={thumb.dataUri} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -296,7 +296,7 @@ function PaletteCell({
         type="button"
         onClick={() => onTogglePin(entry.filename)}
         aria-label={`${entry.pinned ? "Unpin" : "Pin"} ${entry.filename}`}
-        className={`absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded text-sm ${
+        className={`absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded text-sm focus-ring ${
           entry.pinned ? "text-warning-fg" : "text-text-3 hover:text-text"
         }`}
       >

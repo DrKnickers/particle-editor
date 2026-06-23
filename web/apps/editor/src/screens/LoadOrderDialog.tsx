@@ -93,7 +93,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     ? groups.map((g) => ({ ...g, items: g.items.filter((l) => l.label.toLowerCase().includes(q)) })).filter((g) => g.items.length > 0)
     : groups;
 
-  const iconBtn = "flex size-5 shrink-0 items-center justify-center rounded-[4px] text-text-2 hover:bg-hover hover:text-text disabled:pointer-events-none disabled:opacity-30";
+  const iconBtn = "flex size-5 shrink-0 items-center justify-center rounded-[4px] text-text-2 hover:bg-hover hover:text-text disabled:pointer-events-none disabled:opacity-30 focus-ring";
   // Make-room gap spacer (matches EmitterTree): role=presentation so it's never a
   // load-order listitem; bg-accent-soft + inset sky-400 ring previews the landing.
   const gapSpacer = (
@@ -161,7 +161,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                               type="button"
                               aria-label={`Add ${l.label}`}
                               onClick={() => add(l.path)}
-                              className="flex shrink-0 items-center gap-0.5 rounded-[4px] px-1.5 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent-soft"
+                              className="flex shrink-0 items-center gap-0.5 rounded-[4px] px-1.5 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent-soft focus-ring"
                             >
                               <Plus className="size-2.5" strokeWidth={1.8} />
                               add

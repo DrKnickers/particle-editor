@@ -213,7 +213,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
         <button
           type="button"
           onClick={handleSolidColorClick}
-          className={`relative flex h-16 w-full items-center justify-between rounded-md border-2 px-3 transition ${
+          className={`relative flex h-16 w-full items-center justify-between rounded-md border-2 px-3 transition focus-ring-inset ${
             selectedSlot === SOLID_COLOR_SLOT
               ? "border-accent"
               : "border-border hover:border-border-2"
@@ -253,7 +253,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
               key={slot}
               type="button"
               onClick={() => handleSelectSlot(slot)}
-              className={`relative aspect-square overflow-hidden rounded-md border-2 transition ${
+              className={`relative aspect-square overflow-hidden rounded-md border-2 transition focus-ring-inset ${
                 selected ? "border-accent" : "border-border hover:border-border-2"
               }`}
               aria-label={name}
@@ -285,7 +285,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
               key={slot}
               type="button"
               onClick={() => handleCustomClick(slot, isEmpty)}
-              className={`relative aspect-square overflow-hidden rounded-md border-2 transition ${
+              className={`relative aspect-square overflow-hidden rounded-md border-2 transition focus-ring-inset ${
                 selected
                   ? "border-accent"
                   : isEmpty

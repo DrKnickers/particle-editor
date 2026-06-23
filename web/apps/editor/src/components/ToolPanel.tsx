@@ -85,7 +85,7 @@ export function ToolPanel({
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="flex size-6 items-center justify-center rounded text-text-2 outline-none hover:bg-panel-2 hover:text-text"
+          className="flex size-6 items-center justify-center rounded text-text-2 focus-ring hover:bg-panel-2 hover:text-text"
         >
           <X className="size-4" />
         </button>

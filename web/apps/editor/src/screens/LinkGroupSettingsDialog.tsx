@@ -181,7 +181,7 @@ function CategorySection({
           type="button"
           onClick={onToggleCollapse}
           aria-expanded={!collapsed}
-          className="flex flex-1 items-center gap-1 text-left outline-none"
+          className="flex flex-1 items-center gap-1 text-left focus-ring"
         >
           <Chevron className="size-3.5 text-text-3" aria-hidden="true" />
           <span className="text-xs font-medium text-text">{label}</span>

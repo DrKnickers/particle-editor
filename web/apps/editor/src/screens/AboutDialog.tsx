@@ -54,7 +54,7 @@ export function AboutDialog({ open, onOpenChange }: Props) {
             href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-accent underline hover:text-accent"
+            className="text-xs text-accent underline hover:text-accent focus-ring"
           >
             {GITHUB_URL}
           </a>

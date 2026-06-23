@@ -1368,8 +1368,8 @@ export function CurveEditorPanel({ bridge }: Props) {
                 onClick={() => setMode("select")}
                 className={
                   mode === "select"
-                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent disabled:cursor-not-allowed disabled:opacity-40"
-                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40"
+                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
                 }
               >
                 <MousePointer2 className="size-3.5" aria-hidden="true" />
@@ -1390,8 +1390,8 @@ export function CurveEditorPanel({ bridge }: Props) {
                 onClick={() => setMode("insert")}
                 className={
                   mode === "insert"
-                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent disabled:cursor-not-allowed disabled:opacity-40"
-                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40"
+                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
                 }
               >
                 <Plus className="size-3.5" aria-hidden="true" />
@@ -1418,8 +1418,8 @@ export function CurveEditorPanel({ bridge }: Props) {
                   onClick={() => handleInterpolationClick(kind)}
                   className={
                     isActive
-                      ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent"
-                      : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40"
+                      ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent focus-ring"
+                      : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
                   }
                 >
                   {INTERP_ICONS[kind]}
@@ -1516,8 +1516,8 @@ export function CurveEditorPanel({ bridge }: Props) {
                 onClick={handleDelete}
                 className={
                   deleteDisabled
-                    ? "grid h-6 w-6 place-items-center rounded border border-border bg-bg-2/60 text-text-3"
-                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-danger hover:text-danger-fg"
+                    ? "grid h-6 w-6 place-items-center rounded border border-border bg-bg-2/60 text-text-3 focus-ring"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-danger hover:text-danger-fg focus-ring"
                 }
               >
                 <Trash2 className="size-3.5" aria-hidden="true" />
@@ -1802,7 +1802,7 @@ function KeyContextMenu({
             data-testid="ce-key-context-menu-delete"
             onClick={onDelete}
             disabled={isBorder}
-            className="block w-full rounded px-2 py-1 text-left hover:bg-panel-2 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none"
+            className="block w-full rounded px-2 py-1 text-left hover:bg-panel-2 focus-ring disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent"
           >
             Delete
           </button>

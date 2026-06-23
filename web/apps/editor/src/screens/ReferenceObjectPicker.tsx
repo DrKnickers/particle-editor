@@ -591,7 +591,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
             type="button"
             onClick={() => setTransform([0, 0, 0], [0, 0, 0])}
             disabled={name === NONE || locked}
-            className="rounded px-2 py-0.5 text-xs text-text-2 transition hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent outline-none"
+            className="rounded px-2 py-0.5 text-xs text-text-2 transition hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent focus-ring"
             aria-label="Reset transform to origin"
             title="Reset position + rotation to 0"
           >

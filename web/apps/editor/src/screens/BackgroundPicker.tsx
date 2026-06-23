@@ -215,7 +215,7 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
                 type="button"
                 onClick={() => handleContextChange(ctx)}
                 aria-pressed={context === ctx}
-                className={`px-2 py-0.5 text-xs capitalize transition first:rounded-l-md last:rounded-r-md ${
+                className={`px-2 py-0.5 text-xs capitalize transition first:rounded-l-md last:rounded-r-md focus-ring-inset ${
                   context === ctx ? "bg-accent text-white" : "text-text-2 hover:bg-bg-2"
                 }`}
               >
@@ -271,7 +271,7 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
         <button
           type="button"
           onClick={handleSolidColorClick}
-          className={`relative flex h-14 items-center justify-center rounded-md border-2 transition ${
+          className={`relative flex h-14 items-center justify-center rounded-md border-2 transition focus-ring-inset ${
             simpleSolidSelected ? "border-accent" : "border-border hover:border-border-2"
           }`}
           style={{ backgroundColor: backgroundHex }}

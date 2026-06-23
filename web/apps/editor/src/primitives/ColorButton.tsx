@@ -144,7 +144,7 @@ export function ColorButton({
           type="button"
           disabled={disabled}
           aria-label={ariaLabel}
-          className={`flex items-center gap-1.5 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text-2 transition hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 ${HEIGHT_MAP[density]}`}
+          className={`flex items-center gap-1.5 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text-2 transition hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring ${HEIGHT_MAP[density]}`}
         >
           <span
             className="inline-block size-3 rounded-sm border border-border-2"
@@ -278,14 +278,14 @@ export function ColorButton({
               <button
                 type="button"
                 onClick={() => { handleCancel(); setOpen(false); }}
-                className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-[10px] text-text-2 hover:bg-panel-3 hover:text-text"
+                className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-[10px] text-text-2 hover:bg-panel-3 hover:text-text focus-ring"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded border border-accent bg-accent px-3 py-1 text-[10px] font-medium text-white hover:opacity-90"
+                className="rounded border border-accent bg-accent px-3 py-1 text-[10px] font-medium text-white hover:opacity-90 focus-ring"
               >
                 OK
               </button>
@@ -296,7 +296,7 @@ export function ColorButton({
           <button
             type="button"
             onClick={handleAddToCustom}
-            className="w-full rounded border border-border-2 bg-panel-2 px-2 py-1 text-[10px] text-text-2 hover:bg-panel-3 hover:text-text"
+            className="w-full rounded border border-border-2 bg-panel-2 px-2 py-1 text-[10px] text-text-2 hover:bg-panel-3 hover:text-text focus-ring"
           >
             Add to custom colors
           </button>

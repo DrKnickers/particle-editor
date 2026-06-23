@@ -209,7 +209,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                     aria-label={m.label}
                     onClick={() => choose(m.value)}
                     className={cn(
-                      "rounded-[3px] px-[11px] py-[3px] text-[11px] transition-colors",
+                      "rounded-[3px] px-[11px] py-[3px] text-[11px] transition-colors focus-ring-inset",
                       mode === m.value
                         ? "bg-accent-soft font-semibold text-accent"
                         : "text-text-3 hover:text-text-2",
