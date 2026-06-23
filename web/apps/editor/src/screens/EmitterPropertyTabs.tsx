@@ -277,14 +277,14 @@ export function EmitterPropertyTabs({ bridge }: Props) {
           padding to avoid doubling. */}
       <Tabs.Content
         value="basic"
-        className="flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
+        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
         data-testid="tab-basic-content"
       >
         {renderBody((p) => <BasicTab properties={p} onCommit={commit} />)}
       </Tabs.Content>
       <Tabs.Content
         value="appearance"
-        className="flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
+        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
         data-testid="tab-appearance-content"
       >
         {renderBody((p) => (
@@ -298,7 +298,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
       </Tabs.Content>
       <Tabs.Content
         value="physics"
-        className="flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
+        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
         data-testid="tab-physics-content"
       >
         {renderBody((p) => <PhysicsTab properties={p} onCommit={commit} />)}

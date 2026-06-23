@@ -575,6 +575,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
             onChange={(e) => setVisible(e.target.checked)}
             disabled={name === NONE}
             aria-label="Reference object visible"
+            className="disabled:opacity-40 disabled:cursor-not-allowed"
           />
           Visible
         </label>
@@ -608,6 +609,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
             onChange={(e) => setLocked(e.target.checked)}
             disabled={name === NONE}
             aria-label="Lock object"
+            className="disabled:opacity-40 disabled:cursor-not-allowed"
           />
           Lock object
         </label>

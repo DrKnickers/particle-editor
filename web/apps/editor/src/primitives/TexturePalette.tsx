@@ -113,21 +113,21 @@ export function TexturePalette({
                 <ContextMenu.Item
                   disabled={!onBrowse}
                   onSelect={() => onBrowse?.(item.path)}
-                  className="flex cursor-pointer items-center rounded px-2 py-1 text-xs text-text data-[disabled]:cursor-not-allowed data-[disabled]:text-text-3 data-[highlighted]:bg-panel-2"
+                  className="flex cursor-pointer items-center rounded px-2 py-1 text-xs text-text data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[disabled]:text-text-3 data-[highlighted]:bg-panel-2"
                 >
                   Browse for file…
                 </ContextMenu.Item>
                 <ContextMenu.Item
                   disabled={!onClear}
                   onSelect={() => onClear?.(item.path)}
-                  className="flex cursor-pointer items-center rounded px-2 py-1 text-xs text-text data-[disabled]:cursor-not-allowed data-[disabled]:text-text-3 data-[highlighted]:bg-panel-2"
+                  className="flex cursor-pointer items-center rounded px-2 py-1 text-xs text-text data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[disabled]:text-text-3 data-[highlighted]:bg-panel-2"
                 >
                   Clear
                 </ContextMenu.Item>
                 <ContextMenu.Item
                   disabled={!onReveal}
                   onSelect={() => onReveal?.(item.path)}
-                  className="flex cursor-pointer items-center rounded px-2 py-1 text-xs text-text data-[disabled]:cursor-not-allowed data-[disabled]:text-text-3 data-[highlighted]:bg-panel-2"
+                  className="flex cursor-pointer items-center rounded px-2 py-1 text-xs text-text data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 data-[disabled]:text-text-3 data-[highlighted]:bg-panel-2"
                 >
                   Open texture folder
                 </ContextMenu.Item>

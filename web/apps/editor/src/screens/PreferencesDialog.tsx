@@ -80,7 +80,7 @@ function CheckToggle({
       <span
         aria-hidden
         className={cn(
-          "flex size-[14px] items-center justify-center rounded-[var(--radius-xs)] border transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-[var(--accent)]",
+          "flex size-[14px] items-center justify-center rounded-[var(--radius-xs)] border transition-colors peer-disabled:opacity-40 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-[var(--accent)]",
           checked ? "border-accent bg-accent" : "border-border-2 bg-bg-3",
         )}
       >

@@ -35,37 +35,30 @@ input[type="radio"] {
   cursor: pointer;
 }
 
-/* Scrollbar styling — applies to .panel-body and .curve-list scrollable
-   containers (per the design's component class names), plus the
-   inspector Tabs.Content panes (Basic / Appearance / Physics) which
-   scroll independently in the right pane. Without the data-testid
-   selectors the inspector scrollbar fell back to the default white
-   chrome in dark mode. */
+/* Scrollbar styling — applies to the scrollable containers by semantic
+   class: .panel-body, .curve-list, .emitter-tree-scroll, .link-settings-scroll,
+   the inspector Tabs.Content panes (.inspector-tab-scroll — Basic / Appearance /
+   Physics), and the atlas grid (.atlas-grid-scroll). Without these the
+   scrollbars fall back to the default white chrome in dark mode. */
 .panel-body::-webkit-scrollbar,
 .curve-list::-webkit-scrollbar,
 .emitter-tree-scroll::-webkit-scrollbar,
 .link-settings-scroll::-webkit-scrollbar,
-[data-testid="tab-basic-content"]::-webkit-scrollbar,
-[data-testid="tab-appearance-content"]::-webkit-scrollbar,
-[data-testid="tab-physics-content"]::-webkit-scrollbar,
+.inspector-tab-scroll::-webkit-scrollbar,
 .atlas-grid-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 
 .panel-body::-webkit-scrollbar-track,
 .curve-list::-webkit-scrollbar-track,
 .emitter-tree-scroll::-webkit-scrollbar-track,
 .link-settings-scroll::-webkit-scrollbar-track,
-[data-testid="tab-basic-content"]::-webkit-scrollbar-track,
-[data-testid="tab-appearance-content"]::-webkit-scrollbar-track,
-[data-testid="tab-physics-content"]::-webkit-scrollbar-track,
+.inspector-tab-scroll::-webkit-scrollbar-track,
 .atlas-grid-scroll::-webkit-scrollbar-track { background: transparent; }
 
 .panel-body::-webkit-scrollbar-thumb,
 .curve-list::-webkit-scrollbar-thumb,
 .emitter-tree-scroll::-webkit-scrollbar-thumb,
 .link-settings-scroll::-webkit-scrollbar-thumb,
-[data-testid="tab-basic-content"]::-webkit-scrollbar-thumb,
-[data-testid="tab-appearance-content"]::-webkit-scrollbar-thumb,
-[data-testid="tab-physics-content"]::-webkit-scrollbar-thumb,
+.inspector-tab-scroll::-webkit-scrollbar-thumb,
 .atlas-grid-scroll::-webkit-scrollbar-thumb {
   background: var(--border-2);
   border-radius: var(--radius-sm);
@@ -76,9 +69,7 @@ input[type="radio"] {
 .curve-list::-webkit-scrollbar-thumb:hover,
 .emitter-tree-scroll::-webkit-scrollbar-thumb:hover,
 .link-settings-scroll::-webkit-scrollbar-thumb:hover,
-[data-testid="tab-basic-content"]::-webkit-scrollbar-thumb:hover,
-[data-testid="tab-appearance-content"]::-webkit-scrollbar-thumb:hover,
-[data-testid="tab-physics-content"]::-webkit-scrollbar-thumb:hover,
+.inspector-tab-scroll::-webkit-scrollbar-thumb:hover,
 .atlas-grid-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
 /* Reserve the scrollbar gutter so a panel whose collapsible section is

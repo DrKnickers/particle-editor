@@ -166,6 +166,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
               onChange={() => setMode("existing")}
               disabled={!hasExisting}
               data-testid="set-link-group-radio-existing"
+              className="disabled:opacity-40 disabled:cursor-not-allowed"
             />
             <span>Join existing group</span>
           </label>

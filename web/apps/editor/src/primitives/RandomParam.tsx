@@ -98,7 +98,7 @@ export function RandomParam({
                 <Select.Item
                   key={mode}
                   value={mode}
-                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-text outline-none data-[highlighted]:bg-panel-2"
+                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-text outline-none data-[highlighted]:bg-panel-2 data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed"
                 >
                   <Select.ItemIndicator>
                     <Check className="size-3 text-accent" />
