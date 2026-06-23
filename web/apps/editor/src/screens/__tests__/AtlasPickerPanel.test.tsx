@@ -501,8 +501,13 @@ describe("AtlasPickerPanel", () => {
     useMockEmitterProperties.getState().patch(1, { textureSize: 4, colorTexture: "smoke.dds" });
     handlers.forEach((h) => h({ kind: "emitters/tree/changed" }));
     await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(4));
-    // focus did NOT fall to <body> — it was re-homed into the grid
-    expect((document.activeElement as HTMLElement | null)?.getAttribute("data-testid")).toBe("atlas-cell");
+    // focus did NOT fall to <body> — it was re-homed into the grid. The re-home
+    // runs in a post-shrink effect that lands a tick AFTER the 4-cell render, so
+    // poll for it via waitFor rather than sampling activeElement once (CI flake:
+    // null vs 'atlas-cell' when the effect hasn't settled — same class as #292).
+    await waitFor(() =>
+      expect((document.activeElement as HTMLElement | null)?.getAttribute("data-testid")).toBe("atlas-cell"),
+    );
   });
 
   // Reject every request whose kind/params match — delegate the rest to the real
