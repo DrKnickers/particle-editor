@@ -74,6 +74,46 @@ async function browseAndWait(label: string) {
 
 const cb = (name: string) => screen.getByLabelText(`Select ${name}`) as HTMLInputElement;
 
+/** Like makeTreeBridge, but import-from-file *resolves* `{ imported }`
+ *  instead of throwing — exercising the native success path (which the
+ *  mock can't, since it throws "not implemented"). Lets us assert the
+ *  zero / partial / full outcomes. */
+function makeImportBridge(imported: number): Bridge & { request: ReturnType<typeof vi.fn> } {
+  const tree = node(0, "(root)", [node(1, "Alpha"), node(2, "Beta")]);
+  return {
+    request: vi.fn().mockImplementation((req: { kind: string }) => {
+      if (req.kind === "file/open") {
+        return Promise.resolve({ ok: true, path: "C:/x.alo" });
+      }
+      if (req.kind === "emitters/preview-from-file") {
+        return Promise.resolve({ ok: true, tree });
+      }
+      if (req.kind === "emitters/import-from-file") {
+        return Promise.resolve({ imported });
+      }
+      return Promise.resolve({});
+    }),
+    on: vi.fn().mockReturnValue(() => {}),
+  } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+}
+
+/** Render the dialog, load the preview tree, and select both emitters
+ *  (picks.size === 2). Returns the OK button so the caller can click it. */
+async function renderAndSelectAll(
+  bridge: Bridge,
+  onOpenChange: (open: boolean) => void,
+): Promise<HTMLElement> {
+  render(
+    <ImportEmittersDialog bridge={bridge} open onOpenChange={onOpenChange} />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /Browse/ }));
+  await waitFor(() =>
+    expect(screen.getByLabelText("Select Alpha")).toBeInTheDocument(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /Select all emitters/ }));
+  return screen.getByRole("button", { name: /Import 2 selected/ });
+}
+
 describe("ImportEmittersDialog", () => {
   it("Browse… click fires file/open", async () => {
     const bridge = makeStubBridge();
@@ -202,5 +242,128 @@ describe("ImportEmittersDialog", () => {
     await browseAndWait("Parent");
     expect(screen.getByRole("group", { name: "Emitters" })).toBeInTheDocument();
     expect(screen.queryByRole("tree")).not.toBeInTheDocument();
+  });
+
+  it("imported:0 keeps the modal open, shows an error, and keeps the tree", async () => {
+    const bridge = makeImportBridge(0);
+    const onOpenChange = vi.fn();
+    const ok = await renderAndSelectAll(bridge, onOpenChange);
+
+    fireEvent.click(ok);
+
+    await waitFor(() =>
+      expect(screen.getByText(/No emitters were imported/i)).toBeInTheDocument(),
+    );
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    // The tree must remain so the user can re-pick and retry — the
+    // message renders alongside it, not in its place.
+    expect(screen.getByLabelText("Select Alpha")).toBeInTheDocument();
+  });
+
+  it("partial import keeps the modal open, shows a partial message, and keeps the tree", async () => {
+    const bridge = makeImportBridge(1);
+    const onOpenChange = vi.fn();
+    const ok = await renderAndSelectAll(bridge, onOpenChange);
+
+    fireEvent.click(ok);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Imported 1 of 2/i)).toBeInTheDocument(),
+    );
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByLabelText("Select Alpha")).toBeInTheDocument();
+  });
+
+  it("full import closes the modal", async () => {
+    const bridge = makeImportBridge(2);
+    const onOpenChange = vi.fn();
+    const ok = await renderAndSelectAll(bridge, onOpenChange);
+
+    fireEvent.click(ok);
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it("an over-count (imported > requested) is treated as full success", async () => {
+    // The host can never return more than requested, but the `>=` guard
+    // must close rather than mislabel an impossible over-count as partial.
+    const bridge = makeImportBridge(3);
+    const onOpenChange = vi.fn();
+    const ok = await renderAndSelectAll(bridge, onOpenChange);
+
+    fireEvent.click(ok);
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it("a rejected import keeps the modal open and surfaces the error", async () => {
+    // Native rejects on every hard failure (no system, out-of-range
+    // picks, unreadable file); the browser mock throws. Both land here.
+    const tree = node(0, "(root)", [node(1, "Alpha"), node(2, "Beta")]);
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) => {
+        if (req.kind === "file/open") {
+          return Promise.resolve({ ok: true, path: "C:/x.alo" });
+        }
+        if (req.kind === "emitters/preview-from-file") {
+          return Promise.resolve({ ok: true, tree });
+        }
+        if (req.kind === "emitters/import-from-file") {
+          return Promise.reject(new Error("could not load file"));
+        }
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+    const onOpenChange = vi.fn();
+    const ok = await renderAndSelectAll(bridge, onOpenChange);
+
+    fireEvent.click(ok);
+
+    await waitFor(() =>
+      expect(screen.getByText(/could not load file/i)).toBeInTheDocument(),
+    );
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByLabelText("Select Alpha")).toBeInTheDocument();
+  });
+
+  it("ignores a second OK click while an import is in flight", async () => {
+    // The native import has no timeout (slow disk read); a second click
+    // before the first resolves would duplicate-import. Use a deferred
+    // import promise so the request stays in flight across two clicks.
+    const tree = node(0, "(root)", [node(1, "Alpha"), node(2, "Beta")]);
+    let resolveImport: (v: { imported: number }) => void = () => {};
+    const importPromise = new Promise<{ imported: number }>((res) => {
+      resolveImport = res;
+    });
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) => {
+        if (req.kind === "file/open") {
+          return Promise.resolve({ ok: true, path: "C:/x.alo" });
+        }
+        if (req.kind === "emitters/preview-from-file") {
+          return Promise.resolve({ ok: true, tree });
+        }
+        if (req.kind === "emitters/import-from-file") {
+          return importPromise;
+        }
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge & { request: ReturnType<typeof vi.fn> };
+    const onOpenChange = vi.fn();
+    const ok = await renderAndSelectAll(bridge, onOpenChange);
+
+    fireEvent.click(ok); // first click — import now in flight
+    fireEvent.click(ok); // second click — must be ignored
+
+    const importCalls = bridge.request.mock.calls.filter(
+      (c) => (c[0] as { kind: string }).kind === "emitters/import-from-file",
+    );
+    expect(importCalls).toHaveLength(1);
+
+    // Let the in-flight import finish so the pending promise doesn't leak.
+    resolveImport({ imported: 2 });
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 });

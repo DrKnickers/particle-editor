@@ -10,12 +10,19 @@
 //      whole subtree (none / partial / all), so ticking a parent pulls
 //      its descendants in and a manually-unticked child leaves the
 //      parent in the indeterminate ("partial") state.
-//   4. OK ("Import N selected") → emitters/import-from-file → close.
+//   4. OK ("Import N selected") → emitters/import-from-file. Close only
+//      on a full import; a 0 / partial count keeps the modal open with
+//      an inline message (see Errors).
 //   5. Cancel anytime → close, discard state.
 //
 // Errors. file/open ok:false (user cancelled) leaves the modal open
 // with the prompt still empty so the user can retry. preview ok:false
-// surfaces an inline error message inside the body.
+// surfaces an inline error message inside the body (no tree). import
+// resolves `{ imported }` (a count, not an ok-discriminant): imported
+// === 0 or a partial (< requested) result shows an inline message
+// ABOVE the still-loaded tree and stays open so the user can re-pick;
+// a rejected request (native hard failure / mock not-implemented) is
+// caught and shown the same way. Only a full import closes the modal.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -100,6 +107,10 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [picks, setPicks] = useState<Set<number>>(() => new Set());
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
+  // True while an import request is in flight. Blocks a second OK click
+  // (the native import has no timeout and can block on a slow disk read),
+  // which would otherwise duplicate-import and push a second undo entry.
+  const [importing, setImporting] = useState(false);
 
   // Reset state whenever the modal opens fresh so a previous session
   // doesn't bleed in (a closed-then-reopened modal should start empty).
@@ -111,6 +122,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
       setPicks(new Set());
       setCollapsed(new Set());
       setLoading(false);
+      setImporting(false);
     }
   }, [open]);
 
@@ -192,18 +204,53 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
   const handleClear = () => setPicks(new Set());
 
   const handleOk = async () => {
-    if (!sourcePath || picks.size === 0) return;
+    if (!sourcePath || picks.size === 0 || importing) return;
+    const requested = picks.size;
+    setError(null); // clear any prior attempt's message before retrying
+    setImporting(true);
     try {
-      await bridge.request({
+      const { imported } = await bridge.request({
         kind: "emitters/import-from-file",
         params: { path: sourcePath, selected: Array.from(picks) },
       });
-      onOpenChange(false);
+      // A resolved request only means the host didn't throw — the real
+      // outcome is the `imported` count. Closing on resolve alone would
+      // report a fake success when 0 (or only some) actually landed.
+      // `>=` (not `===`) is defensive: the host can never return more than
+      // requested, but treating an impossible over-count as full success
+      // is safer than mislabelling it a partial.
+      if (imported >= requested) {
+        // Full success — every selected emitter was imported.
+        onOpenChange(false);
+      } else if (imported === 0) {
+        // Resolved with 0 imported. The host rejects (→ catch) for every
+        // pre-flight failure — missing/out-of-range picks, unreadable
+        // file — so the only way here is: the source loaded but every
+        // clone threw (corrupt emitter data). Keep the modal open with
+        // the tree intact so the user can pick a different source.
+        console.warn(`[ImportEmitters] imported 0 of ${requested}`);
+        setError(
+          "No emitters were imported. The source file may contain unreadable emitter data.",
+        );
+      } else {
+        // Partial import — some landed, some didn't (out-of-range picks
+        // were dropped, or some clones threw). Report the shortfall and
+        // stay open rather than silently claiming success.
+        console.warn(`[ImportEmitters] imported ${imported} of ${requested}`);
+        setError(`Imported ${imported} of ${requested} selected emitters.`);
+      }
     } catch (err) {
-      // emitters/import-from-file isn't implemented in the mock yet;
-      // surface the error inline and keep the modal open.
+      // The request rejected outright: the native host rejects on any
+      // hard failure (no system bound, missing/out-of-range picks,
+      // unreadable file), and the browser mock throws because import
+      // isn't implemented there. Either way, surface it and stay open.
       console.warn("[ImportEmitters] import failed:", err);
       setError(String(err));
+    } finally {
+      // Re-enable OK whether we imported, errored, or stayed open. (On a
+      // full import the modal is closing, but the open-reset effect also
+      // clears this, so a reopen always starts ready.)
+      setImporting(false);
     }
   };
 
@@ -304,7 +351,11 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               Loading preview…
             </div>
           )}
-          {!loading && error && (
+          {/* A preview failure sets `error` with NO tree → show it alone. An
+              import outcome (0 / partial / reject) sets `error` while the tree
+              is still loaded; that message renders as a banner INSIDE the card
+              below (not here) so the selection stays editable for a retry. */}
+          {!loading && error && !tree && (
             <div className="min-h-[160px] rounded border border-border bg-bg p-3 text-xs text-danger-fg">
               {error}
             </div>
@@ -314,7 +365,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               Click Browse… to select a source .alo file.
             </div>
           )}
-          {!loading && !error && tree && (
+          {!loading && tree && (
             <div className="overflow-hidden rounded border border-border">
               {/* Card header: count + bulk controls */}
               <div className="flex items-center justify-between border-b border-border bg-bg-2 px-3 py-2">
@@ -345,12 +396,20 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
                   </button>
                 </span>
               </div>
+              {/* Import outcome (0 / partial / reject) — a banner above the
+                  tree body so the selection stays visible for a retry. */}
+              {error && (
+                <div className="border-b border-border bg-bg px-3 py-2 text-xs text-warning-fg">
+                  {error}
+                </div>
+              )}
               {/* Tree body */}
               <div
                 role="group"
                 aria-label="Emitters"
                 className="max-h-[260px] overflow-y-auto bg-bg p-1"
               >
+
                 {/* Skip the synthetic root; render its children directly. */}
                 {tree.children.map((c) => renderNode(c, 0))}
               </div>
@@ -362,9 +421,13 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
         <Modal.CancelButton>Cancel</Modal.CancelButton>
         <Modal.OkButton
           onClick={() => void handleOk()}
-          disabled={picks.size === 0}
+          disabled={picks.size === 0 || importing}
         >
-          {picks.size > 0 ? `Import ${picks.size} selected` : "Import"}
+          {importing
+            ? "Importing…"
+            : picks.size > 0
+              ? `Import ${picks.size} selected`
+              : "Import"}
         </Modal.OkButton>
       </Modal.Footer>
     </Modal>
