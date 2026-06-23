@@ -16,6 +16,25 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 > The inline release markers below show where each tagged [SemVer](https://semver.org)
 > release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
 
+## 2026-06-22
+
+### Added
+
+- Every interactive control now shows a keyboard-focus indicator, so the editor is fully keyboard-navigable
+- Animations now respect the operating system's "reduce motion" accessibility setting
+
+### Changed
+
+- The editor now starts with the default emitter selected — the Inspector and curve editor are populated on launch and on New, matching the classic editor
+- Keyboard focus is drawn one consistent way across the editor, and value fields gently highlight when activated
+- Disabled controls now share one consistent dimmed appearance
+
+### Fixed
+
+- Light theme: status messages (error / success / warning) now meet readable contrast, and the UI uses a single consistent accent blue
+- Light theme: menus, dialogs, and popovers cast a soft shadow instead of a hard-edged one, and the atlas selection highlight now matches the theme
+- Light theme: curve-editor key markers and lines no longer disappear
+
 ## 2026-06-21
 
 ### Changed
