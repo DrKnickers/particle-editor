@@ -966,7 +966,7 @@ function FieldSelect({
         <Select.Trigger
           data-testid={testId}
           aria-label={label}
-          className="flex h-[26px] w-full items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text transition hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-[var(--row-h)] w-full items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text transition hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Select.Value>{selected?.label ?? ""}</Select.Value>
           <Select.Icon>

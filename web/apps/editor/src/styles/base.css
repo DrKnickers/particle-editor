@@ -68,7 +68,7 @@ input[type="radio"] {
 [data-testid="tab-physics-content"]::-webkit-scrollbar-thumb,
 [data-testid="atlas-scroll"]::-webkit-scrollbar-thumb {
   background: var(--border-2);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 2px solid var(--panel);
 }
 

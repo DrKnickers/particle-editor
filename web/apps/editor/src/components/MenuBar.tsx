@@ -676,12 +676,12 @@ export function MenuBar({
                 </Menubar.Item>
               </div>
               {stack.length === 0 ? (
-                <div className="flex h-[26px] items-center rounded-[5px] border border-dashed border-border-2 px-2 text-[11px] text-text-3">
+                <div className="flex h-[var(--row-h)] items-center rounded-[var(--radius-sm)] border border-dashed border-border-2 px-2 text-[11px] text-text-3">
                   Unmodded — base game only.
                 </div>
               ) : (
                 <div className="flex gap-1.5">
-                  <div className="my-0.5 w-[3px] shrink-0 rounded-[2px] bg-gradient-to-b from-accent via-accent-2 to-border-2" />
+                  <div className="my-0.5 w-[3px] shrink-0 rounded-[var(--radius-2xs)] bg-gradient-to-b from-accent via-accent-2 to-border-2" />
                   <ul ref={menuDrag.listRef} className="flex min-w-0 flex-1 flex-col gap-[3px]" aria-label="Active load order">
                     {stack.map((p, i) => (
                       <Fragment key={p}>
@@ -690,7 +690,7 @@ export function MenuBar({
                           data-flip-key={p}
                           onPointerDown={menuDrag.startDrag(i)}
                           className={cn(
-                            "relative flex h-[26px] touch-none select-none items-center gap-1.5 rounded-[5px] border border-border-2 bg-bg-3 pl-1 pr-1 text-xs",
+                            "relative flex h-[var(--row-h)] touch-none select-none items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 pl-1 pr-1 text-xs",
                             menuDrag.dragIndex === i ? "cursor-grabbing opacity-40 saturate-50" : "cursor-grab",
                           )}
                         >
@@ -735,7 +735,7 @@ export function MenuBar({
                   sideOffset={2}
                   alignOffset={-4}
                 >
-                  <div className="mb-1 flex h-[26px] items-center gap-1.5 rounded-[5px] border border-border-2 bg-bg-3 px-2">
+                  <div className="mb-1 flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 px-2">
                     <Search className="size-3 shrink-0 text-text-3" strokeWidth={1.5} />
                     <input
                       value={addQuery}
@@ -754,7 +754,7 @@ export function MenuBar({
                         const added = inStack(l.path);
                         const nested = l.kind === "nested";
                         return added ? (
-                          <div key={l.path} className={cn("flex h-[26px] items-center gap-1.5 px-2 text-xs text-text-3", nested && "pl-5")}>
+                          <div key={l.path} className={cn("flex h-[var(--row-h)] items-center gap-1.5 px-2 text-xs text-text-3", nested && "pl-5")}>
                             <Layers className="size-3 shrink-0 text-text-3" strokeWidth={1.3} />
                             <span className="min-w-0 flex-1 truncate">{l.label}</span>
                             <span className="flex shrink-0 items-center gap-1 text-[10px]"><Check className="size-2.5 text-success-fg" strokeWidth={1.8} />in stack</span>

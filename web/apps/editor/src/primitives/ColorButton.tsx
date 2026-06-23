@@ -135,7 +135,7 @@ export function ColorButton({
     addColor(pickerColor);
   };
 
-  const HEIGHT_MAP = { tight: "h-[22px]", default: "h-[26px]", loose: "h-[32px]" };
+  const HEIGHT_MAP = { tight: "h-[var(--row-h-sm)]", default: "h-[var(--row-h)]", loose: "h-[32px]" };
 
   return (
     <Popover.Root open={open} onOpenChange={handleOpenChange}>

@@ -93,7 +93,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     ? groups.map((g) => ({ ...g, items: g.items.filter((l) => l.label.toLowerCase().includes(q)) })).filter((g) => g.items.length > 0)
     : groups;
 
-  const iconBtn = "flex size-5 shrink-0 items-center justify-center rounded-[4px] text-text-2 hover:bg-hover hover:text-text disabled:pointer-events-none disabled:opacity-40 focus-ring";
+  const iconBtn = "flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-xs)] text-text-2 hover:bg-hover hover:text-text disabled:pointer-events-none disabled:opacity-40 focus-ring";
   // Make-room gap spacer (matches EmitterTree): role=presentation so it's never a
   // load-order listitem; bg-accent-soft + inset sky-400 ring previews the landing.
   const gapSpacer = (
@@ -119,7 +119,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
             <div className="mb-[7px] text-[10px] font-semibold uppercase tracking-[0.06em] text-text-3">
               Available mods
             </div>
-            <div className="mb-2 flex h-[26px] items-center gap-1.5 rounded-[5px] border border-border-2 bg-bg-3 px-2">
+            <div className="mb-2 flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 px-2">
               <Search className="size-3 shrink-0 text-text-3" strokeWidth={1.5} />
               <input
                 value={query}
@@ -141,7 +141,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                         <div
                           key={l.path}
                           className={cn(
-                            "flex h-[26px] items-center gap-1.5 rounded-[4px] pl-1.5 pr-1 text-xs hover:bg-hover",
+                            "flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-xs)] pl-1.5 pr-1 text-xs hover:bg-hover",
                             nested && "ml-3",
                             added ? "text-text-3" : "text-text",
                           )}
@@ -161,7 +161,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                               type="button"
                               aria-label={`Add ${l.label}`}
                               onClick={() => add(l.path)}
-                              className="flex shrink-0 items-center gap-0.5 rounded-[4px] px-1.5 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent-soft focus-ring"
+                              className="flex shrink-0 items-center gap-0.5 rounded-[var(--radius-xs)] px-1.5 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent-soft focus-ring"
                             >
                               <Plus className="size-2.5" strokeWidth={1.8} />
                               add
@@ -194,7 +194,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
 
             <div className="flex gap-2">
               {/* precedence rail */}
-              <div className="my-0.5 w-[3px] shrink-0 rounded-[2px] bg-gradient-to-b from-accent via-accent-2 to-border-2" />
+              <div className="my-0.5 w-[3px] shrink-0 rounded-[var(--radius-2xs)] bg-gradient-to-b from-accent via-accent-2 to-border-2" />
 
               <div className="flex min-w-0 flex-1 flex-col">
                 {order.length === 0 ? (
@@ -212,7 +212,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                           data-flip-key={p}
                           onPointerDown={drag.startDrag(i)}
                           className={cn(
-                            "relative flex h-[26px] touch-none select-none items-center gap-[7px] rounded-[5px] border border-border-2 bg-bg-3 pl-[5px] pr-1 text-xs",
+                            "relative flex h-[var(--row-h)] touch-none select-none items-center gap-[7px] rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 pl-[5px] pr-1 text-xs",
                             drag.dragIndex === i ? "cursor-grabbing opacity-40 saturate-50" : "cursor-grab",
                           )}
                         >
@@ -244,7 +244,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
                 )}
 
                 {/* base game floor — pinned, non-removable */}
-                <div className="mt-[5px] flex h-[26px] items-center gap-2 rounded-[5px] border border-dashed border-border-2 pl-1.5 pr-2 text-text-3">
+                <div className="mt-[5px] flex h-[var(--row-h)] items-center gap-2 rounded-[var(--radius-sm)] border border-dashed border-border-2 pl-1.5 pr-2 text-text-3">
                   <span className="flex w-[14px] shrink-0 items-center justify-center" aria-hidden>
                     <Lock className="size-[11px]" strokeWidth={1.4} />
                   </span>

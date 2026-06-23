@@ -71,7 +71,7 @@
   padding: 4px 10px;
   font-size: 12px;
   color: var(--text-2);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   position: relative;
 }
@@ -85,14 +85,14 @@
   min-width: 180px;
   background: var(--panel-2);
   border: 1px solid var(--border-2);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-soft);
   padding: 4px;
   z-index: 1000;
 }
 .menu-dropdown-item {
   padding: 5px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   display: flex;
   justify-content: space-between;
@@ -260,7 +260,7 @@
   display: grid; place-items: center;
   color: var(--text-2);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .window-btn:hover { background: var(--hover); }
 .window-btn.close:hover { background: #d24a4a; color: white; }
@@ -289,7 +289,7 @@
   gap: 5px;
   padding: 5px 9px;
   height: 28px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-2);
@@ -336,7 +336,7 @@
   display: inline-flex;
   align-items: center;
   height: 28px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .tb-split .tb-btn { padding-right: 4px; }
 .tb-split .tb-split-chev {
@@ -346,7 +346,7 @@
   place-items: center;
   cursor: pointer;
   color: var(--text-2);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .tb-split .tb-split-chev:hover { background: var(--hover); }
 
@@ -372,7 +372,7 @@
   border: 1px solid var(--border-2);
   color: var(--text);
   padding: 4px 22px 4px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   cursor: pointer;
   appearance: none;
@@ -388,7 +388,7 @@
   align-items: center;
   background: var(--panel-2);
   border: 1px solid var(--border-2);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   padding: 1px;
   margin-left: 4px;
 }
@@ -399,7 +399,7 @@
   border: none;
   color: var(--text-3);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .theme-toggle button.active {
   background: var(--accent-soft);
@@ -411,8 +411,8 @@
   align-items: center;
   background: var(--panel-2);
   border: 1px solid var(--border-2);
-  border-radius: 5px;
-  height: 26px;
+  border-radius: var(--radius-sm);
+  height: var(--row-h);
   overflow: hidden;
 }
 .sim-speed-stepper input {
@@ -488,7 +488,7 @@
 .panel-header .icon-btn {
   width: 20px; height: 20px;
   display: grid; place-items: center;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--text-2);
   cursor: pointer;
 }
@@ -511,9 +511,9 @@
   gap: 6px;
   background: var(--bg-3);
   border: 1px solid var(--border-2);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   padding: 0 8px;
-  height: 26px;
+  height: var(--row-h);
 }
 .search input {
   flex: 1;
@@ -537,17 +537,12 @@
   gap: 6px;
   padding: 0 6px;
   height: var(--row-h);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   color: var(--text);
   font-size: 12px;
 }
 .tree-row:hover { background: var(--hover); }
-.tree-row.selected {
-  background: var(--selected);
-  border: 1px solid var(--selected-border);
-  height: calc(var(--row-h) - 2px);
-}
 .tree-row .chev {
   width: 12px; height: 12px;
   display: grid; place-items: center;
@@ -560,14 +555,14 @@
   display: grid; place-items: center;
   color: var(--text-3);
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 .tree-row .vis:hover, .tree-row .lock:hover { background: var(--hover); color: var(--text); }
 .tree-row .vis.on { color: var(--text); }
 .tree-row .lock.on { color: var(--warning-fg); }
 .tree-row .swatch {
   width: 12px; height: 12px;
-  border-radius: 2px;
+  border-radius: var(--radius-2xs);
   border: 1px solid rgba(255,255,255,0.15);
   cursor: pointer;
   flex-shrink: 0;
@@ -594,7 +589,7 @@
 .tree-actions .icon-btn {
   width: 24px; height: 22px;
   display: grid; place-items: center;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--text-2);
   cursor: pointer;
 }
@@ -650,7 +645,7 @@
   justify-content: space-between;
   padding: 5px 8px;
   background: var(--bg-2);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -850,7 +845,7 @@
   color: var(--text-2);
   background: var(--bg-2);
   border: 1px solid var(--border-2);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 .btn-texture-browse:hover:not(:disabled) {
@@ -977,8 +972,8 @@
   align-items: center;
   background: var(--bg-3);
   border: 1px solid var(--border-2);
-  border-radius: 4px;
-  height: 22px;
+  border-radius: var(--radius-xs);
+  height: var(--row-h-sm);
   overflow: hidden;
 }
 .num-input:focus-within { border-color: var(--accent); }
@@ -1016,8 +1011,8 @@
 .text-input {
   background: var(--bg-3);
   border: 1px solid var(--border-2);
-  border-radius: 4px;
-  height: 22px;
+  border-radius: var(--radius-xs);
+  height: var(--row-h-sm);
   padding: 0 8px;
   color: var(--text);
   font-size: 12px;
@@ -1033,8 +1028,8 @@
   appearance: none;
   background-color: var(--bg-3);
   border: 1px solid var(--border-2);
-  border-radius: 4px;
-  height: 22px;
+  border-radius: var(--radius-xs);
+  height: var(--row-h-sm);
   padding: 0 22px 0 8px;
   color: var(--text);
   font-size: 12px;
@@ -1050,7 +1045,7 @@
 .checkbox {
   width: 14px;
   height: 14px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--border-2);
   background: var(--bg-3);
   display: grid;
@@ -1166,7 +1161,7 @@
   backdrop-filter: blur(8px);
   border-color: rgba(255,255,255,0.08);
   width: 140px;
-  height: 26px;
+  height: var(--row-h);
 }
 
 .vp-stats {
@@ -1189,13 +1184,13 @@
   background: rgba(20, 24, 33, 0.85);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   padding: 3px;
 }
 .vp-bottom-right .tool {
   width: 26px; height: 26px;
   display: grid; place-items: center;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--text-2);
   cursor: pointer;
 }
@@ -1291,7 +1286,7 @@
   align-items: center;
   gap: 8px;
   padding: 4px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   font-size: 12px;
 }
@@ -1300,7 +1295,7 @@
 .curve-list .curve-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .curve-list .swatch {
   width: 10px; height: 10px;
-  border-radius: 2px;
+  border-radius: var(--radius-2xs);
 }
 
 .curve-canvas-wrap {

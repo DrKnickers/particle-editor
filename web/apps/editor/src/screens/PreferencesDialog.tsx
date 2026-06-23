@@ -80,7 +80,7 @@ function CheckToggle({
       <span
         aria-hidden
         className={cn(
-          "flex size-[14px] items-center justify-center rounded-[3px] border transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-[var(--accent)]",
+          "flex size-[14px] items-center justify-center rounded-[var(--radius-xs)] border transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-[var(--accent)]",
           checked ? "border-accent bg-accent" : "border-border-2 bg-bg-3",
         )}
       >
@@ -199,7 +199,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
               <div
                 role="radiogroup"
                 aria-label="Theme"
-                className="inline-flex gap-0.5 rounded-[5px] border border-border-2 bg-bg-2 p-0.5"
+                className="inline-flex gap-0.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-2 p-0.5"
               >
                 {MODES.map((m) => (
                   <button
@@ -209,7 +209,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                     aria-label={m.label}
                     onClick={() => choose(m.value)}
                     className={cn(
-                      "rounded-[3px] px-[11px] py-[3px] text-[11px] transition-colors focus-ring-inset",
+                      "rounded-[var(--radius-xs)] px-[11px] py-[3px] text-[11px] transition-colors focus-ring-inset",
                       mode === m.value
                         ? "bg-accent-soft font-semibold text-accent"
                         : "text-text-3 hover:text-text-2",
@@ -267,7 +267,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
               >
                 Max preview particles
               </label>
-              <div className="flex h-[22px] w-28 items-center overflow-hidden rounded-[5px] border border-border-2 bg-bg-3">
+              <div className="flex h-[var(--row-h-sm)] w-28 items-center overflow-hidden rounded-[var(--radius-sm)] border border-border-2 bg-bg-3">
                 <input
                   id="pref-overload-max"
                   type="number"
@@ -324,14 +324,14 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
           <SectionCard title="Rendering">
             <div className="flex items-center justify-between gap-3 px-3 py-[9px]">
               <label htmlFor="pref-msaa-level" className="text-xs text-text">Antialiasing</label>
-              <div className="relative h-[22px]">
+              <div className="relative h-[var(--row-h-sm)]">
                 <select
                   id="pref-msaa-level"
                   aria-label="Antialiasing"
                   value={msaaLevel}
                   disabled={msaaLevels === null}
                   onChange={(e) => commitMsaaLevel(Number(e.target.value) as MsaaLevel)}
-                  className="h-[22px] min-w-[104px] cursor-pointer appearance-none rounded-[5px] border border-border-2 bg-bg-3 pl-2 pr-6 text-xs text-text focus-ring disabled:cursor-not-allowed disabled:opacity-40"
+                  className="h-[var(--row-h-sm)] min-w-[104px] cursor-pointer appearance-none rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 pl-2 pr-6 text-xs text-text focus-ring disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {(msaaLevels ?? [msaaLevel]).map((lvl) => (
                     <option key={lvl} value={lvl}>
