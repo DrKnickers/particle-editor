@@ -93,7 +93,7 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     ? groups.map((g) => ({ ...g, items: g.items.filter((l) => l.label.toLowerCase().includes(q)) })).filter((g) => g.items.length > 0)
     : groups;
 
-  const iconBtn = "flex size-5 shrink-0 items-center justify-center rounded-[4px] text-text-2 hover:bg-hover hover:text-text disabled:pointer-events-none disabled:opacity-30 focus-ring";
+  const iconBtn = "flex size-5 shrink-0 items-center justify-center rounded-[4px] text-text-2 hover:bg-hover hover:text-text disabled:pointer-events-none disabled:opacity-40 focus-ring";
   // Make-room gap spacer (matches EmitterTree): role=presentation so it's never a
   // load-order listitem; bg-accent-soft + inset sky-400 ring previews the landing.
   const gapSpacer = (

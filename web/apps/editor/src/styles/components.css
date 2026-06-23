@@ -301,7 +301,7 @@
 /* Disabled toolbar buttons (e.g. Undo/Redo with nothing to undo/redo): dim
    and inert, no hover affordance. The toolbar's other buttons are always
    enabled, so this rule is new with the undo/redo group. */
-.tb-btn:disabled { opacity: 0.4; cursor: default; }
+.tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .tb-btn:disabled:hover { background: transparent; color: var(--text-2); }
 /* Pressed/active toggle state. Driven by `aria-pressed="true"` (the
    single source of truth the toolbar toggles set) as well as the legacy
@@ -601,7 +601,7 @@
 .tree-actions .icon-btn:hover { background: var(--hover); color: var(--text); }
 .tree-actions .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .tree-actions .icon-btn:disabled,
-.tree-actions .icon-btn.disabled { color: var(--text-3); opacity: 0.5; cursor: not-allowed; }
+.tree-actions .icon-btn.disabled { color: var(--text-3); opacity: 0.4; cursor: not-allowed; }
 
 /* ========== Inspector tabs ========== */
 .tabs {
@@ -858,8 +858,8 @@
   border-color: var(--accent);
 }
 .btn-texture-browse:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .btn-texture-browse:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Browse + palette buttons share the single trailing grid column so they
@@ -1390,4 +1390,15 @@
 [data-separator].ce-splitter:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+/* Reduced-motion: silence remaining chevron rotates, active-press scales,
+   the splitter background fade, and the text-input focus border fade. */
+@media (prefers-reduced-motion: reduce) {
+  .tree-row .chev { transition: none; }
+  .panel-section-header .chev { transition: none; }
+  .tb-btn:active:not(:disabled) { transform: none; }
+  .panel-header .icon-btn:active { transform: none; }
+  [data-separator].ce-splitter { transition: none; }
+  .text-input { transition: none; }
 }

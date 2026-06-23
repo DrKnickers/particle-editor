@@ -617,7 +617,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
               type="button"
               onClick={handleMirrorSun}
               disabled={forceAlign}
-              className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-panel-2 focus-ring"
+              className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-panel-2 focus-ring"
             >
               Mirror Sun
             </button>
