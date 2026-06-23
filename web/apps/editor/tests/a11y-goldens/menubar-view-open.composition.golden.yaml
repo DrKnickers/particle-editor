@@ -21,6 +21,7 @@
 - button "Leave particles after instance death" [pressed]
 - button "Toggle Spawner panel" [pressed]
 - button "Toggle Lighting panel"
+- button "Toggle Atlas frame picker" [disabled]
 - button "Ground": "Ground:"
 - button "Background": "Background:"
 - button "Reference object picker": "Object: None"
@@ -156,6 +157,7 @@
   - menuitem "Ground"
   - menuitem "Grid"
   - menuitem "Lighting…"
+  - menuitem "Atlas Frame Picker…"
   - separator
   - menuitem "Pause F8"
   - menuitem "Step Forward"
