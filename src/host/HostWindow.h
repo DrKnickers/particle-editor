@@ -1,5 +1,5 @@
 // HostWindow — the top-level Win32 window for the new UI. Owns:
-//   - the parent HWND (the editor's main window when --new-ui is active)
+//   - the parent HWND (the editor's main window)
 //   - the D3D9 viewport child HWND (sibling-of-WebView2 composition)
 //   - the WebView2 controller + view, navigating to the bundled React app
 //   - the live Engine instance (constructed with parent as hFocus and

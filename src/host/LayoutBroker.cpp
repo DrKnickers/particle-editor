@@ -97,9 +97,8 @@ void LayoutBroker::SetCompositor(Compositor* compositor)
 
 void LayoutBroker::SetBackingColor(COLORREF color)
 {
-    // Composition mode only — the DComp compositor owns the backing
-    // visual. Legacy arch-A has no equivalent (the layered popup's DIB
-    // is the surface), so this is a no-op there.
+    // The DComp compositor owns the backing visual; this is a no-op
+    // when no compositor is attached.
     if (m_dcompCompositor) m_dcompCompositor->SetBackingColor(color);
 }
 
@@ -428,10 +427,9 @@ void LayoutBroker::StartSceneAnim(int fromX, int fromY, int fromW, int fromH,
                                   int toX, int toY, int toW, int toH,
                                   double durationMs, double msElapsedAtSend)
 {
-    // Composition-mode () only: the interpolation drives the DComp engine
-    // visual + the per-frame engine viewport. With no DComp compositor there is
-    // no such path (legacy arch-A keeps its per-frame scene-rect stream), so this
-    // is a clean no-op under --legacy.
+    // The interpolation drives the DComp engine visual + the per-frame engine
+    // viewport. With no DComp compositor attached (e.g. headless --capture)
+    // there is no such path, so this is a clean no-op.
     if (!m_dcompCompositor) return;
 
     const double qpcPerMs = QpcPerMs();

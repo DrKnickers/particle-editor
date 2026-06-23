@@ -1,9 +1,8 @@
 // scene-rect.ts — the centre-quadrant viewport rect in the host's
 // device-pixel "scene rect" space.
 //
-// The host crops the D3D9 engine visual to this rect (AlphaCompositor stamps
-// alpha=0 outside it under arch-A; the DComp engine-visual transform clips to
-// it under). ViewportSlot dispatches it on every layout change via
+// The host crops the D3D9 engine visual to this rect (the DComp engine-visual
+// transform clips to it). ViewportSlot dispatches it on every layout change via
 // `layout/scene-rect`; PanelLayout reads it to seed the dock-slide animation's
 // `from`/`to` (Item 3). Both callers MUST agree to the pixel — otherwise the
 // host's interpolation target would drift from what ViewportSlot reports at

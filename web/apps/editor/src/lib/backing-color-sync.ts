@@ -12,8 +12,8 @@
 //   - once on mount (first paint), and
 //   - whenever `data-theme` on <html> changes (ThemeToggle sets it).
 //
-// In legacy (arch-A) and browser (MockBridge) modes the host ignores /
-// no-ops the request, so this is harmless there. The request is
+// In browser (MockBridge) mode the host ignores / no-ops the request,
+// so this is harmless there. The request is
 // fire-and-forget; a rejection (unknown kind under MockBridge) is
 // swallowed.
 
@@ -39,7 +39,7 @@ export function useBackingColorSync(bridge: Bridge): void {
       void bridge
         .request({ kind: "host/backing-color", params: { color } })
         .catch(() => {
-          /* MockBridge / legacy host ignores the kind — fire-and-forget */
+          /* MockBridge ignores the kind — fire-and-forget */
         });
     };
 

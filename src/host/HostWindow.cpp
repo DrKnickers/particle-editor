@@ -893,7 +893,7 @@ void HostWindowImpl::RenderD3D9()
     // [Item 3] Advance the dock-slide viewport interpolation to THIS frame's
     // wall-clock, so the engine below paints the time-lerped scene rect. Placed
     // before perfT1 so the (cheap, no-op-when-idle) advance stays OUTSIDE the
-    // [PERF] render-timed region. Composition-mode only — a no-op under --legacy.
+    // [PERF] render-timed region.
     layout.AdvanceSceneAnim(PerfQpcNow());
 
     const LONGLONG perfT1 = PerfQpcNow();
@@ -3808,8 +3808,8 @@ int HostWindowImpl::Run(int nCmdShow)
     // before swapping the ParticleSystem under it.
     dispatcher->BindAttachedSystem(&m_attachedParticleSystem);
     // Phase 2: hand the InputDispatcher to the bridge so
-    // `viewport/input` requests route into it. Nullable — in legacy-
-    // popup mode this stays null and the handler is a no-op ack.
+    // `viewport/input` requests route into it. Nullable — the handler
+    // is a no-op ack when no InputDispatcher is bound.
     dispatcher->SetInputDispatcher(m_inputDispatcher.get());
     Log("[host] host state bound (particleSystem + spawnerDriver)\n");
 

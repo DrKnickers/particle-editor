@@ -1,6 +1,6 @@
 // dock-anim.ts — a tiny zustand signal channel for the right-dock slide.
 //
-// Item 3 (dock-slide viewport stutter). Under, PanelLayout drives a
+// Item 3 (dock-slide viewport stutter). PanelLayout drives a
 // host-side time-interpolated viewport rect during the open/close slide (the
 // host re-renders at a wall-clock-lerped rect each frame, synced to the CSS
 // flex-grow tween). While that interpolation is in flight, ViewportSlot's
@@ -14,12 +14,15 @@
 // for the slide, ViewportSlot reads it (via a ref synced through subscribe) to
 // gate ONLY its ResizeObserver callback. Suppression is RO-ONLY — scroll /
 // window-resize / DPR-change sends stay live so a concurrent real resize or
-// monitor swap mid-slide is not dropped. The signal is set ONLY under;
-// under --legacy it stays false and ViewportSlot keeps its per-frame sends.
+// monitor swap mid-slide is not dropped. The signal is set whenever a dock
+// slide animates (any bridge — it's a pure CSS/React tween); when no slide is
+// animating ViewportSlot keeps its per-frame sends. The host-side rect
+// interpolation the signal coordinates is itself a no-op when no DComp
+// compositor is attached.
 import { create } from "zustand";
 
 type DockAnimStore = {
-  /** True while a host-interpolated dock slide is in flight (only). */
+  /** True while a host-interpolated dock slide is in flight. */
   animating: boolean;
   setAnimating: (v: boolean) => void;
   /** True exactly while the Atlas picker's cell grid is mounted in the DOM.

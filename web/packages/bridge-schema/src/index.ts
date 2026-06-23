@@ -981,8 +981,8 @@ export type Request =
   // `from`/`to` are scene rects in device px (same space as layout/scene-rect);
   // `msElapsedAtSend` = ms since the rAF commit where the panel flex actually
   // changed, so the host can pin its curve to the CSS origin across the IPC
-  // hop. only — no-op under --legacy (the host anim path is the DComp
-  // path; the web side is gated on the same hosting-mode check).
+  // hop. No-op when the host has no DComp compositor attached (the
+  // scene-rect animation runs on the DComp path).
   | {
       kind: "animate-scene-rect";
       params: {
@@ -1002,8 +1002,8 @@ export type Request =
   // instead of showing the black host backing. `color` is a CSS colour
   // string as resolved by getComputedStyle — `#rrggbb` or `rgb(r,g,b)`;
   // the host parses both and ignores anything it can't parse. Sent on
-  // first paint and on every theme change. No-op in legacy (arch-A) and
-  // browser (MockBridge) modes.
+  // first paint and on every theme change. No-op in browser (MockBridge)
+  // mode.
   | { kind: "host/backing-color";         params: { color: string } }
   // B1.3.1.1: capture the current engine viewport as a base64-encoded
   // PNG. React's Modal calls this on open to grab a frozen snapshot

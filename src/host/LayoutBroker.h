@@ -126,7 +126,7 @@ public:
 
     // (session 3): forward the theme background colour to the DComp
     // compositor's rearmost backing visual (composition mode only).
-    // No-op when no Compositor is attached (legacy arch-A path). `color`
+    // No-op when no Compositor is attached. `color`
     // is a COLORREF (0x00BBGGRR). Mirrors the SetSceneRect → Compositor
     // forwarding pattern.
     void SetBackingColor(COLORREF color);
@@ -159,8 +159,8 @@ public:
     // `from` is the live on-screen edge the web measured at toggle. `durationMs`
     // matches the CSS duration; `msElapsedAtSend` (ms since the flex actually
     // changed, web-stamped) back-dates the start clock to the CSS origin across
-    // the IPC hop. COMPOSITION-MODE () ONLY — a no-op when no DComp
-    // compositor is attached (legacy keeps its per-frame scene-rect path).
+    // the IPC hop. A no-op when no DComp compositor is attached (e.g.
+    // headless --capture).
     void StartSceneAnim(int fromX, int fromY, int fromW, int fromH,
                         int toX, int toY, int toW, int toH,
                         double durationMs, double msElapsedAtSend);

@@ -4,10 +4,9 @@
 // lived in main.cpp.
 //
 // Why a separate class:
-//   - The new-UI host doesn't construct APPLICATION_INFO (legacy WinMain
-//     is unreachable when `--new-ui` is passed), so the legacy struct
-//     wasn't a viable carrier for mod state in --new-ui mode.
-//   - Both UI modes need to discover mods, restore the last-active mod
+//   - The host doesn't construct the legacy APPLICATION_INFO struct, so
+//     it wasn't a viable carrier for mod state.
+//   - The host needs to discover mods, restore the last-active mod
 //     from the registry, and apply a mod selection's full side-effect
 //     chain (FileManager swap + registry write + texture palette swap
 //     + thumbnail cache clear + engine shader/texture reload).
@@ -22,14 +21,12 @@
 //      LastSubmods) and applies the persisted ordered content-layer
 //      stack so startup behaviour matches the prior session.
 //   4. `SetEngine(Engine*)` after the Engine is built. Required for
-//      the shader/texture reload inside SetLayerStack. In --new-ui mode
-//      the Engine doesn't exist at ModManager-construction time, so
-//      this is a separate step.
+//      the shader/texture reload inside SetLayerStack. The Engine doesn't
+//      exist at ModManager-construction time, so this is a separate step.
 //   5. `SetLayerStack(layers)` is the atomic activation chain (an empty
 //      stack means Unmodded). `SelectMod(modPath)` is the one-layer
-//      quick-switch shorthand. Callers add their own per-mode
-//      finalisation: legacy rebuilds the HMENU + invalidates the
-//      render window; --new-ui fires `engine/state/changed`.
+//      quick-switch shorthand. After the activation chain the host fires
+//      `engine/state/changed` to refresh the React UI.
 //
 // Lifetime ordering: ModManager outlives FileManager only if the
 // caller arranges it (FileManager pointer is borrowed, not owned).

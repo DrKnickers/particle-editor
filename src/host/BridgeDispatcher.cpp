@@ -185,8 +185,7 @@ Engine::LightType ParseLightWhich(const std::string& s)
 // keyed by filename, with the FILETIME payload encoded as REG_BINARY.
 // The list is ordered most-recent-first by reading the FILETIME values
 // and sorting descending. Cap of 9 matches `NUM_HISTORY_ITEMS` at
-// src/main.cpp:47. Legacy and new-UI share the same registry path, so
-// the recent-files menu stays consistent across both UI modes.
+// src/main.cpp:47.
 
 constexpr int kMaxRecentFiles = 9;
 constexpr const wchar_t* kRegistryKeyPath = L"Software\\AloParticleEditor";
@@ -1180,8 +1179,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // layout/scene-rect stream (which the uncapped render loop samples at
     // irregular Δt → a juddering viewport edge), the web sends ONE of these at
     // the dock toggle; LayoutBroker then re-renders the engine at a wall-clock-
-    // lerped rect every frame, synced to the CSS flex-grow tween. only
-    // (StartSceneAnim is a no-op when no DComp compositor is attached). `from`/
+    // lerped rect every frame, synced to the CSS flex-grow tween. StartSceneAnim
+    // is a no-op when no DComp compositor is attached. `from`/
     // `to` are scene rects in main-client device px; `msElapsedAtSend` back-dates
     // the host clock to the CSS origin across this IPC hop. `easing` is ignored
     // here — the host hardcodes the matching CSS `ease` cubic-bezier and the web
@@ -2802,11 +2801,11 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         {
             m_engine->Clear();
             m_engine->OnParticleSystemChanged(-1);
-            // B1.3.1 polish round 3: legacy DoOpenFile relies on
-            // first-render lazy texture binding via per-instance
-            // construction; in --new-ui mode the host's WebView2
-            // composition timing produces white-fallback particles
-            // unless we explicitly invalidate the cache. ReloadTextures
+            // B1.3.1 polish round 3: the legacy native DoOpenFile relied
+            // on first-render lazy texture binding via per-instance
+            // construction; the host's WebView2 composition timing
+            // produces white-fallback particles unless we explicitly
+            // invalidate the cache. ReloadTextures
             // is the same operation View → Reload Textures already
             // does on demand; calling it here makes file/open
             // self-sufficient.
