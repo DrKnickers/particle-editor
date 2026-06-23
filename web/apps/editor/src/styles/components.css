@@ -665,7 +665,25 @@
 .panel-section-header::-webkit-details-marker { display: none; }
 
 .panel-section-header:hover { color: var(--text); }
-.panel-section-header:focus-visible { color: var(--text); }
+/* The header is a role="button" tabIndex=0 control; its resting/hover colour is
+   already --text, so colour alone is no keyboard-focus cue. Draw the canonical
+   accent ring, inset (offset -2px) since the header spans the panel width. */
+.panel-section-header:focus-visible {
+  color: var(--text);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* One canonical focus indicator for interactive *controls* — buttons, icon
+   buttons, swatches, grid tiles, tree/listbox rows, tabs, dropdown triggers.
+   Keyboard-only (:focus-visible) so the mouse stays quiet; outline (not
+   ring/box-shadow) so it is never clipped by an overflow:hidden ancestor.
+   Value FIELDS keep their border-shift; Radix menu items keep their
+   data-[highlighted] background. Apply via className="… focus-ring". */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 
 .panel-section-header .chev {
   color: var(--text-3);
@@ -992,6 +1010,8 @@
   font-family: inherit;
   outline: none;
   width: 100%;
+  /* Fade the border to accent on focus — consistent field-activation feel. */
+  transition: border-color var(--motion-fast-in) var(--ease-entrance);
 }
 .text-input:focus { border-color: var(--accent); }
 

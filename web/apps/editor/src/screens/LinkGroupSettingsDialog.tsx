@@ -444,7 +444,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
           type="button"
           onClick={resetAll}
           disabled={state.kind !== "loaded"}
-          className="mr-auto rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="mr-auto rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
           Reset All
         </button>

@@ -312,7 +312,7 @@ function TabTrigger({ value, label }: { value: string; label: string }) {
     <Tabs.Trigger
       value={value}
       data-testid={`tab-trigger-${value}`}
-      className="flex-1 cursor-pointer border-b-2 border-transparent px-3 py-2 text-xs text-text-2 outline-none transition data-[state=active]:border-accent data-[state=active]:text-text hover:text-text focus-visible:bg-bg-2"
+      className="flex-1 cursor-pointer border-b-2 border-transparent px-3 py-2 text-xs text-text-2 transition data-[state=active]:border-accent data-[state=active]:text-text hover:text-text focus-ring"
     >
       {label}
     </Tabs.Trigger>
@@ -911,7 +911,7 @@ function FieldCheckbox({
         checked={checked}
         disabled={disabled}
         onCheckedChange={(v) => onCheckedChange(v === true)}
-        className={`flex h-[18px] w-[18px] items-center justify-center rounded border border-border-2 bg-bg-2 outline-none transition focus-visible:border-accent col-2 justify-self-end ${
+        className={`flex h-[18px] w-[18px] items-center justify-center rounded border border-border-2 bg-bg-2 transition focus-ring col-2 justify-self-end ${
           disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:border-border-2"
         } data-[state=checked]:border-accent data-[state=checked]:bg-accent`}
         aria-label={label}
@@ -966,7 +966,7 @@ function FieldSelect({
         <Select.Trigger
           data-testid={testId}
           aria-label={label}
-          className="flex h-[26px] w-full items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text outline-none transition hover:border-border-2 focus:border-accent disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-[26px] w-full items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text transition hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Select.Value>{selected?.label ?? ""}</Select.Value>
           <Select.Icon>

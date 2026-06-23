@@ -643,7 +643,7 @@ export function AtlasPickerPanel({
               aria-pressed={showAlpha}
               title="Show texture alpha (off shows additive RGB)"
               onClick={() => setShowAlpha((v) => !v)}
-              className={`shrink-0 rounded border px-1 transition-colors hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] ${
+              className={`shrink-0 rounded border px-1 transition-colors hover:brightness-110 focus-ring ${
                 showAlpha
                   ? "border-[var(--accent)] bg-[var(--accent)] text-black"
                   : "border-border text-text-3"
@@ -760,7 +760,7 @@ const Cell = memo(function Cell({
       tabIndex={focused ? 0 : -1}
       className={`group relative aspect-square rounded bg-bg-2 transition ${
         selected ? "border-2" : "border border-border"
-      } hover:z-10 hover:brightness-110 hover:scale-[1.08] motion-reduce:hover:scale-100 hover:shadow-[inset_0_0_0_2px_rgba(255,255,255,0.7)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]`}
+      } hover:z-10 hover:brightness-110 hover:scale-[1.08] motion-reduce:hover:scale-100 hover:shadow-[inset_0_0_0_2px_rgba(255,255,255,0.7)] focus-ring`}
       style={style}
       onMouseEnter={() => onHover(k)}
       onMouseLeave={() => onHover(null)}

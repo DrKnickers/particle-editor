@@ -96,7 +96,7 @@ export function SaveChangesPrompt({ bridge }: Props) {
           type="button"
           onClick={handleCancel}
           aria-label="Cancel"
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent"
+          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
         >
           Cancel
         </button>
@@ -104,7 +104,7 @@ export function SaveChangesPrompt({ bridge }: Props) {
           type="button"
           onClick={() => void handleDiscard()}
           aria-label="Don't Save"
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent"
+          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
         >
           Don&apos;t Save
         </button>
@@ -112,7 +112,7 @@ export function SaveChangesPrompt({ bridge }: Props) {
           type="button"
           onClick={() => void handleSave()}
           aria-label="Save"
-          className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent outline-none focus:ring-2 focus:ring-accent"
+          className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent focus-ring"
         >
           Save
         </button>

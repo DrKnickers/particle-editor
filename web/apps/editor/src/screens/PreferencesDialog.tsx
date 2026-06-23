@@ -80,7 +80,7 @@ function CheckToggle({
       <span
         aria-hidden
         className={cn(
-          "flex size-[14px] items-center justify-center rounded-[3px] border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent",
+          "flex size-[14px] items-center justify-center rounded-[3px] border transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-[var(--accent)]",
           checked ? "border-accent bg-accent" : "border-border-2 bg-bg-3",
         )}
       >
@@ -331,7 +331,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                   value={msaaLevel}
                   disabled={msaaLevels === null}
                   onChange={(e) => commitMsaaLevel(Number(e.target.value) as MsaaLevel)}
-                  className="h-[22px] min-w-[104px] cursor-pointer appearance-none rounded-[5px] border border-border-2 bg-bg-3 pl-2 pr-6 text-xs text-text outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-[22px] min-w-[104px] cursor-pointer appearance-none rounded-[5px] border border-border-2 bg-bg-3 pl-2 pr-6 text-xs text-text focus-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {(msaaLevels ?? [msaaLevel]).map((lvl) => (
                     <option key={lvl} value={lvl}>

@@ -110,7 +110,7 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss }: Vie
           type="button"
           onClick={() => onChoose("discard")}
           data-testid="autosave-discard"
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent"
+          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
         >
           Discard
         </button>
@@ -119,7 +119,7 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss }: Vie
             type="button"
             onClick={() => onChoose("stable")}
             data-testid="autosave-restore-stable"
-            className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent"
+            className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
           >
             Restore stable
           </button>
@@ -129,7 +129,7 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss }: Vie
             type="button"
             onClick={() => onChoose("recent")}
             data-testid="autosave-restore-recent"
-            className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent outline-none focus:ring-2 focus:ring-accent"
+            className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent focus-ring"
           >
             Restore recent
           </button>

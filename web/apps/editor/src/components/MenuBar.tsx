@@ -66,7 +66,7 @@ const TRIGGER =
 const CONTENT =
   "min-w-[200px] bg-bg-2 border border-border rounded-md shadow-xl p-1 z-50";
 const ITEM =
-  "flex items-center gap-2 px-2 py-1 text-xs text-text rounded hover:bg-panel-2 focus:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent select-none";
+  "flex items-center gap-2 px-2 py-1 text-xs text-text rounded hover:bg-panel-2 data-[highlighted]:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent select-none";
 const SEPARATOR = "my-1 h-px bg-panel-2";
 
 function Hint({ children }: { children: string }) {
@@ -670,7 +670,7 @@ export function MenuBar({
                   aria-label="Expand to full editor"
                   title="Expand to full editor"
                   onSelect={() => setLoadOrderOpen(true)}
-                  className="flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded text-text-3 outline-none hover:bg-hover hover:text-text focus:bg-hover focus:text-text data-[highlighted]:bg-hover data-[highlighted]:text-text"
+                  className="flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded text-text-3 outline-none hover:bg-hover hover:text-text data-[highlighted]:bg-hover data-[highlighted]:text-text"
                 >
                   <ExpandIcon />
                 </Menubar.Item>
@@ -1002,14 +1002,14 @@ export function MenuBar({
         <button
           type="button"
           onClick={() => setResetViewOpen(false)}
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent"
+          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={() => void handleResetViewConfirm()}
-          className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent outline-none focus:ring-2 focus:ring-accent"
+          className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent focus-ring"
         >
           Reset
         </button>

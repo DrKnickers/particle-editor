@@ -74,7 +74,7 @@ export function RandomParam({
       {/* Mode selector */}
       <Select.Root value={value.mode} onValueChange={handleModeChange} disabled={disabled}>
         <Select.Trigger
-          className="flex items-center justify-between rounded border border-border-2 bg-bg-2 px-2 py-0.5 text-xs text-text outline-none hover:border-border-2 focus:border-accent disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center justify-between rounded border border-border-2 bg-bg-2 px-2 py-0.5 text-xs text-text hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Random parameter mode"
         >
           <Select.Value />

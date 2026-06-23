@@ -80,7 +80,7 @@ export function TexturePalette({
                   aria-selected={selected}
                   aria-label={item.label ?? item.path}
                   onClick={() => onChange(item.path)}
-                  className={`relative overflow-hidden rounded border-2 transition focus:outline-none focus:ring-1 focus:ring-accent ${
+                  className={`relative overflow-hidden rounded border-2 transition focus-ring ${
                     selected
                       ? "border-accent"
                       : "border-border-2 hover:border-border-2"

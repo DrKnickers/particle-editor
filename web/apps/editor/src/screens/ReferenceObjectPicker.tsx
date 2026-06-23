@@ -405,7 +405,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
         onClick={(e) => { e.stopPropagation(); setActiveKey(rowKey); selectObject(n); }}
         onKeyDown={(e) => onTreeKeyDown(e, rowKey)}
         className={
-          "cursor-pointer truncate rounded px-2 py-0.5 text-sm outline-none transition focus-visible:ring-1 focus-visible:ring-accent " +
+          "cursor-pointer truncate rounded px-2 py-0.5 text-sm transition focus-ring " +
           (selected ? "bg-accent/20 text-text" : "text-text hover:bg-panel-2")
         }
       >
@@ -469,7 +469,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                       aria-pressed={active}
                       onClick={() => setFaction(f)}
                       className={
-                        "rounded-full border px-2 py-0.5 text-xs outline-none transition focus-visible:ring-1 focus-visible:ring-accent " +
+                        "rounded-full border px-2 py-0.5 text-xs transition focus-ring " +
                         (active
                           ? "border-accent bg-accent/20 text-text"
                           : "border-border text-text-2 hover:bg-panel-2")
@@ -496,7 +496,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                 onClick={() => { setActiveKey("none"); selectObject(NONE); }}
                 onKeyDown={(e) => onTreeKeyDown(e, "none")}
                 className={
-                  "cursor-pointer rounded px-2 py-0.5 text-sm outline-none transition focus-visible:ring-1 focus-visible:ring-accent " +
+                  "cursor-pointer rounded px-2 py-0.5 text-sm transition focus-ring " +
                   (name === NONE ? "bg-accent/20 text-text" : "text-text-2 hover:bg-panel-2")
                 }
               >
@@ -519,7 +519,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                     tabIndex={activeKey === secKey ? 0 : -1}
                     onClick={(e) => { e.stopPropagation(); setActiveKey(secKey); toggle(secKey); }}
                     onKeyDown={(e) => onTreeKeyDown(e, secKey)}
-                    className="flex flex-col rounded outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                    className="flex flex-col rounded focus-ring"
                   >
                     {labelRow(sec.label, sec.total, openSec, false)}
                     {openSec && sec.key === "Heroes" && (
@@ -540,7 +540,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                               tabIndex={activeKey === bk ? 0 : -1}
                               onClick={(e) => { e.stopPropagation(); setActiveKey(bk); toggle(bk); }}
                               onKeyDown={(e) => onTreeKeyDown(e, bk)}
-                              className="flex flex-col rounded outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                              className="flex flex-col rounded focus-ring"
                             >
                               {labelRow(b.label, b.items.length, openBuc, true)}
                               {openBuc && (

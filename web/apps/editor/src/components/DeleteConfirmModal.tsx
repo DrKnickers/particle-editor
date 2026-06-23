@@ -41,14 +41,14 @@ export function DeleteConfirmModal({ bridge }: { bridge: Bridge }) {
           type="button"
           autoFocus
           onClick={clear}
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent"
+          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={onDelete}
-          className="rounded bg-danger px-3 py-1 text-xs font-medium text-white hover:bg-danger/90 outline-none focus:ring-2 focus:ring-danger"
+          className="rounded bg-danger px-3 py-1 text-xs font-medium text-white hover:bg-danger/90 focus-ring"
         >
           Delete
         </button>

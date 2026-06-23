@@ -192,7 +192,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               type="button"
               onClick={() => void handleBrowse()}
               aria-label="Browse for source file"
-              className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent"
+              className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
             >
               Browse…
             </button>
@@ -241,7 +241,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
           onClick={handleSelectAll}
           disabled={!tree || allIds.length === 0}
           aria-label="Select all emitters"
-          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
           Select All
         </button>
@@ -250,7 +250,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
           onClick={handleClear}
           disabled={picks.size === 0}
           aria-label="Clear selection"
-          className="mr-auto rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="mr-auto rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
           Clear
         </button>

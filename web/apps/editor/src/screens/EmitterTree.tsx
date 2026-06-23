@@ -1054,7 +1054,7 @@ const TOOLBAR_BTN =
   "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 outline-none";
 
 const NEW_EMITTER_MENU_ITEM =
-  "flex select-none items-center gap-2 rounded px-2 py-1 text-xs text-text hover:bg-panel-2 focus:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent";
+  "flex select-none items-center gap-2 rounded px-2 py-1 text-xs text-text hover:bg-panel-2 data-[highlighted]:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent";
 
 function findNodeInTree(
   tree: EmitterTreeDto | null,

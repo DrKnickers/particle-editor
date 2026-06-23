@@ -63,7 +63,7 @@ export function ModNicknameDialog() {
               if (e.key === "Enter") handleOk();
             }}
             aria-label="Mod nickname"
-            className="w-full rounded border border-border-2 bg-bg-2 px-2 py-1 text-xs text-text outline-none focus:border-accent"
+            className="w-full rounded border border-border-2 bg-bg-2 px-2 py-1 text-xs text-text outline-none transition-colors focus:border-accent"
             autoFocus
             spellCheck={false}
           />

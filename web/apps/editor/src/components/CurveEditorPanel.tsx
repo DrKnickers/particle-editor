@@ -1447,7 +1447,7 @@ export function CurveEditorPanel({ bridge }: Props) {
               id="ce-lock-to-trigger"
               data-testid="ce-lock-to-trigger"
               data-locked={focusLocked ? "true" : "false"}
-              className="flex h-6 min-w-[80px] items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text outline-none hover:border-border-2 focus:border-accent disabled:cursor-not-allowed disabled:opacity-40 data-[locked=true]:border-accent data-[locked=true]:text-accent"
+              className="flex h-6 min-w-[80px] items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40 data-[locked=true]:border-accent data-[locked=true]:text-accent"
               aria-label="Lock-to track"
             >
               <Select.Value placeholder="None" />

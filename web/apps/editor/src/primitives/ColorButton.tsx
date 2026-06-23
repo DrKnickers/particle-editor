@@ -174,7 +174,7 @@ export function ColorButton({
                     type="button"
                     aria-label={`Basic color ${rgbToHex(color).toUpperCase()}`}
                     onClick={() => handleSelectColor(color)}
-                    className="size-5 rounded-sm border border-transparent hover:border-border-2 focus:border-accent focus:outline-none"
+                    className="size-5 rounded-sm border border-transparent hover:border-border-2 focus-ring"
                     style={{ backgroundColor: rgbToHex(color) }}
                   />
                 </Tip>
@@ -193,7 +193,7 @@ export function ColorButton({
                     aria-label={color ? `Custom color ${rgbToHex(color).toUpperCase()}` : `Custom slot ${i + 1} (empty)`}
                     onClick={() => { if (color) handleSelectColor(color); }}
                     onContextMenu={(e) => { e.preventDefault(); setSlot(i, null); }}
-                    className={`size-5 rounded-sm border hover:border-border-2 focus:outline-none ${
+                    className={`size-5 rounded-sm border hover:border-border-2 focus-ring ${
                       color ? "border-border-2" : "border-dashed border-border-2"
                     }`}
                     style={color ? { backgroundColor: rgbToHex(color) } : { backgroundColor: "transparent" }}
@@ -213,7 +213,7 @@ export function ColorButton({
               onBlur={handleHexCommit}
               onKeyDown={(e) => { if (e.key === "Enter") { handleHexCommit(); setOpen(false); } }}
               maxLength={6}
-              className="w-20 rounded border border-border-2 bg-panel-2 px-2 py-0.5 font-mono text-xs text-text outline-none focus:border-accent"
+              className="w-20 rounded border border-border-2 bg-panel-2 px-2 py-0.5 font-mono text-xs text-text outline-none transition-colors focus:border-accent"
               aria-label="Hex color input"
               spellCheck={false}
             />
@@ -247,7 +247,7 @@ export function ColorButton({
                     const n = parseInt(e.target.value, 10);
                     if (!Number.isNaN(n)) handleSliderChange(ch, n);
                   }}
-                  className="w-12 rounded border border-border-2 bg-panel-2 px-1 py-0.5 text-right font-mono text-[10px] text-text-2 outline-none focus:border-accent"
+                  className="w-12 rounded border border-border-2 bg-panel-2 px-1 py-0.5 text-right font-mono text-[10px] text-text-2 outline-none transition-colors focus:border-accent"
                   aria-label={`${ch.toUpperCase()} value`}
                 />
               </div>

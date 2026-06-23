@@ -218,7 +218,7 @@ export function Modal({
               </Dialog.Title>
               <Dialog.Close
                 aria-label="Close"
-                className="flex size-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text outline-none"
+                className="flex size-6 items-center justify-center rounded text-text-2 hover:bg-panel-2 hover:text-text focus-ring"
               >
                 <X className="size-4" />
               </Dialog.Close>
@@ -264,7 +264,7 @@ function ModalCancelButton({ children = "Cancel", onClick, disabled }: ButtonPro
         type="button"
         onClick={onClick}
         disabled={disabled}
-        className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
       >
         {children}
       </button>
@@ -282,7 +282,7 @@ function ModalOkButton({ children = "OK", onClick, disabled }: ButtonProps) {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+      className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
