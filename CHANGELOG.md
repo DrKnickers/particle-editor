@@ -18,6 +18,10 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ## 2026-06-23
 
+### Changed
+
+- Redesign the Import Emitters dialog — emitters appear as a collapsible branch-select tree with a live "N of M selected" count and Select all / Clear beside it; ticking a parent now selects its whole branch (the separate Auto-include children toggle is gone)
+
 ### Fixed
 
 - The Open dialog (File→Open and Import Emitters' Browse) now opens in the active mod's models folder instead of an unrelated directory
