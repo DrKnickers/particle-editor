@@ -108,7 +108,7 @@ export function TexturePalette({
 
             <ContextMenu.Portal>
               <ContextMenu.Content
-                className="z-50 min-w-[160px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-xl"
+                className="z-50 min-w-[160px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
               >
                 <ContextMenu.Item
                   disabled={!onBrowse}

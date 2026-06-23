@@ -209,7 +209,7 @@ export function Modal({
             // copy worth distinguishing from the title; the title alone is
             // sufficient SR context.
             aria-describedby={undefined}
-            className={`fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 ${SIZE_CLASS[size]} max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-md outline-none modal-animate`}
+            className={`fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 ${SIZE_CLASS[size]} max-h-[80vh] overflow-hidden rounded-lg border border-border bg-bg-2 text-text shadow-[var(--shadow-soft)] outline-none modal-animate`}
           >
             {/* Header */}
             <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-bg-2 px-4">

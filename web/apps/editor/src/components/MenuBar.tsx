@@ -64,7 +64,7 @@ type Props = {
 const TRIGGER =
   "px-2 py-1 text-xs font-medium text-text-2 hover:bg-bg-2 rounded data-[state=open]:bg-bg-2 data-[state=open]:text-text outline-none select-none cursor-default";
 const CONTENT =
-  "min-w-[200px] bg-bg-2 border border-border rounded-md shadow-xl p-1 z-50";
+  "min-w-[200px] bg-bg-2 border border-border rounded-md shadow-[var(--shadow-soft)] p-1 z-50";
 const ITEM =
   "flex items-center gap-2 px-2 py-1 text-xs text-text rounded hover:bg-panel-2 data-[highlighted]:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent select-none";
 const SEPARATOR = "my-1 h-px bg-panel-2";

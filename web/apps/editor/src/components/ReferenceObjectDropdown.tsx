@@ -30,7 +30,7 @@ export function ReferenceObjectDropdown({ bridge }: Props) {
         <AnimatedPopover
           align="end"
           sideOffset={6}
-          className="bg-panel border border-border-2 rounded-token shadow-[var(--shadow)] p-3 min-w-[280px] max-w-md z-50"
+          className="bg-panel border border-border-2 rounded-token shadow-[var(--shadow-soft)] p-3 min-w-[280px] max-w-md z-50"
         >
           <ReferenceObjectPickerBody bridge={bridge} />
         </AnimatedPopover>

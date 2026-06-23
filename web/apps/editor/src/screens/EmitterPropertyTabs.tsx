@@ -977,7 +977,7 @@ function FieldSelect({
           <Select.Content
             position="popper"
             sideOffset={4}
-            className="z-50 min-w-[160px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-xl"
+            className="z-50 min-w-[160px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
           >
             <Select.Viewport>
               {options.map((opt) => (

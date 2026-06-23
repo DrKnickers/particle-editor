@@ -746,7 +746,7 @@ const Cell = memo(function Cell({
   if (selected) {
     // amber via border + box-shadow ring so the blue focus OUTLINE can nest (§4.4)
     style.borderColor = "var(--atlas-selected)";
-    style.boxShadow = "0 0 0 1px var(--atlas-selected), 0 0 12px rgba(255,176,0,.4)";
+    style.boxShadow = "0 0 0 1px var(--atlas-selected), 0 0 12px color-mix(in srgb, var(--atlas-selected) 40%, transparent)";
   }
 
   return (
@@ -865,7 +865,7 @@ function PreviewBox({
   }, [imgReady, frame, side, preview.kind]);
 
   const pulseStyle: React.CSSProperties = pulse
-    ? { boxShadow: "0 0 0 2px var(--atlas-selected), 0 0 16px rgba(255,176,0,.6)" }
+    ? { boxShadow: "0 0 0 2px var(--atlas-selected), 0 0 16px color-mix(in srgb, var(--atlas-selected) 60%, transparent)" }
     : {};
 
   const showCanvas = preview.kind === "ok" && frame !== null;

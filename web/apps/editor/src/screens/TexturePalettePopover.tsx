@@ -48,7 +48,7 @@ export function TexturePalettePopover({ bridge, slot, onApply, tip, children }: 
         <AnimatedPopover
           align="end"
           sideOffset={6}
-          className="z-50 w-[560px] rounded-token border border-border-2 bg-panel p-3 shadow-[var(--shadow)]"
+          className="z-50 w-[560px] rounded-token border border-border-2 bg-panel p-3 shadow-[var(--shadow-soft)]"
         >
           <PaletteBody bridge={bridge} initialSlot={slot} onApply={onApply} />
         </AnimatedPopover>

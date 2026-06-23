@@ -356,7 +356,7 @@ type RowProps = {
 function StyledContextMenuContent({ children, ...rest }: ComponentProps<typeof ContextMenu.Content>) {
   return (
     <ContextMenu.Content
-      className="z-50 min-w-[220px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-xl"
+      className="z-50 min-w-[220px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
       {...rest}
     >
       {children}
@@ -368,7 +368,7 @@ function StyledContextMenuContent({ children, ...rest }: ComponentProps<typeof C
 function StyledContextSubContent({ children, ...rest }: ComponentProps<typeof ContextMenu.SubContent>) {
   return (
     <ContextMenu.SubContent
-      className="z-50 min-w-[200px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-xl"
+      className="z-50 min-w-[200px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
       {...rest}
     >
       {children}
@@ -1171,7 +1171,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </Tip>
           <Menubar.Portal>
             <Menubar.Content
-              className="min-w-[160px] rounded-md border border-border bg-bg-2 p-1 shadow-xl z-50"
+              className="min-w-[160px] rounded-md border border-border bg-bg-2 p-1 shadow-[var(--shadow-soft)] z-50"
               align="start"
               sideOffset={4}
             >
@@ -2306,7 +2306,7 @@ export function EmitterTree({ bridge }: Props) {
           // drag-chip-enter: pop-in on spawn (components.css; reduced-motion
           // disables it). Exit mode overrides position with the landing spot
           // + fades/shrinks via an inline transition — see finish().
-          className="drag-chip-enter pointer-events-none fixed z-50 rounded-md border border-accent bg-bg-2/95 px-2 py-1 text-xs text-accent shadow-xl"
+          className="drag-chip-enter pointer-events-none fixed z-50 rounded-md border border-accent bg-bg-2/95 px-2 py-1 text-xs text-accent shadow-[var(--shadow-soft)]"
           style={
             dragChip.exit
               ? {

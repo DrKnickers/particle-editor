@@ -1459,7 +1459,7 @@ export function CurveEditorPanel({ bridge }: Props) {
               <Select.Content
                 position="popper"
                 sideOffset={4}
-                className="z-50 min-w-[120px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-xl"
+                className="z-50 min-w-[120px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
               >
                 <Select.Viewport>
                   {lockToOptions.map((opt) => (
@@ -1785,7 +1785,7 @@ function KeyContextMenu({
       data-testid="ce-key-context-menu"
       role="menu"
       aria-label="Curve key actions"
-      className="fixed z-50 min-w-[140px] rounded-md border border-border-2 bg-bg-2 p-1 text-xs text-text shadow-xl"
+      className="fixed z-50 min-w-[140px] rounded-md border border-border-2 bg-bg-2 p-1 text-xs text-text shadow-[var(--shadow-soft)]"
       style={{ left: x, top: y }}
     >
       {/* T6 + T4: the tooltip only exists while the item is DISABLED

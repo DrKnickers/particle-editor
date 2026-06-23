@@ -53,7 +53,6 @@
   --x-axis: #ef5350;
   --y-axis: #66bb6a;
   --z-axis: #42a5f5;
-  --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
   /* Motion family. Fast tier = tooltips (matches the shipped
      popover-pop timings); slow tier = modal/banner (larger elements).
      Entrances decelerate (ease-out), exits accelerate (ease-in). */
@@ -67,9 +66,10 @@
   --slip-banner: 6px;
   --slip-modal: 8px;
   /* Soft two-layer drop shadow: wide ambient + tight contact.
-     Unlike --shadow (dark-only), this HAS a light-theme override so it
-     reads equally soft on both themes. Worn by tooltips + the overload
-     banner. */
+     The single elevation shadow for ALL floating surfaces (modals, menus,
+     popovers, dropdowns, tooltips, the overload banner, drag chips). HAS a
+     light-theme override (below) so it reads equally soft on both themes —
+     this replaced the old dark-only --shadow, which was removed. */
   --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
   --radius: 8px;
   --radius-sm: 5px;

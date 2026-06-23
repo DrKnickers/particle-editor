@@ -87,7 +87,7 @@ export function RandomParam({
           <Select.Content
             position="popper"
             sideOffset={4}
-            className="z-50 min-w-[140px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-xl"
+            className="z-50 min-w-[140px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
           >
             <Select.ScrollUpButton className="flex items-center justify-center py-0.5 text-text-3">
               <ChevronUp className="size-3" />

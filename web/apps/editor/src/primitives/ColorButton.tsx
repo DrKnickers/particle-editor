@@ -160,7 +160,7 @@ export function ColorButton({
           side="bottom"
           align="start"
           sideOffset={4}
-          className="z-50 w-72 rounded-md border border-border-2 bg-bg-2 p-3 shadow-xl"
+          className="z-50 w-72 rounded-md border border-border-2 bg-bg-2 p-3 shadow-[var(--shadow-soft)]"
           onOpenAutoFocus={(e) => e.preventDefault()}
           onEscapeKeyDown={handleCancel}
         >
