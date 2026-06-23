@@ -921,9 +921,10 @@ json BuildEngineStateSnapshot(Engine* engine,
 
 BridgeDispatcher::BridgeDispatcher(Engine* engine, LayoutBroker& layout,
                                     AcceleratorBridge& accel, EmitFn emit,
-                                    bool useTestHost)
+                                    bool useTestHost, bool ephemeral)
     : m_engine(engine), m_layout(layout), m_accel(accel), m_emit(std::move(emit))
     , m_testHost(useTestHost)
+    , m_ephemeral(ephemeral)
 {
     // Test seam (ALO_SETTINGS_LIVE=1): lift the --test-host settings gate so
     // a CDP test can exercise the real registry round-trip. The a11y harness
@@ -1567,7 +1568,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         m_engine->SetSkydomeSlot(slot);
         // Persist so the selection survives restart in the new UI
         // (the handler previously only markDirty'd — the daily-driver lost it).
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistSkydomeIndex(slot);
         sendOk(json::object());
         markDirty();
@@ -1582,7 +1583,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         std::wstring wpath = Utf8ToWide(p);
         m_engine->SetSkydomeCustomPath(slot, wpath);
         // Persist the custom slot path (round-trips with legacy).
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistSkydomeCustomPath(slot, wpath);
         sendOk(json::object());
         markDirty();
@@ -1597,7 +1598,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         std::string sec    = params.value("secondaryName", std::string{});
         SkydomeContext ctx = (ctxStr == "land") ? SkydomeContext::Land : SkydomeContext::Space;
         m_engine->SetSkydomeEnvironment(ctx, prim, sec);
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistSkydomeEnvironment(ctx == SkydomeContext::Land ? 0 : 1,
                                       Utf8ToWide(prim), Utf8ToWide(sec));
         sendOk(json::object());
@@ -1611,7 +1612,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         std::string name = params.value("name", std::string{});
         m_engine->SetReferenceObject(name);
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistReferenceObjectName(Utf8ToWide(name));
         sendOk(json::object());
         markDirty();
@@ -1623,7 +1624,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         bool visible = params.value("visible", true);
         m_engine->SetReferenceObjectVisible(visible);
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistReferenceObjectVisible(visible);
         sendOk(json::object());
         markDirty();
@@ -1635,7 +1636,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         bool locked = params.value("locked", false);
         m_engine->SetReferenceLocked(locked);
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistReferenceObjectLock(locked);
         sendOk(json::object());
         markDirty();
@@ -1670,7 +1671,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             if (refKey != 0) CaptureUndoPoint(refKey);
         }
         m_engine->SetReferenceObjectTransform(pos, rot);
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistReferenceObjectTransform(pos, rot);
         sendOk(json::object());
         markDirty();
@@ -1683,7 +1684,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         bool visible = params.value("visible", false);
         m_engine->SetGridVisible(visible);
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistGrid(visible, m_engine->GetGridSpacing());
         sendOk(json::object());
         markDirty();
@@ -1695,7 +1696,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         float spacing = params.value("spacing", 20.0f);
         m_engine->SetGridSpacing(spacing);
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistGrid(m_engine->GetGridVisible(), m_engine->GetGridSpacing());
         sendOk(json::object());
         markDirty();
@@ -1709,7 +1710,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         bool enabled = params.value("enabled", false);
         m_engine->SetSnapEnabled(enabled);
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistSnap(enabled);
         sendOk(json::object());
         markDirty();
@@ -1723,7 +1724,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         m_engine->SetBackground(static_cast<COLORREF>(rgb));
         // Persist the solid-colour background (same Background picker as
         // the skydome; previously only markDirty'd, so it was lost on restart).
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistBackgroundColor(static_cast<COLORREF>(rgb));
         sendOk(json::object());
         markDirty();
@@ -2161,7 +2162,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         float f2I = 0.50f, f2Z = 210.0f, f2T = -10.0f; DWORD f2Diff = RGB(60, 80, 160);
         bool  forceAlign = true;  // kLightForceAlignDefault
 
-        const bool gated = m_testHost && !m_settingsLive;
+        const bool gated = m_ephemeral || (m_testHost && !m_settingsLive);
         if (!gated)
         {
             HKEY hKey = nullptr;
@@ -2233,7 +2234,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (kind == "settings/lighting-force-align/set")
     {
         const bool enabled = params.value("enabled", true);
-        const bool gated = m_testHost && !m_settingsLive;
+        const bool gated = m_ephemeral || (m_testHost && !m_settingsLive);
         if (!gated)
         {
             HKEY hKey = nullptr;
@@ -2265,7 +2266,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // so the dialog-lighting golden never mutates the dev box's registry.
     if (kind == "settings/lighting/set")
     {
-        const bool gated = m_testHost && !m_settingsLive;
+        const bool gated = m_ephemeral || (m_testHost && !m_settingsLive);
         if (!gated)
         {
             HKEY hKey = nullptr;
@@ -2814,7 +2815,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             m_engine->ReloadTextures();
         }
         m_currentFilePath = path;
-        m_recentFiles = WriteRecentFile(path);
+        m_recentFiles = m_ephemeral ? ReadRecentFiles() : WriteRecentFile(path);
         sendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
         SetDirty(false);
         EmitRecentChanged();
@@ -2875,7 +2876,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             return res;
         }
         m_currentFilePath = path;
-        m_recentFiles = WriteRecentFile(path);
+        m_recentFiles = m_ephemeral ? ReadRecentFiles() : WriteRecentFile(path);
         // Refresh the "saved" reference snapshot — what we just wrote
         // to disk IS the new saved state. ApplyUndoSnapshot uses this
         // to clear the title-bar asterisk when the user undoes back
@@ -2938,7 +2939,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             return res;
         }
         m_currentFilePath = path;
-        m_recentFiles = WriteRecentFile(path);
+        m_recentFiles = m_ephemeral ? ReadRecentFiles() : WriteRecentFile(path);
         // Refresh the "saved" reference snapshot — see file/save above.
         m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
         sendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
@@ -5712,7 +5713,7 @@ void BridgeDispatcher::CommitReferenceObjectTransform()
     if (!m_engine) return;
     const D3DXVECTOR3 pos = m_engine->GetReferencePosition();
     const D3DXVECTOR3 rot = m_engine->GetReferenceRotation();
-    if (!(m_testHost && !m_settingsLive))
+    if (!m_ephemeral && !(m_testHost && !m_settingsLive))
         PersistReferenceObjectTransform(pos, rot);
     SetDirty(true);   // markDirty() in DispatchSync is a local lambda over this
     EmitEngineStateChanged();
@@ -5925,7 +5926,7 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
         const D3DXVECTOR3 p(aux.refPos[0], aux.refPos[1], aux.refPos[2]);
         const D3DXVECTOR3 r(aux.refRot[0], aux.refRot[1], aux.refRot[2]);
         m_engine->SetReferenceObjectTransform(p, r);
-        if (!(m_testHost && !m_settingsLive))
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistReferenceObjectTransform(p, r);
     }
 

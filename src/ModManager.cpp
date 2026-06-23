@@ -226,8 +226,10 @@ static void ScanModsDir(const wstring& modsRoot, bool isFoC, vector<ModEntry>& o
 // ---------------------------------------------------------------------------
 
 ModManager::ModManager(IFileManager* fileManager,
-                       const vector<wstring>& gameRoots)
-    : m_fileManager(fileManager),
+                       const vector<wstring>& gameRoots,
+                       bool ephemeral)
+    : m_ephemeral(ephemeral),
+      m_fileManager(fileManager),
       m_gameRoots(gameRoots)
 {}
 
@@ -291,7 +293,8 @@ void ModManager::RestoreLastLayerStack()
         {
             const std::vector<wstring> lastSubmods = ReadLastSubmodsLegacy();
             stack = modlayers::MigrateLegacySelection(lastMod, lastSubmods, ReadCoreMigrated());
-            WriteCoreMigrated();   // the Core decision is now baked into LastLayers
+            if (!m_ephemeral)
+                WriteCoreMigrated();   // the Core decision is now baked into LastLayers
         }
     }
 
@@ -336,8 +339,11 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers)
     // 2. Persist: LastLayers is authoritative; LastMod = primary is kept
     //    in sync so the one-time legacy-selection migration (ReadLastMod feeds
     //    MigrateLegacySelection) has a sane value if LastLayers is ever cleared.
-    WriteLastLayers(m_layerStack);
-    WriteLastMod(primary);
+    if (!m_ephemeral)   // --drive: never rewrite the daily driver's mod stack
+    {
+        WriteLastLayers(m_layerStack);
+        WriteLastMod(primary);
+    }
 
     // 3. Texture palette follows the primary layer. (busts its own
     //    base64 thumbnail cache via the bridge palette refresh —

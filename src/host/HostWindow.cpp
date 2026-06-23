@@ -83,10 +83,26 @@
 #include "../SpawnerDriver.h"
 #include "../UndoStack.h"
 #include "../Autosave.h"  //: two-tier autosave timers + clean-exit cleanup
+#include "DriveRunner.h"  // --drive: scripted non-CDP composite capture
 
 using namespace Microsoft::WRL;
 
 namespace host {
+
+// --drive: read a (small) UTF-8/ASCII JSON script file into a std::string.
+// Returns empty on any error; DriveRunner::Init reports a bad/empty script.
+static std::string ReadFileUtf8(const std::wstring& path)
+{
+    std::string out;
+    FILE* f = _wfopen(path.c_str(), L"rb");
+    if (!f) return out;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (n > 0) { out.resize(static_cast<size_t>(n)); fread(&out[0], 1, static_cast<size_t>(n), f); }
+    fclose(f);
+    return out;
+}
 
 namespace {
 
@@ -672,6 +688,12 @@ struct HostWindowImpl
     // WebMessageReceived to this thread's message pump), so a plain non-atomic
     // bool is correct: no atomic/volatile needed.
     bool         m_uiReady = false;
+    // --drive <script.json>: scripted non-CDP composite capture. m_ephemeral
+    // (true in drive mode) suppresses ALL persistence (settings/MRU/mod-layer/
+    // autosave) and isolates the WebView2 profile + log per-PID so a --drive
+    // run never perturbs a concurrently-running daily-driver editor.
+    std::wstring m_driveScriptPath;
+    bool         m_ephemeral = false;
     FILE*       logFile = nullptr;
     std::mutex  logMutex;
 
@@ -689,7 +711,8 @@ struct HostWindowImpl
                    const std::wstring& captureRef = L"",
                    bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,
                    bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
-                   bool hasSunI = false, float sunIntensity = 1.0f)
+                   bool hasSunI = false, float sunIntensity = 1.0f,
+                   const std::wstring& driveScriptPath = L"")
         : hInstance(inst)
         , textureManager(tex)
         , shaderManager(shd)
@@ -705,9 +728,11 @@ struct HostWindowImpl
         , m_captureHasSun(hasSun)
         , m_captureHasSunI(hasSunI)
         , m_captureSunIntensity(sunIntensity)
+        , m_driveScriptPath(driveScriptPath)
+        , m_ephemeral(!driveScriptPath.empty())
         , layout(nullptr)
         , accelerator()
-        , modManager(std::make_unique<ModManager>(&fil, gameRoots_))
+        , modManager(std::make_unique<ModManager>(&fil, gameRoots_, !driveScriptPath.empty()))
     {
         // [world-lit] capture lighting colours (arrays can't init in list).
         m_captureAmbient[0] = ambR; m_captureAmbient[1] = ambG; m_captureAmbient[2] = ambB;
@@ -776,6 +801,15 @@ struct HostWindowImpl
 void HostWindowImpl::OpenLog()
 {
     std::wstring path = ComputeHostLogPath();
+    // --drive (ephemeral): per-PID log filename so a --drive run's _wfsopen("w")
+    // (truncate) never wipes a concurrently-running daily driver's host.log.
+    if (m_ephemeral)
+    {
+        const size_t dot = path.find_last_of(L'.');
+        const std::wstring suffix = L"-drive-" + std::to_wstring(GetCurrentProcessId());
+        path = (dot == std::wstring::npos) ? path + suffix
+                                           : path.substr(0, dot) + suffix + path.substr(dot);
+    }
     // Phase 3 Stage 4f hardening — _wfopen_s opens with
     // exclusive default share-mode (_SH_DENYRW) so concurrent readers
     // get EBUSY. Surfaced when the dxgi-transport.spec.ts tried to
@@ -1130,7 +1164,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
 
 HRESULT HostWindowImpl::InitWebView2()
 {
-    const bool captureIsolation = !m_captureAlo.empty() || !m_captureRef.empty();
+    const bool captureIsolation = !m_captureAlo.empty() || !m_captureRef.empty() || m_ephemeral;
     std::wstring userDataFolder = ComputeUserDataFolder(captureIsolation);
     Log("[host] WebView2 user-data folder: %ls%s\n", userDataFolder.c_str(),
         captureIsolation ? " (isolated capture profile)" : "");
@@ -2331,7 +2365,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         catch (const std::exception& e)
         {
             Log("[host] Engine construction threw: %s\n", e.what());
-            MessageBoxA(hwnd, e.what(), "Engine init failed", MB_ICONERROR);
+            // --drive is unattended: a modal would hang the run with nothing to
+            // dismiss it. Skip the dialog in ephemeral mode (the pump's
+            // engine-null arm exits non-zero instead).
+            if (!m_ephemeral)
+                MessageBoxA(hwnd, e.what(), "Engine init failed", MB_ICONERROR);
             // Continue — viewport will still clear, just without engine state.
         }
         catch (...)
@@ -2395,7 +2433,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // runs never write autosave files — those would orphan into a
         // recovery prompt for the user's real editor. WM_TIMER writes the
         // live ParticleSystem (dirty-gated) below.
-        if (!useTestHost)
+        if (!useTestHost && !m_ephemeral)   // --drive: no autosave (would orphan a recovery prompt)
         {
             SetTimer(hwnd, Autosave::RECENT_TIMER_ID, Autosave::RECENT_INTERVAL_MS, nullptr);
             SetTimer(hwnd, Autosave::STABLE_TIMER_ID, Autosave::STABLE_INTERVAL_MS, nullptr);
@@ -2678,7 +2716,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         //: stop autosave + delete THIS session's autosave files on a
         // clean exit so no orphan prompts on the next launch. A crash skips
         // WM_DESTROY, leaving the orphan for recovery — exactly the point.
-        if (!useTestHost)
+        if (!useTestHost && !m_ephemeral)
         {
             KillTimer(hwnd, Autosave::RECENT_TIMER_ID);
             KillTimer(hwnd, Autosave::STABLE_TIMER_ID);
@@ -3761,7 +3799,8 @@ int HostWindowImpl::Run(int nCmdShow)
         webView->PostWebMessageAsJson(w.c_str());
     };
     dispatcher = std::make_unique<BridgeDispatcher>(/*engine*/nullptr, layout, accelerator, emitFn,
-                                                    /*useTestHost*/useTestHost);
+                                                    /*useTestHost*/useTestHost,
+                                                    /*ephemeral*/m_ephemeral);
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
     // D6: ModManager is already discovered + restored in the impl
@@ -3867,7 +3906,9 @@ int HostWindowImpl::Run(int nCmdShow)
     // normal ShowWindow would pop a focus-stealing editor onto the user's screen
     // every capture. NOT SW_HIDE / SW_SHOWMINNOACTIVE: a hidden/minimized window
     // can stop DComp compositing and yield a black composite.
-    ShowWindow(hMain, captureMode ? SW_SHOWNOACTIVATE : nCmdShow);
+    // --drive shows the window too (PrintWindow needs a composed window) but,
+    // like --capture, must NOT steal focus from a daily-driver editor.
+    ShowWindow(hMain, (captureMode || m_ephemeral) ? SW_SHOWNOACTIVATE : nCmdShow);
     UpdateWindow(hMain);
 
     // rendering-fidelity] --capture: load the requested .alo now,
@@ -4322,6 +4363,18 @@ int HostWindowImpl::Run(int nCmdShow)
     Log("[resize-perf] pump paced to %lu Hz (budget %.2f ms)\n",
         static_cast<unsigned long>(displayHz), 1000.0 / static_cast<double>(displayHz));
 
+    // --drive: scripted non-CDP composite capture. Its own top-level pump
+    // branch (below) — built+ticked here, NOT under captureMode (which is false
+    // in drive mode). Watchdogs: a startup deadline until app/ready, and a
+    // render-budget cap of sum(settle)+60s once running.
+    int       driveExitCode    = 0;
+    bool      driveDcompSettled = false;
+    LONGLONG  driveDcompStart  = 0;
+    const LONGLONG driveStart  = PerfQpcNow();
+    const LONGLONG driveFreq   = PerfQpcFreq();
+    double    driveBudgetMs    = 0.0;
+    std::unique_ptr<host::DriveRunner> driveRunner;
+
     while (!quit)
     {
         while (PeekMessage(&m, nullptr, 0, 0, PM_REMOVE))
@@ -4338,11 +4391,91 @@ int HostWindowImpl::Run(int nCmdShow)
         // without rendering (exit code set below).
         if (captureFailed) break;
 
+        // --drive: own top-level branch, FIRST (captureMode is false in drive
+        // mode, so this must precede the !captureMode idle branch). Renders
+        // every iteration; never blocks. States: wait app/ready -> build runner
+        // -> one-shot DComp settle -> Tick per frame.
+        if (engine && m_ephemeral)
+        {
+            RenderD3D9();
+            const double elapsedMs = driveFreq > 0
+                ? QpcMs(PerfQpcNow() - driveStart, driveFreq) : 0.0;
+
+            if (driveFreq <= 0)
+            {
+                // No QPC clock: settles/watchdogs can't advance -> hard fail
+                // rather than hang (theoretical on supported Windows).
+                Log("[drive] no high-resolution timer available\n");
+                driveExitCode = 5; quit = true;
+            }
+            else if (!m_uiReady)
+            {
+                // ready-gate: the top-of-loop PeekMessage drain delivers app/ready.
+                if (elapsedMs >= 30000.0)
+                {
+                    Log("[drive] startup watchdog: app/ready never arrived\n");
+                    driveExitCode = 5; quit = true;
+                }
+            }
+            else if (!driveRunner)
+            {
+                std::string err;
+                auto r = std::make_unique<host::DriveRunner>();
+                if (!r->Init(ReadFileUtf8(m_driveScriptPath), err))
+                {
+                    Log("[drive] bad script: %s\n", err.c_str());
+                    driveExitCode = r->ExitCode();   // 2
+                    quit = true;
+                }
+                else
+                {
+                    r->SetHooks(
+                        [this](const std::string& req){ return dispatcher->DispatchSync(req); },
+                        [this](const std::string& u){ return host::CaptureWindowToPng(hMain, host::Utf8ToWide(u)); },
+                        [df = driveFreq]{ return df > 0 ? QpcMs(PerfQpcNow(), df) : 0.0; },
+                        [this](const std::string& msg){ Log("%s\n", msg.c_str()); });
+                    driveBudgetMs = r->TotalSettleMs() + 60000.0;
+                    driveRunner = std::move(r);
+                }
+            }
+            else if (!driveDcompSettled)
+            {
+                // one-shot 150 ms render-pumped settle so DComp commits the
+                // deferred scene-rect crop before the first Tick/capture.
+                if (driveDcompStart == 0) driveDcompStart = PerfQpcNow();
+                if (driveFreq > 0 && QpcMs(PerfQpcNow() - driveDcompStart, driveFreq) >= 150.0)
+                    driveDcompSettled = true;
+            }
+            else
+            {
+                if (driveRunner->Tick() == host::DriveRunner::Status::Done)
+                {
+                    driveExitCode = driveRunner->ExitCode();
+                    quit = true;
+                }
+                else if (elapsedMs >= driveBudgetMs)
+                {
+                    Log("[drive] watchdog: exceeded %.0f ms budget\n", driveBudgetMs);
+                    driveExitCode = 5; quit = true;
+                }
+            }
+
+            Sleep(16);   // pace the sim (mirror the captureMode Sleep(16))
+        }
+        // --drive with a null engine (D3D9/device init failed): the drive
+        // branch above can't run, so exit non-zero rather than spin forever or
+        // return a silent exit-0 with nothing captured.
+        else if (m_ephemeral && !engine)
+        {
+            Log("[drive] engine unavailable -- aborting drive run\n");
+            driveExitCode = 5;
+            quit = true;
+        }
         // Idle: render one frame per budget slot. Cheap enough to always
         // run (Engine has its own paused / IsPreviewPaused gates that skip
         // the simulation step when set; render still presents to keep the
         // surface valid).
-        if (engine && !captureMode)
+        else if (engine && !captureMode)
         {
             const LONGLONG now = PerfQpcNow();
             if (now >= nextFrameQpc)
@@ -4505,6 +4638,8 @@ int HostWindowImpl::Run(int nCmdShow)
     // the `quit` flag (not PostQuitMessage), so m.wParam is stale; return
     // an explicit 0/2 so a script can detect a bad load / failed write.
     if (captureMode) return captureFailed ? 2 : 0;
+    // --drive likewise breaks via `quit`; return the runner's explicit code.
+    if (m_ephemeral) return driveExitCode;
     return static_cast<int>(m.wParam);
 }
 
@@ -4526,14 +4661,15 @@ HostWindow::HostWindow(HINSTANCE hInstance,
                        const std::wstring& captureRef,
                        bool hasAmbient, float ambR, float ambG, float ambB,
                        bool hasSun, float sunR, float sunG, float sunB,
-                       bool hasSunI, float sunIntensity)
+                       bool hasSunI, float sunIntensity,
+                       const std::wstring& driveScriptPath)
     : m_impl(new HostWindowImpl(hInstance, textureManager, shaderManager, fileManager,
                                 gameRoots, useDevUi, useTestHost,
                                 captureAlo, capturePng, captureFrames, captureSkydome,
                                 captureRef,
                                 hasAmbient, ambR, ambG, ambB,
                                 hasSun, sunR, sunG, sunB,
-                                hasSunI, sunIntensity))
+                                hasSunI, sunIntensity, driveScriptPath))
 {
 }
 
@@ -4567,7 +4703,8 @@ int Run(HINSTANCE hInstance,
         const std::wstring& captureRef,
         bool hasAmbient, float ambR, float ambG, float ambB,
         bool hasSun, float sunR, float sunG, float sunB,
-        bool hasSunI, float sunIntensity)
+        bool hasSunI, float sunIntensity,
+        const std::wstring& driveScriptPath)
 {
     HostWindow host(hInstance, textureManager, shaderManager, fileManager,
                     gameRoots, useDevUi, useTestHost,
@@ -4575,7 +4712,7 @@ int Run(HINSTANCE hInstance,
                     captureRef,
                     hasAmbient, ambR, ambG, ambB,
                     hasSun, sunR, sunG, sunB,
-                    hasSunI, sunIntensity);
+                    hasSunI, sunIntensity, driveScriptPath);
     return host.Run(nCmdShow);
 }
 

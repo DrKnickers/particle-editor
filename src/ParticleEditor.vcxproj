@@ -124,6 +124,8 @@
     <ClInclude Include="host\AcceleratorBridge.h" />
     <ClInclude Include="host\AlphaCompositor.h" />
     <ClInclude Include="host\BridgeDispatcher.h" />
+    <ClInclude Include="host\DriveScript.h" />
+    <ClInclude Include="host\DriveRunner.h" />
     <ClInclude Include="host\Compositor.h" />
     <ClInclude Include="host\InputDispatcher.h" />
     <ClInclude Include="host\HostBridgeProxy.h" />
@@ -170,6 +172,7 @@
     </ClCompile>
     <ClCompile Include="host\BridgeDispatcher.cpp">
     </ClCompile>
+    <ClCompile Include="host\DriveRunner.cpp" />
     <ClCompile Include="host\Compositor.cpp">
       <!-- Compositor.cpp pulls in modern dcomp.h / d3d11.h / dxgi1_2.h
            from the Win10 SDK. The project-level AdditionalIncludeDirectories

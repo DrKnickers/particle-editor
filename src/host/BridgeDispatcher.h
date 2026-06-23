@@ -65,8 +65,12 @@ public:
     // (e.g. dialog-lighting's Force Align checkbox) see ctor defaults
     // regardless of the dev box's saved registry — the same determinism
     // gate the HostWindow registry-restore block uses (see).
+    // `ephemeral` (true in --drive mode): suppress ALL registry writes the same
+    // way `useTestHost` does, WITHOUT enabling the test-host-only behaviors
+    // (CDP port, a11y determinism). It ORs into every persist gate + guards the
+    // three otherwise-ungated WriteRecentFile (MRU) sites.
     BridgeDispatcher(Engine* engine, LayoutBroker& layout, AcceleratorBridge& accel,
-                     EmitFn emit, bool useTestHost = false);
+                     EmitFn emit, bool useTestHost = false, bool ephemeral = false);
 
     // Sets / replaces the live Engine pointer. The host can install this
     // before or after the Engine is constructed; null is treated as
@@ -323,6 +327,11 @@ private:
     // Mirrors HostWindow's `--test-host` flag — gates the registry-backed
     // settings handlers to deterministic defaults (see ctor comment +).
     bool               m_testHost = false;
+
+    // --drive ephemeral mode: ORs into every persist gate + guards the MRU
+    // writes so a --drive run performs NO registry writes (without enabling the
+    // test-host-only CDP/a11y behaviors). Set once at construction.
+    bool               m_ephemeral = false;
 
     // Test seam: set from the ALO_SETTINGS_LIVE env var at construction.
     // When true it LIFTS the `--test-host` settings gate, so the

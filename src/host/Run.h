@@ -67,7 +67,13 @@ int Run(HINSTANCE hInstance,
         // when false the engine's ctor-default lighting is left untouched.
         bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,
         bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
-        bool hasSunI = false, float sunIntensity = 1.0f);
+        bool hasSunI = false, float sunIntensity = 1.0f,
+        // --drive <script.json>: launch the full editor (no CDP), replay an
+        // allowlisted ordered list of bridge commands in-process via
+        // BridgeDispatcher::DispatchSync, capture the composed window, then exit.
+        // Non-empty = ephemeral drive mode (no settings/MRU/autosave persistence,
+        // per-PID WebView2 profile + log). See DriveRunner / DriveScript.h.
+        const std::wstring& driveScriptPath = L"");
 
 } // namespace host
 

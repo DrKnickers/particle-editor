@@ -729,8 +729,12 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 		}
 	}
 
-	// If the user picked a path that worked, persist it for next launch
-	if (fileManager != NULL && !pickedPath.empty())
+	// If the user picked a path that worked, persist it for next launch.
+	// --drive (ephemeral) must NOT persist — scan argv directly since the
+	// driveScriptPath local is out of scope inside createFileManager.
+	bool driveMode = false;
+	for (const std::wstring& a : argv) if (a == L"--drive") { driveMode = true; break; }
+	if (fileManager != NULL && !pickedPath.empty() && !driveMode)
 	{
 		HKEY hKey;
 		if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
@@ -846,10 +850,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		bool         captureHasAmbient = false; float captureAmbient[3] = {0,0,0};
 		bool         captureHasSun = false;     float captureSun[3] = {0,0,0};
 		bool         captureHasSunI = false;    float captureSunIntensity = 1.0f;
+		// --drive <script.json>: scripted non-CDP composite capture, then exit.
+		std::wstring driveScriptPath;
 		for (size_t i = 1; i < argv.size(); ++i)
 		{
 			if (argv[i] == L"--dev-ui")    devUi    = true;
 			if (argv[i] == L"--test-host") testHost = true;
+			if (argv[i] == L"--drive")
+			{
+				// Require an explicit path: a bare --drive must NOT fall through
+				// to a normal (persisting) launch — that would half-arm ephemeral
+				// mode (the GameDataPath scan keys off the bare token) and clobber
+				// the daily driver's settings. Fail loudly instead.
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--drive requires a <script.json> path\n");
+					return 2;
+				}
+				driveScriptPath = argv[i + 1];
+				++i;
+				continue;
+			}
 			if (argv[i] == L"--gen-nt5-fixture" && i + 1 < argv.size())
 			{
 				genNt5FixturePath = argv[i + 1];
@@ -919,6 +940,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 				else
 					fwprintf(stderr, L"--sun-intensity: expected a float, got '%s' -- ignored\n", argv[i + 1].c_str());
 			}
+		}
+		// --drive and --capture/--capture-ref are mutually-exclusive one-shots
+		// (both arm a captureMode-style branch). Reject the combination loudly
+		// rather than run an ambiguous mix. Checked BEFORE the capture/capture-ref
+		// warning so an already-rejected run doesn't also print that noise.
+		if (!driveScriptPath.empty() &&
+		    (!captureAlo.empty() || !capturePng.empty() || !captureRef.empty()))
+		{
+			fwprintf(stderr, L"--drive cannot be combined with --capture/--capture-ref\n");
+			return 2;
 		}
 		// Warn when both --capture and --capture-ref are supplied: --capture-ref
 		// wins (last write to capturePng, captureRef takes the branch in HostWindow).
@@ -1302,7 +1333,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		                           captureSkydome, captureRef,
 		                           captureHasAmbient, captureAmbient[0], captureAmbient[1], captureAmbient[2],
 		                           captureHasSun, captureSun[0], captureSun[1], captureSun[2],
-		                           captureHasSunI, captureSunIntensity);
+		                           captureHasSunI, captureSunIntensity,
+		                           driveScriptPath);
 		delete fileManager;
 #ifndef NDEBUG
 		FreeConsole();

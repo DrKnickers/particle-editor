@@ -58,8 +58,14 @@ struct ModEntry
 class ModManager
 {
 public:
+    // ephemeral (true in --drive mode): suppress ALL registry writes
+    // (LastLayers/LastMod/CoreMigrated) so a --drive run never rewrites the
+    // daily driver's persisted mod stack — notably the startup write-back via
+    // RestoreLastLayerStack -> SetLayerStack. Same concept as HostWindow's and
+    // BridgeDispatcher's m_ephemeral (one name across all three modules).
     ModManager(IFileManager* fileManager,
-               const std::vector<std::wstring>& gameRoots);
+               const std::vector<std::wstring>& gameRoots,
+               bool ephemeral = false);
 
     // Late-bound engine pointer. Required before the first SelectMod
     // that needs to take visible effect (shader + texture reload).
@@ -101,6 +107,7 @@ public:
     { return m_layerStack.empty() ? std::wstring() : m_layerStack.front(); }
 
 private:
+    bool                      m_ephemeral = false;  // --drive: suppress registry writes
     IFileManager*             m_fileManager;
     Engine*                   m_engine = nullptr;
     std::vector<std::wstring> m_gameRoots;
