@@ -2698,12 +2698,14 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             // Default the "Open particle system" picker to the selected
             // mod's Models folder (where .alo models live), mirroring the
             // textures/browse default above. Gated on the .alo case
-            // (filterId empty) so the skydome/ground TEXTURE variants are
-            // NOT pointed at Models — they keep the dialog's default dir.
+            // (filterId == "alo", the default when no `filter` key is
+            // passed) so the skydome/ground TEXTURE variants are NOT
+            // pointed at Models — they keep the dialog's default dir.
             // Covers BOTH File->Open and Import Emitters' Browse (both call
-            // file/open with empty params). Fallback: mod root -> default.
+            // file/open with no filter -> filterId "alo"). Fallback: mod
+            // root -> default.
             std::wstring initialDir;
-            if (filterId.empty() && m_modManager)
+            if (filterId == "alo" && m_modManager)
             {
                 const std::wstring mod = m_modManager->GetPrimaryLayerPath();
                 if (!mod.empty())

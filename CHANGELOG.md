@@ -16,6 +16,12 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 > The inline release markers below show where each tagged [SemVer](https://semver.org)
 > release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
 
+## 2026-06-23
+
+### Fixed
+
+- The Open dialog (File→Open and Import Emitters' Browse) now opens in the active mod's models folder instead of an unrelated directory
+
 ## 2026-06-22
 
 ### Added
