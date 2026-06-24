@@ -16,3 +16,6 @@ unzip and run.
 Launch the executable — it opens the WebView2/React UI. This is the only UI
 (x64 only); the legacy Win32 chrome and its `--legacy` / `--legacy-ui` opt-out
 were removed in.
+
+For headless / automated render captures (`--capture`, `--snap-window`,
+`--drive`, and the bridge grabs), see [`docs/CAPTURE_MODES.md`](docs/CAPTURE_MODES.md).
