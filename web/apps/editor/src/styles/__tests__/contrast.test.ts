@@ -78,9 +78,17 @@ describe("token contrast (WCAG AA, normal text >= 4.5:1)", () => {
       expect(contrast(WHITE, t("danger-strong-hover"))).toBeGreaterThanOrEqual(AA);
     });
 
-    it(`${name}: --text-3 (hints) on --bg and --bg-2`, () => {
-      expect(contrast(t("text-3"), t("bg"))).toBeGreaterThanOrEqual(AA);
-      expect(contrast(t("text-3"), t("bg-2"))).toBeGreaterThanOrEqual(AA);
+    it(`${name}: --text-3 (hints) on every surface it renders on`, () => {
+      // text-3 carries hint / disabled / placeholder text on the base + panel
+      // surfaces; all clear AA. `--panel-3` is deliberately NOT asserted: it is
+      // dark-theme ~4.27:1 with text-3, but text-3 NEVER renders on it — every
+      // panel-3 background (tooltip surface, .tb-btn / .panel-header .icon-btn
+      // :active press, button hover) carries --text or --text-2 (both AA there).
+      // Lightening text-3 to clear panel-3 would wash out tertiary text on every
+      // real surface to satisfy a pairing that doesn't occur.
+      for (const bg of ["bg", "bg-2", "panel", "panel-2"]) {
+        expect(contrast(t("text-3"), t(bg))).toBeGreaterThanOrEqual(AA);
+      }
     });
 
     it(`${name}: --text and --text-2 on --bg (regression guard)`, () => {
