@@ -1154,48 +1154,10 @@
 }
 .vp-overlay > * { pointer-events: auto; }
 
-.vp-perspective {
-  top: 10px; left: 10px;
-}
-.vp-perspective .select {
-  background-color: rgba(20, 24, 33, 0.85);
-  backdrop-filter: blur(8px);
-  border-color: rgba(255,255,255,0.08);
-  width: 140px;
-  height: var(--row-h);
-}
-
-.vp-stats {
-  top: 10px; right: 12px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
-  color: var(--text-2);
-}
-.vp-stats .fps { color: var(--success); font-weight: 600; font-size: 12px; }
-
 .vp-axes {
   bottom: 12px; right: 16px;
   width: 70px; height: 70px;
 }
-
-.vp-bottom-right {
-  bottom: 10px; right: 12px;
-  display: flex; gap: 2px;
-  background: rgba(20, 24, 33, 0.85);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: var(--radius-sm);
-  padding: 3px;
-}
-.vp-bottom-right .tool {
-  width: 26px; height: 26px;
-  display: grid; place-items: center;
-  border-radius: var(--radius-xs);
-  color: var(--text-2);
-  cursor: pointer;
-}
-.vp-bottom-right .tool:hover { background: rgba(255,255,255,0.06); color: var(--text); }
 
 /* ========== Curve editor ========== */
 
