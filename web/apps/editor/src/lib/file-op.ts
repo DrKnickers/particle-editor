@@ -8,14 +8,24 @@ import type { Bridge, Request, ResponseFor } from "@particle-editor/bridge-schem
 
 type FileOpErrorStore = {
   message: string | null;
-  show: (message: string) => void;
+  // Optional title override. Errors use the modal's default ("Couldn't complete
+  // that"); a non-error NOTICE (e.g. opened a model .alo) passes its own title.
+  title: string | null;
+  show: (message: string, title?: string) => void;
   clear: () => void;
 };
 export const useFileOpErrorStore = create<FileOpErrorStore>((set) => ({
   message: null,
-  show: (message) => set({ message }),
-  clear: () => set({ message: null }),
+  title: null,
+  show: (message, title) => set({ message, title: title ?? null }),
+  clear: () => set({ message: null, title: null }),
 }));
+
+// Shown after opening an .alo that holds no particle emitters — a model file
+// loads into an empty editor, so without this the user gets no signal that the
+// file simply has nothing to edit.
+export const NO_EMITTERS_NOTICE =
+  "This .alo has no particle emitters — it looks like a model, not a particle effect.";
 
 export type FileOpReq = Extract<
   Request,
@@ -42,6 +52,23 @@ export async function runFileOp(
   const r = await bridge.request(req);
   if (!r.ok && r.error !== "user-cancelled") {
     useFileOpErrorStore.getState().show(messageFor(req.kind, r.error));
+    return r;
+  }
+  // After a successful Open, surface a notice if the .alo holds no particle
+  // emitters (a model file). The host has already loaded + bound the system by
+  // the time file/open resolves, so emitters/list reflects the opened file.
+  // Best-effort: a list failure must never block or fail the open.
+  if (req.kind === "file/open" && r.ok) {
+    try {
+      const dto = await bridge.request({ kind: "emitters/list", params: {} });
+      if (dto.root.children.length === 0) {
+        useFileOpErrorStore
+          .getState()
+          .show(NO_EMITTERS_NOTICE, "No particle emitters");
+      }
+    } catch {
+      /* non-fatal — skip the notice if the list can't be read */
+    }
   }
   return r;
 }

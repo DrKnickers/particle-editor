@@ -270,8 +270,25 @@ describe("ImportEmittersDialog", () => {
     await waitFor(() =>
       expect(screen.getByText(/Imported 1 of 2/i)).toBeInTheDocument(),
     );
+    // Names the real (only reachable) cause rather than a vague "couldn't add".
+    expect(screen.getByText(/unreadable data/i)).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
     expect(screen.getByLabelText("Select Alpha")).toBeInTheDocument();
+  });
+
+  it("a source with no emitters shows a 'no particle emitters' notice, not an empty list", async () => {
+    const bridge = makeBridgeFor(node(0, "(root)", []));
+    render(<ImportEmittersDialog bridge={bridge} open onOpenChange={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /Browse/ }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/No particle emitters in this file/i)).toBeInTheDocument(),
+    );
+    // No selection card (no Select all control) and Import stays disabled.
+    expect(
+      screen.queryByRole("button", { name: /Select all emitters/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Import$/ })).toBeDisabled();
   });
 
   it("full import closes the modal", async () => {

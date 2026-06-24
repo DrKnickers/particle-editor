@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { FileOpErrorModal } from "@/components/FileOpErrorModal";
 import { useFileOpErrorStore } from "@/lib/file-op";
 
-beforeEach(() => useFileOpErrorStore.setState({ message: null }));
+beforeEach(() => useFileOpErrorStore.setState({ message: null, title: null }));
 
 describe("FileOpErrorModal", () => {
   it("is hidden when there is no message", () => {

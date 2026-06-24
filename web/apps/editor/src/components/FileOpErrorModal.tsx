@@ -5,12 +5,13 @@ import { useFileOpErrorStore } from "@/lib/file-op";
 
 export function FileOpErrorModal() {
   const message = useFileOpErrorStore((s) => s.message);
+  const title = useFileOpErrorStore((s) => s.title);
   const clear = useFileOpErrorStore((s) => s.clear);
   return (
     <Modal
       open={message !== null}
       onOpenChange={(o) => { if (!o) clear(); }}
-      title="Couldn't complete that"
+      title={title ?? "Couldn't complete that"}
       size="sm"
     >
       <Modal.Body>

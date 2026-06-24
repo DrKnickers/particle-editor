@@ -233,11 +233,14 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
           "No emitters were imported. The source file may contain unreadable emitter data.",
         );
       } else {
-        // Partial import — some landed, some didn't (out-of-range picks
-        // were dropped, or some clones threw). Report the shortfall and
-        // stay open rather than silently claiming success.
+        // Partial import — some landed, some didn't. The host re-loads the
+        // same source the preview read and imports every in-range pick, so a
+        // shortfall here means some emitters failed to clone (corrupt emitter
+        // data); name that rather than a vague "some couldn't be added".
         console.warn(`[ImportEmitters] imported ${imported} of ${requested}`);
-        setError(`Imported ${imported} of ${requested} selected emitters.`);
+        setError(
+          `Imported ${imported} of ${requested} selected. The rest had unreadable data — the source file may be corrupt.`,
+        );
       }
     } catch (err) {
       // The request rejected outright: the native host rejects on any
@@ -315,6 +318,10 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
   };
 
   const sourceLabel = sourcePath ? basename(sourcePath) : "(no file selected)";
+  // A successfully-previewed .alo with no root emitters is a model file, not a
+  // particle effect — there's nothing to import. Signal that instead of showing
+  // an empty selection card.
+  const emptyTree = tree !== null && tree.children.length === 0;
 
   return (
     <Modal
@@ -365,7 +372,13 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               Click Browse… to select a source .alo file.
             </div>
           )}
-          {!loading && tree && (
+          {!loading && !error && emptyTree && (
+            <div className="flex min-h-[160px] flex-col items-center justify-center gap-1 rounded border border-border bg-bg p-3 text-center text-xs text-text-3">
+              <span className="text-text-2">No particle emitters in this file</span>
+              <span>This .alo looks like a model — there's nothing to import. Browse for a particle effect.</span>
+            </div>
+          )}
+          {!loading && tree && !emptyTree && (
             <div className="overflow-hidden rounded border border-border">
               {/* Card header: count + bulk controls */}
               <div className="flex items-center justify-between border-b border-border bg-bg-2 px-3 py-2">

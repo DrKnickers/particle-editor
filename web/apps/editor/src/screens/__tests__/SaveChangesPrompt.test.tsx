@@ -41,7 +41,7 @@ beforeEach(() => {
     recentFiles: [],
     pendingAction: null,
   });
-  useFileOpErrorStore.setState({ message: null });
+  useFileOpErrorStore.setState({ message: null, title: null });
 });
 
 describe("SaveChangesPrompt", () => {

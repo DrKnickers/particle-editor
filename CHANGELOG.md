@@ -18,6 +18,10 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ## 2026-06-23
 
+### Added
+
+- The editor now tells you when an `.alo` has no particle emitters (a model file, not a particle effect) — both when importing emitters and when opening a file, instead of showing an empty list / empty editor with no explanation
+
 ### Changed
 
 - Redesign the Import Emitters dialog — emitters appear as a collapsible branch-select tree with a live "N of M selected" count and Select all / Clear beside it; ticking a parent now selects its whole branch (the separate Auto-include children toggle is gone)
