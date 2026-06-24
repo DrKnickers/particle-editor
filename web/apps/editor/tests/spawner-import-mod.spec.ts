@@ -1,14 +1,13 @@
 // Phase 3 Screen 8 Batch 4 — Playwright specs covering the Spawner
-// panel, Import Emitters modal, and Mod Nickname dialog (demo-route
-// gated). Same CDP-attach harness as sibling specs.
+// panel and Import Emitters modal. Same CDP-attach harness as sibling
+// specs.
 //
-// Four specs:
+// Three specs:
 //   1. Tools → Spawner opens the SpawnerPanel; opening Background
 //      closes it (mutual exclusion via the openToolPanel atom).
 //   2. Changing the Burst size Spinner fires `engine/state/changed`
 //      with the new `spawner.burstSize` value.
 //   3. File → Import Emitters opens the Import Emitters modal.
-//   4. ?demo=mod-nickname renders the Mod Nickname dialog.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 
@@ -187,38 +186,6 @@ test("File → Import Emitters opens the Import Emitters modal", async () => {
   expect(title).toMatch(/Import Emitters/);
 
   // Dismiss the modal so the next test starts clean.
-  await page.keyboard.press("Escape");
-  await page.waitForSelector(RADIX_DIALOG, {
-    state: "detached",
-    timeout: 2000,
-  });
-});
-
-test("Mod Nickname dialog opens via window.__promptModNickname (no menu entry in Batch 4)", async () => {
-  // Mod Nickname has no menu trigger in Batch 4 (real auto-trigger
-  // lands in the file-load batch). The lib/mod-nickname.ts module
-  // exposes the imperative trigger on window.__promptModNickname so
-  // tests + DevTools can open the dialog without a menu wire-up.
-  await closeAnyPanel(page);
-  await page.keyboard.press("Escape").catch(() => {});
-
-  // Fire the trigger (returns a Promise<string | null>) and DON'T
-  // await it — the dialog is now open and the resolver fires on
-  // dismiss.
-  await page.evaluate(() => {
-    const w = window as unknown as { __promptModNickname?: () => unknown };
-    if (w.__promptModNickname) void w.__promptModNickname();
-  });
-
-  await page.waitForSelector(RADIX_DIALOG, { timeout: 5000 });
-  const title = await page
-    .locator(RADIX_DIALOG)
-    .locator("text=Set mod nickname")
-    .first()
-    .textContent();
-  expect(title).toMatch(/Set mod nickname/);
-
-  // Dismiss so the next spec starts with a clean page.
   await page.keyboard.press("Escape");
   await page.waitForSelector(RADIX_DIALOG, {
     state: "detached",

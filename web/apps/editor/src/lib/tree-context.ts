@@ -66,8 +66,3 @@ export function openTreeContextDialog(
 ): void {
   useTreeContextStore.getState().openDialog(open, emitterId, linkGroupId);
 }
-
-/** Imperative close — symmetric with the open helper. */
-export function closeTreeContextDialog(): void {
-  useTreeContextStore.getState().close();
-}

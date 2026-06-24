@@ -115,11 +115,9 @@ private:
     std::vector<std::wstring> m_layerStack;   // absolute slash-free, [0]=highest
 };
 
-// Registry helpers for mod nicknames, exposed for direct use by the host
-// bridge without going through ModManager — they're trivially
-// side-effect-free and don't carry mutable state.
+// Registry helper for mod nicknames, exposed for direct use by the host
+// bridge without going through ModManager — it's trivially side-effect-free
+// and doesn't carry mutable state.
 std::wstring ReadModNickname(const std::wstring& modPath);
-void         WriteModNickname(const std::wstring& modPath,
-                              const std::wstring& nickname);
 
 #endif // MOD_MANAGER_H

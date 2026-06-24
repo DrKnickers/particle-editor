@@ -175,10 +175,6 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
 //     the first emitter-tree row to open the row's ContextMenu, then
 //     click the item. Assumes the T9 fixture loads at least one root
 //     emitter (a11y-base-state.alo).
-//   - mod-nickname: no menu trigger in production. The `?demo=mod-
-//     nickname` route auto-fires `promptModNickname()` so the dialog
-//     is visible at first paint. Captured by navigating to the demo
-//     route — works without the full AppShell.
 //
 // Deferred surfaces (see tasks/a11y-deferred-surfaces.md for reasoning):
 //   - dialog-save-changes (needs a dirty in-memory document)
@@ -191,9 +187,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
 //
 // Teardown: most dialogs close on Esc. The tree-context dialogs close
 // via Esc too (Radix Dialog handles it), then a second Esc clears any
-// lingering context-menu state for safety. The ?demo=mod-nickname
-// surface navigates back to the editor root to restore AppShell for
-// subsequent captures.
+// lingering context-menu state for safety.
 
 export const DIALOG_SURFACES: SurfaceCapture[] = [
   // ── Menu-triggered Modal dialogs ─────────────────────────────────
@@ -259,39 +253,6 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   // dialog-bloom-settings removed (session 11): Bloom settings folded into
   // the Lighting pane as a section, so they're captured by dialog-lighting.
 
-  // ── Demo-route auto-open ─────────────────────────────────────────
-  {
-    id: "dialog-mod-nickname",
-    setup: async (page) => {
-      // The ?demo=mod-nickname route mounts ModNicknameDemo, which
-      // fires promptModNickname() on mount, so the dialog is visible
-      // immediately after navigation completes.
-      //
-      // Use window.location.href instead of page.goto() — WebView2's
-      // CDP implementation rejects relative URLs in Page.navigate
-      // ("Cannot navigate to invalid URL"). Setting location.href via
-      // page.evaluate() works because it operates in the existing
-      // context (see primitives.spec.ts for the same pattern).
-      await page.evaluate(() => {
-        const base = window.location.href.split("?")[0];
-        window.location.href = base + "?demo=mod-nickname";
-      });
-      await page.waitForSelector('[role="dialog"]');
-    },
-    teardown: async (page) => {
-      // Dismiss the dialog, then return to the editor root so the next
-      // surface (if any) sees AppShell again. T9's beforeEach re-loads
-      // the base fixture per surface, so this just clears the URL.
-      await page.keyboard.press("Escape");
-      // Use window.location.href (not page.goto) — same WebView2 CDP
-      // relative-URL restriction as in setup above.
-      await page.evaluate(() => {
-        window.location.href = window.location.href.split("?")[0];
-      });
-      // Wait for the main app shell to reload.
-      await page.waitForSelector('[data-testid="app-shell"]');
-    },
-  },
   {
     // autosave crash-recovery. The real check-recovery is suppressed
     // under --test-host, so drive the dialog via the ?demo=autosave-recovery

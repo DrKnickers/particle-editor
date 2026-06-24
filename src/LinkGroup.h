@@ -175,10 +175,6 @@ bool JoinLinkGroup(ParticleSystem&            system,
 bool LeaveLinkGroup(ParticleSystem&          system,
                      ParticleSystem::Emitter* member);
 
-// Detach every member of `groupId`. The ID is retired. Returns the
-// number of emitters detached (0 if no such group existed).
-size_t DissolveLinkGroup(ParticleSystem& system, uint32_t groupId);
-
 // Return every emitter in `groupId` (empty vector if groupId == 0
 // or no such group exists).
 std::vector<ParticleSystem::Emitter*> GetLinkGroupMembers(

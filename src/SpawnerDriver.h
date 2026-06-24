@@ -90,15 +90,10 @@ public:
     // In Auto mode (or when a burst is already in flight): no-op.
     void Trigger(const ParticleSystem* sys, Engine* engine);
 
-    // For the dialog's read-only "Bursts/sec" label in Auto mode.
-    float DerivedBurstsPerSec() const { return ComputeBurstsPerSec(m_cfg); }
-
     // Static variant for callers that have a config but no driver
     // instance (e.g. dialog code mid-edit). Same math as the instance
     // method; one source of truth.
     static float ComputeBurstsPerSec(const SpawnerConfig& cfg);
-
-    bool IsActive() const { return m_cfg.enabled || m_cfg.mode == SpawnerConfig::Mode::Manual; }
 
 private:
     enum class Phase

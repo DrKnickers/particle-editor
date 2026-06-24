@@ -58,7 +58,7 @@ test.beforeEach(async ({}, testInfo) => {
   await page.keyboard.press("Escape");
   await page.mouse.move(0, 0);
   // Guard: a prior test's teardown may have triggered a window.location.href
-  // navigation (dialog-mod-nickname resets the ?demo= query param), which
+  // navigation (a demo route resetting the ?demo= query param), which
   // temporarily undefines window.bridge while the app re-mounts. Mirror
   // the HWND lane's a11y-dialogs.spec.ts beforeEach pattern.
   await page.waitForFunction(

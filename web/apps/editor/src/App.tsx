@@ -8,7 +8,6 @@ import { StatusBar } from "@/components/StatusBar";
 import { Toolbar } from "@/components/Toolbar";
 import { MenuBar } from "@/components/MenuBar";
 import { ImportEmittersDialog } from "@/screens/ImportEmittersDialog";
-import { ModNicknameDialog } from "@/screens/ModNicknameDialog";
 import { PrimitivesGallery } from "@/screens/PrimitivesGallery";
 import { AboutDialog } from "@/screens/AboutDialog";
 import { RescaleDialog } from "@/screens/RescaleDialog";
@@ -23,7 +22,6 @@ import { SaveChangesPrompt } from "@/screens/SaveChangesPrompt";
 import { useFileState, useSeedFileState, promptSaveChanges, useFileStateStore } from "@/lib/file-state";
 import { useSeedModStack } from "@/lib/mod-stack";
 import { formatWindowTitle } from "@/lib/window-title";
-import { promptModNickname } from "@/lib/mod-nickname";
 import { BridgeContext } from "@/lib/bridge-context";
 import { useBackingColorSync } from "@/lib/backing-color-sync";
 import { useAppAccelerators } from "@/lib/use-app-accelerators";
@@ -243,10 +241,6 @@ function AppShell() {
             open={importEmittersOpen}
             onOpenChange={setImportEmittersOpen}
           />
-          {/* ModNicknameDialog is mounted unconditionally; it observes its
-              own Zustand atom for open state. Driven by `promptModNickname`
-              (programmatic) or the `?demo=mod-nickname` route in App below. */}
-          <ModNicknameDialog />
           {/* Save-changes prompt (Screen 8 Batch 3). Open state lives in
               the file-state atom; this mount is invisible while the
               pendingAction slot is null. Driven from any destructive op
@@ -270,23 +264,6 @@ function AppShell() {
         </div>
       </Tooltip.Provider>
     </BridgeContext.Provider>
-  );
-}
-
-// ?demo=mod-nickname — design-checkpoint gate for the Mod Nickname
-// dialog. Mounts the dialog and fires `promptModNickname()` once on
-// load so the dialog is immediately visible. Phase 3 Screen 8 Batch 4.
-function ModNicknameDemo() {
-  useEffect(() => {
-    void promptModNickname().then((result) => {
-      console.log("[demo:mod-nickname] resolved with:", result);
-    });
-  }, []);
-  return (
-    <div className="flex h-full w-full items-center justify-center bg-bg text-sm text-text-2">
-      <span>Mod Nickname dialog demo — dismiss to log the result.</span>
-      <ModNicknameDialog />
-    </div>
   );
 }
 
@@ -326,13 +303,6 @@ export function App() {
     return (
       <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
         <PrimitivesGallery />
-      </Tooltip.Provider>
-    );
-  }
-  if (DEMO_PARAM === "mod-nickname") {
-    return (
-      <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
-        <ModNicknameDemo />
       </Tooltip.Provider>
     );
   }

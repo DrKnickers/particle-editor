@@ -1069,15 +1069,6 @@
 }
 
 /* ========== Viewport ========== */
-.viewport {
-  position: relative;
-  background: radial-gradient(ellipse at 50% 60%, #1a2030 0%, #0b0e15 75%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  min-height: 0;
-}
-
 .vp-overlay {
   position: absolute;
   pointer-events: none;

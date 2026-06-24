@@ -27,14 +27,10 @@ Effect::Effect(ID3DXEffect* pD3DEffect)
 	//
 	// Read effect properties
 	//
-	LPCSTR strPhase = NULL, strProc = NULL, strType = NULL;
-	BOOL   zSort = FALSE, tangentSpace = FALSE, shadowVolume = FALSE;
+	LPCSTR strPhase = NULL;
+	BOOL   shadowVolume = FALSE;
 	pD3DEffect->GetString("_ALAMO_RENDER_PHASE", &strPhase);
-	pD3DEffect->GetString("_ALAMO_VERTEX_PROC",  &strProc);
-	pD3DEffect->GetString("_ALAMO_VERTEX_TYPE",  &strType);
-	pD3DEffect->GetBool  ("_ALAMO_TANGENT_SPACE", &tangentSpace);
 	pD3DEffect->GetBool  ("_ALAMO_SHADOW_VOLUME", &shadowVolume);
-	pD3DEffect->GetBool  ("_ALAMO_Z_SORT",        &zSort);
 
 	int phase = NUM_PHASES;
 	if (strPhase != NULL)
@@ -44,11 +40,7 @@ Effect::Effect(ID3DXEffect* pD3DEffect)
 	}
 
 	m_phase        = (phase < NUM_PHASES) ? phase : 0;
-	m_vertexProc   = (strProc != NULL) ? strProc : "";
-	m_vertexType   = (strType != NULL) ? strType : "";
-	m_zSort        = (zSort        != FALSE);
 	m_shadowVolume = (shadowVolume != FALSE);
-	m_tangentSpace = (tangentSpace != FALSE);
 
 	//
 	// Select technique

@@ -7,6 +7,4 @@
 
 export {
   normalize,
-  type UIANode,
-  type Allowlist,
 } from "../../tests/helpers/a11y-normalizer";

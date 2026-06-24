@@ -129,8 +129,6 @@ importers:
 
   packages/bridge-schema: {}
 
-  packages/design-tokens: {}
-
 packages:
 
   '@adobe/css-tools@4.4.4':

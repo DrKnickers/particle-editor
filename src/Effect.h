@@ -71,15 +71,8 @@ public:
 	};
 
 private:
-	Effect*      m_next;
-	Effect**     m_prev;
-
 	Phase	     m_phase;
-	std::string  m_vertexProc;
-	std::string  m_vertexType;
-	bool         m_tangentSpace;
 	bool         m_shadowVolume;
-	bool		 m_zSort;
 	ID3DXEffect* m_pD3DEffect;
 	Handles      m_handles;
 

@@ -219,25 +219,6 @@ bool LeaveLinkGroup(ParticleSystem&          system,
     return true;
 }
 
-size_t DissolveLinkGroup(ParticleSystem& system, uint32_t groupId)
-{
-    if (groupId == 0) return 0;
-    std::vector<ParticleSystem::Emitter*> members = GetLinkGroupMembers(system, groupId);
-    for (size_t i = 0; i < members.size(); i++)
-    {
-        members[i]->detachFromLinkGroup();
-    }
-#ifndef NDEBUG
-    if (!members.empty())
-    {
-        printf("[Link] dissolve group=%u (was %zu members)\n",
-               groupId, members.size());
-        fflush(stdout);
-    }
-#endif
-    return members.size();
-}
-
 // Helper: compare a track's keys + interpolation type for equality.
 static bool TracksEqual(const ParticleSystem::Emitter::Track& a,
                          const ParticleSystem::Emitter::Track& b)

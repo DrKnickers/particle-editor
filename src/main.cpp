@@ -592,12 +592,10 @@ static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 }
 
 //
-// Mods support — registry helpers (ReadModNickname / WriteModNickname /
-// ReadLastMod / WriteLastMod) and disk scanning (ScanModsDir /
-// DiscoverMods) moved to ModManager (src/ModManager.{h,cpp}) in D6.
-// The nickname helpers are exposed via ModManager.h so the legacy
-// nickname dialog WM_COMMAND can still write them directly without
-// going through a ModManager method.
+// Mods support — registry helpers (ReadModNickname / ReadLastMod /
+// WriteLastMod) and disk scanning (ScanModsDir / DiscoverMods) moved to
+// ModManager (src/ModManager.{h,cpp}) in D6. ReadModNickname is
+// exposed via ModManager.h for direct use by the host bridge.
 //
 
 // View-state persistence. Registry layout under

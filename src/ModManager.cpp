@@ -3,9 +3,9 @@
 // Header comments document the why; this file documents the how.
 // Internal helpers (ScanModsDir, ReadLastMod, WriteLastMod) are file-
 // scope statics — they were `static` in main.cpp and stay private here.
-// ReadModNickname / WriteModNickname are exposed in the header because
-// the host bridge reads/writes mod nicknames directly, and there's no
-// benefit in routing that through a ModManager method.
+// ReadModNickname is exposed in the header because the host bridge reads
+// mod nicknames directly, and there's no benefit in routing that through
+// a ModManager method.
 
 #include "ModManager.h"
 #include "ModScan.h"   // ScanModNestedLayers / ModRootHasArt (transitively ModLayers.h)
@@ -27,8 +27,8 @@ using std::wstring;
 using std::vector;
 
 // ---------------------------------------------------------------------------
-// Registry helpers (file-scope private, plus the two exposed nickname ones).
-// All four were `static` in the legacy main.cpp before this extraction.
+// Registry helpers (file-scope private, plus the one exposed nickname read).
+// All were `static` in the legacy main.cpp before this extraction.
 // ---------------------------------------------------------------------------
 
 wstring ReadModNickname(const wstring& modPath)
@@ -47,26 +47,6 @@ wstring ReadModNickname(const wstring& modPath)
         RegCloseKey(hKey);
     }
     return nickname;
-}
-
-void WriteModNickname(const wstring& modPath, const wstring& nickname)
-{
-    HKEY hKey;
-    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor\\ModNicknames", 0, NULL,
-                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
-    {
-        if (nickname.empty())
-        {
-            RegDeleteValue(hKey, modPath.c_str());
-        }
-        else
-        {
-            RegSetValueEx(hKey, modPath.c_str(), 0, REG_SZ,
-                          (const BYTE*)nickname.c_str(),
-                          (DWORD)((nickname.size() + 1) * sizeof(TCHAR)));
-        }
-        RegCloseKey(hKey);
-    }
 }
 
 static wstring ReadLastMod()

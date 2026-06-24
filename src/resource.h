@@ -5,6 +5,5 @@
 // with the native Win32 UI. The shared IDS_* error/query string ids the
 // surviving code still uses were migrated into Resources\resource.h.
 #include "Resources\resource.h"
-#include "mfc_ids.h"
 
 #endif
