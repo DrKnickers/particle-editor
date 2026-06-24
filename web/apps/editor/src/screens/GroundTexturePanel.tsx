@@ -182,7 +182,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
           checked={groundOn}
           onChange={(e) => handleToggleGround(e.target.checked)}
           aria-label="Show ground"
-          className="size-3 accent-[var(--accent)]"
+          className="size-3 accent-[var(--accent-strong)]"
         />
         <span>Show ground</span>
       </label>
@@ -226,7 +226,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
             Solid colour
           </span>
           {selectedSlot === SOLID_COLOR_SLOT && (
-            <span className="flex size-5 items-center justify-center rounded-full bg-accent text-xs text-white">
+            <span className="flex size-5 items-center justify-center rounded-full bg-accent-strong text-xs text-white">
               ✓
             </span>
           )}
@@ -264,7 +264,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
                 {name}
               </span>
               {selected && (
-                <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-xs text-white">
+                <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent-strong text-xs text-white">
                   ✓
                 </span>
               )}
@@ -309,7 +309,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
                 </>
               )}
               {selected && !isEmpty && (
-                <span className="absolute left-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-xs text-white">
+                <span className="absolute left-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent-strong text-xs text-white">
                   ✓
                 </span>
               )}
@@ -328,7 +328,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
             void bridge.request({ kind: "engine/set/grid-visible", params: { visible: e.target.checked } })
           }
           aria-label="Grid visible"
-          className="size-3 accent-[var(--accent)]"
+          className="size-3 accent-[var(--accent-strong)]"
         />
         <span>Show grid</span>
       </label>

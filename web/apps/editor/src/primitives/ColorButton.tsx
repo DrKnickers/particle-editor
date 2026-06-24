@@ -235,7 +235,7 @@ export function ColorButton({
                   max={255}
                   value={pickerColor[ch]}
                   onChange={(e) => handleSliderChange(ch, parseInt(e.target.value, 10))}
-                  className="flex-1 accent-[var(--accent)]"
+                  className="flex-1 accent-[var(--accent-strong)]"
                   aria-label={`${ch.toUpperCase()} channel`}
                 />
                 <input
@@ -285,7 +285,7 @@ export function ColorButton({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded border border-accent bg-accent px-3 py-1 text-[10px] font-medium text-white hover:opacity-90 focus-ring"
+                className="rounded border border-accent-strong bg-accent-strong px-3 py-1 text-[10px] font-medium text-white hover:opacity-90 focus-ring"
               >
                 OK
               </button>

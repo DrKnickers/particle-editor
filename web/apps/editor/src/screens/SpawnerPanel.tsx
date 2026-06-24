@@ -219,7 +219,7 @@ export function SpawnerPanel({ bridge }: Props) {
               checked={config.mode === "manual"}
               onChange={() => setMode("manual")}
               aria-label="Manual mode"
-              className="size-3 accent-[var(--accent)]"
+              className="size-3 accent-[var(--accent-strong)]"
             />
             <span>Manual</span>
           </label>
@@ -231,7 +231,7 @@ export function SpawnerPanel({ bridge }: Props) {
               checked={config.mode === "auto"}
               onChange={() => setMode("auto")}
               aria-label="Auto mode"
-              className="size-3 accent-[var(--accent)]"
+              className="size-3 accent-[var(--accent-strong)]"
             />
             <span>Auto</span>
           </label>
@@ -244,7 +244,7 @@ export function SpawnerPanel({ bridge }: Props) {
               checked={config.enabled}
               onChange={(e) => setEnabled(e.target.checked)}
               aria-label="Enable spawner"
-              className="size-3 accent-[var(--accent)]"
+              className="size-3 accent-[var(--accent-strong)]"
             />
             <span>Enabled</span>
           </label>
@@ -255,7 +255,7 @@ export function SpawnerPanel({ bridge }: Props) {
             type="button"
             onClick={handleTrigger}
             aria-label="Spawn now"
-            className="mt-2 rounded bg-accent px-3 py-1 text-xs font-medium text-white transition hover:bg-accent focus-ring"
+            className="mt-2 rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white transition hover:bg-accent-strong-hover focus-ring"
           >
             Spawn now
           </button>

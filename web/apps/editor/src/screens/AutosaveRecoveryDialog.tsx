@@ -129,7 +129,7 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss }: Vie
             type="button"
             onClick={() => onChoose("recent")}
             data-testid="autosave-restore-recent"
-            className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent focus-ring"
+            className="rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white hover:bg-accent-strong-hover focus-ring"
           >
             Restore recent
           </button>

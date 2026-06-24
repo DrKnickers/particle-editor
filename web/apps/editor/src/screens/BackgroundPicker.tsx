@@ -187,7 +187,7 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
         <span className="text-text-3">Showing:</span>
         <span
           className={`rounded px-2 py-0.5 font-medium ${
-            gameDomeRendering ? "bg-accent text-white" : "bg-bg-2 text-text-2"
+            gameDomeRendering ? "bg-accent-strong text-white" : "bg-bg-2 text-text-2"
           }`}
         >
           {gameDomeRendering
@@ -216,7 +216,7 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
                 onClick={() => handleContextChange(ctx)}
                 aria-pressed={context === ctx}
                 className={`px-2 py-0.5 text-xs capitalize transition first:rounded-l-md last:rounded-r-md focus-ring-inset ${
-                  context === ctx ? "bg-accent text-white" : "text-text-2 hover:bg-bg-2"
+                  context === ctx ? "bg-accent-strong text-white" : "text-text-2 hover:bg-bg-2"
                 }`}
               >
                 {ctx}
@@ -282,7 +282,7 @@ export function BackgroundPickerBody({ bridge }: BodyProps) {
             Solid colour
           </span>
           {simpleSolidSelected && (
-            <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-xs text-white">
+            <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent-strong text-xs text-white">
               ✓
             </span>
           )}

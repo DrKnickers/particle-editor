@@ -913,11 +913,14 @@ function FieldCheckbox({
         onCheckedChange={(v) => onCheckedChange(v === true)}
         className={`flex h-[18px] w-[18px] items-center justify-center rounded border border-border-2 bg-bg-2 transition focus-ring col-2 justify-self-end ${
           disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:border-border-2"
-        } data-[state=checked]:border-accent data-[state=checked]:bg-accent`}
+        } data-[state=checked]:border-accent-strong data-[state=checked]:bg-accent-strong`}
         aria-label={label}
       >
         <Checkbox.Indicator>
-          <Check size={12} className="text-text" />
+          {/* White (not text-text) so the checkmark clears WCAG on the
+              --accent-strong fill in BOTH themes (text-text is #1f1f1f in
+              light → only 2.7:1 on the fill). */}
+          <Check size={12} className="text-white" />
         </Checkbox.Indicator>
       </Checkbox.Root>
     </div>

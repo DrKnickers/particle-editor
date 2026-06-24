@@ -127,7 +127,7 @@ function PaletteBody({
             aria-pressed={filter === s}
             className={`rounded px-3 py-1 text-xs transition focus-ring ${
               filter === s
-                ? "bg-accent text-white"
+                ? "bg-accent-strong text-white"
                 : "bg-bg-2 text-text-2 hover:bg-bg-3"
             }`}
           >

@@ -31,7 +31,9 @@ html { height: 100%; overflow: hidden; }
    (they aren't <input> elements). */
 input[type="checkbox"],
 input[type="radio"] {
-  accent-color: var(--accent);
+  /* --accent-strong (not --accent): the native check/dot is drawn white by the
+     UA, so the fill must be dark enough for WCAG-AA white-on-fill (~5.5:1). */
+  accent-color: var(--accent-strong);
   cursor: pointer;
 }
 

@@ -25,6 +25,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 ### Fixed
 
 - Import Emitters now reports the result accurately — a partial or failed import keeps the dialog open with a message instead of closing as if it had fully succeeded, and double-clicking Import no longer imports twice
+- Primary buttons, selection badges, checkboxes, and hint text now meet WCAG AA colour contrast — primary buttons use a slightly deeper blue so their white labels stay legible in both themes
 - The Open dialog (File→Open and Import Emitters' Browse) now opens in the active mod's models folder instead of an unrelated directory
 
 ## 2026-06-22

@@ -112,7 +112,7 @@ export function SaveChangesPrompt({ bridge }: Props) {
           type="button"
           onClick={() => void handleSave()}
           aria-label="Save"
-          className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent focus-ring"
+          className="rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white hover:bg-accent-strong-hover focus-ring"
         >
           Save
         </button>

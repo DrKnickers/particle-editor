@@ -300,7 +300,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               indeterminate={state === "partial"}
               onChange={() => toggleNode(node)}
               aria-label={`Select ${node.name}`}
-              className="size-3 shrink-0 accent-[var(--accent)]"
+              className="size-3 shrink-0 accent-[var(--accent-strong)]"
             />
             <span className="truncate" title={node.name}>
               {node.name}

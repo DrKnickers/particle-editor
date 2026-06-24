@@ -282,7 +282,7 @@ function ModalOkButton({ children = "OK", onClick, disabled }: ButtonProps) {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-40"
+      className="rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white hover:bg-accent-strong-hover focus-ring disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>

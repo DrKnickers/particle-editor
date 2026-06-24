@@ -32,10 +32,18 @@
   --hover: #252525;
   --text: #dddddd;
   --text-2: #ababab;
-  --text-3: #747474;
+  --text-3: #8c8c8c; /* WCAG AA: ~5.5:1 on --bg (was #747474 = ~4.05:1, sub-AA) */
   --accent: #4ea3ff;
   --accent-2: #2f7fd4;
   --accent-soft: rgba(78, 163, 255, 0.16);
+  /* Accent used as a FILL behind light (white) content — primary buttons,
+     selection badges, checkbox fills. --accent itself is too light for white
+     text (~2.6:1); --accent-strong is dark enough for WCAG AA (white ~5.5:1)
+     while staying the same blue hue. Keep --accent for accent TEXT, tints,
+     rings, and indicator dots (those read fine bright). Mirrors the
+     --danger-fg/-success-fg/-warning-fg fill-vs-foreground split above. */
+  --accent-strong: #1a66cc;
+  --accent-strong-hover: #1558bf;
   --danger: #e06c75;
   --success: #6fbf7a;
   --warning: #e0a14b;
@@ -134,10 +142,15 @@
   --hover: #e9e9e9;
   --text: #1f1f1f;
   --text-2: #525252;
-  --text-3: #848484;
+  --text-3: #666666; /* WCAG AA: ~4.85:1 on --bg (was #848484 = ~3.2:1, sub-AA) */
   --accent: #2f7fd4;
   --accent-2: #1f63b0;
   --accent-soft: rgba(47, 127, 212, 0.14);
+  /* Accent-as-fill behind white text. Light --accent (#2f7fd4) is a dead zone
+     (white ~4.1:1 AND dark text ~4.1:1 — both fail), so the button fill must be
+     deeper. White on #1f63b0 ~6.0:1. */
+  --accent-strong: #1f63b0;
+  --accent-strong-hover: #1a558f;
   /* Semantic FOREGROUND variants, darkened to clear WCAG AA (>=4.5:1) as text
      on the light --panel (#f7f7f7). The base --danger/-success/-warning stay
      bright for FILLS. (warning-as-text can't be both bright-amber and AA on
@@ -177,6 +190,8 @@
   --color-text-3: var(--text-3);
   --color-accent: var(--accent);
   --color-accent-2: var(--accent-2);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-strong-hover: var(--accent-strong-hover);
   --color-accent-soft: var(--accent-soft);
   --color-danger: var(--danger);
   --color-success: var(--success);

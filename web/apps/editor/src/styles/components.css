@@ -1054,8 +1054,9 @@
   flex-shrink: 0;
 }
 .checkbox.checked {
-  background: var(--accent);
-  border-color: var(--accent);
+  /* --accent-strong: white checkmark sits on this fill (WCAG-AA ~5.5:1). */
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
   color: white;
 }
 .checkbox:hover { border-color: var(--accent); }
