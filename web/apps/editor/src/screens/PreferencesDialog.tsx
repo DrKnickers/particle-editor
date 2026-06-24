@@ -21,7 +21,6 @@ import {
   writeMsaaLevel,
   type MsaaLevel,
 } from "@/lib/msaa-quality";
-import { applySkydomeSeamFix, readSkydomeSeamFix, writeSkydomeSeamFix } from "@/lib/skydome-seam-fix";
 import { applyModelShadows, readModelShadows, writeModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows, writeSoftShadows } from "@/lib/soft-shadows";
 
@@ -154,15 +153,6 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
     setMsaaLevel(level);
     writeMsaaLevel(level);
     applyMsaaLevel(bridge, level);
-  };
-
-  // "Smooth skydome seams": re-maps the dome UVs to hide the asset's closure
-  // seam (default on). Persisted in localStorage; applied to the engine live.
-  const [seamFix, setSeamFix] = useState<boolean>(() => readSkydomeSeamFix());
-  const commitSeamFix = (enabled: boolean) => {
-    setSeamFix(enabled);
-    writeSkydomeSeamFix(enabled);
-    applySkydomeSeamFix(bridge, enabled);
   };
 
   // "Model shadows": casts the game's stencil shadow for the reference model
@@ -345,21 +335,6 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                   strokeWidth={1.6}
                 />
               </div>
-            </div>
-            <div className="flex items-start justify-between gap-3 border-t border-border px-3 py-[9px]">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-xs text-text">Smooth skydome seams</span>
-                <span className="text-[11px] leading-snug text-text-3">
-                  Hides the seam baked into stock skydome textures by re-mapping the dome.
-                  Off shows the dome exactly as the game does (with the seam).
-                </span>
-              </div>
-              <CheckToggle
-                id="pref-skydome-seam-fix"
-                label="Smooth skydome seams"
-                checked={seamFix}
-                onChange={(e) => commitSeamFix(e.target.checked)}
-              />
             </div>
             <div className="flex items-start justify-between gap-3 border-t border-border px-3 py-[9px]">
               <div className="flex min-w-0 flex-col gap-0.5">

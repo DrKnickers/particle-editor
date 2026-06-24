@@ -531,10 +531,6 @@ export class MockBridge implements Bridge {
         // MockBridge: no GPU to configure — accept as a no-op.
         return {};
 
-      case "engine/set/skydome-seam-fix":
-        // MockBridge: no engine/dome to re-map — accept as a no-op.
-        return {};
-
       case "engine/set/model-shadows":
         // MockBridge: no engine renderer — accept as a no-op.
         return {};

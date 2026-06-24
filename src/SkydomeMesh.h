@@ -70,12 +70,9 @@ public:
     // touches no device. Replaces any prior contents (Clear() first). Returns
     // false (mesh left empty) on a FileManager miss, a parse failure, or zero
     // renderable sub-meshes. A 0x10005 (legacy-vertex) sub-mesh is dropped here.
-    //
-    // `applySeamFix` (default true) re-maps the dome's UVs spherically to erase
-    // the asset's closure-meridian seam -- a DELIBERATE non-faithful divergence
-    // gated by the "Smooth skydome seams" preference (see SkydomeDewrap.h). When
-    // false the authored (seamed, asset-accurate) UVs are kept verbatim.
-    bool Load(IFileManager& fm, const std::string& aloPath, bool applySeamFix = true);
+    // The dome's authored UVs are uploaded verbatim (faithful to the asset; any
+    // closure-meridian seam the asset bakes is rendered as the game shows it).
+    bool Load(IFileManager& fm, const std::string& aloPath);
 
     // Release all GPU resources + cached CPU data and empty the mesh. Used to
     // clear a deselected slot without a wasted FileManager probe.

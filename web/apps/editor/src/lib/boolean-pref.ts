@@ -1,5 +1,5 @@
 // boolean-pref.ts — shared localStorage backing for the persisted boolean
-// render preferences (soft-shadows / model-shadows / skydome-seam-fix), which
+// render preferences (soft-shadows / model-shadows), which
 // each had a byte-identical read/write pair (DRY audit web-bridge-state-4).
 //
 // Stored as "1"/"0"; reads tolerate the legacy "true" encoding. localStorage

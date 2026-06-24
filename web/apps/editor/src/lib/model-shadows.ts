@@ -1,5 +1,5 @@
 // model-shadows.ts — web side of the "Model shadows" preference.
-// Mirrors skydome-seam-fix.ts: localStorage owns persistence, the engine is told via
+// localStorage owns persistence; the engine is told via
 // engine/set/model-shadows on every change AND once at app mount (App.tsx), so
 // the saved setting applies at startup. Default ON — the game casts stencil
 // shadows for reference objects; enabling makes the preview match in-game behaviour.

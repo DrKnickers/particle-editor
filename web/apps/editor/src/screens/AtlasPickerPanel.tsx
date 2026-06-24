@@ -98,7 +98,7 @@ type PreviewState =
   | { kind: "broken" };
 
 // ─── persisted "show texture alpha" preference ────────────────────────────────
-// Mirrors the localStorage pref pattern (e.g. skydome-seam-fix.ts). Default OFF:
+// Mirrors the localStorage pref pattern (e.g. model-shadows.ts). Default OFF:
 // additive frames (alpha ~0) are visible by default, which is the common need.
 
 const SHOW_ALPHA_KEY = "atlas.showAlpha";

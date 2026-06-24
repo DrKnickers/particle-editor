@@ -167,20 +167,6 @@ describe("PreferencesDialog", () => {
     });
   });
 
-  it("Smooth skydome seams defaults on; unchecking sends enabled:false and persists", () => {
-    const { bridge, request } = makeBridgeStub();
-    render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);
-    const box = screen.getByRole("checkbox", { name: /smooth skydome seams/i }) as HTMLInputElement;
-    expect(box.checked).toBe(true); // default on
-    fireEvent.click(box);
-    expect(box.checked).toBe(false);
-    expect(request).toHaveBeenCalledWith({
-      kind: "engine/set/skydome-seam-fix",
-      params: { enabled: false },
-    });
-    expect(localStorage.getItem("alo:skydome-seam-fix")).toBe("0");
-  });
-
   it("Model shadows defaults on; unchecking sends enabled:false and persists", () => {
     const { bridge, request } = makeBridgeStub();
     render(<PreferencesDialog bridge={bridge} open onOpenChange={() => {}} />);

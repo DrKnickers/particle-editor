@@ -30,7 +30,6 @@ import { useAppAccelerators } from "@/lib/use-app-accelerators";
 import { applyMode, readStoredMode } from "@/lib/theme";
 import { applyOverloadGuard, readOverloadGuard } from "@/lib/overload-guard";
 import { applyMsaaLevel, readMsaaLevel } from "@/lib/msaa-quality";
-import { applySkydomeSeamFix, readSkydomeSeamFix } from "@/lib/skydome-seam-fix";
 import { applyModelShadows, readModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 
@@ -109,13 +108,6 @@ function AppShell() {
   // user to open Preferences first.
   useEffect(() => {
     applyMsaaLevel(bridge, readMsaaLevel());
-  }, [bridge]);
-
-  // Push the persisted "Smooth skydome seams" preference to the engine at
-  // startup so a re-mapped (or asset-accurate) dome loads without opening
-  // Preferences first.
-  useEffect(() => {
-    applySkydomeSeamFix(bridge, readSkydomeSeamFix());
   }, [bridge]);
 
   // Push the persisted "Model shadows" preference to the engine at startup

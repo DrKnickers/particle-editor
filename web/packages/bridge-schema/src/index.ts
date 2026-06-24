@@ -707,10 +707,6 @@ export type Request =
   | { kind: "engine/set/paused";              params: { paused: boolean } }
   | { kind: "engine/set/overload-guard";      params: { enabled: boolean; maxParticles: number } }
   | { kind: "engine/set/msaa-level";          params: { level: number } }
-  // [seam fix] "Smooth skydome seams" view preference — re-maps the dome UVs to
-  // hide the asset's closure seam (deliberate non-faithful divergence). View-only;
-  // persisted web-side, re-applied at startup. The engine reloads the current dome.
-  | { kind: "engine/set/skydome-seam-fix";    params: { enabled: boolean } }
   // [model-shadows] "Model shadows" view preference — casts the game's stencil
   // shadow for the reference model onto the ground (and self-shadows it).
   // View-only; persisted web-side, re-applied at startup.
@@ -1140,7 +1136,6 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/set/paused" }                  ? Record<string, never> :
   R extends { kind: "engine/set/overload-guard" }          ? Record<string, never> :
   R extends { kind: "engine/set/msaa-level" }              ? Record<string, never> :
-  R extends { kind: "engine/set/skydome-seam-fix" }        ? Record<string, never> :
   R extends { kind: "engine/set/model-shadows" }           ? Record<string, never> :
   R extends { kind: "engine/set/soft-shadows" }            ? Record<string, never> :
   R extends { kind: "engine/set/estimated-load" }          ? Record<string, never> :

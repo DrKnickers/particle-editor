@@ -1892,23 +1892,10 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         sendOk(json::object());
         return res;
     }
-    // -------- engine/set/skydome-seam-fix (view-only render preference) --------
-    // "Smooth skydome seams": re-maps the dome's UVs to erase the asset's closure
-    // seam (deliberate non-faithful divergence). Like msaa-level it is a view
-    // preference -- never marks the document dirty. Persisted web-side (localStorage)
-    // and re-applied at startup; the engine setter reloads the current dome.
-    if (kind == "engine/set/skydome-seam-fix")
-    {
-        if (!requireEngine(kind.c_str())) return res;
-        const bool enabled = params.value("enabled", true);
-        m_engine->SetSkydomeSeamFix(enabled);
-        sendOk(json::object());
-        return res;
-    }
     // -------- engine/set/model-shadows (view-only render preference) --------
     // "Model shadows": enables/disables the stencil shadow-volume pass for the
-    // reference object. Like skydome-seam-fix it is a view preference -- never
-    // marks the document dirty. Persisted web-side (localStorage).
+    // reference object. A view preference -- never marks the document dirty.
+    // Persisted web-side (localStorage).
     if (kind == "engine/set/model-shadows")
     {
         if (!requireEngine(kind.c_str())) return res;
