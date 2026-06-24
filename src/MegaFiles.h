@@ -22,9 +22,6 @@ class MegaFile
 
 public:
 	IFile*             getFile(std::string path) const;
-	IFile*             getFile(int index) const;
-	const std::string& getFilename(int index) const;
-	unsigned int       getNumFiles() const { return (unsigned int)files.size(); }
 
 	MegaFile(IFile* file);
 	~MegaFile();

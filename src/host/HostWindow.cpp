@@ -151,7 +151,7 @@ bool IsApprovedWebViewOrigin(PCWSTR uri, bool devUi)
 }
 
 // FPSMeasurer — ring-buffer of the last 32 frame timestamps. Originally
-// ported from the legacy src/main.cpp `FPSMeasurer` (lines 56-99), but
+// ported from the original src/main.cpp `FPSMeasurer` (since removed), but
 // swapped GetTickCount() for QueryPerformanceCounter so the math
 // stays meaningful in's uncapped (no-vsync) UpdateLayeredWindow
 // rendering regime. GetTickCount's ~15.6 ms resolution is too coarse

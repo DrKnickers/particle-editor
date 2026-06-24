@@ -184,10 +184,6 @@ size_t DissolveLinkGroup(ParticleSystem& system, uint32_t groupId);
 std::vector<ParticleSystem::Emitter*> GetLinkGroupMembers(
     const ParticleSystem& system, uint32_t groupId);
 
-// Return every distinct non-zero linkGroup ID present in `system`,
-// in ascending order. Useful for menu population.
-std::vector<uint32_t> GetAllLinkGroupIds(const ParticleSystem& system);
-
 // Return field names that differ between `a` and `b` (considering
 // only non-exempt fields per `exempt`). Used by the Join confirmation
 // dialog: when the diff is empty, the join is silent; otherwise the

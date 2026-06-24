@@ -114,23 +114,6 @@ std::vector<ParticleSystem::Emitter*> GetLinkGroupMembers(
     return out;
 }
 
-std::vector<uint32_t> GetAllLinkGroupIds(const ParticleSystem& system)
-{
-    std::vector<uint32_t> ids;
-    const std::vector<ParticleSystem::Emitter*>& v = system.getEmitters();
-    for (size_t i = 0; i < v.size(); i++)
-    {
-        uint32_t g = v[i]->linkGroup;
-        if (g == 0) continue;
-        if (std::find(ids.begin(), ids.end(), g) == ids.end())
-        {
-            ids.push_back(g);
-        }
-    }
-    std::sort(ids.begin(), ids.end());
-    return ids;
-}
-
 uint32_t CreateLinkGroup(ParticleSystem&                              system,
                           const std::vector<ParticleSystem::Emitter*>& members)
 {

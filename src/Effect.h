@@ -85,13 +85,8 @@ private:
 
 	~Effect();
 public:
-	const Effect*      getNext()        const { return m_next; }
 	Phase              getPhase()       const { return m_phase; }
-	const std::string& getVertexProc()  const { return m_vertexProc; }
-	const std::string& getVertexType()  const { return m_vertexType; }
-	bool               inTangentSpace() const { return m_tangentSpace; }
 	bool               isShadowVolume() const { return m_shadowVolume; }
-	bool               needsZSort()     const { return m_zSort; }
 	const Handles&     getHandles()     const { return m_handles; }
 
     void OnLostDevice()  { m_pD3DEffect->OnLostDevice();  }

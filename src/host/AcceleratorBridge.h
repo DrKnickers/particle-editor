@@ -36,9 +36,6 @@ public:
     using EmitFn = std::function<void(const std::string& combo)>;
     bool TryDispatch(UINT vk, bool ctrl, bool shift, bool alt, EmitFn emit) const;
 
-    // For diagnostics / logging.
-    const std::vector<std::string>& Registered() const { return m_combos; }
-
 private:
     // Human-readable originals kept for logging.
     std::vector<std::string> m_combos;

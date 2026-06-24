@@ -72,10 +72,10 @@ MegaFile::MegaFile(IFile* file)
 			{
 				throw ReadException();
 			}
-			//: a forged nameIndex makes getFile()/getFilename() index
-			// filenames[] out of bounds (std::vector::operator[] is UB, NOT a
-			// throw the catch below would catch). Validate every entry up front
-			// so every files[*] is safe before any lookup. Bound start/size too.
+			//: a forged nameIndex makes getFile() index filenames[]
+			// out of bounds (std::vector::operator[] is UB, NOT a throw the
+			// catch below would catch). Validate every entry up front so every
+			// files[*] is safe before any lookup. Bound start/size too.
 			if (info.nameIndex >= numStrings ||
 				info.start > fsize || info.size > fsize - info.start)
 			{
@@ -132,14 +132,4 @@ IFile* MegaFile::getFile(std::string path) const
 		throw BadFileException();
 	}
 	return NULL;
-}
-
-IFile* MegaFile::getFile(int index) const
-{
-	return new SubFile(file, files[index].start, files[index].size);
-}
-
-const string& MegaFile::getFilename(int index) const
-{
-	return filenames[files[index].nameIndex];
 }

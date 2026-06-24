@@ -51,61 +51,6 @@ using namespace std;
 // VS_VERSION_INFO in ParticleEditor.rc and the React About via vite.config.ts).
 #include "version.h"
 
-// Show up to this amount of files in the File menu
-static const int NUM_HISTORY_ITEMS = 9;
-
-static const int N_TRACKS          = 7;
-static const int MIN_WINDOW_WIDTH  = 860;
-static const int MIN_WINDOW_HEIGHT = 750;
-
-//
-// A class to measure the FPS
-//
-class FPSMeasurer
-{
-    static const int MAX_FRAMES = 32;
-
-    float  m_frames[MAX_FRAMES];
-    size_t m_iFrame;
-    size_t m_nFrames;
-    size_t m_lastFrame;
-    size_t m_firstFrame;
-
-public:
-    float getFPS()
-    {
-        if (m_nFrames > 0)
-        {
-            float diff = (m_frames[m_lastFrame] - m_frames[m_firstFrame]);
-            if (diff > 0.0f)
-            {
-                return m_nFrames / diff;
-            }
-        }
-        return 0.0f;
-    }
-
-    void measure()
-    {
-        m_lastFrame = m_iFrame;
-        m_frames[m_iFrame] = GetTickCount() / 1000.0f;
-        m_nFrames   = min(m_nFrames + 1, MAX_FRAMES);
-        m_iFrame    = (m_iFrame + 1) % MAX_FRAMES;
-        if (m_iFrame == m_firstFrame)
-        {
-            m_firstFrame = (m_firstFrame + 1) % MAX_FRAMES;
-        }
-    }
-
-    FPSMeasurer()
-    {
-        m_firstFrame = 0;
-        m_lastFrame  = 0;
-        m_iFrame     = 0;
-        m_nFrames    = 0;
-    }
-};
-
 // [shader-gate] Headless diagnostic logger (stdout-flushed + debugger). Defined here so both
 // TextureManager and ShaderManager can use it; HostWindowImpl::Log is not reachable from here.
 static void ShaderLog(const char* fmt, ...)

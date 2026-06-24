@@ -402,14 +402,6 @@ public:
     void                   setLinkExemptFlags(uint32_t                groupId,
                                               const LinkExemptFlags&  flags);
 
-    // Access to the raw map for the chunk writer / reader and the
-    // settings dialog (which needs to iterate over per-group entries
-    // for the disagreement-resolver). Const overload only — mutation
-    // goes through setLinkExemptFlags so the normalize-on-default
-    // behaviour is enforced.
-    const std::map<uint32_t, LinkExemptFlags>& getAllLinkExemptFlags() const
-    { return m_linkExempts; }
-
 private:
 	bool			 	                       m_leaveParticles;
 	std::string                                m_name;

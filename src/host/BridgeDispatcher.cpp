@@ -185,8 +185,8 @@ Engine::LightType ParseLightWhich(const std::string& s)
 // src/main.cpp:650-768 — values under `HKCU\Software\AloParticleEditor`
 // keyed by filename, with the FILETIME payload encoded as REG_BINARY.
 // The list is ordered most-recent-first by reading the FILETIME values
-// and sorting descending. Cap of 9 matches `NUM_HISTORY_ITEMS` at
-// src/main.cpp:47.
+// and sorting descending. The cap of 9 (`kMaxRecentFiles`) mirrors the
+// legacy `NUM_HISTORY_ITEMS` constant (since removed from src/main.cpp).
 
 constexpr int kMaxRecentFiles = 9;
 constexpr const wchar_t* kRegistryKeyPath = L"Software\\AloParticleEditor";

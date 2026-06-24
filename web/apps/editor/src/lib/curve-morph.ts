@@ -15,7 +15,6 @@ export type Key = { time: number; value: number };
 
 /** Morph duration / easing tier. Feel-tunable (host pass). */
 export const MORPH_MS = 180;
-export const KEY_POP_MS = 150;
 export const MORPH_SAMPLES = 160;
 /** Key times closer than this are "the same key" (matches the
  *  drag-clamp epsilon order of magnitude used by the renderer). */

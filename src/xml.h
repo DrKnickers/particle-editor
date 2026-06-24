@@ -33,16 +33,10 @@ class XMLNode
 	~XMLNode();
 
 public:
-	bool                isAnonymous() const    { return name.empty(); }
 	const std::wstring& getData() const        { return data; }
 	const std::wstring& getName() const        { return name; }
 	const unsigned int  getNumChildren() const { return (unsigned int)children.size(); }
 	const XMLNode*      getChild(int i) const  { return children[i]; }
-	
-	const bool hasAttribute(std::wstring name) const
-	{
-		return attributes.find(name) != attributes.end();
-	}
 
 	std::wstring getAttribute(std::wstring name) const
 	{
