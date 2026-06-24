@@ -24,6 +24,7 @@
 #include "LinkGroup.h"
 #include "Autosave.h"
 #include "utils.h"
+#include "AssetPathSafety.h"
 #include "engine.h"
 #include "ParticleSystem.h"
 #include "ParticleSystemInstance.h"
@@ -191,6 +192,7 @@ public:
 	{
 		size_t pos;
 		transform(filename.begin(), filename.end(), filename.begin(), toupper);
+		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
 		if (ShaderDiagEnabled()) ShaderLog("[tex-gate] getTexture(%s)\n", filename.c_str());
 		IDirect3DTexture9* pTexture = NULL;
 
@@ -364,6 +366,7 @@ public:
 	{
 		size_t pos;
 		transform(filename.begin(), filename.end(), filename.begin(), toupper);
+		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
 		if (ShaderDiagEnabled()) ShaderLog("[shader-gate] getShader(%s)\n", filename.c_str());
 		Effect* pShader = NULL;
 
@@ -567,10 +570,17 @@ bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
         if (errorOut) *errorOut = "null particle system";
         return false;
     }
+    // (data-loss BLOCKER): write to a sibling temp then atomically
+    // rename into place, mirroring Autosave::Write (Autosave.cpp:197-221). The
+    // old code opened the destination CREATE_ALWAYS (truncate-to-0) and streamed
+    // chunks in place, so any mid-write failure (disk full, removable drive,
+    // denied, throw) corrupted the user's original .alo. Now a failure leaves
+    // the original untouched; only a fully-written temp replaces it.
+    const std::wstring tmp = path + L".tmp";
     PhysicalFile* file = NULL;
     try
     {
-        file = new PhysicalFile(path, PhysicalFile::WRITE);
+        file = new PhysicalFile(tmp, PhysicalFile::WRITE);
     }
     catch (wexception& e)
     {
@@ -598,7 +608,16 @@ bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
         if (errorOut) *errorOut = "write failed";
         ok = false;
     }
-    file->Release();
+    file->Release();   // close the temp handle before the rename
+
+    if (ok && !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
+    {
+        if (errorOut) *errorOut = "could not replace destination file";
+        ok = false;
+    }
+    if (!ok)
+        DeleteFileW(tmp.c_str());   // failure: original .alo preserved, no orphan temp
+
     return ok;
 }
 

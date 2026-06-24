@@ -42,6 +42,9 @@ public:
     MouseCursor() : Object3D(NULL, D3DXVECTOR3(0,0,0))
     {
         QueryPerformanceFrequency(&m_frequency);
+        //: seed m_updated so the first UpdateVelocity() dt is a real
+        // frame delta, not (now - garbage) → bogus first-frame velocity.
+        QueryPerformanceCounter(&m_updated);
         m_oldPosition = D3DXVECTOR3(0,0,0);
     }
 };

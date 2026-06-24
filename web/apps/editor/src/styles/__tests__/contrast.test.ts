@@ -103,6 +103,19 @@ describe("token contrast (WCAG AA, normal text >= 4.5:1)", () => {
         expect(contrast(t(fg), t("panel"))).toBeGreaterThanOrEqual(AA);
       }
     });
+
+    it(`${name}: semantic -fg text tokens also clear AA on --bg and --bg-2`, () => {
+      // The semantic -fg tokens render inline status copy on the base canvas
+      // surfaces too (e.g. SetLinkGroupDialog's warning note sits on --bg; the
+      // texture-palette "broken" placeholder + status row sit on --bg-2). Per
+      // the audit these already pass with the worst margin ~4.58:1; lock it so
+      // a token edit can't silently drop a real pairing below AA.
+      for (const fg of ["danger-fg", "success-fg", "warning-fg"]) {
+        for (const bg of ["bg", "bg-2"]) {
+          expect(contrast(t(fg), t(bg))).toBeGreaterThanOrEqual(AA);
+        }
+      }
+    });
   }
 
   it("documents that bare --accent / --danger are too light for white text (why -strong exists)", () => {

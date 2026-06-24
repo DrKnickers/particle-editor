@@ -20,7 +20,7 @@ import { AutosaveRecoveryDialog, AutosaveRecoveryView } from "@/screens/Autosave
 import { FileOpErrorModal } from "@/components/FileOpErrorModal";
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
 import { SaveChangesPrompt } from "@/screens/SaveChangesPrompt";
-import { useFileState, useSeedFileState } from "@/lib/file-state";
+import { useFileState, useSeedFileState, promptSaveChanges, useFileStateStore } from "@/lib/file-state";
 import { useSeedModStack } from "@/lib/mod-stack";
 import { formatWindowTitle } from "@/lib/window-title";
 import { promptModNickname } from "@/lib/mod-nickname";
@@ -183,6 +183,24 @@ function AppShell() {
       .request({ kind: "engine/state/snapshot", params: {} })
       .then((s) => console.log("[engine/state/snapshot]", s))
       .catch((err) => console.warn("[engine/state/snapshot] failed:", err));
+  }, [bridge]);
+
+  // (data-loss BLOCKER): the native frame-X / Alt-F4 on a dirty doc
+  // emits `app/close-requested` from the host (it can't render the React
+  // prompt itself). Pop the SAME Save/Discard/Cancel prompt File→Exit uses; on
+  // Save-success or Discard it dispatches app/quit, and the host tears down via
+  // WM_APP_QUIT_CONFIRMED → DestroyWindow. Cancel leaves the window open.
+  useEffect(() => {
+    const off = bridge.on("app/close-requested", () => {
+      // Idempotent: a second frame-X (or File→Exit then X) while the prompt is
+      // already open must not churn the pending action. Cancel is React-only —
+      // the host keeps no close-pending state, so this guard lives here.
+      if (useFileStateStore.getState().pendingAction) return;
+      promptSaveChanges(async () => {
+        await bridge.request({ kind: "app/quit", params: {} }).catch(() => {});
+      });
+    });
+    return off;
   }, [bridge]);
 
   return (

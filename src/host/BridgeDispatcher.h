@@ -249,6 +249,11 @@ public:
 
     void EmitManipulatorDrag(const nlohmann::json& payload);   // readout pill
 
+    //: native frame-X on a dirty doc emits `app/close-requested` so
+    // React pops the same Save/Discard/Cancel prompt File→Exit uses (the host
+    // can't render the React prompt itself). Called from HostWindow's wndproc.
+    void EmitCloseRequested();
+
 private:
     // Builds the response envelope for one parsed `req` envelope. Single
     // source of truth for the kind-string ladder — both the async

@@ -151,6 +151,24 @@ static int onUnknownEncoding(void* /*data*/, const XML_Char* name, XML_Encoding*
 	return XML_STATUS_OK;
 }
 
+// Audit F-XML (untrusted mod XML): the bundled Expat is 2.1.0 (predating the
+// 2.4.0 billion-laughs amplification cap), with no entity-expansion limit. Legit
+// game/mod XML declares NO custom entities, so abort parsing on the first
+// <!ENTITY> declaration — closing the entity-expansion DoS. The aborted parse
+// surfaces as the normal XML_Parse==0 ParseException below.
+// thread_local: XMLTree::parse runs concurrently on the GameObjectCatalog
+// worker pool, so this MUST be per-thread — a shared static would let one
+// thread's entity handler stop another thread's parser (DoS bypass) or read a
+// freed parser. Each parse() sets + clears it within one thread's call stack.
+static thread_local XML_Parser g_xmlParser = NULL;
+static void onEntityDecl(void* /*userData*/, const XML_Char* /*entityName*/,
+    int /*isParameterEntity*/, const XML_Char* /*value*/, int /*valueLength*/,
+    const XML_Char* /*base*/, const XML_Char* /*systemId*/,
+    const XML_Char* /*publicId*/, const XML_Char* /*notationName*/)
+{
+    if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+}
+
 void XMLTree::parse(IFile* file)
 {
 	// Reset tree
@@ -168,13 +186,24 @@ void XMLTree::parse(IFile* file)
 	XML_SetElementHandler(parser, onStartElement, onEndElement);
 	XML_SetCharacterDataHandler(parser, onCharacterData);
 	XML_SetUnknownEncodingHandler(parser, onUnknownEncoding, NULL);   // tolerate encoding='ASCII'
+	g_xmlParser = parser;                                  // F-XML: for onEntityDecl's XML_StopParser
+	XML_SetEntityDeclHandler(parser, onEntityDecl);        // F-XML: reject custom entity declarations
 
 	try
 	{
+		// F-XML: cap total input so a crafted untrusted mod XML can't drive an
+		// unbounded read/parse. Real game XML is well under this.
+		unsigned long total = 0;
+		const unsigned long kMaxXmlBytes = 64u * 1024u * 1024u;   // 64 MB
 		while (!file->eof())
 		{
 			char buffer[ BUFFER_SIZE ];
 			unsigned long n = file->read(buffer, BUFFER_SIZE);
+			total += n;
+			if (total > kMaxXmlBytes)
+			{
+				throw ParseException( LoadString(IDS_ERROR_XML, L"input too large", 0) );
+			}
 			if (XML_Parse(parser, buffer, n, file->eof()) == 0)
 			{
 				const wstring error = XML_ErrorString(XML_GetErrorCode(parser));
@@ -184,9 +213,11 @@ void XMLTree::parse(IFile* file)
 	}
 	catch (...)
 	{
+		g_xmlParser = NULL;
 		XML_ParserFree(parser);
 		throw;
 	}
+	g_xmlParser = NULL;
 	XML_ParserFree(parser);
 }
 

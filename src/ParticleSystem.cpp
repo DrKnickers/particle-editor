@@ -49,6 +49,17 @@ static unsigned long readInteger(ChunkReader& reader)
 	return letohl(value);
 }
 
+//: map a raw file integer to a valid InterpolationType, falling
+// back to the linear default for anything outside {IT_UNKNOWN..IT_STEP}.
+static ParticleSystem::Emitter::Track::InterpolationType clampInterpolation(unsigned long raw)
+{
+	typedef ParticleSystem::Emitter::Track Track;
+	int v = (int)raw;
+	if (v < Track::IT_UNKNOWN || v > Track::IT_STEP)
+		return Track::IT_LINEAR;
+	return (Track::InterpolationType)v;
+}
+
 static void writeByte(ChunkWriter& writer, uint8_t value)
 {
 	writer.write(&value, sizeof(value));
@@ -325,7 +336,15 @@ void ParticleSystem::Emitter::readProperties(ChunkReader& reader)
 		switch (type)
 		{
 			case 0x04: blendMode				= readInteger(reader) % NUM_BLEND_MODES; break;
-			case 0x05: nTriangles				= readInteger(reader) + 1; break;
+			case 0x05:
+			{
+				//: a crafted 0xFFFFFFFF would wrap `+1` to 0,
+				// producing a zero-triangle emitter. Clamp so the loaded
+				// value never wraps and stays >= 1.
+				unsigned long raw = readInteger(reader);
+				nTriangles = (raw == 0xFFFFFFFFul) ? 1 : raw + 1;
+				break;
+			}
 			case 0x07: useBursts				= readBool(reader); break;
 			case 0x08: linkToSystem 			= readBool(reader); break;
 			case 0x09: inwardSpeed				= -readFloat(reader); break;
@@ -390,6 +409,11 @@ void ParticleSystem::Emitter::readGroups(ChunkReader& reader)
 		Verify(reader.next() == 0x1100);
 		Verify(reader.next() == 0x1101);
 		reader.read(&groups[i], sizeof(Group));
+		//: `type` is blitted raw from the file but is consumed as a
+		// group-type selector (GT_EXACT..GT_CYLINDER). Reject out-of-range
+		// values. sphereEdge/cylinderEdge stay unvalidated -- they are used
+		// as flags, not bounded enums.
+		Verify(groups[i].type < NUM_GROUP_TYPES);
 		Verify(reader.next() == -1);
 	}
 
@@ -410,7 +434,10 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 		Verify(reader.nextMini() == 0x03);
 		Track::Key last(100.0f, readByte(reader) / 255.0f);
 		Verify(reader.nextMini() == 0x04);
-		trackContents[i].interpolation = (Track::InterpolationType)readInteger(reader);
+		//: the file int is cast straight to the enum; clamp an
+		// out-of-range value to the linear default rather than store a
+		// bogus interpolation mode.
+		trackContents[i].interpolation = clampInterpolation(readInteger(reader));
 		Verify(reader.nextMini() == -1);
 
 		trackContents[i].keys.insert(first);
@@ -421,6 +448,10 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 		{
 			Track::Key key;
 			uint32_t value;
+			//: this mini-chunk is a 4-byte value + 4-byte time;
+			// guard the exact size before the raw reads, mirroring how
+			// readFloat/readInteger validate reader.size().
+			Verify(reader.size() == sizeof(uint32_t) + sizeof(float));
 			reader.read(&value, sizeof(uint32_t));
 			key.value = letohl(value) / 255.0f;
 			reader.read(&key.time, sizeof(float));
@@ -460,7 +491,8 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 		last.time  = 100.0;
 		last.value = readFloat(reader);
 		Verify(reader.nextMini() == 0x04);
-		trackContents[i].interpolation = (Emitter::Track::InterpolationType)readInteger(reader);
+		//: clamp an out-of-range interpolation int to the linear default.
+		trackContents[i].interpolation = clampInterpolation(readInteger(reader));
 		Verify(reader.nextMini() == -1);
 
 		trackContents[i].keys.insert(first);
@@ -469,6 +501,9 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 		while ((type = reader.nextMini()) == 5)
 		{
 			Track::Key key;
+			//: guard the exact key size (value + time) before the
+			// raw blit, mirroring the channel-track loop above.
+			Verify(reader.size() == sizeof(Track::Key));
 			reader.read(&key, sizeof(Track::Key));
 			key.time *= 100.0f; // Transform to percentage
 			Verify(key.time <= 100.0f && trackContents[i].keys.rbegin()->time <= key.time);
@@ -1240,6 +1275,14 @@ size_t ParticleSystem::ImportEmittersFrom(
         catch (...)
         {
             placed = NULL;
+            //: a clone failure silently dropped the emitter. Keep the
+            // existing behaviour (skip the pick) but make it observable -- the
+            // returned `imported` count already lets callers detect partial
+            // imports (imported < picks.size()); log the specific drop in debug.
+#ifndef NDEBUG
+            printf("[ImportEmittersFrom] dropped pick %zu (src idx %zu): "
+                   "serialize/clone failed\n", i, srcIdx); fflush(stdout);
+#endif
         }
         mf->Release();
 

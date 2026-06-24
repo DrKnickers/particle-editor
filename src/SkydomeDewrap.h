@@ -80,6 +80,7 @@ inline uint32_t CollapsePoleUVs(std::vector<unsigned char>& vtx, uint32_t stride
 {
     if (stride == 0 || posOffset + 12 > stride || uvOffset + 8 > stride) return (uint32_t)(vtx.size() / stride);
     uint32_t vcount = (uint32_t)(vtx.size() / stride);
+    const uint32_t entryVcount = vcount;   // F-A: file triangle indices must reference original verts only
     const uint32_t tris = (uint32_t)(idx.size() / 2) / 3;
     const float kPi = 3.14159265358979f;
     const float sinThresh = std::sin(poleLatDeg * kPi / 180.0f);
@@ -96,6 +97,7 @@ inline uint32_t CollapsePoleUVs(std::vector<unsigned char>& vtx, uint32_t stride
     for (uint32_t t = 0; t < tris; ++t)
     {
         const uint16_t vi[3] = { getI(t * 3), getI(t * 3 + 1), getI(t * 3 + 2) };
+        if (vi[0] >= entryVcount || vi[1] >= entryVcount || vi[2] >= entryVcount) continue; // F-A: skip OOB index (crafted skydome .alo)
         const bool pole[3] = { isPole(vi[0]), isPole(vi[1]), isPole(vi[2]) };
         const int npole = (pole[0] ? 1 : 0) + (pole[1] ? 1 : 0) + (pole[2] ? 1 : 0);
         if (npole == 0 || npole == 3) continue;   // interior, or degenerate all-at-pole
@@ -125,6 +127,7 @@ inline uint32_t DewrapSphereUVs(std::vector<unsigned char>& vtx, uint32_t stride
 {
     if (stride == 0 || vtx.size() < stride || uvOffset + 8 > stride) return 0;
     uint32_t vcount = (uint32_t)(vtx.size() / stride);
+    const uint32_t entryVcount = vcount;   // F-A: file triangle indices must reference original verts only
     const uint32_t icount = (uint32_t)(idx.size() / sizeof(uint16_t));
     if (vcount == 0 || icount < 3) return vcount;
 
@@ -154,6 +157,7 @@ inline uint32_t DewrapSphereUVs(std::vector<unsigned char>& vtx, uint32_t stride
     for (uint32_t t = 0; t < tris; ++t)
     {
         const uint16_t vi[3] = { getI(t * 3), getI(t * 3 + 1), getI(t * 3 + 2) };
+        if (vi[0] >= entryVcount || vi[1] >= entryVcount || vi[2] >= entryVcount) continue; // F-A: skip OOB index (crafted skydome .alo)
         const float u0 = getU(vi[0]), u1 = getU(vi[1]), u2 = getU(vi[2]);
         const float tmin = (std::min)(u0, (std::min)(u1, u2));
         const float tmax = (std::max)(u0, (std::max)(u1, u2));

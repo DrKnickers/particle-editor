@@ -4,6 +4,7 @@
 #include "InputDispatcher.h"
 #include "LayoutBroker.h"
 #include "WindowCapture.h"
+#include "HostMessages.h"   // WM_APP_QUIT_CONFIRMED (audit D1)
 #include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
 #include "third_party/nlohmann/json.hpp"
 
@@ -1369,18 +1370,18 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- app/quit -----------------------------------------------
     //
-    // (Group D): React File → Exit dispatches this after the
-    // dirty-prompt clears. PostMessage WM_CLOSE so the existing
-    // DefWindowProc → DestroyWindow → WM_DESTROY shutdown chain
-    // (compositor + engine teardown, WM_QUIT post) runs unchanged.
-    // Using PostMessage (not SendMessage) so the response envelope
-    // gets emitted before the message pump processes WM_CLOSE.
+    // React File → Exit (and the native-X → app/close-requested → prompt path,
+    // audit D1) dispatch this AFTER the Save/Discard/Cancel prompt has cleared.
+    // PostMessage WM_APP_QUIT_CONFIRMED (not WM_CLOSE) so the wndproc's
+    // DestroyWindow → WM_DESTROY teardown runs WITHOUT re-entering the dirty
+    // WM_CLOSE veto. PostMessage (not SendMessage) so the response envelope is
+    // emitted before the pump processes the quit.
     if (kind == "app/quit")
     {
         sendOk(json::object());
         if (m_hostHwnd != nullptr)
         {
-            PostMessage(m_hostHwnd, WM_CLOSE, 0, 0);
+            PostMessage(m_hostHwnd, WM_APP_QUIT_CONFIRMED, 0, 0);
         }
         return res;
     }
@@ -1476,6 +1477,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     if (kind == "mods/set-layers")
     {
+        // G3: intentional sendOk — handler's success path also returns
+        // sendOk({ok,stack}) where ok may itself be false; caller reads
+        // nested ok as the discriminator, so failure stays the same shape.
         if (!m_modManager) { sendOk(json{{"ok", false}, {"error", "ModManager not bound"}}); return res; }
         std::vector<std::wstring> paths;
         auto pit = params.find("paths");
@@ -1783,7 +1787,12 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         }
         else
         {
-            sendOk(json{{"ok", false}, {"error", "no particle system bound"}});
+            // G3: HARD FAIL — success path is a bare sendOk(json::object())
+            // with no nested ok, so no caller reads nested ok here. Sibling
+            // engine/set/* handlers already sendErr (via requireEngine) for
+            // the not-ready case from the same `void bridge.request` call
+            // sites; converting aligns this outlier with them.
+            sendErr("no particle system bound");
         }
         return res;
     }
@@ -2619,6 +2628,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         {
             // The only user-reachable failure (entry exists + mod active) is
             // the pins-full cap; no-mod/malformed never happen from the UI.
+            // G3: intentional sendOk — not an error, a "nothing changed" cap
+            // result the UI handles as normal (carries reason, not error);
+            // success path also returns sendOk({ok:true,pinned}).
             sendOk(json{{"ok", false}, {"reason", "pins-full"}});
             return res;
         }
@@ -2735,6 +2747,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             if (!GetOpenFileNameW(&ofn))
             {
                 // User cancelled / dialog failure.
+                // G3: intentional sendOk — user-cancel is not an error; the
+                // file/* family deliberately returns failures as sendOk so
+                // request() won't throw (caller reads nested ok).
                 sendOk(json{{"ok", false}, {"error", "user-cancelled"}});
                 return res;
             }
@@ -2761,6 +2776,10 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             // Don't touch m_currentFilePath / recents on failure —
             // matches legacy LoadFile behaviour (history append only
             // happens after a successful parse).
+            // G3: intentional sendOk — file/open returns failures as
+            // sendOk({ok:false}) by design so request() won't throw; the
+            // success path returns sendOk({ok:true,path}) and the caller
+            // reads nested ok. Converting would split this handler's contract.
             sendOk(json{{"ok", false}, {"error", err.empty() ? std::string("load failed") : err}});
             return res;
         }
@@ -2857,6 +2876,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
             if (!GetSaveFileNameW(&ofn))
             {
+                // G3: intentional sendOk — user-cancel is not an error; the
+                // file/* family returns failures as sendOk so request() won't
+                // throw (success path is sendOk({ok:true,path})).
                 sendOk(json{{"ok", false}, {"error", "user-cancelled"}});
                 return res;
             }
@@ -2866,12 +2888,17 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         //: actually write the host-owned ParticleSystem to disk.
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
+            // G3: intentional sendOk — same dual-result contract as the
+            // success path below (sendOk({ok:true,path})); caller reads
+            // nested ok. Converting would split this handler's contract.
             sendOk(json{{"ok", false}, {"error", "particle system not bound"}});
             return res;
         }
         std::string err;
         if (!SaveParticleSystem(m_pParticleSystem->get(), path, &err))
         {
+            // G3: intentional sendOk — see above; failure stays nested-ok so
+            // it matches the success payload shape the caller inspects.
             sendOk(json{{"ok", false}, {"error", err.empty() ? std::string("save failed") : err}});
             return res;
         }
@@ -2921,6 +2948,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
         if (!GetSaveFileNameW(&ofn))
         {
+            // G3: intentional sendOk — user-cancel is not an error; the
+            // file/* family returns failures as sendOk so request() won't
+            // throw (success path is sendOk({ok:true,path})).
             sendOk(json{{"ok", false}, {"error", "user-cancelled"}});
             return res;
         }
@@ -2929,12 +2959,17 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         //: actually write to disk.
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
+            // G3: intentional sendOk — same dual-result contract as the
+            // success path below (sendOk({ok:true,path})); caller reads
+            // nested ok. Converting would split this handler's contract.
             sendOk(json{{"ok", false}, {"error", "particle system not bound"}});
             return res;
         }
         std::string err;
         if (!SaveParticleSystem(m_pParticleSystem->get(), path, &err))
         {
+            // G3: intentional sendOk — see above; failure stays nested-ok so
+            // it matches the success payload shape the caller inspects.
             sendOk(json{{"ok", false}, {"error", err.empty() ? std::string("save failed") : err}});
             return res;
         }
@@ -3156,6 +3191,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         std::string path8 = params.value("path", std::string{});
         if (path8.empty())
         {
+            // G3: intentional sendOk — file-load-result contract; the success
+            // path returns sendOk({ok:true,tree}) and the Import Emitters
+            // caller reads nested ok. Converting would split the contract.
             sendOk(json{{"ok", false}, {"error", "missing path"}});
             return res;
         }
@@ -3164,6 +3202,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         std::unique_ptr<ParticleSystem> tmp = LoadParticleSystem(path, &err);
         if (!tmp)
         {
+            // G3: intentional sendOk — like file/open, a load failure here is
+            // returned as nested-ok so request() won't throw; success path is
+            // sendOk({ok:true,tree}). Caller inspects nested ok.
             sendOk(json{
                 {"ok",    false},
                 {"error", err.empty() ? std::string("could not load file") : err},
@@ -3856,6 +3897,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         ParticleSystem::Emitter* source = getEmitterById(id);
         if (source == nullptr)
         {
+            // G3: intentional sendOk — handler success path returns
+            // sendOk({ok:true,newId}); caller reads nested ok, so all
+            // failures stay the same nested-ok shape to match.
             sendOk(json{{"ok", false}, {"error", "emitter not found"}});
             return res;
         }
@@ -3883,6 +3927,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         catch (...)
         {
             memfile->Release();
+            // G3: intentional sendOk — nested-ok failure to match the
+            // success payload the caller inspects (see above).
             sendOk(json{{"ok", false}, {"error", "emitter copy failed"}});
             return res;
         }
@@ -3890,6 +3936,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
         if (dup == nullptr)
         {
+            // G3: intentional sendOk — nested-ok failure to match the
+            // success payload the caller inspects (see above).
             sendOk(json{{"ok", false}, {"error", "insertEmitterAfter returned null"}});
             return res;
         }
@@ -3913,6 +3961,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     {
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
+            // G3: intentional sendOk — handler success path returns
+            // sendOk({ok:true,newIds}); caller reads nested ok, so all
+            // failures stay the same nested-ok shape to match.
             sendOk(json{{"ok", false}, {"error", "no particle system bound"}});
             return res;
         }
@@ -3930,6 +3981,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         }
         if (sources.empty())
         {
+            // G3: intentional sendOk — nested-ok failure to match the
+            // success payload the caller inspects (see above).
             sendOk(json{{"ok", false}, {"error", "no emitters to duplicate"}});
             return res;
         }
@@ -3955,12 +4008,16 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             catch (...)
             {
                 memfile->Release();
+                // G3: intentional sendOk — nested-ok failure to match the
+                // success payload the caller inspects (see above).
                 sendOk(json{{"ok", false}, {"error", "emitter copy failed"}});
                 return res;
             }
             memfile->Release();
             if (dup == nullptr)
             {
+                // G3: intentional sendOk — nested-ok failure to match the
+                // success payload the caller inspects (see above).
                 sendOk(json{{"ok", false}, {"error", "insertEmitterAfter returned null"}});
                 return res;
             }
@@ -5249,6 +5306,13 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // call). The wire shape never carries "auto".
     if (kind == "emitters/drop")
     {
+        // G3: every failure in this handler is an intentional sendOk —
+        // the success path returns sendOk({ok:true}) and the EmitterTree
+        // caller dispatches drops as `void bridge.request(...)`
+        // (fire-and-forget). Converting to sendErr would both split this
+        // handler's nested-ok contract and turn the fire-and-forget calls
+        // into unhandled promise rejections. Out of scope to fix on the JS
+        // side, so all failures stay nested-ok.
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
             sendOk(json{{"ok", false}, {"error", "particle system not bound"}});
@@ -5353,6 +5417,12 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // moved roots' final indices as newIds (a contiguous run).
     if (kind == "emitters/reorder-many")
     {
+        // G3: every failure in this handler is an intentional sendOk — the
+        // success path returns sendOk({ok:true,newIds}) and the JS caller
+        // (lib/emitter-reorder.ts reorderManyEmitters) reads nested ok as
+        // control flow: `const r = await request(...); if (!r.ok) return;`.
+        // Converting to sendErr would make request() throw, defeating that
+        // guard. Out of scope to fix on the JS side, so failures stay nested-ok.
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
             sendOk(json{{"ok", false}, {"error", "particle system not bound"}});
@@ -5819,6 +5889,17 @@ void BridgeDispatcher::EmitDirtyChanged()
         {"type",    "evt"},
         {"kind",    "dirty/changed"},
         {"payload", {{"dirty", m_dirty}}},
+    };
+    m_emit(env.dump());
+}
+
+void BridgeDispatcher::EmitCloseRequested()
+{
+    if (!m_emit) return;
+    json env = {
+        {"type",    "evt"},
+        {"kind",    "app/close-requested"},
+        {"payload", json::object()},
     };
     m_emit(env.dump());
 }

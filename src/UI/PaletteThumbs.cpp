@@ -89,8 +89,16 @@ bool ReadTextureBytes(IFileManager* fm, const wstring& filename, vector<char>& o
 
     const unsigned long size = file->size();
     out.resize(size);
-    if (size) file->read(out.data(), size);
-    delete file;
+    //: a truncated read must fail, not silently hand a zero-padded
+    // buffer to the decoder as if it were complete. Also Release() the
+    // refcounted IFile (was `delete file`, which bypassed the IFile refcount).
+    if (size && file->read(out.data(), size) != size)
+    {
+        out.clear();
+        file->Release();
+        return false;
+    }
+    file->Release();
     return true;
 }
 

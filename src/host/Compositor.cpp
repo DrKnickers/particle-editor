@@ -89,8 +89,8 @@ std::string FormatHresult(HRESULT hr)
 // scoped to this single translation unit.
 struct Compositor::Impl
 {
-    HWND  hwnd;
-    Compositor::LogFn log;
+    HWND  hwnd = nullptr;        // Audit: self-init like the siblings below.
+    Compositor::LogFn log{};     // Audit: self-init like the siblings below.
 
     Microsoft::WRL::ComPtr<IDCompositionDevice>  device;
     Microsoft::WRL::ComPtr<IDCompositionTarget>  target;
@@ -877,6 +877,14 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     }
 
     // 3. Open the engine's shared texture as a D3D11 alias.
+    // Audit: from here on we Reset() the live engine resources,
+    // so a prior successful attach is being torn down and rebuilt. Clear the
+    // attached flag up front; any early failure-return below now leaves a
+    // consistent (flag=false, resources null) state instead of flag=true with
+    // a null swapchain — which would make CompositeEngineFrame return an error
+    // every frame (frozen viewport). The flag is set true again only on the
+    // success path at the end of this method.
+    m_impl->engineVisualAttached = false;
     m_impl->sharedTexD3D11.Reset();
     hr = m_impl->d3d11Device->OpenSharedResource(
         sharedTexture, IID_PPV_ARGS(m_impl->sharedTexD3D11.GetAddressOf()));

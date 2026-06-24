@@ -161,11 +161,13 @@
   --danger-strong: #b3261e;
   --danger-strong-hover: #99201a;
   /* Semantic FOREGROUND variants, darkened to clear WCAG AA (>=4.5:1) as text
-     on the light --panel (#f7f7f7). The base --danger/-success/-warning stay
+     on EVERY light base surface — --bg (#ececec), --bg-2 (#f2f2f2), and
+     --panel (#f7f7f7). --bg is the darkest, so it's the binding case; the
+     contrast guard asserts all three. The base --danger/-success/-warning stay
      bright for FILLS. (warning-as-text can't be both bright-amber and AA on
      white, so it necessarily goes brown.) */
   --danger-fg: #b53224;
-  --success-fg: #2e7d32;
+  --success-fg: #2b762f;  /* slightly deeper than #2e7d32 to clear AA on --bg (4.34→4.76) */
   --warning-fg: #8a5a00;
   --atlas-selected: #c77700;
   /* Cell hover tint darkens on light (the dark theme lightens). Scrim +

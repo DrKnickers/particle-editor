@@ -27,6 +27,16 @@ MegaFile::MegaFile(IFile* file)
 			throw ReadException();
 		}
 
+		//: cap the counts against the file size BEFORE the read loops
+		// (each filename needs >= 2 bytes; each FileInfo is sizeof(FileInfo)).
+		// A forged huge count would otherwise drive an OOM allocation loop and
+		// overflow the start/totalsize math below.
+		const unsigned long fsize = (unsigned long)file->size();
+		if (numStrings > fsize / 2 || numFiles > fsize / sizeof(FileInfo))
+		{
+			throw BadFileException();
+		}
+
 		//
 		// Read filenames
 		//
@@ -61,6 +71,15 @@ MegaFile::MegaFile(IFile* file)
 			if (file->read((void*)&info, sizeof(FileInfo)) != sizeof(FileInfo))
 			{
 				throw ReadException();
+			}
+			//: a forged nameIndex makes getFile()/getFilename() index
+			// filenames[] out of bounds (std::vector::operator[] is UB, NOT a
+			// throw the catch below would catch). Validate every entry up front
+			// so every files[*] is safe before any lookup. Bound start/size too.
+			if (info.nameIndex >= numStrings ||
+				info.start > fsize || info.size > fsize - info.start)
+			{
+				throw BadFileException();
 			}
 			files.push_back(info);
 		}

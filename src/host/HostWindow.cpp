@@ -69,6 +69,8 @@
 #include <gdiplus.h>
 #include "BridgeDispatcher.h"
 #include "HostBridgeProxy.h"
+#include "HostMessages.h"        // WM_APP_QUIT_CONFIRMED (audit D1)
+#include "../CloseDecision.h"    // ShouldVetoClose (audit D1)
 #include "LayoutBroker.h"
 
 #include "../engine.h"
@@ -2710,6 +2712,27 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         KillTimer(hwnd, kResizeSettleTimerId);
         SettleResize("exitsizemove");
         break;
+
+    case WM_CLOSE:
+        // (data-loss BLOCKER): the native frame-X / Alt-F4 used to fall
+        // straight to DefWindowProc → WM_DESTROY, which deletes the recovery
+        // autosave — silently destroying unsaved work AND its safety net. Route
+        // a dirty interactive session to the SAME React Save/Discard/Cancel
+        // prompt File→Exit uses; swallow the default destroy until React replies
+        // (it dispatches app/quit → WM_APP_QUIT_CONFIRMED below).
+        if (ShouldVetoClose(dispatcher && dispatcher->GetDirty(), m_ephemeral, useTestHost))
+        {
+            if (dispatcher) dispatcher->EmitCloseRequested();
+            return 0;
+        }
+        break;   // not dirty (or headless) → DefWindowProc → WM_DESTROY
+
+    case WM_APP_QUIT_CONFIRMED:
+        //: React confirmed the close (saved or discarded). DestroyWindow
+        // → WM_DESTROY (NOT WM_CLOSE), so a confirmed quit never re-enters the
+        // veto above.
+        DestroyWindow(hwnd);
+        return 0;
 
     case WM_DESTROY:
         KillTimer(hwnd, kStatsTimerId);

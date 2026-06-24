@@ -121,7 +121,12 @@ SubFile::~SubFile()
 //
 unsigned long MemoryFile::read(void* buffer, unsigned long size)
 {
-	size = min(size, m_size - m_position);
+	//: `m_size - m_position` underflows (both unsigned) if m_position
+	// somehow exceeds m_size, yielding a huge clamp and an OOB memcpy. Guard
+	// the remaining-bytes computation, mirroring SubFile::read above.
+	const unsigned long remaining = (m_position < m_size) ? (m_size - m_position) : 0;
+	if (size > remaining) size = remaining;
+	if (size == 0) return 0;
     memcpy(buffer, &m_data[m_position], size);
 	m_position = m_position + size;
 	return size;

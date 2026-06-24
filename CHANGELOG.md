@@ -16,6 +16,18 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 > The inline release markers below show where each tagged [SemVer](https://semver.org)
 > release falls; see [`VERSIONING.md`](VERSIONING.md) for the policy.
 
+## 2026-06-24
+
+### Fixed
+
+- Saving an `.alo` can no longer corrupt your existing file if the save fails partway through (disk full, a removable/network drive disconnected, permission denied) — your original file is left untouched until the new one is fully written
+- Closing the editor window with unsaved changes now prompts you to Save / Don't Save / Cancel, instead of silently discarding your work and deleting its crash-recovery autosave
+- The editor now shows a recovery screen with a Reload button if the interface ever hits an unexpected error, instead of going blank
+
+### Security
+
+- Harden the editor against malformed or maliciously crafted mod files: untrusted `.alo`, `.meg`, and `.xml` files are now rejected cleanly instead of risking a crash, and a texture/shader name embedded in an `.alo` can no longer reach outside the mod folder or trigger an outbound network request when the file is opened
+
 ## 2026-06-23
 
 ### Added

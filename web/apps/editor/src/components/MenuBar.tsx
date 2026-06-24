@@ -908,7 +908,8 @@ export function MenuBar({
               onSelect={() => {
                 void bridge
                   .request({ kind: "engine/action/reload-textures", params: {} })
-                  .then(() => bumpTextureEpoch()); // re-fetch atlas previews with fresh content
+                  .then(() => bumpTextureEpoch()) // re-fetch atlas previews with fresh content
+                  .catch(() => {}); // host-side reload failure shouldn't surface as an unhandled rejection
               }}
             >
               <CheckSlot active={false} />

@@ -5899,6 +5899,9 @@ Engine::~Engine()
         SAFE_RELEASE(m_pShaders[i]);
     }
     SAFE_RELEASE(m_pDepthStencilSurface);
+	// Audit: released in Reset()/ResetForResize() but was leaked
+	// at shutdown when no final Reset ran.
+	SAFE_RELEASE(m_pEndFrameQuery);
 	// MSAA surfaces
 	SAFE_RELEASE(m_pMsaaColor);
 	SAFE_RELEASE(m_pMsaaDepth);

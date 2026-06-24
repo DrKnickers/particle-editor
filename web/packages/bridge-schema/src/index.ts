@@ -1291,6 +1291,10 @@ export type Event =
   | { kind: "stats/frozen-changed";   payload: { frozen: boolean } }
   | { kind: "dirty/changed";          payload: { dirty: boolean } }
   | { kind: "recent/changed";         payload: { paths: string[] } }
+  //: host emits this when the native frame-X / Alt-F4 is hit on a
+  // dirty doc, so the app pops the same Save/Discard/Cancel prompt File→Exit
+  // uses (the host can't render the React prompt itself).
+  | { kind: "app/close-requested";    payload: Record<string, never> }
   | { kind: "undo/changed";           payload: { canUndo: boolean; canRedo: boolean; label?: string } }
   | { kind: "accelerator/pressed";    payload: { combo: string } }
   | { kind: "spawner/active-count";   payload: { count: number } }

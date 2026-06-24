@@ -174,6 +174,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
             value={chosenGroup ?? ""}
             onChange={(e) => setChosenGroup(Number.parseInt(e.target.value, 10))}
             disabled={!hasExisting || mode !== "existing"}
+            aria-label="Existing group to join"
             data-testid="set-link-group-select"
             className="ml-6 w-32 rounded border border-border-2 bg-bg px-2 py-1 text-sm text-text focus-ring disabled:cursor-not-allowed disabled:opacity-40"
           >
