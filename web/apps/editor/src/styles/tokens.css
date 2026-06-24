@@ -47,6 +47,12 @@
   --danger: #e06c75;
   --success: #6fbf7a;
   --warning: #e0a14b;
+  /* Danger used as a FILL behind white text (the destructive-action button).
+     --danger (#e06c75) is too light for white (~3.2:1); --danger-strong is a
+     deeper red that clears WCAG AA (white ~5.4:1). Translucent tints
+     (bg-danger/10) + text-danger-fg are unaffected. Mirrors --accent-strong. */
+  --danger-strong: #c0392b;
+  --danger-strong-hover: #a93226;
   /* Foreground variants for semantic colours used as TEXT. The base tokens
      above are tuned for dark backgrounds and FILLS; on the light theme they
      fail WCAG AA as foreground text (~2.1:1). The -fg pair stays bright on dark
@@ -151,6 +157,9 @@
      deeper. White on #1f63b0 ~6.0:1. */
   --accent-strong: #1f63b0;
   --accent-strong-hover: #1a558f;
+  /* Danger fill for white text on the light theme (deeper red ~6.6:1). */
+  --danger-strong: #b3261e;
+  --danger-strong-hover: #99201a;
   /* Semantic FOREGROUND variants, darkened to clear WCAG AA (>=4.5:1) as text
      on the light --panel (#f7f7f7). The base --danger/-success/-warning stay
      bright for FILLS. (warning-as-text can't be both bright-amber and AA on
@@ -194,6 +203,8 @@
   --color-accent-strong-hover: var(--accent-strong-hover);
   --color-accent-soft: var(--accent-soft);
   --color-danger: var(--danger);
+  --color-danger-strong: var(--danger-strong);
+  --color-danger-strong-hover: var(--danger-strong-hover);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger-fg: var(--danger-fg);

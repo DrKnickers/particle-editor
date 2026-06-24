@@ -73,6 +73,11 @@ describe("token contrast (WCAG AA, normal text >= 4.5:1)", () => {
       expect(contrast(WHITE, t("accent-strong-hover"))).toBeGreaterThanOrEqual(AA);
     });
 
+    it(`${name}: white text on --danger-strong (destructive button)`, () => {
+      expect(contrast(WHITE, t("danger-strong"))).toBeGreaterThanOrEqual(AA);
+      expect(contrast(WHITE, t("danger-strong-hover"))).toBeGreaterThanOrEqual(AA);
+    });
+
     it(`${name}: --text-3 (hints) on --bg and --bg-2`, () => {
       expect(contrast(t("text-3"), t("bg"))).toBeGreaterThanOrEqual(AA);
       expect(contrast(t("text-3"), t("bg-2"))).toBeGreaterThanOrEqual(AA);
@@ -92,9 +97,10 @@ describe("token contrast (WCAG AA, normal text >= 4.5:1)", () => {
     });
   }
 
-  it("documents that bare --accent is too light for white text (why -strong exists)", () => {
-    // Guards the rationale: if someone darkens --accent enough to pass here,
-    // --accent-strong may be redundant — this test will flag that to revisit.
+  it("documents that bare --accent / --danger are too light for white text (why -strong exists)", () => {
+    // Guards the rationale: if someone darkens the base token enough to pass
+    // here, the -strong variant may be redundant — flag that to revisit.
     expect(contrast(WHITE, token(":root {", "accent"))).toBeLessThan(AA);
+    expect(contrast(WHITE, token(":root {", "danger"))).toBeLessThan(AA);
   });
 });
