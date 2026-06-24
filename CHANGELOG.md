@@ -20,6 +20,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ### Added
 
+- The Import Emitters list is now fully keyboard-navigable — arrow keys move between emitters, ←/→ collapse/expand, Home/End jump, and Space/Enter selects
 - The editor now tells you when an `.alo` has no particle emitters (a model file, not a particle effect) — both when importing emitters and when opening a file, instead of showing an empty list / empty editor with no explanation
 
 ### Changed

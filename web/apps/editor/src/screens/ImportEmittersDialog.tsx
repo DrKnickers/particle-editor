@@ -24,12 +24,12 @@
 // a rejected request (native hard failure / mock not-implemented) is
 // caught and shown the same way. Only a full import closes the modal.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type {
   Bridge,
   EmitterTreeNode,
 } from "@particle-editor/bridge-schema";
-import { ChevronRight, File } from "lucide-react";
+import { Check, ChevronRight, File, Minus } from "lucide-react";
 import { Modal } from "@/components/Modal";
 
 type Props = {
@@ -68,37 +68,27 @@ function branchState(node: EmitterTreeNode, picks: Set<number>): BranchState {
   return "partial";
 }
 
-/** A native checkbox that also reflects the indeterminate state. React has
- *  no JSX attribute for `indeterminate` (it's a DOM property), so we set it
- *  via a ref in an effect keyed on the value. */
-function TriCheckbox({
-  checked,
-  indeterminate,
-  onChange,
-  "aria-label": ariaLabel,
-  className,
-}: {
-  checked: boolean;
-  indeterminate: boolean;
-  onChange: () => void;
-  "aria-label": string;
-  className?: string;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      aria-label={ariaLabel}
-      className={className}
-    />
-  );
+type VisibleRow = { node: EmitterTreeNode; depth: number; parentId: number | null };
+
+/** Flatten the tree to the currently-visible rows (collapsed subtrees skipped),
+ *  in DOM order, with depth + parent id. This is the index space the roving
+ *  tabindex / arrow-key engine moves over (↑/↓ by index, ← to parentId). */
+function visibleRows(tree: EmitterTreeNode | null, collapsed: Set<number>): VisibleRow[] {
+  if (!tree) return [];
+  const out: VisibleRow[] = [];
+  const walk = (nodes: EmitterTreeNode[], depth: number, parentId: number | null) => {
+    for (const n of nodes) {
+      out.push({ node: n, depth, parentId });
+      if (n.children.length > 0 && !collapsed.has(n.id)) walk(n.children, depth + 1, n.id);
+    }
+  };
+  walk(tree.children, 0, null);
+  return out;
 }
+
+const ARROW_KEYS = new Set([
+  "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", " ", "Enter",
+]);
 
 export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
   const [sourcePath, setSourcePath] = useState<string | null>(null);
@@ -111,6 +101,14 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
   // (the native import has no timeout and can block on a slow disk read),
   // which would otherwise duplicate-import and push a second undo entry.
   const [importing, setImporting] = useState(false);
+  // Roving-tabindex focus target (the treeitem the arrow keys act on). One row
+  // is tabbable at a time; null falls back to the first visible row.
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const rowRefs = useRef(new Map<number, HTMLDivElement>());
+  const setRowRef = (id: number) => (el: HTMLDivElement | null) => {
+    if (el) rowRefs.current.set(id, el);
+    else rowRefs.current.delete(id);
+  };
 
   // Reset state whenever the modal opens fresh so a previous session
   // doesn't bleed in (a closed-then-reopened modal should start empty).
@@ -123,6 +121,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
       setCollapsed(new Set());
       setLoading(false);
       setImporting(false);
+      setActiveId(null);
     }
   }, [open]);
 
@@ -158,10 +157,11 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
         if (preview.ok) {
           setTree(preview.tree);
           // A fresh tree starts with nothing picked and everything
-          // expanded; reset both so stale ids from a prior file (ids
-          // overlap — both start at 1) can't mis-collapse this one.
+          // expanded; reset all three so stale ids from a prior file (ids
+          // overlap — both start at 1) can't mis-collapse or mis-focus this one.
           setPicks(new Set());
           setCollapsed(new Set());
+          setActiveId(null);
         } else {
           setError(preview.error);
           setTree(null);
@@ -257,62 +257,139 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
     }
   };
 
+  // ── Keyboard tree (roving tabindex + WAI-ARIA Tree View) ─────────
+  const rows = useMemo(() => visibleRows(tree, collapsed), [tree, collapsed]);
+  // The single tabbable row: the active one if still visible, else the first.
+  const activeRowId =
+    rows.length === 0
+      ? null
+      : activeId !== null && rows.some((r) => r.node.id === activeId)
+        ? activeId
+        : rows[0]!.node.id;
+
+  const focusRow = (id: number) => {
+    setActiveId(id);
+    rowRefs.current.get(id)?.focus();
+  };
+
+  /** APG Tree View keyboard map. Single tab stop; ↑/↓ move focus, →/← expand/
+   *  collapse or step to child/parent, Home/End jump, Space/Enter toggle
+   *  selection. Range-select (Shift/Ctrl) is intentionally out of scope. */
+  const onTreeKeyDown = (e: KeyboardEvent<HTMLDivElement>, node: EmitterTreeNode) => {
+    if (!ARROW_KEYS.has(e.key)) return; // let Tab / Esc bubble to the modal
+    e.preventDefault();
+    e.stopPropagation(); // a focused child must not let an ancestor re-handle
+    const idx = rows.findIndex((r) => r.node.id === node.id);
+    if (idx < 0) return;
+    const hasKids = node.children.length > 0;
+    switch (e.key) {
+      case "ArrowDown":
+        if (idx < rows.length - 1) focusRow(rows[idx + 1]!.node.id);
+        break;
+      case "ArrowUp":
+        if (idx > 0) focusRow(rows[idx - 1]!.node.id);
+        break;
+      case "ArrowRight":
+        if (hasKids && collapsed.has(node.id)) toggleCollapse(node.id); // expand
+        else if (hasKids) focusRow(node.children[0]!.id); // → first child
+        break;
+      case "ArrowLeft":
+        if (hasKids && !collapsed.has(node.id)) toggleCollapse(node.id); // collapse
+        else if (rows[idx]!.parentId !== null) focusRow(rows[idx]!.parentId!); // → parent
+        break;
+      case "Home":
+        focusRow(rows[0]!.node.id);
+        break;
+      case "End":
+        focusRow(rows[rows.length - 1]!.node.id);
+        break;
+      case " ":
+      case "Enter":
+        setActiveId(node.id);
+        toggleNode(node);
+        break;
+    }
+  };
+
   // ── Render helpers ───────────────────────────────────────────────
 
+  // A multi-select treeitem. Selection lives on the treeitem's `aria-checked`
+  // (true / false / "mixed"); the checkbox is a presentational graphic. The
+  // chevron is a presentational click target — NOT a focusable button, which
+  // would add a second tab stop inside the single-tab-stop tree.
   const renderNode = (node: EmitterTreeNode, depth: number) => {
     const state = branchState(node, picks);
     const hasChildren = node.children.length > 0;
     const isCollapsed = collapsed.has(node.id);
+    const ariaChecked: boolean | "mixed" =
+      state === "all" ? true : state === "partial" ? "mixed" : false;
     return (
-      <div key={node.id}>
-        {/* Selection fill is the app's `bg-accent/20` (ReferenceObjectPicker
-            selection) and applies to FULLY-selected rows only; a partial
-            branch is carried by the indeterminate dash alone, so its row
-            stays neutral (no "selected" fill on a not-fully-selected node).
-            `mb-0.5` separates rows into discrete pills (matching the picker's
-            gap-0.5) so adjacent selections don't fuse into one band. */}
+      <div
+        key={node.id}
+        role="treeitem"
+        aria-label={node.name}
+        aria-checked={ariaChecked}
+        aria-level={depth + 1}
+        aria-expanded={hasChildren ? !isCollapsed : undefined}
+        data-selstate={state}
+        ref={setRowRef(node.id)}
+        tabIndex={node.id === activeRowId ? 0 : -1}
+        onClick={(e) => { e.stopPropagation(); setActiveId(node.id); toggleNode(node); }}
+        onKeyDown={(e) => onTreeKeyDown(e, node)}
+        className="flex flex-col rounded outline-none focus-ring"
+      >
+        {/* Visual row. `bg-accent/20` only on a FULLY-selected row; a partial
+            branch is carried by the dash glyph alone. `mb-0.5` keeps adjacent
+            selections as discrete pills. */}
         <div
-          data-selstate={state}
           className={
-            "mb-0.5 flex h-[26px] items-center gap-1.5 rounded pr-1.5 text-xs " +
+            "mb-0.5 flex h-[26px] cursor-pointer items-center gap-1.5 rounded pr-1.5 text-xs " +
             (state === "all" ? "bg-accent/20" : "hover:bg-hover")
           }
           style={{ paddingLeft: `${4 + depth * 16}px` }}
         >
           {hasChildren ? (
-            <button
-              type="button"
-              onClick={() => toggleCollapse(node.id)}
-              aria-expanded={!isCollapsed}
-              aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${node.name}`}
-              className="flex size-4 shrink-0 items-center justify-center rounded text-text-3 hover:text-text focus-ring"
+            <span
+              aria-hidden
+              data-testid="row-chevron"
+              onClick={(e) => {
+                e.stopPropagation();
+                // APG: collapsing a node that contains focus moves focus to
+                // that node, so the focused descendant doesn't unmount out
+                // from under the user (mouse-collapse while a child is focused).
+                if (!isCollapsed && activeRowId !== null && descendantIds(node).includes(activeRowId)) {
+                  focusRow(node.id);
+                }
+                toggleCollapse(node.id);
+              }}
+              className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-text-3 hover:text-text"
             >
               <ChevronRight
-                className={
-                  "size-3.5 transition-transform " +
-                  (isCollapsed ? "" : "rotate-90")
-                }
+                className={"size-3.5 transition-transform " + (isCollapsed ? "" : "rotate-90")}
               />
-            </button>
+            </span>
           ) : (
             <span className="size-4 shrink-0" aria-hidden />
           )}
-          <label className="flex min-w-0 flex-1 items-center gap-2 py-1 text-text">
-            <TriCheckbox
-              checked={state === "all"}
-              indeterminate={state === "partial"}
-              onChange={() => toggleNode(node)}
-              aria-label={`Select ${node.name}`}
-              className="size-3 shrink-0 accent-[var(--accent-strong)]"
-            />
-            <span className="truncate" title={node.name}>
-              {node.name}
-            </span>
-          </label>
+          <span
+            aria-hidden
+            className={
+              "flex size-3 shrink-0 items-center justify-center rounded-[3px] " +
+              (state === "none" ? "border border-border-2" : "bg-accent-strong text-white")
+            }
+          >
+            {state === "all" && <Check className="size-2.5" strokeWidth={3} />}
+            {state === "partial" && <Minus className="size-2.5" strokeWidth={3} />}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-text" title={node.name}>
+            {node.name}
+          </span>
         </div>
-        {hasChildren &&
-          !isCollapsed &&
-          node.children.map((c) => renderNode(c, depth + 1))}
+        {hasChildren && !isCollapsed && (
+          <div role="group">
+            {node.children.map((c) => renderNode(c, depth + 1))}
+          </div>
+        )}
       </div>
     );
   };
@@ -416,9 +493,10 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
                   {error}
                 </div>
               )}
-              {/* Tree body */}
+              {/* Tree body — WAI-ARIA multi-select tree (roving tabindex). */}
               <div
-                role="group"
+                role="tree"
+                aria-multiselectable="true"
                 aria-label="Emitters"
                 className="max-h-[260px] overflow-y-auto bg-bg p-1"
               >
