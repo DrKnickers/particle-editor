@@ -758,7 +758,7 @@ const Cell = memo(function Cell({
       aria-selected={selected}
       aria-label={`Frame ${k}`}
       tabIndex={focused ? 0 : -1}
-      className={`group relative aspect-square rounded-[var(--radius-sm)] bg-bg-2 transition ${
+      className={`group relative aspect-square rounded-[var(--radius-sm)] bg-bg-2 transition hover:scale-[1.04] hover:z-10 motion-reduce:hover:scale-100 ${
         selected ? "border-2" : "border border-border"
       } focus-ring`}
       style={style}
@@ -766,10 +766,11 @@ const Cell = memo(function Cell({
       onMouseLeave={() => onHover(null)}
       onClick={() => onClick?.(k)}
     >
-      {/* Quiet hover tint — the image-cell equivalent of the app's bg→--hover
-          hover (the sprite IS the cell background, so the tint rides on top as an
-          overlay). Behind the badge; no scale / brightness / ring, which would
-          collide with the accent focus ring and the amber selection ring. */}
+      {/* Hover affordance = a subtle scale-lift (on the cell) + this bumped tint
+          overlay (~14%). Geometry carries it on loud thumbnails and stacks cleanly
+          with the amber selection ring + blue focus outline (those are colour
+          cues; the lift scales the whole cell, rings and all). No outset shadow —
+          the grid scroll container would clip it. */}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[var(--overlay-hover)] opacity-0 transition-opacity group-hover:opacity-100 motion-reduce:transition-none"

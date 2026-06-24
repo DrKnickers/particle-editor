@@ -452,6 +452,17 @@ describe("AtlasPickerPanel", () => {
     expect(hero.querySelector("canvas")).not.toBeNull();
   });
 
+  it("gives cells a hover lift affordance (with a reduced-motion opt-out)", async () => {
+    setup({ textureSize: 16 });
+    const cell = await waitFor(() => {
+      const c = screen.getAllByTestId("atlas-cell").find((x) => x.getAttribute("data-frame") === "6")!;
+      expect(c.style.backgroundImage).not.toBe("");
+      return c;
+    });
+    expect(cell.className).toContain("hover:scale-[1.04]");
+    expect(cell.className).toContain("motion-reduce:hover:scale-100");
+  });
+
   it("alpha mode: the CONTAINER stays the uniform gray (no checkerboard); cells unchanged", async () => {
     setup({ textureSize: 16 });
     // capture a cell's crop style BEFORE the toggle…

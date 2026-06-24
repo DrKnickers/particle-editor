@@ -820,6 +820,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"groundZ",               engine->GetGroundZ()},
         {"groundTexture",         engine->GetGroundTexture()},
         {"groundSolidColor",      static_cast<unsigned int>(engine->GetGroundSolidColor())},
+        {"groundColor",           static_cast<unsigned int>(engine->GetGroundColor())},
         {"groundSlotCustomPaths", groundPaths},
 
         // Skydome

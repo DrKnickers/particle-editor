@@ -13,11 +13,18 @@
 //    the DOM — there is no DOM-side engine-pixel consumer.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, cleanup } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen, cleanup, type RenderOptions } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import { type ReactElement } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { ViewportSlot } from "../ViewportSlot";
 import { MK_LBUTTON, MK_SHIFT } from "../../lib/viewport-input";
 import { useDockAnim } from "../../lib/dock-anim";
+
+// ViewportSlot renders the display-options pill, whose <Tip> buttons need a
+// Tooltip.Provider (App.tsx supplies one in production). Inject it for all renders.
+const render = (ui: ReactElement, options?: RenderOptions) =>
+  rtlRender(<Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>, options);
 
 function makeStubBridge(): Bridge & {
   request: ReturnType<typeof vi.fn>;

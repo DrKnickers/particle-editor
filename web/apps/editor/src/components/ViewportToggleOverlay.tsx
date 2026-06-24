@@ -7,6 +7,8 @@
 import { useEffect, useState } from "react";
 import { PanelBottom, Grid2x2, Sun, Lock, LockOpen } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
+import { pillScrimMode, pillBackdropColor } from "@/lib/colorref";
+import { Tip } from "@/primitives/Tip";
 
 type Props = { bridge: Bridge };
 
@@ -22,21 +24,28 @@ function ToggleButton(props: {
 }) {
   const { label, active, disabled, lock, icon, onClick } = props;
   return (
-    <button
-      type="button"
-      className={
-        "vp-overlay-btn" +
-        (active ? " vp-overlay-btn--active" : "") +
-        (lock && active ? " vp-overlay-btn--lock" : "")
-      }
-      aria-label={label}
-      aria-pressed={active}
-      disabled={disabled}
-      title={label}
-      onClick={onClick}
-    >
-      {icon}
-    </button>
+    // Tip is the app-wide tooltip primitive (, replacing native `title`).
+    // The inline-flex span carries the Tip so the lock's *disabled* state still
+    // shows its "load a reference object" hint (a disabled button fires no
+    // pointer events, so Radix can't trigger off it directly).
+    <Tip content={label}>
+      <span className="inline-flex">
+        <button
+          type="button"
+          className={
+            "vp-overlay-btn" +
+            (active ? " vp-overlay-btn--active" : "") +
+            (lock && active ? " vp-overlay-btn--lock" : "")
+          }
+          aria-label={label}
+          aria-pressed={active}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          {icon}
+        </button>
+      </span>
+    </Tip>
   );
 }
 
@@ -66,8 +75,20 @@ export function ViewportToggleOverlay({ bridge }: Props) {
   const locked = state?.referenceObjectLocked ?? false;
   const hasRef = (state?.referenceObjectName ?? "") !== "";
 
+  // Adaptive scrim: tracks the colour behind the pill — the effective (host-
+  // computed) ground colour (the solid colour, or a textured floor's averaged
+  // colour) when the ground plane is shown, otherwise the viewport background.
+  // Light chip over a dark/neutral backdrop, dark over a bright one. Defaults dark
+  // until the snapshot resolves (no flash).
+  const scrimMode = state == null ? "dark" : pillScrimMode(pillBackdropColor(state));
+
   return (
-    <div className="vp-overlay pointer-events-auto" role="group" aria-label="Viewport display options">
+    <div
+      className="vp-overlay pointer-events-auto"
+      role="group"
+      aria-label="Viewport display options"
+      data-scrim={scrimMode}
+    >
       <ToggleButton
         label="Show ground"
         active={ground}

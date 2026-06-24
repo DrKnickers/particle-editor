@@ -125,3 +125,67 @@ describe("token contrast (WCAG AA, normal text >= 4.5:1)", () => {
     expect(contrast(WHITE, token(":root {", "danger"))).toBeLessThan(AA);
   });
 });
+
+// --- Viewport pill light scrim: composited AA guard -------------------------
+// The light scrim appears ONLY over a genuinely-dark render, so its glyphs must
+// clear AA against the scrim composited over the darkest triggering backdrop
+// (pure black) — NOT against pure white. Eyeballing it against white is what let
+// the first draft ship a 3.1:1 lock accent. (Asserted at the interactive
+// opacity-1 state; the idle 0.4 is a deliberate decorative de-emphasis.)
+const componentsCss = readFileSync("src/styles/components.css", "utf8");
+
+function lightScrimBlock(): string {
+  const m = componentsCss.match(/\.vp-overlay\[data-scrim="light"\]\s*\{([^}]*)\}/);
+  if (!m) throw new Error('.vp-overlay[data-scrim="light"] block not found');
+  return m[1]!;
+}
+function scrimHex(block: string, name: string): string {
+  const m = block.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
+  if (!m) throw new Error(`--${name} (#hex) not found in light-scrim block`);
+  return m[1]!;
+}
+/** Composite an `rgba(r,g,b,a)` scrim token over a solid backdrop → #hex. */
+function scrimCompositeOver(block: string, name: string, bd: [number, number, number]): string {
+  const m = block.match(new RegExp(`--${name}:\\s*rgba\\((\\d+),\\s*(\\d+),\\s*(\\d+),\\s*([0-9.]+)\\)`));
+  if (!m) throw new Error(`--${name} (rgba) not found in light-scrim block`);
+  const [r, g, b, a] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+  const mix = (fg: number, c: number) => Math.round(fg * a + c * (1 - a));
+  const h = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${h(mix(r, bd[0]))}${h(mix(g, bd[1]))}${h(mix(b, bd[2]))}`;
+}
+
+describe("viewport pill light scrim (composited WCAG AA)", () => {
+  it("off-icon + lock accent clear AA over the scrim composited on a dark render", () => {
+    const block = lightScrimBlock();
+    const surface = scrimCompositeOver(block, "vp-scrim-bg", [0, 0, 0]); // darkest triggering backdrop
+    expect(contrast(scrimHex(block, "vp-icon-off"), surface)).toBeGreaterThanOrEqual(AA);
+    expect(contrast(scrimHex(block, "vp-lock-accent"), surface)).toBeGreaterThanOrEqual(AA);
+  });
+});
+
+// The DARK scrim now appears over backdrops up to bright (the raised flip
+// threshold), so its glyphs must stay legible composited over WHITE (worst case)
+// and NEUTRAL — not just over the dark backdrops #365 originally assumed.
+function darkScrimBlock(): string {
+  const blocks = [...componentsCss.matchAll(/\.vp-overlay\s*\{([^}]*)\}/g)];
+  const m = blocks.find((b) => b[1]!.includes("--vp-scrim-bg"));
+  if (!m) throw new Error(".vp-overlay base scrim block not found");
+  return m[1]!;
+}
+
+describe("viewport pill dark scrim (composited WCAG AA over bright/neutral)", () => {
+  const NON_TEXT = 3.0; // toggle icons are graphical objects (WCAG 1.4.11)
+  it("keeps glyphs legible over a bright backdrop", () => {
+    const block = darkScrimBlock();
+    const surface = scrimCompositeOver(block, "vp-scrim-bg", [255, 255, 255]); // brightest backdrop
+    expect(contrast(scrimHex(block, "vp-icon-off"), surface)).toBeGreaterThanOrEqual(NON_TEXT);
+    expect(contrast(scrimHex(block, "vp-icon-on"), surface)).toBeGreaterThanOrEqual(AA);
+    expect(contrast(scrimHex(block, "vp-lock-accent"), surface)).toBeGreaterThanOrEqual(AA);
+  });
+  it("keeps glyphs legible over a neutral backdrop", () => {
+    const block = darkScrimBlock();
+    const surface = scrimCompositeOver(block, "vp-scrim-bg", [128, 128, 128]);
+    expect(contrast(scrimHex(block, "vp-icon-off"), surface)).toBeGreaterThanOrEqual(AA);
+    expect(contrast(scrimHex(block, "vp-icon-on"), surface)).toBeGreaterThanOrEqual(AA);
+  });
+});

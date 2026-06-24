@@ -1422,17 +1422,60 @@ static const UINT kGroundTextureResourceIds[Engine::kGroundTextureCount] = {
     0, 0, 0,            // 5..7 — empty bundled, user-supplied only
 };
 
-// Internal: load a texture from a custom file path. Returns true and
-// writes *ppOut on success; false leaves *ppOut untouched.
+// Average colour of a ground-texture image, read from a 1×1 SCRATCH copy — the
+// live texture is DEFAULT-pool (unlockable under D3D9Ex), so we re-decode a CPU
+// copy just to read its mean. D3DX_FILTER_TRIANGLE (NOT _BOX, which only halves
+// 2×2 for mipmaps) makes every source texel contribute equally, so the single
+// 1×1 texel is the true whole-image average. One-time, only on a ground change.
+// (The custom-file variant re-reads the file to average it — a tolerable cost on
+// a one-time user action; bundled textures reuse their in-memory bytes.)
+static COLORREF ReadScratch1x1Average(IDirect3DTexture9* pTex)
+{
+    COLORREF avg = RGB(128, 128, 128);
+    if (pTex == NULL) return avg;
+    D3DLOCKED_RECT lr;
+    if (SUCCEEDED(pTex->LockRect(0, &lr, NULL, D3DLOCK_READONLY)))
+    {
+        DWORD argb = *(DWORD*)lr.pBits;   // D3DFMT_A8R8G8B8
+        avg = RGB((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
+        pTex->UnlockRect(0);
+    }
+    pTex->Release();
+    return avg;
+}
+static COLORREF AverageColorFromMemory(IDirect3DDevice9* pDevice, const void* data, DWORD size)
+{
+    IDirect3DTexture9* pTex = NULL;
+    if (FAILED(D3DXCreateTextureFromFileInMemoryEx(
+            pDevice, data, size, 1, 1, 1, 0, D3DFMT_A8R8G8B8,
+            D3DPOOL_SCRATCH, D3DX_FILTER_TRIANGLE, D3DX_FILTER_NONE, 0, NULL, NULL, &pTex)))
+        return RGB(128, 128, 128);
+    return ReadScratch1x1Average(pTex);
+}
+static COLORREF AverageColorFromFile(IDirect3DDevice9* pDevice, const std::wstring& path)
+{
+    IDirect3DTexture9* pTex = NULL;
+    if (FAILED(D3DXCreateTextureFromFileExW(
+            pDevice, path.c_str(), 1, 1, 1, 0, D3DFMT_A8R8G8B8,
+            D3DPOOL_SCRATCH, D3DX_FILTER_TRIANGLE, D3DX_FILTER_NONE, 0, NULL, NULL, &pTex)))
+        return RGB(128, 128, 128);
+    return ReadScratch1x1Average(pTex);
+}
+
+// Internal: load a texture from a custom file path. Returns true and writes
+// *ppOut on success; false leaves *ppOut untouched. pAvgOut (optional) receives
+// the texture's average colour.
 static bool LoadGroundTextureFromFile(IDirect3DDevice9*       pDevice,
                                        const std::wstring&     path,
-                                       IDirect3DTexture9**     ppOut)
+                                       IDirect3DTexture9**     ppOut,
+                                       COLORREF*               pAvgOut = NULL)
 {
     if (pDevice == NULL || path.empty() || ppOut == NULL) return false;
     IDirect3DTexture9* pNew = NULL;
     if (FAILED(D3DXCreateTextureFromFileW(pDevice, path.c_str(), &pNew)))
         return false;
     *ppOut = pNew;
+    if (pAvgOut) *pAvgOut = AverageColorFromFile(pDevice, path);
     return true;
 }
 
@@ -1442,7 +1485,8 @@ static bool LoadGroundTextureFromFile(IDirect3DDevice9*       pDevice,
 // empty user-only slot) and is treated as failure.
 static bool LoadGroundTextureFromResource(IDirect3DDevice9*    pDevice,
                                            UINT                 resourceId,
-                                           IDirect3DTexture9**  ppOut)
+                                           IDirect3DTexture9**  ppOut,
+                                           COLORREF*            pAvgOut = NULL)
 {
     if (pDevice == NULL || resourceId == 0 || ppOut == NULL) return false;
     HMODULE  hMod  = GetModuleHandle(NULL);
@@ -1455,6 +1499,7 @@ static bool LoadGroundTextureFromResource(IDirect3DDevice9*    pDevice,
     if (FAILED(D3DXCreateTextureFromFileInMemory(pDevice, pData, dwSize, &pNew)))
         return false;
     *ppOut = pNew;
+    if (pAvgOut) *pAvgOut = AverageColorFromMemory(pDevice, pData, dwSize);
     return true;
 }
 
@@ -1508,6 +1553,7 @@ bool Engine::ReloadGroundTexture()
             return false;
         SAFE_RELEASE(m_pGroundTexture);
         m_pGroundTexture = pNew;
+        m_groundColor = m_groundSolidColor;   // solid slot: the colour IS the floor
 #ifndef NDEBUG
         printf("[Ground] solid-color slot=%d color=#%02X%02X%02X\n",
                m_groundTextureIndex,
@@ -1527,7 +1573,7 @@ bool Engine::ReloadGroundTexture()
     const std::wstring& path = m_groundSlotCustomPaths[m_groundTextureIndex];
     if (!path.empty())
     {
-        if (!LoadGroundTextureFromFile(m_pDevice, path, &pNew))
+        if (!LoadGroundTextureFromFile(m_pDevice, path, &pNew, &m_groundColor))
         {
 #ifndef NDEBUG
             printf("[Ground] custom path failed for slot=%d; trying bundled\n",
@@ -1540,7 +1586,7 @@ bool Engine::ReloadGroundTexture()
     {
         UINT bundledId = kGroundTextureResourceIds[m_groundTextureIndex];
         if (bundledId != 0)
-            LoadGroundTextureFromResource(m_pDevice, bundledId, &pNew);
+            LoadGroundTextureFromResource(m_pDevice, bundledId, &pNew, &m_groundColor);
     }
     if (pNew == NULL)
     {

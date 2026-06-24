@@ -18,7 +18,7 @@ export type Vec3 = readonly [number, number, number];
 export type Vec4 = readonly [number, number, number, number];
 
 /** COLORREF — a 32-bit integer with bytes laid out as `0x00BBGGRR`
- *  (Windows convention; low byte is the *blue* channel). Used for
+ *  (Windows convention; low byte is the *red* channel). Used for
  *  background and ground-solid-color where the engine reads/writes
  *  Win32 COLORREFs directly. Distinct from `Vec4`-as-colour which is
  *  the floating-point linear-space form used for engine lights and
@@ -235,6 +235,7 @@ export type EngineStateDto = {
   groundZ: number;                  // GetGroundZ()
   groundTexture: number;            // GetGroundTexture() — slot index 0..kGroundTextureCount-1
   groundSolidColor: Color;          // GetGroundSolidColor() — slot kGroundSolidColorSlot colour
+  groundColor: Color;               // GetGroundColor() — effective floor colour (solid colour, or the loaded texture's average)
   groundSlotCustomPaths: string[];  // GetGroundSlotCustomPath() across all slots
 
   // Skydome — legacy bundled/custom texture slot (simple-background fallback)

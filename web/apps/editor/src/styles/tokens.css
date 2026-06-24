@@ -70,7 +70,7 @@
      toward the foreground, theme-aware (lightens on dark, darkens on light). */
   --overlay-scrim: rgba(0, 0, 0, 0.55);
   --overlay-scrim-fg: #ececec;
-  --overlay-hover: rgba(255, 255, 255, 0.08);
+  --overlay-hover: rgba(255, 255, 255, 0.14);
   --x-axis: #ef5350;
   --y-axis: #66bb6a;
   --z-axis: #42a5f5;
@@ -172,7 +172,7 @@
   --atlas-selected: #c77700;
   /* Cell hover tint darkens on light (the dark theme lightens). Scrim +
      scrim-fg stay theme-independent (overlay on imagery). */
-  --overlay-hover: rgba(0, 0, 0, 0.06);
+  --overlay-hover: rgba(0, 0, 0, 0.12);
   /* Light-theme grid: ~8% black to match the dark-theme alpha so
      the grid is uniformly subtle across themes. */
   --curve-grid: rgba(0, 0, 0, 0.08);

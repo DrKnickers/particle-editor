@@ -163,13 +163,14 @@
   font-size: 12px;
   line-height: 1.5;
   max-width: 320px;
-  z-index: 60;
   overflow: hidden; /* rich-tier bands clip to the rounded corner */
 }
 .tip-body { display: block; padding: 5px 9px; }
 .tip-arrow { fill: var(--panel-3); }
 
-.tip-animate { --tip-slip-x: 0px; --tip-slip-y: 0px; }
+/* z-index is on the Content (the portaled, positioned element) — not the inner
+   .tip-surface — so the whole tooltip stacks above the app. */
+.tip-animate { --tip-slip-x: 0px; --tip-slip-y: 0px; z-index: 60; }
 .tip-animate[data-side="top"]    { --tip-slip-y: var(--slip-tooltip); }
 .tip-animate[data-side="bottom"] { --tip-slip-y: calc(-1 * var(--slip-tooltip)); }
 .tip-animate[data-side="left"]   { --tip-slip-x: var(--slip-tooltip); }
@@ -1275,16 +1276,23 @@
   .panel-header .icon-btn:active { transform: none; }
   [data-separator].ce-splitter { transition: none; }
   .text-input { transition: none; }
-  .vp-overlay { transition: none; }
 }
 
 /* Viewport display-options overlay: a quiet, in-context cluster of viewport
-   toggles (ground/grid/bloom/reference-lock), bottom-left. The scrim is a fixed
-   dark translucent chip — it floats over the arbitrary 3D render, not a theme
-   surface, so its background stays legible against any scene. Only the lock
-   accent uses the theme --accent token. */
+   toggles (ground/grid/bloom/reference-lock), bottom-left. The scrim ADAPTS —
+   dark by default, light via data-scrim="light" (set by the component when the
+   backdrop behind the pill — the ground colour when the floor is shown, else the
+   viewport background — falls below the luminance flip threshold) — so it stays
+   legible over its actual backdrop. Light-scrim glyph colours are AA-verified
+   against the composited surface (see contrast.test.ts). Tokenized so both
+   variants live in one place. */
 .vp-overlay {
   position: absolute;
+  /* The whole chip captures hover (so :hover/:focus-within lifts opacity over
+     the scrim, not just the buttons). Overrides the dead `.vp-overlay` base
+     rule's `pointer-events: none` — an unlayered selector the component's
+     Tailwind `pointer-events-auto` utility loses to. */
+  pointer-events: auto;
   left: 12px;
   bottom: 12px;
   display: flex;
@@ -1292,13 +1300,38 @@
   gap: 4px;
   padding: 5px;
   border-radius: 11px;
-  background: rgba(11, 15, 20, 0.74);
-  border: 0.5px solid rgba(255, 255, 255, 0.13);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  /* Dark scrim now appears over brighter backdrops too (raised flip threshold),
+     so it's a touch more opaque and its dim icon is lighter — both keep the
+     glyphs legible composited over a bright render (AA-verified in contrast.test). */
+  --vp-scrim-bg: rgba(11, 15, 20, 0.85);
+  --vp-scrim-border: rgba(255, 255, 255, 0.13);
+  --vp-scrim-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --vp-icon-off: #9aa7b4;
+  --vp-icon-on: #e7edf3;
+  --vp-icon-on-bg: rgba(255, 255, 255, 0.11);
+  --vp-icon-hover-bg: rgba(255, 255, 255, 0.06);
+  --vp-icon-disabled: #3d4651;
+  --vp-sep: rgba(255, 255, 255, 0.16);
+  --vp-lock-accent: #4ea3ff;  /* theme-independent: clears AA on the dark chip over bright */
+  background-color: var(--vp-scrim-bg);
+  border: 0.5px solid var(--vp-scrim-border);
+  box-shadow: var(--vp-scrim-shadow);
   backdrop-filter: blur(6px);
-  opacity: 0.6;            /* quiet at idle so it never competes with the render */
-  transition: opacity 0.15s ease;
+  opacity: 0.4;            /* quiet at idle; adaptive scrim keeps it findable */
+  transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   z-index: 10;
+}
+.vp-overlay[data-scrim="light"] {
+  --vp-scrim-bg: rgba(243, 243, 243, 0.88);
+  --vp-scrim-border: rgba(0, 0, 0, 0.13);
+  --vp-scrim-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  --vp-icon-off: #4b5563;     /* AA: 5.2:1 on the composited light scrim */
+  --vp-icon-on: #10151b;
+  --vp-icon-on-bg: rgba(0, 0, 0, 0.10);
+  --vp-icon-hover-bg: rgba(0, 0, 0, 0.06);
+  --vp-icon-disabled: #aeb6bf;
+  --vp-sep: rgba(0, 0, 0, 0.16);
+  --vp-lock-accent: #0d47a1;  /* AA: 5.9:1; darker than --accent-strong, which fails composited */
 }
 .vp-overlay:hover,
 .vp-overlay:focus-within { opacity: 1; }
@@ -1309,17 +1342,27 @@
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  color: #7d8b99;          /* off = dim icon */
+  color: var(--vp-icon-off);
   background: transparent;
   border: 0.5px solid transparent;
+  /* Fade the icon colours too, so a scrim flip animates the WHOLE chip (not just
+     the parent bg) — "a smooth fade, never a hard cut". Also smooths hover. */
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
-.vp-overlay-btn:hover:not(:disabled) { color: #e7edf3; background: rgba(255, 255, 255, 0.06); }
-.vp-overlay-btn--active { color: #e7edf3; background: rgba(255, 255, 255, 0.11); }
+.vp-overlay-btn:hover:not(:disabled) { color: var(--vp-icon-on); background: var(--vp-icon-hover-bg); }
+.vp-overlay-btn--active { color: var(--vp-icon-on); background: var(--vp-icon-on-bg); }
 .vp-overlay-btn--lock {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--vp-lock-accent);
+  background: color-mix(in srgb, var(--vp-lock-accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--vp-lock-accent) 50%, transparent);
 }
-.vp-overlay-btn:disabled { color: #3d4651; cursor: not-allowed; }
+.vp-overlay-btn:disabled { color: var(--vp-icon-disabled); cursor: not-allowed; }
 .vp-overlay-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.vp-overlay-sep { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.16); margin: 0 1px; }
+.vp-overlay-sep { width: 1px; height: 18px; background: var(--vp-sep); margin: 0 1px; }
+
+/* Reduced-motion: AFTER the pill block (later source order) so it overrides the
+   transition above — a copy inside the earlier @media block would not win. */
+@media (prefers-reduced-motion: reduce) {
+  .vp-overlay,
+  .vp-overlay-btn { transition: none; }
+}

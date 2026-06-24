@@ -37,7 +37,11 @@ describe("Tip", () => {
     expect(contents.length).toBeGreaterThan(0);
     const surface = document.querySelector(".tip-surface");
     expect(surface).not.toBeNull();
-    expect(surface!.className).toContain("tip-animate");
+    // The animated Content wraps the visual surface (so its overflow:hidden
+    // can't clip the Arrow).
+    const animated = document.querySelector(".tip-animate");
+    expect(animated).not.toBeNull();
+    expect(animated!.contains(surface)).toBe(true);
   });
 
   it("renders the bare child when content is nullish or empty (T4 conditional sites)", () => {
@@ -53,9 +57,10 @@ describe("Tip", () => {
       <Tip content="hint" side="right" align="start"><button aria-label="T">T</button></Tip>,
     );
     act(() => screen.getByRole("button", { name: "T" }).focus());
-    const surface = document.querySelector(".tip-surface");
-    expect(surface).toHaveAttribute("data-side", "right");
-    expect(surface).toHaveAttribute("data-align", "start");
+    // side/align are forwarded to the Radix Content (now the .tip-animate element).
+    const content = document.querySelector(".tip-animate");
+    expect(content).toHaveAttribute("data-side", "right");
+    expect(content).toHaveAttribute("data-align", "start");
   });
 
   it("wraps plain-string content in the padded tip-body (rich JSX brings its own padding)", () => {

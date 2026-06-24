@@ -528,6 +528,9 @@ public:
 	// engine's m_pGroundTexture. Persisted by main.cpp via
 	// HKCU\Software\AloParticleEditor\GroundSolidColor (REG_DWORD).
 	COLORREF GetGroundSolidColor() const { return m_groundSolidColor; }
+	// Effective ground colour — the solid colour, or the loaded texture's average
+	// (the floor that visually sits under the bottom-left viewport pill).
+	COLORREF GetGroundColor() const { return m_groundColor; }
 	bool     SetGroundSolidColor(COLORREF color);
 
 	//: assign a user-supplied texture file to the given slot.
@@ -959,6 +962,7 @@ private:
 	// HKCU\Software\AloParticleEditor\GroundTextureSlot{0..11}.
 	std::wstring m_groundSlotCustomPaths[kGroundTextureCount];
 	COLORREF     m_groundSolidColor;   // slot kGroundSolidColorSlot
+	COLORREF     m_groundColor = 0x808080;  // effective ground colour (solid or texture avg)
 	bool		m_debugHeat;
 	// Bloom post-process state. Shader, RTs, and parameter handles
 	// live in the Resources block below. Master enable + three

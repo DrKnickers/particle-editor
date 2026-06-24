@@ -232,6 +232,20 @@ const MOCK_LAYERS: readonly { path: string; label: string; parentLabel?: string;
 // load-failed status path + the solid-colour fallback indicator.
 const MOCK_MISSING_DOMES = new Set<string>(["Broken_Sky"]);
 
+// Representative average colour per built-in ground slot — the mock has no real
+// textures, so it stands in for the host's GetGroundColor() (which averages the
+// loaded texture). Slot 4 is the solid-colour slot (uses groundSolidColor).
+const MOCK_GROUND_TEXTURE_COLOR: Record<number, number> = {
+  0: 0x00334455, // dirt — brown, dark
+  1: 0x00204a2a, // grass — green, medium-dark
+  2: 0x0060a8c8, // sand — tan, light
+  3: 0x00f0f0f0, // snow — near-white
+};
+function mockGroundColor(slot: number, solidColor: number): number {
+  if (slot === 4) return solidColor; // kGroundSolidColorSlot
+  return MOCK_GROUND_TEXTURE_COLOR[slot] ?? 0x00808080; // custom/unknown → mid-grey
+}
+
 // A valid deterministic 256×256 checkerboard PNG for the atlas picker mock.
 // 4×4 grid of 64px squares alternating two grays (#CC and #44). Generated from
 // raw RGBA scanlines via Node zlib.deflateSync + hand-assembled PNG chunks — no
@@ -370,18 +384,29 @@ export class MockBridge implements Bridge {
         return {};
 
       case "engine/set/ground-texture":
-        this.patchAndBroadcast({ groundTexture: req.params.slot });
+        this.patchAndBroadcast({
+          groundTexture: req.params.slot,
+          groundColor: mockGroundColor(req.params.slot, snapshotEngineState().groundSolidColor),
+        });
         return {};
 
       case "engine/set/ground-solid-color":
-        this.patchAndBroadcast({ groundSolidColor: req.params.rgb });
+        this.patchAndBroadcast(
+          snapshotEngineState().groundTexture === 4
+            ? { groundSolidColor: req.params.rgb, groundColor: req.params.rgb }
+            : { groundSolidColor: req.params.rgb },
+        );
         return {};
 
       case "engine/set/ground-slot-custom-path": {
         const { slot, path } = req.params;
-        const paths = [...snapshotEngineState().groundSlotCustomPaths];
+        const snap = snapshotEngineState();
+        const paths = [...snap.groundSlotCustomPaths];
         if (slot >= 0 && slot < paths.length) paths[slot] = path;
-        this.patchAndBroadcast({ groundSlotCustomPaths: paths });
+        const patch: Partial<EngineStateDto> = { groundSlotCustomPaths: paths };
+        // Mirror the host: changing the SELECTED slot's texture refreshes the floor colour.
+        if (slot === snap.groundTexture) patch.groundColor = mockGroundColor(slot, snap.groundSolidColor);
+        this.patchAndBroadcast(patch);
         return {};
       }
 
