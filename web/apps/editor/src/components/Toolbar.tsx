@@ -22,7 +22,7 @@ import {
   FilePlus, FolderOpen, Save, SaveAll,
   Undo2, Redo2,
   Play, Pause, ChevronRight, ChevronsRight,
-  Grid2x2, PanelBottom, Sun, Sparkles, CirclePlus, Lightbulb, LayoutGrid,
+  Sparkles, CirclePlus, Lightbulb, LayoutGrid,
 } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
 import { BackgroundDropdown } from "@/components/BackgroundDropdown";
@@ -52,11 +52,8 @@ export function Toolbar({ bridge }: Props) {
   const paused = state?.paused ?? false;
   const canUndo = state?.canUndo ?? false;
   const canRedo = state?.canRedo ?? false;
-  // Viewport engine toggles (formerly the floating ViewportPill). Defaults
-  // match the pill: ground/bloom off, leave-particles on.
-  const ground = state?.ground ?? false;
-  const gridVisible = state?.gridVisible ?? false;
-  const bloom = state?.bloom ?? false;
+  // leave-particles is a sim-behaviour toggle (default on); the ground/grid/bloom
+  // visibility toggles moved to the viewport display-options overlay.
   const leaveParticles = state?.leaveParticles ?? true;
   const dock = useRightDock();
   const spawnerVisible = dock === "spawner";
@@ -190,44 +187,10 @@ export function Toolbar({ bridge }: Props) {
 
       <span className="tb-divider" />
 
-      {/* Group 4: viewport engine toggles. aria-pressed + aria-labels are
-          ported verbatim from the old ViewportPill so a11y semantics are
-          preserved. Each reads the live engine snapshot and dispatches the
-          matching engine/set/* with the inverted value. */}
+      {/* Group 4: viewport toggle. The ground / grid / bloom toggles moved to the
+          bottom-left viewport display-options overlay (ViewportToggleOverlay);
+          leave-particles is a sim-behaviour toggle and stays here. */}
       <div className="tb-group">
-        <Tip content="Show ground">
-          <button
-            type="button"
-            className="tb-btn"
-            aria-label="Show ground"
-            aria-pressed={ground}
-            onClick={() => { void bridge.request({ kind: "engine/set/ground", params: { enabled: !ground } }); }}
-          >
-            <PanelBottom {...ICON} />
-          </button>
-        </Tip>
-        <Tip content="Show grid">
-          <button
-            type="button"
-            className="tb-btn"
-            aria-label="Show grid"
-            aria-pressed={gridVisible}
-            onClick={() => { void bridge.request({ kind: "engine/set/grid-visible", params: { visible: !gridVisible } }); }}
-          >
-            <Grid2x2 {...ICON} />
-          </button>
-        </Tip>
-        <Tip content="Toggle bloom">
-          <button
-            type="button"
-            className="tb-btn"
-            aria-label="Toggle bloom"
-            aria-pressed={bloom}
-            onClick={() => { void bridge.request({ kind: "engine/set/bloom", params: { enabled: !bloom } }); }}
-          >
-            <Sun {...ICON} />
-          </button>
-        </Tip>
         <Tip content="Leave particles after instance death">
           <button
             type="button"

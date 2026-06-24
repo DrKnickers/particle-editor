@@ -36,6 +36,7 @@ const ACCEL_COMBOS = [
   "Ctrl+Del",
   "Ctrl+G",
   "Ctrl+H",
+  "Ctrl+L",
   "Ctrl+Home",
   "F5",
   "F6",
@@ -132,6 +133,15 @@ export function useAppAccelerators(bridge: Bridge): void {
             kind: "engine/set/heat-debug",
             params: { enabled: !(st?.heatDebug ?? false) },
           });
+          break;
+        case "Ctrl+L":
+          // Toggle the reference-object lock — only meaningful when one is loaded.
+          if ((st?.referenceObjectName ?? "") !== "") {
+            void bridge.request({
+              kind: "engine/set/reference-object-lock",
+              params: { locked: !(st?.referenceObjectLocked ?? false) },
+            });
+          }
           break;
         case "F8":
           void bridge.request({

@@ -41,13 +41,14 @@ test("Toolbar renders the 2026 button set", async () => {
     "Step 10",
     "Toggle Spawner panel",
   ]));
-  // Viewport engine toggles (moved from the old ViewportPill).
+  // ground/grid/bloom moved to the viewport display-options overlay; the
+  // leave-particles toggle stays in the toolbar.
   expect(labels).toEqual(expect.arrayContaining([
-    "Show ground",
-    "Show grid",
-    "Toggle bloom",
     "Leave particles after instance death",
   ]));
+  expect(labels).not.toContain("Show ground");
+  expect(labels).not.toContain("Show grid");
+  expect(labels).not.toContain("Toggle bloom");
   // (Theme switching moved out of the toolbar into Edit → Preferences.)
 });
 
@@ -127,20 +128,14 @@ test("Spawner toggle button is present with default aria-pressed=true", async ()
   expect(info.ariaPressed).toMatch(/^(true|false)$/);
 });
 
-test("viewport toggles flip engine state via aria-pressed", async () => {
-  // The three engine toggles that used to live in the floating
-  // ViewportPill now live in the toolbar. Each reflects engine state via
-  // aria-pressed and flips it on click; toggle back to leave state clean.
-  for (const label of [
-    "Show ground",
-    "Toggle bloom",
-    "Leave particles after instance death",
-  ]) {
-    const btn = page.locator(`.toolbar button[aria-label="${label}"]`);
-    await expect(btn).toHaveAttribute("aria-pressed", /true|false/);
-    const before = await btn.getAttribute("aria-pressed");
-    await btn.click();
-    await expect(btn).not.toHaveAttribute("aria-pressed", before ?? "");
-    await btn.click(); // restore
-  }
+test("leave-particles toolbar toggle flips engine state via aria-pressed", async () => {
+  // ground/grid/bloom moved to the viewport display-options overlay;
+  // leave-particles is the remaining toolbar toggle. It reflects engine state
+  // via aria-pressed and flips on click; toggle back to leave state clean.
+  const btn = page.locator(`.toolbar button[aria-label="Leave particles after instance death"]`);
+  await expect(btn).toHaveAttribute("aria-pressed", /true|false/);
+  const before = await btn.getAttribute("aria-pressed");
+  await btn.click();
+  await expect(btn).not.toHaveAttribute("aria-pressed", before ?? "");
+  await btn.click(); // restore
 });

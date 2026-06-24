@@ -141,43 +141,29 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     expect(localStorage.getItem("alo:right-dock")).toBe("none");
   });
 
-  // ── Viewport engine toggles (moved here from the deleted ViewportPill) ──
+  // ── Leave-particles toggle (ground/grid/bloom moved to the viewport overlay) ──
 
-  it("renders the three viewport toggles with their aria-labels", async () => {
-    const b = makeBridge();
-    renderToolbar(b);
-    expect(
-      await screen.findByRole("button", { name: "Show ground" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Toggle bloom" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", {
-        name: "Leave particles after instance death",
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it("reflects the engine snapshot on the viewport toggles via aria-pressed", async () => {
-    // makeBridge snapshot: ground=true, bloom=false, leaveParticles absent
-    // (so it falls back to the default `true`).
+  it("no longer renders the ground/grid/bloom toggles (moved to the viewport display-options overlay)", async () => {
     const b = makeBridge();
     renderToolbar(b);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Show ground" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
+      expect(
+        screen.getByRole("button", { name: "Leave particles after instance death" }),
+      ).toBeInTheDocument(),
     );
-    expect(
-      screen.getByRole("button", { name: "Toggle bloom" }),
-    ).toHaveAttribute("aria-pressed", "false");
-    expect(
-      screen.getByRole("button", {
-        name: "Leave particles after instance death",
-      }),
-    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Show ground" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show grid" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Toggle bloom" })).toBeNull();
+  });
+
+  it("reflects leaveParticles via aria-pressed (default true)", async () => {
+    const b = makeBridge();
+    renderToolbar(b);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Leave particles after instance death" }),
+      ).toHaveAttribute("aria-pressed", "true"),
+    );
   });
 
   it("renders the Spawner toggle as an icon, not a text label", async () => {
@@ -190,70 +176,17 @@ describe("Toolbar — Particle Editor 2026 layout", () => {
     expect(btn.querySelector("svg")).toBeTruthy();
   });
 
-  it("clicking a viewport toggle dispatches engine/set/* with the inverted value", async () => {
+  it("leave-particles dispatches engine/set/leave-particles with the inverted value", async () => {
     const b = makeBridge();
     renderToolbar(b);
-    // Wait for the snapshot so ground=true is reflected before clicking.
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Show ground" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Show ground" }));
-    expect(b.request).toHaveBeenCalledWith({
-      kind: "engine/set/ground",
-      params: { enabled: false },
+    const btn = await screen.findByRole("button", {
+      name: "Leave particles after instance death",
     });
-    fireEvent.click(screen.getByRole("button", { name: "Toggle bloom" }));
-    expect(b.request).toHaveBeenCalledWith({
-      kind: "engine/set/bloom",
-      params: { enabled: true },
-    });
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Leave particles after instance death",
-      }),
-    );
+    await waitFor(() => expect(btn).toHaveAttribute("aria-pressed", "true"));
+    fireEvent.click(btn);
     expect(b.request).toHaveBeenCalledWith({
       kind: "engine/set/leave-particles",
       params: { enabled: false },
-    });
-  });
-
-  it("renders a 'Show grid' viewport toggle", async () => {
-    const b = makeBridge();
-    renderToolbar(b);
-    expect(
-      await screen.findByRole("button", { name: "Show grid" }),
-    ).toBeInTheDocument();
-  });
-
-  it("reflects gridVisible on the 'Show grid' toggle via aria-pressed", async () => {
-    // makeBridge snapshot: gridVisible=true
-    const b = makeBridge();
-    renderToolbar(b);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Show grid" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
-    );
-  });
-
-  it("'Show grid' dispatches engine/set/grid-visible with the inverted value (visible key, not enabled)", async () => {
-    const b = makeBridge();
-    renderToolbar(b);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Show grid" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Show grid" }));
-    expect(b.request).toHaveBeenCalledWith({
-      kind: "engine/set/grid-visible",
-      params: { visible: false },
     });
   });
 

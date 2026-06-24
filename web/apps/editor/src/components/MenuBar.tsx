@@ -231,8 +231,11 @@ export function MenuBar({
 
   const ground = state?.ground ?? false;
   const gridVisible = state?.gridVisible ?? false;
-  // Bloom enable/disable lives on the toolbar's "Toggle bloom" button, not
-  // the View menu (session 11 follow-up), so no bloom state is read here.
+  const refLocked = state?.referenceObjectLocked ?? false;
+  const hasRefObject = (state?.referenceObjectName ?? "") !== "";
+  // Bloom on/off now lives in the viewport display-options overlay (it moved off
+  // the toolbar); its settings stay in the Lighting pane — so no bloom state is
+  // read here (no View-menu Bloom item).
   const paused = state?.paused ?? false;
   const heatDebug = state?.heatDebug ?? false;
 
@@ -836,12 +839,23 @@ export function MenuBar({
               <CheckSlot active={gridVisible} />
               Grid
             </Menubar.Item>
+            <Menubar.Item
+              className={ITEM}
+              disabled={!hasRefObject}
+              onSelect={send({
+                kind: "engine/set/reference-object-lock",
+                params: { locked: !refLocked },
+              })}
+            >
+              <CheckSlot active={refLocked} />
+              Lock reference object
+            </Menubar.Item>
             {/* Lighting opens the docked right-dock pane (shared with the
                 Spawner; session 11). Bloom is fully handled elsewhere:
-                its settings live as a section inside the Lighting pane, and
-                its on/off toggle is the toolbar's "Toggle bloom" button — so
-                the former View-menu "Bloom" + "Bloom Settings…" items were
-                both retired (session 11 follow-up). */}
+                its settings live as a section inside the Lighting pane, and its
+                on/off toggle is in the viewport display-options overlay (it
+                moved off the toolbar) — so the former View-menu "Bloom" +
+                "Bloom Settings…" items stay retired (session 11 follow-up). */}
             <Menubar.Item
               className={ITEM}
               onSelect={() => toggleDock("lighting")}

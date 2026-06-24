@@ -10,6 +10,7 @@ import {
 import { computeSceneRect } from "../lib/scene-rect";
 import { useDockAnim } from "../lib/dock-anim";
 import { ManipulatorReadout } from "./ManipulatorReadout";
+import { ViewportToggleOverlay } from "./ViewportToggleOverlay";
 
 type Props = { bridge: Bridge };
 
@@ -237,6 +238,10 @@ export function ViewportSlot({ bridge }: Props) {
           input from the canvas overlay below it. `ref` is this root div —
           the overlay box the pill positions within. */}
       <ManipulatorReadout bridge={bridge} overlayRef={ref} />
+      {/* Viewport display-options overlay (ground/grid/bloom/reference-lock),
+          bottom-left. `pointer-events-auto` (on .vp-overlay) so its buttons are
+          clickable over the canvas; it's diagonally opposite the readout pill. */}
+      <ViewportToggleOverlay bridge={bridge} />
     </div>
   );
 }

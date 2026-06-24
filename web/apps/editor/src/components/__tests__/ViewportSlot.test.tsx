@@ -48,9 +48,13 @@ describe("ViewportSlot — render surface", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
     expect(bridge.request).toHaveBeenCalled();
-    const firstCall = bridge.request.mock.calls[0]?.[0];
-    expect(firstCall?.kind).toBe("layout/scene-rect");
-    expect(firstCall?.params).toMatchObject({
+    // The viewport overlay (a child) also dispatches engine/state/snapshot on
+    // mount, so find the scene-rect call rather than assume it's first.
+    const sceneRect = bridge.request.mock.calls
+      .map((c) => c?.[0])
+      .find((r) => r?.kind === "layout/scene-rect");
+    expect(sceneRect).toBeTruthy();
+    expect(sceneRect?.params).toMatchObject({
       x: expect.any(Number),
       y: expect.any(Number),
       w: expect.any(Number),

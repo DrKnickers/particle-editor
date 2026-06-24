@@ -1397,4 +1397,51 @@
   .panel-header .icon-btn:active { transform: none; }
   [data-separator].ce-splitter { transition: none; }
   .text-input { transition: none; }
+  .vp-overlay { transition: none; }
 }
+
+/* Viewport display-options overlay: a quiet, in-context cluster of viewport
+   toggles (ground/grid/bloom/reference-lock), bottom-left. The scrim is a fixed
+   dark translucent chip — it floats over the arbitrary 3D render, not a theme
+   surface, so its background stays legible against any scene. Only the lock
+   accent uses the theme --accent token. */
+.vp-overlay {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 11px;
+  background: rgba(11, 15, 20, 0.74);
+  border: 0.5px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+  opacity: 0.6;            /* quiet at idle so it never competes with the render */
+  transition: opacity 0.15s ease;
+  z-index: 10;
+}
+.vp-overlay:hover,
+.vp-overlay:focus-within { opacity: 1; }
+.vp-overlay-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #7d8b99;          /* off = dim icon */
+  background: transparent;
+  border: 0.5px solid transparent;
+}
+.vp-overlay-btn:hover:not(:disabled) { color: #e7edf3; background: rgba(255, 255, 255, 0.06); }
+.vp-overlay-btn--active { color: #e7edf3; background: rgba(255, 255, 255, 0.11); }
+.vp-overlay-btn--lock {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.vp-overlay-btn:disabled { color: #3d4651; cursor: not-allowed; }
+.vp-overlay-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.vp-overlay-sep { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.16); margin: 0 1px; }

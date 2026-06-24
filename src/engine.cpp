@@ -5096,6 +5096,10 @@ void Engine::SetReferenceObject(const std::string& name)
         m_referenceObjectVisible = true;
     // Auto-select on pick so the manipulator gizmo appears immediately; clearing
     // the selection deselects. (Click the object body to re-select, empty to clear.)
+    // NOTE: the lock is intentionally STICKY + persisted across sessions (+
+    // the HostWindow startup restore) — do NOT clear m_referenceLocked here, or
+    // the startup restore is wiped. The overlay/View-menu now make the lock state
+    // visible so a sticky lock on a freshly-loaded object is no longer confusing.
     m_referenceObjectSelected = RefLockResolveSelected(!name.empty(), m_referenceLocked);
     m_hoverManip = ManipHandle();
     RebuildReferenceObjectMesh();

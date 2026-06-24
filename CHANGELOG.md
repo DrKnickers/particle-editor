@@ -18,6 +18,10 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 
 ## 2026-06-24
 
+### Changed
+
+- Ground, grid, and bloom toggles now live in a compact overlay in the bottom-left of the viewport (moved off the toolbar), alongside a new control to **lock the reference object** so you can pan and orbit without accidentally nudging it — toggle the lock from the overlay, the View menu, or Ctrl+L
+
 ### Fixed
 
 - Saving an `.alo` can no longer corrupt your existing file if the save fails partway through (disk full, a removable/network drive disconnected, permission denied) — your original file is left untouched until the new one is fully written
