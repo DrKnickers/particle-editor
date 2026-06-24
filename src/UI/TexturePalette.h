@@ -6,9 +6,8 @@
 // PaletteStore is a process-global singleton holding the per-mod palette
 // state (pinned + recent texture filenames, last-used Color/Bump filter).
 // Persisted to %APPDATA%\AloParticleEditor\texture-palettes.ini, with one
-// [mod=<crc32-of-path>] section per mod plus a single [ui] section for
-// cross-mod state. The GetPopupPos/SetPopupPos [ui] slot is retained for INI
-// compatibility; the palette UI lives in React (WebView2).
+// [mod=<crc32-of-path>] section per mod. The palette UI lives in
+// React (WebView2).
 //
 // This header declares the data layer (PaletteStore) plus the bridge
 // thumbnail helpers (GetThumbnail / GetTexturePreview) the React palette
@@ -84,8 +83,6 @@ public:
     // TogglePin: flips pinned state. Returns false if pinning would
     // exceed MAX_PINS (caller should show "pins full" status feedback).
     bool              TogglePin(const std::wstring& filename);
-    // Remove an entry entirely (from pins or recents).
-    void              Remove(const std::wstring& filename);
 
     // Read access for the popup's WM_PAINT. Returns entries matching
     // the given filter, in display order:
@@ -93,11 +90,6 @@ public:
     //   - Recents: most-recently-used first.
     std::vector<Entry> Pins   (SlotMask filter) const;
     std::vector<Entry> Recents(SlotMask filter) const;
-
-    // Popup window position (cross-mod, persisted in [ui]).
-    // GetPopupPos returns `fallback` if no position has ever been saved.
-    POINT             GetPopupPos(POINT fallback) const;
-    void              SetPopupPos(POINT pos);
 
 private:
     Store();
@@ -114,7 +106,6 @@ private:
     // Loads a mod section from INI on demand; cached in m_byMod.
     ModPalette&       LoadOrInit(const std::wstring& modPath);
     void              FlushMod  (const std::wstring& modPath, const ModPalette& mp) const;
-    void              FlushUi   () const;
 
     // INI path under %APPDATA%\AloParticleEditor\.
     std::wstring      IniPath() const;
@@ -123,8 +114,6 @@ private:
 
     std::wstring                                       m_activeMod;
     std::unordered_map<std::wstring, ModPalette>       m_byMod;        // keyed by lowercased mod path
-    POINT                                              m_popupPos;
-    bool                                               m_popupPosLoaded;
     mutable bool                                       m_iniPathChecked;
     mutable std::wstring                               m_iniPathCache;
 };

@@ -136,9 +136,7 @@ void DbgPrintf(const char*, ...) {}
 // Store
 
 Store::Store()
-    : m_popupPos      { -1, -1 }
-    , m_popupPosLoaded(false)
-    , m_iniPathChecked(false)
+    : m_iniPathChecked(false)
 {
 }
 
@@ -440,22 +438,6 @@ bool Store::TogglePin(const wstring& filename)
     return false;
 }
 
-void Store::Remove(const wstring& filename)
-{
-    if (m_activeMod.empty()) return;
-    ModPalette& mp = LoadOrInit(m_activeMod);
-    for (auto it = mp.entries.begin(); it != mp.entries.end(); ++it)
-    {
-        if (it->filename == filename)
-        {
-            mp.entries.erase(it);
-            FlushMod(m_activeMod, mp);
-            DbgPrintf("[Palette] removed '%s'\n", WideToAnsi(filename).c_str());
-            return;
-        }
-    }
-}
-
 vector<Entry> Store::Pins(SlotMask filter) const
 {
     vector<Entry> out;
@@ -485,34 +467,6 @@ vector<Entry> Store::Recents(SlotMask filter) const
         return a.lastUsedNs > b.lastUsedNs;
     });
     return out;
-}
-
-POINT Store::GetPopupPos(POINT fallback) const
-{
-    if (m_popupPosLoaded) return m_popupPos;
-
-    const wstring iniPath = IniPath();
-    if (!iniPath.empty())
-    {
-        const int x = IniGetInt(iniPath, L"ui", L"PopupX", INT_MIN);
-        const int y = IniGetInt(iniPath, L"ui", L"PopupY", INT_MIN);
-        if (x != INT_MIN && y != INT_MIN)
-        {
-            const_cast<Store*>(this)->m_popupPos       = POINT{ x, y };
-            const_cast<Store*>(this)->m_popupPosLoaded = true;
-            return m_popupPos;
-        }
-    }
-    const_cast<Store*>(this)->m_popupPosLoaded = true;
-    const_cast<Store*>(this)->m_popupPos       = fallback;
-    return fallback;
-}
-
-void Store::SetPopupPos(POINT pos)
-{
-    m_popupPos       = pos;
-    m_popupPosLoaded = true;
-    FlushUi();
 }
 
 void Store::FlushMod(const wstring& modPath, const ModPalette& mp) const
@@ -552,12 +506,4 @@ void Store::FlushMod(const wstring& modPath, const ModPalette& mp) const
     }
     IniSetInt(iniPath, section, L"PinCount",    pinIdx);
     IniSetInt(iniPath, section, L"RecentCount", recentIdx);
-}
-
-void Store::FlushUi() const
-{
-    const wstring iniPath = IniPath();
-    if (iniPath.empty()) return;
-    IniSetInt(iniPath, L"ui", L"PopupX", m_popupPos.x);
-    IniSetInt(iniPath, L"ui", L"PopupY", m_popupPos.y);
 }

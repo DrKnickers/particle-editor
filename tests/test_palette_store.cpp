@@ -220,19 +220,6 @@ static void test_unpin_returns_to_recent()
     ASSERT_STREQ(recents[0].filename, L"foo.tga");
 }
 
-static void test_remove()
-{
-    std::printf("test_remove\n");
-    ResetState();
-    Store::Instance().SetActiveMod(L"C:\\Test\\ModA");
-    Store::Instance().TouchRecent(L"a.tga", SLOT_COLOR);
-    Store::Instance().TouchRecent(L"b.tga", SLOT_COLOR);
-    Store::Instance().Remove(L"a.tga");
-    auto recents = Store::Instance().Recents(SLOT_COLOR);
-    ASSERT_EQ(recents.size(), (size_t)1);
-    ASSERT_STREQ(recents[0].filename, L"b.tga");
-}
-
 static void test_mod_switch_isolation()
 {
     std::printf("test_mod_switch_isolation\n");
@@ -351,21 +338,6 @@ static void test_empty_mod_path_is_noop()
     ASSERT_EQ(Store::Instance().Recents(SLOT_COLOR).size(), (size_t)1);
 }
 
-static void test_popup_position_persists()
-{
-    std::printf("test_popup_position_persists\n");
-    ResetState();
-    POINT fallback { 100, 200 };
-    POINT got = Store::Instance().GetPopupPos(fallback);
-    ASSERT_EQ(got.x, fallback.x);
-    ASSERT_EQ(got.y, fallback.y);
-    Store::Instance().SetPopupPos(POINT{ 500, 600 });
-    // Same instance reads cached value.
-    got = Store::Instance().GetPopupPos(POINT{ 999, 999 });
-    ASSERT_EQ(got.x, (LONG)500);
-    ASSERT_EQ(got.y, (LONG)600);
-}
-
 // ---- Driver -------------------------------------------------------------
 
 int main()
@@ -401,7 +373,6 @@ int main()
     test_pin_from_recent();
     test_pin_overflow_rejected();
     test_unpin_returns_to_recent();
-    test_remove();
     test_mod_switch_isolation();
     test_per_mod_filter_persists();
     test_case_insensitive_mod_path();
@@ -409,7 +380,6 @@ int main()
     test_clear_active_mod();
     test_malformed_filenames_rejected();
     test_empty_mod_path_is_noop();
-    test_popup_position_persists();
 
     // Restore the user's INI.
     DeleteFileW(g_iniPath.c_str());
