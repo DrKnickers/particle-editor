@@ -10,6 +10,19 @@ version** (newest first) and each entry links its PR. The versioning policy live
 For the per-PR engineering diary (design decisions, implementation detail, and issues-and-resolutions),
 see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work, see [`ROADMAP.md`](ROADMAP.md).
 
+**Conventions** (authoritative — `CLAUDE.md` points here). Only `## [Unreleased]` is edited
+day to day: add one concise bullet per user-facing change under the right category.
+Categories appear in this fixed order, only the ones that apply: **Added · Changed · Fixed ·
+Removed · Security**. Bullets are present tense, **no trailing period**, ending with the PR
+link `([#NN](…/pull/NN))` (commit link for the few pre-PR entries) — no commit hash, no file
+names, no engineering diary (that's [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md)). **User
+perspective only** — *what the user can now do*. **Omit non-user-facing changes entirely**:
+docs, changelog/handoff backfills, CI/build config, and pure internal refactors get no bullet
+here (dev log only). Cutting a release renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
+and adds a fresh empty `## [Unreleased]` above it (a user-gated step — see
+[`VERSIONING.md`](VERSIONING.md)); an optional `[X.Y.Z]: …/compare/…` reference-link footer
+may live at the end of the file.
+
 ## [Unreleased]
 
 ### Added
