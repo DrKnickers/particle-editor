@@ -23,6 +23,7 @@ see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work
 - Ground, grid, and bloom toggles now live in a compact overlay in the bottom-left of the viewport (moved off the toolbar), alongside a new control to **lock the reference object** so you can pan and orbit without accidentally nudging it — toggle the lock from the overlay, the View menu, or Ctrl+L
 - The viewport display-options pill now adapts its scrim to the scene — a light chip over dark backdrops, dark otherwise — and rests more quietly until you hover or focus it
 - Atlas Picker frames now lift on hover, making the frame under your cursor easy to see against busy textures
+- The Atlas Picker hover now reads clearly over busy thumbnails in both light and dark mode — a stronger tint and slightly larger lift
 - Skydomes now render their authored textures faithfully, exactly as the game does; the "Smooth skydome seams" preference has been removed (it distorted the starfield and could not cleanly remove the asset's own seam)
 
 ### Fixed

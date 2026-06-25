@@ -459,7 +459,7 @@ describe("AtlasPickerPanel", () => {
       expect(c.style.backgroundImage).not.toBe("");
       return c;
     });
-    expect(cell.className).toContain("hover:scale-[1.04]");
+    expect(cell.className).toContain("hover:scale-[1.06]");
     expect(cell.className).toContain("motion-reduce:hover:scale-100");
   });
 

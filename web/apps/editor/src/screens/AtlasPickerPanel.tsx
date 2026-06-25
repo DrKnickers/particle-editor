@@ -758,7 +758,7 @@ const Cell = memo(function Cell({
       aria-selected={selected}
       aria-label={`Frame ${k}`}
       tabIndex={focused ? 0 : -1}
-      className={`group relative aspect-square rounded-[var(--radius-sm)] bg-bg-2 transition hover:scale-[1.04] hover:z-10 motion-reduce:hover:scale-100 ${
+      className={`group relative aspect-square rounded-[var(--radius-sm)] bg-bg-2 transition hover:scale-[1.06] hover:z-10 motion-reduce:hover:scale-100 ${
         selected ? "border-2" : "border border-border"
       } focus-ring`}
       style={style}
@@ -766,8 +766,8 @@ const Cell = memo(function Cell({
       onMouseLeave={() => onHover(null)}
       onClick={() => onClick?.(k)}
     >
-      {/* Hover affordance = a subtle scale-lift (on the cell) + this bumped tint
-          overlay (~14%). Geometry carries it on loud thumbnails and stacks cleanly
+      {/* Hover affordance = a subtle scale-lift (on the cell) + this tint
+          overlay (~22%). Geometry carries it on loud thumbnails and stacks cleanly
           with the amber selection ring + blue focus outline (those are colour
           cues; the lift scales the whole cell, rings and all). No outset shadow —
           the grid scroll container would clip it. */}
