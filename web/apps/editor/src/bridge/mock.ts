@@ -640,11 +640,12 @@ export class MockBridge implements Bridge {
         const { slot } = req.params;
         const state = snapshotEngineState();
         const paths = state.groundSlotCustomPaths;
-        // Mirrors Engine::IsGroundSlotEmpty: slots 0..(kGroundTextureBundledCount-1)
-        // have bundled defaults (except kGroundSolidColorSlot=4 which is the
-        // procedural solid colour and is never empty either). Slots >=5 are
-        // empty iff their custom path is empty.
-        const hasBuiltin = slot >= 0 && slot < 5;  // 0..4 are bundled / procedural
+        // Mirrors Engine::IsGroundSlotEmpty: a slot is "empty" (no editor-owned
+        // asset) unless it's dirt (slot 0, bundled IDB_GROUND), the procedural solid
+        // colour (slot 4), or has a user custom path. Game-sourced slots 1..3
+        // (grass/sand/snow) have NO bundled resource, so they read empty here even
+        // though they render from the game install -- availability is a separate query.
+        const hasBuiltin = slot === 0 || slot === 4;  // dirt + procedural solid only
         const hasCustom  = slot >= 0 && slot < paths.length && (paths[slot] ?? "") !== "";
         return !(hasBuiltin || hasCustom);
       }

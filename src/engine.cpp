@@ -1649,6 +1649,18 @@ bool Engine::ReloadGroundTexture()
                    leaf, m_groundTextureIndex);
             fflush(stdout);
 #endif
+            // Release-visible signal ONLY for the corrupt-install case: the slot
+            // probed available (file present) yet failed to decode -- distinct from
+            // "no install" (expected, silent). Without this, a user who picked Snow
+            // and silently got dirt has no paper trail in a Release build.
+            if (IsGroundSlotAvailable(m_groundTextureIndex))
+            {
+                char msg[256];
+                _snprintf_s(msg, sizeof(msg), _TRUNCATE,
+                    "[Ground] slot=%d game texture '%s' is present but failed to decode; "
+                    "using dirt (file may be corrupt).\n", m_groundTextureIndex, leaf);
+                OutputDebugStringA(msg);
+            }
         }
     }
     if (pNew == NULL)

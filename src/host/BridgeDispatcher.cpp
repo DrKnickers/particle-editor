@@ -1548,9 +1548,12 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (kind == "engine/set/ground-texture")
     {
         if (!requireEngine(kind.c_str())) return res;
-        m_engine->SetGroundTexture(params.value("slot", 0));
-        sendOk(json::object());
-        markDirty();
+        // SetGroundTexture refuses an unavailable slot (no game install) and stays put.
+        // Report the truth: echo the slot actually in effect + whether it applied, so a
+        // caller awaiting this reply isn't told "ok" for a selection that bounced to dirt.
+        const bool applied = m_engine->SetGroundTexture(params.value("slot", 0));
+        sendOk({ {"slot", m_engine->GetGroundTexture()}, {"applied", applied} });
+        if (applied) markDirty();
         EmitEngineStateChanged();
         return res;
     }

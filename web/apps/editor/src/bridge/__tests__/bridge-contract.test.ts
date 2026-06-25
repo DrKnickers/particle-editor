@@ -182,10 +182,16 @@ describe("MockBridge contract", () => {
 
   it("engine/query/ground-slot-empty respects bundled / custom rules", async () => {
     const b = new MockBridge();
-    // Bundled slots (0..4) are never empty.
-    for (const slot of [0, 1, 2, 3, 4]) {
+    // Dirt (0) + procedural solid (4) are structurally non-empty. Game-sourced
+    // slots 1..3 (grass/sand/snow) have no editor-owned asset -> empty here, even
+    // though they render from the game install (availability is a separate query).
+    for (const slot of [0, 4]) {
       const empty = await b.request({ kind: "engine/query/ground-slot-empty", params: { slot } });
       expect(empty).toBe(false);
+    }
+    for (const slot of [1, 2, 3]) {
+      const empty = await b.request({ kind: "engine/query/ground-slot-empty", params: { slot } });
+      expect(empty).toBe(true);
     }
     // Slot 5 starts empty (no custom path set).
     const before = await b.request({ kind: "engine/query/ground-slot-empty", params: { slot: 5 } });
