@@ -53,6 +53,7 @@ describe("MockBridge contract", () => {
     expect(s).toHaveProperty("groundSolidColor");
     expect(s).toHaveProperty("groundColor");
     expect(s).toHaveProperty("groundSlotCustomPaths");
+    expect(s).toHaveProperty("groundSlotAvailable");
     expect(s).toHaveProperty("skydomeSlot");
     expect(s).toHaveProperty("skydomeCustomPaths");
     expect(s).toHaveProperty("background");

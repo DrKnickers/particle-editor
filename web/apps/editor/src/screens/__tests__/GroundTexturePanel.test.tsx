@@ -17,7 +17,10 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 type RequestFn = (req: { kind: string; params?: Record<string, unknown> }) => Promise<unknown>;
 
 function makeStubBridge(
-  opts: { fileOpen?: { ok: true; path: string } | { ok: false; error: string } } = {},
+  opts: {
+    fileOpen?: { ok: true; path: string } | { ok: false; error: string };
+    groundSlotAvailable?: boolean[];
+  } = {},
 ): Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> } {
   const snapshot = {
     ground: true,
@@ -27,6 +30,9 @@ function makeStubBridge(
     // All 8 slots empty so the custom slots (5..7) render in their
     // Browse... empty state.
     groundSlotCustomPaths: ["", "", "", "", "", "", "", ""],
+    // Per-slot availability. Omitted by default ⇒ the panel treats every
+    // slot as available (back-compat with a host that predates the field).
+    ...(opts.groundSlotAvailable ? { groundSlotAvailable: opts.groundSlotAvailable } : {}),
     skydomeSlot: 0,
     skydomeCustomPaths: ["", "", ""],
     background: 0,
@@ -75,6 +81,36 @@ describe("GroundTexturePanel", () => {
     const setSlot = calls.find((c) => c.kind === "engine/set/ground-texture");
     expect(setSlot).toBeDefined();
     expect(setSlot.params.slot).toBe(1);
+  });
+
+  it("greys out game-sourced slots the host can't resolve (no game install) and blocks their click", async () => {
+    // grass(1) + snow(3) unavailable; dirt(0), sand(2), solid(4) available.
+    const bridge = makeStubBridge({
+      groundSlotAvailable: [true, false, true, false, true, true, true, true],
+    });
+    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+
+    // Wait for the (async) snapshot to land so availability is applied.
+    // Unavailable tiles get a distinct label, are disabled, and don't dispatch.
+    const grass = await screen.findByRole("button", { name: /Grass \(unavailable/ });
+    const snow = screen.getByRole("button", { name: /Snow \(unavailable/ });
+    expect(grass).toBeDisabled();
+    expect(snow).toBeDisabled();
+    fireEvent.click(grass);
+    fireEvent.click(snow);
+
+    // Available tiles keep their plain label and remain clickable.
+    const sand = screen.getByRole("button", { name: "Sand" });
+    expect(sand).not.toBeDisabled();
+    fireEvent.click(sand);
+
+    const setSlots = (bridge.request as ReturnType<typeof vi.fn>).mock.calls
+      .map((c) => c[0])
+      .filter((c) => c.kind === "engine/set/ground-texture")
+      .map((c) => c.params.slot);
+    expect(setSlots).toContain(2); // sand went through
+    expect(setSlots).not.toContain(1); // grass click blocked
+    expect(setSlots).not.toContain(3); // snow click blocked
   });
 
   it("toggles the unit grid (relocated here from the Reference picker, S48)", () => {

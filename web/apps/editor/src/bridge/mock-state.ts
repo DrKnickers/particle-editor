@@ -74,6 +74,9 @@ export function makeDefaultEngineState(): EngineStateDto {
     groundSolidColor: 0x00808080,
     groundColor: 0x00334455, // slot-0 (dirt) representative average; see mock.ts MOCK_GROUND_TEXTURE_COLOR
     groundSlotCustomPaths: Array.from({ length: GROUND_SLOT_COUNT }, () => ""),
+    // Mock has no game install to probe, so every built-in/custom slot is
+    // reported available (the mock serves bundled-style previews for all).
+    groundSlotAvailable: Array.from({ length: GROUND_SLOT_COUNT }, () => true),
 
     skydomeSlot: 0,
     skydomeCustomPaths: Array.from({ length: SKYDOME_CUSTOM_COUNT }, () => ""),

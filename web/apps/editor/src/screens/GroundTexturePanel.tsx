@@ -105,6 +105,11 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
   // Custom-slot paths live at the array's tail. The bridge DTO carries
   // all 8 slots indexed by slot number; we read 5..7 directly.
   const customPaths = snapshot?.groundSlotCustomPaths ?? [];
+  // Per-slot availability (host: false when the EaW/FoC install can't resolve a
+  // game-sourced texture). A missing array (stale snapshot / older host) is
+  // treated as "all available" so the picker never blanks — only an explicit
+  // `false` greys a tile.
+  const slotAvailable = snapshot?.groundSlotAvailable ?? [];
   // Unit grid — viewport scenery, sits with the ground plane (S48: relocated
   // here from the Reference-object picker). Bridge kinds are general grid kinds,
   // unchanged by the move.
@@ -248,22 +253,36 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
       <div className="mb-3 grid grid-cols-2 gap-2">
         {BUNDLED_GROUND_SLOTS.map(({ slot, name, gradient }) => {
           const selected = selectedSlot === slot;
+          // Grey out a game-sourced slot the host couldn't resolve. Only an
+          // explicit `false` disables — undefined (missing array) stays enabled.
+          const unavailable = slotAvailable[slot] === false;
           return (
             <button
               key={slot}
               type="button"
-              onClick={() => handleSelectSlot(slot)}
+              disabled={unavailable}
+              aria-disabled={unavailable || undefined}
+              title={
+                unavailable
+                  ? "Requires your Empire at War / Forces of Corruption install"
+                  : undefined
+              }
+              onClick={unavailable ? undefined : () => handleSelectSlot(slot)}
               className={`relative aspect-square overflow-hidden rounded-md border-2 transition focus-ring-inset ${
-                selected ? "border-accent" : "border-border hover:border-border-2"
+                unavailable
+                  ? "cursor-not-allowed border-border opacity-40"
+                  : selected
+                    ? "border-accent"
+                    : "border-border hover:border-border-2"
               }`}
-              aria-label={name}
+              aria-label={unavailable ? `${name} (unavailable — requires game install)` : name}
               aria-pressed={selected}
             >
               <div className="absolute inset-0" style={{ background: gradient }} />
               <span className="absolute inset-x-0 bottom-0 truncate bg-bg/80 px-1 py-0.5 text-center text-xs text-text backdrop-blur-sm">
                 {name}
               </span>
-              {selected && (
+              {selected && !unavailable && (
                 <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent-strong text-xs text-white">
                   ✓
                 </span>

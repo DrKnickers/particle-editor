@@ -237,6 +237,7 @@ export type EngineStateDto = {
   groundSolidColor: Color;          // GetGroundSolidColor() — slot kGroundSolidColorSlot colour
   groundColor: Color;               // GetGroundColor() — effective floor colour (solid colour, or the loaded texture's average)
   groundSlotCustomPaths: string[];  // GetGroundSlotCustomPath() across all slots
+  groundSlotAvailable: boolean[];   // IsGroundSlotAvailable() per slot — false ⇒ greyed in the picker (Grass/Sand/Snow when the game install can't resolve them)
 
   // Skydome — legacy bundled/custom texture slot (simple-background fallback)
   skydomeSlot: number;              // GetSkydomeSlot() — 0=Off, 1-8=bundled, 9-11=custom

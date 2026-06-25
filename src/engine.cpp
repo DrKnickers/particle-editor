@@ -1404,22 +1404,36 @@ void Engine::SetGroundZ(float z)			        { m_groundZ    = z;      }
 void Engine::SetBackground(COLORREF color)		    { m_background = color; }
 void Engine::SetHeatDebug(bool debug)		        { m_debugHeat  = debug;  }
 
-// ground-texture bundled-resource lookup table. Indices 0..5 map
-// to resource IDs in resource.h. Indices 6..11 have no bundled default
-// (0 = "no resource"); they're populated entirely from user-supplied
-// custom paths. Kept in this .cpp (rather than the header) so the
-// .rc IDs don't need to be visible to every includer of engine.h.
+// ground-texture bundled-resource lookup table. 0 = "no bundled
+// resource". Kept in this .cpp (rather than the header) so the .rc IDs
+// don't need to be visible to every includer of engine.h.
 //
-// Index 0 is the historical default (dirt.bmp shipped pre-);
-// keeping it at index 0 preserves the pre-visual for users who
-// haven't picked a custom texture.
+// Index 0 (dirt) is the editor's OWN default, bundled as RCDATA and
+// always loadable. Grass/Sand/Snow (1-3) are vanilla EaW textures —
+// NOT bundled (we must not ship proprietary game assets); they resolve
+// from the user's EaW/FoC install at runtime via kGroundTextureGameLeaf
+// below (see ReloadGroundTexture / IsGroundSlotAvailable). Slot 4 is the
+// procedural solid colour; 5..7 are user-supplied custom paths only.
 static const UINT kGroundTextureResourceIds[Engine::kGroundTextureCount] = {
-    IDB_GROUND,         // 0 dirt (default; preserves pre-visual)
-    IDB_GROUND_GRASS,   // 1 grass (vanilla EaW W_TEMPGRND00.DDS)
-    IDB_GROUND_SAND,    // 2 sand  (vanilla EaW W_SAND00.DDS)
-    IDB_GROUND_SNOW,    // 3 snow  (vanilla EaW W_SNOW_RGH.DDS)
+    IDB_GROUND,         // 0 dirt (bundled editor default)
+    0,                  // 1 grass — game-sourced (W_TEMPGRND00.DDS)
+    0,                  // 2 sand  — game-sourced (W_SAND00.DDS)
+    0,                  // 3 snow  — game-sourced (W_SNOW_RGH.DDS)
     0,                  // 4 solid color (procedural — see m_groundSolidColor)
     0, 0, 0,            // 5..7 — empty bundled, user-supplied only
+};
+
+// Base-colour leaf names resolved from the user's game install
+// (DATA\ART\TEXTURES, with a loose-by-leaf fallback for mods that stash
+// them flat) — the symmetric twin of the `_bc` normal-map leaves in
+// ReloadGroundNormalTexture. NULL = the slot has no game source (dirt is
+// bundled; solid/custom slots resolve by colour/path instead).
+static const char* const kGroundTextureGameLeaf[Engine::kGroundTextureCount] = {
+    NULL,                // 0 dirt — bundled editor default
+    "W_TEMPGRND00.DDS",  // 1 grass
+    "W_SAND00.DDS",      // 2 sand
+    "W_SNOW_RGH.DDS",    // 3 snow
+    NULL, NULL, NULL, NULL,
 };
 
 // Average colour of a ground-texture image, read from a 1×1 SCRATCH copy — the
@@ -1503,6 +1517,49 @@ static bool LoadGroundTextureFromResource(IDirect3DDevice9*    pDevice,
     return true;
 }
 
+// Internal: load a game-sourced ground texture by leaf name from the user's
+// EaW/FoC install via the FileManager (mod roots → base paths → MEG). The
+// FileManager twin of LoadGroundTextureFromResource: it reads the bytes ONCE
+// and both decodes the texture and averages them into *pAvgOut, so the
+// game-sourced path keeps m_groundColor in parity with the bundled path (the
+// average feeds the ambient-SPH lighting floor and the viewport pill backdrop).
+// Tries DATA\ART\TEXTURES\<leaf> first, then bare <leaf> (mods that stash the
+// texture flat). Returns false with *ppOut untouched on any miss/decode failure
+// — the caller's graceful-degradation signal (no install ⇒ slot unavailable).
+static bool LoadGroundTextureViaFileManager(IDirect3DDevice9*    pDevice,
+                                             IFileManager&        fileManager,
+                                             const char*          leaf,
+                                             IDirect3DTexture9**  ppOut,
+                                             COLORREF*            pAvgOut = NULL)
+{
+    if (pDevice == NULL || leaf == NULL || ppOut == NULL) return false;
+    IFile* file = fileManager.getFile(std::string("DATA\\ART\\TEXTURES\\") + leaf);
+    if (file == NULL) file = fileManager.getFile(leaf);   // mod may stash it flat
+    if (file == NULL) return false;
+    std::vector<unsigned char> bytes;
+    try
+    {
+        bytes = ReadAndRelease(file);   // exact-byte read; Releases the file ref
+    }
+    catch (...)
+    {
+        // Graceful-degradation boundary: ANY failure (ReadException, or a
+        // std::bad_alloc from sizing the byte buffer to the archive entry)
+        // means "slot unavailable" — never a crash. Broader than the sibling
+        // texture loaders by design, because a ground-slot resolve miss must
+        // fall back to dirt, not terminate.
+        return false;
+    }
+    IDirect3DTexture9* pNew = NULL;
+    if (FAILED(D3DXCreateTextureFromFileInMemory(pDevice, bytes.data(),
+                                                 (unsigned long)bytes.size(), &pNew)))
+        return false;
+    *ppOut = pNew;
+    if (pAvgOut)
+        *pAvgOut = AverageColorFromMemory(pDevice, bytes.data(), (DWORD)bytes.size());
+    return true;
+}
+
 //: build a 1×1 procedural texture filled with the given COLORREF.
 // Used by the "Solid Color" slot (kGroundSolidColorSlot). One-pixel
 // tile is enough because the ground is sampled with WRAP wrap-mode —
@@ -1565,10 +1622,9 @@ bool Engine::ReloadGroundTexture()
         return true;
     }
 
-    // Try the current slot's custom path first; fall back to the
-    // slot's bundled default if the custom path doesn't load (file
-    // moved, drive disconnected, unsupported format). On all-failure,
-    // fall back to slot 0 (dirt, always loadable from RCDATA).
+    // Resolution order: custom path → game-sourced leaf (grass/sand/snow,
+    // resolved from the user's install) → bundled resource (dirt only) →
+    // on all-failure, fall back to slot 0 (dirt, always loadable from RCDATA).
     IDirect3DTexture9* pNew = NULL;
     const std::wstring& path = m_groundSlotCustomPaths[m_groundTextureIndex];
     if (!path.empty())
@@ -1576,8 +1632,21 @@ bool Engine::ReloadGroundTexture()
         if (!LoadGroundTextureFromFile(m_pDevice, path, &pNew, &m_groundColor))
         {
 #ifndef NDEBUG
-            printf("[Ground] custom path failed for slot=%d; trying bundled\n",
+            printf("[Ground] custom path failed for slot=%d; trying game/bundled\n",
                    m_groundTextureIndex);
+            fflush(stdout);
+#endif
+        }
+    }
+    if (pNew == NULL)
+    {
+        const char* leaf = kGroundTextureGameLeaf[m_groundTextureIndex];
+        if (leaf != NULL &&
+            !LoadGroundTextureViaFileManager(m_pDevice, m_fileManager, leaf, &pNew, &m_groundColor))
+        {
+#ifndef NDEBUG
+            printf("[Ground] game texture '%s' not resolved for slot=%d; falling back\n",
+                   leaf, m_groundTextureIndex);
             fflush(stdout);
 #endif
         }
@@ -1608,9 +1677,10 @@ bool Engine::ReloadGroundTexture()
     SAFE_RELEASE(m_pGroundTexture);
     m_pGroundTexture = pNew;
 #ifndef NDEBUG
-    printf("[Ground] texture set slot=%d source=%s\n",
-           m_groundTextureIndex,
-           !m_groundSlotCustomPaths[m_groundTextureIndex].empty() ? "custom" : "bundled");
+    const char* src = !m_groundSlotCustomPaths[m_groundTextureIndex].empty() ? "custom"
+                    : (kGroundTextureGameLeaf[m_groundTextureIndex] != NULL)  ? "game"
+                    :                                                           "bundled";
+    printf("[Ground] texture set slot=%d source=%s\n", m_groundTextureIndex, src);
     fflush(stdout);
 #endif
     return true;
@@ -1619,11 +1689,13 @@ bool Engine::ReloadGroundTexture()
 bool Engine::SetGroundTexture(int index)
 {
     if (index < 0 || index >= kGroundTextureCount) return false;
-    // Refuse selection of an empty slot (no bundled default AND no
-    // user-supplied path). UI layer should never offer this; defensive
-    // check here in case a stale registry value or programmatic call
-    // tries it.
-    if (IsGroundSlotEmpty(index)) return false;
+    // Refuse selection of an unavailable slot — empty user slot, OR a
+    // game-sourced slot (grass/sand/snow) the install can't resolve. UI
+    // greys these out; this is defence in depth against a stale persisted
+    // selection or a programmatic call. (Availability, not emptiness: a
+    // game slot reads "empty" structurally now that it has no bundled
+    // resource, yet is selectable whenever the install provides it.)
+    if (!IsGroundSlotAvailable(index)) return false;
     // Fast-path: already at this slot AND we have a valid texture.
     if (index == m_groundTextureIndex && m_pGroundTexture != NULL) return true;
     m_groundTextureIndex = index;
@@ -1640,10 +1712,12 @@ bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
     // ground texture so the preview reflects the change immediately.
     if (slot == m_groundTextureIndex)
     {
-        // If the slot just became empty (cleared user-supplied path
-        // on a higher slot), bounce the selection back to dirt rather
-        // than leaving the engine pointing at nothing.
-        if (IsGroundSlotEmpty(slot))
+        // If the slot can no longer render (cleared user-supplied path on a
+        // higher slot, or a game slot the install can't resolve), bounce the
+        // selection back to dirt rather than leaving the engine pointing at
+        // nothing. Availability-aware: clearing a custom path off a
+        // game-sourced slot reverts to its install texture, not dirt.
+        if (!IsGroundSlotAvailable(slot))
         {
             m_groundTextureIndex = 0;
         }
@@ -1667,6 +1741,63 @@ bool Engine::IsGroundSlotEmpty(int slot) const
     if (slot == kGroundSolidColorSlot) return false;   // always populated procedurally
     if (!m_groundSlotCustomPaths[slot].empty()) return false;
     return kGroundTextureResourceIds[slot] == 0;
+}
+
+bool Engine::IsGroundSlotAvailable(int slot) const
+{
+    if (slot < 0 || slot >= kGroundTextureCount)  return false;
+    if (slot == kGroundSolidColorSlot)            return true;    // procedural — always
+    if (!m_groundSlotCustomPaths[slot].empty())   return true;    // user path (optimistic, as today)
+    if (kGroundTextureResourceIds[slot] != 0)     return true;    // bundled (dirt)
+    if (kGroundTextureGameLeaf[slot] != NULL)                     // game-sourced (grass/sand/snow)
+    {
+        EnsureGroundSlotResolvable();
+        return m_groundSlotResolvable[slot];
+    }
+    return false;                                                 // empty user slot
+}
+
+void Engine::EnsureGroundSlotResolvable() const
+{
+    // Recompute only when the mod-layer set changed (see header note on why
+    // GetContentRoots() is a complete invalidation key). Cheap getFile()+Release()
+    // probe per game leaf — no decode.
+    const std::vector<std::wstring>& roots = m_fileManager.GetContentRoots();
+    if (m_groundSlotResolvableValid && roots == m_groundSlotResolvableRoots)
+        return;
+    for (int i = 0; i < kGroundTextureCount; ++i)
+    {
+        const char* leaf = kGroundTextureGameLeaf[i];
+        bool resolvable = false;
+        if (leaf != NULL)
+        {
+            // FileManager::getFile swallows its own IOExceptions and returns
+            // NULL today, so this can't throw — but this probe runs inside a
+            // const query reached from the snapshot builder, so a defensive
+            // catch keeps a future getFile change from crashing the snapshot
+            // path: the worst case is a slot reported (un)resolvable, never a
+            // crash.
+            try
+            {
+                IFile* f = m_fileManager.getFile(std::string("DATA\\ART\\TEXTURES\\") + leaf);
+                if (f == NULL) f = m_fileManager.getFile(leaf);   // mod may stash it flat
+                if (f != NULL) { f->Release(); resolvable = true; }
+            }
+            catch (...)
+            {
+                resolvable = false;
+            }
+        }
+        m_groundSlotResolvable[i] = resolvable;
+    }
+    m_groundSlotResolvableRoots = roots;
+    m_groundSlotResolvableValid = true;
+#ifndef NDEBUG
+    printf("[Ground] resolvable probe: grass=%d sand=%d snow=%d (mod-roots=%u)\n",
+           m_groundSlotResolvable[1], m_groundSlotResolvable[2], m_groundSlotResolvable[3],
+           (unsigned)roots.size());
+    fflush(stdout);
+#endif
 }
 
 bool Engine::SetGroundSolidColor(COLORREF color)

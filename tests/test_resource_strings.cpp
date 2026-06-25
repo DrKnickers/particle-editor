@@ -115,9 +115,8 @@ int wmain(int argc, wchar_t** argv)
     check_resource(hMod, RT_RCDATA, IDR_SHADER_SKYDOME,    L"IDR_SHADER_SKYDOME");
     check_resource(hMod, RT_RCDATA, IDR_SHADER_GROUND_LIT, L"IDR_SHADER_GROUND_LIT");
     check_resource(hMod, RT_RCDATA, IDB_GROUND,            L"IDB_GROUND (dirt)");
-    check_resource(hMod, RT_RCDATA, IDB_GROUND_GRASS,      L"IDB_GROUND_GRASS");
-    check_resource(hMod, RT_RCDATA, IDB_GROUND_SAND,       L"IDB_GROUND_SAND");
-    check_resource(hMod, RT_RCDATA, IDB_GROUND_SNOW,       L"IDB_GROUND_SNOW");
+    // Grass/Sand/Snow are no longer bundled — they load from the user's game
+    // install at runtime (proprietary vanilla EaW textures must not ship).
     check_resource(hMod, RT_RCDATA, IDR_SKYDOME_SPACE,     L"IDR_SKYDOME_SPACE");
     check_resource(hMod, RT_RCDATA, IDR_SKYDOME_ATMOSPHERE,L"IDR_SKYDOME_ATMOSPHERE");
     check_resource(hMod, RT_RCDATA, IDR_SKYDOME_SUNSET,    L"IDR_SKYDOME_SUNSET");

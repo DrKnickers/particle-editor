@@ -791,6 +791,14 @@ json BuildEngineStateSnapshot(Engine* engine,
     for (int i = 0; i < Engine::kGroundTextureCount; ++i)
         groundPaths.push_back(WideToUtf8(engine->GetGroundSlotCustomPath(i)));
 
+    // Ground slot availability — kGroundTextureCount entries. True = the slot
+    // can render right now: Dirt/Solid Color always; Grass/Sand/Snow only when
+    // the user's EaW/FoC install resolves their texture; Custom when a path is
+    // set. The picker greys out slots whose entry is false.
+    json groundAvail = json::array();
+    for (int i = 0; i < Engine::kGroundTextureCount; ++i)
+        groundAvail.push_back(engine->IsGroundSlotAvailable(i));
+
     // Skydome custom paths — only slots 9..11 are user-customisable.
     // The DTO exposes them as a flat array indexed 0..2.
     json skyPaths = json::array();
@@ -822,6 +830,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"groundSolidColor",      static_cast<unsigned int>(engine->GetGroundSolidColor())},
         {"groundColor",           static_cast<unsigned int>(engine->GetGroundColor())},
         {"groundSlotCustomPaths", groundPaths},
+        {"groundSlotAvailable",   groundAvail},
 
         // Skydome
         {"skydomeSlot",           engine->GetSkydomeSlot()},

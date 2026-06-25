@@ -12,14 +12,12 @@
 #define IDS_SCENEHEAT                   133
 #define IDR_DEFAULT_SHADER              140
 
-// — alternate ground textures, declared as RCDATA in
-// ParticleEditor.rc so the file format isn't restricted to .bmp
-// (loader uses D3DXCreateTextureFromFileInMemory which sniffs the
-// byte content for BMP / DDS / TGA / PNG / JPG / HDR). Placed above
-// _APS_NEXT_RESOURCE_VALUE so existing IDs don't need renumbering.
-#define IDB_GROUND_GRASS                142
-#define IDB_GROUND_SAND                 143
-#define IDB_GROUND_SNOW                 144
+// — alternate ground textures. The Grass/Sand/Snow slots no longer
+// bundle the proprietary vanilla EaW textures; they load W_TEMPGRND00 /
+// W_SAND00 / W_SNOW_RGH from the user's game install at runtime (see
+// engine.cpp kGroundTextureGameLeaf), so IDs 142-144 are retired and NOT
+// reused. IDB_GROUND_METAL/GREY were never wired to a resource — vestigial
+// reserved IDs, kept to avoid renumbering (separate cleanup).
 #define IDB_GROUND_METAL                145
 #define IDB_GROUND_GREY                 146
 

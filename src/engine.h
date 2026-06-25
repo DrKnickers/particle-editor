@@ -376,9 +376,18 @@ public:
 	// and whether the toolbar preview button is enabled.
 	bool     IsGroundSlotEmpty(int slot) const;
 
-	//: number of ground texture slots — 5 bundled defaults
-	// (Dirt, Grass, Sand, Snow, Solid Color) + 3 user-customisable
-	// slots. Total 8, laid out as a 4×2 grid in the picker dialog.
+	// Can the slot currently render — i.e. is it selectable / not greyed in
+	// the picker? Distinct from IsGroundSlotEmpty: grass/sand/snow are now
+	// structurally "empty" (no bundled resource) but AVAILABLE whenever the
+	// user's EaW/FoC install resolves their texture. Drives the picker greying
+	// and the SetGroundTexture gate. Follows the SkydomeSlotStatus precedent of
+	// a separate resolve-state concept rather than overloading "empty".
+	bool     IsGroundSlotAvailable(int slot) const;
+
+	//: number of ground texture slots. Built-in slots 0..4: Dirt (bundled
+	// editor default), Grass/Sand/Snow (game-sourced — loaded from the user's
+	// install, NOT bundled), Solid Color (procedural). Slots 5..7 are
+	// user-customisable. Total 8, laid out as a 4×2 grid in the picker dialog.
 	// Slot 4 is the procedural solid-colour ground driven by
 	// m_groundSolidColor, with a colour picker as its "edit" gesture
 	// instead of a file picker. Slot index 0 is the v1 dirt default.
@@ -963,6 +972,16 @@ private:
 	std::wstring m_groundSlotCustomPaths[kGroundTextureCount];
 	COLORREF     m_groundSolidColor;   // slot kGroundSolidColorSlot
 	COLORREF     m_groundColor = 0x808080;  // effective ground colour (solid or texture avg)
+
+	// Game-sourced ground-slot (grass/sand/snow) resolvability cache. Probed
+	// from the install lazily and memoised; keyed on a snapshot of the
+	// mod-layer content roots (the only mutable input — the FileManager's base
+	// paths and MEGs are fixed at startup). Refreshed by EnsureGroundSlotResolvable;
+	// mutable because it is filled inside the const IsGroundSlotAvailable query.
+	void                              EnsureGroundSlotResolvable() const;
+	mutable bool                      m_groundSlotResolvable[kGroundTextureCount] = {};
+	mutable std::vector<std::wstring> m_groundSlotResolvableRoots;
+	mutable bool                      m_groundSlotResolvableValid = false;
 	bool		m_debugHeat;
 	// Bloom post-process state. Shader, RTs, and parameter handles
 	// live in the Resources block below. Master enable + three

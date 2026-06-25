@@ -51,18 +51,17 @@ IDR_DEFAULT_SHADER      RCDATA                  "resources\\DefaultShader.fx"
 IDR_SHADER_SKYDOME      RCDATA                  "Resources\\Engine\\Skydome.fx"
 IDR_SHADER_GROUND_LIT   RCDATA                  "Resources\\Engine\\GroundLit.fx"
 
-// ground textures. Declared RCDATA (not BITMAP) so the source
-// file format isn't restricted to .bmp — D3DXCreateTextureFromFileInMemory
-// in engine.cpp sniffs the actual bytes and handles BMP / DDS / TGA /
-// PNG / JPG / HDR identically.
+// Ground texture. Declared RCDATA (not BITMAP) so the source file format
+// isn't restricted to .bmp — D3DXCreateTextureFromFileInMemory in engine.cpp
+// sniffs the actual bytes and handles BMP / DDS / TGA / PNG / JPG / HDR
+// identically.
 //
-// Grass / Sand / Snow are vanilla EaW textures bundled by permission.
-// Slot 4 ("Solid Color") is procedurally generated from a user-picked
-// COLORREF — no resource needed.
+// Only dirt is bundled (the editor's own default). The Grass / Sand / Snow
+// slots load the real vanilla EaW textures (W_TEMPGRND00 / W_SAND00 /
+// W_SNOW_RGH) from the user's game install at runtime — see engine.cpp
+// kGroundTextureGameLeaf — so we don't ship proprietary game assets. Slot 4
+// ("Solid Color") is procedurally generated from a user-picked COLORREF.
 IDB_GROUND              RCDATA                  "Resources\\dirt.bmp"
-IDB_GROUND_GRASS        RCDATA                  "Resources\\grass.dds"
-IDB_GROUND_SAND         RCDATA                  "Resources\\sand.dds"
-IDB_GROUND_SNOW         RCDATA                  "Resources\\snow.dds"
 
 // skydome textures. Declared RCDATA so D3DXCreateTextureFromFileInMemory
 // can load them. Procedural-gradient TGA placeholders today; a follow-up

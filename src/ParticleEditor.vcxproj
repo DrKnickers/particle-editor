@@ -212,11 +212,8 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="Resources\dirt.bmp" />
-    <Image Include="Resources\grass.dds" />
     <Image Include="Resources\logo.ico" />
     <Image Include="Resources\missing.bmp" />
-    <Image Include="Resources\sand.dds" />
-    <Image Include="Resources\snow.dds" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\DefaultShader.fx">
