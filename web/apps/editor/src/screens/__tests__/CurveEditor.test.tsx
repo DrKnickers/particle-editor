@@ -1,5 +1,4 @@
-// Vitest tests for CurveEditor (Phase 3 Screen 6 Batch A foundation +
-// Screen 5 / Screen 6 Batch B-α interaction).
+// Vitest tests for CurveEditor (foundation + interaction).
 //
 // Covered:
 //   - Renders a <polyline> + one <circle> per key for an N-key linear track.
@@ -64,7 +63,7 @@ describe("CurveEditor", () => {
     expect(lines.length).toBeGreaterThanOrEqual(22);
   });
 
-  // ─── Screen 5 / Screen 6 Batch B-α ────────────────────────────────
+  // ─── Key click + selection rendering ──────────────────────────────
 
   it("clicking a key fires onKeyClick + the selected key renders with accent fill + r=5", () => {
     const track = fixtureTrack(3); // times 0, 50, 100
@@ -143,7 +142,7 @@ describe("CurveEditor", () => {
     expect(post[2]!.getAttribute("data-selected")).toBe("false");
   });
 
-  // ─── Screen 6 Batch B-β ────────────────────────────────────────────
+  // ─── Key pointer-drag interactions ────────────────────────────────
 
   it("pointer-down + move + up on an interior key fires onKeyDragEnd with the new (time, value)", () => {
     const track = fixtureTrack(3);            // times 0, 50, 100; values 0.1, 0.9, 0.1
@@ -272,7 +271,7 @@ describe("CurveEditor", () => {
     expect(value).toBeCloseTo(0.7, 2);
   });
 
-  // ─── Phase 4.1 Fix dispatch 5: marquee select ─────────────────────
+  // ─── marquee select ───────────────────────────────────────────────
 
   /** Helper — render a CurveEditor with bounding-rect-stubbed SVG so
    *  the viewBox-coord math has a deterministic scale. Returns the
@@ -451,7 +450,7 @@ describe("CurveEditor", () => {
   });
 });
 
-// ─── CRV: gutter-initiated marquee on the multi-channel editor ───────
+// ─── gutter-initiated marquee on the multi-channel editor ────────────
 //
 // The panel renders the MULTI-CHANNEL editor (focusChannel set). Its
 // marquee already tracks everywhere via pointer capture; these tests
@@ -500,7 +499,7 @@ function renderGutterMarquee(
   return { ...result, svg, ref };
 }
 
-describe("CurveEditor — gutter-initiated marquee (CRV multi-channel)", () => {
+describe("CurveEditor — gutter-initiated marquee (multi-channel)", () => {
   it("startMarquee from a left-gutter origin sweeps and selects the covered keys", () => {
     const onMarquee = vi.fn();
     const { svg, ref } = renderGutterMarquee(onMarquee);
@@ -715,7 +714,7 @@ describe("locked focus channel (read-only mirror)", () => {
   });
 
   it("insertMode + locked focus: pointer-down does NOT call onCanvasAdd", () => {
-    // Fix 1: the focusReadOnly guard is hoisted before the insertMode branch,
+    // The focusReadOnly guard is hoisted before the insertMode branch,
     // so insert is suppressed on a locked canvas even when insertMode=true.
     const onCanvasAdd = vi.fn();
     const { backdrop } = renderLockFixture("red", {
@@ -727,7 +726,7 @@ describe("locked focus channel (read-only mirror)", () => {
   });
 
   it("right-click and click on a locked hit pad do NOT invoke onKeyContextMenu / onKeyClick", () => {
-    // Fixes 2 + 3: context-menu and click handlers bail immediately when
+    // Context-menu and click handlers bail immediately when
     // focusReadOnly, so the callbacks are never reached.
     const onKeyContextMenu = vi.fn();
     const onKeyClick = vi.fn();
@@ -1391,7 +1390,7 @@ describe("curve morph (structural changes)", () => {
   });
 });
 
-// ─── CRV: group-drag fires onGroupDragMove on every pointer-move past slop ───
+// ─── group-drag fires onGroupDragMove on every pointer-move past slop ───
 //
 // When ≥2 keys are selected and the user drags one of them, the renderer must
 // call onGroupDragMove with the accumulated (dTime, dValue) on every move event
@@ -1503,7 +1502,7 @@ describe("CurveEditor — group-drag fires onGroupDragMove (live-spinner fix)", 
 
 // ─── Selected-key inverted-core marker geometry ────────────────────────────
 //
-// Option A: selected dot flips to canvas-bg fill + channel-colour stroke.
+// Selected dot flips to canvas-bg fill + channel-colour stroke.
 // Geometry: r=6.5, fill="var(--curve-marker-core)", stroke=channel.color,
 // stroke-width=2.5. Unselected: r=5, fill=channel.color, no stroke.
 // Locked (focusReadOnly) hollow markers are unchanged: fill="none",

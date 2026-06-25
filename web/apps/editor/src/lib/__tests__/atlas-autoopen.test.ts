@@ -3,7 +3,7 @@ import { initialAutoOpen, autoOpenReducer, type AutoOpenState } from "../atlas-a
 
 const arm = (s: AutoOpenState) => autoOpenReducer(s, { type: "focusIndex" }).state;
 
-describe("auto-open state machine (spec §3.2)", () => {
+describe("auto-open state machine", () => {
   it("arms on index focus", () => {
     expect(initialAutoOpen.armed).toBe(false);
     expect(arm(initialAutoOpen)).toEqual({ armed: true, active: false, remembered: null });

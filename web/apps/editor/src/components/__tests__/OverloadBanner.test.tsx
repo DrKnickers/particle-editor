@@ -1,4 +1,4 @@
-// Vitest: OverloadBanner (preview spawn-overload guard, plan part 2 §3).
+// Vitest: OverloadBanner (preview spawn-overload guard).
 // The banner subscribes to the 4 Hz stats/tick bridge event and shows a
 // fixed warning over the viewport while `overload` is latched.
 
@@ -71,7 +71,7 @@ describe("OverloadBanner", () => {
   });
 
   it("wears the soft-shadow motion class instead of shadow-xl", () => {
-    //: .banner-animate carries box-shadow: var(--shadow-soft)
+    // .banner-animate carries box-shadow: var(--shadow-soft)
     // (components.css) and the entrance/exit keyframes; the old
     // shadow-xl ring-1 ring-black/15 Tailwind stack is retired.
     const { bridge, emit } = makeBridge();
@@ -91,7 +91,7 @@ describe("OverloadBanner", () => {
     expect(handlers.has("stats/tick")).toBe(false);
   });
 
-  // ── Refusal banner (Task 5) ──────────────────────────────────────────────
+  // ── Refusal banner ──────────────────────────────────────────────
 
   it("mounts the banner with refusal copy when engine/overload/refused fires", () => {
     const { bridge, emit } = makeBridge();
@@ -165,7 +165,7 @@ describe("OverloadBanner", () => {
     expect(bannerAfter!.textContent).toContain("Preview spawning limited");
   }, 10_000);
 
-  it("keeps the refusal copy through the exit fade — no stale latch flash (the s37 bug)", async () => {
+  it("keeps the refusal copy through the exit fade — no stale latch flash", async () => {
     const { bridge, emit } = makeBridge();
     render(<OverloadBanner bridge={bridge} />);
     emit("engine/overload/refused", { estimated: 2000, cap: 1000, attemptedCount: 1 });

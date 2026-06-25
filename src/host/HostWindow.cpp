@@ -15,20 +15,20 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <windowsx.h>   // Phase 3 Stage 3c: GET_X_LPARAM / GET_Y_LPARAM for mouse forwarding
+#include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM for mouse forwarding
 #include <shellapi.h>
 #include <shlobj.h>
 #include <wrl.h>
 #include <wrl/implements.h>
 #include <d3d9.h>
 #include <winhttp.h>
-#include <shlwapi.h>  // Phase 0: SHCreateMemStream for WebResourceRequested response
+#include <shlwapi.h>  // SHCreateMemStream for WebResourceRequested response
 #include <dwmapi.h>   // title-bar dark-mode (DWMWA_USE_IMMERSIVE_DARK_MODE)
-#include <timeapi.h>  // [resize-perf Fix B1] timeBeginPeriod/timeEndPeriod for the paced pump
+#include <timeapi.h>  // [resize-perf] timeBeginPeriod/timeEndPeriod for the paced pump
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "dwmapi.lib")
-#pragma comment(lib, "winmm.lib")   // [resize-perf Fix B1] timeBeginPeriod
+#pragma comment(lib, "winmm.lib")   // [resize-perf] timeBeginPeriod
 
 // See BridgeDispatcher.cpp for the runtime (theme-toggle) title-bar sync;
 // this is the startup default. Guarded for older SDKs (value 20 on modern
@@ -42,11 +42,11 @@
 #include <algorithm>   // [resize-perf] per-kind bridge-probe sort
 #include <atomic>
 #include <cstdarg>
-#include <cmath>       ///roundf for drag-time grid/angle snap
+#include <cmath>       // roundf for drag-time grid/angle snap
 #include <cstdio>
 #include <cstdlib>     // C runtime helpers
 #include <cstring>
-#include <share.h>     // Stage 4f: _SH_DENYNO for _wfsopen sharing
+#include <share.h>     // _SH_DENYNO for _wfsopen sharing
 #include <filesystem>
 #include <map>         // [resize-perf] per-kind bridge-probe tally
 #include <memory>
@@ -69,8 +69,8 @@
 #include <gdiplus.h>
 #include "BridgeDispatcher.h"
 #include "HostBridgeProxy.h"
-#include "HostMessages.h"        // WM_APP_QUIT_CONFIRMED (audit D1)
-#include "../CloseDecision.h"    // ShouldVetoClose (audit D1)
+#include "HostMessages.h"        // WM_APP_QUIT_CONFIRMED
+#include "../CloseDecision.h"    // ShouldVetoClose
 #include "LayoutBroker.h"
 
 #include "../engine.h"
@@ -84,7 +84,7 @@
 #include "../ParticleSystemInstance.h"
 #include "../SpawnerDriver.h"
 #include "../UndoStack.h"
-#include "../Autosave.h"  //: two-tier autosave timers + clean-exit cleanup
+#include "../Autosave.h"  // two-tier autosave timers + clean-exit cleanup
 #include "DriveRunner.h"  // --drive: scripted non-CDP composite capture
 
 using namespace Microsoft::WRL;
@@ -115,7 +115,7 @@ constexpr int     kInitialHeight             = 800;
 constexpr wchar_t kVirtualHostName[]         = L"app.local";
 constexpr INTERNET_PORT kDevServerPort       = 5174;
 constexpr UINT_PTR    kStatsTimerId          = 0x100;  // 4 Hz stats broadcast
-// [resize-perf revised Fix A] one-shot safety net: re-armed on every
+// [resize-perf] one-shot safety net: re-armed on every
 // size tick while in sizemove; fires 150 ms after the ticks stop and
 // re-resets ONLY if a per-tick cheap reset failed mid-gesture (normally
 // a no-op — see LayoutBroker::SettleDeferredReset). Covers a lost
@@ -123,7 +123,7 @@ constexpr UINT_PTR    kStatsTimerId          = 0x100;  // 4 Hz stats broadcast
 constexpr UINT_PTR    kResizeSettleTimerId   = 0x101;
 constexpr UINT        kResizeSettleDelayMs   = 150;
 
-// G11: WebView2 origin allow-list. The host must trust only the
+// WebView2 origin allow-list. The host must trust only the
 // page it deliberately loads, not "whatever is currently navigated". Three
 // origins are legitimate:
 //   - https://app.local/     prod: the SetVirtualHostNameToFolderMapping
@@ -152,8 +152,8 @@ bool IsApprovedWebViewOrigin(PCWSTR uri, bool devUi)
 
 // FPSMeasurer — ring-buffer of the last 32 frame timestamps. Originally
 // ported from the original src/main.cpp `FPSMeasurer` (since removed), but
-// swapped GetTickCount() for QueryPerformanceCounter so the math
-// stays meaningful in's uncapped (no-vsync) UpdateLayeredWindow
+// later work swapped GetTickCount() for QueryPerformanceCounter so the math
+// stays meaningful in the uncapped (no-vsync) UpdateLayeredWindow
 // rendering regime. GetTickCount's ~15.6 ms resolution is too coarse
 // when the renderer pegs at hundreds of FPS: 32 frames can fit inside
 // 0–2 ticks, producing fps readings that snap between 0 (zero-diff
@@ -201,8 +201,8 @@ public:
 // [PERF] per-stage frame timing. QPC microsecond helpers + a tiny
 // per-stage accumulator. Always-on (QPC is ~20 ns/call, ~6 calls/frame),
 // emitted to host.log at 1 Hz under the [PERF] prefix to localise which
-// composition-path stage's cost scales with window area. See
-// tasks/todo.md (measurement round). The QPC frequency is fixed for the
+// composition-path stage's cost scales with window area. The QPC
+// frequency is fixed for the
 // process lifetime, so cache it once.
 static LONGLONG PerfQpcFreq()
 {
@@ -397,19 +397,19 @@ struct HostWindowImpl
 
     ComPtr<ICoreWebView2Controller> webController;
     ComPtr<ICoreWebView2>           webView;
-    // Phase 0: needed by the WebResourceRequested handler to
+    // needed by the WebResourceRequested handler to
     // construct the response stream via env->CreateWebResourceResponse.
     ComPtr<ICoreWebView2Environment> webEnv;
     EventRegistrationToken          accelKeyTok = {};
     EventRegistrationToken          docTitleTok = {};
-    // G5: stash the WebMessageReceived registration token so
+    // Stash the WebMessageReceived registration token so
     // WM_DESTROY can explicitly remove the handler before tearing down
     // webView. Pre-fix the token was a local in InitWebView2 and the
     // handler stayed subscribed (the lambda captures `this`) — masked
     // today by webView.Reset(), but the explicit-unsubscribe pattern
     // mirrors accelKeyTok above and is materially safer.
     EventRegistrationToken          webMessageTok = {};
-    // G11: navigation / new-window / permission policy tokens.
+    // Navigation / new-window / permission policy tokens.
     // Registered alongside webMessageTok in InitWebView2 and removed in
     // WM_DESTROY (mirroring the G5 webMessageTok lifecycle). The handlers
     // enforce the IsApprovedWebViewOrigin allow-list (cancel off-origin
@@ -423,12 +423,12 @@ struct HostWindowImpl
     // "loaded but never signaled". Registered in FinishWebView2ControllerSetup,
     // removed in WM_DESTROY (same lifecycle as the tokens above).
     EventRegistrationToken          navCompletedTok = {};
-    // F10: TME_LEAVE arming state. WebView2 needs a
+    // TME_LEAVE arming state. WebView2 needs a
     // COREWEBVIEW2_MOUSE_EVENT_KIND_MOUSE_LEAVE input when the pointer
     // exits the host HWND so CSS :hover / cursor state clears. Re-arm
     // on each WM_MOUSEMOVE after the leave fires.
     bool                            m_mouseTracked = false;
-    // G8: owned class background brush. Created in Run(),
+    // Owned class background brush. Created in Run(),
     // released in WM_DESTROY.
     HBRUSH                          m_classBrush = nullptr;
 
@@ -437,7 +437,7 @@ struct HostWindowImpl
     IFileManager&    fileManager;
     std::unique_ptr<Engine> engine;
 
-    //: layered-window alpha compositor. Constructed after the
+    // layered-window alpha compositor. Constructed after the
     // Engine (needs its D3D9 device), torn down before the Engine in
     // WM_DESTROY so Engine never dereferences a freed compositor.
     std::unique_ptr<host::AlphaCompositor> alphaCompositor;
@@ -458,9 +458,9 @@ struct HostWindowImpl
 
     // Undo / redo stack. Task 2.4: constructed here so BridgeDispatcher
     // can service `undo/perform` requests. Captures are not yet wired
-    // through the new-UI bridge surface (Phase 3 emitter work), so the
+    // through the new-UI bridge surface (emitter work), so the
     // stack stays empty for now and `undo/perform` resolves with
-    // `applied: false`. The plumbing exists so Phase 3 wraps the
+    // `applied: false`. The plumbing exists so later work wraps the
     // engine setter handlers in Capture() without re-touching this file.
     UndoStack                          undoStack;
 
@@ -470,7 +470,7 @@ struct HostWindowImpl
     FPSMeasurer                        fpsMeasurer;
 
     // [PERF] per-stage frame-timing accumulators. Reset each 1 Hz
-    // emit in RenderD3D9. Always-on; see tasks/todo.md (measurement round).
+    // emit in RenderD3D9. Always-on.
     PerfStage          perfUpdate, perfRender, perfWait, perfComposite, perfFrame;
     // [PERF2] round-2 — engine Render() per-pass sub-timing (us).
     PerfStage          perfRScene, perfRBloom, perfRDistort, perfRCompose, perfRPresent;
@@ -478,7 +478,7 @@ struct HostWindowImpl
     unsigned           perfWaitSpinsMax = 0;
     DWORD              perfLastEmitTick = 0;
 
-    // [resize-perf] Phase-0 probes (tasks/resize-perf-investigation.md).
+    // [resize-perf] probes.
     // Always-on 1 Hz aggregates, same convention as [PERF] above.
     // perfWmpos times the per-tick PredictAndApply+RenderD3D9 chain in
     // WM_WINDOWPOSCHANGED (the suspected reset storm); the reset counter
@@ -494,7 +494,7 @@ struct HostWindowImpl
     // 1 Hz emit). Keyed by the wire `kind` string.
     std::map<std::wstring, unsigned> perfMsgKinds;
 
-    // [resize-perf Fix D] true between WM_ENTERSIZEMOVE and
+    // [resize-perf] true between WM_ENTERSIZEMOVE and
     // WM_EXITSIZEMOVE — gates the main-window WM_ERASEBKGND
     // suppression and arms the settle-safety quiescence timer.
     bool      m_inSizeMove       = false;
@@ -530,7 +530,7 @@ struct HostWindowImpl
     // Only Z (height) tracks the drag delta; X/Y stay frozen at the
     // click position. WM_LBUTTONUP detaches the preview (place it).
     // Matches the legacy main.cpp.
-    // MANIPULATE: / S47] a manipulator handle (translate arrow or rotate
+    // MANIPULATE: a manipulator handle (translate arrow or rotate
     // ring) was grabbed; LMB drag moves/rotates the object (wins over camera orbit
     // only when a handle is actually under the cursor at press).
     enum class DragMode { NONE, MOVE, ROTATE, ZOOM, OBJECT_Z, MANIPULATE };
@@ -538,8 +538,8 @@ struct HostWindowImpl
     Engine::Camera  m_dragStartCam  = {};
     int             m_dragStartX    = 0;
     int             m_dragStartY    = 0;
-    // / S47] manipulator drag state: the grabbed handle (kind + axis),
-    // the transform snapshot at grab, and the no-jump anchors. TRANSLATE
+    // Manipulator drag state: the grabbed handle (kind + axis),
+    // the transform snapshot at grab, and the no-jump anchors. TRANSLATE 
     // accumulates precision-scaled per-move axis-param deltas: each WM_MOUSEMOVE adds
     // (tNow - m_manipPrevT) * factor to m_manipAccumT (factor = 0.2 while Shift held,
     // else 1.0) and applies newPos = startPos + axis*m_manipAccumT. m_manipGrabT0 is
@@ -563,7 +563,7 @@ struct HostWindowImpl
     float           m_manipGrabAngle   = 0.0f;   // ring angle at grab (rad)
     float           m_manipPrevAngle   = 0.0f;   // previous-move ring angle (rad)
     float           m_manipAccumAngle  = 0.0f;   // accumulated rotation (rad)
-    // s52] Per-gesture latch: false until the FIRST per-move mutation
+    // Per-gesture latch: false until the FIRST per-move mutation
     // of a manipulator drag pushes its (one) pre-mutation undo point. A grab
     // that never moves the object captures nothing — no phantom undo step.
     bool            m_manipUndoCaptured = false;
@@ -591,7 +591,7 @@ struct HostWindowImpl
         m_manipAccumAngle = 0.0f;
         m_manipAccumU = 0.0f;
         m_manipAccumV = 0.0f;
-        m_manipUndoCaptured = false;   // s52] next grab starts a fresh gesture
+        m_manipUndoCaptured = false;   // next grab starts a fresh gesture
         if (engine) engine->SetManipulatorActiveDrag(Engine::ManipHandle(), 0.0f, 0.0f);
         // hide the readout pill (ResetManipDragState is called from the 4
         // capture-drag-end sites: LBUTTONUP, RBUTTONDOWN, CAPTURECHANGED, KILLFOCUS).
@@ -620,7 +620,7 @@ struct HostWindowImpl
     ParticleSystemInstance* m_attachedParticleSystem = nullptr;
     int                     m_lastCursorX = 0;
     int                     m_lastCursorY = 0;
-    // (Group A): last GetTickCount() at which we pushed a
+    // last GetTickCount() at which we pushed a
     // `cursor/position-3d` event. Throttled to ~30 Hz so the
     // WebView2 message channel isn't saturated by WM_MOUSEMOVE
     // (which fires per-pixel). The legacy status bar updates per
@@ -628,13 +628,13 @@ struct HostWindowImpl
     // bridge a 33 ms minimum interval is a good compromise.
     DWORD                   m_lastCursorEmitTick = 0;
 
-    // Phase 2: viewport/input bridge surface owner. Constructed
+    // viewport/input bridge surface owner. Constructed
     // alongside the AlphaCompositor in WM_CREATE; holds a raw HWND for the
     // viewport popup it PostMessages camera/keyboard input to. BridgeDispatcher
     // gets a borrow via SetInputDispatcher.
     std::unique_ptr<host::InputDispatcher> m_inputDispatcher;
 
-    // Phase 3 Stage 3: WebView2 composition hosting. The host always
+    // WebView2 composition hosting. The host always
     // takes the CreateCoreWebView2CompositionController path, and a
     // host::Compositor owns the DirectComposition visual tree WebView2 plugs
     // into via put_RootVisualTarget.
@@ -649,7 +649,7 @@ struct HostWindowImpl
     std::unique_ptr<host::Compositor>          m_compositor;
     ComPtr<ICoreWebView2CompositionController> m_compositionController;
 
-    // Phase 3 Stage 3d: cursor sync. Under HWND hosting,
+    // Cursor sync. Under HWND hosting,
     // WebView2's child HWND owns the cursor via its own WM_SETCURSOR
     // handler. Under composition hosting the host HWND receives
     // WM_SETCURSOR and must consult the composition controller for
@@ -768,7 +768,7 @@ struct HostWindowImpl
     // setup, then drives Compositor::AttachWebView2 to commit the
     // DComp tree with WebView2's RootVisualTarget plugged in.
     HRESULT OnCompositionControllerReady(HRESULT chr, ICoreWebView2CompositionController* ctl);
-    // Phase 3 Stage 3c: forward a Win32 mouse message arriving
+    // Forward a Win32 mouse message arriving
     // at hMain into the WebView2 composition surface via
     // ICoreWebView2CompositionController::SendMouseInput. The host HWND
     // owns input under composition hosting and must forward. Also handles
@@ -778,7 +778,7 @@ struct HostWindowImpl
     void    ForwardMouseToCompositionWebView2(UINT msg, WPARAM wp, LPARAM lp);
     void    ResizeWebViewToClient();
 
-    // [resize-perf Fix A] End-of-resize-gesture settle: the one deferred
+    // [resize-perf] End-of-resize-gesture settle: the one deferred
     // Engine::Reset (via LayoutBroker), an exact final put_Bounds, and a
     // fresh frame. Called from WM_EXITSIZEMOVE and the quiescence timer.
     void    SettleResize(const char* why);
@@ -812,7 +812,7 @@ void HostWindowImpl::OpenLog()
         path = (dot == std::wstring::npos) ? path + suffix
                                            : path.substr(0, dot) + suffix + path.substr(dot);
     }
-    // Phase 3 Stage 4f hardening — _wfopen_s opens with
+    // Hardening — _wfopen_s opens with
     // exclusive default share-mode (_SH_DENYRW) so concurrent readers
     // get EBUSY. Surfaced when the dxgi-transport.spec.ts tried to
     // read host.log via Node fs.readFileSync to assert [COMP-engine-*]
@@ -851,7 +851,7 @@ void HostWindowImpl::Log(const char* fmt, ...)
 }
 
 // Composition is the editor's only render transport — there is no HWND
-// fallback (decision A, hosting-mode removal). When DirectComposition
+// fallback (hosting-mode removal). When DirectComposition
 // or the WebView2 composition controller can't be brought up, the viewport
 // would be a permanent black window, so we surface a clear modal error and
 // exit cleanly instead. Reached from the synchronous env-setup failures
@@ -926,7 +926,7 @@ void HostWindowImpl::RenderD3D9()
     if (dispatcher && engine->ConsumeCatalogReadyFlag())
         dispatcher->EmitEngineStateChanged();
 
-    // [Item 3] Advance the dock-slide viewport interpolation to THIS frame's
+    // Advance the dock-slide viewport interpolation to THIS frame's
     // wall-clock, so the engine below paints the time-lerped scene rect. Placed
     // before perfT1 so the (cheap, no-op-when-idle) advance stays OUTSIDE the
     // [PERF] render-timed region.
@@ -946,20 +946,20 @@ void HostWindowImpl::RenderD3D9()
 
     fpsMeasurer.measure();
 
-    // Phase 3 Stage 4c — per-frame composite.
+    // Per-frame composite.
     // engine->Render() above issued D3D9 draws into the AlphaCompositor's
     // shared texture. IssueEndFrameQuery markers the D3D9 command stream
     // after those draws; WaitEndFrameQuery spins until the GPU has
-    // finished them — cross-device sync per sub-plan §3.3 path (b).
+    // finished them — cross-device sync path (b).
     // Then CompositeEngineFrame CopyResources from the D3D11 alias into
     // the engine's DXGI swapchain back buffer and Present1's it. DComp
     // picks up the new content on its next composition cycle.
     //
-    // Gated on Compositor::IsReady (Stage 3 attachment committed) +
-    // engineVisualAttached (Stage 4b attach succeeded). When
+    // Gated on Compositor::IsReady (attachment committed) +
+    // engineVisualAttached (attach succeeded). When
     // AttachEngineVisual failed (LUID mismatch, D3D11 device, etc.),
     // CompositeEngineFrame returns S_FALSE and this block is a per-frame
-    // no-op with the viewport area empty per sub-plan §3.8.
+    // no-op with the viewport area empty.
     if (m_compositor && m_compositor->IsReady())
     {
         engine->IssueEndFrameQuery();
@@ -968,7 +968,7 @@ void HostWindowImpl::RenderD3D9()
         const LONGLONG perfT2     = PerfQpcNow();
         const int      perfSpins  = engine->WaitEndFrameQuery();
         const double   perfWaitUs = PerfUsSince(perfT2);
-        // Phase 3 Stage 4d — pass the engine's current shared
+        // Pass the engine's current shared
         // handle so Compositor can lazy-detect AlphaCompositor::Resize
         // invalidation and re-open the D3D11 alias. Without this, a
         // window resize freezes the viewport (engine keeps rendering
@@ -991,7 +991,7 @@ void HostWindowImpl::RenderD3D9()
     // to host.log (mirrors the [COMP-engine-frame] GetTickCount throttle).
     // Times are microseconds. The fps field is derived from frame.avg for
     // sanity only — under an agent-driven launch it is unrepresentative of
-    // the user's healthy run (); read per-stage ratios + spin counts.
+    // the user's healthy run; read per-stage ratios + spin counts.
     perfUpdate.add(perfUpdateUs);
     perfRender.add(perfRenderUs);
     perfFrame.add(PerfUsSince(perfFrameStart));
@@ -1006,7 +1006,7 @@ void HostWindowImpl::RenderD3D9()
         const double fps     = favg > 0.0 ? 1.0e6 / favg : 0.0;
         const double spinAvg = perfWait.n
             ? static_cast<double>(perfWaitSpinsSum) / static_cast<double>(perfWait.n) : 0.0;
-        // [resize-perf Fix B1] rps = RenderD3D9 calls in this ~1s window —
+        // [resize-perf] rps = RenderD3D9 calls in this ~1s window —
         // the REAL render cadence (the fps field is 1/frame-cost, the
         // theoretical max, and stopped tracking cadence once the pump
         // was paced).
@@ -1058,11 +1058,11 @@ void HostWindowImpl::ResizeWebViewToClient()
     // ~30 Hz during sizemove. Reverted after the user's feel verdict —
     // halving the panels' tracking rate read as a regression, and with
     // the per-tick reset now on the cheap ResetEx path there is no
-    // budget pressure to justify it. corollary 1.)
+    // budget pressure to justify it.)
     RECT r;
     GetClientRect(hMain, &r);
     webController->put_Bounds(r);
-    //: when main resizes, the viewport popup's screen position
+    // When main resizes, the viewport popup's screen position
     // may need to change too (the main HWND's client origin shifted
     // in screen space). React will re-send a layout/viewport-rect
     // once its ResizeObserver fires, which is the authoritative
@@ -1085,7 +1085,7 @@ void HostWindowImpl::SettleResize(const char* why)
 
 void HostWindowImpl::OnWebMessage(const std::wstring& json)
 {
-    // [resize-perf] Phase-0 probe — bridge message rate, tallied PER
+    // [resize-perf] bridge message rate, tallied PER
     // KIND (the user's live splitter drag showed ~104/s of NON-scene-rect
     // traffic the dimension audit hadn't ranked; attribution found it was
     // viewport/input at mouse rate). Extracting the kind is a cheap
@@ -1121,7 +1121,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         return;
     }
 
-    // [resize-perf C2] Per-message log hygiene: the interactive streams
+    // Per-message log hygiene: the interactive streams
     // (layout/scene-rect at ~28/s during a splitter drag, viewport/input
     // at mouse rate ~60-140/s whenever the cursor crosses the viewport)
     // each paid a host.log write + fflush — a synchronous DISK flush per
@@ -1185,7 +1185,7 @@ HRESULT HostWindowImpl::InitWebView2()
         auto opts = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
         if (opts)
         {
-            // T9] --force-renderer-accessibility enables Blink's
+            // --force-renderer-accessibility enables Blink's
             // accessibility subsystem at startup so the UIA tree is
             // immediately available to out-of-process clients
             // (uia_inspector). Without it, Blink's a11y is lazily
@@ -1210,15 +1210,15 @@ HRESULT HostWindowImpl::InitWebView2()
                     Log("[host] WebView2 env failed 0x%08lx\n", envHr);
                     return E_FAIL;
                 }
-                // Phase 0: stash for WebResourceRequested.
+                // Stash for WebResourceRequested.
                 webEnv = env;
 
-                // Phase 3 Stage 3b: composition hosting. Stand up the
+                // Composition hosting. Stand up the
                 // host::Compositor (DComp V1 device only, no tree yet — tree
                 // assembly is deferred until inside the composition-controller
-                // completion callback, per v3 lesson) and create a
-                // CompositionController. Composition is a hard requirement
-                // (decision A): on Compositor::Init or the Environment3 QI
+                // completion callback) and create a
+                // CompositionController. Composition is a hard requirement:
+                // on Compositor::Init or the Environment3 QI
                 // failing there is NO HWND fallback — fail with a clear error
                 // and exit rather than leave a black window.
                 m_compositor = std::make_unique<host::Compositor>(
@@ -1257,7 +1257,7 @@ HRESULT HostWindowImpl::InitWebView2()
 }
 
 // ---------------------------------------------------------------------
-// Phase 3 Stage 3b: shared per-controller setup. Runs after
+// Shared per-controller setup. Runs after
 // either CreateCoreWebView2Controller (HWND mode) or
 // CreateCoreWebView2CompositionController (+ QI to ICoreWebView2Controller)
 // completes. Every WebView2 wire-up (transparent bg, DevTools, host-object
@@ -1295,7 +1295,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     //     own Radix context menus (emitter tree, curve editor), so e.g.
     //     "Dissolve Link Group" is unreachable. The jsdom test lane can't
     //     catch this (Radix opens fine there); only a faithful WebView2
-    //     launch surfaces it ().
+    //     launch surfaces it.
     //  2. test-host mode enables DevTools (F12) for Playwright/CDP — no
     //     effect in normal launches (gated on useTestHost).
     if (webView)
@@ -1315,7 +1315,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
 
     // Task 2.2.1: expose hostBridge via AddHostObjectToScript
     // (--test-host only). WebView2 drops postMessage under
-    // CDP attachment (lessons.md); the host-object
+    // CDP attachment; the host-object
     // channel is on a separate marshalling path and works,
     // so Playwright drives request/response via this object
     // instead. Never exposed in production — gated on
@@ -1435,7 +1435,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     GetClientRect(hMain, &bounds);
     controller->put_Bounds(bounds);
 
-    //: viewport is now a top-level WS_POPUP
+    // Viewport is now a top-level WS_POPUP
     // owned by hMain (created in WM_CREATE). DWM
     // composites top-level popups as their own
     // layer in screen space, above any child HWND's
@@ -1464,7 +1464,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
         }
 
         // Cache-bust the (unhashed) entry document so a rebuilt dist is
-        // served fresh — see CacheBust.h / for why we can't set a
+        // served fresh — see CacheBust.h for why we can't set a
         // Cache-Control header on the mapped host. Append the build's
         // index.html mtime as ?v=…; it changes on every rebuild and is
         // stable across relaunches of the same build (unchanged hashed
@@ -1501,14 +1501,14 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     }
 
     // Subscribe to JS → host messages.
-    // G5: stash the registration token in the member
+    // Stash the registration token in the member
     // webMessageTok so WM_DESTROY can explicitly unsubscribe.
     webView->add_WebMessageReceived(
         Callback<ICoreWebView2WebMessageReceivedEventHandler>(
             [this](ICoreWebView2*,
                    ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT
             {
-                // G11: reject messages whose originating document
+                // Reject messages whose originating document
                 // isn't an approved origin. Belt-and-suspenders with the
                 // NavigationStarting cancel — if a frame ever loaded an
                 // off-origin document, its postMessage must not reach the
@@ -1558,7 +1558,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 return S_OK;
             }).Get(), &webMessageTok);
 
-    // G11: navigation / new-window / permission policy. Registered
+    // Navigation / new-window / permission policy. Registered
     // BEFORE the Navigate() call below so the very first (legitimate) load is
     // already subject to the allow-list. The app's own target —
     // https://app.local/index.html (prod) or http://localhost:5174/ (dev) —
@@ -1607,7 +1607,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 return S_OK;
             }).Get(), &permissionTok);
 
-    //: a WebResourceRequested handler will NOT fire for the
+    // A WebResourceRequested handler will NOT fire for the
     // mapped app.local host (SetVirtualHostNameToFolderMapping short-circuits
     // user handlers), so we cannot inject a Cache-Control response header to
     // keep a rebuilt bundle fresh. The cache-bust above (prodNavUrl's
@@ -1649,20 +1649,20 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
 }
 
 // ---------------------------------------------------------------------
-// Phase 3 Stage 3b: composition controller completion callback.
+// Composition controller completion callback.
 // Mirrors dxgi_spike.cpp:OnCompositionControllerReady. Order:
 //   1. Stash the composition controller (kept alive for WM_DESTROY).
 //   2. QI down to ICoreWebView2Controller and run the shared
 //      FinishWebView2ControllerSetup. All wire-up post-step is identical
 //      to HWND mode (transparent bg, AcceleratorKeyPressed, put_Bounds,
 //      Navigate, ...).
-//   3. Build the DComp tree NOW (deferred per v3 — must happen AFTER
+//   3. Build the DComp tree NOW (deferred — must happen AFTER
 //      the controller exists). Compositor::AttachWebView2 plugs the
 //      controller's RootVisualTarget into the webview visual + Commits.
-// If step 3 fails: it's the failure mode. Log and return; the
+// If step 3 fails: it's the opaque-white failure mode. Log and return; the
 // editor still has the controller wired so the rest of the host stays
-// alive, but the visual tree won't show anything. Per sub-stage 3b
-// acceptance, this is the load-bearing observation.
+// alive, but the visual tree won't show anything. Per the acceptance
+// criteria, this is the load-bearing observation.
 // ---------------------------------------------------------------------
 HRESULT HostWindowImpl::OnCompositionControllerReady(
     HRESULT chr, ICoreWebView2CompositionController* ctl)
@@ -1706,7 +1706,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         return setupHr;
     }
 
-    // Phase 3 Stage 3e: DPI. Composition hosting doesn't
+    // DPI. Composition hosting doesn't
     // auto-track DPI like HWND mode does — the host must call
     // put_RasterizationScale to tell WebView2 the device-pixel
     // scaling factor. Without this, chrome rasterizes at 1.0
@@ -1735,7 +1735,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         }
     }
 
-    // Phase 3 Stage 3d: cursor sync. The composition
+    // Cursor sync. The composition
     // controller exposes the desired cursor via get_Cursor and
     // fires add_CursorChanged whenever it changes (e.g. pointer
     // over a link, I-beam over a text input). Cache the HCURSOR
@@ -1773,7 +1773,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
 
     // Build the visual tree. This is the load-bearing call — if it
     // returns S_OK but the editor renders opaque white, we are in the
-    // documented failure mode. Per sub-stage 3b acceptance gate:
+    // documented opaque-white failure mode. Per the acceptance gate:
     // STOP, capture binary + log + screenshot, surface to user. Do
     // not iterate beyond the 24h cap.
     if (m_compositor)
@@ -1781,14 +1781,14 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         HRESULT bhr = m_compositor->AttachWebView2(ctl);
         if (FAILED(bhr))
         {
-            //-class failure: the WebView2 RootVisualTarget couldn't be
+            // Composition-class failure: the WebView2 RootVisualTarget couldn't be
             // plugged into the DComp tree, so nothing composites — a black
-            // window, exactly what decision A's hard-requirement exists to
+            // window, exactly what the composition hard-requirement exists to
             // prevent. There is no HWND fallback: signal a fatal error.
             // PostMessage so this callback unwinds before the modal + exit.
             // (Engine-visual attach below is DIFFERENT — that failure keeps
             // the chrome usable, so it stays soft.)
-            Log("[host] composition: Compositor::AttachWebView2 FAILED hr=0x%08lx —-class failure\n", bhr);
+            Log("[host] composition: Compositor::AttachWebView2 FAILED hr=0x%08lx — composition-class failure\n", bhr);
             PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK, static_cast<WPARAM>(bhr), 0);
             return bhr;
         }
@@ -1800,14 +1800,14 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         const int clientH = r.bottom - r.top;
         m_compositor->SetSize(clientW, clientH);
 
-        // Phase 3 Stage 4b — attach engine visual BEHIND the
-        // WebView2 visual (per sub-plan §3.4 / D3). On failure, log
+        // Attach engine visual BEHIND the
+        // WebView2 visual. On failure, log
         // and continue with composition mode intact: chrome works,
-        // viewport area stays empty (per §3.8 / D7 — explicit
-        // no-chain-into-F8). Stage 4c will wire the per-frame
-        // CompositeEngineFrame call site; until then this attach
+        // viewport area stays empty (explicit
+        // no-chain-into-HWND-mode). The per-frame
+        // CompositeEngineFrame call site is wired later; until then this attach
         // is functionally "load the engine visual into the tree
-        // but don't Present it" — 4b's smoke matches Stage 3b's
+        // but don't Present it" — its smoke matches the
         // chrome-only output.
         if (engine && engine->GetSharedTextureHandle())
         {
@@ -1816,7 +1816,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
             HRESULT ehr = m_compositor->AttachEngineVisual(sharedTex, clientW, clientH, engineLuid);
             if (FAILED(ehr))
             {
-                Log("[host] composition: AttachEngineVisual hr=0x%08lx — composition mode continues with engine visual NOT attached (viewport area will be empty; sub-plan §3.8)\n", ehr);
+                Log("[host] composition: AttachEngineVisual hr=0x%08lx — composition mode continues with engine visual NOT attached (viewport area will be empty)\n", ehr);
                 // Do NOT PostMessage(WM_APP_COMPOSITION_FALLBACK) — that
                 // path is for chrome-itself-broken failures; engine-
                 // attach failures keep the chrome usable in composition
@@ -1830,12 +1830,12 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
                 engine ? engine->GetSharedTextureHandle() : nullptr);
         }
 
-        // Phase 3 Stage 5 — inject the DComp Compositor into the
+        // Inject the DComp Compositor into the
         // LayoutBroker so React-side layout/scene-rect dispatches start
         // routing into Compositor::SetEngineVisualTransform + Engine::
         // SetSceneViewport. The setter also replays the cached scene-
-        // rect onto the newly-attached compositor via ReemitSceneRect
-        // (sub-plan §3.5), so if React HAS already dispatched a scene-
+        // rect onto the newly-attached compositor via ReemitSceneRect,
+        // so if React HAS already dispatched a scene-
         // rect by this point, the engine visual + engine viewport
         // immediately match it. (In practice React's first dispatch
         // typically arrives AFTER this site because React is still
@@ -1852,13 +1852,13 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
             // first frame is sized correctly. Without this seed, the
             // engine visual's offset/clip stays at the DComp default
             // (0,0,inf,inf) — visually OK but inconsistent with the
-            // post-Stage-5 invariant "engine visual ALWAYS has an
+            // invariant "engine visual ALWAYS has an
             // explicit transform under composition mode."
             //
             // The seed also makes the boot-time
             // [COMP-engine-transform] / [engine] SetSceneViewport log
             // lines appear before React's first dispatch — useful as
-            // a positive control + asserted by T7's dxgi-scene-rect
+            // a positive control + asserted by the dxgi-scene-rect
             // Playwright spec.
             int sx, sy, sw, sh;
             if (!layout.GetSceneRect(sx, sy, sw, sh))
@@ -1879,13 +1879,12 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
                 {
                     Log("[host] composition: initial seed SetEngineVisualTransform hr=0x%08lx (non-fatal)\n", thr);
                 }
-                // Phase 3 Stage 5 T6 follow-up (rev 2) —
-                // restore engine viewport seed under B-γ with per-
+                // Restore engine viewport seed with per-
                 // pixel-FoV-vs-current-RT reference. At seed time
                 // sceneH equals BackBufferHeight (full client), so
                 // SetSceneViewport's per-pixel-FoV computes
-                // fovY = 45° × clientH/RT_H = 45° — matches pre-
-                // Stage-5 projection exactly. No FoV explosion at
+                // fovY = 45° × clientH/RT_H = 45° — matches the
+                // full-RT projection exactly. No FoV explosion at
                 // attach.
                 if (engine)
                 {
@@ -1897,7 +1896,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
         Log("[host] composition hosting ready (DComp tree committed)\n");
     }
 
-    // Phase 3 Stage 3f (path b+): give WebView2 logical
+    // Give WebView2 logical
     // keyboard focus. Under HWND hosting, WebView2's own child HWND
     // received WM_KEY*/WM_IME_* via the OS focus chain — under
     // composition, the host HWND owns Win32 focus and WebView2
@@ -1922,7 +1921,7 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
 }
 
 // ---------------------------------------------------------------------
-// Phase 3 Stage 3c: mouse forwarding under composition hosting.
+// Mouse forwarding under composition hosting.
 // Translates the Win32 WM_MOUSE* message family into
 // ICoreWebView2CompositionController::SendMouseInput calls. The
 // COREWEBVIEW2_MOUSE_EVENT_KIND enum values are numerically identical
@@ -1966,7 +1965,7 @@ void HostWindowImpl::ForwardMouseToCompositionWebView2(UINT msg, WPARAM wp, LPAR
     //   MK_CONTROL=0x08  → CONTROL
     //   MK_MBUTTON=0x10  → MIDDLE_BUTTON
     // (MK_XBUTTON1/2 don't have COREWEBVIEW2 equivalents in 1.0.3967.48;
-    //  Stage 3c doesn't forward them. The 99-test suite doesn't
+    //  the forwarder doesn't forward them. The 99-test suite doesn't
     //  exercise XButton.)
     auto virtualKeys = static_cast<COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS>(
         LOWORD(wp) & (MK_LBUTTON | MK_RBUTTON | MK_SHIFT |
@@ -2006,7 +2005,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     {
     case WM_CREATE:
     {
-        //: viewport is a top-level WS_POPUP window OWNED by main
+        // Viewport is a top-level WS_POPUP window OWNED by main
         // (not a WS_CHILD). DWM composites top-level popups as their
         // own layer in screen space, above any child HWND's DComp
         // surface — including WebView2's. WS_EX_NOACTIVATE prevents
@@ -2019,11 +2018,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // destroyed, and stays z-ordered above the owner. Position
         // is in SCREEN coords; LayoutBroker translates from main-
         // client coords via ClientToScreen.
-        //: WS_EX_LAYERED + UpdateLayeredWindow(ULW_ALPHA) replaces
-        ///'s SetWindowRgn cut-out. The AlphaCompositor pushes a
+        // WS_EX_LAYERED + UpdateLayeredWindow(ULW_ALPHA) replaces
+        // the earlier SetWindowRgn cut-out. The AlphaCompositor pushes a
         // pre-multiplied ARGB bitmap each tick, the OS composites the
         // popup onto the WebView2 underneath, and software alpha stamps
-        // (T4) carve soft-edged holes for chrome occlusion rects.
+        // carve soft-edged holes for chrome occlusion rects.
         hViewport = CreateWindowExW(
             WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
             kHostViewportClassName, L"",
@@ -2178,7 +2177,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         }
                     }
 
-                    // Imported reference object + unit grid (). At
+                    // Imported reference object + unit grid. At
                     // startup the catalog isn't built yet, so SetReferenceObject DEFERS:
                     // it kicks the off-thread catalog build and the mesh resolves/uploads
                     // a frame or more later, once Update() harvests the catalog and reruns
@@ -2214,7 +2213,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         // Persistent gizmo snap toggle (REG_DWORD, like GridVisible).
                         if (readDword(L"SnapEnabled", dw))
                             engine->SetSnapEnabled(dw != 0);
-                        // freeze/lock] Restore the persisted lock so a frozen
+                        // Restore the persisted lock so a frozen
                         // object comes back frozen. (Ordering vs. the Name read isn't
                         // load-bearing: the silent restore force-deselects below
                         // regardless, so the object lands deselected either way — the
@@ -2251,7 +2250,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     // intensities, ambient, shadow) so the new-UI viewport
                     // opens with the user's saved lights instead of engine
                     // ctor defaults. Mirrors the legacy `PushLightingToEngine`
-                    // (native Win32 UI, removed in) field-for-field, including the
+                    // (native Win32 UI, since removed) field-for-field, including the
                     // Force-Align fill-angle computation: when the
                     // LightingForceFillAlignment flag is ON the fill azimuths
                     // are derived from the sun (sun.z + 120° / + 210°, both at
@@ -2262,7 +2261,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     // dialog-lighting a11y golden seeds from must show ctor
                     // defaults under --test-host). Intensity is folded into the
                     // diffuse/specular channels exactly as the legacy `MakeLight`
-                    // (native Win32 UI, removed in) did; fills pass specular=black.
+                    // (native Win32 UI, since removed) did; fills pass specular=black.
                     auto readColor = [&](const wchar_t* name, COLORREF def) -> COLORREF {
                         DWORD v = 0;
                         return readDword(name, v) ? static_cast<COLORREF>(v) : def;
@@ -2338,7 +2337,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     engine->SetShadow (colorToVec4(sunShadow));
 
                     // The standing no-user verification channel for the
-                    // lighting restore () — distinct from [view-restore]
+                    // lighting restore — distinct from [view-restore]
                     // above. Prints the inputs that drove the engine writes.
                     Log("[lighting-restore] sunZ=%.1f sunTilt=%.1f forceAlign=%d "
                         "fill1Z=%.1f fill2Z=%.1f sunDiffuse=0x%06X\n",
@@ -2350,8 +2349,8 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     // --test-host CDP bridge can't observe it (the whole block
                     // is gated off under --test-host), so a faithful
                     // non-test-host launch + this log line is how parity is
-                    // confirmed (host.log is trusted under; agent
-                    // screenshots are not — see tasks/lessons.md).
+                    // confirmed (host.log is trusted under this architecture; agent
+                    // screenshots are not).
                     Log("[view-restore] bg=0x%06X showGround=%d groundTex=%d "
                         "groundSolid=0x%06X skydome=%d\n",
                         static_cast<unsigned>(engine->GetBackground()),
@@ -2380,7 +2379,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             // Continue without engine; snapshot will return ok:false.
         }
 
-        //: stand up the alpha compositor against the Engine's D3D9
+        // Stand up the alpha compositor against the Engine's D3D9
         // device. The Engine's Reset() resizes the off-screen RT on
         // layout changes; we still bootstrap a non-degenerate size now
         // so the very first Render finds a valid RT to target.
@@ -2400,7 +2399,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 Log("[host] AlphaCompositor up (%ldx%ld)\n",
                     vrc.right - vrc.left, vrc.bottom - vrc.top);
 
-                // Phase 2: stand up the InputDispatcher on the
+                // Stand up the InputDispatcher on the
                 // viewport popup so DOM-routed camera/keyboard input reaches
                 // the engine. Bound to BridgeDispatcher below in Run() once
                 // `dispatcher` exists.
@@ -2430,7 +2429,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // stats/tick event to React so the status bar stays live.
         SetTimer(hwnd, kStatsTimerId, 250, nullptr);
 
-        //: two-tier autosave timers (30 s recent / 5 min stable),
+        // Two-tier autosave timers (30 s recent / 5 min stable),
         // mirroring the legacy main.cpp. Gated on !useTestHost so harness
         // runs never write autosave files — those would orphan into a
         // recovery prompt for the user's real editor. WM_TIMER writes the
@@ -2453,7 +2452,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             bool overload  = engine ? engine->IsSpawnOverloadActive() : false;
             dispatcher->EmitStatsTick(fps, emitters, particles, instances, overload);
         }
-        //: autosave tick. Best-effort + dirty-gated — skip the write
+        // Autosave tick. Best-effort + dirty-gated — skip the write
         // when nothing changed since the last save (no point autosaving an
         // unmodified saved file). Runs on the host UI thread between frames
         // (single-threaded pump), same as legacy's WM_TIMER write.
@@ -2472,7 +2471,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             (void)wrote;
 #endif
         }
-        // [resize-perf revised Fix A] quiescence safety net — fires
+        // [resize-perf] quiescence safety net — fires
         // 150 ms after size ticks stop; normally a no-op (per-tick
         // cheap resets keep sizes in sync), it only re-resets if a
         // mid-gesture reset failed. Covers a lost WM_EXITSIZEMOVE.
@@ -2485,7 +2484,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     case WM_SIZE:
         ResizeWebViewToClient();
-        // Phase 3 Stage 3b: the DComp tree's root visual clip
+        // The DComp tree's root visual clip
         // needs to track the host client size or chrome gets clipped on
         // resize.
         if (m_compositor && m_compositor->IsReady())
@@ -2496,7 +2495,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
 
-    // [resize-perf Fix D] During the modal sizemove loop DefWindowProc
+    // [resize-perf] During the modal sizemove loop DefWindowProc
     // erases the full client with the class brush on every tick (the
     // main class registers CS_HREDRAW|CS_VREDRAW) — pure GDI cost:
     // WebView2 repaints the whole client continuously anyway. Suppress
@@ -2506,7 +2505,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (m_inSizeMove) return 1;
         break;  // DefWindowProc fills with the class brush as today
 
-    // Phase 3 Stage 3f (path b+): host HWND gained focus
+    // Host HWND gained focus
     // (initial show, Alt-Tab back, click into the window). Forward
     // logical keyboard focus to WebView2 so its DOM event chain
     // sees WM_KEY*/WM_IME_*. Without this, after Alt-Tab away and
@@ -2520,7 +2519,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         break;  // fall through so DefWindowProc sees it too
 
-    // Phase 3 Stage 3e: DPI changed (window moved to a
+    // DPI changed (window moved to a
     // monitor with different DPI). HIWORD(wp) is the new system DPI;
     // lp points to a suggested RECT in screen coords. Update the
     // composition controller's rasterization scale so chrome
@@ -2559,7 +2558,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_APP_COMPOSITION_FALLBACK:
         FailFatalComposition(static_cast<HRESULT>(wp));   // [[noreturn]]
 
-    // Phase 3 Stage 3d: cursor sync. Under composition the
+    // Cursor sync. Under composition the
     // host HWND owns WM_SETCURSOR; consult the cached cursor that
     // the composition controller's add_CursorChanged handler last
     // delivered. Returning TRUE tells Windows we set the cursor
@@ -2572,7 +2571,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         break;
 
-    // Phase 3 Stage 3c: forward mouse input to WebView2's
+    // Forward mouse input to WebView2's
     // composition controller. The host owns input and forwards via
     // SendMouseInput.
     case WM_MOUSEMOVE:
@@ -2582,7 +2581,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_MOUSEWHEEL:  case WM_MOUSEHWHEEL:
         if (m_compositionController)
         {
-            // F10: arm TME_LEAVE on each fresh WM_MOUSEMOVE
+            // Arm TME_LEAVE on each fresh WM_MOUSEMOVE
             // so WM_MOUSELEAVE fires when the pointer exits the host
             // HWND. Without this, WebView2 keeps last-known CSS :hover
             // state and cursor when the pointer leaves the window.
@@ -2599,7 +2598,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         break;
 
-    // F10: forward COREWEBVIEW2_MOUSE_EVENT_KIND_MOUSE_LEAVE
+    // Forward COREWEBVIEW2_MOUSE_EVENT_KIND_MOUSE_LEAVE
     // when the pointer exits the host HWND so WebView2 clears CSS :hover
     // state and the cursor. WM_MOUSELEAVE's wp/lp don't carry coords or
     // virtual-key state — use POINT{-1, -1} per WebView2 docs.
@@ -2622,13 +2621,13 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 
     case WM_MOVE:
-        //: when main moves, the viewport popup follows. Position
+        // When main moves, the viewport popup follows. Position
         // changes only — size stays cached.
         layout.RefreshScreenPosition();
         return 0;
 
     case WM_WINDOWPOSCHANGED:
-        // polish: WM_WINDOWPOSCHANGED fires for every position/
+        // WM_WINDOWPOSCHANGED fires for every position/
         // size change BEFORE WM_SIZE / WM_MOVE / WM_PAINT.
         //
         // (1) PredictAndApply resizes the popup synchronously to
@@ -2641,7 +2640,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         //     frame, so a wider/taller resize reveals dark purple
         //     where the ground plane should be.
         //
-        // [resize-perf revised Fix A] PredictAndApply's per-tick reset
+        // [resize-perf] PredictAndApply's per-tick reset
         // runs on the cheap ResetEx path (~3-5 ms — textures/shaders
         // persist per D3D9Ex semantics; only size-keyed RTs rebuild),
         // so the scene renders at the CORRECT size every tick — no
@@ -2651,7 +2650,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // only if a mid-gesture reset failed.
         if (hViewport)
         {
-            // [resize-perf] Phase-0 probe — time the per-tick chain and
+            // [resize-perf] time the per-tick chain and
             // emit a 1 Hz aggregate with the engine's reset sub-stage
             // breakdown (cheap = ResetForResize successes).
             const LONGLONG rpT0 = PerfQpcNow();
@@ -2683,7 +2682,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         break;  // fall through so DefWindowProc continues processing
 
-    // polish: during the modal sizemove loop, WM_SIZE/WM_MOVE
+    // During the modal sizemove loop, WM_SIZE/WM_MOVE
     // fire continuously. Each one calls RefreshScreenPosition so
     // the popup tracks main's new position. The cached client-coord
     // rect from the last layout/viewport-rect message is the source
@@ -2693,10 +2692,10 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     // right place via owner-client translation. (An earlier design
     // note rejected HIDING the popup during sizemove — that exposes
     // the bare WebView2 transparent region, which paints white. The
-    // Fix A handlers below don't hide anything; they only defer the
+    // resize-settle handlers below don't hide anything; they only defer the
     // per-tick engine reset.)
 
-    // [resize-perf revised Fix A] Modal sizemove bracket. m_inSizeMove
+    // [resize-perf] Modal sizemove bracket. m_inSizeMove
     // gates the WM_ERASEBKGND suppression below; per-tick engine resets
     // now run unconditionally on the cheap ResetEx path (LayoutBroker::
     // ResetEngineForResize), so EXITSIZEMOVE's settle is a no-op safety
@@ -2714,7 +2713,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
 
     case WM_CLOSE:
-        // (data-loss BLOCKER): the native frame-X / Alt-F4 used to fall
+        // Data-loss BLOCKER: the native frame-X / Alt-F4 used to fall
         // straight to DefWindowProc → WM_DESTROY, which deletes the recovery
         // autosave — silently destroying unsaved work AND its safety net. Route
         // a dirty interactive session to the SAME React Save/Discard/Cancel
@@ -2728,7 +2727,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;   // not dirty (or headless) → DefWindowProc → WM_DESTROY
 
     case WM_APP_QUIT_CONFIRMED:
-        //: React confirmed the close (saved or discarded). DestroyWindow
+        // React confirmed the close (saved or discarded). DestroyWindow
         // → WM_DESTROY (NOT WM_CLOSE), so a confirmed quit never re-enters the
         // veto above.
         DestroyWindow(hwnd);
@@ -2736,7 +2735,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     case WM_DESTROY:
         KillTimer(hwnd, kStatsTimerId);
-        //: stop autosave + delete THIS session's autosave files on a
+        // Stop autosave + delete THIS session's autosave files on a
         // clean exit so no orphan prompts on the next launch. A crash skips
         // WM_DESTROY, leaving the orphan for recovery — exactly the point.
         if (!useTestHost && !m_ephemeral)
@@ -2745,7 +2744,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             KillTimer(hwnd, Autosave::STABLE_TIMER_ID);
             Autosave::DeleteOurSession();
         }
-        // G8: release the class background brush. Per
+        // Release the class background brush. Per
         // WNDCLASSEX docs the system would free it on UnregisterClass,
         // but the class is never explicitly unregistered. Doing it
         // here is safe for the single-window-per-process host.
@@ -2754,7 +2753,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             DeleteObject(m_classBrush);
             m_classBrush = nullptr;
         }
-        // G5: unregister the WebMessageReceived handler
+        // Unregister the WebMessageReceived handler
         // explicitly before tearing down webView, mirroring the
         // accelKeyTok pattern below. The handler lambda captures
         // `this`; explicit unsubscribe before destruction prevents
@@ -2765,8 +2764,8 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             webView->remove_WebMessageReceived(webMessageTok);
             webMessageTok = {};
         }
-        // G11: unsubscribe the nav/new-window/permission handlers
-        // before webView teardown, same rationale as the G5 removal above
+        // Unsubscribe the nav/new-window/permission handlers
+        // before webView teardown, same rationale as the WebMessageReceived removal above
         // (the lambdas capture `this`).
         if (webView)
         {
@@ -2810,7 +2809,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             webController.Reset();
         }
         webView.Reset();
-        // Phase 3 Stage 3b/3d: release composition controller +
+        // Release composition controller +
         // DComp tree. Order matters per dxgi_spike.cpp:783-818:
         // controller is released AFTER webController->Close() (which
         // already settles WebView2's pending work) and BEFORE
@@ -2820,7 +2819,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // Compositor holds its own reference). m_compositor.reset()
         // then releases the visual tree.
         //
-        // Stage 3d: unregister the CursorChanged handler before
+        // Unregister the CursorChanged handler before
         // releasing the controller so the lambda (which captures
         // `this`) can't fire after HostWindowImpl starts destructing.
         // Same pattern as AcceleratorKeyPressed above.
@@ -2831,19 +2830,19 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         m_webViewCursor = nullptr;
         m_compositionController.Reset();
-        // Phase 3 Stage 5 — clear LayoutBroker's pointer BEFORE
+        // Clear LayoutBroker's pointer BEFORE
         // releasing the Compositor so any late SetSceneRect dispatch
         // (e.g. an in-flight BridgeDispatcher message that's already
         // past the WM_DESTROY barrier in the message-pump shutdown
         // sequence) doesn't dereference a freed Compositor.
         layout.SetCompositor(nullptr);
         m_compositor.reset();
-        //: detach the compositor from Engine BEFORE either is
+        // Detach the compositor from Engine BEFORE either is
         // destroyed so Render() (if scheduled before WM_QUIT drains
         // the queue) can't dereference a freed compositor. Drop the
         // compositor first since Engine owns the D3D9 device the
         // compositor's resources are bound to.
-        // Phase 2: drop the InputDispatcher before the engine /
+        // Drop the InputDispatcher before the engine /
         // compositor. It holds the viewport popup HWND raw; the popup
         // itself is destroyed below as part of the standard WM_DESTROY
         // cleanup.
@@ -2892,7 +2891,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     // Scope: camera only. The shift-click-to-spawn path
     // (legacy 2956) depends on the MouseCursor Object3D port and is
     // explicitly deferred. The status-bar mouse-coord push
-    // (legacy 3041) is a Screen 1 polish item.
+    // (legacy 3041) is a polish item.
     //
     // Engine state emission: SetCamera bypasses the dispatcher
     // setter ladder, so we must call EmitEngineStateChanged()
@@ -2903,7 +2902,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     case WM_LBUTTONDOWN:
     {
         if (!engine) return 0;
-        // Phase 2 smoke instrumentation — verify what wParam
+        // Smoke instrumentation — verify what wParam
         // actually arrived from the synthesized PostMessage.
         Log("[ArchC-engine] WM_LBUTTONDOWN wp=0x%llx MK_SHIFT=%d MK_CONTROL=%d hasPS=%d emitters=%zu attached=%d\n",
             static_cast<unsigned long long>(wp),
@@ -2912,7 +2911,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             particleSystem ? 1 : 0,
             particleSystem ? particleSystem->getEmitters().size() : 0,
             m_attachedParticleSystem ? 1 : 0);
-        // Phase 2: the viewport popup is hidden and WebView2 owns
+        // The viewport popup is hidden and WebView2 owns
         // keyboard routing; we forward keystrokes through the bridge. We do
         // NOT SetFocus the hidden popup — that briefly succeeds (visibility
         // isn't a precondition; WS_EX_NOACTIVATE only blocks user-driven
@@ -2931,7 +2930,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // with a MOVE drag. Release on Shift-keyup or LBUTTONUP — the
         // existing WM_KEYUP handler kills the attached instance.
         // Legacy parity: if a cursor-bound preview already exists (spawned
-        // by an earlier WM_KEYDOWN VK_SHIFT or by the B1.3.1 fallback below),
+        // by an earlier WM_KEYDOWN VK_SHIFT or by the fallback below),
         // LMB-down enters OBJECT_Z drag mode for height adjustment. LMB-up
         // will then detach the preview, placing it permanently in the scene.
         // Matches the legacy main.cpp. Do NOT enter a camera drag
@@ -2948,10 +2947,10 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 static_cast<void*>(m_attachedParticleSystem));
             return 0;
         }
-        // / S47] Reference-object manipulator: if a handle (translate
+        // Reference-object manipulator: if a handle (translate
         // arrow or rotate ring) is under the cursor, grab it (drag moves/rotates the
         // object) — this wins over camera orbit AND over the Shift+LMB particle-spawn
-        // below (: so Shift-clicking a handle is a precise grab, not a spawn).
+        // below (so Shift-clicking a handle is a precise grab, not a spawn).
         // PickManipulatorHandle returns NONE unless the object is selected, so a MISS
         // (including empty-space Shift-clicks) falls through to the spawn / camera path.
         {
@@ -3004,7 +3003,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 return 0;
             }
         }
-        // B1.3.1 round 5 fallback: Shift+LMB with no existing preview spawns
+        // Round 5 fallback: Shift+LMB with no existing preview spawns
         // one in-place (covers the case where WM_KEYDOWN VK_SHIFT didn't
         // fire because WebView2 held focus). Then immediately enter
         // OBJECT_Z so the user can drag-Z in the same gesture and LMB-up
@@ -3024,7 +3023,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 cx, cy, pos.x, pos.y, pos.z,
                 static_cast<void*>(m_attachedParticleSystem));
 #ifndef NDEBUG
-            // [handoff item 14] Mirror the cursor-unproject
+            // Mirror the cursor-unproject
             // diagnostic at this alternate spawn entry. Consistent
             // grep prefix lets all three call sites (WM_MOUSEMOVE
             // throttled emit, WM_KEYDOWN VK_SHIFT, WM_LBUTTONDOWN
@@ -3078,7 +3077,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         m_dragStartX   = (short)LOWORD(lp);
         m_dragStartY   = (short)HIWORD(lp);
         SetCapture(hwnd);
-        // Phase 2: see WM_LBUTTONDOWN — we don't SetFocus the hidden
+        // See WM_LBUTTONDOWN — we don't SetFocus the hidden
         // popup, which would trigger the spurious WM_KILLFOCUS → kill loop.
         return 0;
     }
@@ -3143,7 +3142,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         m_lastCursorX = mx;
         m_lastCursorY = my;
 
-        // / S47] Manipulator drag. TRANSLATE: accumulate precision-
+        // Manipulator drag. TRANSLATE: accumulate precision-
         // scaled per-move axis-param deltas (m_manipAccumT += (now - prev) * factor)
         // and apply newPos = startPos + axis*m_manipAccumT — with factor==1 this
         // telescopes to (now - grab), i.e. the old absolute-from-grab; factor=0.2 while
@@ -3174,7 +3173,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 ReleaseCapture();
                 return 0;
             }
-            const float factor = (wp & MK_SHIFT) ? 0.2f : 1.0f;   //: read wParam, NOT GetKeyState
+            const float factor = (wp & MK_SHIFT) ? 0.2f : 1.0f;   // read wParam, NOT GetKeyState
             bool moved = false;
             if (m_manipKind == Engine::ManipHandle::TRANSLATE)
             {
@@ -3193,7 +3192,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         const float step = engine->GetGridSpacing() * factor;    // finer step when Shift held
                         if (step > 0.0f) { newPos.x = roundf(newPos.x / step) * step; newPos.y = roundf(newPos.y / step) * step; }
                     }
-                    // s52] Capture the pre-drag transform ONCE, on the
+                    // Capture the pre-drag transform ONCE, on the
                     // first move that ACTUALLY changes the position, BEFORE
                     // mutating — the engine still holds the grab-time transform
                     // here, so this is the PRE state. Gating on a real change
@@ -3235,7 +3234,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         // NOTE: snapping .x/.y is correct ONLY for the ground (normal-Z)
                         // plane, whose free axes ARE X and Y. A future YZ/ZX plane would
                         // need to snap ITS in-plane components -- revisit snap when adding
-                        // those (see the design spec §4, "Out": YZ/ZX deferred).
+                        // those (YZ/ZX deferred).
                         const float step = engine->GetGridSpacing() * factor;
                         if (step > 0.0f) { newPos.x = roundf(newPos.x / step) * step;
                                            newPos.y = roundf(newPos.y / step) * step; }
@@ -3284,7 +3283,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         const float s = 15.0f * factor;
                         (&newRot.x)[comp] = roundf((&newRot.x)[comp] / s) * s;
                     }
-                    // s52] Capture the pre-drag transform ONCE, on the
+                    // Capture the pre-drag transform ONCE, on the
                     // first move that ACTUALLY changes the rotation, BEFORE
                     // mutating (engine still at the grab-time transform → PRE
                     // state). Gating on a real change avoids a phantom undo step
@@ -3346,7 +3345,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             return 0;
         }
 
-        // / S47] Hover feedback: when idle (not dragging), highlight the
+        // Hover feedback: when idle (not dragging), highlight the
         // handle under the cursor. PickManipulatorHandle returns NONE unless an object
         // is selected, so this is a cheap no-op when there's nothing to hover.
         if (m_dragMode == DragMode::NONE)
@@ -3378,7 +3377,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         GetCursorPos3D(engine.get(), (short)mx, (short)my, cursorWorld);
         m_mouseCursor.SetPosition(cursorWorld);
 
-        // (Group A): push the world-space cursor to the React
+        // Push the world-space cursor to the React
         // status bar, throttled. 33 ms ≈ 30 Hz — fast enough to read,
         // slow enough that the bridge channel doesn't bottleneck.
         const DWORD now = GetTickCount();
@@ -3387,13 +3386,13 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             m_lastCursorEmitTick = now;
             dispatcher->EmitCursorPosition3D(cursorWorld.x, cursorWorld.y, cursorWorld.z);
 #ifndef NDEBUG
-            // [handoff item 14] Throttled diagnostic for the
+            // Throttled diagnostic for the
             // cursor-unproject path. Piggybacks on the bridge-emit gate
             // so the cadence is ~30 Hz (rather than per-WM_MOUSEMOVE,
             // which is 60+ Hz and would flood host.log). `mode` names
             // which viewport GetCursorPos3D used — `scene` under
-            // composition mode (architecture C), `full-rt` under legacy
-            // mode (architecture A, or pre-scene-rect-dispatch boot).
+            // composition mode, `full-rt` under legacy
+            // mode (or pre-scene-rect-dispatch boot).
             int dx, dy, dw, dh;
             const bool dscene = engine->GetSceneViewport(dx, dy, dw, dh);
             Log("[cursor-unproject] in=(%d,%d) mode=%s vp=(%d,%d,%d,%d) world=(%.2f,%.2f,%.2f)\n",
@@ -3511,7 +3510,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         m_attachedParticleSystem =
             engine->SpawnParticleSystem(*particleSystem, &m_mouseCursor);
 #ifndef NDEBUG
-        // [handoff item 14] One-shot diagnostic at the actual
+        // One-shot diagnostic at the actual
         // spawn site so a misplaced spawn can be tied to the input
         // coords + viewport in host.log without re-running with a
         // breakpoint. Per-Shift-press, not per-frame, so untrottled.
@@ -3552,7 +3551,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // (Alt-Tab away, foreign focus steal), WM_KEYUP may never arrive
         // and the attached instance leaks. Drop it here.
         //
-        // Phase 2: the viewport popup is hidden and never genuinely
+        // The viewport popup is hidden and never genuinely
         // owns focus, but receives spurious WM_KILLFOCUS from Win32 focus
         // churn whenever ANY focus assignment touches it (other apps
         // activating, modal dialogs, etc.). Treating those as user-Alt-Tab
@@ -3725,7 +3724,7 @@ int HostWindowImpl::Run(int nCmdShow)
     }
     Log("[host] WebView2 runtime detected — proceeding\n");
 
-    // B1.3.1.1: GDI+ init for AlphaCompositor::CaptureSnapshotPng (the
+    // GDI+ init for AlphaCompositor::CaptureSnapshotPng (the
     // modal frosted-glass backdrop). One-time per process; matching
     // Gdiplus::GdiplusShutdown runs right before CoUninitialize at the
     // bottom of this function. The two earlier early-return paths
@@ -3750,7 +3749,7 @@ int HostWindowImpl::Run(int nCmdShow)
     if (!wc.hIcon) wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
     wc.lpszClassName = kHostWindowClassName;
     wc.style         = CS_HREDRAW | CS_VREDRAW;
-    // polish: paint the parent in the same dark purple as the
+    // Paint the parent in the same dark purple as the
     // D3D9 viewport's clear color (engine.cpp m_background default).
     // When the popup is briefly mispositioned during a window resize
     // — the popup tracks main on each WM_SIZE but its cached size
@@ -3758,7 +3757,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // dark purple instead of the WebView2 transparent-region's white
     // default. Smoothly indistinguishable from the actual viewport
     // until React resends the rect.
-    // G8: stash the brush so WM_DESTROY can DeleteObject it.
+    // Stash the brush so WM_DESTROY can DeleteObject it.
     // Pre-fix the CreateSolidBrush handle was assigned directly to the
     // class without being stored, and no UnregisterClass call exists,
     // so the brush leaked for process lifetime. The host only ever has
@@ -3869,7 +3868,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // file/new + file/open can kill any in-flight cursor-bound instance
     // before swapping the ParticleSystem under it.
     dispatcher->BindAttachedSystem(&m_attachedParticleSystem);
-    // Phase 2: hand the InputDispatcher to the bridge so
+    // Hand the InputDispatcher to the bridge so
     // `viewport/input` requests route into it. Nullable — the handler
     // is a no-op ack when no InputDispatcher is bound.
     dispatcher->SetInputDispatcher(m_inputDispatcher.get());
@@ -3896,7 +3895,7 @@ int HostWindowImpl::Run(int nCmdShow)
         return 1;
     }
 
-    // B1.4 T4c: size the popup HWND to the main window's
+    // Size the popup HWND to the main window's
     // full client rect just before showing the window. Without this,
     // the popup is stuck at CreateWindowExW's bootstrap rect
     // (screen 16,16,320,240) and renders as a tiny preview at the
@@ -3906,7 +3905,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // the resize cleanly.
     layout.ApplyFullClient();
 
-    // Phase 2: hide the viewport popup. It still spans the full
+    // Hide the viewport popup. It still spans the full
     // main client (ApplyFullClient above) and the D3D9 swapchain on its
     // hidden HWND keeps rendering into the AlphaCompositor's shared RT,
     // which the host's DComp path presents — the WebView2 DOM canvas is the
@@ -4115,7 +4114,7 @@ int HostWindowImpl::Run(int nCmdShow)
                 // Honor the persisted ShowGround setting in headless --capture too.
                 // The host path (unlike main.cpp startup) never read it, so the
                 // ground was always drawn; a clean background (registry ShowGround=0)
-                // lets a capture isolate the sprite — e.g. the §6 spin test, where
+                // lets a capture isolate the sprite — e.g. the spin test, where
                 // terrain-through-transparency otherwise contaminates the read.
                 {
                     HKEY hKey; DWORD gval = 1, gsz = sizeof(gval), gtype = 0;
@@ -4259,7 +4258,7 @@ int HostWindowImpl::Run(int nCmdShow)
                     // camera fit is skipped (default camera) and the object resolves during the
                     // render loop. A truly-bogus ref that NEVER resolves is caught downstream:
                     // RenderReferenceShadows never draws, so its [redbug-shadow] marker is absent
-                    // and tasks/redbug-shadow-decl-check.ps1 (the durable guard) fails. Don't
+                    // and the durable guard fails. Don't
                     // hard-fail here — that would also kill a valid-but-still-resolving object.
                     Log("[redbug] ref object '%s' not resolved at startup (status=%d); camera fit "
                         "skipped, will resolve during the render loop\n", refName, (int)rs);
@@ -4344,12 +4343,11 @@ int HostWindowImpl::Run(int nCmdShow)
     // dialogs; tool panels live in React under WebView2 (which has its
     // own input routing and doesn't need TranslateAccelerator either).
     //
-    // [resize-perf Fix B1] The render is PACED to the display's refresh
+    // [resize-perf] The render is PACED to the display's refresh
     // cadence instead of free-running. The unpaced loop measured ~3000 fps
     // at idle ([PERF] probe): one core pegged and the GPU saturated with
     // queued frames, starving WebView2's renderer during splitter drags
-    // (the dominant splitter-jank amplifier — see
-    // tasks/resize-perf-investigation.md, fix B). Mechanics:
+    // (the dominant splitter-jank amplifier). Mechanics:
     //   - render only when the per-frame QPC budget has elapsed;
     //   - between frames, MsgWaitForMultipleObjectsEx sleeps until EITHER
     //     input/messages arrive (instant wake — input latency unchanged)
@@ -4647,11 +4645,11 @@ int HostWindowImpl::Run(int nCmdShow)
         }
     }
 
-    // [resize-perf Fix B1] matching release for the timeBeginPeriod above.
+    // [resize-perf] matching release for the timeBeginPeriod above.
     timeEndPeriod(1);
 
     g_self = nullptr;
-    // B1.3.1.1: matching shutdown for the GdiplusStartup above. Safe
+    // Matching shutdown for the GdiplusStartup above. Safe
     // here because the message pump has drained: no dispatcher
     // handlers (CaptureSnapshotPng et al) can run after WM_QUIT.
     if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);

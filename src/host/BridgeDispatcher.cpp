@@ -4,8 +4,8 @@
 #include "InputDispatcher.h"
 #include "LayoutBroker.h"
 #include "WindowCapture.h"
-#include "HostMessages.h"   // WM_APP_QUIT_CONFIRMED (audit D1)
-#include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
+#include "HostMessages.h"   // WM_APP_QUIT_CONFIRMED
+#include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated)
 #include "third_party/nlohmann/json.hpp"
 
 #include "../engine.h"
@@ -90,8 +90,8 @@ static bool ParseCssColorToColorRef(const std::string& in, COLORREF& out)
     return true;
 }
 
-// Defined in src/main.cpp (relocated there when arch-A's EmitterList.cpp
-// was removed in); reused by the host's emitter-mutation handlers.
+// Defined in src/main.cpp (relocated there when the legacy EmitterList.cpp
+// was removed); reused by the host's emitter-mutation handlers.
 // Declared extern here so the dispatcher can link against it without a
 // header dependency on main.cpp.
 extern std::string GenerateDuplicateName(const ParticleSystem* system,
@@ -179,7 +179,7 @@ Engine::LightType ParseLightWhich(const std::string& s)
     return Engine::LT_SUN;  // default / "sun"
 }
 
-// Recent-files registry helpers. Phase 3 Screen 8 Batch 3.
+// Recent-files registry helpers.
 //
 // Storage layout matches legacy's `AddToHistory` / `GetHistory` in
 // src/main.cpp:650-768 — values under `HKCU\Software\AloParticleEditor`
@@ -293,7 +293,7 @@ std::vector<std::wstring> WriteRecentFile(const std::wstring& path)
 
 // Persist the skydome selection to HKCU\Software\AloParticleEditor
 // using the SAME value names/types as the legacy `WriteSkydomeIndex` /
-// `WriteSkydomeCustomPath` (legacy Win32 UI, removed in), so a dome chosen in the new
+// `WriteSkydomeCustomPath` (legacy Win32 UI, since removed), so a dome chosen in the new
 // UI survives restart AND round-trips with the legacy picker. The new-UI
 // skydome handlers previously only marked the doc dirty (no registry write),
 // so a daily-driver selection was silently lost on restart — these close that
@@ -543,7 +543,7 @@ json SpawnerConfigToJson(const SpawnerConfig& cfg)
     };
 }
 
-// Screen 4 Batch B1 — wire-name ↔ LinkExemptFlags::member mapping.
+// Wire-name ↔ LinkExemptFlags::member mapping.
 // Mirrors the legacy field table at [src/UI/EmitterList.cpp:2381]
 // (kLinkSettingsFields), but uses camelCase field names that match the
 // schema's wire surface. Excludes `name` (intrinsically exempt;
@@ -691,7 +691,7 @@ LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
 // the same order as legacy `ImportEmitters_AddTreeItem` (during-life
 // before on-death) so the import dialog tree matches.
 //
-// Screen 4 Batch A: extended with `role` / `linkGroup` / `visible`.
+// extended with `role` / `linkGroup` / `visible`.
 // `role` is derived from how this emitter is attached to its parent's
 // spawn slot (lifetime vs death); top-level emitters return "root".
 // The sentinel for "no spawn child" is `(size_t)-1` — matches the
@@ -727,7 +727,7 @@ json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx)
         {"role",      role},
         {"linkGroup", static_cast<unsigned int>(emit.linkGroup)},
         {"visible",   emit.visible},
-        // chain-load warning: spawn-quantity params mirrored onto
+        // Chain-load warning: spawn-quantity params mirrored onto
         // every tree node so the React side can estimate per-chain alive
         // counts without N get-properties round-trips. Field names match
         // EmitterPropertiesDto / SpawnParamsDto in bridge-schema.
@@ -743,7 +743,7 @@ json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx)
     };
 }
 
-// Phase 3 Screen 8 Batch 4 — default spawner-config JSON. Mirrors the
+// Default spawner-config JSON. Mirrors the
 // `SpawnerConfig()` initialiser at [src/SpawnerDriver.h:18]. Used to
 // seed the dispatcher's cached config on construction so the first
 // snapshot returns a populated `spawner` field even before any
@@ -819,7 +819,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         : json(WideToUtf8(currentFilePath));
 
     return json{
-        // Editor-level state (Screen 8 Batch 3).
+        // Editor-level state.
         {"currentFilePath",       filePathField},
         {"dirty",                 dirty},
 
@@ -892,7 +892,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"wind",                  Vec3ToJson(engine->GetWind())},
         {"gravity",               Vec3ToJson(engine->GetGravity())},
 
-        // Spawner (Phase 3 Screen 8 Batch 4) — cached on the dispatcher.
+        // Spawner — cached on the dispatcher.
         // Host doesn't yet own a SpawnerDriver*; the cache is what
         // spawner/start writes into and what subsequent snapshots read
         // back. Empty object when never set (shouldn't happen because
@@ -901,7 +901,7 @@ json BuildEngineStateSnapshot(Engine* engine,
                                       ? DefaultSpawnerConfigJson()
                                       : spawnerConfig},
 
-        // Screen 4 Batch A — selected emitter (editor state). Serialise
+        // Selected emitter (editor state). Serialise
         // -1 as JSON null so the schema's `number | null` discriminator
         // works without a sentinel-aware client.
         {"selectedEmitterId",     selectedEmitterId < 0
@@ -952,14 +952,14 @@ BridgeDispatcher::BridgeDispatcher(Engine* engine, LayoutBroker& layout,
     // mount even when the user has prior history).
     m_recentFiles = ReadRecentFiles();
 
-    // Phase 3 Screen 8 Batch 4: seed the spawner-config cache from the
+    // Seed the spawner-config cache from the
     // shared default JSON so the first snapshot returns the same struct
     // a freshly-constructed `SpawnerConfig()` would. Subsequent
     // spawner/start requests overwrite this in DispatchInternal.
     m_spawnerConfig = DefaultSpawnerConfigJson();
 }
 
-// G2: defensive envelope for any json::exception that escapes
+// Defensive envelope for any json::exception that escapes
 // DispatchInternal. The outer try/catch in Dispatch and DispatchSync wraps
 // only json::parse; per-handler `.get<T>()` / `.value(...)` / `is_T()`
 // calls inside DispatchInternal can still throw nlohmann::json::type_error
@@ -988,7 +988,7 @@ static json BuildDispatchExceptionEnvelope(const json& parsed, const char* what)
 void BridgeDispatcher::SetEngine(Engine* engine)
 {
     m_engine = engine;
-    // [guard-config §2] Reapply the cached overload-guard config so a
+    // [guard-config] Reapply the cached overload-guard config so a
     // recreated engine never silently reverts to defaults. Today the
     // engine is constructed once per process (HostWindow startup) and
     // this is a no-op safety net; if a future change recreates the
@@ -1024,7 +1024,7 @@ void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
         return;
     }
 
-    // G2: catch json::exception escaping DispatchInternal.
+    // Catch json::exception escaping DispatchInternal.
     json res;
     try
     {
@@ -1074,7 +1074,7 @@ std::string BridgeDispatcher::DispatchSync(const std::string& jsonRequest)
         return err.dump();
     }
 
-    // G2: catch json::exception escaping DispatchInternal.
+    // Catch json::exception escaping DispatchInternal.
     try
     {
         return DispatchInternal(parsed).dump();
@@ -1134,7 +1134,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return false;
     };
 
-    // Phase 3 Screen 8 Batch 3: every mutating engine/set/* and
+    // Every mutating engine/set/* and
     // engine/action/* (the destructive ones) ends with a SetDirty(true)
     // so the dirty flag + dirty/changed event fire after the parameter
     // change. SetDirty itself debounces (no-op when already dirty), so
@@ -1154,7 +1154,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     }
 
     // -------- layout/scene-rect --------
-    // B1.4 T4c. Under the popup-spans-window architecture the
+    // Under the popup-spans-window architecture the
     // popup HWND covers the WebView's main-row area at all times.
     // This message updates the SUB-RECT inside the popup where the
     // rendered scene should be visible — AlphaCompositor stamps
@@ -1187,7 +1187,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     }
 
     // -------- animate-scene-rect --------
-    // [Item 3] One-shot dock-slide animation. Instead of the per-frame
+    // One-shot dock-slide animation. Instead of the per-frame
     // layout/scene-rect stream (which the uncapped render loop samples at
     // irregular Δt → a juddering viewport edge), the web sends ONE of these at
     // the dock toggle; LayoutBroker then re-renders the engine at a wall-clock-
@@ -1253,7 +1253,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     }
 
     // -------- viewport/capture-snapshot --------
-    // B1.3.1.1: React's Modal primitive calls this on open to grab a
+    // React's Modal primitive calls this on open to grab a
     // frozen image of the engine viewport. It renders the JPEG as an
     // opaque <img> portaled into the WebView2 viewport DOM, covering the
     // live DComp engine visual beneath the transparent WebView2 — so
@@ -1261,7 +1261,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // uniformly. The compositor reads the engine RT back on demand, so
     // the capture sees the raw engine output.
     //
-    // Returns `{ imageBase64, w, h }` — base64 of a JPEG (the
+    // Returns `{ imageBase64, w, h }` — base64 of a JPEG (the 
     // backdrop is shown blurred, so lossy is invisible and far cheaper to
     // encode + transmit than PNG). When the compositor has no frame yet
     // (engine never composited, device just reset), returns an empty string
@@ -1353,7 +1353,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- viewport/input (Phase 2) --------
+    // -------- viewport/input --------
     //
     // DOM mouse/wheel/key events on the in-DOM <canvas> arrive here
     // and are forwarded to InputDispatcher, which PostMessages the
@@ -1380,8 +1380,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- app/quit -----------------------------------------------
     //
-    // React File → Exit (and the native-X → app/close-requested → prompt path,
-    // audit D1) dispatch this AFTER the Save/Discard/Cancel prompt has cleared.
+    // React File → Exit (and the native-X → app/close-requested → prompt path)
+    // dispatch this AFTER the Save/Discard/Cancel prompt has cleared.
     // PostMessage WM_APP_QUIT_CONFIRMED (not WM_CLOSE) so the wndproc's
     // DestroyWindow → WM_DESTROY teardown runs WITHOUT re-entering the dirty
     // WM_CLOSE veto. PostMessage (not SendMessage) so the response envelope is
@@ -1396,7 +1396,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- mods/list, mods/refresh, mods/set-layers () --------
+    // -------- mods/list, mods/refresh, mods/set-layers --------
     //
     // Three thin wrappers around ModManager. ModManager owns the
     // canonical state (mods catalog + the ordered layer stack) and the
@@ -1510,8 +1510,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     {
         if (!requireEngine("snapshot")) return res;
         // Spawner field: prefer the live driver config (host-state
-        // plumbing), fall back to the JSON cache from
-        // Batch 4 when no driver is bound (e.g. unit tests, partial
+        // plumbing), fall back to the JSON cache
+        // when no driver is bound (e.g. unit tests, partial
         // wiring during construction).
         json spawnerJson = m_spawnerDriver
             ? SpawnerConfigToJson(m_spawnerDriver->GetConfig())
@@ -1663,7 +1663,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (kind == "engine/set/reference-object-transform")
     {
         if (!requireEngine(kind.c_str())) return res;
-        // freeze/lock] Drop a UI-routed transform request against a locked
+        // Drop a UI-routed transform request against a locked
         // object — the picker already disables the spinners + Reset, so this is the
         // backstop for a stale/racing request. Returning BEFORE the undo capture
         // below means a dropped request also pushes no phantom undo step. This gates
@@ -1674,7 +1674,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (m_engine->IsReferenceLocked()) { sendOk(json::object()); return res; }
         D3DXVECTOR3 pos = JsonToVec3(params.value("position", json::array()));
         D3DXVECTOR3 rot = JsonToVec3(params.value("rotation", json::array()));
-        // s52] PRE-mutation undo capture, keyed PER changed component
+        // PRE-mutation undo capture, keyed PER changed component
         // (see RefTransformUndoKey.h): an X-spinner edit and a Y-spinner edit
         // are separate undo steps; a no-op set (e.g. Reset on an already-origin
         // object) returns key 0 and we push NO entry. requireEngine() above
@@ -1942,7 +1942,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         sendOk(json::object());
         return res;
     }
-    // T9] stats/set-frozen — test-only knob that suppresses
+    // stats/set-frozen — test-only knob that suppresses
     // the 4 Hz stats/tick emission AND tells React's StatusBar to
     // clear its local state. Used by a11y spec beforeEach to bring
     // the StatusBar to a deterministic placeholder render before
@@ -1967,11 +1967,11 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- engine/action/reset-view-settings ----------------------
     //
-    // (Group D): cascade reset for the View → Reset View Settings
+    // Cascade reset for the View → Reset View Settings
     // menu. Mirrors the legacy main.cpp reset path: pushes engine defaults
     // for background, ground (visibility + Z + texture), bloom (off +
     // canonical strength/cutoff/size), and skydome (Off slot). Lighting
-    // reset rides with D4 (separate handler around Force Align).
+    // reset rides with the lighting reset (separate handler around Force Align).
     //
     // Defaults match the Engine constructor (engine.cpp:1690-1715) —
     // kept in sync by hand because there's only one canonical value
@@ -2050,7 +2050,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // Rescale the active particle system by a duration / size percentage.
     // host-state plumbing: real implementation. Iterates over every
     // emitter in the live ParticleSystem and applies the helper from
-    // src/Rescale.cpp. UndoStack capture is best-effort — Phase 3 emitter
+    // src/Rescale.cpp. UndoStack capture is best-effort — emitter
     // work hasn't seeded the stack baseline yet (see undo/perform notes
     // below), so a Capture here lands in an empty stack with no
     // pre-existing redo to clear; that's correct, it just means undo
@@ -2114,13 +2114,13 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         m_engine->EnumerateReferenceObjects(objs);   // kicks the off-thread build
         json arr = json::array();
         for (const GameObjectRef& r : objs)
-            // Stage 2] domain/role/bucket from the profile classifier drive the
+            // domain/role/bucket from the profile classifier drive the
             // picker's collapsible Heroes / Ground / Space tree (legacy `category` retired).
             arr.push_back(json{ {"name", r.name},
                                 {"domain", ObjDomainName(r.domain)},
                                 {"role",   ObjRoleName(r.role)},
                                 {"bucket", ObjBucketName(r.bucket)},
-                                {"affiliation", r.affiliation} });   // fu] picker faction filter
+                                {"affiliation", r.affiliation} });   // picker faction filter
         // While the catalog builds off the UI thread, `objs` is empty and
         // `building` is true -> the picker shows "Loading objects…" and re-queries when
         // the catalog-ready engine/state/changed event fires (see HostWindow RenderD3D9).
@@ -2155,7 +2155,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // its displayed controls from — intensity/colour kept SEPARATE (the
     // engine snapshot only carries the lossy folded Vec4). Follows the value
     // names/types the legacy `LightingDlgProc` registry reads used (native Win32
-    // UI, removed in): same names/types (floats REG_BINARY, colours + the flag
+    // UI, since removed): same names/types (floats REG_BINARY, colours + the flag
     // REG_DWORD). Colours go on the wire as packed COLORREF ints (`Color`).
     //
     // Gated under --test-host (returns the canonical defaults, NOT the live
@@ -2344,7 +2344,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // duplicate, silently swallowing the undo (undo→redo→undo lost the
     // second undo). Skip the auto-cap mid-redo-branch (the post-state is
     // already at entries[cursor]) or on an empty stack (CanUndo would
-    // be false anyway). See tasks/todo.md §3 for the full trace.
+    // be false anyway).
     if (kind == "undo/perform")
     {
         std::string dir = params.value("direction", std::string("undo"));
@@ -2356,7 +2356,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
                 && m_undo->Depth() > 0
                 && m_undo->IsLiveAhead())
             {
-                // s52] Route through the chokepoint so the auto-capped
+                // Route through the chokepoint so the auto-capped
                 // live state carries the CURRENT ref transform (else the first
                 // Ctrl+Z after a gizmo drag would restore an older transform).
                 CaptureUndoPoint(0);
@@ -2364,7 +2364,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
             const std::vector<char>* snap = nullptr;
             size_t selIdx = SIZE_MAX;
-            UndoStack::EditorAux aux;   // s52] restored ref transform
+            UndoStack::EditorAux aux;   // restored ref transform
             if (dir == "undo" && m_undo->CanUndo())
             {
                 applied = m_undo->Undo(&snap, &selIdx, &aux);
@@ -2388,17 +2388,17 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- file/* (Phase 3 Screen 8 Batch 3) ----------------------
+    // -------- file/* ----------------------
     //
     // The new-UI host doesn't yet own a ParticleSystem* (emitter / file-
-    // load wiring is later-batch work in Phase 3+). So the file handlers
+    // load wiring is later work). So the file handlers
     // perform the *editor-level* side of the operation — currentFilePath
     // tracking, dirty flag, recent-files registry, native picker
     // round-trip — but skip the engine-level ParticleSystem read/write
     // until that pointer exists. Same forward-compatible no-op pattern
-    // as engine/action/rescale-system in Batch 1. (The arch-A `DoNewFile` /
-    // `DoOpenFile` / `DoSaveFile` handlers in src/main.cpp were removed in
-    //; these bridge handlers are now the only file-operation path.)
+    // as engine/action/rescale-system. (The legacy `DoNewFile` /
+    // `DoOpenFile` / `DoSaveFile` handlers in src/main.cpp were since
+    // removed; these bridge handlers are now the only file-operation path.)
 
     // -------- file/new --------
     // replace the host-owned ParticleSystem with a fresh empty
@@ -2450,7 +2450,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         sendOk(json::object());
         SetDirty(false);
         EmitEngineStateChanged();
-        // B1.3.1 polish round 3: React's EmitterTree subscribes to
+        // Polish round 3: React's EmitterTree subscribes to
         // emitters/tree/changed; without this emit the tree stays on
         // its pre-file/new state even after the ParticleSystem has
         // been swapped under it.
@@ -2797,7 +2797,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         {
             *m_pParticleSystem = std::move(loaded);
         }
-        // Load-time sweep: pre-.alo files may contain
+        // Load-time sweep: older .alo files may contain
         // single-member link groups. Sweep once after binding so the
         // data layer matches the render-layer filter from frame one.
         // Does NOT call markDirty() — the correction is a
@@ -2812,7 +2812,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (m_undo) m_undo->Clear();
         // Refresh the "saved" reference snapshot — the just-loaded
         // state IS the saved file's content. Captured AFTER the
-        // sweep so legacy singleton-link-group .alo files don't show
+        // link-group sweep so legacy singleton-link-group .alo files don't show
         // as dirty when the user undoes back to "as loaded".
         if (m_pParticleSystem && *m_pParticleSystem)
             m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
@@ -2823,7 +2823,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         {
             m_engine->Clear();
             m_engine->OnParticleSystemChanged(-1);
-            // B1.3.1 polish round 3: the legacy native DoOpenFile relied
+            // Polish round 3: the legacy native DoOpenFile relied
             // on first-render lazy texture binding via per-instance
             // construction; the host's WebView2 composition timing
             // produces white-fallback particles unless we explicitly
@@ -2839,7 +2839,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         SetDirty(false);
         EmitRecentChanged();
         EmitEngineStateChanged();
-        // B1.3.1 polish round 3: React's EmitterTree subscribes to
+        // Polish round 3: React's EmitterTree subscribes to
         // emitters/tree/changed; without this emit the tree stays on
         // the previous file's emitters even though the engine now
         // holds the new file's ParticleSystem.
@@ -2911,7 +2911,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
         sendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
         SetDirty(false);
-        //: the work is now on disk — this session's autosave is
+        // The work is now on disk — this session's autosave is
         // redundant. Delete it so a clean exit leaves no orphan to prompt
         // for. Further edits re-create it on the next tick. (Mirrors legacy
         // main.cpp DeleteOurSession-after-save.)
@@ -2979,7 +2979,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
         sendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
         SetDirty(false);
-        //: see file/save — autosave is redundant once saved to disk.
+        // See file/save — autosave is redundant once saved to disk.
         Autosave::DeleteOurSession();
         EmitRecentChanged();
         EmitEngineStateChanged();
@@ -3000,12 +3000,12 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- autosave/check-recovery () --------
+    // -------- autosave/check-recovery --------
     //
     // React calls this once on mount. Scan %TEMP%\AloParticleEditor\ for an
     // orphaned autosave left by a crashed prior session and return it (or
     // null). Suppressed under --test-host (the harness must never get a
-    // recovery prompt — it would pollute a11y captures, cf.) and when a
+    // recovery prompt — it would pollute a11y captures) and when a
     // document is already loaded (a CLI file / any non-untitled state "wins"
     // over recovery, matching the legacy main.cpp). Stash the live
     // OrphanSession so autosave/recover can consume its temp paths w/o re-scan.
@@ -3046,7 +3046,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- autosave/recover () --------
+    // -------- autosave/recover --------
     //
     // Apply the recovery choice from the React dialog. For recent/stable,
     // load the chosen temp .alo via the SAME swap+notify sequence file/open
@@ -3110,15 +3110,15 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- spawner/* (Phase 3 Screen 8 Batch 4) -------------------
+    // -------- spawner/* -------------------
     //
-    // The new-UI host doesn't yet own a SpawnerDriver* (matches Batch 3
-    // for ParticleSystem*). The handlers do the *editor-level* side of
+    // The new-UI host doesn't yet own a SpawnerDriver* (matches the
+    // ParticleSystem* situation). The handlers do the *editor-level* side of
     // the work: cache the incoming config in m_spawnerConfig so a
     // subsequent engine/state/snapshot returns it, log the request for
     // diagnostics, and broadcast engine/state/changed so React sees the
-    // updated config land. When SpawnerDriver wiring happens in a later
-    // batch, the cached config can be passed directly into
+    // updated config land. When SpawnerDriver wiring happens later,
+    // the cached config can be passed directly into
     // `m_spawnerDriver->SetConfig(...)` from these same handlers.
     //
     // Note: spawner config is session state (matches legacy: "never
@@ -3144,9 +3144,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     {
         // real trigger. Note that without per-frame Tick wiring
         // the burst-state machine doesn't advance — Trigger schedules
-        // a burst that won't actually fire instances until a later
-        // batch wires SpawnerDriver::Tick into the render loop. That's
-        // the documented out-of-scope item for this batch.
+        // a burst that won't actually fire instances until later
+        // work wires SpawnerDriver::Tick into the render loop. That's
+        // a documented out-of-scope item for now.
         if (m_spawnerDriver
             && m_pParticleSystem
             && *m_pParticleSystem
@@ -3246,7 +3246,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- emitters/list -----------------------------------------
     //
-    // Screen 4 Batch A — real implementation. Walks the live particle
+    // Real implementation. Walks the live particle
     // system and returns a synthetic-root wrapper whose children are
     // the real top-level emitters. Returns an empty wrapper if no
     // system is bound (e.g. tests that haven't wired BindHostState).
@@ -3284,7 +3284,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- emitters/select ---------------------------------------
     //
-    // Screen 4 Batch A — selection state lives on the dispatcher (it's
+    // Selection state lives on the dispatcher (it's
     // editor state, not engine state). Update the scalar, emit the
     // narrow `emitters/selected` event (subscribed to by EmitterTree)
     // and a follow-up engine/state/changed so any snapshot consumer
@@ -3331,7 +3331,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- emitters/get-tracks (Screen 6 Batch A) ----------------
+    // -------- emitters/get-tracks ----------------
     //
     // Read-only. Serialises the named emitter's 7 tracks (Red, Green,
     // Blue, Alpha, Scale, Index, RotationSpeed in fixed order). Each
@@ -3441,14 +3441,14 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- Screen 4 Batch B1 — emitter mutations -----------------
+    // -------- emitter mutations -----------------
     //
     // Each handler validates the target emitter, captures a PRE-
     // mutation undo snapshot via captureUndo(), mutates via the
     // ParticleSystem API, then emits `emitters/tree/changed` + dirty.
     // The PRE-mutation timing pairs with undo/perform's head-of-
     // history auto-capture above (see lines ~1396) so Ctrl+Z restores
-    // the state right before the mutation ran. link-group sweeps
+    // the state right before the mutation ran. Link-group sweeps
     // sit BETWEEN the mutation and the next captureUndo — covered by
     // the same snapshot atomically.
 
@@ -3471,7 +3471,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // (a wheel-spun spinner / held arrow on one emitter) fold into a
     // single undo step within the time window — see legacy EP_CHANGE
     // coalescing (main.cpp ~2682).
-    // s52] Forwarder to the member chokepoint — the member also folds
+    // Forwarder to the member chokepoint — the member also folds
     // in the engine's current reference-object transform as snapshot side-band
     // aux (engine-guarded) so undo/redo carries the ref transform on the same
     // timeline. Behavior for the ~30 particle-edit call sites is unchanged.
@@ -3501,7 +3501,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
                 copied = true;
             }
         }
-        //: copySharedParamsFrom REASSIGNS each sibling's non-exempt
+        // copySharedParamsFrom REASSIGNS each sibling's non-exempt
         // track multisets — invalidating any live particle's cached cursor
         // iterators into them, across ALL non-exempt tracks (not just the
         // one the user edited). The callers reseat only the edited track,
@@ -3515,7 +3515,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             m_engine->OnParticleSystemChanged(-1);
     };
 
-    // -------- emitters/get-properties (Phase 4.1 Fix dispatch 1) ----
+    // -------- emitters/get-properties ----
     //
     // Walks every editable Basic + Appearance + Physics field on the
     // named emitter and serialises into an EmitterPropertiesDto. The
@@ -3618,7 +3618,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- emitters/set-properties (Phase 4.1 Fix dispatch 1) ----
+    // -------- emitters/set-properties ----
     //
     // Batch patch: iterate over each key present in `patch` and apply
     // it directly to the target emitter's struct field. Captures undo
@@ -3649,7 +3649,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         // (scroll-wheel ticks, held arrow) within the time window into one
         // undo step; switching field starts a fresh step. Finer than legacy's
         // per-emitter EP_CHANGE coalescing — a deliberate
-        // choice. Key layout: bit 31 set (never 0 = structural), bits
+        // design choice. Key layout: bit 31 set (never 0 = structural), bits
         // 16..30 an order-independent FNV-1a hash of the patch field names,
         // bits 0..15 the emitter id (so different emitters never fold).
         uint32_t fieldHash = 0;
@@ -4115,7 +4115,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- emitters/delete-track-keys + set-track-interpolation --
     //
-    // Screen 5 / Screen 6 Batch B-α track mutations. Both handlers
+    // Track mutations. Both handlers
     // resolve the emitter by id, look up the named track on `tracks[]`
     // (the slot pointer aliasing — see the comment block in
     // ParticleSystem.h:148), then mutate the underlying multiset /
@@ -4369,7 +4369,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- emitters/set-track-key (Screen 6 Batch B-β) ----------
+    // -------- emitters/set-track-key ----------
     //
     // Drag-to-move + Spinner edit commit. Erases the key at
     // `oldTime` from the multiset and inserts `(newTime, newValue)`.
@@ -4463,7 +4463,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- emitters/add-track-key (Screen 6 Batch B-β) ----------
+    // -------- emitters/add-track-key ----------
     //
     // Click-to-add (Insert mode) commit. Inserts a new key into the
     // multiset. If a key at the exact `time` already exists, bumps
@@ -4710,7 +4710,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
                 resolved = true;
             }
         }
-        //: copySharedParamsFrom reassigns each sibling's non-exempt
+        // copySharedParamsFrom reassigns each sibling's non-exempt
         // track multisets, orphaning live particles' cached cursor iterators.
         // Reseat every instance's cursors (the propagateLinkGroup chokepoint
         // pattern). Only fires when we actually copied.
@@ -4746,7 +4746,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- linkGroups/diff-membership () --------------------
+    // -------- linkGroups/diff-membership --------------------
     //
     // Read-only preview of a would-be join's non-exempt field
     // disagreements, so the UI can warn before set-membership silently
@@ -4904,7 +4904,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- Screen 4 Batch B2 — add child / move / link-group memb -
+    // -------- add child / move / link-group memb -
 
     // -------- emitters/add-lifetime-child ---------------------------
     //
@@ -4938,7 +4938,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- emitters/add-root --------------------------------------
     //
-    // Phase 4.1 Fix dispatch 5 — wraps `ParticleSystem::addRootEmitter()`
+    // Wraps `ParticleSystem::addRootEmitter()`
     // for the new top-level Emitters → New Emitter → Root menu item.
     // The engine always succeeds (no max-roots cap); the only failure
     // path is a missing particle-system pointer, surfaced as
@@ -5111,7 +5111,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- emitters/set-visible -----------------------------------
     //
-    // (Group A): per-emitter visibility toggle for the EmitterTree
+    // Per-emitter visibility toggle for the EmitterTree
     // panel toolbar's [👁] button. Sets `Emitter::visible` for the
     // target only — children are untouched. `visible` is editor-only
     // state (not persisted to the .alo file), so this handler does NOT
@@ -5136,7 +5136,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- emitters/set-all-visible -------------------------------
     //
-    // (Group A): bulk Show All / Hide All from the EmitterTree
+    // Bulk Show All / Hide All from the EmitterTree
     // panel toolbar. Walks the entire emitter array (the engine stores
     // all emitters flat with parent pointers — no recursion needed)
     // and sets `visible` uniformly. Same editor-only semantic as
@@ -5267,7 +5267,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         // any future caller honest.
         EnforceSingleMemberLinkGroups();
 
-        //: Join/Create call `copySharedParamsFrom`, which REPLACES
+        // Join/Create call `copySharedParamsFrom`, which REPLACES
         // each joining member's non-exempt track multisets with copies from
         // the canonical member. Any live particle of those members holds
         // cached cursor iterators into the OLD containers — now orphaned —
@@ -5286,7 +5286,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- emitters/drop (Screen 4 Batch B3) ----------------------
+    // -------- emitters/drop ----------------------
     //
     // Drag-and-drop reorder + reparent. Tagged-union on params.mode:
     //   - "reorder":  wraps `ParticleSystem::moveEmitterToRootIndex`.
@@ -5477,7 +5477,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- emitters/copy / cut / paste (Screen 4 Batch C) --------
+    // -------- emitters/copy / cut / paste --------
     //
     // Process-local clipboard. We reuse the existing import-from-
     // file serialise pattern: per emitter, allocate a MemoryFile, wrap
@@ -5707,7 +5707,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     }
 
     // -------- everything else (emitters/* etc.) ---------------------
-    sendErr("not implemented yet (Phase 3+)");
+    sendErr("not implemented yet");
     return res;
 }
 
@@ -5789,7 +5789,7 @@ void BridgeDispatcher::CommitReferenceObjectTransform()
     EmitEngineStateChanged();
 }
 
-// s52] See the header. PRE-mutation capture chokepoint: live PS +
+// See the header. PRE-mutation capture chokepoint: live PS +
 // selection + (engine-guarded) current reference-object transform as aux.
 void BridgeDispatcher::CaptureUndoPoint(DWORD coalesceKey)
 {
@@ -5817,7 +5817,7 @@ void BridgeDispatcher::CaptureUndoPoint(DWORD coalesceKey)
         m_undo->Capture(*sys, selIdx, 0, aux);
 }
 
-// s52] Host-facing wrapper for a gizmo gesture — one non-coalescing
+// Host-facing wrapper for a gizmo gesture — one non-coalescing
 // undo point. Called on the first real per-move mutation of a drag.
 void BridgeDispatcher::CaptureReferenceTransformUndoPoint()
 {
@@ -5994,7 +5994,7 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
         m_emit(env.dump());
     }
 
-    // s52] Restore the reference-object transform that rode with this
+    // Restore the reference-object transform that rode with this
     // snapshot, and keep the registry in step. Engine-guarded (null when D3D
     // init failed); applied AFTER the PS swap/Clear so nothing clobbers it.
     // The undo/perform caller emits engine/state/changed next, which re-reads
@@ -6029,8 +6029,8 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
 // computeLinkGroupBrackets (web/apps/editor/src/lib/link-group-colors.ts).
 // Called from emitters/delete + linkGroups/set-membership (the two
 // mutation paths that can leave a group with exactly one member —
-// see ROADMAP §1.1 for the enumeration) AND from file/open
-// after binding a loaded ParticleSystem (so pre-saved files
+// see the ROADMAP for the enumeration) AND from file/open
+// after binding a loaded ParticleSystem (so older saved files
 // with singletons self-correct on load). Callers handle their own
 // captureUndo() / SetDirty() — the sweep itself is silent on both.
 void BridgeDispatcher::EnforceSingleMemberLinkGroups()
@@ -6111,7 +6111,7 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
             EmitEngineStateChanged();
         }
     }
-    // T9] Gate test-driven freeze. When frozen, the React
+    // Gate test-driven freeze. When frozen, the React
     // StatusBar has already cleared its state (via stats/frozen-
     // changed) and is rendering placeholders; emitting would
     // re-populate it with non-deterministic per-frame values.

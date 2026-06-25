@@ -1,8 +1,8 @@
-// EmitterPropertyTabs — lower-left quadrant of the four-quadrant layout
-// (Phase 4.1 Fix dispatch 1). Three tabs (Basic / Appearance / Physics)
+// EmitterPropertyTabs — lower-left quadrant of the four-quadrant layout.
+// Three tabs (Basic / Appearance / Physics)
 // driven by Radix Tabs. The Basic tab is fully wired this batch — 18
 // form fields commit via `emitters/set-properties { id, patch: { ... } }`.
-// Appearance + Physics tabs render "Coming in Fix dispatch N"
+// Appearance + Physics tabs render "coming soon"
 // placeholders; the schema-side DTO carries every field they need.
 //
 // Replaces the legacy `src/UI/Emitter.cpp` modal (873 LOC, ~150 control
@@ -118,9 +118,9 @@ const GT_CYLINDER = 4;
 // on-wire projection of `ParticleSystem::Emitter::groups[NUM_GROUPS]`.
 // Engine constants at [src/ParticleSystem.h:28-30]:
 //   GROUP_SPEED    = 0  → "Initial speed"   (rendered in PhysicsTab)
-//   GROUP_LIFETIME = 1  → "Lifetime"        (NOT rendered — Q4 decision;
-//                                            schema retained for
-//                                            round-trip fidelity)
+//   GROUP_LIFETIME = 1  → "Lifetime"        (NOT rendered; schema
+//                                            retained for round-trip
+//                                            fidelity)
 //   GROUP_POSITION = 2  → "Initial position" (rendered in PhysicsTab)
 // PhysicsTab indexes groups[0] and groups[2] explicitly; index 1 is
 // preserved on the wire but absent from the inspector.
@@ -232,7 +232,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
     [bridge],
   );
 
-  // B1.3.1: the tab strip is always mounted so the user can see the
+  // The tab strip is always mounted so the user can see the
   // Basic/Appearance/Physics structure (and pre-click a tab) before any
   // emitter is selected. The per-Content `renderBody` helper swaps in a
   // placeholder when no selection / loading, so only the active tab's
@@ -392,8 +392,8 @@ export function BasicTab({
   // Tri-state Generation mode derived from (useBursts, isWeatherParticle).
   // Legacy parity: weather wins when set (the legacy UI surfaces weather
   // mode regardless of useBursts), then bursts vs continuous splits on
-  // the remaining axis. See spec §5.1 + Risk #1 for the atomic-patch
-  // rationale — each setMode call fires ONE patch carrying both keys so
+  // the remaining axis. The atomic-patch rationale —
+  // each setMode call fires ONE patch carrying both keys so
   // the engine never observes a transient inconsistent state pair.
   const mode: GenerationMode = properties.isWeatherParticle
     ? "weather"
@@ -466,7 +466,7 @@ export function BasicTab({
       </Section>
 
       <Section title="Generation">
-        {/* Hand-rolled radio rows (not Radix RadioGroup) per spec §5.1
+        {/* Hand-rolled radio rows (not Radix RadioGroup)
             — keeps the visual fidelity tight to the legacy three-row
             stack while still being keyboard-accessible. The wrapper
             div carries role="radiogroup" so screen readers announce
@@ -538,8 +538,7 @@ export function BasicTab({
           />
           {/* NOTE: Continuous and Weather both bind to nParticlesPerSecond
               but carry distinct aria-labels ("Particles/second:" vs
-              "Particles:") so getByLabelText still distinguishes them.
-              Per spec Risk #3. */}
+              "Particles:") so getByLabelText still distinguishes them. */}
           <FieldSpinner
             label="Particles:"
             value={properties.nParticlesPerSecond}
@@ -623,7 +622,7 @@ export function BasicTab({
 
 // ─── Field row primitives ──────────────────────────────────────────
 //
-// Task 2.5: form rows use the design's `.form-row` 3-column grid
+// Form rows use the design's `.form-row` 3-column grid
 // (label / input / unit) from components.css. The optional third
 // column carries the unit hint (e.g. "s", "%"); empty for fields
 // that don't have one.
@@ -825,7 +824,7 @@ export function FieldSpinner({
    *  multipliers). "mid" = +25 % (~73 px), "wide" = +50 % (~87 px),
    *  "x2" = doubled (~116 px). */
   widthBoost?: "mid" | "wide" | "x2";
-  /** Optional data-testid for a11y surface drivers (T8). Applied to the
+  /** Optional data-testid for a11y surface drivers. Applied to the
    *  outermost .form-row div so the surface selector targets the spinner
    *  row as a unit. Use sparingly — only at callsites that need UIA
    *  capture anchoring. */
@@ -861,7 +860,7 @@ export function FieldSpinner({
   return (
     <div className={rowClass} data-testid={testId}>
       <span className="lbl">{label}</span>
-      {/* Task 2.5: the design's .form-row 3rd column carries the unit
+      {/* The design's .form-row 3rd column carries the unit
           hint, so we suppress the Spinner's inline trailing-unit overlay
           here. Outside .form-row callers still get the inline unit. */}
       <Spinner
@@ -1008,17 +1007,17 @@ function FieldSelect({
 
 // Exported for direct testing — Radix Tabs in jsdom doesn't reliably
 // switch via fireEvent (the known pointer-event flake noted in the
-// Fix dispatch 1 tests), so vitest mounts AppearanceTab directly.
+// tests), so vitest mounts AppearanceTab directly.
 //
-// B1.3-P5 restructure — five sections matching legacy
+// Restructure — five sections matching legacy
 // IDD_EMITTER_PROPS2 (`src/UI/EmitterEditor.rc:381-385`):
 //   Textures / Random color addition / Tail / Rotation / Rendering.
 //
 // Field moves vs the prior layout:
 //   - Rotation block (random rotation direction, fixed rotation,
 //     average, variance) moved IN from the Basic tab.
-//   - `affectedByWind` moved OUT to Physics > Initial speed (P6).
-//   - `nTriangles` dropped from the inspector entirely (Q2 decision);
+//   - `affectedByWind` moved OUT to Physics > Initial speed.
+//   - `nTriangles` dropped from the inspector entirely;
 //     the schema field is retained on the wire.
 //
 // Semantic flip on "Always face camera" (legacy IDC_CHECK16,
@@ -1104,7 +1103,7 @@ export function AppearanceTab({
           decimals={0}
           onCommit={(v) => onCommit({ textureSize: Math.max(1, Math.round(v)) })}
         />
-        {/* Minimum scale: adopts displayInvertedPercent (B1.3-P2) —
+        {/* Minimum scale: adopts displayInvertedPercent —
             matches legacy IDC_SPINNER13 inversion at
             [src/UI/Emitter.cpp:492]. The stored ratio (0..1) displays
             as `100 - val*100` and commits `(100 - displayed)/100`. */}
@@ -1208,7 +1207,7 @@ export function AppearanceTab({
       </Section>
 
       <Section title="Rotation">
-        {/* Rotation block moved in from the Basic tab in B1.3-P5.
+        {/* Rotation block moved in from the Basic tab.
             The Average/Variance fields are disabled when
             `randomRotation === false` — mirrors legacy
             [src/UI/Emitter.cpp:201-206]. Variance carries a `± °`
@@ -1223,7 +1222,7 @@ export function AppearanceTab({
           checked={properties.randomRotation}
           onCheckedChange={(v) => onCommit({ randomRotation: v })}
         />
-        {/* PRM-4/PRM-5: the engine stores these as a normalised ratio; the
+        {/* The engine stores these as a normalised ratio; the
             legacy panel displayed average as ×360 (integer −180..180°) and
             variance as ×100 (integer 0..100), committing typed/360 and
             typed/100 (Emitter.cpp:498-499, 828-829). The host serialises the
@@ -1292,10 +1291,10 @@ export function AppearanceTab({
 
 // Exported for direct testing — matches the AppearanceTab pattern.
 // Radix Tabs in jsdom doesn't reliably switch via fireEvent (known
-// pointer-event flake from Fix dispatch 1), so vitest mounts
+// pointer-event flake), so vitest mounts
 // PhysicsTab directly.
 //
-// B1.3-P6 restructure — four sections matching legacy
+// Restructure — four sections matching legacy
 // IDD_EMITTER_PROPS3 (`src/UI/EmitterEditor.rc:347-417`):
 //   Initial position / Initial speed / Acceleration / Ground
 //   interaction.
@@ -1307,12 +1306,12 @@ export function AppearanceTab({
 //   - `affectedByWind` moved IN from Appearance, now under Initial
 //     speed (matches legacy IDD_EMITTER_PROPS3, .rc:350).
 //   - `emitFromMesh` + `emitFromMeshOffset` moved OUT to Basic >
-//     Connection (P4).
+//     Connection.
 //   - `isWeatherParticle` + `weatherCubeSize` + `weatherCubeDistance`
-//     moved OUT to Basic > Generation Weather radio (P3).
-//   - `weatherFadeoutDistance` dropped (Q3; schema retained).
+//     moved OUT to Basic > Generation Weather radio.
+//   - `weatherFadeoutDistance` dropped (schema retained).
 //   - `groups[1]` (Lifetime random-param) dropped from the render
-//     tree (Q4); schema array still carries 3 entries, we just don't
+//     tree; schema array still carries 3 entries, we just don't
 //     render index 1.
 //
 // Weather-mode disable cascade (matches legacy
@@ -1468,7 +1467,7 @@ export function PhysicsTab({
           testId="physics-ground-behavior-trigger"
           widthBoost="mid"
         />
-        {/* PRM-6: legacy bounciness was an unbounded float (Emitter.cpp:259-266,
+        {/* Legacy bounciness was an unbounded float (Emitter.cpp:259-266,
             506). Don't clamp to [0,1] — a modder can use >1 (super-elastic) and
             existing files outside [0,1] must round-trip on edit. */}
         <FieldSpinner

@@ -23,7 +23,7 @@
 // on select; see Engine::SetReferenceObject).
 enum class ReferenceObjectStatus { None, Ok, Skinned, LoadFailed, ModelMissing };
 
-///S49] Per-slot load outcome for a game skydome, surfaced in the
+// Per-slot load outcome for a game skydome, surfaced in the
 // engine-state snapshot so the Background picker can distinguish "no dome
 // chosen" from "dome chosen but its .alo wouldn't load" (the latter silently
 // falls through to the solid-colour background; see Engine::RenderSkydomes).
@@ -138,7 +138,7 @@ public:
 	// unbounded dimension is instance count).
 	static constexpr int kDefaultMaxPreviewParticles = 10'000;
 	// One knob: the instance ceiling derives from the particle cap,
-	// preserving #121's 100k:5k ratio (10k → 500 live instances —
+	// preserving the 100k:5k ratio (10k → 500 live instances —
 	// vanilla effects run tens; raising the particle knob raises this).
 	static constexpr int kInstancesDivisor           = 20;
 	// Defensive clamp bounds for SetOverloadGuard — engine invariants
@@ -218,7 +218,7 @@ public:
 
 	float    GetGroundZ() const		{ return m_groundZ; }
 	int      GetGroundTexture() const { return m_groundTextureIndex; }
-	//: main.cpp's thumbnail generator needs the D3D9 device to
+	// main.cpp's thumbnail generator needs the D3D9 device to
 	// create scratch textures via D3DXCreateTextureFromFile*Ex with
 	// width/height clamped to 64×64. Exposed read-only.
 	IDirect3DDevice9* GetDevice() const { return m_pDevice; }
@@ -251,19 +251,19 @@ public:
 	// background before it's first opened. Defined in engine.cpp.
 	void ArmCatalogPrefetch();
 
-	// Phase 3 Stage 2: NT-handle alias of the engine's primary
+	// NT-handle alias of the engine's primary
 	// render-target texture, openable from a parallel D3D11 device via
 	// OpenSharedResource. Forwarded from m_pAlphaCompositor->GetShared
 	// Handle() — the AlphaCompositor's offscreen RT is now a shared-
-	// handle texture (Stage 2a promotion). Returns nullptr when the
+	// handle texture. Returns nullptr when the
 	// compositor isn't installed (e.g. canvas-jpeg mode where
 	// the engine renders to its native swap-chain back buffer) or when
-	// Resize hasn't run yet. Stage 4 wires this into the DXGI / DComp
-	// path; Stage 2 only exposes + verifies the handle.
+	// Resize hasn't run yet. The DXGI / DComp path wires this in;
+	// this only exposes + verifies the handle.
 	HANDLE GetSharedTextureHandle() const;
 
-	// Phase 3 Stage 4a — cross-device GPU sync helpers.
-	// Under composition mode (Stage 4+), HostWindow's per-frame loop
+	// Cross-device GPU sync helpers.
+	// Under composition mode, HostWindow's per-frame loop
 	// calls these between engine->Render() (D3D9 draws into the shared
 	// texture) and m_compositor->CompositeEngineFrame() (D3D11
 	// CopyResource from alias to swapchain back buffer). Without the
@@ -272,10 +272,10 @@ public:
 	//
 	// Production port of dxgi_spike.cpp:687-697 with the same 100k-
 	// iteration spin cap. Spike measured 0.30 ms total at 3440x1440;
-	// the spin doesn't dominate. Sub-plan §3.3 path (b): Engine owns
+	// the spin doesn't dominate. Engine owns
 	// the query (it has the D3D9 device anyway), host orchestrates the
 	// call sites under composition mode only — zero overhead on the
-	// non-composition paths (arch-A, canvas-jpeg) which never call.
+	// non-composition paths (canvas-jpeg) which never call.
 	//
 	// Lazy creation on first Issue. m_pEndFrameQuery is released in
 	// Engine::Reset before m_pDevice->Reset (queries aren't D3DPOOL_*
@@ -289,16 +289,16 @@ public:
 	// [PERF] round-2 sub-profiling — per-pass CPU-submit timing (us) of the
 	// last Render() call; the host folds these into the [PERF2] host.log
 	// line. `present` includes the AlphaCompositor::Composite() synchronous
-	// readback. Diagnostic-only; see tasks/todo.md.
+	// readback. Diagnostic-only.
 	struct RenderPassTimingsUs { double scene = 0, bloom = 0, distort = 0, composite = 0, present = 0; };
 	RenderPassTimingsUs GetLastRenderTimings() const { return m_lastRenderTimings; }
 	RenderPassTimingsUs m_lastRenderTimings = {};
 
-	// [resize-perf] Phase-0 probe — per-Reset() sub-stage wall-clock (ms)
+	// [resize-perf] Per-Reset() sub-stage wall-clock (ms)
 	// plus a monotonic call counter, so the host's 1 Hz [resize-perf]
 	// log line can show the device-reset storm during window resize and
-	// size the A2 (cheap settle-reset) payoff. Same diagnostic pattern as
-	// RenderPassTimingsUs above; see tasks/resize-perf-investigation.md.
+	// size the cheap settle-reset payoff. Same diagnostic pattern as
+	// RenderPassTimingsUs above.
 	// `lost` = OnLostDevice + releases + texture-cache wipe (pre-Reset);
 	// `reload` = shader OnReset + skydome/ground re-decode + ResetParameters;
 	// `alpha` = AlphaCompositor::Resize (shared RT + SYSTEMMEM + DIB rebuild).
@@ -317,7 +317,7 @@ public:
 	const ResetPerf& GetResetPerf() const { return m_resetPerf; }
 	ResetPerf m_resetPerf = {};
 
-	// Phase 3 Stage 4b — adapter LUID for the multi-GPU
+	// Adapter LUID for the multi-GPU
 	// guard. Compositor::AttachEngineVisual compares this against
 	// the D3D11 device's adapter LUID; on mismatch (hybrid laptops
 	// where D3D9Ex and D3D11 picked different physical GPUs),
@@ -330,11 +330,11 @@ public:
 	// know" and skips the comparison.
 	LUID GetAdapterLuid() const;
 
-	// Phase 3 Stage 5 — scene-rect viewport (Variant B-γ).
+	// Scene-rect viewport.
 	//
 	// Under composition mode, LayoutBroker calls this on every
 	// React-side layout/scene-rect dispatch (gated on a non-null
-	// DComp Compositor pointer per LayoutBroker R9 mitigation). The
+	// DComp Compositor pointer in LayoutBroker). The
 	// (x, y, w, h) is in main-host-client coords, which equals the
 	// engine RT's coordinate space (the engine RT is currently sized
 	// to full host client per the popup-spans-window invariant).
@@ -345,8 +345,8 @@ public:
 	//      (sceneW / sceneH) via D3DXMatrixPerspectiveFovRH — otherwise
 	//      the scene gets stretched when scene-rect aspect ≠ RT aspect.
 	//   3. Next Engine::Render's scene pass will SetViewport(scene-rect)
-	//      after the full-RT Clear (the D12 ordering rule from sub-plan
-	//      §3.4 — Clear-then-SetViewport prevents post-process bleed
+	//      after the full-RT Clear (the ordering rule —
+	//      Clear-then-SetViewport prevents post-process bleed
 	//      across the scene-rect boundary).
 	//
 	// Passing w<=0 or h<=0 clears the scene viewport: m_projection
@@ -358,8 +358,7 @@ public:
 	// log lines on actual changes via host.log (when wired).
 	//
 	// Survives Engine::Reset (Reset re-applies the cached rect after
-	// rebuilding m_projection at full-RT aspect — sub-plan R8
-	// mitigation). Non-composition transports (canvas-jpeg, arch-A)
+	// rebuilding m_projection at full-RT aspect). Non-composition transports (canvas-jpeg)
 	// never call this so m_sceneViewportActive stays false and Render
 	// behaves identically to today.
 	void SetSceneViewport(int x, int y, int w, int h);
@@ -384,7 +383,7 @@ public:
 	// a separate resolve-state concept rather than overloading "empty".
 	bool     IsGroundSlotAvailable(int slot) const;
 
-	//: number of ground texture slots. Built-in slots 0..4: Dirt (bundled
+	// number of ground texture slots. Built-in slots 0..4: Dirt (bundled
 	// editor default), Grass/Sand/Snow (game-sourced — loaded from the user's
 	// install, NOT bundled), Solid Color (procedural). Slots 5..7 are
 	// user-customisable. Total 8, laid out as a 4×2 grid in the picker dialog.
@@ -396,7 +395,7 @@ public:
 	static const int kGroundSolidColorSlot      = 4;   // 0-based; "Solid Color" slot
 	static const int kGroundThumbnailSize       = 64;
 
-	//: skydome slot layout (dialog and engine share these).
+	// skydome slot layout (dialog and engine share these).
 	// 0=Off, 1-8=bundled scenes, 9-11=user-supplied custom paths.
 	static const int kSkydomeSlotCount       = 12;
 	static const int kSkydomeBundledCount    = 9;   // Off + 8 scenes
@@ -417,7 +416,7 @@ public:
 	const D3DXVECTOR3& GetWind() const    { return m_wind; }
     Effect* GetShader(int i) const        { return m_pShaders[i]; }
 
-	//: read-only access to lighting state for the Lighting dialog's
+	// read-only access to lighting state for the Lighting dialog's
 	// startup seed and WM_USER reseed-from-engine path after Reset View
 	// Settings. The dialog itself owns the UI representation (RGB +
 	// intensity + angles); these getters are used only to read back what
@@ -522,7 +521,7 @@ public:
 	void SetGravity(const D3DXVECTOR3& gravity);
 	void SetGround(bool enable);
 	void SetGroundZ(float z);
-	//: pick one of the ground texture slots (0..kGroundTextureCount-1).
+	// pick one of the ground texture slots (0..kGroundTextureCount-1).
 	// Returns true on success; false if index is out of range, the slot
 	// is empty (no bundled default AND no user-supplied path), or the
 	// texture failed to load. On failure of a non-default index, the
@@ -531,7 +530,7 @@ public:
 	// actually-loaded slot.
 	bool SetGroundTexture(int index);
 
-	//: the procedural solid-colour ground (slot kGroundSolidColorSlot).
+	// the procedural solid-colour ground (slot kGroundSolidColorSlot).
 	// SetGroundSolidColor regenerates a 1×1 D3D texture at the new
 	// colour and, if that slot is currently selected, refreshes the
 	// engine's m_pGroundTexture. Persisted by main.cpp via
@@ -542,7 +541,7 @@ public:
 	COLORREF GetGroundColor() const { return m_groundColor; }
 	bool     SetGroundSolidColor(COLORREF color);
 
-	//: assign a user-supplied texture file to the given slot.
+	// assign a user-supplied texture file to the given slot.
 	// Slots 0-5 already have bundled defaults; setting a custom path
 	// on them overrides the default. Slots 6-11 start empty; a custom
 	// path is what populates them. Setting an empty path reverts to
@@ -553,7 +552,7 @@ public:
 	// path failed to load); false on out-of-range slot index.
 	bool SetGroundSlotCustomPath(int slot, const std::wstring& path);
 
-	//: skydome slot selection and custom-path management.
+	// skydome slot selection and custom-path management.
 	// Slot 0 = Off, slots 1-8 = bundled scenes, slots 9-11 = user-supplied paths.
 	int  GetSkydomeSlot() const { return m_skydomeIndex; }
 	bool SetSkydomeSlot(int index);
@@ -588,7 +587,7 @@ public:
 	// Slot 0 entry is 0 (Off — no texture); slots 1-8 map to IDR_SKYDOME_* constants.
 	static const int* GetSkydomeBundledResources();
 
-	// follow-up: parallel table of in-archive paths for slots 1-8 — what
+	// Parallel table of in-archive paths for slots 1-8 — what
 	// the FileManager should look up first when restoring the slot's texture.
 	// Slot 0 entry is NULL (Solid colour — no asset). Used by the picker
 	// thumbnail builder so its resolution chain matches Engine's.
@@ -650,7 +649,7 @@ public:
 	// and an open picker re-queries its now-ready object list.
 	bool ConsumeCatalogReadyFlag();
 
-	// Unit grid. State + setters land here (); RenderUnitGrid is.
+	// Unit grid. State + setters land here; RenderUnitGrid is separate.
 	void  SetGridVisible(bool visible) { m_gridVisible = visible; }
 	void  SetGridSpacing(float spacing);
 	bool  GetGridVisible()  const { return m_gridVisible; }
@@ -661,7 +660,7 @@ public:
 	void  SetSnapEnabled(bool v) { m_snapEnabled = v; }
 	bool  GetSnapEnabled()  const { return m_snapEnabled; }
 
-	// / S47] In-viewport manipulator (grab a handle, drag to move/rotate
+	// In-viewport manipulator (grab a handle, drag to move/rotate
 	// the reference object). A handle is one of 3 translate arrows or 3 rotate rings,
 	// identified by a (kind, axis) pair; axis 0=X/1=Y/2=Z.
 	struct ManipHandle
@@ -697,9 +696,9 @@ public:
 	                            const D3DXVECTOR3& anchor, float& outU, float& outV) const;
 	void BuildCursorRay(short screenX, short screenY,
 	                    D3DXVECTOR3& outOrigin, D3DXVECTOR3& outDir) const;
-	// polish] The gizmo only shows + is grabbable when the object is
+	// The gizmo only shows + is grabbable when the object is
 	// SELECTED (auto-selected on pick; click the object body to re-select; click
-	// empty to deselect). PickReferenceObject (S46) ray-tests the object's
+	// empty to deselect). PickReferenceObject ray-tests the object's
 	// object-space AABB for the body-click. SetManipulatorHover lets the host
 	// highlight the handle under the cursor (set each idle mouse-move; NONE = none).
 	void SetReferenceObjectSelected(bool selected) {
@@ -710,7 +709,7 @@ public:
 	// [gizmo-drag-teardown] So the host can self-abort an in-flight gizmo drag when
 	// an out-of-band mutation (clear / deselect / lock) deselects the object.
 	bool IsReferenceObjectSelected() const { return m_referenceObjectSelected; }
-	// freeze/lock] Setting the lock re-resolves the CURRENT selection under the
+	// Setting the lock re-resolves the CURRENT selection under the
 	// new state: locking deselects (hides the gizmo + clears manip hover/active);
 	// unlocking leaves the object deselected until the user clicks it again.
 	void SetReferenceLocked(bool locked) {
@@ -744,7 +743,7 @@ public:
 
 	void				Reset();
 
-	// [resize-perf revised Fix A] Cheap RESIZE-ONLY reset via
+	// [resize-perf] Cheap RESIZE-ONLY reset via
 	// IDirect3DDevice9Ex::ResetEx. Per first-party docs (ResetEx, d3d9.h):
 	// "Resets the type, size, and format of the swap chain with all other
 	// surfaces persistent" / "does not cause surfaces, textures or state
@@ -772,7 +771,7 @@ private:
 	// to the highest supported level <= the preference. Render-thread only.
 	void				ApplyMsaaLevelNow();
 
-	///Screen-uniform gizmo handle length (world units), sized so the
+	// Screen-uniform gizmo handle length (world units), sized so the
 	// reference-object gizmo holds a constant on-screen pixel size at its origin.
 	// Reads m_sceneFovY / m_sceneViewportH / m_sceneViewportActive + the camera; see GizmoSizing.h.
 	float				ReferenceGizmoHandleLength() const;
@@ -782,7 +781,7 @@ private:
 	// and binds the named textures.
 	void				BindShaderTextures(Effect* shader);
 
-	//: shared loader used by the constructor, lost-device recovery,
+	// shared loader used by the constructor, lost-device recovery,
 	// and SetGroundTexture. Releases m_pGroundTexture (if any) and
 	// re-creates from the resource ID at kResourceIds[m_groundTextureIndex].
 	// On non-default-index failure, retries with index 0 once. Returns
@@ -810,18 +809,18 @@ private:
 	// bloom targets (Reset / ResetForResize / ResetParameters / dtor).
 	void				ReleaseShadowMaskTargets();
 
-	//: build the UV sphere VB/IB/Decl once at engine init.
+	// build the UV sphere VB/IB/Decl once at engine init.
 	void				InitSkydomeMesh();
-	// Phase 3 Stage 1: split out the VB/IB allocation + fill so
+	// split out the VB/IB allocation + fill so
 	// Engine::Reset can recreate them post-device-Reset (D3DPOOL_DEFAULT
 	// no longer survives Reset, unlike the original D3DPOOL_MANAGED).
 	void				CreateSkydomeMeshBuffers();
 	void				ReleaseSkydomeMeshBuffers();
-	//: compile IDR_SHADER_SKYDOME from RCDATA and cache parameter handles.
+	// compile IDR_SHADER_SKYDOME from RCDATA and cache parameter handles.
 	void				InitSkydomeEffect();
-	//: release m_pSkydomeTexture and re-load from slot (bundled or custom).
+	// release m_pSkydomeTexture and re-load from slot (bundled or custom).
 	bool				ReloadSkydomeTexture(int slot);
-	//: draw the skydome sphere, camera-locked, depth off, cull CW.
+	// draw the skydome sphere, camera-locked, depth off, cull CW.
 	// Called from Render() when slot != Off and effect/texture are ready.
 	void				RenderSkydome();
 
@@ -874,7 +873,7 @@ private:
 	// same box the click-pick (PickReferenceObject) hit-tests. No-op when unselected.
 	void				RenderReferenceSelectionBox();
 
-	// Unit grid (): the engine's first line-list primitive. RenderUnitGrid
+	// Unit grid: the engine's first line-list primitive. RenderUnitGrid
 	// draws axis-aligned world lines at m_gridSpacing over a fixed extent, co-planar
 	// with the ground (z-test on, z-write off), with a brighter line every 5 cells.
 	// (The reusable fixed-function D3DPT_LINELIST helper, DrawWorldLines, is a
@@ -882,16 +881,16 @@ private:
 	// only forward-declared here.)
 	void				RenderUnitGrid();
 
-	//: compile IDR_SHADER_GROUND_LIT from RCDATA, cache parameter
+	// compile IDR_SHADER_GROUND_LIT from RCDATA, cache parameter
 	// handles, and build the tangent-space ground vertex declaration.
 	void				InitGroundEffect();
-	//: release + reload the companion `<base>_bc` normal map for the
+	// release + reload the companion `<base>_bc` normal map for the
 	// active ground slot (game/mod via FileManager); flat-normal on miss.
 	void				ReloadGroundNormalTexture();
-	//: create the 1px (128,128,255) neutral tangent-space normal used
+	// create the 1px (128,128,255) neutral tangent-space normal used
 	// when a slot has no companion normal map.
 	void				CreateGroundFlatNormal();
-	//: draw the lit ground quad through m_pGroundEffect. Called from
+	// draw the lit ground quad through m_pGroundEffect. Called from
 	// Render() when the effect is ready; else the unlit FF quad is used.
 	void				RenderGroundLit();
 
@@ -940,11 +939,11 @@ private:
 	D3DXMATRIX	m_projection;
 	D3DXMATRIX	m_viewProjection;
 
-	// Phase 3 Stage 5 — scene viewport cache (Variant B-γ).
+	// Scene viewport cache.
 	// Active flag false means "use full RT" (default — matches all
 	// non-composition transports). When active, Engine::Render
 	// SetViewports the device to (X, Y, W, H) before the scene
-	// pass (after the full-RT Clear per the D12 ordering rule);
+	// pass (after the full-RT Clear per the ordering rule);
 	// m_projection is computed at W/H aspect by SetSceneViewport.
 	// Survives Reset (re-applied at end of Reset to overwrite the
 	// full-RT-aspect projection rebuild at engine.cpp:1448).
@@ -963,7 +962,7 @@ private:
     COLORREF    m_background;
 	bool		m_showGround;
 	float		m_groundZ;
-	int			m_groundTextureIndex;   //: 0..kGroundTextureCount-1
+	int			m_groundTextureIndex;   // 0..kGroundTextureCount-1
 	// Per-slot user-supplied texture file path. Empty string means
 	// "use bundled default" (for slots 0..kGroundTextureBundledCount-1
 	// except slot kGroundSolidColorSlot which has no file source) or
@@ -994,7 +993,7 @@ private:
 	D3DXVECTOR3 m_wind;
 	D3DXVECTOR3	m_gravity;
     D3DXVECTOR4 m_ambient;
-    //: scene-global shadow tint. Stored only — no shader handle
+    // scene-global shadow tint. Stored only — no shader handle
     // currently consumes it. Exposed in the Lighting dialog for parity
     // with the Petroglyph map editor's panel and forward-compatibility
     // with shader changes.
@@ -1003,7 +1002,7 @@ private:
     D3DXMATRIX  m_sphLightFill[3];
     D3DXMATRIX  m_sphLightAll[3];
 
-	// / Phase 3 Stage 1: Skydome UV sphere geometry.
+	// Skydome UV sphere geometry.
 	// Originally D3DPOOL_MANAGED so it survived device Reset, but
 	// D3D9Ex disallows the managed pool — promoted to D3DPOOL_DEFAULT.
 	// Engine::Reset now releases the VB/IB before m_pDevice->Reset and
@@ -1027,7 +1026,7 @@ private:
 	IDirect3DVertexDeclaration9* m_pSkydomeDecl;
 	DWORD                        m_skydomeIndexCount;
 
-	//: skydome effect and texture state
+	// skydome effect and texture state
 	ID3DXEffect*             m_pSkydomeEffect;
 	D3DXHANDLE               m_hSkydomeWVP;
 	D3DXHANDLE               m_hSkydomeTex;
@@ -1049,8 +1048,8 @@ private:
 	// RebuildSkydomeMeshes alongside the mesh state it gates the render on.
 	SkydomeSlotStatus        m_skydomePrimaryStatus   = SkydomeSlotStatus::None;
 	SkydomeSlotStatus        m_skydomeSecondaryStatus = SkydomeSlotStatus::None;
-	// [#NN] Cached per-axis skydome lists (LoadAllSkydomeLists), rebuilt only when the
-	// mod/submod context changes. Without this, #224's GameObjectFiles locator re-parsed
+	// Cached per-axis skydome lists (LoadAllSkydomeLists), rebuilt only when the
+	// mod/submod context changes. Without this, the GameObjectFiles locator re-parsed
 	// GameObjectFiles.xml + re-sniffed every referenced file ~4x per mod switch (the two
 	// RebuildSkydomeMeshes axes + the two picker-query axes), on the UI thread -> mod-switch
 	// lag. Built lazily + context-checked by EnsureSkydomeLists(); both EnumerateSkydomeNames
@@ -1061,14 +1060,14 @@ private:
 
 	// Imported reference object (a game-object .alo placed in the preview
 	// for scale). Rigid multi-part: each sub-mesh placed by its skeleton bone.
-	// is the render path only; the picker/transform/persistence are.
+	// This is the render path only; the picker/transform/persistence are separate.
 	ReferenceObjectMesh      m_referenceObjectMesh;
 	// Hardpoint attach models mounted on the selected object (turrets / weapons
 	// the unit references via its <HardPoints> list). Rebuilt in RebuildReferenceObjectMesh;
 	// drawn after the unit in RenderReferenceObject; looped at every device-reset site.
 	std::vector<std::unique_ptr<ReferenceAttachment>> m_referenceAttachments;
 
-	// selection + placement state driving m_referenceObjectMesh.
+	// Selection + placement state driving m_referenceObjectMesh.
 	std::string              m_referenceObjectName;            // "" = none selected
 	bool                     m_referenceObjectVisible = true;
 	bool                     m_modelShadowsEnabled = true;     // [shadow] "Model shadows" pref (default on)
@@ -1118,12 +1117,12 @@ private:
 	// the mod context, neither rebuilds an identical catalog nor drops the ref object.
 	std::vector<std::wstring> m_catalogContextRoots;      // content roots the catalog reflects
 
-	// unit-grid state (RenderUnitGrid is).
+	// Unit-grid state (RenderUnitGrid is separate).
 	bool                     m_gridVisible = false;
 	float                    m_gridSpacing = 20.0f;
 	bool                     m_snapEnabled = false;            // gizmo grid/angle snap
 
-	//: bump-mapped ground lighting. Effect + tangent-space vertex decl +
+	// bump-mapped ground lighting. Effect + tangent-space vertex decl +
 	// normal-map state, mirroring the skydome effect lifecycle. Faithful port
 	// of TerrainMeshBump.fx (reference/foc-shaders/) minus cloud/FOW.
 	struct GroundVertex
@@ -1209,12 +1208,12 @@ private:
 
 	ITextureManager&				m_textureManager;
 	IShaderManager&					m_shaderManager;
-	// follow-up: needed to resolve curated skydome textures from the
+	// Needed to resolve curated skydome textures from the
 	// base game / active mod via the MEG-archive + loose-file chain.
 	IFileManager&					m_fileManager;
-	// Phase 3 Stage 1: promoted from IDirect3D9/IDirect3DDevice9 to
+	// promoted from IDirect3D9/IDirect3DDevice9 to
 	// the *Ex types so the engine's render target can be opened as a
-	// shared-handle resource by a D3D11 device (Stage 2). IDirect3DDevice9Ex
+	// shared-handle resource by a D3D11 device. IDirect3DDevice9Ex
 	// inherits from IDirect3DDevice9, so existing call sites that use the
 	// base interface (TextureManager, ShaderManager, Effect helpers) keep
 	// working through implicit covariance. D3DPOOL_MANAGED is no longer
@@ -1226,7 +1225,7 @@ private:
 	IDirect3DDevice9Ex*				m_pDevice;
 	IDirect3DVertexDeclaration9*	m_pDeclaration;
 
-	// Phase 3 Stage 4a — D3D9Ex event query for cross-device
+	// D3D9Ex event query for cross-device
 	// GPU sync. Lazy-created on first IssueEndFrameQuery; released in
 	// Engine::Reset before m_pDevice->Reset; lazy-recreated on next
 	// Issue. See IssueEndFrameQuery / WaitEndFrameQuery declarations

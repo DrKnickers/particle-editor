@@ -1,6 +1,6 @@
 // Locks the shared Reset-Camera constant to the legacy engine default so a
 // stray edit to one source can't silently diverge the menu item and the
-// Ctrl+Home accelerator from the legacy ID_VIEW_RESETCAMERA behaviour ().
+// Ctrl+Home accelerator from the legacy ID_VIEW_RESETCAMERA behaviour.
 //
 // Legacy reference: the legacy main.cpp (ID_VIEW_RESETCAMERA) and the engine
 // constructor default src/engine.cpp:2190-2192 — eye (0,-250,125), target

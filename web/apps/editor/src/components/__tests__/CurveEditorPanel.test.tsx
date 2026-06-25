@@ -1,4 +1,4 @@
-// Vitest tests for CurveEditorPanel (Task 2.6 of the redesign).
+// Vitest tests for CurveEditorPanel.
 //
 // Covered:
 //   - Renders the panel chrome + 7 channel rows (one per CHANNELS
@@ -23,7 +23,7 @@ import type {
 import { TRACK_NAMES } from "@particle-editor/bridge-schema";
 import { CurveEditorPanel, CHANNELS } from "../CurveEditorPanel";
 
-//: the toolbar buttons mount Tips (Radix Tooltip.Root), which
+// the toolbar buttons mount Tips (Radix Tooltip.Root), which
 // require the app-level Tooltip.Provider — wrapper stands in for it
 // (precedent: renderToolbar in Toolbar.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
@@ -76,7 +76,7 @@ function makeStubBridge(initialSelectedId: number | null, tracks?: TrackDto[]) {
       }
       if (req.kind === "emitters/get-properties") {
         // textureSize=1 → ineligible for atlas auto-open; keeps the
-        // controller inert in these tests (same as before).
+        // controller inert in these tests (same as before the atlas picker).
         return Promise.resolve({ properties: { textureSize: 1 } });
       }
       return Promise.resolve({});
@@ -104,7 +104,7 @@ function selectChannel(id: string) {
 }
 
 describe("CurveEditorPanel", () => {
-  //: CurveEditorPanel now publishes to the module-singleton atlas
+  // CurveEditorPanel now publishes to the module-singleton atlas
   // context + mounts the auto-open controller (which writes the right-dock
   // store). Both stores survive across tests, so reset them per-test.
   beforeEach(() => {
@@ -305,7 +305,7 @@ describe("CurveEditorPanel", () => {
     ).toBe(true);
   });
 
-  // F9: Index is exclusive too — enabling it hides every other channel.
+  // Index is exclusive too — enabling it hides every other channel.
   it("enabling Index via its checkbox hides every other channel (index-exclusive)", async () => {
     const { bridge } = makeStubBridge(0);
     render(<CurveEditorPanel bridge={bridge} />);
@@ -326,7 +326,7 @@ describe("CurveEditorPanel", () => {
     });
   });
 
-  // F9: the two exclusive channels replace each other — clicking Index
+  // The two exclusive channels replace each other — clicking Index
   // while Scale is solo turns Scale off and Index on.
   it("clicking Index while Scale is solo swaps solo to Index", () => {
     const { bridge } = makeStubBridge(0);
@@ -347,7 +347,7 @@ describe("CurveEditorPanel", () => {
     ).toBe("index");
   });
 
-  // F9: selecting a non-exclusive curve exits Index solo.
+  // Selecting a non-exclusive curve exits Index solo.
   it("clicking a non-Index row while Index is solo exits solo", async () => {
     const { bridge } = makeStubBridge(0);
     render(<CurveEditorPanel bridge={bridge} />);
@@ -1255,7 +1255,7 @@ describe("CurveEditorPanel", () => {
       expect(screen.getByTestId("ce-tool-select").getAttribute("data-state")).toBe("on");
       expect(screen.getByTestId("ce-tool-select")).toBeDisabled();
 
-      // T6 span-shim: both buttons must still be in the DOM (the inline-block
+      // span-shim: both buttons must still be in the DOM (the inline-block
       // wrapper span must not swallow the testid or prevent discovery).
       expect(screen.getByTestId("ce-tool-select").closest("span.inline-block")).not.toBeNull();
       expect(screen.getByTestId("ce-tool-insert").closest("span.inline-block")).not.toBeNull();
@@ -1379,12 +1379,12 @@ describe("CurveEditorPanel", () => {
       expect(getCurveKeysClipboard()[0]).toMatchObject({ time: 50, value: 0.5 });
 
       // Belt-and-braces note: handleKeyDragEnd, handleCanvasAdd, and
-      // handleGroupDragEnd each carry a focusLocked early-return (spec §4
-      // defense-in-depth). Those handlers are not directly invocable via
+      // handleGroupDragEnd each carry a focusLocked early-return
+      // (defense-in-depth). Those handlers are not directly invocable via
       // jsdom (the renderer withholds drag props and the canvas is not
       // exercisable at pixel level in a unit test), so direct invocation
       // is not meaningful here. The race guard above (zero mutating calls
-      // after lock lands) covers the §3 risk-2 scenario that motivates
+      // after lock lands) covers the mid-gesture lock scenario that motivates
       // those guards; the guards themselves are belt-and-braces for paths
       // the renderer's prop-withholding might not reach in all future refactors.
     });
@@ -1477,7 +1477,7 @@ function makeStubBridgeWithFocusInteriorKey(initialSelectedId: number) {
 }
 
 /** Bridge whose `scale` track has THREE interior keys (25/50/75) plus
- *  the two borders (0/100), so F8 multi-key average specs have a real
+ *  the two borders (0/100), so multi-key average specs have a real
  *  group to act on. */
 function makeStubBridgeMultiInterior(initialSelectedId: number) {
   const listeners: SelectionListener[] = [];
@@ -1525,8 +1525,8 @@ function makeStubBridgeMultiInterior(initialSelectedId: number) {
   return { bridge };
 }
 
-// F8: multi-key average edit (shift-by-delta / preserve spread).
-describe("CurveEditorPanel — F8 multi-key average edit", () => {
+// Multi-key average edit (shift-by-delta / preserve spread).
+describe("CurveEditorPanel — multi-key average edit", () => {
   /** Click a focus-channel key by its time (ctrl for additive). */
   function clickKey(time: number, additive: boolean) {
     const el = screen
@@ -1559,7 +1559,7 @@ describe("CurveEditorPanel — F8 multi-key average edit", () => {
     const { bridge } = makeStubBridgeMultiInterior(0);
     await selectScaleInterior(bridge);
     // avg time = (25+50+75)/3 = 50; avg value = (20+40+60)/3 = 40.
-    // Time spinner (step 0.1, an-audit-finding) renders at the app-wide 2dp default.
+    // Time spinner (step 0.1) renders at the app-wide 2dp default.
     expect(
       (screen.getByLabelText("Selected key time") as HTMLInputElement).value,
     ).toBe("50.00");
@@ -1616,9 +1616,9 @@ describe("CurveEditorPanel — F8 multi-key average edit", () => {
   });
 });
 
-// an-audit-finding: the curve Time spinner uses a 0.1 step (legacy granularity) and
-// displays at the app-wide 2dp default (decoupled from step, per).
-describe("CurveEditorPanel — an-audit-finding decimal-grained time", () => {
+// The curve Time spinner uses a 0.1 step (legacy granularity) and
+// displays at the app-wide 2dp default (decoupled from step).
+describe("CurveEditorPanel — decimal-grained time", () => {
   it("Time spinner displays the selected key time at 2 decimal places", async () => {
     const { bridge } = makeStubBridgeWithFocusInteriorKey(0);
     render(<CurveEditorPanel bridge={bridge} />);
@@ -1667,10 +1667,10 @@ describe("CurveEditorPanel — an-audit-finding decimal-grained time", () => {
   });
 });
 
-// an-audit-finding: right-click on the empty curve canvas. In Select mode it clears
+// Right-click on the empty curve canvas. In Select mode it clears
 // the selection (legacy WM_RBUTTONDOWN → CM_SELECT); in Insert mode it
 // drops back to Select mode without deselecting (legacy CM_INSERT branch).
-describe("CurveEditorPanel — an-audit-finding right-click deselect", () => {
+describe("CurveEditorPanel — right-click deselect", () => {
   async function focusScaleWithSelection() {
     const { bridge } = makeStubBridgeWithFocusInteriorKey(0);
     render(<CurveEditorPanel bridge={bridge} />);
@@ -1710,11 +1710,11 @@ describe("CurveEditorPanel — an-audit-finding right-click deselect", () => {
   });
 });
 
-// an-audit-finding: Copy / Cut / Paste of selected curve keys via Ctrl+C / X / V,
+// Copy / Cut / Paste of selected curve keys via Ctrl+C / X / V,
 // matching legacy CurveEditor.cpp CopyKeys / PasteKeys. Window-scoped (SVG
 // clicks don't move DOM focus into the panel), with a TYPING_TAGS guard and
 // an emitter-tree-origin guard so the two clipboards never both fire.
-describe("CurveEditorPanel — an-audit-finding key copy/cut/paste", () => {
+describe("CurveEditorPanel — key copy/cut/paste", () => {
   beforeEach(() => setCurveKeysClipboard([]));
 
   function clickKeyByTime(time: number, additive = false) {
@@ -1842,7 +1842,7 @@ describe("CurveEditorPanel — an-audit-finding key copy/cut/paste", () => {
   });
 });
 
-// CRV: group-drag live-updates the Time/Value spinners.
+// Group-drag live-updates the Time/Value spinners.
 //
 // When ≥2 keys are selected and the user drags the group, the Value
 // spinner must reflect the live shifted average — not the stale committed

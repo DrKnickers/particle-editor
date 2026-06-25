@@ -1,8 +1,8 @@
-// Phase 3 Stage 4f #3 — DXGI perf gate.
+// DXGI perf gate.
 //
 // Samples engine FPS via the existing `stats/tick` bridge event for
 // 10 seconds and asserts the mean exceeds a generous threshold. The
-// Stage 0 spike measured 0.30 ms total frame-transport at 3440×1440
+// early spike measured 0.30 ms total frame-transport at 3440×1440
 // (~3000+ FPS theoretical); production overhead (Engine::Update,
 // render-loop scheduling, OS overhead) brings this down substantially
 // but FPS should still comfortably exceed 60 on any modern dev rig
@@ -17,12 +17,12 @@
 //   - DXGI Present1 stall (e.g. swapchain config incompatible with
 //     DComp resulting in CPU blocking on Present).
 //
-// Sub-plan §6 4f originally specified "FPS > 80 at 1080p AND > 60 at
+// The original spec said "FPS > 80 at 1080p AND > 60 at
 // 3440×1440." Both resolutions require the test harness to drive the
 // host window to those specific sizes — we don't currently have a
 // `host/window-rect` bridge for setting outer-window size from a
 // spec. The single-resolution gate at the user's current window size
-// is a reasonable Stage 4f acceptance; multi-resolution perf testing
+// is a reasonable acceptance; multi-resolution perf testing
 // remains queued for the eventual 1080p / 3440×1440 split (could
 // extend via layout/viewport-rect which DOES change the engine RT
 // size, but that doesn't shift the host window outer rect).
@@ -32,7 +32,7 @@
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy" /* */;
+const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 
 // Tuneable thresholds. The mean-FPS gate is intentionally generous
 // — local dev rigs vary, CI machines (if this spec ever runs on CI)

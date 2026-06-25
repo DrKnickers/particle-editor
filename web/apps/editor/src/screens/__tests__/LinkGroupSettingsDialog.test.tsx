@@ -1,4 +1,4 @@
-// Vitest unit test for the LinkGroupSettingsDialog (Screen 4 Batch B1).
+// Vitest unit test for the LinkGroupSettingsDialog.
 // Verifies that:
 //   1. The dialog mounts and renders checkboxes from the mock fixture
 //      after `linkGroups/list-exempt-fields` resolves.

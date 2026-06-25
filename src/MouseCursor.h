@@ -42,7 +42,7 @@ public:
     MouseCursor() : Object3D(NULL, D3DXVECTOR3(0,0,0))
     {
         QueryPerformanceFrequency(&m_frequency);
-        //: seed m_updated so the first UpdateVelocity() dt is a real
+        // Seed m_updated so the first UpdateVelocity() dt is a real
         // frame delta, not (now - garbage) → bogus first-frame velocity.
         QueryPerformanceCounter(&m_updated);
         m_oldPosition = D3DXVECTOR3(0,0,0);
@@ -54,7 +54,7 @@ public:
 // world-space ray, then intersect with the z=0 plane. Used by:
 //   - the host's ViewportWndProc (WM_MOUSEMOVE / WM_KEYDOWN VK_SHIFT).
 //
-// [handoff item 14] Under architecture C, the engine renders into
+// In this architecture, the engine renders into
 // a SCENE sub-rect of the popup HWND and m_projection is built at
 // scene-rect aspect (per-pixel FoV referenced to scene-H, see
 // src/engine.cpp:1540 SetSceneViewport). But Engine::Render restores the
@@ -70,7 +70,7 @@ public:
 // D3DVIEWPORT9 from that rect and pass it to D3DXVec3Unproject. The
 // function subtracts viewport.X / viewport.Y internally so the input
 // (x, y) stays in popup-client coords — no caller-side translate.
-// Architecture A (legacy popup) never activates the scene viewport
+// The legacy popup path never activates the scene viewport
 // (LayoutBroker's SetSceneViewport call is composition-only), so
 // GetSceneViewport returns false and the device-viewport fallback runs
 // unchanged.

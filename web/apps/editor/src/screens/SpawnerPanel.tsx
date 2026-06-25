@@ -1,7 +1,7 @@
 // SpawnerPanel — modeless tool window for the programmable particle
-// spawner (Phase 3 Screen 8 Batch 4). Ported from the native
+// spawner. Ported from the native
 // `SpawnerDlgProc` (legacy Win32 UI); the Win32 dialog and the
-// `--legacy-ui` opt-out were removed in, so this React panel is now
+// `--legacy-ui` opt-out were removed, so this React panel is now
 // the sole spawner surface.
 //
 // Sections (top-to-bottom):
@@ -13,8 +13,8 @@
 //   6. Lifetime  — single Spinner.
 //   7. Jitter position — Vec3 row (spawn-point scatter).
 //   7b. Acceleration (arc) / Squiggle amplitude — Vec3 rows; Squiggle
-//       frequency — scalar. Path-shaping over each instance's lifetime
-//       (), replacing the old one-time velocity jitter.
+//       frequency — scalar. Path-shaping over each instance's lifetime,
+//       replacing the old one-time velocity jitter.
 //   8. Spawn now — manual-only button (fires spawner/trigger).
 //
 // State sync. The panel reads `snapshot.spawner` on mount and listens

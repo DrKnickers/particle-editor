@@ -1,4 +1,4 @@
-// atlas-context.ts — Publishes ONLY what the curve editor uniquely owns (spec §4.5).
+// atlas-context.ts — Publishes ONLY what the curve editor uniquely owns.
 //
 // Mirrors right-dock.ts: a writer-only publish fn + narrow read selector + a test reset.
 // colorTexture/textureSize are NOT here — the panel reads those from

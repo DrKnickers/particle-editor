@@ -40,7 +40,7 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 
 - **[CHANGELOG.md](CHANGELOG.md)** — public-facing release history, updated only when a new version ships.
 - **[DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md)** — per-PR engineering detail. Every non-trivial PR adds an entry with *What ships* / *How we tackled it* / *Issues encountered* — see existing entries for the shape.
-- **[ROADMAP.md](ROADMAP.md)** — planned work, grouped by horizon. Items have stable `[TIER-K]` tags (e.g. ``) plus position-only `N.M` numbers.
+- **[ROADMAP.md](ROADMAP.md)** — planned work, grouped by horizon. Items have stable tier tags plus position-only `N.M` numbers.
 
 The full project conventions live in [`CLAUDE.md`](CLAUDE.md) at the repo root — that's the authoritative spec for how Plans get written, how lessons get captured, and how the trust-but-verify rule applies. Worth a read before non-trivial work.
 

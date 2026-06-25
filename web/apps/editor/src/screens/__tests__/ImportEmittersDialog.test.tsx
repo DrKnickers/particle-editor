@@ -1,4 +1,4 @@
-// Vitest tests for ImportEmittersDialog (Phase 3 Screen 8 Batch 4).
+// Vitest tests for ImportEmittersDialog.
 //
 // The tree is a WAI-ARIA multi-select tree: rows are `role="treeitem"` with
 // `aria-checked` ("true" / "false" / "mixed"), roving tabindex, and arrow-key

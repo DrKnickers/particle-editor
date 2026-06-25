@@ -24,7 +24,7 @@ function ToggleButton(props: {
 }) {
   const { label, active, disabled, lock, icon, onClick } = props;
   return (
-    // Tip is the app-wide tooltip primitive (, replacing native `title`).
+    // Tip is the app-wide tooltip primitive (replacing native `title`).
     // The inline-flex span carries the Tip so the lock's *disabled* state still
     // shows its "load a reference object" hint (a disabled button fires no
     // pointer events, so Radix can't trigger off it directly).

@@ -29,8 +29,9 @@ export function ViewportSlot({ bridge }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // [Item 3] Dock-slide suppression signal. While PanelLayout runs a host-
-  // interpolated viewport rect for the dock open/close slide (only),
+  // Dock-slide suppression signal. While PanelLayout runs a host-
+  // interpolated viewport rect for the dock open/close slide (in this
+  // architecture only),
   // the ResizeObserver below must NOT also fire per-frame scene-rects — that
   // clumpy stream is the very judder the host interpolation replaces. Mirror
   // the zustand signal into a ref so the mount-time RO callback can read the
@@ -45,7 +46,7 @@ export function ViewportSlot({ bridge }: Props) {
     const el = ref.current;
     if (!el) return;
 
-    // [resize-perf C1] Last-sent dedupe. The same rect is computed by
+    // Last-sent dedupe. The same rect is computed by
     // multiple sources (the RO and the window-resize listener BOTH fire
     // for every window-resize tick — a measured 2× send rate), and
     // scroll events frequently leave the rect unchanged. Key includes
@@ -57,7 +58,7 @@ export function ViewportSlot({ bridge }: Props) {
       const key = `${x},${y},${w},${h},${window.devicePixelRatio || 1}`;
       if (key === lastSent) return;
       lastSent = key;
-      // B1.4 T4c: the centre-quadrant rect drives the SCENE rect (the
+      // The centre-quadrant rect drives the SCENE rect (the
       // visible sub-rect inside the popup), not the popup HWND itself. The
       // compositor crops the engine visual to it each frame — UI panels behind
       // the cropped-away bands show through (and receive their own mouse events).
@@ -89,7 +90,7 @@ export function ViewportSlot({ bridge }: Props) {
     // DPR to keep getting fired).
     let mql: MediaQueryList | null = null;
     // Track the active onChange in outer scope so cleanup can remove
-    // it. (G6: pre-fix the cleanup nulled `mql` but the
+    // it. (Pre-fix the cleanup nulled `mql` but the
     // active `change` listener stayed subscribed — one leaked listener
     // per component unmount, each holding the stale closure including
     // `send` and `bridge`.)
@@ -111,7 +112,7 @@ export function ViewportSlot({ bridge }: Props) {
       ro.disconnect();
       window.removeEventListener("scroll", send);
       window.removeEventListener("resize", send);
-      // G6: explicitly remove the active DPR listener.
+      // Explicitly remove the active DPR listener.
       if (mql && onChange) mql.removeEventListener("change", onChange);
       mql = null;
       onChange = null;
@@ -124,7 +125,7 @@ export function ViewportSlot({ bridge }: Props) {
   // DOM — there is no DOM-side engine-pixel consumer.)
   //
   // Coordinate convention: popup-client physical pixels = clientX/Y *
-  // devicePixelRatio. The popup spans the full main client (T4c.4) so
+  // devicePixelRatio. The popup spans the full main client so
   // canvas-relative offsets aren't needed — clientX/Y already aligns
   // with the popup's client origin.
   //
@@ -133,7 +134,7 @@ export function ViewportSlot({ bridge }: Props) {
   // when the cursor leaves the canvas — critical for fast camera
   // motions that overshoot the viewport bounds.
   //
-  // Wheel: native addEventListener with { passive: false } per
+  // Wheel: native addEventListener with { passive: false }
   // (React 18 attaches wheel listeners as passive at the root, which
   // blocks preventDefault — the FieldSpinner pattern). We preventDefault
   // so the viewport region doesn't double-handle wheels as page scroll.

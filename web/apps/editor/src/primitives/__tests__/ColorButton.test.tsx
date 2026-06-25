@@ -12,7 +12,7 @@ import type { ReactElement, ReactNode } from "react";
 import { ColorButton } from "../ColorButton";
 import { usePaletteStore } from "../palette-store";
 
-//: the swatch grids mount Tips (Radix Tooltip.Root), which require
+// The swatch grids mount Tips (Radix Tooltip.Root), which require
 // the app-level Tooltip.Provider — wrapper stands in for it (precedent:
 // renderToolbar in Toolbar.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
@@ -58,9 +58,9 @@ describe("ColorButton", () => {
     expect(usePaletteStore.getState().slots[0]).toEqual({ r: 0, g: 200, b: 100 });
   });
 
-  // ---: live preview ---------------------------------------------------
+  // --- live preview ---------------------------------------------------
 
-  it("dragging an RGB slider fires onChange live, not just on release ()", async () => {
+  it("dragging an RGB slider fires onChange live, not just on release", async () => {
     const onChange = vi.fn();
     render(<ColorButton value={RED} onChange={onChange} aria-label="color-btn" />);
     await openPicker();
@@ -70,7 +70,7 @@ describe("ColorButton", () => {
     expect(onChange).toHaveBeenLastCalledWith({ r: 255, g: 0, b: 255 });
   });
 
-  it("typing in an R/G/B number input fires onChange live and clamps ()", async () => {
+  it("typing in an R/G/B number input fires onChange live and clamps", async () => {
     const onChange = vi.fn();
     render(<ColorButton value={RED} onChange={onChange} aria-label="color-btn" />);
     await openPicker();
@@ -80,7 +80,7 @@ describe("ColorButton", () => {
     expect(onChange).toHaveBeenLastCalledWith({ r: 255, g: 255, b: 0 }); // clamped to 255
   });
 
-  it("typing a valid hex fires onChange live; an invalid hex does not ()", async () => {
+  it("typing a valid hex fires onChange live; an invalid hex does not", async () => {
     const onChange = vi.fn();
     render(<ColorButton value={RED} onChange={onChange} aria-label="color-btn" />);
     await openPicker();
@@ -92,9 +92,9 @@ describe("ColorButton", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  // ---: cancel / revert ------------------------------------------------
+  // --- cancel / revert ------------------------------------------------
 
-  it("Cancel reverts the engine to the color the picker opened with ()", async () => {
+  it("Cancel reverts the engine to the color the picker opened with", async () => {
     const onChange = vi.fn();
     render(<ColorButton value={RED} onChange={onChange} aria-label="color-btn" />);
     await openPicker();
@@ -106,7 +106,7 @@ describe("ColorButton", () => {
     expect(onChange).toHaveBeenLastCalledWith(RED);
   });
 
-  it("Escape reverts to the open-time color ()", async () => {
+  it("Escape reverts to the open-time color", async () => {
     const onChange = vi.fn();
     render(<ColorButton value={RED} onChange={onChange} aria-label="color-btn" />);
     await openPicker();

@@ -20,7 +20,7 @@
 //     daily-driver editor build with the same exe name survives.
 //   - in --test-host mode App.tsx swaps window.bridge for a TestHostBridge that
 //     routes over the host-object IPC channel (WebView2 drops page->host
-//     postMessage while CDP is attached; lessons.md) -- window.bridge.request
+//     postMessage while CDP is attached) -- window.bridge.request
 //     is the call shape the native specs use, so we mirror it.
 import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
@@ -102,8 +102,8 @@ function killTestHost() {
   });
 }
 
-// Pre-spawn cleanup (mirrors run-native-tests.mjs killAny() before launch;
-// lessons.md). A stale --test-host process poisons the next run: the new
+// Pre-spawn cleanup (mirrors run-native-tests.mjs killAny() before launch).
+// A stale --test-host process poisons the next run: the new
 // child can't bind :9222, but probeCdp() still returns ok against the STALE
 // instance -- so we'd connect to and capture the WRONG window (a false-positive
 // PNG). Kill any leftover --test-host, then give Windows a moment to release
@@ -117,7 +117,7 @@ const child = spawn(exe, ["--test-host"], {
   detached: false,
 });
 
-// Host-death guard (lessons.md). If the host crashes on startup, the CDP
+// Host-death guard. If the host crashes on startup, the CDP
 // probe loop would otherwise burn the full 30s ceiling before reporting a
 // generic timeout. Track the child's exit so we can break early and report the
 // real cause distinctly.

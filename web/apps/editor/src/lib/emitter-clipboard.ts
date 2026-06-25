@@ -1,6 +1,6 @@
 // emitter-clipboard.ts — tracks whether the (host-owned) emitter clipboard
 // has content, so the Edit → Paste menu item and the tree context-menu
-// Paste item can gate their enabled state (/).
+// Paste item can gate their enabled state.
 //
 // The actual clipboard buffer lives in the C++ host (and the MockBridge's
 // in-memory store); the React side can't read it directly. We approximate

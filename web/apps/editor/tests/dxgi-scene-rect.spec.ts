@@ -1,10 +1,10 @@
-// Phase 3 Stage 5 T7 — DXGI scene-rect transform gate.
+// DXGI scene-rect transform gate.
 //
-// Stage 5 wires LayoutBroker.SetSceneRect (driven by React's
+// The scene-rect path wires LayoutBroker.SetSceneRect (driven by React's
 // `layout/scene-rect` bridge dispatch) into:
 //   1. Compositor::SetEngineVisualTransform — queues a DComp clip
 //      update; applied at the end of the next CompositeEngineFrame
-//      (sub-plan T6 deferred-clip mechanism) so swapchain pixels +
+//      (deferred-clip mechanism) so swapchain pixels +
 //      DComp clip arrive on the same DWM cycle.
 //   2. Engine::SetSceneViewport — updates m_sceneViewport state +
 //      recomputes m_projection at per-pixel-FoV (45° × sceneH /
@@ -22,11 +22,10 @@
 //     reachable from here. The [COMP-engine-transform] line is
 //     sufficient evidence that LayoutBroker dispatched into the
 //     composition-mode path — Compositor + Engine calls are gated
-//     on the same m_dcompCompositor presence check (LayoutBroker R9
-//     mitigation c).
+//     on the same m_dcompCompositor presence check in LayoutBroker.
 //   - Visual correctness of the rendered output — Playwright cannot
 //     screenshot DComp content (CDP captures DOM only). Manual smoke
-//     at T6 is the irreducible visual gate; this spec is the
+//     is the irreducible visual gate; this spec is the
 //     log-evidence regression gate for the wiring path.
 //
 // Skip behaviour: each test no-ops with a clear annotation when
@@ -38,7 +37,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy" /* */;
+const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 const HOST_LOG_PATH = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
   : "";
@@ -70,8 +69,7 @@ test.beforeEach(({}, testInfo) => {
       description:
         "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — scene-rect transform " +
         "gate is composition-mode-only (LayoutBroker.SetSceneRect's " +
-        "new wiring is gated on m_dcompCompositor presence per R9 " +
-        "mitigation c).",
+        "new wiring is gated on m_dcompCompositor presence).",
     });
     test.skip();
   }
@@ -89,7 +87,7 @@ function readHostLog(): string {
 }
 
 // Parse all [COMP-engine-transform] lines into structured tuples.
-// Format (post-T6): `[COMP-engine-transform] clip=(L,T,R,B) (absolute host-client)`
+// Format: `[COMP-engine-transform] clip=(L,T,R,B) (absolute host-client)`
 function extractTransforms(log: string): Array<{ l: number; t: number; r: number; b: number }> {
   return [...log.matchAll(/\[COMP-engine-transform\] clip=\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\)/g)].map(
     (m) => ({
@@ -135,7 +133,7 @@ test("layout/scene-rect dispatch produces a matching [COMP-engine-transform] lin
     await b.request({ kind: "layout/scene-rect", params: { x, y, w, h } });
   }, { x: targetX, y: targetY, w: targetW, h: targetH });
 
-  // The deferred-clip mechanism (Compositor.cpp Stage 5 T6) queues
+  // The deferred-clip mechanism (Compositor.cpp) queues
   // the transform; it applies in the NEXT CompositeEngineFrame after
   // the dispatch. Engine renders at ~70-100 fps, so the transform
   // applies within ~10-15ms. Wait 250ms for slack (some CI hosts
@@ -223,8 +221,8 @@ test("three sequential scene-rect dispatches produce three transform lines in or
   }
 });
 
-test("no [COMP-engine-fail] lines emitted by Stage 5 scene-rect path", () => {
-  // Stage 5's SetEngineVisualTransform has multiple failure paths
+test("no [COMP-engine-fail] lines emitted by the scene-rect path", () => {
+  // SetEngineVisualTransform has multiple failure paths
   // (SetOffsetX, SetOffsetY, SetClip, Commit). If any fired during
   // the prior tests' dispatches, [COMP-engine-fail] would be present.
   const log = readHostLog();
@@ -240,7 +238,7 @@ test("no [COMP-engine-fail] lines emitted by Stage 5 scene-rect path", () => {
   const totalFails = failLines.length + applyFailLines.length;
   if (totalFails > 0) {
     throw new Error(
-      `Found ${totalFails} Stage 5 transform-related [COMP-engine-fail] line(s):\n  ` +
+      `Found ${totalFails} transform-related [COMP-engine-fail] line(s):\n  ` +
       [...failLines, ...applyFailLines].join("\n  "),
     );
   }

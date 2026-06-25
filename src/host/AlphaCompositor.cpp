@@ -1,7 +1,7 @@
 // AlphaCompositor implementation. See AlphaCompositor.h for the design.
 
 #include "AlphaCompositor.h"
-#include "GdiplusEncode.h"   // host::GdiplusEncoderClsid / host::Base64Encode (DRY cpp-host-1)
+#include "GdiplusEncode.h"   // host::GdiplusEncoderClsid / host::Base64Encode
 
 #include <d3d9.h>
 #include <wrl/client.h>
@@ -39,15 +39,14 @@ void ThrowIfFailed(HRESULT hr, const char* what)
 struct AlphaCompositor::Impl
 {
     Microsoft::WRL::ComPtr<IDirect3DDevice9>  device;
-    // Phase 3 Stage 2: shared-handle texture promoted from the
+    // Shared-handle texture promoted from the
     // prior CreateRenderTarget surface. CreateTexture with USAGE_RENDER
     // TARGET + D3DPOOL_DEFAULT + a non-null pSharedHandle out-param is
     // the D3D9Ex idiom for cross-device shareable RTs (validated in the
     // dxgi_spike at commit 6c00536). sharedTex.GetSurfaceLevel(0) is
     // the same IDirect3DSurface9 the engine renders into via slot 0,
     // so the existing Render() chain is unchanged. sharedHandle is an
-    // NT alias D3D11 can open via OpenSharedResource — Stage 4 wires
-    // that side; Stage 2 just exposes the handle and verifies it.
+    // NT alias D3D11 can open via OpenSharedResource on the compositor side.
     Microsoft::WRL::ComPtr<IDirect3DTexture9> sharedTex;
     HANDLE                                    sharedHandle = nullptr;
     Microsoft::WRL::ComPtr<IDirect3DSurface9> offscreenRT;   // sharedTex level-0, ARGB
@@ -55,7 +54,7 @@ struct AlphaCompositor::Impl
     int      width      = 0;
     int      height     = 0;
 
-    // B1.4 T4c: the scene rect — the visible viewport sub-region
+    // The scene rect — the visible viewport sub-region
     // (viewport-client coords) that CaptureSnapshotPng / CaptureSnapshot
     // ToFile crop the readback to. Default (0/0/0/0) disables the crop
     // (full RT) — the host-boot default before React dispatches the
@@ -80,7 +79,7 @@ void AlphaCompositor::Resize(int w, int h)
     if (w == m_impl->width && h == m_impl->height) return;
     if (w <= 0 || h <= 0) return;
 
-    // [G7] Transactional rebuild. Build every new resource into
+    // Transactional rebuild. Build every new resource into
     // LOCALS first; only once they all succeed do we release the old set and
     // move the locals into m_impl. Pre-fix this freed all old resources up
     // front and then allocated — so a single failed Create* (transient VRAM /
@@ -96,15 +95,15 @@ void AlphaCompositor::Resize(int w, int h)
 
     try
     {
-        // Phase 3 Stage 2: shared-handle render-target texture.
+        // Shared-handle render-target texture.
         // CreateTexture with USAGE_RENDERTARGET + D3DPOOL_DEFAULT and a
         // non-null pSharedHandle yields an NT-handle alias openable from a
         // parallel D3D11 device via OpenSharedResource. The level-0 surface
         // serves as the engine's render target slot 0, so the existing
-        // arch-A render+readback path is structurally unchanged. The
+        // render+readback path is structurally unchanged. The
         // sharedHandle out-param is populated only when the device is
-        // D3D9Ex (Stage 1 hard-fails otherwise, so this is always the case
-        // post-Stage-1). D3DMULTISAMPLE_NONE because GetRenderTargetData
+        // D3D9Ex (the device-creation path hard-fails otherwise, so this is
+        // always the case here). D3DMULTISAMPLE_NONE because GetRenderTargetData
         // rejects multisampled sources; scene AA still handled via texturing.
         HRESULT hr = m_impl->device->CreateTexture(
             static_cast<UINT>(w), static_cast<UINT>(h),
@@ -175,7 +174,7 @@ void AlphaCompositor::SetSceneRect(int x, int y, int w, int h)
 }
 
 // The GDI+ encoder-CLSID lookup (PNG + JPEG) and the base64 encoder now live in
-// host/GdiplusEncode.h (DRY audit cpp-host-1): host::GdiplusEncoderClsid(mime, …)
+// host/GdiplusEncode.h: host::GdiplusEncoderClsid(mime, …)
 // + host::Base64Encode(…). Was four copy-pasted CLSID lookups + two identical
 // Base64 copies across AlphaCompositor / WindowCapture / PaletteThumbs.
 
@@ -198,8 +197,8 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     //
     // Safety: offscreenRT holds the engine's rendered pixels and nothing
     // mutates it on the CPU side, so between Engine::Render calls it is
-    // always re-readable. During the Win32 modal sizing loop (/
-    // cb7b4c7), Engine::Render also doesn't run, so offscreenRT holds the
+    // always re-readable. During the Win32 modal sizing loop, Engine::Render
+    // also doesn't run, so offscreenRT holds the
     // pre-resize frame — exactly the backdrop the modal wants.
     if (!m_impl->offscreenRT || !m_impl->sysMemSurface) return false;
     if (m_impl->width <= 0 || m_impl->height <= 0)     return false;
@@ -226,7 +225,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
     const int srcW = m_impl->width;
     const int srcH = m_impl->height;
 
-    // B1.4 T4c.5: crop region = the current scene rect (the only sub-region
+    // Crop region = the current scene rect (the only sub-region
     // that holds pixels the user sees; encoding the full RT would stretch
     // outside-scene engine content into the modal's backdrop). When no
     // scene rect is set (boot, or harnesses that drive CaptureSnapshotPng
@@ -248,14 +247,14 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
         if (cropW <= 0 || cropH <= 0) return false;
     }
 
-    // instant-modal] Encoded (downscaled) output dims. The snapshot is
+    // Encoded (downscaled) output dims. The snapshot is
     // only ever shown as a modal's frosted-glass backdrop — Dialog.Overlay
     // paints bg-black/60 + backdrop-blur-sm over it, so a full-res encode is
     // wasted work. Two knobs cut it: kSnapshotMaxEdge caps the long edge
     // (bounding the upscale/softness under the blur — ~3.4x at 3440 -> 1024);
     // kSnapshotDownscale forces a min reduction even for sub-cap (windowed)
     // captures. This formula is reused VERBATIM by both paths so the encoded
-    // size is byte-identical to the pre-output (the native dim tests and
+    // size is byte-identical to the prior output (the native dim tests and
     // the backdrop-blur "floor" both depend on it — do not retune lightly).
     constexpr int kSnapshotMaxEdge   = 1024;  // upper bound on the encoded long edge
     constexpr int kSnapshotDownscale = 2;     // min downscale factor (windowed snappiness)
@@ -387,7 +386,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
         // active RT can fail D3DERR_INVALIDCALL, so park slot 0 on the swap-
         // chain back buffer just for the blit, then restore. We touch ONLY
         // slot 0 (not depth); the back buffer is full-size (>= the small RT)
-        // and is never presented in, so this is side-effect-free, and
+        // and is never presented in this architecture, so this is side-effect-free, and
         // the engine re-binds offscreenRT at the top of every frame regardless.
         Microsoft::WRL::ComPtr<IDirect3DSurface9> savedRT;
         if (FAILED(m_impl->device->GetRenderTarget(0, &savedRT)) || !savedRT) return false;
@@ -452,7 +451,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
 
     if (tryStretchPath()) return true;
 
-    // ===== Slow path (fallback): the proven pre-full readback + GDI+
+    // ===== Slow path (fallback): the proven full readback + GDI+
     // downscale. Reached when the device lacks the StretchRect caps or the GPU
     // fast path hit any failure (so the modal still gets its backdrop).
     HRESULT hr = m_impl->device->GetRenderTargetData(

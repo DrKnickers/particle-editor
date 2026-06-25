@@ -99,7 +99,7 @@ public:
 
     // Device-reset phase 1: per sub-mesh effect->OnResetDevice. Split from
     // CreateBuffers so the engine can do all-effects-then-all-buffers across both
-    // domes (matches the existing reset dance; see todo.md Risk 7). The buffer
+    // domes (matches the existing reset dance). The buffer
     // refill is CreateBuffers (phase 2).
     void OnResetEffects();
 

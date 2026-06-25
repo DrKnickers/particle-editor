@@ -1,4 +1,4 @@
-// [Item 3] PanelLayout dock-slide host-anim contract tests.
+// PanelLayout dock-slide host-anim contract tests.
 //
 // These render the FULL PanelLayout to exercise the real toggle effect, but
 // MOCK the heavy child screens to trivial stubs. The children each do an
@@ -11,7 +11,7 @@
 // tests stay mock-free.
 //
 // What we lock here is the WEB CONTRACT only; the actual smooth interpolation
-// is host-side and verified in the real editor ():
+// is host-side and verified in the real editor:
 //   - the suppression-signal lifecycle (raised on a dock slide, cleared at
 //     the settle, and NOT stranded by a rapid re-toggle).
 //   - reduced-motion: the panel snaps (no animate-scene-rect).
@@ -21,7 +21,7 @@
 // a CLOSE always takes the no-animate branch and the remembered-width capture
 // can't fire. The CLOSE/grow direction and the analytic `to` math ARE locked,
 // just in scene-rect.test.ts (dockSlideTarget open-shrink / close-grow / clamp);
-// the close-direction effect WIRING is left to host-side verification (),
+// the close-direction effect WIRING is left to host-side verification,
 // where real geometry exists.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, render, waitFor } from "@testing-library/react";

@@ -5,8 +5,8 @@
 //
 // Why this exists: Playwright drives the React app through a CDP
 // connection (--remote-debugging-port=9222). WebView2 silently drops
-// `chrome.webview.postMessage` calls while a CDP debugger is attached
-// (see tasks/lessons.md). The host-object IPC channel is on a
+// `chrome.webview.postMessage` calls while a CDP debugger is attached.
+// The host-object IPC channel is on a
 // separate marshalling path and is unaffected, so test traffic routes
 // through it instead.
 //

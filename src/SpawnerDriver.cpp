@@ -31,7 +31,7 @@ inline D3DXVECTOR3 Jitter(const D3DXVECTOR3& r)
 }
 
 // Random squiggle phase in [0, 2π) per axis, seeded once at spawn so
-// each instance wanders on its own offset ().
+// each instance wanders on its own offset.
 inline float RandPhase()
 {
     float u = (float)std::rand() / (float)RAND_MAX;
@@ -194,7 +194,7 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
 
             D3DXVECTOR3 pos = m_cfg.position + Jitter(m_cfg.jitterPosition);
             anchor.SetPosition(pos);
-            anchor.SetVelocity(m_cfg.velocity);   //: no velocity jitter; path is shaped over lifetime instead
+            anchor.SetVelocity(m_cfg.velocity);   // no velocity jitter; path is shaped over lifetime instead
 
             ParticleSystemInstance* inst = engine->SpawnParticleSystem(*sys, &anchor);
             if (inst != NULL)

@@ -1,11 +1,11 @@
 // Vitest contract tests for the UIA accessibility-tree normalizer
-// (/ Phase 3 a11y close-out, Task T1).
+// (Phase 3 a11y close-out).
 //
-// The normalizer is the pure-TS foundation under T9+ snapshot tests:
+// The normalizer is the pure-TS foundation under the snapshot tests:
 // before any golden comparison, raw UIA trees are run through
 // `normalize()` so volatile fields (BoundingRectangle, RuntimeId, …)
 // don't bake into the golden, child order is deterministic, and the
-// Chromium chrome wrappers from the T0 probe (Chrome_WidgetWin_1,
+// Chromium chrome wrappers from the probe (Chrome_WidgetWin_1,
 // BrowserRootView, NonClientView, Intermediate D3D Window) are
 // flattened away.
 //
@@ -68,7 +68,7 @@ describe("a11y-normalizer", () => {
   });
 
   it("strips wrapper visuals matched by ClassName (real Chromium chrome pattern)", () => {
-    // Mirrors the actual HWND-mode tree from the T0 probe:
+    // Mirrors the actual HWND-mode tree from the probe:
     // AloHostMain → Chrome_WidgetWin_1 → BrowserRootView → NonClientView → ...React
     const raw = {
       Name: "AloParticleEditor",

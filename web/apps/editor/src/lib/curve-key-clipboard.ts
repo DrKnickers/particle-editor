@@ -1,4 +1,4 @@
-// curve-key-clipboard.ts — in-app clipboard for curve track keys (an-audit-finding).
+// curve-key-clipboard.ts — in-app clipboard for curve track keys.
 //
 // Legacy `CurveEditor.cpp` used a process-wide Win32 clipboard format
 // (`RegisterClipboardFormat("Alamo_EmitterTrackKeys")`) so copied keys
@@ -26,7 +26,7 @@ type CurveKeyClipboardStore = {
 };
 
 // Module-local store backing the imperative setter/getter below; not exported
-// (no external subscriber — the dead reactive hook was removed, DRY audit xcut-0).
+// (no external subscriber — the dead reactive hook was removed).
 const useCurveKeyClipboardStore = create<CurveKeyClipboardStore>((set) => ({
   keys: [],
   setKeys: (keys) => set({ keys }),

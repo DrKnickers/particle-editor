@@ -1,4 +1,4 @@
-// Vitest unit test for the RescaleEmitterDialog (Screen 4 Batch B1).
+// Vitest unit test for the RescaleEmitterDialog.
 // Verifies that OK fires `engine/action/rescale-emitter` with the
 // current spinner values.
 

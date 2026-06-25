@@ -8,7 +8,7 @@
 // entry document `index.html` keeps a fixed URL, and a stale cached
 // index.html keeps pointing at the OLD hashed asset URLs, masking the whole
 // rebuild. We cannot inject a Cache-Control response header on the mapped
-// host (the mapping short-circuits WebResourceRequested — see), so we
+// host (the mapping short-circuits WebResourceRequested), so we
 // bust index.html via a query string on the navigation URL instead: append
 // the build's index.html mtime as `?v=<token>`. The token changes on every
 // rebuild (Vite's emptyOutDir rewrites index.html) and is stable across

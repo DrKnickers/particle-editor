@@ -1,5 +1,5 @@
 // UIA inspector — emits the Win32 UI Automation subtree rooted at a
-// given HWND as JSON to stdout. Used by Playwright a11y specs ().
+// given HWND as JSON to stdout. Used by Playwright a11y specs.
 //
 // CLI: uia_inspector.exe --hwnd 0xNNNN --capture <id> [--depth N]
 //   --hwnd     target window handle (hex)
@@ -8,12 +8,12 @@
 //
 // Exit codes: 0 success; 1 bad args; 2 UIA init failed; 3 HWND invalid.
 //
-// Emitted properties (per the T1 normalizer's allowlist):
+// Emitted properties (per the normalizer's allowlist):
 //   Name, ControlType, AutomationId, ClassName,
 //   IsKeyboardFocusable, IsEnabled, IsOffscreen, children.
 //
-// ClassName is what the T1 normalizer keys off for wrapper stripping
-// (Chrome_WidgetWin_1, BrowserRootView, etc. per T0 probe findings).
+// ClassName is what the normalizer keys off for wrapper stripping
+// (Chrome_WidgetWin_1, BrowserRootView, etc. per probe findings).
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -245,7 +245,7 @@ int wmain(int argc, wchar_t* argv[]) {
     hr = uia->ElementFromHandle(hwnd, &root);
     if (FAILED(hr) || !root) { fprintf(stderr, "ElementFromHandle failed\n"); return 3; }
 
-    // T9 warmup] Chromium/WebView2 uses lazy Blink accessibility
+    // Warmup: Chromium/WebView2 uses lazy Blink accessibility
     // initialization: the inner React DOM UIA tree is not built until a
     // UIA client has triggered cross-process activation of the Blink
     // accessibility subsystem. GetFocusedElement() forces a cross-process

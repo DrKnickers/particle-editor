@@ -1,19 +1,17 @@
 // EmitterTree — sidebar tree of the live ParticleSystem's emitters.
 //
-// Phase 3 Screen 4 Batch A: read-only render + single-select.
-// Phase 3 Screen 4 Batch B1: right-click context menu + 4 modal dialogs
-//                            for Rename/Duplicate/Delete/Increment/
-//                            Rescale/LinkGroupSettings.
-// Phase 3 Screen 4 Batch B2: Add Lifetime/Death Child, Move Up/Down,
-//                            Set Link Group… / Leave Link Group, plus
-//                            React-side multi-select (Ctrl/Cmd + Shift
-//                            + plain click).
-// Phase 3 Screen 4 Batch B3: HTML5 drag/drop reorder + reparent.
-// Phase 3 Screen 4 Batch C : Link-group bracket gutter + inline rename
-//                            (F2 / dbl-click / context-menu Rename;
-//                            replaces B1's modal — `RenameEmitterDialog`
-//                            is deleted) + keyboard nav (arrows / Home
-//                            / End / Enter / F2 / Delete / Ctrl+C/X/V).
+// Capabilities:
+//   - read-only render + single-select.
+//   - right-click context menu + modal dialogs for Rename/Duplicate/
+//     Delete/Increment/Rescale/LinkGroupSettings.
+//   - Add Lifetime/Death Child, Move Up/Down, Set Link Group… /
+//     Leave Link Group, plus React-side multi-select (Ctrl/Cmd + Shift
+//     + plain click).
+//   - HTML5 drag/drop reorder + reparent.
+//   - Link-group bracket gutter + inline rename
+//     (F2 / dbl-click / context-menu Rename; replaces the rename modal —
+//     `RenameEmitterDialog` is deleted) + keyboard nav (arrows / Home
+//     / End / Enter / F2 / Delete / Ctrl+C/X/V).
 //
 // Multi-select model: server tracks only the primary id (via the
 // existing `emitters/select`); React layers an in-memory `ids[]` +
@@ -31,8 +29,8 @@
 // when `visible === false`.
 //
 // Link-group dot: a small filled circle in `bg-accent` when
-// `linkGroup !== 0`. The full coloured-bracket visualization (
-// port) renders in the right gutter (Batch C); the dot itself stays
+// `linkGroup !== 0`. The full coloured-bracket visualization
+// renders in the right gutter; the dot itself stays
 // as a per-row affordance for quick "this row is linked" recognition.
 //
 // Inline rename: a string-keyed Zustand atom would be overkill — local
@@ -271,7 +269,7 @@ function findParentNode(
  *      source's parent)
  *    - upper/lower third → reorder, only when BOTH source and target are
  *      roots (gap semantics apply to the root list).
- *  This was Batch B3's inline `resolveDropIntent`; lifted to a pure fn so
+ *  This was an inline `resolveDropIntent`; lifted to a pure fn so
  *  the pointer-drag controller (which replaced HTML5 DnD — dead under
  *  composition hosting) can call it for any hovered target row. */
 function resolveDropIntent(
@@ -302,7 +300,7 @@ function resolveDropIntent(
   };
 }
 
-// Inline-rename state (Batch C). `editing.id` is the row currently in
+// Inline-rename state. `editing.id` is the row currently in
 // rename mode; `editing.value` is the live input value. The original
 // name is captured at edit-start (`original`) so an empty-commit can
 // revert without a tree re-fetch round-trip.
@@ -327,7 +325,7 @@ type RowProps = {
   draggingIds: number[];
   indicator: DropIndicator;
   startDrag: (node: EmitterTreeNode, e: React.PointerEvent) => void;
-  // Batch C — inline rename. `editing.id === node.id` means this row
+  // Inline rename. `editing.id === node.id` means this row
   // renders an `<input>` instead of the label span. `beginEdit` starts
   // a new rename session against this row; `setEditValue` updates the
   // live value; `commitEdit` / `cancelEdit` end the session.
@@ -336,17 +334,17 @@ type RowProps = {
   setEditValue: (value: string) => void;
   commitEdit: () => void;
   cancelEdit: () => void;
-  //: true when this row's link group is the one currently hovered —
+  // True when this row's link group is the one currently hovered —
   // the row paints a subtle tint so the user sees the whole group light up
   // together. `onHoverLinkGroup` reports this row's group on pointer enter
   // (null on leave) so the parent can drive the tint + bracket highlight.
   linkHover: boolean;
   onHoverLinkGroup: (groupId: number | null) => void;
-  //: dissolve the entire link group this row belongs to.
+  // Dissolve the entire link group this row belongs to.
   onDissolveLinkGroup: (groupId: number) => void;
   // Badge / spine click: select every member of this row's link group.
   onSelectLinkGroup: (groupId: number) => void;
-  //: non-null when this row sits on a chain whose estimated alive
+  // non-null when this row sits on a chain whose estimated alive
   // count crosses the warning threshold (guard cap, or the 10k advisory).
   chainWarning: ChainWarning | null;
 };
@@ -394,7 +392,7 @@ function EmitterRow({
   const linkColor = colorForGroup(node.linkGroup);
   const spineTintColor = isLinked && !isSelected ? linkColor : null;
   const isEditing = editing !== null && editing.id === node.id;
-  // Context-menu Paste gates on session clipboard content ().
+  // Context-menu Paste gates on session clipboard content.
   const hasClipboard = useEmitterClipboardHasContent();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -481,7 +479,7 @@ function EmitterRow({
   };
 
   const handleRename = () => {
-    // Batch C: context-menu Rename starts inline edit instead of
+    // Context-menu Rename starts inline edit instead of
     // opening a modal. `RenameEmitterDialog` has been removed.
     resolveTargetIds();
     beginEdit(node.id, node.name);
@@ -508,7 +506,7 @@ function EmitterRow({
     resolveTargetIds();
     openTreeContextDialog("rescale", node.id);
   };
-  // Context-menu clipboard () + New Root () — reuse the same
+  // Context-menu clipboard + New Root — reuse the same
   // bridge calls as the tree's Ctrl+C/X/V so behaviour stays identical.
   const handleNewRoot = () => {
     void bridge.request({ kind: "emitters/add-root", params: {} });
@@ -584,7 +582,7 @@ function EmitterRow({
   // tree-flatten output.
   void orderedIds;
 
-  // ── Batch B3 — drag/drop handlers ────────────────────────────────
+  // ── drag/drop handlers ────────────────────────────────
   //
   // The row is both a drag source and a drop target. Drop semantics:
   //   - drop above/below a root → reorder (a make-room gap renders at the
@@ -610,7 +608,7 @@ function EmitterRow({
   const separatorClass =
     "my-1 h-px bg-panel-2";
 
-  // Selected-row styling (Batch B2):
+  // Selected-row styling:
   //   - primary       : strong sky-500 left border + sky-500/15 bg
   //   - non-primary   : softer sky-400/50 left border + sky-500/15 bg
   //   - unselected    : transparent border + hover bg
@@ -642,7 +640,7 @@ function EmitterRow({
           <button
             type="button"
             onPointerDown={(e) => startDrag(node, e)}
-            //: hovering a linked row lights up its whole group.
+            // Hovering a linked row lights up its whole group.
             onPointerEnter={() => onHoverLinkGroup(node.linkGroup || null)}
             onPointerLeave={() => onHoverLinkGroup(null)}
             onClick={(e) =>
@@ -679,7 +677,7 @@ function EmitterRow({
               rowBgClass,
               reparentTintClass,
               fontClass,
-              //: hovering a group tints its member rows. On linked
+              // Hovering a group tints its member rows. On linked
               // rows the inline group-tint (below) already covers this and
               // would override the class, so only apply the generic accent
               // tint where there's no inline tint (selected linked rows, or
@@ -699,7 +697,7 @@ function EmitterRow({
               // badge is aria-hidden — so the accessibility tree (and the
               // emitter-tree a11y goldens) are unchanged.
               // Eye auto-places into column 1.
-              //: warned rows append a 16px col 4 for the chain-load
+              // warned rows append a 16px col 4 for the chain-load
               // glyph; unwarned rows keep the 3-column template.
               gridTemplateColumns: chainWarning !== null
                 ? "18px 18px 1fr 16px"
@@ -861,14 +859,14 @@ function EmitterRow({
                 {roleGlyph(node.role)}
               </span>
             )}
-            {/*: soft chain-load warning glyph, placed VISUALLY in
+            {/* soft chain-load warning glyph, placed VISUALLY in
                 col 5 (right of the name) via grid-column but rendered
                 LAST in DOM — same convention as the role glyph / link
                 dot, so unwarned rows' accessible names stay byte-
-                identical and the a11y goldens hold.: the rich
+                identical and the a11y goldens hold. The rich
                 ChainWarningTip carries the root→offender breakdown for
                 sighted users; the aria-label keeps the FULL plain-text
-                breakdown for screen readers (spec §4). side="right" so
+                breakdown for screen readers. side="right" so
                 tree tooltips open toward the viewport. */}
             {chainWarning !== null && (
               <Tip
@@ -948,7 +946,7 @@ function EmitterRow({
             <ContextMenu.Item onSelect={handleRescale} className={menuItemClass}>
               Rescale Emitter…
             </ContextMenu.Item>
-            {/* ─── Batch B2 additions ───────────────────────────── */}
+            {/* ─────────────────────────────────────────────────── */}
             <ContextMenu.Separator className={separatorClass} />
             <ContextMenu.Item onSelect={handleNewRoot} className={menuItemClass}>
               New Root Emitter
@@ -1041,10 +1039,10 @@ function EmitterRow({
 }
 
 // ─── Panel-header toolbar ────────────────────────────────────────────
-// (Group A polish): restore the legacy panel toolbar from
+// Restore the legacy panel toolbar from
 // src/UI/EmitterList.cpp:3016. Layout matches legacy ordering:
 //   [New ▾] [Delete] [▲ Move Up] [▼ Move Down]   (this batch)
-//   [👁]    [Show All] [Hide All]                (next batch, T2/T3)
+//   [👁]    [Show All] [Hide All]                (next batch)
 // All four buttons here use bridge calls that already exist in the
 // schema — no host-side work needed.
 
@@ -1199,7 +1197,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </Menubar.Portal>
         </Menubar.Menu>
       </Menubar.Root>
-      {/* T6 span shims: disabled buttons fire no pointer events, so the Tip
+      {/* Span shims: disabled buttons fire no pointer events, so the Tip
           listens on a wrapping span that stays interactive while the button
           inside is disabled. */}
       <Tip content="Duplicate">
@@ -1289,7 +1287,7 @@ export function EmitterTree({ bridge }: Props) {
   // falls back to the advisory 10k when disabled.
   const guard = useOverloadGuardConfig();
 
-  //: stableId → soft chain-load warning, recomputed whenever the
+  // stableId → soft chain-load warning, recomputed whenever the
   // tree refetches (spawn values ride the tree DTO, so a properties edit
   // that matters lands here via emitters/tree/changed → setTree).
   const chainWarnings = useMemo(
@@ -1315,7 +1313,7 @@ export function EmitterTree({ bridge }: Props) {
   // SetEngine.
   useEstimatedLoadPush(bridge, tree);
 
-  // Batch B3 — drag/drop state. `draggingId` is the source row's id;
+  // Drag/drop state. `draggingId` is the source row's id;
   // `indicator` is the row + zone currently displaying a drop hint.
   // Both lifted to the tree level so only one indicator can be active
   // and so rows can read the dragged node's subtree for cycle checks.
@@ -1335,12 +1333,12 @@ export function EmitterTree({ bridge }: Props) {
   // [pointer-drag] Set true when a real drag completes so the synthetic
   // click that follows pointerup (when down+up land on the same row) does
   // NOT also fire row selection. Reset on the next pointerdown and in
-  // handleRowClick. (B3's HTML5 DnD is replaced by pointer events because
+  // handleRowClick. (HTML5 DnD is replaced by pointer events because
   // dragstart never fires under composition hosting — WebView2 is a
   // composition visual with no HWND for the OS drag loop.)
   const draggedRef = useRef(false);
 
-  // [audit A1/A2/A3] While a pointer drag is active this holds a function that
+  // While a pointer drag is active this holds a function that
   // ABORTS it (tears down dims/gap/chip + listeners, commits nothing). The
   // emitters/tree/changed subscription calls it before refetching, so a host-
   // side structural change mid-drag — undo/redo/paste reach the accelerators
@@ -1350,12 +1348,12 @@ export function EmitterTree({ bridge }: Props) {
   // the user re-drags against the fresh tree.
   const activeDragCancelRef = useRef<(() => void) | null>(null);
 
-  // [audit B1] The pointerId of the in-flight drag (null = none). Re-entrancy
+  // The pointerId of the in-flight drag (null = none). Re-entrancy
   // guard: a second pointerdown while a drag is live is ignored, so two
   // gestures can't register duplicate listeners over shared controller state.
   const dragPointerRef = useRef<number | null>(null);
 
-  // Batch C — inline rename. Local component state because only the
+  // Inline rename. Local component state because only the
   // tree owns both the focus target (each row's button) and the input
   // (mounted inside the row). One row at a time; null = no edit in
   // progress.
@@ -1409,7 +1407,7 @@ export function EmitterTree({ bridge }: Props) {
   useEffect(() => {
     const cancelList = refreshTree();
     const offTree = bridge.on("emitters/tree/changed", () => {
-      // [audit A1/A2/A3] A structural change while a drag is held invalidates
+      // A structural change while a drag is held invalidates
       // the gesture's pointerdown snapshot (positional ids + geometry). Abort
       // it BEFORE refetching so it can't commit stale ids or paint a stale
       // gap/dim against the reshuffled tree.
@@ -1542,7 +1540,7 @@ export function EmitterTree({ bridge }: Props) {
     }
   }, [flatRows, draggingId, indicator]);
 
-  // Phase 4.1 Fix dispatch 5 — subscribe to menu-driven rename
+  // Subscribe to menu-driven rename
   // requests. The MenuBar's "Rename Emitter" item writes the target
   // id into the tree-action atom; we pick it up, begin inline edit
   // (same path as F2 / context-menu Rename / dbl-click), and consume
@@ -1588,7 +1586,7 @@ export function EmitterTree({ bridge }: Props) {
   const rootChildren = tree?.root.children ?? [];
 
   // [pointer-drag] Pointer-based drag-to-reorder / -reparent. HTML5 DnD
-  // (Batch B3) never initiates under composition hosting (WebView2
+  // never initiates under composition hosting (WebView2
   // is a composition visual with no HWND for the OS drag loop), so the
   // tree drag is driven by pointer events — they deliver like clicks in
   // every hosting mode (and on touch). On pointerdown we arm a drag and
@@ -1601,13 +1599,13 @@ export function EmitterTree({ bridge }: Props) {
   const startDrag = (source: EmitterTreeNode, e: React.PointerEvent) => {
     if (e.button !== 0) return;               // primary button only
     if (editingRef.current !== null) return;  // not while inline-renaming
-    // [audit B1] One tree drag at a time — a second pointerdown (second mouse,
+    // One tree drag at a time — a second pointerdown (second mouse,
     // pen) while a drag is live must not arm a duplicate controller over the
     // shared component state.
     if (dragPointerRef.current !== null) return;
     const pointerId = e.pointerId;
     dragPointerRef.current = pointerId;
-    // [audit B2] Capture the pointer so losing it (alt-tab / window blur)
+    // Capture the pointer so losing it (alt-tab / window blur)
     // delivers pointercancel — Chromium synthesises it for captured pointers —
     // and so the gesture only reacts to ITS pointer. jsdom has no
     // setPointerCapture; guard so unit tests are unaffected.
@@ -1763,7 +1761,7 @@ export function EmitterTree({ bridge }: Props) {
       setDragChip({ x: chipPos.x, y: chipPos.y, names: chipNames });
     };
 
-    // [] While the pointer sits in an edge zone of the scroll viewport,
+    // While the pointer sits in an edge zone of the scroll viewport,
     // scroll it each frame (proportional to depth) and re-resolve the drop
     // target so the indicator follows the rows moving under the pointer.
     const tick = () => {
@@ -1780,7 +1778,7 @@ export function EmitterTree({ bridge }: Props) {
     };
 
     const onMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== pointerId) return; // [audit B1/B2] our pointer only
+      if (ev.pointerId !== pointerId) return; // our pointer only
       lastX = ev.clientX;
       lastY = ev.clientY;
       if (!active) {
@@ -1806,14 +1804,14 @@ export function EmitterTree({ bridge }: Props) {
         geom = captureRootBlockGeometry(treeScrollRef.current, curRoots);
         rowGeom = captureRowGeometry(treeScrollRef.current, curRows);
         liftedH = geom !== null ? liftedBlockHeight(geom, blockRootIdxs) : 0;
-        // [] Esc / right-click cancel only an ACTIVE drag — attach the
+        // Esc / right-click cancel only an ACTIVE drag — attach the
         // listeners on activation so a pre-threshold right-click still opens
-        // the row context menu. [] start the autoscroll loop.
+        // the row context menu. Start the autoscroll loop.
         document.addEventListener("keydown", onKey, true);
         document.addEventListener("contextmenu", onCtx, true);
-        // [audit A1/A2/A3] expose the abort hook only while active, so a mid-
+        // Expose the abort hook only while active, so a mid-
         // drag tree mutation cancels the gesture before it commits stale ids.
-        // [audit B2] tear down on focus loss (alt-tab / window blur / tab hide)
+        // Tear down on focus loss (alt-tab / window blur / tab hide)
         // so the drag can't get stranded with no pointerup ever arriving.
         activeDragCancelRef.current = () => finish(false);
         window.addEventListener("blur", onBlur);
@@ -1832,7 +1830,7 @@ export function EmitterTree({ bridge }: Props) {
       document.removeEventListener("contextmenu", onCtx, true);
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("visibilitychange", onVis);
-      // [audit B1/B2] clear the re-entrancy latch + abort hook on EVERY exit
+      // Clear the re-entrancy latch + abort hook on EVERY exit
       // path (including a pre-threshold release that returns early below) and
       // release the captured pointer.
       dragPointerRef.current = null;
@@ -1874,7 +1872,7 @@ export function EmitterTree({ bridge }: Props) {
         setDragChip((c) => (c === null ? null : { ...c, exit }));
         window.setTimeout(() => setDragChip(null), CHIP_EXIT_MS + 40);
       }
-      // [audit F2] Swallow the trailing synthetic click, but only briefly. If
+      // Swallow the trailing synthetic click, but only briefly. If
       // the drag ended over a DIFFERENT row (the common reparent/reorder case)
       // or empty space, no synthetic click fires to consume the flag — so
       // clear it on the next macrotask instead of letting it eat the user's
@@ -1895,13 +1893,13 @@ export function EmitterTree({ bridge }: Props) {
     };
     const onUp = (ev: PointerEvent) => { if (ev.pointerId !== pointerId) return; finish(true); };
     const onCancel = (ev: PointerEvent) => { if (ev.pointerId !== pointerId) return; finish(false); };
-    // [audit B2] Focus loss can swallow the pointerup entirely (the up happens
+    // Focus loss can swallow the pointerup entirely (the up happens
     // off-window, or the OS steals the pointer). Without these the gesture
     // would stay armed — dims/gap/chip frozen, rAF looping, the next stray
     // click committing the abandoned drop. visibilitychange covers tab hide.
     const onBlur = () => finish(false);
     const onVis = () => { if (document.visibilityState === "hidden") finish(false); };
-    // [] Capture-phase so we win over the row's Radix context menu and
+    // Capture-phase so we win over the row's Radix context menu and
     // the tree's own key handler; stopPropagation keeps the menu from opening.
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape") return;
@@ -1920,18 +1918,18 @@ export function EmitterTree({ bridge }: Props) {
     document.addEventListener("pointercancel", onCancel);
   };
 
-  //: hovering a LINKED row lights up its whole group — member rows
+  // Hovering a LINKED row lights up its whole group — member rows
   // tint when `linkHover` is true. `hoveredLinkGroup` is the group currently
   // hovered (null = none). The hover signal comes from member rows via
   // onHoverLinkGroup.
   const [hoveredLinkGroup, setHoveredLinkGroup] = useState<number | null>(null);
 
-  //: dissolve a whole link group in one action. Gather every member
+  // Dissolve a whole link group in one action. Gather every member
   // of `groupId` from the live flat list and unlink them all with a single
   // `set-membership {groupId:null}` — the host's per-target LeaveLinkGroup
   // (+ auto-dissolve of the last pair) unwinds the group under one
   // captureUndo, so a single Ctrl+Z restores it. Reads the live flatRows
-  // at call time, never a cached id list (R4 mitigation).
+  // at call time, never a cached id list.
   const handleDissolveLinkGroup = useCallback(
     (groupId: number) => {
       if (groupId === 0) return;
@@ -1965,12 +1963,12 @@ export function EmitterTree({ bridge }: Props) {
 
   const treeScrollRef = useRef<HTMLDivElement | null>(null);
 
-  // ── Marquee (rubber-band) selection () ──────────────────────
+  // ── Marquee (rubber-band) selection ──────────────────────
   // A primary-button drag starting on EMPTY space inside the scroll
   // viewport (not on a row) sweeps a rectangle; every emitter row it
   // intersects becomes the selection. Ctrl/Cmd makes it additive (union
   // with the prior selection); Esc cancels and restores. Mirrors the
-  // legacy EmitterList marquee (); uses live intersection rather than
+  // legacy EmitterList marquee; uses live intersection rather than
   // the legacy sticky-hit accumulation (the more predictable behaviour).
   // Document-level move/up listeners (no pointer capture needed) so a drag
   // that leaves the viewport still tracks.
@@ -2048,7 +2046,7 @@ export function EmitterTree({ bridge }: Props) {
     [],
   );
 
-  // ── Batch C — keyboard handler ─────────────────────────────────
+  // ── keyboard handler ─────────────────────────────────
   //
   // Routes via the focused row's `data-emitter-id`. The tree container
   // is `tabIndex={0}` so it can hold focus when no row is focused
@@ -2193,7 +2191,7 @@ export function EmitterTree({ bridge }: Props) {
       ) : (
         // Wrap the <ul> in a relative-positioned container so the
         // bracket gutter (absolute, right-aligned) can stack alongside.
-        // B1.3.1 polish: this container is the scroll viewport now —
+        // This container is the scroll viewport now —
         // `flex-1 min-h-0 overflow-y-auto` so long emitter lists scroll
         // inside it while EmitterTreeToolbar (sibling below) stays
         // pinned at the pane's bottom.
@@ -2274,7 +2272,7 @@ export function EmitterTree({ bridge }: Props) {
             />
           )}
           </ul>
-          {/* Marquee (rubber-band) selection rectangle (). */}
+          {/* Marquee (rubber-band) selection rectangle. */}
           {marqueeBox !== null && (
             <div
               data-testid="emitter-marquee"

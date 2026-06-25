@@ -101,7 +101,7 @@ HRESULT STDMETHODCALLTYPE HostBridgeProxy::Invoke(DISPID dispIdMember, REFIID /*
         catch (const std::exception& e)
         {
             // Build a defensive error envelope so the JS side still
-            // gets a well-formed response object to parse. G4:
+            // gets a well-formed response object to parse.
             // pre-fix this concatenated e.what() into a hand-rolled JSON
             // string, so quotes/backslashes/control chars in exception
             // text would malform the JSON — defeating the entire purpose

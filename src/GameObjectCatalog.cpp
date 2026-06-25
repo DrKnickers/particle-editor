@@ -255,7 +255,7 @@ namespace
                                          childDataAll(e, L"SpaceBehavior"));
                 re.movementRaw    = trim(WideToAnsi(childData(e, L"MovementClass")));
                 re.affiliationRaw = trim(WideToAnsi(childData(e, L"Affiliation")));
-                re.scaleFactorRaw = trim(WideToAnsi(childData(e, L"Scale_Factor")));  //
+                re.scaleFactorRaw = trim(WideToAnsi(childData(e, L"Scale_Factor")));
                 // fieldable source lists.
                 re.costRaw        = trim(WideToAnsi(childData(e, L"Build_Cost_Credits")));
                 if (re.costRaw.empty())
@@ -432,7 +432,7 @@ namespace
     // members (the model-bearing fighters) are then ALSO marked. Case-insensitive
     // throughout (the catalog keys are already folded). A HARD picker keep-gate
     // (IsPickerListed); the --dump-catalog audit lists kept-but-non-fieldable so a real
-    // unit can never silently vanish ().
+    // unit can never silently vanish.
     void markFieldable(IFileManager& fm,
                        const std::map<std::string, RawEntry>& byName,
                        std::vector<GameObjectRef>& objects)
@@ -602,7 +602,7 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
     }
     const size_t n = uniqueFiles.size();
 
-    //-timing] Diagnostic per-phase timing to stderr, gated by the
+    // Diagnostic per-phase timing to stderr, gated by the
     // CATALOG_TIMING env var (off in normal runs). Tag: [catalog-timing].
     char tmbuf[8] = { 0 };
     const bool timing = GetEnvironmentVariableA("CATALOG_TIMING", tmbuf, sizeof(tmbuf)) > 0;
@@ -699,7 +699,7 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
         ref.role        = cl.role;
         ref.bucket      = cl.bucket;
         ref.conflict    = cl.conflict;
-        ref.affiliation = prof.affiliation;   // fu] surfaced as the picker's faction filter
+        ref.affiliation = prof.affiliation;   // surfaced as the picker's faction filter
         // <Scale_Factor> render multiplier: inherit up the Variant_Of chain
         // (first-non-empty), then guard-parse -- reject empty / non-finite / non-positive
         // (a 0 or negative scale yields a singular world matrix -> un-pickable object;
@@ -785,8 +785,8 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
 namespace
 {
     // A renderable object that is NOT a selectable unit/structure -> Excluded. Tag-DENY
-    // (never tag-allow: an unrecognised real unit must fall through to kept, not vanish --
-    //) + a few behavior tokens. Substring match on the lower-cased tag.
+    // (never tag-allow: an unrecognised real unit must fall through to kept, not vanish)
+    // + a few behavior tokens. Substring match on the lower-cased tag.
     bool isExcludedTag(const std::string& tl)
     {
         static const char* kDeny[] = {
@@ -922,7 +922,7 @@ Classification ClassifyObject(const ObjectProfile& p)
     //    capitals resolve their mesh via Galactic_Model_Name (Star_Destroyer); real buildable
     //    structures set Is_Dummy=Yes (E_Gravity_Well_Station, mining facilities); a story unit can
     //    set In_Background=Yes (Eclipse SSD). Backdrops are caught by their Planet/Skydome/Prop TAG
-    //    (fail-toward-showing,), and the fieldable gate hides any non-fieldable straggler.
+    //    (fail-toward-showing), and the fieldable gate hides any non-fieldable straggler.
     //    (isDummy/inBackground stay captured on the profile for diagnostics; they do not gate here.)
     if (p.modelField == ModelFieldKind::None ||
         isExcludedTag(tl) || isExcludedName(nl) || hasExcludeBehavior(p.behaviorTokens))

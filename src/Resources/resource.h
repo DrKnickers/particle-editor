@@ -3,7 +3,7 @@
 // Used by ParticleEditor.rc
 //
 // The legacy native-UI dialog / icon / toolbar / menu / control / command IDs
-// were removed in along with the Win32 UI. These five are the live IDs
+// were removed along with the Win32 UI. These five are the live IDs
 // that remained from that block; more live resource IDs (ground / skydome
 // textures, shaders, and shared error / query strings) follow further below.
 #define IDI_LOGO                        109
@@ -12,7 +12,7 @@
 #define IDS_SCENEHEAT                   133
 #define IDR_DEFAULT_SHADER              140
 
-// — alternate ground textures. The Grass/Sand/Snow slots no longer
+// Alternate ground textures. The Grass/Sand/Snow slots no longer
 // bundle the proprietary vanilla EaW textures; they load W_TEMPGRND00 /
 // W_SAND00 / W_SNOW_RGH from the user's game install at runtime (see
 // engine.cpp kGroundTextureGameLeaf), so IDs 142-144 are retired and NOT
@@ -21,21 +21,21 @@
 #define IDB_GROUND_METAL                145
 #define IDB_GROUND_GREY                 146
 
-// — texture-palette button glyph (16x16 24-bit BMP, painter's
+// Texture-palette button glyph (16x16 24-bit BMP, painter's
 // palette icon). Used as the BS_BITMAP image for IDC_BUTTON_PALETTE
 // in the Textures groupbox header on the Appearance tab.
 #define IDB_PALETTE_GLYPH               147
 
-// — hover-pin badge (24x48 24-bit BMP, vertical strip).
+// Hover-pin badge (24x48 24-bit BMP, vertical strip).
 // Top half (y=0..23) = empty/hover state; bottom half (y=24..47) =
 // filled/pinned state. Blitted onto each cell when the user hovers.
 #define IDB_PIN_BADGE                   148
 
-// — skydome equirectangular shader. Samples an environment texture
+// Skydome equirectangular shader. Samples an environment texture
 // onto a UV sphere rendered from inside.
 #define IDR_SHADER_SKYDOME              150
 
-//: 8 bundled skydome textures (slots 1-8 in the picker dialog).
+// 8 bundled skydome textures (slots 1-8 in the picker dialog).
 // RCDATA entries added in Task 5 will point at src/Resources/skydomes/*.tga.
 #define IDR_SKYDOME_SPACE               151
 #define IDR_SKYDOME_ATMOSPHERE          152
@@ -46,11 +46,11 @@
 #define IDR_SKYDOME_STUDIO              157
 #define IDR_SKYDOME_INDOOR              158
 
-// — bump-mapped terrain lighting for the ground plane. Faithful port of
+// Bump-mapped terrain lighting for the ground plane. Faithful port of
 // the game's TerrainMeshBump.fx (reference/foc-shaders/) minus cloud/FOW.
 #define IDR_SHADER_GROUND_LIT           159
 
-// — shared error/query STRINGTABLE ids migrated here from the now-deleted
+// Shared error/query STRINGTABLE ids migrated here from the now-deleted
 // Resources/resource.en.h when the legacy localized .rc/.h files were removed.
 // These are the ONLY IDS_* the surviving engine/IO/host code LoadString()s
 // (engine.cpp, files.cpp, xml.cpp, exceptions.h, main.cpp); their runtime

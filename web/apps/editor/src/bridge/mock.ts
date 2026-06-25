@@ -3,7 +3,7 @@
 // the WebView2 host (browser-mode design iteration, Vitest contract
 // tests).
 //
-// Coverage as of Task 2.1:
+// Coverage:
 //   - engine/state/snapshot                  full DTO
 //   - engine/set/*  (17 setters)             mutates the store, then
 //                                            emits engine/state/changed
@@ -16,7 +16,7 @@
 //   - animate-scene-rect                     accepted as a no-op
 //   - host/backing-color                     accepted as a no-op
 // Everything else (emitters/*, file/*, undo/*, spawner/*) rejects with
-// a "not implemented" error — those land in Phase 3+.
+// a "not implemented" error — those land later.
 
 import type {
   Bridge,
@@ -92,7 +92,7 @@ function isMutating(kind: Request["kind"]): boolean {
   // has no engine sim so the value has no effect here.
   if (kind === "engine/set/estimated-load") return false;
   if (kind === "engine/set/heat-debug") return false;
-  // T9] stats/set-frozen is a test-only knob; never mutating.
+  // stats/set-frozen is a test-only knob; never mutating.
   if (kind === "stats/set-frozen") return false;
   if (kind.startsWith("engine/set/")) return true;
   // engine/action/clear is destructive — destroying particles in the
@@ -100,7 +100,7 @@ function isMutating(kind: Request["kind"]): boolean {
   if (kind === "engine/action/clear") return true;
   // engine/action/rescale-system mutates emitter parameters.
   if (kind === "engine/action/rescale-system") return true;
-  // Screen 4 Batch B1: per-emitter rescale + structural mutations are
+  // Per-emitter rescale + structural mutations are
   // all mutating. Link-group exempt-set edits change propagation
   // behaviour but not engine-observable particle output; flag them
   // anyway so the dirty-bit + save-prompt gate matches the native
@@ -111,7 +111,7 @@ function isMutating(kind: Request["kind"]): boolean {
   if (kind === "emitters/delete") return true;
   if (kind === "emitters/rename") return true;
   if (kind === "emitters/duplicate-with-index-increment") return true;
-  // Screen 4 Batch B2 — add-child / move / link-group-membership all
+  // Add-child / move / link-group-membership all
   // change persisted tree state, so they ride the dirty bit.
   if (kind === "emitters/add-lifetime-child") return true;
   if (kind === "emitters/add-death-child") return true;
@@ -119,12 +119,12 @@ function isMutating(kind: Request["kind"]): boolean {
   if (kind === "emitters/move") return true;
   if (kind === "emitters/move-many") return true;
   if (kind === "linkGroups/set-membership") return true;
-  // Screen 4 Batch B3 — drag/drop reorder + reparent. Both modes
+  // Drag/drop reorder + reparent. Both modes
   // mutate persisted tree state.
   if (kind === "emitters/drop") return true;
   // Multi-select drag-reorder — same structural-mutation tier as emitters/drop.
   if (kind === "emitters/reorder-many") return true;
-  // Screen 4 Batch C — clipboard. `copy` doesn't mutate the tree;
+  // Clipboard. `copy` doesn't mutate the tree;
   // `cut` (delete) + `paste` (insert) both do. Matches the native
   // host's per-handler `SetDirty` rule.
   if (kind === "emitters/cut") return true;
@@ -132,17 +132,17 @@ function isMutating(kind: Request["kind"]): boolean {
   if (kind === "emitters/paste-as-child") return true;
   if (kind === "linkGroups/set-exempt-fields") return true;
   if (kind === "linkGroups/reset-exempt-fields") return true;
-  // Screen 5 / Screen 6 Batch B-α — track key deletion + interpolation
+  // Track key deletion + interpolation
   // toggle are persisted mutations on the per-emitter Track state.
   if (kind === "emitters/delete-track-keys") return true;
   if (kind === "emitters/set-track-interpolation") return true;
   if (kind === "emitters/set-track-lock") return true;
-  // Screen 6 Batch B-β — drag-to-move + click-to-add land in the same
+  // Drag-to-move + click-to-add land in the same
   // mutating tier as delete + interpolation: both edit per-emitter
   // Track state.
   if (kind === "emitters/set-track-key") return true;
   if (kind === "emitters/add-track-key") return true;
-  // Phase 4.1 Fix dispatch 1 — per-emitter property patch.
+  // Per-emitter property patch.
   if (kind === "emitters/set-properties") return true;
   return false;
 }
@@ -179,7 +179,7 @@ function didMutate(
   }
 }
 
-//: live spawn values come from the properties overlay at emit time —
+// live spawn values come from the properties overlay at emit time —
 // ONE decoration point instead of mirroring into the tree store from every
 // mutation handler. Tree-node literals carry ZERO_SPAWN purely to satisfy
 // the type; this override is the source of truth.
@@ -214,7 +214,7 @@ const MOCK_SKINNED_REFS = new Set<string>(["Stormtrooper_Squad"]);
 // Names that resolve in the catalog but whose model file is absent from the
 // mod/base (getFile miss) — selecting one drives the "model file not found" status
 // path (distinct from skinned / corrupt). Must match a Name in the catalog list.
-// A structure (the picker now lists units + structures only; the s49 prop
+// A structure (the picker now lists units + structures only; the earlier prop
 // example would be filtered out, so the missing-model case rides a kept category).
 const MOCK_MISSING_MODELS = new Set<string>(["Sensor_Array_NoModel"]);
 
@@ -256,7 +256,7 @@ const MOCK_ATLAS_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACA
 export class MockBridge implements Bridge {
   private listeners = new Map<EventKind, Set<(e: Event) => void>>();
 
-  /** Screen 8 Batch 4: in-mock "active spawner instance count". Bumped
+  /** In-mock "active spawner instance count". Bumped
    *  by spawner/trigger (by burstSize), zeroed by spawner/stop. The
    *  native SpawnerDriver tracks real ParticleSystemInstance lifecycles;
    *  the mock counter is just a hook for UI badge testing. */
@@ -298,7 +298,7 @@ export class MockBridge implements Bridge {
     // no-op batch move leaves the document clean, mirroring the native host
     // (which marks dirty only on the success branch of each handler). The
     // mock previously fired this unconditionally for any mutating kind, so a
-    // refused/no-op drag-commit falsely dirtied the doc (audit fix D).
+    // refused/no-op drag-commit falsely dirtied the doc.
     // (file/* and engine/action/reload-* / clear are deliberately NOT
     // marked dirty — see isMutating below.)
     if (isMutating(req.kind) && didMutate(req, result, preMoveRootOrder)) {
@@ -320,7 +320,7 @@ export class MockBridge implements Bridge {
   // ---------------------------------------------------------------- internals
 
   private emit(e: Event): void {
-    //: decorate tree payloads with live spawn values at the single
+    // decorate tree payloads with live spawn values at the single
     // event choke point (see decorateSpawn above).
     if (e.kind === "emitters/tree/changed") {
       e = { ...e, payload: { ...e.payload, root: decorateSpawn(e.payload.root) } };
@@ -335,7 +335,7 @@ export class MockBridge implements Bridge {
     this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
   }
 
-  /** Screen 8 Batch 3: every mutating setter/action sets dirty=true. The
+  /** Every mutating setter/action sets dirty=true. The
    *  debounce (don't re-emit if already dirty) avoids spamming
    *  `dirty/changed` on every slider drag tick. The native host applies
    *  the same rule. */
@@ -465,7 +465,7 @@ export class MockBridge implements Bridge {
         return {};
 
       case "engine/set/reference-object-transform":
-        // freeze/lock] Mirror the native bridge: a locked object drops
+        // Mirror the native bridge: a locked object drops
         // UI-routed transform requests (the picker also disables the inputs).
         if (useMockEngineState.getState().referenceObjectLocked) return {};
         this.patchAndBroadcast({
@@ -509,7 +509,7 @@ export class MockBridge implements Bridge {
         this.patchAndBroadcast({ bloomSize: req.params.v });
         return {};
 
-      // Task 2.7 — leave particles after instance death. Mirrors the
+      // Leave particles after instance death. Mirrors the
       // native ParticleSystem::setLeaveParticles handler in
       // BridgeDispatcher.cpp.
       case "engine/set/leave-particles":
@@ -571,7 +571,7 @@ export class MockBridge implements Bridge {
         return {};
 
       // ---------------- stats freeze (test-only knob) ----------------
-      // T9] Mock parity for native stats/set-frozen. Browser
+      // Mock parity for native stats/set-frozen. Browser
       // mode emits no stats/tick, so freezing is largely no-op, but
       // emit the frozen-changed event for any consumer that listens.
       case "stats/set-frozen":
@@ -600,7 +600,7 @@ export class MockBridge implements Bridge {
       case "engine/action/step-frames":
         return {};
 
-      // Group D: cascade-reset background, ground, bloom,
+      // Cascade-reset background, ground, bloom,
       // skydome, lighting back to engine defaults. The mock applies
       // a patch of just the view-setting fields (background / ground
       // / skydome / bloom) so editor state — currentFilePath, dirty
@@ -769,7 +769,7 @@ export class MockBridge implements Bridge {
         // running. Accept the request silently.
         return {};
 
-      // ---------------- autosave crash-recovery () ----------------
+      // ---------------- autosave crash-recovery ----------------
       case "autosave/check-recovery":
         // Mock: no %TEMP% scan in browser mode — always "no orphan", so the
         // recovery dialog never appears under `pnpm dev` / web vitest.
@@ -791,7 +791,7 @@ export class MockBridge implements Bridge {
 
       case "animate-scene-rect":
         // Mock: no native viewport-anim system (the host interpolates the
-        // dock-slide rect under). Accept silently.
+        // dock-slide rect under this architecture). Accept silently.
         return {};
 
       case "host/backing-color":
@@ -805,13 +805,13 @@ export class MockBridge implements Bridge {
         return { imageBase64: "", w: 0, h: 0 };
 
       case "viewport/input":
-        // Phase 2 — mock: no native HWND to PostMessage to.
+        // Mock: no native HWND to PostMessage to.
         // Tests assert on `dispatch` call args (kind + payload shape);
         // the return shape is the standard empty-object ack. Browser
         // mode never has an engine to drive, so this is a pure no-op.
         return {};
 
-      // ---------------- file ops (Phase 3 Screen 8 Batch 3) ----------
+      // ---------------- file ops ----------
       //
       // The mock implementations are deliberately UI-free: there's no
       // real picker, no on-disk read/write. They simulate the host's
@@ -892,7 +892,7 @@ export class MockBridge implements Bridge {
         // opens GetOpenFileNameW in the active mod's texture folder.
         return { filename: "" };
 
-      // ---------------- texture palette (sub-feature B) ----------------
+      // ---------------- texture palette ----------------
       //
       // Browser mode has no per-mod Store and no texture decode, so the
       // palette is inert: empty pins/recents, null thumbnails, no-op
@@ -918,7 +918,7 @@ export class MockBridge implements Bridge {
       case "textures/palette/touch-recent":
         return { ok: true };
 
-      // ---------------- spawner (Phase 3 Screen 8 Batch 4) ----------------
+      // ---------------- spawner ----------------
       //
       // The native host treats spawner/start as a full-config replace
       // (mirrors `SpawnerDriver::SetConfig`). The mock matches: every
@@ -954,7 +954,7 @@ export class MockBridge implements Bridge {
         });
         return {};
 
-      // ---------------- emitters/preview-from-file (Phase 3 Screen 8 Batch 4)
+      // ---------------- emitters/preview-from-file
       //
       // Returns a fixed 3-emitter mock tree regardless of path. Lets the
       // Import Emitters modal exercise the checkbox tree in browser
@@ -982,7 +982,7 @@ export class MockBridge implements Bridge {
           },
         };
 
-      // ---------------- emitters/get-tracks (Screen 6 Batch A) -------
+      // ---------------- emitters/get-tracks -------
       //
       // Read-only. Always returns 7 deterministic tracks per emitter
       // id from the fixture generator (see `makeFixtureTracks`). An
@@ -1011,7 +1011,7 @@ export class MockBridge implements Bridge {
         return { tracks: deriveLockViews(useMockTrackOverlay.getState().read(node.id)) };
       }
 
-      // ---------------- emitters/get-properties (Phase 4.1 Fix 1) ----
+      // ---------------- emitters/get-properties ----
       //
       // Returns the merged fixture+overlay DTO for `id`. Unknown ids
       // (including the synthetic root id=-1) return default-shaped
@@ -1032,7 +1032,7 @@ export class MockBridge implements Bridge {
         };
       }
 
-      // ---------------- emitters/set-properties (Phase 4.1 Fix 1) ----
+      // ---------------- emitters/set-properties ----
       //
       // Batch patch: apply every key in `patch` to the overlay, emit
       // tree/changed + state/changed once so the React form re-fetches
@@ -1065,7 +1065,7 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      // ---------------- emitters/delete-track-keys (Screen 5/6 B-α) --
+      // ---------------- emitters/delete-track-keys --
       //
       // Border keys (first + last in time order) are silently skipped.
       // The wire contract returns Record<string, never> on every call;
@@ -1088,7 +1088,7 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      // ---------------- emitters/set-track-interpolation (Screen 5/6 B-α)
+      // ---------------- emitters/set-track-interpolation
       //
       // Always succeeds (when the track is known); the mock surfaces a
       // missing-track as a silent no-op (matching the native host's
@@ -1132,7 +1132,7 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      // ---------------- emitters/set-track-key (Screen 6 Batch B-β) --
+      // ---------------- emitters/set-track-key --
       //
       // Drag-to-move commit. Erases the key at `oldTime` and inserts
       // `(newTime, newValue)` in time order. Border keys (first + last
@@ -1156,7 +1156,7 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      // ---------------- emitters/add-track-key (Screen 6 Batch B-β) --
+      // ---------------- emitters/add-track-key --
       //
       // Click-to-add commit. Inserts a new key at `(time, value)` in
       // time order. If a key already exists at the exact `time`, the
@@ -1183,7 +1183,7 @@ export class MockBridge implements Bridge {
         return { time, value };
       }
 
-      // ---------------- emitters/list + emitters/select (Screen 4 Batch A)
+      // ---------------- emitters/list + emitters/select
       //
       // The fixture tree lives in `mock-state.useMockEmitterTree`. The
       // list response returns a fresh copy so React-side consumers can't
@@ -1195,7 +1195,7 @@ export class MockBridge implements Bridge {
         const cloned = JSON.parse(
           JSON.stringify(useMockEmitterTree.getState().tree),
         ) as EmitterTreeDto;
-        //: decorate the clone with live spawn values (see decorateSpawn).
+        // decorate the clone with live spawn values (see decorateSpawn).
         return { root: decorateSpawn(cloned.root) };
       }
 
@@ -1211,7 +1211,7 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      // ---------------- emitters/* mutations (Screen 4 Batch B1) -----
+      // ---------------- emitters/* mutations -----
       //
       // The fixture tree is mutated in place via the helpers in
       // mock-state. Each handler emits `emitters/tree/changed` so the
@@ -1299,7 +1299,7 @@ export class MockBridge implements Bridge {
         return { newId: result.newId };
       }
 
-      // ---------------- emitters/add-* / move / set-membership (B2) -
+      // ---------------- emitters/add-* / move / set-membership -
       //
       // Each mutates the fixture tree via mock-state helpers, then
       // emits `emitters/tree/changed` + `engine/state/changed`. Refusal
@@ -1333,7 +1333,7 @@ export class MockBridge implements Bridge {
         return { newId: result.newId };
       }
 
-      // Phase 4.1 Fix dispatch 5 — new top-level "New Root Emitter"
+      // New top-level "New Root Emitter"
       // menu item. Always succeeds at the mock level (the engine has
       // no max-roots cap). Tree-changed + state-changed events match
       // the other add-child handlers.
@@ -1429,7 +1429,7 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      // ---------------- emitters/drop (Screen 4 Batch B3) ------------
+      // ---------------- emitters/drop ------------
       //
       // Tagged-union: { mode: "reorder", id, rootIndex } reorders a
       // root via `reorderRootEmitter`; { mode: "reparent", id,
@@ -1476,7 +1476,7 @@ export class MockBridge implements Bridge {
         return { ok: true };
       }
 
-      // ---------------- emitters/copy / cut / paste (Screen 4 Batch C)
+      // ---------------- emitters/copy / cut / paste
       //
       // Process-local clipboard mirrors the native host's
       // `std::vector<std::vector<uint8_t>>`. `copy` snapshots subtrees
@@ -1565,7 +1565,7 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      // ---------------- engine/action/rescale-emitter (Screen 4 B1) --
+      // ---------------- engine/action/rescale-emitter --
       //
       // Per-emitter rescale. The mock has no engine state to mutate so
       // the handler is a logging stub; the dirty-bit ride-along via
@@ -1586,7 +1586,7 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      // ---------------- linkGroups/* (Screen 4 Batch B1,) ------
+      // ---------------- linkGroups/* ------
       case "linkGroups/list-exempt-fields": {
         const fields = useMockLinkGroupExempt.getState().get(req.params.groupId);
         return { fields };
@@ -1610,7 +1610,7 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      //: the native host diffs real emitter params; the mock has
+      // The native host diffs real emitter params; the mock has
       // none, so it echoes whatever conflicts the test seeded (default:
       // none). Read-only — no mutation, no events.
       case "linkGroups/diff-membership": {
@@ -1620,7 +1620,7 @@ export class MockBridge implements Bridge {
         return { conflicts: useMockLinkGroupConflicts.getState().conflicts };
       }
 
-      // LNK settings surface: same stub — the real exempt→shared field diff
+      // Link settings surface: same stub — the real exempt→shared field diff
       // is a native concern; echo the seeded conflicts so a test/preview can
       // drive the inline settings warning.
       case "linkGroups/diff-exempt-change":
@@ -1660,10 +1660,10 @@ export class MockBridge implements Bridge {
         this.lightingForceAlign = req.params.enabled;
         return {};
 
-      // ---------------- emitters / undo: Phase 3+ ----------------
+      // ---------------- emitters / undo: not yet implemented ----------------
       case "emitters/update":
       case "emitters/import-from-file":
-        throw new Error(`MockBridge: '${req.kind}' not implemented (Phase 3+)`);
+        throw new Error(`MockBridge: '${req.kind}' not implemented`);
 
       // Browser-mode undo is a no-op — the mock doesn't capture
       // snapshots of its multi-store state, so there's nothing to

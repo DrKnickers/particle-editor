@@ -17,7 +17,7 @@ const APP_VERSION = readAppVersion(
 // across rebuilds of the same commit, so the About dialog's
 // "Build date" reflects when the code was actually committed rather
 // than when somebody happened to run `pnpm build`. Using `new Date()`
-// here was the source of handoff item 16's lone real golden-drift
+// here was the source of the lone real golden-drift
 // surface (dialog-about) — every rebuild on a different day shifted
 // the value and broke the a11y golden.
 //

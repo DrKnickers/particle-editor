@@ -1,11 +1,11 @@
 // CurveEditor — SVG renderer for a single track.
 //
-// Phase 3 Screen 6 Batch A: read-only foundation.
-// Screen 5 / Screen 6 Batch B-α:
+// Read-only foundation.
+// Key selection:
 //   - Key selection (click + Ctrl/Cmd+click toggle, click empty SVG to
 //     clear). Selection state is OWNED by the parent (TrackEditor or
 //     EmitterPropertyPanel) and identified by key TIME — not array
-//     index — so a future drag-to-move (Batch B) can re-order keys in
+//     index — so a future drag-to-move can re-order keys in
 //     the underlying multiset without invalidating the selection.
 //   - Smooth (cubic-Bezier) + step (staircase) rendering branches.
 //     The control-point formula matches the legacy implementation at
@@ -15,7 +15,7 @@
 //     Step expands each segment as [p1, (p2.x, p1.y), p2] so a single
 //     <polyline> can render the staircase.
 //
-// Screen 6 Batch B-β adds:
+// Drag-to-move:
 //   - Drag-to-move via pointer events. Pointer-down on a key starts a
 //     drag (local state); pointer-move re-projects the dragged key to
 //     the new screen position, clamped to:
@@ -39,7 +39,7 @@
 //     the selected styling (filled accent + r=5) and the ring stroke
 //     as a layered cue.
 //
-// Phase 4.1 Fix dispatch 5 adds:
+// Marquee select:
 //   - Marquee (rubber-band) select on empty-canvas pointer-down in
 //     Select mode. While dragging, a semi-transparent rectangle with
 //     a dashed border tracks the cursor. At pointer-up every key
@@ -51,7 +51,7 @@
 //     cleared and the callback is NOT fired. When the gesture never
 //     grows past `DRAG_SLOP` between down and up we treat it as a
 //     plain click and fire `onCanvasClick` (preserves the existing
-//     "click empty area to clear selection" UX from). Insert
+//     "click empty area to clear selection" UX). Insert
 //     mode is unchanged: empty-canvas pointer-down still fires
 //     `onCanvasAdd` and marquee is suppressed.
 
@@ -59,7 +59,7 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type
 import type { InterpolationType, TrackDto, TrackName } from "@particle-editor/bridge-schema";
 import { useCurveMorph, type SuppressedMove } from "../lib/use-curve-morph";
 
-/** Channel definition for the multi-channel overlay branch (Task 2.6).
+/** Channel definition for the multi-channel overlay branch.
  *  `id` is the UI-facing identifier (e.g. "rotation"); `trackName` is
  *  the wire-level TrackName (e.g. "rotationSpeed") used to look up the
  *  track in the `tracks` array. `color` is a CSS colour string (token
@@ -79,7 +79,7 @@ type Props = {
    *  channel branch (when `tracks` + `channels` are passed) doesn't
    *  need it. */
   track?: TrackDto;
-  /** Multi-channel overlay branch (Task 2.6): when `tracks` +
+  /** Multi-channel overlay branch: when `tracks` +
    *  `channels` + `visibleChannels` are all passed, the renderer
    *  ignores `track` / `valueRange` and instead draws one curve per
    *  visible channel in the channel's colour. Multi-channel mode is
@@ -97,7 +97,7 @@ type Props = {
    *  stroke + full opacity + key circles + interactive handlers) and
    *  dims the others (thinner stroke + reduced opacity + no markers).
    *  When unset, the multi-channel branch stays view-only and dims
-   *  every channel equally (the Task 2.6 behavior). */
+   *  every channel equally (the view-only behavior). */
   focusChannel?: string;
   /** Y-axis range for the canvas. In single-track mode this is the
    *  one and only Y range. In multi-channel mode this is the
@@ -183,7 +183,7 @@ type Props = {
    *  capturing surface). The parent uses this to roll back any
    *  live-drag visualisation. */
   onKeyDragCancel?: () => void;
-  /** an-audit-finding group-drag commit: a drag of one key within a multi-selection
+  /** Group-drag commit: a drag of one key within a multi-selection
    *  shifts the whole selection by (dTime, dValue). */
   onGroupDragEnd?: (dTime: number, dValue: number) => void;
   /** Group-drag live move: fires on every pointer-move past slop during
@@ -192,7 +192,7 @@ type Props = {
    *  spinners (which show the selection AVERAGE) — the group analogue of
    *  `onKeyDragMove`. */
   onGroupDragMove?: (dTime: number, dValue: number) => void;
-  /** Marquee-select handler (Phase 4.1 Fix dispatch 5). Fires at
+  /** Marquee-select handler. Fires at
    *  pointer-up when a Select-mode rubber-band drag has covered at
    *  least one key. `times` is the set of key TIMES inside the
    *  rectangle (inclusive on both axes in viewBox space). `shift`
@@ -202,7 +202,7 @@ type Props = {
    *  marquee is treated as a click and `onCanvasClick` fires
    *  instead. */
   onCanvasMarqueeSelect?: (times: number[], shift: boolean) => void;
-  /** CRV: ref to drive the marquee imperatively so it can be STARTED from
+  /** Ref to drive the marquee imperatively so it can be STARTED from
    *  outside the plot SVG (the axis-label gutters). Only the multi-channel
    *  focus editor implements it; the single-track branch ignores it. */
   marqueeRef?: Ref<CurveMarqueeHandle>;
@@ -278,7 +278,7 @@ function buildSmoothPath(points: ReadonlyArray<{ x: number; y: number }>): strin
  *  each (p1, p2) pair, emits the horizontal leg at p1.y then the
  *  vertical jump to p2.y. Per legacy [src/UI/CurveEditor.cpp:300-318]
  *  the horizontal leg uses the "line pen" and the vertical leg the
- *  "step pen" — visual differentiation is deferred to Batch B; the
+ *  "step pen" — visual differentiation is deferred; the
  *  shape is identical either way. */
 function buildStepPolyline(points: ReadonlyArray<{ x: number; y: number }>): string {
   if (points.length === 0) return "";
@@ -432,7 +432,7 @@ export function CurveEditor({
   // also set, the focus channel renders emphasised + interactive (key
   // circles, drag, marquee, insert, context menu) while the other
   // visible channels render dimmed as background context. When
-  // `focusChannel` is unset the branch stays view-only (Task 2.6).
+  // `focusChannel` is unset the branch stays view-only.
   if (tracks !== undefined && channels !== undefined && visibleChannels !== undefined) {
     return (
       <MultiChannelCurves
@@ -518,7 +518,7 @@ export function CurveEditor({
   // the dragged circle's cx/cy reflects the latest cursor position.
   const [, setDragTick] = useState(0);
 
-  // Phase 4.1 Fix dispatch 5 — marquee state. Held as React state
+  // Marquee state. Held as React state
   // (not a ref) because the rectangle rendering already needs a
   // re-render on every pointer-move; useState gives us both the
   // value-tracking and the render side-effect in one. Coordinates
@@ -779,7 +779,7 @@ export function CurveEditor({
 
   /** Pointer-down on the canvas backdrop (empty area). In Insert
    *  mode, computes (time, value) and fires `onCanvasAdd`. In
-   *  Select mode (), starts a marquee — pointer-move grows the
+   *  Select mode, starts a marquee — pointer-move grows the
    *  rectangle; pointer-up commits the selection or, if no drag past
    *  slop, fires the click path (clears selection). */
   const onCanvasPointerDown = (event: ReactPointerEvent<SVGRectElement>) => {
@@ -859,7 +859,7 @@ export function CurveEditor({
         // not a key circle). Child click handlers stopPropagation so
         // they never reach here.
         if (e.target !== e.currentTarget) return;
-        // (Group D follow-up): in Insert mode, pointer-down on
+        // In Insert mode, pointer-down on
         // the backdrop fires onCanvasAdd. If the bridge response
         // renders a new key circle before pointer-up, the synthetic
         // click event's target becomes the SVG (LCA of backdrop-down
@@ -884,7 +884,7 @@ export function CurveEditor({
         fill="transparent"
         onPointerDown={onCanvasPointerDown}
         onContextMenu={(e) => {
-          // (Group D follow-up): right-click on empty canvas
+          // Right-click on empty canvas
           // drops the parent back to Select mode. preventDefault to
           // suppress the browser's native context menu, since we
           // own the gesture.
@@ -1023,7 +1023,7 @@ export function CurveEditor({
         );
       })}
 
-      {/* Marquee rectangle (). Rendered last so it draws over the
+      {/* Marquee rectangle. Rendered last so it draws over the
           keys. `pointerEvents="none"` keeps the captured backdrop in
           control of the gesture — the rect is purely visual. The
           fill + dashed border use the accent token (--accent-soft fill,
@@ -1046,13 +1046,13 @@ export function CurveEditor({
   );
 }
 
-// ─── Multi-channel overlay (Task 2.6 + hybrid focus-channel restore) ──
+// ─── Multi-channel overlay (with hybrid focus-channel restore) ──
 //
 // Renders a single SVG with one layer per visible channel. Two modes:
 //
 //   1. View-only (focusChannel undefined) — every visible channel
 //      renders the same way: curve line + small unstyled circles, all
-//      `pointerEvents=none`. Matches the Task 2.6 behaviour.
+//      `pointerEvents=none`. Matches the view-only behaviour.
 //
 //   2. Hybrid focus-channel (focusChannel set) — non-focus visible
 //      channels render dimmed (opacity 0.4, no markers, no pointer
@@ -1101,7 +1101,7 @@ type MultiProps = {
   onKeyDragStart?: (keyTime: number) => void;
   onKeyDragMove?: (keyTime: number, currentTime: number, currentValue: number) => void;
   onKeyDragCancel?: () => void;
-  /** an-audit-finding: a drag of one key within a multi-selection shifts the whole
+  /** A drag of one key within a multi-selection shifts the whole
    *  selection by (dTime, dValue). The parent applies it via applyGroupShift. */
   onGroupDragEnd?: (dTime: number, dValue: number) => void;
   /** Group-drag live move — fires every move past slop with the live
@@ -1243,7 +1243,7 @@ function MultiChannelCurves({
     moved: boolean;
     pointerId: number;
     target: Element | null;
-    // an-audit-finding group-drag: when the grabbed key is part of a multi-selection,
+    // Group-drag: when the grabbed key is part of a multi-selection,
     // the whole selection shifts by (groupDTime, groupDValue).
     isGroup: boolean;
     groupDTime: number;
@@ -1251,8 +1251,8 @@ function MultiChannelCurves({
   } | null>(null);
   const [, setDragTick] = useState(0);
 
-  // ── Morph animation. morphSuppressRef stays null this task (Task 4
-  // wires the recording at the drag-commit site). dragRef must be
+  // ── Morph animation. morphSuppressRef stays null this task (the
+  // recording is wired at the drag-commit site). dragRef must be
   // declared before this hook so the isDragging closure captures it.
   const morphSuppressRef = useRef<SuppressedMove>(null);
   const morph = useCurveMorph({
@@ -1404,7 +1404,7 @@ function MultiChannelCurves({
     const svg = event.currentTarget;
     const { x, y } = eventToViewBox(svg, event.clientX, event.clientY, width, height);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    // ── Group-drag branch (an-audit-finding): shift the whole selection by the
+    // ── Group-drag branch: shift the whole selection by the
     // grabbed key's cursor delta. Border selected keys stay fixed in time;
     // the time-shift is clamped so interior selected keys never cross the
     // global endpoints. The per-key value clamp happens on commit
@@ -1528,7 +1528,7 @@ function MultiChannelCurves({
     }
     setDragTick((n) => n + 1);
     if (isGroup) {
-      // an-audit-finding: commit the whole-selection shift (or treat a no-move as a
+      // Commit the whole-selection shift (or treat a no-move as a
       // plain key click so it falls back to single-select).
       if (moved && onGroupDragEnd) {
         dragConsumedClickRef.current = true;
@@ -1613,7 +1613,7 @@ function MultiChannelCurves({
     return () => { window.removeEventListener("keydown", handler); };
   }, [marquee]);
 
-  // CRV: imperative entry so a marquee can BEGIN from outside this SVG (the
+  // Imperative entry so a marquee can BEGIN from outside this SVG (the
   // axis-label gutters). Maps the client point into viewBox space, CLAMPS it
   // to the plot edges (a left-gutter start anchors at time 0; a bottom-gutter
   // start at value min), seeds the marquee, and captures the pointer to this
@@ -1690,7 +1690,7 @@ function MultiChannelCurves({
   // key's projected position so the circle tracks the cursor.
   const drag = dragRef.current;
   const focusRenderPoints = focusLayer === null ? [] : focusLayer.points.map((p) => {
-    // an-audit-finding group-drag preview: every selected key shifts by the group
+    // Group-drag preview: every selected key shifts by the group
     // delta (border keys keep their time), clamped to the canvas bounds.
     if (drag !== null && drag.isGroup && (selectedKeyTimes?.has(p.time) ?? false)) {
       const isBorder = focusBorderTimes.has(p.time);
@@ -1838,7 +1838,7 @@ function MultiChannelCurves({
         const layerOpacity = focusEnabled ? 0.4 : 1;
         const strokeW = 2;
         // Marker shape: in view-only mode, fully-styled circles
-        // (matching Task 2.6 appearance). In focus mode, smaller
+        // (matching the view-only appearance). In focus mode, smaller
         // filled dots with no stroke — visible enough to read where
         // the control points sit on the dim curve, quiet enough that
         // the focus channel's keys remain the eye's target.
@@ -2057,7 +2057,7 @@ function MultiChannelCurves({
                     onClick={(e) => {
                       if (focusReadOnly) return;
                       e.stopPropagation();
-                      // an-audit-finding: suppress the synthetic click that the browser
+                      // Suppress the synthetic click that the browser
                       // fires after a drag. Without this, a group drag ends
                       // with this (the grabbed) key's trailing click calling
                       // onKeyClick, which collapses the multi-selection down

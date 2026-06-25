@@ -1,16 +1,16 @@
-// Phase 3 Stage 1g — D3D9Ex migration regression spec.
+// D3D9Ex migration regression spec.
 //
 // Asserts that the production engine (running under D3D9Ex instead of
 // D3D9) survives the four D3DPOOL_DEFAULT migration sites' new
 // Release-before / Recreate-after Reset cycle. Specifically guards
-// against the incident shape — a D3DPOOL_DEFAULT resource missing
+// against the known incident shape — a D3DPOOL_DEFAULT resource missing
 // from Engine::Reset's release/recreate flow producing a device-lost
 // state on the next Reset trigger.
 //
 // What this spec proves:
 //
 //   1. window.bridge attached    ⇒ Engine constructor completed.
-//      Because Stage 1 decision #1 hard-fails on D3D9Ex unavailable,
+//      Because the engine hard-fails on D3D9Ex unavailable,
 //      bridge attachment is positive proof Direct3DCreate9Ex +
 //      CreateDeviceEx + InitSkydomeMesh (with D3DPOOL_DEFAULT VB/IB)
 //      all succeeded — the failure modes from yesterday's "Unable to
@@ -30,8 +30,8 @@
 //      driver of the new release/recreate path. 10 cycles assert the
 //      engine remains responsive (no resource leak, no device-lost).
 //
-//   5. polluter pair scenario — explicitly reproduces the spec-
-//      ordering that surfaced (background-picker × spawner toggle
+//   5. Polluter pair scenario — explicitly reproduces the spec-
+//      ordering that surfaced the incident (background-picker × spawner toggle
 //      then ground-texture set). Today the engine handles it via the
 //      skydome OnLost/OnReset + the new D3DPOOL_DEFAULT migration;
 //      regression would mean a new resource missed the Reset flow.
@@ -78,8 +78,8 @@ test.afterAll(async () => {
 });
 
 test("bridge attached ⇒ D3D9Ex init + DPOOL_DEFAULT skydome mesh succeeded", async () => {
-  // Engine::Engine throws on Direct3DCreate9Ex failure (hard-fail per
-  // Stage 1 decision #1) and on InitSkydomeMesh failure ("Unable to
+  // Engine::Engine throws on Direct3DCreate9Ex failure (hard-fail)
+  // and on InitSkydomeMesh failure ("Unable to
   // create skydome mesh"). Either failure would prevent the editor from
   // reaching CDP, so this spec executing AT ALL implies both succeeded.
   // The explicit probe here documents the implicit contract.
@@ -96,11 +96,11 @@ test("bridge attached ⇒ D3D9Ex init + DPOOL_DEFAULT skydome mesh succeeded", a
   expect(probe.hasOn).toBe(true);
 });
 
-test("ground texture cycle through bundled slots (regression)", async () => {
+test("ground texture cycle through bundled slots (device-lost regression)", async () => {
   // Slots 0..3 are bundled RCDATA textures loaded via
   // LoadGroundTextureFromResource → D3DXCreateTextureFromFileInMemory.
   // Cycle through them, assert each mutation lands. Failure mode would
-  // be groundTexture stuck at 0 — the literal symptom.
+  // be groundTexture stuck at 0 — the literal incident symptom.
   const result = await page.evaluate(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const b = (window as any).bridge;
@@ -126,7 +126,7 @@ test("ground texture cycle through bundled slots (regression)", async () => {
 });
 
 test("solid-colour ground (slot 4) ⇒ CreateSolidColorTexture under D3DPOOL_DEFAULT", async () => {
-  // Stage 1 site 1: CreateSolidColorTexture (engine.cpp:1044) migrated
+  // CreateSolidColorTexture (engine.cpp:1044) migrated
   // from D3DPOOL_MANAGED to D3DPOOL_DEFAULT. The first time this path
   // runs on the D3D9Ex device it allocates a fresh 1×1 RGBA texture,
   // locks it, writes the colour, unlocks. If the migration is buggy
@@ -213,8 +213,8 @@ test("10× resize cycle ⇒ Engine::Reset survives the new D3DPOOL_DEFAULT relea
   expect(result!.skydomeSlot).toBe(1);
 });
 
-test(polluter pair + ground set ⇒ engine accepts mutation after spawner+modal cycle", async () => {
-  // surface: spawner toggle (Zustand store + localStorage) +
+test("polluter pair + ground set ⇒ engine accepts mutation after spawner+modal cycle", async () => {
+  // Incident surface: spawner toggle (Zustand store + localStorage) +
   // multiple modal-cycle workflows leave m_pSkydomeEffect's D3DPOOL_
   // DEFAULT state-cache references stale across Reset, causing
   // m_pDevice->Reset to return D3DERR_INVALIDCALL and the swallow-
@@ -222,7 +222,7 @@ test(polluter pair + ground set ⇒ engine accepts mutation after spawner+modal 
   // D3DERR_DEVICENOTRESET state — at which point
   // engine/set/ground-texture silently no-ops (slot stays at 0).
   //
-  // After the Stage 1 migration the same scenario should still work,
+  // After the D3DPOOL_DEFAULT migration the same scenario should still work,
   // because the skydome effect's OnLost/OnReset is already wired
   // (fixed 2026-05-20) and the new D3DPOOL_DEFAULT VB/IB/textures
   // also go through Release/Recreate.
@@ -240,7 +240,7 @@ test(polluter pair + ground set ⇒ engine accepts mutation after spawner+modal 
       await b.request({ kind: "engine/set/skydome-slot", params: { slot: i % 3 } });
     }
 
-    // 2. The test: set ground to a non-zero slot and verify it
+    // 2. The regression check: set ground to a non-zero slot and verify it
     //    actually lands. Pre-fix this returned with state still at 0.
     await b.request({ kind: "engine/set/ground-texture", params: { slot: 3 } });
     const dto = (await b.request({

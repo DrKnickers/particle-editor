@@ -79,7 +79,7 @@ export type LightingSettingsDto = {
   forceAlign: boolean;
 };
 
-// ─── Spawner DTO (Phase 3 Screen 8 Batch 4) ──────────────────────────
+// ─── Spawner DTO ──────────────────────────
 //
 // Mirrors `SpawnerConfig` at [src/SpawnerDriver.h:18]. Defaults match
 // `SpawnerConfig()` (Auto mode, disabled, burst 1, no spacing, 10 s
@@ -111,21 +111,21 @@ export type SpawnerParamsDto = {
   /** Per-axis ± jitter on the spawn position, world units. */
   jitterPosition: Vec3;
   /** Deterministic arc: constant acceleration applied over each
-   *  instance's lifetime, units/sec². () */
+   *  instance's lifetime, units/sec². */
   acceleration: Vec3;
   /** Smooth squiggle: per-axis peak lateral displacement, world units.
-   *  Layered on top of the arc with a per-instance random phase. () */
+   *  Layered on top of the arc with a per-instance random phase. */
   squiggleAmplitude: Vec3;
   /** Squiggle frequency in Hz (oscillations/sec), 0..SQUIGGLE_FREQ_MAX
-   *  (=20), shared across axes. () */
+   *  (=20), shared across axes. */
   squiggleFrequency: number;
 };
 
-// ─── Emitter tree DTO (Phase 3 Screen 8 Batch 4 + Screen 4 Batch A) ──
+// ─── Emitter tree DTO ──
 //
 // Shape used by both `emitters/list` (live tree) and
-// `emitters/preview-from-file` (import preview). Screen 4 Batch A
-// extends with role + link-group + visibility so the sidebar tree can
+// `emitters/preview-from-file` (import preview). Extended
+// with role + link-group + visibility so the sidebar tree can
 // render glyphs and link-group dots without an additional round-trip.
 //
 // `role` identifies the slot the emitter occupies in its parent:
@@ -136,7 +136,7 @@ export type SpawnerParamsDto = {
 //   - "death"    : parent->spawnOnDeath points at this emitter (spawned
 //                  once when the parent particle dies).
 //
-// `linkGroup` mirrors `ParticleSystem::Emitter::linkGroup` (). 0
+// `linkGroup` mirrors `ParticleSystem::Emitter::linkGroup`. 0
 // means unlinked; non-zero IDs are stable within a single system.
 //
 // `visible` mirrors `ParticleSystem::Emitter::visible` — an editor-only
@@ -220,7 +220,7 @@ export type SkydomeSlotStatus = "none" | "ok" | "load-failed";
 
 export type EngineStateDto = {
   // ─── File / editor-level state ─────────────────────────────────────
-  // Phase 3 Screen 8 Batch 3: dirty + current file path live at the top
+  // dirty + current file path live at the top
   // of the DTO so they group with editor-level state (not engine
   // parameters). `currentFilePath` is null when the in-memory particle
   // system has never been saved (untitled). `dirty` is true if any
@@ -284,7 +284,7 @@ export type EngineStateDto = {
   bloomCutoff: number;              // GetBloomCutoff()
   bloomSize: number;                // GetBloomSize()
 
-  // Leave particles after instance death (Task 2.7). Defaults true —
+  // Leave particles after instance death. Defaults true —
   // matches ParticleSystem's constructor seed at [ParticleSystem.cpp:956].
   // Read via ParticleSystem::getLeaveParticles(); persisted with the
   // particle system (chunk-serialised at [ParticleSystem.cpp:948]).
@@ -306,7 +306,7 @@ export type EngineStateDto = {
   wind: Vec3;                       // GetWind()
   gravity: Vec3;                    // GetGravity()
 
-  // Spawner (Phase 3 Screen 8 Batch 4). Defaults mirror SpawnerConfig()'s
+  // Spawner. Defaults mirror SpawnerConfig()'s
   // initialiser at [src/SpawnerDriver.h:18] — Auto mode + disabled +
   // burst 1 + 0 s spacing + 10 s interval + origin + 5 s lifetime + no
   // jitter. The native host owns this config (m_spawnerConfig on
@@ -314,8 +314,8 @@ export type EngineStateDto = {
   // spawner/start.
   spawner: SpawnerParamsDto;
 
-  // Currently-selected emitter id, or null when nothing is selected
-  // (Screen 4 Batch A). The full tree itself is fetched via
+  // Currently-selected emitter id, or null when nothing is selected.
+  // The full tree itself is fetched via
   // `emitters/list` because trees can be large (hundreds of nodes for
   // complex systems) and shouldn't ride every snapshot; only the
   // (cheap) scalar selection rides here so React derives the selected
@@ -372,7 +372,7 @@ export type LayerRef = {
   kind: "mod" | "nested";
 };
 
-// ─── Viewport input (Phase 2) ────────────────────────────────
+// ─── Viewport input ────────────────────────────────
 //
 // Discriminated union carried by the `viewport/input` Request kind.
 // The host's InputDispatcher switches on `type` and PostMessages the
@@ -380,7 +380,7 @@ export type LayerRef = {
 //
 // Coordinates (`x`, `y`) are popup-client physical pixels, which equals
 // main-client CSS coords × `devicePixelRatio` at event time. The
-// popup spans the full main client per T4c.4 so client-of-popup ≡
+// popup spans the full main client so client-of-popup ≡
 // client-of-main; the renderer doesn't need to know the popup's screen
 // position.
 //
@@ -416,7 +416,7 @@ export type ViewportInputEvent =
   | { type: "keydown" | "keyup"; vk: number; repeat: boolean }
   | { type: "blur" };
 
-// ─── Track DTO (Phase 3 Screen 6 Batch A) ────────────────────────────
+// ─── Track DTO ────────────────────────────
 //
 // Per-emitter animation curves. The native `Emitter::tracks[7]` slot
 // (one Track* per channel) maps to a fixed-order JSON array on the
@@ -484,14 +484,14 @@ export const TRACK_NAMES: readonly TrackName[] = Object.freeze([
   "rotationSpeed",
 ]);
 
-// ─── Emitter properties DTO (Phase 4.1 Fix dispatch 1) ──────────────
+// ─── Emitter properties DTO ──────────────
 //
 // Mirrors every editable field on `ParticleSystem::Emitter`
 // ([src/ParticleSystem.h:71-204]). Grouped by the UI tab that surfaces
 // the field (Basic / Appearance / Physics) so a reviewer can see at a
-// glance what's wired where. Fix dispatch 1 wires the Basic group to
-// `EmitterPropertyTabs`; Appearance + Physics ride this DTO so dispatches
-// 2 and 3 add only UI, not schema.
+// glance what's wired where. The Basic group is wired to
+// `EmitterPropertyTabs`; Appearance + Physics ride this DTO so later
+// dispatches add only UI, not schema.
 //
 // `groups: GroupDto[]` mirrors the C array `Group groups[NUM_GROUPS]`
 // (NUM_GROUPS = 3). Per-Group fields match the `#pragma pack(1)` struct
@@ -592,7 +592,7 @@ export type EmitterPropertiesDto = {
 export type EmitterPatchDto = Record<string, unknown>;  // expanded later
 
 // `EmitterTreeDto` is the wire shape returned by `emitters/list`. Until
-// Screen 4 fleshes out the per-emitter field set, it's a thin wrapper
+// the per-emitter field set is fleshed out, it's a thin wrapper
 // over the minimal `EmitterTreeNode` (one root node + descendants).
 export type EmitterTreeDto = { root: EmitterTreeNode };
 
@@ -605,7 +605,7 @@ export type EmitterTreeDto = { root: EmitterTreeNode };
 // texture has been used as.
 export type PaletteEntry = { filename: string; pinned: boolean; slotMask: number };
 
-// Autosave crash-recovery candidate (). Returned by
+// Autosave crash-recovery candidate. Returned by
 // `autosave/check-recovery` when a crashed prior session left an orphaned
 // autosave under %TEMP%\AloParticleEditor\. At least one tier is present.
 // Mtimes are epoch-ms so React can render "N minutes ago" without a wire
@@ -643,7 +643,7 @@ export type Request =
   | {
       kind: "textures/get-preview";
       // bare basename as stored in EmitterDto.colorTexture; host prepends
-      // Data\Art\Textures\ and forces a .DDS swap (no .tga fallback — spec §7).
+      // Data\Art\Textures\ and forces a .DDS swap (no .tga fallback).
       // flattenAlpha (default true on the host) forces every pixel fully opaque
       // (alpha=255) so ADDITIVE frames (RGB content, alpha ~0) are visible; pass
       // false to honor the texture's real alpha.
@@ -689,7 +689,7 @@ export type Request =
   | { kind: "engine/set/bloom-cutoff";        params: { v: number } }
   | { kind: "engine/set/bloom-size";          params: { v: number } }
 
-  // Engine setters — leave particles after instance death (Task 2.7).
+  // Engine setters — leave particles after instance death.
   // Mirrors ParticleSystem::setLeaveParticles / getLeaveParticles
   // ([src/ParticleSystem.h:343,347]). When true (default), particles
   // continue to live after their owning instance is killed (the
@@ -722,7 +722,7 @@ export type Request =
   // instance count for the preemptive overload gate.
   | { kind: "engine/set/estimated-load";      params: { perInstance: number } }
 
-  // T9] Test-only knob: suppress the 4 Hz stats/tick emission
+  // Test-only knob: suppress the 4 Hz stats/tick emission
   // AND tell React's StatusBar to clear its local state via
   // stats/frozen-changed. Used by a11y spec beforeEach for deterministic
   // UIA goldens. `frozen` defaults to true on the host if omitted.
@@ -769,18 +769,17 @@ export type Request =
   | { kind: "settings/lighting-force-align/set"; params: { enabled: boolean } }
   | { kind: "settings/lighting/set";             params: LightingSettingsDto }
 
-  // Emitters (Phase 3+)
+  // Emitters
   | { kind: "emitters/list";              params: Record<string, never> }
   | { kind: "emitters/select";            params: { id: number | null } }
   | { kind: "emitters/update";            params: { id: number; patch: EmitterPatchDto } }
   | { kind: "emitters/import-from-file";  params: { path: string; selected: number[] } }
   | { kind: "emitters/preview-from-file"; params: { path: string } }
 
-  // Track read (Phase 3 Screen 6 Batch A). Read-only this batch; key
-  // mutations land with Screen 5 / Screen 6 Batch B.
+  // Track read. Read-only here; key mutations land later.
   | { kind: "emitters/get-tracks";        params: { id: number } }
 
-  // Emitter property read/write (Phase 4.1 Fix dispatch 1). Single
+  // Emitter property read/write. Single
   // round-trip read returns the full property DTO for `id`. Writes use
   // a JSON patch object — only the keys actually present in `patch` are
   // applied to the engine, so the React form can fire one field at a
@@ -789,7 +788,7 @@ export type Request =
   | { kind: "emitters/set-properties";
       params: { id: number; patch: Partial<EmitterPropertiesDto> } }
 
-  // Track mutations (Phase 3 Screen 5 / Screen 6 Batch B-α). Border
+  // Track mutations. Border
   // keys (first + last in time order) are silently skipped server-side
   // by `delete-track-keys` — they define the track's time range and
   // are not deletable per legacy semantics. The React UI filters them
@@ -810,7 +809,7 @@ export type Request =
   | { kind: "emitters/set-track-lock";
       params: { id: number; channel: TrackName; lockTo: TrackName | null } }
 
-  // Track key mutations (Phase 3 Screen 6 Batch B-β).
+  // Track key mutations.
   //
   // `set-track-key` moves an existing key. The host erases the key at
   // `oldTime` and inserts a new key at `(newTime, newValue)`. Border
@@ -826,14 +825,14 @@ export type Request =
   | { kind: "emitters/add-track-key";
       params: { id: number; track: TrackName; time: number; value: number } }
 
-  // Emitter mutations (Phase 3 Screen 4 Batch B1)
+  // Emitter mutations
   | { kind: "emitters/duplicate";                       params: { id: number } }
   | { kind: "emitters/duplicate-many";                  params: { ids: number[] } }   // batch: duplicate each; response.newIds are the copies, aligned to input order
   | { kind: "emitters/delete";                          params: { id: number } }
   | { kind: "emitters/rename";                          params: { id: number; name: string } }
   | { kind: "emitters/duplicate-with-index-increment";  params: { id: number; delta: number } }
 
-  // Emitter mutations (Phase 3 Screen 4 Batch B2)
+  // Emitter mutations
   //
   // add-lifetime-child / add-death-child wrap
   // `ParticleSystem::addLifetimeEmitter` / `::addDeathEmitter`. The new
@@ -854,7 +853,7 @@ export type Request =
   //     the smallest unused positive uint32_t.
   | { kind: "emitters/add-lifetime-child";  params: { parentId: number } }
   | { kind: "emitters/add-death-child";     params: { parentId: number } }
-  // Phase 4.1 Fix dispatch 5: legacy "New Root Emitter" menu item.
+  // Legacy "New Root Emitter" menu item.
   // Wraps `ParticleSystem::addRootEmitter()` (parameter-less; the
   // optional template overload isn't exposed across the wire). Always
   // succeeds at the engine level — returns `newId: -1` only when the
@@ -864,7 +863,7 @@ export type Request =
   | { kind: "emitters/move";                params: { id: number; direction: "up" | "down" } }
   | { kind: "emitters/move-many";           params: { ids: number[]; direction: "up" | "down" } }   // batch: move the selected roots as a block; response.newIds follow them
   | { kind: "emitters/reorder-many";        params: { ids: number[]; rootIndex: number } }   // batch drag-reorder: move selected roots to land contiguous at gap rootIndex; response.newIds follow them (input order)
-  // (Group A polish): visibility ops for the EmitterTree panel
+  // Visibility ops for the EmitterTree panel
   // toolbar. `set-visible` flips a single emitter's `visible` flag
   // without touching its children (matches legacy
   // `EmitterList_ToggleEmitterVisibility`). `set-all-visible` walks
@@ -874,7 +873,7 @@ export type Request =
   | { kind: "emitters/set-all-visible";     params: { visible: boolean } }
   | { kind: "linkGroups/set-membership";    params: { ids: number[]; groupId: number | null } }
 
-  // Emitter drag/drop (Phase 3 Screen 4 Batch B3)
+  // Emitter drag/drop
   //
   // Tagged-union to keep the two semantics cleanly separated. React side
   // computes `slot` and `rootIndex` before calling — the bridge never
@@ -891,12 +890,12 @@ export type Request =
         | { mode: "reparent"; id: number; targetId: number; slot: "lifetime" | "death" }
     }
 
-  // Emitter clipboard (Phase 3 Screen 4 Batch C)
+  // Emitter clipboard
   //
   // Process-local clipboard. The host serialises selected emitters
   // (with their subtrees) into an in-memory byte buffer using the
   // existing `MemoryFile` + `Emitter::write(writer, copy=true)` +
-  // `Emitter(ChunkReader&)` pattern (same as import / Batch B1
+  // `Emitter(ChunkReader&)` pattern (same as the import /
   // duplicate). The buffer survives across copy → paste calls on the
   // same process — no cross-instance sharing (matches legacy).
   //
@@ -923,15 +922,15 @@ export type Request =
   //     buffer[0].
   | { kind: "emitters/paste-as-child"; params: { parentId: number; slot: "lifetime" | "death" } }
 
-  // Per-emitter rescale (Phase 3 Screen 4 Batch B1 — Screen-8 sub-dialog)
+  // Per-emitter rescale (sub-dialog)
   | { kind: "engine/action/rescale-emitter";  params: { id: number; durationScalePercent: number; sizeScalePercent: number } }
 
-  // Link-group exempt-set CRUD (Phase 3 Screen 4 Batch B1 — surface)
+  // Link-group exempt-set CRUD
   | { kind: "linkGroups/list-exempt-fields";   params: { groupId: number } }
   | { kind: "linkGroups/set-exempt-fields";    params: { groupId: number; fields: string[] } }
   | { kind: "linkGroups/reset-exempt-fields";  params: { groupId: number } }
 
-  // join-conflict preview (read-only). Given the SAME params
+  // Join-conflict preview (read-only). Given the SAME params
   // `set-membership` would receive, return — per joining emitter — the
   // list of non-exempt fields that disagree with the value a join would
   // overwrite them to, so the UI can warn before clobbering. Mirrors the
@@ -952,7 +951,7 @@ export type Request =
   // Undo / spawner / layout / accelerators
   | { kind: "undo/perform";               params: { direction: "undo" | "redo" } }
   | { kind: "layout/viewport-rect";       params: { x: number; y: number; w: number; h: number } }
-  // B1.4 T4c: under the popup-spans-window architecture
+  // Under the popup-spans-window architecture
   // (popup HWND occupies the WebView's main-row area at all times),
   // splitter drag no longer resizes the popup. Instead, the centre-
   // quadrant rect — the visible "scene rect" inside the popup — is
@@ -969,7 +968,7 @@ export type Request =
   // Coords in MAIN-HWND-CLIENT space (DPR-multiplied), same as
   // layout/viewport-rect.
   | { kind: "layout/scene-rect";          params: { x: number; y: number; w: number; h: number } }
-  // Item 3 (dock-slide viewport stutter): ONE-SHOT dock-slide animation.
+  // Dock-slide viewport stutter: ONE-SHOT dock-slide animation.
   // The per-frame layout/scene-rect stream is clumpy/gappy on the emit side,
   // and the uncapped host render loop samples it at irregular Δt → the
   // viewport's cropped edge juddered against the browser-smooth panel. Instead
@@ -992,7 +991,7 @@ export type Request =
       };
     }
   // Push the current theme background colour to the host's composition
-  // backing. In the DComp tree is [backing, engine, webview]; the
+  // backing. In this architecture the DComp tree is [backing, engine, webview]; the
   // engine visual is clipped to the scene rect, so every transparent DOM
   // region OUTSIDE that rect (panel gaps, splitter seams, rounded-corner
   // wedges) composites over the rearmost backing visual. Painting that
@@ -1003,7 +1002,7 @@ export type Request =
   // first paint and on every theme change. No-op in browser (MockBridge)
   // mode.
   | { kind: "host/backing-color";         params: { color: string } }
-  // B1.3.1.1: capture the current engine viewport as a base64-encoded
+  // Capture the current engine viewport as a base64-encoded
   // PNG. React's Modal calls this on open to grab a frozen snapshot
   // of the engine output, renders the PNG as an <img> portaled into
   // the viewport DOM, and full-occludes the engine popup — so
@@ -1013,7 +1012,7 @@ export type Request =
   // the host's "no frame yet" path returns an empty string + zero
   // dims so the caller can short-circuit.
   | { kind: "viewport/capture-snapshot";  params: Record<string, never> }
-  // Phase 2: renderer-side DOM events on the in-DOM <canvas>
+  // Renderer-side DOM events on the in-DOM <canvas>
   // are forwarded to the host, which synthesizes the corresponding
   // Win32 message and PostMessages it to the (hidden) viewport popup
   // HWND. The engine's existing viewport WNDPROC consumes the
@@ -1029,12 +1028,12 @@ export type Request =
   | { kind: "spawner/start";              params: SpawnerParamsDto }
   | { kind: "spawner/trigger";            params: Record<string, never> }
   | { kind: "spawner/stop";               params: Record<string, never> }
-  // (Group D): host quit. Posts WM_CLOSE to the main HostWindow
+  // Host quit. Posts WM_CLOSE to the main HostWindow
   // which falls through DefWindowProc → DestroyWindow → the existing
   // WM_DESTROY cleanup chain. React's File → Exit menu item is the
   // sole caller and gates on the dirty-prompt before dispatching.
   | { kind: "app/quit";                   params: Record<string, never> }
-  // (Group D): cascade reset for the View → Reset View Settings
+  // Cascade reset for the View → Reset View Settings
   // menu. Pushes engine defaults for background, ground, bloom,
   // skydome, and lighting in one host-side action (one emit of
   // engine/state/changed at the end). Mirrors the legacy main.cpp
@@ -1056,7 +1055,7 @@ export type Request =
   // and persists to HKCU\Software\AloParticleEditor\LastLayers.
   | { kind: "mods/set-layers";            params: { paths: string[] } }
 
-  // Autosave crash-recovery (). React-initiated on mount (no host→React
+  // Autosave crash-recovery. React-initiated on mount (no host→React
   // startup event, so there's no fire-before-subscribe race): `check-recovery`
   // scans for an orphaned autosave from a crashed prior session and returns it
   // (or null — also null under --test-host / when a CLI file was given);
@@ -1096,12 +1095,12 @@ type ResponseForA<R extends Request> =
   R extends { kind: "textures/palette/touch-recent" }
     ? { ok: true } :
 
-  // Mods ()
+  // Mods
   R extends { kind: "mods/list" }    ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
   R extends { kind: "mods/refresh" } ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
   R extends { kind: "mods/set-layers" } ? { ok: boolean; stack: string[] } | { ok: false; error: string } :
 
-  // Autosave crash-recovery ()
+  // Autosave crash-recovery
   R extends { kind: "autosave/check-recovery" }   ? { orphan: AutosaveOrphan | null } :
   R extends { kind: "autosave/recover" }          ? Record<string, never> :
 
@@ -1176,13 +1175,13 @@ type ResponseForB<R extends Request> =
     | { ok: true; tree: EmitterTreeNode }
     | { ok: false; error: string } :
 
-  // Track read (Phase 3 Screen 6 Batch A). Always returns 7 tracks in
+  // Track read. Always returns 7 tracks in
   // TRACK_NAMES order; an unknown id yields 7 empty tracks rather than
   // an error so the panel can render a "no data yet" stub without
   // special-casing the failure.
   R extends { kind: "emitters/get-tracks" } ? { tracks: TrackDto[] } :
 
-  // Emitter properties (Phase 4.1 Fix dispatch 1). Read returns the
+  // Emitter properties. Read returns the
   // full DTO; write returns an empty object after the patch is
   // applied. Unknown id: read returns default-shaped properties
   // (zeros + empty strings) so the form can render a disabled
@@ -1190,19 +1189,19 @@ type ResponseForB<R extends Request> =
   R extends { kind: "emitters/get-properties" } ? { properties: EmitterPropertiesDto } :
   R extends { kind: "emitters/set-properties" } ? Record<string, never> :
 
-  // Track mutations (Phase 3 Screen 5 / Screen 6 Batch B-α)
+  // Track mutations
   R extends { kind: "emitters/delete-track-keys" }       ? Record<string, never> :
   R extends { kind: "emitters/set-track-interpolation" } ? Record<string, never> :
   R extends { kind: "emitters/set-track-lock" } ? Record<string, never> :
 
-  // Track key mutations (Phase 3 Screen 6 Batch B-β).
+  // Track key mutations.
   // set-track-key returns empty; add-track-key returns the actual
   // inserted (time, value) which may differ from the requested time
   // when a same-time collision triggered a dedupe-bump.
   R extends { kind: "emitters/set-track-key" } ? Record<string, never> :
   R extends { kind: "emitters/add-track-key" } ? { time: number; value: number } :
 
-  // Emitter mutations (Phase 3 Screen 4 Batch B1)
+  // Emitter mutations
   R extends { kind: "emitters/duplicate" } ?
     | { ok: true; newId: number }
     | { ok: false; error: string } :
@@ -1213,7 +1212,7 @@ type ResponseForB<R extends Request> =
   R extends { kind: "emitters/rename" }                         ? Record<string, never> :
   R extends { kind: "emitters/duplicate-with-index-increment" } ? { newId: number } :
 
-  // Emitter mutations (Phase 3 Screen 4 Batch B2)
+  // Emitter mutations
   R extends { kind: "emitters/add-lifetime-child" } ? { newId: number } :
   R extends { kind: "emitters/add-death-child" }    ? { newId: number } :
   R extends { kind: "emitters/add-root" }           ? { newId: number } :
@@ -1226,21 +1225,21 @@ type ResponseForB<R extends Request> =
   R extends { kind: "emitters/set-all-visible" }    ? Record<string, never> :
   R extends { kind: "linkGroups/set-membership" }   ? Record<string, never> :
 
-  // Emitter drag/drop (Phase 3 Screen 4 Batch B3)
+  // Emitter drag/drop
   R extends { kind: "emitters/drop" } ?
     | { ok: true }
     | { ok: false; error: string } :
 
-  // Emitter clipboard (Phase 3 Screen 4 Batch C)
+  // Emitter clipboard
   R extends { kind: "emitters/copy" }  ? Record<string, never> :
   R extends { kind: "emitters/cut" }   ? Record<string, never> :
   R extends { kind: "emitters/paste" } ? { newIds: number[] } :
   R extends { kind: "emitters/paste-as-child" } ? { newId: number } :
 
-  // Per-emitter rescale (Phase 3 Screen 4 Batch B1)
+  // Per-emitter rescale
   R extends { kind: "engine/action/rescale-emitter" } ? Record<string, never> :
 
-  // Link-group exempt-set CRUD (Phase 3 Screen 4 Batch B1)
+  // Link-group exempt-set CRUD
   R extends { kind: "linkGroups/list-exempt-fields" }  ? { fields: string[] } :
   R extends { kind: "linkGroups/set-exempt-fields" }   ? Record<string, never> :
   R extends { kind: "linkGroups/reset-exempt-fields" } ? Record<string, never> :
@@ -1281,21 +1280,21 @@ export type Event =
   // refuses a spawn. Polled by the dispatcher's 4 Hz stats path and used
   // to drive a transient (~5 s) refusal banner in the UI.
   | { kind: "engine/overload/refused"; payload: { estimated: number; cap: number; attemptedCount: number } }
-  // T9] Emitted whenever stats/set-frozen flips. When
+  // Emitted whenever stats/set-frozen flips. When
   // frozen=true, StatusBar clears its local state so the cells
   // render `—` placeholders. Used by a11y spec beforeEach for
   // deterministic UIA goldens.
   | { kind: "stats/frozen-changed";   payload: { frozen: boolean } }
   | { kind: "dirty/changed";          payload: { dirty: boolean } }
   | { kind: "recent/changed";         payload: { paths: string[] } }
-  //: host emits this when the native frame-X / Alt-F4 is hit on a
+  // Host emits this when the native frame-X / Alt-F4 is hit on a
   // dirty doc, so the app pops the same Save/Discard/Cancel prompt File→Exit
   // uses (the host can't render the React prompt itself).
   | { kind: "app/close-requested";    payload: Record<string, never> }
   | { kind: "undo/changed";           payload: { canUndo: boolean; canRedo: boolean; label?: string } }
   | { kind: "accelerator/pressed";    payload: { combo: string } }
   | { kind: "spawner/active-count";   payload: { count: number } }
-  // (Group A): viewport mouse cursor's intersection with the
+  // Viewport mouse cursor's intersection with the
   // ground plane in world coords. Host throttles to ~30 Hz so the
   // status bar update doesn't saturate the bridge.
   | { kind: "cursor/position-3d";     payload: { x: number; y: number; z: number } }

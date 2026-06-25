@@ -1,11 +1,11 @@
 // Vitest unit tests for the SaveChangesPrompt modal.
 //
-// Phase 3 Screen 8 Batch 3. Three buttons: Save / Don't Save / Cancel.
+// Three buttons: Save / Don't Save / Cancel.
 // Open state is driven by `pendingAction` in the file-state atom — set
 // it to a sentinel closure and assert the prompt renders + the right
 // callback fires.
 //
-// / Radix-in-jsdom note: Modal uses Radix Dialog, which mounts
+// Radix-in-jsdom note: Modal uses Radix Dialog, which mounts
 // into a portal. Buttons are reachable via `screen.getByRole("button",
 // { name: ... })` thanks to the aria-label on each footer button.
 

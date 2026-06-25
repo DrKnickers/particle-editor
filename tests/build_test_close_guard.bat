@@ -1,5 +1,5 @@
 @echo off
-REM Build the WM_CLOSE veto-decision regression test (audit D1) as a standalone
+REM Build the WM_CLOSE veto-decision regression test as a standalone
 REM x64 console exe. CloseDecision.h is header-only (pure function, no .cpp);
 REM no src/*.cpp are linked. The DirectX libs are linked only to match the
 REM other tests' floor (unreferenced here).

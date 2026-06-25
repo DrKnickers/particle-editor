@@ -4,8 +4,8 @@
 // Static-mesh + material decoder for Alamo `.alo` models.
 //
 // Pure-data leaf module: depends only on the editor's ChunkReader + IFile
-// (no engine / D3D coupling), so the skydome render core,
-// (game-object import) and all consume it. It decodes the static-mesh +
+// (no engine / D3D coupling), so the skydome render core, game-object import,
+// and downstream consumers all use it. It decodes the static-mesh +
 // material subset of the `.alo` chunk vocabulary, PLUS (for rigid
 // multi-part placement) the skeleton (0x200) bones + the connections (0x600)
 // object->bone bindings -- everything else (lights 0x1300, proxies/dazzles
@@ -70,7 +70,7 @@ struct AloMesh
     std::vector<AloSubMesh> subMeshes;
 };
 
-// One skeleton bone (chunk 0x202). places each rigid sub-mesh by its
+// One skeleton bone (chunk 0x202). The renderer places each rigid sub-mesh by its
 // bone's accumulated object-space transform. Stored VERBATIM from disk -- the
 // consumer builds the runtime matrix and resolves the root-sentinel convention:
 //   - `matrix` is the raw 4x3 transform in COLUMN-MAJOR order (3 columns of 4
@@ -134,8 +134,8 @@ bool AloIsNonVisibleShader(const std::string& shaderName);
 
 // Render classification of a sub-mesh's named shader (case-insensitive), so the
 // reference renderer phase-sorts + blends each sub-mesh the way the game does.
-// The shipped .fxo's SB blocks are compiled out (ALAMO_STATE_BLOCKS 0; todo.md
-// Risk 2), so the APP applies the blend -- this is the source of "which blend".
+// The shipped .fxo's SB blocks are compiled out (ALAMO_STATE_BLOCKS 0), so the
+// APP applies the blend -- this is the source of "which blend".
 // Grounded in the FoC Mesh*/RSkin* corpus (reference/foc-shaders): additive =
 // ONE/ONE (MeshAdditive*, and the name-mismatched MeshShield), alpha =
 // SRCALPHA/INVSRCALPHA (MeshAlpha*), Heat/Shadow/Occluded are non-opaque-visible

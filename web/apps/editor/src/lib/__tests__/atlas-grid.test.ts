@@ -41,7 +41,7 @@ describe("classifySelection", () => {
     expect(classifySelection([0.1,0.5], null)).toBe("multi-diff");
   });
 });
-describe("fitGridLayout (Approach A: width-only, ~sqrt(n) columns, dense floor)", () => {
+describe("fitGridLayout (width-only, ~sqrt(n) columns, dense floor)", () => {
   const GAP = 4, MIN = 44, MAX = 160;
   it("4 frames -> 2x2 of big thumbnails (fills width)", () => {
     const { cols, cell } = fitGridLayout(4, 226, GAP, MIN, MAX);

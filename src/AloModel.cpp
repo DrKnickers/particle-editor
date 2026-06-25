@@ -280,7 +280,7 @@ namespace
     // child or an unexpected bone-data size leaves the field at its default
     // (identity matrix / parentIndex 0) rather than throwing -- these chunks were
     // skipped wholesale before, so a surprising shape must not break a model
-    // that loaded before. The consumer () flags a degenerate placement.
+    // that loaded before. The consumer flags a degenerate placement.
     void ReadBone(ChunkReader& r, AloBone& bone)
     {
         ChunkType t;

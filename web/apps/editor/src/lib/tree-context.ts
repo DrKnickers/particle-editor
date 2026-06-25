@@ -1,5 +1,5 @@
 // tree-context.ts — Zustand atom driving the EmitterTree right-click
-// context-menu dialog flow (Phase 3 Screen 4 Batch B1).
+// context-menu dialog flow.
 //
 // The context menu items that open a modal (Increment Index / Rescale
 // Emitter / Link Group Settings / Set Link Group) park their target id
@@ -14,7 +14,7 @@
 // discriminated-union atom makes the "open dialog X for emitter Y"
 // transition atomic.
 //
-// Note: "rename" was removed in Batch C — inline rename (F2 / double-
+// Note: "rename" was removed — inline rename (F2 / double-
 // click / context-menu Rename) is now handled by local state in the
 // EmitterTree component, not via a modal. The `RenameEmitterDialog`
 // component was deleted alongside this change.

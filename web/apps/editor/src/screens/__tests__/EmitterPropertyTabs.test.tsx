@@ -1,4 +1,4 @@
-// Vitest tests for EmitterPropertyTabs (Phase 4.1 Fix dispatch 1).
+// Vitest tests for EmitterPropertyTabs (Phase 4.1).
 //
 // Covered:
 //   - Renders the placeholder when no emitter is selected.
@@ -7,7 +7,7 @@
 //     `data-state="active"` attribute Radix sets).
 //   - Basic tab renders form fields populated from the get-properties
 //     response (Lifetime spinner, Name input, useBursts checkbox).
-//   - Appearance + Physics tabs render the "Coming in Fix dispatch N"
+//   - Appearance + Physics tabs render their "coming soon"
 //     placeholders.
 //   - Editing the Lifetime spinner fires emitters/set-properties
 //     with `patch: { lifetime: <new value> }`.
@@ -23,7 +23,7 @@ import type {
 import { EmitterPropertyTabs, AppearanceTab, PhysicsTab } from "../EmitterPropertyTabs";
 import { makeDefaultEngineState, makeFixtureProperties } from "@/bridge/mock-state";
 
-//: the property tabs mount Tips (Radix Tooltip.Root) on the form-row
+// the property tabs mount Tips (Radix Tooltip.Root) on the form-row
 // labels, which require the Tooltip.Provider App.tsx supplies in production —
 // this wrapper stands in for it (precedent: renderWithTooltips in
 // EmitterTree.test.tsx).
@@ -79,7 +79,7 @@ function makeStubBridge(
 
 describe("EmitterPropertyTabs", () => {
   it("renders the always-mounted tab strip with body-level placeholder when no emitter is selected", async () => {
-    // B1.3.1: the tab strip is mounted unconditionally so the user can
+    // The tab strip is mounted unconditionally so the user can
     // see the Basic/Appearance/Physics structure (and pre-click a tab)
     // before any emitter is selected. The placeholder sits inside the
     // active tab's body, not in place of the whole component.
@@ -120,7 +120,7 @@ describe("EmitterPropertyTabs", () => {
   });
 
   it("Basic tab renders Maximum lifetime + Name + Bursts radio populated from get-properties", async () => {
-    // Post-B1.3-P3: "Lifetime" is now "Maximum lifetime:" inside the
+    // "Lifetime" is now "Maximum lifetime:" inside the
     // Generation section, and "Use Bursts" is the Bursts radio of a
     // tri-state mutex (Bursts / Continuous / Weather).
     const { bridge } = makeStubBridge(0, {
@@ -130,7 +130,7 @@ describe("EmitterPropertyTabs", () => {
       isWeatherParticle: false,
     });
     render(<EmitterPropertyTabs bridge={bridge} />);
-    // B1.3.1: the tab strip mounts immediately; wait specifically for the
+    // The tab strip mounts immediately; wait specifically for the
     // BasicTab form to hydrate (placeholder → loading → form transition).
     await waitFor(() => {
       expect(screen.getByLabelText("Maximum lifetime:")).toBeInTheDocument();
@@ -171,20 +171,19 @@ describe("EmitterPropertyTabs", () => {
     expect(screen.getByTestId("tab-physics-content")).toBeInTheDocument();
   });
 
-  // ─── Appearance tab specs (Fix dispatch 2) ─────────────────────
+  // ─── Appearance tab specs ──────────────────────────────────────
   // AppearanceTab is exported and mounted directly — Radix Tabs in
   // jsdom doesn't reliably switch tabs via fireEvent (the known
-  // pointer-event flake from Fix dispatch 1), so we test the panel
+  // pointer-event flake), so we test the panel
   // content in isolation.
 
-  it("AppearanceTab renders the expected post-P5 field labels", () => {
+  it("AppearanceTab renders the expected field labels", () => {
     const props = makeFixtureProperties(0);
     render(<AppearanceTab properties={props} onCommit={() => {}} />);
-    // Post-B1.3-P5: five sections (Textures / Random color addition /
-    // Tail / Rotation / Rendering) with renamed labels per spec §5.5.
+    // Five sections (Textures / Random color addition /
+    // Tail / Rotation / Rendering) with renamed labels.
     // `Triangles` and `Affected by Wind` are dropped (former
-    // permanently from the inspector, latter relocated to Physics in
-    // P6).
+    // permanently from the inspector, latter relocated to Physics).
     const expectedLabels = [
       // Textures
       "Color:",
@@ -233,31 +232,31 @@ describe("EmitterPropertyTabs", () => {
     expect(tailSizeInput.disabled).toBe(true);
   });
 
-  // `Triangles` was removed from Appearance in B1.3-P5 (dropped from
-  // the inspector per Q2 decision; schema field retained on the wire).
+  // `Triangles` was removed from Appearance (dropped from
+  // the inspector per a design decision; schema field retained on the wire).
   // Executable absence-assertion: fails if anyone re-adds Triangles to
   // the Appearance tab.
-  it("AppearanceTab does not render the Triangles field (dropped per B1.3 Q2 decision)", () => {
+  it("AppearanceTab does not render the Triangles field (dropped per design decision)", () => {
     const props = makeFixtureProperties(0);
     render(<AppearanceTab properties={props} onCommit={() => {}} />);
     expect(screen.queryByLabelText("Triangles")).toBeNull();
     expect(screen.queryByLabelText("Triangles:")).toBeNull();
   });
 
-  // ─── Physics tab specs (B1.3-P6 restructure) ───────────────────
+  // ─── Physics tab specs (restructure) ───────────────────────────
   // PhysicsTab is exported and mounted directly for the same reason
   // AppearanceTab is: Radix Tabs in jsdom doesn't reliably switch on
   // fireEvent.click.
   //
-  // Post-P6: four Sections (Initial position / Initial speed /
+  // Four Sections (Initial position / Initial speed /
   // Acceleration / Ground interaction). `Emit From Mesh*` moved to
-  // Basic > Connection (P4); Weather Particle / Cube Size / Cube
-  // Distance moved to Basic > Generation Weather radio (P3);
-  // Weather Fadeout Distance dropped (Q3); groups[1] not rendered
-  // (Q4); Parent speed inherit (Basic→Physics) and Affected by wind
+  // Basic > Connection; Weather Particle / Cube Size / Cube
+  // Distance moved to Basic > Generation Weather radio;
+  // Weather Fadeout Distance dropped; groups[1] not rendered;
+  // Parent speed inherit (Basic→Physics) and Affected by wind
   // (Appearance→Physics) added under Initial speed.
 
-  it("PhysicsTab renders the expected post-P6 field labels", () => {
+  it("PhysicsTab renders the expected field labels", () => {
     const props = makeFixtureProperties(0);
     render(<PhysicsTab properties={props} onCommit={() => {}} />);
     // Acceleration row is a 3-spinner cluster with a combined
@@ -320,14 +319,14 @@ describe("EmitterPropertyTabs", () => {
   it("PhysicsTab: removed fields are not rendered (Emit From Mesh*, Weather*, weather fadeout)", () => {
     const props = makeFixtureProperties(0);
     render(<PhysicsTab properties={props} onCommit={() => {}} />);
-    // Moved to Basic > Connection in P4:
+    // Moved to Basic > Connection:
     expect(screen.queryByLabelText("Emit From Mesh")).toBeNull();
     expect(screen.queryByLabelText("Emit From Mesh Offset")).toBeNull();
-    // Moved to Basic > Generation Weather radio in P3:
+    // Moved to Basic > Generation Weather radio:
     expect(screen.queryByLabelText("Weather Particle")).toBeNull();
     expect(screen.queryByLabelText("Weather Cube Size")).toBeNull();
     expect(screen.queryByLabelText("Weather Cube Distance")).toBeNull();
-    // Dropped per Q3 (schema field retained):
+    // Dropped (schema field retained):
     expect(screen.queryByLabelText("Weather Fadeout Distance")).toBeNull();
     // Old PascalCase labels also gone:
     expect(screen.queryByLabelText("Gravity")).toBeNull();
@@ -515,7 +514,7 @@ describe("EmitterPropertyTabs", () => {
     await waitFor(() => {
       expect(screen.getByTestId("section-emitter-timing")).toBeInTheDocument();
     });
-    // Post-B1.3-P3: Lifetime moved into Generation, so test the
+    // Lifetime moved into Generation, so test the
     // collapse via an Emitter Timing field that still lives there
     // (Initial spawn delay).
     const header = screen.getByTestId("section-emitter-timing");
@@ -548,11 +547,11 @@ describe("EmitterPropertyTabs", () => {
   });
 
   it("editing Maximum lifetime fires emitters/set-properties with patch.lifetime", async () => {
-    // Post-B1.3-P3: "Lifetime" relabelled to "Maximum lifetime:" and
+    // "Lifetime" relabelled to "Maximum lifetime:" and
     // moved into Generation. The underlying `lifetime` key is unchanged.
     const { bridge } = makeStubBridge(0, { lifetime: 1.0 });
     render(<EmitterPropertyTabs bridge={bridge} />);
-    // B1.3.1: tab strip mounts immediately; wait for the BasicTab form.
+    // Tab strip mounts immediately; wait for the BasicTab form.
     await waitFor(() => {
       expect(screen.getByLabelText("Maximum lifetime:")).toBeInTheDocument();
     });

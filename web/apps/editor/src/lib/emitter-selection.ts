@@ -1,9 +1,9 @@
 // emitter-selection.ts — Zustand atom driving React-side multi-select
-// state for the EmitterTree (Phase 3 Screen 4 Batch B2).
+// state for the EmitterTree.
 //
 // Server-side, the BridgeDispatcher tracks only the *primary* selected
-// emitter id (the row that owns focus and drives keyboard nav once
-// Batch C lands). Multi-select is purely a React concern: batch
+// emitter id (the row that owns focus and drives keyboard nav).
+// Multi-select is purely a React concern: batch
 // operations like "Set Link Group…" / "Leave Link Group" take
 // `ids: number[]` so the host doesn't need a parallel selection set.
 //
@@ -102,7 +102,7 @@ export const useEmitterSelectionStore = create<EmitterSelectionStore>(
   }),
 );
 
-// ─── Scalar selector hooks (per — Zustand v5 fresh-object rule)
+// ─── Scalar selector hooks (Zustand v5 fresh-object rule)
 //
 // Subscribing to `ids` directly hands components a stable reference
 // from the store; React's rendering is fine with that. We expose

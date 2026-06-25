@@ -12,7 +12,7 @@
   /* html must also be transparent — the browser's system canvas paints white
      when the html element has no background, even if body is transparent. */
   html, #root { background: transparent; }
-  /* Phase 4.1 follow-up: body must NOT carry an opaque background.
+  /* Phase 4.1 transparency follow-up: body must NOT carry an opaque background.
      WebView2 is set to transparent (DefaultBackgroundColor {0,0,0,0}) so
      the D3D9 viewport sibling-HWND can show through transparent HTML
      regions. Opaque chrome (header, toolbar, side panels, status bar,

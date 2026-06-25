@@ -1,4 +1,4 @@
-// Phase 3 Screen 4 Batch B2 Playwright contract specs.
+// Playwright contract specs.
 //
 // Verifies:
 //   1. emitters/add-lifetime-child via the bridge adds a lifetime child
@@ -243,7 +243,7 @@ test("Ctrl+click on a second emitter row updates data-selected-count to 2", asyn
 
 // ── 4. emitters/paste-as-child attaches the clipboard into a slot ────
 //
-// Real-host round-trip for the new Paste As ▸ command (/):
+// Real-host round-trip for the new Paste As ▸ command:
 // copy a root, then paste-as-child into a parent whose lifetime slot is
 // free, and confirm the engine attaches a lifetime child with the
 // source's suffixed name (GenerateDuplicateName). Exercises the C++

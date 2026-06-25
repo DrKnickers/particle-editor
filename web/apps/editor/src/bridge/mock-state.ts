@@ -63,7 +63,7 @@ const zeroLight: LightDto = {
  *  splat it into the store without sharing references. */
 export function makeDefaultEngineState(): EngineStateDto {
   return {
-    // Editor-level state (Screen 8 Batch 3): a freshly-launched mock
+    // Editor-level state: a freshly-launched mock
     // session is untitled (no path) and clean (no edits since load).
     currentFilePath: null,
     dirty: false,
@@ -116,7 +116,7 @@ export function makeDefaultEngineState(): EngineStateDto {
     bloomCutoff:   0.9,
     bloomSize:     0.1,
 
-    // Task 2.7 — leave particles after instance death. Default true
+    // Leave particles after instance death. Default true
     // matches the native ParticleSystem constructor at
     // [ParticleSystem.cpp:956].
     leaveParticles: true,
@@ -143,7 +143,7 @@ export function makeDefaultEngineState(): EngineStateDto {
     // initial mock state and file/new (both apply makeDefaultEngineState()).
     selectedEmitterId: 0,
 
-    //: no active mod by default. Browser-mode MockBridge has
+    // no active mod by default. Browser-mode MockBridge has
     // no disk to scan; the primary layer (front of the stack) updates this field
     // via mods/set-layers for menu check-mark parity.
     activeModPath: null,
@@ -175,7 +175,7 @@ export function snapshotEngineState(): EngineStateDto {
   return rest;
 }
 
-// ─── Recent files registry (Screen 8 Batch 3) ───────────────────────
+// ─── Recent files registry ───────────────────────
 //
 // Lives outside the EngineStateDto because it's host state, not engine
 // state — the native host backs this with the Windows registry under
@@ -196,7 +196,7 @@ type RecentFilesStore = {
   reset: () => void;
 };
 
-// ─── Emitter-tree fixture (Screen 4 Batch A) ─────────────────────────
+// ─── Emitter-tree fixture ─────────────────────────
 //
 // Three roots covering the role + link-group combinations that the
 // EmitterTree component needs to render:
@@ -205,7 +205,7 @@ type RecentFilesStore = {
 //   - root "Flash"   (linkGroup 0) — leaf
 // One linked pair (Smoke + Sparks share group 1) so the link-group dot
 // styling is exercised. All emitters are visible=true; the disabled
-// glyph state isn't reachable in Batch A (no visibility toggle yet).
+// glyph state isn't reachable (no visibility toggle yet).
 //
 // IDs are flat 0..5 and stable across resets so test assertions can
 // pin to specific rows.
@@ -266,7 +266,7 @@ export const useMockEmitterTree = create<EmitterTreeStore>((set) => ({
   reset: () => set({ tree: makeDefaultEmitterTree() }),
 }));
 
-// ─── Link-group exempt-field fixture (Screen 4 Batch B1) ────────────
+// ─── Link-group exempt-field fixture ────────────
 //
 // The native side persists per-group LinkExemptFlags bitfields;
 // the wire shape is `string[]` of field names that are exempt
@@ -315,7 +315,7 @@ export const useMockLinkGroupExempt = create<LinkGroupExemptStore>(
   }),
 );
 
-// ─── join-conflict seam (mock only) ──────────────────────────
+// ─── Join-conflict seam (mock only) ──────────────────────────
 //
 // The native host computes a join's field disagreements from the real
 // emitter params via `DiffNonExemptParams`. The MockBridge has only the
@@ -323,7 +323,7 @@ export const useMockLinkGroupExempt = create<LinkGroupExemptStore>(
 // `linkGroups/diff-membership` returns whatever this store is seeded with
 // (default: none). Tests drive the SetLinkGroupDialog confirm flow by
 // seeding conflicts here; the real field-level correctness is a native
-// (user) verification (web-lane-vs-native split).
+// (user) verification (the web-lane-vs-native split).
 
 export type LinkJoinConflict = { id: number; fields: string[] };
 
@@ -342,7 +342,7 @@ export const useMockLinkGroupConflicts = create<LinkGroupConflictStore>(
   }),
 );
 
-// ─── Tree-mutation helpers (Screen 4 Batch B1) ──────────────────────
+// ─── Tree-mutation helpers ──────────────────────
 //
 // MockBridge invokes these to mutate the fixture in-place while
 // preserving the parent-pointer / role invariants. Each helper returns
@@ -483,7 +483,7 @@ export function duplicateEmitter(
 
 /** Delete the emitter at `id` (and its subtree). Returns the new tree
  *  or null when the id isn't found / is the synthetic root.
- *  Post-deletion, runs `enforceSingleMemberLinkGroups` () so the
+ *  Post-deletion, runs `enforceSingleMemberLinkGroups` so the
  *  survivor of a 2-member group whose other member was just deleted
  *  drops to `linkGroup = 0` automatically. */
 export function deleteEmitter(
@@ -540,7 +540,7 @@ export function duplicateWithIndexIncrement(
   return { tree: annotated, newId: dup.newId };
 }
 
-// ─── Batch B2 helpers — Add child / Move / Link-group membership ────
+// ─── Add child / Move / Link-group membership helpers ────
 
 /** Add a lifetime child under `parentId`. Refused when the parent
  *  already has a lifetime child (the underlying engine slot is a
@@ -575,7 +575,7 @@ export function addLifetimeChildEmitter(
   return { tree: next, newId };
 }
 
-/** Add a new empty root emitter (Phase 4.1 Fix dispatch 5).
+/** Add a new empty root emitter.
  *
  *  Mirrors `ParticleSystem::addRootEmitter()` with the default empty
  *  Emitter argument: the new root has no name, link group 0, visible,
@@ -734,7 +734,7 @@ export function findUnusedLinkGroupId(tree: EmitterTreeDto): number {
  *  means "create a new group" (picks the smallest unused positive id
  *  via `findUnusedLinkGroupId`). `null` or `0` clears membership.
  *  Post-mutation, runs `enforceSingleMemberLinkGroups` to keep the
- *  data layer aligned with the render-layer filter — see. */
+ *  data layer aligned with the render-layer filter. */
 export function setLinkGroupMembership(
   tree: EmitterTreeDto,
   ids: number[],
@@ -794,7 +794,7 @@ export function enforceSingleMemberLinkGroups(
   return { root: demote(tree.root) };
 }
 
-// ─── Batch B3 helpers — drag/drop reorder + reparent ────────────────
+// ─── drag/drop reorder + reparent helpers ────────────────
 
 /** Find the parent of `id` in the tree (returns the synthetic root if
  *  the id is a top-level root). Returns null when the id isn't found. */
@@ -928,7 +928,7 @@ export function reparentEmitterInTree(
   return { root: walk(tree.root) };
 }
 
-// ─── Batch C helpers — clipboard (copy / cut / paste) ───────────────
+// ─── clipboard helpers (copy / cut / paste) ───────────────
 //
 // The mock clipboard is a plain `EmitterTreeNode[]` array of cloned
 // subtrees. `copy` deep-clones the named nodes into the clipboard,
@@ -1053,7 +1053,7 @@ export const useMockRecentFiles = create<RecentFilesStore>((set, get) => ({
   reset: () => set({ paths: [] }),
 }));
 
-// ─── Track fixtures (Screen 6 Batch A) ───────────────────────────────
+// ─── Track fixtures ───────────────────────────────
 //
 // Deterministic per-emitter-id tracks so the mock surfaces something
 // visible in the CurveEditor for any selected emitter. The shape is
@@ -1063,8 +1063,8 @@ export const useMockRecentFiles = create<RecentFilesStore>((set, get) => ({
 //
 // The seed is the emitter id so different selections show distinct
 // curves. Each track's interpolation rotates through linear / smooth /
-// step so the toolbar's interpolation-state visual (Batch B will wire
-// the actual toggle) shows variety in screenshots.
+// step so the toolbar's interpolation-state visual shows variety in
+// screenshots.
 
 const TRACK_INTERPOLATIONS: readonly InterpolationType[] = Object.freeze([
   "linear", "smooth", "linear", "linear", "smooth", "step", "linear",
@@ -1161,7 +1161,7 @@ export function makeFixtureTracks(id: number): TrackDto[] {
   return TRACK_NAMES.map((_n, i) => buildFixtureTrack(id, i));
 }
 
-// ─── Mutable per-emitter track overrides (Screen 5 / Screen 6 Batch B-α)
+// ─── Mutable per-emitter track overrides
 //
 // `makeFixtureTracks` is a pure-function generator. To make the mock
 // observe track mutations (delete-key, set-interpolation) across
@@ -1372,7 +1372,7 @@ export function setTrackKeyInOverlay(
   return true;
 }
 
-// ─── Emitter properties fixture + overlay (Phase 4.1 Fix dispatch 1) ─
+// ─── Emitter properties fixture + overlay ─
 //
 // Same pattern as `useMockTrackOverlay`: a deterministic generator
 // (`makeFixtureProperties`) supplies the baseline; a per-id overlay

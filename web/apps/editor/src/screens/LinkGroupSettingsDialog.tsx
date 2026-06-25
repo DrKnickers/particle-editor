@@ -1,6 +1,6 @@
-// LinkGroupSettingsDialog — Screen 4 Batch B1.
+// LinkGroupSettingsDialog.
 //
-// surface in the new UI. On open, fetches the link-group's
+// Link-group settings surface in the new UI. On open, fetches the link-group's
 // current exempt-field set via `linkGroups/list-exempt-fields` and
 // renders a checkbox-per-field list. OK commits the toggles via
 // `linkGroups/set-exempt-fields`; Cancel discards. Reset All sets all
@@ -238,7 +238,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   // Collapsed category ids. Empty = all expanded (the default).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  // (settings surface): members the proposed exempt set would
+  // Members the proposed exempt set would
   // overwrite to the canonical value when a now-exempt field becomes
   // shared. Fetched reactively as the local exempt set changes; shown
   // INLINE before OK (which resolves it host-side). Read-only preview.
@@ -246,7 +246,7 @@ export function LinkGroupSettingsDialog({ bridge }: Props) {
 
   // Fetch the current exempt set when the dialog opens. Each open is a
   // fresh fetch so external edits (e.g. another bridge client writing
-  // through) are reflected immediately.
+  // through the link-group settings surface) are reflected immediately.
   useEffect(() => {
     if (!open || groupId === null) {
       setState({ kind: "loading" });

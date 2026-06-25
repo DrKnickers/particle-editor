@@ -184,7 +184,7 @@ int main(int argc, char** argv)
         float lmin[3] = { FLT_MAX, FLT_MAX, FLT_MAX };
         float lmax[3] = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
         size_t meshVerts = 0;
-        bool meshRigid = true;   // item 6] a-priori rigid iff no skinned submesh
+        bool meshRigid = true;   // a-priori rigid iff no skinned submesh
         for (size_t si = 0; si < me.subMeshes.size(); ++si)
         {
             const AloSubMesh& sm = me.subMeshes[si];

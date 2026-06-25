@@ -1,15 +1,15 @@
-// Task 2.2 / 2.2.1 contract tests: drive the *real* native bridge inside
+// Contract tests: drive the *real* native bridge inside
 // ParticleEditor.exe --test-host via CDP. These specs exist to
 // catch schema drift between the TypeScript MockBridge (covered by
-// Vitest in Task 2.1) and the C++ BridgeDispatcher — the failure mode
-// the plan called out as Risk #2.
+// Vitest) and the C++ BridgeDispatcher — a failure mode
+// the plan called out as a risk.
 //
 // Channel: in --test-host mode, App.tsx swaps `window.bridge` for a
 // TestHostBridge that routes requests through WebView2's host-object
 // IPC channel (`chrome.webview.hostObjects.hostBridge`) instead of
 // `chrome.webview.postMessage`. WebView2 silently drops postMessage
-// calls from page → host while a CDP debugger is attached
-// (tasks/lessons.md); the host-object channel is on a separate
+// calls from page → host while a CDP debugger is attached;
+// the host-object channel is on a separate
 // marshalling path and is unaffected. Events (host → page) still flow
 // over postMessage and are wired up by TestHostBridge.on().
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";

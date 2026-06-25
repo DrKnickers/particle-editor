@@ -11,9 +11,9 @@
 # Forcing `text eol=lf` makes the working-tree copy match the
 # stored-LF index regardless of platform or autocrlf setting.
 #
-# See handoff item 16 (resolved) and lessons.md (the autocrlf snapshot
-# footgun lesson) for the diagnostic walkthrough that landed this
-# file. If you add a new byte-exact snapshot pattern under tests/,
+# This guards the autocrlf snapshot footgun — the diagnostic
+# walkthrough that landed this file. If you add a new byte-exact
+# snapshot pattern under tests/,
 # match it here too.
 
 # Current a11y goldens (HWND lane = .golden.json, composition lane = .composition.golden.yaml)

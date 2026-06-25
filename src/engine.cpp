@@ -13,9 +13,9 @@
 #include "ParticleSystemInstance.h"
 #include "EmitterInstance.h"
 #include "SphericalHarmonics.h"
-#include "utils.h"     // follow-up: WideToAnsi for custom-slot path bridging
+#include "utils.h"     // WideToAnsi for custom-slot path bridging
 #include "host/AlphaCompositor.h"
-#include "GizmoSizing.h"   ///pure screen-uniform gizmo-handle formula
+#include "GizmoSizing.h"   // pure screen-uniform gizmo-handle formula
 #include "PlaneHandle.h"   // pure ground-plane handle math (RayPlaneOffset, HandleHit, etc.)
 #include "GizmoRibbon.h"   // aesthetics: camera-facing ribbon quad expansion
 #include "RingFade.h"      // aesthetics: ring back-face alpha falloff
@@ -40,7 +40,7 @@ static const char* ShaderNames[Engine::NUM_SHADERS] = {
     "Engine\\PrimAlphaScanlines.fx",
 };
 
-//: slot 0 is Off (no resource); slots 1-8 map to bundled skydome textures.
+// slot 0 is Off (no resource); slots 1-8 map to bundled skydome textures.
 // RCDATA entries for IDR_SKYDOME_* are added in Task 5; until then,
 // FindResource for slots 1-8 returns NULL and ReloadSkydomeTexture returns false.
 static const int kSkydomeBundledResources[Engine::kSkydomeBundledCount] = {
@@ -55,7 +55,7 @@ static const int kSkydomeBundledResources[Engine::kSkydomeBundledCount] = {
     IDR_SKYDOME_INDOOR,      // 8
 };
 
-// follow-up: parallel table of in-archive paths for slots 1-8. Routed
+// Parallel table of in-archive paths for slots 1-8. Routed
 // through FileManager so the mod-overlay → loose-file → MEG-archive chain
 // resolves them automatically (same path emitter textures take). Slot 0 has
 // no game asset (Solid colour). When FileManager can't resolve a path (no
@@ -94,7 +94,7 @@ static IDirect3DTexture9* LoadTextureViaFileManager(IDirect3DDevice9* pDevice,
 {
     IFile* file = fileManager.getFile(path);
     if (file == NULL) return NULL;
-    // F13+F14: ReadAndRelease handles the exact-byte read
+    // ReadAndRelease handles the exact-byte read
     // (pre-fix this ignored the read's return value) and Releases the
     // file reference. On empty or short read it throws ReadException,
     // which we map to NULL for caller compatibility.
@@ -702,7 +702,7 @@ void Engine::ReloadTextures()
 	m_textureManager.Clear();
 	int n = (int)m_instances.size();
 	OnParticleSystemChanged(-1);
-	// follow-up: re-resolve the active skydome texture too, so a mod
+	// Re-resolve the active skydome texture too, so a mod
 	// override of (say) DATA\ART\TEXTURES\W_SKYBLUE01.DDS takes effect on
 	// the next render. No-op when the slot is Off.
 	if (m_skydomeIndex != kSkydomeOffSlot)
@@ -712,12 +712,12 @@ void Engine::ReloadTextures()
 	// re-resolve the game domes so a changed .alo / texture (and, on the
 	// mod-switch path where ReloadShaders->ShaderManager::Clear ran first, a
 	// changed .fxo) is picked up. On a standalone Reload-Textures the cached
-	// shader is still valid, so the re-getShader is a cheap no-op (Risk 6).
+	// shader is still valid, so the re-getShader is a cheap no-op.
 	if (!m_skydomePrimaryName.empty() || !m_skydomeSecondaryName.empty())
 	{
 		RebuildSkydomeMeshes();
 	}
-	///S50] A mod/submod switch changes the object catalog -> invalidate it so the
+	// A mod/submod switch changes the object catalog -> invalidate it so the
 	// next Update() rebuilds it OFF the UI thread (++generation discards any in-flight
 	// build started under the OLD context). But ReloadTextures ALSO runs on texture-only
 	// paths (F5 reload, every file open) where the mod context is UNCHANGED -- invalidating
@@ -943,7 +943,7 @@ bool Engine::Render()
 	const LONGLONG _ptScene0 = EngQpcNow();
 	m_pDevice->BeginScene();
 
-	//: when the layered-window compositor is installed, swap slot
+	// When the layered-window compositor is installed, swap slot
 	// 0 from the swap-chain back buffer to the compositor's off-screen
 	// ARGB RT. The pScreenSurface capture immediately below then picks
 	// this RT up as the "screen" target for the full render chain
@@ -984,21 +984,21 @@ bool Engine::Render()
     D3DCOLOR clearColor = D3DCOLOR_XRGB(GetRValue(m_background), GetGValue(m_background), GetBValue(m_background));
 	m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, clearColor, 1.0f, 0);
 
-	// Phase 3 Stage 5 D12 — Clear-then-SetViewport ordering rule.
+	// Clear-then-SetViewport ordering rule.
 	// The full-RT Clear above fills m_pSceneTexture with engine clear
 	// color in its entirety. NOW narrow the viewport to the scene-rect
 	// sub-region so scene draws only land inside it. The post-process
 	// passes below restore the full-RT viewport before sampling.
 	//
 	// This ordering eliminates post-process bleed across the scene-rect
-	// boundary (sub-plan R5b dissolved): bloom's gaussian taps near the
+	// boundary: bloom's gaussian taps near the
 	// inner scene-rect edge sample uniform engine clear color outside,
 	// not stale pixels from last frame.
 	//
-	// Non-composition transports (canvas-jpeg, arch-A) never call
+	// Non-composition transports (canvas-jpeg) never call
 	// SetSceneViewport, so m_sceneViewportActive stays false and this
 	// block is a no-op for them — Render behaves byte-identical to
-	// pre-Stage-5.
+	// the full-RT path.
 	D3DVIEWPORT9 prevViewportS5 = {};
 	bool         restoreViewportS5 = false;
 	if (m_sceneViewportActive)
@@ -1015,14 +1015,14 @@ bool Engine::Render()
 		restoreViewportS5 = true;
 	}
 
-	// /: optional skydome pass, after Clear, before ground.
+	// Optional skydome pass, after Clear, before ground.
 	// RenderSkydomes() draws the real game .alo domes when one is selected,
 	// else falls back to the simple-background sphere (slot != Off).
 	RenderSkydomes();
 
 	if (m_showGround)
 	{
-		//: bump-mapped lit ground via the game's terrain shader when the
+		// bump-mapped lit ground via the game's terrain shader when the
 		// effect is ready; else the original unlit fixed-function quad.
 		if (m_pGroundEffect != NULL && m_pGroundDecl != NULL)
 		{
@@ -1103,13 +1103,13 @@ bool Engine::Render()
 	}
 	SAFE_RELEASE(pSceneSurface);
 
-	// Phase 3 Stage 5 D12 — restore full-RT viewport before the
+	// restore full-RT viewport before the
 	// bloom + distort post-process passes. They read+write at full-RT
 	// resolution on m_pSceneTexture / m_pDistortTexture / m_pBloomTexture[];
 	// keeping the scene-rect viewport active would clip their full-screen
 	// quads. DComp's SetClip on the engine visual crops the off-scene-
 	// rect region after compositing, so the wasted post-process work is
-	// invisible (sub-plan §3.4 "post-process at full-RT" trade-off).
+	// invisible (the "post-process at full-RT" trade-off).
 	if (restoreViewportS5)
 	{
 		m_pDevice->SetViewport(&prevViewportS5);
@@ -1137,7 +1137,7 @@ bool Engine::Render()
 	//   StarWarsG.exe:          bound at .data:0x140a129f4 = 4, 0 writers
 	// Both binaries store the loop bound as a `.data`-baked int32 with
 	// no runtime write site anywhere in the program -- equivalent to a
-	// hardcoded constant. See tasks/find_bloom_iterations.md.
+	// hardcoded constant.
 	static const UINT BLOOM_BLUR_ITERATIONS = 4;
 	const LONGLONG _ptScene1 = EngQpcNow();   // scene ends / bloom begins
 	if (m_bloomEnabled && m_bloomReady && m_pBloomEffect != NULL
@@ -1277,7 +1277,7 @@ bool Engine::Render()
 	const LONGLONG _ptDistort1 = EngQpcNow();  // distort ends / composite begins
 	// Now render to the screen
 	m_pDevice->SetRenderTarget(0, pScreenSurface);
-	//: in alpha-compositor mode the slot-0 RT is our off-screen
+	// In alpha-compositor mode the slot-0 RT is our off-screen
 	// D3DMULTISAMPLE_NONE surface. The auto-depth-stencil captured at
 	// the top of Render is multisampled (matches the swap chain), so
 	// restoring it here pairs an MS_NONE RT with an MSAA depth — D3D9
@@ -1404,7 +1404,7 @@ void Engine::SetGroundZ(float z)			        { m_groundZ    = z;      }
 void Engine::SetBackground(COLORREF color)		    { m_background = color; }
 void Engine::SetHeatDebug(bool debug)		        { m_debugHeat  = debug;  }
 
-// ground-texture bundled-resource lookup table. 0 = "no bundled
+// Ground-texture bundled-resource lookup table. 0 = "no bundled
 // resource". Kept in this .cpp (rather than the header) so the .rc IDs
 // don't need to be visible to every includer of engine.h.
 //
@@ -1560,7 +1560,7 @@ static bool LoadGroundTextureViaFileManager(IDirect3DDevice9*    pDevice,
     return true;
 }
 
-//: build a 1×1 procedural texture filled with the given COLORREF.
+// build a 1×1 procedural texture filled with the given COLORREF.
 // Used by the "Solid Color" slot (kGroundSolidColorSlot). One-pixel
 // tile is enough because the ground is sampled with WRAP wrap-mode —
 // every texel across the entire ground reads back the same colour.
@@ -1570,7 +1570,7 @@ static bool CreateSolidColorTexture(IDirect3DDevice9*    pDevice,
 {
     if (pDevice == NULL || ppOut == NULL) return false;
     IDirect3DTexture9* pNew = NULL;
-    // Phase 3 Stage 1: D3DPOOL_MANAGED → D3DPOOL_DEFAULT, because
+    // D3DPOOL_MANAGED → D3DPOOL_DEFAULT, because
     // D3D9Ex rejects the managed pool. But a DEFAULT-pool texture cannot
     // be LockRect'd unless it is ALSO created D3DUSAGE_DYNAMIC — without
     // it, LockRect returns D3DERR_INVALIDCALL, CreateSolidColorTexture
@@ -1712,7 +1712,7 @@ bool Engine::SetGroundTexture(int index)
     if (index == m_groundTextureIndex && m_pGroundTexture != NULL) return true;
     m_groundTextureIndex = index;
     bool ok = ReloadGroundTexture();
-    ReloadGroundNormalTexture();   //: re-resolve the slot's companion _bc map
+    ReloadGroundNormalTexture();   // re-resolve the slot's companion _bc map
     return ok;
 }
 
@@ -1734,7 +1734,7 @@ bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
             m_groundTextureIndex = 0;
         }
         bool ok = ReloadGroundTexture();
-        ReloadGroundNormalTexture();   //: re-resolve the slot's companion _bc map
+        ReloadGroundNormalTexture();   // re-resolve the slot's companion _bc map
         return ok;
     }
     return true;
@@ -1940,7 +1940,7 @@ void Engine::SetAmbient(const D3DXVECTOR4& color)
 	SPH_Calculate_Matrices(m_sphLightAll,  &m_lights[0], 3, m_ambient);
 }
 
-//: scene-global shadow tint setter. The declaration has lived in
+// scene-global shadow tint setter. The declaration has lived in
 // engine.h since the original codebase shipped but never had a body —
 // no shader effect handle currently consumes the value. We store it
 // here so the API is no longer linker-dangling and the Lighting
@@ -1966,7 +1966,7 @@ const Engine::Light& Engine::GetLight(LightType which) const
 
 void Engine::Reset()
 {
-	// [resize-perf] Phase-0 probe — sub-stage QPC brackets filled into
+	// [resize-perf] sub-stage QPC brackets filled into
 	// m_resetPerf at the end; the host logs them at 1 Hz. See engine.h.
 	const LONGLONG _rpT0 = EngQpcNow();
 
@@ -1993,26 +1993,26 @@ void Engine::Reset()
     }
 	if (m_pBloomEffect != NULL) m_pBloomEffect->OnLostDevice();
 	if (m_pShadowBlurEffect != NULL) m_pShadowBlurEffect->OnLostDevice();   // [soft-shadows] distinct ID3DXEffect
-	// skydome effect needs the same OnLost/OnReset dance — without it,
+	// The skydome effect needs the same OnLost/OnReset dance — without it,
 	// the effect's internal D3DPOOL_DEFAULT state-cache references survive
 	// past Reset and cause D3DERR_INVALIDCALL on any later size change.
 	// Surfaced as the ground-texture-stuck-at-0 bug in --test-host mode
 	// after the polluter pair background-picker × spawner-import-mod;
 	// interactive use never noticed because Render()'s recovery path
-	// papered over the failed Reset on the next WM_PAINT. (handoff
-	// Open Items §1, fixed 2026-05-20.)
+	// papered over the failed Reset on the next WM_PAINT. (Fixed
+	// 2026-05-20.)
 	if (m_pSkydomeEffect != NULL) m_pSkydomeEffect->OnLostDevice();
-	//: same OnLost dance for the ground effect; its normal textures are
+	// same OnLost dance for the ground effect; its normal textures are
 	// D3DPOOL_DEFAULT under D3D9Ex (procedural flat normal + D3DX-loaded _bc
 	// map) and must be released before Reset, recreated after (below).
 	if (m_pGroundEffect != NULL) m_pGroundEffect->OnLostDevice();
 	SAFE_RELEASE(m_pGroundNormalTexture);
 	SAFE_RELEASE(m_pGroundFlatNormalTexture);
-	// Phase 3 Stage 1: D3D9Ex disallows D3DPOOL_MANAGED, so
+	// D3D9Ex disallows D3DPOOL_MANAGED, so
 	// resources that were previously managed-pool (skydome VB/IB, the
 	// solid-colour ground texture, and any custom skydome texture)
 	// are now D3DPOOL_DEFAULT and must be released before Reset and
-	// recreated after. Same shape as incident — every newly-
+	// recreated after. Every newly-
 	// D3DPOOL_DEFAULT resource that misses this dance produces a
 	// stale-resource D3DERR on the next Reset.
 	ReleaseSkydomeMeshBuffers();
@@ -2024,24 +2024,23 @@ void Engine::Reset()
 	m_referenceObjectMesh.OnLostDevice();   // same DEFAULT-pool dance
 	for (auto& a : m_referenceAttachments) if (a) a->mesh.OnLostDevice();   // hardpoint attach models
 	SAFE_RELEASE(m_pGroundTexture);
-	//: the compositor's off-screen RT is D3DPOOL_DEFAULT, so
+	// The compositor's off-screen RT is D3DPOOL_DEFAULT, so
 	// it must be released before m_pDevice->Reset — otherwise Reset
 	// fails with D3DERR_INVALIDCALL and the engine is left in a
 	// half-broken state (textures null, shaders OnLost'd but device
 	// never reset). The Resize() call at the end of this function
 	// recreates the RT against the new back-buffer size.
 	if (m_pAlphaCompositor) m_pAlphaCompositor->ReleaseGpuResources();
-	// [F6] D3DX texture helpers (D3DXCreateTextureFromFileInMemory,
+	// D3DX texture helpers (D3DXCreateTextureFromFileInMemory,
 	// D3DXCreateTextureFromResource) silently substitute D3DPOOL_DEFAULT
 	// for D3DPOOL_MANAGED under D3D9Ex — the documented MANAGED default
 	// inside the helper hits D3D9Ex's pool restriction and the helper
 	// falls back to DEFAULT. TextureManager caches the result, so every
 	// cached handle is a DEFAULT-pool resource that must be released
-	// before Reset. Stage 1 sub-plan named this as Risk 4.7 but the
-	// chosen mitigation (grep for D3DPOOL_MANAGED literal) couldn't
+	// before Reset. An early mitigation (grep for the D3DPOOL_MANAGED literal) couldn't
 	// find it because the helper hides the pool argument.
 	m_textureManager.OnLostDevice();
-	// Phase 3 Stage 4a — release the event query before Reset.
+	// release the event query before Reset.
 	// IDirect3DQuery9 is not in any D3DPOOL_*, but D3D9Ex's device Reset
 	// invalidates queries the same way it invalidates D3DPOOL_DEFAULT
 	// resources. Lazy-recreated by the next IssueEndFrameQuery call
@@ -2063,21 +2062,21 @@ void Engine::Reset()
 	if (m_pSkydomeEffect != NULL) m_pSkydomeEffect->OnResetDevice();
 	if (m_pGroundEffect  != NULL) m_pGroundEffect->OnResetDevice();
 	// two-phase like the rest of the dance: all effects OnReset here,
-	// then the DEFAULT-pool VB/IB + textures refill below (todo.md Risk 7).
+	// then the DEFAULT-pool VB/IB + textures refill below.
 	m_skydomePrimaryMesh.OnResetEffects();
 	m_skydomeSecondaryMesh.OnResetEffects();
 	m_referenceObjectMesh.OnResetEffects();   // phase 1
 	for (auto& a : m_referenceAttachments) if (a) a->mesh.OnResetEffects();   // attachments, phase 1
-	//: recreate the D3DPOOL_DEFAULT ground normal textures post-Reset.
+	// recreate the D3DPOOL_DEFAULT ground normal textures post-Reset.
 	CreateGroundFlatNormal();
-	// Phase 3 Stage 1: rebuild the previously-managed-pool
+	// rebuild the previously-managed-pool
 	// resources. CreateSkydomeMeshBuffers regenerates the procedural
 	// VB/IB; ReloadGroundTexture re-runs the bundled-or-solid-colour
 	// loader using m_groundTextureIndex; ReloadSkydomeTexture re-runs
 	// the bundled-or-custom path using m_skydomeIndex.
 	CreateSkydomeMeshBuffers();
 	ReloadGroundTexture();
-	ReloadGroundNormalTexture();   //: re-resolve the companion _bc map
+	ReloadGroundNormalTexture();   // re-resolve the companion _bc map
 	ReloadSkydomeTexture(m_skydomeIndex);
 	// phase 2: refill the game-dome DEFAULT-pool VB/IB + material
 	// textures from the cached transcoded blobs (no re-parse).
@@ -2090,7 +2089,7 @@ void Engine::Reset()
 
 	const LONGLONG _rpT3 = EngQpcNow();   // [resize-perf] reload ends / alpha resize begins
 
-	//: the alpha compositor owns D3D9 resources (RT + sysmem
+	// The alpha compositor owns D3D9 resources (RT + sysmem
 	// surface) sized to the popup client area. Refresh them so the
 	// off-screen RT keeps pace with the swap-chain's back-buffer
 	// size, which the engine's render chain (m_pSceneTexture etc.)
@@ -2105,7 +2104,7 @@ void Engine::Reset()
 
 	const LONGLONG _rpT4 = EngQpcNow();   // [resize-perf] alpha resize ends
 
-	// Phase 3 Stage 5 R8 mitigation — re-apply the cached scene
+	// re-apply the cached scene
 	// viewport so its projection aspect ratio survives Reset.
 	// ResetParameters() above rebuilt m_projection at FULL-RT aspect via
 	// D3DXMatrixPerspectiveFovRH (engine.cpp:1448), overwriting whatever
@@ -2143,14 +2142,14 @@ void Engine::Reset()
 	++m_resetPerf.count;
 }
 
-// [resize-perf revised Fix A] Cheap resize-only reset. See engine.h for the
+// [resize-perf] Cheap resize-only reset. See engine.h for the
 // contract and the first-party ResetEx semantics this leans on. Mirrors
 // Reset()'s structure minus everything ResetEx makes unnecessary: no
 // OnLostDevice/OnResetDevice on shaders/effects, no skydome VB/IB release,
 // no ground/skydome texture re-decode, no TextureManager cache wipe. The
 // end-frame query is still released + lazily recreated — IDirect3DQuery9
 // invalidation across device resets was observed empirically under plain
-// Reset (Stage 4a) and a query re-create costs nothing next frame.
+// Reset and a query re-create costs nothing next frame.
 bool Engine::ResetForResize()
 {
 	if (m_pDevice == NULL) return false;
@@ -2229,19 +2228,19 @@ bool Engine::ResetForResize()
 	return true;
 }
 
-// Phase 3 Stage 2: forwarder to the AlphaCompositor's shared
+// forwarder to the AlphaCompositor's shared
 // HANDLE. Returns nullptr when the compositor isn't installed (canvas-
 // jpeg mode skips the layered-window path) or before Resize has run.
-// Stage 4 will consume this via a D3D11 OpenSharedResource into the
-// DComp visual tree; today nothing reads it but the standalone
-// shared_texture_test exe (Stage 2c) verifies the handle is openable.
+// The DComp visual tree will consume this via a D3D11 OpenSharedResource;
+// today nothing reads it but the standalone
+// shared_texture_test exe verifies the handle is openable.
 HANDLE Engine::GetSharedTextureHandle() const
 {
 	return m_pAlphaCompositor ? m_pAlphaCompositor->GetSharedHandle() : nullptr;
 }
 
-// Phase 3 Stage 4a — cross-device GPU sync. See engine.h for
-// the design rationale (sub-plan §3.3 path b — engine-exposed helpers,
+// cross-device GPU sync. See engine.h for
+// the design rationale (engine-exposed helpers,
 // host orchestrates call sites under composition mode only).
 //
 // IssueEndFrameQuery lazily creates the IDirect3DQuery9 event query on
@@ -2276,7 +2275,7 @@ void Engine::IssueEndFrameQuery()
 // host message pump indefinitely on a hung GPU. Returns the spin count
 // (0 = signalled on the first poll) so the host can log GPU-wait pressure.
 //
-// [resize-perf Fix B2] The wait now YIELDS between polls past a short
+// [resize-perf] The wait now YIELDS between polls past a short
 // tight burst. The original no-yield spin burned a full core while the
 // GPU drained (measured ~4000 spins/frame at the unpaced ~3000 fps idle
 // — engine.cpp's share of the splitter-drag contention). The first 64
@@ -2303,7 +2302,7 @@ int Engine::WaitEndFrameQuery()
 	return spins;
 }
 
-// Phase 3 Stage 4b — adapter LUID accessor for the multi-GPU
+// adapter LUID accessor for the multi-GPU
 // guard. IDirect3D9Ex::GetAdapterLUID returns the LUID of the adapter
 // associated with the supplied D3D9 adapter ordinal — the bridge
 // between D3D9's adapter-index world and DXGI's LUID world. Compositor
@@ -2328,13 +2327,13 @@ LUID Engine::GetAdapterLuid() const
 	return luid;
 }
 
-// Phase 3 Stage 5 — scene-rect viewport (Variant B-γ).
+// scene-rect viewport.
 //
 // Stash the rect, mark active, and recompute m_projection at the
 // scene-rect aspect ratio. Next Engine::Render's scene pass picks
 // up m_sceneViewportActive == true and applies SetViewport after the
-// full-RT Clear (the D12 Clear-then-SetViewport ordering rule in
-// sub-plan §3.4 — prevents post-process bleed across the scene-rect
+// full-RT Clear (the Clear-then-SetViewport ordering rule —
+// prevents post-process bleed across the scene-rect
 // boundary). Post-process passes restore the cached viewport before
 // running.
 //
@@ -2457,7 +2456,7 @@ void Engine::SetSceneViewport(int x, int y, int w, int h)
 	float fovY   = D3DXToRadian(45.0f) * (float)h / kFovAnchorHeightPx;
 	const float kMaxFovY = D3DXToRadian(120.0f);
 	if (fovY > kMaxFovY) fovY = kMaxFovY;
-	m_sceneFovY = fovY;   ///capture the CLAMPED FoV the projection uses (gizmo sizing)
+	m_sceneFovY = fovY;   // capture the CLAMPED FoV the projection uses (gizmo sizing)
 	float aspect = (float)w / (float)h;
 	D3DXMatrixPerspectiveFovRH(&m_projection, fovY, aspect, n, 1000.0f);
 	m_projection._33 = -1.0f;
@@ -2475,7 +2474,7 @@ void Engine::SetSceneViewport(int x, int y, int w, int h)
 		m_pDevice->SetTransform(D3DTS_PROJECTION, &m_projection);
 	}
 
-	// [resize-perf C2] Throttled to 1 Hz: this used to print + fflush +
+	// [resize-perf] Throttled to 1 Hz: this used to print + fflush +
 	// OutputDebugStringA on EVERY apply, and splitter drags apply at the
 	// stream rate (~28/s) — ODS alone is ms-class with a debugger
 	// attached. One line per second is plenty to see the live rect.
@@ -2660,9 +2659,9 @@ D3DMULTISAMPLE_TYPE Engine::GetMultiSampleType(DWORD* MultiSampleQuality, D3DFOR
 	return D3DMULTISAMPLE_NONE;
 }
 
-//: Build the UV sphere vertex declaration + mesh used by the skydome
+// Build the UV sphere vertex declaration + mesh used by the skydome
 // render pass. Called once from the Engine constructor after m_pDevice is
-// created. Phase 3 Stage 1: the VB/IB allocation moved into
+// created. The VB/IB allocation moved into
 // CreateSkydomeMeshBuffers() so Engine::Reset can recreate them after
 // the device Reset (D3DPOOL_DEFAULT resources don't survive Reset).
 void Engine::InitSkydomeMesh()
@@ -2681,7 +2680,7 @@ void Engine::InitSkydomeMesh()
     CreateSkydomeMeshBuffers();
 }
 
-// Phase 3 Stage 1: Allocate + fill the skydome VB and IB.
+// Allocate + fill the skydome VB and IB.
 // Called from InitSkydomeMesh (engine init) and from Engine::Reset (after
 // device Reset succeeds). D3DPOOL_DEFAULT means the buffers live in
 // driver-managed VRAM that's lost on Reset; the procedural sphere data
@@ -2765,7 +2764,7 @@ void Engine::CreateSkydomeMeshBuffers()
 #endif
 }
 
-// Phase 3 Stage 1: Release the skydome VB + IB ahead of
+// Release the skydome VB + IB ahead of
 // m_pDevice->Reset. Counterpart of CreateSkydomeMeshBuffers. Symmetric
 // with the existing OnLostDevice pattern used for shaders + compositor RT.
 void Engine::ReleaseSkydomeMeshBuffers()
@@ -2810,7 +2809,7 @@ bool Engine::ReloadSkydomeTexture(int slot)
 
     if (slot > kSkydomeOffSlot && slot < kSkydomeBundledCount)
     {
-        // follow-up: try the curated in-archive path first so the
+        // Try the curated in-archive path first so the
         // skydome picks up real game textures (and mod overlays on top of
         // them) wherever they exist. Fall back to the bundled RCDATA
         // placeholder so the slot still renders something when the base
@@ -2844,7 +2843,7 @@ bool Engine::ReloadSkydomeTexture(int slot)
         std::string narrowPath = WideToAnsi(path);
         m_pSkydomeTexture = LoadTextureViaFileManager(m_pDevice, m_fileManager, narrowPath);
         if (m_pSkydomeTexture != NULL) return true;
-        // Phase 3 Stage 1: D3DPOOL_MANAGED → D3DPOOL_DEFAULT.
+        // D3DPOOL_MANAGED → D3DPOOL_DEFAULT.
         // D3D9Ex disallows the managed pool. Custom-slot textures are
         // re-loaded from disk via Engine::Reset → ReloadSkydomeTexture
         // (called with m_skydomeIndex) when the device is reset.
@@ -2877,7 +2876,7 @@ void Engine::RenderSkydome()
     // diffuse to white (0xFFFFFFFF) — which blows out additive particles to
     // white and breaks the alpha-blended ones. The ground is unaffected (its
     // vertices are already white), which is exactly why the bug looked like a
-    // skydome-only blend issue. See tasks/lessons.md.
+    // skydome-only blend issue.
     IDirect3DVertexDeclaration9* oldDecl = NULL;
     m_pDevice->GetVertexDeclaration(&oldDecl);
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -2916,7 +2915,7 @@ void Engine::RenderSkydome()
 }
 
 // The blend mode a dome sub-mesh's shader expects. The game .fxo set this
-// inside a no-op'd SB block (ALAMO_STATE_BLOCKS 0; todo.md Risk 2), so the app
+// inside a no-op'd SB block (ALAMO_STATE_BLOCKS 0), so the app
 // applies it. MeshAdditive* -> ONE/ONE (space starfields); MeshAlpha* ->
 // SRCALPHA/INVSRCALPHA (land ring/horizon overlays); everything else (Skydome,
 // MeshGloss base) -> opaque.
@@ -2971,7 +2970,7 @@ static void ApplyAloMaterialParams(ID3DXEffect* fx,
 // matrix (Skydome.fx computes world_pos/world_normal for SH) instead of the
 // identity the particle path uses. Saves + restores the full render-state delta
 // any sub-mesh may touch so the dome can't leak blend/zwrite/cull/decl into the
-// ground + particle draws that follow ().
+// ground + particle draws that follow.
 void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
 {
     D3DXMATRIX wvp = world * m_view * m_projection;
@@ -3001,7 +3000,7 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
             continue;   // opaque sub-meshes in phase 0, blended in phase 1
 
         // Render state the shader expects (the game .fxo may NOT set it itself --
-        // ALAMO_STATE_BLOCKS; todo.md Risk 2 -- so we set it regardless). Every dome
+        // ALAMO_STATE_BLOCKS -- so we set it regardless). Every dome
         // layer is a camera-centred background: depth test+write OFF (drawn first,
         // ground/particles paint over it) and CULL_NONE (one triangle per view ray
         // -> no overdraw, sidesteps the unknown .alo winding). Blend per shader
@@ -3079,7 +3078,7 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
     }
 
     // Restore the saved delta. Stream-source / indices are intentionally NOT
-    // restored: every subsequent draw rebinds them (todo.md Risk 9).
+    // restored: every subsequent draw rebinds them.
     m_pDevice->SetVertexDeclaration(oldDecl);
     if (oldDecl) oldDecl->Release();
     m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, oldAlphaBlend);
@@ -3157,7 +3156,7 @@ D3DXMATRIX Engine::ReferenceObjectWorldFrom(const D3DXVECTOR3& pos, const D3DXVE
 D3DXMATRIX Engine::ReferenceObjectWorld() const
 { return ReferenceObjectWorldFrom(m_referencePosition, m_referenceRotation); }
 
-// Eased "display" transform -> the RENDER uses this (smooth motion).
+// Eased "display" transform -> the RENDER uses this (smooth motion). 
 D3DXMATRIX Engine::ReferenceObjectDisplayWorld() const
 { return ReferenceObjectWorldFrom(m_displayPosition, m_displayRotation); }
 
@@ -3520,7 +3519,7 @@ void Engine::DumpParticleDrawStateIfRequested(unsigned long blendMode,
 // Draw the imported reference object in two phases (opaque then
 // transparent). Each rigid sub-mesh is placed by its bone's object-space matrix
 // (sub.placement) times the live object world, and runs its OWN game shader 1:1
-// with the same engine binding the particle / dome paths use. render-state
+// with the same engine binding the particle / dome paths use. Render-state
 // save/restore so the particle draw is unaffected. No-op when none loaded/resolved.
 void Engine::RenderReferenceObject()
 {
@@ -3546,7 +3545,7 @@ void Engine::RenderReferenceObject()
     // Two phases matching the game's Opaque-then-Transparent order: opaque
     // sub-meshes (fill + depth) first, then additive/alpha layers blended on top.
     // Each sub-mesh's render state is set here, not by the .fxo (its SB block is
-    // compiled out -- ALAMO_STATE_BLOCKS 0; / todo.md Risk 2). Opaque uses
+    // compiled out -- ALAMO_STATE_BLOCKS 0). Opaque uses
     // CULL_CW (the editor renders RIGHT-handed -- LookAtRH/PerspectiveFovRH -- which
     // flips screen-space winding vs the game, so game-front faces present as CW
     // here; CCW culled the front faces and showed the lit hull interior, the
@@ -3702,7 +3701,7 @@ void Engine::RenderReferenceShadows()
     // [redbug] One-shot marker proving the shadow pass actually DRAWS volumes (not
     // merely that the shadow-volume shader was loaded during ref-object resolution,
     // which happens regardless of whether this pass runs). The regression guard
-    // tasks/redbug-shadow-decl-check.ps1 greps for this so it can't false-PASS on a
+    // greps for this so it can't false-PASS on a
     // shader-load-without-draw. Past the early-returns above the function always
     // draws, so this fires exactly when a real shadow pass executes. Gated by
     // ALO_SHADER_DIAG + once-per-process so production stays silent.
@@ -3747,7 +3746,7 @@ void Engine::RenderReferenceShadows()
     // offset at every distance, so the contact holds position at all zooms. The push
     // does introduce a sub-percent screen-space shift of the volume (a deeper vertex
     // projects slightly toward the principal point) but it SHRINKS with distance and
-    // is negligible vs the d^2 drift it removes. (See tasks/lessons.md.)
+    // is negligible vs the d^2 drift it removes.
     //
     // Sign/magnitude tunable: too small -> self-shadow flicker returns; too large ->
     // the shadow visibly detaches from the model base up close.
@@ -4195,8 +4194,8 @@ void Engine::RenderReferenceShadows()
     // m_pDeclaration. Restore whichever vertex format was actually active, never both:
     // at the shadow-pass entry this engine always has an explicit decl bound, so oDecl
     // is non-null in practice; the SetFVF branch is a fallback for a pure-FVF device
-    // (where GetVertexDeclaration returns null). Guarded headless by
-    // tasks/redbug-shadow-decl-check.ps1 (ALO_DUMP_RSTATE decl-element dump).
+    // (where GetVertexDeclaration returns null). Guarded headless by a
+    // regression check (ALO_DUMP_RSTATE decl-element dump).
     if (oDecl) { m_pDevice->SetVertexDeclaration(oDecl); oDecl->Release(); }
     else       { m_pDevice->SetFVF(oFVF); }
     m_pDevice->SetVertexShader(oVS); if (oVS) oVS->Release();
@@ -4237,7 +4236,7 @@ void Engine::RenderReferenceShadows()
 // EmitterInstance::Vertex decl (Position + diffuse Color; the FF view/proj are
 // already set this frame). Depth test ON (so a placed object occludes lines
 // behind it) but depth write OFF (lines never block particle sorting). Saves +
-// restores every render / texture-stage state it touches (discipline).
+// restores every render / texture-stage state it touches (this discipline).
 // File-static (not an Engine member) so the header needn't see EmitterInstance::Vertex.
 static void DrawWorldLines(IDirect3DDevice9* dev, IDirect3DVertexDeclaration9* decl,
                            const EmitterInstance::Vertex* verts, int lineCount,
@@ -4518,7 +4517,7 @@ namespace
 {
     // Gizmo geometry constants shared by the render and the pick so the
     // drawn handle and the grabbable region stay in lockstep. Arrow length is
-    // `baseLen` (screen-uniform; Engine::ReferenceGizmoHandleLength, S51/);
+    // `baseLen` (screen-uniform; Engine::ReferenceGizmoHandleLength);
     // rings sit just outside the arrowheads.
     constexpr float kAxisPickScale   = 0.18f;   // arrow pick radius = len * this
     constexpr float kHoverGrow       = 1.3f;    // hovered arrow grows (visual + pick)
@@ -4566,7 +4565,7 @@ namespace
     }
 }
 
-///Screen-uniform gizmo sizing (was eye-distance*0.12, "v1"). See GizmoSizing.h.
+// Screen-uniform gizmo sizing (was eye-distance*0.12, "v1"). See GizmoSizing.h.
 float Engine::ReferenceGizmoHandleLength() const
 {
     const D3DXVECTOR3 eye = m_eye.Position;
@@ -4771,7 +4770,7 @@ void Engine::RenderReferenceManipulator()
         v.push_back(v0);
         v.push_back(v1);
     };
-    ///During a drag, FADE the non-active handles via alpha (hue kept) so
+    // During a drag, FADE the non-active handles via alpha (hue kept) so
     // they ghost out softly instead of darkening toward black. The alpha-blended
     // ribbon/tri paths make alpha the right lever now (the old RGB*0.4 darkened).
     auto dim = [&](D3DCOLOR c) -> D3DCOLOR {
@@ -4870,7 +4869,7 @@ void Engine::RenderReferenceManipulator()
         rseg(c00, c10, border); rseg(c10, c11, border); rseg(c11, c01, border); rseg(c01, c00, border);
     }
 
-    ///Active-drag guides. faint() dims the RGB (lines draw alpha-blend
+    // Active-drag guides. faint() dims the RGB (lines draw alpha-blend
     // OFF, so alpha is a no-op -- scale the colour, as dim() does). TRANSLATE: one
     // faint axis line. PLANE: both in-plane (X,Y) axis lines, faint. ROTATE sweep
     // unchanged (full colour).
@@ -5131,9 +5130,9 @@ void Engine::EnumerateSkydomeNames(SkydomeContext context,
     for (const SkydomeRef& r : lists[secAxis])  outSecondary.push_back(r.name);
 }
 
-// [#NN] Build (one LoadAllSkydomeLists pass) and cache the four axis skydome lists,
+// Build (one LoadAllSkydomeLists pass) and cache the four axis skydome lists,
 // rebuilding only when the FileManager's mod/submod context has changed since the
-// cache was last built. This collapses #224's ~4 GameObjectFiles scans per mod switch
+// cache was last built. This collapses the ~4 GameObjectFiles scans per mod switch
 // (RebuildSkydomeMeshes' two axes + the picker query's two) into a single pass.
 // Context is re-checked every call, so it's correct regardless of which consumer runs
 // first after a switch (RebuildSkydomeMeshes runs before ReloadTextures' catalog
@@ -5275,8 +5274,8 @@ void Engine::SetReferenceObject(const std::string& name)
         m_referenceObjectVisible = true;
     // Auto-select on pick so the manipulator gizmo appears immediately; clearing
     // the selection deselects. (Click the object body to re-select, empty to clear.)
-    // NOTE: the lock is intentionally STICKY + persisted across sessions (+
-    // the HostWindow startup restore) — do NOT clear m_referenceLocked here, or
+    // NOTE: the lock is intentionally STICKY + persisted across sessions (gizmo
+    // freeze/lock + the HostWindow startup restore) — do NOT clear m_referenceLocked here, or
     // the startup restore is wiped. The overlay/View-menu now make the lock state
     // visible so a sticky lock on a freshly-loaded object is no longer confusing.
     m_referenceObjectSelected = RefLockResolveSelected(!name.empty(), m_referenceLocked);
@@ -5487,7 +5486,7 @@ void Engine::RebuildReferenceObjectMesh()
                     m_referenceObjectName.c_str(), m_referenceAttachments.size(), attach.size());
 #endif
 
-        // [Fix A] Load-time warning: if the primary object has shadow sub-meshes but
+        // Load-time warning: if the primary object has shadow sub-meshes but
         // none resolved to a real shadow-volume effect, the stencil pass will silently
         // draw nothing. Emit once here (not per-frame) so it appears in host.log /
         // OutputDebugStringA without spamming. Primary object only; attachments are a
@@ -5531,13 +5530,13 @@ void Engine::RebuildReferenceObjectMesh()
       :                                                   ReferenceObjectStatus::LoadFailed;
 }
 
-// Grid spacing must stay positive ('s line loop steps by it).
+// Grid spacing must stay positive (the line loop steps by it).
 void Engine::SetGridSpacing(float spacing)
 {
     m_gridSpacing = (spacing > 0.0f) ? spacing : 1.0f;
 }
 
-//: compile IDR_SHADER_GROUND_LIT, cache parameter handles, select the
+// compile IDR_SHADER_GROUND_LIT, cache parameter handles, select the
 // best-validating technique (bump → gloss), and build the tangent-space ground
 // vertex declaration. Graceful-degrade: on any failure m_pGroundEffect stays
 // NULL and Render() falls back to the unlit fixed-function ground quad.
@@ -5608,7 +5607,7 @@ void Engine::InitGroundEffect()
 #endif
 }
 
-//: 1x1 neutral tangent-space normal (0,0,1) packed RGB(128,128,255).
+// 1x1 neutral tangent-space normal (0,0,1) packed RGB(128,128,255).
 // Dynamic+default pool so it's lockable under D3D9Ex (see CreateSolidColorTexture).
 void Engine::CreateGroundFlatNormal()
 {
@@ -5625,13 +5624,13 @@ void Engine::CreateGroundFlatNormal()
     {
         // RGB = flat tangent-space normal (0,0,1); ALPHA = 0 so a slot with no
         // real _bc gloss map is matte (no specular) instead of fully glossy
-        // (: gloss lives in the _bc map's alpha — see GroundLit.fx).
+        // (gloss lives in the _bc map's alpha — see GroundLit.fx).
         *(DWORD*)lr.pBits = D3DCOLOR_ARGB(0, 128, 128, 255);
         m_pGroundFlatNormalTexture->UnlockRect(0);
     }
 }
 
-//: resolve the active slot's companion `<base>_bc` normal map from the
+// resolve the active slot's companion `<base>_bc` normal map from the
 // game/mod via FileManager. Only the three vanilla-textured slots have a known
 // base name; dirt/solid/empty-custom slots get the flat-normal fallback (lit,
 // no relief). Re-run on slot change and after device Reset.
@@ -5678,7 +5677,7 @@ void Engine::ReloadGroundNormalTexture()
 #endif
 }
 
-//: draw the lit ground quad through m_pGroundEffect. World is identity
+// draw the lit ground quad through m_pGroundEffect. World is identity
 // (the quad is already in world space), so object space == world space for the
 // per-pixel light/half vectors — matching the game's object-space bump path.
 void Engine::RenderGroundLit()
@@ -5717,7 +5716,7 @@ void Engine::RenderGroundLit()
 
     // The vertex declaration is NOT captured by the effect state block, so it
     // must be restored or the particle draws lose their diffuse-colour stream
-    // (). Render states the effect changes ARE saved/restored by Begin/End.
+    // Render states the effect changes ARE saved/restored by Begin/End.
     IDirect3DVertexDeclaration9* oldDecl = NULL;
     m_pDevice->GetVertexDeclaration(&oldDecl);
 
@@ -5794,18 +5793,18 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	m_pShadowMask       = NULL;
 	m_pShadowMaskMsaa   = NULL;
 	m_pShadowBlurEffect = NULL;
-	//: skydome geometry — pre-init so partial-failure cleanup is safe
+	// skydome geometry — pre-init so partial-failure cleanup is safe
 	m_pSkydomeVB        = NULL;
 	m_pSkydomeIB        = NULL;
 	m_pSkydomeDecl      = NULL;
 	m_skydomeIndexCount = 0;
-	//: skydome effect + texture state
+	// skydome effect + texture state
 	m_pSkydomeEffect    = NULL;
 	m_hSkydomeWVP       = NULL;
 	m_hSkydomeTex       = NULL;
 	m_pSkydomeTexture   = NULL;
 	m_skydomeIndex      = kSkydomeOffSlot;
-	//: ground-lighting effect + tangent-space decl + normal-map state
+	// ground-lighting effect + tangent-space decl + normal-map state
 	m_pGroundEffect            = NULL;
 	m_pGroundDecl              = NULL;
 	m_pGroundNormalTexture     = NULL;
@@ -5822,9 +5821,9 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	// Initialize members
 	m_showGround     = true;
 	m_groundZ        = 0.0f;
-	m_groundTextureIndex = 0;                 //: dirt by default
-	m_groundSolidColor   = RGB(128, 128, 128); //: flat grey default
-	m_pGroundTexture = NULL;      //: must be NULL before first ReloadGroundTexture()
+	m_groundTextureIndex = 0;                 // dirt by default
+	m_groundSolidColor   = RGB(128, 128, 128); // flat grey default
+	m_pGroundTexture = NULL;      // must be NULL before first ReloadGroundTexture()
 	m_debugHeat      = false;
 	m_bloomEnabled   = false;
 	m_bloomReady     = false;
@@ -5854,13 +5853,11 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	//
 	// Initialize Direct3D9Ex
 	//
-	// Phase 3 Stage 1: D3D9 → D3D9Ex. D3D9Ex is required for
-	// the Stage 2 shared-handle render-target path; the spike validated
-	// the entire engine→D3D11→DComp pipeline on this rig (decision doc
-	// at docs/superpowers/research/dxgi-stage-0-decision.md). Per Stage 1
-	// decision #1: hard-fail if D3D9Ex is unavailable — there is no
-	// in-process fallback to vanilla D3D9 (production fallback to legacy
-	// arch-A is filed for Stage 6+).
+	// D3D9 → D3D9Ex. D3D9Ex is required for
+	// the shared-handle render-target path; the spike validated
+	// the entire engine→D3D11→DComp pipeline on this rig. The
+	// decision: hard-fail if D3D9Ex is unavailable — there is no
+	// in-process fallback to vanilla D3D9.
 	{
 		HRESULT createHr = Direct3DCreate9Ex(D3D_SDK_VERSION, &m_pDirect3D);
 		if (FAILED(createHr) || m_pDirect3D == NULL)
@@ -5894,9 +5891,9 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	m_presentationParameters.MultiSampleType = GetMultiSampleType(&m_presentationParameters.MultiSampleQuality, DisplayMode.Format, m_presentationParameters.AutoDepthStencilFormat, m_presentationParameters.Windowed);
 
 	// Create device (first try hardware, then software).
-	// Phase 3 Stage 1: D3D9 CreateDevice → D3D9Ex CreateDeviceEx
+	// D3D9 CreateDevice → D3D9Ex CreateDeviceEx
 	// (extra trailing nullptr for fullscreen display mode — we are always
-	// windowed) + D3DCREATE_MULTITHREADED, which is required for Stage 2
+	// windowed) + D3DCREATE_MULTITHREADED, which is required for
 	// cross-device shared-handle textures and costs ~5% per-frame
 	// overhead in exchange. Verified across 189k frames in the dxgi_spike
 	// without anomaly.
@@ -5923,7 +5920,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 			throw runtime_error("Unable to create render device");
 		}
 
-		// Adapter info for Stage 2 multi-GPU LUID match debugging.
+		// Adapter info for multi-GPU LUID match debugging.
 		D3DADAPTER_IDENTIFIER9 adapterIdent = {};
 		m_pDirect3D->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &adapterIdent);
 		printf("[D3D9Ex] device created (%s multithreaded) adapter=%s "
@@ -5942,7 +5939,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 		throw runtime_error("Unable to create vertex declaration");
 	}
 
-	// Create ground texture.: routed through ReloadGroundTexture
+	// Create ground texture. routed through ReloadGroundTexture
 	// so the same code path is shared with SetGroundTexture and the
 	// lost-device recovery branches below. m_groundTextureIndex was
 	// initialized to 0 (dirt) in the constructor; main.cpp's startup
@@ -6001,14 +5998,14 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
     SetLight(LT_FILL2, fill);
 	ResetParameters();
 
-	//: build the UV sphere mesh used by the skydome render pass.
+	// build the UV sphere mesh used by the skydome render pass.
 	// m_pDevice is guaranteed valid at this point.
 	InitSkydomeMesh();
-	//: compile the skydome HLSL effect and cache its parameter handles.
+	// compile the skydome HLSL effect and cache its parameter handles.
 	// Graceful-degrade: if compile fails m_pSkydomeEffect stays NULL and the
 	// render pass (Task 4) will guard on it and skip skydome rendering.
 	InitSkydomeEffect();
-	//: ground-lighting effect + tangent-space decl + flat-normal fallback.
+	// ground-lighting effect + tangent-space decl + flat-normal fallback.
 	// Graceful-degrade identically: on compile failure m_pGroundEffect stays
 	// NULL and Render() falls back to the unlit fixed-function ground quad.
 	CreateGroundFlatNormal();
@@ -6082,7 +6079,7 @@ Engine::~Engine()
         SAFE_RELEASE(m_pShaders[i]);
     }
     SAFE_RELEASE(m_pDepthStencilSurface);
-	// Audit: released in Reset()/ResetForResize() but was leaked
+	// Released in Reset()/ResetForResize() but was leaked
 	// at shutdown when no final Reset ran.
 	SAFE_RELEASE(m_pEndFrameQuery);
 	// MSAA surfaces
@@ -6093,14 +6090,14 @@ Engine::~Engine()
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
 	SAFE_RELEASE(m_pGroundTexture);
-	//: skydome effect + texture (released before geometry for symmetry)
+	// skydome effect + texture (released before geometry for symmetry)
 	SAFE_RELEASE(m_pSkydomeEffect);
 	SAFE_RELEASE(m_pSkydomeTexture);
-	//: skydome geometry (D3DPOOL_MANAGED — only released here, not on Reset)
+	// skydome geometry (D3DPOOL_MANAGED — only released here, not on Reset)
 	SAFE_RELEASE(m_pSkydomeVB);
 	SAFE_RELEASE(m_pSkydomeIB);
 	SAFE_RELEASE(m_pSkydomeDecl);
-	//: ground-lighting effect + decl + normal textures
+	// ground-lighting effect + decl + normal textures
 	SAFE_RELEASE(m_pGroundEffect);
 	SAFE_RELEASE(m_pGroundDecl);
 	SAFE_RELEASE(m_pGroundNormalTexture);

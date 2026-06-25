@@ -1,4 +1,4 @@
-// SetLinkGroupDialog — Phase 3 Screen 4 Batch B2.
+// SetLinkGroupDialog.
 //
 // Modal opened from the EmitterTree context-menu "Set Link Group…"
 // item. Two radio choices:
@@ -14,7 +14,7 @@
 // Operates on the React-side multi-selection — the bridge call's
 // `ids` is the current `useEmitterSelectionStore` ids array. The
 // dialog stays driven by the `tree-context` atom (extended with
-// `"set-link-group"` for this batch); the right-click handler in
+// `"set-link-group"`); the right-click handler in
 // EmitterTree.tsx promotes a non-multi-selected right-clicked row to
 // a single-select before opening, so the selection-at-OK matches the
 // row the user clicked when no Ctrl/Shift gesture preceded.
@@ -51,7 +51,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
   const [mode, setMode] = useState<"new" | "existing">("new");
   const [existingGroups, setExistingGroups] = useState<number[]>([]);
   const [chosenGroup, setChosenGroup] = useState<number | null>(null);
-  //: the non-exempt fields the chosen join would overwrite, shown
+  // The non-exempt fields the chosen join would overwrite, shown
   // INLINE so the user sees them before a single OK commits — no separate
   // confirm step. Fetched reactively as the target (mode / group) changes;
   // read-only, never blocks the join.
@@ -96,7 +96,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
     return false;
   }, [mode, chosenGroup, selectedIds]);
 
-  //: reactively preview which non-exempt fields the current target
+  // Reactively preview which non-exempt fields the current target
   // (a new group, or the chosen existing group) would overwrite, so the
   // form can list them BEFORE the user commits. Read-only; the result only
   // drives the inline note — OK always proceeds. Re-runs when the target
@@ -195,7 +195,7 @@ export function SetLinkGroupDialog({ bridge }: Props) {
               {selectedIds.length === 1 ? " emitter" : " emitters"} will be linked.
             </p>
           )}
-          {/*: inline disagreement note. Shows which shared fields the
+          {/* Inline disagreement note. Shows which shared fields the
               join would overwrite, so the user decides BEFORE the single OK
               — no separate confirm step. */}
           {conflictFields.length > 0 && (

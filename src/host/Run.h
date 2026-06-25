@@ -1,5 +1,5 @@
 // Entry point for the WebView2/React host. Invoked unconditionally from
-// WinMain (the sole UI since removed the legacy Win32 UI and the
+// WinMain (the sole UI since an earlier change removed the legacy Win32 UI and the
 // `--new-ui`/`--legacy` flags). Constructs the hybrid WebView2 + D3D9
 // composition window, owns the Engine instance for the session, and runs
 // the host message pump.
@@ -54,7 +54,7 @@ int Run(HINSTANCE hInstance,
         // --skydome <slot>: apply this skydome slot in --capture mode before
         // rendering (0 = Off / solid colour). Lets a capture verify particles
         // render correctly over a background skydome (regression for the
-        // RenderSkydome vertex-declaration leak — see lessons).
+        // RenderSkydome vertex-declaration leak).
         int captureSkydome = 0,
         // --capture-ref <objectName>: render a game reference object (with its
         // shadow) headlessly instead of a particle system. When non-empty (with

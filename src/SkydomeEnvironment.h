@@ -4,9 +4,9 @@
 // Map-environment reader: enumerates the game/mod's skydome
 // GameObjects and resolves a chosen primary+secondary pair through the injected
 // IFileManager (mod -> base -> MEG). Pure data + FileManager -- no engine /
-// D3D / UI coupling -- so it is unit-testable with a mock FM and reused by,
-// which extends MapEnvironment with per-map colour-grade params (the reuse
-// contract) rather than adding a second locator.
+// D3D / UI coupling -- so it is unit-testable with a mock FM and reused by a
+// future map colour-grade feature, which extends MapEnvironment with per-map
+// colour-grade params (the reuse contract) rather than adding a second locator.
 //
 // Confirmed data model (vanilla FoC source; scope doc section 0): a skydome is
 // an `.alo` GameObject listed in {Land,Space}{Primary,Secondary}Skydomes.xml.
@@ -37,7 +37,8 @@ struct SkydomeRef
     bool        inBackground = false;
 };
 
-// A resolved environment for one map/context. adds colour-grade fields here.
+// A resolved environment for one map/context. A future map colour-grade feature
+// adds colour-grade fields here.
 struct MapEnvironment
 {
     SkydomeRef primary, secondary;
@@ -53,7 +54,7 @@ constexpr int kNumSkydomeAxes = 4;   // == enum SkydomeAxis size
 // otherwise (out may still be empty -- which drives the picker's empty state).
 // Never throws.
 //
-// [#224] Discovers the list files via `Data\\XML\\GameObjectFiles.xml`
+// Discovers the list files via `Data\\XML\\GameObjectFiles.xml`
 // (mod-resolved), classifying each referenced file by its ROOT element -- so a
 // mod's domes registered under non-canonical names/paths (e.g. Mod's
 // `Props\\Skydomes_Space_Secondary.xml`) are found, not just the canonical
@@ -61,7 +62,7 @@ constexpr int kNumSkydomeAxes = 4;   // == enum SkydomeAxis size
 // GameObjectFiles.xml.
 bool LoadSkydomeList(IFileManager& fm, SkydomeAxis axis, std::vector<SkydomeRef>& out);
 
-// [#NN] Build ALL FOUR axis lists in a single GameObjectFiles pass -- parse
+// Build ALL FOUR axis lists in a single GameObjectFiles pass -- parse
 // GameObjectFiles.xml once, sniff each referenced file's root once, and bucket
 // its entries into the matching axis (`out[(int)axis]`). Equivalent per-axis
 // output to calling `LoadSkydomeList` four times, but ~4x cheaper (no repeated

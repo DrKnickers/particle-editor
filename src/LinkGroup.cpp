@@ -79,7 +79,7 @@ bool LinkExemptFlags::operator == (const LinkExemptFlags& o) const
     // padding between bool members in practice (booleans are sizeof(1)
     // on every supported toolchain). If a future field of a different
     // type is added, this needs revisiting — but the debug assertion
-    // in copySharedParamsFrom (R4 mitigation) will catch a forgotten
+    // in copySharedParamsFrom will catch a forgotten
     // restore, which is the same signal as a forgotten equality term.
     return memcmp(this, &o, sizeof(LinkExemptFlags)) == 0;
 }
@@ -125,7 +125,7 @@ uint32_t CreateLinkGroup(ParticleSystem&                              system,
     }
 
     const uint32_t newId = AllocateLinkGroupId(system);
-    //: brand-new group uses the v1 default exempt set. There's
+    // brand-new group uses the v1 default exempt set. There's
     // no map entry for newId yet (the dialog gets opened only after
     // the group exists), so getLinkExemptFlags returns the static
     // defaults. We can short-circuit to GetDefaultLinkExemptFlags
@@ -159,7 +159,7 @@ bool JoinLinkGroup(ParticleSystem&          system,
     std::vector<ParticleSystem::Emitter*> members = GetLinkGroupMembers(system, groupId);
     if (members.empty())                     return false;
 
-    //: use the group's current exempt set, not the v1 defaults.
+    // use the group's current exempt set, not the v1 defaults.
     // A group with custom exempts (e.g. `lifetime` exempt) joining a
     // fresh emitter must preserve the joiner's lifetime per the
     // group's exempt rule — otherwise the join would silently overwrite
@@ -280,7 +280,7 @@ std::vector<std::string> DiffNonExemptParams(
     CHECK_FIELD(nParticlesPerBurst,      "nParticlesPerBurst");
     CHECK_FIELD(groundBehavior,          "groundBehavior");
 
-    // Textures + name (newly per-flag in).
+    // Textures + name (per-flag).
     CHECK_FIELD(colorTexture,            "colorTexture");
     CHECK_FIELD(normalTexture,           "normalTexture");
     // name is checked separately — the inspector exposes it through F2

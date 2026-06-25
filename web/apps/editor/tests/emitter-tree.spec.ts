@@ -1,4 +1,4 @@
-// Phase 3 Screen 4 Batch A contract tests for the EmitterTree sidebar.
+// Contract tests for the EmitterTree sidebar.
 // Verifies that:
 //   1. The sidebar renders the live ParticleSystem's tree (≥1 row at
 //      first paint — the host seeds with one root emitter at startup).
@@ -74,7 +74,7 @@ test("clicking a row updates snapshot.selectedEmitterId", async () => {
   expect(result.selectedAfter).toBe(result.expected);
 });
 
-test("emitters/list nodes carry spawn params ()", async () => {
+test("emitters/list nodes carry spawn params", async () => {
   // The host serializes a `spawn` object on every EmitterTreeNode
   // (commit a5bec9c). Assert the first root child carries all six
   // spawn keys with the right primitive types.

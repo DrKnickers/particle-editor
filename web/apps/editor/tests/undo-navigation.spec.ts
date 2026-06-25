@@ -1,4 +1,4 @@
-// undo navigation contract specs.
+// Undo navigation contract specs.
 //
 // Regression coverage for the head-of-history auto-capture in
 // BridgeDispatcher's `undo/perform`. The auto-cap exists because the
@@ -210,7 +210,7 @@ test("a same-field burst still coalesces under per-field keying", async () => {
   expect(await getLifetime(id)).toBeCloseTo(p0, 4); // one undo reverts all 3
 });
 
-// ── follow-up: streaming track-key undo coalescing ──────────────
+// ── Follow-up: streaming track-key undo coalescing ──────────────
 //
 // The host's emitters/set-track-key folds rapid same-track/same-emitter
 // edits (a wheel/hold-arrow/scrub Value or Time key spinner, plus a

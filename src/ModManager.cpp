@@ -325,10 +325,10 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers)
         WriteLastMod(primary);
     }
 
-    // 3. Texture palette follows the primary layer. (busts its own
-    //    base64 thumbnail cache via the bridge palette refresh —
+    // 3. Texture palette follows the primary layer. (The current path busts
+    //    its own base64 thumbnail cache via the bridge palette refresh —
     //    BridgeDispatcher ClearBridgeThumbCache; the legacy GDI popup
-    //    cache-clear / refresh was removed with arch-A —.)
+    //    cache-clear / refresh was removed with the old UI.)
     TexturePalette::Store::Instance().SetActiveMod(primary);
 
     printf("[Mods] Layer stack: %zu layer(s), primary=%S\n",

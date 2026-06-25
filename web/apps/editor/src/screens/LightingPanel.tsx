@@ -1,7 +1,7 @@
 // LightingPanel — modeless tool window for the three engine lights,
 // ambient tint, and shadow tint. Ported from the native `LightingDlgProc`
-// Win32 dialog, which (along with the `--legacy-ui` opt-out) was removed in
-// — so this React panel is now the sole lighting surface.
+// Win32 dialog, which (along with the `--legacy-ui` opt-out) was removed —
+// so this React panel is now the sole lighting surface.
 //
 // Sections (top-to-bottom):
 //   1. Sun light (expanded by default, <details> collapsible):
@@ -33,7 +33,7 @@
 // intensity re-multiplies the existing colour so the user's chosen hue
 // is preserved.
 //
-// Force Align (Group D): the legacy "Force Align Fill Lights"
+// Force Align: the legacy "Force Align Fill Lights"
 // checkbox snaps fill1/fill2 azimuth from the sun's azimuth. The
 // constraint is purely UI-side (engine just consumes the final
 // engine/set/light dispatches); flag is session-only — legacy
@@ -84,7 +84,7 @@ function directionFromAzAlt(zDeg: number, tiltDeg: number): Vec4 {
 
 /** Build a `LightDto` from user-facing inputs, folding `intensity`
  *  into the diffuse/specular Vec4 channels exactly as the legacy
- *  `MakeLight` (native Win32 UI, removed in) did. */
+ *  `MakeLight` (native Win32 UI, since removed) did. */
 function buildLightDto(
   zDeg: number,
   tiltDeg: number,
@@ -178,7 +178,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
   const [fill2, setFill2] = useState<LightFormState>(FILL2_DEFAULTS);
   const [ambient, setAmbient] = useState<RgbColor>(AMBIENT_DEFAULT);
   const [shadow, setShadow] = useState<RgbColor>(SHADOW_DEFAULT);
-  // Group D: Force Align Fill Lights. Default ON to match the legacy
+  // Force Align Fill Lights. Default ON to match the legacy
   // Win32 UI's force-align default (true). Seeded from the
   // registry below (it rides in the `settings/lighting` DTO); the toggle
   // handler writes it back via `settings/lighting-force-align/set`.
@@ -268,7 +268,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
     void bridge.request({ kind: "settings/lighting/set", params: dto });
   };
 
-  // Group D: cascade helper. When forceAlign is ON, fill1/fill2
+  // Cascade helper. When forceAlign is ON, fill1/fill2
   // azimuth follow sun.az with the canonical offsets; altitude is
   // pinned to FORCE_ALIGN_FILL_ALT. Called from updateSun (when sun
   // moves) and from handleForceAlignToggle (when the constraint
@@ -604,7 +604,7 @@ export function LightingPanel({ bridge, onClose, closing }: Props) {
       </ToolPanel.Section>
 
       <ToolPanel.Footer>
-        {/* T6 + T4: the tooltip only exists while the button is DISABLED
+        {/* The tooltip only exists while the button is DISABLED
             (Force Align on) — disabled elements fire no pointer events, so
             the Tip rides an inline-block span wrapper. The footer is a
             flex-wrap row, so the span is layout-neutral (it becomes the

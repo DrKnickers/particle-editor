@@ -3,7 +3,7 @@
 // at build time via Vite `define` (see vite.config.ts).
 //
 // Ported from src/main.cpp's AboutProc. The native Win32 About dialog and
-// the `--legacy-ui` opt-out were removed in; this React modal is now
+// the `--legacy-ui` opt-out were removed; this React modal is now
 // the sole About surface.
 
 import { Modal } from "@/components/Modal";

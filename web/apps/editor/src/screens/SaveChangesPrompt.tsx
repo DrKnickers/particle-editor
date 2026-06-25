@@ -1,7 +1,7 @@
 // SaveChangesPrompt — three-button modal that gates destructive ops
 // (New / Open / Recent) when the in-memory particle system is dirty.
 //
-// Phase 3 Screen 8 Batch 3. Mirrors the legacy `DoCheckChanges`
+// Mirrors the legacy `DoCheckChanges`
 // (`MessageBox MB_YESNOCANCEL`) in the legacy main.cpp:
 //   - Save (Yes) → call file/save; if it succeeds, run the pending
 //     action. If save was cancelled (ok:false), abort.

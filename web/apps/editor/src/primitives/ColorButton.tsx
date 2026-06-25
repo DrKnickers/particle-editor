@@ -71,7 +71,7 @@ export function ColorButton({
   const { slots, addColor, setSlot } = usePaletteStore();
   // In-flight picker state. `pickerColor` previews live; `originalColor` is the
   // color the picker opened with, so Cancel/Escape can restore it (the engine has
-  // no undo of its own —). Both are (re)snapshotted on each open.
+  // no undo of its own). Both are (re)snapshotted on each open.
   const [pickerColor, setPickerColor] = useState<RgbColor>(value);
   const [originalColor, setOriginalColor] = useState<RgbColor>(value);
   const [hexText, setHexText] = useState<string>(rgbToHex(value).slice(1).toUpperCase());
@@ -90,7 +90,7 @@ export function ColorButton({
     const rgb = hexToRgb(raw);
     if (rgb) {
       setPickerColor(rgb);
-      onChange(rgb); //: live preview on each valid hex.
+      onChange(rgb); // Live preview on each valid hex.
     }
   };
 
@@ -109,10 +109,10 @@ export function ColorButton({
     const next = { ...pickerColor, [channel]: clampByte(v) };
     setPickerColor(next);
     setHexText(rgbToHex(next).slice(1).toUpperCase());
-    onChange(next); //: live preview — drive the engine as the value changes.
+    onChange(next); // Live preview — drive the engine as the value changes.
   };
 
-  //: re-commit the open-time color. Shared by the Cancel button + Escape.
+  // Re-commit the open-time color. Shared by the Cancel button + Escape.
   const handleCancel = () => {
     onChange(originalColor);
     setPickerColor(originalColor);

@@ -85,9 +85,9 @@ class FileManager : public IFileManager
 	// names now (placed where the user ordered it), not a separate layer. Empty = none.
 	std::vector<std::wstring> submods;
 	// Loose-file search roots for the active mod, in PRECEDENCE order (front
-	// wins): the selected submod stack (, Core among them where chosen)
-	// first, then the mod root LAST (-- the game ranks the mod root lowest; see
-	// BuildModContentRoots). Rebuilt by SetModPath/SetSubmods; searched before the base
+	// wins): the selected submod stack (Core among them where chosen)
+	// first, then the mod root LAST -- the game ranks the mod root lowest; see
+	// BuildModContentRoots. Rebuilt by SetModPath/SetSubmods; searched before the base
 	// paths. First match wins (the engine replaces a file by precedence, never merges).
 	std::vector<std::wstring> modContentRoots;
 
@@ -113,7 +113,7 @@ public:
 
 	// The base install search paths, so a background thread can construct an
 	// ISOLATED FileManager over the same roots (own MEG handles -> no seek-race with
-	// this instance) and rebuild the game-object catalog off the UI thread.
+	// this instance) and rebuild the game-object catalog off the UI thread. 
 	// Replicate the active content with SetLayers(GetContentRoots()).
 	const std::vector<std::wstring>& GetBasepaths() const override { return basepaths; }
 

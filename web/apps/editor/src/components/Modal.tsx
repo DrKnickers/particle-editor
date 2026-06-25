@@ -1,4 +1,4 @@
-// Modal — shared dialog foundation for Screen 8 sub-dialogs.
+// Modal — shared dialog foundation for sub-dialogs.
 //
 // Radix Dialog wrapper exposing a compound-component API:
 //   <Modal open onOpenChange title size="sm|md|lg">
@@ -51,11 +51,11 @@ export function Modal({
   size = "md",
   children,
 }: ModalProps) {
-  // B1.3.1.1: frosted-glass modal backdrop via engine-snapshot capture.
+  // Frosted-glass modal backdrop via engine-snapshot capture.
   // The engine renders into a DComp visual UNDER the transparent
   // WebView2 — its pixels can't be reached by CSS effects
-  // (backdrop-filter, opacity, blur) applied to HTML elements (see
-  // tasks/lessons.md for the structural reason and the failed
+  // (backdrop-filter, opacity, blur) applied to HTML elements (the
+  // structural reason ruled out the failed
   // server-side modal-mask approach this replaces). The fix lifts the
   // engine output INTO the WebView2 DOM as a frozen <img>:
   //
@@ -70,11 +70,11 @@ export function Modal({
   //      transparent again and the live DComp engine visual shows
   //      through. The engine keeps rendering through the modal lifecycle.
   //
-  // Bridge comes from BridgeContext (NOT `window.bridge` — see).
+  // Bridge comes from BridgeContext (NOT `window.bridge`).
   const bridge = useBridge();
   const [snapshot, setSnapshot] = useState<{ imageBase64: string; w: number; h: number } | null>(null);
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
-  // Phase 3 Stage 1 follow-up: gate Dialog open on snapshot
+  // Gate Dialog open on snapshot
   // readiness so Dialog.Overlay's fade-in starts with the <img>
   // already mounted. Pre-deferral (cache-hit) the snapshot resolved in
   // ~0.1 ms — effectively synchronous with the modal-open render — so
@@ -172,7 +172,7 @@ export function Modal({
 
   return (
     <>
-      {/* B1.3.1.1 frosted-glass backdrop. Portal the snapshot <img>
+      {/* Frosted-glass backdrop. Portal the snapshot <img>
           into the viewport-quadrant DOM so it sits below Dialog.Overlay
           in the same compositing tree — Dialog.Overlay's `bg-black/60
           backdrop-blur-sm` then blurs panels + snapshot uniformly. The
@@ -205,7 +205,7 @@ export function Modal({
           <Dialog.Content
             // aria-describedby={undefined} opts out of Radix's accessibility
             // warning about a missing Dialog.Description. Sub-dialogs at the
-            // Screen 8 batch 1 scale (About, Rescale) have no separate body
+            // small-scale dialogs (About, Rescale) have no separate body
             // copy worth distinguishing from the title; the title alone is
             // sufficient SR context.
             aria-describedby={undefined}

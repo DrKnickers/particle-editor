@@ -1,9 +1,9 @@
-// Phase 3 Stage 1 follow-up — AlphaCompositor snapshot regression.
+// AlphaCompositor snapshot regression.
 //
 // Pins the contract that the `viewport/capture-snapshot` bridge command
 // continues to produce a valid base64 PNG after the per-frame
-// `lastRawDib` cache was deferred. The host runs in arch B (
-// WS_EX_LAYERED popup, no `retired`) under
+// `lastRawDib` cache was deferred. The host runs in the
+// WS_EX_LAYERED popup architecture under
 // the default Playwright config, so this spec exercises exactly the
 // path that lost its cache: `Composite()` skips the cache copy, and
 // `CaptureSnapshotPng()` must do its own `GetRenderTargetData` +
@@ -63,7 +63,7 @@ test("first viewport/capture-snapshot after boot returns valid PNG (cache-flag-o
   // through the host, which calls AlphaCompositor::Resize → renders →
   // SetSceneRect to match. The next Composite tick is what would have
   // populated lastRawDib under the old code; after the refactor that
-  // step is a no-op in arch B.
+  // step is a no-op in this architecture.
   const result = await page.evaluate(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const b = (window as any).bridge;

@@ -538,7 +538,7 @@ export function useCurveMorph(args: {
     }
 
     // Prune jobs for channels that have disappeared (visibility toggle,
-    // emitter switch) — spec §2.3.
+    // emitter switch).
     for (const id of Array.from(jobs.current.keys())) {
       if (!channels.some((c) => c.channelId === id)) {
         jobs.current.delete(id);
@@ -613,7 +613,7 @@ export function useCurveMorph(args: {
     setActiveIds(Array.from(jobs.current.keys()));
   }
 
-  // Fix B — synchronous first frame (no empty-overlay flash).
+  // Synchronous first frame (no empty-overlay flash).
   // Runs post-commit, pre-paint, whenever activeIds changes (i.e. when a
   // new overlay <g> has just been mounted by React). Draws e≈0 immediately
   // so the first painted frame shows the old shape — seamless handoff from

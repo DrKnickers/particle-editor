@@ -7,7 +7,7 @@
 //
 // Ported from src/main.cpp's WM_COMMAND launcher for IDD_RESCALE_SYSTEM
 // (line 1524). The native Win32 dialog and the `--legacy-ui` opt-out were
-// removed in; this React modal is now the sole Rescale surface.
+// removed; this React modal is now the sole Rescale surface.
 
 import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";

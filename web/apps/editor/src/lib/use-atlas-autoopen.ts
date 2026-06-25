@@ -1,5 +1,5 @@
 // use-atlas-autoopen.ts — the React controller for the atlas picker's
-// auto-open / restore behaviour (spec §3.2). It subscribes to the atlas
+// auto-open / restore behaviour. It subscribes to the atlas
 // context (focus / selection / emitter) and the right-dock store, turns
 // those into events for the pure `autoOpenReducer`, and executes the
 // reducer's commands by writing the right-dock store.

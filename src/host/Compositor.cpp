@@ -2,7 +2,7 @@
 //
 // Most of this file is a port of src/host/spike/dxgi_spike.cpp's
 // InitDComp + BuildVisualTree + Shutdown sections (the working
-// Stage 0 spike on user's RTX 3080). The spike topology is
+// spike on user's RTX 3080). The spike topology is
 // preserved exactly; only the wrapping changes (LogFn callback
 // instead of LogDbg, ComPtr members on a pImpl struct, idempotency
 // guards).
@@ -22,7 +22,7 @@
 // d3d11.h / dcommon.h / d2d1_1.h all resolve to the modern Win10
 // SDK versions. dcomp.h then has the types it needs.
 //
-// Consumers of Compositor.h (HostWindow.cpp in Stage 3b) don't pay
+// Consumers of Compositor.h (HostWindow.cpp) don't pay
 // this cost — Compositor.h's pImpl hides every DComp type behind
 // `struct Impl`, so HostWindow.cpp's translation unit never sees
 // dcomp.h. HostWindow.cpp keeps the project's DXSDK-first include
@@ -58,7 +58,7 @@
 #include "Compositor.h"
 
 #pragma comment(lib, "dcomp.lib")
-// Phase 3 Stage 4b — D3D11 device + DXGI factory + composition
+// D3D11 device + DXGI factory + composition
 // swapchain. d3d11.lib for D3D11CreateDevice; dxgi.lib for
 // CreateDXGIFactory2. dcomp.lib already covers the existing visual
 // tree work. All three libs ship with the Win10 SDK and are picked
@@ -89,8 +89,8 @@ std::string FormatHresult(HRESULT hr)
 // scoped to this single translation unit.
 struct Compositor::Impl
 {
-    HWND  hwnd = nullptr;        // Audit: self-init like the siblings below.
-    Compositor::LogFn log{};     // Audit: self-init like the siblings below.
+    HWND  hwnd = nullptr;        // self-init like the siblings below.
+    Compositor::LogFn log{};     // self-init like the siblings below.
 
     Microsoft::WRL::ComPtr<IDCompositionDevice>  device;
     Microsoft::WRL::ComPtr<IDCompositionTarget>  target;
@@ -108,7 +108,7 @@ struct Compositor::Impl
     int  lastH = 0;
     bool treeBuilt = false;
 
-    // Phase 3 Stage 4 — engine D3D11 / DXGI bridge + visual.
+    // engine D3D11 / DXGI bridge + visual.
     // ComPtr destruction order on ~Impl: engineVisual (releases
     // SetContent(swapchain) ref) → sharedTexD3D11 (D3D11 alias on the
     // engine-owned D3D9 VRAM; alias release does NOT free the
@@ -116,7 +116,7 @@ struct Compositor::Impl
     // → engineSwapChain → dxgiFactory → d3d11Context → d3d11Device.
     // AlphaCompositor + Engine teardown later (HostWindow.cpp WM_DESTROY
     // order) releases the D3D9 side. See Compositor.h's engine-visual
-    // block + sub-plan §3.6 for lifecycle.
+    // block for lifecycle.
     Microsoft::WRL::ComPtr<ID3D11Device>          d3d11Device;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext>   d3d11Context;
     Microsoft::WRL::ComPtr<IDXGIFactory2>         dxgiFactory;
@@ -125,14 +125,14 @@ struct Compositor::Impl
     Microsoft::WRL::ComPtr<ID3D11Texture2D>       sharedTexD3D11;
     Microsoft::WRL::ComPtr<IDCompositionVisual>   engineVisual;
 
-    // Cache + flag for AttachEngineVisual idempotence + 4c lazy
+    // Cache + flag for AttachEngineVisual idempotence + lazy
     // handle/size detection in CompositeEngineFrame.
     HANDLE engineHandleCached   = nullptr;
     int    engineWidthCached    = 0;
     int    engineHeightCached   = 0;
     bool   engineVisualAttached = false;
 
-    // Phase 3 Stage 5 — last applied scene-rect transform on
+    // last applied scene-rect transform on
     // the engine visual. Idempotence on SetEngineVisualTransform: skip
     // the SetOffset/SetClip/Commit call sequence when the new args
     // match the cache. (0,0,0,0) means "no transform applied yet" —
@@ -143,7 +143,7 @@ struct Compositor::Impl
     int engineLastTransformW = 0;
     int engineLastTransformH = 0;
 
-    // Phase 3 Stage 5 (T6 follow-up) — pending transform queue.
+    // Pending transform queue.
     // SetEngineVisualTransform with default (immediate=false) writes
     // the new args here and returns; CompositeEngineFrame applies the
     // pending transform at the END of the frame, after Present1 has
@@ -151,7 +151,7 @@ struct Compositor::Impl
     // DWM composition cycle sees both the new pixels and the new clip
     // simultaneously — no transient "engine clear color at the new
     // clip edge" artifact during pane-drag resize storms.
-    // [resize-perf C2] pendingQuiet carries the caller's quiet flag
+    // [resize-perf] pendingQuiet carries the caller's quiet flag
     // (per-frame anim applies skip the transform log) across the
     // deferral.
     bool pendingTransform  = false;
@@ -161,7 +161,7 @@ struct Compositor::Impl
     int  pendingW          = 0;
     int  pendingH          = 0;
 
-    // Phase 3 Stage 4c — 1 Hz throttled diagnostics for
+    // 1 Hz throttled diagnostics for
     // [COMP-engine-frame] + [COMP-engine-handle-hash]. Per-frame
     // emission would dominate the log; per-second is enough to spot
     // a stalled composite (count stops) or a swapped texture
@@ -201,11 +201,11 @@ struct Compositor::Impl
         if (log) log(s);
     }
 
-    // Phase 3 Stage 5 T6 follow-up — apply a scene-rect
+    // Apply a scene-rect
     // transform immediately. Shared by SetEngineVisualTransform's
     // immediate path and CompositeEngineFrame's pending-apply tail.
     // Caller validates engineVisualAttached + engineVisual + device
-    // exist and (w, h) > 0. [resize-perf C2] quiet=true skips the
+    // exist and (w, h) > 0. [resize-perf] quiet=true skips the
     // [COMP-engine-transform] log line — used for per-frame anim
     // applies (dock slide / scene-rect chase, which would otherwise
     // log + fflush at the render rate); instant and anim-TERMINAL
@@ -325,7 +325,7 @@ HRESULT Compositor::Impl::EnsureBackingDevice()
     if (!backingFactory)
     {
         // CreateDXGIFactory1 + QI to IDXGIFactory2 — same DXSDK-shadowing
-        // workaround as AttachEngineVisual ().
+        // workaround as AttachEngineVisual.
         Microsoft::WRL::ComPtr<IDXGIFactory1> f1;
         hr = CreateDXGIFactory1(IID_PPV_ARGS(f1.GetAddressOf()));
         if (FAILED(hr))
@@ -498,8 +498,8 @@ HRESULT Compositor::Init()
     }
 
     // V2 factory function, V1 IID — same shape as WebView2APISample
-    // and dxgi_spike.cpp:InitDComp. v2 tried V2
-    // IDCompositionDesktopDevice and still produced white; v3
+    // and dxgi_spike.cpp:InitDComp. An earlier attempt used V2
+    // IDCompositionDesktopDevice and still produced white; a later one
     // reverted to V1. The spike confirmed V1 works on this rig.
     HRESULT hr = DCompositionCreateDevice2(
         nullptr, IID_PPV_ARGS(m_impl->device.GetAddressOf()));
@@ -532,8 +532,8 @@ HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
     HRESULT hr;
 
     // Create the target. Topmost=TRUE matches spike line 440 +
-    // sample line 919. v1 tried both TRUE and FALSE; topmost
-    // wasn't the failure mode but matches the working sample.
+    // sample line 919. An earlier attempt tried both TRUE and FALSE;
+    // topmost wasn't the failure mode but matches the working sample.
     hr = m_impl->device->CreateTargetForHwnd(
         m_impl->hwnd, TRUE, m_impl->target.GetAddressOf());
     if (FAILED(hr))
@@ -557,9 +557,9 @@ HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
     }
 
     // WebView2 visual. Spike adds the engine visual FIRST (so the
-    // WebView2 added below renders ABOVE it via list-order). Stage 3
-    // has no engine visual yet — only the WebView2. Stage 4 will
-    // insert the engine visual BEFORE this one so the z-order stays
+    // WebView2 added below renders ABOVE it via list-order). At this
+    // point there is no engine visual yet — only the WebView2. The
+    // engine visual is inserted BEFORE this one so the z-order stays
     // engine-behind-WebView2 (which is what we want — chrome on top,
     // viewport pixels showing through transparent DOM regions).
     hr = m_impl->device->CreateVisual(m_impl->webviewVisual.GetAddressOf());
@@ -586,8 +586,8 @@ HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
 
     // Plug WebView2's surface into the visual. This is the
     // load-bearing call — if put_RootVisualTarget returns S_OK and
-    // the tree still produces opaque white, we are in
-    // territory.
+    // the tree still produces opaque white, we are back in the
+    // opaque-white failure territory.
     hr = ctl->put_RootVisualTarget(m_impl->webviewVisual.Get());
     if (FAILED(hr))
     {
@@ -605,7 +605,7 @@ HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
     }
 
     m_impl->treeBuilt = true;
-    m_impl->LogLine("[COMP-tree] tree committed (Stage 3: webview-only)");
+    m_impl->LogLine("[COMP-tree] tree committed (webview-only)");
 
     // if React pushed a backing colour before the tree
     // was built (host/backing-color racing AttachWebView2), apply it now.
@@ -636,11 +636,10 @@ HRESULT Compositor::SetSize(int width, int height)
     // the Commit at the end of this function.
     m_impl->ApplyBackingTransform();
 
-    // Root visual offset + clip. Stage 3 anchors the WebView2
+    // Root visual offset + clip. Anchors the WebView2
     // visual at (0,0) covering the full host client; SetOffsetX/Y
-    // at zero is the no-op default but documented here for Stage 4
-    // (which will offset the engine visual by the scene-rect
-    // origin).
+    // at zero is the no-op default but documented here for the engine
+    // visual, which is offset by the scene-rect origin.
     HRESULT hr = m_impl->rootVisual->SetOffsetX(0.0f);
     if (FAILED(hr))
     {
@@ -722,10 +721,10 @@ HRESULT Compositor::SetBackingColor(COLORREF color) noexcept
     return S_OK;
 }
 
-// ---------- Phase 3 Stage 4 — engine visual ----------
-// 4a shipped declarations + stub bodies; 4b replaces AttachEngineVisual
-// with the real D3D11 + DXGI + DComp wiring. CompositeEngineFrame and
-// RefreshEngineSharedHandle stay stubs until 4c / 4d respectively.
+// ---------- engine visual ----------
+// AttachEngineVisual does the real D3D11 + DXGI + DComp wiring;
+// CompositeEngineFrame and RefreshEngineSharedHandle implement the
+// per-frame composite and the resize-handle re-open respectively.
 
 HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
                                        int    w,
@@ -782,7 +781,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
         if (FAILED(hr))
         {
             // SDK debug layer not installed — retry without DEBUG flag.
-            // Spike's pattern at dxgi_spike.cpp:322. Production Debug
+            // Mirrors the spike's pattern. Production Debug
             // builds with SDK layers proceed via the first path; Debug
             // builds on a machine without SDK layers fall back here.
             m_impl->LogLine("[COMP-engine-init] D3D11CreateDevice with DEBUG failed hr=" + FormatHresult(hr) + " — retrying without (SDK layers missing?)");
@@ -851,7 +850,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     // ParticleEditor.vcxproj puts $(DXSDK_DIR)Lib\x64 FIRST on
     // AdditionalLibraryDirectories (for d3dx9.lib), which shadows the
     // Win10 SDK's dxgi.lib with DXSDK June 2010's pre-Win8 version
-    // that lacks CreateDXGIFactory2. Same shape as include-
+    // that lacks CreateDXGIFactory2. Same shape as the include-
     // path shadowing on the linker side. Workaround: use
     // CreateDXGIFactory1 (in DXSDK's dxgi.lib since Win7 SDK era) +
     // QI to IDXGIFactory2. If QI fails, the system is pre-Win8 and
@@ -877,7 +876,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     }
 
     // 3. Open the engine's shared texture as a D3D11 alias.
-    // Audit: from here on we Reset() the live engine resources,
+    // From here on we Reset() the live engine resources,
     // so a prior successful attach is being torn down and rebuilt. Clear the
     // attached flag up front; any early failure-return below now leaves a
     // consistent (flag=false, resources null) state instead of flag=true with
@@ -905,7 +904,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
 
     // 4. Composition swapchain. Format + alpha + buffer count match
     // dxgi_spike.cpp:377-396 exactly — that combination works on the
-    // user's RTX 3080 per the Stage 0 spike measurements.
+    // user's RTX 3080 per the spike measurements.
     DXGI_SWAP_CHAIN_DESC1 scDesc = {};
     scDesc.Width  = static_cast<UINT>(w);
     scDesc.Height = static_cast<UINT>(h);
@@ -914,14 +913,14 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     scDesc.BufferCount = 2;
     scDesc.SampleDesc.Count = 1;
     scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-    // Phase 3 Stage 4d.1 — ALPHA_MODE_IGNORE, NOT PREMULTIPLIED.
+    // ALPHA_MODE_IGNORE, NOT PREMULTIPLIED.
     //
     // The spike's swapchain used DXGI_ALPHA_MODE_PREMULTIPLIED (its
     // engine workload was D3DClear() to solid color, alpha was clean).
     // The production engine's particle blend states (additive for
     // fire, alpha-blend for smoke, etc.) leave the engine RT's alpha
     // channel in an arbitrary state — the engine never cared because
-    // legacy arch-A's UpdateLayeredWindow uses the popup's STAMPED
+    // legacy UpdateLayeredWindow uses the popup's STAMPED
     // alpha (from AlphaCompositor::Composite), not the RT's alpha.
     //
     // Under DXGI with PREMULTIPLIED, DComp interpreted the RT's RGB
@@ -929,7 +928,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     // over particle-blended regions, DComp's compositing math
     // darkened the output — visible as "additive fire sprites
     // overlapping smoke render with dark/black backgrounds" during
-    // 4d smoke (the user-surfaced bug that originally read as a
+    // smoke testing (the user-surfaced bug that originally read as a
     // separate issue).
     //
     // IGNORE tells DComp "treat this surface as fully opaque; don't
@@ -987,13 +986,13 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     // referenceVisual=nullptr)` actually places this visual at the
     // BEGINNING of the children list (= rendered FIRST = BEHIND all
     // siblings) — bisected from spike's --no-engine smoke mode (see
-    // dxgi_spike.cpp:488-495 long comment). The Stage 3 webview was
+    // dxgi_spike.cpp:488-495 long comment). The webview was
     // added via AttachWebView2 with (FALSE, nullptr) which places it
     // at the END of the children list (= rendered LAST = IN FRONT of
     // all siblings). So after this AddVisual call the children list
     // is [engine, webview]; DComp draws engine first, webview on top.
     // Chrome with opaque backgrounds occludes; transparent regions
-    // show engine through. (D3 OK + sub-plan §3.4.)
+    // show engine through.
     hr = m_impl->rootVisual->AddVisual(m_impl->engineVisual.Get(), TRUE, nullptr);
     if (FAILED(hr))
     {
@@ -1016,9 +1015,9 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
         return hr;
     }
 
-    // Cache (handle, size) + flag. Lazy detection in 4c's real
-    // CompositeEngineFrame will check this tuple against
-    // engine->GetSharedTextureHandle() each frame; 4d's resize-handle
+    // Cache (handle, size) + flag. Lazy detection in
+    // CompositeEngineFrame checks this tuple against
+    // engine->GetSharedTextureHandle() each frame; the resize-handle
     // re-open hooks here too.
     m_impl->engineHandleCached    = sharedTexture;
     m_impl->engineWidthCached     = w;
@@ -1034,10 +1033,10 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
     // No engine visual attached → S_FALSE per the documented
     // contract. Host's per-frame loop treats S_FALSE as "skip the
     // composite step this frame." Triggered by:
-    //   - Stage 3 baseline (no AttachEngineVisual ever called).
+    //   - the webview-only baseline (no AttachEngineVisual ever called).
     //   - AttachEngineVisual failed (LUID mismatch, D3D11 device,
     //     OpenSharedResource, swapchain) — composition mode stays
-    //     intact per §3.8, viewport stays empty.
+    //     intact, viewport stays empty.
     if (!m_impl->engineVisualAttached) return S_FALSE;
 
     // Defensive — engineVisualAttached implies all resources exist,
@@ -1049,7 +1048,7 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
         return E_NOT_VALID_STATE;
     }
 
-    // Phase 3 Stage 4d — lazy resize-handle re-open. Every
+    // Lazy resize-handle re-open. Every
     // AlphaCompositor::Resize call invalidates the previous shared
     // HANDLE and creates a new one. The previous CopyResource path
     // would read from a released D3D9 texture (visible as a frozen
@@ -1110,7 +1109,7 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
         return hr;
     }
 
-    // Phase 3 Stage 5 T6 follow-up — apply any pending scene-
+    // Apply any pending scene-
     // rect transform NOW that the swapchain has fresh pixels from the
     // engine's render at the new viewport. Without this deferral
     // (i.e. if SetEngineVisualTransform Commit'd the new clip
@@ -1164,8 +1163,7 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
                  static_cast<unsigned long long>(m_impl->engineFrameCount));
         m_impl->LogLine(buf);
 
-        // [COMP-engine-handle-hash] sanity diagnostic per the
-        // dxgi-stage-4 sub-plan §4 4c addendum. Logs current handle
+        // [COMP-engine-handle-hash] sanity diagnostic. Logs current handle
         // value + cached resource COM-object addresses each second.
         // If `sharedTex` pointer changes mid-run WITHOUT a preceding
         // [COMP-engine-resize] entry, OpenSharedResource silently
@@ -1273,24 +1271,24 @@ HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
     return S_OK;
 }
 
-// ---------- Phase 3 Stage 5 — scene-rect transform ----------
+// ---------- scene-rect transform ----------
 //
 // Positions the visible portion of the DComp engine visual to the
 // LayoutBroker's scene-rect sub-region of the host client. See
 // Compositor.h for the public contract.
 //
-// Design (sub-plan §3.1 / D1 — Option A, post-fix):
+// Design (post-fix):
 //   - Swapchain stays at engine RT size (full host client). No
 //     ResizeBuffers per scene-rect update; DComp's per-visual
 //     SetClip is cheap (nanoseconds) vs swapchain resize storms
 //     during pane drags.
 //
-// COORDINATE-SPACE CONTRACT (load-bearing — initial Stage 5 ship
-// had this inverted; see lessons.md candidate). Under B-γ,
-// the engine renders its scene into the SCENE-RECT SUB-REGION of
+// COORDINATE-SPACE CONTRACT (load-bearing — an earlier revision
+// had this inverted). The
+// engine renders its scene into the SCENE-RECT SUB-REGION of
 // its full-client RT (Engine::SetSceneViewport calls SetViewport
 // with (sceneX, sceneY, sceneW, sceneH) after the full-RT Clear,
-// per the D12 ordering rule). The CopyResource at every frame
+// per the ordering rule). The CopyResource at every frame
 // makes the swapchain back-buffer a verbatim copy of the RT, so
 // the scene lives at swapchain pixels [sceneX..sceneX+W,
 // sceneY..sceneY+H] and engine clear color is elsewhere.
@@ -1308,10 +1306,10 @@ HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
 // the entire swapchain by (sceneX, sceneY), creating a double-
 // offset against the engine's already-scene-rect-positioned RT
 // content (visible as the scene appearing in the bottom-right
-// corner of the scene-rect quadrant). The original sub-plan §3.1
+// corner of the scene-rect quadrant). The original design
 // described SetOffset + clip-at-(0,0,W,H), which would have worked
-// IF the engine rendered at RT (0, 0); under B-γ, the engine
-// renders at RT (sceneX, sceneY), so SetOffset(0, 0) + clip at
+// IF the engine rendered at RT (0, 0); since the engine
+// renders at RT (sceneX, sceneY), SetOffset(0, 0) + clip at
 // absolute coords is the matching shape.
 HRESULT Compositor::SetEngineVisualTransform(int x, int y, int w, int h, bool immediate, bool quiet) noexcept
 {

@@ -1,6 +1,6 @@
 /* Base resets, font registration, scrollbar styling.
    NOTE: body { background } intentionally omitted — globals.css sets
-   bg-transparent on body for WebView2 transparency (requirement
+   bg-transparent on body for WebView2 transparency (required
    for D3D9 viewport sibling-HWND compositing). The shell paints
    bg-bg on its outer <div> instead. Font-feature-settings + font-family
    live on the body rule in globals.css for the same cascade-friendliness

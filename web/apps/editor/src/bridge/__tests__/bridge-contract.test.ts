@@ -41,7 +41,7 @@ describe("MockBridge contract", () => {
   it("engine/state/snapshot returns the full DTO shape", async () => {
     const b = new MockBridge();
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });
-    // Editor-level state (Screen 8 Batch 3).
+    // Editor-level state.
     expect(s).toHaveProperty("currentFilePath");
     expect(s).toHaveProperty("dirty");
     expect(s.currentFilePath).toBeNull();
@@ -72,7 +72,7 @@ describe("MockBridge contract", () => {
     expect(s.camera.position).toHaveLength(3);
     expect(s).toHaveProperty("wind");
     expect(s).toHaveProperty("gravity");
-    // Screen 4 Batch A: selected-emitter scalar. Legacy parity: the default
+    // Selected-emitter scalar. Legacy parity: the default
     // root emitter (id 0) is selected on boot, so the editor opens populated.
     expect(s).toHaveProperty("selectedEmitterId");
     expect(s.selectedEmitterId).toBe(0);
@@ -409,16 +409,16 @@ describe("MockBridge contract", () => {
 
   it("rejects unimplemented emitters/* requests (mutations) as not implemented", async () => {
     const b = new MockBridge();
-    // emitters/list and emitters/select are implemented as of Screen 4
-    // Batch A; emitters/import-from-file landed with audit-G1 (native
+    // emitters/list and emitters/select are implemented;
+    // emitters/import-from-file landed with a native
     // handler + the emitter-import a11y spec). emitters/update remains
-    // Phase 3+ work and is the one asserted unimplemented here.
+    // unimplemented and is the one asserted unimplemented here.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect(b.request({ kind: "emitters/update", params: { id: 0, patch: {} } } as any))
       .rejects.toThrow(/not implemented/);
   });
 
-  // Phase 3 Screen 8 Batch 3: file/save / file/recent/list are now
+  // file/save / file/recent/list are now
   // implemented in the mock (and the native host). The old "throws not
   // implemented" assertion has been replaced by round-trip specs below
   // covering file/new, file/save-as, recent/changed.
@@ -528,7 +528,7 @@ describe("MockBridge contract", () => {
     expect(snap.dirty).toBe(false);
   });
 
-  // Task 2.4: file/open is no longer a hard reject. The native handler
+  // file/open is no longer a hard reject. The native handler
   // shows GetOpenFileNameW; the mock resolves with the schema's
   // cancellation shape so the React handler's request chain aborts
   // cleanly in browser mode without surfacing a raw rejection.
@@ -539,7 +539,7 @@ describe("MockBridge contract", () => {
     expect(r).toEqual({ ok: false, error: "browser-mode" });
   });
 
-  // ─── Phase 3 Screen 8 Batch 4: spawner + emitters/preview-from-file
+  // ─── spawner + emitters/preview-from-file
   it("spawner/start round-trips through MockBridge; snapshot reflects new config", async () => {
     const b = new MockBridge();
     let lastSnap: { spawner?: { burstSize: number; mode: string } } | null = null;
@@ -645,7 +645,7 @@ describe("MockBridge contract", () => {
     }
   });
 
-  // ─── Screen 4 Batch A — emitter tree + selection ──────────────────
+  // ─── emitter tree + selection ──────────────────
   it("emitters/list returns the fixture tree with the synthetic root + populated real roots", async () => {
     const b = new MockBridge();
     const tree = await b.request({ kind: "emitters/list", params: {} });
@@ -700,7 +700,7 @@ describe("MockBridge contract", () => {
     off();
   });
 
-  // ─── Screen 4 Batch B1 — emitter mutations + Screen-8 dialogs ─────
+  // ─── emitter mutations + dialogs ─────
   it("emitters/duplicate clones the emitter as a new root and returns ok:true + newId", async () => {
     const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
@@ -806,7 +806,7 @@ describe("MockBridge contract", () => {
     expect(r.fields).toEqual(["lifetime", "gravity"]);
   });
 
-  // ─── Screen 4 Batch B2 — add-child + move + link-group membership ─
+  // ─── add-child + move + link-group membership ─
 
   it("emitters/add-lifetime-child adds a lifetime child under the parent and returns its newId", async () => {
     const b = new MockBridge();
@@ -827,7 +827,7 @@ describe("MockBridge contract", () => {
     off();
   });
 
-  it("emitters/add-root appends a new empty root emitter and returns its newId ()", async () => {
+  it("emitters/add-root appends a new empty root emitter and returns its newId", async () => {
     const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
     const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
@@ -883,7 +883,7 @@ describe("MockBridge contract", () => {
     off();
   });
 
-  it("emitters/set-visible flips a single emitter's visible flag ()", async () => {
+  it("emitters/set-visible flips a single emitter's visible flag", async () => {
     const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
     const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
@@ -900,7 +900,7 @@ describe("MockBridge contract", () => {
     off();
   });
 
-  it("emitters/set-all-visible recurses through the tree ()", async () => {
+  it("emitters/set-all-visible recurses through the tree", async () => {
     const b = new MockBridge();
     let lastTree: EmitterTreeDto | null = null;
     const off = b.on("emitters/tree/changed", (e) => { lastTree = e.payload; });
@@ -933,7 +933,7 @@ describe("MockBridge contract", () => {
     // Fixture: Smoke (id=0) + Sparks (id=3) share linkGroup=1.
     // Flash (id=5) is unlinked. Add Flash to a new group via the
     // -1 sentinel — the resolution rule picks group 2 (smallest
-    // unused positive), then's `enforceSingleMemberLinkGroups`
+    // unused positive), then `enforceSingleMemberLinkGroups`
     // fires immediately after the mutation and demotes Flash back to
     // 0 because group 2 has exactly one member. Net result: a -1 +
     // single-id dispatch is effectively a no-op (data layer matches
@@ -959,7 +959,7 @@ describe("MockBridge contract", () => {
 
     // Assign Flash + Smoke to an explicit group id — should land
     // exactly there with no scan/rewrite. Group 7 has 2 members so
-    //'s enforcement doesn't fire.
+    // the single-member enforcement doesn't fire.
     await b.request({
       kind: "linkGroups/set-membership",
       params: { ids: [0, 5], groupId: 7 },
@@ -969,9 +969,9 @@ describe("MockBridge contract", () => {
     off();
   });
 
-  // ─── — engine-side single-member link-group enforcement ─────
+  // ─── Engine-side single-member link-group enforcement ─────
   //
-  // Five tests covering the three mutation paths from ROADMAP §1.1
+  // Five tests covering the three mutation paths
   // that can leave a group with exactly one member, plus a regression
   // guard against over-eager demotion and an undo round-trip.
 
@@ -982,7 +982,7 @@ describe("MockBridge contract", () => {
 
     // Fixture: Smoke (id=0) + Sparks (id=3) share linkGroup=1. Leave
     // Smoke via groupId=null — Sparks is now alone in group 1, so
-    // demotes Sparks too.
+    // the enforcement demotes Sparks too.
     await b.request({
       kind: "linkGroups/set-membership",
       params: { ids: [0], groupId: null },
@@ -1003,7 +1003,7 @@ describe("MockBridge contract", () => {
     // Fixture: Smoke (id=0) + Sparks (id=3) share linkGroup=1. Flash
     // (id=5) is unlinked. Move Smoke into a 2-member-with-Flash group
     // (say groupId=7) via a single dispatch — leaves Sparks alone in
-    // group 1, which demotes.
+    // group 1, which the enforcement demotes.
     //
     // Use two dispatches to set this up clearly: first add Flash to
     // group 7 (creates singleton — gets demoted), then bulk-assign
@@ -1094,7 +1094,7 @@ describe("MockBridge contract", () => {
     off();
   });
 
-  // ─── Screen 4 Batch B3 — drag/drop reorder + reparent ────────────
+  // ─── drag/drop reorder + reparent ────────────
 
   it("emitters/drop { mode: 'reorder' } reorders the fixture roots", async () => {
     const b = new MockBridge();
@@ -1138,7 +1138,7 @@ describe("MockBridge contract", () => {
     off();
   });
 
-  // ─── Screen 4 Batch C — clipboard (copy / cut / paste) ───────────
+  // ─── clipboard (copy / cut / paste) ───────────
 
   it("emitters/copy stashes the named subtrees and emits no tree change", async () => {
     const b = new MockBridge();
@@ -1214,7 +1214,7 @@ describe("MockBridge contract", () => {
     ]));
   });
 
-  // ─── — linkGroups/diff-membership (join-conflict preview) ──
+  // ─── linkGroups/diff-membership (join-conflict preview) ──
 
   it("linkGroups/diff-membership returns the seeded conflicts for a real-group join", async () => {
     const b = new MockBridge();
@@ -1245,7 +1245,7 @@ describe("MockBridge contract", () => {
     expect(zero.conflicts).toEqual([]);
   });
 
-  // ─── Screen 6 Batch A — emitters/get-tracks ─────────────────────
+  // ─── emitters/get-tracks ─────────────────────
   //
   // Read-only DTO contract. The wire shape is always 7 tracks in
   // `TRACK_NAMES` order; an unknown id returns empty-keys placeholders
@@ -1289,7 +1289,7 @@ describe("MockBridge contract", () => {
     }
   });
 
-  // ─── Screen 5 / Screen 6 Batch B-α — track mutations ────────────
+  // ─── track mutations ────────────
   //
   // delete-track-keys removes the named keys (silently skipping border
   // keys — first + last in time order); set-track-interpolation
@@ -1353,7 +1353,7 @@ describe("MockBridge contract", () => {
     expect(after2.tracks.find((t) => t.name === "alpha")?.interpolation).toBe("step");
   });
 
-  // ─── Screen 6 Batch B-β — track key mutations ────────────────────
+  // ─── track key mutations ────────────────────
   //
   // set-track-key moves an existing key (erase oldTime, insert
   // newTime/newValue). Border keys silently fix newTime = oldTime.
@@ -1431,7 +1431,7 @@ describe("MockBridge contract", () => {
     expect(alpha2?.keys.length).toBe(6);
   });
 
-  // ─── Phase 4.1 Fix dispatch 1 — emitters/get-properties + set-properties
+  // ─── emitters/get-properties + set-properties
 
   it("emitters/get-properties returns a full EmitterPropertiesDto with Basic/Appearance/Physics fields", async () => {
     const b = new MockBridge();
@@ -1660,7 +1660,7 @@ describe("MockBridge stableId semantics (reorder-glide identity contract)", () =
 describe("MockBridge dirty-bit for batch structural mutations", () => {
   // isMutating must flag emitters/move-many and emitters/duplicate-many so the
   // mock's dirty-bit / save-prompt gate matches the native host's markDirty
-  // rule. Both shipped in PR #104 but were missing from the allowlist, so a
+  // rule. Both shipped earlier but were missing from the allowlist, so a
   // multi-select move/duplicate left the document falsely clean in the mock.
   it("emitters/move-many marks the document dirty", async () => {
     const b = new MockBridge();
@@ -1678,7 +1678,7 @@ describe("MockBridge dirty-bit for batch structural mutations", () => {
     expect((await b.request({ kind: "engine/state/snapshot", params: {} })).dirty).toBe(true);
   });
 
-  // Audit fix D — the mock fired markDirty UNCONDITIONALLY for any mutating
+  // The mock previously fired markDirty UNCONDITIONALLY for any mutating
   // kind, so a REFUSED or NO-OP drag-commit (which the native host leaves
   // clean, marking dirty only on a real mutation) falsely dirtied the doc.
   it("a REFUSED emitters/drop (own-footprint reorder) leaves the document clean", async () => {
@@ -1798,8 +1798,8 @@ describe("emitters/set-track-lock — read aliasing (native parity)", () => {
   });
 });
 
-describe("emitter tree spawn params ()", () => {
-  //: tree nodes must mirror the LIVE spawn values from the
+describe("emitter tree spawn params", () => {
+  // tree nodes must mirror the LIVE spawn values from the
   // properties overlay (fixture defaults + set-properties patches), not
   // the frozen ZERO_SPAWN placeholder the tree-store literals carry for
   // type satisfaction. Decoration happens at the mock's emit/return

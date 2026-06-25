@@ -4,8 +4,8 @@
 //
 // Why: Playwright drives the editor over a CDP connection
 // (--remote-debugging-port=9222). WebView2 silently drops
-// `chrome.webview.postMessage` calls while a CDP debugger is attached
-// (see tasks/lessons.md); host-object dispatch is on a separate
+// `chrome.webview.postMessage` calls while a CDP debugger is attached;
+// host-object dispatch is on a separate
 // marshalling path and is unaffected, so test traffic uses it.
 //
 // Scope: requests use the host-object channel; events come back over

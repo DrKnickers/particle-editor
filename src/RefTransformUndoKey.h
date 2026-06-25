@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string_view>
 
-// s52] Pure helper for the reference-object-transform undo coalesce key.
+// Pure helper for the reference-object-transform undo coalesce key.
 //
 // A `engine/set/reference-object-transform` request carries the WHOLE transform
 // (6 floats) every time, so to give the SAME per-field undo granularity as the

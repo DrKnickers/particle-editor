@@ -7,7 +7,7 @@
 // Owns its own engine-state subscription (snapshot on mount +
 // engine/state/changed) so it stays self-contained — the parent panel
 // doesn't have to thread bloom state through. Mirrors the legacy
-// `BloomDlgProc` (legacy Win32 UI, removed in) for the React UI.
+// `BloomDlgProc` (legacy Win32 UI, since removed) for the React UI.
 //
 // Bridge surface (existing — zero schema additions):
 //   - engine/set/bloom            { enabled }

@@ -42,7 +42,7 @@ const DEMO_PARAM = new URLSearchParams(window.location.search).get("demo");
 function AppShell() {
   const bridge = useMemo(() => {
     const b = makeBridge();
-    // Task 2.2: attach to window.bridge so Playwright (via CDP) and
+    // Attach to window.bridge so Playwright (via CDP) and
     // anyone poking at DevTools can drive the bridge. Diagnostic-only —
     // no production code path reads window.bridge.
     exposeBridgeForTests(b);
@@ -55,7 +55,7 @@ function AppShell() {
   // black host backing. Pushes on mount + on every theme change.
   useBackingColorSync(bridge);
 
-  // B1.4: tool-panel + right-dock visibility now live inside
+  // Tool-panel + right-dock visibility now live inside
   // `PanelLayout`, which mounts the relevant child components directly.
   // The MenuBar drives the right-dock (Spawner / Lighting) via
   // `toggleDock` imported there, so AppShell no longer threads any
@@ -64,7 +64,7 @@ function AppShell() {
   const [rescaleOpen, setRescaleOpen] = useState(false);
   const [importEmittersOpen, setImportEmittersOpen] = useState(false);
 
-  // B1.4 T6: View → Reset panel layout. Clearing the localStorage keys
+  // View → Reset panel layout. Clearing the localStorage keys
   // is necessary but not sufficient — the live PanelLayout still has
   // each Group's `defaultLayout` baked into its first-mount memo. The
   // epoch bump forces React to fully remount PanelLayout, and the new
@@ -76,7 +76,7 @@ function AppShell() {
     setPanelLayoutEpoch((n) => n + 1);
   }, []);
 
-  // Task 2.6 (Phase 2): the bottom row is now an always-on
+  // The bottom row is now an always-on
   // CurveEditorPanel that owns its own selection subscription, so the
   // app-shell no longer needs to track `selectedEmitterId` to gate the
   // lower-right pane. The previously-mounted EmitterPropertyPanel +
@@ -120,12 +120,12 @@ function AppShell() {
     applySoftShadows(bridge, readSoftShadows());
   }, [bridge]);
 
-  // Screen 8 Batch 3: subscribe to file-state events (dirty/changed,
+  // Subscribe to file-state events (dirty/changed,
   // recent/changed, engine/state/changed) and seed from snapshot +
   // file/recent/list on mount. Stays mounted for the app's lifetime.
   useSeedFileState(bridge);
 
-  // Task 12: seed the mod-stack store from mods/list and subscribe to
+  // Seed the mod-stack store from mods/list and subscribe to
   // engine/state/changed so the preview cache is invalidated on mod switches.
   useSeedModStack(bridge);
 
@@ -139,7 +139,7 @@ function AppShell() {
     document.title = formatWindowTitle(currentFilePath, dirty);
   }, [currentFilePath, dirty]);
 
-  // / /: wire the legacy global keyboard accelerators to
+  // Wire the legacy global keyboard accelerators to
   // the new UI's existing actions. The host (AcceleratorBridge) translates
   // the registered combos and emits `accelerator/pressed`; the hook routes
   // each to the same bridge call the matching menu item uses.
@@ -163,7 +163,7 @@ function AppShell() {
     };
   }, []);
 
-  // Task 2.1 verification hook: log the initial engine snapshot at mount.
+  // Verification hook: log the initial engine snapshot at mount.
   // Confirms the bridge round-trip is producing a real EngineStateDto,
   // not the old `{ groundZ, background, skydomeSlot }` stub. Stays as a
   // permanent dev-mode breadcrumb — cheap, and useful any time the
@@ -175,7 +175,7 @@ function AppShell() {
       .catch((err) => console.warn("[engine/state/snapshot] failed:", err));
   }, [bridge]);
 
-  // (data-loss BLOCKER): the native frame-X / Alt-F4 on a dirty doc
+  // Data-loss BLOCKER: the native frame-X / Alt-F4 on a dirty doc
   // emits `app/close-requested` from the host (it can't render the React
   // prompt itself). Pop the SAME Save/Discard/Cancel prompt File→Exit uses; on
   // Save-success or Discard it dispatches app/quit, and the host tears down via
@@ -215,7 +215,7 @@ function AppShell() {
           {/* Toolbar — 4 groups (File · Edit · View · Render) */}
           <Toolbar bridge={bridge} />
 
-          {/* Main row — B1.4: PanelLayout owns the three-column +
+          {/* Main row — PanelLayout owns the three-column +
               two-inner-vertical-split structure with draggable separators
               via react-resizable-panels@4.x. Sizes persist per-user under
               alo:layout:{outer:{2col,3col},left,center}. The five
@@ -227,7 +227,7 @@ function AppShell() {
           {/* Status bar */}
           <StatusBar bridge={bridge} />
 
-          {/* Sub-dialogs (Screen 8 batch 1). Mounted at app level so menu
+          {/* Sub-dialogs. Mounted at app level so menu
               triggers from anywhere can drive them and Radix portals don't
               fight clipping from intermediate scrollable parents. */}
           <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
@@ -241,22 +241,22 @@ function AppShell() {
             open={importEmittersOpen}
             onOpenChange={setImportEmittersOpen}
           />
-          {/* Save-changes prompt (Screen 8 Batch 3). Open state lives in
+          {/* Save-changes prompt. Open state lives in
               the file-state atom; this mount is invisible while the
               pendingAction slot is null. Driven from any destructive op
               handler via `promptSaveChanges(...)`. */}
           <SaveChangesPrompt bridge={bridge} />
-          {/* Screen 4 Batch B1 — emitter-tree context-menu modals. They
+          {/* Emitter-tree context-menu modals. They
               observe the `tree-context` Zustand atom for open state; the
               EmitterTree row's ContextMenu items poke the atom to mount
-              whichever one was chosen. Rename moved to inline editing in
-              Batch C — no modal involvement. */}
+              whichever one was chosen. Rename moved to inline editing —
+              no modal involvement. */}
           <IncrementIndexDialog bridge={bridge} />
           <RescaleEmitterDialog bridge={bridge} />
           <LinkGroupSettingsDialog bridge={bridge} />
-          {/* Screen 4 Batch B2 — multi-select link-group assignment. */}
+          {/* Multi-select link-group assignment. */}
           <SetLinkGroupDialog bridge={bridge} />
-          {/* — crash-recovery. Checks for an orphaned autosave on mount;
+          {/* Crash-recovery. Checks for an orphaned autosave on mount;
               a no-op when the host reports none (always so under the mock). */}
           <AutosaveRecoveryDialog bridge={bridge} />
           <FileOpErrorModal />
@@ -267,7 +267,7 @@ function AppShell() {
   );
 }
 
-// ?demo=autosave-recovery — a11y gate. Renders the recovery dialog
+// ?demo=autosave-recovery — crash-recovery a11y gate. Renders the recovery dialog
 // with a FIXED both-tiers orphan and a FIXED `nowMs`, so the age text is
 // deterministic for the composition a11y golden (the real check-recovery is
 // suppressed under --test-host, so the dialog can't be driven by a real scan).

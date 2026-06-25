@@ -1,4 +1,4 @@
-// — regression test for the spawner shaped-path kinematics.
+// Regression test for the spawner shaped-path kinematics.
 //
 // Exercises EvalSpawnerPath (src/SpawnerPath.h), the closed form that
 // drives spawner-owned instance motion: a deterministic arc
@@ -35,7 +35,7 @@ int main()
     const D3DXVECTOR3 spawn(10.0f, 20.0f, -5.0f);
     const D3DXVECTOR3 v0(1.0f, 2.0f, 3.0f);
 
-    // ── Risk 2: τ=0 emanates from the exact spawn point, even with
+    // ── τ=0 emanates from the exact spawn point, even with
     //    nonzero amplitude + phase + accel (the −sin(φ) zeroing term). ──
     {
         SpawnerPathState s = { spawn, v0, D3DXVECTOR3(0, -9.8f, 0),
@@ -50,7 +50,7 @@ int main()
         CHECK(NearV(vel, v0 + kick, 1e-2f));
     }
 
-    // ── Risk 1: accel-only is an exact parabola; velocity is live
+    // ── Accel-only is an exact parabola; velocity is live
     //    (v0 + a·τ), so emitted particles inherit the right value. ──
     {
         D3DXVECTOR3 a(0, -9.8f, 0);

@@ -1,5 +1,5 @@
 // ImportEmittersDialog — Modal-based file picker → tree preview →
-// branch-select checkboxes → import. Phase 3 Screen 8 Batch 4.
+// branch-select checkboxes → import.
 //
 // Flow:
 //   1. Modal opens; only "Browse…" is enabled.

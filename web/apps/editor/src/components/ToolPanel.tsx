@@ -1,4 +1,4 @@
-// ToolPanel — shared shell for the Screen 8 Batch 2 modeless tool
+// ToolPanel — shared shell for the modeless tool
 // windows (Lighting, Bloom Settings, Ground Texture, Background).
 //
 // Lives under `components/` (app-shell-style), not `primitives/`,
@@ -128,7 +128,7 @@ function ToolPanelSection({
   unit,
   children,
 }: ToolPanelSectionProps) {
-  // B1.3.2: shared `.panel-section` class set with Section.tsx so both
+  // Shared `.panel-section` class set with Section.tsx so both
   // collapsible-section consumers use one source-of-truth styling.
   // alwaysOpen branch keeps its no-chevron / no-cursor variant; the
   // `cursor: default` override on the header suppresses the shared

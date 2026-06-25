@@ -1,15 +1,15 @@
-// autosave/check-recovery + autosave/recover round-trip spec ().
+// autosave/check-recovery + autosave/recover round-trip spec.
 //
 // The deterministic, harness-safe halves of the feature:
-//   1. check-recovery is SUPPRESSED under --test-host (Risk 4) — the harness
-//      must never get a real recovery prompt (it would pollute a11y captures,
-//      cf.). The host returns { orphan: null }.
+//   1. check-recovery is SUPPRESSED under --test-host — the harness
+//      must never get a real recovery prompt (it would pollute a11y captures).
+//      The host returns { orphan: null }.
 //   2. recover is a safe no-op when there's no pending orphan (no prior
 //      check / double-recover) — returns {} and changes nothing.
 //
 // The actual restore/discard-with-orphan paths can't run here (the scan is
 // suppressed under --test-host by design), so they're covered by the manual
-// crash smoke in tasks/todo.md + the AutosaveRecoveryDialog vitest.
+// crash smoke + the AutosaveRecoveryDialog vitest.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 

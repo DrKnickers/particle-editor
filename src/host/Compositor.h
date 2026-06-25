@@ -1,14 +1,14 @@
 // Compositor — owns the DirectComposition V1 visual tree that hosts
-// WebView2 in composition mode. Stage 3 of Phase 3: swap
-// WebView2 from HWND mode (CreateCoreWebView2Controller) to
-// composition mode (CreateCoreWebView2CompositionController).
+// WebView2 in composition mode: WebView2 runs in
+// composition mode (CreateCoreWebView2CompositionController) rather
+// than HWND mode (CreateCoreWebView2Controller).
 //
 // This class is the production counterpart of the InitDComp +
 // BuildVisualTree + Shutdown sections in src/host/spike/dxgi_spike.cpp
-// — the working reference topology from the Stage 0 spike on the
+// — the working reference topology from the spike on the
 // user's RTX 3080. Implementation details (DComp device, target,
 // visual ComPtrs) live in Compositor.cpp via the pImpl idiom so
-// consumers of this header (HostWindow.cpp in Stage 3b) don't have
+// consumers of this header (HostWindow.cpp) don't have
 // to pull in <dcomp.h> / <d3d11.h> / <dxgi1_2.h>. That matters here
 // because ParticleEditor.vcxproj puts the legacy DXSDK include path
 // FIRST (for d3dx9.h), and DXSDK's stale DXGI.h / D3D11.h / Dcommon.h
@@ -20,10 +20,10 @@
 // Spike invariants preserved in the implementation:
 //   - V2 factory function DCompositionCreateDevice2(nullptr, ...),
 //     V1 IDCompositionDevice IID — matches WebView2APISample on the
-//     known-good v3 baseline.
+//     known-good baseline.
 //   - CreateTargetForHwnd(hwnd, TRUE, ...) — topmost=TRUE.
 //   - Visual tree built ONLY after the WebView2 composition controller
-//     exists (per v3 lesson #2 — deferred construction).
+//     exists (deferred construction).
 //   - AddVisual(visual, FALSE, nullptr) puts the visual in front of
 //     all siblings; MSDN's naming is counterintuitive ("insertAbove
 //     = FALSE + null ref" = "above all," NOT "behind all"). Bisected
@@ -33,9 +33,9 @@
 //   - Commit() once at end of AttachWebView2; subsequent state
 //     changes (size, transform) call Commit() themselves.
 //
-// Stage 3 ships with the WebView2 visual as the SOLE child of the
-// root. Stage 4 adds the engine D3D11 swapchain visual as a sibling
-// — the AttachEngineVisual() seam is reserved for that.
+// The WebView2 visual is one child of the root; the engine D3D11
+// swapchain visual is added as a sibling via the AttachEngineVisual()
+// seam.
 //
 // Lifecycle ownership note. put_RootVisualTarget makes WebView2 hold
 // a reference to the internal webview visual. The CALLER must tear
@@ -95,14 +95,14 @@ public:
     // as the sole child of the root, plug the controller's
     // RootVisualTarget into the visual, and Commit. MUST be called
     // from the composition controller completion callback, not from
-    // Init() (v3 lesson — deferred tree construction). Idempotent
+    // Init() (deferred tree construction). Idempotent
     // — second call is a no-op + returns S_OK.
     HRESULT AttachWebView2(ICoreWebView2CompositionController* ctl);
 
     // Update the root visual's clip / offset for a new host client
     // size. Calls Commit() internally. No-op if dimensions are
-    // unchanged. Stage 3 uses the full client rect; Stage 4 will
-    // add a scene-rect transform for the engine visual.
+    // unchanged. Uses the full client rect; a scene-rect transform
+    // for the engine visual is applied separately.
     HRESULT SetSize(int width, int height);
 
     // Explicit Commit — exposed so the caller can batch state
@@ -111,9 +111,9 @@ public:
     // commit themselves.
     HRESULT Commit();
 
-    // ---------- Phase 3 Stage 4 — engine visual ----------
+    // ---------- engine visual ----------
 
-    // Stage 4. Stand up the D3D11 device + DXGI factory, open the
+    // Stand up the D3D11 device + DXGI factory, open the
     // engine's shared texture as a D3D11 alias, create a composition
     // swapchain, build the engine IDCompositionVisual, insert it
     // BEHIND the WebView2 visual (via AddVisual(engine, TRUE, nullptr)
@@ -128,12 +128,13 @@ public:
     // leaves the engine visual NOT attached. Caller logs
     // [COMP-engine-fail] and continues with composition mode intact
     // (chrome works in composition mode; viewport area is empty).
-    // Sub-plan §3.8 documents the explicit no-chain-into-F8 design.
+    // By design, a failure here does NOT chain into the HWND-mode
+    // fallback.
     //
     // Engine-side cross-device sync (D3D9 event query) is owned by
     // Engine; host orchestrates the spin between engine->Render() and
     // CompositeEngineFrame() — see Engine::IssueEndFrameQuery /
-    // WaitEndFrameQuery and sub-plan §3.3 path (b).
+    // WaitEndFrameQuery path (b).
     //
     // engineAdapterLuid: caller (HostWindow) passes
     // engine->GetAdapterLuid(). On hybrid-GPU laptops where D3D9Ex
@@ -168,8 +169,8 @@ public:
     // a pointer-compare per frame with no extra work.
     //
     // Returns S_OK on success; S_FALSE when no engine visual is
-    // attached (Stage 3 baseline state, or AttachEngineVisual-failed
-    // state per §3.8 — chrome works, viewport empty).
+    // attached (webview-only baseline state, or AttachEngineVisual-failed
+    // state — chrome works, viewport empty).
     HRESULT CompositeEngineFrame(HANDLE currentSharedHandle) noexcept;
 
     // Drop the D3D11 alias and re-open against a fresh shared handle.
@@ -178,7 +179,7 @@ public:
     // HANDLE on every resize — every resize creates a new handle).
     // Exposed publicly so HostWindow can trigger an eager re-open if
     // the lazy per-frame detection isn't responsive enough for some
-    // future use case. Stage 4 ships with lazy-only (D4); the
+    // future use case. Re-open is lazy-only by default; the
     // explicit-call path stays available for diagnostic / future use.
     //
     // The (hintW, hintH) params are advisory — the actual swapchain
@@ -190,7 +191,7 @@ public:
                                       int    hintW,
                                       int    hintH) noexcept;
 
-    // Phase 3 Stage 5 — scene-rect transform on the engine
+    // Scene-rect transform on the engine
     // visual. Constrains the DComp engine visual to the scene-rect
     // sub-region of the host client so chrome panels stop bleeding
     // engine pixels.
@@ -199,7 +200,7 @@ public:
     // a direct child of the root visual whose coordinate space equals
     // host-client coords; no translation is required.
     //
-    // COORDINATE-SPACE CONTRACT (B-γ, post-fix). Under B-γ the engine
+    // COORDINATE-SPACE CONTRACT (post-fix). The engine
     // renders its scene into the (x, y, w, h) sub-region of its
     // full-client RT, so the swapchain back-buffer carries the scene
     // at pixels [x..x+w, y..y+h] and engine clear color elsewhere.
@@ -216,9 +217,9 @@ public:
     //
     // Idempotent on identical args. Returns:
     //   S_OK            — applied successfully (or no-op for idempotent)
-    //   S_FALSE         — engine visual not yet attached (Stage 4
-    //                     AttachEngineVisual hasn't succeeded yet, or
-    //                     failed per §3.8 / D7 — caller should treat
+    //   S_FALSE         — engine visual not yet attached
+    //                     (AttachEngineVisual hasn't succeeded yet, or
+    //                     failed — caller should treat
     //                     this as "not ready, retry later")
     //   E_INVALIDARG    — w <= 0 or h <= 0
     //   E_NOT_VALID_STATE — DComp device or engine visual missing
@@ -241,7 +242,7 @@ public:
     // with), pass immediate=true to apply the transform straight
     // through.
     //
-    // [resize-perf C2] quiet=true skips the [COMP-engine-transform]
+    // [resize-perf] quiet=true skips the [COMP-engine-transform]
     // line for THIS apply — used by per-frame anim applies (dock
     // slide / scene-rect chase), which would otherwise log + fflush
     // at the render rate. Instant and anim-TERMINAL applies keep

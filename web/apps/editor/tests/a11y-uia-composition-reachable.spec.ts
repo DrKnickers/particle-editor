@@ -1,4 +1,4 @@
-// T11] Composition-mode UIA reachability backbone spec.
+// Composition-mode UIA reachability backbone spec.
 //
 // What this asserts (positive contract): when the editor is hosted in
 // composition mode, the host window's Win32 UI Automation tree exposes
@@ -16,7 +16,7 @@
 //
 // What this does NOT assert: byte-equality with the HWND lane's
 // goldens. The two modes' trees diverge for two architectural
-// reasons that surfaced during T11 design:
+// reasons that surfaced during design:
 //   (a) HWND mode has an `AloHostViewport` Pane sibling under
 //       AloHostMain — the D3D9 viewport's own HWND child. In
 //       composition mode the viewport is an IDCompositionVisual with
@@ -29,19 +29,18 @@
 //       panel tabs; composition reaches into the `panel-section-
 //       header` buttons inside the tabs. The captures aren't
 //       comparable in depth without per-mode depth-balancing.
-// The hybrid two-lane design (T9 HWND specs + T10 composition DOM-
+// The hybrid two-lane design (the HWND specs + the composition DOM-
 // snapshot specs) provides the actual surface-by-surface regression
-// coverage; T11's job is the narrower one of asserting the
+// coverage; this spec's job is the narrower one of asserting the
 // composition mode's UIA backbone is reachable AT ALL — i.e. catching
-// the case where WebView2's Blink a11y regresses back to its
-// pre-T9.3 lazy-init state, leaving composition mode with no UIA
+// the case where WebView2's Blink a11y regresses back to its earlier
+// lazy-init state, leaving composition mode with no UIA
 // visibility into the React content.
 //
-// History: the original T0 (Phase 0) probe at
-// tasks/phase-0-a11y-cross-mode-probe.md found composition mode's
+// History: the original Phase 0 probe found composition mode's
 // host HWND had "zero UIA descendants" and concluded cross-mode
 // equality was infeasible. That was overstated — Phase 0 didn't have
-// the T9.3 enabling changes (--force-renderer-accessibility +
+// the enabling changes (--force-renderer-accessibility +
 // uia_inspector warmup) that wake up Blink's a11y. With those, the
 // React tree IS reachable in composition mode. The hybrid lanes are
 // retained as resilience; this spec encodes the positive backbone
@@ -63,7 +62,7 @@ import { captureUIA, discoverHostHwnd } from "./helpers/uia";
 import type { UIANode } from "./helpers/a11y-normalizer";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy" /* */;
+const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 
 let browser: Browser;
 let page: Page;
@@ -117,7 +116,7 @@ test.describe("a11y/uia-composition-reachable [composition]", () => {
   test("composition mode host HWND exposes React backbone via Win32 UIA", async () => {
     // Depth 20 (matching the HWND lane). Composition mode actually
     // has the React tree deep enough that 12 wasn't reaching the
-    // menubar — empirically determined during T11 verification.
+    // menubar — empirically determined during verification.
     const tree = await captureUIA(hostHwnd, "composition-backbone-check", { depth: 20 });
 
     // (1) Root is AloHostMain. Defensive sanity — confirms we captured

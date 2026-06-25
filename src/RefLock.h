@@ -1,5 +1,5 @@
 #pragma once
-// freeze/lock] The single rule for whether the reference object is SELECTED
+// The single rule for whether the reference object is SELECTED
 // (gizmo shown + grabbable). A locked object is never selected, regardless of what
 // any call site requests. Every selection path computes through this one function --
 // the viewport click-select setter, the auto-select-on-load, and SetReferenceLocked --

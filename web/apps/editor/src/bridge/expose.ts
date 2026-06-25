@@ -13,8 +13,8 @@
 // that host-object channel instead of `chrome.webview.postMessage`.
 //
 // Why: WebView2 silently drops postMessage calls from the page → host
-// while a CDP debugger is attached (verified empirically, see
-// tasks/lessons.md). The host-object IPC channel is unaffected,
+// while a CDP debugger is attached (verified empirically). The host-object
+// IPC channel is unaffected,
 // so Playwright contract specs use the swapped bridge for
 // request/response. Events (engine/state/changed etc.) still flow over
 // the host → page postMessage direction, which is unaffected by the

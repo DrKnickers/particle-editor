@@ -1,6 +1,6 @@
 #define _WIN32_WINNT 0x0501
 // Pull comctl32 v6 declarations (TVN_ITEMCHANGED / NMTVITEMCHANGE) — needed
-// for's checkbox-tree cascade.
+// for the checkbox-tree cascade.
 #define _WIN32_IE 0x0600
 #include <cmath>
 #include <iostream>
@@ -33,7 +33,7 @@
 #include "ModManager.h"
 #include "resource.h"
 
-//: the WebView2 + D3D9 host declared here is the ONLY UI — WinMain runs
+// the WebView2 + D3D9 host declared here is the ONLY UI — WinMain runs
 // it unconditionally (the `--legacy` / `--legacy-ui` / `--new-ui` flags are
 // gone; an unknown flag is ignored). The host requires Windows 10+ (DPI
 // awareness v2, WebView2) and is x64-only (the only platform the build
@@ -86,7 +86,7 @@ class TextureManager : public ITextureManager
 	IFileManager*		fileManager;
 	IDirect3DTexture9*  pDefaultTexture;
 
-	// F13+F14: takes the decoded bytes by reference rather
+	// Takes the decoded bytes by reference rather
 	// than an IFile* — file lifetime + exact-byte reads are handled by
 	// ReadAndRelease at the call sites.
 	static IDirect3DTexture9* createTexture(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
@@ -120,7 +120,7 @@ class TextureManager : public ITextureManager
 		{
 			return NULL;
 		}
-		// F13: ReadAndRelease consumes the IFile* reference
+		// ReadAndRelease consumes the IFile* reference
 		// (which the previous code leaked) and enforces exact-byte reads.
 		try
 		{
@@ -145,7 +145,7 @@ public:
 		try
 		{
 			IFile* file = new PhysicalFile(AnsiToWide(filename));
-			// F13/F14/N4: ReadAndRelease handles exact-byte
+			// ReadAndRelease handles exact-byte
 			// reads and the IFile Release (was `delete file;` which
 			// violated the refcounted IFile abstraction).
 			try
@@ -212,7 +212,7 @@ public:
 		textures.clear();
 	}
 
-	// F6: drop every cached resource (including the missing-
+	// Drop every cached resource (including the missing-
 	// texture placeholder) for the device-reset path. Under D3D9Ex,
 	// D3DXCreateTextureFromFileInMemory and D3DXCreateTextureFromResource
 	// silently use D3DPOOL_DEFAULT — those handles are stale after
@@ -247,7 +247,7 @@ class ShaderManager : public IShaderManager
 	IFileManager* fileManager;
 	Effect*       pDefaultShader;
 
-	// F13+F14: takes decoded bytes by reference rather than
+	// Takes decoded bytes by reference rather than
 	// an IFile* (file lifetime + exact-byte reads handled by
 	// ReadAndRelease at call sites).
 	static Effect* createShader(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
@@ -294,7 +294,7 @@ class ShaderManager : public IShaderManager
 		{
 			return NULL;
 		}
-		// F13: ReadAndRelease consumes the IFile* reference
+		// ReadAndRelease consumes the IFile* reference
 		// (was leaked) and enforces exact-byte reads.
 		try
 		{
@@ -319,7 +319,7 @@ public:
 		try
 		{
 			IFile* file = new PhysicalFile(AnsiToWide(filename));
-			// F13/F14/N4: ReadAndRelease handles exact-byte
+			// ReadAndRelease handles exact-byte
 			// reads and the IFile Release (was `delete file;` which
 			// violated the refcounted IFile abstraction).
 			try
@@ -412,8 +412,8 @@ public:
 #include "MouseCursor.h"
 
 
-// Emitter duplicate-name helper (relocated here when arch-A's EmitterList.cpp
-// was removed in). Returns "<base>_<n>" where <n> is one more than the
+// Emitter duplicate-name helper (relocated here when the old EmitterList.cpp
+// was removed). Returns "<base>_<n>" where <n> is one more than the
 // highest numeric suffix already in use among emitters in `system` whose name
 // matches `<base>` or `<base>_<digits>`. If `sourceName` itself ends in
 // `_<digits>` that suffix is stripped first, so duplicating "Foo_3" repeatedly
@@ -515,7 +515,7 @@ bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
         if (errorOut) *errorOut = "null particle system";
         return false;
     }
-    // (data-loss BLOCKER): write to a sibling temp then atomically
+    // Data-loss guard: write to a sibling temp then atomically
     // rename into place, mirroring Autosave::Write (Autosave.cpp:197-221). The
     // old code opened the destination CREATE_ALWAYS (truncate-to-0) and streamed
     // chunks in place, so any mid-write failure (disk full, removable drive,
@@ -758,7 +758,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		if (pSet) pSet(L"DrKnickers.AloParticleEditor");
 	}
 
-	// Stage 2 — the WebView2 + D3D9 host is the ONLY UI. We build the
+	// The WebView2 + D3D9 host is the ONLY UI. We build the
 	// three managers the (now-dead) legacy main() built (so the host can
 	// construct Engine identically) and run host::Run unconditionally; no
 	// legacy WNDCLASS / windows are registered. The `--legacy` / `--legacy-ui`
@@ -768,7 +768,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		bool devUi    = false;
 		bool testHost = false;
 		// --gen-nt5-fixture <path>: one-shot CLI to produce a
-		// .alo file with a known pre-singleton link group. Used
+		// .alo file with a known legacy singleton link group. Used
 		// to exercise the load-time enforcement sweep at file/open.
 		// Since the production save path always runs through
 		// post-mutation enforcement (which would have demoted the
@@ -959,7 +959,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			// Put both in link group 1 (transient — valid 2-member
 			// state), then manually demote emitter 0 back to 0.
 			// Result on disk: emitter 0 at linkGroup=0, emitter 1
-			// alone at linkGroup=1 — the pre-"singleton group"
+			// alone at linkGroup=1 — the legacy "singleton group"
 			// state that file/open's enforcement sweep must demote.
 			emitters[0]->linkGroup = 1;
 			emitters[1]->linkGroup = 1;
@@ -1106,7 +1106,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			// [bump-spin SINGLE] --bumpspin1: like --bumpspin but exactly ONE large, centered,
 			// long-lived sprite (single burst of 1 at the EXACT origin). Two captures at different
 			// --frames then show the SAME sprite at two clean, NON-overlapping spin phases -> the
-			// decisive §6 test (does the lit crescent track the spin or stay sun-anchored?).
+			// decisive test (does the lit crescent track the spin or stay sun-anchored?).
 			bool bumpSpin1 = false;
 			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin1") bumpSpin1 = true;
 			if (bumpSpin1)
@@ -1209,9 +1209,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			         genSmokeTestPath.c_str(), (int)e->blendMode, sys->getEmitters().size());
 			return 0;
 		}
-		// T9.2] --gen-a11y-fixture <path>: one-shot CLI to produce a
+		// --gen-a11y-fixture <path>: one-shot CLI to produce a
 		// .alo file with a 3-emitter tree (1 root + 1 lifetime child + 1
-		// death child). Used by the T9 a11y specs so every surface driver's
+		// death child). Used by the a11y specs so every surface driver's
 		// beforeEach can open a deterministic file with enough tree depth to
 		// exercise ArrowRight expand (kbd-arrow-tree-expanded) as well as the
 		// simpler single-row surfaces. Bypasses BridgeDispatcher; uses the

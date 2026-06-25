@@ -528,7 +528,7 @@ int main(int argc, char** argv) {
         CHECK(m.meshes.size() == 1, "mesh loads without a skeleton");
 
         // (b) A bone-data chunk of an UNEXPECTED size must be TOLERATED (keep
-        // identity defaults), never throw -- these chunks loaded before.
+        // identity defaults), never throw -- these chunks loaded before game-object support.
         Bytes nm; cstr(nm, "Weird");
         Bytes badData; u32le(badData, 5); badData.resize(40, 0);   // 40 B: neither 56 nor 60
         Bytes badSkel = container(0x0200, { container(0x0202, { leaf(0x0203, nm), leaf(0x0206, badData) }) });

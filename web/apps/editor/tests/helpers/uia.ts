@@ -6,7 +6,7 @@ import type { UIANode } from "./a11y-normalizer";
 // ESM-equivalent of __dirname (package is "type": "module").
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Path to the T3 C++ inspector executable.
+// Path to the C++ inspector executable.
 // tests/helpers/ → 5 levels of ".." → repo root → x64/<Debug|Release>/
 const INSPECTOR_PATH = path.resolve(
   __dirname,
@@ -74,7 +74,7 @@ export async function discoverHostHwnd(
   options?: { windowClassName?: string; timeoutMs?: number }
 ): Promise<bigint> {
   // The harness launches ParticleEditor.exe with stdio:ignore and a VISIBLE
-  // window (windowsHide removed in T9.3 — SW_HIDE suppresses the
+  // window (windowsHide removed earlier — SW_HIDE suppresses the
   // WebView2 UIA provider, preventing UIA from traversing into the React DOM).
   //
   // Strategy: FindWindow("AloHostViewport") reliably finds the D3D popup child

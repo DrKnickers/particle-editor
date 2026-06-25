@@ -1,8 +1,5 @@
 // TDD: useEstimatedLoadPush — tree-driven push of estimated alive-particles
 // to the engine (engine/set/estimated-load) with epsilon gating.
-//
-// Spec: docs/superpowers/specs/2026-06-11-overload-hard-guard-design.md §2.1
-// Plan: docs/superpowers/plans/2026-06-11-overload-hard-guard.md Task 2
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";

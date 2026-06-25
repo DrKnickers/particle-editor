@@ -27,7 +27,7 @@ class ParticleSystem;
 class UndoStack
 {
 public:
-    // s52] Side-band editor state that travels with a snapshot but is
+    // Side-band editor state that travels with a snapshot but is
     // NOT part of the ParticleSystem buffer: the reference-object transform
     // (position + rotation). It persists to the registry, not the .alo, so it
     // can't live in the serialized buffer. Carried on EVERY entry so undoing a
@@ -158,7 +158,7 @@ private:
         DWORD             coalesceKey;
         DWORD             timestamp;
         bool              isSavedState;
-        EditorAux         aux;   // s52] ref-object transform at capture
+        EditorAux         aux;   // ref-object transform at capture
     };
 
     std::deque<Entry> m_entries;

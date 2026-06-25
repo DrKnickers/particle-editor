@@ -1,4 +1,4 @@
-// Phase 3 Screen 2 contract tests: React menu bar DOM presence and
+// Contract tests: React menu bar DOM presence and
 // selected bridge dispatches. Same CDP-attach harness as toolbar.spec.ts.
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 
@@ -18,7 +18,7 @@ test.afterAll(async () => {
   await browser?.close();
 });
 
-// ── 1. All 6 triggers present in legacy order () ──────────────────────────
+// ── 1. All 6 triggers present in legacy order ──────────────────────────
 
 test("All 6 menu triggers render in the menubar in legacy order [File, Edit, Emitters, Mods, View, Help]", async () => {
   const triggers = await page.evaluate(() => {
@@ -31,7 +31,7 @@ test("All 6 menu triggers render in the menubar in legacy order [File, Edit, Emi
     );
   });
   expect(triggers).toEqual(["File", "Edit", "Emitters", "Mods", "View", "Help"]);
-  // Tools menu is removed in.
+  // Tools menu is removed.
   expect(triggers).not.toContain("Tools");
 });
 
@@ -62,7 +62,7 @@ test("Edit > Clear All Particles dispatches engine/action/clear", async () => {
 });
 
 // ── 3. Bloom toggle flips state ──────────────────────────────────────────────
-// (Bloom moved off the View menu in session 11 — its on/off toggle is the
+// (Bloom moved off the View menu — its on/off toggle is the
 // toolbar's "Toggle bloom" button. This drives the same engine/set/bloom
 // command directly through the bridge.)
 
@@ -112,7 +112,7 @@ test("View > Pause dispatches engine/set/paused and flips state", async () => {
 
 // ── 5. File menu opens and exposes items via Radix portal ────────────────────
 
-// ── — Emitters top-level menu dispatches emitters/add-root ──────────────
+// ── Emitters top-level menu dispatches emitters/add-root ──────────────
 
 test("Emitters > New Emitter > Root Emitter dispatches emitters/add-root", async () => {
   // Bridge-level verification: the dispatch surface for the new menu

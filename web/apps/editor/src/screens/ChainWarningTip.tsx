@@ -1,6 +1,6 @@
 // ChainWarningTip — the rich tooltip body for the ⚠
 // chain-load glyph (user-picked layout: amber header band + aligned
-// name/math rows; spec §4). Consumes ChainWarning.path directly — the
+// name/math rows). Consumes ChainWarning.path directly — the
 // estimation formula lives only in chain-load.ts, and the number
 // formatting is the exported fmtCount/fmtMultiplier pair shared with
 // formatChainWarning, so the plain-text and rich presentations can

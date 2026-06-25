@@ -140,7 +140,7 @@ public:
         // tree can key rows by it. Assigned in ALL THREE constructors.
         unsigned int stableId;
 
-        // Link-group membership (). 0 = unlinked; non-zero IDs are
+        // Link-group membership. 0 = unlinked; non-zero IDs are
         // unique within a ParticleSystem and stable across save/load.
         // Persisted in an editor-only optional chunk (0x0100); ignored
         // by the game engine. Minimum group size is 2 — single-member
@@ -391,13 +391,13 @@ public:
 	void setName(const std::string& name) { m_name = name; }
 	void setLeaveParticles(bool leave)    { m_leaveParticles = leave; }
 
-    //: per-group exempt-set storage. Groups not present in the
+    // per-group exempt-set storage. Groups not present in the
     // map use the v1 default exempt set (textures + atlas-index curve +
     // name) returned by GetDefaultLinkExemptFlags() in LinkGroup.cpp.
     // Persisted via the new system-body chunk 0x0003. Storage is sparse:
     // setLinkExemptFlags removes the entry if `flags` equals the v1
     // defaults, so files without per-group customization remain
-    // byte-identical to pre-output.
+    // byte-identical to the earlier output.
     const LinkExemptFlags& getLinkExemptFlags(uint32_t groupId) const;
     void                   setLinkExemptFlags(uint32_t                groupId,
                                               const LinkExemptFlags&  flags);

@@ -1,8 +1,8 @@
-// Vitest specs for the B1.3-P5 "Always face camera" semantic-flip
+// Vitest specs for the "Always face camera" semantic-flip
 // cascade.
 //
 // The legacy `World Oriented` checkbox stored `isWorldOriented` and
-// displayed it directly. P5 renames the field to `Always face camera`
+// displayed it directly. This renames the field to `Always face camera`
 // and inverts the semantic — checkbox checked = "always face camera"
 // = `isWorldOriented === false`. When `blendMode === BLEND_BUMP`
 // (==11) the camera-facing orientation is forced, so the checkbox
@@ -22,7 +22,7 @@ import type { ReactElement, ReactNode } from "react";
 import { AppearanceTab } from "../EmitterPropertyTabs";
 import { makeFixtureProperties } from "@/bridge/mock-state";
 
-//: AppearanceTab mounts Tips (Radix Tooltip.Root) on the form-row
+// AppearanceTab mounts Tips (Radix Tooltip.Root) on the form-row
 // labels, which require the app-level Tooltip.Provider — wrapper stands in
 // for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (

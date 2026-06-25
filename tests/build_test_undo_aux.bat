@@ -1,5 +1,5 @@
 @echo off
-REM Build the UndoStack EditorAux regression test (s52]) as a standalone
+REM Build the UndoStack EditorAux regression test as a standalone
 REM x64 console exe. Links only the data-model TUs UndoStack.cpp + ParticleSystem.cpp
 REM need, against the DirectX SDK libs (symbols referenced but not exercised).
 setlocal

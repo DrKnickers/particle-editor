@@ -1,6 +1,6 @@
 import type { EmitterTreeNode, SpawnParamsDto } from "@particle-editor/bridge-schema";
 
-// soft chain warning. Advisory only — nothing in the editor blocks
+// Soft chain warning. Advisory only — nothing in the editor blocks
 // on this. Spec: docs/superpowers/specs/2026-06-10-chain-warning-design.md.
 
 // Vanilla effects run tens-to-hundreds alive; the v1 chain-test bomb was
@@ -48,8 +48,7 @@ export type ChainWarning = {
 // ChainWarning for every row on a root→node path whose cumulative estimate
 // crosses `threshold` (default `CHAIN_WARN_THRESHOLD`). A(child) = A(parent) × E(child): every
 // alive parent particle hosts one child-emitter instance. Life and death
-// children deliberately share the rule — documented approximation, see
-// spec §1.
+// children deliberately share the rule — documented approximation.
 export function estimateChainLoad(
   root: EmitterTreeNode,
   // Configurable guard cap when the overload guard is enabled; the

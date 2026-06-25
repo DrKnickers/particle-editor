@@ -607,13 +607,12 @@
 /* Collapsible section primitive — shared by Section.tsx (controlled
  * via useState + data-open attribute) and ToolPanel.Section (native
  * <details>). The rotation selector targets both state shapes so each
- * consumer keeps its own state model while sharing the visual.
- * B1.3.2 unification. */
+ * consumer keeps its own state model while sharing the visual. */
 .panel-section {
   /* Hybrid density (was a bordered+filled card): no container chrome — the
      tinted header band (below) anchors each group while rows run edge-to-edge
      for maximum label/input width. Shared with the ToolPanel.Section panels
-     (Lighting / Bloom / Ground / Background) via the B1.3.2 unification, so
+     (Lighting / Bloom / Ground / Background) via the same unification, so
      they get the same treatment for app-wide consistency. */
   margin-bottom: 9px;
 }
@@ -917,7 +916,7 @@
   user-select: none;
 }
 
-/* Tri-state Generation radio rows (B1.3 P3). Hand-rolled radio chrome
+/* Tri-state Generation radio rows. Hand-rolled radio chrome
    rather than Radix RadioGroup so the layout sits tightly inside
    `.panel-section-body` alongside the FieldSpinner form-rows. Active
    state fills the inner dot via the accent token. */
@@ -1216,7 +1215,7 @@
   background: var(--success);
 }
 
-/* ========== Splitters (B1.4) ========== */
+/* ========== Splitters ========== */
 /* react-resizable-panels 4.x emits `data-separator` on the handle.
    Active-drag styling piggybacks on the `:active` pseudo-class
    (4.x dropped the `data-resize-handle-active` attribute that 2.x
@@ -1226,7 +1225,7 @@
    cursor ~3px onto the viewport where no splitter was visible);
    --accent-soft hover preview is a tactile but quiet signal. */
 [data-separator].ce-splitter {
-  /* Opaque app-shell colour, NOT transparent. In the engine DComp
+  /* Opaque app-shell colour, NOT transparent. In this architecture the engine DComp
      visual is clipped to the scene rect and shows through any transparent
      DOM; a transparent splitter gutter sitting next to the viewport (outside
      the scene rect) revealed the black engine backing — stark in light theme.

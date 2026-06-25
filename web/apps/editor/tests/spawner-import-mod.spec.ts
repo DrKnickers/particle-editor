@@ -1,4 +1,4 @@
-// Phase 3 Screen 8 Batch 4 — Playwright specs covering the Spawner
+// Playwright specs covering the Spawner
 // panel and Import Emitters modal. Same CDP-attach harness as sibling
 // specs.
 //
@@ -48,7 +48,7 @@ async function waitForPanel(p: Page, title: string) {
   });
 }
 
-/** Task 2.4: Spawner panel is a right-side column. Session 11: it shares
+/** Spawner panel is a right-side column. It shares
  *  the right-dock slot with Lighting, tracked in
  *  localStorage('alo:right-dock'). Force it visible before the assertions
  *  via the toolbar toggle so we don't depend on test-order leftovers. */
@@ -71,7 +71,7 @@ async function ensureSpawnerHidden(p: Page) {
 }
 
 async function closeAnyPanel(p: Page) {
-  // Task 2.4: SpawnerPanel is a docked column (session 11: shares the
+  // SpawnerPanel is a docked column (shares the
   // right-dock slot with the docked Lighting pane via alo:right-dock).
   // The remaining ToolPanel-chrome dialogs are the docked Lighting pane
   // plus the Background/Ground popovers. Keep cleaning those up so
@@ -86,7 +86,7 @@ async function closeAnyPanel(p: Page) {
 }
 
 test("Emitters → Spawner toggles the Spawner column", async () => {
-  // Task 2.4: SpawnerPanel is a permanent right column. The Emitters
+  // SpawnerPanel is a permanent right column. The Emitters
   // menu's "Spawner" entry now toggles the column (not opens a
   // slide-in). Start hidden so the menu click flips it visible.
   await closeAnyPanel(page);
@@ -96,7 +96,7 @@ test("Emitters → Spawner toggles the Spawner column", async () => {
 });
 
 test("Opening the Background popover does not close the Spawner column (independent surfaces)", async () => {
-  // Task 2.2: Background lives in a Radix Popover anchored to the
+  // Background lives in a Radix Popover anchored to the
   // toolbar, separate from the workspace grid. Opening the popover
   // must not affect the permanent Spawner column.
   await closeAnyPanel(page);

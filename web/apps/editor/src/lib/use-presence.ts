@@ -1,5 +1,5 @@
 // usePresence — keeps an element mounted through its CSS exit animation
-// (; built for OverloadBanner, generic for any custom-unmount
+// (built for OverloadBanner, generic for any custom-unmount
 // surface). Radix components get this from Presence for free; this is
 // the shim for `cond ? <El/> : null` mounts.
 //

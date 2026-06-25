@@ -1,4 +1,4 @@
-// Vitest unit tests for AtlasPickerPanel (Task 8).
+// Vitest unit tests for AtlasPickerPanel.
 // Verifies: grid cell count, selected-frame highlight, non-square header,
 // and the five placeholder states (single-frame, no-texture, missing,
 // too-large, off-index-channel).
@@ -157,7 +157,7 @@ describe("AtlasPickerPanel", () => {
     await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
     const cells = screen.getAllByTestId("atlas-cell");
     const five = cells.find((c) => c.getAttribute("data-frame") === "5")!;
-    // DOM-hook preservation (Risk 6): same element keeps data-* and gains role/aria
+    // DOM-hook preservation: same element keeps data-* and gains role/aria
     expect(five.getAttribute("role")).toBe("option");
     expect(five.getAttribute("data-selected")).toBe("true");
     expect(five.getAttribute("aria-selected")).toBe("true");
@@ -515,7 +515,7 @@ describe("AtlasPickerPanel", () => {
     // focus did NOT fall to <body> — it was re-homed into the grid. The re-home
     // runs in a post-shrink effect that lands a tick AFTER the 4-cell render, so
     // poll for it via waitFor rather than sampling activeElement once (CI flake:
-    // null vs 'atlas-cell' when the effect hasn't settled — same class as #292).
+    // null vs 'atlas-cell' when the effect hasn't settled).
     await waitFor(() =>
       expect((document.activeElement as HTMLElement | null)?.getAttribute("data-testid")).toBe("atlas-cell"),
     );
@@ -544,7 +544,7 @@ describe("AtlasPickerPanel", () => {
     // Wait for the cells before firing keys: the listbox renders during
     // preview-load with no cells yet, and Home would race the cursor-init
     // effect (which seeds focus at the context frame, 5) — leaving focus at 5
-    // and Enter assigning frame 5 instead of 0. (Same flake class as #292.)
+    // and Enter assigning frame 5 instead of 0.
     await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
     fireEvent.keyDown(grid, { key: "Home" });  // focus frame 0
     fireEvent.keyDown(grid, { key: "Enter" }); // assign → set-track-key rejects → commit fails

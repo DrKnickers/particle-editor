@@ -2,8 +2,6 @@
 // file state (currentFilePath + dirty + recentFiles) plus the
 // SaveChangesPrompt's pending-action slot.
 //
-// Phase 3 Screen 8 Batch 3.
-//
 // The host is the source of truth for `currentFilePath`, `dirty`, and
 // the recent-files list. This module's job is:
 //
@@ -90,7 +88,7 @@ export function useSeedFileState(bridge: Bridge): void {
     let cancelled = false;
 
     // 1. Seed from snapshot — the snapshot DTO carries currentFilePath
-    //    + dirty as top-level fields (added in Batch 3).
+    //    + dirty as top-level fields.
     bridge
       .request({ kind: "engine/state/snapshot", params: {} })
       .then((s) => {

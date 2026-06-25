@@ -1,6 +1,6 @@
-// Phase 3 Stage 3g: composition-hosting A/B parity guard.
+// Composition-hosting A/B parity guard.
 //
-// Stage 3 swapped WebView2 from HWND-mode hosting
+// The composition-hosting work swapped WebView2 from HWND-mode hosting
 // (CreateCoreWebView2Controller) to composition hosting
 // (CreateCoreWebView2CompositionController), gated on the env-var
 // pair `ALO_HOSTING_MODE != legacy (default)` + `ALO_VIEWPORT_TRANSPORT=
@@ -22,12 +22,12 @@
 // host-object proxy, postMessage round-trips, React event handling)
 // works identically under composition mode to HWND mode.
 //
-// The OS-input-path coverage is irreducible to manual smoke (per
-// the sub-plan's §6 sub-stage 3i acceptance) — Playwright can't
+// The OS-input-path coverage is irreducible to manual smoke —
+// Playwright can't
 // dispatch a real WM_LBUTTONDOWN that goes through the OS focus
 // chain into the host's MainWndProc. The host-side correctness
-// of mouse forwarding (3c), cursor sync (3d), DPI (3e), and
-// keyboard focus transfer (3f) all depend on smoke evidence
+// of mouse forwarding, cursor sync, DPI, and
+// keyboard focus transfer all depend on smoke evidence
 // outside this file.
 //
 // What these specs DO catch:
@@ -35,7 +35,7 @@
 //     accidentally breaking the QI to ICoreWebView2Controller
 //     would cause every spec to fail loading)
 //   - Regression in FinishWebView2ControllerSetup factoring
-//     (e.g. if the refactor for sub-stage 3b dropped a wire,
+//     (e.g. if the refactor dropped a wire,
 //     these specs would fail because the bridge handler isn't
 //     registered)
 //   - Regression in Compositor::AttachWebView2 (e.g. tree commit
@@ -49,7 +49,7 @@
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy" /* */;
+const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 
 let browser: Browser;
 let page: Page;
@@ -78,8 +78,7 @@ test.beforeEach(({}, testInfo) => {
       type: "skip-reason",
       description:
         "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — composition-mode gate not " +
-        "applicable to this run. Set both ALO_HOSTING_MODE != legacy (default) " +
-        "and retired to enable.",
+        "applicable to this run. Set ALO_HOSTING_MODE != legacy (default) to enable.",
     });
     test.skip();
   }
@@ -111,7 +110,7 @@ test("click on Background toolbar dropdown opens the popover (click routing unde
 });
 
 test("click coords land at the expected DOM element under composition", async () => {
-  // Stage 3c forwards WM_LBUTTONDOWN coords via lParam -> POINT ->
+  // The host forwards WM_LBUTTONDOWN coords via lParam -> POINT ->
   // SendMouseInput. CDP click bypasses this path, but if the React
   // tree is being rendered through the composition surface correctly,
   // clicking a button at its DOM rect should hit the button (no
@@ -129,7 +128,7 @@ test("click coords land at the expected DOM element under composition", async ()
 });
 
 test("wheel event on the curve editor canvas dispatches without parent scroll under composition", async () => {
-  // regression guard. The curve editor uses a native
+  // Regression guard. The curve editor uses a native
   // addEventListener("wheel", ..., { passive: false }) to allow
   // preventDefault. Under composition mode the wheel event still
   // arrives at the renderer via CDP synthesis; the React handler
@@ -179,7 +178,7 @@ test("modifier keys round-trip via React event system under composition", async 
   // Even though this bypasses the host's wParam-MK_SHIFT-to-
   // VIRTUAL_KEYS_SHIFT translation in
   // ForwardMouseToCompositionWebView2, it validates the React chain
-  // DID receive the modifier — paired with the manual smoke (3c),
+  // DID receive the modifier — paired with the manual smoke,
   // this proves the full path works.
   await page.keyboard.press("Escape").catch(() => {});
 
@@ -254,11 +253,11 @@ test("keyboard input via CDP reaches focused React input under composition", asy
   // MainWndProc. It validates the simpler claim: the React event
   // system inside WebView2 still receives and dispatches keyboard
   // events normally under composition mode (no DOM-level breakage).
-  // The real keyboard-focus assertion is in the 3f manual smoke.
+  // The real keyboard-focus assertion is in the manual smoke.
   //
   // Open the Lighting pane so we have a known input to focus. Bloom's
-  // controls now live as a collapsible section inside Lighting (session
-  // 11), so expand that section before reaching the Enable bloom checkbox.
+  // controls now live as a collapsible section inside Lighting,
+  // so expand that section before reaching the Enable bloom checkbox.
   await page.keyboard.press("Escape").catch(() => {});
   const trigger = page.locator('[role="menubar"] >> text=View').first();
   await trigger.click();
@@ -318,8 +317,8 @@ test("keyboard input via CDP reaches focused React input under composition", asy
   }
 });
 
-test("composition mode does not break the test-host bridge proxy (regression)", async () => {
-  // documents that WebView2 drops postMessage under CDP
+test("composition mode does not break the test-host bridge proxy (postMessage regression)", async () => {
+  // WebView2 drops postMessage under CDP
   // attach — the test-host channel uses AddHostObjectToScript
   // instead. Under composition mode, the host-object channel is
   // still on ICoreWebView2 (accessible via get_CoreWebView2 on the

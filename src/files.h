@@ -79,7 +79,7 @@ public:
 	SubFile(IFile* file, unsigned long start, unsigned long size);
 };
 
-// F13+F14: read every byte of `file` into a fresh buffer,
+// Read every byte of `file` into a fresh buffer,
 // Release() the file reference, return the bytes. Throws ReadException
 // on partial read, empty file, or null pointer (Releases before
 // throwing). Consolidates the load-once-and-decode sites (textures,

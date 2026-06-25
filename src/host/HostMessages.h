@@ -8,7 +8,7 @@
 //   WM_APP + 1  WM_APP_COMPOSITION_FALLBACK  (defined locally in HostWindow.cpp)
 //   WM_APP + 2  WM_APP_QUIT_CONFIRMED        (below)
 
-//: posted by the app/quit bridge handler AFTER the React Save/Discard/
+// Posted by the app/quit bridge handler AFTER the React Save/Discard/
 // Cancel prompt has cleared. Its wndproc handler calls DestroyWindow (→WM_DESTROY,
 // NOT WM_CLOSE), so a confirmed quit bypasses the dirty-close veto in WM_CLOSE.
 static const UINT WM_APP_QUIT_CONFIRMED = WM_APP + 2;

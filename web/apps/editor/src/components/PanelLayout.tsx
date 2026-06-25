@@ -1,4 +1,4 @@
-// PanelLayout — B1.4 resizable splitters for the editor shell's
+// PanelLayout — resizable splitters for the editor shell's
 // main row.
 //
 // Replaces the Tailwind flex layout that used to live in App.tsx's
@@ -22,7 +22,7 @@
 //
 // The five quadrant-* data-testids live on the inner divs *inside*
 // each Panel's children, not on the Panel itself. Two reasons:
-//   - Risk 2 in the plan: Modal.tsx's
+//   - Modal.tsx's
 //     `document.querySelector('[data-testid="quadrant-viewport"]')`
 //     and the subsequent getBoundingClientRect rely on the rect
 //     matching the viewport pixels exactly. Placing the testID on
@@ -71,12 +71,12 @@ const LEFT_DEFAULTS: Layout = { tree: 25, tabs: 75 };
 const CENTER_DEFAULTS: Layout = { viewport: 75, curve: 25 };
 
 // The right-dock slot's pixel floor. Pinned to the Panel's `minSize` below so
-// they stay in lockstep, and reused by the Item-3 dock-slide anim as the
+// they stay in lockstep, and reused by the dock-slide anim as the
 // fallback open-target width on a first-ever open (before any close has
 // recorded the dock's remembered width).
 const DOCK_MIN_PX = 260;
 
-// B1.4 T6: every localStorage key PanelLayout owns. Exported so the
+// Every localStorage key PanelLayout owns. Exported so the
 // View → Reset panel layout menu item can clear them all in one shot
 // before AppShell bumps the key= that remounts PanelLayout with the
 // in-code defaults above.
@@ -239,7 +239,7 @@ export function PanelLayout({ bridge }: Props) {
 
     setDockAnimating(true);
 
-    // [Item 3] Drive a host-side time-interpolated viewport rect synced to the
+    // Drive a host-side time-interpolated viewport rect synced to the
     // CSS flex-grow tween, so the engine viewport edge glides with the panel
     // instead of juddering against the clumpy per-frame scene-rect stream.
     const vpEl = document.querySelector('[data-testid="quadrant-viewport"]') as HTMLElement | null;
@@ -455,7 +455,7 @@ export function PanelLayout({ bridge }: Props) {
   const left = usePersistedLayout("alo:layout:left", LEFT_DEFAULTS);
   const center = usePersistedLayout("alo:layout:center", CENTER_DEFAULTS);
 
-  // B1.4 T4c: React no longer dispatches a popup-rect to the
+  // React no longer dispatches a popup-rect to the
   // host. The host self-sizes the engine popup HWND to its own main
   // client area on WM_CREATE / WM_SIZE / WM_WINDOWPOSCHANGED
   // (HostWindow.cpp). The popup is therefore stable across splitter
@@ -561,11 +561,11 @@ export function PanelLayout({ bridge }: Props) {
               className="relative h-full w-full min-h-0"
             >
               <ViewportSlot bridge={bridge} />
-              {/* Preview spawn-overload banner (overload guard §3) — a
+              {/* Preview spawn-overload banner (overload guard) — a
                   sibling of ViewportSlot inside this `relative`
                   viewport-rect container so `absolute top-center`
                   positioning needs no extra geometry. Registers its
-                  own viewport occlusion (risk 4); see the component
+                  own viewport occlusion; see the component
                   header for the full rationale. */}
               <OverloadBanner bridge={bridge} />
             </div>

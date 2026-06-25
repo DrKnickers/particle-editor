@@ -7,7 +7,7 @@
 // format here — not in C++ — preserves a single source of truth and
 // keeps it unit-testable.
 //
-// Format (spec 2026-06-11-open-file-titlebar-rebrand §3.2):
+// Format:
 //   - Clean, named    : `foo.alo — Particle Editor`
 //   - Dirty, named    : `● foo.alo — Particle Editor`
 //   - Clean, untitled : `Untitled.alo — Particle Editor`

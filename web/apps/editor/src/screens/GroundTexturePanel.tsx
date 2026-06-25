@@ -1,7 +1,7 @@
 // GroundTexturePanel — modeless tool window for the ground plane:
 // show/hide master toggle plus a grid of texture slots. Ported from the
 // native `GroundTexturePickerProc` in the legacy main.cpp; the Win32 dialog
-// and the `--legacy-ui` opt-out were removed in, so this React panel
+// and the `--legacy-ui` opt-out were removed, so this React panel
 // is now the sole ground-texture surface.
 //
 // Slot layout (mirrors Engine::kGroundTextureCount=8 / kGroundSolidColorSlot=4):
@@ -110,7 +110,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
   // treated as "all available" so the picker never blanks — only an explicit
   // `false` greys a tile.
   const slotAvailable = snapshot?.groundSlotAvailable ?? [];
-  // Unit grid — viewport scenery, sits with the ground plane (S48: relocated
+  // Unit grid — viewport scenery, sits with the ground plane (relocated
   // here from the Reference-object picker). Bridge kinds are general grid kinds,
   // unchanged by the move.
   const gridVisible = snapshot?.gridVisible ?? false;
@@ -138,8 +138,8 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
   };
   // Clicking the wide solid-colour tile selects the slot AND pops the
   // native colour picker (mirrors BackgroundPicker's proven pattern — an
-  // OS dialog, immune to the viewport occlusion a DOM popover hits,
-  // and discoverable because the obvious target is the one that opens it).
+  // OS dialog, immune to the viewport occlusion a DOM popover hits in this
+  // architecture, and discoverable because the obvious target is the one that opens it).
   const handleSolidColorClick = () => {
     if (selectedSlot !== SOLID_COLOR_SLOT) {
       void bridge.request({
@@ -337,8 +337,8 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
         })}
       </div>
 
-      {/* Unit grid — viewport scenery; belongs with the ground plane (S48,
-          relocated from the Reference-object picker). Same bridge kinds. */}
+      {/* Unit grid — viewport scenery; belongs with the ground plane
+          (relocated from the Reference-object picker). Same bridge kinds. */}
       <label className="mb-3 mt-3 flex items-center gap-2 text-xs text-text">
         <input
           type="checkbox"

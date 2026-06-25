@@ -20,7 +20,7 @@ export function BackgroundDropdown({ bridge }: Props) {
   const snap = useEngineSnapshot(bridge);
 
   const slot = snap?.skydomeSlot ?? 0;
-  ///S49] a game dome takes render precedence — but show the dome swatch
+  // A game dome takes render precedence — but show the dome swatch
   // only when it actually loaded (status "ok"), mirroring the picker body's
   // gameDomeRendering. A selected-but-failed dome falls back to the simple
   // background, so its swatch must too (not paint the dome gradient).

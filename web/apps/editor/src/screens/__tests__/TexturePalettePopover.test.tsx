@@ -1,5 +1,5 @@
 // Vitest specs for TexturePalettePopover — the frequently-used texture
-// palette popup (sub-feature B). Mirrors the GroundDropdown/BackgroundDropdown
+// palette popup. Mirrors the GroundDropdown/BackgroundDropdown
 // Radix-Popover test pattern: build a fake bridge, click the trigger, then
 // assert against the portaled content.
 
@@ -10,7 +10,7 @@ import type { ReactElement, ReactNode } from "react";
 import { TexturePalettePopover } from "../TexturePalettePopover";
 import type { Bridge, PaletteEntry } from "@particle-editor/bridge-schema";
 
-//: each palette cell mounts a Tip (Radix Tooltip.Root), which
+// each palette cell mounts a Tip (Radix Tooltip.Root), which
 // requires the app-level Tooltip.Provider — wrapper stands in for it
 // (precedent: renderToolbar in Toolbar.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
@@ -199,7 +199,7 @@ describe("TexturePalettePopover", () => {
     ).toBeInTheDocument();
   });
 
-  it("distinguishes a broken thumbnail (decode-failed) from missing ()", async () => {
+  it("distinguishes a broken thumbnail (decode-failed) from missing", async () => {
     const b = makeBridge({
       list: { pins: [pin], recents: [] },
       thumbnail: null,
@@ -220,7 +220,7 @@ describe("TexturePalettePopover", () => {
     expect(ph).toHaveTextContent(/broken/i);
   });
 
-  it("marks a missing thumbnail (file-not-found) as missing ()", async () => {
+  it("marks a missing thumbnail (file-not-found) as missing", async () => {
     const b = makeBridge({
       list: { pins: [pin], recents: [] },
       thumbnail: null,

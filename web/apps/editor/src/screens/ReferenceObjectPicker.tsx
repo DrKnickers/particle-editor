@@ -116,15 +116,15 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const [objects, setObjects] = useState<ReferenceObjectEntry[]>([]);
   const [ready, setReady] = useState(false); // got a non-building object list for the active catalog
   const [query, setQuery] = useState("");
-  // fu] Faction filter (null = All); narrows the tree to objects affiliated with it.
-  // [s55] faction + collapsed groups + tree scroll persist across popover reopens so the
+  // Faction filter (null = All); narrows the tree to objects affiliated with it.
+  // Faction + collapsed groups + tree scroll persist across popover reopens so the
   // user keeps their place (the popover unmounts on close). See lib/picker-state.
   const [faction, setFaction] = useState<string | null>(() => loadPickerState().faction);
   // Collapsed group keys (default = everything expanded; collapse is opt-in).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(loadPickerState().collapsed));
   const treeRef = useRef<HTMLDivElement | null>(null);
   const scrollRestored = useRef(false);
-  // fu] Roving-tabindex: exactly one tree row is tabbable at a time; arrow
+  // Roving-tabindex: exactly one tree row is tabbable at a time; arrow
   // keys move the active row + focus it. `itemRefs` maps a row key -> its DOM node.
   const [activeKey, setActiveKey] = useState<string>("none");
   const itemRefs = useRef(new Map<string, HTMLDivElement | null>());
@@ -180,7 +180,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const ql = query.trim().toLowerCase();
   const matches = useMemo(() => (n: string) => ql === "" || n.toLowerCase().includes(ql), [ql]);
 
-  // fu] Faction filter. `affiliation` may be a comma list ("Rebel, Empire"); the chip
+  // Faction filter. `affiliation` may be a comma list ("Rebel, Empire"); the chip
   // set is every distinct token across all objects, and an object passes when it carries the
   // selected faction. (Objects with no affiliation appear only under "All".)
   const factionsOf = (o: ReferenceObjectEntry) =>
@@ -195,7 +195,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
     [objects, faction],
   );
 
-  // [s55] Persist + validate the faction filter. Once the active content's faction
+  // Persist + validate the faction filter. Once the active content's faction
   // set is known, drop a saved faction that isn't present (e.g. after a mod switch)
   // so it can never filter the list to empty; otherwise persist the choice.
   useEffect(() => {
@@ -212,12 +212,12 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
     savePickerState({ faction });
   }, [faction, factions, ready]);
 
-  // [s55] Persist the collapsed-group set (serialized as a sorted array).
+  // Persist the collapsed-group set (serialized as a sorted array).
   useEffect(() => {
     savePickerState({ collapsed: [...collapsed] });
   }, [collapsed]);
 
-  // [s55] Restore the saved tree scroll once the list has rendered (one-shot).
+  // Restore the saved tree scroll once the list has rendered (one-shot).
   useEffect(() => {
     if (ready && treeRef.current && !scrollRestored.current) {
       treeRef.current.scrollTop = loadPickerState().scrollTop;
@@ -254,7 +254,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
     name === NONE ||
     (visibleObjects.some((o) => o.name === name) && matches(name));
 
-  // fu] The flat list of VISIBLE tree rows in DOM order — drives roving-tabindex
+  // The flat list of VISIBLE tree rows in DOM order — drives roving-tabindex
   // arrow navigation. Each row carries enough to move (kind/expanded/parent).
   type Row =
     | { key: string; kind: "leaf"; name: string; parentKey?: string }
@@ -288,7 +288,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
     setActiveKey(rows.some((r) => r.key === selKey) ? selKey : (rows[0]?.key ?? "none"));
   }, [rows, activeKey, name]);
 
-  // fu #2] Force-open the ancestor groups of the active selection so a
+  // Force-open the ancestor groups of the active selection so a
   // selection persisted from a prior session (into a group the user had collapsed)
   // is always visible. Runs on selection / list change, never re-collapsing on its own.
   useEffect(() => {
@@ -453,7 +453,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
           <p role="status" className="text-xs text-text-2">Loading objects…</p>
         ) : (
           <>
-            {/* fu] Faction filter chips (only when the active content has affiliations). */}
+            {/* Faction filter chips (only when the active content has affiliations). */}
             {factions.length > 0 && (
               <div
                 className="flex max-h-20 flex-wrap gap-1 overflow-y-auto scrollbar-stable"

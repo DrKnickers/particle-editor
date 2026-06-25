@@ -1,6 +1,6 @@
 // Unit tests for the shared GDI+ image-encoder helpers (src/host/GdiplusEncode.h),
-// consolidated from 4 CLSID lookups + 2 byte-identical Base64Encode copies by
-// the DRY-audit cpp-host-1 work. Pins:
+// consolidated from 4 CLSID lookups + 2 byte-identical Base64Encode copies.
+// Pins:
 //   - Base64Encode against the RFC 4648 §10 known-answer vectors, which exercise
 //     all three padding tails (0/1/2 trailing bytes) — the part most likely to
 //     regress in a hand-rolled encoder.

@@ -1,6 +1,6 @@
 #pragma once
 
-// (data-loss BLOCKER): decide whether a WM_CLOSE (native frame-X /
+// Data-loss guard: decide whether a WM_CLOSE (native frame-X /
 // Alt-F4) should be vetoed so the user is prompted to save. Pure + header-only
 // so the wndproc logic is unit-testable (tests/test_close_guard.cpp).
 //

@@ -1,6 +1,6 @@
-// Phase 3 Screen 2 — React-rendered menu bar using Radix UI Menubar.
+// React-rendered menu bar using Radix UI Menubar.
 //
-// Phase 4.1 Fix dispatch 5: restructured to legacy top-level order
+// Restructured to legacy top-level order
 //   File / Edit / Emitters / Mods / View / Help
 // (legacy [src/ParticleEditor.en.rc:565-630]). Changes vs the original
 // 5-menu shape:
@@ -126,7 +126,7 @@ export function MenuBar({
   onResetPanelLayout,
 }: Props) {
   const [state, setState] = useState<EngineStateDto | null>(null);
-  // Group D: View → Reset View Settings prompt visibility.
+  // View → Reset View Settings prompt visibility.
   const [resetViewOpen, setResetViewOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
 
@@ -143,7 +143,7 @@ export function MenuBar({
   const [layers, setLayers] = useState<LayerRef[]>([]);
   const [stack, setStack] = useState<string[]>([]);
   const [loadOrderOpen, setLoadOrderOpen] = useState(false);
-  const [addQuery, setAddQuery] = useState(""); // [Option D] Add mod… flyout search
+  const [addQuery, setAddQuery] = useState(""); // Add mod… flyout search
   const refreshModsList = async () => {
     try {
       const r = await bridge.request({ kind: "mods/list", params: {} });
@@ -184,7 +184,7 @@ export function MenuBar({
     void setLayerStack(inStack(p) ? stack.filter((s) => !eqPath(s, p)) : [...stack, p]);
   const removeFromStack = (p: string) =>
     void setLayerStack(stack.filter((s) => !eqPath(s, p)));
-  // [Option D] In-menu stack reorder via the shared glide engine — live-commits
+  // In-menu stack reorder via the shared glide engine — live-commits
   // each reorder (the menu IS the editor; the modal is the "Expand" fallback). No
   // scroll container (the dropdown list is short; big stacks use Expand).
   const reorderStack = (from: number, target: number) => {
@@ -245,11 +245,11 @@ export function MenuBar({
   const primaryEmitterId = useEmitterSelectionPrimary();
   const hasPrimary = primaryEmitterId !== null;
 
-  // Screen 8 Batch 3: File-menu wiring needs the recent-files list +
+  // File-menu wiring needs the recent-files list +
   // the prompt-save-changes helper.
   const { recentFiles } = useFileState();
 
-  // Edit-menu clipboard + delete () act on the current emitter
+  // Edit-menu clipboard + delete act on the current emitter
   // selection — the same actions the tree's Ctrl+C/X/V/Del use. Paste gates
   // on whether anything has been copied this session.
   const selectedIds = useEmitterSelectionIds();
@@ -296,7 +296,7 @@ export function MenuBar({
   };
 
   const handleExit = () => {
-    // Group D: route through promptSaveChanges so a dirty
+    // Route through promptSaveChanges so a dirty
     // particle system gets the Save/Discard/Cancel prompt before
     // the host tears down. app/quit posts WM_CLOSE on the host
     // side; the existing WM_DESTROY chain handles compositor +
@@ -307,7 +307,7 @@ export function MenuBar({
     });
   };
 
-  // ── Emitters menu handlers () ─────────────────────────────────
+  // ── Emitters menu handlers ─────────────────────────────────
 
   const handleAddRoot = () => {
     void bridge.request({ kind: "emitters/add-root", params: {} });
@@ -339,7 +339,7 @@ export function MenuBar({
     useTreeContextStore.getState().openDialog("rescale", primaryEmitterId);
   };
 
-  // ── Edit-menu clipboard / delete () ─────────────────────────
+  // ── Edit-menu clipboard / delete ─────────────────────────
   // Snapshot the selection at click time (not the render-time `selectedIds`)
   // so the action always uses the live set.
   const handleCopy = () => {
@@ -363,7 +363,7 @@ export function MenuBar({
     requestDeleteEmitters(bridge, ids);
   };
 
-  // ── Emitters-menu visibility () ─────────────────────────────
+  // ── Emitters-menu visibility ─────────────────────────────
   const handleShowAll = () => {
     void bridge.request({ kind: "emitters/set-all-visible", params: { visible: true } });
   };
@@ -385,7 +385,7 @@ export function MenuBar({
     }
   };
 
-  // [Option D] Add mod… catalog — the layer catalog grouped by parent, searchable
+  // Add mod… catalog — the layer catalog grouped by parent, searchable
   // (membership lives here now, out of the top-level menu). Mirrors the modal's
   // available pane: keyed by parentPath so duplicate-label mods stay separate.
   const addGroups: { key: string; label: string; items: LayerRef[] }[] = [];
@@ -559,7 +559,7 @@ export function MenuBar({
         </Menubar.Portal>
       </Menubar.Menu>
 
-      {/* ─── Emitters () ─── */}
+      {/* ─── Emitters ─── */}
       <Menubar.Menu>
         <Menubar.Trigger className={TRIGGER}>Emitters</Menubar.Trigger>
         <Menubar.Portal>
@@ -614,7 +614,7 @@ export function MenuBar({
               Rescale Emitter…
             </Menubar.Item>
             <Menubar.Separator className={SEPARATOR} />
-            {/*: Toggle Visibility acts on the primary selection (reads
+            {/* Toggle Visibility acts on the primary selection (reads
                 its current `visible` via a one-shot list); Show/Hide All use
                 set-all-visible. The per-row eye affordance covers per-row
                 toggling; these mirror the legacy Emitters-menu commands. */}
@@ -639,7 +639,7 @@ export function MenuBar({
         </Menubar.Portal>
       </Menubar.Menu>
 
-      {/* ─── Mods (Option D: in-place reorder; catalog in "Add mod…"; modal demoted) ─── */}
+      {/* ─── Mods (in-place reorder; catalog in "Add mod…"; modal demoted) ─── */}
       <Menubar.Menu>
         <Menubar.Trigger className={TRIGGER}>Mods</Menubar.Trigger>
         <Menubar.Portal>
@@ -647,7 +647,7 @@ export function MenuBar({
             className={`${CONTENT} w-72`}
             align="start"
             sideOffset={4}
-            // [Option D guardrail] suppress the dropdown's auto-dismiss while a drag
+            // Guardrail: suppress the dropdown's auto-dismiss while a drag
             // is live, so a drag that strays past the menu edge can't close it
             // mid-gesture (the designer's #1 risk for in-popover drag).
             onEscapeKeyDown={(e) => { if (menuDrag.dragging) e.preventDefault(); }}
@@ -786,7 +786,7 @@ export function MenuBar({
             <Menubar.Separator className={SEPARATOR} />
 
             {/* Reset — clears the stack (Unmodded). Stacked-layers glyph + dotted
-                divider per the Option-D design. preventDefault keeps the menu open
+                divider. preventDefault keeps the menu open
                 so the cleared state shows live above. */}
             <Menubar.Item
               className={ITEM}
@@ -855,7 +855,7 @@ export function MenuBar({
                 its settings live as a section inside the Lighting pane, and its
                 on/off toggle is in the viewport display-options overlay (it
                 moved off the toolbar) — so the former View-menu "Bloom" +
-                "Bloom Settings…" items stay retired (session 11 follow-up). */}
+                "Bloom Settings…" items stay retired. */}
             <Menubar.Item
               className={ITEM}
               onSelect={() => toggleDock("lighting")}
@@ -892,7 +892,7 @@ export function MenuBar({
               <CheckSlot active={false} />
               Step Forward
             </Menubar.Item>
-            {/* Group D: dispatches engine/set/camera with the legacy
+            {/* Dispatches engine/set/camera with the legacy
                 default vectors. Shares RESET_CAMERA with the Ctrl+Home
                 accelerator (lib/reset-camera.ts) so the two can't drift —
                 no new bridge kind required, the camera setter already exists. */}
@@ -940,11 +940,11 @@ export function MenuBar({
               <CheckSlot active={heatDebug} />
               Heat Debug
             </Menubar.Item>
-            {/* Group D: pop the confirm modal; the modal's
+            {/* Pop the confirm modal; the modal's
                 Reset button fires engine/action/reset-view-settings
                 which cascades background / ground / bloom / skydome
                 back to defaults in one host-side action. Lighting
-                reset rides separately with D4. */}
+                reset rides separately. */}
             <Menubar.Item
               className={ITEM}
               onSelect={() => setResetViewOpen(true)}
@@ -953,7 +953,7 @@ export function MenuBar({
               Reset View Settings
             </Menubar.Item>
             <Menubar.Separator className={SEPARATOR} />
-            {/* B1.4 T6: clears the four alo:layout:* localStorage keys
+            {/* Clears the four alo:layout:* localStorage keys
                 and remounts PanelLayout (via an epoch bump in App.tsx)
                 so every Group reads in-code defaults on next mount. No
                 confirm prompt — the gesture is cheap to recover from
@@ -996,7 +996,7 @@ export function MenuBar({
       onApplied={() => void refreshModsList()}
     />
 
-    {/* Group D: confirm prompt for View → Reset View Settings.
+    {/* Confirm prompt for View → Reset View Settings.
         Body copy mirrors the legacy MessageBox in the legacy main.cpp.
         Sits as a sibling of Menubar.Root rather than inside it so
         Radix's child-list semantics for keyboard nav aren't disturbed.

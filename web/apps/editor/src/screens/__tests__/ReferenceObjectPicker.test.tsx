@@ -1,4 +1,4 @@
-// / Vitest unit tests for ReferenceObjectPicker. Driven by the real
+// Vitest unit tests for ReferenceObjectPicker. Driven by the real
 // MockBridge so the canned reference-object-list + the set handlers (including
 // the skinned-status path) are exercised end-to-end against the schema.
 //
@@ -389,7 +389,7 @@ describe("ReferenceObjectPicker — lock", () => {
   });
 });
 
-describe("ReferenceObjectPicker — fu] keyboard navigation + persisted-selection expand", () => {
+describe("ReferenceObjectPicker — keyboard navigation + persisted-selection expand", () => {
   const ready = async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
@@ -456,7 +456,7 @@ describe("ReferenceObjectPicker — fu] keyboard navigation + persisted-selectio
   });
 });
 
-describe("ReferenceObjectPicker — fu] faction filter chips", () => {
+describe("ReferenceObjectPicker — faction filter chips", () => {
   const ready = async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);

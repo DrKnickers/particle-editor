@@ -6,7 +6,7 @@ using namespace std;
 // Read every byte of `file` into a freshly-allocated buffer, Release
 // the file reference, return the bytes. Throws ReadException on partial
 // read or empty file (Releases before throwing). Takes ownership of the
-// IFile* reference. (F13+F14.)
+// IFile* reference.
 vector<unsigned char> ReadAndRelease(IFile* file)
 {
 	if (file == NULL) throw ReadException();
@@ -121,7 +121,7 @@ SubFile::~SubFile()
 //
 unsigned long MemoryFile::read(void* buffer, unsigned long size)
 {
-	//: `m_size - m_position` underflows (both unsigned) if m_position
+	// `m_size - m_position` underflows (both unsigned) if m_position
 	// somehow exceeds m_size, yielding a huge clamp and an OOB memcpy. Guard
 	// the remaining-bytes computation, mirroring SubFile::read above.
 	const unsigned long remaining = (m_position < m_size) ? (m_size - m_position) : 0;

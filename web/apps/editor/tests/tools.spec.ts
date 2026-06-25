@@ -1,17 +1,17 @@
-// Phase 3 Screen 8 Batch 2 contract tests: the Lighting tool pane (now
-// docked, with Bloom folded in as a section — session 11) + the Ground /
+// Contract tests: the Lighting tool pane (now
+// docked, with Bloom folded in as a section) + the Ground /
 // Background toolbar popovers, wired against the real native bridge inside
 // ParticleEditor.exe --test-host. Same CDP-attach harness as
 // sibling specs.
 //
 // What the specs cover:
-//   1. View → Lighting opens the (now docked, session-11) Lighting pane.
+//   1. View → Lighting opens the (now docked) Lighting pane.
 //   2. Opening the Background popover does NOT close Lighting (the two
-//      surfaces are orthogonal post-Task-2.2).
+//      surfaces are orthogonal).
 //   3. Toggling Enable inside Lighting's Bloom section fires
 //      engine/set/bloom, observed via the engine/state/changed event.
 //   4. The Ground popover opens from the toolbar dropdown trigger
-//      (Task 2.3: View → Ground Texture… became a popover on the
+//      (View → Ground Texture… became a popover on the
 //      Toolbar).
 //   5. Clicking a bundled ground slot in the popover updates the
 //      snapshot's groundTexture.
@@ -54,7 +54,7 @@ async function openMenuItem(p: Page, menu: string, item: string) {
 
 // Helper — wait for a ToolPanel with the given title to mount. ToolPanel
 // uses role="dialog" with the title as aria-label; the only menu-opened
-// ToolPanel after session 11 is "Lighting" (docked; Bloom folded into it,
+// ToolPanel now is "Lighting" (docked; Bloom folded into it,
 // Background and Ground are toolbar popovers).
 async function waitForPanel(p: Page, title: string) {
   await p.waitForSelector(`[role="dialog"][aria-label="${title}"]`, {
@@ -76,14 +76,14 @@ async function closeAnyPanel(p: Page) {
 }
 
 test("View → Lighting opens the Lighting panel", async () => {
-  //: Lighting moved from Tools to View.
+  // Lighting moved from Tools to View.
   await closeAnyPanel(page);
   await openMenuItem(page, "View", "Lighting");
   await waitForPanel(page, "Lighting");
 });
 
 test("Opening the Background popover does not close the Lighting panel (independent surfaces)", async () => {
-  // Task 2.2: Background was extracted from the slide-in ToolPanel
+  // Background was extracted from the slide-in ToolPanel
   // mutual-exclusion group and now lives in a Radix Popover anchored
   // to the toolbar. Opening the popover should therefore NOT close
   // whatever ToolPanel is currently open — the two are orthogonal
@@ -110,7 +110,7 @@ test("Opening the Background popover does not close the Lighting panel (independ
 });
 
 test("Toggling Enable Bloom fires engine/set/bloom (observed via state/changed)", async () => {
-  // Bloom settings folded into the Lighting pane (session 11): open
+  // Bloom settings folded into the Lighting pane: open
   // Lighting, then expand the collapsible Bloom section to reach the
   // Enable checkbox.
   await closeAnyPanel(page);
@@ -165,11 +165,11 @@ test("Toggling Enable Bloom fires engine/set/bloom (observed via state/changed)"
 });
 
 test("Ground popover opens from the toolbar dropdown trigger", async () => {
-  // Task 2.3: the GroundTexturePanel slide-in ToolPanel was replaced by
+  // The GroundTexturePanel slide-in ToolPanel was replaced by
   // a Radix Popover triggered from the Toolbar's Group 4 dropdown. The
   // dropdown button carries aria-label="Ground"; the mounted content is
   // a popover wrapper (data-radix-popper-content-wrapper) rather than
-  // role="dialog". Mirrors the Task 2.2 Background popover spec.
+  // role="dialog". Mirrors the Background popover spec.
   await closeAnyPanel(page);
   const probe = await page.evaluate(async () => {
     const btn = document.querySelector<HTMLButtonElement>('button[aria-label="Ground"]');

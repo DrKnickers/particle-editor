@@ -8,7 +8,7 @@ import type { ReactElement, ReactNode } from "react";
 import { TexturePalette } from "../TexturePalette";
 import type { TextureItem } from "../TexturePalette";
 
-//: each palette cell mounts a Tip (Radix Tooltip.Root), which
+// each palette cell mounts a Tip (Radix Tooltip.Root), which
 // requires the app-level Tooltip.Provider — wrapper stands in for it
 // (precedent: renderToolbar in Toolbar.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (

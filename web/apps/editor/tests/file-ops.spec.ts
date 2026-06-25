@@ -1,4 +1,4 @@
-// Phase 3 Screen 8 Batch 3 — File-ops Playwright suite.
+// File-ops Playwright suite.
 //
 // Coverage:
 //   1. File → New on a clean system dispatches file/new with no
@@ -18,7 +18,7 @@
 //     post-picker flow (path is committed, dirty cleared, etc.).
 //   - The save-changes prompt is a Radix Modal mounted alongside the
 //     About / Rescale modals. Its <Modal> uses role="dialog" — selector
-//     hygiene per: filter by visible "Save changes?" title text.
+//     hygiene: filter by visible "Save changes?" title text.
 //   - We pre-clean the file state at the start of each test via
 //     file/new, so leftover dirty / currentFilePath from prior tests
 //     don't bleed.

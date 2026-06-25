@@ -7,7 +7,7 @@
 
 #include "ParticleSystem.h"
 
-// Linked-emitter group helpers ().
+// Linked-emitter group helpers.
 //
 // A "link group" is a set of two or more emitters in a single
 // ParticleSystem whose non-exempt parameters are kept identical:
@@ -29,7 +29,7 @@
 // invariant (e.g. LeaveLinkGroup auto-dissolves the group when
 // removal would leave only one member).
 
-// Per-group exempt set (). Each bool toggles whether the
+// Per-group exempt set. Each bool toggles whether the
 // corresponding emitter field is per-emitter (true = exempt = each
 // member keeps its own) or shared (false = propagated). The default
 // constructor restores the v1 hard-coded set: textures + atlas-index
@@ -184,8 +184,8 @@ std::vector<ParticleSystem::Emitter*> GetLinkGroupMembers(
 // only non-exempt fields per `exempt`). Used by the Join confirmation
 // dialog: when the diff is empty, the join is silent; otherwise the
 // dialog lists the affected fields so the user can give informed
-// consent. Pre-callers passed no flags (implicit v1 defaults);
-// post-callers pass the group's specific flags to get the right
+// consent. Earlier callers passed no flags (implicit v1 defaults);
+// callers now pass the group's specific flags to get the right
 // answer for groups with custom exempt sets.
 std::vector<std::string> DiffNonExemptParams(
     const ParticleSystem::Emitter& a,

@@ -1,4 +1,4 @@
-// RescaleEmitterDialog — Screen 4 Batch B1.
+// RescaleEmitterDialog.
 //
 // Two-Spinner modal that fires `engine/action/rescale-emitter`. Shape
 // mirrors `RescaleDialog` (the system-wide rescale) but the bridge

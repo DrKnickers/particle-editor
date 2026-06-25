@@ -1,4 +1,4 @@
-// Phase 4.1 Fix dispatch 1 — EmitterPropertyTabs Playwright specs.
+// Phase 4.1 — EmitterPropertyTabs Playwright specs.
 //
 // 1. Selecting an emitter shows the property tabs in the lower-left
 //    quadrant + the track editor in the lower-right quadrant
@@ -81,7 +81,7 @@ test("editing the Lifetime spinner in the Basic tab fires emitters/set-propertie
   await expect(tabs).toBeVisible({ timeout: 5_000 });
 
   // Lifetime spinner is in the Basic tab (active by default).
-  // Post-B1.3-P3: "Lifetime" was relabelled to "Maximum lifetime:"
+  // "Lifetime" was relabelled to "Maximum lifetime:"
   // inside the Generation section. Use exact match.
   const lifetime = page.getByLabel("Maximum lifetime:", { exact: true });
   await expect(lifetime).toBeVisible({ timeout: 5_000 });
@@ -114,7 +114,7 @@ test("editing the Lifetime spinner in the Basic tab fires emitters/set-propertie
   expect(result.properties.lifetime).toBeCloseTo(7.5, 5);
 });
 
-test("switching to Physics tab and changing gravity round-trips via get-properties (Fix dispatch 3)", async () => {
+test("switching to Physics tab and changing gravity round-trips via get-properties", async () => {
   // Re-select to ensure the panel is mounted.
   const firstId = await page.evaluate(async () => {
     const bridge = (window as Window & { bridge?: {
@@ -134,12 +134,12 @@ test("switching to Physics tab and changing gravity round-trips via get-properti
   await page.locator('[data-testid="tab-trigger-physics"]').click();
 
   // The gravity spinner renders inside the Physics tab content.
-  // Post-B1.3-P6: "Gravity" was relabelled to "Gravity acceleration:"
+  // "Gravity" was relabelled to "Gravity acceleration:"
   // inside the Acceleration section.
   const gravity = page.getByLabel("Gravity acceleration:", { exact: true });
   await expect(gravity).toBeVisible({ timeout: 5_000 });
 
-  // Same pattern as the Appearance Fix dispatch 2 test — drive via the
+  // Same pattern as the Appearance blend-mode test — drive via the
   // bridge directly to assert round-trip; per-keystroke spinner
   // semantics are covered by Vitest.
   await page.evaluate(async (id: number) => {
@@ -165,7 +165,7 @@ test("switching to Physics tab and changing gravity round-trips via get-properti
   expect(result.properties.gravity).toBeCloseTo(-9.81, 5);
 });
 
-test("Physics group type change round-trips via get-properties (Fix dispatch 3)", async () => {
+test("Physics group type change round-trips via get-properties", async () => {
   const firstId = await page.evaluate(async () => {
     const bridge = (window as Window & { bridge?: {
       request: (req: { kind: string; params: unknown }) => Promise<unknown>;
@@ -216,7 +216,7 @@ test("Physics group type change round-trips via get-properties (Fix dispatch 3)"
   expect(patchedGroups[0].type).toBe(3);
 });
 
-test("switching to Appearance tab and changing blendMode emits engine/state/changed with the patched value (Fix dispatch 2)", async () => {
+test("switching to Appearance tab and changing blendMode emits engine/state/changed with the patched value", async () => {
   // Re-select to ensure the panel is mounted.
   const firstId = await page.evaluate(async () => {
     const bridge = (window as Window & { bridge?: {

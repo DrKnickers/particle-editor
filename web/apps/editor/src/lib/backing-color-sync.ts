@@ -1,7 +1,7 @@
 // useBackingColorSync — push the resolved theme background colour to the
 // host so the DComp composition backing matches the app shell.
 //
-// In the engine visual is clipped to the scene
+// In this architecture the engine visual is clipped to the scene
 // rect, so every transparent DOM region OUTSIDE it (panel gaps, splitter
 // seams, rounded-corner wedges) composites over the rearmost host backing
 // visual. Painting that backing the app-shell `--bg` makes those regions

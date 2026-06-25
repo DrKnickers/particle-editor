@@ -38,7 +38,7 @@ IDB_MISSING             BITMAP                  "resources/missing.bmp"
 
 // IDI_LOGO is the application icon (loaded by the host window class,
 // src/host/HostWindow.cpp). The legacy curve-editor icons were removed with
-// the native UI ().
+// the native UI.
 IDI_LOGO                ICON                    "resources/logo.ico"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -63,7 +63,7 @@ IDR_SHADER_GROUND_LIT   RCDATA                  "Resources\\Engine\\GroundLit.fx
 // ("Solid Color") is procedurally generated from a user-picked COLORREF.
 IDB_GROUND              RCDATA                  "Resources\\dirt.bmp"
 
-// skydome textures. Declared RCDATA so D3DXCreateTextureFromFileInMemory
+// Skydome textures. Declared RCDATA so D3DXCreateTextureFromFileInMemory
 // can load them. Procedural-gradient TGA placeholders today; a follow-up
 // PR can replace with curated equirectangular DDS (BC1) assets without
 // touching the loader.
@@ -120,7 +120,7 @@ END
 //
 // String Table
 //
-//: the shared error/query strings the surviving engine/IO/host code
+// the shared error/query strings the surviving engine/IO/host code
 // LoadString()s, migrated here (LANG_NEUTRAL, so they resolve under any
 // system locale) from the now-deleted ParticleEditor.en.rc when the legacy
 // localized .rc/.h files were removed. Ids are defined in Resources\resource.h.
@@ -193,3 +193,4 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
+

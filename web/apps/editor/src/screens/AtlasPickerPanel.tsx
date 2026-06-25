@@ -1,11 +1,11 @@
-// AtlasPickerPanel — atlas frame grid + click-to-assign (Task 8 + 9 + 12).
+// AtlasPickerPanel — atlas frame grid + click-to-assign.
 //
 // Displays the texture atlas for the selected emitter's colorTexture as a
 // side×side cell grid.  Hover previews a cell; the selection.frame field from
 // AtlasContext highlights the currently-assigned frame with the amber token
 // --atlas-selected.  Clicking a cell assigns the frame to all selected index
-// keys (Task 9 — with a confirm dialog for differing values).  Preview fetches
-// are mod-stack-keyed (Task 12) so a mod switch invalidates stale results.
+// keys (with a confirm dialog for differing values).  Preview fetches
+// are mod-stack-keyed so a mod switch invalidates stale results.
 //
 // Placeholder precedence (top = highest priority):
 //   1. no colorTexture           → "No color texture set."
@@ -31,7 +31,7 @@ import {
 } from "@/lib/atlas-grid";
 import { useDockAnim } from "@/lib/dock-anim";
 
-// Smart-grid sizing constants (§ "maximize available space"): cell gap (matches
+// Smart-grid sizing constants (maximize available space): cell gap (matches
 // the grid's `gap-1` = 4px) and the min/max square thumbnail size. The grid
 // reflows RESPONSIVELY to the measured panel width (~√n columns capped so a cell
 // never falls below GRID_MIN_CELL), so a wide dock shows more columns and a
@@ -340,7 +340,7 @@ export function AtlasPickerPanel({
     }
   }, [flatPrev, rawPrev]);
 
-  // ── stale-index reset (Risk 3) ─────────────────────────────────────────────
+  // ── stale-index reset ─────────────────────────────────────────────
   // On emitter / texture / atlas-size change, reset the keyboard cursor to the
   // (resolved) assigned frame and clear hover. Intentionally NOT keyed on
   // `frame` — the cursor should persist across key-selection changes, resetting
@@ -390,7 +390,7 @@ export function AtlasPickerPanel({
   }
 
   // Gate the pulse + live-announce on a confirmed commit, guarded against an
-  // emitter switch mid-await (§4.5). On a FAILED commit (a set-track-key write was
+  // emitter switch mid-await. On a FAILED commit (a set-track-key write was
   // rejected, or there was no resolvable target to write to), announce the failure
   // too — otherwise a keyboard / screen-reader user gets silence where a sighted user
   // at least sees no amber pulse. No toast infra in this project, so the aria-live
@@ -433,19 +433,19 @@ export function AtlasPickerPanel({
     ? `${side}×${side} · ${fc}`
     : `${side}×${side} · ${fc} of ${textureSize}`;
   const highlight    = frame === null ? null : resolveFrame(frame, side);
-  // Clamp the keyboard cursor against the live grid (backstop for Risk 3).
+  // Clamp the keyboard cursor against the live grid (backstop for the stale-index reset).
   const safeFocus    = focusIndex !== null && focusIndex < totalCells ? focusIndex : null;
   // Clamp hover too, so a stale hover index (e.g. mid texture-swap, before the
   // reset effect clears it) can never feed cropStyle an out-of-range frame.
   const safeHover    = hover !== null && hover < totalCells ? hover : null;
   // The single tabbable cell: cursor, else the assigned frame, else 0 (never null).
   const rovingTarget = safeFocus ?? highlight ?? 0;
-  const previewFrame = safeHover ?? safeFocus ?? highlight; // §3.1 precedence (?? — frame 0 valid)
-  // Responsive grid sizing (Approach A): ~sqrt(n) columns filling the measured
+  const previewFrame = safeHover ?? safeFocus ?? highlight; // precedence (?? — frame 0 valid)
+  // Responsive grid sizing: ~sqrt(n) columns filling the measured
   // (and slide-frozen) width, with a min-cell floor so large atlases stay dense.
   const layout = fitGridLayout(totalCells, gridW, GRID_GAP, GRID_MIN_CELL, GRID_MAX_CELL);
 
-  // ── keyboard navigation (§4.2) ─────────────────────────────────────────────
+  // ── keyboard navigation ─────────────────────────────────────────────
 
   function focusCell(k: number) {
     const el = gridRef.current?.querySelector<HTMLElement>(`[data-frame="${k}"]`);
@@ -744,7 +744,7 @@ const Cell = memo(function Cell({
 }) {
   const style: React.CSSProperties = cropStyle(k, side, srcW, srcH);
   if (selected) {
-    // amber via border + box-shadow ring so the blue focus OUTLINE can nest (§4.4)
+    // amber via border + box-shadow ring so the blue focus OUTLINE can nest
     style.borderColor = "var(--atlas-selected)";
     style.boxShadow = "0 0 0 1px var(--atlas-selected), 0 0 12px color-mix(in srgb, var(--atlas-selected) 40%, transparent)";
   }

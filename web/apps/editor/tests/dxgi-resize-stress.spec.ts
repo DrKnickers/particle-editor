@@ -1,4 +1,4 @@
-// Phase 3 Stage 4f #2 — DXGI resize-stress gate.
+// DXGI resize-stress gate.
 //
 // Drives `layout/viewport-rect` through 50 size cycles. Each cycle
 // invalidates AlphaCompositor's shared HANDLE (releases the old D3D9
@@ -11,7 +11,7 @@
 // Asserts:
 //   1. Host doesn't crash (bridge stays responsive across all 50 cycles).
 //   2. `[COMP-engine-resize]` lines accumulate in host.log (proves lazy
-//      detection fired — without 4d this would be zero).
+//      detection fired — without the lazy handle-check this would be zero).
 //   3. No `[COMP-engine-fail]` lines added during the stress run.
 //   4. CompositeEngineFrame keeps running through the stress (composite
 //      count continues to grow).
@@ -24,7 +24,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy" /* */;
+const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 const HOST_LOG_PATH = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, "AloParticleEditor", "host.log")
   : "";

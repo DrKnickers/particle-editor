@@ -6,14 +6,14 @@
 // - Trigger is asChild: the existing element IS the trigger; no wrapper.
 // - content: string → padded plain tier; JSX → rich tier (brings its own
 //   padding, e.g. ChainWarningTip's amber band). Nullish/empty → the bare
-//   child renders with no tooltip at all (conditional T4 sites).
+//   child renders with no tooltip at all (conditional sites).
 // - Motion/styling: `tip-animate` (the Radix Content) carries the fast-tier fade
 //   + 4px directional slip keyed off Radix data-state/data-side, reduced-motion
 //   guarded; the inner `tip-surface` div wears the visual (bg/border/--shadow-soft
 //   + overflow:hidden) so its corner-clip never clips the Arrow. Both in
 //   components.css.
 //
-// Disabled triggers (T6): disabled elements fire no pointer events — wrap
+// Disabled triggers: disabled elements fire no pointer events — wrap
 // the disabled element in <span className="inline-block"> at the call site
 // and put <Tip> on the span.
 

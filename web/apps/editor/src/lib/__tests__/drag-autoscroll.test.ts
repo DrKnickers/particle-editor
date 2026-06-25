@@ -1,4 +1,4 @@
-//: unit tests for the pure autoscroll-delta decision used by the
+// Unit tests for the pure autoscroll-delta decision used by the
 // emitter-tree reorder drag. jsdom can't exercise real layout/scroll, so the
 // only logic worth unit-testing is this pure ramp — the live scrolling is
 // verified in the browser preview.

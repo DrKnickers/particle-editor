@@ -22,7 +22,7 @@
 //   - engine/query/*         (3 of)     → IsGroundSlotEmpty / IsSkydomeSlotEmpty
 //                                         / IsBloomAvailable
 // Everything else (emitters/*, file/*, undo/*, spawner/*) still returns
-// `{ ok: false, error: "not implemented yet (Phase 3+)" }`.
+// `{ ok: false, error: "not implemented yet" }`.
 #ifndef HOST_BRIDGE_DISPATCHER_H
 #define HOST_BRIDGE_DISPATCHER_H
 
@@ -37,9 +37,9 @@
 
 #include "third_party/nlohmann/json.hpp"
 
-//: Autosave::OrphanSession is held by value in the recovery stash.
+// Autosave::OrphanSession is held by value in the recovery stash.
 #include "../Autosave.h"
-#include "../UndoStack.h"   // s52] full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
+#include "../UndoStack.h"   // full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
 
 class Engine;
 class ParticleSystem;
@@ -64,7 +64,7 @@ public:
     // deterministic defaults / no-op their writes, so the a11y goldens
     // (e.g. dialog-lighting's Force Align checkbox) see ctor defaults
     // regardless of the dev box's saved registry — the same determinism
-    // gate the HostWindow registry-restore block uses (see).
+    // gate the HostWindow registry-restore block uses.
     // `ephemeral` (true in --drive mode): suppress ALL registry writes the same
     // way `useTestHost` does, WITHOUT enabling the test-host-only behaviors
     // (CDP port, a11y determinism). It ORs into every persist gate + guards the
@@ -82,7 +82,7 @@ public:
 
     // Inject the UndoStack used to service `undo/perform` requests.
     // Stack is constructed by HostWindow alongside the Engine. Null is
-    // treated as "no undo available, applied:false". Phase 3+ emitter
+    // treated as "no undo available, applied:false". Emitter
     // mutation handlers wrap each mutating Request in a captureUndo()
     // call PRE-mutation; `undo/perform` deserializes the recorded
     // ParticleSystem snapshot and swaps it into the host-owned slot via
@@ -163,7 +163,7 @@ public:
     // handlers re-seed via their own paths.
     void ResetSavedBaseline();
 
-    // Phase 2: inject the InputDispatcher that owns the hidden
+    // Inject the InputDispatcher that owns the hidden
     // viewport popup HWND. The `viewport/input` request arm forwards
     // its params object to InputDispatcher::Dispatch. Null is tolerated
     // (the request just no-ops). Wired once in HostWindow at startup.
@@ -175,7 +175,7 @@ public:
     void Dispatch(const std::string& jsonRequest);
 
     // Synchronous variant used by HostBridgeProxy (the host-object IPC
-    // channel that survives CDP attachment — see tasks/lessons.md).
+    // channel that survives CDP attachment).
     // Parses the request, runs the same kind-handler ladder as Dispatch,
     // and returns the serialised response envelope directly to the caller
     // instead of emitting it. Events (engine/state/changed etc.) still
@@ -194,7 +194,7 @@ public:
     // persists + flips the dirty flag exactly once. Reads the live engine values.
     void CommitReferenceObjectTransform();
 
-    // s52] Push ONE pre-mutation undo point for a reference-object
+    // Push ONE pre-mutation undo point for a reference-object
     // transform change driven from the host (the gizmo). Thin wrapper over
     // CaptureUndoPoint(0) — a gizmo gesture never coalesces. Called from
     // HostWindow on the FIRST per-move mutation of a drag (so a grab without
@@ -203,7 +203,7 @@ public:
     void CaptureReferenceTransformUndoPoint();
     void EmitStatsTick(float fps, int emitters, int particles, int instances, bool overload);
 
-    // Phase 3 Screen 4 Batch B1 — emit `emitters/tree/changed` with the
+    // Emit `emitters/tree/changed` with the
     // live ParticleSystem's tree as payload. Called after each
     // mutation handler (duplicate / delete / rename / rescale /
     // link-group exempt-set edit) so the React EmitterTree re-fetches
@@ -216,7 +216,7 @@ public:
     // SpawnerPanel's badge subscription is unchanged.
     void EmitSpawnerActiveCount(int count);
 
-    // Phase 3 Screen 8 Batch 3 — editor-level file state.
+    // Editor-level file state.
     //
     // The dispatcher owns three pieces of state that don't belong on
     // Engine (Engine is engine parameters; these are editor state):
@@ -241,7 +241,7 @@ public:
     // handler after AcceleratorBridge::TryDispatch returns true.
     void EmitAcceleratorPressed(const std::string& combo);
 
-    // (Group A): push the 3D ground-plane intersection of the
+    // Push the 3D ground-plane intersection of the
     // viewport mouse cursor (world-space). Called from the viewport
     // popup's WM_MOUSEMOVE — throttled host-side to ~30 Hz so the
     // WebView2 message channel isn't saturated.
@@ -249,7 +249,7 @@ public:
 
     void EmitManipulatorDrag(const nlohmann::json& payload);   // readout pill
 
-    //: native frame-X on a dirty doc emits `app/close-requested` so
+    // Native frame-X on a dirty doc emits `app/close-requested` so
     // React pops the same Save/Discard/Cancel prompt File→Exit uses (the host
     // can't render the React prompt itself). Called from HostWindow's wndproc.
     void EmitCloseRequested();
@@ -293,7 +293,7 @@ private:
     void ApplyUndoSnapshot(const std::vector<char>& buf, size_t selIdx,
                            const UndoStack::EditorAux& aux);
 
-    // s52] Single source of truth for a PRE-mutation undo capture:
+    // Single source of truth for a PRE-mutation undo capture:
     // snapshots the live ParticleSystem + selection (as the captureUndo
     // lambda did) PLUS the engine's current reference-object transform into
     // the snapshot's side-band aux. The engine read is guarded — m_engine is
@@ -330,7 +330,7 @@ private:
     EmitFn             m_emit;
 
     // Mirrors HostWindow's `--test-host` flag — gates the registry-backed
-    // settings handlers to deterministic defaults (see ctor comment +).
+    // settings handlers to deterministic defaults (see ctor comment).
     bool               m_testHost = false;
 
     // --drive ephemeral mode: ORs into every persist gate + guards the MRU
@@ -347,7 +347,7 @@ private:
     // false.
     bool               m_settingsLive = false;
 
-    // T9] When true, EmitStatsTick is a no-op and React's
+    // When true, EmitStatsTick is a no-op and React's
     // StatusBar receives a stats/frozen-changed event so it clears
     // its local stats+cursor state and renders `—` placeholders.
     // Set via the `stats/set-frozen` bridge request. Used by a11y
@@ -358,7 +358,7 @@ private:
     UndoStack*         m_undo     = nullptr;
     HWND               m_hostHwnd = nullptr;
     ::ModManager*      m_modManager = nullptr;  // mods/* surface
-    InputDispatcher*   m_input      = nullptr;  // Phase 2: viewport/input
+    InputDispatcher*   m_input      = nullptr;  // viewport/input
 
     // host-state plumbing — pointers borrowed from HostWindow.
     // `m_pParticleSystem` is a pointer-to-unique_ptr so file/new and
@@ -376,7 +376,7 @@ private:
     // away. Engine pointer is already cached in m_engine.
     ParticleSystemInstance**         m_ppAttachedParticleSystem = nullptr;
 
-    // Phase 3 Screen 8 Batch 3 — editor-level file state. Owned here
+    // Editor-level file state. Owned here
     // rather than on Engine because they're editor concerns (not
     // engine parameters). The snapshot builder reads both fields.
     std::wstring              m_currentFilePath;
@@ -406,15 +406,15 @@ private:
     Autosave::OrphanSession   m_pendingOrphan{};
     bool                      m_hasPendingOrphan = false;
 
-    // Phase 3 Screen 8 Batch 4 — spawner config cache for snapshot
-    // parity. The host doesn't yet own a SpawnerDriver* (matches Batch 3
-    // for ParticleSystem*); spawner/start handlers cache the incoming
+    // Spawner config cache for snapshot
+    // parity. The host doesn't yet own a SpawnerDriver* (matches the
+    // ParticleSystem* situation); spawner/start handlers cache the incoming
     // params here so a subsequent engine/state/snapshot returns the
     // user's last-committed config. JSON-shaped to avoid pulling
     // SpawnerDriver.h into the dispatcher header.
     nlohmann::json m_spawnerConfig;
 
-    // Phase 3 Screen 4 Batch A — selected-emitter id (editor state, not
+    // Selected-emitter id (editor state, not
     // engine state). -1 means "no selection"; the snapshot serialises
     // that as JSON null. `emitters/select` writes this directly; the
     // snapshot builder reads it. Kept on the dispatcher (not plumbed
@@ -422,7 +422,7 @@ private:
     // window doesn't otherwise need.
     int m_selectedEmitterId = -1;
 
-    // Phase 3 Screen 4 Batch C — process-local emitter clipboard. One
+    // Process-local emitter clipboard. One
     // buffer per copied subtree, serialised via the same
     // `MemoryFile` + `Emitter::write(writer, copy=true)` pattern as
     // import-from-file (BridgeDispatcher.cpp:1607). `emitters/

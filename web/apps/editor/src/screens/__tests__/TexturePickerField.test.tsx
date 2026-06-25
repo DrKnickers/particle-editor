@@ -1,12 +1,11 @@
 // Vitest specs for TexturePickerField — the color/bump texture field with
-// a Browse button (sub-feature A) and a frequently-used palette button
-// (sub-feature B).
+// a Browse button and a frequently-used palette button.
 //
 // Browse: calls `onBrowse(slot)` and commits the returned basename via
 // `onCommit` — but only when non-empty (a cancelled dialog must not clear
 // the existing value).
 //
-// Palette (B): a palette button opens the TexturePalettePopover. Every
+// Palette: a palette button opens the TexturePalettePopover. Every
 // non-empty commit — manual blur, Browse, or palette apply — also fires
 // `textures/palette/touch-recent` so recents stay warm (legacy parity).
 
@@ -17,7 +16,7 @@ import type { ReactElement, ReactNode } from "react";
 import { TexturePickerField } from "../EmitterPropertyTabs";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
-//: TexturePickerField mounts Tips (Radix Tooltip.Root) on its label
+// TexturePickerField mounts Tips (Radix Tooltip.Root) on its label
 // and buttons, which require the app-level Tooltip.Provider — wrapper stands
 // in for it (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
@@ -111,7 +110,7 @@ describe("TexturePickerField — Browse button", () => {
   });
 });
 
-describe("TexturePickerField — palette button + usage tracking (B)", () => {
+describe("TexturePickerField — palette button + usage tracking", () => {
   it("renders a palette button that opens the palette popover", async () => {
     const b = makeBridge();
     render(

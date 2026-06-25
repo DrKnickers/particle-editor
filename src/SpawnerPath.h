@@ -4,7 +4,7 @@
 #include <d3dx9.h>
 #include <cmath>
 
-// — shaped-path kinematics for spawner-owned instances.
+// Shaped-path kinematics for spawner-owned instances.
 //
 // Pulled out of ParticleSystemInstance::Update (which is D3D-coupled and
 // can't link headless) so the closed form is one source of truth and can

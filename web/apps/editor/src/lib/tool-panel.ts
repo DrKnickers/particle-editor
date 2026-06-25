@@ -1,6 +1,6 @@
 // tool-panel.ts — Zustand atom that drives the single-open-panel host.
 //
-// Phase 3 Screen 8 Batch 2 architectural call: only one modeless tool
+// Architectural call: only one modeless tool
 // window may be open at a time. Opening any panel via the menu, the
 // BackgroundButton, or any future trigger replaces whichever was
 // previously open. Closing is by setting the atom to `null` (via the
@@ -10,7 +10,7 @@
 // architectural changes — deferred to a later refactor if user feedback
 // says one-at-a-time is too restrictive. One-at-a-time matches the
 // existing BackgroundPicker pattern, keeps the layout math trivial, and
-// ships in this batch with no new bridge surface.
+// ships with no new bridge surface.
 //
 // Consumers:
 //   - `setOpenToolPanel(id)`          → imperative setter (for handlers

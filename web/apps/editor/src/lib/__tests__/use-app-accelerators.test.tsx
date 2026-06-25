@@ -58,7 +58,7 @@ describe("useAppAccelerators", () => {
     expect(b.request).toHaveBeenCalledWith({ kind: "file/save", params: {} });
   });
 
-  it("Ctrl+Y → undo/perform redo ()", () => {
+  it("Ctrl+Y → undo/perform redo", () => {
     const b = makeFakeBridge();
     render(<Harness bridge={b} />);
     b.request.mockClear();
@@ -89,7 +89,7 @@ describe("useAppAccelerators", () => {
     expect(b.request).toHaveBeenCalledWith({ kind: "engine/set/paused", params: { paused: false } });
   });
 
-  it("Alt+Up → emitters/move-many up for the selection ()", () => {
+  it("Alt+Up → emitters/move-many up for the selection", () => {
     const b = makeFakeBridge();
     useEmitterSelectionStore.getState().setIds([7], 7);
     render(<Harness bridge={b} />);

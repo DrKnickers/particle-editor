@@ -1,4 +1,4 @@
-// Vitest unit test for the SetLinkGroupDialog (Screen 4 Batch B2).
+// Vitest unit test for the SetLinkGroupDialog.
 // Verifies that opening the modal renders both radios, that "Join
 // existing group" is disabled when no groups exist in the fetched
 // tree, and that OK with the default "Create new" radio fires
@@ -70,7 +70,7 @@ describe("SetLinkGroupDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
 
-    // OK now diffs first (), so the join lands a microtask later.
+    // OK now diffs first, so the join lands a microtask later.
     await waitFor(() => {
       const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
       expect(calls.find((c) => c.kind === "linkGroups/set-membership")).toBeDefined();
@@ -121,7 +121,7 @@ describe("SetLinkGroupDialog", () => {
     await waitFor(() => expect(ok).not.toBeDisabled());
   });
 
-  // ─── — inline join-conflict note (one-click join) ─────────
+  // ─── inline join-conflict note (one-click join) ──────────────────
 
   function makeConflictBridge(
     tree: EmitterTreeDto,

@@ -1,5 +1,5 @@
 // marquee.ts — pure geometry helpers for the emitter-tree rubber-band
-// (marquee) selection (). The DOM wiring lives in EmitterTree; these
+// (marquee) selection. The DOM wiring lives in EmitterTree; these
 // functions are kept pure so the intersection math is unit-testable
 // (jsdom's getBoundingClientRect returns zeroes, so the rect logic can't be
 // exercised through a rendered component).

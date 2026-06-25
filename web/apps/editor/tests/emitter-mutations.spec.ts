@@ -1,4 +1,4 @@
-// Phase 3 Screen 4 Batch B1 Playwright contract specs.
+// Playwright contract specs.
 //
 // Verifies:
 //   1. Right-clicking an emitter row opens the Radix ContextMenu.
@@ -226,7 +226,7 @@ test("linkGroups/list-exempt-fields returns the v1 default exempt set for a fres
   ]));
 });
 
-// ── 5. — engine-side single-member link-group enforcement ───────
+// ── 5. Engine-side single-member link-group enforcement ───────
 //
 // Drives the host's real `EnforceSingleMemberLinkGroups` via the bridge.
 // Sets up a 2-member group, then leaves one emitter — verifies the
@@ -234,7 +234,7 @@ test("linkGroups/list-exempt-fields returns the v1 default exempt set for a fres
 // otherwise have count=1 (a single-member group renders no group
 // indicator, so the data is normalised to match).
 
-test(": leaving a 2-member link group demotes the survivor to linkGroup=0", async () => {
+test("leaving a 2-member link group demotes the survivor to linkGroup=0", async () => {
   await page.keyboard.press("Escape").catch(() => {});
   const result = await page.evaluate(async () => {
     const bridge = (window as Window & {
@@ -271,7 +271,7 @@ test(": leaving a 2-member link group demotes the survivor to linkGroup=0", asyn
       params: { ids: [firstId, dupId], groupId: 42 },
     });
 
-    // Confirm both are at 42 (group has 2 members, does not
+    // Confirm both are at 42 (group has 2 members, the sweep does not
     // demote).
     const mid = await bridge.request({
       kind: "emitters/list",
@@ -286,7 +286,7 @@ test(": leaving a 2-member link group demotes the survivor to linkGroup=0", asyn
     }
 
     // Leave the duplicate (groupId=null). Group 42 now has 1 member
-    // (firstId), so's sweep demotes firstId to 0.
+    // (firstId), so the sweep demotes firstId to 0.
     await bridge.request({
       kind: "linkGroups/set-membership",
       params: { ids: [dupId], groupId: null },
@@ -309,16 +309,16 @@ test(": leaving a 2-member link group demotes the survivor to linkGroup=0", asyn
     };
   });
 
-  // invariant: both members of the (former) 2-member group ended
+  // Invariant: both members of the (former) 2-member group ended
   // at linkGroup=0. The leaver dropped to 0 via the explicit
-  // groupId=null mutation; the survivor dropped to 0 via's
+  // groupId=null mutation; the survivor dropped to 0 via the
   // post-mutation sweep.
   expect(result.firstLinkGroup).toBe(0);
   expect(result.dupLinkGroup).toBe(0);
 });
 
-test(": undo restores the pre-mutation linkGroups (atomicity of capture + sweep)", async () => {
-  // Atomicity contract:'s `EnforceSingleMemberLinkGroups()`
+test("undo restores the pre-mutation linkGroups (atomicity of capture + sweep)", async () => {
+  // Atomicity contract: the `EnforceSingleMemberLinkGroups()`
   // sweep fires AFTER the mutation in both `emitters/delete` and
   // `linkGroups/set-membership`. The single PRE-mutation
   // `captureUndo()` in each handler covers BOTH the mutation and
@@ -330,7 +330,7 @@ test(": undo restores the pre-mutation linkGroups (atomicity of capture + sweep)
   // [BridgeDispatcher.cpp's undo/perform block](../../src/host/BridgeDispatcher.cpp)
   // uses head-of-history auto-capture to reconcile the new-UI's
   // PRE-mutation captureUndo convention with UndoStack's
-  // POST-mutation cursor invariant. See tasks/todo.md §3.
+  // POST-mutation cursor invariant.
   await page.keyboard.press("Escape").catch(() => {});
   const result = await page.evaluate(async () => {
     const bridge = (window as Window & {
@@ -378,7 +378,7 @@ test(": undo restores the pre-mutation linkGroups (atomicity of capture + sweep)
     }
 
     // Delete the duplicate — captureUndo() snapshots the pre-delete
-    // state (both at 99), then deleteEmitter prunes dup, then's
+    // state (both at 99), then deleteEmitter prunes dup, then the
     // sweep demotes firstId to 0 because group 99 is now a singleton.
     await bridge.request({
       kind: "emitters/delete",
@@ -437,12 +437,12 @@ test(": undo restores the pre-mutation linkGroups (atomicity of capture + sweep)
   expect(result.undoDupPresent).toBe(true);
 });
 
-test(": load-time sweep — opening a pre-.alo with a singleton group auto-demotes it; dirty bit stays clean", async () => {
+test("load-time sweep — opening a legacy .alo with a singleton group auto-demotes it; dirty bit stays clean", async () => {
   // The fixture `tests/fixtures/nt-5-singleton.alo` was produced by
   // `ParticleEditor.exe --gen-nt5-fixture <path>` (see main.cpp's
-  // argv branch) and contains a state no-aware codepath can
+  // argv branch) and contains a state no sweep-aware codepath can
   // produce: emitter 0 at linkGroup=0, emitter 1 at linkGroup=1
-  // (alone — a pre-singleton). On file/open, the host's
+  // (alone — a legacy singleton). On file/open, the host's
   // load-time `EnforceSingleMemberLinkGroups` sweep
   // ([BridgeDispatcher.cpp:1591](../../src/host/BridgeDispatcher.cpp))
   // fires right after the ParticleSystem swap, demoting emitter 1
@@ -501,7 +501,7 @@ test(": load-time sweep — opening a pre-.alo with a singleton group auto-demot
   expect(result.error).toBeUndefined();
   // Two root emitters were saved; both should be present.
   expect(result.childrenCount).toBe(2);
-  // load-time sweep demoted the singleton. Both should be at 0.
+  // The load-time sweep demoted the singleton. Both should be at 0.
   expect(result.childrenLinkGroups).toEqual([0, 0]);
   // Sweep must NOT have triggered a dirty flag — opening a legacy
   // file shouldn't force a save-prompt for the normalization fix.
@@ -518,7 +518,7 @@ test(": load-time sweep — opening a pre-.alo with a singleton group auto-demot
   });
 });
 
-test(": deleting one member of a 2-member link group demotes the survivor", async () => {
+test("deleting one member of a 2-member link group demotes the survivor", async () => {
   await page.keyboard.press("Escape").catch(() => {});
   const result = await page.evaluate(async () => {
     const bridge = (window as Window & {
@@ -553,7 +553,7 @@ test(": deleting one member of a 2-member link group demotes the survivor", asyn
     });
 
     // Delete the duplicate. Group 73 now has 1 member (firstId) →
-    // demotes firstId to 0.
+    // the sweep demotes firstId to 0.
     await bridge.request({
       kind: "emitters/delete",
       params: { id: dupId },

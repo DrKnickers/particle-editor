@@ -5,7 +5,7 @@
 // its in-game Name and resolves it to a renderable `.alo` model path, through
 // the injected IFileManager (mod -> base -> MEG). Pure data + FileManager --
 // no engine / D3D / UI coupling -- so it is unit-testable with a mock FM and
-// reused by the engine () to populate the reference-object picker.
+// reused by the engine to populate the reference-object picker.
 //
 // Parallels SkydomeEnvironment (the skydome-list reader) but spans the WHOLE
 // object graph. "Data\\XML\\GameObjectFiles.xml" lists ~120 object files; each
@@ -164,7 +164,7 @@ struct GameObjectCatalog
 bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out);
 
 // Lazy per-model renderability probe (loads + decodes the `.alo` via AloModel).
-// The catalog stores only XML; calls this on-select and caches the result
+// The catalog stores only XML; the engine calls this on-select and caches the result
 // (the `.alo` parse is far too costly to run for every object at build time).
 //   Renderable          -- has >= 1 rigid, visible sub-mesh the renderer draws
 //   SkinnedUnsupported  -- loads, but every visible sub-mesh is skinned (v1 skip)

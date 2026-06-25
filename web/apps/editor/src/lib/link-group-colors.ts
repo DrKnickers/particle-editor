@@ -1,7 +1,7 @@
 // link-group-colors.ts — palette for the EmitterTree's link-group
 // indicators (spine, tint, badge).
 //
-// Mirrors the legacy `kBracketPalette` (visual port): 8 colours
+// Mirrors the legacy `kBracketPalette`: 8 colours
 // cycled by `linkGroup % 8`. Group 0 is "unlinked" and never gets a
 // colour — colorForGroup(0) returns null so callers know to skip
 // rendering.
@@ -35,3 +35,4 @@ export function colorForGroup(group: number): string | null {
   const idx = (group - 1) % BRACKET_PALETTE_SIZE;
   return BRACKET_PALETTE[idx] ?? null;
 }
+

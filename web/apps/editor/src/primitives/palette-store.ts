@@ -1,6 +1,6 @@
 // palette-store.ts — Zustand slice for the 16-slot custom color palette.
 // Persisted to localStorage in browser mode; native host registry persistence
-// is wired in Phase 3 Screen 8 when Lighting dialog ships.
+// is wired in when the Lighting dialog ships.
 //
 // Slot shape: an RGB tuple [r, g, b] (0-255 each) or null for empty slots.
 // 16 slots matches Win32 ChooseColor's custom-color array size.

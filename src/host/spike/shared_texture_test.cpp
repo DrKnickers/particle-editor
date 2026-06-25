@@ -1,11 +1,11 @@
-// shared_texture_test.cpp — Phase 3 Stage 2c
+// shared_texture_test.cpp
 // ====================================================
 //
 // Standalone CLI exe that verifies the D3D9Ex shared-handle pipeline
 // end-to-end without involving the real Engine class or WebView2:
 //
-//   1. Direct3DCreate9Ex + CreateDeviceEx (same flags Engine uses post-
-//      Stage 1: HARDWARE_VERTEXPROCESSING | MULTITHREADED).
+//   1. Direct3DCreate9Ex + CreateDeviceEx (same flags Engine uses:
+//      HARDWARE_VERTEXPROCESSING | MULTITHREADED).
 //   2. CreateTexture(USAGE_RENDERTARGET, D3DPOOL_DEFAULT, &sharedHandle) —
 //      the exact API call AlphaCompositor::Resize now makes.
 //   3. SetRenderTarget(level0(sharedTex)); Clear(knownColor); EndScene;
@@ -17,12 +17,12 @@
 //   6. Compare every pixel against the expected packed DWORD. Exit code
 //      0 on bit-exact match, 1 on mismatch, 2 on any API/init failure.
 //
-// Stage 0's dxgi_spike already proved this pipeline can produce visible
+// The dxgi_spike already proved this pipeline can produce visible
 // frames; this test specifically locks the BIT-EXACT contract: the
 // pixels D3D9 wrote ARE the pixels D3D11 reads, byte-for-byte. That's
-// the load-bearing invariant for Stage 4 — the DComp visual will show
-// whatever D3D11 reads, and the engine writes via D3D9. If they don't
-// match, the entire phase 3 architecture breaks.
+// the load-bearing invariant for the engine visual — the DComp visual
+// will show whatever D3D11 reads, and the engine writes via D3D9. If
+// they don't match, the entire shared-handle architecture breaks.
 //
 // Usage:
 //   shared_texture_test.exe [--w=N] [--h=N] [--color=0xAARRGGBB]

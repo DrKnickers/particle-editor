@@ -17,7 +17,7 @@ import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 import { EmitterTree } from "../EmitterTree";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 
-//: EmitterTree mounts Tips (Radix Tooltip.Root), which require the
+// EmitterTree mounts Tips (Radix Tooltip.Root), which require the
 // Tooltip.Provider that App.tsx supplies in production — this helper stands
 // in for it here (same precedent as EmitterTree.test.tsx).
 const renderWithTooltips = (ui: ReactElement) =>
@@ -289,12 +289,12 @@ describe("EmitterTree multi-drag preview", () => {
     fireEvent.pointerUp(smokeBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 103 });
   });
 
-  it("cancels an in-flight drag when the host mutates the tree mid-gesture — no stale-id commit, no stale preview [audit A1/A2/A3]", async () => {
+  it("cancels an in-flight drag when the host mutates the tree mid-gesture — no stale-id commit, no stale preview", async () => {
     // A structural change can land mid-drag: undo/redo/paste reach the app
     // accelerators focus-independently, or another pane mutates. The drag's
     // closures captured POSITIONAL ids + geometry at pointerdown, so the
     // gesture must abort on emitters/tree/changed rather than commit stale ids
-    // (A1) or paint a stale gap/dim (A2/A3). This bridge records the
+    // or paint a stale gap/dim. This bridge records the
     // tree/changed subscriber so the test can fire it mid-gesture.
     const tree = fixtureTree();
     const handlers = new Map<string, (e: unknown) => void>();
@@ -336,12 +336,12 @@ describe("EmitterTree multi-drag preview", () => {
       handlers.get("emitters/tree/changed")?.({ payload: tree });
     });
 
-    // The gesture is aborted: the make-room gap is gone (A2) and the dim is
-    // cleared (A3) — no stale preview against the reshuffled tree.
+    // The gesture is aborted: the make-room gap is gone and the dim is
+    // cleared — no stale preview against the reshuffled tree.
     expect(screen.queryByTestId("drop-gap-at-1")).toBeNull();
     expect(document.querySelector('button[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "false");
 
-    // Releasing now commits NOTHING — no stale-id reorder/drop (A1).
+    // Releasing now commits NOTHING — no stale-id reorder/drop.
     fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 40, clientY: 26 });
     const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
     expect(calls.find((c) => c.kind === "emitters/reorder-many")).toBeUndefined();

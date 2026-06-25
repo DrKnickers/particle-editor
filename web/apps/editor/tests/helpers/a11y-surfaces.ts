@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test";
 
 // Each surface is a "drive the app to this state" recipe used by the
-// composition DOM-snapshot specs (T10, captures via
+// composition DOM-snapshot specs (captures via
 // page.accessibility.snapshot()). id matches the golden filename:
 // a11y-goldens/<id>.composition.golden.yaml. (The legacy HWND UIA specs
-// (T9) + their <id>.golden.json goldens were removed in.)
+// + their <id>.golden.json goldens were removed.)
 export type SurfaceCapture = {
   id: string;
   setup: (page: Page) => Promise<void>;
@@ -14,13 +14,13 @@ export type SurfaceCapture = {
 async function dismissModals(page: Page) {
   // Coarse cleanup — closes any open menu / dialog. If a test leaves
   // the editor mid-rename or mid-IME, this won't recover; surface that
-  // through R6 follow-ups if it bites.
+  // through follow-ups if it bites.
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 }
 
 /**
- *: force the canonical captured UI state before a golden run.
+ * Force the canonical captured UI state before a golden run.
  *
  * The native a11y harness reuses the host's STABLE WebView2 user-data
  * folder (`ComputeUserDataFolder`, src/host/HostWindow.cpp), so whatever
@@ -52,9 +52,9 @@ export async function seedCanonicalUiState(page: Page): Promise<void> {
   );
 }
 
-// Note (T5): EmitterPropertyTabs.tsx already exposes
+// Note: EmitterPropertyTabs.tsx already exposes
 // `data-testid="emitter-property-tabs"` on its Tabs.Root (used by
-// existing vitest + Playwright property-tabs specs). The T5 plan
+// existing vitest + Playwright property-tabs specs). The plan
 // asked for a new `property-tabs` testid, but adding a duplicate
 // would require either wrapping Tabs.Root in an otherwise-pointless
 // div or renaming the existing testid (scope creep — 5+ active
@@ -159,7 +159,7 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
   // surface + every full-page golden's toolbar region).
 ];
 
-// ─── T6: dialog surfaces ──────────────────────────────────────────────
+// ─── Dialog surfaces ──────────────────────────────────────────────────
 //
 // Every dialog captured here renders through `<Modal>` (Radix Dialog
 // primitives) or `<ToolPanel>` (a self-rendered `role="dialog"`
@@ -173,14 +173,14 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
 //     `role="menuitem"` via Radix.
 //   - Context-menu-triggered dialogs (tree-context atom): right-click
 //     the first emitter-tree row to open the row's ContextMenu, then
-//     click the item. Assumes the T9 fixture loads at least one root
+//     click the item. Assumes the fixture loads at least one root
 //     emitter (a11y-base-state.alo).
 //
-// Deferred surfaces (see tasks/a11y-deferred-surfaces.md for reasoning):
+// Deferred surfaces:
 //   - dialog-save-changes (needs a dirty in-memory document)
 //   - dialog-link-group-settings (needs an emitter with linkGroup > 0)
 //   - background-picker / ground-texture (no longer Modal — replaced
-//     by toolbar Popovers in/D6)
+//     by toolbar Popovers)
 //   - primitives-gallery (separate ?demo=primitives route, full-page
 //     replacement — not a dialog overlay)
 //   - spawner (always-on right column, not a dialog)
@@ -254,7 +254,7 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   // the Lighting pane as a section, so they're captured by dialog-lighting.
 
   {
-    // autosave crash-recovery. The real check-recovery is suppressed
+    // Autosave crash-recovery. The real check-recovery is suppressed
     // under --test-host, so drive the dialog via the ?demo=autosave-recovery
     // route, which renders it with a FIXED both-tiers orphan + FIXED nowMs —
     // deterministic age text for the golden.
@@ -319,18 +319,18 @@ export const DIALOG_SURFACES: SurfaceCapture[] = [
   },
 ];
 
-// ─── T7: keyboard / interaction surfaces ──────────────────────────────
+// ─── Keyboard / interaction surfaces ──────────────────────────────────
 //
 // These drivers are mode-agnostic — the same setup/teardown recipes are
-// consumed by the HWND UIA specs (T9) and the composition DOM-snapshot
-// specs (T10). No menu or dialog is left open by any driver here, so
+// consumed by the HWND UIA specs and the composition DOM-snapshot
+// specs. No menu or dialog is left open by any driver here, so
 // dismissModals() is not needed; teardowns are either a single Escape
 // (cancel rename) or no-op.
 //
 // Assumption: kbd-emitter-rename-mode assumes the loaded fixture exposes
 // at least one root emitter and that F2 on the focused row enters rename
 // mode. Whether rename-mode actually appears in the captured UIA tree is
-// validated in T9 when goldens are generated.
+// validated when goldens are generated.
 
 export const KEYBOARD_SURFACES: SurfaceCapture[] = [
   {
@@ -368,36 +368,36 @@ export const KEYBOARD_SURFACES: SurfaceCapture[] = [
   },
 ];
 
-// ─── T8: custom-primitive surfaces ────────────────────────────────────
+// ─── Custom-primitive surfaces ────────────────────────────────────────
 //
 // CurveEditor canvas:
-//   The T8 plan referenced `[data-testid="curve-editor-canvas"]`, which
+//   The plan referenced `[data-testid="curve-editor-canvas"]`, which
 //   doesn't exist. `data-testid="curve-editor-svg"` is already on the
 //   interactive SVG canvas at CurveEditor.tsx:802 and CurveEditor.tsx:1473
 //   (two render paths — single-channel and multi-channel). The SVG has no
 //   `tabIndex`, so `.click()` delivers pointer-active state rather than
 //   keyboard focus — the surface id `curve-editor-focused` captures the
-//   cursor-active UIA tree, which is what T9 goldens will pin down.
+//   cursor-active UIA tree, which is what the goldens will pin down.
 //   Reusing the existing testid is surgical (no React change needed) per
-//   the T5 precedent of preferring existing testids over new duplicate
+//   the precedent of preferring existing testids over new duplicate
 //   attrs. The surface id remains unchanged — it's an internal label for
 //   the golden file, not a selector.
 //
 // Spinner:
-//   The T8 plan referenced `[data-testid="spinner-emit-rate"]` — a
+//   The plan referenced `[data-testid="spinner-emit-rate"]` — a
 //   placeholder name that doesn't correspond to any real field. The
 //   closest semantically correct control on the Basic tab is
 //   "Particles/second:" (the `nParticlesPerSecond` FieldSpinner under the
 //   Continuous stream radiogroup at EmitterPropertyTabs.tsx:491). This is
 //   the first spinner on the Basic tab that represents a continuous
 //   emission-rate quantity (analogous to "emit rate" in plain language).
-//   Path A (surgical): added optional `testId?: string` prop to
+//   The surgical fix: added optional `testId?: string` prop to
 //   `FieldSpinner` in EmitterPropertyTabs.tsx and applied
 //   `testId="spinner-particles-per-second"` at that one callsite. The prop
 //   forwards onto FieldSpinner's outermost `.form-row` div, which already
 //   wraps the input. No change to the generic Spinner.tsx primitive.
 //   The surface selector targets `input` inside that row (the focusable
-//   element), matching the T8 plan's `.focus()` approach.
+//   element), matching the plan's `.focus()` approach.
 
 export const CUSTOM_PRIMITIVE_SURFACES: SurfaceCapture[] = [
   {

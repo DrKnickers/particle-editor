@@ -15,7 +15,7 @@ int main(){
     selected = RefLockResolveSelected(selected, /*locked=*/true);
     ok(selected == false, "lock while selected -> deselected");
 
-    // 3) Scenario: auto-select-on-load while locked stays deselected (Risk 1 -- the
+    // 3) Scenario: auto-select-on-load while locked stays deselected (the
     //    SetReferenceObject path computes !name.empty() through the SAME rule).
     bool nameNonEmpty = true;
     ok(RefLockResolveSelected(nameNonEmpty, /*locked=*/true) == false,

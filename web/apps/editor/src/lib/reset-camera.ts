@@ -2,7 +2,7 @@
 // vectors, shared by the View → Reset Camera menu item (MenuBar.tsx) and the
 // Ctrl+Home accelerator (use-app-accelerators.ts). Both dispatch
 // `engine/set/camera` with these exact values, so keeping ONE constant means
-// the menu item and the shortcut can never silently drift apart ().
+// the menu item and the shortcut can never silently drift apart.
 //
 // The values mirror the legacy editor exactly:
 //   - ID_VIEW_RESETCAMERA handler            — the legacy main.cpp

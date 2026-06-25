@@ -56,7 +56,7 @@ describe("Section", () => {
   });
 
   it("collapsed state flips data-open on the section container (drives chevron rotation in CSS)", () => {
-    // B1.3.2: rotation is driven by `[data-open="false"]` on .panel-section
+    // Rotation is driven by `[data-open="false"]` on .panel-section
     // (matching the `:not([open])` selector for native <details> in the
     // shared CSS). The .collapsed modifier class is gone.
     const { container } = render(<Section title="Collision"><div>child</div></Section>);

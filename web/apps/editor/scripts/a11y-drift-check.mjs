@@ -1,6 +1,6 @@
 // a11y-goldens drift check (Phase 1). Regenerates the composition golden
 // lane on the current tree and reports drift. Reuses run-native-tests.mjs for
-// capture. (The legacy `[hwnd]` lane was removed in with the legacy UI.)
+// capture. (The legacy `[hwnd]` lane was removed with the legacy UI.)
 //
 //   node scripts/a11y-drift-check.mjs [--no-build]
 //   exit 0 = no stable drift  ·  2 = drift (files on stdout)  ·  1 = error
@@ -116,7 +116,7 @@ function ensureDebugHost(msbuild) {
 // gitignored dist/ is absent, so this build is load-bearing, not optional.
 //
 // Built UNCONDITIONALLY (not staleness-gated on web src) so the drift capture
-// always reflects current source — this also closes trap, where a
+// always reflects current source — this also closes the trap where a
 // stale-but-present dist silently served the OLD UI and the run passed green
 // with zero golden diff. `--no-build` (NO_BUILD) skips it for fast local re-runs.
 //
@@ -148,7 +148,7 @@ function buildWebDist() {
   // actually (re)produced it. vite runs with emptyOutDir:true (it WIPES dist/
   // first), so exit 0 alone doesn't prove output landed — a no-op or partial
   // build could leave dist/ empty/stale and the goldens would capture the wrong
-  // UI green (the trap this build exists to close). Comparing two file
+  // UI green (the stale-dist trap this build exists to close). Comparing two file
   // mtimes (not wall-clock) sidesteps statSync-float vs Date.now-int skew.
   let beforeMs = -1;
   try { beforeMs = statSync(indexHtml).mtimeMs; } catch { /* no prior dist */ }

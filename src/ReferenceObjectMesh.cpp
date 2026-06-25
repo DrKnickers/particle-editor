@@ -300,7 +300,7 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath,
                 continue;
 
             // Phase/blend class. Occluded is never visible geometry. Heat is
-            // a deferred two-stage scene-composite (D3) -> log + skip in v1. Opaque
+            // a deferred two-stage scene-composite -> log + skip in v1. Opaque
             // (incl. MeshCollision = flat blue) + additive/alpha are KEPT and drawn
             // (the latter two in the transparent pass). Shadow-volume sub-meshes fall
             // through to build a RefSubMeshGpu but are routed into m_shadowSubMeshes
@@ -312,7 +312,7 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath,
             if (rc == ALO_RC_HEAT)
             {
 #ifndef NDEBUG
-                fprintf(stderr, "[RefObj] skip Heat sub-mesh \"%s\" -- faithful Heat phase deferred (S46/D3)\n",
+                fprintf(stderr, "[RefObj] skip Heat sub-mesh \"%s\" -- faithful Heat phase deferred\n",
                         sm.shaderName.c_str());
 #endif
                 continue;

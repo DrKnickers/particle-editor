@@ -1,6 +1,6 @@
-// Phase 3 Stage 4f #1 — DXGI transport log-evidence gate.
+// DXGI transport log-evidence gate.
 //
-// The headline Stage 4 ship gate: the DXGI swapchain + DComp engine
+// The headline ship gate: the DXGI swapchain + DComp engine
 // visual + per-frame CopyResource + Present1 pipeline is alive and
 // stable in steady state. Asserts:
 //   1. `[COMP-engine-attach]` log line present (AttachEngineVisual
@@ -25,7 +25,7 @@
 // composition mode shows only the React DOM (empty `<img>`,
 // transparent `<canvas>`) — not the DXGI pixels. So this spec
 // CANNOT visually assert "engine pixels are correct"; that's
-// irreducible to manual smoke (sub-plan §6 4c acceptance) or
+// irreducible to manual smoke or
 // host-side AlphaCompositor::CaptureSnapshotPng bridge inspection.
 //
 // What this spec DOES catch:
@@ -47,7 +47,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy" /* */;
+const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 
 // Host.log path — written by the host's Log() macro, see HostWindow.cpp.
 // Path mirrors what the [host] WebView2 user-data folder line points at.
@@ -82,8 +82,7 @@ test.beforeEach(({}, testInfo) => {
       type: "skip-reason",
       description:
         "ALO_HOSTING_MODE == 'legacy' (composition mode inactive) — DXGI transport gate not " +
-        "applicable to this run. Set both ALO_HOSTING_MODE != legacy (default) " +
-        "and retired to enable.",
+        "applicable to this run. Set ALO_HOSTING_MODE != legacy (default) to enable.",
     });
     test.skip();
   }

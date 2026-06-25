@@ -1,4 +1,4 @@
-// B1.4 — Playwright contract tests for the resizable splitter
+// Playwright contract tests for the resizable splitter
 // layout (PanelLayout.tsx + react-resizable-panels 4.x).
 //
 // Pinned behaviours:

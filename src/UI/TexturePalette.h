@@ -1,7 +1,7 @@
 #ifndef TEXTUREPALETTE_H
 #define TEXTUREPALETTE_H
 
-// — frequently-used textures palette.
+// Frequently-used textures palette.
 //
 // PaletteStore is a process-global singleton holding the per-mod palette
 // state (pinned + recent texture filenames, last-used Color/Bump filter).
@@ -11,7 +11,7 @@
 //
 // This header declares the data layer (PaletteStore) plus the bridge
 // thumbnail helpers (GetThumbnail / GetTexturePreview) the React palette
-// consumes. The legacy native popup was removed with arch-A ().
+// consumes. The legacy native popup was removed with the old architecture.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -119,13 +119,13 @@ private:
 };
 
 // ============================================================================
-// New-UI bridge thumbnails (sub-feature B)
+// New-UI bridge thumbnails
 //
 // The palette popover lives in React (WebView2), so thumbnails must
 // cross the bridge as image data rather than being blitted to a Win32
 // window. GetThumbnail decodes a texture (by basename) using the same D3DX
 // technique as the legacy popup's DecodeThumbnail, GDI+ PNG-encodes it, and
-// returns a `data:image/png;base64,...` URI on success.: it also
+// returns a `data:image/png;base64,...` URI on success. It also
 // reports WHY there's no image — Missing (FileManager couldn't find the file)
 // vs Broken (file present but empty / won't decode) — mirroring the legacy
 // popup's grey-X vs magenta-X placeholders, so React can tell them apart.
@@ -142,7 +142,7 @@ ThumbnailResult GetThumbnail(const std::wstring& filename,
 void            ClearBridgeThumbCache();
 
 // ============================================================================
-// — Atlas frame picker preview
+// Atlas frame picker preview
 //
 // GetTexturePreview decodes a texture at (close to) its native resolution
 // rather than the fixed square thumbnail size, so the atlas frame picker can

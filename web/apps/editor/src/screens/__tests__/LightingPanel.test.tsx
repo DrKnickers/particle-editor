@@ -10,7 +10,7 @@ import type { ReactElement, ReactNode } from "react";
 import { LightingPanel } from "../LightingPanel";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
-//: the Mirror Sun button mounts a Tip (Radix Tooltip.Root) while
+// the Mirror Sun button mounts a Tip (Radix Tooltip.Root) while
 // disabled, which requires the app-level Tooltip.Provider — wrapper stands
 // in for it (precedent: renderToolbar in Toolbar.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (
@@ -86,7 +86,7 @@ describe("LightingPanel", () => {
   it("Mirror Sun button dispatches engine/set/light for both fills (with Force Align disabled)", () => {
     const bridge = makeStubBridge();
     render(<LightingPanel bridge={bridge} onClose={() => {}} />);
-    // Group D: Mirror Sun is disabled while Force Align is on
+    // Mirror Sun is disabled while Force Align is on
     // (matches legacy — Mirror Sun is undefined while the fill angles
     // are pinned to sun.az + offset). Toggle Force Align off first.
     const forceAlign = screen.getByLabelText("Force Align Fill Lights") as HTMLInputElement;
@@ -138,7 +138,7 @@ describe("LightingPanel", () => {
     expect(sun.params.specular[3]).toBe(1);
   });
 
-  it("Force Align ON cascades sun.az to fill1/fill2 azimuth ()", () => {
+  it("Force Align ON cascades sun.az to fill1/fill2 azimuth", () => {
     const bridge = makeStubBridge();
     render(<LightingPanel bridge={bridge} onClose={() => {}} />);
     // Default state: Force Align is ON. Changing sun.az should

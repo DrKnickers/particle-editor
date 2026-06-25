@@ -59,7 +59,7 @@ public:
     // been called with a non-degenerate size.
     IDirect3DSurface9* GetRenderTarget() const;
 
-    // B1.4 T4c: the "scene rect" is the visible viewport
+    // The "scene rect" is the visible viewport
     // sub-region (the centre quadrant), in viewport-client coords.
     // CaptureSnapshotPng / CaptureSnapshotToFile crop the readback to
     // this rect so the modal backdrop / --capture PNG show only the
@@ -71,7 +71,7 @@ public:
     // first layout/scene-rect.
     void SetSceneRect(int x, int y, int w, int h);
 
-    // B1.3.1.1: capture the most recent pre-stamp engine frame as a
+    // Capture the most recent pre-stamp engine frame as a
     // base64-encoded PNG. `outBase64` is filled with the PNG payload
     // (no "data:image/png;base64," prefix — the caller adds that).
     // `outW` / `outH` are the snapshot pixel dimensions. Returns
@@ -96,7 +96,7 @@ public:
     // initialized by the host (HostWindow::Run). UI-thread only.
     bool CaptureSnapshotToFile(const std::wstring& path);
 
-    // Phase 3 Stage 2: NT-handle alias of the offscreen render
+    // NT-handle alias of the offscreen render
     // target, allocated in Resize via CreateTexture(USAGE_RENDERTARGET,
     // D3DPOOL_DEFAULT, &sharedHandle). A parallel D3D11 device opens it
     // via OpenSharedResource (validated end-to-end in the dxgi_spike at

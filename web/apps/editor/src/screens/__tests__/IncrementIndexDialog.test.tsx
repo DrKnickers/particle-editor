@@ -1,4 +1,4 @@
-// Vitest unit test for the IncrementIndexDialog (Screen 4 Batch B1).
+// Vitest unit test for the IncrementIndexDialog.
 // Verifies that the modal renders a Spinner and OK fires
 // `emitters/duplicate-with-index-increment`.
 

@@ -1,4 +1,4 @@
-// drag-autoscroll.ts —. Pure decision for how fast to scroll a list
+// drag-autoscroll.ts — pure decision for how fast to scroll a list
 // while a drag hovers near its top/bottom edge. The emitter-tree reorder drag
 // (EmitterTree.tsx) runs a requestAnimationFrame loop that adds this delta to
 // the scroll container's scrollTop each frame.

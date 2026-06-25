@@ -1,5 +1,5 @@
-// Vitest unit tests for the EmitterTree sidebar (Phase 3 Screen 4
-// Batch A). Verifies the fixture tree renders 3 roots with their
+// Vitest unit tests for the EmitterTree sidebar. Verifies the
+// fixture tree renders 3 roots with their
 // children at the right indentation and that clicking a row fires
 // emitters/select with the row's id.
 
@@ -17,7 +17,7 @@ import { useEmitterTreeStore } from "@/lib/emitter-tree";
 import { useDeleteConfirmStore, requestDeleteEmitters } from "@/lib/delete-emitters";
 import { writeOverloadGuard } from "@/lib/overload-guard";
 
-//: EmitterTree mounts Tips (Radix Tooltip.Root) on the per-row eye
+// EmitterTree mounts Tips (Radix Tooltip.Root) on the per-row eye
 // toggles and the footer toolbar, which requires the Tooltip.Provider that
 // App.tsx supplies in production — this helper stands in for it here.
 const renderWithTooltips = (ui: ReactElement) =>
@@ -189,7 +189,7 @@ describe("EmitterTree", () => {
     expect(selectCall.params).toEqual({ id: 1 });
   });
 
-  // ─── Batch B2 — multi-select via Ctrl/Cmd + Shift modifiers ──────
+  // ─── multi-select via Ctrl/Cmd + Shift modifiers ─────────────────
 
   it("Ctrl+click on an unselected row toggles it into the multi-selection (primary updates)", async () => {
     const bridge = makeStubBridge();
@@ -256,7 +256,7 @@ describe("EmitterTree", () => {
     expect([...(pending?.ids ?? [])].sort((a, b) => a - b)).toEqual([0, 5]);
   });
 
-  // ─── Batch B3 — drag/drop reorder + reparent ─────────────────────
+  // ─── drag/drop reorder + reparent ────────────────────────────────
 
   /** Stub the row's getBoundingClientRect so the drop-zone math has a
    *  predictable rectangle. The component reads clientY relative to
@@ -387,7 +387,7 @@ describe("EmitterTree", () => {
     expect(calls.find((c) => c.kind === "emitters/reorder-many")).toBeUndefined();
   });
 
-  // ─── — cancel an in-progress reorder drag ─────────────────
+  // ─── cancel an in-progress reorder drag ──────────────────────────
 
   /** Start a single-root drag and leave it ACTIVE (past the threshold) without
    *  releasing, so the cancel paths can be exercised. clientY 75 (Sparks' upper
@@ -494,7 +494,7 @@ describe("EmitterTree", () => {
     expect(sel.primary).toBe(4);
   });
 
-  // ─── Batch C — inline rename ─────────────────────────────────────
+  // ─── inline rename ───────────────────────────────────────────────
 
   it("F2 on the focused row enters inline rename mode (input renders with current name)", async () => {
     const bridge = makeStubBridge();
@@ -553,7 +553,7 @@ describe("EmitterTree", () => {
     expect(calls.find((c) => c.kind === "emitters/rename")).toBeUndefined();
   });
 
-  // ─── Batch C — keyboard nav ──────────────────────────────────────
+  // ─── keyboard nav ────────────────────────────────────────────────
 
   it("ArrowDown on the tree shifts primary to the next row in flat order", async () => {
     const bridge = makeStubBridge();
@@ -571,7 +571,7 @@ describe("EmitterTree", () => {
     expect(useEmitterSelectionStore.getState().primary).toBe(1);
   });
 
-  // ─── Batch C — Ctrl+C clipboard dispatch ─────────────────────────
+  // ─── Ctrl+C clipboard dispatch ───────────────────────────────────
 
   it("Ctrl+C on the tree dispatches emitters/copy with the current selection ids", async () => {
     const bridge = makeStubBridge();
@@ -591,7 +591,7 @@ describe("EmitterTree", () => {
     expect(copyCall.params).toEqual({ ids: [0, 3] });
   });
 
-  // ─── Task 5 — per-row visibility eye button ──────────────────────
+  // ─── per-row visibility eye button ───────────────────────────────
 
   it("each row renders a per-row visibility eye button", async () => {
     const bridge = makeStubBridge();
@@ -683,7 +683,7 @@ describe("EmitterTree", () => {
     expect(screen.getAllByLabelText("death child")).toHaveLength(1);
   });
 
-  // ─── Task 7 — toolbar moves below the tree, restyles to .tree-actions ──
+  // ─── toolbar moves below the tree, restyles to .tree-actions ──────
 
   it("toolbar renders AFTER the tree's <ul> in DOM order", async () => {
     const bridge = makeStubBridge();
@@ -823,7 +823,7 @@ describe("EmitterTree", () => {
     expect(hideAll.querySelector("svg")).not.toBeNull();
   });
 
-  // ─── P7 — per-row link indicators (badge + spine) ──────────
+  // ─── per-row link indicators (badge + spine) ─────────────────────
 
   it("link dot test ids no longer exist — emitter-link-dot-* is gone", async () => {
     const bridge = makeStubBridge();
@@ -873,7 +873,7 @@ describe("EmitterTree", () => {
     expect(screen.queryByTestId("emitter-link-spine-1")).toBeNull();
   });
 
-  // ─── P7 — badge / spine click selects the whole group ───────
+  // ─── badge / spine click selects the whole group ─────────────────
 
   it("clicking the link badge selects all members of that group", async () => {
     const bridge = makeStubBridge();
@@ -960,7 +960,7 @@ describe("EmitterTree", () => {
     expect(rowFor(0).getAttribute("data-link-hover")).toBe("false");
   });
 
-  // ─── P7 — Dissolve link group ──────────────────────────────
+  // ─── Dissolve link group ─────────────────────────────────────────
 
   it("Dissolve Link Group on a linked row unlinks every member at once", async () => {
     const bridge = makeStubBridge();
@@ -1018,16 +1018,16 @@ describe("EmitterTree delete gating (helper-level)", () => {
   });
 });
 
-// ─── — chain-load warning glyph ────────────────────────────────
+// ─── chain-load warning glyph ────────────────────────────────────────
 //
 // These render against the REAL MockBridge (not the stub) because the
 // mock decorates tree payloads with live spawn values from the
 // properties overlay (`decorateSpawn` in bridge/mock.ts) — patching the
 // overlay then rendering exercises the same data path the browser-mode
-// editor uses.: every render goes through renderWithTooltips
+// editor uses. Every render goes through renderWithTooltips
 // (defined near the imports) because EmitterTree now mounts Tips
 // unconditionally (per-row eye toggles + footer toolbar).
-describe("chain-load warning glyph ()", () => {
+describe("chain-load warning glyph", () => {
   beforeEach(() => {
     // The overlay is module-scoped; reset so a patched spawn value can't
     // leak between tests.
@@ -1049,7 +1049,7 @@ describe("chain-load warning glyph ()", () => {
     useMockEmitterProperties.getState().patch(0, { nParticlesPerSecond: 20_000, lifetime: 1 });
     renderWithTooltips(<EmitterTree bridge={new MockBridge()} />);
     const glyph = await screen.findByTestId("emitter-chain-warning-0");
-    //: the native `title` is gone (the rich Tip replaced it); the
+    // the native `title` is gone (the rich Tip replaced it); the
     // aria-label now carries the FULL formatChainWarning breakdown.
     expect(glyph.getAttribute("title")).toBeNull();
     expect(glyph.getAttribute("aria-label")).toContain("20,000");
@@ -1075,7 +1075,7 @@ describe("chain-load warning glyph ()", () => {
   });
 });
 
-// ── Cap-tracking glyph (overload-indicator-consistency spec, Part 1) ──
+// ── Cap-tracking glyph ──
 // The glyph threshold follows the configurable guard cap when the guard
 // is enabled, and falls back to the advisory 10k when disabled.
 //

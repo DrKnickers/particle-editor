@@ -1,4 +1,4 @@
-// dxgi_spike.cpp — Phase 3 Stage 0 spike app
+// dxgi_spike.cpp — DXGI shared-handle visual-hosting spike app
 // =====================================================
 //
 // Standalone exe that proves (or disproves) the DXGI shared-handle visual-
@@ -30,12 +30,12 @@
 // visual tree topology, per-frame phase timings via QueryPerformanceCounter.
 //
 // CRITICAL: this is the FOURTH attempt at WebView2 visual hosting on this
-// codebase. The first three (v1/v2/v3) all produced opaque-white output
-// despite every API returning S_OK. See
-//   docs/superpowers/research/dxgi---history.md
-// for the post-mortem. The differential here vs: both engine and
+// codebase. The first three all produced opaque-white output
+// despite every API returning S_OK. The differential here vs those
+// attempts: both engine and
 // WebView2 are DComp visuals, NOT one-DComp-one-Win32-child. That mixed
-// paradigm is what v1/v2/v3 and SetWindowRgn both hit. If THIS
+// paradigm is what the earlier composition attempts and the SetWindowRgn
+// attempt both hit. If THIS
 // spike also produces white, mark NO-GO and revert. Do not iterate.
 //
 // Build: dxgi_spike.vcxproj (this dir). Output: x64/Debug/dxgi_spike.exe.
@@ -50,7 +50,7 @@
 //   - Top + bottom 40px show semi-transparent dark bars with text (WebView2)
 //   - Clicking the bottom-right "click probe" button changes its text
 //   - %TEMP%\dxgi_spike.log: [SPIKE] frame=N total=X.XXms fps=YYY.Y …
-//   - Per CLAUDE.md: don't conclude from surface symptoms — verify
+//   - Don't conclude from surface symptoms — verify
 //     log shows non-zero phase timings AND visual surface matches.
 
 #define WIN32_LEAN_AND_MEAN
@@ -410,8 +410,8 @@ bool InitD3D11AndSwapchain() {
 
 bool InitDComp() {
     // V2 factory function, V1 IID — same shape the sample uses successfully
-    // on this exact machine. v2 tried V2 IDCompositionDesktopDevice and
-    // it still produced white; v3 reverted to V1 and didn't help either but
+    // on this exact machine. An earlier attempt tried V2 IDCompositionDesktopDevice and
+    // it still produced white; a later one reverted to V1 and didn't help either but
     // matches the known-good sample.
     HRESULT hr = DCompositionCreateDevice2(nullptr, IID_PPV_ARGS(g_dcompDevice.GetAddressOf()));
     if (FAILED(hr) || !g_dcompDevice) {
@@ -424,7 +424,7 @@ bool InitDComp() {
 
 // ---------------------------------------------------------------------------
 // Build the visual tree (called ONLY when both swapchain + WebView2 are ready,
-// per v3 lesson that early tree construction may have been the bug).
+// since early tree construction may have been the bug).
 // ---------------------------------------------------------------------------
 
 bool BuildVisualTree() {

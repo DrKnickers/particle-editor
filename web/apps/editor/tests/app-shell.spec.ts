@@ -1,4 +1,4 @@
-// Phase 3 Screen 1 contract tests: StatusBar DOM presence and live
+// StatusBar contract tests: DOM presence and live
 // stats/tick delivery from the C++ host at 4 Hz. Sibling of
 // bridge-native.spec.ts and background-picker.spec.ts — same CDP-attach
 // harness, same window.bridge host-object channel.

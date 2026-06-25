@@ -1,4 +1,4 @@
-// Vitest specs for the tri-state Generation radio mutex (P3, B1.3).
+// Vitest specs for the tri-state Generation radio mutex.
 //
 // Replaces the legacy `Use Bursts` checkbox with a three-radio mutex
 // (Bursts / Continuous stream / Weather particle) deriving from
@@ -8,7 +8,7 @@
 //
 // The Weather sub-fields (Particles / Distance from camera / Cube size)
 // live under the Weather radio branch — moved away from the Physics tab
-// where they sat in the pre-B1.3 UI.
+// where they sat in the previous UI.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
@@ -17,7 +17,7 @@ import type { ReactElement, ReactNode } from "react";
 import { BasicTab } from "../EmitterPropertyTabs";
 import { makeFixtureProperties } from "@/bridge/mock-state";
 
-//: BasicTab mounts Tips (Radix Tooltip.Root) on the form-row labels,
+// BasicTab mounts Tips (Radix Tooltip.Root) on the form-row labels,
 // which require the app-level Tooltip.Provider — wrapper stands in for it
 // (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (

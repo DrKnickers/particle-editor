@@ -6,7 +6,7 @@ import { KEYBOARD_SURFACES, seedCanonicalUiState } from "./helpers/a11y-surfaces
 import "./helpers/toMatchJSONGolden";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy" /* */;
+const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 // ESM-equivalent of __dirname (package is "type": "module").
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = path.resolve(__dirname, "fixtures/a11y-base-state.alo");
@@ -25,7 +25,7 @@ test.beforeAll(async () => {
     null,
     { timeout: 15_000 }
   );
-  await seedCanonicalUiState(page); //: pin canonical UI state (light theme + Spawner visible)
+  await seedCanonicalUiState(page); // pin canonical UI state (light theme + Spawner visible)
 });
 
 test.afterAll(async () => {

@@ -1,4 +1,4 @@
-// — PaletteStore (data layer only).
+// PaletteStore (data layer only).
 //
 // Split out from TexturePalette.cpp so the data layer can be tested in
 // isolation (no d3dx9 / GDI dependencies). Popup window, content

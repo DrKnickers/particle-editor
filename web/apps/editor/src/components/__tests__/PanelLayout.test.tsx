@@ -1,4 +1,4 @@
-// Vitest for the PanelLayout component (B1.4).
+// Vitest for the PanelLayout component.
 //
 // PanelLayout owns the editor shell's main row: outer horizontal Group
 // (left | centre | spawner) + nested vertical Groups inside the left
@@ -7,7 +7,7 @@
 // keyed by alo:layout:outer:{2col,3col} / alo:layout:left /
 // alo:layout:center.
 //
-// These tests are the failing-skeleton end of T2 (the impl ships in T3).
+// These tests are the failing-skeleton end (the impl ships later).
 // We pin three things:
 //   1. Pure persistence helpers handle the corruption / missing-key /
 //      ratio-drift cases (each test is small and the helpers stay
@@ -16,7 +16,7 @@
 //      production code depends on (Modal.tsx querySelector,
 //      Playwright specs, viewport-rect callbacks). The testIDs must
 //      live on the same semantic inner divs they sit on today so
-//      Risk 2 in tasks/todo.md is enforced by the test, not just by
+//      this invariant is enforced by the test, not just by
 //      vigilance.
 //   3. Spawner visibility flips the spawner panel mount/unmount.
 
@@ -43,7 +43,7 @@ function makeStubBridge(): Bridge {
   } as unknown as Bridge;
 }
 
-//: PanelLayout mounts EmitterTree, whose Tips (Radix Tooltip.Root)
+// PanelLayout mounts EmitterTree, whose Tips (Radix Tooltip.Root)
 // require the Tooltip.Provider that App.tsx supplies in production — this
 // helper stands in for it here (same precedent as EmitterTree.test.tsx).
 const renderPanelLayout = (bridge: Bridge) =>
@@ -151,7 +151,7 @@ describe("PanelLayout — collapseDockShare (dock-mount fix)", () => {
   });
 });
 
-describe("PanelLayout — Reset panel layout (T6)", () => {
+describe("PanelLayout — Reset panel layout", () => {
   it("resetPanelLayoutStorage clears every key listed in PANEL_LAYOUT_KEYS", () => {
     // Seed every persisted-layout key with arbitrary content; the
     // helper should wipe all four without touching unrelated keys.
@@ -292,7 +292,7 @@ describe("PanelLayout — DOM structure", () => {
   it("quadrant-viewport rect is the innermost wrapper (Modal portal target preservation)", () => {
     const bridge = makeStubBridge();
     renderPanelLayout(bridge);
-    // Risk 2 from the plan: Modal.tsx does
+    // Modal.tsx does
     //   document.querySelector('[data-testid="quadrant-viewport"]')
     // and reads getBoundingClientRect on the result. The testID must
     // land on a div with `position: relative` (same semantics as today's

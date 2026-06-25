@@ -1,4 +1,4 @@
-// Task 2.2 test harness: orchestrates the native bridge Playwright run.
+// Native test harness: orchestrates the native bridge Playwright run.
 //
 // 1. Kill any stale ParticleEditor.exe (best-effort).
 // 2. Launch x64\Debug\ParticleEditor.exe --test-host.
@@ -54,7 +54,7 @@ function killAny() {
 }
 
 async function main() {
-  // T12] `--update` flag: forward to the Playwright run as
+  // `--update` flag: forward to the Playwright run as
   // UPDATE_A11Y_GOLDENS=1 so the a11y matcher writes goldens instead
   // of comparing. Set here (rather than expecting the caller to
   // prefix the env var) so `pnpm a11y:update` works on Windows
@@ -65,12 +65,12 @@ async function main() {
     console.log("[run-native-tests] --update flag → UPDATE_A11Y_GOLDENS=1");
   }
 
-  // [handoff item 16 follow-up] Forward unknown CLI args through to
+  // Forward unknown CLI args through to
   // Playwright so scoped runs like `pnpm a11y:update --grep "dialog-about"`
   // actually filter the suite. Previously these args were silently
   // dropped (the Playwright spawn below had a hard-coded arg list),
   // which made every "scoped" refresh regenerate ALL goldens —
-  // the exact footgun handoff item 16 R7 warned about. The only
+  // the exact footgun the design review warned about. The only
   // recognised flag (--update) is consumed above; anything else gets
   // forwarded as-is.
   const RECOGNISED_FLAGS = new Set(["--update"]);
@@ -81,7 +81,7 @@ async function main() {
   await sleep(300);
 
   console.log(`[run-native-tests] Launching ${exe} --test-host ...`);
-  // Phase 3 Stage 4f hardening — DON'T inherit stdio. The
+  // Stdio hardening — DON'T inherit stdio. The
   // previous `stdio: "inherit"` caused a real footgun: ParticleEditor.exe
   // is a SUBSYSTEM:Windows app, but node attaches an inherited console
   // for its piped stdio. The host writes [ArchC]/[host]/[COMP-*]
@@ -89,18 +89,18 @@ async function main() {
   // inherited console window, Windows enters QuickEdit (Mark) mode
   // which BLOCKS the stderr buffer. The next per-frame fprintf hangs
   // and freezes the entire host thread — Playwright then times out,
-  // ALL in-flight specs cascade-fail. Surfaced during Stage 4f smoke.
+  // ALL in-flight specs cascade-fail. Surfaced during smoke testing.
   //
   // Fix: discard child stdio. All host diagnostics are duplicated to
   // %LOCALAPPDATA%\AloParticleEditor\host.log via the Log() macro, so
   // test diagnostics don't lose anything.
   //
-  // T9.3] windowsHide:true removed. Win32 UIA does not expose
+  // windowsHide:true removed. Win32 UIA does not expose
   // WebView2's accessibility tree when the host window is hidden
   // (SW_HIDE) — UIA can't traverse into the Chrome_WidgetWin_1 →
   // BrowserRootView → React DOM subtree. The window must be visible
-  // (SW_SHOW) for the a11y specs (T9) to capture meaningful trees.
-  // The Stage 4f QuickEdit risk only applies to `stdio:"inherit"`;
+  // (SW_SHOW) for the a11y specs to capture meaningful trees.
+  // The QuickEdit risk only applies to `stdio:"inherit"`;
   // with stdio:"ignore" there is no inherited console window for the
   // user to click into, so windowsHide is not needed for safety.
   //
@@ -115,7 +115,7 @@ async function main() {
   });
 
   let childExited = false;
-  // Mid-run host-death guard (see lessons.md). If the host dies WHILE
+  // Mid-run host-death guard. If the host dies WHILE
   // Playwright is running, every remaining spec fails with
   // `connect ECONNREFUSED ::1:9222` (the CDP endpoint died with the host).
   // That ~60-failure cascade is indistinguishable from a real regression
@@ -137,7 +137,7 @@ async function main() {
           "  Remaining specs are INVALID — their CDP endpoint died with the\n" +
           "  host. This is NOT a test failure / regression. Re-run the suite;\n" +
           "  if it recurs, check for a stale `--test-host` process or a locked\n" +
-          "  WebView2 user-data folder (lessons.md /).\n",
+          "  WebView2 user-data folder.\n",
       );
       // Stop Playwright NOW so the run halts at the death instead of burning
       // through every remaining spec against the dead CDP endpoint.
@@ -211,50 +211,50 @@ async function main() {
       "tests/splitters.spec.ts",
       "tests/d3d9ex.spec.ts",
       "tests/alpha-compositor-snapshot.spec.ts",
-      // Phase 2 — DOM-event → viewport/input bridge wiring
-      // under architecture-C (canvas-in-DOM viewport). Skips with a
+      // DOM-event → viewport/input bridge wiring
+      // under this architecture (canvas-in-DOM viewport). Skips with a
       // clear annotation when ALO_HOSTING_MODE == "legacy",
       // so runs WITHOUT the env var are a no-op. Included in the
-      // harness so the moment canvas-jpeg is enabled (Phase 4 default
-      // flip) the bridge surface is gated automatically.
+      // harness so the moment canvas-jpeg becomes the default the
+      // bridge surface is gated automatically.
       "tests/canvas-architecture.spec.ts",
-      // Phase 3 Stage 3g — composition-hosting A/B parity
+      // Composition-hosting A/B parity
       // gate. Tests skip with a clear annotation when
       // ALO_HOSTING_MODE == "legacy" (composition mode inactive), so running the
       // harness WITHOUT the env var (HWND-mode baseline) is a no-op
       // for this file. Running WITH the env-var pair gates the
       // composition path's bridge layer.
       "tests/composition-hosting.spec.ts",
-      // Phase 3 Stage 4f — DXGI transport / resize-stress /
+      // DXGI transport / resize-stress /
       // perf gates. All three specs skip when ALO_WEBVIEW2_HOSTING
       // != "composition". Composition mode requires BOTH env vars
       // (canvas-jpeg + composition) plus a dist/ built with VITE_*
-      // counterparts to be a meaningful gate. (Note 4f #2 dxgi-vs-
-      // jpeg SSIM was deferred from this list — Playwright's DOM-only
+      // counterparts to be a meaningful gate. (The dxgi-vs-
+      // jpeg SSIM check was deferred from this list — Playwright's DOM-only
       // screenshots can't see DXGI engine pixels under composition;
-      // manual visual smoke is the irreducible gate. See sub-plan §6.)
+      // manual visual smoke is the irreducible gate.)
       "tests/dxgi-transport.spec.ts",
       "tests/dxgi-resize-stress.spec.ts",
       "tests/dxgi-perf.spec.ts",
-      // Phase 3 Stage 5 T7 — scene-rect transform gate. Skips
+      // Scene-rect transform gate. Skips
       // when ALO_HOSTING_MODE == "legacy" (composition mode inactive) (LayoutBroker's
-      // new wiring is composition-mode-only per R9 mitigation c).
+      // new wiring is composition-mode-only).
       // Asserts [COMP-engine-transform] log lines fire on
       // layout/scene-rect dispatch with the expected absolute clip.
       "tests/dxgi-scene-rect.spec.ts",
-      // Phase 3 a11y T10 — composition-mode DOM-snapshot specs.
-      // (The T9 HWND/UIA `[hwnd]` quartet + their `.golden.json` goldens
-      // were removed in along with the legacy `--legacy` lane.)
-      // Mirror the T9 HWND quartet but capture via
+      // Composition-mode a11y DOM-snapshot specs.
+      // (The HWND/UIA `[hwnd]` quartet + their `.golden.json` goldens
+      // were removed along with the legacy `--legacy` lane.)
+      // Mirror the HWND quartet but capture via
       // page.accessibility.snapshot() (CDP) instead of Win32 UIA.
-      // Auto-skip under default HWND mode (T9 covers that lane);
+      // Auto-skip under default HWND mode (the UIA lane covers that);
       // active only when ALO_HOSTING_MODE != legacy (default). Reuse the
-      // surface-driver arrays from T5-T8 unchanged.
+      // surface-driver arrays from the golden lanes unchanged.
       "tests/a11y-chrome-composition.spec.ts",
       "tests/a11y-dialogs-composition.spec.ts",
       "tests/a11y-keyboard-composition.spec.ts",
       "tests/a11y-curve-spinner-composition.spec.ts",
-      // Phase 3 a11y T11 — composition-mode UIA backbone
+      // Composition-mode UIA backbone
       // reachability spec. Asserts the composition-hosted tree
       // exposes AloHostMain → Chromium chrome → EmbeddedBrowserFrame
       // → React menubar all the way down via Win32 UIA. Catches the
@@ -262,7 +262,7 @@ async function main() {
       // composition users with no screen-reader access to React).
       // Auto-skips under default HWND mode.
       "tests/a11y-uia-composition-reachable.spec.ts",
-      // Preview overload guard regression (session 35 part 2). Bombs the
+      // Preview overload guard regression. Bombs the
       // live preview with rate=1e9 and asserts the engine plateaus at
       // the particle budget + latches `overload` on stats/tick instead
       // of OOM-crashing. Runs LAST: it floods the live engine and
@@ -270,7 +270,7 @@ async function main() {
       // restores properties + clears instances, but keeping it after
       // the deterministic a11y goldens removes any timing coupling.
       "tests/preview-overload.spec.ts",
-      // [handoff item 16 follow-up] Forward unknown args (e.g. --grep
+      // Forward unknown args (e.g. --grep
       // "dialog-about") so scoped a11y refresh actually scopes. See
       // RECOGNISED_FLAGS above.
       ...forwardedArgs,
@@ -301,7 +301,7 @@ async function main() {
 
   // A mid-run host death (detected in child.on("exit") above) makes the
   // Playwright exit code meaningless — exit 2 to distinguish it from ordinary
-  // spec failures (exit 1) and a clean pass (exit 0). See lessons.md.
+  // spec failures (exit 1) and a clean pass (exit 0).
   if (hostDiedMidRun) {
     console.error(
       "[run-native-tests] run ABORTED: host died mid-run (see FATAL above). " +

@@ -1,4 +1,4 @@
-// Vitest tests for SpawnerPanel (Phase 3 Screen 8 Batch 4).
+// Vitest tests for SpawnerPanel.
 //
 // Coverage:
 //   1. Renders the burst-size + spacing + position×3 + lifetime Spinners

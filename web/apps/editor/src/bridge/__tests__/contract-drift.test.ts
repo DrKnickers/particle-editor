@@ -58,7 +58,7 @@ function mockCaseLabels(src: string): Set<string> {
 // Explicit, commented DEFERRED allowlist — request kinds the schema declares
 // that MockBridge intentionally does NOT implement (browser mode lacks the
 // engine machinery they need). Each is still REACHED by the mock's switch as a
-// `throw "... not implemented (Phase 3+)"` arm, so a caller in browser mode
+// `throw "... not implemented"` arm, so a caller in browser mode
 // fails loudly rather than silently. Removing a kind from the schema, or
 // adding a real mock handler for it, must also remove it here (the "no stale
 // allowlist entries" assertion enforces that).
@@ -99,13 +99,13 @@ describe("bridge contract drift (schema Request kinds vs MockBridge)", () => {
     // A deferred kind reaching a `throw` arm is fine; but if it gains a real
     // handler it should graduate off the allowlist. The mock routes both via
     // `case`, so we distinguish by the throw text: a deferred case must sit in
-    // the "not implemented (Phase 3+)" throw block.
+    // the "not implemented" throw block.
     const graduated = DEFERRED.filter((k) => {
-      // Find the case label and check it's in the Phase-3+ throw cluster.
+      // Find the case label and check it's in the not-implemented throw cluster.
       const idx = mockSrc.indexOf(`case "${k}":`);
       if (idx < 0) return false; // not handled at all → fine (still deferred)
       const after = mockSrc.slice(idx, idx + 400);
-      return !/not implemented \(Phase 3\+\)/.test(after);
+      return !/not implemented/.test(after);
     });
     expect(graduated).toEqual([]);
   });

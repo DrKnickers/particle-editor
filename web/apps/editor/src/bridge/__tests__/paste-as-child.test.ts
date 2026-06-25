@@ -1,4 +1,4 @@
-// Tests for Paste As ▸ Child (/): the pure mock-state tree
+// Tests for Paste As ▸ Child: the pure mock-state tree
 // helper and the MockBridge `emitters/paste-as-child` round-trip.
 
 import { describe, it, expect } from "vitest";

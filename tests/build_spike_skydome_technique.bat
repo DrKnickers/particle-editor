@@ -1,5 +1,5 @@
 @echo off
-REM Step-0] Build the skydome-technique-validation spike (standalone
+REM Build the skydome-technique-validation spike (standalone
 REM D3D9Ex + D3DX exe). Diagnostic only; not a CI unit test.
 setlocal
 call "%~dp0_env.bat" || exit /b 1

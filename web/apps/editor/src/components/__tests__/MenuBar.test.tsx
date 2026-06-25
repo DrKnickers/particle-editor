@@ -1,4 +1,4 @@
-// Vitest tests for MenuBar — Phase 3 Screen 8 Batch 3 additions.
+// Vitest tests for MenuBar.
 //
 // Coverage:
 //   1. File → New on a dirty system opens the SaveChangesPrompt
@@ -6,7 +6,7 @@
 //   2. Recent Files submenu renders entries from the file-state atom
 //      (recentFiles array of paths).
 //
-// Radix-in-jsdom caveat (): hovering / sub-menu opening is brittle
+// Radix-in-jsdom caveat: hovering / sub-menu opening is brittle
 // in jsdom because Radix relies on pointer events. The recent-files
 // spec verifies the basename-formatting helper on the data path —
 // asserting on the rendered submenu DOM nodes after clicking the File
@@ -51,7 +51,7 @@ function renderMenuBar(
   );
 }
 
-describe("MenuBar — File menu (Batch 3)", () => {
+describe("MenuBar — File menu", () => {
   it("File → New on a dirty system stores the pending action (opens SaveChangesPrompt)", async () => {
     useFileStateStore.getState().setDirty(true);
     const bridge = makeStubBridge();
@@ -104,9 +104,9 @@ describe("MenuBar — File menu (Batch 3)", () => {
   });
 });
 
-// ─── Phase 4.1 Fix dispatch 5 — top-level menu restructure ──────────
+// ─── Top-level menu restructure ──────────
 
-describe("MenuBar — top-level structure ()", () => {
+describe("MenuBar — top-level structure", () => {
   beforeEach(() => {
     useEmitterSelectionStore.setState({ ids: [], primary: null });
     useTreeActionStore.setState({ renameRequest: null });
@@ -152,7 +152,7 @@ describe("MenuBar — top-level structure ()", () => {
     expect(toggleVis.getAttribute("data-disabled")).not.toBeNull();
   });
 
-  it("View menu exposes Lighting… and no longer has any Bloom entries (folded into Lighting + toolbar, session 11)", async () => {
+  it("View menu exposes Lighting… and no longer has any Bloom entries (folded into Lighting + toolbar)", async () => {
     const bridge = makeStubBridge();
     renderMenuBar(bridge);
     const trigger = screen.getByRole("menuitem", { name: "View" });
@@ -167,7 +167,7 @@ describe("MenuBar — top-level structure ()", () => {
     expect(screen.queryByRole("menuitem", { name: /Bloom/ })).toBeNull();
   });
 
-  it("View > Reset panel layout fires the onResetPanelLayout callback (B1.4 T6)", async () => {
+  it("View > Reset panel layout fires the onResetPanelLayout callback", async () => {
     const bridge = makeStubBridge();
     const onResetPanelLayout = vi.fn();
     renderMenuBar(bridge, { onResetPanelLayout });
@@ -260,7 +260,7 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     await waitFor(() => { expect(screen.getByRole("menuitem", { name: "Refresh Mod List" })).toBeTruthy(); });
   }
 
-  // [Option D] open the Add mod… flyout (catalog + search lives there now).
+  // Open the Add mod… flyout (catalog + search lives there now).
   async function openAddMod() {
     const addMod = screen.getByRole("menuitem", { name: /Add mod/ });
     fireEvent.pointerDown(addMod, { button: 0, pointerType: "mouse" });
@@ -291,7 +291,7 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     });
   });
 
-  // Option D composes the stack — adding APPENDS, never replaces.
+  // The stack composes — adding APPENDS, never replaces.
   it("Add mod… appends to an existing stack instead of replacing it", async () => {
     const bridge = makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha"] });
     renderMenuBar(bridge);

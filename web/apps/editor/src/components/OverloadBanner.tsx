@@ -1,4 +1,4 @@
-// OverloadBanner — preview spawn-overload guard (plan part 2 §3).
+// OverloadBanner — preview spawn-overload guard.
 //
 // The engine suppresses particle spawning when the live preview would
 // exceed its hard budgets (global particle/instance budget OR a single
@@ -51,7 +51,7 @@ const EXIT_MS = 150;
 const REFUSAL_MS = 5_000;
 
 // Refusal state: the two numbers the copy needs.
-// attemptedCount is on the wire but unused by the copy (spec §2.5).
+// attemptedCount is on the wire but unused by the copy.
 type RefusalState = { estimated: number; cap: number };
 
 function OverloadBannerBody({
@@ -133,7 +133,7 @@ export function OverloadBanner({ bridge }: { bridge: Bridge }) {
   // The banner is visible when a refusal is active OR when the latch is set.
   // usePresence drives the exit animation for both cases off a single boolean.
   const visible = refusal !== null || overload;
-  // [s37 bug] Freeze the rendered variant for the exit: when the refusal
+  // Freeze the rendered variant for the exit: when the refusal
   // window expires and visible drops, usePresence keeps the body mounted
   // for the 150 ms fade — and the raw `refusal ?? latch` ternary would
   // fall through to the LATCH copy for the whole fade. While visible,

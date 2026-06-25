@@ -1,4 +1,4 @@
-// Step-0 spike] Does a real game dome shader's precompiled technique
+// Spike: does a real game dome shader's precompiled technique
 // VALIDATE + Begin() on the editor's D3D9Ex HAL device?
 //
 // The game's Skydome.fx / MeshAdditive.fx / MeshGloss.fx ship only DX8

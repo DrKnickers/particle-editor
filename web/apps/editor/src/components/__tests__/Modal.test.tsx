@@ -48,7 +48,7 @@ describe("Modal", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  // B1.3.1 polish regression guard. The Modal sits over the
+  // Polish regression guard. The Modal sits over the
   // layered engine viewport, where HTML effects (box-shadow extent
   // > occlusion pad, semi-transparent backgrounds, backdrop-filter)
   // produce visible compositing artifacts that don't appear over the
@@ -93,7 +93,7 @@ describe("Modal", () => {
     // The old `data-[state=open]:animate-in` utilities came from the
     // tailwindcss-animate plugin, which this Tailwind v4 build does NOT
     // load — they generated zero CSS (see components.css's popover
-    // section note). replaced them with real keyframe classes.
+    // section note). They were replaced with real keyframe classes.
     render(
       <Modal open onOpenChange={() => {}} title="Test Modal">
         <Modal.Body>body</Modal.Body>
@@ -108,9 +108,9 @@ describe("Modal", () => {
   });
 
   it("dispatches viewport/capture-snapshot on open for the frosted-glass backdrop", async () => {
-    // B1.3.1.1: the frosted-glass backdrop replaces the old modal-mask
+    // The frosted-glass backdrop replaces the old modal-mask
     // approach (which dimmed engine pixels server-side and produced an
-    // inner-shadow seam -- see). The new flow snapshots the engine
+    // inner-shadow seam). The new flow snapshots the engine
     // into a portaled <img>; Dialog.Overlay's CSS effects then blur panels
     // + snapshot uniformly. We assert the capture fires on open. The
     // quadrant rect comes from a data-testid="quadrant-viewport" element

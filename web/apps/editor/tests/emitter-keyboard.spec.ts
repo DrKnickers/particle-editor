@@ -1,4 +1,4 @@
-// Phase 3 Screen 4 Batch C Playwright contract specs.
+// Playwright contract specs.
 //
 // Verifies:
 //   1. F2 on a focused tree row enters inline rename mode (an

@@ -1,4 +1,4 @@
-// Phase 3 Screen 7 contract tests: primitive gallery smoke tests.
+// Contract tests: primitive gallery smoke tests.
 //
 // Exercises the ?demo=primitives gallery route inside the native WebView2
 // host. Uses the same CDP-attach harness as sibling specs (toolbar.spec.ts,

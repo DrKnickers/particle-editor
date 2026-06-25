@@ -1,4 +1,4 @@
-// s52] Regression test for UndoStack::EditorAux — the side-band
+// Regression test for UndoStack::EditorAux — the side-band
 // reference-object transform that rides on every undo snapshot so the
 // reference-object gizmo / Reset / spinners undo on the same Ctrl+Z timeline
 // as particle edits.
@@ -7,11 +7,11 @@
 // contract the host wiring depends on:
 //   1. aux round-trips through Undo/Redo (A -> B -> Undo=A -> Redo=B)
 //   2. aux is carried by a "particle edit" capture, so undoing it does NOT
-//      yank the reference object (Risk 1)
+//      yank the reference object
 //   3. a coalesced PRE-mutation burst keeps the SESSION-START aux, not the
-//      last pre-fold value (M1 — the bug the design review caught)
+//      last pre-fold value (the bug the design review caught)
 //   4. different coalesce keys do NOT fold (per-field granularity)
-//   5. a defaulted capture (no aux arg) yields {0,0,0} (legacy back-compat, M2)
+//   5. a defaulted capture (no aux arg) yields {0,0,0} (legacy back-compat)
 //
 // Build/run: tests\build_test_undo_aux.bat ; tests\test_undo_aux.exe
 // Expects the final line "=== undo aux: ALL PASS ===" and exit code 0.
@@ -71,7 +71,7 @@ static void test_round_trip(ParticleSystem& ps)
 }
 
 // 2. A particle-edit capture carries the current aux, so undoing the edit
-//    leaves the reference object where it is (Risk 1). The two snapshots carry
+//    leaves the reference object where it is. The two snapshots carry
 //    DIFFERENT particle content (one emitter vs two) but the SAME ref aux, so
 //    the assertion proves the ref rode along independent of the particle edit.
 static void test_particle_undo_preserves_ref()
@@ -91,12 +91,12 @@ static void test_particle_undo_preserves_ref()
 }
 
 // 6. The per-field coalesce key (RefTransformUndoKey.h) — the only new
-//    non-trivial pure logic in the bridge handler. Guards M4 (no-op -> no
-//    entry) and the per-field granularity the design depends on.
+//    non-trivial pure logic in the bridge handler. Guards the no-op -> no
+//    entry case and the per-field granularity the design depends on.
 static void test_ref_transform_key()
 {
     const float zero[6] = {0,0,0,0,0,0};
-    // No change -> key 0 -> caller pushes no undo entry (M4 / no-op Reset).
+    // No change -> key 0 -> caller pushes no undo entry (no-op Reset).
     {
         const float same[6] = {1,2,3,4,5,6};
         CHECK(RefTransformCoalesceKey(same, same) == 0, "identical transform -> key 0 (no capture)");
@@ -122,7 +122,7 @@ static void test_ref_transform_key()
     (void)zero;
 }
 
-// 3. M1: a coalesced PRE-mutation burst keeps the SESSION-START aux.
+// 3. A coalesced PRE-mutation burst keeps the SESSION-START aux.
 static void test_coalesce_keeps_session_start(ParticleSystem& ps)
 {
     UndoStack u;
@@ -156,7 +156,7 @@ static void test_different_keys_dont_fold(ParticleSystem& ps)
     CHECK(u.Depth() == 3, "two different-key edits stay two separate undo steps");
 }
 
-// 5. A defaulted capture (no aux arg) yields {0,0,0} (legacy back-compat, M2).
+// 5. A defaulted capture (no aux arg) yields {0,0,0} (legacy back-compat).
 static void test_default_aux_is_zero(ParticleSystem& ps)
 {
     UndoStack u;

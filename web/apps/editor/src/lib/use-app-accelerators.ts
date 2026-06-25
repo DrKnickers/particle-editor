@@ -1,6 +1,5 @@
 // use-app-accelerators.ts — wires the legacy global keyboard accelerators
-// (ParticleEditor.en.rc:508-530) to the new UI's existing actions (,
-//,).
+// (ParticleEditor.en.rc:508-530) to the new UI's existing actions.
 //
 // The host (AcceleratorBridge) translates registered combos and emits
 // `accelerator/pressed`; this hook dispatches each to the same bridge call
@@ -15,9 +14,8 @@
 //     mid-edit). The EmitterTree handles them when it has focus, which is
 //     the safe scope.
 //
-// Flagged GAPS (no underlying action yet, so not wired — see
-// tasks/fix-plan.md): none. Every legacy accelerator target below resolves
-// to an existing bridge command or UI action.
+// Flagged GAPS (no underlying action yet, so not wired): none. Every legacy
+// accelerator target below resolves to an existing bridge command or UI action.
 
 import { useEffect, useRef } from "react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";

@@ -44,7 +44,7 @@ describe("Tip", () => {
     expect(animated!.contains(surface)).toBe(true);
   });
 
-  it("renders the bare child when content is nullish or empty (T4 conditional sites)", () => {
+  it("renders the bare child when content is nullish or empty", () => {
     renderTip(
       <Tip content={undefined}><button aria-label="Plain">P</button></Tip>,
     );

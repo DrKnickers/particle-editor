@@ -1,5 +1,5 @@
 // window-title.test.ts — title format contract for the Win32 titlebar
-// mirror (spec §3.2). Four cases: clean/dirty × named/untitled, plus
+// mirror. Four cases: clean/dirty × named/untitled, plus
 // basename handling for both path separator styles.
 import { describe, expect, test } from "vitest";
 import { formatWindowTitle } from "../window-title";

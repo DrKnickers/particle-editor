@@ -1,7 +1,7 @@
 // LayoutBroker — applies the React-side `layout/viewport-rect` message
 // to the D3D9 viewport HWND.
 //
-// (May 2026): the viewport is a top-level WS_POPUP owned by the
+// May 2026: the viewport is a top-level WS_POPUP owned by the
 // main HWND, not a WS_CHILD. React reports the viewport quadrant rect
 // in main-client coordinates; LayoutBroker converts to screen
 // coordinates for SetWindowPos on the popup. The popup is composited
@@ -25,7 +25,7 @@ class Engine;
 namespace host {
 
 class AlphaCompositor;
-// Phase 3 Stage 5 — DComp tree compositor (owns the engine
+// DComp tree compositor (owns the engine
 // visual). LayoutBroker injects scene-rect transforms when composition
 // mode is active. Forward-declared to keep dcomp.h out of this header
 // (Compositor.cpp's isolation pattern).
@@ -51,12 +51,12 @@ public:
     // snapshot crop is correct on the first capture. Null = not installed.
     void SetAlphaCompositor(AlphaCompositor* compositor);
 
-    // Phase 3 Stage 5 — inject the DComp-tree compositor (the
+    // Inject the DComp-tree compositor (the
     // one that owns the engine visual). Non-null implies composition
     // mode is active; SetSceneRect will additionally forward the
     // scene-rect transform onto Compositor::SetEngineVisualTransform
     // and the engine's per-frame viewport via Engine::SetSceneViewport
-    // (gated on this pointer per R9 mitigation c). Passing null at
+    // (gated on this pointer). Passing null at
     // teardown clears the gate so any late SetSceneRect dispatch
     // post-WM_DESTROY doesn't dereference a freed Compositor.
     //
@@ -71,26 +71,26 @@ public:
     // getBoundingClientRect. With per-monitor-v2 DPI awareness,
     // child-window coordinates are in physical pixels.
     //
-    // converts to screen coords via ClientToScreen(owner, …)
+    // Converts to screen coords via ClientToScreen(owner, …)
     // before SetWindowPos because the viewport is now a top-level
     // popup, not a child.
     void Apply(int x, int y, int w, int h);
 
-    //: re-apply the last-cached client-coord rect, with a fresh
+    // Re-apply the last-cached client-coord rect, with a fresh
     // ClientToScreen translation. Called from HostWindow's WM_MOVE
     // handler when the main window is dragged across the desktop so
     // the popup viewport follows. Skips the Engine::Reset path
     // (size didn't change, only position).
     void RefreshScreenPosition();
 
-    // polish: predict the viewport rect from main's CURRENT client
+    // Predict the viewport rect from main's CURRENT client
     // size + the layout offsets cached at the last Apply. Used by
     // HostWindow's WM_SIZE handler so the popup tracks main's resize
     // synchronously, before React's ResizeObserver fires the next
     // authoritative layout/viewport-rect.
     void PredictAndApply();
 
-    // B1.4 T4c: under the popup-spans-window architecture,
+    // Under the popup-spans-window architecture,
     // React no longer dispatches a popup-rect via layout/viewport-rect.
     // The host sizes the popup HWND to the OWNER MAIN HWND's full
     // client rect on WM_CREATE / WM_SIZE / WM_WINDOWPOSCHANGED. The
@@ -104,7 +104,7 @@ public:
     // in one place.
     void ApplyFullClient();
 
-    // B1.4 T4c: set the scene rect (the visible viewport sub-region)
+    // Set the scene rect (the visible viewport sub-region)
     // in MAIN-HWND-CLIENT coords. LayoutBroker caches it and re-emits it
     // (ReemitSceneRect) to the AlphaCompositor (which crops its snapshot —
     // the modal backdrop — to it, in popup-client coords) and to the DComp
@@ -115,13 +115,13 @@ public:
     // the full RT is captured).
     void SetSceneRect(int x, int y, int w, int h);
 
-    // Phase 3 Stage 5 — read the cached scene rect (in
+    // Read the cached scene rect (in
     // main-client coords). Returns true and populates the outs when a
     // non-degenerate scene rect has been dispatched at least once;
     // returns false (outs untouched) otherwise. Used by HostWindow at
     // composition-controller-ready time to seed the engine visual's
     // initial transform without waiting for React's next dispatch
-    // (sub-plan §3.5 — avoids a 1-3 frame full-client glitch).
+    // (avoids a 1-3 frame full-client glitch).
     bool GetSceneRect(int& x, int& y, int& w, int& h) const;
 
     // forward the theme background colour to the DComp
@@ -131,7 +131,7 @@ public:
     // forwarding pattern.
     void SetBackingColor(COLORREF color);
 
-    // B1.3.1.1: forward a viewport snapshot request to the compositor.
+    // Forward a viewport snapshot request to the compositor.
     // Returns `false` (and leaves outputs untouched) when no
     // compositor is attached or the compositor has no cached frame
     // (engine never composited, just-reset device, etc.). React's
@@ -150,7 +150,7 @@ public:
     // pause->step->capture particle filmstrips).
     bool CaptureSnapshotToFile(const std::wstring& path);
 
-    // [Item 3] Dock-slide viewport interpolation. The web sends ONE
+    // Dock-slide viewport interpolation. The web sends ONE
     // animate-scene-rect at the dock open/close toggle; the host then re-renders
     // the engine at a wall-clock-lerped scene rect every render frame, synced to
     // the CSS flex-grow tween, so the viewport edge glides with the panel instead
@@ -179,13 +179,13 @@ public:
     // Cancel an in-flight dock-slide anim so the static scene-rect path takes
     // over. Called from the viewport RESIZE paths (Apply / PredictAndApply on a
     // size change — incl. a DPR move's Engine::Reset): a resize invalidates the
-    // anim's captured absolute-px from/to, so per spec risk #4 we drop the anim
+    // anim's captured absolute-px from/to, so we drop the anim
     // (a 1-frame discontinuity is fine; a ~200ms stale-target slide is not). A
     // pure window MOVE (RefreshScreenPosition) does NOT cancel — the scene rect
     // is client-relative, so a move leaves from/to valid.
     void CancelSceneAnim() { m_sceneAnim.active = false; }
 
-    // [resize-perf revised Fix A] Safety-net settle: if the popup size
+    // [resize-perf] Safety-net settle: if the popup size
     // diverged from the size at the last completed engine reset (i.e. a
     // per-tick reset FAILED mid-gesture), reset once now. A cheap no-op
     // in the normal case — every size change resets inline via
@@ -200,18 +200,18 @@ private:
     // attach because moving the popup changes the popup-client translation.
     void ReemitSceneRect();
 
-    // [Item 3] The real scene-rect application (compositor mask + engine
+    // The real scene-rect application (compositor mask + engine
     // viewport + DComp clip). SetSceneRect is now a thin guard that drops
     // external updates while a dock-slide anim owns the rect; both the guard and
     // the per-frame anim advance funnel the actual work through here.
-    // [resize-perf C2] animFrame=true marks a mid-flight anim apply —
+    // [resize-perf] animFrame=true marks a mid-flight anim apply —
     // the DComp transform log is skipped for those (they fire at the
     // render rate); instant applies and anim terminals log normally.
     void ApplySceneRect(int x, int y, int w, int h, bool animFrame = false);
 
-    // [resize-perf revised Fix A] One resize-driven engine reset, shared
+    // [resize-perf] One resize-driven engine reset, shared
     // by Apply / PredictAndApply / SettleDeferredReset (one helper, not
-    // three hand-copies —). Tries the cheap ResetEx path
+    // three hand-copies). Tries the cheap ResetEx path
     // (Engine::ResetForResize — textures/shaders persist, ~3-5 ms) and
     // falls back to the full Reset() + RecoverDeviceIfNeeded chain on
     // failure. Updates m_resetW/H bookkeeping. (w, h) is the popup size
@@ -223,13 +223,13 @@ private:
     // legacy popup band-mask compositor — owned by HostWindow,
     // injected via SetAlphaCompositor.
     AlphaCompositor* m_alphaCompositor = nullptr;
-    // Phase 3 Stage 5 — DComp-tree compositor injected by
+    // DComp-tree compositor injected by
     // HostWindow when composition mode is active. Non-null IS the
     // composition-mode signal LayoutBroker uses to gate the new
-    // SetEngineVisualTransform + Engine::SetSceneViewport calls (per
-    // sub-plan §3.3 + R9 mitigation c). Owned by HostWindow.
+    // SetEngineVisualTransform + Engine::SetSceneViewport calls.
+    // Owned by HostWindow.
     Compositor* m_dcompCompositor = nullptr;
-    // B1.4 T4c: scene rect in MAIN-HWND-CLIENT coords. (0/0/0/0)
+    // Scene rect in MAIN-HWND-CLIENT coords. (0/0/0/0)
     // disables the compositor mask.
     int     m_sceneX = 0;
     int     m_sceneY = 0;
@@ -239,21 +239,21 @@ private:
     // expensive) D3D9 device Reset when the size actually changed.
     int     m_lastW;
     int     m_lastH;
-    //: last viewport rect (in main-client coords).
+    // last viewport rect (in main-client coords).
     int     m_lastX = 0;
     int     m_lastY = 0;
-    // polish: main's client size at the last Apply.
+    // main's client size at the last Apply.
     int     m_lastClientW = 0;
     int     m_lastClientH = 0;
 
-    // [resize-perf revised Fix A] m_resetW/H track the popup size at the
+    // [resize-perf] m_resetW/H track the popup size at the
     // last completed engine reset so SettleDeferredReset can tell whether
     // a per-tick reset failed (m_lastW/H ≠ m_resetW/H) without poking at
     // the engine's presentation parameters.
     int     m_resetW = 0;
     int     m_resetH = 0;
 
-    // [Item 3] In-flight dock-slide interpolation. `active` is false when idle.
+    // In-flight dock-slide interpolation. `active` is false when idle.
     // Rects are MAIN-HWND-CLIENT device px (held as float so the per-frame lerp
     // keeps sub-pixel precision, rounded only at apply). `startQpc` is a QPC tick
     // count back-dated to the CSS origin; `durMs` is the CSS duration.

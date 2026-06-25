@@ -1,4 +1,4 @@
-// IncrementIndexDialog — Screen 4 Batch B1.
+// IncrementIndexDialog.
 //
 // Single-spinner modal that triggers
 // `emitters/duplicate-with-index-increment`. Mirrors legacy

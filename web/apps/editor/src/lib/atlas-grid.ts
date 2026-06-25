@@ -18,7 +18,7 @@ export function cellRect(k: number, side: number, srcW: number, srcH: number): C
   const col = k % side, row = Math.floor(k / side), cw = srcW / side, ch = srcH / side;
   return { left: col * cw, top: row * ch, width: cw, height: ch };
 }
-// Width-only, count-aware grid sizing for the picker (Approach A). Aim for a
+// Width-only, count-aware grid sizing for the picker. Aim for a
 // balanced grid (~sqrt(n) columns — and since a real atlas has n = side², that
 // is the atlas `side`), but never use so many columns that the square cell
 // would fall below `min`. So small atlases get big thumbnails that fill the

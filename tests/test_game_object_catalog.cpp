@@ -15,8 +15,8 @@
 #include "GameObjectCatalog.h"
 #include "managers.h"
 #include "files.h"
-#include "AloModel.h"   // dbg] --dumpalo: decode bones/connections/meshes
-#include "xml.h"        // dbg] --xmltest: does a raw XML file parse?
+#include "AloModel.h"   // --dumpalo: decode bones/connections/meshes
+#include "xml.h"        // --xmltest: does a raw XML file parse?
 
 #include <chrono>
 #include <cstdio>
@@ -120,7 +120,7 @@ static const GameObjectRef* find(const GameObjectCatalog& cat, const std::string
 struct RealDirFM : IFileManager
 {
     std::wstring              xmlDir;    // single-dir convenience (back-compat)
-    std::vector<std::wstring> xmlDirs;   // dbg] multi-root: searched in PRECEDENCE order, first hit wins
+    std::vector<std::wstring> xmlDirs;   // multi-root: searched in PRECEDENCE order, first hit wins
     std::wstring              forcedAlo;
     IFile* getFile(const std::string& path) override
     {
@@ -222,7 +222,7 @@ static int dumpRealCatalog(const char* xmlDir)
                            r->sourceFile.c_str());
         else   std::printf("  %-28s -> (not found)\n", s);
     }
-    // PR2] Hardpoint resolution against the real content.
+    // Hardpoint resolution against the real content.
     std::printf("hardpoint table size: %zu\n", cat.hardpoints.size());
     std::printf("sample unit hardpoints (Name -> Model_To_Attach @ Attachment_Bone; damage/collision bones):\n");
     for (const char* s : samples)
@@ -266,7 +266,7 @@ static int dumpProbe(const char* aloPath)
     return 0;
 }
 
-// dbg] Decode one .alo and print its skeleton + per-mesh connection bone +
+// Decode one .alo and print its skeleton + per-mesh connection bone +
 // hidden flag -- so a hardpoint's Damage_*/Collision_Mesh bone can be cross-checked
 // against the model the unit actually renders (the Autem_Venator damage-decal bug:
 // hardpoints authored for EV_Venator.alo, unit renders Venator_OFC.alo).
@@ -310,7 +310,7 @@ static int dumpAlo(const char* aloPath)
     return 0;
 }
 
-// dbg] Build the catalog over MULTIPLE content roots (root, submod..., Core)
+// Build the catalog over MULTIPLE content roots (root, submod..., Core)
 // and print one unit's resolved model + hardpointNames + the hide-bones the engine
 // would compute -- the authoritative check for "why are Autem_Venator's damage decals
 // still visible" (does the Variant_Of-inherited hardpoint list resolve at all?).
@@ -370,13 +370,13 @@ static int dumpUnit(const char* unitName, const std::vector<std::string>& dirs)
         if (!d.collisionMeshBone.empty())   hideBones.insert(lower(d.collisionMeshBone));
         if (!d.modelToAttach.empty() && !d.attachmentBone.empty()) attachBones.insert(lower(d.attachmentBone));
     }
-    for (const std::string& a : attachBones) hideBones.erase(a);   // mount points never hidden ()
+    for (const std::string& a : attachBones) hideBones.erase(a);   // mount points never hidden
     std::printf("=> resulting hide-bone set (lower-cased, mount bones erased): %zu\n", hideBones.size());
     for (const std::string& b : hideBones) std::printf("     %s\n", b.c_str());
     return 0;
 }
 
-// dbg] Parse a raw XML file path directly (no FM) and report success + root
+// Parse a raw XML file path directly (no FM) and report success + root
 // element + direct-child count -- to classify "object file silently dropped from the
 // catalog": is it a parse FAILURE (XMLTree::parse throws) or a content/find issue?
 static int dumpXmlTest(const char* path)
@@ -559,7 +559,7 @@ int main(int argc, char** argv)
     }
 
     // (Legacy [category] + [picker filter] sections retired with the GameObjectCategory
-    // enum in fu]; the profile classifier's keep/group is covered by [classify]
+    // enum; the profile classifier's keep/group is covered by [classify]
     // (role/bucket) + [fieldable] (IsPickerListed) below.)
 
     // ---- sorted by name ----------------------------------------------------
@@ -571,7 +571,7 @@ int main(int argc, char** argv)
         CHECK(sorted, "objects sorted by name");
     }
 
-    // ---- hardpoint table + per-unit hardpoint names (PR2) ------------
+    // ---- hardpoint table + per-unit hardpoint names ------------
     std::printf("[hardpoints]\n");
     {
         MockFM hpfm;
@@ -628,7 +628,7 @@ int main(int argc, char** argv)
               "Variant_Of with its own <HardPoints> REPLACES (not merges) the parent's list");
     }
 
-    // ---- BUG-2: the parser tolerates encoding='ASCII' ----------------
+    // ---- the parser tolerates encoding='ASCII' ----------------
     // Many mod XML files declare <?xml ... encoding='ASCII'?>, which expat only knows
     // as "US-ASCII" -> without the unknown-encoding handler the parse threw and the
     // whole file (every object in it) was silently dropped from the catalog.
@@ -721,7 +721,7 @@ int main(int argc, char** argv)
               "no model (Squadron wrapper) -> Excluded");
         // Backdrops are excluded by TAG (SpaceProp), not by an Is_Dummy / In_Background flag —
         // EaW puts those flags on real units/structures, so the classifier no longer reads them
-        // (the field was retired with fu]); a real Is_Dummy structure staying listed is
+        // (the field was retired); a real Is_Dummy structure staying listed is
         // covered by the --dumpcat audit on the real mods.
         CHECK(ClassifyObject(P("SpaceProp", ModelFieldKind::Space)).role == ObjRole::Excluded,
               "SpaceProp -> Excluded by tag");

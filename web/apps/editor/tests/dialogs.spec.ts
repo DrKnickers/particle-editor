@@ -1,4 +1,4 @@
-// Phase 3 Screen 8 Batch 1 contract tests: Help → About + Edit → Rescale…
+// Contract tests: Help → About + Edit → Rescale…
 // sub-dialogs. Same CDP-attach harness as sibling specs. Verifies that
 // menu triggers render the React modal and that the rescale OK click
 // dispatches the new `engine/action/rescale-system` bridge call.
@@ -92,11 +92,11 @@ test("Edit → Rescale dialog opens and closes via DOM gestures", async () => {
 });
 
 test("engine/action/rescale-system dispatched directly fires engine/state/changed", async () => {
-  // B1.4 T4c follow-up: this test used to click the Modal's OK
+  // Follow-up: this test used to click the Modal's OK
   // button and observe the engine/state/changed side-effect. The OK
   // click routes through React's NativeBridge → postMessage, which is
-  // the channel (tasks/lessons.md) warns against — its delivery
-  // semantics are sensitive to CDP attach timing AND, under T4c's
+  // the channel we warn against — its delivery
+  // semantics are sensitive to CDP attach timing AND, under the
   // popup-spans-window architecture, to event volume during boot.
   // Reshaped to dispatch via `window.bridge.request` (TestHostBridge
   // → COM IDispatch under --test-host), which matches the pattern in

@@ -1,10 +1,8 @@
-// Pure helpers for the EmitterTree drag/drop layer (Phase 3 Screen 4
-// Batch B3). Kept module-local + side-effect-free so Vitest can exercise
-// the math + validation in isolation without faking jsdom's DnD
-// machinery.
+// Pure helpers for the EmitterTree drag/drop layer. Kept module-local +
+// side-effect-free so Vitest can exercise the math + validation in
+// isolation without faking jsdom's DnD machinery.
 //
-// The four exported functions mirror the four design-locked decisions
-// from `tasks/lt4_design_parking_lot.md`:
+// The four exported functions mirror the four design-locked decisions:
 //
 //   - computeDropZone        : y-position → upper/middle/lower third
 //   - isDescendant           : DFS in source's subtree, used for cycle
@@ -56,7 +54,7 @@ export function isDescendant(
  *    - only lifetime free → "lifetime"
  *    - only death free → "death"
  *    - both filled → null (caller refuses the drop)
- *  Uses each child's `role` field — Batch A populated this on every
+ *  Uses each child's `role` field, populated on every
  *  EmitterTreeNode. */
 export function resolveReparentSlot(
   target: EmitterTreeNode,

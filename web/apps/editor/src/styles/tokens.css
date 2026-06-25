@@ -18,7 +18,7 @@
      backgrounds, native scrollbars) in DARK — without this they paint
      light-mode chrome even on the dark theme. `accent-color` (base.css)
      tints the check; `color-scheme` fixes the box background. Safe with
-     transparency: html/body/#root set explicit transparent
+     the transparency setup: html/body/#root set explicit transparent
      backgrounds (globals.css), so this doesn't repaint the canvas. */
   color-scheme: dark;
   --bg: #111111;

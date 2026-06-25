@@ -8,7 +8,7 @@ import { Toolbar } from "../Toolbar";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { __resetRightDockForTests } from "@/lib/right-dock";
 
-//: toolbar buttons mount a Tip (Radix Tooltip.Root), which requires
+// toolbar buttons mount a Tip (Radix Tooltip.Root), which requires
 // the Tooltip.Provider that App.tsx supplies in production — this helper
 // stands in for it here (same precedent as EmitterTree.test.tsx).
 const renderToolbar = (bridge: Bridge) =>

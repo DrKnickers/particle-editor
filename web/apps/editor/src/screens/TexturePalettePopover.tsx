@@ -1,4 +1,4 @@
-// TexturePalettePopover — frequently-used texture palette (sub-feature B).
+// TexturePalettePopover — frequently-used texture palette.
 //
 // A Radix Popover (mirroring GroundDropdown/BackgroundDropdown) anchored to
 // a trigger passed as `children` — in practice the palette button on
@@ -226,7 +226,7 @@ function PaletteCell({
   onTogglePin: (filename: string) => void;
 }) {
   // undefined = still loading; otherwise the decoded URI + why-no-image status.
-  //: the host distinguishes a missing file (typo'd path) from a broken
+  // The host distinguishes a missing file (typo'd path) from a broken
   // texture (present but won't decode) so we can show different placeholders.
   type Thumb = { dataUri: string | null; status: "ok" | "missing" | "broken" };
   const [thumb, setThumb] = useState<Thumb | undefined>(undefined);

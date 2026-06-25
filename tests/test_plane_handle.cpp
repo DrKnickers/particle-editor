@@ -44,7 +44,7 @@ int main(){
     ok( planehandle::HandleHit(7.5f,7.5f,inL,outL,s)&&close(s,0.45f), "score is Chebyshev, not radial");
 
     // --- ComposePlanePos: ground (normalAxis=2) -> Z invariant; X/Y take the accums.
-    //     (This pins Risk 5: a plane drag never changes height.)
+    //     (This pins the invariant that a plane drag never changes height.)
     { const float start[3]={10.f,20.f,5.f}; float out[3];
       planehandle::ComposePlanePos(start,2,3.f,-4.f,out);
       ok(close(out[0],13.f)&&close(out[1],16.f)&&close(out[2],5.f), "ComposePlanePos ground: Z invariant"); }

@@ -1,8 +1,8 @@
-// Vitest: StatusBar parity elements (/7/8).
-//   — always-on "⇧ Shift: spawn instance" hint (legacy main.cpp).
-//   — "PAUSED" indicator shown ONLY while the preview is paused
-//           (driven by engine/state/changed, same signal the Toolbar uses).
-//   — cursor readout is 2 decimal places (legacy was 2dp).
+// Vitest: StatusBar parity elements.
+//   - always-on "⇧ Shift: spawn instance" hint (legacy main.cpp).
+//   - "PAUSED" indicator shown ONLY while the preview is paused
+//     (driven by engine/state/changed, same signal the Toolbar uses).
+//   - cursor readout is 2 decimal places (legacy was 2dp).
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
@@ -30,13 +30,13 @@ function makeBridge(snapshot: { paused: boolean } = { paused: false }) {
 }
 
 describe("StatusBar", () => {
-  it("always shows the shift-to-spawn hint ()", () => {
+  it("always shows the shift-to-spawn hint", () => {
     const { bridge } = makeBridge();
     render(<StatusBar bridge={bridge} />);
     expect(screen.getByText("⇧ Shift: spawn instance")).toBeInTheDocument();
   });
 
-  it("shows PAUSED only while paused ()", async () => {
+  it("shows PAUSED only while paused", async () => {
     const { bridge, emit } = makeBridge();
     render(<StatusBar bridge={bridge} />);
     // Not paused initially.
@@ -47,16 +47,16 @@ describe("StatusBar", () => {
     expect(screen.queryByText("PAUSED")).not.toBeInTheDocument();
   });
 
-  it("renders the cursor readout with 2 decimals ()", () => {
+  it("renders the cursor readout with 2 decimals", () => {
     const { bridge, emit } = makeBridge();
     render(<StatusBar bridge={bridge} />);
     emit("cursor/position-3d", { x: 1, y: -2.5, z: 3.456 });
     expect(screen.getByText("1.00, -2.50, 3.46")).toBeInTheDocument();
   });
 
-  // Preview spawn-overload guard (plan part 2 §3): while stats/tick
+  // Preview spawn-overload guard: while stats/tick
   // reports overload=true, the Particles readout tints amber; it reverts
-  // when the overload clears. feel test]: the readout is a passive
+  // when the overload clears. Feel test: the readout is a passive
   // non-button, so it carries NO tooltip — the OverloadBanner over the
   // viewport states the cause.
   it("tints the particle count amber while overloaded", () => {

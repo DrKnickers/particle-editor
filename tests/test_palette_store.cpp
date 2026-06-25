@@ -1,4 +1,4 @@
-// — black-box test for PaletteStore data layer.
+// Black-box test for PaletteStore data layer.
 //
 // Compiled & linked separately from the main editor exe. Exercises
 // mod-switch, recent/pin lifecycle, eviction, persistence, and edge

@@ -49,7 +49,7 @@ static unsigned long readInteger(ChunkReader& reader)
 	return letohl(value);
 }
 
-//: map a raw file integer to a valid InterpolationType, falling
+// Map a raw file integer to a valid InterpolationType, falling
 // back to the linear default for anything outside {IT_UNKNOWN..IT_STEP}.
 static ParticleSystem::Emitter::Track::InterpolationType clampInterpolation(unsigned long raw)
 {
@@ -307,7 +307,7 @@ void ParticleSystem::Emitter::write(ChunkWriter& writer, bool copy)
 		writer.endChunk();
 	}
 
-	// Editor-only link-group chunk (). Game engine readers skip
+	// Editor-only link-group chunk. Game engine readers skip
 	// unknown chunks at the emitter level (the existing optional
 	// 0x36 / 0x45 chunks rely on the same behaviour). Only emitted
 	// when this emitter actually belongs to a group, so files
@@ -338,7 +338,7 @@ void ParticleSystem::Emitter::readProperties(ChunkReader& reader)
 			case 0x04: blendMode				= readInteger(reader) % NUM_BLEND_MODES; break;
 			case 0x05:
 			{
-				//: a crafted 0xFFFFFFFF would wrap `+1` to 0,
+				// A crafted 0xFFFFFFFF would wrap `+1` to 0,
 				// producing a zero-triangle emitter. Clamp so the loaded
 				// value never wraps and stays >= 1.
 				unsigned long raw = readInteger(reader);
@@ -409,7 +409,7 @@ void ParticleSystem::Emitter::readGroups(ChunkReader& reader)
 		Verify(reader.next() == 0x1100);
 		Verify(reader.next() == 0x1101);
 		reader.read(&groups[i], sizeof(Group));
-		//: `type` is blitted raw from the file but is consumed as a
+		// `type` is blitted raw from the file but is consumed as a
 		// group-type selector (GT_EXACT..GT_CYLINDER). Reject out-of-range
 		// values. sphereEdge/cylinderEdge stay unvalidated -- they are used
 		// as flags, not bounded enums.
@@ -434,7 +434,7 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 		Verify(reader.nextMini() == 0x03);
 		Track::Key last(100.0f, readByte(reader) / 255.0f);
 		Verify(reader.nextMini() == 0x04);
-		//: the file int is cast straight to the enum; clamp an
+		// The file int is cast straight to the enum; clamp an
 		// out-of-range value to the linear default rather than store a
 		// bogus interpolation mode.
 		trackContents[i].interpolation = clampInterpolation(readInteger(reader));
@@ -448,7 +448,7 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 		{
 			Track::Key key;
 			uint32_t value;
-			//: this mini-chunk is a 4-byte value + 4-byte time;
+			// This mini-chunk is a 4-byte value + 4-byte time;
 			// guard the exact size before the raw reads, mirroring how
 			// readFloat/readInteger validate reader.size().
 			Verify(reader.size() == sizeof(uint32_t) + sizeof(float));
@@ -491,7 +491,7 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 		last.time  = 100.0;
 		last.value = readFloat(reader);
 		Verify(reader.nextMini() == 0x04);
-		//: clamp an out-of-range interpolation int to the linear default.
+		// Clamp an out-of-range interpolation int to the linear default.
 		trackContents[i].interpolation = clampInterpolation(readInteger(reader));
 		Verify(reader.nextMini() == -1);
 
@@ -501,7 +501,7 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 		while ((type = reader.nextMini()) == 5)
 		{
 			Track::Key key;
-			//: guard the exact key size (value + time) before the
+			// Guard the exact key size (value + time) before the
 			// raw blit, mirroring the channel-track loop above.
 			Verify(reader.size() == sizeof(Track::Key));
 			reader.read(&key, sizeof(Track::Key));
@@ -546,7 +546,7 @@ ParticleSystem::Emitter::Emitter(ChunkReader& reader)
 		type = reader.next();
 	}
 
-	// Editor-only link-group chunk (). Optional; absent in
+	// Editor-only link-group chunk. Optional; absent in
 	// pre-feature files and in files where this emitter is unlinked.
 	if (type == 0x100)
 	{
@@ -583,7 +583,7 @@ ParticleSystem::Emitter::Emitter(const Emitter& emitter)
         tracks[i] = trackContents + (emitter.tracks[i] - emitter.trackContents);
     }
 
-    // F15: the default operator= just shallow-copied
+    // The default operator= just shallow-copied
     // m_instances (the set of live runtime EmitterInstance pointers),
     // leaving the cloned Emitter pointing at the source's live
     // instances. Subsequent destruction or mutation of the clone would
@@ -787,8 +787,8 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
 
     // Tracks — for each exempt slot, restore the saved track AND
     // break any src-side aliasing by pointing tracks[i] at our own
-    // trackContents[i]. The pre-code did this for TRACK_INDEX
-    // only; generalizes to any exempt track.
+    // trackContents[i]. The earlier code did this for TRACK_INDEX
+    // only; this generalizes to any exempt track.
     const bool trackExempt[NUM_TRACKS] = {
         exempt.trackRed,
         exempt.trackGreen,
@@ -816,7 +816,7 @@ void ParticleSystem::Emitter::copySharedParamsFrom(const Emitter&         src,
     if (exempt.unknown49) unknown49 = sav_unknown49;
 
 #ifndef NDEBUG
-    // R4 mitigation: assert that exempt fields hold their saved values.
+    // Assert that exempt fields hold their saved values.
     // Catches a forgotten restore if a future flag is added to
     // LinkExemptFlags but its restore line isn't added above.
     // Only asserts on the common easy-to-check fields (most-recent
@@ -979,11 +979,11 @@ void ParticleSystem::write(IFile* file)
 	}
 	writer.endChunk();
 
-	// per-group exempt-flags chunk. Editor-only — game engine
+	// Per-group exempt-flags chunk. Editor-only — game engine
 	// skips unknown system-level chunks (same pattern as 0x0002
 	// leaveParticles below). Only emitted when at least one group has
 	// a non-default exempt set; files without customization remain
-	// byte-identical to pre-output.
+	// byte-identical to the earlier output.
 	//
 	// Layout:
 	//   uint32_t count
@@ -1035,7 +1035,7 @@ void ParticleSystem::setLinkExemptFlags(uint32_t                 groupId,
 {
     if (groupId == 0) return;                                  // not a valid group
     // Normalize: don't store an entry that equals the v1 defaults.
-    // Keeps files without customisation byte-identical to pre-.
+    // Keeps files without customisation byte-identical to the earlier output.
     if (flags == GetDefaultLinkExemptFlags())
     {
         m_linkExempts.erase(groupId);
@@ -1073,8 +1073,8 @@ ParticleSystem::ParticleSystem(IFile* file)
 	    }
 	    Verify(type == -1);
 
-	    // Read optional system-body sibling chunks. Pre-readers
-	    // only handled 0x0002 (leaveParticles); extends to
+	    // Read optional system-body sibling chunks. Earlier readers
+	    // only handled 0x0002 (leaveParticles); this extends to
 	    // 0x0003 (per-group link-exempt flags). The loop tolerantly
 	    // skips any unrecognized chunk so future additions don't
 	    // require touching this code path.
@@ -1088,7 +1088,7 @@ ParticleSystem::ParticleSystem(IFile* file)
 	        }
 	        else if (type == 0x0003)
 	        {
-	            // per-group link-exempt flags.
+	            // Per-group link-exempt flags.
 	            uint32_t count = (uint32_t)readInteger(reader);
 	            for (uint32_t i = 0; i < count; ++i)
 	            {
@@ -1275,7 +1275,7 @@ size_t ParticleSystem::ImportEmittersFrom(
         catch (...)
         {
             placed = NULL;
-            //: a clone failure silently dropped the emitter. Keep the
+            // A clone failure silently dropped the emitter. Keep the
             // existing behaviour (skip the pick) but make it observable -- the
             // returned `imported` count already lets callers detect partial
             // imports (imported < picks.size()); log the specific drop in debug.
@@ -1419,7 +1419,7 @@ namespace {
 // index (`oldIndices[k]`) against the SNAPSHOT — never the live field. The
 // single-pass read-modify-write this replaces compared against the live field
 // and silently SWAPPED a parent's life/death children whenever one child's new
-// index aliased a sibling's old index (audit fix C). `moved[k]->index` is
+// index aliased a sibling's old index. `moved[k]->index` is
 // already the new index; `moved` and `oldIndices` are parallel, new-layout order.
 //
 // Shared by moveEmitter / moveEmitterToRootIndex / reorderManyRootsToIndex so

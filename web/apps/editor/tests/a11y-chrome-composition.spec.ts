@@ -6,7 +6,7 @@ import { CHROME_SURFACES, seedCanonicalUiState } from "./helpers/a11y-surfaces";
 import "./helpers/toMatchJSONGolden";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
-const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy" /* */;
+const COMPOSITION_MODE = process.env.ALO_HOSTING_MODE !== "legacy";
 // Absolute path because the editor's CWD is repo-root (per run-native-tests.mjs:66),
 // not the tests dir — see the matching comment in a11y-chrome.spec.ts (HWND lane).
 // ESM-equivalent of __dirname (package is "type": "module").
@@ -27,7 +27,7 @@ test.beforeAll(async () => {
     null,
     { timeout: 15_000 }
   );
-  await seedCanonicalUiState(page); //: pin canonical UI state (light theme + Spawner visible)
+  await seedCanonicalUiState(page); // pin canonical UI state (light theme + Spawner visible)
 });
 
 test.afterAll(async () => {
@@ -79,7 +79,7 @@ test.beforeEach(async ({}, testInfo) => {
       // Pause the particle simulation so live values don't leak into the
       // snapshot. See a11y-chrome.spec.ts (HWND lane) for full reasoning.
       await bridge.request({ kind: "engine/set/paused", params: { paused: true } });
-      // T9] Freeze the StatusBar's 4 Hz stats stream so cells
+      // Freeze the StatusBar's 4 Hz stats stream so cells
       // render `—` placeholders deterministically.
       await bridge.request({ kind: "stats/set-frozen", params: { frozen: true } });
     },

@@ -1,12 +1,12 @@
 // Custom Playwright matcher `expect(x).toMatchJSONGolden(path, opts)` for
-// a11y goldens.
+// the a11y goldens.
 //
 // Behavior:
 //   - String `received`: write as-is, no transformation. Used by the
-//     composition lane (T10), which captures Playwright's
+//     composition lane, which captures Playwright's
 //     `locator.ariaSnapshot()` YAML output. Goldens end in `.golden.yaml`.
 //   - Object `received`: serialize as `JSON.stringify(value, null, 2) + "\n"`
-//     and compare byte-for-byte. Used by the HWND lane (T9), which
+//     and compare byte-for-byte. Used by the HWND lane, which
 //     captures the normalized UIA tree from `uia_inspector.exe`. Goldens
 //     end in `.golden.json`.
 //   - With env `UPDATE_A11Y_GOLDENS=1`: write the serialized value to the
@@ -24,8 +24,8 @@
 //
 // Imported (side-effect) by every spec that uses `toMatchJSONGolden` — the
 // `expect.extend` call and the global type augmentation only take effect
-// once the module is loaded. T9/T10 spec templates include the import at
-// the top of each file.
+// once the module is loaded. The HWND and composition spec templates
+// include the import at the top of each file.
 
 import { expect, type MatcherReturnType } from "@playwright/test";
 import * as fs from "node:fs";
@@ -55,13 +55,11 @@ const FAILURE_DIR = path.join(__dirname, "..", "a11y-failures");
 //
 // Resolution: treat the date as volatile and normalize it to a stable
 // placeholder, exactly like the JSON normalizer's `volatile` property
-// list () and the StatusBar source-side freeze. The About dialog
+// list and the StatusBar source-side freeze. The About dialog
 // still shows the real commit date to users; the test simply doesn't
 // assert the specific value. Covers both lanes: composition (ariaSnapshot
 // YAML, inline "Build date: YYYY-MM-DD") and HWND (UIA tree JSON, where
 // the date is its own `"Name": "YYYY-MM-DD"` text node).
-//
-// See handoff item 16 + lessons.md for the full diagnosis.
 function normalizeVolatile(s: string): string {
   return s
     .replace(/Build date: \d{4}-\d{2}-\d{2}/g, "Build date: <DATE>")

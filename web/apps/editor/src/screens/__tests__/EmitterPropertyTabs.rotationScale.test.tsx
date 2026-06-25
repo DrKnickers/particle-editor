@@ -5,7 +5,7 @@ import type { ReactElement, ReactNode } from "react";
 
 import { FieldSpinner } from "../EmitterPropertyTabs";
 
-//: FieldSpinner mounts a Tip (Radix Tooltip.Root) on its label,
+// FieldSpinner mounts a Tip (Radix Tooltip.Root) on its label,
 // which requires the app-level Tooltip.Provider — wrapper stands in for it
 // (precedent: renderWithTooltips in EmitterTree.test.tsx).
 const TipProvider = ({ children }: { children: ReactNode }) => (

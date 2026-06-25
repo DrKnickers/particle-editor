@@ -1,4 +1,4 @@
-// Phase 3 Screen 4 Batch B3 Playwright contract specs.
+// Playwright contract specs.
 //
 // Verifies:
 //   1. emitters/drop { mode: "reorder", id, rootIndex } via the bridge

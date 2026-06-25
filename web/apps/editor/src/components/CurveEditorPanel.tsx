@@ -1,8 +1,8 @@
 // CurveEditorPanel — hybrid focus-channel curve editor.
 //
-// Task 2.6 set up the always-on bottom panel with a multi-channel
+// The always-on bottom panel has a multi-channel
 // overlay and per-channel visibility checkboxes. The hybrid focus-
-// channel restoration adds the edit surface that Task 2.6 dropped:
+// channel restoration adds the edit surface that the panel dropped:
 //
 //   - Clicking a channel ROW (not just the checkbox) sets that
 //     channel as the EDIT FOCUS. The focus row gets a visual
@@ -30,8 +30,8 @@
 // boot starts with the documented defaults (R / G / B visible,
 // focus on Red). Selection (per focus channel) clears on focus
 // change. Optimistic (time, value) override keeps spinners
-// populated across the bridge round-trip (lessons.md: sticky
-// override; don't clear on every `tracks` refresh).
+// populated across the bridge round-trip (sticky override; don't clear
+// on every `tracks` refresh).
 //
 // Y-axis range is UNIFIED across visible channels — every visible
 // curve renders into the same Y space (union of per-channel
@@ -80,7 +80,7 @@ import { useAtlasAutoOpen } from "@/lib/use-atlas-autoopen";
 // enabling either hides everything else (see `EXCLUSIVE_CHANNELS`,
 // `handleRowClick`, and the checkbox onChange handler). The Index
 // atlas sub-frame is read on its own integer scale, like Scale, so
-// it's not meaningful to overlay it with the colour curves (F9).
+// it's not meaningful to overlay it with the colour curves.
 export const CHANNELS: readonly ChannelDef[] = [
   { id: "red",      label: "Red",      color: "var(--x-axis)",  defaultOn: true,  trackName: "red" },
   { id: "green",    label: "Green",    color: "var(--y-axis)",  defaultOn: true,  trackName: "green" },
@@ -93,7 +93,7 @@ export const CHANNELS: readonly ChannelDef[] = [
 
 // Channels that are mutually exclusive with all others: turning one on
 // (via row click or checkbox) hides every other channel ("solo mode"),
-// and selecting any non-exclusive curve exits solo. F9 added Index to
+// and selecting any non-exclusive curve exits solo. Index was added to
 // the set that previously held only Scale; Rotation joined later (its
 // degrees/sec scale, like Index and Scale, doesn't share the 0..1 band).
 const EXCLUSIVE_CHANNELS: ReadonlySet<string> = new Set(["scale", "index", "rotation"]);
@@ -307,7 +307,7 @@ export function CanvasWithAxisLabels({
   yMin: number;
   yMax: number;
   children: React.ReactNode;
-  /** CRV: a primary pointerdown landing in a label gutter (outside the plot
+  /** A primary pointerdown landing in a label gutter (outside the plot
    *  SVG) routes here so the curve marquee can start from the margins. */
   onGutterPointerDown?: (e: React.PointerEvent) => void;
 }) {
@@ -330,7 +330,7 @@ export function CanvasWithAxisLabels({
       data-testid="curve-canvas-with-axes"
       className="grid h-full w-full"
       onPointerDown={(e) => {
-        // CRV gutter-marquee: a primary press landing OUTSIDE the plot SVG
+        // Gutter-marquee: a primary press landing OUTSIDE the plot SVG
         // (in a label gutter) starts a marquee via the parent. A press inside
         // the SVG belongs to the plot's own handlers (whose backdrop also
         // stopPropagations, so this guard is belt-and-suspenders).
@@ -446,7 +446,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // visible channel avoids that one-tick churn.
   const [focusChannel, setFocusChannel] = useState<string>("red");
   const [mode, setMode] = useState<EditMode>("select");
-  // CRV: handle to start a marquee from the axis-label gutters (see
+  // Handle to start a marquee from the axis-label gutters (see
   // CanvasWithAxisLabels.onGutterPointerDown wiring below).
   const curveRef = useRef<CurveMarqueeHandle>(null);
   // Selection state — keyed by key TIME (not array index). Per focus
@@ -454,7 +454,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   const [selectedKeyTimes, setSelectedKeyTimes] = useState<Set<number>>(
     () => new Set(),
   );
-  // sticky optimistic override — see lessons.md.
+  // Sticky optimistic override.
   const [optimisticSelected, setOptimisticSelected] = useState<
     { time: number; value: number } | null
   >(null);
@@ -547,7 +547,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     return tracks.find((t) => t.name === focusedChannel.trackName) ?? null;
   }, [tracks, focusedChannel]);
 
-  // Atlas eligibility (): the picker only auto-opens when the emitter's
+  // Atlas eligibility: the picker only auto-opens when the emitter's
   // texture is an atlas (gridSide ≥ 2). CurveEditorPanel doesn't otherwise
   // read emitter properties, so fetch just `textureSize` keyed on the
   // selection. Default 1 (ineligible) until the fetch resolves; a failed /
@@ -606,12 +606,12 @@ export function CurveEditorPanel({ bridge }: Props) {
   const focusLocked = focusedTrack !== null && focusedTrack.lockedTo !== null;
 
   // Read-only mirror: never leave Insert active on a locked focus —
-  // covers lock-while-insert AND focus-switch-onto-locked (spec §3.3).
+  // covers lock-while-insert AND focus-switch-onto-locked.
   useEffect(() => {
     if (focusLocked && mode === "insert") setMode("select");
   }, [focusLocked, mode]);
 
-  // an-audit-finding robustness: after a tree/changed refetch the engine's float32 key
+  // Robustness: after a tree/changed refetch the engine's float32 key
   // times can land an ULP away from the times we optimistically put in
   // `selectedKeyTimes` (e.g. a group move commits N keys; the real engine
   // rounds each to float32). Without this, every moved key EXCEPT the
@@ -834,7 +834,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       // only shifts the rendered POSITION via dragRef, not the
       // logical time). Sticky-optimistic is cleared so it can't
       // pull stale spinner values over the incoming live-drag data.
-      // an-audit-finding: keep a multi-selection intact when the grabbed key is one of
+      // Keep a multi-selection intact when the grabbed key is one of
       // its members — that's the start of a group drag, not a re-select.
       setSelectedKeyTimes((prev) =>
         prev.has(keyTime) && prev.size > 1 ? prev : new Set([keyTime]),
@@ -941,7 +941,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     };
   }, [liveDrag, selectedKeyTimes, focusedTrack, borderKeyTimes, optimisticSelected]);
 
-  // F8: multi-key selection (>1) shows the AVERAGE time/value of the
+  // Multi-key selection (>1) shows the AVERAGE time/value of the
   // selected keys; editing shifts the whole group by the delta
   // (preserve spread). Mirrors legacy TrackEditor.cpp / CurveEditor.cpp
   // CurveEditor_MoveSelection: the average is over ALL selected keys
@@ -1042,7 +1042,7 @@ export function CurveEditorPanel({ bridge }: Props) {
               // Commit the float32 (engineTime) value, NOT the raw double
               // wireTime, so the time the engine stores + returns on refetch
               // is EXACTLY what we put in selectedKeyTimes — otherwise the
-              // moved keys lose their selected highlight (an-audit-finding polish).
+              // moved keys lose their selected highlight.
               oldTime: m.oldTime,
               newTime: m.engineTime,
               newValue: m.newValue,
@@ -1054,7 +1054,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     [bridge, selectedId, focusedTrack, focusedChannel.trackName, selectedKeyTimes, borderKeyTimes],
   );
 
-  // an-audit-finding: a multi-key canvas drag commits as a single group shift, reusing
+  // A multi-key canvas drag commits as a single group shift, reusing
   // the same path the Time/Value spinners use for multi-selections.
   const handleGroupDragEnd = useCallback(
     (dTime: number, dValue: number) => {
@@ -1085,7 +1085,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   const handleTimeSpinner = useCallback(
     (nextTime: number) => {
       if (selectedId === null || focusedTrack === null || focusLocked) return;
-      // F8: multi-key → shift the group's times by (new avg − old avg).
+      // Multi-key → shift the group's times by (new avg − old avg).
       if (multiSelected !== null) {
         if (!multiSelected.editable) return;
         const dTime = nextTime - multiSelected.avgTime;
@@ -1126,7 +1126,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   const handleValueSpinner = useCallback(
     (nextValue: number) => {
       if (selectedId === null || focusLocked) return;
-      // F8: multi-key → shift the group's values by (new avg − old avg).
+      // Multi-key → shift the group's values by (new avg − old avg).
       if (multiSelected !== null) {
         const dValue = nextValue - multiSelected.avgValue;
         if (dValue === 0) return;
@@ -1221,7 +1221,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // currently locked to another channel (read-only).
   const interpDisabled = selectedId === null || focusedTrack === null || focusLocked;
 
-  // ── Key clipboard (an-audit-finding) ─────────────────────────────────────────
+  // ── Key clipboard ─────────────────────────────────────────
   // Copy the selected keys' {time,value} (borders included — legacy
   // CopyKeys copies the whole selection). Returns whether anything was
   // copied so Cut can bail before deleting.
@@ -1246,7 +1246,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // (host dedupes by epsilon + returns the real inserted time). We select
   // the returned times so the pasted keys highlight — same auto-select-
   // the-returned-time path handleCanvasAdd uses (and the same reason it
-  // survives float32 drift natively,). Blocked on a locked focus.
+  // survives float32 drift natively). Blocked on a locked focus.
   const handlePasteKeys = useCallback(() => {
     if (selectedId === null || focusLocked) return;
     const clip = getCurveKeysClipboard();
@@ -1304,7 +1304,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     return () => { window.removeEventListener("keydown", onKeyDown); };
   }, [handleCopyKeys, handleCutKeys, handlePasteKeys, selectedKeyTimes]);
 
-  // Read-only mirror (spec §2.1): a locked focus channel gets NO
+  // Read-only mirror: a locked focus channel gets NO
   // interactive handlers — drag, insert, key-click, marquee, and the
   // key context menu are all selection/mutation gateways. onCanvasClick
   // and onCanvasContextMenu stay wired (clear-selection / mode-drop UX).
@@ -1351,7 +1351,7 @@ export function CurveEditorPanel({ bridge }: Props) {
           className="ce-toolbar"
         >
           {/* Mode toggle (Select / Insert) */}
-          {/* T6: disabled buttons fire no pointer events, so the Tip rides an
+          {/* Disabled buttons fire no pointer events, so the Tip rides an
               inline-block span wrapper. Copy flips to the lock hint while
               the channel is locked, mirroring the Delete button pattern. */}
           <Tip
@@ -1501,7 +1501,7 @@ export function CurveEditorPanel({ bridge }: Props) {
           {/* Delete action — useful as a visible affordance even
               with the Delete key wired (discoverability + works in
               browsers with the key intercepted by extensions). */}
-          {/* T6: the "Select a non-border key first" hint only matters while
+          {/* The "Select a non-border key first" hint only matters while
               the button is DISABLED — disabled elements fire no pointer
               events, so the Tip rides an inline-block span wrapper. */}
           <Tip
@@ -1529,7 +1529,7 @@ export function CurveEditorPanel({ bridge }: Props) {
 
           {/* Time / Value spinners — populated from the focus channel's
               selected key, or the AVERAGE of the selected keys when >1 is
-              selected (F8). Disabled when nothing is selected. A border
+              selected. Disabled when nothing is selected. A border
               single-key disables Time (value-only edit); a multi-select of
               all-border keys does the same. The Spinner `key` binds to
               track + selection size + displayed value so the input
@@ -1543,9 +1543,9 @@ export function CurveEditorPanel({ bridge }: Props) {
               onChange={handleTimeSpinner}
               min={0}
               max={100}
-              // an-audit-finding: legacy used a 0.1 time step; wheel/arrows nudge in
+              // Legacy used a 0.1 time step; wheel/arrows nudge in
               // tenths of a percent. Display picks up the app-wide 2dp
-              // default () — decoupled from step — so the Time field
+              // default — decoupled from step — so the Time field
               // reads consistently with the Value spinner beside it.
               step={0.1}
               unit="%"
@@ -1689,7 +1689,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                   selectedKeyTimes={selectedKeyTimes}
                   onCanvasClick={handleCanvasClick}
                   onCanvasContextMenu={() => {
-                    // an-audit-finding: mirror legacy WM_RBUTTONDOWN. In Insert mode a
+                    // Mirror legacy WM_RBUTTONDOWN. In Insert mode a
                     // right-click drops back to Select mode without
                     // deselecting; in Select mode it clears the selection.
                     if (mode === "insert") {
@@ -1788,7 +1788,7 @@ function KeyContextMenu({
       className="fixed z-50 min-w-[140px] rounded-md border border-border-2 bg-bg-2 p-1 text-xs text-text shadow-[var(--shadow-soft)]"
       style={{ left: x, top: y }}
     >
-      {/* T6 + T4: the tooltip only exists while the item is DISABLED
+      {/* The tooltip only exists while the item is DISABLED
           (border key) — disabled elements fire no pointer events, so the
           Tip rides a block span wrapper (block, not inline-block, to keep
           the menu item full-width). */}

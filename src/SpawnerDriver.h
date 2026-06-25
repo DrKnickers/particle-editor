@@ -42,7 +42,7 @@ struct SpawnerConfig
 
     D3DXVECTOR3 jitterPosition = D3DXVECTOR3(0, 0, 0);   // per-axis ±, world units
 
-    // Path-shaping (). Each spawned instance follows a shaped path
+    // Path-shaping. Each spawned instance follows a shaped path
     // over its lifetime rather than a straight line:
     //
     //   - acceleration: deterministic constant accel (gravity-like) that
@@ -55,7 +55,7 @@ struct SpawnerConfig
     //     per second (Hz), shared across axes.
     //
     // All zero ⇒ a plain straight line (constant velocity), the
-    // pre-behaviour minus the old velocity jitter.
+    // earlier behaviour minus the old velocity jitter.
     D3DXVECTOR3 acceleration      = D3DXVECTOR3(0, 0, 0);   // arc, units/sec²
     D3DXVECTOR3 squiggleAmplitude = D3DXVECTOR3(0, 0, 0);   // per-axis ±, world units
     float       squiggleFrequency = 1.0f;                  // Hz; 0..SQUIGGLE_FREQ_MAX

@@ -1,16 +1,17 @@
 // PaletteThumbs.cpp — thumbnail decode → base64 PNG for the new-UI texture
-// palette (sub-feature B).
+// palette.
 //
 // Self-contained on purpose: it reuses the *technique* of the legacy popup's
 // DecodeThumbnail (TexturePalette.cpp) — D3DXCreateTextureFromFileInMemoryEx
 // into a scratch A8R8G8B8 surface, LockRect, copy out the BGRA pixels — but
 // targets a PNG byte stream (GDI+) instead of an HBITMAP, and is parameterised
 // with the FileManager + device rather than the popup's file-static services.
-// (The legacy popup TU, TexturePalette.cpp, was removed with arch-A in.)
+// (The legacy popup TU, TexturePalette.cpp, was removed with the old
+// architecture.)
 //
 // The PNG-encoder-CLSID lookup and base64 encoder are shared via
 // host/GdiplusEncode.h (host::GdiplusEncoderClsid / host::Base64Encode),
-// consolidated from AlphaCompositor's former copies by DRY audit cpp-host-1.
+// consolidated from AlphaCompositor's former copies by a DRY audit.
 
 #include "TexturePalette.h"
 #include "../utils.h"     // WideToAnsi
@@ -20,7 +21,7 @@
 #include <d3d9.h>
 #include <d3dx9.h>
 #include <gdiplus.h>
-#include "../host/GdiplusEncode.h"   // host::GdiplusEncoderClsid / host::Base64Encode (DRY cpp-host-1)
+#include "../host/GdiplusEncode.h"   // host::GdiplusEncoderClsid / host::Base64Encode
 #include <objidl.h>       // IStream / CreateStreamOnHGlobal
 #include <algorithm>
 #include <cassert>
@@ -41,8 +42,8 @@ namespace {
 using ThumbStatus = TexturePalette::ThumbStatus;
 
 // Decode at a fixed square size. Larger than the legacy 32px popup thumb
-// (the React grid renders ~120px cells from sub-feature B's "faithful"
-// option) but bounded so the base64 payload stays small.
+// (the React grid renders ~120px cells from the "faithful" option) but
+// bounded so the base64 payload stays small.
 const int THUMB_PNG_PX = 128;
 
 // filename -> decode result (uri + status). Failures are cached too: a
@@ -51,7 +52,7 @@ const int THUMB_PNG_PX = 128;
 std::unordered_map<wstring, TexturePalette::ThumbnailResult> g_bridgeThumbCache;
 
 // PNG encoder-CLSID lookup + base64 encoder now shared via host/GdiplusEncode.h
-// (DRY audit cpp-host-1) — these were copied verbatim from AlphaCompositor.cpp.
+// — these were copied verbatim from AlphaCompositor.cpp.
 // Called qualified as host::GdiplusEncoderClsid / host::Base64Encode below
 // (this TU is in an anonymous namespace, not namespace host).
 
@@ -89,7 +90,7 @@ bool ReadTextureBytes(IFileManager* fm, const wstring& filename, vector<char>& o
 
     const unsigned long size = file->size();
     out.resize(size);
-    //: a truncated read must fail, not silently hand a zero-padded
+    // A truncated read must fail, not silently hand a zero-padded
     // buffer to the decoder as if it were complete. Also Release() the
     // refcounted IFile (was `delete file`, which bypassed the IFile refcount).
     if (size && file->read(out.data(), size) != size)
@@ -162,7 +163,7 @@ bool EncodeTextureToPngBytes(IDirect3DTexture9* tex, int w, int h, vector<uint8_
     return true;
 }
 
-// Decode `filename` to PNG bytes (on Ok).: the return value reports
+// Decode `filename` to PNG bytes (on Ok). The return value reports
 // WHY there's no image. Missing = the file isn't reachable (no device/FM, or
 // FileManager can't resolve it = a typo'd/absent path). Broken = the file IS
 // present but unusable (empty, or D3DX/GDI+ can't turn it into pixels). This

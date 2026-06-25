@@ -8,7 +8,7 @@
 
 namespace {
 
-// [Item 3] CSS `ease` timing function = cubic-bezier(0.25, 0.1, 0.25, 1.0),
+// CSS `ease` timing function = cubic-bezier(0.25, 0.1, 0.25, 1.0),
 // evaluated the way browsers do (the WebKit/Chromium UnitBezier): given the
 // animation's LINEAR progress x in [0,1], solve for the curve parameter t with
 // bezierX(t) = x (Newton-Raphson + bisection fallback), then return bezierY(t).
@@ -91,7 +91,7 @@ void LayoutBroker::SetCompositor(Compositor* compositor)
     // Replay the cached scene-rect onto the newly-attached compositor
     // so the first frame post-attach is sized correctly — avoids a
     // 1-3 frame full-client glitch before React's first
-    // layout/scene-rect dispatch arrives (sub-plan §3.5).
+    // layout/scene-rect dispatch arrives.
     if (m_dcompCompositor) ReemitSceneRect();
 }
 
@@ -138,13 +138,13 @@ void LayoutBroker::Apply(int x, int y, int w, int h)
                  SWP_NOACTIVATE | SWP_NOZORDER);
     InvalidateRect(m_viewport, nullptr, FALSE);
 
-    // [Item 3] A real viewport resize invalidates the dock-slide anim's captured
-    // absolute-px from/to — cancel it (spec risk #4) and let the static
+    // A real viewport resize invalidates the dock-slide anim's captured
+    // absolute-px from/to — cancel it and let the static
     // scene-rect path resume. (m_lastW/H still hold the OLD size here.)
     if (w != m_lastW || h != m_lastH) CancelSceneAnim();
 
     // Reset the D3D9 swap chain so its backbuffer matches the new HWND
-    // client size. [resize-perf revised Fix A] Cheap ResetEx path with
+    // client size. [resize-perf] Cheap ResetEx path with
     // full-Reset fallback, shared via ResetEngineForResize.
     if (m_engine && (w != m_lastW || h != m_lastH))
     {
@@ -210,7 +210,7 @@ void LayoutBroker::PredictAndApply()
 
     const bool sizeChanged = (newW != m_lastW || newH != m_lastH);
 
-    // [Item 3] Cancel a dock-slide anim on a real resize (spec risk #4); the
+    // Cancel a dock-slide anim on a real resize; the
     // move-only branch above already returned via RefreshScreenPosition.
     if (sizeChanged) CancelSceneAnim();
 
@@ -221,7 +221,7 @@ void LayoutBroker::PredictAndApply()
     m_lastClientW = curW;
     m_lastClientH = curH;
 
-    // [resize-perf revised Fix A] Per-tick reset stays — but on the
+    // [resize-perf] Per-tick reset stays — but on the
     // cheap ResetEx path (~3-5 ms vs the ~24 ms full reset, which spent
     // ~20 ms re-decoding textures ResetEx lets us keep). The scene
     // therefore renders at the CORRECT size on every sizemove tick: no
@@ -264,8 +264,8 @@ void LayoutBroker::ResetEngineForResize(int w, int h)
             // device is now in DEVICENOTRESET. In interactive use
             // Render()'s next-frame guard recovers; in --test-host mode
             // the viewport HWND is hidden so Render() isn't pumped,
-            // which would leave the device stuck (handoff Open Items §1
-            // pre-2026-05-20). Recover explicitly so any later bridge
+            // which would leave the device stuck (a known prior issue).
+            // Recover explicitly so any later bridge
             // call that touches D3D sees a live device.
             resetOk = false;
         }
@@ -317,14 +317,14 @@ void LayoutBroker::RefreshScreenPosition()
 
 void LayoutBroker::SetSceneRect(int x, int y, int w, int h)
 {
-    // [Item 3] Self-defense: while a dock-slide anim owns the scene rect, drop
+    // Self-defense: while a dock-slide anim owns the scene rect, drop
     // external (stray / late) scene-rects so they can't clobber the host's
     // smooth interpolation. The authoritative settle send arrives AFTER the anim
     // ends (web schedules it at 260ms > the 200ms tween, by which point
     // m_sceneAnim.active is false), so it is not dropped; and a re-toggle arrives
     // as a fresh animate-scene-rect (StartSceneAnim), not via this path.
     //
-    // [resize-perf C3, REVERTED 2026-06-10] A chase-lerp variant smoothed the
+    // [resize-perf, REVERTED 2026-06-10] A chase-lerp variant smoothed the
     // interactive scene-rect stream here (each rect a short host-clocked glide).
     // User verdict killed it: a chase's steady-state lag is ONE PACKET INTERVAL
     // by construction, and under real drag load the stream runs ~12/s →
@@ -332,7 +332,7 @@ void LayoutBroker::SetSceneRect(int x, int y, int w, int h)
     // starved the chases (PredictAndApply cancels the anim every size tick),
     // leaving backing colour in newly revealed areas. Smoothing cannot beat the
     // data rate — instant application tracks the panels' own relayout cadence
-    // as tightly as the architecture allows ().
+    // as tightly as the architecture allows.
     if (m_sceneAnim.active) return;
     ApplySceneRect(x, y, w, h);
 }
@@ -364,22 +364,22 @@ void LayoutBroker::ApplySceneRect(int x, int y, int w, int h, bool animFrame)
         m_alphaCompositor->SetSceneRect(x - m_lastX, y - m_lastY, w, h);
     }
 
-    // Phase 3 Stage 5 — composition-mode scene-rect transform.
+    // Composition-mode scene-rect transform.
     // Compositor's engine visual lives in host-client coords (root-
     // visual child) — NO translation. Engine RT is sized to full host
     // client — also host-client coords. Both consumers receive (x, y,
     // w, h) verbatim. Gating on m_dcompCompositor != nullptr IS the
-    // composition-mode signal (sub-plan R9 mitigation c — keeps
-    // canvas-jpeg / arch-A paths byte-identical to today).
+    // composition-mode signal (keeps
+    // canvas-jpeg / legacy paths byte-identical to today).
     if (m_dcompCompositor)
     {
-        // Phase 3 Stage 5 T6 follow-up (rev 2) — B-γ engine
+        // Engine
         // viewport scoping restored, with per-pixel-FoV reference =
         // CURRENT engine RT height (not the boot-time scene-rect
         // height that an earlier iteration captured). With reference
         // = RT_H, scene-rect H ≤ RT_H always, so fovY ≤ 45° — engine
         // renders LESS world per frame at large windows, not more.
-        // Net perf at maximized should be ≥ pre-Stage-5 (less
+        // Net perf at maximized should be ≥ before this change (less
         // rasterization in the scene pass, narrower projection).
         //
         // Order: engine first so it knows the new viewport before
@@ -389,7 +389,7 @@ void LayoutBroker::ApplySceneRect(int x, int y, int w, int h, bool animFrame)
         // the fresh engine pixels.
         if (m_engine)
         {
-            // [black-line fix, session 10] Guard band. The engine RT is a
+            // [black-line fix] Guard band. The engine RT is a
             // D3D9Ex shared surface; its D3D11 alias (what DComp actually
             // presents) is INCOHERENT in the rightmost ~3-4px of the rendered
             // scene-rect region — the D3D9 side renders correct content there,
@@ -543,7 +543,7 @@ void LayoutBroker::ReemitSceneRect()
             m_alphaCompositor->SetSceneRect(0, 0, 0, 0);
     }
 
-    // Phase 3 Stage 5 — re-emit the cached scene-rect onto the
+    // Re-emit the cached scene-rect onto the
     // DComp Compositor + Engine. Both consume main-client coords directly.
     // SetCompositor replays state onto a newly-attached compositor;
     // idempotence guards inside SetEngineVisualTransform + SetSceneViewport

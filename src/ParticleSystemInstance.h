@@ -23,7 +23,7 @@ class ParticleSystemInstance : public Object3D
     TimeF                    m_lastUpdateTime = -1.0f;
     bool                     m_lifetimeExpired = false;
 
-    // Path-shaping (). Captured at the first-Update baseline /
+    // Path-shaping. Captured at the first-Update baseline /
     // SetPathShape; the instance position is then computed analytically
     // from elapsed time τ = currentTime - m_spawnTime:
     //
@@ -66,7 +66,7 @@ public:
     // call StopSpawning when (currentTime - spawnTime) reaches it.
     void SetMaxLifetime(float seconds) { m_maxLifetime = seconds; }
 
-    // Set by the SpawnerDriver after spawn (). Stamps the
+    // Set by the SpawnerDriver after spawn. Stamps the
     // path-shaping parameters; the per-instance squiggle phase makes
     // sibling instances in a burst diverge. All-zero ⇒ a straight line.
     void SetPathShape(const D3DXVECTOR3& accel,

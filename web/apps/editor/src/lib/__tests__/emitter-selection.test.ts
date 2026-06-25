@@ -1,4 +1,4 @@
-// Vitest specs for the emitter-selection Zustand atom (Screen 4 B2).
+// Vitest specs for the emitter-selection Zustand atom.
 // Covers the four action shapes: setSingle, toggle add/remove, range,
 // and clear. The atom is the React-side ground truth for multi-select;
 // EmitterTree click handlers route through it.

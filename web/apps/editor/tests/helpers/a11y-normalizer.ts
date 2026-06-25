@@ -1,4 +1,4 @@
-// UIA accessibility-tree normalizer for HWND-mode goldens ().
+// UIA accessibility-tree normalizer for HWND-mode goldens.
 //
 // Purpose: take a raw UIA snapshot — produced by the Phase 3 a11y probe
 // against the running editor host — and reduce it to a deterministic,
@@ -9,7 +9,7 @@
 //      `allowlist.volatile` is the documented inverse (RuntimeId,
 //      BoundingRectangle, etc.) and is not consulted directly here —
 //      the stable allowlist is authoritative.
-//   2. Wrapper stripping. The HWND-mode tree from the T0 probe is
+//   2. Wrapper stripping. The HWND-mode tree from the a11y probe is
 //      wrapped in 3+ levels of Chromium/WebView2 chrome
 //      (Chrome_WidgetWin_1 → BrowserRootView → NonClientView → …).
 //      These wrappers have no semantic meaning for the React app but
@@ -60,7 +60,7 @@ export function normalize(node: UIANode, allowlist: Allowlist): UIANode {
   // Strip wrapper visuals: if a child's AutomationId, ControlType, OR
   // ClassName matches alwaysStripWrappers, replace it with its
   // children. ClassName match is what catches the Chromium/WebView2
-  // chrome wrappers (Chrome_WidgetWin_1 etc.) — see T0 probe findings.
+  // chrome wrappers (Chrome_WidgetWin_1 etc.) — see the a11y probe findings.
   const wrappers = new Set(allowlist.alwaysStripWrappers);
   children = children.flatMap((c) => {
     const isWrapper =
@@ -73,7 +73,7 @@ export function normalize(node: UIANode, allowlist: Allowlist): UIANode {
   // Use ordinal (byte-value) comparison, NOT localeCompare — locale-sensitive
   // comparison produces inconsistent ordering for separator characters like `|`
   // vs alphabetic characters across runs and environments (Windows ICU table
-  // version, OS language pack). Surfaced during T9.4 determinism reruns.
+  // version, OS language pack). Surfaced during determinism reruns.
   children.sort((a, b) => {
     const ka = `${a.AutomationId ?? ""}|${a.Name ?? ""}|${a.ControlType ?? ""}`;
     const kb = `${b.AutomationId ?? ""}|${b.Name ?? ""}|${b.ControlType ?? ""}`;
