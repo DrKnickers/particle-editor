@@ -50,6 +50,23 @@ Visual Studio 2022 (Platform Toolset v143), x64, DirectX SDK June 2010 (for `d3d
 
 See [`README.md`](README.md) for runtime details and [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md) → *Reference* → *Build Environment Requirements* for the canonical build matrix.
 
+## Static analysis
+
+`cppcheck` runs over the C++ with no build or compile database
+(`winget install Cppcheck.Cppcheck`):
+
+```bash
+cppcheck --enable=warning,style,performance,portability --std=c++17 \
+  --quiet --suppress=missingIncludeSystem --suppress=missingInclude \
+  -I src src/ChunkReader.cpp src/ChunkWriter.cpp src/AloModel.cpp
+```
+
+A 2026-06 pass flagged `ChunkReader::m_position` / `m_miniOffset` left
+uninitialized in the constructor (`src/ChunkReader.cpp:140`) — worth fixing
+next time that file is open. (`clang-tidy` / `clangd` are also available but
+need a `compile_commands.json`, which the VS-generator MSBuild build doesn't
+emit.)
+
 ## Code of conduct
 
 Be decent. Disagreements about code are welcome — disagreements about people aren't.
