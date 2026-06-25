@@ -1,6 +1,6 @@
 // ModManager — single source of truth for mod discovery and active-mod
 // state. Driven by the host bridge (src/host/BridgeDispatcher.cpp);
-// extracted in D6 from the inline mod-discovery code that previously
+// extracted from the inline mod-discovery code that previously
 // lived in main.cpp.
 //
 // Why a separate class:

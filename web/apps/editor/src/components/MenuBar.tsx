@@ -130,7 +130,7 @@ export function MenuBar({
   const [resetViewOpen, setResetViewOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
 
-  // D6: list of discovered mods, fetched separately from the
+  // list of discovered mods, fetched separately from the
   // engine snapshot because it has a much lower change cadence (only
   // shifts on Refresh or disk mutation). The *active* mod is on the
   // snapshot so the menu's check mark stays reactive without a second
@@ -218,7 +218,7 @@ export function MenuBar({
       })
       .catch((err) => console.warn("[MenuBar] snapshot failed:", err));
     const off = bridge.on("engine/state/changed", (e) => setState(e.payload));
-    // D6: prime the mods list at mount. Active mod arrives via
+    // prime the mods list at mount. Active mod arrives via
     // snapshot; the list is a separate channel because it changes
     // rarely.
     void refreshModsList();
@@ -851,7 +851,7 @@ export function MenuBar({
               Lock reference object
             </Menubar.Item>
             {/* Lighting opens the docked right-dock pane (shared with the
-                Spawner; session 11). Bloom is fully handled elsewhere:
+                Spawner). Bloom is fully handled elsewhere:
                 its settings live as a section inside the Lighting pane, and its
                 on/off toggle is in the viewport display-options overlay (it
                 moved off the toolbar) — so the former View-menu "Bloom" +

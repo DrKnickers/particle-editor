@@ -1,4 +1,4 @@
-// Phase 4.1 Fix dispatch 4 — viewport resize smoke spec.
+// viewport resize smoke spec.
 //
 // Drives `layout/viewport-rect` with three different physical-pixel
 // sizes in sequence (small → medium → large). After each, asks for

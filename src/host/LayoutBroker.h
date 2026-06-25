@@ -124,7 +124,7 @@ public:
     // (sub-plan §3.5 — avoids a 1-3 frame full-client glitch).
     bool GetSceneRect(int& x, int& y, int& w, int& h) const;
 
-    // (session 3): forward the theme background colour to the DComp
+    // forward the theme background colour to the DComp
     // compositor's rearmost backing visual (composition mode only).
     // No-op when no Compositor is attached. `color`
     // is a COLORREF (0x00BBGGRR). Mirrors the SetSceneRect → Compositor

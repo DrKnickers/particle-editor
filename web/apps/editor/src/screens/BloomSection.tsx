@@ -1,6 +1,6 @@
 // BloomSection — bloom enable + strength / cutoff / size, rendered as a
-// `ToolPanel.Section` inside the docked Lighting pane. session 11
-// folded the standalone BloomPanel into Lighting (one right-dock slot);
+// `ToolPanel.Section` inside the docked Lighting pane. The standalone
+// BloomPanel was folded into Lighting (one right-dock slot);
 // this component carries the former BloomPanel's logic so LightingPanel
 // stays focused on the lights.
 //

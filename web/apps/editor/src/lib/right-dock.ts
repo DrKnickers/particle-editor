@@ -3,7 +3,7 @@
 // The right column holds EITHER the Spawner OR the Lighting pane
 // (mutually exclusive), or nothing. This replaces lib/spawner-visibility.ts:
 // the Spawner used to be the only docked right column and Lighting was a
-// floating `ToolPanel` overlay. session 11 promotes Lighting to a
+// floating `ToolPanel` overlay. Lighting is now promoted to a
 // docked pane that shares one slot with the Spawner — opening one closes
 // the other.
 //

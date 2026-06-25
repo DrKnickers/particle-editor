@@ -49,7 +49,7 @@ function AppShell() {
     return b;
   }, []);
 
-  // (session 3): keep the host's DComp composition backing painted
+  // keep the host's DComp composition backing painted
   // the current theme `--bg` so transparent panel gaps / splitter seams /
   // rounded-corner wedges blend into the app shell instead of showing the
   // black host backing. Pushes on mount + on every theme change.

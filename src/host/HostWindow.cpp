@@ -499,7 +499,7 @@ struct HostWindowImpl
     // suppression and arms the settle-safety quiescence timer.
     bool      m_inSizeMove       = false;
 
-    // D6: mod state shared with React. ModManager constructed in
+    // mod state shared with React. ModManager constructed in
     // the impl ctor (DiscoverMods + RestoreLastLayerStack run before
     // any UI shows); SetEngine called in WM_CREATE once the Engine
     // exists. Passed to BridgeDispatcher via SetModManager.
@@ -666,7 +666,7 @@ struct HostWindowImpl
 
     bool        useDevUi   = false;  // --dev-ui: navigate to Vite HMR server
     bool        useTestHost = false; // --test-host: CDP :9222 + DevTools
-    // rendering-fidelity] --capture mode: load m_captureAlo,
+    // --capture mode: load m_captureAlo,
     // render m_captureFrames frames, write engine RT to m_capturePng,
     // then quit. Both paths empty = normal interactive run.
     std::wstring m_captureAlo;
@@ -739,7 +739,7 @@ struct HostWindowImpl
         // [world-lit] capture lighting colours (arrays can't init in list).
         m_captureAmbient[0] = ambR; m_captureAmbient[1] = ambG; m_captureAmbient[2] = ambB;
         m_captureSun[0] = sunR; m_captureSun[1] = sunG; m_captureSun[2] = sunB;
-        // D6: discover installed mods and restore the
+        // discover installed mods and restore the
         // previously-active one from the registry before any UI shows.
         // Both calls are quick; they don't touch GPU / WebView2 state.
         // Engine pointer is bound later via SetEngine() in WM_CREATE.
@@ -751,7 +751,7 @@ struct HostWindowImpl
     void OpenLog();
     void CloseLog();
 
-    //: InitD3D9 dropped; the Engine owns the live D3D9 device. The
+    // InitD3D9 dropped; the Engine owns the live D3D9 device. The
     // viewport HWND is handed to Engine's ctor in WM_CREATE.
     void RenderD3D9();
 
@@ -2037,7 +2037,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         layout.SetViewport(hViewport);
 
-        //: no host-owned D3D9 device. The Engine constructs the
+        // no host-owned D3D9 device. The Engine constructs the
         // live device internally below, targeting this viewport HWND.
 
         // Construct the Engine now that both HWNDs exist. hFocus = parent,
@@ -2048,7 +2048,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 hwnd, hViewport, textureManager, shaderManager, fileManager);
             if (dispatcher) dispatcher->SetEngine(engine.get());
             layout.SetEngine(engine.get());
-            // D6: bind engine to ModManager so subsequent
+            // bind engine to ModManager so subsequent
             // SelectMod() calls can hot-swap shaders + textures.
             if (modManager) modManager->SetEngine(engine.get());
 
@@ -2851,7 +2851,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (engine) engine->SetAlphaCompositor(nullptr);
         layout.SetAlphaCompositor(nullptr);
         alphaCompositor.reset();
-        //: engine owns its D3D9 device; just drop the engine and it
+        // engine owns its D3D9 device; just drop the engine and it
         // tears the device down in its destructor.
         engine.reset();
         PostQuitMessage(0);
@@ -2866,7 +2866,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     {
     case WM_PAINT:
     {
-        //: rendering happens on the main-loop idle path
+        // rendering happens on the main-loop idle path
         // (PeekMessage-drain → render). WM_PAINT just validates the
         // invalid region so Windows doesn't keep firing it. Same pattern
         // as legacy src/main.cpp's main loop, where WM_PAINT also does
@@ -2919,7 +2919,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // activation), then OS focus management snaps it back, firing a
         // spurious WM_KILLFOCUS the defensive kill below would read as "user
         // Alt-Tab'd, drop the spawn."
-        // polish: Shift+LMB also triggers cursor-bound spawn. The
+        // Shift+LMB also triggers cursor-bound spawn. The
         // legacy keydown-only path (case WM_KEYDOWN below) requires the
         // viewport HWND to have focus when Shift is pressed, but
         // WebView2 holds focus from the React UI by default — the
@@ -3024,7 +3024,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 cx, cy, pos.x, pos.y, pos.z,
                 static_cast<void*>(m_attachedParticleSystem));
 #ifndef NDEBUG
-            // / handoff item 14] Mirror the cursor-unproject
+            // [handoff item 14] Mirror the cursor-unproject
             // diagnostic at this alternate spawn entry. Consistent
             // grep prefix lets all three call sites (WM_MOUSEMOVE
             // throttled emit, WM_KEYDOWN VK_SHIFT, WM_LBUTTONDOWN
@@ -3387,7 +3387,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             m_lastCursorEmitTick = now;
             dispatcher->EmitCursorPosition3D(cursorWorld.x, cursorWorld.y, cursorWorld.z);
 #ifndef NDEBUG
-            // / handoff item 14] Throttled diagnostic for the
+            // [handoff item 14] Throttled diagnostic for the
             // cursor-unproject path. Piggybacks on the bridge-emit gate
             // so the cadence is ~30 Hz (rather than per-WM_MOUSEMOVE,
             // which is 60+ Hz and would flood host.log). `mode` names
@@ -3511,7 +3511,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         m_attachedParticleSystem =
             engine->SpawnParticleSystem(*particleSystem, &m_mouseCursor);
 #ifndef NDEBUG
-        // / handoff item 14] One-shot diagnostic at the actual
+        // [handoff item 14] One-shot diagnostic at the actual
         // spawn site so a misplaced spawn can be tied to the input
         // coords + viewport in host.log without re-running with a
         // breakpoint. Per-Shift-press, not per-frame, so untrottled.
@@ -3667,7 +3667,7 @@ int HostWindowImpl::Run(int nCmdShow)
         Log("[host] === --test-host MODE: CDP on :9222 + DevTools enabled ===\n");
     }
 
-    // Task 1.4: when --dev-ui is requested, verify the Vite dev server
+    // when --dev-ui is requested, verify the Vite dev server
     // is reachable before proceeding. A missing server is a common mistake
     // (forgot to run `pnpm dev`) — fail fast with a clear message rather than
     // navigating to an empty page.
@@ -3702,7 +3702,7 @@ int HostWindowImpl::Run(int nCmdShow)
     HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     Log("[host] CoInitializeEx hr=0x%08lx\n", coHr);
 
-    // Task 1.5: verify the WebView2 Evergreen runtime is present before
+    // verify the WebView2 Evergreen runtime is present before
     // creating any window. If missing the dialog is the only visible artifact.
     if (!WebView2RuntimeInstalled())
     {
@@ -3826,7 +3826,7 @@ int HostWindowImpl::Run(int nCmdShow)
                                                     /*ephemeral*/m_ephemeral);
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
-    // D6: ModManager is already discovered + restored in the impl
+    // ModManager is already discovered + restored in the impl
     // ctor. Bind it so the dispatcher can service `mods/list`,
     // `mods/select`, `mods/refresh` and include `activeModPath` in
     // snapshots.
@@ -3934,7 +3934,7 @@ int HostWindowImpl::Run(int nCmdShow)
     ShowWindow(hMain, (captureMode || m_ephemeral) ? SW_SHOWNOACTIVATE : nCmdShow);
     UpdateWindow(hMain);
 
-    // rendering-fidelity] --capture: load the requested .alo now,
+    // --capture: load the requested .alo now,
     // using the exact swap+notify sequence file/open uses (BindHostState
     // bound &particleSystem to the dispatcher, so this slot is what the
     // render loop below reads via particleSystem.get()). The loop then
@@ -4410,7 +4410,7 @@ int HostWindowImpl::Run(int nCmdShow)
             }
         }
         if (quit) break;
-        // rendering-fidelity] Load/capture failure → bail to cleanup
+        // Load/capture failure → bail to cleanup
         // without rendering (exit code set below).
         if (captureFailed) break;
 
@@ -4657,7 +4657,7 @@ int HostWindowImpl::Run(int nCmdShow)
     if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
     CoUninitialize();
     CloseLog();
-    // rendering-fidelity] In --capture mode we break the loop via
+    // In --capture mode we break the loop via
     // the `quit` flag (not PostQuitMessage), so m.wParam is stale; return
     // an explicit 0/2 so a script can detect a bad load / failed write.
     if (captureMode) return captureFailed ? 2 : 0;

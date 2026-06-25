@@ -1,4 +1,4 @@
-// ModManager — implementation. Extracted from src/main.cpp in D6.
+// ModManager — implementation. Extracted from src/main.cpp.
 //
 // Header comments document the why; this file documents the how.
 // Internal helpers (ScanModsDir, ReadLastMod, WriteLastMod) are file-

@@ -460,7 +460,7 @@ std::string GenerateDuplicateName(const ParticleSystem* system, const std::strin
     return base + suffix;
 }
 
-// ── Pure-IO ParticleSystem helpers (host-state plumbing) ─────────
+// ── Pure-IO ParticleSystem helpers ─────────
 //
 // These free functions are declared in `src/ParticleSystemIO.h` and
 // implemented here so the host's BridgeDispatcher can read/write .alo
@@ -594,7 +594,7 @@ static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 //
 // Mods support — registry helpers (ReadModNickname / ReadLastMod /
 // WriteLastMod) and disk scanning (ScanModsDir / DiscoverMods) moved to
-// ModManager (src/ModManager.{h,cpp}) in D6. ReadModNickname is
+// ModManager (src/ModManager.{h,cpp}). ReadModNickname is
 // exposed via ModManager.h for direct use by the host bridge.
 //
 
@@ -788,7 +788,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// plume. on (default) keeps randomRotation; off zeroes the spin so a directional
 		// (lit-from-the-right) shader stays anchored across all puffs (option (c) demo).
 		int          smokeSpin = 1;        // 1 = spin (default), 0 = no spin
-		// rendering-fidelity] --capture <alo> <png> [--frames N]:
+		// --capture <alo> <png> [--frames N]:
 		// headless render-fidelity capture. Loads <alo>, renders N frames,
 		// writes the engine's render target to <png>, exits. Implies the
 		// --new-ui host path (it owns the engine). See src/host/Run.h.
@@ -1274,7 +1274,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		{
 			return host::SnapWindowOneShot(L"AloHostMain", snapWindowPath);
 		}
-		// D6: capture gameRoots so the host can build its
+		// capture gameRoots so the host can build its
 		// ModManager. createFileManager already discovers them
 		// internally; pass &gameRoots to extract.
 		std::vector<std::wstring> gameRoots;

@@ -322,7 +322,7 @@ export type EngineStateDto = {
   // row styling from the snapshot without an extra round-trip.
   selectedEmitterId: number | null;
 
-  // D6 — currently-active mod's full path on disk, or null when
+  // currently-active mod's full path on disk, or null when
   // Unmodded. The full mod *list* is fetched separately via
   // `mods/list` because it changes rarely (refresh / disk scan)
   // compared to engine state. The path alone rides every snapshot so
@@ -340,7 +340,7 @@ export type EngineStateDto = {
   canRedo: boolean;
 };
 
-// ─── Mods (D6) ──────────────────────────────────────────────────
+// ─── Mods ────────────────────────────────────────────────────────────
 //
 // One discovered mod under <gameRoot>/Mods/. Shape matches the legacy
 // C++ `ModEntry` struct (src/ModManager.h) minus `wstring → string`
@@ -602,7 +602,7 @@ export type EmitterTreeDto = { root: EmitterTreeNode };
 
 // One entry in the frequently-used texture palette. `slotMask` is the
 // raw C++ bit-flag (SLOT_COLOR=1, SLOT_BUMP=2) recording which slots the
-// texture has been used as. sub-feature B]
+// texture has been used as.
 export type PaletteEntry = { filename: string; pinned: boolean; slotMask: number };
 
 // Autosave crash-recovery candidate (). Returned by
@@ -628,7 +628,7 @@ export type Request =
   // color/bump texture. Opens in the active mod's texture folder,
   // filtered to *.tga;*.dds; returns the chosen file's basename (or ""
   // if cancelled). `slot` drives only the dialog title (and future
-  // palette usage-tracking). feature-parity A]
+  // palette usage-tracking).
   | { kind: "textures/browse";            params: { slot: "color" | "bump" } }
 
   // Frequently-used texture palette — per-mod pinned + recent textures
@@ -637,7 +637,7 @@ export type Request =
   // texture to a base64 PNG data URI (null = missing/broken);
   // `toggle-pin` flips pinned state (rejects when pins are full);
   // `touch-recent` records a texture as used in the given slot.
-  // No active mod ⇒ list is empty and mutations are no-ops. sub-feature B]
+  // No active mod ⇒ list is empty and mutations are no-ops.
   | { kind: "textures/palette/list";         params: { slot: "color" | "bump" } }
   | { kind: "textures/palette/thumbnail";    params: { filename: string } }
   | {
@@ -1042,7 +1042,7 @@ export type Request =
   // confirmation dialog lives React-side via Radix AlertDialog;
   // the dispatcher's job is purely to apply the defaults.
   | { kind: "engine/action/reset-view-settings"; params: Record<string, never> }
-  // D6 / — Mods menu surface. `mods/list` returns the discovered
+  // — Mods menu surface. `mods/list` returns the discovered
   // mod catalog (each mod + its nested layers as a flat `layers` list), the
   // ordered `stack`, and `activePath` (= primary layer); the React menu calls
   // it once at mount and again after `mods/refresh`. `mods/refresh` re-scans
@@ -1081,7 +1081,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "file/recent/list" }          ? { paths: string[] } :
   R extends { kind: "textures/browse" }           ? { filename: string } :
 
-  // Texture palette (sub-feature B)
+  // Texture palette
   R extends { kind: "textures/palette/list" }
     ? { hasMod: boolean; filter: "color" | "bump"; pins: PaletteEntry[]; recents: PaletteEntry[] } :
   R extends { kind: "textures/palette/thumbnail" }
@@ -1096,7 +1096,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "textures/palette/touch-recent" }
     ? { ok: true } :
 
-  // Mods (D6 /)
+  // Mods ()
   R extends { kind: "mods/list" }    ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
   R extends { kind: "mods/refresh" } ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
   R extends { kind: "mods/set-layers" } ? { ok: boolean; stack: string[] } | { ok: false; error: string } :

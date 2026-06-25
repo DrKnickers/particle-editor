@@ -1,4 +1,4 @@
-// Tests for useBackingColorSync (session 3). Verifies the hook
+// Tests for useBackingColorSync. Verifies the hook
 // pushes the resolved --bg to the host on mount and on every data-theme
 // change, and skips the push when --bg is unresolved.
 

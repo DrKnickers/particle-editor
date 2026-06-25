@@ -79,7 +79,7 @@ import {
  *  layout, accelerators are not. The native host applies the same rule
  *  via per-handler `SetDirty(true)` calls. */
 function isMutating(kind: Request["kind"]): boolean {
-  //: engine/set/paused (view-only preview clock toggle) and
+  // engine/set/paused (view-only preview clock toggle) and
   // engine/set/heat-debug (view-only debug overlay) are excluded —
   // both leave the document state untouched and shouldn't trigger
   // save-prompt gates. Native host applies the same rule in
@@ -718,7 +718,7 @@ export class MockBridge implements Bridge {
         // so tests can verify that the UI clamps/hides unsupported levels).
         return { levels: [0, 2, 4], current: 4 };
 
-      // ---------------- mods (D6) -------------------------------
+      // ---------------- mods -----------------------------------------
       //
       // Browser-mode MockBridge has no disk to scan, so `mods/list` /
       // `mods/refresh` return a small synthetic fixture (a flat layer catalog

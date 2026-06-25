@@ -1,4 +1,4 @@
-// D6: mods/* bridge surface contract test against the live host.
+// mods/* bridge surface contract test against the live host.
 //
 // The Mods menu's UI is exercised in vitest (jsdom can render Radix
 // menus); these specs verify the wire contract holds end-to-end:

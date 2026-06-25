@@ -249,7 +249,7 @@ public:
     // rate self-throttles by construction.
     HRESULT SetEngineVisualTransform(int x, int y, int w, int h, bool immediate = false, bool quiet = false) noexcept;
 
-    // (session 3) — theme-coloured composition backing. Recolour
+    // theme-coloured composition backing. Recolour
     // the rearmost backing visual so every transparent DOM region
     // outside the scene rect (panel gaps, splitter seams, rounded-corner
     // wedges) composites over the app-shell `--bg` instead of the black

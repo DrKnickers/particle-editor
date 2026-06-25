@@ -19,7 +19,7 @@
 import { create } from "zustand";
 
 // Lighting + Bloom moved out of this overlay store into lib/right-dock.ts
-// (session 11): they're now a single docked pane sharing the
+// they're now a single docked pane sharing the
 // Spawner's right slot, not floating overlays. Background + Ground remain
 // overlays here.
 export type ToolPanelId =

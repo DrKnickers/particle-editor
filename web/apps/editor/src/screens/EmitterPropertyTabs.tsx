@@ -213,7 +213,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
     [bridge, selectedId, fetchProps],
   );
 
-  // feature-parity A] Browse helper — opens the host-side native
+  // Browse helper — opens the host-side native
   // texture dialog and resolves to the picked basename ("" if cancelled
   // or in browser/mock mode). TexturePickerField commits a non-empty
   // result through `commit`, same as the text input.
@@ -691,7 +691,7 @@ function FieldText({
 // blur behaviour, and adds the Browse button. `onBrowse(slot)` resolves
 // to the picked basename (or "" if cancelled); a non-empty result is
 // committed via the same `onCommit` the text input uses.
-// feature-parity B] The palette button opens the frequently-used
+// The palette button opens the frequently-used
 // texture palette (TexturePalettePopover). Every non-empty commit — manual
 // blur, Browse, or palette apply — funnels through `commit`, which also
 // fires `textures/palette/touch-recent` so recents stay warm (legacy
@@ -1077,7 +1077,7 @@ export function AppearanceTab({
   return (
     <div className="inspector">
       <Section title="Textures">
-        {/* feature-parity A+B] Color/bump texture fields: Browse
+        {/* Color/bump texture fields: Browse
             button (host native dialog via textures/browse) + palette
             button (frequently-used per-mod pinned/recent popup). */}
         <TexturePickerField

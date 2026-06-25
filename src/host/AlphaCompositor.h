@@ -86,7 +86,7 @@ public:
     // effects above can dim + blur it uniformly with the panels.
     bool CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH);
 
-    // rendering-fidelity] Write the most recent pre-stamp engine
+    // Write the most recent pre-stamp engine
     // frame straight to a PNG file at `path`. Same readback + crop +
     // GDI+ encode as CaptureSnapshotPng, but saves to disk instead of
     // returning base64 — used by the `--capture` CLI mode so rendering

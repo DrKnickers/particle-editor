@@ -807,7 +807,7 @@
    Browse button opens the host-side native file dialog (textures/browse).
    The label column is sized to the shortened "Color:" / "Bump:" labels
    (was 96px for the old "Color texture:" labels) so the freed width flows
-   into the filename input. feature-parity A] */
+   into the filename input. */
 .form-row.form-row-texture {
   grid-template-columns: 44px minmax(0, 1fr) auto;
 }

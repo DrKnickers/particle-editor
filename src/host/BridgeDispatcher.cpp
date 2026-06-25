@@ -44,7 +44,7 @@
 
 using nlohmann::json;
 
-// (session 3): parse a CSS colour string from getComputedStyle
+// parse a CSS colour string from getComputedStyle
 // ("#rrggbb", "#rgb", or "rgb(r, g, b)" / "rgba(r, g, b, a)") into a
 // COLORREF for the host/backing-color handler. Returns true on success.
 // Defensive — unknown formats return false so the handler answers
@@ -684,7 +684,7 @@ LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
     return mask;
 }
 
-//: walk a ParticleSystem and build an EmitterTreeNode-shaped JSON
+// walk a ParticleSystem and build an EmitterTreeNode-shaped JSON
 // tree. Mirrors the schema definition at
 // web/packages/bridge-schema/src/index.ts:91. Children are computed
 // from each emitter's `spawnDuringLife` / `spawnOnDeath` indices in
@@ -908,7 +908,7 @@ json BuildEngineStateSnapshot(Engine* engine,
                                       ? json(nullptr)
                                       : json(selectedEmitterId)},
 
-        // D6 — active mod path. Empty wstring serialises as JSON
+        // active mod path. Empty wstring serialises as JSON
         // null so the React side treats "Unmodded" and "no mod state
         // yet" the same way. ModManager owns the canonical state;
         // BridgeDispatcher reads through and serialises here.
@@ -1211,7 +1211,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     }
 
     // -------- host/backing-color --------
-    // (session 3): recolour the DComp composition backing to the
+    // recolour the DComp composition backing to the
     // app-shell --bg so every transparent DOM region outside the scene
     // rect (panel gaps, splitter seams, rounded-corner wedges) blends
     // into the shell instead of showing the black host backing. `color`
@@ -1396,7 +1396,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- mods/list, mods/refresh, mods/set-layers (D6 /) --------
+    // -------- mods/list, mods/refresh, mods/set-layers () --------
     //
     // Three thin wrappers around ModManager. ModManager owns the
     // canonical state (mods catalog + the ordered layer stack) and the
@@ -1509,8 +1509,8 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (kind == "engine/state/snapshot")
     {
         if (!requireEngine("snapshot")) return res;
-        // Spawner field: prefer the live driver config (
-        // host-state plumbing), fall back to the JSON cache from
+        // Spawner field: prefer the live driver config (host-state
+        // plumbing), fall back to the JSON cache from
         // Batch 4 when no driver is bound (e.g. unit tests, partial
         // wiring during construction).
         json spawnerJson = m_spawnerDriver
@@ -1814,7 +1814,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         m_engine->SetHeatDebug(params.value("enabled", false));
         sendOk(json::object());
-        //: heat-debug is a view-only debug overlay. Don't mark dirty.
+        // heat-debug is a view-only debug overlay. Don't mark dirty.
         EmitEngineStateChanged();
         return res;
     }
@@ -1872,7 +1872,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     {
         SetPreviewPaused(params.value("paused", false));
         sendOk(json::object());
-        //: paused is a view-only toggle (preview clock). Don't mark dirty.
+        // paused is a view-only toggle (preview clock). Don't mark dirty.
         EmitEngineStateChanged();
         return res;
     }
@@ -2401,7 +2401,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     //; these bridge handlers are now the only file-operation path.)
 
     // -------- file/new --------
-    //: replace the host-owned ParticleSystem with a fresh empty
+    // replace the host-owned ParticleSystem with a fresh empty
     // one + one root emitter (mirrors legacy DoNewFile at
     // src/main.cpp:1289). Clear editor path / dirty.
     if (kind == "file/new")
@@ -2481,7 +2481,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // through emitters/set-properties — same path the text input uses.
     // Like file/open, GetOpenFileNameW runs a nested message loop while
     // the JS caller awaits. Mirrors legacy LoadTexture
-    // (src/UI/Emitter.cpp:83). feature-parity A]
+    // (src/UI/Emitter.cpp:83).
     if (kind == "textures/browse")
     {
         std::string slot = "color";
@@ -2538,7 +2538,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     //
     // Expose the per-mod frequently-used texture palette
     // (TexturePalette::Store, already repointed at the active mod by
-    // ModManager::SelectMod) to the new UI. sub-feature B]
+    // ModManager::SelectMod) to the new UI.
     if (kind == "textures/palette/list")
     {
         std::string slot = "color";
@@ -2768,7 +2768,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             return res;
         }
 
-        //: actually load the .alo into the host-owned slot.
+        // actually load the .alo into the host-owned slot.
         std::string err;
         std::unique_ptr<ParticleSystem> loaded = LoadParticleSystem(path, &err);
         if (!loaded)
@@ -2885,7 +2885,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             path = buf;
         }
 
-        //: actually write the host-owned ParticleSystem to disk.
+        // actually write the host-owned ParticleSystem to disk.
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
             // G3: intentional sendOk — same dual-result contract as the
@@ -2956,7 +2956,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         }
 
         std::wstring path = buf;
-        //: actually write to disk.
+        // actually write to disk.
         if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
         {
             // G3: intentional sendOk — same dual-result contract as the
@@ -3126,7 +3126,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // does NOT set dirty=true.
     if (kind == "spawner/start")
     {
-        //: cache + commit to the real driver. The cache is kept
+        // cache + commit to the real driver. The cache is kept
         // updated so snapshot reads still work when no driver is bound
         // (Vitest / partial-wiring paths).
         m_spawnerConfig = params;
@@ -3142,7 +3142,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     }
     if (kind == "spawner/trigger")
     {
-        //: real trigger. Note that without per-frame Tick wiring
+        // real trigger. Note that without per-frame Tick wiring
         // the burst-state machine doesn't advance — Trigger schedules
         // a burst that won't actually fire instances until a later
         // batch wires SpawnerDriver::Tick into the render loop. That's
@@ -3159,7 +3159,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     }
     if (kind == "spawner/stop")
     {
-        //: flip enabled=false on the live driver. Auto-mode
+        // flip enabled=false on the live driver. Auto-mode
         // bursts stop scheduling; manual triggers still work.
         if (m_spawnerDriver)
         {
@@ -3180,7 +3180,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
 
     // -------- emitters/preview-from-file ----------------------------
     //
-    //: actually load the .alo into a temporary ParticleSystem and
+    // actually load the .alo into a temporary ParticleSystem and
     // build the EmitterTreeNode tree. The temporary system drops at
     // scope exit. Note we wrap the real roots under a synthetic
     // `id: 0, name: "root"` node to match the MockBridge response

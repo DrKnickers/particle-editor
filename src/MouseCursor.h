@@ -54,7 +54,7 @@ public:
 // world-space ray, then intersect with the z=0 plane. Used by:
 //   - the host's ViewportWndProc (WM_MOUSEMOVE / WM_KEYDOWN VK_SHIFT).
 //
-// / handoff item 14] Under architecture C, the engine renders into
+// [handoff item 14] Under architecture C, the engine renders into
 // a SCENE sub-rect of the popup HWND and m_projection is built at
 // scene-rect aspect (per-pixel FoV referenced to scene-H, see
 // src/engine.cpp:1540 SetSceneViewport). But Engine::Render restores the

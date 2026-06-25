@@ -95,7 +95,7 @@ public:
     // main window — set this in HostWindow once hMain exists).
     void SetHostHwnd(HWND hwnd) { m_hostHwnd = hwnd; }
 
-    // D6: inject the ModManager that owns mod discovery + active-
+    // inject the ModManager that owns mod discovery + active-
     // mod state. The dispatcher routes `mods/list`, `mods/select`, and
     // `mods/refresh` requests through it, and includes the active path
     // in the engine-state snapshot via `activeModPath`. Null is
@@ -357,7 +357,7 @@ private:
     bool               m_statsFrozen = false;
     UndoStack*         m_undo     = nullptr;
     HWND               m_hostHwnd = nullptr;
-    ::ModManager*      m_modManager = nullptr;  // D6: mods/* surface
+    ::ModManager*      m_modManager = nullptr;  // mods/* surface
     InputDispatcher*   m_input      = nullptr;  // Phase 2: viewport/input
 
     // host-state plumbing — pointers borrowed from HostWindow.

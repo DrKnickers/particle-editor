@@ -30,11 +30,11 @@ class IFileManager;
 
 namespace host {
 
-// D6: `gameRoots` is the EmpireAtWarPaths vector that was used
+// `gameRoots` is the EmpireAtWarPaths vector that was used
 // to build `fileManager`. Threaded through so the host's ModManager
 // can scan their Mods\ subdirectories on startup. Legacy mode reads
 // the same vector inside `main(APPLICATION_INFO*, argv)`.
-// captureAlo / capturePng / captureFrames — rendering-fidelity]
+// captureAlo / capturePng / captureFrames —
 // one-shot frame-capture mode. When captureAlo + capturePng are both
 // non-empty, the host loads captureAlo, renders captureFrames frames,
 // writes the engine's render target to capturePng, and exits. Used to

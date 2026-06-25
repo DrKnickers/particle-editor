@@ -169,7 +169,7 @@ struct Compositor::Impl
     DWORD    engineLastFrameLogTick = 0;
     uint64_t engineFrameCount       = 0;
 
-    // (session 3) — theme-coloured composition backing. A 1x1
+    // theme-coloured composition backing. A 1x1
     // composition swapchain on its OWN D3D11 device (kept independent of
     // the engine's device so the engine's LUID guard + shared-texture
     // path stay byte-for-byte unchanged), scaled to the full client via
@@ -276,7 +276,7 @@ HRESULT Compositor::Impl::ApplyTransform(int x, int y, int w, int h, bool quiet)
     return S_OK;
 }
 
-// ---------- (session 3) — theme-coloured backing helpers ----------
+// ---------- theme-coloured backing helpers ----------
 
 HRESULT Compositor::Impl::EnsureBackingDevice()
 {
@@ -607,7 +607,7 @@ HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
     m_impl->treeBuilt = true;
     m_impl->LogLine("[COMP-tree] tree committed (Stage 3: webview-only)");
 
-    // (session 3): if React pushed a backing colour before the tree
+    // if React pushed a backing colour before the tree
     // was built (host/backing-color racing AttachWebView2), apply it now.
     // SetBackingColor caches + no-ops the visual work until the tree is
     // ready; this is the deferred-apply hook.
@@ -631,7 +631,7 @@ HRESULT Compositor::SetSize(int width, int height)
     m_impl->lastW = width;
     m_impl->lastH = height;
 
-    // (session 3): rescale the backing visual's 1x1 content to fill
+    // rescale the backing visual's 1x1 content to fill
     // the new client. No-op until the backing visual exists; published by
     // the Commit at the end of this function.
     m_impl->ApplyBackingTransform();
@@ -1001,7 +1001,7 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
         return hr;
     }
 
-    // (session 3): the engine was just prepended to the children
+    // the engine was just prepended to the children
     // list; if the theme-coloured backing was already present it is now
     // IN FRONT of the engine. Re-prepend the backing so the order stays
     // [backing, engine, webview]. No-op when the backing hasn't been

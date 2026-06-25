@@ -17,8 +17,8 @@
 using namespace Microsoft::WRL;
 
 namespace {
-constexpr wchar_t kWindowClassName[]   = L"LT4ViewportPocMain";
-constexpr wchar_t kViewportClassName[] = L"LT4ViewportPocChild";
+constexpr wchar_t kWindowClassName[]   = L"ViewportPocMain";
+constexpr wchar_t kViewportClassName[] = L"ViewportPocChild";
 constexpr int     kInitialWidth        = 1280;
 constexpr int     kInitialHeight       = 800;
 
@@ -189,7 +189,7 @@ HRESULT InitWebView2(HWND parent) {
         wchar_t buf[MAX_PATH];
         GetTempPathW(MAX_PATH, buf);
         userDataFolder = buf;
-        userDataFolder += L"LT4ViewportPocWebView2Data";
+        userDataFolder += L"ViewportPocWebView2Data";
     }
 
     return CreateCoreWebView2EnvironmentWithOptions(

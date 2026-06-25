@@ -143,7 +143,7 @@ export function makeDefaultEngineState(): EngineStateDto {
     // initial mock state and file/new (both apply makeDefaultEngineState()).
     selectedEmitterId: 0,
 
-    // D6 /: no active mod by default. Browser-mode MockBridge has
+    //: no active mod by default. Browser-mode MockBridge has
     // no disk to scan; the primary layer (front of the stack) updates this field
     // via mods/set-layers for menu check-mark parity.
     activeModPath: null,
