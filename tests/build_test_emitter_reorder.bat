@@ -3,7 +3,7 @@ REM Build the emitter-reorder regression test (audit fix C) as a standalone
 REM x64 console exe. Links only the data-model TUs ParticleSystem.cpp needs,
 REM against the DirectX SDK libs (symbols referenced but not exercised).
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

@@ -4,7 +4,7 @@ REM standalone x64 console exe. AssetPathSafety.h is header-only (no .cpp);
 REM this TU pulls in nothing else, so no src/*.cpp are linked. The DirectX
 REM libs are linked only to match the other tests' floor (unreferenced here).
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

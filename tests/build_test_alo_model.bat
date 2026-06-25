@@ -3,7 +3,7 @@ REM Build the AloModel decoder unit test as a standalone x64 console exe.
 REM Data-model TUs only (AloModel + ChunkReader + files + utils); no engine /
 REM D3D-coupled TUs. utils.cpp provides LoadString used by the exception ctors.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

@@ -3,7 +3,7 @@ REM Build the ModLayers.h pure-helper unit test as a standalone x64
 REM console exe. ModLayers.h is header-only with no engine/Win32 deps, so this
 REM links only the test TU.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 set ROOT=%~dp0..
 pushd "%ROOT%"

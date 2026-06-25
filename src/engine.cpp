@@ -360,7 +360,7 @@ static void BloomLog(FILE* f, const char* line)
 }
 
 // Returns the .exe's directory with trailing backslash, e.g.
-// "<path> Editor\". Used to place the bloom diagnostic
+// "<install dir>\". Used to place the bloom diagnostic
 // file next to the executable where the user is most likely to look.
 static std::wstring ExeDirectory()
 {

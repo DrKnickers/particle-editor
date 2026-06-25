@@ -4,7 +4,7 @@ REM x64 console exe. CloseDecision.h is header-only (pure function, no .cpp);
 REM no src/*.cpp are linked. The DirectX libs are linked only to match the
 REM other tests' floor (unreferenced here).
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

@@ -5,7 +5,7 @@ REM so the expat include path is needed to COMPILE, but the MegaFile ctor never
 REM exercises any XML symbol, so xml.cpp / the expat lib are NOT needed to LINK.
 REM Data-model TUs only: MegaFiles + files + utils + crc32.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

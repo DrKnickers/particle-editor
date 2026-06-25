@@ -4,7 +4,7 @@ REM console exe. Links the XML reader (xml.cpp + static expat) + files + utils
 REM data-model TUs; no engine / D3D-coupled TUs (managers.h is included only for
 REM the abstract IFileManager interface).
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

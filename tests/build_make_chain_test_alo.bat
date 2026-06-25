@@ -2,7 +2,7 @@
 REM Build the chain-test .alo authoring tool (chain investigation v3).
 REM Same harness as build_test_emitter_reorder.bat: data-model TUs only.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

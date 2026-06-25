@@ -4,7 +4,7 @@ REM exe. It loads the built ParticleEditor.exe as a data module and asserts the
 REM migrated IDS_* STRINGTABLE entries resolve (and the kept RCDATA/icon/bitmap
 REM resources survived the .rc trim). Links user32 for LoadStringW/FindResourceW.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 set ROOT=%~dp0..
 pushd "%ROOT%"

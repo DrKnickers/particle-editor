@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
-// Used by <path>
+// Used by ParticleEditor.rc
 //
 // The legacy native-UI dialog / icon / toolbar / menu / control / command IDs
 // were removed in along with the Win32 UI. These five are the live IDs

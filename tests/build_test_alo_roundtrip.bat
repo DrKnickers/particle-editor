@@ -8,7 +8,7 @@ REM xml.h, so the expat include path is needed to compile; no XML symbol is
 REM exercised, so the expat lib is NOT linked. d3d9/d3dx9 symbols are referenced
 REM (not exercised) by the data model.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

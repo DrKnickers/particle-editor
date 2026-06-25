@@ -81,7 +81,7 @@ int main()
         // bytes), which is what wstring::size() counts and what the old buffer held.
         std::vector<std::wstring> in;
         for (int i = 0; i < 16; ++i)
-            in.push_back(std::wstring(L"C:\\<path> Wars Empire at War\\corruption\\Mods\\Mod\\Layer")
+            in.push_back(std::wstring(L"C:\\GameLibrary\\steamapps\\common\\Example Strategy Game\\expansion\\Mods\\SampleMod\\Layer")
                          + std::to_wstring(i));
         std::wstring blob = SerializeMultiSz(in);
         CHECK(blob.size() > 1024);   // wchar count, not bytes

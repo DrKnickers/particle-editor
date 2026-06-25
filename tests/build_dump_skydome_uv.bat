@@ -2,7 +2,7 @@
 REM Build the skydome UV-topology probe as a standalone x64 console exe.
 REM Pure data-model TUs (AloModel + ChunkReader + files + utils); no engine / D3D.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

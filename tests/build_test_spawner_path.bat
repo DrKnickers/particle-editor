@@ -4,7 +4,7 @@ REM standalone x64 console exe. SpawnerPath.h is header-only + pure, so
 REM this links nothing from the engine — only the DirectX libs that
 REM provide the D3DXVECTOR3 helpers.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

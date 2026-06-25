@@ -5,7 +5,7 @@ REM expat + files + utils. The prebuilt expatw_static.lib is a RELEASE (/MD)
 REM build, so this TU is compiled /MD (release CRT) to match it and avoid a
 REM CRT-mismatch link error; the other tests' /MDd is not required here.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

@@ -3,7 +3,7 @@ REM Build the UndoStack EditorAux regression test (s52]) as a standalone
 REM x64 console exe. Links only the data-model TUs UndoStack.cpp + ParticleSystem.cpp
 REM need, against the DirectX SDK libs (symbols referenced but not exercised).
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

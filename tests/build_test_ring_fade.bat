@@ -1,6 +1,6 @@
 @echo off
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 set ROOT=%~dp0..
 pushd "%ROOT%"

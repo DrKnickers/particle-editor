@@ -1,7 +1,7 @@
 @echo off
 REM Throwaway: build the .alo bbox measurement (dev-box only, not CI).
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 set ROOT=%~dp0..
 pushd "%ROOT%"

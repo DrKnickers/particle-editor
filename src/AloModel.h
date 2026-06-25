@@ -18,10 +18,10 @@
 // the parent/bone-index root-sentinel convention is the CONSUMER's job (it
 // needs D3D math + empirical verification), not this pure-data layer's.
 //
-// Format authority: the maintainer's own MIT exporter
-// DrKnickers/max2alamo-2026 (alamo_format/src/alo_build.cpp), cross-checked
-// against GlyphXTools/alo-viewer (MIT) and validated byte-for-byte against the
-// vanilla EaW + FoC corpus. Portions derived from those MIT references.
+// Format authority: the maintainer's own MIT Alamo exporter
+// (alo_build.cpp), cross-checked against GlyphXTools/alo-viewer (MIT) and
+// validated byte-for-byte against the vanilla EaW + FoC corpus. Portions
+// derived from those MIT references.
 
 #include <cstdint>
 #include <string>

@@ -5,7 +5,7 @@ REM the AloModel decoder (for ProbeModelSkinned) + files + utils data-model
 REM TUs; no engine / D3D-coupled TUs (managers.h is included only for the
 REM abstract IFileManager interface).
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..

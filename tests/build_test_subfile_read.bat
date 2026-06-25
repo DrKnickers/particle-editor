@@ -3,7 +3,7 @@ REM Build the SubFile::read clamp regression test as a standalone x64 console ex
 REM Pure file-layer TUs (files + utils for LoadString in the exception ctors); no
 REM engine / D3D. See tests/test_subfile_read.cpp.
 setlocal
-call "C:\Program Files\<path>" >nul
+call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..
