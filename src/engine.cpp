@@ -2964,6 +2964,54 @@ static void ApplyAloMaterialParams(ID3DXEffect* fx,
     }
 }
 
+// World matrix for a BILLBOARD sub-mesh (a 0x206 bone, e.g. the star dome's sun
+// glow). The quad's bone places it off-centre; the game orients it to FACE THE
+// CAMERA so a flat additive quad is never seen edge-on. We reproduce that: keep
+// the bone's object-space position (through the dome world), but replace its
+// orientation with a screen-facing basis so the quad's authored in-plane extent
+// (local X/Z) maps to camera right/up. Without this the quad draws flat and
+// collapses to a 1px additive-white line edge-on (the false "closure seam").
+static D3DXMATRIX MakeSkydomeBillboardWorld(const D3DXVECTOR3& eyePos,
+                                            const D3DXVECTOR3& eyeUp,
+                                            const D3DXMATRIX&  placement,
+                                            const D3DXMATRIX&  domeWorld)
+{
+    // Bone object-space position -> world (through the dome's scale+translate).
+    D3DXVECTOR3 cObj(placement._41, placement._42, placement._43);
+    D3DXVECTOR3 center; D3DXVec3TransformCoord(&center, &cObj, &domeWorld);
+
+    // Uniform dome scale = length of domeWorld's first basis row (sf,sf,sf).
+    const D3DXVECTOR3 row0(domeWorld._11, domeWorld._12, domeWorld._13);
+    const float sf = D3DXVec3Length(&row0);
+
+    // Spherical billboard basis facing the eye (point-at-eye, not view-plane: the
+    // sun is a single off-centre point on a camera-locked sphere). The quad lies in
+    // its bone-local X/Z plane (local Y is the normal), so map X->right, Z->up,
+    // Y->normal. NOTE: deliberately NOT the engine's view-aligned m_billboard
+    // (inverse view-rotation) -- that screen-aligns a center-anchored quad; this
+    // off-centre point needs to point AT the eye.
+    D3DXVECTOR3 normal = eyePos - center;
+    if (D3DXVec3Length(&normal) < 1e-4f) normal = D3DXVECTOR3(0, 1, 0);   // sun at the eye (bone @ origin)
+    D3DXVec3Normalize(&normal, &normal);
+    // right = up x normal. If eyeUp is (near-)parallel to normal (camera ~directly
+    // over/under the sun) OR degenerate (zero), the cross collapses -> fall back to
+    // a world axis guaranteed non-parallel to normal. Detect via the cross MAGNITUDE
+    // (|a x b| = sin θ), which catches both cases a dot-threshold up-guard would miss.
+    D3DXVECTOR3 right;
+    D3DXVec3Cross(&right, &eyeUp, &normal);
+    if (D3DXVec3Length(&right) < 1e-4f) D3DXVec3Cross(&right, &D3DXVECTOR3(1, 0, 0), &normal);
+    if (D3DXVec3Length(&right) < 1e-4f) D3DXVec3Cross(&right, &D3DXVECTOR3(0, 1, 0), &normal);
+    D3DXVec3Normalize(&right, &right);
+    D3DXVECTOR3 up; D3DXVec3Cross(&up, &normal, &right); D3DXVec3Normalize(&up, &up);
+
+    D3DXMATRIX w; D3DXMatrixIdentity(&w);
+    w._11 = right.x  * sf; w._12 = right.y  * sf; w._13 = right.z  * sf;   // local X -> right
+    w._21 = normal.x * sf; w._22 = normal.y * sf; w._23 = normal.z * sf;   // local Y -> normal (verts Y==0)
+    w._31 = up.x     * sf; w._32 = up.y     * sf; w._33 = up.z     * sf;   // local Z -> up
+    w._41 = center.x;      w._42 = center.y;      w._43 = center.z;        // sun world position
+    return w;
+}
+
 // Draw one decoded .alo dome: each sub-mesh runs its OWN named game
 // shader 1:1 (Skydome.fx / MeshGloss.fxo / MeshAdditive.fx). Mirrors the
 // particle per-frame binding template (engine.cpp:746) but binds the REAL world
@@ -2973,8 +3021,8 @@ static void ApplyAloMaterialParams(ID3DXEffect* fx,
 // ground + particle draws that follow.
 void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
 {
-    D3DXMATRIX wvp = world * m_view * m_projection;
-
+    // World/WVP are now per-sub-mesh (each carries its bone placement; a billboard
+    // sub-mesh gets a camera-facing world), so they are computed inside the loop.
     DWORD oldAlphaBlend, oldSrcBlend, oldDestBlend, oldZWrite, oldZEnable, oldCull;
     m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
     m_pDevice->GetRenderState(D3DRS_SRCBLEND,         &oldSrcBlend);
@@ -3028,13 +3076,24 @@ void Engine::RenderSkydomeMesh(SkydomeMesh& mesh, const D3DXMATRIX& world)
         ID3DXEffect* fx = sub.effect->getD3DEffect();   // AddRef'd
         const Effect::Handles& h = sub.effect->getHandles();
 
+        // Per-sub-mesh world. A billboard bone (the star dome's sun glow) is placed
+        // at its bone position and RE-ORIENTED to face the camera, so its flat
+        // additive quad never collapses to an edge-on 1px line. Every other sub-mesh
+        // keeps the dome world verbatim -- byte-identical to the prior behaviour, so
+        // no existing/mod dome render changes (the dome meshes are authored in object
+        // space on near-identity bones; only the sun rides a 0x206 billboard bone).
+        D3DXMATRIX subWorld = (sub.billboardMode != 0)
+            ? MakeSkydomeBillboardWorld(m_eye.Position, m_eye.Up, sub.placement, world)
+            : world;
+        D3DXMATRIX subWvp = subWorld * m_view * m_projection;
+
         // Engine semantics: the verbatim particle binding template (engine.cpp:746)
         // but with the REAL world matrix -- the dome shaders compute world_pos /
         // world_normal for SH diffuse + (MeshGloss) specular -- not the identity the
         // particle path uses. Handles a shader doesn't declare are NULL -> no-op.
         D3DXVECTOR4 eyePos(m_eye.Position.x, m_eye.Position.y, m_eye.Position.z, 1.0f);
-        fx->SetMatrix(h.hWorld,               &world);
-        fx->SetMatrix(h.hWorldViewProjection, &wvp);
+        fx->SetMatrix(h.hWorld,               &subWorld);
+        fx->SetMatrix(h.hWorldViewProjection, &subWvp);
         fx->SetVector(h.hEyePosition,         &eyePos);
         fx->SetVector(h.hGlobalAmbient,       &m_ambient);
         fx->SetVector(h.hDirLightVec0,        &m_lights[0].Position);

@@ -39,6 +39,8 @@ class IFileManager;
 // to rebuild it after a device reset without re-parsing the model.
 struct SubMeshGpu
 {
+    SubMeshGpu() { D3DXMatrixIdentity(&placement); }
+
     // --- cached CPU data (survives device lost/reset) ---
     std::string                 shaderName;        // 0x10101, e.g. "Skydome.fx"
     std::string                 vertexFormatName;  // 0x10002, e.g. "alD3dVertNU2C"
@@ -48,6 +50,17 @@ struct SubMeshGpu
     uint32_t                    stride = 0;        // runtime vertex stride (== decl size)
     uint32_t                    vertexCount = 0;
     uint32_t                    primitiveCount = 0;
+
+    // --- object-space placement (from the .alo 0x200 skeleton + 0x600 connections) ---
+    // This sub-mesh's parent mesh's bone, accumulated to object space (identity if
+    // the dome has no skeleton / no connection). The vanilla star domes carry a
+    // sun BILLBOARD sub-mesh on a 0x206 bone: `billboardMode != 0` flags it so the
+    // draw replaces this matrix's orientation with a camera-facing one. Without
+    // that, the flat additive sun quad is drawn at the dome centre, un-billboarded,
+    // and collapses to a 1px additive-white line when viewed edge-on (the artifact
+    // long misread as a "closure-meridian seam"). See Engine::RenderSkydomeMesh.
+    D3DXMATRIX                  placement;
+    uint32_t                    billboardMode = 0;
 
     // --- GPU handles (released on device lost; refilled on reset) ---
     Effect*                         effect = nullptr;  // owned ref (ShaderManager::getShader); NULL => skipped

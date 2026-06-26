@@ -157,6 +157,7 @@ may live at the end of the file.
 
 ### Fixed
 
+- The vanilla space skydomes (Stars Low/Medium/High) no longer show a faint white vertical line — the sun glow now renders as a round billboard facing the camera, the way the game draws it, instead of an edge-on sliver
 - Tooltips now appear cleanly — the little pointer arrow fades in with the tooltip instead of popping in a moment later
 - Saving an `.alo` can no longer corrupt your existing file if the save fails partway through (disk full, a removable/network drive disconnected, permission denied) — your original file is left untouched until the new one is fully written
 - Closing the editor window with unsaved changes now prompts you to Save / Don't Save / Cancel, instead of silently discarding your work and deleting its crash-recovery autosave

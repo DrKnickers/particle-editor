@@ -125,6 +125,36 @@ namespace
         }
         return nullptr;
     }
+
+    // Build a bone's local D3DXMATRIX from the 12 on-disk floats (column-major:
+    // col0@[0..3], col1@[4..7], col2@[8..11]); row 3 = translation. Mirrors
+    // ReferenceObjectMesh::boneLocalMatrix (same row-vector RH Z-up object space).
+    D3DXMATRIX boneLocalMatrix(const float m[12])
+    {
+        D3DXMATRIX r;
+        r._11 = m[0]; r._12 = m[4]; r._13 = m[8];  r._14 = 0.0f;
+        r._21 = m[1]; r._22 = m[5]; r._23 = m[9];  r._24 = 0.0f;
+        r._31 = m[2]; r._32 = m[6]; r._33 = m[10]; r._34 = 0.0f;
+        r._41 = m[3]; r._42 = m[7]; r._43 = m[11]; r._44 = 1.0f;
+        return r;
+    }
+
+    // Accumulate each bone's object-space matrix up the parent chain (obj[i] =
+    // local[i] * obj[parent]); parents precede children, so one forward pass
+    // suffices. Mirrors ReferenceObjectMesh::computeBoneObjectMatrices.
+    void computeBoneObjectMatrices(const std::vector<AloBone>& bones,
+                                   std::vector<D3DXMATRIX>& out)
+    {
+        const size_t n = bones.size();
+        out.resize(n);
+        for (size_t i = 0; i < n; ++i)
+        {
+            D3DXMATRIX local = boneLocalMatrix(bones[i].matrix);
+            const uint32_t p = bones[i].parentIndex;
+            if (p < i) D3DXMatrixMultiply(&out[i], &local, &out[p]);
+            else       out[i] = local;
+        }
+    }
 }
 
 SkydomeMesh::~SkydomeMesh()
@@ -163,11 +193,33 @@ bool SkydomeMesh::Load(IFileManager& fm, const std::string& aloPath)
     file->Release();                                 // release our getFile ref
     if (!ok) return false;
 
+    // Bone object-space matrices + per-mesh placement. The vanilla star domes
+    // carry the dome on a near-identity bone and a SUN on a 0x206 billboard bone
+    // (translated off-centre); the connections map mesh ordinal -> bone. Without
+    // this placement the sun quad draws at the dome centre, un-billboarded, and
+    // its flat additive geometry collapses to a 1px white line edge-on.
+    std::vector<D3DXMATRIX> boneObj;
+    computeBoneObjectMatrices(model.bones, boneObj);
+
     // Flatten every sub-mesh of every 0x400 mesh into the GPU list, transcoding
     // the raw 144B vertices into the compact runtime layout. A 0x10005 (legacy)
     // sub-mesh has empty rawVertexBytes (AloModel drops it) -> skip it here.
-    for (const AloMesh& mesh : model.meshes)
+    for (size_t meshIdx = 0; meshIdx < model.meshes.size(); ++meshIdx)
     {
+        const AloMesh& mesh = model.meshes[meshIdx];
+
+        // This mesh's object-space placement + billboard flag = its 0x602
+        // connection bone (identity / no-billboard if absent or out of range).
+        D3DXMATRIX placement; D3DXMatrixIdentity(&placement);
+        uint32_t   billboardMode = 0;
+        for (const AloConnection& c : model.connections)
+        {
+            if (c.objectIndex != meshIdx) continue;
+            if (c.boneIndex < boneObj.size())        placement     = boneObj[c.boneIndex];
+            if (c.boneIndex < model.bones.size())    billboardMode = model.bones[c.boneIndex].billboardMode;
+            break;
+        }
+
         for (const AloSubMesh& sm : mesh.subMeshes)
         {
             if (sm.rawVertexBytes.empty() || sm.vertexCount == 0 || sm.primitiveCount == 0)
@@ -184,6 +236,8 @@ bool SkydomeMesh::Load(IFileManager& fm, const std::string& aloPath)
             gpu.vertexCount      = sm.vertexCount;
             gpu.primitiveCount   = sm.primitiveCount;
             gpu.indexBytes       = sm.indexBytes;
+            gpu.placement        = placement;
+            gpu.billboardMode    = billboardMode;
 
             gpu.vertexBytes.resize((size_t)stride * sm.vertexCount);
             for (uint32_t v = 0; v < sm.vertexCount; ++v)
