@@ -291,3 +291,10 @@ tests/max_verts.txt
 # web/apps/editor/scripts/probe-cdp-viewport.mjs --out-dir defaults here).
 # Transient PNG artifacts; regenerate via the harness — never committed.
 /tmp/
+
+# Serena MCP per-project data. project.yml bakes the cwd dir name, so it
+# diverges across git worktrees (worktree dir name vs repo name) and would
+# churn if tracked; cache/ is machine-specific. Serena regenerates .serena/
+# per-cwd at runtime, so ignoring it loses nothing. Decision: Serena project
+# data is intentionally never tracked here.
+.serena/
