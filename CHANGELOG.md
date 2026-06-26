@@ -76,6 +76,7 @@ may live at the end of the file.
 
 ### Changed
 
+- A locked reference object no longer blocks camera navigation — clicking and dragging on a frozen object now pans/zooms the view straight through it, so you can frame an effect against the object without unlocking it first
 - The Grass, Sand, and Snow ground textures now load from your Empire at War / Forces of Corruption game install at runtime instead of being bundled with the editor; when no game install is configured they appear greyed-out in the ground picker (Dirt and Solid Colour always work)
 - Ground, grid, and bloom toggles now live in a compact overlay in the bottom-left of the viewport (moved off the toolbar), alongside a new control to **lock the reference object** so you can pan and orbit without accidentally nudging it — toggle the lock from the overlay, the View menu, or Ctrl+L
 - The viewport display-options pill now adapts its scrim to the scene — a light chip over dark backdrops, dark otherwise — and rests more quietly until you hover or focus it

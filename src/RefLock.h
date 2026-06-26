@@ -9,3 +9,14 @@ inline bool RefLockResolveSelected(bool wantSelected, bool locked)
 {
     return wantSelected && !locked;
 }
+
+// Whether a viewport left-click that geometrically hit the reference object
+// should be CONSUMED (select + swallow the click) vs. passed through to camera
+// navigation. A locked object is navigation-transparent: even a ray hit passes
+// through so pan/zoom works without unlocking. Consume only on a hit of an
+// UNLOCKED object. Mirrors RefLockResolveSelected: one tested rule, every path
+// computes through it.
+inline bool RefLockConsumeBodyClick(bool pickHit, bool locked)
+{
+    return pickHit && !locked;
+}

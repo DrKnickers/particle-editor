@@ -27,6 +27,18 @@ int main(){
     ok(RefLockResolveSelected(false, false) == false, "unlock a deselected object -> stays deselected");
     ok(RefLockResolveSelected(true,  false) == true,  "unlock with a pending select -> selectable");
 
+    // 5) Body-click consume rule: a viewport LMB body hit is CONSUMED
+    //    (select + swallow) only when the object is UNLOCKED. A locked object is
+    //    navigation-transparent -- even a geometric hit passes through to the camera.
+    ok(RefLockConsumeBodyClick(true,  false) == true,  "hit+unlocked -> consume (select)");
+    ok(RefLockConsumeBodyClick(true,  true)  == false, "hit+locked   -> pass through (navigation)");
+    ok(RefLockConsumeBodyClick(false, false) == false, "miss+unlocked -> nothing to consume");
+    ok(RefLockConsumeBodyClick(false, true)  == false, "miss+locked   -> nothing to consume");
+
+    // NOTE: these cases prove the PREDICATE only. The WM_LBUTTONDOWN routing that
+    // consumes-vs-falls-through on its result has no boot-free test seam (--drive
+    // can't inject mouse input); it is verified by the manual live editor check.
+
     printf(g_fail? "\n=== ref lock: %d FAIL ===\n":"\n=== ref lock: ALL PASS ===\n", g_fail);
     return g_fail?1:0;
 }

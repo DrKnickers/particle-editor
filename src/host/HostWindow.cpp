@@ -3043,16 +3043,24 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             SetCapture(hwnd);
             return 0;
         }
-        // Click-to-select: clicking the object body selects it (the
-        // gizmo appears); clicking empty space deselects it and falls through to
-        // camera orbit. (Handle grabs above already won when the object was selected.)
+        // Click-to-select: clicking an UNLOCKED object body selects it (the gizmo
+        // appears); clicking empty space deselects it and falls through to camera
+        // MOVE. A LOCKED object is navigation-transparent — a body hit is NOT
+        // consumed, so the click reaches the camera MOVE/ZOOM path below (matching
+        // RMB orbit, which never picks). The consume rule lives in the unit-tested
+        // RefLockConsumeBodyClick (RefLock.h). (Handle grabs above already won when
+        // the object was selected; a locked object is never selected, so none exist.)
         {
-            if (engine->PickReferenceObject((short)LOWORD(lp), (short)HIWORD(lp)))
+            const bool hit = engine->PickReferenceObject((short)LOWORD(lp), (short)HIWORD(lp));
+            if (RefLockConsumeBodyClick(hit, engine->IsReferenceLocked()))
             {
                 engine->SetReferenceObjectSelected(true);
-                return 0;   // consume — don't orbit when clicking the object
+                return 0;   // consume — don't pan when clicking an unlocked object
             }
-            engine->SetReferenceObjectSelected(false);   // empty click: deselect
+            // Miss, or a hit on a LOCKED object: deselect, then fall through to
+            // camera MOVE/ZOOM. While locked this is idempotent — selection is
+            // already forced false and hover/active manip already cleared.
+            engine->SetReferenceObjectSelected(false);
         }
         // Plain LMB drag — camera MOVE / ZOOM (no preview involved).
         m_dragMode     = (wp & MK_CONTROL) ? DragMode::ZOOM : DragMode::MOVE;
