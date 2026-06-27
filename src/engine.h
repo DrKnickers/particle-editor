@@ -842,12 +842,22 @@ private:
 	// post-switch caller is RebuildSkydomeMeshes or EnumerateSkydomeNames.
 	const std::array<std::vector<SkydomeRef>, kNumSkydomeAxes>& EnsureSkydomeLists();
 
-	// Resolve m_referenceObjectName -> catalog model path -> lazy skinned
+	// Load the SHOWN m_referenceObjectName -> catalog model path -> lazy skinned
 	// probe -> Load/Resolve/CreateBuffers (clone of RebuildSkydomeMeshes). Sets
-	// m_referenceObjectStatus. If the catalog isn't built yet (startup restore
-	// / just-invalidated on a mod switch), defers until the background build finishes
-	// (Update() retries) -- never builds synchronously, so it can't freeze the UI thread.
+	// m_referenceObjectStatus. Existence-gating, desired-name resolution, and the
+	// clear/defer/restore across a mod switch are owned by ResolveDesiredReference (below),
+	// which calls this once a PRESENT object is resolved; Rebuild's own catalog-not-built
+	// defer is a fallback. Never builds synchronously, so it can't freeze the UI thread.
 	void				RebuildReferenceObjectMesh();
+
+	// Resolve m_referenceDesiredName -> m_referenceObjectName, existence-gated against
+	// the catalog, deferring while it rebuilds. The single place "absent -> None" and
+	// deselect-on-clear are enforced (called by SetReferenceObject, ReloadTextures on a
+	// mod-context change, and the Update() catalog-ready harvest).
+	void				ResolveDesiredReference();
+	// Full teardown of reference render state (mesh + hardpoint attachments + render
+	// scale + status), so a clear never leaves stale attachment nodes or a stale scale.
+	void				ResetReferenceRenderState();
 
 	// Kick a background catalog (re)build if one is wanted and not already
 	// built/in-flight. Snapshots the FileManager roots on the calling (UI) thread and
@@ -1069,6 +1079,11 @@ private:
 
 	// Selection + placement state driving m_referenceObjectMesh.
 	std::string              m_referenceObjectName;            // "" = none selected
+	// The INTENDED/persisted selection (what the user picked / what startup restores).
+	// Survives a mod-layer switch; m_referenceObjectName above is the SHOWN/resolved
+	// value (snapshot source) which clears to "" when the desired object is absent from
+	// the active stack. Both are driven through Engine::ResolveDesiredReference().
+	std::string              m_referenceDesiredName;
 	bool                     m_referenceObjectVisible = true;
 	bool                     m_modelShadowsEnabled = true;     // [shadow] "Model shadows" pref (default on)
 	bool                     m_softShadowsEnabled  = true;     // [soft-shadows] "Soft shadows" pref (default on)
@@ -1077,8 +1092,9 @@ private:
 	// Per-object <Scale_Factor> render multiplier for the selected reference
 	// object (1.0 = native; trooper 1.5, AT-AT 1.8). Applied as a leftmost uniform
 	// scale in ReferenceObjectWorldFrom so render/pick/selection-box agree. Reset to
-	// 1.0 at the TOP of RebuildReferenceObjectMesh (all exit paths) and set from the
-	// catalog only on a successful resolve, so a mod/submod switch never leaves it stale.
+	// 1.0 by ResetReferenceRenderState (clear paths) and at the TOP of
+	// RebuildReferenceObjectMesh, set from the catalog only on a successful resolve, so a
+	// mod/submod switch never leaves it stale.
 	float                    m_referenceScaleFactor = 1.0f;
 	// Render-only "display" transform eased toward the committed transform above
 	// each frame so gizmo/object motion is smooth (incl. under snap). Committed values

@@ -889,6 +889,29 @@ int main(int argc, char** argv)
         CHECK(im && im->fieldable && IsPickerListed(*im), "Company_Units member of a buildable company -> fieldable + listed");
     }
 
+    // ---- ResolveReferenceName: existence gate for the reference selection -----
+    std::printf("[resolve-reference-name]\n");
+    {
+        std::vector<GameObjectRef> objs;
+        GameObjectRef a; a.name = "Rebel_Trooper"; objs.push_back(a);
+        GameObjectRef b; b.name = "AT_AT";         objs.push_back(b);
+        CHECK(ResolveReferenceName(objs, "Rebel_Trooper")  == "Rebel_Trooper", "present exact -> name");
+        CHECK(ResolveReferenceName(objs, "rebel_trooper")  == "Rebel_Trooper", "present diff-case -> canonical casing");
+        CHECK(ResolveReferenceName(objs, "Imperial_Probe") == "",              "absent -> empty (None)");
+        CHECK(ResolveReferenceName(objs, "")               == "",              "empty desired -> empty");
+        std::vector<GameObjectRef> none;
+        CHECK(ResolveReferenceName(none, "Rebel_Trooper")  == "",              "empty catalog -> empty");
+        // Exact-name match only -- a substring of a catalog name must NOT match
+        // (guards against a regression to search-style/prefix matching).
+        CHECK(ResolveReferenceName(objs, "AT")             == "",              "substring is NOT a match (exact name only)");
+        // Case-only duplicate names -> first match wins, returned in its canonical casing
+        // (the catalog itself is first-wins on duplicate Names; document the helper's behaviour).
+        std::vector<GameObjectRef> dup;
+        GameObjectRef d1; d1.name = "Rebel_Trooper"; dup.push_back(d1);
+        GameObjectRef d2; d2.name = "rebel_trooper"; dup.push_back(d2);
+        CHECK(ResolveReferenceName(dup, "REBEL_TROOPER")   == "Rebel_Trooper", "case-only duplicate -> first match wins (canonical)");
+    }
+
     std::printf("\n=== GameObjectCatalog: %s ===\n", g_failed == 0 ? "ALL PASS" : "FAILURES");
     return g_failed == 0 ? 0 : 1;
 }

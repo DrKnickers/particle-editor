@@ -733,11 +733,17 @@ void Engine::ReloadTextures()
 		m_referenceCatalogBuilt = false;
 		++m_catalogGeneration;
 	}
-	// Re-resolve the selected reference object either way: on a context change it defers
-	// onto the fresh async catalog; on a texture-only reload the catalog is still valid so
-	// it re-Loads in place from the cached model path (refreshing the object's textures --
-	// one .alo load, no vanish), matching the in-place skydome behaviour above.
-	if (!m_referenceObjectName.empty())
+	// Reference object: on a real mod-context change, clear the SHOWN selection to None
+	// NOW (no stale id during the async rebuild) and let the catalog-ready retry restore
+	// it iff it still exists -- ResolveDesiredReference takes its not-built branch
+	// (the catalog was just invalidated above) and does both. On a texture-only reload the
+	// catalog is still valid, so re-resolve the shown object in place (refresh its
+	// textures, no vanish), exactly as before.
+	if (modContextChanged)
+	{
+		ResolveDesiredReference();
+	}
+	else if (!m_referenceObjectName.empty())
 	{
 		RebuildReferenceObjectMesh();
 	}
@@ -769,10 +775,12 @@ void Engine::Update()
 				m_referenceCatalog      = std::move(*ready);
 				m_referenceCatalogBuilt = true;
 				m_catalogJustReady      = true;                        // host -> emit state-changed (picker re-queries)
-				if (m_referenceMeshDeferred)                            // a restored/selected object was waiting
+				if (m_referenceMeshDeferred)                            // a deferred/selected object was waiting
 				{
-					m_referenceMeshDeferred = false;
-					RebuildReferenceObjectMesh();
+					// Catalog now ready: existence-gated restore -- show + load the
+					// desired object iff it exists in the new stack, else stay None.
+					// ResolveDesiredReference clears m_referenceMeshDeferred itself.
+					ResolveDesiredReference();
 				}
 			}
 			// else: stale build (mod switched mid-flight) -> discard; the kick below rebuilds.
@@ -5328,18 +5336,17 @@ void Engine::EnumerateReferenceObjects(std::vector<GameObjectRef>& out)
 // object doesn't make a newly-picked one silently invisible.
 void Engine::SetReferenceObject(const std::string& name)
 {
-    m_referenceObjectName = name;
+    m_referenceDesiredName = name;   // the INTENT (persisted); shown value is resolved below
     if (!name.empty())
         m_referenceObjectVisible = true;
-    // Auto-select on pick so the manipulator gizmo appears immediately; clearing
-    // the selection deselects. (Click the object body to re-select, empty to clear.)
-    // NOTE: the lock is intentionally STICKY + persisted across sessions (gizmo
-    // freeze/lock + the HostWindow startup restore) — do NOT clear m_referenceLocked here, or
-    // the startup restore is wiped. The overlay/View-menu now make the lock state
-    // visible so a sticky lock on a freshly-loaded object is no longer confusing.
+    // Auto-select on an explicit pick so the manipulator gizmo appears immediately. A
+    // desired name that resolves present keeps this true (ResolveDesiredReference's
+    // present branch doesn't touch selection); an absent/None/deferred desired is
+    // force-deselected inside ResolveDesiredReference. The lock is intentionally STICKY +
+    // persisted (do NOT clear m_referenceLocked here, or the startup restore is wiped).
     m_referenceObjectSelected = RefLockResolveSelected(!name.empty(), m_referenceLocked);
     m_hoverManip = ManipHandle();
-    RebuildReferenceObjectMesh();
+    ResolveDesiredReference();
 }
 
 // [capture] Sum of shadow-volume sub-meshes across the primary mesh and all
@@ -5385,6 +5392,55 @@ bool Engine::GetReferenceObjectBounds(D3DXVECTOR3& outMin, D3DXVECTOR3& outMax) 
     return true;
 }
 
+// Full teardown of the render-state fields RebuildReferenceObjectMesh clears on its
+// empty-name / deferred exits: mesh, hardpoint attachments, render scale, status. Does
+// NOT touch m_referenceMeshDeferred -- that flag stays owned by the caller
+// (ResolveDesiredReference), which sets it per branch -- so a clear path never leaves a
+// stale attachment node or a stale render scale behind.
+void Engine::ResetReferenceRenderState()
+{
+    m_referenceObjectMesh.Clear();
+    m_referenceAttachments.clear();
+    m_referenceScaleFactor  = 1.0f;
+    m_referenceObjectStatus = ReferenceObjectStatus::None;
+}
+
+// Resolve the desired (intended/persisted) reference name into the shown selection,
+// existence-gated against the catalog. Clears to None + deselects when the object is
+// absent or nothing is desired; defers (shown None now) while the catalog rebuilds and
+// is retried by Update() on catalog-ready. A successful resolve does NOT auto-select --
+// a restore is inert (gizmo appears only on a user click); an explicit pick keeps its
+// gizmo because SetReferenceObject sets m_referenceObjectSelected before calling here and
+// the present branch leaves that flag untouched.
+void Engine::ResolveDesiredReference()
+{
+    // Not built yet (startup, or just-invalidated by a mod switch) AND something is
+    // desired: show None NOW (no stale id during the async build) and arm the retry.
+    if (!m_referenceCatalogBuilt && !m_referenceDesiredName.empty())
+    {
+        m_referenceObjectName.clear();
+        SetReferenceObjectSelected(false);   // deselect: hides gizmo + aborts any in-flight drag
+        ResetReferenceRenderState();
+        m_catalogWanted         = true;
+        m_referenceMeshDeferred = true;      // Update() retries this fn on catalog-ready
+        return;
+    }
+
+    m_referenceMeshDeferred = false;
+    const std::string resolved = m_referenceCatalogBuilt
+        ? ResolveReferenceName(m_referenceCatalog.objects, m_referenceDesiredName)
+        : std::string();                     // desired empty -> "" regardless
+    m_referenceObjectName = resolved;
+
+    if (resolved.empty())                    // explicit None, or absent-from-this-stack
+    {
+        SetReferenceObjectSelected(false);   // honest None: deselect
+        ResetReferenceRenderState();
+        return;
+    }
+    RebuildReferenceObjectMesh();            // present: load it (may set LoadFailed for a bad .alo)
+}
+
 // Resolve the selected Name -> model path -> load. The probe (only on the
 // load-failure path, so the common case parses the .alo once) distinguishes a
 // skinned/unsupported object from a missing/corrupt one for the picker status.
@@ -5394,9 +5450,9 @@ void Engine::RebuildReferenceObjectMesh()
     m_referenceAttachments.clear();   // rebuilt below iff the unit mounts hardpoint models
     // Reset the render scale at the TOP so every exit path (empty-name clear,
     // deferred catalog-not-built return, LoadFailed, successful resolve) leaves no
-    // stale scale from a previously-selected object -- a mid-session mod/submod switch
-    // hits the deferred return before any GameObjectRef resolves (S-M1). Overwritten
-    // from the catalog only on a successful resolve below.
+    // stale scale from a previously-selected object. (A mod/submod switch now clears via
+    // ResetReferenceRenderState through ResolveDesiredReference, so Rebuild's deferred
+    // return is a fallback.) Overwritten from the catalog only on a successful resolve below.
     m_referenceScaleFactor = 1.0f;
 
     if (m_referenceObjectName.empty())

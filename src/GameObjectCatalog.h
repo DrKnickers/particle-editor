@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <cstring>
 
 class IFileManager;
 
@@ -185,5 +186,20 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
 const char* ObjDomainName(ObjDomain d);
 const char* ObjRoleName(ObjRole r);
 const char* ObjBucketName(ObjBucket b);
+
+// Resolve a desired reference-object Name against the catalog's objects,
+// case-INSENSITIVELY (the Alamo engine resolves Names case-insensitively).
+// Returns the catalog's CANONICAL casing when present, or "" when the name is
+// absent from this stack (the caller treats "" as "selection clears to None").
+// Empty input -> "". The single existence rule the engine routes through.
+inline std::string ResolveReferenceName(const std::vector<GameObjectRef>& objects,
+                                        const std::string& desired)
+{
+    if (desired.empty()) return std::string();
+    for (const GameObjectRef& r : objects)
+        if (_stricmp(r.name.c_str(), desired.c_str()) == 0)
+            return r.name;   // adopt canonical casing
+    return std::string();    // absent -> None
+}
 
 #endif
