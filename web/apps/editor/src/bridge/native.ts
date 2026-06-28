@@ -1,9 +1,12 @@
 import type { Bridge, Request, ResponseFor, Event, EventKind, EventOf, WireMessage, RequestId } from "@particle-editor/bridge-schema";
+import { traceBridgeRequestEnd, traceBridgeRequestStart } from "@/lib/perf-trace";
 
 type Pending = {
   resolve: (data: unknown) => void;
   reject: (err: Error) => void;
   timer?: ReturnType<typeof setTimeout>;
+  bridgeKind: string;
+  startMs: number;
 };
 
 declare global {
@@ -59,8 +62,9 @@ export class NativeBridge implements Bridge {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    for (const [, p] of this.pending) {
+    for (const [id, p] of this.pending) {
       if (p.timer !== undefined) clearTimeout(p.timer);
+      traceBridgeRequestEnd(p.bridgeKind, String(id), "async", p.startMs, "error", "disposed");
       p.reject(new Error("NativeBridge: disposed (host disconnected)"));
     }
     this.pending.clear();
@@ -79,15 +83,17 @@ export class NativeBridge implements Bridge {
         reject(new Error("NativeBridge: disposed (host disconnected)"));
         return;
       }
+      const startMs = traceBridgeRequestStart(req.kind, id, "async");
       let timer: ReturnType<typeof setTimeout> | undefined;
       if (this.requestTimeoutMs !== undefined) {
         timer = setTimeout(() => {
           if (this.pending.delete(id)) {
+            traceBridgeRequestEnd(req.kind, id, "async", startMs, "error", "timeout");
             reject(new Error(`bridge request "${req.kind}" timed out after ${this.requestTimeoutMs}ms`));
           }
         }, this.requestTimeoutMs);
       }
-      this.pending.set(id, { resolve: resolve as (d: unknown) => void, reject, timer });
+      this.pending.set(id, { resolve: resolve as (d: unknown) => void, reject, timer, bridgeKind: req.kind, startMs });
       try {
         window.chrome!.webview!.postMessage!(JSON.stringify(envelope));
       } catch (err) {
@@ -96,6 +102,7 @@ export class NativeBridge implements Bridge {
         // promise + map entry (G12).
         if (timer !== undefined) clearTimeout(timer);
         this.pending.delete(id);
+        traceBridgeRequestEnd(req.kind, id, "async", startMs, "error", err instanceof Error ? err.message : String(err));
         reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
@@ -128,8 +135,13 @@ export class NativeBridge implements Bridge {
       if (!p) return;
       this.pending.delete(msg.id);
       if (p.timer !== undefined) clearTimeout(p.timer);
-      if (msg.ok) p.resolve(msg.data);
-      else p.reject(new Error(msg.error));
+      if (msg.ok) {
+        traceBridgeRequestEnd(p.bridgeKind, msg.id, "async", p.startMs, "ok");
+        p.resolve(msg.data);
+      } else {
+        traceBridgeRequestEnd(p.bridgeKind, msg.id, "async", p.startMs, "error", msg.error);
+        p.reject(new Error(msg.error));
+      }
     } else if (msg.type === "evt") {
       const bucket = this.listeners.get(msg.kind);
       bucket?.forEach((h) => h({ kind: msg.kind, payload: msg.payload } as Event));

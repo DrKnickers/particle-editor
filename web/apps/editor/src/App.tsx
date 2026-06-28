@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { makeBridge } from "@/bridge";
 import { signalAppReady } from "@/lib/app-ready";
+import { emitClockCalibration } from "@/lib/perf-trace";
 import { exposeBridgeForTests } from "@/bridge/expose";
 import { PanelLayout, resetPanelLayoutStorage } from "@/components/PanelLayout";
 import { StatusBar } from "@/components/StatusBar";
@@ -155,7 +156,10 @@ function AppShell() {
   useEffect(() => {
     let inner = 0;
     const outer = requestAnimationFrame(() => {
-      inner = requestAnimationFrame(() => signalAppReady());
+      inner = requestAnimationFrame(() => {
+        emitClockCalibration("startup-ready");
+        signalAppReady();
+      });
     });
     return () => {
       cancelAnimationFrame(outer);

@@ -611,6 +611,31 @@ static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 
 static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, vector<wstring>* outGameRoots = NULL )
 {
+	auto valueCountForOption = [](const std::wstring& arg) -> size_t
+	{
+		if (arg == L"--drive" ||
+		    arg == L"--perf-trace" ||
+		    arg == L"--perf-trace-mode" ||
+		    arg == L"--perf-artifact-dir" ||
+		    arg == L"--perf-webview-profile" ||
+		    arg == L"--gen-nt5-fixture" ||
+		    arg == L"--gen-a11y-fixture" ||
+		    arg == L"--gen-smoke-test" ||
+		    arg == L"--frames" ||
+		    arg == L"--skydome" ||
+		    arg == L"--ambient" ||
+		    arg == L"--sun" ||
+		    arg == L"--sun-intensity" ||
+		    arg == L"--smoke-color" ||
+		    arg == L"--smoke-spin")
+			return 1;
+		if (arg == L"--capture" || arg == L"--capture-ref")
+			return 2;
+		if (arg == L"--snap-window")
+			return 1;
+		return 0;
+	};
+
 	// Search for the Empire at War path
 	vector<wstring> EmpireAtWarPaths;
 	if (argv.size() > 1)
@@ -618,6 +643,13 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 		// Override on the command line; use that
 		for (size_t i = 1; i < argv.size(); i++)
 		{
+			const size_t valueCount = valueCountForOption(argv[i]);
+			if (valueCount > 0)
+			{
+				i += (std::min)(valueCount, argv.size() - i - 1);
+				continue;
+			}
+			if (!argv[i].empty() && argv[i][0] == L'-') continue;
 			if (PathIsDirectory(argv[i].c_str()))
 			{
     			EmpireAtWarPaths.push_back(argv[i]);
@@ -814,10 +846,58 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		bool         captureHasSunI = false;    float captureSunIntensity = 1.0f;
 		// --drive <script.json>: scripted non-CDP composite capture, then exit.
 		std::wstring driveScriptPath;
+		std::wstring perfTracePath;
+		std::wstring perfTraceMode;
+		std::wstring perfArtifactDir;
+		std::wstring perfWebViewProfile;
 		for (size_t i = 1; i < argv.size(); ++i)
 		{
 			if (argv[i] == L"--dev-ui")    devUi    = true;
 			if (argv[i] == L"--test-host") testHost = true;
+			if (argv[i] == L"--perf-trace")
+			{
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--perf-trace requires a <path>\n");
+					return 2;
+				}
+				perfTracePath = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--perf-trace-mode")
+			{
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--perf-trace-mode requires off, null, or file\n");
+					return 2;
+				}
+				perfTraceMode = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--perf-artifact-dir")
+			{
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--perf-artifact-dir requires a <path>\n");
+					return 2;
+				}
+				perfArtifactDir = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--perf-webview-profile")
+			{
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--perf-webview-profile requires a <path>\n");
+					return 2;
+				}
+				perfWebViewProfile = argv[i + 1];
+				++i;
+				continue;
+			}
 			if (argv[i] == L"--drive")
 			{
 				// Require an explicit path: a bare --drive must NOT fall through
@@ -903,6 +983,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 					fwprintf(stderr, L"--sun-intensity: expected a float, got '%s' -- ignored\n", argv[i + 1].c_str());
 			}
 		}
+		auto readEnvW = [](const wchar_t* name) -> std::wstring
+		{
+			wchar_t value[32768] = {};
+			const DWORD n = GetEnvironmentVariableW(name, value, static_cast<DWORD>(std::size(value)));
+			if (n == 0 || n >= std::size(value)) return L"";
+			return std::wstring(value, n);
+		};
+		if (perfTracePath.empty())      perfTracePath = readEnvW(L"ALO_PERF_TRACE");
+		if (perfTraceMode.empty())      perfTraceMode = readEnvW(L"ALO_PERF_TRACE_MODE");
+		if (perfArtifactDir.empty())    perfArtifactDir = readEnvW(L"ALO_PERF_ARTIFACT_DIR");
+		if (perfWebViewProfile.empty()) perfWebViewProfile = readEnvW(L"ALO_PERF_WEBVIEW_PROFILE");
 		// --drive and --capture/--capture-ref are mutually-exclusive one-shots
 		// (both arm a captureMode-style branch). Reject the combination loudly
 		// rather than run an ambiguous mix. Checked BEFORE the capture/capture-ref
@@ -1296,7 +1387,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		                           captureHasAmbient, captureAmbient[0], captureAmbient[1], captureAmbient[2],
 		                           captureHasSun, captureSun[0], captureSun[1], captureSun[2],
 		                           captureHasSunI, captureSunIntensity,
-		                           driveScriptPath);
+		                           driveScriptPath,
+		                           perfTracePath, perfTraceMode, perfArtifactDir,
+		                           perfWebViewProfile);
 		delete fileManager;
 #ifndef NDEBUG
 		FreeConsole();

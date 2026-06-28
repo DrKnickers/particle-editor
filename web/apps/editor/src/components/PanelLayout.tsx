@@ -46,6 +46,7 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 import { useRightDock, setDock } from "@/lib/right-dock";
 import { computeSceneRect, dockSlideTarget } from "@/lib/scene-rect";
 import { useDockAnim } from "@/lib/dock-anim";
+import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
 import { ViewportSlot } from "./ViewportSlot";
 import { OverloadBanner } from "./OverloadBanner";
 import { CurveEditorPanel } from "./CurveEditorPanel";
@@ -356,7 +357,20 @@ export function PanelLayout({ bridge }: Props) {
     // DOM before the tween (see below). Tracked here so cleanup can tear them down.
     let readySub: (() => void) | null = null;
     let readyTimeout = 0;
+    let atlasGate:
+      | { ended: boolean; spanId: string; startMs: number; dock: string }
+      | null = null;
     if (dockVisible && dock === "atlas") {
+      const gateStartMs = performance.now();
+      const gateSpanId = makePerfSpanId("atlas.dock_gate", dock);
+      atlasGate = { ended: false, spanId: gateSpanId, startMs: gateStartMs, dock };
+      emitPerfTrace({
+        eventName: "atlas.dock_gate",
+        eventType: "span_start",
+        spanId: gateSpanId,
+        dock,
+        rendererStartMs: gateStartMs,
+      });
       // OPEN (atlas): gate the slide START on the grid being mounted (atlasReady).
       // A RE-OPEN renders the grid synchronously from the props/preview caches, so
       // atlasReady is already true here → start immediately (one rAF for a fresh
@@ -364,9 +378,22 @@ export function PanelLayout({ bridge }: Props) {
       // we start the slide on the false→true edge — eliminating the centre-column
       // overlap from the grid mount landing mid-tween. A max-timeout fallback
       // starts the slide regardless, so a grid that never mounts can't hang it.
-      const fire = () => {
+      const fire = (reason: "already_ready" | "ready" | "timeout" = "ready") => {
         if (raf) return; // already started (edge + timeout race, or re-entry)
         if (readyTimeout) { clearTimeout(readyTimeout); readyTimeout = 0; }
+        const gateEndMs = performance.now();
+        emitPerfTrace({
+          eventName: "atlas.dock_gate",
+          eventType: "span_end",
+          spanId: gateSpanId,
+          dock,
+          rendererStartMs: gateStartMs,
+          rendererEndMs: gateEndMs,
+          durationMs: Math.max(0, gateEndMs - gateStartMs),
+          status: reason === "timeout" ? "timeout" : "ok",
+          reason,
+        });
+        if (atlasGate) atlasGate.ended = true;
         raf = requestAnimationFrame(startSlide);
       };
       // READ readiness BEFORE clearing it. On a RE-OPEN the AtlasPickerPanel
@@ -389,7 +416,7 @@ export function PanelLayout({ bridge }: Props) {
         // opens and the flags still clear. The normal cold-open path is the
         // false→true edge above, which fires the moment the grid renders.
         readyTimeout = window.setTimeout(() => {
-          readySub?.(); readySub = null; fire();
+          readySub?.(); readySub = null; fire("timeout");
         }, 280);
       }
     } else if (dockVisible) {
@@ -414,6 +441,21 @@ export function PanelLayout({ bridge }: Props) {
       // superseding toggle / unmount can't start a stale slide or leak a timer.
       readySub?.();
       if (readyTimeout) clearTimeout(readyTimeout);
+      if (atlasGate && !atlasGate.ended) {
+        const gateEndMs = performance.now();
+        emitPerfTrace({
+          eventName: "atlas.dock_gate",
+          eventType: "span_end",
+          spanId: atlasGate.spanId,
+          dock: atlasGate.dock,
+          rendererStartMs: atlasGate.startMs,
+          rendererEndMs: gateEndMs,
+          durationMs: Math.max(0, gateEndMs - atlasGate.startMs),
+          status: "cancelled",
+          reason: "cleanup",
+        });
+        atlasGate.ended = true;
+      }
       // A superseding toggle (or unmount) cancels the settle timer above — the
       // ONLY happy-path clear. Drop the in-flight slide's flags here too, else
       // a re-toggle that early-returns (or takes the non-animate branch) leaves

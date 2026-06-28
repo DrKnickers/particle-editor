@@ -26,12 +26,15 @@ int main()
         CHECK(s.defaultSettleMs == 150.0);  // default
     }
 
-    // --- allowlist: engine/set/*, file/open(+path), emitters/list, emitters/select OK ---
+    // --- allowlist: explicit render-safe commands, file/open(+path), emitters/list/select, texture preview OK ---
     {
         Script s; std::string err;
         CHECK(ParseScript(R"({"steps":[{"kind":"engine/set/camera","params":{}}]})", s, err));
+        CHECK(ParseScript(R"({"steps":[{"kind":"engine/set/background","params":{"rgb":1234}}]})", s, err));
         CHECK(ParseScript(R"({"steps":[{"kind":"emitters/list"}]})", s, err));
         CHECK(ParseScript(R"({"steps":[{"kind":"emitters/select","params":{"id":0}}]})", s, err));
+        CHECK(ParseScript(R"({"steps":[{"kind":"layout/scene-rect","params":{"x":0,"y":0,"w":800,"h":600}}]})", s, err));
+        CHECK(ParseScript(R"({"steps":[{"kind":"textures/get-preview","params":{"filename":"p_fire.dds"}}]})", s, err));
     }
     // --- allowlist: dangerous/unknown kinds REJECTED ---
     {
@@ -43,6 +46,8 @@ int main()
         CHECK(!ParseScript(R"({"steps":[{"kind":"mods/set-layers"}]})", s, err));
         CHECK(!ParseScript(R"({"steps":[{"kind":"debug/capture-window"}]})", s, err));
         CHECK(!ParseScript(R"({"steps":[{"kind":"emitters/delete"}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"kind":"engine/set/leave-particles","params":{"enabled":true}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"kind":"engine/set/ground-slot-custom-path","params":{"path":"C:\\x.dds"}}]})", s, err));
     }
     // --- file/open requires an explicit path ---
     {
@@ -67,9 +72,9 @@ int main()
     // --- capture / settle / camera / select-emitter step shapes ---
     {
         Script s; std::string err;
-        CHECK(ParseScript(R"({"steps":[{"capture":"C:\\shot.png"}]})", s, err));
+        CHECK(ParseScript(R"({"steps":[{"capture":"shot.png"}]})", s, err));
         CHECK(s.steps[0].kind == StepKind::Capture);
-        CHECK(s.steps[0].capturePath == "C:\\shot.png");
+        CHECK(s.steps[0].capturePath == "shot.png");
 
         CHECK(ParseScript(R"({"steps":[{"settle":200}]})", s, err));
         CHECK(s.steps[0].kind == StepKind::Settle);
@@ -88,6 +93,11 @@ int main()
 
         // capture requires a string path
         CHECK(!ParseScript(R"({"steps":[{"capture":123}]})", s, err));
+        // capture paths are artifact-relative only
+        CHECK(!ParseScript(R"({"steps":[{"capture":"C:\\shot.png"}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"capture":"..\\shot.png"}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"capture":"nested/../shot.png"}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"capture":"\\\\server\\share\\shot.png"}]})", s, err));
         // select-emitter requires name OR stableId
         CHECK(!ParseScript(R"({"steps":[{"select-emitter":{}}]})", s, err));
         // select-emitter rejects BOTH name AND stableId (exactly-one invariant)
@@ -104,6 +114,10 @@ int main()
         Script s; std::string err;
         // settleMs default override
         CHECK(ParseScript(R"({"settleMs":300,"steps":[{"settle":1}]})", s, err) && s.defaultSettleMs == 300.0);
+        CHECK(!ParseScript(R"({"settleMs":-1,"steps":[]})", s, err));
+        CHECK(!ParseScript(R"({"settleMs":60001,"steps":[]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"settle":-1}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"settle":60001}]})", s, err));
         // non-object root rejected
         CHECK(!ParseScript("[1,2,3]", s, err));
         CHECK(!ParseScript("42", s, err));
@@ -111,6 +125,14 @@ int main()
         CHECK(!ParseScript(R"({"open":"C:\\x.alo"})", s, err));
         // empty steps array is accepted (pins the current no-op contract)
         CHECK(ParseScript(R"({"steps":[]})", s, err) && s.steps.empty());
+    }
+
+    // --- malformed typed fields reject without throwing ---
+    {
+        Script s; std::string err;
+        CHECK(!ParseScript(R"({"steps":[{"kind":123}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"camera":{"target":[1,"bad",3]}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"select-emitter":{"name":42}}]})", s, err));
     }
 
     // --- ClassifyResponse failure-contract edge cases ---

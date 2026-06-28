@@ -73,7 +73,13 @@ int Run(HINSTANCE hInstance,
         // BridgeDispatcher::DispatchSync, capture the composed window, then exit.
         // Non-empty = ephemeral drive mode (no settings/MRU/autosave persistence,
         // per-PID WebView2 profile + log). See DriveRunner / DriveScript.h.
-        const std::wstring& driveScriptPath = L"");
+        const std::wstring& driveScriptPath = L"",
+        // Performance-audit-only knobs. Empty values preserve the normal launch
+        // path; explicit paths are used by reproducible perf runs.
+        const std::wstring& perfTracePath = L"",
+        const std::wstring& perfTraceMode = L"",
+        const std::wstring& perfArtifactDir = L"",
+        const std::wstring& perfWebViewProfile = L"");
 
 } // namespace host
 

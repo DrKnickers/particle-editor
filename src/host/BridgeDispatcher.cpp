@@ -6,6 +6,7 @@
 #include "WindowCapture.h"
 #include "HostMessages.h"   // WM_APP_QUIT_CONFIRMED
 #include "StringConv.h"   // host::Utf8ToWide / WideToUtf8 (consolidated)
+#include "PerfTrace.h"
 #include "third_party/nlohmann/json.hpp"
 
 #include "../engine.h"
@@ -25,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -985,6 +987,22 @@ static json BuildDispatchExceptionEnvelope(const json& parsed, const char* what)
     return res;
 }
 
+static std::string JsonStringField(const json& parsed, const char* name)
+{
+    if (auto it = parsed.find(name); it != parsed.end() && it->is_string())
+        return it->get<std::string>();
+    return {};
+}
+
+static void EndDispatchSpan(host::perf::Span* span, const json& res)
+{
+    if (!span) return;
+    const bool ok = res.value("ok", false);
+    std::string error;
+    if (!ok) error = res.value("error", std::string());
+    span->End(ok ? "ok" : "error", error);
+}
+
 void BridgeDispatcher::SetEngine(Engine* engine)
 {
     m_engine = engine;
@@ -1024,15 +1042,26 @@ void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
         return;
     }
 
+    std::unique_ptr<host::perf::Span> span;
+    if (host::perf::Enabled()) {
+        span = std::make_unique<host::perf::Span>("bridge.dispatch", nlohmann::json{
+            {"bridgeMode", "async"},
+            {"bridgeKind", JsonStringField(parsed, "kind")},
+            {"requestId", JsonStringField(parsed, "id")}
+        });
+    }
+
     // Catch json::exception escaping DispatchInternal.
     json res;
     try
     {
         res = DispatchInternal(parsed);
+        EndDispatchSpan(span.get(), res);
     }
     catch (const json::exception& e)
     {
         fprintf(stderr, "[host] BridgeDispatcher::Dispatch: type/conversion exception: %s\n", e.what());
+        if (span) span->End("error", e.what());
         res = BuildDispatchExceptionEnvelope(parsed, e.what());
     }
     // Drop responses that have no id (malformed request, can't correlate).
@@ -1074,14 +1103,26 @@ std::string BridgeDispatcher::DispatchSync(const std::string& jsonRequest)
         return err.dump();
     }
 
+    std::unique_ptr<host::perf::Span> span;
+    if (host::perf::Enabled()) {
+        span = std::make_unique<host::perf::Span>("bridge.dispatch", nlohmann::json{
+            {"bridgeMode", "sync"},
+            {"bridgeKind", JsonStringField(parsed, "kind")},
+            {"requestId", JsonStringField(parsed, "id")}
+        });
+    }
+
     // Catch json::exception escaping DispatchInternal.
     try
     {
-        return DispatchInternal(parsed).dump();
+        json res = DispatchInternal(parsed);
+        EndDispatchSpan(span.get(), res);
+        return res.dump();
     }
     catch (const json::exception& e)
     {
         fprintf(stderr, "[host] BridgeDispatcher::DispatchSync: type/conversion exception: %s\n", e.what());
+        if (span) span->End("error", e.what());
         return BuildDispatchExceptionEnvelope(parsed, e.what()).dump();
     }
 }
@@ -2576,6 +2617,11 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (auto it = params.find("filename"); it != params.end() && it->is_string())
             filename = it->get<std::string>();
 
+        std::unique_ptr<host::perf::Span> span;
+        if (host::perf::Enabled())
+            span = std::make_unique<host::perf::Span>("bridge.texture_thumbnail", nlohmann::json{
+                {"filename", filename}
+            });
         IDirect3DDevice9* dev = m_engine ? m_engine->GetDevice() : nullptr;
         const TexturePalette::ThumbnailResult t = TexturePalette::GetThumbnail(
             Utf8ToWide(filename), m_fileManager, dev);
@@ -2586,6 +2632,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             {"dataUri", t.dataUri.empty() ? json(nullptr) : json(t.dataUri)},
             {"status",  status},
         });
+        if (span) span->End(status);
         return res;
     }
 
@@ -2601,6 +2648,12 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (auto it = params.find("flattenAlpha"); it != params.end() && it->is_boolean())
             flattenAlpha = it->get<bool>();
 
+        std::unique_ptr<host::perf::Span> span;
+        if (host::perf::Enabled())
+            span = std::make_unique<host::perf::Span>("bridge.texture_preview", nlohmann::json{
+                {"filename", filename},
+                {"flattenAlpha", flattenAlpha}
+            });
         IDirect3DDevice9* dev = m_engine ? m_engine->GetDevice() : nullptr;
         const TexturePalette::PreviewResult p = TexturePalette::GetTexturePreview(
             Utf8ToWide(filename), m_fileManager, dev, 1024, flattenAlpha);
@@ -2613,6 +2666,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             });
         else
             sendOk(json{{"status", p.status}});
+        if (span) span->End(p.status);
         return res;
     }
 

@@ -7,6 +7,7 @@
 // (DriveRunner) converts these POD results into engine/Win32 calls.
 
 #include <cmath>
+#include <cctype>
 #include <optional>
 #include <string>
 #include <vector>
@@ -56,10 +57,30 @@ inline bool IsAllowedBridgeKind(const std::string& kind)
     // Everything else (save/save-as/browse/quit/mods/debug/emitter-mutations)
     // is rejected — several open modal native dialogs that would deadlock an
     // unattended run on the single UI thread (spec section 4.6).
-    if (kind.rfind("engine/set/", 0) == 0) return true;   // entire engine/set/* family
+    if (kind == "engine/set/background")       return true;
+    if (kind == "engine/set/bloom")            return true;
+    if (kind == "engine/set/bloom-strength")   return true;
+    if (kind == "engine/set/bloom-cutoff")     return true;
+    if (kind == "engine/set/bloom-size")       return true;
+    if (kind == "engine/set/camera")           return true;
+    if (kind == "engine/set/grid-visible")     return true;
+    if (kind == "engine/set/grid-spacing")     return true;
+    if (kind == "engine/set/ground")           return true;
+    if (kind == "engine/set/ground-z")         return true;
+    if (kind == "engine/set/ground-texture")   return true;
+    if (kind == "engine/set/model-shadows")    return true;
+    if (kind == "engine/set/msaa-level")       return true;
+    if (kind == "engine/set/overload-guard")   return true;
+    if (kind == "engine/set/paused")           return true;
+    if (kind == "engine/set/reference-object") return true;
+    if (kind == "engine/set/reference-object-visible") return true;
+    if (kind == "engine/set/shadow")           return true;
+    if (kind == "engine/set/soft-shadows")     return true;
     if (kind == "file/open")               return true;   // path-required (checked separately)
     if (kind == "emitters/list")           return true;
     if (kind == "emitters/select")         return true;
+    if (kind == "layout/scene-rect")       return true;   // resize/layout perf probe; no persistence
+    if (kind == "textures/get-preview")    return true;   // read-only decode path for perf audit
     return false;
 }
 
@@ -67,6 +88,29 @@ inline bool FileOpenHasPath(const nlohmann::json& params)
 {
     return params.is_object() && params.contains("path") &&
            params["path"].is_string() && !params["path"].get<std::string>().empty();
+}
+
+inline bool IsFiniteMs(double value)
+{
+    return std::isfinite(value) && value >= 0.0 && value <= 60000.0;
+}
+
+inline bool IsSafeArtifactRelativePath(const std::string& path)
+{
+    if (path.empty()) return false;
+    if (path.size() >= 2 && std::isalpha(static_cast<unsigned char>(path[0])) && path[1] == ':')
+        return false;
+    if (path[0] == '/' || path[0] == '\\') return false;
+    std::string segment;
+    for (char ch : path) {
+        if (ch == '/' || ch == '\\') {
+            if (segment == "..") return false;
+            segment.clear();
+        } else {
+            segment.push_back(ch);
+        }
+    }
+    return segment != "..";
 }
 
 // --- request envelope + response classification ----------------------------
@@ -186,14 +230,19 @@ inline EmitterResolve ResolveEmitterId(const std::string& listEnvelope,
 inline bool ParseScript(const std::string& json, Script& out, std::string& err)
 {
     out = Script{};
+    try {
     nlohmann::json j;
     try { j = nlohmann::json::parse(json); }
     catch (const std::exception& e) { err = std::string("invalid JSON: ") + e.what(); return false; }
 
     if (!j.is_object()) { err = "root must be an object"; return false; }
 
-    if (j.contains("settleMs") && j["settleMs"].is_number())
+    if (j.contains("settleMs") && j["settleMs"].is_number()) {
         out.defaultSettleMs = j["settleMs"].get<double>();
+        if (!IsFiniteMs(out.defaultSettleMs)) {
+            err = "'settleMs' must be finite and between 0 and 60000"; return false;
+        }
+    }
 
     if (!j.contains("steps") || !j["steps"].is_array()) { err = "missing 'steps' array"; return false; }
 
@@ -237,10 +286,16 @@ inline bool ParseScript(const std::string& json, Script& out, std::string& err)
             }
             step.kind = StepKind::Capture;
             step.capturePath = s["capture"].get<std::string>();
+            if (!IsSafeArtifactRelativePath(step.capturePath)) {
+                err = "'capture' must be an artifact-relative path"; return false;
+            }
         } else if (s.contains("settle")) {
             if (!s["settle"].is_number()) { err = "'settle' must be a number (ms)"; return false; }
             step.kind = StepKind::Settle;
             step.settleMs = s["settle"].get<double>();
+            if (!IsFiniteMs(step.settleMs)) {
+                err = "'settle' must be finite and between 0 and 60000"; return false;
+            }
         } else if (s.contains("camera")) {
             const auto& c = s["camera"];
             if (!c.is_object()) { err = "'camera' must be an object"; return false; }
@@ -274,6 +329,15 @@ inline bool ParseScript(const std::string& json, Script& out, std::string& err)
         out.steps.push_back(std::move(step));
     }
     return true;
+    } catch (const std::exception& e) {
+        out = Script{};
+        err = std::string("bad script: ") + e.what();
+        return false;
+    } catch (...) {
+        out = Script{};
+        err = "bad script";
+        return false;
+    }
 }
 
 }  // namespace drive

@@ -22,10 +22,12 @@
 #include <d3dx9.h>
 #include <gdiplus.h>
 #include "../host/GdiplusEncode.h"   // host::GdiplusEncoderClsid / host::Base64Encode
+#include "../host/PerfTrace.h"
 #include <objidl.h>       // IStream / CreateStreamOnHGlobal
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -198,8 +200,18 @@ ThumbnailResult GetThumbnail(const std::wstring& filename,
                              IFileManager* fileManager,
                              IDirect3DDevice9* device)
 {
+    const bool perfOn = host::perf::Enabled();
+    std::unique_ptr<host::perf::Span> span;
+    if (perfOn) {
+        span = std::make_unique<host::perf::Span>("texture.palette.thumbnail", nlohmann::json{
+            {"filename", WideToAnsi(filename)}
+        });
+    }
     auto it = g_bridgeThumbCache.find(filename);
-    if (it != g_bridgeThumbCache.end()) return it->second;
+    if (it != g_bridgeThumbCache.end()) {
+        if (span) span->End("cache_hit");
+        return it->second;
+    }
 
     vector<uint8_t> png;
     const ThumbStatus status = DecodeToPngBytes(fileManager, device, filename, png);
@@ -214,6 +226,10 @@ ThumbnailResult GetThumbnail(const std::wstring& filename,
         result.status = ThumbStatus::Broken;
 
     g_bridgeThumbCache[filename] = result;  // cache failures too (don't re-decode known-bad)
+    if (span) {
+        span->End(result.status == ThumbStatus::Ok ? "ok" :
+                  result.status == ThumbStatus::Missing ? "missing" : "broken");
+    }
     return result;
 }
 
@@ -228,27 +244,61 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
                                 int maxBound,
                                 bool flattenAlpha)
 {
+    const bool perfOn = host::perf::Enabled();
+    std::unique_ptr<host::perf::Span> totalSpan;
+    if (perfOn) {
+        totalSpan = std::make_unique<host::perf::Span>("texture.preview", nlohmann::json{
+            {"filename", WideToAnsi(filename)},
+            {"maxBound", maxBound},
+            {"flattenAlpha", flattenAlpha}
+        });
+    }
     PreviewResult out;
-    if (device == nullptr || filename.empty() || fileManager == nullptr) { out.status = "missing"; return out; }
+    if (device == nullptr || filename.empty() || fileManager == nullptr) {
+        out.status = "missing";
+        if (totalSpan) totalSpan->End("missing");
+        return out;
+    }
 
     vector<char> bytes;
-    if (!ReadTextureBytes(fileManager, filename, bytes) || bytes.empty())
     {
-        out.status = "missing";
-        return out;
+        std::unique_ptr<host::perf::Span> readSpan;
+        if (perfOn) {
+            readSpan = std::make_unique<host::perf::Span>("texture.preview.read_bytes", nlohmann::json{
+                {"filename", WideToAnsi(filename)}
+            });
+        }
+        if (!ReadTextureBytes(fileManager, filename, bytes) || bytes.empty())
+        {
+            if (readSpan) readSpan->End("missing");
+            if (totalSpan) totalSpan->End("missing");
+            out.status = "missing";
+            return out;
+        }
+        if (readSpan) readSpan->End("ok");
     }
 
-    // Probe true source dimensions and reject non-2D resources (cube/volume):
-    // the picker grid only makes sense over a flat sheet.
-    D3DXIMAGE_INFO info = {};
-    if (FAILED(D3DXGetImageInfoFromFileInMemory(bytes.data(), (UINT)bytes.size(), &info))
-        || info.ResourceType != D3DRTYPE_TEXTURE)
     {
-        out.status = "broken";
-        return out;
+        std::unique_ptr<host::perf::Span> infoSpan;
+        if (perfOn) {
+            infoSpan = std::make_unique<host::perf::Span>("texture.preview.image_info", nlohmann::json{
+                {"filename", WideToAnsi(filename)},
+                {"byteCount", bytes.size()}
+            });
+        }
+        D3DXIMAGE_INFO info = {};
+        if (FAILED(D3DXGetImageInfoFromFileInMemory(bytes.data(), (UINT)bytes.size(), &info))
+            || info.ResourceType != D3DRTYPE_TEXTURE)
+        {
+            if (infoSpan) infoSpan->End("broken");
+            if (totalSpan) totalSpan->End("broken");
+            out.status = "broken";
+            return out;
+        }
+        out.srcW = (int)info.Width;
+        out.srcH = (int)info.Height;
+        if (infoSpan) infoSpan->End("ok");
     }
-    out.srcW = (int)info.Width;
-    out.srcH = (int)info.Height;
 
     // Downscale only when a dimension exceeds maxBound; preserve aspect ratio.
     int tw = out.srcW, th = out.srcH;
@@ -259,13 +309,42 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
         else          { tw = (std::max)(1, (int)((double)tw * maxBound / th)); th = maxBound; }
     }
 
+    if (perfOn) {
+        host::perf::Emit({
+            {"eventName", "texture.preview.resize_plan"},
+            {"eventType", "instant"},
+            {"filename", WideToAnsi(filename)},
+            {"srcW", out.srcW},
+            {"srcH", out.srcH},
+            {"targetW", tw},
+            {"targetH", th}
+        });
+    }
+
     IDirect3DTexture9* tex = nullptr;
-    HRESULT hr = D3DXCreateTextureFromFileInMemoryEx(
-        device, bytes.data(), (UINT)bytes.size(),
-        (UINT)tw, (UINT)th, 1, 0,
-        D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
-        D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &tex);
-    if (FAILED(hr) || tex == nullptr) { if (tex) tex->Release(); out.status = "broken"; return out; }
+    {
+        std::unique_ptr<host::perf::Span> decodeSpan;
+        if (perfOn) {
+            decodeSpan = std::make_unique<host::perf::Span>("texture.preview.d3dx_decode", nlohmann::json{
+                {"filename", WideToAnsi(filename)},
+                {"targetW", tw},
+                {"targetH", th}
+            });
+        }
+        HRESULT hr = D3DXCreateTextureFromFileInMemoryEx(
+            device, bytes.data(), (UINT)bytes.size(),
+            (UINT)tw, (UINT)th, 1, 0,
+            D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH,
+            D3DX_DEFAULT, D3DX_DEFAULT, 0, NULL, NULL, &tex);
+        if (FAILED(hr) || tex == nullptr) {
+            if (tex) tex->Release();
+            if (decodeSpan) decodeSpan->End("broken");
+            if (totalSpan) totalSpan->End("broken");
+            out.status = "broken";
+            return out;
+        }
+        if (decodeSpan) decodeSpan->End("ok");
+    }
 
     // [atlas-picker] "Color channel" preview mode. Particle atlases are commonly
     // ADDITIVE (a frame's content lives in RGB with alpha 0), so honoring alpha would
@@ -277,6 +356,12 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
     // frames of textures that carry no alpha).
     if (flattenAlpha)
     {
+        std::unique_ptr<host::perf::Span> flattenSpan;
+        if (perfOn) {
+            flattenSpan = std::make_unique<host::perf::Span>("texture.preview.flatten_alpha", nlohmann::json{
+                {"filename", WideToAnsi(filename)}
+            });
+        }
         D3DSURFACE_DESC sd = {};
         D3DLOCKED_RECT  lr = {};
         if (SUCCEEDED(tex->GetLevelDesc(0, &sd)) &&
@@ -289,16 +374,48 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
                     prow[(size_t)x * 4 + 3] = 255;   // A8R8G8B8 in memory = B,G,R,A; force opaque
             }
             tex->UnlockRect(0);
+            if (flattenSpan) flattenSpan->End("ok");
+        }
+        else
+        {
+            if (flattenSpan) flattenSpan->End("skipped");
         }
     }
 
     vector<uint8_t> png;
-    const bool ok = EncodeTextureToPngBytes(tex, tw, th, png);
+    bool ok = false;
+    {
+        std::unique_ptr<host::perf::Span> encodeSpan;
+        if (perfOn) {
+            encodeSpan = std::make_unique<host::perf::Span>("texture.preview.png_encode", nlohmann::json{
+                {"filename", WideToAnsi(filename)},
+                {"targetW", tw},
+                {"targetH", th}
+            });
+        }
+        ok = EncodeTextureToPngBytes(tex, tw, th, png);
+        if (encodeSpan) encodeSpan->End(ok ? "ok" : "broken");
+    }
     tex->Release();
-    if (!ok) { out.status = "broken"; return out; }
+    if (!ok) {
+        if (totalSpan) totalSpan->End("broken");
+        out.status = "broken";
+        return out;
+    }
 
     out.status  = "ok";
-    out.dataUri = "data:image/png;base64," + host::Base64Encode(png.data(), png.size());
+    {
+        std::unique_ptr<host::perf::Span> base64Span;
+        if (perfOn) {
+            base64Span = std::make_unique<host::perf::Span>("texture.preview.base64", nlohmann::json{
+                {"filename", WideToAnsi(filename)},
+                {"pngBytes", png.size()}
+            });
+        }
+        out.dataUri = "data:image/png;base64," + host::Base64Encode(png.data(), png.size());
+        if (base64Span) base64Span->End("ok");
+    }
+    if (totalSpan) totalSpan->End("ok");
     return out;
 }
 

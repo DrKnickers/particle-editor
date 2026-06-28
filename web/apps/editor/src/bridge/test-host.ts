@@ -29,6 +29,7 @@ import type {
   EventOf,
   RequestId,
 } from "@particle-editor/bridge-schema";
+import { traceBridgeRequestEnd, traceBridgeRequestStart } from "@/lib/perf-trace";
 
 // The `window.chrome.webview` / `window.chrome.webview.hostObjects`
 // types are declared globally in `./native.ts` (single source of truth).
@@ -71,12 +72,20 @@ export class TestHostBridge implements Bridge {
       kind: req.kind,
       params: req.params,
     };
-    const resStr = await hb.dispatchRequest(JSON.stringify(envelope));
-    const res = JSON.parse(resStr) as
-      | { type: "res"; ok: true; data: unknown }
-      | { type: "res"; ok: false; error: string };
-    if (!res.ok) throw new Error(res.error);
-    return res.data as ResponseFor<R>;
+    const startMs = traceBridgeRequestStart(req.kind, envelope.id, "sync");
+    try {
+      const resStr = await hb.dispatchRequest(JSON.stringify(envelope));
+      const res = JSON.parse(resStr) as
+        | { type: "res"; ok: true; data: unknown }
+        | { type: "res"; ok: false; error: string };
+      if (!res.ok) throw new Error(res.error);
+      traceBridgeRequestEnd(req.kind, envelope.id, "sync", startMs, "ok");
+      return res.data as ResponseFor<R>;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      traceBridgeRequestEnd(req.kind, envelope.id, "sync", startMs, "error", message);
+      throw err;
+    }
   }
 
   on<K extends EventKind>(kind: K, handler: (e: EventOf<K>) => void): () => void {

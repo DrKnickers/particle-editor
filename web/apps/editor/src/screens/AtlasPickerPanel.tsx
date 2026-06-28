@@ -43,6 +43,7 @@ const GRID_MIN_CELL = 44;
 const GRID_MAX_CELL = 160;
 import { getPreviewCached, useTextureEpoch } from "@/lib/atlas-preview-cache";
 import { useModStack } from "@/lib/mod-stack";
+import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
 
 // Module-level cache of the last settled grid width. The panel UNMOUNTS when the
 // dock closes, so component state is lost; persisting the width here lets a
@@ -178,6 +179,7 @@ export function AtlasPickerPanel({
   const roRef = useRef<ResizeObserver | null>(null);
   const lastMeasureRef = useRef<(() => void) | null>(null); // latest measure fn, called at slide settle
   const pulseTimer = useRef<number | undefined>(undefined);
+  const decodedPreviewUrisRef = useRef<Set<string>>(new Set());
   const emitterIdRef = useRef<number | null>(emitterId);
   useEffect(() => { emitterIdRef.current = emitterId; }, [emitterId]);
   useEffect(() => { writeShowAlpha(showAlpha); }, [showAlpha]);
@@ -244,10 +246,32 @@ export function AtlasPickerPanel({
     const fetchProps = () => {
       if (inFlight) { again = true; return; } // coalesce an event burst into one round-trip
       inFlight = true;
+      const startMs = performance.now();
+      const spanId = makePerfSpanId("atlas.fetch_props", emitterId);
+      emitPerfTrace({
+        eventName: "atlas.fetch_props",
+        eventType: "span_start",
+        spanId,
+        emitterId,
+        rendererStartMs: startMs,
+      });
       void bridge
         .request({ kind: "emitters/get-properties", params: { id: emitterId } })
         .then((r) => {
           inFlight = false;
+          const endMs = performance.now();
+          emitPerfTrace({
+            eventName: "atlas.fetch_props",
+            eventType: "span_end",
+            spanId,
+            emitterId,
+            rendererStartMs: startMs,
+            rendererEndMs: endMs,
+            durationMs: Math.max(0, endMs - startMs),
+            status: "ok",
+            textureSize: r.properties.textureSize,
+            hasColorTexture: Boolean(r.properties.colorTexture),
+          });
           if (!live) return;
           setTextureSize(r.properties.textureSize);
           setColorTexture(r.properties.colorTexture);
@@ -256,7 +280,22 @@ export function AtlasPickerPanel({
             lastEmitterProps = { id: emitterId, textureSize: r.properties.textureSize, colorTexture: r.properties.colorTexture };
           if (again) { again = false; fetchProps(); } // trailing fetch for events that arrived mid-flight
         })
-        .catch(() => { inFlight = false; /* leave defaults → no-texture placeholder */ });
+        .catch((err) => {
+          inFlight = false;
+          const endMs = performance.now();
+          emitPerfTrace({
+            eventName: "atlas.fetch_props",
+            eventType: "span_end",
+            spanId,
+            emitterId,
+            rendererStartMs: startMs,
+            rendererEndMs: endMs,
+            durationMs: Math.max(0, endMs - startMs),
+            status: "error",
+            error: err instanceof Error ? err.message : String(err),
+          });
+          /* leave defaults -> no-texture placeholder */
+        });
     };
     fetchProps();
     // Re-fetch on ANY emitter mutation (emitters/tree/changed is a broad
@@ -299,7 +338,54 @@ export function AtlasPickerPanel({
         // Fold the alpha mode into the cache key so flattened and raw previews of
         // the same texture don't collide.
         `${flattenAlpha ? "flat" : "raw"}::${colorTexture}`,
-        () => bridge.request({ kind: "textures/get-preview", params: { filename: colorTexture, flattenAlpha } }),
+        () => {
+          const mode = flattenAlpha ? "flat" : "raw";
+          const startMs = performance.now();
+          const spanId = makePerfSpanId("atlas.preview_fetch", mode, colorTexture);
+          emitPerfTrace({
+            eventName: "atlas.preview_fetch",
+            eventType: "span_start",
+            spanId,
+            texture: colorTexture,
+            previewMode: mode,
+            rendererStartMs: startMs,
+          });
+          return bridge
+            .request({ kind: "textures/get-preview", params: { filename: colorTexture, flattenAlpha } })
+            .then((r) => {
+              const endMs = performance.now();
+              emitPerfTrace({
+                eventName: "atlas.preview_fetch",
+                eventType: "span_end",
+                spanId,
+                texture: colorTexture,
+                previewMode: mode,
+                rendererStartMs: startMs,
+                rendererEndMs: endMs,
+                durationMs: Math.max(0, endMs - startMs),
+                status: r.status === "ok" ? "ok" : r.status,
+                srcW: r.status === "ok" ? r.srcW : undefined,
+                srcH: r.status === "ok" ? r.srcH : undefined,
+              });
+              return r;
+            })
+            .catch((err) => {
+              const endMs = performance.now();
+              emitPerfTrace({
+                eventName: "atlas.preview_fetch",
+                eventType: "span_end",
+                spanId,
+                texture: colorTexture,
+                previewMode: mode,
+                rendererStartMs: startMs,
+                rendererEndMs: endMs,
+                durationMs: Math.max(0, endMs - startMs),
+                status: "error",
+                error: err instanceof Error ? err.message : String(err),
+              });
+              throw err;
+            });
+        },
       )
         .then((r) => {
           if (!live) return;
@@ -333,9 +419,46 @@ export function AtlasPickerPanel({
   useEffect(() => {
     for (const p of [flatPrev, rawPrev]) {
       if (p.kind === "ok") {
+        if (decodedPreviewUrisRef.current.has(p.dataUri)) continue;
+        decodedPreviewUrisRef.current.add(p.dataUri);
         const img = new Image();
         img.src = p.dataUri;
-        void img.decode?.().catch(() => {});
+        const decodePromise = img.decode?.();
+        if (!decodePromise) continue;
+        const startMs = performance.now();
+        const spanId = makePerfSpanId("atlas.browser_decode");
+        emitPerfTrace({
+          eventName: "atlas.browser_decode",
+          eventType: "span_start",
+          spanId,
+          rendererStartMs: startMs,
+        });
+        void decodePromise
+          .then(() => {
+            const endMs = performance.now();
+            emitPerfTrace({
+              eventName: "atlas.browser_decode",
+              eventType: "span_end",
+              spanId,
+              rendererStartMs: startMs,
+              rendererEndMs: endMs,
+              durationMs: Math.max(0, endMs - startMs),
+              status: "ok",
+            });
+          })
+          .catch((err) => {
+            const endMs = performance.now();
+            emitPerfTrace({
+              eventName: "atlas.browser_decode",
+              eventType: "span_end",
+              spanId,
+              rendererStartMs: startMs,
+              rendererEndMs: endMs,
+              durationMs: Math.max(0, endMs - startMs),
+              status: "error",
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
       }
     }
   }, [flatPrev, rawPrev]);
@@ -366,8 +489,18 @@ export function AtlasPickerPanel({
   // open starts from a clean "not ready" state and re-waits.
   const gridMounted = preview.kind === "ok" && eligible && !tooLarge && !offIndex;
   useEffect(() => {
+    if (gridMounted) {
+      emitPerfTrace({
+        eventName: "atlas.grid_mounted",
+        eventType: "instant",
+        emitterId,
+        texture: colorTexture,
+        textureSize,
+        side,
+      });
+    }
     useDockAnim.getState().setAtlasReady(gridMounted);
-  }, [gridMounted]);
+  }, [colorTexture, emitterId, gridMounted, side, textureSize]);
   useEffect(() => () => { useDockAnim.getState().setAtlasReady(false); }, []);
 
   // ── click-to-assign ──────────────────────────────────────────────────────

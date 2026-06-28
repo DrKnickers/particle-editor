@@ -24,10 +24,12 @@
 #include <winhttp.h>
 #include <shlwapi.h>  // SHCreateMemStream for WebResourceRequested response
 #include <dwmapi.h>   // title-bar dark-mode (DWMWA_USE_IMMERSIVE_DARK_MODE)
+#include <psapi.h>
 #include <timeapi.h>  // [resize-perf] timeBeginPeriod/timeEndPeriod for the paced pump
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "winmm.lib")   // [resize-perf] timeBeginPeriod
 
 // See BridgeDispatcher.cpp for the runtime (theme-toggle) title-bar sync;
@@ -46,6 +48,7 @@
 #include <cstdio>
 #include <cstdlib>     // C runtime helpers
 #include <cstring>
+#include <cwctype>
 #include <share.h>     // _SH_DENYNO for _wfsopen sharing
 #include <filesystem>
 #include <map>         // [resize-perf] per-kind bridge-probe tally
@@ -59,6 +62,8 @@
 #include "WindowCapture.h"  // host::CaptureWindowToPng (factored out for --capture/--snap-window)
 #include "StringConv.h"     // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
 #include "CacheBust.h"   // app.local index.html cache-bust query (workaround)
+#include "PerfTrace.h"
+#include "WebViewModalPolicy.h"
 
 #include "AcceleratorBridge.h"
 #include "AlphaCompositor.h"
@@ -225,10 +230,41 @@ struct PerfStage
     double   sumUs = 0.0;
     double   maxUs = 0.0;
     unsigned n     = 0;
-    void   add(double us) { sumUs += us; if (us > maxUs) maxUs = us; ++n; }
+    unsigned over16 = 0;
+    unsigned over33 = 0;
+    unsigned over50 = 0;
+    void   add(double us) {
+        sumUs += us;
+        if (us > maxUs) maxUs = us;
+        if (us > 16666.7) ++over16;
+        if (us > 33333.3) ++over33;
+        if (us > 50000.0) ++over50;
+        ++n;
+    }
     double avg() const    { return n ? sumUs / n : 0.0; }
-    void   reset()        { sumUs = 0.0; maxUs = 0.0; n = 0; }
+    void   reset()        { sumUs = 0.0; maxUs = 0.0; n = 0; over16 = over33 = over50 = 0; }
 };
+
+struct ProcessMemorySnapshot
+{
+    SIZE_T workingSetBytes = 0;
+    SIZE_T privateUsageBytes = 0;
+};
+
+static ProcessMemorySnapshot GetProcessMemorySnapshot()
+{
+    ProcessMemorySnapshot out;
+    PROCESS_MEMORY_COUNTERS_EX pmc = {};
+    pmc.cb = sizeof(pmc);
+    if (GetProcessMemoryInfo(GetCurrentProcess(),
+                             reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc),
+                             sizeof(pmc)))
+    {
+        out.workingSetBytes = pmc.WorkingSetSize;
+        out.privateUsageBytes = pmc.PrivateUsage;
+    }
+    return out;
+}
 
 // Probe the installed WebView2 Evergreen runtime. Returns true if
 // GetAvailableCoreWebView2BrowserVersionString succeeds and returns a
@@ -286,7 +322,6 @@ bool ProbeDevServer()
             ok = (statusCode >= 200 && statusCode < 300);
         }
     }
-
     WinHttpCloseHandle(hRequest);
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
@@ -353,6 +388,32 @@ std::wstring ComputeHostLogPath()
     wchar_t tempDir[MAX_PATH] = {};
     GetTempPathW(MAX_PATH, tempDir);
     return std::wstring(tempDir) + L"AloParticleEditor_host.log";
+}
+
+std::wstring JoinPath(const std::wstring& dir, const wchar_t* leaf)
+{
+    if (dir.empty()) return leaf ? std::wstring(leaf) : std::wstring();
+    std::filesystem::path p(dir);
+    p /= leaf;
+    return p.wstring();
+}
+
+std::wstring LowerAscii(std::wstring value)
+{
+    for (wchar_t& ch : value) ch = static_cast<wchar_t>(std::towlower(ch));
+    return value;
+}
+
+bool IsKnownPerfTraceMode(const std::wstring& mode)
+{
+    const std::wstring m = LowerAscii(mode);
+    return m.empty() || m == L"off" || m == L"null" || m == L"file";
+}
+
+std::wstring AppendQueryParam(const std::wstring& url, const wchar_t* param)
+{
+    if (!param || !param[0]) return url;
+    return url + (url.find(L'?') == std::wstring::npos ? L"?" : L"&") + param;
 }
 
 // UTF-8 ↔ UTF-16 conversions now live in StringConv.h (host::Utf8ToWide /
@@ -696,6 +757,7 @@ struct HostWindowImpl
     // run never perturbs a concurrently-running daily-driver editor.
     std::wstring m_driveScriptPath;
     bool         m_ephemeral = false;
+    std::wstring m_perfWebViewProfile;
     FILE*       logFile = nullptr;
     std::mutex  logMutex;
 
@@ -714,7 +776,8 @@ struct HostWindowImpl
                    bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,
                    bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
                    bool hasSunI = false, float sunIntensity = 1.0f,
-                   const std::wstring& driveScriptPath = L"")
+                   const std::wstring& driveScriptPath = L"",
+                   const std::wstring& perfWebViewProfile = L"")
         : hInstance(inst)
         , textureManager(tex)
         , shaderManager(shd)
@@ -732,6 +795,7 @@ struct HostWindowImpl
         , m_captureSunIntensity(sunIntensity)
         , m_driveScriptPath(driveScriptPath)
         , m_ephemeral(!driveScriptPath.empty())
+        , m_perfWebViewProfile(perfWebViewProfile)
         , layout(nullptr)
         , accelerator()
         , modManager(std::make_unique<ModManager>(&fil, gameRoots_, !driveScriptPath.empty()))
@@ -803,14 +867,24 @@ struct HostWindowImpl
 void HostWindowImpl::OpenLog()
 {
     std::wstring path = ComputeHostLogPath();
+    const std::wstring perfArtifactDir = host::perf::CurrentConfig().artifactDir;
     // --drive (ephemeral): per-PID log filename so a --drive run's _wfsopen("w")
     // (truncate) never wipes a concurrently-running daily driver's host.log.
     if (m_ephemeral)
     {
-        const size_t dot = path.find_last_of(L'.');
         const std::wstring suffix = L"-drive-" + std::to_wstring(GetCurrentProcessId());
-        path = (dot == std::wstring::npos) ? path + suffix
-                                           : path.substr(0, dot) + suffix + path.substr(dot);
+        if (!perfArtifactDir.empty())
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(perfArtifactDir, ec);
+            path = (std::filesystem::path(perfArtifactDir) / (L"host" + suffix + L".log")).wstring();
+        }
+        else
+        {
+            const size_t dot = path.find_last_of(L'.');
+            path = (dot == std::wstring::npos) ? path + suffix
+                                               : path.substr(0, dot) + suffix + path.substr(dot);
+        }
     }
     // Hardening — _wfopen_s opens with
     // exclusive default share-mode (_SH_DENYRW) so concurrent readers
@@ -1027,6 +1101,47 @@ void HostWindowImpl::RenderD3D9()
             perfRDistort.avg(), perfRDistort.maxUs,
             perfRCompose.avg(), perfRCompose.maxUs,
             perfRPresent.avg(), perfRPresent.maxUs);
+        if (host::perf::Enabled())
+        {
+            const ProcessMemorySnapshot mem = GetProcessMemorySnapshot();
+            host::perf::Emit({
+                {"eventName", "engine.frame_summary"},
+                {"eventType", "counter"},
+                {"durationMs", perfFrame.avg() / 1000.0},
+                {"windowWidth", pr.right - pr.left},
+                {"windowHeight", pr.bottom - pr.top},
+                {"frameCount", perfFrame.n},
+                {"renderCallsPerSecond", perfFrame.n},
+                {"estimatedFpsFromCost", fps},
+                {"avgFrameMs", perfFrame.avg() / 1000.0},
+                {"maxFrameMs", perfFrame.maxUs / 1000.0},
+                {"over16Ms", perfFrame.over16},
+                {"over33Ms", perfFrame.over33},
+                {"over50Ms", perfFrame.over50},
+                {"avgUpdateMs", perfUpdate.avg() / 1000.0},
+                {"maxUpdateMs", perfUpdate.maxUs / 1000.0},
+                {"avgRenderMs", perfRender.avg() / 1000.0},
+                {"maxRenderMs", perfRender.maxUs / 1000.0},
+                {"avgGpuWaitMs", perfWait.avg() / 1000.0},
+                {"maxGpuWaitMs", perfWait.maxUs / 1000.0},
+                {"avgCompositeMs", perfComposite.avg() / 1000.0},
+                {"maxCompositeMs", perfComposite.maxUs / 1000.0},
+                {"avgRenderSceneMs", perfRScene.avg() / 1000.0},
+                {"maxRenderSceneMs", perfRScene.maxUs / 1000.0},
+                {"avgRenderBloomMs", perfRBloom.avg() / 1000.0},
+                {"maxRenderBloomMs", perfRBloom.maxUs / 1000.0},
+                {"avgRenderDistortMs", perfRDistort.avg() / 1000.0},
+                {"maxRenderDistortMs", perfRDistort.maxUs / 1000.0},
+                {"avgRenderComposeMs", perfRCompose.avg() / 1000.0},
+                {"maxRenderComposeMs", perfRCompose.maxUs / 1000.0},
+                {"avgRenderPresentMs", perfRPresent.avg() / 1000.0},
+                {"maxRenderPresentMs", perfRPresent.maxUs / 1000.0},
+                {"avgGpuWaitSpins", spinAvg},
+                {"maxGpuWaitSpins", perfWaitSpinsMax},
+                {"workingSetBytes", static_cast<unsigned long long>(mem.workingSetBytes)},
+                {"privateUsageBytes", static_cast<unsigned long long>(mem.privateUsageBytes)}
+            });
+        }
         perfUpdate.reset(); perfRender.reset(); perfWait.reset();
         perfComposite.reset(); perfFrame.reset();
         perfRScene.reset(); perfRBloom.reset(); perfRDistort.reset();
@@ -1091,7 +1206,6 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     // viewport/input at mouse rate). Extracting the kind is a cheap
     // substring scan next to the UTF16→8 + JSON parse that follows.
     // 1 Hz emit of the top kinds; idle emits nothing by construction.
-    ++perfWebMsgs;
     std::wstring msgKind;
     {
         static const std::wstring kKindNeedle = L"\"kind\":\"";
@@ -1103,7 +1217,6 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
             if (ve != std::wstring::npos && ve > vs && ve - vs < 64)
             {
                 msgKind = json.substr(vs, ve - vs);
-                ++perfMsgKinds[msgKind];
             }
         }
     }
@@ -1120,6 +1233,47 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         Log("[capture] app/ready received (React first paint)\n");
         return;
     }
+    if (msgKind == L"perf/clock-calibration")
+    {
+        nlohmann::json msg = nlohmann::json::parse(WideToUtf8(json), nullptr, false);
+        nlohmann::json event = {
+            {"eventName", "clock_calibration"},
+            {"eventType", "instant"},
+            {"hostReceiveQpc", host::perf::NowQpc()},
+            {"hostQpcFrequency", host::perf::QpcFrequency()}
+        };
+        if (!msg.is_discarded())
+        {
+            if (auto it = msg.find("rendererNowMs"); it != msg.end() && it->is_number())
+                event["rendererNowMs"] = *it;
+            if (auto it = msg.find("rendererTimeOriginMs"); it != msg.end() && it->is_number())
+                event["rendererTimeOriginMs"] = *it;
+            if (auto it = msg.find("sampleId"); it != msg.end() && it->is_string())
+                event["sampleId"] = *it;
+        }
+        host::perf::Emit(std::move(event));
+        return;
+    }
+    if (msgKind == L"perf/trace")
+    {
+        nlohmann::json msg = nlohmann::json::parse(WideToUtf8(json), nullptr, false);
+        if (!msg.is_discarded())
+        {
+            nlohmann::json event;
+            if (auto it = msg.find("event"); it != msg.end() && it->is_object())
+                event = *it;
+            if (!event.is_object()) event = nlohmann::json::object();
+            if (!event.contains("eventName")) event["eventName"] = "renderer.event";
+            if (!event.contains("eventType")) event["eventType"] = "instant";
+            event["sourceComponent"] = "renderer";
+            host::perf::Emit(std::move(event));
+        }
+        return;
+    }
+
+    ++perfWebMsgs;
+    if (!msgKind.empty())
+        ++perfMsgKinds[msgKind];
 
     // Per-message log hygiene: the interactive streams
     // (layout/scene-rect at ~28/s during a splitter drag, viewport/input
@@ -1155,6 +1309,15 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
             off += static_cast<size_t>(n);
         }
         Log("[resize-perf] bridge: msgs=%u top[%s] (per ~1s)\n", perfWebMsgs, detail);
+        if (host::perf::Enabled())
+        {
+            host::perf::Emit({
+                {"eventName", "host.bridge_message_summary"},
+                {"eventType", "counter"},
+                {"messageCount", perfWebMsgs},
+                {"topKinds", detail}
+            });
+        }
         perfWebMsgs = 0;
         perfMsgKinds.clear();
         perfMsgLastEmit = rpNow;
@@ -1167,8 +1330,13 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
 HRESULT HostWindowImpl::InitWebView2()
 {
     const bool captureIsolation = !m_captureAlo.empty() || !m_captureRef.empty() || m_ephemeral;
-    std::wstring userDataFolder = ComputeUserDataFolder(captureIsolation);
+    std::wstring userDataFolder = m_perfWebViewProfile.empty()
+        ? ComputeUserDataFolder(captureIsolation)
+        : m_perfWebViewProfile;
+    if (!m_perfWebViewProfile.empty())
+        SHCreateDirectoryExW(nullptr, userDataFolder.c_str(), nullptr);
     Log("[host] WebView2 user-data folder: %ls%s\n", userDataFolder.c_str(),
+        !m_perfWebViewProfile.empty() ? " (perf profile)" :
         captureIsolation ? " (isolated capture profile)" : "");
 
     // Task 2.2: when --test-host is set, pass --remote-debugging-port=9222
@@ -1503,6 +1671,9 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // Subscribe to JS → host messages.
     // Stash the registration token in the member
     // webMessageTok so WM_DESTROY can explicitly unsubscribe.
+    if (host::perf::Enabled())
+        prodNavUrl = AppendQueryParam(prodNavUrl, L"perfTrace=1");
+
     webView->add_WebMessageReceived(
         Callback<ICoreWebView2WebMessageReceivedEventHandler>(
             [this](ICoreWebView2*,
@@ -1638,7 +1809,10 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     if (useDevUi)
     {
         Log("[host] dev-ui: Navigate to Vite dev server\n");
-        webView->Navigate(L"http://localhost:5174/");
+        const std::wstring devUrl = host::perf::Enabled()
+            ? L"http://localhost:5174/?perfTrace=1"
+            : L"http://localhost:5174/";
+        webView->Navigate(devUrl.c_str());
     }
     else
     {
@@ -3892,7 +4066,8 @@ int HostWindowImpl::Run(int nCmdShow)
         // A headless --capture run must never pop a modal (it disrupts the user's
         // screen and tells them nothing) — log + bail instead. The isolated capture
         // profile above should prevent this failure, but guard the dialog regardless.
-        if (m_captureAlo.empty() && m_captureRef.empty())
+        const bool captureRun = !m_captureAlo.empty() || !m_captureRef.empty();
+        if (ShouldShowWebViewInitErrorModal(captureRun, m_ephemeral))
             MessageBoxW(hMain, msg, L"Particle Editor", MB_ICONERROR);
         else
             Log("[capture] WebView2 init failed (0x%08lx) — bailing headlessly\n", hr);
@@ -4460,7 +4635,16 @@ int HostWindowImpl::Run(int nCmdShow)
                 {
                     r->SetHooks(
                         [this](const std::string& req){ return dispatcher->DispatchSync(req); },
-                        [this](const std::string& u){ return host::CaptureWindowToPng(hMain, host::Utf8ToWide(u)); },
+                        [this](const std::string& u){
+                            const std::wstring artifactDir = host::perf::CurrentConfig().artifactDir;
+                            std::filesystem::path base = !artifactDir.empty()
+                                ? std::filesystem::path(artifactDir)
+                                : std::filesystem::current_path();
+                            std::filesystem::path out = base / host::Utf8ToWide(u);
+                            std::error_code ec;
+                            std::filesystem::create_directories(out.parent_path(), ec);
+                            return host::CaptureWindowToPng(hMain, out.wstring());
+                        },
                         [df = driveFreq]{ return df > 0 ? QpcMs(PerfQpcNow(), df) : 0.0; },
                         [this](const std::string& msg){ Log("%s\n", msg.c_str()); });
                     driveBudgetMs = r->TotalSettleMs() + 60000.0;
@@ -4691,14 +4875,16 @@ HostWindow::HostWindow(HINSTANCE hInstance,
                        bool hasAmbient, float ambR, float ambG, float ambB,
                        bool hasSun, float sunR, float sunG, float sunB,
                        bool hasSunI, float sunIntensity,
-                       const std::wstring& driveScriptPath)
+                       const std::wstring& driveScriptPath,
+                       const std::wstring& perfWebViewProfile)
     : m_impl(new HostWindowImpl(hInstance, textureManager, shaderManager, fileManager,
                                 gameRoots, useDevUi, useTestHost,
                                 captureAlo, capturePng, captureFrames, captureSkydome,
                                 captureRef,
                                 hasAmbient, ambR, ambG, ambB,
                                 hasSun, sunR, sunG, sunB,
-                                hasSunI, sunIntensity, driveScriptPath))
+                                hasSunI, sunIntensity, driveScriptPath,
+                                perfWebViewProfile))
 {
 }
 
@@ -4733,16 +4919,77 @@ int Run(HINSTANCE hInstance,
         bool hasAmbient, float ambR, float ambG, float ambB,
         bool hasSun, float sunR, float sunG, float sunB,
         bool hasSunI, float sunIntensity,
-        const std::wstring& driveScriptPath)
+        const std::wstring& driveScriptPath,
+        const std::wstring& perfTracePath,
+        const std::wstring& perfTraceMode,
+        const std::wstring& perfArtifactDir,
+        const std::wstring& perfWebViewProfile)
 {
+    std::wstring effectiveTracePath = perfTracePath;
+    host::perf::SinkMode traceMode = host::perf::SinkMode::Off;
+    if (!perfTraceMode.empty())
+    {
+        if (!IsKnownPerfTraceMode(perfTraceMode))
+        {
+            fwprintf(stderr, L"--perf-trace-mode: expected off, null, or file; got '%s'\n",
+                     perfTraceMode.c_str());
+            return 2;
+        }
+        traceMode = host::perf::ParseSinkMode(perfTraceMode);
+    }
+    if (!effectiveTracePath.empty())
+        traceMode = host::perf::SinkMode::File;
+    if (traceMode == host::perf::SinkMode::Off && !perfArtifactDir.empty())
+    {
+        traceMode = host::perf::SinkMode::File;
+        effectiveTracePath = JoinPath(perfArtifactDir, L"perf-trace.ndjson");
+    }
+    if (!perfArtifactDir.empty())
+        SHCreateDirectoryExW(nullptr, perfArtifactDir.c_str(), nullptr);
+
+    bool perfTraceStarted = false;
+    if (traceMode != host::perf::SinkMode::Off)
+    {
+        host::perf::Config cfg;
+        cfg.mode = traceMode;
+        cfg.tracePath = effectiveTracePath;
+        cfg.artifactDir = perfArtifactDir;
+        std::string err;
+        if (!host::perf::Init(cfg, &err))
+        {
+            fprintf(stderr, "perf trace init failed: %s\n", err.c_str());
+            return 2;
+        }
+        perfTraceStarted = true;
+        host::perf::Emit({
+            {"eventName", "host.perf_configuration"},
+            {"eventType", "instant"},
+            {"traceMode", traceMode == host::perf::SinkMode::File ? "file" : "null"},
+            {"tracePath", host::WideToUtf8(effectiveTracePath)},
+            {"artifactDir", host::WideToUtf8(perfArtifactDir)},
+            {"webViewProfile", host::WideToUtf8(perfWebViewProfile)}
+        });
+    }
+
     HostWindow host(hInstance, textureManager, shaderManager, fileManager,
                     gameRoots, useDevUi, useTestHost,
                     captureAlo, capturePng, captureFrames, captureSkydome,
                     captureRef,
                     hasAmbient, ambR, ambG, ambB,
                     hasSun, sunR, sunG, sunB,
-                    hasSunI, sunIntensity, driveScriptPath);
-    return host.Run(nCmdShow);
+                    hasSunI, sunIntensity, driveScriptPath,
+                    perfWebViewProfile);
+    const int result = host.Run(nCmdShow);
+    if (perfTraceStarted)
+    {
+        host::perf::Emit({
+            {"eventName", "host.process_exit"},
+            {"eventType", "instant"},
+            {"exitCode", result}
+        });
+        host::perf::Shutdown();
+    }
+    return result;
 }
 
 } // namespace host

@@ -18,6 +18,10 @@ function installWebview(postMessage: PostMessage) {
   };
 }
 
+function installLocation(search: string) {
+  window.history.replaceState(null, "", `/${search}`);
+}
+
 function pendingSize(b: NativeBridge): number {
   return (b as unknown as { pending: Map<unknown, unknown> }).pending.size;
 }
@@ -28,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete (window as unknown as { chrome?: unknown }).chrome;
+  installLocation("");
   vi.useRealTimers();
 });
 
@@ -65,6 +70,31 @@ describe("NativeBridge G12 — request lifecycle does not leak pending entries",
     await expect(b.request({ kind: "emitters/list", params: {} } as never)).rejects.toThrow(
       /disposed|disconnect/i,
     );
+  });
+
+  it("dispose() closes perf spans for outstanding requests", async () => {
+    installLocation("?perfTrace=1");
+    const postMessage = vi.fn();
+    installWebview(postMessage);
+    const b = new NativeBridge();
+    const p = b.request({ kind: "emitters/list", params: {} } as never);
+    const traceEvents = () =>
+      postMessage.mock.calls
+        .map(([raw]) => JSON.parse(raw as string))
+        .filter((msg) => msg.kind === "perf/trace")
+        .map((msg) => msg.event);
+    expect(traceEvents()).toHaveLength(1);
+
+    b.dispose();
+
+    await expect(p).rejects.toThrow(/disposed|disconnect/i);
+    expect(traceEvents()).toHaveLength(2);
+    const [start, end] = traceEvents();
+    expect(start.eventType).toBe("span_start");
+    expect(end.eventType).toBe("span_end");
+    expect(end.spanId).toBe(start.spanId);
+    expect(end.status).toBe("error");
+    expect(end.error).toBe("disposed");
   });
 
   it("opt-in timeout rejects + removes a request whose response never arrives", async () => {

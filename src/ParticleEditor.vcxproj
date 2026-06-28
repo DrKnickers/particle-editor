@@ -173,6 +173,7 @@
     <ClCompile Include="host\BridgeDispatcher.cpp">
     </ClCompile>
     <ClCompile Include="host\DriveRunner.cpp" />
+    <ClCompile Include="host\PerfTrace.cpp" />
     <ClCompile Include="host\Compositor.cpp">
       <!-- Compositor.cpp pulls in modern dcomp.h / d3d11.h / dxgi1_2.h
            from the Win10 SDK. The project-level AdditionalIncludeDirectories

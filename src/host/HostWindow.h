@@ -51,7 +51,8 @@ public:
                bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,
                bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
                bool hasSunI = false, float sunIntensity = 1.0f,
-               const std::wstring& driveScriptPath = L"");
+               const std::wstring& driveScriptPath = L"",
+               const std::wstring& perfWebViewProfile = L"");
     ~HostWindow();
 
     HostWindow(const HostWindow&)            = delete;

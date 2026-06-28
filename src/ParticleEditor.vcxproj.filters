@@ -206,6 +206,9 @@
     <ClCompile Include="host\LayoutBroker.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
+    <ClCompile Include="host\PerfTrace.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
     <ClCompile Include="UI\PaletteStore.cpp">
       <Filter>Source Files\UI</Filter>
     </ClCompile>
