@@ -74,6 +74,12 @@ int Run(HINSTANCE hInstance,
         // Non-empty = ephemeral drive mode (no settings/MRU/autosave persistence,
         // per-PID WebView2 profile + log). See DriveRunner / DriveScript.h.
         const std::wstring& driveScriptPath = L"",
+        // --record <timeline.json>: launch the full editor (no CDP), drive a
+        // deterministic fixed-fps timeline (camera tweens + synthetic cursor +
+        // allowlisted bridge events), emit a numbered PNG sequence, then exit.
+        // Non-empty = ephemeral record mode (same persistence isolation as drive).
+        // See ClipRunner / ClipTimeline.h.
+        const std::wstring& recordScriptPath = L"",
         // Performance-audit-only knobs. Empty values preserve the normal launch
         // path; explicit paths are used by reproducible perf runs.
         const std::wstring& perfTracePath = L"",

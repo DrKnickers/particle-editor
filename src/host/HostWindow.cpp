@@ -91,6 +91,7 @@
 #include "../UndoStack.h"
 #include "../Autosave.h"  // two-tier autosave timers + clean-exit cleanup
 #include "DriveRunner.h"  // --drive: scripted non-CDP composite capture
+#include "ClipRunner.h"   // --record: deterministic clip recording (PNG sequence)
 
 using namespace Microsoft::WRL;
 
@@ -757,6 +758,16 @@ struct HostWindowImpl
     // run never perturbs a concurrently-running daily-driver editor.
     std::wstring m_driveScriptPath;
     bool         m_ephemeral = false;
+    // --record <timeline.json>: deterministic clip recording. m_recordMode routes
+    // the record pump branch; m_automationMode (drive OR record) gates persistence
+    // — keep them separate so a --record run takes the persistence isolation but
+    // enters the RECORD branch, never the drive branch.
+    std::wstring m_recordScriptPath;
+    bool         m_recordMode = false;
+    bool         m_automationMode = false;
+    int          m_recordFrame = 0;          // current emitted frame (echoed in the ui/cursor `frame`)
+    int          m_lastAckedFrame = -1;      // set by OnWebMessage on ui/frame-acked
+    std::unique_ptr<host::ClipRunner> m_clipRunner;
     std::wstring m_perfWebViewProfile;
     FILE*       logFile = nullptr;
     std::mutex  logMutex;
@@ -777,6 +788,7 @@ struct HostWindowImpl
                    bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
                    bool hasSunI = false, float sunIntensity = 1.0f,
                    const std::wstring& driveScriptPath = L"",
+                   const std::wstring& recordScriptPath = L"",
                    const std::wstring& perfWebViewProfile = L"")
         : hInstance(inst)
         , textureManager(tex)
@@ -795,10 +807,13 @@ struct HostWindowImpl
         , m_captureSunIntensity(sunIntensity)
         , m_driveScriptPath(driveScriptPath)
         , m_ephemeral(!driveScriptPath.empty())
+        , m_recordScriptPath(recordScriptPath)
+        , m_recordMode(!recordScriptPath.empty())
+        , m_automationMode(!driveScriptPath.empty() || !recordScriptPath.empty())
         , m_perfWebViewProfile(perfWebViewProfile)
         , layout(nullptr)
         , accelerator()
-        , modManager(std::make_unique<ModManager>(&fil, gameRoots_, !driveScriptPath.empty()))
+        , modManager(std::make_unique<ModManager>(&fil, gameRoots_, !driveScriptPath.empty() || !recordScriptPath.empty()))
     {
         // [world-lit] capture lighting colours (arrays can't init in list).
         m_captureAmbient[0] = ambR; m_captureAmbient[1] = ambG; m_captureAmbient[2] = ambB;
@@ -870,9 +885,9 @@ void HostWindowImpl::OpenLog()
     const std::wstring perfArtifactDir = host::perf::CurrentConfig().artifactDir;
     // --drive (ephemeral): per-PID log filename so a --drive run's _wfsopen("w")
     // (truncate) never wipes a concurrently-running daily driver's host.log.
-    if (m_ephemeral)
+    if (m_automationMode)
     {
-        const std::wstring suffix = L"-drive-" + std::to_wstring(GetCurrentProcessId());
+        const std::wstring suffix = (m_recordMode ? L"-record-" : L"-drive-") + std::to_wstring(GetCurrentProcessId());
         if (!perfArtifactDir.empty())
         {
             std::error_code ec;
@@ -979,7 +994,11 @@ void HostWindowImpl::RenderD3D9()
     // the composition sync/copy). Per-stage deltas are taken below.
     const LONGLONG perfFrameStart = PerfQpcNow();
 
-    if (spawnerDriver && particleSystem)
+    // In --record mode the spawner is driven EXACTLY ONCE per emitted frame by
+    // the ClipRunner step hook (at the fixed virtual dt), so skip the wall-clock
+    // tick here — otherwise the frozen-clock renders during the ack/barrier waits
+    // would each advance spawning (SpawnerDriver::Tick rewrites dt<=0 to 1/60).
+    if (spawnerDriver && particleSystem && !m_recordMode)
         spawnerDriver->Tick(dt, particleSystem.get(), engine.get());
 
     // shift-click-to-spawn: refresh cursor velocity from
@@ -1275,6 +1294,19 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     if (!msgKind.empty())
         ++perfMsgKinds[msgKind];
 
+    // --record per-frame ack: React posts {"type":"ui/frame-acked","frame":N}
+    // after a double-rAF (frame N's cursor/state has painted). The record loop
+    // waits on m_lastAckedFrame to grab a committed composite. Host-lifecycle
+    // signal, not a dispatcher request — intercept + return.
+    if (json.find(L"\"type\":\"ui/frame-acked\"") != std::wstring::npos)
+    {
+        static const std::wstring kFrameNeedle = L"\"frame\":";
+        const size_t fp = json.find(kFrameNeedle);
+        if (fp != std::wstring::npos)
+            m_lastAckedFrame = _wtoi(json.c_str() + fp + kFrameNeedle.size());
+        return;
+    }
+
     // Per-message log hygiene: the interactive streams
     // (layout/scene-rect at ~28/s during a splitter drag, viewport/input
     // at mouse rate ~60-140/s whenever the cursor crosses the viewport)
@@ -1329,7 +1361,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
 
 HRESULT HostWindowImpl::InitWebView2()
 {
-    const bool captureIsolation = !m_captureAlo.empty() || !m_captureRef.empty() || m_ephemeral;
+    const bool captureIsolation = !m_captureAlo.empty() || !m_captureRef.empty() || m_automationMode;
     std::wstring userDataFolder = m_perfWebViewProfile.empty()
         ? ComputeUserDataFolder(captureIsolation)
         : m_perfWebViewProfile;
@@ -2543,7 +2575,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             // --drive is unattended: a modal would hang the run with nothing to
             // dismiss it. Skip the dialog in ephemeral mode (the pump's
             // engine-null arm exits non-zero instead).
-            if (!m_ephemeral)
+            if (!m_automationMode)
                 MessageBoxA(hwnd, e.what(), "Engine init failed", MB_ICONERROR);
             // Continue — viewport will still clear, just without engine state.
         }
@@ -2608,7 +2640,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // runs never write autosave files — those would orphan into a
         // recovery prompt for the user's real editor. WM_TIMER writes the
         // live ParticleSystem (dirty-gated) below.
-        if (!useTestHost && !m_ephemeral)   // --drive: no autosave (would orphan a recovery prompt)
+        if (!useTestHost && !m_automationMode)   // --drive: no autosave (would orphan a recovery prompt)
         {
             SetTimer(hwnd, Autosave::RECENT_TIMER_ID, Autosave::RECENT_INTERVAL_MS, nullptr);
             SetTimer(hwnd, Autosave::STABLE_TIMER_ID, Autosave::STABLE_INTERVAL_MS, nullptr);
@@ -2893,7 +2925,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // a dirty interactive session to the SAME React Save/Discard/Cancel
         // prompt File→Exit uses; swallow the default destroy until React replies
         // (it dispatches app/quit → WM_APP_QUIT_CONFIRMED below).
-        if (ShouldVetoClose(dispatcher && dispatcher->GetDirty(), m_ephemeral, useTestHost))
+        if (ShouldVetoClose(dispatcher && dispatcher->GetDirty(), m_automationMode, useTestHost))
         {
             if (dispatcher) dispatcher->EmitCloseRequested();
             return 0;
@@ -2912,7 +2944,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // Stop autosave + delete THIS session's autosave files on a
         // clean exit so no orphan prompts on the next launch. A crash skips
         // WM_DESTROY, leaving the orphan for recovery — exactly the point.
-        if (!useTestHost && !m_ephemeral)
+        if (!useTestHost && !m_automationMode)
         {
             KillTimer(hwnd, Autosave::RECENT_TIMER_ID);
             KillTimer(hwnd, Autosave::STABLE_TIMER_ID);
@@ -4004,7 +4036,7 @@ int HostWindowImpl::Run(int nCmdShow)
     };
     dispatcher = std::make_unique<BridgeDispatcher>(/*engine*/nullptr, layout, accelerator, emitFn,
                                                     /*useTestHost*/useTestHost,
-                                                    /*ephemeral*/m_ephemeral);
+                                                    /*ephemeral*/m_automationMode);
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
     // ModManager is already discovered + restored in the impl
@@ -4113,7 +4145,7 @@ int HostWindowImpl::Run(int nCmdShow)
     // can stop DComp compositing and yield a black composite.
     // --drive shows the window too (PrintWindow needs a composed window) but,
     // like --capture, must NOT steal focus from a daily-driver editor.
-    ShowWindow(hMain, (captureMode || m_ephemeral) ? SW_SHOWNOACTIVATE : nCmdShow);
+    ShowWindow(hMain, (captureMode || m_automationMode) ? SW_SHOWNOACTIVATE : nCmdShow);
     UpdateWindow(hMain);
 
     // --capture: load the requested .alo now,
@@ -4579,6 +4611,16 @@ int HostWindowImpl::Run(int nCmdShow)
     double    driveBudgetMs    = 0.0;
     std::unique_ptr<host::DriveRunner> driveRunner;
 
+    // --record: deterministic clip recording. Its own pump branch (below), a
+    // sibling of --drive. The runner is built once (after app/ready + the
+    // one-time startup gate) then Ticked per emitted frame.
+    int       recordExitCode   = 0;
+    const LONGLONG recordStart = PerfQpcNow();
+    const LONGLONG recordFreq  = PerfQpcFreq();
+    double    recordBudgetMs   = 0.0;
+    std::wstring recordTmpDir, recordOutDir;
+    constexpr int kBarrierPresents = 2;   // DComp-present barrier before each grab
+
     while (!quit)
     {
         while (PeekMessage(&m, nullptr, 0, 0, PM_REMOVE))
@@ -4682,6 +4724,187 @@ int HostWindowImpl::Run(int nCmdShow)
         {
             Log("[drive] engine unavailable -- aborting drive run\n");
             driveExitCode = 5;
+            quit = true;
+        }
+        // --record: own top-level branch (captureMode/m_ephemeral are false in
+        // record mode, so this precedes the !captureMode idle branch). States:
+        // wait app/ready -> parse timeline + one-time startup gate (seed/resize/
+        // pause/open/catalog) + build runner -> Tick per emitted frame.
+        else if (engine && m_recordMode)
+        {
+            RenderD3D9();
+            const double elapsedMs = recordFreq > 0
+                ? QpcMs(PerfQpcNow() - recordStart, recordFreq) : 0.0;
+
+            if (recordFreq <= 0)
+            {
+                Log("[record] no high-resolution timer available\n");
+                recordExitCode = 5; quit = true;
+            }
+            else if (!m_uiReady)
+            {
+                if (elapsedMs >= 30000.0)
+                {
+                    Log("[record] startup watchdog: app/ready never arrived\n");
+                    recordExitCode = 5; quit = true;
+                }
+            }
+            else if (!m_clipRunner)
+            {
+                // Parse the timeline (need width/height/openPath for the gate).
+                std::string err;
+                auto r = std::make_unique<host::ClipRunner>();
+                if (!r->Init(ReadFileUtf8(m_recordScriptPath), err))
+                {
+                    Log("[record] bad timeline: %s\n", err.c_str());
+                    recordExitCode = r->ExitCode();   // 2
+                    quit = true;
+                }
+                else
+                {
+                    const clip::Timeline tl = r->TL();   // small copy for the gate
+
+                    // (a) deterministic particle RNG (Goal-A motion correctness).
+                    srand(0x5EEDu);
+
+                    // (b) resize the WINDOW to tl.width x tl.height via SetWindowPos
+                    //     -> WM_WINDOWPOSCHANGED -> LayoutBroker -> Engine::ResetForResize.
+                    //     CaptureWindowToPng grabs the WINDOW rect (GetWindowRect,
+                    //     WindowCapture.cpp:31), so the window size IS the emitted
+                    //     frame size — set it directly so frames are exactly
+                    //     tl.width x tl.height (the engine viewport is the client
+                    //     sub-rect, a bit smaller after chrome).
+                    SetWindowPos(hMain, nullptr, 0, 0, tl.width, tl.height,
+                                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+
+                    // (c) freeze the sim clock; record steps it once per frame.
+                    SetPreviewPaused(true);
+
+                    // (d) open the scene (if any) via the synchronous bridge path.
+                    //     Abort (exit 3) on a FAILED open: file/open reports failure
+                    //     as nested {ok:true,data:{ok:false}}, so check it or we'd
+                    //     silently record an empty/wrong scene.
+                    bool gateOk = true;
+                    if (!tl.openPath.empty())
+                    {
+                        nlohmann::json req = {
+                            {"type", "req"}, {"id", "record-open"},
+                            {"kind", "file/open"}, {"params", {{"path", tl.openPath}}}};
+                        if (drive::ClassifyResponse(dispatcher->DispatchSync(req.dump())) != drive::Outcome::Ok)
+                        {
+                            Log("[record] file/open failed for %s\n", tl.openPath.c_str());
+                            recordExitCode = 3; quit = true; gateOk = false;
+                        }
+                    }
+
+                    if (gateOk)
+                    {
+                    // (e) build the catalog + a render-pumped settle so
+                    //     ReloadTextures + the resize reflow + any async catalog
+                    //     harvest land BEFORE t=0 (paused -> no sim advance).
+                    engine->BuildCatalogSync();
+                    {
+                        const LONGLONG s = PerfQpcNow();
+                        while (QpcMs(PerfQpcNow() - s, recordFreq) < tl.openSettleMs)
+                        {
+                            MSG mw;
+                            while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
+                            { TranslateMessage(&mw); DispatchMessage(&mw); }
+                            RenderD3D9();
+                            Sleep(8);
+                        }
+                    }
+
+                    // (f) output dirs: render to <out>.tmp, move on success.
+                    recordOutDir = host::Utf8ToWide(tl.out);
+                    recordTmpDir = recordOutDir + L".tmp";
+                    std::error_code ec;
+                    std::filesystem::remove_all(recordTmpDir, ec);
+                    std::filesystem::create_directories(recordTmpDir, ec);
+
+                    // (g) hooks.
+                    const std::wstring tmpDir = recordTmpDir;
+                    r->SetHooks(
+                        // dispatch (allowlisted bridge req -> response)
+                        [this](const std::string& req){ return dispatcher->DispatchSync(req); },
+                        // step the preview clock + drive the spawner ONCE at the
+                        // fixed virtual dt (RenderD3D9's spawner tick is skipped in
+                        // record mode, so this is the only advance per frame).
+                        [this](int frames60){
+                            StepPreviewFrames(frames60);
+                            if (spawnerDriver && particleSystem)
+                                spawnerDriver->Tick(frames60 / 60.0f, particleSystem.get(), engine.get());
+                        },
+                        // ui/cursor host->web push (device px; React divides by DPR)
+                        [this](double x, double y, bool vis, bool press){
+                            nlohmann::json m = {{"type","ui/cursor"},{"x",x},{"y",y},
+                                                {"visible",vis},{"pressed",press},{"frame",m_recordFrame}};
+                            if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(m.dump()).c_str());
+                        },
+                        // ack: pumped wait for ui/frame-acked >= frameId (bounded)
+                        [this, rf = recordFreq](int frameId, double deadlineMs){
+                            const LONGLONG s = PerfQpcNow();
+                            for (;;)
+                            {
+                                MSG mw;
+                                while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
+                                { TranslateMessage(&mw); DispatchMessage(&mw); }
+                                if (m_lastAckedFrame >= frameId) return true;
+                                if (rf > 0 && QpcMs(PerfQpcNow() - s, rf) >= deadlineMs) return false;
+                                RenderD3D9();
+                                Sleep(4);
+                            }
+                        },
+                        // capture: DComp-present barrier then PrintWindow composite
+                        [this, tmpDir, bp = kBarrierPresents](int idx){
+                            for (int i = 0; i < bp; ++i) RenderD3D9();
+                            wchar_t name[40];
+                            swprintf_s(name, L"\\frame_%05d.png", idx);
+                            return host::CaptureWindowToPng(hMain, tmpDir + name);
+                        },
+                        [this](const std::string& s){ Log("[record] %s\n", s.c_str()); });
+
+                    recordBudgetMs = r->FrameCount() *
+                                     (host::ClipRunner::kAckDeadlineMs + 1000.0) + 30000.0;
+                    m_clipRunner = std::move(r);
+                    }  // end if (gateOk)
+                }
+            }
+            else
+            {
+                m_recordFrame = m_clipRunner->CurrentFrame();
+                if (m_clipRunner->Tick() == host::ClipRunner::Status::Done)
+                {
+                    recordExitCode = m_clipRunner->ExitCode();
+                    // Move the completed sequence into place on success only.
+                    if (recordExitCode == 0)
+                    {
+                        std::error_code ec;
+                        std::filesystem::remove_all(recordOutDir, ec);
+                        std::error_code ec2;
+                        std::filesystem::rename(recordTmpDir, recordOutDir, ec2);
+                        if (ec2)
+                        {
+                            Log("[record] move tmp -> out failed: %s\n", ec2.message().c_str());
+                            recordExitCode = 4;   // publish failure -> non-zero exit
+                        }
+                    }
+                    Log("[record] done: %d frames, exit %d\n",
+                        m_clipRunner->FrameCount(), recordExitCode);
+                    quit = true;
+                }
+                else if (elapsedMs >= recordBudgetMs)
+                {
+                    Log("[record] watchdog: exceeded %.0f ms budget\n", recordBudgetMs);
+                    recordExitCode = 5; quit = true;
+                }
+            }
+        }
+        // --record with a null engine: can't run; exit non-zero.
+        else if (m_recordMode && !engine)
+        {
+            Log("[record] engine unavailable -- aborting record run\n");
+            recordExitCode = 5;
             quit = true;
         }
         // Idle: render one frame per budget slot. Cheap enough to always
@@ -4853,6 +5076,7 @@ int HostWindowImpl::Run(int nCmdShow)
     if (captureMode) return captureFailed ? 2 : 0;
     // --drive likewise breaks via `quit`; return the runner's explicit code.
     if (m_ephemeral) return driveExitCode;
+    if (m_recordMode) return recordExitCode;
     return static_cast<int>(m.wParam);
 }
 
@@ -4876,6 +5100,7 @@ HostWindow::HostWindow(HINSTANCE hInstance,
                        bool hasSun, float sunR, float sunG, float sunB,
                        bool hasSunI, float sunIntensity,
                        const std::wstring& driveScriptPath,
+                       const std::wstring& recordScriptPath,
                        const std::wstring& perfWebViewProfile)
     : m_impl(new HostWindowImpl(hInstance, textureManager, shaderManager, fileManager,
                                 gameRoots, useDevUi, useTestHost,
@@ -4883,7 +5108,7 @@ HostWindow::HostWindow(HINSTANCE hInstance,
                                 captureRef,
                                 hasAmbient, ambR, ambG, ambB,
                                 hasSun, sunR, sunG, sunB,
-                                hasSunI, sunIntensity, driveScriptPath,
+                                hasSunI, sunIntensity, driveScriptPath, recordScriptPath,
                                 perfWebViewProfile))
 {
 }
@@ -4920,6 +5145,7 @@ int Run(HINSTANCE hInstance,
         bool hasSun, float sunR, float sunG, float sunB,
         bool hasSunI, float sunIntensity,
         const std::wstring& driveScriptPath,
+        const std::wstring& recordScriptPath,
         const std::wstring& perfTracePath,
         const std::wstring& perfTraceMode,
         const std::wstring& perfArtifactDir,
@@ -4977,7 +5203,7 @@ int Run(HINSTANCE hInstance,
                     captureRef,
                     hasAmbient, ambR, ambG, ambB,
                     hasSun, sunR, sunG, sunB,
-                    hasSunI, sunIntensity, driveScriptPath,
+                    hasSunI, sunIntensity, driveScriptPath, recordScriptPath,
                     perfWebViewProfile);
     const int result = host.Run(nCmdShow);
     if (perfTraceStarted)

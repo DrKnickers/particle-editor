@@ -31,6 +31,8 @@ import { applyOverloadGuard, readOverloadGuard } from "@/lib/overload-guard";
 import { applyMsaaLevel, readMsaaLevel } from "@/lib/msaa-quality";
 import { applyModelShadows, readModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
+import { RecordCursor } from "@/components/RecordCursor";
+import { parseCursorMessage, postFrameAcked } from "@/lib/record-cursor-bridge";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
 // Evaluated once at module load; a page navigation to ?demo=primitives
@@ -197,8 +199,40 @@ function AppShell() {
     return off;
   }, [bridge]);
 
+  // --record synthetic cursor: the host pushes ui/cursor over WebView2; mirror it
+  // into a fixed overlay and ack each frame (double-rAF) so the host's PrintWindow
+  // grab captures a committed composite. Raw listener — NativeBridge ignores a
+  // ui/cursor message (type is neither res nor evt), so there's no conflict.
+  // Entirely dormant outside --record.
+  const [recordCursor, setRecordCursor] = useState({ x: 0, y: 0, visible: false, pressed: false });
+  useEffect(() => {
+    const wv = window.chrome?.webview as
+      | {
+          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+        }
+      | undefined;
+    if (!wv?.addEventListener) return;
+    const onMsg = (e: { data: unknown }) => {
+      const c = parseCursorMessage(e.data);
+      if (!c) return;
+      setRecordCursor(c);
+      const frame =
+        typeof (e.data as { frame?: number })?.frame === "number" ? (e.data as { frame: number }).frame : 0;
+      requestAnimationFrame(() => requestAnimationFrame(() => postFrameAcked(frame)));
+    };
+    wv.addEventListener("message", onMsg);
+    return () => wv.removeEventListener?.("message", onMsg);
+  }, []);
+
   return (
     <BridgeContext.Provider value={bridge}>
+      <RecordCursor
+        x={recordCursor.x}
+        y={recordCursor.y}
+        visible={recordCursor.visible}
+        pressed={recordCursor.pressed}
+      />
       {/* One app-level tooltip provider: first hover waits 400ms;
           moving between tooltipped controls within 300ms opens instantly
           (the "sweep the toolbar" feel native title can't give). Values are

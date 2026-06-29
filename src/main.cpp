@@ -726,9 +726,10 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 	// If the user picked a path that worked, persist it for next launch.
 	// --drive (ephemeral) must NOT persist — scan argv directly since the
 	// driveScriptPath local is out of scope inside createFileManager.
-	bool driveMode = false;
-	for (const std::wstring& a : argv) if (a == L"--drive") { driveMode = true; break; }
-	if (fileManager != NULL && !pickedPath.empty() && !driveMode)
+	bool driveMode = false, recordMode = false;
+	for (const std::wstring& a : argv) { if (a == L"--drive") driveMode = true; if (a == L"--record") recordMode = true; }
+	const bool automationMode = driveMode || recordMode;  // --drive AND --record suppress persistence
+	if (fileManager != NULL && !pickedPath.empty() && !automationMode)
 	{
 		HKEY hKey;
 		if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
@@ -846,6 +847,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		bool         captureHasSunI = false;    float captureSunIntensity = 1.0f;
 		// --drive <script.json>: scripted non-CDP composite capture, then exit.
 		std::wstring driveScriptPath;
+		// --record <timeline.json>: scripted deterministic clip recording (PNG
+		// sequence), then exit. Ephemeral like --drive (no persistence).
+		std::wstring recordScriptPath;
 		std::wstring perfTracePath;
 		std::wstring perfTraceMode;
 		std::wstring perfArtifactDir;
@@ -910,6 +914,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 					return 2;
 				}
 				driveScriptPath = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--record")
+			{
+				// Require an explicit <timeline.json> path, same as --drive: a
+				// bare --record half-arms ephemeral mode (the GameDataPath scan
+				// keys off the bare token) and would clobber the daily driver.
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--record requires a <timeline.json> path\n");
+					return 2;
+				}
+				recordScriptPath = argv[i + 1];
 				++i;
 				continue;
 			}
@@ -1002,6 +1020,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		    (!captureAlo.empty() || !capturePng.empty() || !captureRef.empty()))
 		{
 			fwprintf(stderr, L"--drive cannot be combined with --capture/--capture-ref\n");
+			return 2;
+		}
+		// --record is likewise a mutually-exclusive one-shot.
+		if (!recordScriptPath.empty() &&
+		    (!driveScriptPath.empty() || !captureAlo.empty() || !capturePng.empty() || !captureRef.empty()))
+		{
+			fwprintf(stderr, L"--record cannot be combined with --drive/--capture/--capture-ref\n");
 			return 2;
 		}
 		// Warn when both --capture and --capture-ref are supplied: --capture-ref
@@ -1387,7 +1412,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		                           captureHasAmbient, captureAmbient[0], captureAmbient[1], captureAmbient[2],
 		                           captureHasSun, captureSun[0], captureSun[1], captureSun[2],
 		                           captureHasSunI, captureSunIntensity,
-		                           driveScriptPath,
+		                           driveScriptPath, recordScriptPath,
 		                           perfTracePath, perfTraceMode, perfArtifactDir,
 		                           perfWebViewProfile);
 		delete fileManager;

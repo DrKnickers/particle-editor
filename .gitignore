@@ -298,3 +298,8 @@ tests/max_verts.txt
 # per-cwd at runtime, so ignoring it loses nothing. Decision: Serena project
 # data is intentionally never tracked here.
 .serena/
+
+# --record clip outputs — NEVER tracked (host on a site-media release, embed by URL)
+*.mp4
+frame_*.png
+/clips/

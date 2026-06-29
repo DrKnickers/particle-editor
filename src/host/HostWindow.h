@@ -52,6 +52,7 @@ public:
                bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
                bool hasSunI = false, float sunIntensity = 1.0f,
                const std::wstring& driveScriptPath = L"",
+               const std::wstring& recordScriptPath = L"",
                const std::wstring& perfWebViewProfile = L"");
     ~HostWindow();
 
