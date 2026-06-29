@@ -77,6 +77,7 @@ may live at the end of the file.
 
 ### Changed
 
+- New app icon — an azure orbital “particle” mark (a glowing core with a tilted orbit and particles) — now appears in the taskbar, window title bar, and Alt-Tab, and is used as the landing page's favicon (replacing the placeholders)
 - Switching mod layers no longer leaves a broken reference-object selection: if the selected object isn't in the new stack the selection clears to None, and it's restored automatically when you switch back to a stack that has it (your saved selection is kept)
 - A locked reference object no longer blocks camera navigation — clicking and dragging on a frozen object now pans/zooms the view straight through it, so you can frame an effect against the object without unlocking it first
 - The Grass, Sand, and Snow ground textures now load from your Empire at War / Forces of Corruption game install at runtime instead of being bundled with the editor; when no game install is configured they appear greyed-out in the ground picker (Dirt and Solid Colour always work)
