@@ -1,0 +1,16 @@
+# Nested ignore — root .gitignore is in tasks/public-manifest.txt (published to the
+# mirror), so site-only ignores must live here. Git honours nested ignore files.
+# HARD RULE: no clip/poster binary ever enters the git tree (hosted on the
+# site-media GitHub Release, referenced by URL). See the spec §2/§5/§8.
+#
+# This convenience-ignores the common cases; the smoke's git-ls-files guard
+# (landing.spec.ts) is the cross-platform enforcement layer (it is case-insensitive
+# and catches anything these lowercase patterns miss on a case-sensitive filesystem).
+media-local/
+*.mp4
+*.webm
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.gif

@@ -1,0 +1,36 @@
+# GitHub Pages deploy for the landing site. Install on the FORK at rollout as
+# .github/workflows/pages.yml. Publishes the repo's site/ dir (Pages can't serve a
+# /site subfolder, so we stage + upload it as the Pages artifact). The dev-only
+# deploy/ and README.md are excluded from the published artifact. Runs only after
+# Pages is enabled on the fork — a gated rollout step.
+name: Deploy landing page
+on:
+  push:
+    branches: [master]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Stage page files (exclude dev-only deploy/ + README)
+        run: |
+          mkdir _site
+          rsync -a --exclude deploy --exclude README.md --exclude .gitignore --exclude media-local site/ _site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

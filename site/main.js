@@ -1,0 +1,62 @@
+// Particle Editor landing — page-owned motion. See the spec §5 + the plan's motion model.
+const params = new URLSearchParams(location.search);
+const override = window.__MEDIA_BASE__ || (params.get("media")?.trim() || null);
+let MEDIA_BASE = override ?? "https://github.com/DrKnickers/particle-editor/releases/download/site-media/";
+if (!MEDIA_BASE.endsWith("/")) MEDIA_BASE += "/";
+
+const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+let userChoice = null; // null = follow OS preference; boolean = explicit user choice
+let motionOn = userChoice ?? !mq.matches;
+const eligible = new Set();            // eager or scrolled-into-view → may play when motionOn
+
+const videos = Array.from(document.querySelectorAll(".clip-video"));
+const images = Array.from(document.querySelectorAll(".clip-img"));
+const toggle = document.getElementById("motion-toggle");
+
+// Posters first (cheap, avoids a blank frame); images get their src too.
+for (const v of videos) if (v.dataset.poster) v.poster = MEDIA_BASE + v.dataset.poster;
+for (const img of images) if (img.dataset.poster) img.src = MEDIA_BASE + img.dataset.poster;
+
+// Start/resume one video — ONLY when motion is on. Loads src lazily on first start.
+function startVideo(v) {
+  if (!motionOn) return;               // reduced-motion / paused → poster stands in
+  if (!v.dataset.started) {
+    v.dataset.started = "1";
+    v.src = MEDIA_BASE + v.dataset.clip;
+    v.load();
+  }
+  v.play().catch((e) => { if (e && e.name !== "NotAllowedError" && e.name !== "AbortError") console.warn("clip failed:", v.dataset.clip, e); });
+}
+
+// Mark eligible (eager or scrolled in) and start if motion is on.
+function makeEligible(v) { eligible.add(v); startVideo(v); }
+
+// Hero eager; below-fold lazy via IntersectionObserver. IO records eligibility even when
+// motion is off, so a later "Play motion" starts the in-view clips without loading the
+// ones still below the fold.
+const eager = videos.filter(v => v.dataset.eager === "true");
+const lazy  = videos.filter(v => v.dataset.eager !== "true");
+eager.forEach(makeEligible);
+if ("IntersectionObserver" in window) {
+  const io = new IntersectionObserver((entries, obs) => {
+    for (const e of entries) if (e.isIntersecting) { makeEligible(e.target); obs.unobserve(e.target); }
+  }, { rootMargin: "200px" });
+  lazy.forEach(v => io.observe(v));
+} else {
+  lazy.forEach(makeEligible);          // no IO → treat all as eligible
+}
+
+// Reflect motion state in the DOM + the control. Visible label = accessible name.
+function applyMotion() {
+  toggle.textContent = motionOn ? "Pause motion" : "Play motion";
+  if (motionOn) { for (const v of eligible) startVideo(v); }
+  else { for (const v of videos) v.pause(); }
+}
+toggle.addEventListener("click", () => { userChoice = !motionOn; motionOn = userChoice; applyMotion(); });
+mq.addEventListener("change", (e) => { if (userChoice === null) { motionOn = !e.matches; applyMotion(); } });
+applyMotion();                         // reflect initial state (esp. "Play motion" under reduce)
+
+// Load animation: tag the reveal elements, flip on load (CSS guards reduced-motion).
+document.querySelectorAll(".hero > *, .feature > *, .site-footer > *")
+  .forEach(el => el.classList.add("reveal"));
+window.addEventListener("load", () => document.body.classList.add("loaded"));

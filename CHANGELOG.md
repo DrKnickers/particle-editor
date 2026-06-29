@@ -27,6 +27,7 @@ may live at the end of the file.
 
 ### Added
 
+- Public landing page — a static GitHub Pages showcase for the editor in `site/`, with looping UI clips and a download CTA; built now, deploys to the public fork at the (gated) rollout
 - The Import Emitters list is now fully keyboard-navigable — arrow keys move between emitters, ←/→ collapse/expand, Home/End jump, and Space/Enter selects
 - The editor now tells you when an `.alo` has no particle emitters (a model file, not a particle effect) — both when importing emitters and when opening a file, instead of showing an empty list / empty editor with no explanation
 - Every interactive control now shows a keyboard-focus indicator, so the editor is fully keyboard-navigable

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Particle Editor — Effects, rendered faithfully.</title>
+  <meta name="description" content="A modern editor for .alo particle systems, with a live preview that runs the game's own Forces of Corruption shaders.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <!-- Open Graph / Twitter (image URL filled at rollout — site-media release) -->
+  <meta property="og:title" content="Particle Editor — Effects, rendered faithfully.">
+  <meta property="og:description" content="A modern editor for .alo particle systems, with a live preview that runs the game's own Forces of Corruption shaders.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://github.com/DrKnickers/particle-editor/releases/download/site-media/og.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- Fonts: display=swap avoids FOIT; preconnect warms the gstatic origin -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Top bar -->
+  <header class="topbar">
+    <a class="wordmark" href="#top"><span class="dot" aria-hidden="true">●</span> Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a href="#download">download</a>
+      <a href="https://github.com/DrKnickers/particle-editor">source</a>
+      <button type="button" id="motion-toggle" class="motion-toggle">Pause motion</button>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- Hero -->
+    <section class="hero" aria-labelledby="hero-h">
+      <p class="kicker">Particle effects editor — Empire at War</p>
+      <h1 id="hero-h">Effects, rendered faithfully.</h1>
+      <p class="lede">A modern editor for <code>.alo</code> particle systems, with a live preview
+        that runs the game's own Forces of Corruption shaders. Author emitters, curves, and
+        atlases, all within the editor.</p>
+      <p class="actions">
+        <a class="btn-primary" href="#download">↓ Download for Windows</a>
+        <a class="btn-quiet" href="https://github.com/DrKnickers/particle-editor">View the source</a>
+      </p>
+      <figure class="clip clip-hero" aria-label="The editor previewing a particle effect over a game model.">
+        <video class="clip-video" loop muted playsinline preload="none"
+               width="1280" height="720"
+               data-clip="hero.mp4" data-poster="hero-poster.jpg" data-eager="true"></video>
+      </figure>
+    </section>
+
+    <!-- Feature 01 -->
+    <section class="feature" aria-labelledby="f1-h">
+      <p class="numeral" aria-hidden="true">01</p>
+      <h2 id="f1-h">Not an approximation.</h2>
+      <p class="feature-copy">Real game models, skydomes, and the actual FoC shader pipeline drive the preview.</p>
+      <figure class="clip" aria-label="The preview rendering a real game model with the game's shaders.">
+        <video class="clip-video" loop muted playsinline preload="none"
+               width="1280" height="720"
+               data-clip="faithful.mp4" data-poster="faithful-poster.jpg"></video>
+      </figure>
+    </section>
+
+    <!-- Feature 02 (poster-only until A grows the clip) -->
+    <section class="feature" aria-labelledby="f2-h">
+      <p class="numeral" aria-hidden="true">02</p>
+      <h2 id="f2-h">A live preview.</h2>
+      <p class="feature-copy">Emitters, curves, and atlas frames update in the viewport as you edit them.</p>
+      <figure class="clip">
+        <img class="clip-img" data-poster="preview-poster.jpg" width="1280" height="720"
+             alt="The editor's curve and emitter panels beside the live viewport.">
+      </figure>
+    </section>
+
+    <!-- Feature 03 (poster-only until A grows the clip) -->
+    <section class="feature" aria-labelledby="f3-h">
+      <p class="numeral" aria-hidden="true">03</p>
+      <h2 id="f3-h">A modern workspace.</h2>
+      <p class="feature-copy">Dockable panels, transform gizmos, mod-layer stacking, and an adaptive viewport.</p>
+      <figure class="clip">
+        <img class="clip-img" data-poster="workspace-poster.jpg" width="1280" height="720"
+             alt="The editor's dockable panel layout with a transform gizmo in the viewport.">
+      </figure>
+    </section>
+  </main>
+
+  <!-- Download / credits -->
+  <footer class="site-footer" id="download">
+    <h2>Download the editor</h2>
+    <p class="actions">
+      <a class="btn-primary" href="https://github.com/DrKnickers/particle-editor/releases/latest">↓ Latest release (.zip)</a>
+    </p>
+    <p class="footer-meta">MIT-licensed · forked from GlyphXTools/particle-editor · Windows x64 · requires a copy of the game for full rendering</p>
+  </footer>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
