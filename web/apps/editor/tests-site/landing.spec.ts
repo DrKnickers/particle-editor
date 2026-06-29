@@ -51,8 +51,10 @@ test("clip slots: loop/muted/playsinline + reserved dims + poster set", async ({
 
 test("links: download + source resolve; internal anchors exist", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".site-footer a.btn-primary")).toHaveAttribute("href", /releases\/latest/);
-  await expect(page.locator('header a[href*="github.com/DrKnickers/particle-editor"]')).toHaveCount(1);
+  // all three download CTAs (nav, hero, footer) point straight at the release
+  for (const sel of ["header a.btn-primary", ".hero a.btn-primary", ".site-footer a.btn-primary"])
+    await expect(page.locator(sel)).toHaveAttribute("href", /releases\/latest/);
+  await expect(page.locator('header a[href="https://github.com/DrKnickers/particle-editor"]')).toHaveCount(1); // source
   const hrefs = await page.locator("a[href]").evaluateAll((els) =>
     els.map((e) => e.getAttribute("href") || ""));
   for (const h of hrefs) {

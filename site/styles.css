@@ -1,11 +1,12 @@
 /* Particle Editor landing — refined modern-editorial.
-   Locked aesthetic (spec §4): warm near-black, Schibsted Grotesk + IBM Plex Mono,
-   one rationed ember accent, restrained fade-up on load. */
+   Locked aesthetic (spec §4): cool near-black matching the editor's UI, Schibsted Grotesk
+   + IBM Plex Mono, one rationed azure accent (the editor's blue), a faint starfield echoing
+   the viewport, restrained fade-up on load. All text AA-verified (axe). */
 
 :root {
-  --bg:#0d0c0b;  --paper:#f3efe8;  --body:#a39e95;  --faint:#857f76;
-  --ember:#d9703c;  --rule:rgba(243,239,232,.12);
-  --frame-1:#1b1916;  --frame-2:#0a0908;
+  --bg:#0b0d12;  --paper:#eef1f6;  --body:#9aa1ad;  --faint:#79818e;
+  --accent:#4a8bff;  --rule:rgba(238,241,246,.12);
+  --frame-1:#161c26;  --frame-2:#090b10;
   --maxw:1080px;
   --sans:"Schibsted Grotesk", system-ui, sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, monospace;
@@ -14,9 +15,30 @@
 *,*::before,*::after { box-sizing:border-box; }
 html { scroll-behavior:smooth; }
 body {
-  margin:0; background:var(--bg); color:var(--body);
+  margin:0; color:var(--body);
   font-family:var(--sans); font-weight:400; line-height:1.55;
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  /* Faint viewport-style starfield — static CSS, no motion, no perf cost. Fixed to the
+     viewport so it reads as depth behind the content. */
+  background-color:var(--bg);
+  background-image:
+    radial-gradient(1.3px 1.3px at 9% 14%, rgba(238,241,246,.55), transparent),
+    radial-gradient(1px 1px at 22% 38%, rgba(238,241,246,.32), transparent),
+    radial-gradient(1.2px 1.2px at 34% 11%, rgba(174,200,255,.45), transparent),
+    radial-gradient(1px 1px at 47% 27%, rgba(238,241,246,.3), transparent),
+    radial-gradient(1.5px 1.5px at 58% 8%, rgba(238,241,246,.4), transparent),
+    radial-gradient(1px 1px at 66% 44%, rgba(238,241,246,.26), transparent),
+    radial-gradient(1.3px 1.3px at 79% 19%, rgba(174,200,255,.5), transparent),
+    radial-gradient(1px 1px at 88% 36%, rgba(238,241,246,.28), transparent),
+    radial-gradient(1.1px 1.1px at 94% 9%, rgba(238,241,246,.34), transparent),
+    radial-gradient(1px 1px at 15% 62%, rgba(238,241,246,.28), transparent),
+    radial-gradient(1.2px 1.2px at 31% 78%, rgba(238,241,246,.32), transparent),
+    radial-gradient(1px 1px at 44% 91%, rgba(238,241,246,.24), transparent),
+    radial-gradient(1.4px 1.4px at 61% 71%, rgba(174,200,255,.4), transparent),
+    radial-gradient(1px 1px at 74% 86%, rgba(238,241,246,.26), transparent),
+    radial-gradient(1.2px 1.2px at 86% 64%, rgba(238,241,246,.3), transparent),
+    radial-gradient(1px 1px at 96% 82%, rgba(238,241,246,.22), transparent);
+  background-repeat:no-repeat; background-attachment:fixed;
 }
 code { font-family:var(--mono); font-size:.92em; color:var(--paper); }
 a { color:inherit; }
@@ -28,16 +50,18 @@ a { color:inherit; }
   padding:1.25rem 1.5rem; border-bottom:1px solid var(--rule);
 }
 .wordmark { font-weight:600; color:var(--paper); text-decoration:none; letter-spacing:-.01em; }
-.wordmark .dot { color:var(--ember); font-size:.7em; vertical-align:.15em; }
+.wordmark .dot { color:var(--accent); font-size:.7em; vertical-align:.15em; }
 .topnav { display:flex; align-items:center; gap:1.25rem; }
-.topnav a { font-family:var(--mono); font-size:.8rem; color:var(--body); text-decoration:none; }
-.topnav a:hover { color:var(--paper); }
+.topnav a:not(.btn-primary) { font-family:var(--mono); font-size:.8rem; color:var(--body); text-decoration:none; }
+.topnav a:not(.btn-primary):hover { color:var(--paper); }
+/* the nav Download = the footer's release button, sized for the bar */
+.topnav .btn-primary { font-size:.82rem; padding:.42rem .85rem; }
 .motion-toggle {
   font-family:var(--mono); font-size:.78rem; color:var(--body);
   background:transparent; border:1px solid var(--rule); border-radius:2px;
   padding:.3rem .6rem; cursor:pointer;
 }
-.motion-toggle:hover, .motion-toggle:focus-visible { color:var(--paper); border-color:var(--ember); }
+.motion-toggle:hover, .motion-toggle:focus-visible { color:var(--paper); border-color:var(--accent); }
 
 /* ---- Shared ---- */
 main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
@@ -51,7 +75,7 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
   background:var(--paper); color:var(--bg); padding:.7rem 1.2rem; border-radius:3px;
   transition:background .18s ease, color .18s ease;
 }
-.btn-primary:hover, .btn-primary:focus-visible { background:var(--ember); color:var(--bg); }
+.btn-primary:hover, .btn-primary:focus-visible { background:var(--accent); color:var(--bg); }
 .btn-quiet { color:var(--body); text-decoration:underline; text-underline-offset:.2em; }
 .btn-quiet:hover { color:var(--paper); }
 
@@ -62,12 +86,13 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
   line-height:1.02; color:var(--paper); margin:0 0 1.5rem;
 }
 .lede { font-size:clamp(1.05rem, 1.6vw, 1.3rem); max-width:46ch; color:var(--body); margin:0; }
+.hero-note { font-family:var(--mono); font-size:.8rem; color:var(--faint); margin:1.1rem 0 0; }
 
 /* ---- Feature sections ---- */
 .feature { padding:5rem 1.5rem; border-top:1px solid var(--rule); }
 .numeral {
   font-family:var(--mono); font-size:clamp(2.5rem, 7vw, 5rem); font-weight:500;
-  color:transparent; -webkit-text-stroke:1px var(--ember); margin:0 0 .5rem;
+  color:transparent; -webkit-text-stroke:1px var(--accent); margin:0 0 .5rem;
 }
 .feature h2 {
   font-size:clamp(1.8rem, 3.5vw, 2.8rem); font-weight:600; letter-spacing:-.025em;
@@ -82,8 +107,8 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
   border:1px solid var(--rule); position:relative;
 }
 .clip-video, .clip-img { display:block; width:100%; height:auto; aspect-ratio:16/9; object-fit:cover; }
-/* hover-ember ring on playable clips */
-.clip:has(.clip-video):hover { border-color:rgba(217,112,60,.5); }
+/* hover-accent ring on playable clips */
+.clip:has(.clip-video):hover { border-color:rgba(74,139,255,.5); }
 
 /* ---- Footer ---- */
 .site-footer { padding:5rem 1.5rem 6rem; border-top:1px solid var(--rule); text-align:center; }
@@ -100,6 +125,7 @@ body.loaded .reveal:nth-child(2) { animation-delay:.18s; }
 body.loaded .reveal:nth-child(3) { animation-delay:.28s; }
 body.loaded .reveal:nth-child(4) { animation-delay:.38s; }
 body.loaded .reveal:nth-child(5) { animation-delay:.48s; }
+body.loaded .reveal:nth-child(6) { animation-delay:.58s; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior:auto; }
