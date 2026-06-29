@@ -48,3 +48,71 @@ At rollout (user-gated, on the fork):
 6. Manual iOS Safari smoke (Chromium can't cover iOS `playsinline` / Low-Power-Mode).
 
 Default URL: `https://drknickers.github.io/particle-editor/`.
+
+## Temporary VPS demo (2026-06-29)
+
+There is a friend-facing WIP demo on a standalone VPS vhost:
+
+```
+https://particle.example.com/
+```
+
+This is separate from Plex and from the planned GitHub Pages rollout. Caddy serves
+static files directly from:
+
+```
+/var/www/particle-editor-demo
+```
+
+The Caddy block is intentionally simple:
+
+```caddy
+particle.example.com {
+    root * /var/www/particle-editor-demo
+    encode zstd gzip
+    file_server
+}
+```
+
+Normal content updates do **not** need sudo or Caddy changes. This Windows machine has
+a site-only SSH key at:
+
+```
+<path>
+```
+
+It logs in as `particledeploy@66.163.126.124`. That VPS user owns only
+`/var/www/particle-editor-demo` and has no sudo. A verified access check was:
+
+```powershell
+ssh -i $env:USERPROFILE\.ssh\particle-demo-site-key particledeploy@66.163.126.124 `
+  "whoami && test -w /var/www/particle-editor-demo && echo writable && sudo -n true 2>/dev/null || echo no-sudo"
+```
+
+Expected output includes `particledeploy`, `writable`, and `no-sudo`.
+
+To refresh the whole demo from a prepared local staging directory:
+
+```powershell
+$stage = "$env:TEMP\particle-editor-vps-demo"
+$tar = "$env:TEMP\particle-editor-vps-demo.tar.gz"
+if (Test-Path $tar) { Remove-Item $tar -Force }
+tar -czf $tar -C $stage .
+scp -i $env:USERPROFILE\.ssh\particle-demo-site-key $tar `
+  particledeploy@66.163.126.124:/tmp/particle-editor-vps-demo.tar.gz
+ssh -i $env:USERPROFILE\.ssh\particle-demo-site-key particledeploy@66.163.126.124 `
+  "set -e; cd /var/www/particle-editor-demo; find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; tar -xzf /tmp/particle-editor-vps-demo.tar.gz -C ."
+```
+
+Then verify:
+
+```powershell
+curl.exe -L --max-time 30 -o NUL -w "root=%{http_code} bytes=%{size_download}`n" https://particle.example.com/
+curl.exe -L --max-time 30 -o NUL -w "hero=%{http_code} bytes=%{size_download}`n" https://particle.example.com/media-local/hero.mp4
+curl.exe -L --max-time 30 -o NUL -w "faith=%{http_code} bytes=%{size_download}`n" https://particle.example.com/media-local/faith.mp4
+```
+
+Initial deployment note: the uploaded demo was captured from the running local preview
+at `http://localhost:5175/?media=media-local/`, not from committed media. The served
+WIP referenced `hero.mp4` / `hero-poster.jpg`, `faith.mp4` / `faith-poster.jpg`,
+`preview-poster.jpg`, and `workspace-poster.jpg`; those binaries remain out of git.
