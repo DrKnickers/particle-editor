@@ -16,9 +16,9 @@ function makeStubBridge(): Bridge & {
 } {
   return {
     request: vi.fn().mockImplementation((req: { kind: string }) => {
-      // Default: file/open returns ok:false so the test doesn't need
+      // Default: file/pick-open returns ok:false so the test doesn't need
       // to mock the preview round-trip.
-      if (req.kind === "file/open") {
+      if (req.kind === "file/pick-open") {
         return Promise.resolve({ ok: false, error: "browser-mode" });
       }
       return Promise.resolve({});
@@ -49,7 +49,7 @@ function makeNestedBridge(): Bridge & { request: ReturnType<typeof vi.fn> } {
 function makeBridgeFor(tree: EmitterTreeNode): Bridge & { request: ReturnType<typeof vi.fn> } {
   return {
     request: vi.fn().mockImplementation((req: { kind: string }) => {
-      if (req.kind === "file/open") return Promise.resolve({ ok: true, path: "C:/x.alo" });
+      if (req.kind === "file/pick-open") return Promise.resolve({ ok: true, path: "C:/x.alo" });
       if (req.kind === "emitters/preview-from-file") return Promise.resolve({ ok: true, tree });
       return Promise.resolve({});
     }),
@@ -75,7 +75,7 @@ function makeImportBridge(imported: number): Bridge & { request: ReturnType<type
   const tree = node(0, "(root)", [node(1, "Alpha"), node(2, "Beta")]);
   return {
     request: vi.fn().mockImplementation((req: { kind: string }) => {
-      if (req.kind === "file/open") return Promise.resolve({ ok: true, path: "C:/x.alo" });
+      if (req.kind === "file/pick-open") return Promise.resolve({ ok: true, path: "C:/x.alo" });
       if (req.kind === "emitters/preview-from-file") return Promise.resolve({ ok: true, tree });
       if (req.kind === "emitters/import-from-file") return Promise.resolve({ imported });
       return Promise.resolve({});
@@ -97,7 +97,7 @@ async function renderAndSelectAll(
 }
 
 describe("ImportEmittersDialog", () => {
-  it("Browse… click fires file/open", async () => {
+  it("Browse… click fires file/pick-open", async () => {
     const bridge = makeStubBridge();
     render(<ImportEmittersDialog bridge={bridge} open onOpenChange={() => {}} />);
 
@@ -105,7 +105,7 @@ describe("ImportEmittersDialog", () => {
 
     await waitFor(() => {
       const calls = bridge.request.mock.calls.map((c) => c[0] as { kind: string });
-      expect(calls.some((c) => c.kind === "file/open")).toBe(true);
+      expect(calls.some((c) => c.kind === "file/pick-open")).toBe(true);
     });
   });
 
@@ -351,7 +351,7 @@ describe("ImportEmittersDialog", () => {
     const tree = node(0, "(root)", [node(1, "Alpha"), node(2, "Beta")]);
     const bridge = {
       request: vi.fn().mockImplementation((req: { kind: string }) => {
-        if (req.kind === "file/open") return Promise.resolve({ ok: true, path: "C:/x.alo" });
+        if (req.kind === "file/pick-open") return Promise.resolve({ ok: true, path: "C:/x.alo" });
         if (req.kind === "emitters/preview-from-file") return Promise.resolve({ ok: true, tree });
         if (req.kind === "emitters/import-from-file") return Promise.reject(new Error("could not load file"));
         return Promise.resolve({});
@@ -374,7 +374,7 @@ describe("ImportEmittersDialog", () => {
     const importPromise = new Promise<{ imported: number }>((res) => { resolveImport = res; });
     const bridge = {
       request: vi.fn().mockImplementation((req: { kind: string }) => {
-        if (req.kind === "file/open") return Promise.resolve({ ok: true, path: "C:/x.alo" });
+        if (req.kind === "file/pick-open") return Promise.resolve({ ok: true, path: "C:/x.alo" });
         if (req.kind === "emitters/preview-from-file") return Promise.resolve({ ok: true, tree });
         if (req.kind === "emitters/import-from-file") return importPromise;
         return Promise.resolve({});

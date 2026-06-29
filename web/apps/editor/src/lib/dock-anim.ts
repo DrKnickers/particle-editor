@@ -25,19 +25,27 @@ type DockAnimStore = {
   /** True while a host-interpolated dock slide is in flight. */
   animating: boolean;
   setAnimating: (v: boolean) => void;
-  /** True exactly while the Atlas picker's cell grid is mounted in the DOM.
-   *  AtlasPickerPanel sets it; PanelLayout's OPEN-slide effect (atlas dock only)
-   *  gates the slide START on the false→true edge so a COLD first open waits for
-   *  the grid to render before the tween, avoiding the mid-slide centre-column
-   *  overlap. A max-timeout fallback in PanelLayout starts the slide regardless,
-   *  so this can never hang the slide if the grid never mounts. */
-  atlasReady: boolean;
-  setAtlasReady: (v: boolean) => void;
+  /** Atlas readiness, SPLIT (perf-audit P1b first-open):
+   *  - atlasTerminalFirstPaint: the picker has reached ANY terminal first-paint
+   *    state — the cell grid OR a placeholder (missing / broken / off-index /
+   *    too-large / no-texture). PanelLayout's OPEN-slide effect (atlas dock only)
+   *    gates the slide START on the false→true edge of THIS, so a placeholder/error
+   *    open no longer waits for a full grid mount before the tween (the old
+   *    behavior blocked the slide until the grid was up). A max-timeout fallback in
+   *    PanelLayout still starts the slide regardless, so this can never hang it.
+   *  - atlasGridMounted: true exactly while the cell grid is mounted in the DOM
+   *    (the old atlasReady semantics), kept as a distinct grid-timing signal. */
+  atlasTerminalFirstPaint: boolean;
+  setAtlasTerminalFirstPaint: (v: boolean) => void;
+  atlasGridMounted: boolean;
+  setAtlasGridMounted: (v: boolean) => void;
 };
 
 export const useDockAnim = create<DockAnimStore>((set) => ({
   animating: false,
   setAnimating: (v) => set({ animating: v }),
-  atlasReady: false,
-  setAtlasReady: (v) => set({ atlasReady: v }),
+  atlasTerminalFirstPaint: false,
+  setAtlasTerminalFirstPaint: (v) => set({ atlasTerminalFirstPaint: v }),
+  atlasGridMounted: false,
+  setAtlasGridMounted: (v) => set({ atlasGridMounted: v }),
 }));

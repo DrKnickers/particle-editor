@@ -28,7 +28,7 @@ describe("DeleteConfirmModal", () => {
 
   it("shows subtree copy and deletes on confirm", async () => {
     const { bridge, calls } = recordingBridge();
-    useDeleteConfirmStore.setState({ pending: { ids: [0], impact: { affectedCount: 3, primaryName: "a", isDestructive: true } } });
+    useDeleteConfirmStore.setState({ pending: { ids: [0], impact: { affectedCount: 3, primaryName: "a", isDestructive: true }, tree: null } });
     render(<DeleteConfirmModal bridge={bridge} />);
     expect(screen.getByText('Delete "a" and its 2 child emitters?')).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
@@ -38,7 +38,7 @@ describe("DeleteConfirmModal", () => {
 
   it("shows multi-select copy and cancels without deleting", async () => {
     const { bridge, calls } = recordingBridge();
-    useDeleteConfirmStore.setState({ pending: { ids: [1, 2, 3], impact: { affectedCount: 3, primaryName: "a1", isDestructive: true } } });
+    useDeleteConfirmStore.setState({ pending: { ids: [1, 2, 3], impact: { affectedCount: 3, primaryName: "a1", isDestructive: true }, tree: null } });
     render(<DeleteConfirmModal bridge={bridge} />);
     expect(screen.getByText("Delete 3 emitters?")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -49,7 +49,7 @@ describe("DeleteConfirmModal", () => {
   it("shows multi-select-with-children copy", () => {
     const { bridge } = recordingBridge();
     // 2 selected (ids 0 + 3), 4 total once children are counted.
-    useDeleteConfirmStore.setState({ pending: { ids: [0, 3], impact: { affectedCount: 4, primaryName: "a", isDestructive: true } } });
+    useDeleteConfirmStore.setState({ pending: { ids: [0, 3], impact: { affectedCount: 4, primaryName: "a", isDestructive: true }, tree: null } });
     render(<DeleteConfirmModal bridge={bridge} />);
     expect(screen.getByText("Delete 2 selected emitters and their children (4 total)?")).toBeTruthy();
   });

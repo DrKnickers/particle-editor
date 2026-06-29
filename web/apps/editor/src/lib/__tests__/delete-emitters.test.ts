@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   computeDeleteImpact, performDelete, requestDeleteEmitters,
   readConfirmDelete, writeConfirmDelete, useDeleteConfirmStore,
+  collapseToRoots, confirmPendingDelete,
 } from "@/lib/delete-emitters";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
@@ -58,8 +59,56 @@ describe("confirm-delete setting", () => {
 describe("performDelete", () => {
   it("emits emitters/delete in descending id order", () => {
     const { bridge, calls } = recordingBridge();
-    performDelete(bridge, [1, 3, 0]);
+    performDelete(bridge, [1, 3, 0], null);
     expect(calls).toEqual([3, 1, 0]);
+  });
+});
+
+// Release-audit #8: parent+descendant selections must collapse to roots so a
+// shifting positional id never deletes the wrong node.
+describe("collapseToRoots (#8)", () => {
+  it("drops a descendant whose ancestor is also selected", () => {
+    expect(collapseToRoots([0, 1], tree)).toEqual([0]);        // a + a1 -> a
+  });
+  it("drops all descendants of a selected ancestor", () => {
+    expect(collapseToRoots([0, 1, 2], tree)).toEqual([0]);     // a + a1 + a2 -> a
+  });
+  it("keeps disjoint subtrees (no shared ancestor)", () => {
+    expect(collapseToRoots([1, 3], tree)).toEqual([1, 3]);     // a1 + b -> both
+  });
+  it("is a no-op for a single id or null tree", () => {
+    expect(collapseToRoots([1], tree)).toEqual([1]);
+    expect(collapseToRoots([0, 1], null)).toEqual([0, 1]);
+  });
+  it("performDelete collapses then deletes only the root", () => {
+    const { bridge, calls } = recordingBridge();
+    performDelete(bridge, [0, 1, 2], tree);
+    expect(calls).toEqual([0]);                                // not [2,1,0]
+  });
+});
+
+describe("confirmPendingDelete (#8 confirm-time revalidation)", () => {
+  it("deletes (collapsed) when the tree is unchanged since the confirm opened", () => {
+    const { bridge, calls } = recordingBridge();
+    const live = useEmitterTreeStore.getState().tree;
+    useDeleteConfirmStore.setState({
+      pending: { ids: [0, 1], impact: computeDeleteImpact([0, 1], live), tree: live },
+    });
+    confirmPendingDelete(bridge);
+    expect(calls).toEqual([0]);
+    expect(useDeleteConfirmStore.getState().pending).toBeNull();
+  });
+  it("ABORTS (deletes nothing) when the tree changed since the confirm opened", () => {
+    const { bridge, calls } = recordingBridge();
+    const stale = useEmitterTreeStore.getState().tree;
+    useDeleteConfirmStore.setState({
+      pending: { ids: [0], impact: computeDeleteImpact([0], stale), tree: stale },
+    });
+    // A new emitters/list landed — different tree object reference.
+    useEmitterTreeStore.setState({ tree: { root: node(-1, "root", [node(0, "a")]) } as unknown as EmitterTreeDto });
+    confirmPendingDelete(bridge);
+    expect(calls).toEqual([]);                                 // stale -> no delete
+    expect(useDeleteConfirmStore.getState().pending).toBeNull();
   });
 });
 

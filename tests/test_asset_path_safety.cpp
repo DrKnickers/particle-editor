@@ -6,12 +6,15 @@
 // "..\..\x" escapes the mod root. IsSafeRelativeAssetName must FLAG these and
 // SanitizeAssetName must reduce a flagged name to its bare basename, while
 // leaving legitimate relative game-asset names (interior backslashes, dotted
-// filenames) untouched. Header-only; see tests/build_test_asset_path_safety.bat.
+// filenames) untouched. The newer fail-closed texture candidate helper must
+// return no candidates for unsafe names. Header-only; see
+// tests/build_test_asset_path_safety.bat.
 
 #include "AssetPathSafety.h"
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 static int g_failed = 0;
 #define CHECK(cond, msg) do {                              \
@@ -54,6 +57,24 @@ int main()
     expectSafe("BAR.DDS",      "BAR.DDS  (plain relative filename)");
     expectSafe("A.B..C.TGA",   "A.B..C.TGA  (the '..' not bracketed by separators -> NOT flagged)");
     expectSafe("",             "empty string  (harmless)");
+
+    // --- FAIL-CLOSED texture candidates ---
+    {
+        std::vector<std::string> c = SafeTextureCandidates("FX\\foo.tga");
+        CHECK(c.size() == 4, "SafeTextureCandidates: safe relative texture yields four candidates");
+        if (c.size() == 4)
+        {
+            CHECK(c[0] == "Data\\Art\\Textures\\FX\\foo.tga", "candidate[0] is texture-root original");
+            CHECK(c[1] == "Data\\Art\\Textures\\FX\\foo.dds", "candidate[1] is texture-root .dds fallback");
+            CHECK(c[2] == "FX\\foo.tga", "candidate[2] is bare original");
+            CHECK(c[3] == "FX\\foo.dds", "candidate[3] is bare .dds fallback");
+        }
+    }
+    CHECK(SafeTextureCandidates("..\\x").empty(),       "SafeTextureCandidates rejects parent traversal");
+    CHECK(SafeTextureCandidates("C:\\x").empty(),       "SafeTextureCandidates rejects drive-absolute");
+    CHECK(SafeTextureCandidates("\\\\unc\\x").empty(),  "SafeTextureCandidates rejects UNC");
+    CHECK(SafeTextureCandidates("x.dds:ads").empty(),   "SafeTextureCandidates rejects ADS colon");
+    CHECK(SafeTextureCandidates("ok/..\\x.tga").empty(), "SafeTextureCandidates rejects mixed-slash traversal");
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");

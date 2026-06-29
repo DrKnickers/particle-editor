@@ -51,11 +51,14 @@ type ViewProps = {
   onChoose: (choice: RecoverChoice) => void;
   /** Dismissed without choosing (Esc / overlay / X) — "decide later". */
   onDismiss: () => void;
+  /** Error from a failed recovery attempt — keeps the dialog open so the user
+   *  can try the other tier or discard (release-audit #3). */
+  error?: string | null;
 };
 
 /** Pure presentation. Renders the 3-state recovery prompt for the tiers the
  *  orphan carries (both → 3 buttons; single tier → restore + discard). */
-export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss }: ViewProps) {
+export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss, error }: ViewProps) {
   const now = nowMs ?? Date.now();
   const hasRecent = orphan != null && orphan.recentMtimeMs != null;
   const hasStable = orphan != null && orphan.stableMtimeMs != null;
@@ -102,6 +105,14 @@ export function AutosaveRecoveryView({ orphan, nowMs, onChoose, onDismiss }: Vie
                 </li>
               )}
             </ul>
+          )}
+          {error != null && (
+            <p
+              data-testid="autosave-recover-error"
+              className="rounded border border-border bg-bg px-2 py-1 text-[11px] leading-relaxed text-danger-fg"
+            >
+              {error}
+            </p>
           )}
         </div>
       </Modal.Body>
@@ -158,14 +169,35 @@ export function AutosaveRecoveryDialog({ bridge }: Props) {
     return () => { cancelled = true; };
   }, [bridge]);
 
+  const [recoverError, setRecoverError] = useState<string | null>(null);
+
   const choose = (choice: RecoverChoice) => {
-    void bridge.request({ kind: "autosave/recover", params: { choice } });
-    setOrphan(null);
+    setRecoverError(null);
+    // Await the host result: only close when the recovery actually succeeded (or
+    // was explicitly discarded). On `failed`, the host kept the orphan files, so
+    // keep the dialog open and let the user try the other tier or discard
+    // (release-audit #3 — previously this fired-and-closed, deleting the fallback).
+    void (async () => {
+      try {
+        const r = await bridge.request({ kind: "autosave/recover", params: { choice } });
+        if (r.status === "failed") {
+          setRecoverError(
+            choice === "discard"
+              ? "Couldn't discard the recovered session — please try again."
+              : "Couldn't restore that autosave (it may be corrupt). Try the other version, or discard.",
+          );
+          return;
+        }
+        setOrphan(null);
+      } catch {
+        setRecoverError("Recovery failed unexpectedly — try again, the other version, or discard.");
+      }
+    })();
   };
 
   // Decide-later: close locally, send no recover so the host keeps the orphan
   // for next launch.
   const dismiss = () => setOrphan(null);
 
-  return <AutosaveRecoveryView orphan={orphan} onChoose={choose} onDismiss={dismiss} />;
+  return <AutosaveRecoveryView orphan={orphan} onChoose={choose} onDismiss={dismiss} error={recoverError} />;
 }

@@ -26,6 +26,8 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
   const [catalog, setCatalog] = useState<LayerRef[]>([]);
   const [order, setOrder] = useState<string[]>([]);   // working stack (paths, front = top)
   const [query, setQuery] = useState("");
+  const [applyPending, setApplyPending] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   // An unresolved in-stack path (absent from the catalog) falls back to its
   // basename rather than the full path, matching MenuBar's labelFor.
@@ -71,7 +73,33 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, bridge]);
 
-  const apply = () => { void bridge.request({ kind: "mods/set-layers", params: { paths: order } }); onApplied?.(); onOpenChange(false); };
+  const apply = () => {
+    setApplyError(null);
+    setApplyPending(true);
+    // Await the host result: notify + close ONLY if the apply (incl. the shader
+    // reload) succeeded. On failure/reject keep the dialog open with an error so
+    // the user can adjust and retry — and the host did NOT persist a broken stack
+    // (release-audit #5 — previously this fire-and-forgot and closed regardless).
+    void (async () => {
+      try {
+        const r = await bridge.request({ kind: "mods/set-layers", params: { paths: order } });
+        if (!r.ok) {
+          setApplyError(
+            "error" in r && r.error
+              ? `Couldn't apply the load order: ${r.error}`
+              : "Couldn't apply the load order — the mod shaders failed to reload. Adjust the stack and try again.",
+          );
+          return;
+        }
+        onApplied?.();
+        onOpenChange(false);
+      } catch (err) {
+        setApplyError(`Couldn't apply the load order: ${String(err)}`);
+      } finally {
+        setApplyPending(false);
+      }
+    })();
+  };
 
   // Group the catalog by parent PATH (mods are their own group, keyed by their own
   // path; nested layers group under their owning mod's parentPath). Keying on the
@@ -257,8 +285,13 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
         </div>
       </Modal.Body>
       <Modal.Footer>
+        {applyError != null && (
+          <span data-testid="load-order-error" className="mr-auto text-[11px] leading-snug text-danger-fg">
+            {applyError}
+          </span>
+        )}
         <Modal.CancelButton onClick={() => onOpenChange(false)}>Cancel</Modal.CancelButton>
-        <Modal.OkButton onClick={apply}>Apply</Modal.OkButton>
+        <Modal.OkButton onClick={apply} disabled={applyPending}>{applyPending ? "Applying…" : "Apply"}</Modal.OkButton>
       </Modal.Footer>
 
       {drag.chipNode}

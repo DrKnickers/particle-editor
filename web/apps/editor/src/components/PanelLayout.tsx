@@ -371,9 +371,10 @@ export function PanelLayout({ bridge }: Props) {
         dock,
         rendererStartMs: gateStartMs,
       });
-      // OPEN (atlas): gate the slide START on the grid being mounted (atlasReady).
-      // A RE-OPEN renders the grid synchronously from the props/preview caches, so
-      // atlasReady is already true here → start immediately (one rAF for a fresh
+      // OPEN (atlas): gate the slide START on the picker's TERMINAL first paint
+      // (atlasTerminalFirstPaint — grid OR placeholder). A RE-OPEN reaches it
+      // synchronously from the props/preview caches, so it's already true here →
+      // start immediately (one rAF for a fresh
       // rafTs). A COLD first open renders the grid only after async round-trips, so
       // we start the slide on the false→true edge — eliminating the centre-column
       // overlap from the grid mount landing mid-tween. A max-timeout fallback
@@ -397,18 +398,20 @@ export function PanelLayout({ bridge }: Props) {
         raf = requestAnimationFrame(startSlide);
       };
       // READ readiness BEFORE clearing it. On a RE-OPEN the AtlasPickerPanel
-      // (a child) mounts its grid synchronously from the caches and its
-      // gridMounted effect runs BEFORE this parent effect (React runs child
-      // effects first), so atlasReady is already true here → start immediately.
-      // Otherwise (cold open) clear any stale readiness and wait for THIS grid
-      // mount's false→true edge.
-      const readyAtRun = useDockAnim.getState().atlasReady;
+      // (a child) reaches its terminal first paint synchronously from the caches
+      // and its readiness effect runs BEFORE this parent effect (React runs child
+      // effects first), so atlasTerminalFirstPaint is already true here → start
+      // immediately. Otherwise (cold open) clear any stale readiness and wait for
+      // THIS open's false→true edge. Gating on TERMINAL first paint (not a full
+      // grid mount) lets a placeholder/error/off-index open slide promptly instead
+      // of waiting out the timeout (perf-audit P1b).
+      const readyAtRun = useDockAnim.getState().atlasTerminalFirstPaint;
       if (readyAtRun) {
-        fire(); // re-open: grid already mounted via the caches → start now
+        fire("already_ready"); // re-open: picker already at terminal first paint via caches → start now
       } else {
-        useDockAnim.getState().setAtlasReady(false); // defensive: clear stale
+        useDockAnim.getState().setAtlasTerminalFirstPaint(false); // defensive: clear stale
         readySub = useDockAnim.subscribe((s) => {
-          if (s.atlasReady) { readySub?.(); readySub = null; fire(); }
+          if (s.atlasTerminalFirstPaint) { readySub?.(); readySub = null; fire(); }
         });
         // Fallback: never let the slide HANG if the grid never mounts. This is a
         // pathological-case net (a real grid mounts in well under this), so its

@@ -3770,13 +3770,47 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // churn whenever ANY focus assignment touches it (other apps
         // activating, modal dialogs, etc.). Treating those as user-Alt-Tab
         // triggers and killing the cursor-bound spawn is a regression, so we
-        // suppress the OS-driven kill here. (The legitimate blur case is
-        // handled renderer-side via the window.blur → viewport/input
-        // { type: "blur" } bridge path.)
+        // suppress the OS-driven kill here. (The legitimate blur case is handled
+        // renderer-side: window.blur → viewport/input { type:"blur" } → the
+        // private WM_APP_VIEWPORT_BLUR message below, which DOES end the spawn.)
         if (m_attachedParticleSystem)
         {
             Log("[ArchC-kill] WM_KILLFOCUS suppressed (attached=%p preserved)\n",
                 static_cast<void*>(m_attachedParticleSystem));
+        }
+        return 0;
+    }
+    case WM_APP_VIEWPORT_BLUR:
+    {
+        // Genuine renderer viewport blur (window.blur via InputDispatcher) -- end
+        // any cursor-bound Shift spawn. Distinct from the OS WM_KILLFOCUS above
+        // (suppressed for Win32 focus churn) so a real blur can't leak the
+        // attached preview (release-audit #7). Tear down an in-flight OBJECT_Z
+        // placement drag first: m_dragMode = NONE BEFORE ReleaseCapture (
+        // teardown order). No-op when nothing is attached / no drag.
+        //
+        // Preserve the WM_KILLFOCUS MANIPULATE behavior the renderer blur used to
+        // trigger (it previously routed through WM_KILLFOCUS): commit an in-flight
+        // gizmo drag so its moved transform isn't lost. Idempotent — if the OS
+        // WM_KILLFOCUS also fires, whichever runs first sets m_dragMode=NONE and
+        // the other skips.
+        if (m_dragMode == DragMode::MANIPULATE)
+        {
+            if (dispatcher) dispatcher->CommitReferenceObjectTransform();
+            m_dragMode = DragMode::NONE;
+            ResetManipDragState();
+        }
+        if (m_dragMode == DragMode::OBJECT_Z)
+        {
+            m_dragMode = DragMode::NONE;
+            ReleaseCapture();
+        }
+        if (m_attachedParticleSystem && engine)
+        {
+            Log("[ArchC-kill] WM_APP_VIEWPORT_BLUR killing attached=%p\n",
+                static_cast<void*>(m_attachedParticleSystem));
+            engine->KillParticleSystem(m_attachedParticleSystem);
+            m_attachedParticleSystem = nullptr;
         }
         return 0;
     }

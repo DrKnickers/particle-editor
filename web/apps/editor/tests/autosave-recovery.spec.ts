@@ -4,8 +4,9 @@
 //   1. check-recovery is SUPPRESSED under --test-host — the harness
 //      must never get a real recovery prompt (it would pollute a11y captures).
 //      The host returns { orphan: null }.
-//   2. recover is a safe no-op when there's no pending orphan (no prior
-//      check / double-recover) — returns {} and changes nothing.
+//   2. recover with no pending orphan (no prior check / double-recover) is a
+//      safe no-op state-wise — it returns
+//      {status:"failed",reason:"no_pending_session"} and changes nothing.
 //
 // The actual restore/discard-with-orphan paths can't run here (the scan is
 // suppressed under --test-host by design), so they're covered by the manual
@@ -53,7 +54,7 @@ test("autosave/recover{discard} is a safe no-op with no pending orphan", async (
     const after = await b.request({ kind: "engine/state/snapshot", params: {} });
     return { result: res, dirtyBefore: before.dirty, dirtyAfter: after.dirty };
   });
-  expect(result).toEqual({});
+  expect(result).toEqual({ status: "failed", reason: "no_pending_session" });
   // No pending orphan ⇒ recover touches nothing (dirty bit unchanged).
   expect(dirtyAfter).toBe(dirtyBefore);
 });

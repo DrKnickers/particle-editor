@@ -83,4 +83,18 @@ describe("runFileOp", () => {
     expect(r.ok).toBe(true);
     expect(useFileOpErrorStore.getState().message).toBeNull();
   });
+
+  it("surfaces a REJECTED request and re-throws (release-audit #11)", async () => {
+    const bridge: Bridge = {
+      request: async () => { throw new Error("bridge offline"); },
+      on: () => () => {},
+    } as Bridge;
+    await expect(
+      runFileOp(bridge, { kind: "file/save", params: {} }),
+    ).rejects.toThrow("bridge offline");
+    // The rejection is surfaced in the SAME error store (not swallowed), so the
+    // caller can keep its prompt open instead of silently abandoning the op.
+    expect(useFileOpErrorStore.getState().message).toContain("Couldn't save the file");
+    expect(useFileOpErrorStore.getState().message).toContain("bridge offline");
+  });
 });

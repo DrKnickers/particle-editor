@@ -47,6 +47,24 @@ describe("LoadOrderDialog", () => {
     expect(onApplied).toHaveBeenCalled();
   });
 
+  it("a FAILED apply ({ok:false}) keeps the dialog open and does not call onApplied (#5)", async () => {
+    const request = vi.fn().mockImplementation((req: { kind: string }) =>
+      req.kind === "mods/list"
+        ? Promise.resolve({ mods: [], layers: LAYERS, stack: ["C:/m/Alpha/Mod", "C:/m/Alpha/Core"], activePath: "C:/m/Alpha/Mod" })
+        : Promise.resolve({ ok: false, error: "shader reload failed" }));
+    const bridge = { request, on: vi.fn().mockReturnValue(() => {}) } as unknown as Bridge;
+    const onApplied = vi.fn();
+    const onOpenChange = vi.fn();
+    render(<LoadOrderDialog bridge={bridge} open onOpenChange={onOpenChange} onApplied={onApplied} />);
+    await waitFor(() => screen.getByRole("button", { name: "Move Core up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    // Failure is surfaced, the dialog stays open, and onApplied is NOT called —
+    // the host did not persist a broken stack (release-audit #5).
+    expect(await screen.findByTestId("load-order-error")).toBeInTheDocument();
+    expect(onApplied).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
   it("Cancel does not dispatch set-layers", async () => {
     const bridge = makeBridge(["C:/m/Alpha/Mod"]);
     render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} onApplied={() => {}} />);

@@ -9,6 +9,7 @@ import {
 } from "../lib/viewport-input";
 import { computeSceneRect } from "../lib/scene-rect";
 import { useDockAnim } from "../lib/dock-anim";
+import { useModalOpen } from "../lib/modal-open";
 import { ManipulatorReadout } from "./ManipulatorReadout";
 import { ViewportToggleOverlay } from "./ViewportToggleOverlay";
 
@@ -180,18 +181,31 @@ export function ViewportSlot({ bridge }: Props) {
       send(makeWheelEvent(e, e.clientX, e.clientY));
     };
 
+    // Suppress global viewport keys while any blocking modal is open — otherwise a
+    // key pressed with focus on a modal button drives the viewport behind it
+    // (release-audit #12).
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target)) return;
+      if (isTypingTarget(e.target) || useModalOpen.getState().count > 0) return;
       send(makeKeyEvent("keydown", e));
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target)) return;
+      if (isTypingTarget(e.target) || useModalOpen.getState().count > 0) return;
       send(makeKeyEvent("keyup", e));
     };
 
     const onBlur = () => {
       send(blurEvent);
     };
+
+    // When a modal OPENS (count 0→1), end any cursor-bound Shift spawn before the
+    // key-suppression above engages — opening a modal doesn't fire window.blur, so
+    // without this the spawn would survive (and its kill-keyup would be suppressed).
+    // (#7↔#12 integration.)
+    let prevModalCount = useModalOpen.getState().count;
+    const unsubModalOpen = useModalOpen.subscribe((s) => {
+      if (prevModalCount === 0 && s.count > 0) send(blurEvent);
+      prevModalCount = s.count;
+    });
 
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointermove", onPointerMove);
@@ -213,6 +227,7 @@ export function ViewportSlot({ bridge }: Props) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
+      unsubModalOpen();
     };
   }, [bridge]);
 

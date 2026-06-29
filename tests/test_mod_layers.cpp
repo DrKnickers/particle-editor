@@ -88,6 +88,11 @@ int main()
         CHECK(veq(ParseMultiSz(blob.data(), blob.size()), in));
     }
 
+    // --- ShouldPersistLayers: persist the layer stack to the registry only when
+    //     the post-apply shader reload succeeded (Tranche B / finding #5). ---
+    CHECK(ShouldPersistLayers(true) == true);    // reload ok  -> persist
+    CHECK(ShouldPersistLayers(false) == false);  // reload bad -> do NOT persist
+
     if (g_fail == 0) std::printf("=== ModLayers: ALL PASS ===\n");
     else             std::printf("=== ModLayers: %d FAILURE(S) ===\n", g_fail);
     return g_fail == 0 ? 0 : 1;

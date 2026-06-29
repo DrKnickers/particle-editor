@@ -86,6 +86,24 @@ static void expectBadFile(const Bytes& image, const char* label)
     CHECK(!ok && !other, label);
 }
 
+static bool chunkWalkThrowsBadFile(const Bytes& image, bool& other)
+{
+    other = false;
+    MemoryFile* f = new MemoryFile();
+    if (!image.empty()) f->write(image.data(), (unsigned long)image.size());
+    f->seek(0);
+    try
+    {
+        ChunkReader r(f);
+        (void)r.next();
+        (void)r.next();
+        f->Release();
+        return false;
+    }
+    catch (BadFileException&) { f->Release(); return true; }
+    catch (...)               { other = true; f->Release(); return false; }
+}
+
 // Find the unique occurrence of `needle` in `hay`; -1 if not found or ambiguous.
 static long findUnique(const Bytes& hay, const Bytes& needle)
 {
@@ -187,6 +205,19 @@ int main()
         put32(0x1234);
         put32(0x80000000u);
         expectBadFile(img, "wrong root chunk (not 0x0900) -> BadFileException");
+    }
+
+    // --- b1b: child chunk size exceeds parent remaining -> BadFileException.
+    {
+        Bytes img;
+        auto put32 = [&](uint32_t v){ for(int i=0;i<4;i++) img.push_back((unsigned char)((v>>(8*i))&0xFF)); };
+        put32(0x0900);
+        put32(0x80000008u);           // root container has exactly one child header
+        put32(0x1000);
+        put32(0x80000100u);           // child claims 256 bytes beyond parent end
+        bool other = false;
+        bool threw = chunkWalkThrowsBadFile(img, other);
+        CHECK(threw && !other, "child chunk larger than parent remaining -> BadFileException");
     }
 
     // For b2..b5 we patch a valid serialized image so it stays structurally

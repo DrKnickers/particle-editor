@@ -159,6 +159,13 @@ may live at the end of the file.
 
 ### Fixed
 
+- Browsing for a file (Import Emitters' **Browse**, and the skydome/ground texture pickers) no longer replaces or discards your open particle system — it only returns the chosen path
+- Changing the mod load order now shows an error if it couldn't be applied (for example, a layer's shaders failed to reload) instead of silently appearing to take effect
+- A failed save now reports the error instead of silently appearing to succeed
+- Deleting multiple emitters now removes exactly the ones you selected even if the tree changed after you selected them, and asks once before deleting emitters that still have children
+- When crash-recovery can't load an autosave, the recovery file is now kept so you can retry, instead of being deleted
+- Typing in a dialog no longer leaks keystrokes through to the 3D viewport behind it
+- Switching focus away from the 3D viewport in the middle of a drag or spawn action now cleanly ends the action, instead of leaving a stray spawn or a half-applied move
 - The vanilla space skydomes (Stars Low/Medium/High) no longer show a faint white vertical line — the sun glow now renders as a round billboard facing the camera, the way the game draws it, instead of an edge-on sliver
 - Tooltips now appear cleanly — the little pointer arrow fades in with the tooltip instead of popping in a moment later
 - Saving an `.alo` can no longer corrupt your existing file if the save fails partway through (disk full, a removable/network drive disconnected, permission denied) — your original file is left untouched until the new one is fully written
@@ -236,6 +243,7 @@ may live at the end of the file.
 
 ### Security
 
+- Extend the malformed/malicious mod-file hardening to every place the editor reads mod assets — skydome and ground textures, reference models, palette previews, and the game-object catalog — so a path in any of them stays inside the mod folder, with hard size limits that reject oversized or malformed data
 - Harden the editor against malformed or maliciously crafted mod files: untrusted `.alo`, `.meg`, and `.xml` files are now rejected cleanly instead of risking a crash, and a texture/shader name embedded in an `.alo` can no longer reach outside the mod folder or trigger an outbound network request when the file is opened
 - Web UI host enforces an origin allow-list, blocking off-origin navigation, popups, and permission requests
 

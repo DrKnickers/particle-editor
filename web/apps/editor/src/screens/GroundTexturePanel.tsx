@@ -161,7 +161,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
       // or failure. Mirrors BackgroundPicker's custom-skydome flow.
       void (async () => {
         const r = await bridge.request({
-          kind: "file/open",
+          kind: "file/pick-open",
           params: { filter: "ground" },
         });
         if (!r.ok || !r.path) return;

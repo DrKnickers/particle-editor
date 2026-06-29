@@ -30,6 +30,7 @@ import {
   fitGridLayout,
 } from "@/lib/atlas-grid";
 import { useDockAnim } from "@/lib/dock-anim";
+import { runWhenIdle } from "@/lib/run-after-paint";
 
 // Smart-grid sizing constants (maximize available space): cell gap (matches
 // the grid's `gap-1` = 4px) and the min/max square thumbnail size. The grid
@@ -401,10 +402,22 @@ export function AtlasPickerPanel({
           console.warn(`[atlas] preview fetch failed (${flattenAlpha ? "color" : "alpha"} mode) for ${colorTexture}:`, err);
           if (live) set({ kind: "broken" });
         });
-    // Active mode first so first paint isn't gated behind the other mode's decode.
-    if (showAlpha) { void load(false, setRawPrev); void load(true, setFlatPrev); }
-    else           { void load(true, setFlatPrev); void load(false, setRawPrev); }
-    return () => { live = false; };
+    // Active mode first (synchronous) so first paint isn't gated behind the other
+    // mode's decode. The INACTIVE mode is deferred to the first idle slot after
+    // first paint so it doesn't compete with the active mode's decode (perf-audit
+    // P1b). showAlpha is NOT in this effect's deps, so a toggle never re-runs it —
+    // the inactive load runs exactly once (from the idle callback), so there's no
+    // duplicate fetch; a toggle before idle fires briefly shows the loading
+    // placeholder (bounded by the idle timeout).
+    let cancelInactive = () => {};
+    if (showAlpha) {
+      void load(false, setRawPrev);                                          // active: raw
+      cancelInactive = runWhenIdle(() => { void load(true, setFlatPrev); });  // inactive: flat
+    } else {
+      void load(true, setFlatPrev);                                          // active: flat
+      cancelInactive = runWhenIdle(() => { void load(false, setRawPrev); });  // inactive: raw
+    }
+    return () => { live = false; cancelInactive(); };
   }, [bridge, colorTexture, eligible, stack, tooLarge, textureEpoch]);
 
   // The displayed preview is the active mode's prefetched result — a synchronous
@@ -479,15 +492,24 @@ export function AtlasPickerPanel({
 
   const offIndex     = focusedTrack !== "index";
 
-  // ── cold-start slide readiness (atlasReady) ────────────────────────────────
-  // Signal the dock-slide whether the cell grid is actually mounted. This is the
-  // EXACT condition under which the <div role="listbox"> + cells render below
-  // (okPreview truthy ⇒ preview.kind === "ok" ⇒ colorTexture present). On a COLD
-  // first open the grid mounts only after the async get-properties + preview
-  // round-trips resolve; PanelLayout's OPEN slide (atlas dock only) waits on the
-  // false→true edge so the tween runs uncontended. Cleared on unmount so the next
-  // open starts from a clean "not ready" state and re-waits.
+  // ── cold-start slide readiness ─────────────────────────────────────────────
+  // gridMounted: whether the cell grid is actually mounted — the EXACT condition
+  // under which the <div role="listbox"> + cells render below (okPreview truthy ⇒
+  // preview.kind === "ok" ⇒ colorTexture present). On a COLD first open the grid
+  // mounts only after the async get-properties + preview round-trips resolve. This
+  // feeds telemetry (atlas.grid_mounted) and the dock-anim grid signal; the dock
+  // OPEN slide itself now gates on terminalFirstPaint (below), NOT this, so a
+  // placeholder/error open slides promptly. Both signals are cleared on unmount so
+  // the next open starts from a clean "not ready" state and re-waits.
   const gridMounted = preview.kind === "ok" && eligible && !tooLarge && !offIndex;
+  // Terminal first paint: ANY non-loading first-paint outcome — the grid OR a
+  // placeholder. The prefetch effect's early-return (!colorTexture/tooLarge/
+  // !eligible) leaves preview.kind === "loading", and offIndex shows a non-grid
+  // state too, so those placeholder cases are folded in explicitly. The dock gate
+  // releases on THIS so a placeholder/error open no longer waits for a full grid
+  // mount (perf-audit P1b).
+  const terminalFirstPaint =
+    !colorTexture || tooLarge || !eligible || offIndex || preview.kind !== "loading";
   useEffect(() => {
     if (gridMounted) {
       emitPerfTrace({
@@ -499,9 +521,15 @@ export function AtlasPickerPanel({
         side,
       });
     }
-    useDockAnim.getState().setAtlasReady(gridMounted);
+    useDockAnim.getState().setAtlasGridMounted(gridMounted);
   }, [colorTexture, emitterId, gridMounted, side, textureSize]);
-  useEffect(() => () => { useDockAnim.getState().setAtlasReady(false); }, []);
+  useEffect(() => {
+    useDockAnim.getState().setAtlasTerminalFirstPaint(terminalFirstPaint);
+  }, [terminalFirstPaint]);
+  useEffect(() => () => {
+    useDockAnim.getState().setAtlasGridMounted(false);
+    useDockAnim.getState().setAtlasTerminalFirstPaint(false);
+  }, []);
 
   // ── click-to-assign ──────────────────────────────────────────────────────
 

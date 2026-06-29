@@ -20,6 +20,7 @@ import type { Bridge } from "@particle-editor/bridge-schema";
 import { ViewportSlot } from "../ViewportSlot";
 import { MK_LBUTTON, MK_SHIFT } from "../../lib/viewport-input";
 import { useDockAnim } from "../../lib/dock-anim";
+import { useModalOpen } from "../../lib/modal-open";
 
 // ViewportSlot renders the display-options pill, whose <Tip> buttons need a
 // Tooltip.Provider (App.tsx supplies one in production). Inject it for all renders.
@@ -277,5 +278,40 @@ describe("ViewportSlot — dock-slide RO suppression (Item 3)", () => {
     window.dispatchEvent(new Event("resize"));    // same rect again
     window.dispatchEvent(new Event("scroll"));    // and again
     expect(sceneRectCalls(bridge)).toBe(before);  // all deduped
+  });
+});
+
+describe("ViewportSlot — modal-open key suppression (#12)", () => {
+  afterEach(() => {
+    cleanup();
+    useModalOpen.setState({ count: 0 });
+  });
+
+  it("suppresses viewport keydown/keyup while a modal is open", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    useModalOpen.setState({ count: 1 });            // a blocking modal is open
+    fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
+    fireEvent.keyUp(window, { keyCode: 16, key: "Shift" });
+    const keys = findViewportInputCalls(bridge).filter(
+      (r) => r.params.type === "keydown" || r.params.type === "keyup",
+    );
+    expect(keys).toHaveLength(0);
+  });
+
+  it("forwards viewport keys when no modal is open", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
+    expect(findViewportInputCalls(bridge).some((r) => r.params.type === "keydown")).toBe(true);
+  });
+
+  it("sends a blur (ends a cursor-bound spawn) when a modal opens (0->1)", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const blursBefore = findViewportInputCalls(bridge).filter((r) => r.params.type === "blur").length;
+    useModalOpen.getState().open();                 // count 0 -> 1
+    const blursAfter = findViewportInputCalls(bridge).filter((r) => r.params.type === "blur").length;
+    expect(blursAfter).toBe(blursBefore + 1);
   });
 });

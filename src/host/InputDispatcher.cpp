@@ -2,6 +2,7 @@
 // design + lifecycle notes.
 
 #include "InputDispatcher.h"
+#include "HostMessages.h"
 
 #include <cstdio>
 #include <string>
@@ -134,11 +135,13 @@ bool InputDispatcher::Dispatch(const nlohmann::json& params)
 
     if (type == "blur")
     {
-        // window.blur → WM_KILLFOCUS. The engine's defensive cleanup
-        // at HostWindow.cpp:1325 will kill any cursor-bound spawn.
-        // wParam (gaining-focus HWND) is unused by the engine handler;
-        // 0 is the canonical "no other window gets focus" value.
-        PostMessageW(m_viewport, WM_KILLFOCUS, 0, 0);
+        // Genuine renderer blur (window.blur: click-away / alt-tab from the
+        // browser). Post the PRIVATE WM_APP_VIEWPORT_BLUR, NOT WM_KILLFOCUS:
+        // the viewport's OS WM_KILLFOCUS is deliberately suppressed (Win32 focus
+        // churn would otherwise kill a cursor-bound Shift spawn). The private
+        // message's handler ends the cursor-bound spawn on a real blur
+        // (release-audit #7).
+        PostMessageW(m_viewport, WM_APP_VIEWPORT_BLUR, 0, 0);
         return true;
     }
 

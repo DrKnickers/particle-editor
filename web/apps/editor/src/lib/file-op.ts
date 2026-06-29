@@ -49,7 +49,17 @@ export async function runFileOp(
   bridge: Bridge,
   req: FileOpReq,
 ): Promise<ResponseFor<FileOpReq>> {
-  const r = await bridge.request(req);
+  let r: ResponseFor<FileOpReq>;
+  try {
+    r = await bridge.request(req);
+  } catch (err) {
+    // A REJECTED request (bridge not ready, transport error) bypasses the
+    // {ok:false} path below — surface it in the same error store so the failure
+    // is visible, then re-throw so the caller can keep its prompt open and not
+    // run a destructive pending action (release-audit #11).
+    useFileOpErrorStore.getState().show(messageFor(req.kind, String(err)));
+    throw err;
+  }
   if (!r.ok && r.error !== "user-cancelled") {
     useFileOpErrorStore.getState().show(messageFor(req.kind, r.error));
     return r;

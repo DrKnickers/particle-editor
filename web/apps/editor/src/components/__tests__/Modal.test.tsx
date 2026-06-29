@@ -7,6 +7,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { BridgeContext } from "@/lib/bridge-context";
 import { Modal } from "../Modal";
+import { useModalOpen } from "@/lib/modal-open";
 
 function makeStubBridge() {
   const request = vi.fn().mockResolvedValue({});
@@ -153,5 +154,22 @@ describe("Modal", () => {
     const closeBtn = screen.getByRole("button", { name: "Close" });
     fireEvent.click(closeBtn);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("tracks useModalOpen: +1 while open, -1 on close and on unmount (#12)", () => {
+    useModalOpen.setState({ count: 0 });
+    const view = (open: boolean) => (
+      <Modal open={open} onOpenChange={() => {}} title="M">
+        <Modal.Body>b</Modal.Body>
+      </Modal>
+    );
+    const { rerender, unmount } = render(view(true));
+    expect(useModalOpen.getState().count).toBe(1);   // open -> inc
+    rerender(view(false));
+    expect(useModalOpen.getState().count).toBe(0);   // close -> dec
+    rerender(view(true));
+    expect(useModalOpen.getState().count).toBe(1);   // reopen -> inc
+    unmount();
+    expect(useModalOpen.getState().count).toBe(0);   // unmount -> dec
   });
 });

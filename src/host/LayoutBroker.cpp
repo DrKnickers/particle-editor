@@ -1,5 +1,6 @@
 #include "LayoutBroker.h"
 
+#include "../SceneOverscan.h"
 #include "../engine.h"
 #include "AlphaCompositor.h"
 #include "Compositor.h"
@@ -413,9 +414,8 @@ void LayoutBroker::ApplySceneRect(int x, int y, int w, int h, bool animFrame)
             // that keeps BOTH per-pixel angles exactly constant ⇒ the clipped
             // (visible) framing is pixel-identical to no overscan (an equal-px
             // band would change the aspect ~1% and shift edge content).
-            const int GBx = (w / 64 > 12) ? (w / 64) : 12;
-            const int GBy = (w > 0) ? (GBx * h + w / 2) / w : GBx;
-            m_engine->SetSceneViewport(x - GBx, y - GBy, w + 2 * GBx, h + 2 * GBy);
+            const SceneViewport ov = ComputeOverscanViewport(x, y, w, h);
+            m_engine->SetSceneViewport(ov.x, ov.y, ov.w, ov.h);
         }
         m_dcompCompositor->SetEngineVisualTransform(x, y, w, h,
                                                     /*immediate=*/false,
@@ -543,17 +543,22 @@ void LayoutBroker::ReemitSceneRect()
             m_alphaCompositor->SetSceneRect(0, 0, 0, 0);
     }
 
-    // Re-emit the cached scene-rect onto the
-    // DComp Compositor + Engine. Both consume main-client coords directly.
-    // SetCompositor replays state onto a newly-attached compositor;
-    // idempotence guards inside SetEngineVisualTransform + SetSceneViewport
-    // make repeated calls from popup-origin changes effectively free.
+    // Re-emit the cached scene-rect onto the DComp Compositor + Engine. The DComp
+    // transform takes the TRUE main-client rect; the engine viewport takes the
+    // OVERSCANNED rect via ComputeOverscanViewport -- the SAME guard band the
+    // normal apply path uses, so reemit can't reintroduce edge artifacts
+    // (release-audit #10). SetCompositor replays state onto a newly-attached
+    // compositor; idempotence guards inside SetEngineVisualTransform +
+    // SetSceneViewport make repeated calls from popup-origin changes effectively free.
     if (m_dcompCompositor && m_sceneW > 0 && m_sceneH > 0)
     {
         m_dcompCompositor->SetEngineVisualTransform(
             m_sceneX, m_sceneY, m_sceneW, m_sceneH);
         if (m_engine)
-            m_engine->SetSceneViewport(m_sceneX, m_sceneY, m_sceneW, m_sceneH);
+        {
+            const SceneViewport ov = ComputeOverscanViewport(m_sceneX, m_sceneY, m_sceneW, m_sceneH);
+            m_engine->SetSceneViewport(ov.x, ov.y, ov.w, ov.h);
+        }
     }
 }
 

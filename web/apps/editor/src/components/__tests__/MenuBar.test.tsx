@@ -13,9 +13,10 @@
 // trigger + SubTrigger.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { MenuBar } from "../MenuBar";
 import { useFileStateStore } from "@/lib/file-state";
+import { useFileOpErrorStore } from "@/lib/file-op";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import { useTreeActionStore } from "@/lib/tree-action";
 import type { Bridge } from "@particle-editor/bridge-schema";
@@ -359,6 +360,58 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     await waitFor(() => {
       expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/test/corruption/Mods/Alpha"] } });
     });
+  });
+
+  // A failed apply must surface via the shared error store (not silently proceed),
+  // AND still re-fetch mods/list so the menu reflects the host's ACTUAL state (#5).
+  it("surfaces a failed mods/set-layers via the error store and still re-fetches mods/list", async () => {
+    const bridge = makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha"] });
+    bridge.request.mockImplementation((req: { kind: string }) => {
+      if (req.kind === "engine/state/snapshot") return Promise.resolve({ activeModPath: null, ground: false, bloom: false, paused: false });
+      if (req.kind === "mods/list" || req.kind === "mods/refresh")
+        return Promise.resolve({ mods: fixtureMods, layers: fixtureLayers, stack: ["C:/test/corruption/Mods/Alpha"], activePath: "C:/test/corruption/Mods/Alpha" });
+      if (req.kind === "mods/set-layers") return Promise.resolve({ ok: false, error: "mod shaders failed" });
+      return Promise.resolve({});
+    });
+    useFileOpErrorStore.getState().clear();
+    renderMenuBar(bridge);
+    await openModsMenu();
+    bridge.request.mockClear(); // isolate the post-apply re-fetch from the boot seed
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reset" }));
+    await waitFor(() => {
+      expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: [] } });
+    });
+    await waitFor(() => {
+      expect(useFileOpErrorStore.getState().message).toContain("mod shaders failed");
+    });
+    // re-fetched the actual host state despite the failure
+    expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/list", params: {} });
+    useFileOpErrorStore.getState().clear();
+  });
+
+  // The boot mods/list seed is deferred to the first idle slot (perf-audit P1a):
+  // not fetched before first paint; fetched after the idle flush. (Overrides the
+  // synchronous rIC stub in test-setup with a controllable queue.)
+  it("defers the boot mods/list seed to idle", async () => {
+    const idleQ: Array<() => void> = [];
+    const origR = globalThis.requestIdleCallback;
+    const origC = globalThis.cancelIdleCallback;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).requestIdleCallback = (cb: () => void) => { idleQ.push(cb); return idleQ.length; };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).cancelIdleCallback = (id: number) => { idleQ[id - 1] = () => {}; };
+    try {
+      const bridge = makeModsStubBridge();
+      renderMenuBar(bridge);
+      // The eager snapshot fetch fires; the mods/list seed is queued, not yet fired.
+      await waitFor(() => expect(bridge.request).toHaveBeenCalledWith({ kind: "engine/state/snapshot", params: {} }));
+      expect(bridge.request).not.toHaveBeenCalledWith({ kind: "mods/list", params: {} });
+      await act(async () => { idleQ.splice(0).forEach((fn) => fn()); });
+      await waitFor(() => expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/list", params: {} }));
+    } finally {
+      globalThis.requestIdleCallback = origR;
+      globalThis.cancelIdleCallback = origC;
+    }
   });
 
   it("Refresh dispatches mods/refresh", async () => {

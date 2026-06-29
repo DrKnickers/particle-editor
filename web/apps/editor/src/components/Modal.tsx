@@ -27,6 +27,7 @@ import { X } from "lucide-react";
 import { useEffect, useState, type ReactNode, type MouseEventHandler } from "react";
 import { createPortal } from "react-dom";
 import { useBridge } from "@/lib/bridge-context";
+import { useModalOpen } from "@/lib/modal-open";
 
 export type ModalSize = "sm" | "md" | "lg";
 
@@ -111,6 +112,16 @@ export function Modal({
     const fallback = window.setTimeout(() => setSnapshotReady(true), 750);
     return () => window.clearTimeout(fallback);
   }, [open, bridge]);
+
+  // Mark a blocking modal open so the viewport suppresses global keys while this
+  // dialog is up (release-audit #12). Keyed on `open` — Modal stays mounted and
+  // toggles `open`; the cleanup decrements on close OR unmount and is
+  // StrictMode-safe (open→inc, cleanup→dec net correctly across the dev double-invoke).
+  useEffect(() => {
+    if (!open) return;
+    useModalOpen.getState().open();
+    return () => useModalOpen.getState().close();
+  }, [open]);
 
   useEffect(() => {
     if (!open || !bridge) return;

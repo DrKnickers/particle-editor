@@ -316,14 +316,9 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers)
     // 1. FileManager content roots (slash re-added by BuildContentRoots).
     if (m_fileManager) m_fileManager->SetLayers(m_layerStack);
 
-    // 2. Persist: LastLayers is authoritative; LastMod = primary is kept
-    //    in sync so the one-time legacy-selection migration (ReadLastMod feeds
-    //    MigrateLegacySelection) has a sane value if LastLayers is ever cleared.
-    if (!m_ephemeral)   // --drive: never rewrite the daily driver's mod stack
-    {
-        WriteLastLayers(m_layerStack);
-        WriteLastMod(primary);
-    }
+    // 2. Registry persistence is DEFERRED to after the engine reload below, so a
+    //    failed shader reload never records a stack the next launch cannot render
+    //    (release-audit #5). The in-memory stack + content roots are applied now.
 
     // 3. Texture palette follows the primary layer. (The current path busts
     //    its own base64 thumbnail cache via the bridge palette refresh —
@@ -341,6 +336,19 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers)
     {
         if (!m_engine->ReloadShaders()) ok = false;
         m_engine->ReloadTextures();
+    }
+
+    // 5. Persist the stack to the registry ONLY if the reload succeeded
+    //    (release-audit #5): LastLayers is authoritative; LastMod = primary is kept
+    //    in sync so the one-time legacy-selection migration (ReadLastMod feeds
+    //    MigrateLegacySelection) has a sane value if LastLayers is ever cleared.
+    //    On a failed reload we leave the registry untouched so the next launch boots
+    //    the last-known-good stack, not one whose shaders failed to load.
+    //    (--drive / m_ephemeral never rewrites the daily driver's mod stack.)
+    if (!m_ephemeral && modlayers::ShouldPersistLayers(ok))
+    {
+        WriteLastLayers(m_layerStack);
+        WriteLastMod(primary);
     }
     return ok;
 }

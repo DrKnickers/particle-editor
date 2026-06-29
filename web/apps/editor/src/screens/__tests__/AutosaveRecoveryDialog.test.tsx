@@ -137,4 +137,21 @@ describe("AutosaveRecoveryDialog (container)", () => {
     expect(recover).toBeDefined();
     expect(recover.params).toEqual({ choice: "recent" });
   });
+
+  it("a FAILED recover keeps the dialog open and surfaces an error (#3)", async () => {
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) => {
+        if (req.kind === "autosave/check-recovery") return Promise.resolve({ orphan: orphan() });
+        if (req.kind === "autosave/recover") return Promise.resolve({ status: "failed", reason: "load_error" });
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge;
+    render(<AutosaveRecoveryDialog bridge={bridge} />);
+    fireEvent.click(await screen.findByTestId("autosave-restore-recent"));
+    // The host kept the orphan files (failed load), so the dialog stays OPEN with
+    // an error and the user can still try the other tier or discard.
+    expect(await screen.findByTestId("autosave-recover-error")).toBeInTheDocument();
+    expect(screen.getByTestId("autosave-restore-recent")).toBeInTheDocument();
+  });
 });

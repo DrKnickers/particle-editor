@@ -49,21 +49,21 @@ export function SaveChangesPrompt({ bridge }: Props) {
 
   const handleSave = async () => {
     // Attempt to save via runFileOp, which surfaces a non-cancel failure
-    // (disk full / read-only / locked) in the error modal — without it a
-    // failed save here silently abandons the pending op AND leaves the doc
-    // dirty with no feedback (the data-loss path this routing closes). On
-    // ANY !ok (user-cancel OR failure) do NOT run the pending New/Open —
-    // the unsaved work must survive — and close this prompt.
+    // (disk full / read-only / locked) in the error modal. On success, run the
+    // pending New/Open and close. On ANY failure OR user-cancel, KEEP this prompt
+    // open (do NOT clear pendingAction) and do NOT run the destructive pending op:
+    // the unsaved work must survive, and the user can retry Save, Don't Save, or
+    // Cancel from the still-open prompt (release-audit #11 — previously a failed
+    // save silently closed the prompt and abandoned the pending op).
     try {
       const r = await runFileOp(bridge, { kind: "file/save", params: {} });
       if (r.ok) {
         await runPending();
-      } else {
-        setPendingAction(null);
       }
-    } catch (err) {
-      console.warn("[SaveChangesPrompt] file/save failed:", err);
-      setPendingAction(null);
+      // else: leave the prompt open; runFileOp already surfaced any real error.
+    } catch {
+      // Rejected save — runFileOp already populated the error store. Keep the
+      // prompt open so the pending op never runs and the user can retry.
     }
   };
 

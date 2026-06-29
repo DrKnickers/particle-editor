@@ -13,6 +13,14 @@
 
 namespace modlayers {
 
+// Persist the chosen layer stack to the registry ONLY when the post-apply shader
+// reload succeeded — so a failed reload never records a stack the next launch
+// cannot render. Pure; unit-tested in tests/test_mod_layers.cpp.
+inline bool ShouldPersistLayers(bool reloadOk)
+{
+    return reloadOk;
+}
+
 // Strip trailing whitespace and path separators. Casing preserved (Windows paths
 // are case-insensitive, but on-disk casing is kept for display).
 inline std::wstring CanonicalizeLayerPath(std::wstring p)

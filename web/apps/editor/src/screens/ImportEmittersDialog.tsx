@@ -3,7 +3,8 @@
 //
 // Flow:
 //   1. Modal opens; only "Browse…" is enabled.
-//   2. Browse → bridge.request("file/open") → if ok:true, fire
+//   2. Browse → bridge.request("file/pick-open") (NON-MUTATING picker — never
+//      loads the file as the active document) → if ok:true, fire
 //      "emitters/preview-from-file" with the resolved path.
 //   3. Preview success → render the selection card. Selection is a
 //      conventional file-tree BRANCH model: a parent checkbox owns its
@@ -15,7 +16,7 @@
 //      an inline message (see Errors).
 //   5. Cancel anytime → close, discard state.
 //
-// Errors. file/open ok:false (user cancelled) leaves the modal open
+// Errors. file/pick-open ok:false (user cancelled) leaves the modal open
 // with the prompt still empty so the user can retry. preview ok:false
 // surfaces an inline error message inside the body (no tree). import
 // resolves `{ imported }` (a count, not an ok-discriminant): imported
@@ -139,7 +140,10 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
   const handleBrowse = async () => {
     setError(null);
     try {
-      const r = await bridge.request({ kind: "file/open", params: {} });
+      // Non-mutating picker: returns the chosen path WITHOUT loading it as the
+      // active document, so browsing for an import source can never replace the
+      // current (possibly dirty) document (release-audit #2).
+      const r = await bridge.request({ kind: "file/pick-open", params: {} });
       if (!r.ok) {
         // User cancelled the picker or browser-mode rejected — leave
         // the modal open so a retry is one click away.

@@ -1,6 +1,6 @@
 // Vitest unit tests for the GroundTexturePanel:
 //   1. Bundled slot click → engine/set/ground-texture.
-//   2. Empty Custom slot → file/open with filter:"ground" (the host
+//   2. Empty Custom slot → file/pick-open with filter:"ground" (the host
 //      pops the DDS/TGA picker, not the .alo one).
 //   3. On a resolved path, the chain dispatches set-ground-slot-custom-path
 //      then set-ground-texture in order.
@@ -59,7 +59,7 @@ function makeStubBridge(
   };
   const request: RequestFn = vi.fn().mockImplementation((req) => {
     if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
-    if (req.kind === "file/open") {
+    if (req.kind === "file/pick-open") {
       return Promise.resolve(opts.fileOpen ?? { ok: false, error: "browser-mode" });
     }
     return Promise.resolve({});
@@ -123,7 +123,7 @@ describe("GroundTexturePanel", () => {
     expect(setGrid.params.visible).toBe(true);
   });
 
-  it("clicking an empty Custom slot dispatches file/open with filter:\"ground\"", async () => {
+  it("clicking an empty Custom slot dispatches file/pick-open with filter:\"ground\"", async () => {
     const bridge = makeStubBridge({ fileOpen: { ok: false, error: "browser-mode" } });
     render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
     await waitFor(() => {
@@ -132,7 +132,7 @@ describe("GroundTexturePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Custom slot 1 \(empty\)/ }));
     await waitFor(() => {
       const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-      const open = calls.find((c) => c.kind === "file/open");
+      const open = calls.find((c) => c.kind === "file/pick-open");
       expect(open).toBeDefined();
       expect(open.params).toEqual({ filter: "ground" });
     });

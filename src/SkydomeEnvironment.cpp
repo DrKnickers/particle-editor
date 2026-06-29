@@ -4,6 +4,7 @@
 #include "xml.h"          // XMLTree / XMLNode
 #include "files.h"        // IFile, ReadAndRelease
 #include "utils.h"        // WideToAnsi
+#include "AssetPathSafety.h"
 
 #include <cwctype>        // towlower
 #include <cstring>        // memchr (root-element sniff)
@@ -151,6 +152,7 @@ namespace
             if (c->getName() != L"File") continue;
             const std::string rel = trim(WideToAnsi(c->getData()));
             if (rel.empty()) continue;
+            if (!IsSafeRelativeAssetName(rel)) continue;
             const std::string full = std::string("Data\\XML\\") + rel;
             // Fast path: sniff the root from the first bytes. Only when the sniff is
             // inconclusive (empty) do we pay a full parse -- a sniff that returns a
@@ -190,6 +192,7 @@ namespace
             SkydomeRef ref;
             ref.name      = name;
             ref.modelPath = WideToAnsi(model);
+            if (!IsSafeRelativeAssetName(ref.modelPath)) ref.modelPath.clear();
             const float scale   = wtofSafe(childData(e, L"Scale_Factor"));
             ref.scaleFactor     = (scale > 0.0f) ? scale : 1.0f;  // absent / junk / <=0 -> 1.0 (avoid invisible dome)
             ref.sortOrderAdjust = wtoiSafe(childData(e, L"Sort_Order_Adjust"));
@@ -242,6 +245,7 @@ bool ResolveSkydomeModel(IFileManager& fm, const SkydomeRef& ref, std::vector<un
 {
     outBytes.clear();
     if (ref.modelPath.empty()) return false;
+    if (!IsSafeRelativeAssetName(ref.modelPath)) return false;
 
     IFile* f = fm.getFile(std::string("Data\\Art\\Models\\") + ref.modelPath);
     if (f == nullptr) return false;
@@ -313,6 +317,7 @@ void LoadAllSkydomeLists(IFileManager& fm, std::array<std::vector<SkydomeRef>, k
                     const XMLNode* c = root->getChild(i);
                     if (c->getName() != L"File") continue;
                     const std::string rel = trim(WideToAnsi(c->getData()));
+                    if (!IsSafeRelativeAssetName(rel)) continue;
                     if (!rel.empty()) files.push_back(std::string("Data\\XML\\") + rel);
                 }
             }

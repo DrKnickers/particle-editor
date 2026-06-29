@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 
 // Audit F-PATH (security): asset names embedded in an untrusted .alo (texture /
 // shader filenames) used to flow VERBATIM into new PhysicalFile(...) -> CreateFile.
@@ -31,8 +32,10 @@ inline bool IsSafeRelativeAssetName(const std::string& n)
 }
 
 // Unsafe names are reduced to their basename (everything after the last
-// slash/backslash), which the normal mod-root resolver then handles exactly like
-// any other relative name. Safe names pass through unchanged.
+// slash/backslash/colon), which the normal mod-root resolver then handles exactly
+// like any other relative name. A separator-less unsafe name (e.g. "..") has no
+// basename to strip and is returned as-is — harmless at the sole call site
+// (main.cpp's already-traversal-guarded sink). Safe names pass through unchanged.
 inline std::string SanitizeAssetName(std::string n)
 {
     if (IsSafeRelativeAssetName(n)) return n;
@@ -41,4 +44,21 @@ inline std::string SanitizeAssetName(std::string n)
     // cut down, not just slash-bearing absolute/UNC names.
     size_t p = n.find_last_of("\\/:");
     return (p == std::string::npos) ? n : n.substr(p + 1);
+}
+
+inline std::vector<std::string> SafeTextureCandidates(const std::string& bareName)
+{
+    if (bareName.empty() || !IsSafeRelativeAssetName(bareName)) return {};
+
+    std::string asDds = bareName;
+    const size_t dot = asDds.rfind('.');
+    if (dot != std::string::npos) asDds = asDds.substr(0, dot) + ".dds";
+
+    std::vector<std::string> out;
+    out.reserve(4);
+    out.push_back("Data\\Art\\Textures\\" + bareName);
+    out.push_back("Data\\Art\\Textures\\" + asDds);
+    out.push_back(bareName);
+    out.push_back(asDds);
+    return out;
 }

@@ -4,6 +4,7 @@
 #include "exceptions.h"
 #include "crc32.h"
 #include "xml.h"
+#include "ResourceLimits.h"
 using namespace std;
 
 //
@@ -32,7 +33,9 @@ MegaFile::MegaFile(IFile* file)
 		// A forged huge count would otherwise drive an OOM allocation loop and
 		// overflow the start/totalsize math below.
 		const unsigned long fsize = (unsigned long)file->size();
-		if (numStrings > fsize / 2 || numFiles > fsize / sizeof(FileInfo))
+		if (numStrings > kMaxMegEntryCount ||
+			numFiles > kMaxMegEntryCount ||
+			numStrings > fsize / 2 || numFiles > fsize / sizeof(FileInfo))
 		{
 			throw BadFileException();
 		}
@@ -40,6 +43,7 @@ MegaFile::MegaFile(IFile* file)
 		//
 		// Read filenames
 		//
+		unsigned long runningNameBytes = 0;
 		for (unsigned long i = 0; i < numStrings; i++)
 		{
 			uint16_t length;
@@ -47,6 +51,13 @@ MegaFile::MegaFile(IFile* file)
 			{
 				throw ReadException();
 			}
+			const unsigned long entryBytes = (unsigned long)sizeof(uint16_t) + length;
+			if (length > kMaxFilenameLength ||
+				runningNameBytes > kMaxMegNameTableBytes - entryBytes)
+			{
+				throw BadFileException();
+			}
+			runningNameBytes += entryBytes;
 
 			char* data = new char[length + 1];
 			if (file->read(data, length) != length)

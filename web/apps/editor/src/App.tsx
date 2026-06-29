@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { makeBridge } from "@/bridge";
 import { signalAppReady } from "@/lib/app-ready";
-import { emitClockCalibration } from "@/lib/perf-trace";
+import { emitClockCalibration, emitPerfTrace } from "@/lib/perf-trace";
 import { exposeBridgeForTests } from "@/bridge/expose";
 import { PanelLayout, resetPanelLayoutStorage } from "@/components/PanelLayout";
 import { StatusBar } from "@/components/StatusBar";
@@ -156,10 +156,15 @@ function AppShell() {
   // host's screenshot isn't guaranteed, so we don't rely on it alone; the host
   // adds its own settle, making this the belt to its suspenders. No-op without WebView2.
   useEffect(() => {
+    // Startup milestone spans for the perf lane (no-ops when tracing is off):
+    // app.shell-mounted bracketed against app.first-interactive-paint measures the
+    // critical startup window (perf-audit P1a).
+    emitPerfTrace({ eventName: "app.shell-mounted", eventType: "instant" });
     let inner = 0;
     const outer = requestAnimationFrame(() => {
       inner = requestAnimationFrame(() => {
         emitClockCalibration("startup-ready");
+        emitPerfTrace({ eventName: "app.first-interactive-paint", eventType: "instant" });
         signalAppReady();
       });
     });
@@ -168,18 +173,9 @@ function AppShell() {
       if (inner) cancelAnimationFrame(inner);
     };
   }, []);
-
-  // Verification hook: log the initial engine snapshot at mount.
-  // Confirms the bridge round-trip is producing a real EngineStateDto,
-  // not the old `{ groundZ, background, skydomeSlot }` stub. Stays as a
-  // permanent dev-mode breadcrumb — cheap, and useful any time the
-  // bridge surface grows.
-  useEffect(() => {
-    bridge
-      .request({ kind: "engine/state/snapshot", params: {} })
-      .then((s) => console.log("[engine/state/snapshot]", s))
-      .catch((err) => console.warn("[engine/state/snapshot] failed:", err));
-  }, [bridge]);
+  // (Removed the redundant startup engine/state/snapshot dev-log here — its data is
+  // already fetched by the eager Toolbar/MenuBar/StatusBar consumers; the duplicate
+  // was pure startup bridge fan-out, perf-audit P1a.)
 
   // Data-loss BLOCKER: the native frame-X / Alt-F4 on a dirty doc
   // emits `app/close-requested` from the host (it can't render the React

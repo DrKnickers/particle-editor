@@ -6,6 +6,8 @@
 #include "utils.h"        // WideToAnsi
 #include "AloModel.h"     // LoadAloModel + AloIsSkinnedVertexFormat / AloIsNonVisibleShader
 #include "exceptions.h"   // wexception (LoadAloModel boundary)
+#include "AssetPathSafety.h"
+#include "ResourceLimits.h"
 
 #include <algorithm>
 #include <atomic>
@@ -167,6 +169,7 @@ namespace
             const XMLNode* c = root->getChild(i);
             if (c->getName() != L"File") continue;          // tolerate comments / other elements
             std::string fn = trim(WideToAnsi(c->getData()));
+            if (!IsSafeRelativeAssetName(fn)) continue;
             if (!fn.empty()) files.push_back(fn);
         }
         return true;
@@ -182,9 +185,15 @@ namespace
                              std::vector<char>& bytes)
     {
         bytes.clear();
+        if (!IsSafeRelativeAssetName(fileName)) return;
         IFile* f = fm.getFile(std::string("Data\\XML\\") + fileName);
         if (f == nullptr) return;
         const unsigned long sz = f->size();
+        if (sz > kMaxXmlFileBytes)
+        {
+            f->Release();
+            return;
+        }
         if (sz > 0)
         {
             bytes.resize(sz);
@@ -403,6 +412,11 @@ namespace
         if (!f) return;
         std::string text;
         const unsigned long sz = f->size();
+        if (sz > kMaxXmlFileBytes)
+        {
+            f->Release();
+            return;
+        }
         if (sz > 0)
         {
             text.resize(sz); f->seek(0);
@@ -501,6 +515,7 @@ namespace
     void parseHardpointFile(IFileManager& fm, const std::string& fileName,
                             std::map<std::string, HardPointDef>& out)
     {
+        if (!IsSafeRelativeAssetName(fileName)) return;
         IFile* f = fm.getFile(std::string("Data\\XML\\") + fileName);
         if (f == nullptr) return;
 
@@ -529,6 +544,7 @@ namespace
 
             HardPointDef def;
             def.modelToAttach       = trim(WideToAnsi(childData(e, L"Model_To_Attach")));
+            if (!IsSafeRelativeAssetName(def.modelToAttach)) def.modelToAttach.clear();
             def.attachmentBone      = trim(WideToAnsi(childData(e, L"Attachment_Bone")));
             def.damageDecalBone     = trim(WideToAnsi(childData(e, L"Damage_Decal")));
             def.damageParticlesBone = trim(WideToAnsi(childData(e, L"Damage_Particles")));
@@ -568,6 +584,7 @@ namespace
             const XMLNode* c = root->getChild(i);
             if (c->getName() != L"File") continue;
             std::string fn = trim(WideToAnsi(c->getData()));
+            if (!IsSafeRelativeAssetName(fn)) continue;
             if (!fn.empty() && seen.insert(fn).second) files.push_back(fn);
         }
         for (const std::string& fn : files)
@@ -676,6 +693,7 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
     {
         ResolvedModel rm = resolveModel(kv.first, byName);
         if (rm.path.empty()) continue;                    // no renderable model -> not pickable
+        if (!IsSafeRelativeAssetName(rm.path)) continue;  // unsafe model path -> missing
 
         GameObjectRef ref;
         ref.name           = kv.second.name;           // original casing for the picker label
@@ -742,6 +760,7 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
 ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPath)
 {
     if (modelPath.empty()) return ModelProbeResult::LoadFailed;
+    if (!IsSafeRelativeAssetName(modelPath)) return ModelProbeResult::LoadFailed;
 
     IFile* f = fm.getFile(std::string("Data\\Art\\Models\\") + modelPath);
     if (f == nullptr) return ModelProbeResult::NotFound;   // file genuinely absent

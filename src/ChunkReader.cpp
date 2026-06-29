@@ -2,6 +2,7 @@
 #include <vector>
 #include "ChunkFile.h"
 #include "exceptions.h"
+#include "ResourceLimits.h"
 using namespace std;
 
 ChunkType ChunkReader::nextMini()
@@ -30,8 +31,17 @@ ChunkType ChunkReader::nextMini()
 		throw ReadException();
 	}
 
-	m_miniSize   = letohl(hdr.size);
-	m_miniOffset = m_file->tell() + m_miniSize;
+	// Validate the untrusted mini-chunk size against the parent's remaining bytes
+	// AND an absolute cap before trusting it for offset math / later allocations
+	// (release-audit #13: absolute max chunk/string sizes for ALO parsing).
+	const long miniSize = (long)letohl(hdr.size);
+	const long avail    = m_offsets[m_curDepth] - (long)m_file->tell();
+	if (miniSize < 0 || miniSize > avail || (unsigned long)miniSize > kMaxAloChunkBytes)
+	{
+		throw BadFileException();
+	}
+	m_miniSize   = miniSize;
+	m_miniOffset = m_file->tell() + miniSize;
 	m_position   = 0;
 
 	return letohl(hdr.type);
@@ -63,6 +73,12 @@ ChunkType ChunkReader::next()
 	}
 
 	unsigned long size = letohl(hdr.size);
+	const long payloadSize = (long)(size & 0x7FFFFFFF);
+	const long parentRemaining = m_offsets[m_curDepth] - (long)m_file->tell();
+	if (parentRemaining < 0 || payloadSize > parentRemaining)
+	{
+		throw BadFileException();
+	}
 	// Guard the fixed m_offsets[MAX_CHUNK_DEPTH] array: a crafted .alo with
 	// chunks nested past depth 255 would otherwise write out of bounds via
 	// the pre-increment below (CWE-787 heap corruption during parse).
@@ -72,7 +88,7 @@ ChunkType ChunkReader::next()
 	{
 		throw BadFileException();
 	}
-	m_offsets[ ++m_curDepth ] = m_file->tell() + (size & 0x7FFFFFFF);
+	m_offsets[ ++m_curDepth ] = m_file->tell() + payloadSize;
 	m_size     = (~size & 0x80000000) ? size : -1;
 	m_miniSize = -1;
 	m_position = 0;
@@ -110,6 +126,16 @@ string ChunkReader::readString()
 	// can misbehave.
 	const long len = size();
 	if (len <= 0)
+	{
+		throw BadFileException();
+	}
+	if ((unsigned long)len > kMaxAloStringBytes) // absolute cap (release-audit #13)
+	{
+		throw BadFileException();
+	}
+	const long end = (m_miniSize >= 0) ? m_miniOffset : m_offsets[m_curDepth];
+	const long remaining = end - (long)m_file->tell();
+	if (remaining < 0 || len > remaining)
 	{
 		throw BadFileException();
 	}

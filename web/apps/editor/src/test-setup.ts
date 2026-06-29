@@ -58,6 +58,21 @@ if (!HTMLElement.prototype.releasePointerCapture) {
   HTMLElement.prototype.releasePointerCapture = vi.fn();
 }
 
+// jsdom doesn't implement requestIdleCallback / cancelIdleCallback. Run the
+// callback SYNCHRONOUSLY so deferred startup/Atlas work (lib/run-after-paint
+// runWhenIdle, perf-audit P1) behaves eagerly in tests by default — existing
+// suites assert post-startup state without flushing. Tests that specifically
+// assert the DEFERRAL override these with a controllable queue + flush.
+if (typeof globalThis.requestIdleCallback === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).requestIdleCallback = (cb: (d?: unknown) => void) => {
+    cb({ didTimeout: false, timeRemaining: () => 0 });
+    return 0;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).cancelIdleCallback = () => {};
+}
+
 // jsdom in this config doesn't expose window.localStorage. Stub it with
 // an in-memory Map-backed shim so components using localStorage (e.g.
 // ThemeToggle persistence, palette-store) can round-trip in unit tests.

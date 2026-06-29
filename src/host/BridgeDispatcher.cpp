@@ -2716,19 +2716,25 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
-    // -------- file/open --------
+    // -------- file/open + file/pick-open --------
     //
-    // Two modes:
+    // `path` source (both kinds):
     //   - If `params.path` is provided (Recent Files / drag-drop / Open
     //     dialog already resolved on the React side), use it directly.
     //   - Otherwise pop GetOpenFileNameW. The native dialog runs a
     //     nested message loop; host pump pauses for the dialog's
     //     lifetime, which is fine because the JS caller is awaiting.
     //
-    // Both modes commit the path into m_currentFilePath, push to
-    // recents, fire recent/changed + engine/state/changed, and clear
-    // dirty. Actual ParticleSystem load is forward-deferred.
-    if (kind == "file/open")
+    // Post-pick behaviour DIFFERS by kind:
+    //   - file/pick-open (and the skydome/ground TEXTURE filter variants)
+    //     return the chosen path WITHOUT touching the document — no commit
+    //     to m_currentFilePath, recents, events, dirty reset, or engine load
+    //     (release-audit #2: a Browse must never replace the active document).
+    //   - file/open with the default .alo filter commits the path into
+    //     m_currentFilePath, pushes to recents, fires recent/changed +
+    //     engine/state/changed, and clears dirty; the ParticleSystem load is
+    //     forward-deferred.
+    if (kind == "file/open" || kind == "file/pick-open")
     {
         std::wstring path;
         if (auto pit = params.find("path"); pit != params.end() && pit->is_string())
@@ -2768,9 +2774,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             // (filterId == "alo", the default when no `filter` key is
             // passed) so the skydome/ground TEXTURE variants are NOT
             // pointed at Models — they keep the dialog's default dir.
-            // Covers BOTH File->Open and Import Emitters' Browse (both call
-            // file/open with no filter -> filterId "alo"). Fallback: mod
-            // root -> default.
+            // Covers BOTH File->Open (file/open) and Import Emitters' Browse
+            // (file/pick-open) — both use the default "alo" filter (no `filter`
+            // key). Fallback: mod root -> default.
             std::wstring initialDir;
             if (filterId == "alo" && m_modManager)
             {
@@ -2808,6 +2814,17 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
                 return res;
             }
             path = buf;
+        }
+
+        // Non-mutating picker: file/pick-open returns the chosen path WITHOUT
+        // loading it into the host (no document swap, undo clear, dirty reset,
+        // recents, or engine touch). Used by Import Emitters' Browse and the
+        // texture pickers so a Browse can never replace the active dirty
+        // document (release-audit #2).
+        if (kind == "file/pick-open")
+        {
+            sendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
+            return res;
         }
 
         // Texture-picker variants short-circuit here: just return the
@@ -3108,18 +3125,22 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     // original filename with dirty=true: an empty saved baseline keeps it
     // dirty until a real save (the temp content matches no on-disk file), and
     // the temp path never enters recents. For discard, leave the boot
-    // document untouched. Either way DeleteOrphan consumes the session.
+    // document untouched. The orphan files are consumed (deleted) ONLY on a
+    // successful recover or an explicit discard — a FAILED load keeps them so the
+    // other tier (or the next launch) can still recover (release-audit #3).
     if (kind == "autosave/recover")
     {
         if (!m_hasPendingOrphan)
         {
-            sendOk(json::object());  // no prior check / already consumed
+            // No prior orphan check, or it was already consumed by a successful
+            // recover / discard.
+            sendOk(json{{"status", "failed"}, {"reason", "no_pending_session"}});
             return res;
         }
         const std::string choice = params.value("choice", std::string("discard"));
+        // Copy the session for the attempt but DO NOT consume it yet — a failed
+        // load must leave it intact so the user can retry the other tier.
         const Autosave::OrphanSession s = m_pendingOrphan;
-        m_hasPendingOrphan = false;
-        m_pendingOrphan = Autosave::OrphanSession{};
 
         std::wstring restorePath;
         if (choice == "recent")      restorePath = s.recentPath;
@@ -3129,7 +3150,21 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
                 choice.c_str(), restorePath.empty() ? 0 : 1);
 #endif
 
-        if (!restorePath.empty())
+        Autosave::RecoverOutcome outcome = Autosave::RecoverOutcome::Failed;
+        std::string reason;
+
+        if (choice == "discard")
+        {
+            outcome = Autosave::RecoverOutcome::Discarded;
+        }
+        else if (restorePath.empty())
+        {
+            // A recover choice whose tier has no file on disk — a failure, never a
+            // silent delete, so the dialog can offer the other tier.
+            outcome = Autosave::RecoverOutcome::Failed;
+            reason  = "no_file";
+        }
+        else
         {
             std::string err;
             std::unique_ptr<ParticleSystem> loaded = LoadParticleSystem(restorePath, &err);
@@ -3154,13 +3189,32 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
                 SetDirty(true);
                 EmitEngineStateChanged();
                 EmitEmittersTreeChanged();
+                outcome = Autosave::RecoverOutcome::Recovered;
             }
-            // Load failure → fall through to discard semantics (boot doc
-            // stays); the orphan is still consumed below.
+            else
+            {
+                // Load failed — keep the orphan (other tier / next launch can still
+                // recover). The boot document is untouched.
+                outcome = Autosave::RecoverOutcome::Failed;
+                reason  = "load_error";
+            }
         }
 
-        Autosave::DeleteOrphan(s);
-        sendOk(json::object());
+        // Consume (delete files + clear pending) ONLY on a successful recover or an
+        // explicit discard — never on a failed load.
+        if (Autosave::ShouldDeleteOrphan(outcome))
+        {
+            Autosave::DeleteOrphan(s);
+            m_hasPendingOrphan = false;
+            m_pendingOrphan = Autosave::OrphanSession{};
+        }
+
+        const char* status =
+            outcome == Autosave::RecoverOutcome::Recovered ? "recovered" :
+            outcome == Autosave::RecoverOutcome::Discarded ? "discarded" : "failed";
+        json out = json{{"status", status}};
+        if (!reason.empty()) out["reason"] = reason;
+        sendOk(out);
         return res;
     }
 

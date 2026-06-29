@@ -620,6 +620,7 @@ export type Request =
   // File / recents
   | { kind: "file/new";                   params: Record<string, never> }
   | { kind: "file/open";                  params: { path?: string; filter?: "alo" | "skydome" | "ground" } }   // path undef = native picker; filter selects lpstrFilter (default "alo")
+  | { kind: "file/pick-open";             params: { filter?: "alo" | "skydome" | "ground" } }   // NON-MUTATING picker: returns the chosen path WITHOUT loading it as the active doc (release-audit #2)
   | { kind: "file/save";                  params: { path?: string } }   // path undef = native picker
   | { kind: "file/save-as";               params: Record<string, never> } // always opens native picker
   | { kind: "file/recent/list";           params: Record<string, never> }
@@ -1075,6 +1076,7 @@ type ResponseForA<R extends Request> =
   // File
   R extends { kind: "file/new" }                  ? Record<string, never> :
   R extends { kind: "file/open" }                 ? { ok: true; path?: string } | { ok: false; error: string } :
+  R extends { kind: "file/pick-open" }            ? { ok: true; path?: string } | { ok: false; error: string } :
   R extends { kind: "file/save" }                 ? { ok: true; path?: string } | { ok: false; error: string } :
   R extends { kind: "file/save-as" }              ? { ok: true; path?: string } | { ok: false; error: string } :
   R extends { kind: "file/recent/list" }          ? { paths: string[] } :
@@ -1102,7 +1104,7 @@ type ResponseForA<R extends Request> =
 
   // Autosave crash-recovery
   R extends { kind: "autosave/check-recovery" }   ? { orphan: AutosaveOrphan | null } :
-  R extends { kind: "autosave/recover" }          ? Record<string, never> :
+  R extends { kind: "autosave/recover" }          ? { status: "recovered" | "discarded" | "failed"; reason?: string } :
 
   // Engine snapshot
   R extends { kind: "engine/state/snapshot" }     ? EngineStateDto :

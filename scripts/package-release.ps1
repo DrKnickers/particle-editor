@@ -1,130 +1,201 @@
 <#
 .SYNOPSIS
-    Stage the Particle Editor release-zip layout.
+    Stage (and optionally zip) the Particle Editor release layout, self-asserting completeness.
 
 .DESCRIPTION
-    Assembles the exact directory tree the host expects to launch from, ready
-    to zip into a GitHub Release artifact.
+    Assembles the exact directory tree the host launches from and FAILS LOUDLY if any required
+    runtime file is missing -- so a release archive can never be produced with a broken/incomplete
+    bundle.
 
     WHY THIS LAYOUT IS LOAD-BEARING:
-    The host computes the web-bundle path at runtime by walking UP three parent
-    directories from the running .exe, then descending into web\apps\editor\dist
-    (see src/host/HostWindow.cpp ComputeEditorDistPath:
+    The host computes the web-bundle path at runtime by walking UP three parent directories from the
+    running .exe, then descending into web/apps/editor/dist (HostWindow.cpp ComputeEditorDistPath):
 
         auto root = p.parent_path().parent_path().parent_path();
         return root / "web" / "apps" / "editor" / "dist";
 
-    So from  <STAGE>\x64\Release\ParticleEditor.exe  the three .parent_path()
-    hops land back on <STAGE>, and the bundle must live at
-    <STAGE>\web\apps\editor\dist. Flatten the exe or move the bundle and the
+    So from  <STAGE>/x64/Release/ParticleEditor.exe  the three hops land back on <STAGE>, and the
+    bundle must live at  <STAGE>/web/apps/editor/dist . Flatten the exe or move the bundle and the
     WebView shows ERR_NAME_NOT_RESOLVED for app.local at launch.
 
     Authoritative staged tree:
 
-        <STAGE>\
-          x64\Release\
+        <STAGE>/
+          x64/Release/
             ParticleEditor.exe
-            d3dx9_43.dll          # bundled beside the exe (x64 build)
-          web\apps\editor\dist\
+            WebView2Loader.dll     # WebView2 runtime loader (dynamic dependency)
+            d3dx9_43.dll           # x64 D3DX9 runtime, vendored at libs/redist/
+          web/apps/editor/dist/
             index.html
-            assets\
-            fonts\
+            assets/                # built JS/CSS (must be non-empty)
+            fonts/
 
-    d3dx9_43.dll SOURCE (architecture matters): the editor is x64, so the DLL
-    must be the x64 build. This script copies it from $env:WINDIR\System32
-    (on 64-bit Windows that is the x64 copy). It NEVER copies from SysWOW64
-    (the 32-bit copy, which will not load into the x64 exe). If System32 has
-    no copy, the script notes the DXSDK CAB expand alternative and continues.
+    d3dx9_43.dll is vendored at  libs/redist/d3dx9_43.dll  (x64) and copied from there, so packaging
+    is deterministic on any machine or CI runner (a per-machine OS copy is absent on a clean install).
+
+    CROSS-PLATFORM: this script is written to run under Windows PowerShell 5.1 AND PowerShell 7
+    (pwsh) on Linux, so the node --test packaging smoke test can exercise it on the CI runner. Keep
+    all paths built via [System.IO.Path]::Combine / Join-Path -- no embedded backslash path literals.
 
 .PARAMETER Stage
-    Destination directory for the staged tree. Defaults to .\release-stage
-    (relative to the current working directory). Re-running overwrites files.
+    Destination directory for the staged tree. Defaults to ./release-stage. CLEARED and rebuilt each
+    run so stale files from a prior run never survive into the archive.
 
 .PARAMETER RepoRoot
-    Repository root to copy the build artifacts from. Defaults to the parent
-    of this script's directory (scripts\.. = repo root).
+    Repository root to copy build artifacts from. Defaults to the parent of this script's directory.
+
+.PARAMETER OutZip
+    Optional. When set, after staging the script creates this zip from the staged tree AND asserts the
+    zip's entries include every required artifact -- the final "inspect the archive" gate.
 
 .EXAMPLE
-    pwsh scripts\package-release.ps1
-    pwsh scripts\package-release.ps1 -Stage C:\tmp\pe-release
+    pwsh scripts/package-release.ps1
+.EXAMPLE
+    powershell -File scripts/package-release.ps1 -OutZip ParticleEditor-v0.3.0.zip
 #>
 
 [CmdletBinding()]
 param(
-    [string] $Stage = (Join-Path (Get-Location) 'release-stage'),
-    [string] $RepoRoot = (Split-Path -Parent $PSScriptRoot)
+    [string] $Stage    = (Join-Path (Get-Location) 'release-stage'),
+    [string] $RepoRoot = (Split-Path -Parent $PSScriptRoot),
+    [string] $OutZip
 )
 
 $ErrorActionPreference = 'Stop'
 
+# Normalize to absolute paths and REFUSE a destructive -Stage (the stage is Remove-Item'd below):
+# never the filesystem root, the repo root, or an ancestor of the repo.
+$Stage    = [System.IO.Path]::GetFullPath($Stage)
+$RepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
+$sep       = [System.IO.Path]::DirectorySeparatorChar
+$stageNorm = $Stage.TrimEnd([char]'\', [char]'/')
+$repoNorm  = $RepoRoot.TrimEnd([char]'\', [char]'/')
+if ([string]::IsNullOrWhiteSpace([System.IO.Path]::GetFileName($stageNorm)) -or
+    $stageNorm -eq $repoNorm -or
+    $repoNorm.StartsWith($stageNorm + $sep, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "[package-release] Refusing -Stage '$Stage' (filesystem root, the repo root, or an ancestor of it). Use a dedicated staging directory."
+}
+
+function Test-RequiredSource {
+    param([string]$Label, [string]$Path, [ValidateSet('Leaf','Container')][string]$Kind)
+    if (-not (Test-Path -LiteralPath $Path -PathType $Kind)) {
+        throw "[package-release] Missing required source: $Label -> $Path"
+    }
+}
+function Assert-Staged {
+    param([string]$Relative)
+    $p = [System.IO.Path]::Combine($Stage, $Relative)
+    if (-not (Test-Path -LiteralPath $p -PathType Leaf)) {
+        throw "[package-release] Missing staged artifact: $Relative"
+    }
+    if ((Get-Item -LiteralPath $p).Length -le 0) {
+        throw "[package-release] Empty staged artifact: $Relative"
+    }
+}
+
 Write-Host "Particle Editor -- release staging" -ForegroundColor Cyan
 Write-Host "  RepoRoot : $RepoRoot"
 Write-Host "  Stage    : $Stage"
+if ($OutZip) { Write-Host "  OutZip   : $OutZip" }
 Write-Host ""
 
-# --- Resolve and validate the source artifacts --------------------------------
+# --- Resolve + validate source artifacts -------------------------------------
+$exeSource    = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release', 'ParticleEditor.exe')
+$loaderSource = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release', 'WebView2Loader.dll')
+$d3dxSource   = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist', 'd3dx9_43.dll')
+$distSource   = [System.IO.Path]::Combine($RepoRoot, 'web', 'apps', 'editor', 'dist')
+$distIndex    = [System.IO.Path]::Combine($distSource, 'index.html')
+$distAssets   = [System.IO.Path]::Combine($distSource, 'assets')
 
-$exeSource  = Join-Path $RepoRoot 'x64\Release\ParticleEditor.exe'
-$distSource = Join-Path $RepoRoot 'web\apps\editor\dist'
+Test-RequiredSource 'ParticleEditor.exe'      $exeSource    'Leaf'
+Test-RequiredSource 'WebView2Loader.dll'      $loaderSource 'Leaf'
+Test-RequiredSource 'd3dx9_43.dll (vendored)' $d3dxSource   'Leaf'
+Test-RequiredSource 'web bundle (dist)'       $distSource   'Container'
+Test-RequiredSource 'web bundle index.html'   $distIndex    'Leaf'
+Test-RequiredSource 'web bundle assets/'      $distAssets   'Container'
 
-if (-not (Test-Path -LiteralPath $exeSource -PathType Leaf)) {
-    throw "Built exe not found: $exeSource`n" +
-          "Build x64 Release first: msbuild ParticleEditor.sln /p:Configuration=Release /p:Platform=x64"
-}
-if (-not (Test-Path -LiteralPath $distSource -PathType Container)) {
-    throw "Web bundle not found: $distSource`n" +
-          "Build the web bundle first (in web\): pnpm install, then pnpm --filter ./apps/editor build"
-}
-
-# --- Prepare the staged tree --------------------------------------------------
-
-$stageExeDir  = Join-Path $Stage 'x64\Release'
-$stageDistDir = Join-Path $Stage 'web\apps\editor\dist'
-
+# --- Clear + prepare the staged tree -----------------------------------------
+if (Test-Path -LiteralPath $Stage) { Remove-Item -LiteralPath $Stage -Recurse -Force }
+$stageExeDir  = [System.IO.Path]::Combine($Stage, 'x64', 'Release')
+$stageDistDir = [System.IO.Path]::Combine($Stage, 'web', 'apps', 'editor', 'dist')
 New-Item -ItemType Directory -Force -Path $stageExeDir  | Out-Null
 New-Item -ItemType Directory -Force -Path $stageDistDir | Out-Null
 
-# --- Copy the exe -------------------------------------------------------------
+# --- Copy native artifacts ----------------------------------------------------
+Copy-Item -LiteralPath $exeSource    -Destination $stageExeDir -Force
+Copy-Item -LiteralPath $loaderSource -Destination $stageExeDir -Force
+Copy-Item -LiteralPath $d3dxSource   -Destination $stageExeDir -Force
+Write-Host "  [ok] ParticleEditor.exe, WebView2Loader.dll, d3dx9_43.dll -> $stageExeDir"
 
-Copy-Item -LiteralPath $exeSource -Destination $stageExeDir -Force -ErrorAction Stop
-Write-Host "  [ok] ParticleEditor.exe -> $stageExeDir"
-
-# --- Copy the web bundle (index.html, assets\, fonts\) ------------------------
-
-# Copy the *contents* of dist into the staged dist dir so the tree matches
-# web\apps\editor\dist\{index.html, assets\, fonts\} exactly.
-Copy-Item -LiteralPath (Join-Path $distSource '*') -Destination $stageDistDir -Recurse -Force -ErrorAction Stop
+# --- Copy the web bundle CONTENTS (index.html, assets/, fonts/) ---------------
+Get-ChildItem -LiteralPath $distSource -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $stageDistDir -Recurse -Force
+}
 Write-Host "  [ok] web bundle -> $stageDistDir"
 
-# --- Bundle the x64 d3dx9_43.dll beside the exe -------------------------------
-
-$dllName    = 'd3dx9_43.dll'
-$dllStage   = Join-Path $stageExeDir $dllName
-$dllSystem  = Join-Path $env:WINDIR "System32\$dllName"   # x64 copy on 64-bit Windows
-$dllSysWow  = Join-Path $env:WINDIR "SysWOW64\$dllName"   # 32-bit copy -- DO NOT USE
-
-if (Test-Path -LiteralPath $dllSystem -PathType Leaf) {
-    Copy-Item -LiteralPath $dllSystem -Destination $dllStage -Force -ErrorAction Stop
-    Write-Host "  [ok] $dllName (x64, from System32) -> $stageExeDir"
+# --- Post-stage assertions (fail loud) ---------------------------------------
+Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'ParticleEditor.exe'))
+Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'WebView2Loader.dll'))
+Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'd3dx9_43.dll'))
+Assert-Staged ([System.IO.Path]::Combine('web', 'apps', 'editor', 'dist', 'index.html'))
+$stagedAssets = [System.IO.Path]::Combine($stageDistDir, 'assets')
+if (-not (Test-Path -LiteralPath $stagedAssets -PathType Container) -or
+    -not (Get-ChildItem -LiteralPath $stagedAssets -Recurse -File)) {
+    throw "[package-release] Staged web bundle has no assets: $stagedAssets"
 }
-else {
-    Write-Host "  [!!] $dllName not found in System32 ($dllSystem)." -ForegroundColor Yellow
-    Write-Host "       Do NOT copy from SysWOW64 ($dllSysWow) -- that is the 32-bit copy" -ForegroundColor Yellow
-    Write-Host "       and will not load into the x64 exe." -ForegroundColor Yellow
-    Write-Host "       Expand the x64 DLL from the DirectX SDK (June 2010) CAB instead:" -ForegroundColor Yellow
-    Write-Host '         expand "$env:DXSDK_DIR\Redist\Jun2010_d3dx9_43_x64.cab" -F:d3dx9_43.dll <dest>' -ForegroundColor Yellow
-    Write-Host "       (use the _x64.cab, NOT the _x86.cab), then copy it to:" -ForegroundColor Yellow
-    Write-Host "         $stageExeDir" -ForegroundColor Yellow
+$stagedFonts = [System.IO.Path]::Combine($stageDistDir, 'fonts')
+if (-not (Test-Path -LiteralPath $stagedFonts -PathType Container) -or
+    -not (Get-ChildItem -LiteralPath $stagedFonts -Recurse -File)) {
+    throw "[package-release] Staged web bundle has no fonts: $stagedFonts"
+}
+Write-Host "  [ok] staged tree verified"
+
+# --- Optional: create + verify the release zip -------------------------------
+if ($OutZip) {
+    if (Test-Path -LiteralPath $OutZip) { Remove-Item -LiteralPath $OutZip -Force }
+    Compress-Archive -Path ([System.IO.Path]::Combine($Stage, '*')) -DestinationPath $OutZip -Force
+
+    # Load the zip-reader type only if it isn't already available (PS 5.1 needs the assembly;
+    # pwsh 7 has it loaded). A genuine load failure must surface, not be swallowed.
+    if (-not ('System.IO.Compression.ZipFile' -as [type])) {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+    }
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($OutZip)
+    try {
+        $entries = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
+    } finally {
+        $zip.Dispose()
+    }
+    # Only FILE entries count — a bare directory entry (ends in '/') must not satisfy a check.
+    $fileEntries = @($entries | Where-Object { -not $_.EndsWith('/') })
+
+    $requiredEntries = @(
+        'x64/Release/ParticleEditor.exe'
+        'x64/Release/WebView2Loader.dll'
+        'x64/Release/d3dx9_43.dll'
+        'web/apps/editor/dist/index.html'
+    )
+    foreach ($r in $requiredEntries) {
+        if ($fileEntries -notcontains $r) { throw "[package-release] Missing zip entry: $r" }
+    }
+    if (-not ($fileEntries | Where-Object { $_ -like 'web/apps/editor/dist/assets/*' })) {
+        throw "[package-release] Missing zip entry (file under): web/apps/editor/dist/assets/"
+    }
+    if (-not ($fileEntries | Where-Object { $_ -like 'web/apps/editor/dist/fonts/*' })) {
+        throw "[package-release] Missing zip entry (file under): web/apps/editor/dist/fonts/"
+    }
+    Write-Host "  [ok] zip verified -> $OutZip" -ForegroundColor Cyan
 }
 
 # --- Report -------------------------------------------------------------------
-
 Write-Host ""
 Write-Host "Staged tree under: $Stage" -ForegroundColor Cyan
 Get-ChildItem -LiteralPath $Stage -Recurse -File |
-    ForEach-Object { Write-Host ("  " + $_.FullName.Substring($Stage.Length).TrimStart('\')) }
+    ForEach-Object { Write-Host ("  " + $_.FullName.Substring($Stage.Length).TrimStart([char]'\', [char]'/')) }
 
-Write-Host ""
-Write-Host "Next: zip the staged tree (its CONTENTS become the zip root), e.g.:" -ForegroundColor Cyan
-Write-Host "  Compress-Archive -Path `"$Stage\*`" -DestinationPath ParticleEditor-vX.Y.Z.zip" -ForegroundColor Cyan
-Write-Host "Then attach the zip to the GitHub Release (see VERSIONING.md -> Cutting a release)." -ForegroundColor Cyan
+if (-not $OutZip) {
+    Write-Host ""
+    Write-Host "Next: re-run with -OutZip to create AND self-verify the release archive, e.g.:" -ForegroundColor Cyan
+    Write-Host "  pwsh scripts/package-release.ps1 -OutZip ParticleEditor-vX.Y.Z.zip" -ForegroundColor Cyan
+    Write-Host "Then attach the zip to the GitHub Release (see VERSIONING.md -> Cutting a release)." -ForegroundColor Cyan
+}

@@ -3,6 +3,7 @@
 #include "xml.h"
 #include "exceptions.h"
 #include "utils.h"
+#include "ResourceLimits.h"
 using namespace std;
 
 static const int BUFFER_SIZE = 32*1024;	// Read 32k at once
@@ -194,13 +195,12 @@ void XMLTree::parse(IFile* file)
 		// F-XML: cap total input so a crafted untrusted mod XML can't drive an
 		// unbounded read/parse. Real game XML is well under this.
 		unsigned long total = 0;
-		const unsigned long kMaxXmlBytes = 64u * 1024u * 1024u;   // 64 MB
 		while (!file->eof())
 		{
 			char buffer[ BUFFER_SIZE ];
 			unsigned long n = file->read(buffer, BUFFER_SIZE);
 			total += n;
-			if (total > kMaxXmlBytes)
+			if (total > kMaxXmlFileBytes)
 			{
 				throw ParseException( LoadString(IDS_ERROR_XML, L"input too large", 0) );
 			}

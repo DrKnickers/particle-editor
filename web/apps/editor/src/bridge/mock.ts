@@ -778,8 +778,8 @@ export class MockBridge implements Bridge {
         return { orphan: null };
 
       case "autosave/recover":
-        // Mock: no document to swap. Accept silently.
-        return {};
+        // Mock: no document to swap. Report success per the chosen action.
+        return { status: req.params?.choice === "discard" ? "discarded" : "recovered" };
 
       case "layout/viewport-rect":
         // Mock: no native HWND to reposition.
@@ -844,6 +844,11 @@ export class MockBridge implements Bridge {
         // so fire it explicitly — mirrors the native host's file/new.
         this.emit({ kind: "emitters/selected", payload: { id: 0 } });
         return {};
+
+      case "file/pick-open":
+        // Non-mutating picker: no native dialog in browser mode, so report no path
+        // acquired (callers branch on `ok`). Never touches document state.
+        return { ok: false, error: "browser-mode" };
 
       case "file/open": {
         // If the caller passed a path explicitly (e.g. Recent Files), use it.

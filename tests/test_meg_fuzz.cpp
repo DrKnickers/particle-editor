@@ -32,6 +32,7 @@ typedef std::vector<unsigned char> Bytes;
 
 // FileInfo on disk = 5 x uint32 = 20 bytes (must match MegaFile::FileInfo).
 static const uint32_t kFileInfoSize = 20;
+static const uint32_t kMaxMegEntryCountForTest = 1u * 1024u * 1024u;
 
 static void putU32(Bytes& b, uint32_t v)
 {
@@ -97,6 +98,68 @@ static void expectBadFile(const Bytes& b, const char* label)
     bool other = false;
     bool threw = throwsBadFile(b, other);
     CHECK(threw && !other, label);
+}
+
+struct ScriptedMegFile : IFile
+{
+    Bytes data;
+    unsigned long reportedSize;
+    unsigned long pos = 0;
+    bool largeNameReadAttempted = false;
+    bool fileInfoReadAttempted = false;
+    bool filenameLengthReadAttempted = false;
+
+    ScriptedMegFile(const Bytes& bytes, unsigned long fakeSize)
+        : data(bytes), reportedSize(fakeSize) {}
+
+    bool eof() override { return pos >= reportedSize; }
+    unsigned long size() override { return reportedSize; }
+    void seek(unsigned long offset) override { pos = offset; }
+    unsigned long tell() override { return pos; }
+    unsigned long read(void* buffer, unsigned long n) override
+    {
+        if (pos >= 8 && n == sizeof(uint16_t)) filenameLengthReadAttempted = true;
+        if (n > 32768u) largeNameReadAttempted = true;
+        if (pos >= 8 && n == kFileInfoSize) fileInfoReadAttempted = true;
+        if (pos + n > data.size()) return 0;
+        if (n) std::memcpy(buffer, data.data() + pos, n);
+        pos += n;
+        return n;
+    }
+    unsigned long write(const void*, unsigned long) override { return 0; }
+};
+
+static bool scriptedThrowsBadFile(ScriptedMegFile* f, bool& other,
+                                  bool* largeNameRead = nullptr,
+                                  bool* fileInfoRead = nullptr,
+                                  bool* filenameLengthRead = nullptr)
+{
+    other = false;
+    auto capture = [&]() {
+        if (largeNameRead) *largeNameRead = f->largeNameReadAttempted;
+        if (fileInfoRead) *fileInfoRead = f->fileInfoReadAttempted;
+        if (filenameLengthRead) *filenameLengthRead = f->filenameLengthReadAttempted;
+    };
+    try
+    {
+        MegaFile mega(f);
+        capture();
+        f->Release();
+        return false;
+    }
+    catch (BadFileException&)
+    {
+        capture();
+        f->Release();
+        return true;
+    }
+    catch (...)
+    {
+        other = true;
+        capture();
+        f->Release();
+        return false;
+    }
 }
 
 int main()
@@ -169,6 +232,68 @@ int main()
         // start=0 is in range, but size > fsize-start -> (size > fsize - start) fires.
         putFileInfo(b, 0, 0, /*size*/0xFFFFFF00ul, /*start*/0, /*nameIndex*/0);
         expectBadFile(b, "FileInfo.size past EOF -> BadFileException");
+    }
+
+    // ---- G: per-filename length cap rejects before attempting a huge name read ----
+    {
+        Bytes b;
+        putU32(b, 1);                 // numStrings
+        putU32(b, 0);                 // numFiles
+        putU16(b, 65535);             // length > kMaxFilenameLength
+        ScriptedMegFile* f = new ScriptedMegFile(b, 128u * 1024u * 1024u);
+        bool other = false;
+        bool largeNameRead = false;
+        bool threw = scriptedThrowsBadFile(f, other, &largeNameRead);
+        CHECK(threw && !other, "filename length > 32 KiB -> BadFileException");
+        CHECK(!largeNameRead, "oversized filename rejected before large read");
+    }
+
+    // ---- H: aggregate name table cap rejects before reading the over-cap entry ----
+    {
+        Bytes b;
+        const uint32_t n = 513;        // 512 * 32768 == 16 MiB; 513rd exceeds cap
+        putU32(b, n);
+        putU32(b, 0);
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            putU16(b, 32768);
+            if (i < 512)
+                b.insert(b.end(), 32768, (unsigned char)'A');
+        }
+        ScriptedMegFile* f = new ScriptedMegFile(b, 128u * 1024u * 1024u);
+        bool other = false;
+        bool largeNameRead = false;
+        bool threw = scriptedThrowsBadFile(f, other, &largeNameRead);
+        CHECK(threw && !other, "aggregate MEG name table > 16 MiB -> BadFileException");
+        CHECK(!largeNameRead, "aggregate overflow entry rejected before reading its filename bytes");
+    }
+
+    // ---- I: entry-count hard cap rejects before FileInfo loop ----
+    {
+        Bytes b;
+        putU32(b, 0);
+        putU32(b, kMaxMegEntryCountForTest + 1u);
+        ScriptedMegFile* f = new ScriptedMegFile(b, 128u * 1024u * 1024u);
+        bool other = false;
+        bool fileInfoRead = false;
+        bool threw = scriptedThrowsBadFile(f, other, nullptr, &fileInfoRead);
+        CHECK(threw && !other, "numFiles > 1M -> BadFileException");
+        CHECK(!fileInfoRead, "entry-count cap fires before FileInfo reads");
+    }
+
+    // ---- J: filename-count hard cap rejects before filename loop ----
+    {
+        Bytes b;
+        putU32(b, kMaxMegEntryCountForTest + 1u);
+        putU32(b, 0);
+        ScriptedMegFile* f = new ScriptedMegFile(b, 128u * 1024u * 1024u);
+        bool other = false;
+        bool largeNameRead = false;
+        bool filenameLengthRead = false;
+        bool threw = scriptedThrowsBadFile(f, other, &largeNameRead, nullptr, &filenameLengthRead);
+        CHECK(threw && !other, "numStrings > 1M -> BadFileException");
+        CHECK(!filenameLengthRead, "numStrings cap fires before filename length reads");
+        CHECK(!largeNameRead, "numStrings cap fires before filename byte reads");
     }
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");

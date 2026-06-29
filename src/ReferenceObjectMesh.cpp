@@ -15,6 +15,7 @@
 #include "managers.h"   // IShaderManager, IFileManager
 #include "files.h"      // IFile, ReadAndRelease
 #include "exceptions.h" // wexception (Load boundary catch)
+#include "AssetPathSafety.h"
 
 namespace
 {
@@ -155,17 +156,7 @@ namespace
     }
     IDirect3DTexture9* loadMaterialTexture(IDirect3DDevice9* dev, IFileManager& fm, const std::string& bareName)
     {
-        if (bareName.empty()) return nullptr;
-        std::string asDds = bareName;
-        const size_t dot = asDds.rfind('.');
-        if (dot != std::string::npos) asDds = asDds.substr(0, dot) + ".dds";
-        const std::string candidates[] = {
-            "Data\\Art\\Textures\\" + bareName,
-            "Data\\Art\\Textures\\" + asDds,
-            bareName,
-            asDds,
-        };
-        for (const std::string& c : candidates)
+        for (const std::string& c : SafeTextureCandidates(bareName))
         {
             IDirect3DTexture9* tex = loadTextureExact(dev, fm, c);
             if (tex) return tex;

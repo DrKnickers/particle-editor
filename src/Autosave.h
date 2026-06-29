@@ -58,6 +58,24 @@ namespace Autosave
         FILETIME           stableMtime;
     };
 
+    // Outcome of an autosave recovery attempt. Decides whether the orphan
+    // session's files are consumed (deleted) or kept on disk for a later retry.
+    enum class RecoverOutcome
+    {
+        Recovered,   // user chose a tier and it loaded successfully
+        Discarded,   // user explicitly discarded the recovery
+        Failed,      // load failed, or no path resolved — keep the files
+    };
+
+    // Orphan files are deleted ONLY on a successful recover or an explicit
+    // discard, NEVER on a failed load — so the other tier (or the next launch)
+    // can still recover. Pure; unit-tested in tests/test_autosave_recover.cpp.
+    inline bool ShouldDeleteOrphan(RecoverOutcome outcome)
+    {
+        return outcome == RecoverOutcome::Recovered ||
+               outcome == RecoverOutcome::Discarded;
+    }
+
     // Write the system to the chosen tier's autosave path for the
     // current PID. originalFilename is recorded in the .meta sidecar
     // for the recovery prompt to display. No-op + return false on
@@ -77,9 +95,10 @@ namespace Autosave
     // Also sweeps autosave files older than 30 days as a side effect.
     bool ScanForOrphan(OrphanSession* out);
 
-    // Delete an orphan session's files (both tiers + meta). Called
-    // after the recovery prompt resolves, regardless of the user's
-    // choice — the session is consumed either way.
+    // Delete an orphan session's files (both tiers + meta). Call ONLY when
+    // ShouldDeleteOrphan(outcome) is true — i.e. a successful recover or an
+    // explicit discard. On a failed load, leave the files on disk so the other
+    // tier or the next launch can still recover them.
     void DeleteOrphan(const OrphanSession& session);
 }
 

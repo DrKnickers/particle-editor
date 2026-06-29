@@ -8,10 +8,13 @@
 //
 // `bridge` is threaded in — it is a prop, not a module singleton. The confirm
 // STORE never calls bridge; <DeleteConfirmModal> (mounted in App, where bridge
-// lives) runs performDelete(bridge, ids) on confirm.
+// lives) runs confirmPendingDelete(bridge) on confirm, which re-validates the
+// pending ids against the live tree (aborting if it changed) before delegating
+// to performDelete(bridge, ids, tree).
 import { create } from "zustand";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
+import { useFileOpErrorStore } from "@/lib/file-op";
 
 export type DeleteImpact = {
   affectedCount: number; // deduped union of every selected id's subtree
@@ -62,35 +65,87 @@ export function writeConfirmDelete(value: boolean): void {
   localStorage.setItem(CONFIRM_DELETE_KEY, value ? "true" : "false");
 }
 
-// The single descending-order delete loop (collapses the prior two inline
-// copies in EmitterTree + MenuBar). `id` is a position index host-side, which
-// shifts as siblings vanish — descending order keeps queued ids valid for the
-// common case. (The parent+descendant-both-selected stale-index footgun is a
-// pre-existing, separately-tracked bug; behaviour is preserved as-is here.)
-export function performDelete(bridge: Bridge, ids: number[]): void {
-  for (const id of [...ids].sort((a, b) => b - a)) {
+// Collapse a selection to its top-level roots: drop any id whose ancestor is
+// ALSO selected. Deleting the ancestor already removes its whole subtree
+// recursively host-side, so issuing a separate delete for a selected descendant
+// is both redundant AND the source of the stale-positional-id footgun (deleting
+// the parent shifts indices, so a later stale id resolves to the wrong node).
+// Pure; unit-tested (release-audit #8).
+export function collapseToRoots(ids: number[], tree: EmitterTreeDto | null): number[] {
+  if (ids.length <= 1 || !tree) return [...ids];
+  const selected = new Set(ids);
+  const parentOf = new Map<number, number>();
+  const index = (n: EmitterTreeNode, parent: number | null) => {
+    if (parent !== null) parentOf.set(n.id, parent);
+    n.children.forEach((c) => index(c, n.id));
+  };
+  tree.root.children.forEach((n) => index(n, null));
+  const hasSelectedAncestor = (id: number): boolean => {
+    let p = parentOf.get(id);
+    while (p !== undefined) {
+      if (selected.has(p)) return true;
+      p = parentOf.get(p);
+    }
+    return false;
+  };
+  return ids.filter((id) => !hasSelectedAncestor(id));
+}
+
+// The single delete loop (collapses the prior two inline copies in EmitterTree +
+// MenuBar). `id` is a position index host-side, which shifts as siblings vanish.
+// We first collapse the selection to roots (so a parent + its descendant never
+// both issue a delete), then sort descending so the remaining sibling indices
+// stay valid as earlier-deleted ones vanish.
+export function performDelete(bridge: Bridge, ids: number[], tree: EmitterTreeDto | null): void {
+  const roots = collapseToRoots(ids, tree);
+  for (const id of [...roots].sort((a, b) => b - a)) {
     void bridge.request({ kind: "emitters/delete", params: { id } });
   }
 }
 
 type DeleteConfirmStore = {
-  pending: { ids: number[]; impact: DeleteImpact } | null;
-  open: (ids: number[], impact: DeleteImpact) => void;
+  // `tree` is the tree snapshot captured when the confirm opened — confirm-time
+  // revalidation compares it by reference against the live tree to detect a
+  // structural change that would make the captured ids stale (release-audit #8).
+  pending: { ids: number[]; impact: DeleteImpact; tree: EmitterTreeDto | null } | null;
+  open: (ids: number[], impact: DeleteImpact, tree: EmitterTreeDto | null) => void;
   clear: () => void;
 };
 export const useDeleteConfirmStore = create<DeleteConfirmStore>((set) => ({
   pending: null,
-  open: (ids, impact) => set({ pending: { ids, impact } }),
+  open: (ids, impact, tree) => set({ pending: { ids, impact, tree } }),
   clear: () => set({ pending: null }),
 }));
 
 // The single entry point for all four delete call sites.
 export function requestDeleteEmitters(bridge: Bridge, ids: number[]): void {
   if (ids.length === 0) return;
-  const impact = computeDeleteImpact(ids, useEmitterTreeStore.getState().tree);
+  const tree = useEmitterTreeStore.getState().tree;
+  const impact = computeDeleteImpact(ids, tree);
   if (!readConfirmDelete() || !impact.isDestructive) {
-    performDelete(bridge, ids);
+    performDelete(bridge, ids, tree);
     return;
   }
-  useDeleteConfirmStore.getState().open(ids, impact);
+  useDeleteConfirmStore.getState().open(ids, impact, tree);
+}
+
+// Called by <DeleteConfirmModal> when the user confirms. Re-validates against the
+// CURRENT tree: if it changed since the confirm opened (an emitters/tree/changed
+// landed), the captured positional ids are stale, so ABORT rather than delete the
+// wrong nodes (release-audit #8). Otherwise collapse-to-roots + delete against the
+// live tree. Always clears the pending state.
+export function confirmPendingDelete(bridge: Bridge): void {
+  const pending = useDeleteConfirmStore.getState().pending;
+  const live = useEmitterTreeStore.getState().tree;
+  useDeleteConfirmStore.getState().clear();
+  if (!pending) return;
+  if (pending.tree !== live) {
+    // The tree changed since the confirm opened — the captured positional ids are
+    // stale. Surface it (not a silent no-op) so the user re-selects (#8).
+    useFileOpErrorStore.getState().show(
+      "The emitter list changed — the delete was cancelled. Please re-select and try again.",
+    );
+    return;
+  }
+  performDelete(bridge, pending.ids, live);
 }

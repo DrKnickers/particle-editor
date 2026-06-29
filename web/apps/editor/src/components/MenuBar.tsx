@@ -31,7 +31,8 @@ import type {
   LayerRef,
 } from "@particle-editor/bridge-schema";
 import { promptSaveChanges, useFileState } from "@/lib/file-state";
-import { runFileOp } from "@/lib/file-op";
+import { runFileOp, useFileOpErrorStore } from "@/lib/file-op";
+import { runWhenIdle } from "@/lib/run-after-paint";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
 import { bumpTextureEpoch } from "@/lib/atlas-preview-cache";
 import {
@@ -159,7 +160,22 @@ export function MenuBar({
   const eqPath = (a: string, b: string) =>
     a.replace(/[\\/]+$/, "").toLowerCase() === b.replace(/[\\/]+$/, "").toLowerCase();
   const setLayerStack = async (paths: string[]) => {
-    await bridge.request({ kind: "mods/set-layers", params: { paths } });
+    // Surface a failed apply instead of silently proceeding as if it worked
+    // (release-audit #5). On failure the host did NOT persist the stack; we still
+    // re-fetch so the menu reflects the host's ACTUAL state.
+    try {
+      const r = await bridge.request({ kind: "mods/set-layers", params: { paths } });
+      if (!r.ok) {
+        useFileOpErrorStore.getState().show(
+          "error" in r && r.error
+            ? `Couldn't apply the load order: ${r.error}`
+            : "Couldn't apply the load order — the mod shaders failed to reload.",
+          "Load order",
+        );
+      }
+    } catch (err) {
+      useFileOpErrorStore.getState().show(`Couldn't apply the load order: ${String(err)}`, "Load order");
+    }
     // The snapshot carries activePath but not the full stack list, so re-fetch
     // mods/list to refresh the summary + per-layer checkmarks.
     await refreshModsList();
@@ -218,12 +234,14 @@ export function MenuBar({
       })
       .catch((err) => console.warn("[MenuBar] snapshot failed:", err));
     const off = bridge.on("engine/state/changed", (e) => setState(e.payload));
-    // prime the mods list at mount. Active mod arrives via
-    // snapshot; the list is a separate channel because it changes
-    // rarely.
-    void refreshModsList();
+    // Prime the mods list at mount — DEFERRED to the first idle slot after first
+    // interactive paint (perf-audit P1a startup fan-out). Active mod arrives via
+    // the eager snapshot; the list changes rarely and the live engine/state/changed
+    // subscription above keeps it current, so the initial fetch is non-paint-critical.
+    const cancelModsSeed = runWhenIdle(() => { if (!cancelled) void refreshModsList(); });
     return () => {
       cancelled = true;
+      cancelModsSeed();
       off();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -4,9 +4,10 @@
 // priority). Components read it via useModStack(); the preview cache is keyed
 // on it so a stack change automatically invalidates all cached previews.
 //
-// initModStack(bridge) seeds the store from mods/list on call and subscribes
-// to engine/state/changed to refresh whenever the host broadcasts a state
-// transition (mod-switch, file-open, etc.). It returns an unsubscribe function.
+// initModStack(bridge) seeds the store from mods/list — DEFERRED to the first idle
+// slot after first paint (perf-audit P1a startup fan-out) — and subscribes to
+// engine/state/changed to refresh whenever the host broadcasts a state transition
+// (mod-switch, file-open, etc.). It returns an unsubscribe function.
 //
 // useSeedModStack(bridge) is the React hook wrapper — call it once in AppShell
 // so it re-runs only when bridge changes (i.e. never in practice).
@@ -14,6 +15,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { invalidatePreviewCache } from "./atlas-preview-cache";
+import { runWhenIdle } from "./run-after-paint";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 interface ModStackState {
@@ -66,12 +68,19 @@ export function initModStack(bridge: Bridge): () => void {
       });
   };
 
-  // Seed immediately.
-  refresh();
+  // Seed the initial stack DEFERRED to the first idle slot after first interactive
+  // paint (perf-audit P1a startup fan-out) — non-paint-critical: the stack defaults
+  // to [] and the live subscription below re-seeds on any host broadcast. (Tests
+  // calling initModStack directly drive this via a faked requestIdleCallback.)
+  const cancelSeed = runWhenIdle(refresh);
 
   // Re-seed on every host-side state broadcast (file open, mod switch, etc.).
   const off = bridge.on("engine/state/changed", refresh);
-  return off;
+  return () => {
+    latest++; // invalidate any in-flight (deferred) refresh so it bails before setState
+    cancelSeed();
+    off();
+  };
 }
 
 /**

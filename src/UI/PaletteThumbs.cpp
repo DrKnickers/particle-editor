@@ -17,6 +17,7 @@
 #include "../utils.h"     // WideToAnsi
 #include "../managers.h"  // IFileManager
 #include "../files.h"     // IFile
+#include "../AssetPathSafety.h"
 
 #include <d3d9.h>
 #include <d3dx9.h>
@@ -64,6 +65,8 @@ std::unordered_map<wstring, TexturePalette::ThumbnailResult> g_bridgeThumbCache;
 // TextureManager resolution order.
 IFile* OpenTextureFile(IFileManager* fm, const string& filename)
 {
+    if (!IsSafeRelativeAssetName(filename)) return nullptr;
+
     string upper = filename;
     std::transform(upper.begin(), upper.end(), upper.begin(),
                    [](unsigned char c) { return (char)::toupper(c); });
@@ -87,7 +90,9 @@ bool ReadTextureBytes(IFileManager* fm, const wstring& filename, vector<char>& o
 {
     assert(fm != nullptr && "ReadTextureBytes requires a non-null IFileManager");
     out.clear();
-    IFile* file = OpenTextureFile(fm, WideToAnsi(filename));
+    const string name = WideToAnsi(filename);
+    if (!IsSafeRelativeAssetName(name)) return false;
+    IFile* file = OpenTextureFile(fm, name);
     if (file == nullptr) return false;
 
     const unsigned long size = file->size();

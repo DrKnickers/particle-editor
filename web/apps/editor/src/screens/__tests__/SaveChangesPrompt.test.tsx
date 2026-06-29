@@ -95,7 +95,7 @@ describe("SaveChangesPrompt", () => {
     expect(useFileStateStore.getState().pendingAction).toBeNull();
   });
 
-  it("a FAILED save surfaces the error modal and does not run the pending action", async () => {
+  it("a FAILED save surfaces the error modal, keeps the prompt open, and does not run the pending action", async () => {
     const bridge = {
       request: vi.fn().mockImplementation((req: { kind: string }) =>
         req.kind === "file/save"
@@ -110,27 +110,62 @@ describe("SaveChangesPrompt", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    // The failure is surfaced (not silently swallowed) and the pending
-    // New/Open is NOT run — the unsaved work survives.
+    // The failure is surfaced (not silently swallowed), the pending New/Open is
+    // NOT run, and the prompt STAYS OPEN (pendingAction preserved) so the user can
+    // retry / Don't Save / Cancel — the unsaved work survives (release-audit #11).
     await waitFor(() => {
       expect(useFileOpErrorStore.getState().message).toContain("read-only");
     });
     expect(action).not.toHaveBeenCalled();
-    expect(useFileStateStore.getState().pendingAction).toBeNull();
+    expect(useFileStateStore.getState().pendingAction).not.toBeNull();
   });
 
-  it("a CANCELLED save stays silent (no error modal) and aborts the pending action", async () => {
-    const bridge = makeStubBridge(false); // resolves { ok:false, error:"user-cancelled" }
+  it("a CANCELLED save stays silent (no error modal) and keeps the prompt open", async () => {
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) =>
+        req.kind === "file/save"
+          ? Promise.resolve({ ok: false, error: "user-cancelled" })
+          : Promise.resolve({}),
+      ),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge;
     const action = vi.fn();
     useFileStateStore.getState().setPendingAction(action);
     render(<SaveChangesPrompt bridge={bridge} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
+    // A user-cancelled save is not an error and must not run the pending op; the
+    // prompt stays open so the user can choose again (release-audit #11).
     await waitFor(() => {
-      expect(useFileStateStore.getState().pendingAction).toBeNull();
+      expect(bridge.request).toHaveBeenCalledWith(expect.objectContaining({ kind: "file/save" }));
     });
     expect(action).not.toHaveBeenCalled();
     expect(useFileOpErrorStore.getState().message).toBeNull(); // cancel is not an error
+    expect(useFileStateStore.getState().pendingAction).not.toBeNull();
+  });
+
+  it("a REJECTED save surfaces the error, keeps the prompt open, and does not run the pending action (#11)", async () => {
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) =>
+        req.kind === "file/save"
+          ? Promise.reject(new Error("bridge offline"))
+          : Promise.resolve({}),
+      ),
+      on: vi.fn().mockReturnValue(() => {}),
+    } as unknown as Bridge;
+    const action = vi.fn();
+    useFileStateStore.getState().setPendingAction(action);
+    render(<SaveChangesPrompt bridge={bridge} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // A rejected (thrown) save is surfaced via the error store and the prompt
+    // stays open — the destructive pending op must never run (release-audit #11).
+    await waitFor(() => {
+      expect(useFileOpErrorStore.getState().message).toContain("bridge offline");
+    });
+    expect(action).not.toHaveBeenCalled();
+    expect(useFileStateStore.getState().pendingAction).not.toBeNull();
   });
 });

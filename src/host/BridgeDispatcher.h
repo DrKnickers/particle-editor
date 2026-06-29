@@ -400,9 +400,11 @@ private:
     // autosave crash-recovery. `autosave/check-recovery` scans
     // %TEMP%\AloParticleEditor\ for an orphan from a crashed prior session
     // and stashes it here so `autosave/recover` can consume its temp paths
-    // without a re-scan; recover clears the stash (and DeleteOrphan's the
-    // files) regardless of the user's choice. `m_hasPendingOrphan` guards
-    // an empty stash (recover with no prior check, or a double recover).
+    // without a re-scan. recover consumes the stash (clear + DeleteOrphan the
+    // files) ONLY on a successful recover or an explicit discard; a FAILED load
+    // leaves the stash intact so the other tier / next launch can still recover
+    // (release-audit #3). `m_hasPendingOrphan` guards an empty stash (recover
+    // with no prior check, or a double recover).
     Autosave::OrphanSession   m_pendingOrphan{};
     bool                      m_hasPendingOrphan = false;
 

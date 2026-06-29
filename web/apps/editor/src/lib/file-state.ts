@@ -22,6 +22,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import type { Bridge } from "@particle-editor/bridge-schema";
+import { runWhenIdle } from "@/lib/run-after-paint";
 
 // ─── Atom shape ─────────────────────────────────────────────────────
 
@@ -98,16 +99,22 @@ export function useSeedFileState(bridge: Bridge): void {
       })
       .catch((err) => console.warn("[file-state] snapshot failed:", err));
 
-    // 2. Seed recent files from file/recent/list.
-    bridge
-      .request({ kind: "file/recent/list", params: {} })
-      .then((r) => {
-        if (cancelled) return;
-        useFileStateStore.getState().setRecentFiles(r.paths);
-      })
-      .catch((err) =>
-        console.warn("[file-state] file/recent/list failed:", err),
-      );
+    // 2. Seed recent files from file/recent/list — DEFERRED to the first idle slot
+    //    after first interactive paint (perf-audit P1a startup fan-out). The
+    //    snapshot above stays EAGER (it drives currentFilePath/dirty -> document
+    //    title); the recent list is non-paint-critical (the File→Recent menu shows
+    //    empty until it lands, then live recent/changed events keep it current).
+    const cancelRecent = runWhenIdle(() => {
+      bridge
+        .request({ kind: "file/recent/list", params: {} })
+        .then((r) => {
+          if (cancelled) return;
+          useFileStateStore.getState().setRecentFiles(r.paths);
+        })
+        .catch((err) =>
+          console.warn("[file-state] file/recent/list failed:", err),
+        );
+    });
 
     // 3. Subscribe to the three event channels.
     const offDirty = bridge.on("dirty/changed", (e) => {
@@ -128,6 +135,7 @@ export function useSeedFileState(bridge: Bridge): void {
 
     return () => {
       cancelled = true;
+      cancelRecent();
       offDirty();
       offRecent();
       offSnap();

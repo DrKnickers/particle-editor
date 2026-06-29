@@ -12,6 +12,7 @@ import type { Request } from "@particle-editor/bridge-schema";
 import { useMockEmitterProperties } from "@/bridge/mock-state";
 import { __resetPreviewCache, bumpTextureEpoch } from "@/lib/atlas-preview-cache";
 import { __resetModStackForTests } from "@/lib/mod-stack";
+import { useDockAnim } from "@/lib/dock-anim";
 
 beforeEach(() => {
   __resetAtlasContext();
@@ -21,6 +22,7 @@ beforeEach(() => {
   // The seeded-props cache is module-level; clear it so a textureSize/colorTexture
   // cached by one case can't leak into the next case's synchronous first render.
   __resetAtlasPropsCache();
+  useDockAnim.setState({ atlasTerminalFirstPaint: false, atlasGridMounted: false });
 });
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -619,5 +621,52 @@ describe("AtlasPickerPanel", () => {
     // …toggle Alpha → the failed mode becomes active → the broken placeholder shows.
     fireEvent.click(screen.getByTestId("atlas-alpha-toggle"));
     await waitFor(() => expect(screen.getByText(/could not be read/i)).toBeTruthy());
+  });
+
+  // ── readiness split (perf-audit P1b) ──────────────────────────────────────
+  it("a placeholder (no-texture) releases the dock gate via atlasTerminalFirstPaint without mounting the grid", async () => {
+    setup({ textureSize: 16, colorTexture: "" });
+    // terminal-first-paint fires on the placeholder so the dock can slide promptly…
+    await waitFor(() => expect(useDockAnim.getState().atlasTerminalFirstPaint).toBe(true));
+    // …but the grid is NOT mounted (no "ok" preview), so the two signals are distinct.
+    expect(useDockAnim.getState().atlasGridMounted).toBe(false);
+  });
+
+  it("a full grid sets BOTH atlasGridMounted and atlasTerminalFirstPaint", async () => {
+    setup({ textureSize: 16 });
+    await waitFor(() => expect(useDockAnim.getState().atlasGridMounted).toBe(true));
+    expect(useDockAnim.getState().atlasTerminalFirstPaint).toBe(true);
+  });
+
+  it("defers the INACTIVE alpha-mode preview to idle; the active mode fetches synchronously", async () => {
+    // Override the global synchronous rIC stub with a controllable queue so we can
+    // observe the inactive mode's deferral (perf-audit P1b).
+    const idleQ: Array<() => void> = [];
+    const origR = globalThis.requestIdleCallback;
+    const origC = globalThis.cancelIdleCallback;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).requestIdleCallback = (cb: () => void) => { idleQ.push(cb); return idleQ.length; };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).cancelIdleCallback = (id: number) => { idleQ[id - 1] = () => {}; };
+    try {
+      useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
+      publishAtlasContext({
+        emitterId: 1, focusedTrack: "index", interpolation: "step",
+        selection: { frame: 5, keyTimes: [0.3] },
+      });
+      const bridge = new MockBridge();
+      const spy = vi.spyOn(bridge, "request");
+      const previewFetches = () =>
+        spy.mock.calls.filter((c) => (c[0] as Request).kind === "textures/get-preview").length;
+      render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
+      // Active mode fetched synchronously; the inactive mode is queued, not yet fetched.
+      await waitFor(() => expect(previewFetches()).toBe(1));
+      // Flush idle → the inactive mode now fetches.
+      await act(async () => { idleQ.splice(0).forEach((fn) => fn()); });
+      await waitFor(() => expect(previewFetches()).toBe(2));
+    } finally {
+      globalThis.requestIdleCallback = origR;
+      globalThis.cancelIdleCallback = origC;
+    }
   });
 });
