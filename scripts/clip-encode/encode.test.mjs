@@ -18,6 +18,70 @@ test("buildFfmpegArgs carries the load-bearing invariants", () => {
   assert.ok(args.includes("-framerate 30"), "missing -framerate");
 });
 
+test("invariants survive the loop + drop-black + start options", () => {
+  const args = buildFfmpegArgs({
+    framesDir: "d", fps: 30, out: "o.mp4",
+    start: 22, loop: "pingpong", dropBlackBelow: 35,
+  }).join(" ");
+  // load-bearing invariants must still be present in the composed graph
+  assert.ok(args.includes("format=yuv420p"), "missing yuv420p");
+  assert.ok(args.includes("trunc(iw/2)*2:trunc(ih/2)*2"), "missing even-dims scale");
+  assert.ok(args.includes("+faststart"), "missing +faststart");
+  assert.ok(args.includes("-an"), "missing -an");
+  // new behaviours
+  assert.ok(args.includes("-start_number 22"), "missing head trim");
+  assert.ok(args.includes("concat=n=2:v=1"), "missing ping-pong concat");
+  assert.ok(args.includes("-filter_complex"), "loop must use filter_complex");
+  assert.ok(args.includes("lavfi.signalstats.YAVG"), "missing black-frame guard");
+  assert.ok(args.includes("-r 30"), "missing pinned output cadence after drops/loop");
+});
+
+test("default (no loop) uses a plain -vf chain", () => {
+  const args = buildFfmpegArgs({ framesDir: "d", fps: 30, out: "o.mp4" });
+  assert.ok(args.includes("-vf"), "default should use -vf");
+  assert.ok(!args.includes("-filter_complex"), "default should not use filter_complex");
+  assert.ok(!args.includes("-start_number"), "default should not trim");
+});
+
+test("crossfade loop builds an xfade dissolve at offset D-2C", () => {
+  // 210 frames @ 30fps = 7s; C=1 → offset = 7 - 2 = 5
+  const args = buildFfmpegArgs({
+    framesDir: "d", fps: 30, out: "o.mp4",
+    loop: "crossfade", crossfadeSec: 1.0, frameCount: 210,
+  }).join(" ");
+  assert.ok(args.includes("xfade=transition=fade:duration=1"), "missing xfade");
+  assert.ok(args.includes("offset=5.0000"), "wrong xfade offset");
+  assert.ok(args.includes("-filter_complex"), "crossfade must use filter_complex");
+  assert.ok(args.includes("format=yuv420p"), "invariant dropped");
+  assert.ok(args.includes("+faststart") && args.includes("-an"), "invariant dropped");
+  assert.ok(args.includes("-r 30"), "missing pinned cadence");
+});
+
+test("crf defaults to 20 and is overridable", () => {
+  assert.ok(buildFfmpegArgs({ framesDir: "d", fps: 30, out: "o.mp4" }).join(" ").includes("-crf 20"));
+  assert.ok(buildFfmpegArgs({ framesDir: "d", fps: 30, out: "o.mp4", crf: 16 }).join(" ").includes("-crf 16"));
+});
+
+test("crossfade without frameCount throws (offset is underivable)", () => {
+  assert.throws(() => buildFfmpegArgs({
+    framesDir: "d", fps: 30, out: "o.mp4", loop: "crossfade",
+  }), /frameCount/);
+});
+
+test("crossfade rejects a clip shorter than 2× the crossfade (negative offset)", () => {
+  // 30 frames @ 30fps = 1s, C=1 → offset would be -1
+  assert.throws(() => buildFfmpegArgs({
+    framesDir: "d", fps: 30, out: "o.mp4", loop: "crossfade", crossfadeSec: 1.0, frameCount: 30,
+  }), /2× crossfade|duration/);
+});
+
+test("crossfade + drop-black-below is rejected (stream length mismatch)", () => {
+  assert.throws(() => buildFfmpegArgs({
+    framesDir: "d", fps: 30, out: "o.mp4", loop: "crossfade", crossfadeSec: 1.0,
+    frameCount: 210, dropBlackBelow: 35,
+  }), /drop-black/);
+});
+
 test("encode produces yuv420p + even dims + faststart", { skip: !ffmpegReady && "ffmpeg/ffprobe not installed" }, () => {
   const dir = mkdtempSync(join(tmpdir(), "clip-enc-"));
   // Generate 3 valid 100x100 PNGs WITH ffmpeg (no fragile embedded base64).

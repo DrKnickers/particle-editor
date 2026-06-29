@@ -106,7 +106,8 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
   background:radial-gradient(120% 120% at 50% 35%, var(--frame-1), var(--frame-2));
   border:1px solid var(--rule); position:relative;
 }
-.clip-video, .clip-img { display:block; width:100%; height:auto; aspect-ratio:16/9; object-fit:cover; }
+/* Clips are shot 4:3 (1280×960) to reveal more of the curve editor. */
+.clip-video, .clip-img { display:block; width:100%; height:auto; aspect-ratio:4/3; object-fit:cover; }
 /* hover-accent ring on playable clips */
 .clip:has(.clip-video):hover { border-color:rgba(74,139,255,.5); }
 

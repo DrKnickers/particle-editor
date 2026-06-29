@@ -28,6 +28,15 @@ struct Tween {
     Ease           ease = Ease::Linear;
 };
 
+struct TrackKeyTween {
+    int         id = -1;
+    std::string track;            // "red".."alpha","scale","index","rotationSpeed"
+    double      keyTime = 0;      // key time in [0,100]; use a border (0 or 100) for a guaranteed-present key
+    double      fromValue = 0, toValue = 0;
+    double      t0 = 0, t1 = 0;
+    Ease        ease = Ease::Linear;
+};
+
 struct CursorKey { double t = 0, x = 0, y = 0; bool vis = false, press = false; };
 
 struct AtEvent { double t = 0; std::string kind; nlohmann::json params; };
@@ -39,9 +48,10 @@ struct Timeline {
     double         openSettleMs = kDefaultSettleMs;
     bool           loop = false;
     std::string    openPath;                  // from `open` sugar (optional)
-    std::vector<Tween>     tweens;
-    std::vector<CursorKey> cursor;            // sorted by t
-    std::vector<AtEvent>   ats;               // sorted by t
+    std::vector<Tween>         tweens;
+    std::vector<TrackKeyTween> trackKeys;
+    std::vector<CursorKey>     cursor;            // sorted by t
+    std::vector<AtEvent>       ats;               // sorted by t
 };
 
 // frameCount = round(durationMs * fps / 1000); frame N's virtual time = N*1000/fps.
@@ -87,6 +97,25 @@ inline drive::CameraVecs EvalCameraOrbit(const Tween& tw, double t) {
     return drive::ComputeOrbitCamera(yaw, pitch, dist, target);
 }
 
+// Per-track value bounds — match the UI's clamp rules so a script can't insert a
+// key the engine/save path would corrupt (RGBA*255 byte cast in ParticleSystem.cpp).
+inline bool TrackKeyValueInRange(const std::string& track, double v) {
+    if (!std::isfinite(v)) return false;
+    if (track == "red" || track == "green" || track == "blue" || track == "alpha")
+        return v >= 0.0 && v <= 1.0;
+    if (track == "scale" || track == "index") return v >= 0.0;
+    if (track == "rotationSpeed")             return true;   // signed
+    return false;                                            // unknown track name
+}
+
+// track-key: lerp the keyframe value from->to over [t0,t1] with easing.
+inline double EvalTrackKeyValue(const TrackKeyTween& tw, double t) {
+    double u;
+    if (tw.t1 <= tw.t0) u = 1.0;                             // zero-width -> settle at `to`
+    else u = ApplyEase(tw.ease, (t - tw.t0) / (tw.t1 - tw.t0));
+    return tw.fromValue + (tw.toValue - tw.fromValue) * u;
+}
+
 struct CursorState { double x = 0, y = 0; bool vis = false, press = false; };
 
 // Piecewise-linear position; vis/press take the LATEST key at or before t (step).
@@ -112,9 +141,30 @@ inline CursorState EvalCursor(const std::vector<CursorKey>& keys, double t) {
 }
 
 // Record allowlist = the --drive render-state allowlist MINUS engine/set/paused
-// (the recorder owns the preview clock; an author toggle would corrupt stepping).
-// engine/action/step-frames is already outside drive::IsAllowedBridgeKind.
+// (the recorder owns the preview clock; an author toggle would corrupt stepping),
+// PLUS the non-modal spawner commands. Loading a particle system creates NO
+// preview instance, so without the spawner the recorded viewport stays empty
+// (0 emitters / 0 particles). spawner/start {manual,enabled} + spawner/trigger
+// spawn one instance whose emitters then run against the stepped clock. These are
+// record-only — deliberately NOT added to the shared --drive allowlist (which
+// stays a non-mutating snapshot/perf path). engine/action/step-frames is already
+// outside drive::IsAllowedBridgeKind.
 inline bool IsAllowedRecordKind(const std::string& kind) {
+    if (kind == "spawner/start")   return true;
+    if (kind == "spawner/trigger") return true;
+    if (kind == "spawner/stop")    return true;
+    // mods/set-layers lets a timeline clear the mod stack (paths:[]) so a
+    // reference-object resolves the BASE-GAME asset, not a mod override. Safe in
+    // record: ModManager is constructed ephemeral (automationMode) so SetLayerStack
+    // does NOT persist — the daily-driver's mod stack is untouched.
+    if (kind == "mods/set-layers") return true;
+    // emitters/delete drops an emitter subtree from the in-memory effect (no
+    // native dialog). The handler markDirty()s, but --record NEVER writes the
+    // .alo back, so the source asset is untouched — this lets a timeline remove
+    // an emitter for a render (e.g. the heat-haze passes) without editing the
+    // file. `id` is the 0-based emitter-array index; deletion shifts the array,
+    // so a timeline removing several must delete highest-index-first.
+    if (kind == "emitters/delete") return true;
     if (!drive::IsAllowedBridgeKind(kind)) return false;
     if (kind == "engine/set/paused") return false;
     return true;
@@ -189,14 +239,40 @@ inline bool ParseTimeline(const std::string& json, Timeline& out, std::string& e
         if (kinds != 1) { err = "each track is exactly one of tween|cursor|at"; return false; }
 
         if (tr.contains("tween")) {
-            Tween tw;
-            tw.name = tr["tween"].is_string() ? tr["tween"].get<std::string>() : "";
-            if (tw.name != "camera-orbit") { err = "unknown tween: " + tw.name; return false; }
-            tw.from = tr.contains("from") ? tr["from"] : nlohmann::json::object();
-            tw.to   = tr.contains("to")   ? tr["to"]   : nlohmann::json::object();
-            tw.t0 = tr.value("t0", 0.0); tw.t1 = tr.value("t1", 0.0);
-            if (!ParseEase(tr, tw.ease)) { err = "unknown ease"; return false; }
-            out.tweens.push_back(std::move(tw));
+            const std::string tname = tr["tween"].is_string() ? tr["tween"].get<std::string>() : "";
+            if (tname == "camera-orbit") {
+                Tween tw;
+                tw.name = tname;
+                tw.from = tr.contains("from") ? tr["from"] : nlohmann::json::object();
+                tw.to   = tr.contains("to")   ? tr["to"]   : nlohmann::json::object();
+                tw.t0 = tr.value("t0", 0.0); tw.t1 = tr.value("t1", 0.0);
+                if (!ParseEase(tr, tw.ease)) { err = "unknown ease"; return false; }
+                out.tweens.push_back(std::move(tw));
+            } else if (tname == "track-key") {
+                TrackKeyTween tk;
+                if (!tr.contains("id") || !tr["id"].is_number_integer()) { err = "track-key needs integer 'id'"; return false; }
+                tk.id = tr["id"].get<int>();
+                if (tk.id < 0) { err = "track-key 'id' must be >= 0"; return false; }
+                tk.track = tr.value("track", std::string{});
+                if (tk.track.empty()) { err = "track-key needs non-empty 'track'"; return false; }
+                tk.keyTime = tr.value("keyTime", 0.0);
+                if (!(tk.keyTime >= 0.0 && tk.keyTime <= 100.0)) { err = "track-key 'keyTime' must be 0..100"; return false; }
+                if (!tr.contains("from") || !tr["from"].is_object() || !tr["from"].contains("value")
+                    || !tr["from"]["value"].is_number()) { err = "track-key needs numeric 'from.value'"; return false; }
+                if (!tr.contains("to") || !tr["to"].is_object() || !tr["to"].contains("value")
+                    || !tr["to"]["value"].is_number()) { err = "track-key needs numeric 'to.value'"; return false; }
+                tk.fromValue = tr["from"]["value"].get<double>();
+                tk.toValue   = tr["to"]["value"].get<double>();
+                if (!TrackKeyValueInRange(tk.track, tk.fromValue)
+                    || !TrackKeyValueInRange(tk.track, tk.toValue)) {
+                    err = "track-key value out of range for track '" + tk.track + "'"; return false;
+                }
+                tk.t0 = tr.value("t0", 0.0); tk.t1 = tr.value("t1", 0.0);
+                if (!ParseEase(tr, tk.ease)) { err = "unknown ease"; return false; }
+                out.trackKeys.push_back(std::move(tk));
+            } else {
+                err = "unknown tween: " + tname; return false;
+            }
         } else if (tr.contains("cursor")) {
             if (!tr["cursor"].is_array()) { err = "'cursor' must be an array"; return false; }
             double lastT = -1e18;

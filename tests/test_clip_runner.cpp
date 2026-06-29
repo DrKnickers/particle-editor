@@ -4,15 +4,26 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <crtdbg.h>
 #include "ClipRunner.h"
 
 static int g_fail = 0;
 #define CHECK(cond) do { if (!(cond)) { \
     std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond); ++g_fail; } } while (0)
 
+static bool Near(double a, double b, double eps = 1e-6) { return std::fabs(a - b) < eps; }
+
 using host::ClipRunner;
 
 int main() {
+#ifdef _DEBUG
+    // Route CRT assertions (e.g. a bad STL access in a failing test) to stderr
+    // instead of a modal dialog — an unattended/subagent test run otherwise hangs
+    // on the Abort/Retry/Ignore box. Fail fast (nonzero exit), never block.
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
+
     // Init rejects a bad timeline with exitCode 2.
     {
         ClipRunner r; std::string err;
@@ -98,6 +109,88 @@ int main() {
         r.SetHooks([&](const std::string&){ return std::string(R"({"type":"res","ok":true,"data":{}})"); },
             [&](int){}, [&](double,double,bool,bool){}, [&](int,double){return false;}, // ack ALWAYS times out
             [&](int){ ++caps; return true; }, [&](const std::string&){});
+        while (r.Tick() != ClipRunner::Status::Done) {}
+        CHECK(r.ExitCode() == 0 && caps == r.FrameCount());
+    }
+
+    // --- track-key tween emits a RAMPING set-track-key each frame ---------
+    {
+        ClipRunner r; std::string err;
+        // 3 frames @ 60fps over 50ms; red border key 0 scrubs 1.0 -> 0.0 linearly.
+        const char* js = R"({"fps":60,"width":1280,"height":720,"durationMs":50,"out":"o",
+          "tracks":[{"tween":"track-key","id":7,"track":"red","keyTime":0,
+                     "from":{"value":1.0},"to":{"value":0.0},"t0":0,"t1":50,"ease":"linear"}]})";
+        CHECK(r.Init(js, err));
+        std::vector<double> values; bool shapeOk = true;
+        // get-tracks mock with a red key at time 0 — keeps the Task-3 preflight happy
+        // once it lands (this test is forward-compatible with that task).
+        const std::string tracksResp = R"({"type":"res","ok":true,"data":{"tracks":[
+            {"name":"red","keys":[{"time":0.0,"value":1.0},{"time":100.0,"value":0.0}],"interpolation":"linear","lockedTo":null}]}})";
+        r.SetHooks(
+            [&](const std::string& req){
+                auto j = nlohmann::json::parse(req);
+                if (j["kind"] == "emitters/get-tracks") return tracksResp;
+                if (j["kind"] == "emitters/set-track-key") {
+                    const auto& p = j["params"];
+                    if (p["id"].get<int>() != 7 || p["track"].get<std::string>() != "red"
+                        || p["oldTime"].get<double>() != 0.0 || p["newTime"].get<double>() != 0.0)
+                        shapeOk = false;                      // id/track set, time pinned at the border
+                    values.push_back(p["newValue"].get<double>());
+                }
+                return std::string(R"({"type":"res","ok":true,"data":{}})"); },
+            [&](int){}, [&](double,double,bool,bool){},
+            [&](int,double){ return true; }, [&](int){ return true; }, [&](const std::string&){});
+        int guard = 0;
+        while (r.Tick() != ClipRunner::Status::Done) { if (++guard > 100) { CHECK(!"runaway"); break; } }
+        CHECK(r.ExitCode() == 0);
+        CHECK((int)values.size() == r.FrameCount());          // one emit per frame
+        CHECK(shapeOk);                                       // params shaped right, time pinned
+        CHECK(!values.empty());                               // guard the front()/back() below
+        if (!values.empty()) {
+            CHECK(Near(values.front(), 1.0));                 // starts at `from`
+            CHECK(values.back() < values.front());            // and RAMPS down (a constant fails here)
+        }
+    }
+
+    // --- preflight: missing key at keyTime -> exit 3, no frames ----------
+    {
+        // get-tracks mock returns red keys ONLY at 0 and 100; tween targets keyTime 50.
+        auto tracksResp = std::string(R"({"type":"res","ok":true,"data":{"tracks":[
+            {"name":"red","keys":[{"time":0.0,"value":1.0},{"time":100.0,"value":0.0}],"interpolation":"linear","lockedTo":null}]}})");
+        ClipRunner r; std::string err;
+        const char* js = R"({"fps":60,"width":1280,"height":720,"durationMs":50,"out":"o",
+          "tracks":[{"tween":"track-key","id":2,"track":"red","keyTime":50,
+                     "from":{"value":1.0},"to":{"value":0.0},"t0":0,"t1":50}]})";
+        CHECK(r.Init(js, err));
+        int caps = 0;
+        r.SetHooks(
+            [&](const std::string& req){
+                auto j = nlohmann::json::parse(req);
+                if (j["kind"] == "emitters/get-tracks") return tracksResp;
+                return std::string(R"({"type":"res","ok":true,"data":{}})"); },
+            [&](int){}, [&](double,double,bool,bool){},
+            [&](int,double){ return true; }, [&](int){ ++caps; return true; }, [&](const std::string&){});
+        while (r.Tick() != ClipRunner::Status::Done) {}
+        CHECK(r.ExitCode() == 3);                              // preflight rejected
+        CHECK(caps == 0);                                     // never captured a frame
+    }
+    // --- preflight: border key present -> proceeds normally --------------
+    {
+        auto tracksResp = std::string(R"({"type":"res","ok":true,"data":{"tracks":[
+            {"name":"red","keys":[{"time":0.0,"value":1.0},{"time":100.0,"value":0.0}],"interpolation":"linear","lockedTo":null}]}})");
+        ClipRunner r; std::string err;
+        const char* js = R"({"fps":60,"width":1280,"height":720,"durationMs":50,"out":"o",
+          "tracks":[{"tween":"track-key","id":2,"track":"red","keyTime":0,
+                     "from":{"value":1.0},"to":{"value":0.0},"t0":0,"t1":50}]})";
+        CHECK(r.Init(js, err));
+        int caps = 0;
+        r.SetHooks(
+            [&](const std::string& req){
+                auto j = nlohmann::json::parse(req);
+                if (j["kind"] == "emitters/get-tracks") return tracksResp;
+                return std::string(R"({"type":"res","ok":true,"data":{}})"); },
+            [&](int){}, [&](double,double,bool,bool){},
+            [&](int,double){ return true; }, [&](int){ ++caps; return true; }, [&](const std::string&){});
         while (r.Tick() != ClipRunner::Status::Done) {}
         CHECK(r.ExitCode() == 0 && caps == r.FrameCount());
     }

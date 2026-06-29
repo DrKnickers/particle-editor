@@ -53,6 +53,7 @@ import type {
 import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "@/screens/CurveEditor";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
+import { parseFocusChannelMessage } from "@/lib/record-focus-bridge";
 import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
@@ -741,6 +742,29 @@ export function CurveEditorPanel({ bridge }: Props) {
     setSelectedKeyTimes(new Set());
     setOptimisticSelected(null);
   }, [visible, focusChannel]);
+
+  // --record focus push: the host posts ui/focus-channel so a scripted
+  // curve scrub shows the channel it edits. Routes through handleRowClick
+  // (the same path as a user click) so visibility/solo + focus stay
+  // consistent. The channel may arrive as a track name ("scale",
+  // "rotationSpeed") or a channel id ("rotation"); resolve both.
+  useEffect(() => {
+    const wv = window.chrome?.webview as
+      | {
+          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+        }
+      | undefined;
+    if (!wv?.addEventListener) return;
+    const onMsg = (e: { data: unknown }) => {
+      const ch = parseFocusChannelMessage(e.data);
+      if (!ch) return;
+      const def = CHANNELS.find((c) => c.id === ch || c.trackName === ch);
+      if (def) handleRowClick(def.id);
+    };
+    wv.addEventListener("message", onMsg);
+    return () => wv.removeEventListener?.("message", onMsg);
+  }, [handleRowClick]);
 
   // ── Curve interactions ────────────────────────────────────────────
 

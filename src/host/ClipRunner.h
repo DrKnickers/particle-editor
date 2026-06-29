@@ -45,6 +45,9 @@ private:
     DispatchFn m_dispatch; StepFn m_step; CursorFn m_cursor;
     AckFn m_ack; CaptureFn m_capture; LogFn m_log;
 
+    bool m_preflighted = false;
+    bool Preflight();   // verify every track-key target exists; false + exit 3 on miss
+
     bool DispatchKind(const std::string& kind, const nlohmann::json& params);  // false + exit 3 on fail
 };
 

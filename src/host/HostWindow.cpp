@@ -4849,6 +4849,40 @@ int HostWindowImpl::Run(int nCmdShow)
                         }
                     }
 
+                    // (e1) hide the right-dock (Spawner/Lighting/Atlas) panel so the
+                    //      recorded clip shows a clean layout + more curve editor.
+                    {
+                        nlohmann::json hp = {{"type","ui/hide-panel"}};
+                        if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(hp.dump()).c_str());
+                    }
+
+                    // (e2) focus the curve panel on each track-key tween's channel so
+                    //      a scripted scrub shows the channel it edits (the panel focus
+                    //      is React-local + defaults to red). Posted once after settle;
+                    //      focusChannel persists independent of the emitter selection.
+                    for (const auto& tk : tl.trackKeys)
+                    {
+                        nlohmann::json fm = {{"type","ui/focus-channel"},{"channel", tk.track}};
+                        if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(fm.dump()).c_str());
+                    }
+
+                    // (e3) let React APPLY the (e1)/(e2) pushes before frame capture.
+                    //      PostWebMessageAsJson is async: without a short render-pumped
+                    //      wait the first frames capture the still-open right dock (the
+                    //      Spawner panel), so the hide-panel + focus-channel must settle
+                    //      here, BEFORE t=0. Paused sim => no particle/clock advance.
+                    {
+                        const LONGLONG s = PerfQpcNow();
+                        while (QpcMs(PerfQpcNow() - s, recordFreq) < 500)
+                        {
+                            MSG mw;
+                            while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
+                            { TranslateMessage(&mw); DispatchMessage(&mw); }
+                            RenderD3D9();
+                            Sleep(8);
+                        }
+                    }
+
                     // (f) output dirs: render to <out>.tmp, move on success.
                     recordOutDir = host::Utf8ToWide(tl.out);
                     recordTmpDir = recordOutDir + L".tmp";

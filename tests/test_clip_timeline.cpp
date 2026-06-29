@@ -116,6 +116,87 @@ int main()
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"tween":"zoom-blur","t0":0,"t1":100}]})"));
     }
 
+    // --- track-key: parse (happy + bounds + camera-orbit regression) ------
+    {
+        const char* js = R"({"fps":30,"width":1280,"height":720,"durationMs":2000,"out":"o",
+          "tracks":[
+            {"tween":"track-key","id":3,"track":"red","keyTime":0,
+             "from":{"value":1.0},"to":{"value":0.15},"t0":400,"t1":1600,"ease":"inOutSine"},
+            {"tween":"camera-orbit","from":{"yaw":0},"to":{"yaw":6.2832},"t0":0,"t1":2000,"ease":"linear"}
+          ]})";
+        Timeline tl; std::string err;
+        CHECK(ParseTimeline(js, tl, err));
+        CHECK(tl.trackKeys.size() == 1 && tl.tweens.size() == 1);          // both arms parse
+        CHECK(tl.trackKeys[0].id == 3 && tl.trackKeys[0].track == "red");
+        CHECK(Near(tl.trackKeys[0].keyTime, 0.0) && Near(tl.trackKeys[0].fromValue, 1.0)
+              && Near(tl.trackKeys[0].toValue, 0.15) && tl.trackKeys[0].ease == Ease::InOutSine);
+        CHECK(tl.tweens[0].name == "camera-orbit");                        // regression: camera survives refactor
+    }
+    {
+        auto rejects = [](const char* j){ Timeline t; std::string e; return !ParseTimeline(j,t,e) && !e.empty(); };
+        // missing from.value / missing track
+        CHECK(rejects(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o",
+          "tracks":[{"tween":"track-key","id":1,"track":"red","keyTime":0,"to":{"value":0.5},"t0":0,"t1":100}]})"));
+        CHECK(rejects(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o",
+          "tracks":[{"tween":"track-key","id":1,"keyTime":0,"from":{"value":1},"to":{"value":0.5},"t0":0,"t1":100}]})"));
+        // bounds: alpha out of 0..1, keyTime out of 0..100, negative id
+        CHECK(rejects(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o",
+          "tracks":[{"tween":"track-key","id":1,"track":"alpha","keyTime":0,"from":{"value":1},"to":{"value":1.5},"t0":0,"t1":100}]})"));
+        CHECK(rejects(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o",
+          "tracks":[{"tween":"track-key","id":1,"track":"red","keyTime":150,"from":{"value":1},"to":{"value":0},"t0":0,"t1":100}]})"));
+        CHECK(rejects(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o",
+          "tracks":[{"tween":"track-key","id":-1,"track":"red","keyTime":0,"from":{"value":1},"to":{"value":0},"t0":0,"t1":100}]})"));
+        // scale must be >= 0; rotationSpeed may be negative (signed)
+        CHECK(rejects(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o",
+          "tracks":[{"tween":"track-key","id":1,"track":"scale","keyTime":0,"from":{"value":1},"to":{"value":-2},"t0":0,"t1":100}]})"));
+        // index shares scale's >= 0 rule
+        CHECK(rejects(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o","tracks":[{"tween":"track-key","id":1,"track":"index","keyTime":0,"from":{"value":0},"to":{"value":-1},"t0":0,"t1":100}]})"));
+        // unknown track name rejected by the TrackKeyValueInRange guard
+        CHECK(rejects(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o","tracks":[{"tween":"track-key","id":1,"track":"bogus","keyTime":0,"from":{"value":0.5},"to":{"value":0.5},"t0":0,"t1":100}]})"));
+        Timeline t; std::string e;
+        CHECK(ParseTimeline(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o",
+          "tracks":[{"tween":"track-key","id":1,"track":"rotationSpeed","keyTime":0,"from":{"value":1},"to":{"value":-3},"t0":0,"t1":100}]})", t, e));
+    }
+    // --- track-key: eval (linear, inOutSine, signed, clamp) --------------
+    {
+        TrackKeyTween tk; tk.fromValue = 1.0; tk.toValue = 0.0; tk.t0 = 0; tk.t1 = 1000; tk.ease = Ease::Linear;
+        CHECK(Near(EvalTrackKeyValue(tk, -100.0), 1.0));     // before t0 -> from (clamped)
+        CHECK(Near(EvalTrackKeyValue(tk, 0.0), 1.0));        // at t0 -> from
+        CHECK(Near(EvalTrackKeyValue(tk, 500.0), 0.5));      // linear midpoint
+        CHECK(Near(EvalTrackKeyValue(tk, 1000.0), 0.0));     // at t1 -> to
+        CHECK(Near(EvalTrackKeyValue(tk, 1500.0), 0.0));     // clamp past t1
+        TrackKeyTween e; e.fromValue = 0.0; e.toValue = 100.0; e.t0 = 0; e.t1 = 1000; e.ease = Ease::InOutSine;
+        CHECK(EvalTrackKeyValue(e, 250.0) < 25.0);           // eased: slower than linear early
+        // inOutSine at u=0.25 = 100*(1-cos(pi/4))/2 = 100*(2-sqrt2)/4 ≈ 14.6447
+        CHECK(Near(EvalTrackKeyValue(e, 250.0), 14.6447, 1e-3));
+        CHECK(EvalTrackKeyValue(e, 750.0) > 75.0);           // faster late
+        TrackKeyTween neg; neg.fromValue = 0.5; neg.toValue = -0.5; neg.t0 = 0; neg.t1 = 1000; neg.ease = Ease::Linear;
+        CHECK(Near(EvalTrackKeyValue(neg, 500.0), 0.0));     // signed lerp, not clamped at 0
+        CHECK(Near(EvalTrackKeyValue(neg, 1000.0), -0.5));
+        TrackKeyTween z; z.fromValue = 0.2; z.toValue = 0.9; z.t0 = 500; z.t1 = 500; // zero-width
+        CHECK(Near(EvalTrackKeyValue(z, 0.0), 0.9));         // t1<=t0 -> to (TweenU convention)
+    }
+    // --- record-only spawner allowlist (preview-instance creation) -------
+    {
+        // spawner commands are record-allowed (non-modal; create the preview instance)
+        CHECK(IsAllowedRecordKind("spawner/start"));
+        CHECK(IsAllowedRecordKind("spawner/trigger"));
+        CHECK(IsAllowedRecordKind("spawner/stop"));
+        // mods/set-layers is record-allowed too (clear the mod stack -> base-game asset)
+        CHECK(IsAllowedRecordKind("mods/set-layers"));
+        CHECK(!drive::IsAllowedBridgeKind("mods/set-layers"));
+        // emitters/delete is record-allowed (drop an emitter for a render; .alo untouched)
+        CHECK(IsAllowedRecordKind("emitters/delete"));
+        CHECK(!drive::IsAllowedBridgeKind("emitters/delete"));
+        // ...but record-only: NOT in the shared --drive allowlist
+        CHECK(!drive::IsAllowedBridgeKind("spawner/start"));
+        CHECK(!drive::IsAllowedBridgeKind("spawner/trigger"));
+        CHECK(!drive::IsAllowedBridgeKind("spawner/stop"));
+        // sanity: paused still blocked, a render-state setter still allowed
+        CHECK(!IsAllowedRecordKind("engine/set/paused"));
+        CHECK(IsAllowedRecordKind("engine/set/bloom-strength"));
+    }
+
     if (g_fail) { std::printf("\n%d CHECK(s) FAILED\n", g_fail); return 1; }
     std::printf("all clip-timeline tests passed\n");
     return 0;
