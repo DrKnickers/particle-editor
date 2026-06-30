@@ -1,15 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><defs>
-    <radialGradient id="core" cx="42%" cy="36%" r="62%"><stop offset="0%" stop-color="#8cbcff"/><stop offset="60%" stop-color="#4a8bff"/><stop offset="100%" stop-color="#2f72e0"/></radialGradient>
-    <radialGradient id="part" cx="40%" cy="34%" r="64%"><stop offset="0%" stop-color="#bcd8ff"/><stop offset="100%" stop-color="#5b97ff"/></radialGradient>
-    <clipPath id="front"><rect x="-256" y="128" width="768" height="256"/></clipPath>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="plate" x1="48" y1="22" x2="210" y2="230" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#172232"/>
+      <stop offset="1" stop-color="#070a10"/>
+    </linearGradient>
+    <radialGradient id="particle" cx="42%" cy="36%" r="62%">
+      <stop offset="0" stop-color="#e8f3ff"/>
+      <stop offset=".58" stop-color="#4a8bff"/>
+      <stop offset="1" stop-color="#235fd1"/>
+    </radialGradient>
   </defs>
-    <g transform="rotate(-22 128 128)">
-      <ellipse cx="128" cy="128" rx="102.40" ry="39.68" fill="none" stroke="#3f7fe6" stroke-width="11.52"/>
-      <circle cx="145.78" cy="88.92" r="19.20" fill="url(#part)"/>
-    </g>
-    <circle cx="128" cy="128" r="34.56" fill="url(#core)"/>
-    <g transform="rotate(-22 128 128)">
-      <g clip-path="url(#front)"><ellipse cx="128" cy="128" rx="102.40" ry="39.68" fill="none" stroke="#6ba2ff" stroke-width="11.52"/></g>
-      <circle cx="193.82" cy="158.40" r="19.20" fill="url(#part)"/><circle cx="39.32" cy="147.84" r="19.20" fill="url(#part)"/>
-    </g>
-  </svg>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#plate)"/>
+  <rect x="10" y="10" width="236" height="236" rx="56" fill="none" stroke="#7aa5ea" stroke-opacity=".18" stroke-width="2"/>
+  <path d="M54.73 159.8 C94.82 93.44 157.03 176.38 201.27 96.2" fill="none" stroke="#3676dc" stroke-opacity=".23" stroke-width="32.07" stroke-linecap="round"/>
+  <path d="M54.73 159.8 C94.82 93.44 157.03 176.38 201.27 96.2" fill="none" stroke="#69aaff" stroke-width="17.14" stroke-linecap="round"/>
+  <path d="M126.44 133.18 C152.54 135.6 179.15 136.29 201.27 96.2" fill="none" stroke="#bcdcff" stroke-opacity=".54" stroke-width="4.98" stroke-linecap="round"/>
+  <circle cx="54.73" cy="159.8" r="12.44" fill="#10223a" stroke="#83beff" stroke-width="3"/>
+  <circle cx="201.27" cy="96.2" r="11.34" fill="#10223a" stroke="#83beff" stroke-width="3"/>
+  <circle cx="132.15" cy="132.15" r="39.26" fill="url(#particle)"/>
+</svg>

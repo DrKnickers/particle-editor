@@ -1,32 +1,37 @@
 # App icon source
 
-Generates `../logo.ico` (the window / taskbar / exe icon).
+Generates `../logo.ico` (the window / taskbar / exe icon) plus the site
+favicons.
 
-The mark is an **orbital** — a glowing azure core with a tilted orbit and
-particles (an emitter/atom) — in the site's azure accent (`#4a8bff`, see
-`site/styles.css`). Flat with consistent single-light shading; transparent;
-no plate; no bloom.
+The app icon is a Windows 11-style rounded tile: a dark editor-native material
+plate with a no-handle spline, endpoint nodes, and an azure particle in the
+site's accent (`#4a8bff`, see `site/styles.css`). The standalone mark exports
+drop the tile and keep only the transparent spline + particle.
 
-**Source of truth is `build.js`** — the shape and shading are defined in code.
-Everything else here (including `logo.svg`) is a generated output, not an input.
+**Source of truth is `build.py`** -- the shape and shading are defined in code.
+`build.js` is a compatibility wrapper for the old command. Everything else here
+(including `logo.svg`) is a generated output, not an input.
 
 ## Files
-- `build.js` — the generator. Defines the geometry/shading and writes every
-  output: each PNG size, the packed `logo.ico`, the 256px `logo.svg`,
-  `master_1024.png`, and a `preview_sheet.png`. Encodes the size ramp:
-  full orbit + 3 particles at ≥48px, a thicker orbit + 2 particles at 32px,
-  and a tilted orbit **line** + 2 particles through the core at 16px (a curved
-  ring can't survive that small — the line keeps it reading as an orbit).
-- `logo.svg` — a 256px master vector **generated** by `build.js` (a handy
-  standalone export; editing it has no effect — change `build.js` instead).
-- `master_1024.png` — large render for the landing page / README / store art.
+
+- `build.py` -- the generator. Defines the geometry/shading and writes every
+  output: each PNG size, the packed app/site ICOs, the tile-backed
+  `logo.svg`, `site/favicon.svg`, transparent `mark.svg`, `master_1024.png`,
+  `mark_1024.png`, and a `preview_sheet.png`.
+- `build.js` -- compatibility wrapper that runs `build.py`.
+- `logo.svg` -- a 256px master vector **generated** by `build.py` (a handy
+  standalone export; editing it has no effect -- change `build.py` instead).
+- `mark.svg` -- transparent standalone mark for non-icon brand use.
+- `master_1024.png` -- large render for the landing page / README / store art.
+- `mark_1024.png` -- transparent standalone mark render.
 
 ## Regenerate
+
+```powershell
+python build.py
+# or: node build.js
 ```
-npm i @resvg/resvg-js      # rasterizer (ABI-stable prebuilt; no native build)
-node build.js              # writes ./out/* including logo.ico
-cp out/logo.ico ../logo.ico
-```
-`logo.ico` packs 16/32/48/64/128/256, each a PNG-compressed entry (Windows
-Vista+; this app is Win11 x64-only). Tune colour/geometry via the constants and
-the `large()` / `HINTED` configs at the top of `build.js`.
+
+`logo.ico` and `site/favicon.ico` pack 16/32/48/64/128/256, each a
+PNG-compressed entry (Windows Vista+; this app is Win11 x64-only). Tune
+colour/geometry via the constants and drawing helpers in `build.py`.

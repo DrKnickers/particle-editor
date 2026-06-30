@@ -1,17 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
   <defs>
-    <linearGradient id="plate" x1="48" y1="22" x2="210" y2="230" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#172232"/>
-      <stop offset="1" stop-color="#070a10"/>
-    </linearGradient>
     <radialGradient id="particle" cx="42%" cy="36%" r="62%">
       <stop offset="0" stop-color="#e8f3ff"/>
       <stop offset=".58" stop-color="#4a8bff"/>
       <stop offset="1" stop-color="#235fd1"/>
     </radialGradient>
   </defs>
-  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#plate)"/>
-  <rect x="10" y="10" width="236" height="236" rx="56" fill="none" stroke="#7aa5ea" stroke-opacity=".18" stroke-width="2"/>
   <path d="M54.73 159.8 C94.82 93.44 157.03 176.38 201.27 96.2" fill="none" stroke="#3676dc" stroke-opacity=".23" stroke-width="32.07" stroke-linecap="round"/>
   <path d="M54.73 159.8 C94.82 93.44 157.03 176.38 201.27 96.2" fill="none" stroke="#69aaff" stroke-width="17.14" stroke-linecap="round"/>
   <path d="M126.44 133.18 C152.54 135.6 179.15 136.29 201.27 96.2" fill="none" stroke="#bcdcff" stroke-opacity=".54" stroke-width="4.98" stroke-linecap="round"/>
