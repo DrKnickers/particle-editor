@@ -16,6 +16,7 @@
 #include "files.h"      // IFile, ReadAndRelease
 #include "exceptions.h" // wexception (Load boundary catch)
 #include "AssetPathSafety.h"
+#include "MuzzleFlashFilter.h"   // IsMuzzleFlashMesh (hide fire-only muzzle quads)
 
 namespace
 {
@@ -267,22 +268,31 @@ bool ReferenceObjectMesh::Load(IFileManager& fm, const std::string& aloPath,
         D3DXMATRIX placement;
         D3DXMatrixIdentity(&placement);
         bool hideByHardpoint = false;
+        std::string connBoneLower;   // this mesh's 0x602-connected bone name (for muzzle detection)
         for (const AloConnection& c : model.connections)
         {
             if (c.objectIndex == meshIdx)
             {
                 if (c.boneIndex < boneObj.size())
                     placement = boneObj[c.boneIndex];
+                if (c.boneIndex < model.bones.size())
+                    connBoneLower = toLower(model.bones[c.boneIndex].name);
                 // Drop damaged-state geometry: a mesh whose connection bone is
                 // named by one of the unit's hardpoints' Damage_*/Collision_Mesh bones
                 // (direct 0x602 connection only -- damage geometry rides its own leaf bone).
-                if (!hideBoneNamesLower.empty() && c.boneIndex < model.bones.size() &&
-                    hideBoneNamesLower.count(toLower(model.bones[c.boneIndex].name)))
+                if (!hideBoneNamesLower.empty() && !connBoneLower.empty() &&
+                    hideBoneNamesLower.count(connBoneLower))
                     hideByHardpoint = true;
                 break;
             }
         }
         if (hideByHardpoint)
+            continue;
+        // Muzzle flashes are toggled on only while firing in-game (runtime, not
+        // 0x402-hidden), so the always-on reference draw would show them stuck on.
+        // Hide by the muzzle naming convention (MuzzleFlashFilter.h) so the idle
+        // reference pose matches the game; also keeps them out of the AABB below.
+        if (IsMuzzleFlashMesh(toLower(mesh.name), connBoneLower))
             continue;
 
         for (const AloSubMesh& sm : mesh.subMeshes)

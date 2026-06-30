@@ -148,3 +148,32 @@ export function parseOpenPickerMessage(
   if (m.open !== undefined && typeof m.open !== "boolean") return null;
   return { which: m.which as PickerWhich, open: m.open !== false };
 }
+
+/**
+ * Parse a host->web ui/set-picker-search push; returns `{ text }` or null. The
+ * host sends it during --record so a clip can drive a workspace picker's search
+ * box (the synthetic cursor can't type) — e.g. filter the reference-object tree
+ * to a few units so they're visible/clickable instead of scrolled out. Empty
+ * `text` clears the filter; a missing/non-string `text` rejects.
+ */
+export function parseSetPickerSearchMessage(data: unknown): { text: string } | null {
+  const m = coerceMessage(data);
+  if (!m || m.type !== "ui/set-picker-search") return null;
+  if (typeof m.text !== "string") return null;
+  return { text: m.text };
+}
+
+/**
+ * --record only: force-collapse picker tree sections by **bare section name**
+ * (e.g. ["Heroes"] — the top-level Heroes/Ground/Space sections; buckets are NOT
+ * supported, the consumer prefixes each key as "sec:<name>"). Unlike a user's
+ * collapse choice, this overrides the search force-expand, so a clip can keep a
+ * section collapsed even while a `ui/set-picker-search` filter is active. A
+ * non-array (or non-string item) rejects. Dormant outside --record.
+ */
+export function parseSetPickerCollapseMessage(data: unknown): { keys: string[] } | null {
+  const m = coerceMessage(data);
+  if (!m || m.type !== "ui/picker-collapse") return null;
+  if (!Array.isArray(m.keys) || !m.keys.every((k) => typeof k === "string")) return null;
+  return { keys: m.keys as string[] };
+}

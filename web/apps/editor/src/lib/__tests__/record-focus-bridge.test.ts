@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseFocusChannelMessage, parseHidePanelMessage } from "../record-focus-bridge";
+import {
+  parseFocusChannelMessage,
+  parseHidePanelMessage,
+  parseSetPickerCollapseMessage,
+  parseSetPickerSearchMessage,
+} from "../record-focus-bridge";
 
 describe("record-focus-bridge", () => {
   it("parses a ui/focus-channel message (object form)", () => {
@@ -25,5 +30,28 @@ describe("record-focus-bridge", () => {
     expect(parseHidePanelMessage({ type: "ui/focus-channel", channel: "scale" })).toBe(false);
     expect(parseHidePanelMessage(null)).toBe(false);
     expect(parseHidePanelMessage("not json")).toBe(false);
+  });
+
+  it("parses a ui/set-picker-search message (object + string form)", () => {
+    expect(parseSetPickerSearchMessage({ type: "ui/set-picker-search", text: "AT_" })).toEqual({ text: "AT_" });
+    expect(parseSetPickerSearchMessage(JSON.stringify({ type: "ui/set-picker-search", text: "" }))).toEqual({ text: "" });
+  });
+  it("ignores non-search messages and bad payloads", () => {
+    expect(parseSetPickerSearchMessage({ type: "ui/open-picker", which: "reference" })).toBeNull();
+    expect(parseSetPickerSearchMessage({ type: "ui/set-picker-search" })).toBeNull(); // no text
+    expect(parseSetPickerSearchMessage({ type: "ui/set-picker-search", text: 3 })).toBeNull(); // non-string
+    expect(parseSetPickerSearchMessage(null)).toBeNull();
+    expect(parseSetPickerSearchMessage("not json")).toBeNull();
+  });
+  it("parses a ui/picker-collapse message (object + string form)", () => {
+    expect(parseSetPickerCollapseMessage({ type: "ui/picker-collapse", keys: ["Heroes"] })).toEqual({ keys: ["Heroes"] });
+    expect(parseSetPickerCollapseMessage(JSON.stringify({ type: "ui/picker-collapse", keys: [] }))).toEqual({ keys: [] });
+  });
+  it("ignores non-collapse messages and bad payloads", () => {
+    expect(parseSetPickerCollapseMessage({ type: "ui/set-picker-search", text: "AT_" })).toBeNull();
+    expect(parseSetPickerCollapseMessage({ type: "ui/picker-collapse" })).toBeNull(); // no keys
+    expect(parseSetPickerCollapseMessage({ type: "ui/picker-collapse", keys: "Heroes" })).toBeNull(); // not array
+    expect(parseSetPickerCollapseMessage({ type: "ui/picker-collapse", keys: [1, 2] })).toBeNull(); // non-string items
+    expect(parseSetPickerCollapseMessage(null)).toBeNull();
   });
 });

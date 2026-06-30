@@ -50,6 +50,53 @@ describe("ReferenceObjectPicker — selection + status", () => {
     });
   });
 
+  it("tags each tree leaf with a ref-unit:<name> testid for clip-cursor targeting", async () => {
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("tree", { name: "Reference object" });
+    await waitFor(() =>
+      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument(),
+    );
+    // The leaf row (the click/select target) carries a positional-by-name testid so a
+    // --record cursor can land on a specific unit.
+    const leaf = screen.getByRole("treeitem", { name: "AT_AT_Walker" });
+    expect(leaf.getAttribute("data-testid")).toBe("ref-unit:AT_AT_Walker");
+    expect(document.querySelector('[data-testid="ref-unit:AT_AT_Walker"]')).toBe(leaf);
+  });
+
+  it("filters the tree when a ui/set-picker-search message arrives (clip-driven search)", async () => {
+    // The synthetic --record cursor can't type, so the host drives the search box via a
+    // ui/set-picker-search webview push. Mock window.chrome.webview to deliver it.
+    const listeners: Record<string, Array<(e: { data: unknown }) => void>> = {};
+    (window as unknown as { chrome?: unknown }).chrome = {
+      webview: {
+        addEventListener: (e: string, h: (ev: { data: unknown }) => void) => { (listeners[e] ||= []).push(h); },
+        removeEventListener: (e: string, h: (ev: { data: unknown }) => void) => {
+          listeners[e] = (listeners[e] ?? []).filter((x) => x !== h);
+        },
+      },
+    };
+    try {
+      const bridge = new MockBridge();
+      render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+      await screen.findByRole("tree", { name: "Reference object" });
+      await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
+      expect(screen.getByRole("treeitem", { name: "AT_ST_Walker" })).toBeInTheDocument();
+
+      act(() => {
+        const msg = { data: JSON.stringify({ type: "ui/set-picker-search", text: "AT_AT" }) };
+        (listeners.message ?? []).forEach((h) => h(msg));
+      });
+
+      await waitFor(() =>
+        expect(screen.queryByRole("treeitem", { name: "AT_ST_Walker" })).not.toBeInTheDocument(),
+      );
+      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
+    } finally {
+      delete (window as unknown as { chrome?: unknown }).chrome;
+    }
+  });
+
   it("collapses a section to hide its items, and expands it again", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
@@ -68,6 +115,46 @@ describe("ReferenceObjectPicker — selection + status", () => {
 
     fireEvent.click(screen.getByRole("treeitem", { name: /Space/ })); // expand again
     expect(await screen.findByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument();
+  });
+
+  it("force-collapses a section under search via ui/picker-collapse (clip driver)", async () => {
+    // The whole point of ui/picker-collapse: a clip can keep a section closed even
+    // though a search force-expands every section. (Drives the Faith clip's Heroes
+    // collapse; here we use Space since the mock has it.)
+    const listeners: Record<string, Array<(e: { data: unknown }) => void>> = {};
+    (window as unknown as { chrome?: unknown }).chrome = {
+      webview: {
+        addEventListener: (e: string, h: (ev: { data: unknown }) => void) => { (listeners[e] ||= []).push(h); },
+        removeEventListener: (e: string, h: (ev: { data: unknown }) => void) => {
+          listeners[e] = (listeners[e] ?? []).filter((x) => x !== h);
+        },
+      },
+    };
+    const send = (payload: unknown) =>
+      act(() => {
+        (listeners.message ?? []).forEach((h) => h({ data: JSON.stringify(payload) }));
+      });
+    try {
+      const bridge = new MockBridge();
+      render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+      await screen.findByRole("tree", { name: "Reference object" });
+      await waitFor(() => expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument());
+
+      // A search force-expands every section, so a plain collapse would be ignored.
+      send({ type: "ui/set-picker-search", text: "_" }); // matches every name (all have "_")
+      await waitFor(() => expect(screen.getByRole("treeitem", { name: "Star_Destroyer" })).toBeInTheDocument());
+
+      // The host force-collapses Space (bare section name) -> its items hide DESPITE the search.
+      send({ type: "ui/picker-collapse", keys: ["Space"] });
+      await waitFor(() =>
+        expect(screen.queryByRole("treeitem", { name: "Star_Destroyer" })).not.toBeInTheDocument(),
+      );
+      expect(screen.getByRole("treeitem", { name: /Space/ })).toHaveAttribute("aria-expanded", "false");
+      // A non-collapsed section's items stay visible.
+      expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
+    } finally {
+      delete (window as unknown as { chrome?: unknown }).chrome;
+    }
   });
 
   it("lists an unrecognised-tag unit under Ground ▸ Other (the Mod-units-missing fix)", async () => {

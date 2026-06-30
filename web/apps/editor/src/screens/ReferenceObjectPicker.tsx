@@ -33,6 +33,7 @@ import type {
 import { Spinner } from "@/primitives/Spinner";
 import { ToolPanel } from "@/components/ToolPanel";
 import { loadPickerState, resolveFaction, savePickerState } from "@/lib/picker-state";
+import { parseSetPickerCollapseMessage, parseSetPickerSearchMessage } from "@/lib/record-focus-bridge";
 
 type Props = {
   bridge: Bridge;
@@ -122,6 +123,10 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const [faction, setFaction] = useState<string | null>(() => loadPickerState().faction);
   // Collapsed group keys (default = everything expanded; collapse is opt-in).
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(loadPickerState().collapsed));
+  // --record only: sections force-collapsed by the host (ui/picker-collapse). Unlike
+  // `collapsed`, these stay closed even while searching (which otherwise force-expands
+  // everything) — lets a clip hide a section, e.g. Heroes, during a filter. Empty for users.
+  const [forceCollapsed, setForceCollapsed] = useState<Set<string>>(new Set());
   const treeRef = useRef<HTMLDivElement | null>(null);
   const scrollRestored = useRef(false);
   // Roving-tabindex: exactly one tree row is tabbable at a time; arrow
@@ -165,6 +170,29 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
     });
     return () => { cancelled = true; off(); };
   }, [bridge]);
+
+  // --record only: the host drives the search box via a ui/set-picker-search push
+  // (the synthetic cursor can't type) — used to filter the tree to a few units so a
+  // clip cursor can reach them instead of scrolling. Dormant outside --record.
+  useEffect(() => {
+    const wv = window.chrome?.webview as
+      | {
+          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+        }
+      | undefined;
+    if (!wv?.addEventListener) return;
+    const onMsg = (e: { data: unknown }) => {
+      const msg = parseSetPickerSearchMessage(e.data);
+      if (msg) setQuery(msg.text);
+      // Bare section names from the timeline (e.g. "Heroes") map to the prefixed
+      // collapse keys the tree uses ("sec:Heroes"), matching `collapsed`/isOpen.
+      const col = parseSetPickerCollapseMessage(e.data);
+      if (col) setForceCollapsed(new Set(col.keys.map((k) => `sec:${k}`)));
+    };
+    wv.addEventListener("message", onMsg);
+    return () => wv.removeEventListener?.("message", onMsg);
+  }, []);
 
   const loading = !ready;
 
@@ -230,8 +258,11 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
 
   // While searching, force every group open so matches are always visible; otherwise
   // honor the user's collapse choices. (A group is open unless explicitly collapsed.)
+  // A host-forced collapse (--record only) wins over BOTH — so a clip can keep a
+  // section closed even under a search filter. `forceCollapsed` holds the same
+  // prefixed keys as `collapsed` (e.g. "sec:Heroes"). Empty for normal users.
   const searching = ql !== "";
-  const isOpen = (key: string) => searching || !collapsed.has(key);
+  const isOpen = (key: string) => !forceCollapsed.has(key) && (searching || !collapsed.has(key));
   const toggle = (key: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -279,7 +310,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
       }
     }
     return out;
-  }, [sections, collapsed, searching, name, known]);
+  }, [sections, collapsed, forceCollapsed, searching, name, known]);
 
   // Keep the active (tabbable) row valid as the visible set changes (search / collapse).
   useEffect(() => {
@@ -400,6 +431,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
         key={n}
         role="treeitem"
         aria-selected={selected}
+        data-testid={`ref-unit:${n}`}
         ref={setRowRef(rowKey)}
         tabIndex={activeKey === rowKey ? 0 : -1}
         onClick={(e) => { e.stopPropagation(); setActiveKey(rowKey); selectObject(n); }}
