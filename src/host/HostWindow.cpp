@@ -4684,7 +4684,10 @@ int HostWindowImpl::Run(int nCmdShow)
     const LONGLONG recordFreq  = PerfQpcFreq();
     double    recordBudgetMs   = 0.0;
     std::wstring recordTmpDir, recordOutDir;
-    constexpr int kBarrierPresents = 2;   // DComp-present barrier before each grab
+    constexpr int kBarrierPresents = 3;   // DComp-present barrier before each grab
+                                          // (each present is DwmFlush'd in the capture
+                                          // hook so the composited frame lands before
+                                          // PrintWindow — see the capture lambda note)
 
     while (!quit)
     {
@@ -4978,9 +4981,20 @@ int HostWindowImpl::Run(int nCmdShow)
                                 Sleep(4);
                             }
                         },
-                        // capture: DComp-present barrier then PrintWindow composite
+                        // capture: present the latest engine frame, then BLOCK on the
+                        // compositor before PrintWindow reads the window. Each
+                        // RenderD3D9() Present1's the composed surface to the DXGI
+                        // swapchain, but DComp only picks that up on its NEXT
+                        // composition cycle (async — see RenderD3D9's CompositeEngineFrame
+                        // note). At 30fps the ack/Sleep slack let that cycle land; at
+                        // 60fps the grabs outrun it and PrintWindow catches a viewport
+                        // with the engine frame not yet composited (static background, no
+                        // smoke). DwmFlush() blocks until the DWM/DComp composition pass
+                        // completes, so the just-presented frame is on the window before
+                        // we grab. Interleaved (not just trailing) so the final present is
+                        // always followed by a composited pass.
                         [this, tmpDir, bp = kBarrierPresents](int idx){
-                            for (int i = 0; i < bp; ++i) RenderD3D9();
+                            for (int i = 0; i < bp; ++i) { RenderD3D9(); DwmFlush(); }
                             wchar_t name[40];
                             swprintf_s(name, L"\\frame_%05d.png", idx);
                             return host::CaptureWindowToPng(hMain, tmpDir + name);

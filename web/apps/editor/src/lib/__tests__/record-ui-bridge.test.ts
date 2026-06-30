@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseOpenPickerMessage, parseSelectKeyMessage, parseShowPanelMessage } from "../record-focus-bridge";
+import { parseAtlasAlphaMessage, parseOpenPickerMessage, parseSelectKeyMessage, parseShowPanelMessage } from "../record-focus-bridge";
 
 describe("record-ui-bridge", () => {
   it("parses ui/show-panel messages", () => {
@@ -54,6 +54,14 @@ describe("record-ui-bridge", () => {
       track: "red",
       time: 0.5,
     });
+  });
+
+  it("parses ui/atlas-alpha and rejects a non-boolean `on`", () => {
+    expect(parseAtlasAlphaMessage({ type: "ui/atlas-alpha", on: true })).toEqual({ on: true });
+    expect(parseAtlasAlphaMessage(JSON.stringify({ type: "ui/atlas-alpha", on: false }))).toEqual({ on: false });
+    expect(parseAtlasAlphaMessage({ type: "ui/atlas-alpha" })).toBeNull();
+    expect(parseAtlasAlphaMessage({ type: "ui/atlas-alpha", on: "true" })).toBeNull();
+    expect(parseAtlasAlphaMessage({ type: "ui/select-key", on: true })).toBeNull();
   });
 
   it("rejects malformed ui/select-key messages", () => {

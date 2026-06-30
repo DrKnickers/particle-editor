@@ -24,6 +24,10 @@ function quoteAttr(value: string): string {
   return JSON.stringify(value);
 }
 function selectorForRef(ref: string): { selector: string; atlasTile: boolean } | null {
+  // testid: free-form id (may contain ':') — match by prefix, use the whole remainder.
+  if (ref.startsWith("testid:") && ref.length > "testid:".length) {
+    return { selector: `[data-testid=${quoteAttr(ref.slice("testid:".length))}]`, atlasTile: false };
+  }
   const parts = ref.split(":");
   if (parts[0] === "curve-key" && parts.length === 3) {
     return {

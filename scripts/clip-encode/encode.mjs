@@ -99,6 +99,15 @@ export function buildFfmpegArgs({ framesDir, fps, out, start = 0, loop = "none",
   }
 
   args.push("-c:v", "libx264", "-crf", String(crf), "-preset", "slow");
+  // Tag an explicit, consistent color MATRIX. Without this ffmpeg leaves
+  // color_space UNSET → "unknown", which forces players to guess the YUV→RGB
+  // coefficients: a hardware-overlay path and a composited path can guess
+  // differently and toggle between them, flickering the frame even when the video
+  // is PAUSED. Tag the matrix + primaries bt709 + limited (tv) range. We do NOT
+  // force -color_trc: the PNG source is sRGB (iec61966-2-1), already a DEFINED
+  // transfer, so tagging it bt709 would mislabel the curve we never converted to —
+  // and the flicker was the unknown matrix, not the transfer. LOAD-BEARING.
+  args.push("-colorspace", "bt709", "-color_primaries", "bt709", "-color_range", "tv");
   // After dropping frames (or building a loop) the source PTS are gappy/rebuilt —
   // pin the output cadence so playback timing is exact.
   if (dropBlackBelow != null || loop === "pingpong" || loop === "crossfade") {

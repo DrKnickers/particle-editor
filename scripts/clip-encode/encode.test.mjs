@@ -16,6 +16,13 @@ test("buildFfmpegArgs carries the load-bearing invariants", () => {
   assert.ok(args.includes("+faststart"), "missing +faststart");
   assert.ok(args.includes("-an"), "missing -an");
   assert.ok(args.includes("-framerate 30"), "missing -framerate");
+  // anti-flicker: the matrix (colorspace) must be tagged, never left "unknown".
+  // We deliberately do NOT tag -color_trc (the sRGB source transfer is already
+  // defined; mislabelling it bt709 is wrong and unnecessary).
+  assert.ok(args.includes("-colorspace bt709"), "missing bt709 colorspace tag");
+  assert.ok(args.includes("-color_primaries bt709"), "missing bt709 primaries");
+  assert.ok(args.includes("-color_range tv"), "missing tv color range");
+  assert.ok(!args.includes("-color_trc"), "should not mislabel the sRGB transfer as bt709");
 });
 
 test("invariants survive the loop + drop-black + start options", () => {
@@ -95,12 +102,15 @@ test("encode produces yuv420p + even dims + faststart", { skip: !ffmpegReady && 
   assert.equal(enc.status, 0, "encode failed");
   const probe = spawnSync("ffprobe", [
     "-v", "error", "-select_streams", "v:0",
-    "-show_entries", "stream=pix_fmt,width,height", "-of", "json", out,
+    "-show_entries", "stream=pix_fmt,width,height,color_space", "-of", "json", out,
   ], { encoding: "utf8" });
   const s = JSON.parse(probe.stdout).streams[0];
   assert.equal(s.pix_fmt, "yuv420p");
   assert.equal(s.width % 2, 0);
   assert.equal(s.height % 2, 0);
+  // anti-flicker: the matrix must be tagged bt709, never "unknown" (which makes
+  // players guess and Chromium flicker between overlay/composite paths).
+  assert.equal(s.color_space, "bt709", "color matrix left unknown/wrong");
   // faststart => moov atom present AND before mdat.
   const trace = spawnSync("ffprobe", ["-v", "trace", out], { encoding: "utf8" }).stderr || "";
   const moov = trace.indexOf("type:'moov'");

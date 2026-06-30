@@ -1,7 +1,8 @@
 export type CursorElementRef =
   | `curve-key:${string}:${string}`
   | `atlas-tile:${string}`
-  | `channel-row:${string}`;
+  | `channel-row:${string}`
+  | `testid:${string}`;
 
 export type CursorTarget =
   | { kind: "element"; ref: CursorElementRef }
@@ -35,6 +36,11 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 function parseElementRef(ref: string): CursorElementRef | null {
+  // testid: the id is a free-form data-testid value that may itself contain ':',
+  // so match by prefix (not a ":"-split count) and keep the whole remainder.
+  if (ref.startsWith("testid:") && ref.length > "testid:".length) {
+    return ref as CursorElementRef;
+  }
   const parts = ref.split(":");
   if (parts[0] === "curve-key" && parts.length === 3 && parts[1] && parts[2]) {
     return ref as CursorElementRef;

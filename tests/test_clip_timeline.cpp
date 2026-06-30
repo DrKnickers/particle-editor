@@ -132,6 +132,23 @@ int main()
         CHECK(tl.cursor[3].target.kind == CursorTarget::Kind::Point);
         CHECK(Near(tl.cursor[3].target.x, 42.5) && Near(tl.cursor[3].target.y, 99.25));
     }
+    // Generic testid element ref: any [data-testid] element is targetable.
+    {
+        const char* js = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o",
+          "tracks":[{"cursor":[{"t":0,"vis":true,"press":false,"target":{"kind":"element","ref":"testid:atlas-alpha-toggle"}}]}]})";
+        Timeline tl; std::string err;
+        CHECK(ParseTimeline(js, tl, err));
+        CHECK(tl.cursor.size() == 1);
+        CHECK(tl.cursor[0].target.kind == CursorTarget::Kind::Element);
+        CHECK(tl.cursor[0].target.ref == "testid:atlas-alpha-toggle");
+    }
+    // A testid id is free-form and may itself contain ':' — accept by prefix.
+    {
+        CHECK(IsValidCursorElementRef("testid:a:b:c"));
+        CHECK(IsValidCursorElementRef("testid:atlas-alpha-toggle"));
+        CHECK(!IsValidCursorElementRef("testid:"));    // empty id rejected
+        CHECK(!IsValidCursorElementRef("button:ok"));  // unknown prefix rejected
+    }
     // Existing literal cursor track still parses and stays non-target-bearing.
     {
         const char* js = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o",
@@ -297,6 +314,7 @@ int main()
         CHECK(IsAllowedRecordKind("ui/show-panel"));
         CHECK(IsAllowedRecordKind("ui/open-picker"));
         CHECK(IsAllowedRecordKind("ui/select-key"));
+        CHECK(IsAllowedRecordKind("ui/atlas-alpha"));
         CHECK(!drive::IsAllowedBridgeKind("emitters/delete"));
         CHECK(!drive::IsAllowedBridgeKind("ui/show-panel"));
         CHECK(!drive::IsAllowedBridgeKind("ui/open-picker"));

@@ -34,6 +34,22 @@ describe("record-cursor-track", () => {
     ]);
   });
 
+  it("accepts a testid ref whose id contains colons (free-form data-testid)", () => {
+    expect(
+      parseCursorTrackMessage({
+        type: "ui/cursor-track",
+        keys: [{ t: 0, vis: true, press: false, target: { kind: "element", ref: "testid:a:b:c" } }],
+      }),
+    ).toEqual([{ t: 0, vis: true, press: false, target: { kind: "element", ref: "testid:a:b:c" } }]);
+    // a bare "testid:" with no id is still rejected
+    expect(
+      parseCursorTrackMessage({
+        type: "ui/cursor-track",
+        keys: [{ t: 0, vis: true, press: false, target: { kind: "element", ref: "testid:" } }],
+      }),
+    ).toBeNull();
+  });
+
   it("rejects malformed cursor tracks", () => {
     expect(parseCursorTrackMessage({ type: "ui/cursor-track", keys: [] })).toBeNull();
     expect(

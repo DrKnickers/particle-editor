@@ -222,6 +222,7 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     if (kind == "ui/open-picker")   return true;
     if (kind == "ui/focus-channel") return true;  // focus a curve channel mid-clip
     if (kind == "ui/select-key")    return true;  // select a curve key (lights the atlas preview/highlight)
+    if (kind == "ui/atlas-alpha")   return true;  // toggle the Atlas-Frames Alpha preview mode
     if (!drive::IsAllowedBridgeKind(kind)) return false;
     if (kind == "engine/set/paused") return false;
     return true;
@@ -247,6 +248,10 @@ inline std::vector<std::string> SplitCursorRef(const std::string& ref) {
 }
 
 inline bool IsValidCursorElementRef(const std::string& ref) {
+    // testid: the id is a free-form data-testid value that may itself contain ':',
+    // so accept by prefix (non-empty remainder) before the per-segment non-empty
+    // check the structured refs rely on. Mirrors the web parseElementRef.
+    if (ref.rfind("testid:", 0) == 0) return ref.size() > 7;  // "testid:".size() == 7
     const auto parts = SplitCursorRef(ref);
     for (const auto& part : parts)
         if (part.empty()) return false;

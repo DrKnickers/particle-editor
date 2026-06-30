@@ -19,6 +19,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useAtlasContext } from "@/lib/atlas-context";
+import { parseAtlasAlphaMessage } from "@/lib/record-focus-bridge";
 import { ToolPanel } from "@/components/ToolPanel";
 import { AtlasConfirmModal } from "@/components/AtlasConfirmModal";
 import {
@@ -189,6 +190,23 @@ export function AtlasPickerPanel({
   stackRef.current = stack;
   useEffect(() => { emitterIdRef.current = emitterId; }, [emitterId]);
   useEffect(() => { writeShowAlpha(showAlpha); }, [showAlpha]);
+  // --record: the host posts ui/atlas-alpha to flip the Alpha preview mode (the
+  // synthetic cursor's click on the toggle is view-only, so the state flips here).
+  useEffect(() => {
+    const wv = window.chrome?.webview as
+      | {
+          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+        }
+      | undefined;
+    if (!wv?.addEventListener) return;
+    const onMsg = (e: { data: unknown }) => {
+      const a = parseAtlasAlphaMessage(e.data);
+      if (a) setShowAlpha(a.on);
+    };
+    wv.addEventListener("message", onMsg);
+    return () => wv.removeEventListener?.("message", onMsg);
+  }, []);
   useEffect(() => () => { if (pulseTimer.current) clearTimeout(pulseTimer.current); }, []);
   useEffect(() => () => roRef.current?.disconnect(), []);
 
