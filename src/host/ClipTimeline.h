@@ -223,6 +223,7 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     if (kind == "ui/focus-channel") return true;  // focus a curve channel mid-clip
     if (kind == "ui/select-key")    return true;  // select a curve key (lights the atlas preview/highlight)
     if (kind == "ui/atlas-alpha")   return true;  // toggle the Atlas-Frames Alpha preview mode
+    if (kind == "ui/pose-drag")     return true;  // pose a frozen reorder drag (chip+gap) for a clip still
     if (!drive::IsAllowedBridgeKind(kind)) return false;
     if (kind == "engine/set/paused") return false;
     return true;

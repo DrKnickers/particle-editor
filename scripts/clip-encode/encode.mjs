@@ -31,7 +31,16 @@ import { join } from "node:path";
 // Compose the per-frame filter chain shared by the -vf and -filter_complex paths.
 // `pre` runs before any loop construction (per-source-frame); `post` carries the
 // even-dims + yuv420p invariants and runs last on the final stream.
-function buildFilterParts({ fps, dropBlackBelow }) {
+// Validate a crop "W:H:X:Y" (four non-negative ints) before it reaches the ffmpeg
+// filtergraph — an unvalidated string would let an extra filter be injected
+// (e.g. "1264:952:8:0,transpose=1"). Throws on anything else; null is a no-op.
+function assertCrop(crop) {
+  if (crop != null && !/^\d+:\d+:\d+:\d+$/.test(crop)) {
+    throw new Error(`--crop must be W:H:X:Y (non-negative integers), got "${crop}"`);
+  }
+}
+
+function buildFilterParts({ fps, dropBlackBelow, crop }) {
   const pre = [];
   if (dropBlackBelow != null) {
     // Measure per-frame luma, keep only frames brighter than the threshold, then
@@ -40,17 +49,24 @@ function buildFilterParts({ fps, dropBlackBelow }) {
     pre.push(`metadata=mode=select:key=lavfi.signalstats.YAVG:value=${dropBlackBelow}:function=greater`);
     pre.push(`setpts=N/${fps}/TB`);
   }
-  const post = "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p";
+  // crop=W:H:X:Y trims the captured window's non-content chrome (e.g. the Win11
+  // phantom ~8px resize border GetWindowRect/PrintWindow includes around the editor
+  // — crop=1264:952:8:0 keeps the title bar, drops the black L/R/B border). Runs
+  // first so the even-dims + yuv420p invariants apply to the trimmed frame.
+  const cropPart = crop ? `crop=${crop},` : "";
+  const post = `${cropPart}scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p`;
   return { pre, post };
 }
 
 export function buildFfmpegArgs({ framesDir, fps, out, start = 0, loop = "none",
-                                  dropBlackBelow = null, crossfadeSec = 1.0, frameCount = null, crf = 20 }) {
+                                  dropBlackBelow = null, crossfadeSec = 1.0, frameCount = null, crf = 20,
+                                  crop = null }) {
+  assertCrop(crop);
   const args = ["-y", "-framerate", String(fps)];
   if (start) args.push("-start_number", String(start));
   args.push("-i", join(framesDir, "frame_%05d.png"));
 
-  const { pre, post } = buildFilterParts({ fps, dropBlackBelow });
+  const { pre, post } = buildFilterParts({ fps, dropBlackBelow, crop });
   const preChain = pre.length ? `${pre.join(",")},` : "";
 
   if (loop === "pingpong") {
@@ -126,9 +142,13 @@ export function countFrames(framesDir, start = 0) {
   return n;
 }
 
-export function buildPosterArgs({ framesDir, poster, posterFrame = 0 }) {
+export function buildPosterArgs({ framesDir, poster, posterFrame = 0, crop = null }) {
+  assertCrop(crop);
   const name = `frame_${String(posterFrame).padStart(5, "0")}.png`;
-  return ["-y", "-i", join(framesDir, name), "-frames:v", "1", poster];
+  const args = ["-y", "-i", join(framesDir, name)];
+  if (crop) args.push("-vf", `crop=${crop}`); // match the video's chrome trim
+  args.push("-frames:v", "1", poster);
+  return args;
 }
 
 function run(bin, args) {
@@ -174,7 +194,7 @@ if (process.argv[1] && process.argv[1].endsWith("encode.mjs")) {
   if (!a.frames || !a.fps || !a.out) {
     console.error("usage: node encode.mjs --frames <dir> --fps <n> --out <clip.mp4> [--poster <p.jpg>]\n" +
                   "  [--start <n>] [--loop pingpong|crossfade] [--crossfade <sec>]\n" +
-                  "  [--crf <n>] [--drop-black-below <luma>] [--poster-frame <n>]");
+                  "  [--crf <n>] [--drop-black-below <luma>] [--poster-frame <n>] [--crop W:H:X:Y]");
     process.exit(2);
   }
   if (!existsSync(a.frames)) {
@@ -191,10 +211,11 @@ if (process.argv[1] && process.argv[1].endsWith("encode.mjs")) {
     crossfadeSec: numOpt(a, "crossfade", 1.0),
     frameCount: loop === "crossfade" ? countFrames(a.frames, start) : null,
     crf: numOpt(a, "crf", 20),
+    crop: a.crop ?? null,
   }));
   if (a.poster) {
     const posterFrame = numOpt(a, "poster-frame", start);
-    run("ffmpeg", buildPosterArgs({ framesDir: a.frames, poster: a.poster, posterFrame }));
+    run("ffmpeg", buildPosterArgs({ framesDir: a.frames, poster: a.poster, posterFrame, crop: a.crop ?? null }));
   }
   console.log(`encoded ${a.out}`);
 }

@@ -104,6 +104,28 @@ export function parseAtlasAlphaMessage(data: unknown): { on: boolean } | null {
   return typeof m.on === "boolean" ? { on: m.on } : null;
 }
 
+export type PoseDragTarget = "stack" | "emitter";
+
+/**
+ * Parse a host->web ui/pose-drag push; returns `{ target, from, gap }` or null.
+ * The host sends it during --record to FREEZE a reorder drag (lifted chip + make-room
+ * gap) so a clip still can show "drag to reorder" without driving real pointer events.
+ * `target` picks the list (the mod stack or the emitter tree); `from` is the row being
+ * lifted, `gap` the insertion gap (0..len). All three are required + validated.
+ */
+export function parsePoseDragMessage(
+  data: unknown,
+): { target: PoseDragTarget; from: number; gap: number } | null {
+  const m = coerceMessage(data);
+  if (!m || m.type !== "ui/pose-drag") return null;
+  const target = m.target;
+  if (target !== "stack" && target !== "emitter") return null;
+  const from = m.from, gap = m.gap;
+  if (typeof from !== "number" || !Number.isInteger(from) || from < 0) return null;
+  if (typeof gap !== "number" || !Number.isInteger(gap) || gap < 0) return null;
+  return { target, from, gap };
+}
+
 export type PickerWhich = "reference" | "background" | "mods";
 const PICKER_WHICH = ["reference", "background", "mods"] as const;
 

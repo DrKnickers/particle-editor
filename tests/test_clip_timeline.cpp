@@ -315,10 +315,12 @@ int main()
         CHECK(IsAllowedRecordKind("ui/open-picker"));
         CHECK(IsAllowedRecordKind("ui/select-key"));
         CHECK(IsAllowedRecordKind("ui/atlas-alpha"));
+        CHECK(IsAllowedRecordKind("ui/pose-drag"));
         CHECK(!drive::IsAllowedBridgeKind("emitters/delete"));
         CHECK(!drive::IsAllowedBridgeKind("ui/show-panel"));
         CHECK(!drive::IsAllowedBridgeKind("ui/open-picker"));
         CHECK(!drive::IsAllowedBridgeKind("ui/select-key"));
+        CHECK(!drive::IsAllowedBridgeKind("ui/pose-drag"));
         // ...but record-only: NOT in the shared --drive allowlist
         CHECK(!drive::IsAllowedBridgeKind("spawner/start"));
         CHECK(!drive::IsAllowedBridgeKind("spawner/trigger"));

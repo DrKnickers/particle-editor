@@ -47,7 +47,7 @@ import {
 import { useTreeContextStore } from "@/lib/tree-context";
 import { requestEmitterRename } from "@/lib/tree-action";
 import { toggleDock } from "@/lib/right-dock";
-import { parseOpenPickerMessage } from "@/lib/record-focus-bridge";
+import { parseOpenPickerMessage, parsePoseDragMessage } from "@/lib/record-focus-bridge";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { Modal } from "@/components/Modal";
 import { PreferencesDialog } from "@/screens/PreferencesDialog";
@@ -214,11 +214,14 @@ export function MenuBar({
     n.splice(Math.max(0, Math.min(t, n.length)), 0, m);
     void setLayerStack(n);
   };
+  // --record only: a posed (frozen) drag for the mod stack, driven by ui/pose-drag.
+  const [posedStackDrag, setPosedStackDrag] = useState<{ from: number; gap: number } | null>(null);
   const menuDrag = useStackReorder({
     order: stack,
     labelFor,
     onReorder: reorderStack,
     getScrollContainer: () => null,
+    pose: posedStackDrag,
   });
   const handleResetViewConfirm = async () => {
     setResetViewOpen(false);
@@ -260,7 +263,16 @@ export function MenuBar({
     if (!wv?.addEventListener) return;
     const onMsg = (e: { data: unknown }) => {
       const msg = parseOpenPickerMessage(e.data);
-      if (msg?.which === "mods") setMenuValue(msg.open ? MODS_MENU_VALUE : "");
+      if (msg?.which === "mods") {
+        // The host may have changed the layer stack out-of-band (e.g. a --record
+        // mods/set-layers, which goes straight through the bridge and never hits the
+        // web setLayerStack wrapper). Re-fetch so the dropdown shows the live stack.
+        if (msg.open) void refreshModsList();
+        else setPosedStackDrag(null); // closing clears any posed drag so the chip can't ghost
+        setMenuValue(msg.open ? MODS_MENU_VALUE : "");
+      }
+      const pd = parsePoseDragMessage(e.data);
+      if (pd?.target === "stack") setPosedStackDrag({ from: pd.from, gap: pd.gap });
     };
     wv.addEventListener("message", onMsg);
     return () => wv.removeEventListener?.("message", onMsg);

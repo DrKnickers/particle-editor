@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAtlasAlphaMessage, parseOpenPickerMessage, parseSelectKeyMessage, parseShowPanelMessage } from "../record-focus-bridge";
+import { parseAtlasAlphaMessage, parseOpenPickerMessage, parsePoseDragMessage, parseSelectKeyMessage, parseShowPanelMessage } from "../record-focus-bridge";
 
 describe("record-ui-bridge", () => {
   it("parses ui/show-panel messages", () => {
@@ -62,6 +62,31 @@ describe("record-ui-bridge", () => {
     expect(parseAtlasAlphaMessage({ type: "ui/atlas-alpha" })).toBeNull();
     expect(parseAtlasAlphaMessage({ type: "ui/atlas-alpha", on: "true" })).toBeNull();
     expect(parseAtlasAlphaMessage({ type: "ui/select-key", on: true })).toBeNull();
+  });
+
+  it("parses ui/pose-drag and validates target + integer indices", () => {
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: 0, gap: 2 })).toEqual({
+      target: "stack",
+      from: 0,
+      gap: 2,
+    });
+    expect(parsePoseDragMessage(JSON.stringify({ type: "ui/pose-drag", target: "emitter", from: 3, gap: 0 }))).toEqual({
+      target: "emitter",
+      from: 3,
+      gap: 0,
+    });
+    // wrong type / bad target / non-integer / negative all reject
+    expect(parsePoseDragMessage({ type: "ui/atlas-alpha", target: "stack", from: 0, gap: 0 })).toBeNull();
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "mods", from: 0, gap: 0 })).toBeNull();
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: 1.5, gap: 0 })).toBeNull();
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: -1, gap: 0 })).toBeNull();
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: 0 })).toBeNull();
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: "0", gap: 0 })).toBeNull();
+    // gap is validated identically: negative / non-integer / non-number all reject
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: 0, gap: -1 })).toBeNull();
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: 0, gap: 1.5 })).toBeNull();
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: 0, gap: "abc" })).toBeNull();
+    expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: 0, gap: null })).toBeNull();
   });
 
   it("rejects malformed ui/select-key messages", () => {

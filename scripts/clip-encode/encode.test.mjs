@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildFfmpegArgs } from "./encode.mjs";
+import { buildFfmpegArgs, buildPosterArgs } from "./encode.mjs";
 
 const has = (bin) => spawnSync(bin, ["-version"]).status === 0;
 const ffmpegReady = has("ffmpeg") && has("ffprobe");
@@ -23,6 +23,22 @@ test("buildFfmpegArgs carries the load-bearing invariants", () => {
   assert.ok(args.includes("-color_primaries bt709"), "missing bt709 primaries");
   assert.ok(args.includes("-color_range tv"), "missing tv color range");
   assert.ok(!args.includes("-color_trc"), "should not mislabel the sRGB transfer as bt709");
+});
+
+test("crop trims the window chrome and runs before the even-dims/yuv420p invariants", () => {
+  const args = buildFfmpegArgs({ framesDir: "d", fps: 60, out: "o.mp4", crop: "1264:952:8:0" }).join(" ");
+  assert.ok(args.includes("crop=1264:952:8:0"), "missing crop");
+  // crop must precede scale (trim first, then enforce even dims on the trimmed frame)
+  assert.ok(args.indexOf("crop=1264:952:8:0") < args.indexOf("scale=trunc"), "crop must run before scale");
+  assert.ok(args.includes("format=yuv420p"), "invariant dropped");
+  // no crop arg when none is requested
+  assert.ok(!buildFfmpegArgs({ framesDir: "d", fps: 60, out: "o.mp4" }).join(" ").includes("crop="), "crop should be opt-in");
+  // the poster path carries the same crop, and none when absent
+  assert.ok(buildPosterArgs({ framesDir: "d", poster: "p.jpg", crop: "1264:952:8:0" }).join(" ").includes("-vf crop=1264:952:8:0"), "poster missing crop");
+  assert.ok(!buildPosterArgs({ framesDir: "d", poster: "p.jpg" }).join(" ").includes("crop="), "poster crop should be opt-in");
+  // a crop that isn't W:H:X:Y is rejected — no extra-filter injection
+  assert.throws(() => buildFfmpegArgs({ framesDir: "d", fps: 60, out: "o.mp4", crop: "1264:952:8:0,transpose=1" }), /crop must be/);
+  assert.throws(() => buildPosterArgs({ framesDir: "d", poster: "p.jpg", crop: "8:8:0:0;rm -rf" }), /crop must be/);
 });
 
 test("invariants survive the loop + drop-black + start options", () => {
