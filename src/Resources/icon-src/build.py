@@ -15,7 +15,7 @@ SITE = REPO / "site"
 
 SIZES = (16, 32, 48, 64, 128, 256)
 ACCENT = "#4a8bff"
-MARK_SCALE = 1.08
+MARK_SCALE = 1.15
 MARK_ANCHOR = (0.51, 0.50)
 MARK_OFFSET = (-0.010, 0.0108)
 ENDPOINT_FILL = "#10223a"
@@ -78,7 +78,7 @@ def radial_circle(
     size: int,
     center: tuple[float, float],
     radius: float,
-    colors: tuple[str, str, str] = ("#e8f3ff", ACCENT, "#235fd1"),
+    colors: tuple[str, str, str] = ("#f4faff", "#5ea1ff", "#2f72e0"),
     alpha: int = 255,
 ) -> Image.Image:
     layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
@@ -191,11 +191,11 @@ def draw_mark(base: Image.Image) -> None:
         base,
         points,
         max(3, round(size * 0.058 * MARK_SCALE)),
-        (54, 118, 220, 58),
+        (70, 145, 244, 76),
         blur=max(1, round(size * 0.003)),
     )
-    draw_tube(base, points, max(2, round(size * 0.031 * MARK_SCALE)), (105, 170, 255, 238))
-    draw_tube(base, points[len(points) // 2 :], max(1, round(size * 0.009 * MARK_SCALE)), (188, 220, 255, 130))
+    draw_tube(base, points, max(2, round(size * 0.031 * MARK_SCALE)), (124, 185, 255, 250))
+    draw_tube(base, points[len(points) // 2 :], max(1, round(size * 0.009 * MARK_SCALE)), (220, 240, 255, 155))
 
     draw_endpoint(draw, p0, max(5, round(size * 0.045 * MARK_SCALE)))
     draw_endpoint(draw, p3, max(5, round(size * 0.041 * MARK_SCALE)))
@@ -275,14 +275,14 @@ def mark_svg(include_plate: bool) -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
   <defs>{plate_defs}
     <radialGradient id="particle" cx="42%" cy="36%" r="62%">
-      <stop offset="0" stop-color="#e8f3ff"/>
-      <stop offset=".58" stop-color="#4a8bff"/>
-      <stop offset="1" stop-color="#235fd1"/>
+      <stop offset="0" stop-color="#f4faff"/>
+      <stop offset=".58" stop-color="#5ea1ff"/>
+      <stop offset="1" stop-color="#2f72e0"/>
     </radialGradient>
   </defs>{plate_shapes}
-  <path d="{path}" fill="none" stroke="#3676dc" stroke-opacity=".23" stroke-width="{svg_num(glow_width)}" stroke-linecap="round"/>
-  <path d="{path}" fill="none" stroke="#69aaff" stroke-width="{svg_num(tube_width)}" stroke-linecap="round"/>
-  <path d="{highlight_path}" fill="none" stroke="#bcdcff" stroke-opacity=".54" stroke-width="{svg_num(highlight_width)}" stroke-linecap="round"/>
+  <path d="{path}" fill="none" stroke="#4691f4" stroke-opacity=".3" stroke-width="{svg_num(glow_width)}" stroke-linecap="round"/>
+  <path d="{path}" fill="none" stroke="#7cb9ff" stroke-width="{svg_num(tube_width)}" stroke-linecap="round"/>
+  <path d="{highlight_path}" fill="none" stroke="#dcf0ff" stroke-opacity=".61" stroke-width="{svg_num(highlight_width)}" stroke-linecap="round"/>
   <circle cx="{svg_num(p0[0])}" cy="{svg_num(p0[1])}" r="{svg_num(start_radius)}" fill="{ENDPOINT_FILL}" stroke="#83beff" stroke-width="3"/>
   <circle cx="{svg_num(p3[0])}" cy="{svg_num(p3[1])}" r="{svg_num(end_radius)}" fill="{ENDPOINT_FILL}" stroke="#83beff" stroke-width="3"/>
   <circle cx="{svg_num(particle[0])}" cy="{svg_num(particle[1])}" r="{svg_num(particle_radius)}" fill="url(#particle)"/>

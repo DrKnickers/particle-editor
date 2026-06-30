@@ -4,9 +4,10 @@ Generates `../logo.ico` (the window / taskbar / exe icon) plus the site
 favicons.
 
 The app icon is a Windows 11-style rounded tile: a dark editor-native material
-plate with a no-handle spline, endpoint nodes, and an azure particle in the
-site's accent (`#4a8bff`, see `site/styles.css`). The standalone mark exports
-drop the tile and keep only the transparent spline + particle.
+plate with a no-handle spline, endpoint nodes, and a taskbar-weighted azure
+particle derived from the site's accent (`#4a8bff`, see `site/styles.css`).
+The standalone mark exports drop the tile and keep only the transparent
+spline + particle.
 
 **Source of truth is `build.py`** -- the shape and shading are defined in code.
 `build.js` is a compatibility wrapper for the old command. Everything else here
