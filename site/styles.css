@@ -50,8 +50,11 @@ a { color:inherit; }
   gap:1rem; max-width:var(--maxw); margin:0 auto;
   padding:1.25rem 1.5rem; border-bottom:1px solid var(--rule);
 }
-.wordmark { font-weight:600; color:var(--paper); text-decoration:none; letter-spacing:-.01em; white-space:nowrap; }
-.wordmark .dot { color:var(--accent); font-size:.7em; vertical-align:.15em; }
+.wordmark {
+  display:inline-flex; align-items:center; gap:.5rem;
+  font-weight:600; color:var(--paper); text-decoration:none; letter-spacing:-.01em; white-space:nowrap;
+}
+.wordmark-icon { width:1.45rem; height:1.45rem; flex:0 0 auto; display:block; }
 .topnav { display:flex; align-items:center; flex:0 1 auto; gap:1.25rem; margin-left:auto; min-width:0; }
 .topnav a, .topnav .btn-primary, .motion-toggle { white-space:nowrap; }
 .topnav a:not(.btn-primary) {
@@ -61,9 +64,10 @@ a { color:inherit; }
 .topnav a:not(.btn-primary):hover { color:var(--paper); }
 /* the nav Download = the footer's release button, sized for the bar */
 .topnav .btn-primary {
-  display:inline-flex; align-items:center; justify-content:center;
+  display:inline-flex; align-items:center; justify-content:center; gap:.42rem;
   font-size:.82rem; padding:.42rem .85rem;
 }
+.nav-download-icon { line-height:1; }
 .motion-toggle {
   font-family:var(--mono); font-size:.78rem; color:var(--body);
   background:transparent; border:1px solid var(--rule); border-radius:2px;
@@ -159,7 +163,7 @@ body.loaded .reveal:nth-child(6) { animation-delay:.58s; }
 
 @media (max-width:520px) {
   .topbar { padding:.85rem 1rem; gap:.7rem; }
-  .topnav { justify-content:flex-end; gap:.6rem; }
+  .topnav { flex:0 0 auto; justify-content:flex-end; gap:.6rem; }
   .topnav .nav-download {
     width:2.75rem; min-width:2.75rem; height:2.75rem;
     padding:0;
@@ -167,8 +171,7 @@ body.loaded .reveal:nth-child(6) { animation-delay:.58s; }
   .nav-download-label { display:none; }
   .topnav .nav-source { min-height:2.75rem; font-size:.76rem; }
   .motion-toggle {
-    min-width:3.625rem; height:2.75rem;
-    padding:.3rem .5rem; text-align:center;
+    display:none;
   }
 }
 
