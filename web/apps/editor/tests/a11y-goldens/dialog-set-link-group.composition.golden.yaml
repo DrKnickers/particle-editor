@@ -5,7 +5,7 @@
   - text: Create new group
   - radio "Join existing group" [disabled]
   - text: Join existing group
-  - combobox [disabled]:
+  - combobox "Existing group to join" [disabled]:
     - option "(none)" [selected]
   - paragraph: Select at least 2 emitters to create a group.
   - button "Cancel"

@@ -15,9 +15,6 @@
 - button "Play"
 - button "Step"
 - button "Step 10"
-- button "Show ground" [pressed]
-- button "Show grid"
-- button "Toggle bloom"
 - button "Leave particles after instance death" [pressed]
 - button "Toggle Spawner panel"
 - button "Toggle Lighting panel" [pressed]
@@ -110,6 +107,11 @@
   - textbox "Emit offset:" [disabled]: "0.50"
   - text: units
 - separator
+- group "Viewport display options":
+  - button "Show ground" [pressed]
+  - button "Show grid"
+  - button "Toggle bloom"
+  - button "Load a reference object to lock it" [disabled]
 - separator
 - text: Curve editor
 - button "Select tool" [pressed]

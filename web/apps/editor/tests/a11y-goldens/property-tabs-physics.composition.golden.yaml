@@ -15,20 +15,17 @@
 - button "Play"
 - button "Step"
 - button "Step 10"
-- button "Show ground" [pressed]
-- button "Show grid"
-- button "Toggle bloom"
 - button "Leave particles after instance death" [pressed]
 - button "Toggle Spawner panel" [pressed]
 - button "Toggle Lighting panel"
-- button "Toggle Atlas frame picker" [disabled]
+- button "Toggle Atlas frame picker"
 - button "Ground": "Ground:"
 - button "Background": "Background:"
 - button "Reference object picker": "Object: None"
 - text: Particle System
 - complementary:
   - tree "Emitters":
-    - treeitem "Hide emitter default":
+    - treeitem "Hide emitter default" [selected]:
       - button "Hide emitter default":
         - button "Hide emitter"
         - text: default
@@ -42,8 +39,8 @@
         - text: default ✕
   - menubar:
     - menuitem "New Emitter"
-  - button "Duplicate emitter" [disabled]
-  - button "Delete emitter" [disabled]
+  - button "Duplicate emitter"
+  - button "Delete emitter"
   - button "Move emitter up" [disabled]
   - button "Move emitter down" [disabled]
   - button "Show all emitters"
@@ -53,15 +50,88 @@
   - tab "Basic"
   - tab "Appearance"
   - tab "Physics" [selected]
-- tabpanel "Physics": Select an emitter to edit its properties
+- tabpanel "Physics":
+  - button "Initial position" [expanded]
+  - text: "Type:"
+  - combobox "Type:": Exact
+  - text: "Value: X"
+  - textbox "Group 3 Value X": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "Y"
+  - textbox "Group 3 Value Y": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Z
+  - textbox "Group 3 Value Z": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - button "Initial speed" [expanded]
+  - text: "Type:"
+  - combobox "Type:": Exact
+  - text: "Value: X"
+  - textbox "Group 1 Value X": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "Y"
+  - textbox "Group 1 Value Y": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Z
+  - textbox "Group 1 Value Z": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "Inward speed:"
+  - textbox "Inward speed:": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "Parent speed inherit:"
+  - textbox "Parent speed inherit:": "0"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "% Affected by wind"
+  - checkbox "Affected by wind"
+  - button "Acceleration" [expanded]
+  - text: "X / Y / Z: X"
+  - textbox "Acceleration X": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "Y"
+  - textbox "Acceleration Y": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Z
+  - textbox "Acceleration Z": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "Gravity acceleration:"
+  - textbox "Gravity acceleration:": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "Inward acceleration:"
+  - textbox "Inward acceleration:": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: Object space acceleration
+  - checkbox "Object space acceleration"
+  - button "Ground interaction" [expanded]
+  - text: "Behavior:"
+  - combobox "Behavior:": None
+  - text: "Bounciness:"
+  - textbox "Bounciness:" [disabled]: "0.20"
 - separator
+- group "Viewport display options":
+  - button "Show ground" [pressed]
+  - button "Show grid"
+  - button "Toggle bloom"
+  - button "Load a reference object to lock it" [disabled]
 - separator
 - text: Curve editor
 - button "Select tool" [pressed]
 - button "Insert tool"
-- button "Interpolation linear" [disabled]
-- button "Interpolation smooth" [disabled]
-- button "Interpolation step" [disabled]
+- button "Interpolation linear" [pressed]
+- button "Interpolation smooth"
+- button "Interpolation step"
 - text: "Lock to:"
 - combobox "Lock-to track" [disabled]: None
 - button "Delete selected keys" [disabled]
@@ -91,7 +161,9 @@
   - button "Toggle Rotation curve Rotation":
     - checkbox "Toggle Rotation curve"
     - text: Rotation
-- text: Select an emitter to edit its tracks
+- text: 1 0 0.5
+- img "Multi-channel curve overlay, 3 channels"
+- text: 0 25 50 75 100%
 - separator
 - complementary:
   - text: Spawner 0

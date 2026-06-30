@@ -15,20 +15,17 @@
 - button "Play"
 - button "Step"
 - button "Step 10"
-- button "Show ground" [pressed]
-- button "Show grid"
-- button "Toggle bloom"
 - button "Leave particles after instance death" [pressed]
 - button "Toggle Spawner panel" [pressed]
 - button "Toggle Lighting panel"
-- button "Toggle Atlas frame picker" [disabled]
+- button "Toggle Atlas frame picker"
 - button "Ground": "Ground:"
 - button "Background": "Background:"
 - button "Reference object picker": "Object: None"
 - text: Particle System
 - complementary:
   - tree "Emitters":
-    - treeitem "Hide emitter default":
+    - treeitem "Hide emitter default" [selected]:
       - button "Hide emitter default":
         - button "Hide emitter"
         - text: default
@@ -42,8 +39,8 @@
         - text: default ✕
   - menubar:
     - menuitem "New Emitter"
-  - button "Duplicate emitter" [disabled]
-  - button "Delete emitter" [disabled]
+  - button "Duplicate emitter"
+  - button "Delete emitter"
   - button "Move emitter up" [disabled]
   - button "Move emitter down" [disabled]
   - button "Show all emitters"
@@ -53,15 +50,75 @@
   - tab "Basic" [selected]
   - tab "Appearance"
   - tab "Physics"
-- tabpanel "Basic": Select an emitter to edit its properties
+- tabpanel "Basic":
+  - text: Name
+  - textbox "Name": default
+  - button "Emitter Timing" [expanded]
+  - text: "Initial spawn delay:"
+  - textbox "Initial spawn delay:": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "s Skip time:"
+  - textbox "Skip time:": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "s Freeze time:"
+  - textbox "Freeze time:": "0.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: s
+  - button "Generation" [expanded]
+  - radiogroup "Generation mode":
+    - radio "Bursts"
+    - text: "Bursts:"
+    - textbox "Bursts:" [disabled]: "0"
+    - text: "Burst delay:"
+    - textbox "Burst delay:" [disabled]: "1.00"
+    - text: "s Particles/burst:"
+    - textbox "Particles/burst:" [disabled]: "1"
+    - radio "Continuous stream" [checked]
+    - text: "Particles/second:"
+    - textbox "Particles/second:": "1"
+    - button "Increment": ▲
+    - button "Decrement": ▼
+    - radio "Weather particle"
+    - text: "Particles:"
+    - textbox "Particles:" [disabled]: "1"
+    - text: "Distance from camera:"
+    - textbox "Distance from camera:" [disabled]: "0.00"
+    - text: "units Cube size:"
+    - textbox "Cube size:" [disabled]: "500.00"
+    - text: units
+  - text: "Maximum lifetime:"
+  - textbox "Maximum lifetime:": "1.00"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "s Minimum lifetime:"
+  - textbox "Minimum lifetime:": "100"
+  - button "Increment": ▲
+  - button "Decrement": ▼
+  - text: "%"
+  - button "Connection" [expanded]
+  - text: Link particles to instance
+  - checkbox "Link particles to instance"
+  - text: "Emit mode:"
+  - combobox "Emit mode:": Disable
+  - text: "Emit offset:"
+  - textbox "Emit offset:" [disabled]: "0.50"
+  - text: units
 - separator
+- group "Viewport display options":
+  - button "Show ground" [pressed]
+  - button "Show grid"
+  - button "Toggle bloom"
+  - button "Load a reference object to lock it" [disabled]
 - separator
 - text: Curve editor
 - button "Select tool" [pressed]
 - button "Insert tool"
-- button "Interpolation linear" [disabled]
-- button "Interpolation smooth" [disabled]
-- button "Interpolation step" [disabled]
+- button "Interpolation linear" [pressed]
+- button "Interpolation smooth"
+- button "Interpolation step"
 - text: "Lock to:"
 - combobox "Lock-to track" [disabled]: None
 - button "Delete selected keys" [disabled]
@@ -91,7 +148,9 @@
   - button "Toggle Rotation curve Rotation":
     - checkbox "Toggle Rotation curve"
     - text: Rotation
-- text: Select an emitter to edit its tracks
+- text: 1 0 0.5
+- img "Multi-channel curve overlay, 3 channels"
+- text: 0 25 50 75 100%
 - separator
 - complementary:
   - text: Spawner 0
@@ -155,10 +214,10 @@
 - contentinfo: "FPS — · Emitters — · Particles — · Instances — · Cursor — PAUSED ⇧ Shift: spawn instance"
 - menu "Emitters":
   - menuitem "New Emitter"
-  - menuitem "Rename Emitter F2" [disabled]
-  - menuitem "Rescale Emitter…" [disabled]
+  - menuitem "Rename Emitter F2"
+  - menuitem "Rescale Emitter…"
   - separator
-  - menuitem "Toggle Visibility" [disabled]
+  - menuitem "Toggle Visibility"
   - menuitem "Show All Emitters"
   - menuitem "Hide All Emitters"
   - separator
