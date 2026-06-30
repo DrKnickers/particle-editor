@@ -3597,6 +3597,36 @@ void Engine::RenderReferenceObject()
 
     const D3DXMATRIX objectWorld = ReferenceObjectDisplayWorld();   // eased (render)
 
+    // [refZ] Env-gated trace of the reference-object placement at the draw -- the
+    // diagnostic that root-caused the "land unit floats above the ground" report
+    // (a stale per-object transform leaking across an object swap; fixed by
+    // ReferenceTransformMemory.h). Prints the committed + eased positions, the
+    // per-object scale, the final world translation, and the ground Z, throttled so
+    // a --record run doesn't spew. The env is read ONCE (static) so it's truly free
+    // when ALO_REFZ is unset; kept as a durable probe for future placement reports.
+    static int s_refzOn = -1;
+    if (s_refzOn < 0) s_refzOn = (getenv("ALO_REFZ") != nullptr) ? 1 : 0;
+    if (s_refzOn)
+    {
+        static int s_refz = 0;
+        if ((s_refz++ % 30) == 0)
+        {
+            D3DXVECTOR3 omn(0,0,0), omx(0,0,0);
+            m_referenceObjectMesh.GetBoundingBox(omn, omx);
+            fprintf(stderr,
+                "[refZ] f=%d name=%s vis=%d sel=%d scale=%.3f refPos=(%.3f,%.3f,%.3f) "
+                "dispPos=(%.3f,%.3f,%.3f) worldT=(%.3f,%.3f,%.3f) groundZ=%.3f objAABBz=[%.3f..%.3f]\n",
+                s_refz, m_referenceObjectName.c_str(),
+                m_referenceObjectVisible ? 1 : 0, m_referenceObjectSelected ? 1 : 0,
+                m_referenceScaleFactor,
+                m_referencePosition.x, m_referencePosition.y, m_referencePosition.z,
+                m_displayPosition.x, m_displayPosition.y, m_displayPosition.z,
+                objectWorld._41, objectWorld._42, objectWorld._43,
+                m_groundZ, omn.z, omx.z);
+            fflush(stderr);
+        }
+    }
+
     DWORD oldAlphaBlend, oldSrcBlend, oldDestBlend, oldZWrite, oldZEnable, oldCull;
     m_pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &oldAlphaBlend);
     m_pDevice->GetRenderState(D3DRS_SRCBLEND,         &oldSrcBlend);
@@ -5336,6 +5366,50 @@ void Engine::EnumerateReferenceObjects(std::vector<GameObjectRef>& out)
 // object doesn't make a newly-picked one silently invisible.
 void Engine::SetReferenceObject(const std::string& name)
 {
+    // Per-object transform memory. The reference transform (m_referencePosition /
+    // m_referenceRotation) is otherwise ONE global state that leaks across object
+    // swaps: a Z set while framing object A (e.g. lifting a space unit) stays put and
+    // floats a land unit B picked after it. Here, on a real swap to a DIFFERENT
+    // object, stash the outgoing object's transform under its name and load the
+    // incoming object's remembered transform (origin if it was never moved), so each
+    // object keeps its own placement and a freshly-picked unit starts grounded.
+    //
+    // Edge handling (see the unit test tests/test_reference_transform_memory.cpp):
+    //  * Initial load ("" -> A), incl. the startup restore which sets the transform
+    //    THEN the name: no memory for A and no outgoing object -> KEEP the current
+    //    (restored) transform rather than zeroing it.
+    //  * Leaving to None (A -> ""): remember A, then clear the live transform so a
+    //    later None -> X can't inherit A's Z.
+    //  * Re-select of the SAME object: no-op.
+    //
+    // The outgoing key is the DESIRED name, NOT the resolved m_referenceObjectName:
+    // a deferred catalog rebuild (mod/submod switch) clears m_referenceObjectName to
+    // "" while a moved transform is still live, and keying off that empty resolved
+    // name would mis-read the next pick as a startup "keep current" and re-float the
+    // new object. m_referenceDesiredName holds the last picked object through the
+    // defer (it is only cleared by entering None) and is set AFTER this block, so it
+    // still names the object the live transform belongs to -- and is genuinely empty
+    // only at true startup, where keeping the restored transform is correct.
+    {
+        auto lower = [](std::string s) { for (char& c : s) c = (char)tolower((unsigned char)c); return s; };
+        const std::string oldKey = lower(m_referenceDesiredName);  // object the live transform belongs to
+        const std::string newKey = lower(name);                    // incoming pick
+        bool changed = false;
+        const reftransform::Xform next = reftransform::OnSwap(
+            m_referenceTransforms, oldKey, newKey,
+            reftransform::Xform{ m_referencePosition, m_referenceRotation }, changed);
+        if (changed)
+        {
+            m_referencePosition = next.pos;
+            m_referenceRotation = next.rot;
+            // Snap the eased display transform to the (possibly restored) committed
+            // value so the incoming object appears AT its placement instead of gliding
+            // in from the previous object's position.
+            m_displayPosition = m_referencePosition;
+            m_displayRotation = m_referenceRotation;
+        }
+    }
+
     m_referenceDesiredName = name;   // the INTENT (persisted); shown value is resolved below
     if (!name.empty())
         m_referenceObjectVisible = true;

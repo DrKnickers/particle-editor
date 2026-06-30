@@ -1671,7 +1671,17 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         std::string name = params.value("name", std::string{});
         m_engine->SetReferenceObject(name);
         if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        {
             PersistReferenceObjectName(Utf8ToWide(name));
+            // The swap may have changed the live transform (per-object memory:
+            // restore this object's placement, or origin for a never-moved unit).
+            // Persist it so the single global ReferenceObjectTransform in the
+            // registry tracks the SHOWN object -- otherwise a stale transform from a
+            // previous object would be restored onto this one at next startup and
+            // float it (the cross-restart tail of the same bug).
+            PersistReferenceObjectTransform(m_engine->GetReferencePosition(),
+                                            m_engine->GetReferenceRotation());
+        }
         sendOk(json::object());
         markDirty();
         EmitEngineStateChanged();
@@ -5916,6 +5926,7 @@ void BridgeDispatcher::CaptureUndoPoint(DWORD coalesceKey)
         const D3DXVECTOR3 r = m_engine->GetReferenceRotation();
         aux.refPos[0] = p.x; aux.refPos[1] = p.y; aux.refPos[2] = p.z;
         aux.refRot[0] = r.x; aux.refRot[1] = r.y; aux.refRot[2] = r.z;
+        aux.refName = m_engine->GetReferenceObjectName();   // gate the restore on identity
     }
     // Preserve both capture paths (matches the lambda this replaced + the
     // auto-cap's Capture(...,0)): non-zero key coalesces, zero never does.
@@ -6110,7 +6121,13 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
     // Stays in lockstep with CaptureUndoPoint's matching `if (m_engine)` guard:
     // with no engine there's no gizmo, so aux is always {0,0,0} on these
     // entries and skipping the restore drops nothing.
-    if (m_engine)
+    // Restore the captured transform ONLY when the snapshot's reference object is
+    // still the one shown. With per-object transform memory a swap leaves each
+    // object at its own placement; re-applying object A's captured transform onto a
+    // swapped-to object B would teleport B (the emitter-edit snapshot still undoes
+    // correctly -- only the side-band transform restore is gated). A case-
+    // insensitive compare mirrors the catalog's name folding.
+    if (m_engine && _stricmp(aux.refName.c_str(), m_engine->GetReferenceObjectName().c_str()) == 0)
     {
         const D3DXVECTOR3 p(aux.refPos[0], aux.refPos[1], aux.refPos[2]);
         const D3DXVECTOR3 r(aux.refRot[0], aux.refRot[1], aux.refRot[2]);

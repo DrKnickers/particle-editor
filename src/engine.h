@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include <map>
+#include <utility>
 
 #include "managers.h"
 #include "ParticleSystem.h"
@@ -10,6 +12,7 @@
 #include "SkydomeEnvironment.h"   // SkydomeContext
 #include "SkydomeMesh.h"          // game-faithful dome render core
 #include "ReferenceObjectMesh.h"  // imported game-object render core
+#include "ReferenceTransformMemory.h"  // per-object reference-transform memory (pure)
 #include "GameObjectCatalog.h"    // enumerate game objects by Name
 #include "RefLock.h"
 #include <memory>
@@ -1089,6 +1092,16 @@ private:
 	bool                     m_softShadowsEnabled  = true;     // [soft-shadows] "Soft shadows" pref (default on)
 	D3DXVECTOR3              m_referencePosition = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
 	D3DXVECTOR3              m_referenceRotation = D3DXVECTOR3(0.0f, 0.0f, 0.0f);  // degrees [yaw,pitch,roll]
+	// Per-object reference-transform memory (session-only): each reference object
+	// remembers its OWN position+rotation, so switching to a different object shows
+	// it at ITS last placement (or origin if never moved) instead of inheriting the
+	// previous object's transform. Without this the transform is one global state
+	// that leaks across swaps -- a Z set while framing object A floats a land unit B
+	// loaded after it. Keyed by lower-cased object name (catalog folds names
+	// case-insensitively). Save/restore happens on a real object->different-object
+	// swap in Engine::SetReferenceObject; the initial load and mod/submod re-resolves
+	// leave it untouched so the startup-restored transform survives.
+	reftransform::Store      m_referenceTransforms;
 	// Per-object <Scale_Factor> render multiplier for the selected reference
 	// object (1.0 = native; trooper 1.5, AT-AT 1.8). Applied as a leftmost uniform
 	// scale in ReferenceObjectWorldFrom so render/pick/selection-box agree. Reset to

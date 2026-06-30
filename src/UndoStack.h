@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <deque>
 #include <vector>
+#include <string>
 #include <cstddef>
 
 class ParticleSystem;
@@ -33,10 +34,17 @@ public:
     // can't live in the serialized buffer. Carried on EVERY entry so undoing a
     // particle edit restores the ref transform it captured — i.e. leaves the
     // reference object where it is. Plain floats keep this header D3D-free.
+    //
+    // refName is the reference object SHOWN at capture. Each object now keeps its
+    // own transform (per-object memory), so the restore is gated on it: undoing a
+    // particle edit re-applies the captured transform only when the SAME object is
+    // still shown -- otherwise a transform captured for object A would teleport an
+    // unrelated object B that the user swapped to. Empty = no object.
     struct EditorAux
     {
-        float refPos[3] = {0.0f, 0.0f, 0.0f};
-        float refRot[3] = {0.0f, 0.0f, 0.0f};
+        float       refPos[3] = {0.0f, 0.0f, 0.0f};
+        float       refRot[3] = {0.0f, 0.0f, 0.0f};
+        std::string refName;
     };
 
     // Coalescing: if a new capture's coalesceKey matches the previous
