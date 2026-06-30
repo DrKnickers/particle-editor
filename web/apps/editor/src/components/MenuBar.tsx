@@ -47,6 +47,7 @@ import {
 import { useTreeContextStore } from "@/lib/tree-context";
 import { requestEmitterRename } from "@/lib/tree-action";
 import { toggleDock } from "@/lib/right-dock";
+import { parseOpenPickerMessage } from "@/lib/record-focus-bridge";
 import { RESET_CAMERA } from "@/lib/reset-camera";
 import { Modal } from "@/components/Modal";
 import { PreferencesDialog } from "@/screens/PreferencesDialog";
@@ -69,6 +70,7 @@ const CONTENT =
 const ITEM =
   "flex items-center gap-2 px-2 py-1 text-xs text-text rounded hover:bg-panel-2 data-[highlighted]:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent select-none";
 const SEPARATOR = "my-1 h-px bg-panel-2";
+const MODS_MENU_VALUE = "mods";
 
 function Hint({ children }: { children: string }) {
   return <span className="ml-auto text-[10px] text-text-3">{children}</span>;
@@ -130,6 +132,7 @@ export function MenuBar({
   // View → Reset View Settings prompt visibility.
   const [resetViewOpen, setResetViewOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [menuValue, setMenuValue] = useState("");
 
   // list of discovered mods, fetched separately from the
   // engine snapshot because it has a much lower change cadence (only
@@ -246,6 +249,22 @@ export function MenuBar({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridge]);
+
+  useEffect(() => {
+    const wv = window.chrome?.webview as
+      | {
+          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+        }
+      | undefined;
+    if (!wv?.addEventListener) return;
+    const onMsg = (e: { data: unknown }) => {
+      const msg = parseOpenPickerMessage(e.data);
+      if (msg?.which === "mods") setMenuValue(msg.open ? MODS_MENU_VALUE : "");
+    };
+    wv.addEventListener("message", onMsg);
+    return () => wv.removeEventListener?.("message", onMsg);
+  }, []);
 
   const ground = state?.ground ?? false;
   const gridVisible = state?.gridVisible ?? false;
@@ -431,9 +450,9 @@ export function MenuBar({
 
   return (
     <>
-    <Menubar.Root className="flex items-center gap-0.5">
+    <Menubar.Root className="flex items-center gap-0.5" value={menuValue} onValueChange={setMenuValue}>
       {/* ─── File ─── */}
-      <Menubar.Menu>
+      <Menubar.Menu value="file">
         <Menubar.Trigger className={TRIGGER}>File</Menubar.Trigger>
         <Menubar.Portal>
           <Menubar.Content
@@ -499,7 +518,7 @@ export function MenuBar({
       </Menubar.Menu>
 
       {/* ─── Edit ─── */}
-      <Menubar.Menu>
+      <Menubar.Menu value="edit">
         <Menubar.Trigger className={TRIGGER}>Edit</Menubar.Trigger>
         <Menubar.Portal>
           <Menubar.Content
@@ -578,7 +597,7 @@ export function MenuBar({
       </Menubar.Menu>
 
       {/* ─── Emitters ─── */}
-      <Menubar.Menu>
+      <Menubar.Menu value="emitters">
         <Menubar.Trigger className={TRIGGER}>Emitters</Menubar.Trigger>
         <Menubar.Portal>
           <Menubar.Content
@@ -658,7 +677,7 @@ export function MenuBar({
       </Menubar.Menu>
 
       {/* ─── Mods (in-place reorder; catalog in "Add mod…"; modal demoted) ─── */}
-      <Menubar.Menu>
+      <Menubar.Menu value="mods">
         <Menubar.Trigger className={TRIGGER}>Mods</Menubar.Trigger>
         <Menubar.Portal>
           <Menubar.Content
@@ -829,7 +848,7 @@ export function MenuBar({
       {menuDrag.chipNode}
 
       {/* ─── View ─── */}
-      <Menubar.Menu>
+      <Menubar.Menu value="view">
         <Menubar.Trigger className={TRIGGER}>View</Menubar.Trigger>
         <Menubar.Portal>
           <Menubar.Content
@@ -988,7 +1007,7 @@ export function MenuBar({
       </Menubar.Menu>
 
       {/* ─── Help ─── */}
-      <Menubar.Menu>
+      <Menubar.Menu value="help">
         <Menubar.Trigger className={TRIGGER}>Help</Menubar.Trigger>
         <Menubar.Portal>
           <Menubar.Content

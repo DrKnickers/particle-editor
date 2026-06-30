@@ -37,7 +37,17 @@ struct TrackKeyTween {
     Ease        ease = Ease::Linear;
 };
 
-struct CursorKey { double t = 0, x = 0, y = 0; bool vis = false, press = false; };
+struct CursorTarget {
+    enum class Kind { None, Element, Point } kind = Kind::None;
+    std::string ref;
+    double x = 0, y = 0;
+};
+
+struct CursorKey {
+    double t = 0, x = 0, y = 0;
+    bool vis = false, press = false;
+    CursorTarget target;
+};
 
 struct AtEvent { double t = 0; std::string kind; nlohmann::json params; };
 
@@ -118,7 +128,8 @@ inline double EvalTrackKeyValue(const TrackKeyTween& tw, double t) {
 
 struct CursorState { double x = 0, y = 0; bool vis = false, press = false; };
 
-// Piecewise-linear position; vis/press take the LATEST key at or before t (step).
+// Smoothstep-eased position between bracketing keys; vis/press STEP from the
+// upcoming key. (Literal-track evaluator — target tracks are evaluated web-side.)
 inline CursorState EvalCursor(const std::vector<CursorKey>& keys, double t) {
     CursorState cs;
     if (keys.empty()) return cs;
@@ -131,13 +142,36 @@ inline CursorState EvalCursor(const std::vector<CursorKey>& keys, double t) {
             const CursorKey& a = keys[i - 1]; const CursorKey& b = keys[i];
             const double span = b.t - a.t;
             const double u = span > 0 ? (t - a.t) / span : 1.0;
-            cs.x = a.x + (b.x - a.x) * u;
-            cs.y = a.y + (b.y - a.y) * u;
+            const double ue = u * u * (3.0 - 2.0 * u);
+            cs.x = a.x + (b.x - a.x) * ue;
+            cs.y = a.y + (b.y - a.y) * ue;
             cs.vis = b.vis; cs.press = b.press;  // step state from the upcoming key
             return cs;
         }
     }
     return cs;
+}
+
+inline bool CursorTrackIsTargetBearing(const std::vector<CursorKey>& keys) {
+    for (const auto& k : keys)
+        if (k.target.kind != CursorTarget::Kind::None) return true;
+    return false;
+}
+
+inline nlohmann::json BuildCursorTrackJson(const std::vector<CursorKey>& keys) {
+    nlohmann::json out = { {"type", "ui/cursor-track"}, {"keys", nlohmann::json::array()} };
+    for (const auto& k : keys) {
+        nlohmann::json target;
+        if (k.target.kind == CursorTarget::Kind::Element) {
+            target = { {"kind", "element"}, {"ref", k.target.ref} };
+        } else if (k.target.kind == CursorTarget::Kind::Point) {
+            target = { {"kind", "point"}, {"x", k.target.x}, {"y", k.target.y} };
+        } else {
+            target = nlohmann::json::object();
+        }
+        out["keys"].push_back({ {"t", k.t}, {"vis", k.vis}, {"press", k.press}, {"target", target} });
+    }
+    return out;
 }
 
 // Record allowlist = the --drive render-state allowlist MINUS engine/set/paused
@@ -165,6 +199,29 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     // file. `id` is the 0-based emitter-array index; deletion shifts the array,
     // so a timeline removing several must delete highest-index-first.
     if (kind == "emitters/delete") return true;
+    // emitters/move {id, direction} reorders the in-memory emitter array (no
+    // dialog; .alo not written back). `id` is the 0-based array index and a move
+    // shifts the array, so sequential moves in one timeline must account for the
+    // shift. The reorder only changes a LIVE preview's draw order after a respawn
+    // (spawner/stop+start+trigger) — see tasks/clips/README.md.
+    if (kind == "emitters/move") return true;
+    // emitters/set-track-key is also drivable as a discrete at-event (not just by
+    // the continuous track-key tween) — a clip uses it for distinct atlas-frame
+    // "clicks" (set the index track to a chosen frame, with dwells) rather than a
+    // per-frame scrub that makes the picker grid jump. In-memory, dialog-free.
+    if (kind == "emitters/set-track-key") return true;
+    // engine/set/skydome-environment {context, primaryName, secondaryName} is the
+    // name-based game-dome selector the Background picker actually uses (NOT the
+    // legacy slot-index API). Persist is gated by !m_ephemeral, so record-safe.
+    if (kind == "engine/set/skydome-environment") return true;
+    // ui/* events are view-only host->webview pushes (panel/picker open state);
+    // the ClipRunner routes any ui/-prefixed kind to PostWebMessageAsJson rather
+    // than the bridge dispatcher. Allow the two we drive so the parser passes them
+    // through to the runner; they never reach IsAllowedBridgeKind.
+    if (kind == "ui/show-panel")    return true;
+    if (kind == "ui/open-picker")   return true;
+    if (kind == "ui/focus-channel") return true;  // focus a curve channel mid-clip
+    if (kind == "ui/select-key")    return true;  // select a curve key (lights the atlas preview/highlight)
     if (!drive::IsAllowedBridgeKind(kind)) return false;
     if (kind == "engine/set/paused") return false;
     return true;
@@ -175,6 +232,61 @@ inline bool ParseEase(const nlohmann::json& t, Ease& out) {
     if (s == "linear")     { out = Ease::Linear;    return true; }
     if (s == "inOutSine")  { out = Ease::InOutSine;  return true; }
     return false;
+}
+
+inline std::vector<std::string> SplitCursorRef(const std::string& ref) {
+    std::vector<std::string> parts;
+    size_t start = 0;
+    for (;;) {
+        const size_t pos = ref.find(':', start);
+        parts.push_back(ref.substr(start, pos == std::string::npos ? std::string::npos : pos - start));
+        if (pos == std::string::npos) break;
+        start = pos + 1;
+    }
+    return parts;
+}
+
+inline bool IsValidCursorElementRef(const std::string& ref) {
+    const auto parts = SplitCursorRef(ref);
+    for (const auto& part : parts)
+        if (part.empty()) return false;
+    if (parts.size() == 3 && parts[0] == "curve-key") return true;
+    if (parts.size() == 2 && parts[0] == "atlas-tile") return true;
+    if (parts.size() == 2 && parts[0] == "channel-row") return true;
+    return false;
+}
+
+inline bool ParseCursorTarget(const nlohmann::json& value, CursorTarget& out, std::string& err) {
+    out = CursorTarget{};
+    if (!value.is_object()) { err = "cursor target must be an object"; return false; }
+    const std::string kind = value.value("kind", std::string{});
+    if (kind == "element") {
+        if (!value.contains("ref") || !value["ref"].is_string()) {
+            err = "cursor element target needs string 'ref'"; return false;
+        }
+        const std::string ref = value["ref"].get<std::string>();
+        if (!IsValidCursorElementRef(ref)) {
+            err = "cursor element target has malformed 'ref'"; return false;
+        }
+        out.kind = CursorTarget::Kind::Element;
+        out.ref = ref;
+        return true;
+    }
+    if (kind == "point") {
+        if (!value.contains("x") || !value["x"].is_number()
+            || !value.contains("y") || !value["y"].is_number()) {
+            err = "cursor point target needs numeric 'x' and 'y'"; return false;
+        }
+        const double x = value["x"].get<double>();
+        const double y = value["y"].get<double>();
+        if (!std::isfinite(x) || !std::isfinite(y)) {
+            err = "cursor point target 'x' and 'y' must be finite"; return false;
+        }
+        out.kind = CursorTarget::Kind::Point;
+        out.x = x; out.y = y;
+        return true;
+    }
+    err = "cursor target has unknown kind"; return false;
 }
 
 inline bool ParseTimeline(const std::string& json, Timeline& out, std::string& err) {
@@ -274,15 +386,45 @@ inline bool ParseTimeline(const std::string& json, Timeline& out, std::string& e
                 err = "unknown tween: " + tname; return false;
             }
         } else if (tr.contains("cursor")) {
+            // Exactly one cursor track per timeline. The literal-vs-target mixing
+            // guard below is per-track; a SECOND cursor track would merge into the
+            // shared `out.cursor` and could mix modes across tracks (a literal key
+            // would then serialize as target:{} and the web parser would reject the
+            // whole stream). out.cursor non-empty here ⇒ a prior cursor track ran.
+            if (!out.cursor.empty()) { err = "only one cursor track is allowed per timeline"; return false; }
             if (!tr["cursor"].is_array()) { err = "'cursor' must be an array"; return false; }
             double lastT = -1e18;
+            bool trackHasTarget = false;
+            bool trackHasLiteral = false;
             for (const auto& k : tr["cursor"]) {
+                if (!k.is_object()) { err = "cursor key must be an object"; return false; }
                 CursorKey ck;
-                ck.t = k.value("t", 0.0); ck.x = k.value("x", 0.0); ck.y = k.value("y", 0.0);
+                ck.t = k.value("t", 0.0);
                 ck.vis = k.value("vis", false); ck.press = k.value("press", false);
+                const bool hasTarget = k.contains("target");
+                const bool hasX = k.contains("x");
+                const bool hasY = k.contains("y");
+                if (hasTarget) {
+                    if (hasX || hasY) { err = "cursor target keys must not include x/y"; return false; }
+                    if (!k.contains("t") || !k["t"].is_number()) { err = "cursor target key needs numeric 't'"; return false; }
+                    if (!k.contains("vis") || !k["vis"].is_boolean()
+                        || !k.contains("press") || !k["press"].is_boolean()) {
+                        err = "cursor target key needs boolean 'vis' and 'press'"; return false;
+                    }
+                    if (!ParseCursorTarget(k["target"], ck.target, err)) return false;
+                    trackHasTarget = true;
+                } else {
+                    if (!hasX && !hasY) { err = "cursor key needs x/y or target"; return false; }
+                    if (!hasX || !hasY || !k["x"].is_number() || !k["y"].is_number()) {
+                        err = "cursor literal key needs numeric 'x' and 'y'"; return false;
+                    }
+                    ck.x = k.value("x", 0.0); ck.y = k.value("y", 0.0);
+                    trackHasLiteral = true;
+                }
                 if (ck.t < lastT) { err = "cursor keyframe times must be non-decreasing"; return false; }
                 lastT = ck.t; out.cursor.push_back(ck);
             }
+            if (trackHasTarget && trackHasLiteral) { err = "cursor track cannot mix target and literal keys"; return false; }
         } else {  // at
             AtEvent ev;
             ev.t = tr.value("at", 0.0);

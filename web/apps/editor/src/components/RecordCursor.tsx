@@ -30,28 +30,26 @@ export function RecordCursor({ x, y, visible, pressed }: RecordCursorProps): Rea
         zIndex: 2147483647,
       }}
     >
-      {/* arrow sprite; hotspot at (0,0) = the tip */}
+      {/* arrow sprite; hotspot is the tip at SVG (2,2). The -2px margins pull that
+          tip onto the div's positioned point so the cursor tip lands exactly on the
+          target coordinate (without them it renders ~2px down-right). The press
+          scale shares the same (2,2) origin, so the tip stays pinned while scaling. */}
       <svg
+        data-testid="record-cursor-sprite"
         width="24"
         height="24"
         viewBox="0 0 24 24"
-        style={{ display: "block", filter: "drop-shadow(0 1px 1px rgba(0,0,0,.6))" }}
+        style={{
+          display: "block",
+          marginLeft: "-2px",
+          marginTop: "-2px",
+          filter: "drop-shadow(0 1px 1px rgba(0,0,0,.6))",
+          transform: pressed ? "scale(0.82)" : "scale(1)",
+          transformOrigin: "2px 2px",
+        }}
       >
         <path d="M2 2 L2 18 L7 13 L11 21 L14 19 L10 12 L17 12 Z" fill="#fff" stroke="#000" strokeWidth="1.5" />
       </svg>
-      {pressed && (
-        <span
-          style={{
-            position: "absolute",
-            left: -10,
-            top: -10,
-            width: 20,
-            height: 20,
-            border: "2px solid rgba(120,180,255,.9)",
-            borderRadius: "50%",
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -3,9 +3,11 @@
 // BackgroundDropdown; the popover content reuses ReferenceObjectPickerBody.
 
 import * as Popover from "@radix-ui/react-popover";
+import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { AnimatedPopover } from "@/components/AnimatedPopover";
+import { parseOpenPickerMessage } from "@/lib/record-focus-bridge";
 import { useEngineSnapshot } from "@/lib/use-engine-snapshot";
 import { ReferenceObjectPickerBody } from "@/screens/ReferenceObjectPicker";
 
@@ -13,12 +15,29 @@ type Props = { bridge: Bridge };
 
 export function ReferenceObjectDropdown({ bridge }: Props) {
   const snap = useEngineSnapshot(bridge);
+  const [open, setOpen] = useState(false);
 
   const name = snap?.referenceObjectName ?? "";
   const label = name === "" ? "None" : name;
 
+  useEffect(() => {
+    const wv = window.chrome?.webview as
+      | {
+          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+        }
+      | undefined;
+    if (!wv?.addEventListener) return;
+    const onMsg = (e: { data: unknown }) => {
+      const msg = parseOpenPickerMessage(e.data);
+      if (msg?.which === "reference") setOpen(msg.open);
+    };
+    wv.addEventListener("message", onMsg);
+    return () => wv.removeEventListener?.("message", onMsg);
+  }, []);
+
   return (
-    <Popover.Root>
+    <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button type="button" className="tb-btn" aria-label="Reference object picker">
           <span>Object:</span>

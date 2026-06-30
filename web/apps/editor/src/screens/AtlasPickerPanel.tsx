@@ -140,6 +140,7 @@ export function AtlasPickerPanel({
   const frame         = useAtlasContext((c) => c.selection.frame);
   const keyTimes      = useAtlasContext((c) => c.selection.keyTimes);
   const stack         = useModStack();
+  const stackKey      = stack.join("|");
   const textureEpoch  = useTextureEpoch((s) => s.epoch); // re-fetch preview on a texture reload
 
   // Seed from the module-level cache when it matches the CURRENT emitter, so a
@@ -181,7 +182,11 @@ export function AtlasPickerPanel({
   const lastMeasureRef = useRef<(() => void) | null>(null); // latest measure fn, called at slide settle
   const pulseTimer = useRef<number | undefined>(undefined);
   const decodedPreviewUrisRef = useRef<Set<string>>(new Set());
+  const bridgeRef = useRef(bridge);
+  const stackRef = useRef(stack);
   const emitterIdRef = useRef<number | null>(emitterId);
+  bridgeRef.current = bridge;
+  stackRef.current = stack;
   useEffect(() => { emitterIdRef.current = emitterId; }, [emitterId]);
   useEffect(() => { writeShowAlpha(showAlpha); }, [showAlpha]);
   useEffect(() => () => { if (pulseTimer.current) clearTimeout(pulseTimer.current); }, []);
@@ -324,6 +329,10 @@ export function AtlasPickerPanel({
   // (instant, no fetch). showAlpha is read here only to PRIORITISE the active
   // mode's fetch for first paint, and is intentionally absent from the deps so a
   // toggle never re-runs this effect (no ESLint here, so no exhaustive-deps note).
+  const previewInputKey = eligible && !tooLarge && colorTexture
+    ? `${emitterId ?? "none"}::${textureEpoch}::${stackKey}::${colorTexture}`
+    : null;
+
   useEffect(() => {
     if (!eligible || tooLarge || !colorTexture) {
       setFlatPrev({ kind: "loading" });
@@ -335,7 +344,7 @@ export function AtlasPickerPanel({
     setRawPrev({ kind: "loading" });
     const load = (flattenAlpha: boolean, set: (p: PreviewState) => void) =>
       getPreviewCached(
-        stack,
+        stackRef.current,
         // Fold the alpha mode into the cache key so flattened and raw previews of
         // the same texture don't collide.
         `${flattenAlpha ? "flat" : "raw"}::${colorTexture}`,
@@ -351,7 +360,7 @@ export function AtlasPickerPanel({
             previewMode: mode,
             rendererStartMs: startMs,
           });
-          return bridge
+          return bridgeRef.current
             .request({ kind: "textures/get-preview", params: { filename: colorTexture, flattenAlpha } })
             .then((r) => {
               const endMs = performance.now();
@@ -418,7 +427,7 @@ export function AtlasPickerPanel({
       cancelInactive = runWhenIdle(() => { void load(false, setRawPrev); });  // inactive: raw
     }
     return () => { live = false; cancelInactive(); };
-  }, [bridge, colorTexture, eligible, stack, tooLarge, textureEpoch]);
+  }, [colorTexture, eligible, previewInputKey, tooLarge]);
 
   // The displayed preview is the active mode's prefetched result — a synchronous
   // pick, so toggling Alpha is instant (no bridge round-trip, no loading flash).

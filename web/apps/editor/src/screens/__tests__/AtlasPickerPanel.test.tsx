@@ -359,6 +359,20 @@ describe("AtlasPickerPanel", () => {
     await waitFor(() => expect(previewCalls()).toBe(4)); // cache dropped → both modes re-fetch fresh content
   });
 
+  it("keeps the loaded grid mounted across same-input parent rerenders", async () => {
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [33] } });
+    const firstBridge = new MockBridge();
+    const v = render(<AtlasPickerPanel bridge={firstBridge} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
+
+    v.rerender(<AtlasPickerPanel bridge={new MockBridge()} onClose={() => {}} />);
+
+    expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16);
+    expect(screen.getByTestId("atlas-hero").textContent).toMatch(/frame 5/i);
+  });
+
+
   it("alpha toggle: defaults OFF (additive RGB), flips, and persists", async () => {
     setup({ textureSize: 16 });
     const toggle = await screen.findByTestId("atlas-alpha-toggle");

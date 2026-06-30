@@ -53,7 +53,7 @@ import type {
 import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "@/screens/CurveEditor";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
-import { parseFocusChannelMessage } from "@/lib/record-focus-bridge";
+import { parseFocusChannelMessage, parseSelectKeyMessage } from "@/lib/record-focus-bridge";
 import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
@@ -765,6 +765,33 @@ export function CurveEditorPanel({ bridge }: Props) {
     wv.addEventListener("message", onMsg);
     return () => wv.removeEventListener?.("message", onMsg);
   }, [handleRowClick]);
+
+  // --record key-select push: the host posts ui/select-key so a scripted atlas
+  // edit SELECTS the key it is about to reassign — the same selection a user
+  // makes by clicking a key. This populates atlas-context's selection.frame /
+  // keyTimes (via the publish effect's intersection with the focused track's
+  // keys), which lights the atlas picker's preview box + grid highlight. Without
+  // it the --record path mutates the track with no key selected, so the preview
+  // box stays empty. Mirrors handleKeyClick's single-select (clears optimistic
+  // override first). The host fires ui/focus-channel BEFORE this, so the named
+  // track is already focused by the time it arrives.
+  useEffect(() => {
+    const wv = window.chrome?.webview as
+      | {
+          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+        }
+      | undefined;
+    if (!wv?.addEventListener) return;
+    const onMsg = (e: { data: unknown }) => {
+      const sel = parseSelectKeyMessage(e.data);
+      if (!sel) return;
+      setOptimisticSelected(null);
+      setSelectedKeyTimes(new Set([sel.time]));
+    };
+    wv.addEventListener("message", onMsg);
+    return () => wv.removeEventListener?.("message", onMsg);
+  }, []);
 
   // ── Curve interactions ────────────────────────────────────────────
 

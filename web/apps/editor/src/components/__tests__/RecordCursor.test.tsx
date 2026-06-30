@@ -23,6 +23,9 @@ describe("RecordCursor", () => {
   it("marks pressed state", () => {
     const { container } = render(<RecordCursor x={0} y={0} visible={true} pressed={true} />);
     const el = container.querySelector('[data-testid="record-cursor"]') as HTMLElement;
+    const sprite = container.querySelector('[data-testid="record-cursor-sprite"]') as SVGElement;
     expect(el.getAttribute("data-pressed")).toBe("true");
+    expect(container.querySelector("span")).toBeNull();
+    expect(sprite.style.transform).toBe("scale(0.82)");
   });
 });

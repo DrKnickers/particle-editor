@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { makeBridge } from "@/bridge";
 import { signalAppReady } from "@/lib/app-ready";
@@ -33,6 +33,8 @@ import { applyModelShadows, readModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 import { RecordCursor } from "@/components/RecordCursor";
 import { parseCursorMessage, postFrameAcked } from "@/lib/record-cursor-bridge";
+import { evalRecordCursor } from "@/lib/record-cursor-eval";
+import { parseCursorTickMessage, parseCursorTrackMessage, type RecordCursorKey } from "@/lib/record-cursor-track";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
 // Evaluated once at module load; a page navigation to ?demo=primitives
@@ -201,15 +203,49 @@ function AppShell() {
   // ui/cursor message (type is neither res nor evt), so there's no conflict.
   // Entirely dormant outside --record.
   const [recordCursor, setRecordCursor] = useState({ x: 0, y: 0, visible: false, pressed: false });
+  const recordCursorTrackRef = useRef<RecordCursorKey[] | null>(null);
   useEffect(() => {
     const wv = window.chrome?.webview as
       | {
           addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
           removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+          postMessage?: (m: unknown) => void;
         }
       | undefined;
     if (!wv?.addEventListener) return;
     const onMsg = (e: { data: unknown }) => {
+      const track = parseCursorTrackMessage(e.data);
+      if (track) {
+        recordCursorTrackRef.current = track;
+        return;
+      }
+
+      const tick = parseCursorTickMessage(e.data);
+      if (tick) {
+        const keys = recordCursorTrackRef.current;
+        if (!keys) return;
+        const cursor = evalRecordCursor(keys, tick.t);
+        setRecordCursor({ x: cursor.x, y: cursor.y, visible: cursor.vis, pressed: cursor.press });
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() =>
+            wv.postMessage?.(
+              JSON.stringify({
+                type: "ui/frame-acked",
+                frame: tick.frame,
+                cursor: {
+                  x: cursor.x,
+                  y: cursor.y,
+                  vis: cursor.vis,
+                  press: cursor.press,
+                  resolved: cursor.resolved,
+                },
+              }),
+            ),
+          ),
+        );
+        return;
+      }
+
       const c = parseCursorMessage(e.data);
       if (!c) return;
       setRecordCursor(c);

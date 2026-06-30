@@ -65,9 +65,14 @@ std::unordered_map<wstring, TexturePalette::ThumbnailResult> g_bridgeThumbCache;
 // TextureManager resolution order.
 IFile* OpenTextureFile(IFileManager* fm, const string& filename)
 {
-    if (!IsSafeRelativeAssetName(filename)) return nullptr;
+    // A .alo bakes the ABSOLUTE authoring path (e.g. C:\Art\Textures\Game\X.tga);
+    // reduce it to its basename so it resolves through the MEG chain exactly like
+    // the renderer does. Rejecting an absolute name outright is why the atlas
+    // picker showed "missing" for effects using the shared master atlas.
+    const string name = SanitizeAssetName(filename);
+    if (name.empty() || !IsSafeRelativeAssetName(name)) return nullptr;
 
-    string upper = filename;
+    string upper = name;
     std::transform(upper.begin(), upper.end(), upper.begin(),
                    [](unsigned char c) { return (char)::toupper(c); });
 
@@ -90,8 +95,10 @@ bool ReadTextureBytes(IFileManager* fm, const wstring& filename, vector<char>& o
 {
     assert(fm != nullptr && "ReadTextureBytes requires a non-null IFileManager");
     out.clear();
-    const string name = WideToAnsi(filename);
-    if (!IsSafeRelativeAssetName(name)) return false;
+    // Absolute authoring paths -> basename (see OpenTextureFile), so a .alo's
+    // C:\Art\Textures\... texture resolves instead of being rejected here.
+    const string name = SanitizeAssetName(WideToAnsi(filename));
+    if (name.empty() || !IsSafeRelativeAssetName(name)) return false;
     IFile* file = OpenTextureFile(fm, name);
     if (file == nullptr) return false;
 

@@ -2,6 +2,7 @@
 // validation, tween + cursor evaluation, frame math. No host / WebView2 / D3D9.
 #include <cstdio>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 #include "ClipTimeline.h"
@@ -52,9 +53,34 @@ int main()
             { 1000,100, 200, true,  true  },  // same t, press on
         };
         auto c0 = EvalCursor(keys, 0.0);    CHECK(Near(c0.x, 0) && Near(c0.y, 0) && !c0.vis);
+        auto c25 = EvalCursor(keys, 250.0); CHECK(c25.x < 25.0);
         auto c5 = EvalCursor(keys, 500.0);  CHECK(Near(c5.x, 50) && Near(c5.y, 100) && c5.vis);
         auto c1 = EvalCursor(keys, 1000.0); CHECK(Near(c1.x, 100) && c1.press);
         auto cAfter = EvalCursor(keys, 2000.0); CHECK(Near(cAfter.x, 100));  // clamp past last
+    }
+    // cursor easing parity vector for the web vitest:
+    // keys: (0, 0,0,false,false), (1000, 100,200,true,false), (2000, 200,100,true,true)
+    // t=0    -> x=0,       y=0,       vis=false, press=false
+    // t=250  -> u=0.25, smoothstep=0.15625, x=15.625,  y=31.25,  vis=true,  press=false
+    // t=500  -> u=0.5,  smoothstep=0.5,     x=50,      y=100,    vis=true,  press=false
+    // t=1250 -> u=0.25, smoothstep=0.15625, x=115.625, y=184.375, vis=true,  press=true
+    // t=2500 -> x=200,     y=100,     vis=true, press=true
+    {
+        std::vector<CursorKey> keys = {
+            { 0,    0,   0,   false, false },
+            { 1000, 100, 200, true,  false },
+            { 2000, 200, 100, true,  true  },
+        };
+        auto a = EvalCursor(keys, 0.0);
+        CHECK(Near(a.x, 0.0) && Near(a.y, 0.0) && !a.vis && !a.press);
+        auto b = EvalCursor(keys, 250.0);
+        CHECK(Near(b.x, 15.625) && Near(b.y, 31.25) && b.vis && !b.press);
+        auto c = EvalCursor(keys, 500.0);
+        CHECK(Near(c.x, 50.0) && Near(c.y, 100.0) && c.vis && !c.press);
+        auto d = EvalCursor(keys, 1250.0);
+        CHECK(Near(d.x, 115.625) && Near(d.y, 184.375) && d.vis && d.press);
+        auto e = EvalCursor(keys, 2500.0);
+        CHECK(Near(e.x, 200.0) && Near(e.y, 100.0) && e.vis && e.press);
     }
     // Allowlist: engine/set/* ok, but engine/set/paused subtracted; step-frames rejected.
     {
@@ -84,6 +110,65 @@ int main()
         CHECK(tl.cursor.size() == 2 && tl.cursor[1].press);
         CHECK(tl.ats.size() == 1 && tl.ats[0].kind == "emitters/select" && Near(tl.ats[0].t, 950));
     }
+    // Target cursor track parse: element refs and literal point targets are accepted.
+    {
+        const char* js = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o",
+          "tracks":[{"cursor":[
+            {"t":0,"vis":true,"press":false,"target":{"kind":"element","ref":"curve-key:red:25"}},
+            {"t":500,"vis":true,"press":true,"target":{"kind":"element","ref":"atlas-tile:17"}},
+            {"t":750,"vis":false,"press":false,"target":{"kind":"element","ref":"channel-row:alpha"}},
+            {"t":1000,"vis":false,"press":false,"target":{"kind":"point","x":42.5,"y":99.25}}
+          ]}]})";
+        Timeline tl; std::string err;
+        CHECK(ParseTimeline(js, tl, err));
+        CHECK(tl.cursor.size() == 4);
+        CHECK(CursorTrackIsTargetBearing(tl.cursor));
+        CHECK(tl.cursor[0].target.kind == CursorTarget::Kind::Element);
+        CHECK(tl.cursor[0].target.ref == "curve-key:red:25");
+        CHECK(tl.cursor[1].target.kind == CursorTarget::Kind::Element);
+        CHECK(tl.cursor[1].target.ref == "atlas-tile:17");
+        CHECK(tl.cursor[2].target.kind == CursorTarget::Kind::Element);
+        CHECK(tl.cursor[2].target.ref == "channel-row:alpha");
+        CHECK(tl.cursor[3].target.kind == CursorTarget::Kind::Point);
+        CHECK(Near(tl.cursor[3].target.x, 42.5) && Near(tl.cursor[3].target.y, 99.25));
+    }
+    // Existing literal cursor track still parses and stays non-target-bearing.
+    {
+        const char* js = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o",
+          "tracks":[{"cursor":[{"t":0,"x":1,"y":2,"vis":false,"press":false},{"t":500,"x":3,"y":4,"vis":true,"press":true}]}]})";
+        Timeline tl; std::string err;
+        CHECK(ParseTimeline(js, tl, err));
+        CHECK(tl.cursor.size() == 2);
+        CHECK(!CursorTrackIsTargetBearing(tl.cursor));
+        CHECK(tl.cursor[0].target.kind == CursorTarget::Kind::None);
+        CHECK(Near(tl.cursor[1].x, 3.0) && Near(tl.cursor[1].y, 4.0) && tl.cursor[1].press);
+    }
+    // Target cursor track serializer: host posts ui/cursor-track with target-key shapes.
+    {
+        std::vector<CursorKey> keys;
+        CursorKey a; a.t = 0; a.vis = true; a.press = false;
+        a.target.kind = CursorTarget::Kind::Element; a.target.ref = "curve-key:red:25";
+        keys.push_back(a);
+        CursorKey b; b.t = 250; b.vis = true; b.press = true;
+        b.target.kind = CursorTarget::Kind::Point; b.target.x = 10.5; b.target.y = 20.25;
+        keys.push_back(b);
+        const auto msg = BuildCursorTrackJson(keys);
+        CHECK(msg["type"] == "ui/cursor-track");
+        CHECK(msg["keys"].is_array() && msg["keys"].size() == 2);
+        CHECK(msg["keys"][0].size() == 4);
+        CHECK(Near(msg["keys"][0]["t"].get<double>(), 0.0));
+        CHECK(msg["keys"][0]["vis"] == true && msg["keys"][0]["press"] == false);
+        CHECK(msg["keys"][0]["target"].size() == 2);
+        CHECK(msg["keys"][0]["target"]["kind"] == "element");
+        CHECK(msg["keys"][0]["target"]["ref"] == "curve-key:red:25");
+        CHECK(msg["keys"][1].size() == 4);
+        CHECK(Near(msg["keys"][1]["t"].get<double>(), 250.0));
+        CHECK(msg["keys"][1]["vis"] == true && msg["keys"][1]["press"] == true);
+        CHECK(msg["keys"][1]["target"].size() == 3);
+        CHECK(msg["keys"][1]["target"]["kind"] == "point");
+        CHECK(Near(msg["keys"][1]["target"]["x"].get<double>(), 10.5));
+        CHECK(Near(msg["keys"][1]["target"]["y"].get<double>(), 20.25));
+    }
     // at-events are sorted ascending after parse (forward-index firing depends on it).
     {
         const char* js = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o",
@@ -112,6 +197,26 @@ int main()
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"at":0,"kind":"file/open","params":{}}]})"));
         CHECK(rejects(R"({"open":"a.alo","fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"at":0,"kind":"file/open","params":{"path":"b.alo"}}]})"));
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"cursor":[{"t":100},{"t":50}]}]})"));
+        CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"cursor":[{"t":0,"vis":true,"press":false}]}]})")); // neither x/y nor target
+        CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"cursor":[{"t":0,"vis":true,"press":false,"target":{"kind":"element","ref":"curve-key:red"}}]}]})")); // missing time
+        CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"cursor":[{"t":0,"vis":true,"press":false,"target":{"kind":"element","ref":"curve-key::25"}}]}]})")); // empty part
+        CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"cursor":[{"t":0,"vis":true,"press":false,"target":{"kind":"element","ref":"unknown:thing"}}]}]})")); // unknown prefix
+        CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"cursor":[{"t":0,"vis":true,"press":false,"target":{"kind":"point","x":1}}]}]})")); // missing y
+        CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"cursor":[{"t":0,"x":1,"y":2,"vis":true,"press":false}]},{"cursor":[{"t":1,"x":3,"y":4,"vis":true,"press":false}]}]})")); // two cursor tracks
+        CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"cursor":[{"t":0,"x":1,"y":2,"vis":true,"press":false}]},{"cursor":[{"t":1,"vis":true,"press":false,"target":{"kind":"point","x":3,"y":4}}]}]})")); // literal + target cursor tracks (cross-track mix)
+        {
+            nlohmann::json bad = {
+                {"fps", 60}, {"width", 1920}, {"height", 1080}, {"durationMs", 1000}, {"out", "o"},
+                {"tracks", nlohmann::json::array({
+                    {{"cursor", nlohmann::json::array({
+                        {{"t", 0}, {"vis", true}, {"press", false},
+                         {"target", {{"kind", "point"}, {"x", std::numeric_limits<double>::infinity()}, {"y", 2}}}}
+                    })}}
+                })}
+            };
+            Timeline t; std::string e;
+            CHECK(!ParseTimeline(bad.dump(), t, e) && !e.empty());
+        }
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"at":0,"kind":"emitters/list","cursor":[]}]})"));
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"tween":"zoom-blur","t0":0,"t1":100}]})"));
     }
@@ -187,7 +292,15 @@ int main()
         CHECK(!drive::IsAllowedBridgeKind("mods/set-layers"));
         // emitters/delete is record-allowed (drop an emitter for a render; .alo untouched)
         CHECK(IsAllowedRecordKind("emitters/delete"));
+        CHECK(IsAllowedRecordKind("emitters/move"));
+        CHECK(IsAllowedRecordKind("engine/set/skydome-environment"));
+        CHECK(IsAllowedRecordKind("ui/show-panel"));
+        CHECK(IsAllowedRecordKind("ui/open-picker"));
+        CHECK(IsAllowedRecordKind("ui/select-key"));
         CHECK(!drive::IsAllowedBridgeKind("emitters/delete"));
+        CHECK(!drive::IsAllowedBridgeKind("ui/show-panel"));
+        CHECK(!drive::IsAllowedBridgeKind("ui/open-picker"));
+        CHECK(!drive::IsAllowedBridgeKind("ui/select-key"));
         // ...but record-only: NOT in the shared --drive allowlist
         CHECK(!drive::IsAllowedBridgeKind("spawner/start"));
         CHECK(!drive::IsAllowedBridgeKind("spawner/trigger"));

@@ -7,9 +7,11 @@
 // + Solid colour surface (the custom skydome-texture slots were removed).
 
 import * as Popover from "@radix-ui/react-popover";
+import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { AnimatedPopover } from "@/components/AnimatedPopover";
+import { parseOpenPickerMessage } from "@/lib/record-focus-bridge";
 import { useEngineSnapshot } from "@/lib/use-engine-snapshot";
 import { BackgroundPickerBody } from "@/screens/BackgroundPicker";
 import { colorrefToHex } from "@/lib/colorref";
@@ -18,6 +20,7 @@ type Props = { bridge: Bridge };
 
 export function BackgroundDropdown({ bridge }: Props) {
   const snap = useEngineSnapshot(bridge);
+  const [open, setOpen] = useState(false);
 
   const slot = snap?.skydomeSlot ?? 0;
   // A game dome takes render precedence — but show the dome swatch
@@ -33,8 +36,24 @@ export function BackgroundDropdown({ bridge }: Props) {
       ? { backgroundColor: snap ? colorrefToHex(snap.background) : "#000000" }
       : { backgroundColor: "var(--bg-3)" }; // legacy texture slot — no thumbnail
 
+  useEffect(() => {
+    const wv = window.chrome?.webview as
+      | {
+          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
+        }
+      | undefined;
+    if (!wv?.addEventListener) return;
+    const onMsg = (e: { data: unknown }) => {
+      const msg = parseOpenPickerMessage(e.data);
+      if (msg?.which === "background") setOpen(msg.open);
+    };
+    wv.addEventListener("message", onMsg);
+    return () => wv.removeEventListener?.("message", onMsg);
+  }, []);
+
   return (
-    <Popover.Root>
+    <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button
           type="button"

@@ -15,7 +15,7 @@
     "a11y": "node ./scripts/run-native-tests.mjs",
     "a11y:update": "node ./scripts/run-native-tests.mjs --update",
     "a11y:drift": "node ./scripts/a11y-drift-check.mjs",
-    "test:scripts": "node --test scripts/lib/*.test.mjs ../../../scripts/clip-encode/*.test.mjs"
+    "test:scripts": "node --test scripts/lib/*.test.mjs ../../../scripts/clip-encode/*.test.mjs ../../../scripts/clip-verify/*.test.mjs"
   },
   "dependencies": {
     "@particle-editor/bridge-schema": "workspace:*",

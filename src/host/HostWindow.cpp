@@ -51,6 +51,7 @@
 #include <cwctype>
 #include <share.h>     // _SH_DENYNO for _wfsopen sharing
 #include <filesystem>
+#include <fstream>     // --record cursor-sidecar.json verify artifact
 #include <map>         // [resize-perf] per-kind bridge-probe tally
 #include <memory>
 #include <mutex>
@@ -767,6 +768,14 @@ struct HostWindowImpl
     bool         m_automationMode = false;
     int          m_recordFrame = 0;          // current emitted frame (echoed in the ui/cursor `frame`)
     int          m_lastAckedFrame = -1;      // set by OnWebMessage on ui/frame-acked
+    // Extended ack payload for the SEMANTIC-targeting cursor path: when a
+    // ui/frame-acked carries a `cursor` object (web resolved the selectors),
+    // OnWebMessage stashes the device-px cursor {x,y,vis,press} + the per-target
+    // `resolved` array here, keyed by frame. ClipRunner reads it back via the
+    // AckDataFn hook to fail-loud on an unresolved target + build the sidecar.
+    int            m_lastAckCursorFrame = -1;
+    nlohmann::json m_lastAckCursor;          // {x,y,vis,press}
+    nlohmann::json m_lastAckResolved = nlohmann::json::array();  // [{ref,x,y,ok}]
     std::unique_ptr<host::ClipRunner> m_clipRunner;
     std::wstring m_perfWebViewProfile;
     FILE*       logFile = nullptr;
@@ -1298,12 +1307,34 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     // after a double-rAF (frame N's cursor/state has painted). The record loop
     // waits on m_lastAckedFrame to grab a committed composite. Host-lifecycle
     // signal, not a dispatcher request — intercept + return.
+    //
+    // The SEMANTIC-targeting cursor path carries a nested `cursor` object
+    // ({x,y,vis,press,resolved:[...]}) the web side computed against its live DOM;
+    // stash it (keyed by frame) for the ClipRunner AckDataFn. The plain literal
+    // ack has no `cursor` key — the substring frame scan still works for it.
     if (json.find(L"\"type\":\"ui/frame-acked\"") != std::wstring::npos)
     {
         static const std::wstring kFrameNeedle = L"\"frame\":";
         const size_t fp = json.find(kFrameNeedle);
         if (fp != std::wstring::npos)
             m_lastAckedFrame = _wtoi(json.c_str() + fp + kFrameNeedle.size());
+
+        if (json.find(L"\"cursor\":") != std::wstring::npos)
+        {
+            nlohmann::json msg = nlohmann::json::parse(WideToUtf8(json), nullptr, false);
+            if (!msg.is_discarded() && msg.is_object() && msg.contains("cursor")
+                && msg["cursor"].is_object())
+            {
+                nlohmann::json cur = msg["cursor"];
+                // Split the resolved array out of the cursor object so the sidecar
+                // gets cursor:{x,y,vis,press} + resolved:[...] as siblings.
+                m_lastAckResolved = cur.contains("resolved") && cur["resolved"].is_array()
+                                        ? cur["resolved"] : nlohmann::json::array();
+                cur.erase("resolved");
+                m_lastAckCursor = std::move(cur);
+                m_lastAckCursorFrame = msg.value("frame", -1);
+            }
+        }
         return;
     }
 
@@ -4883,6 +4914,19 @@ int HostWindowImpl::Run(int nCmdShow)
                         }
                     }
 
+                    // (e4) semantic-targeting cursor: stream the cursor TRACK to the
+                    //      web side ONCE here (it resolves the selectors against its
+                    //      own live DOM per frame). The host then ticks per frame
+                    //      ({type:"ui/cursor-tick"}) instead of pushing a computed
+                    //      {ui/cursor}. A literal-only track posts nothing here — the
+                    //      existing per-frame ui/cursor push path stays unchanged.
+                    if (clip::CursorTrackIsTargetBearing(tl.cursor))
+                    {
+                        const nlohmann::json trackMsg = clip::BuildCursorTrackJson(tl.cursor);
+                        if (webView)
+                            webView->PostWebMessageAsJson(host::Utf8ToWide(trackMsg.dump()).c_str());
+                    }
+
                     // (f) output dirs: render to <out>.tmp, move on success.
                     recordOutDir = host::Utf8ToWide(tl.out);
                     recordTmpDir = recordOutDir + L".tmp";
@@ -4903,9 +4947,20 @@ int HostWindowImpl::Run(int nCmdShow)
                             if (spawnerDriver && particleSystem)
                                 spawnerDriver->Tick(frames60 / 60.0f, particleSystem.get(), engine.get());
                         },
-                        // ui/cursor host->web push (device px; React divides by DPR)
+                        // ui/cursor host->web push (device px; React divides by DPR).
+                        // Timeline coords are CAPTURED-FRAME px, but the PrintWindow
+                        // capture includes the window chrome (native title bar +
+                        // borders) while RecordCursor positions inside the webview
+                        // (client area). Subtract the client-origin offset so the
+                        // cursor lands where the author measured in the frame.
                         [this](double x, double y, bool vis, bool press){
-                            nlohmann::json m = {{"type","ui/cursor"},{"x",x},{"y",y},
+                            POINT org = {0, 0};
+                            RECT wr = {0, 0, 0, 0};
+                            ClientToScreen(hMain, &org);
+                            GetWindowRect(hMain, &wr);
+                            const double cx = x - (org.x - wr.left);
+                            const double cy = y - (org.y - wr.top);
+                            nlohmann::json m = {{"type","ui/cursor"},{"x",cx},{"y",cy},
                                                 {"visible",vis},{"pressed",press},{"frame",m_recordFrame}};
                             if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(m.dump()).c_str());
                         },
@@ -4930,7 +4985,24 @@ int HostWindowImpl::Run(int nCmdShow)
                             swprintf_s(name, L"\\frame_%05d.png", idx);
                             return host::CaptureWindowToPng(hMain, tmpDir + name);
                         },
-                        [this](const std::string& s){ Log("[record] %s\n", s.c_str()); });
+                        [this](const std::string& s){ Log("[record] %s\n", s.c_str()); },
+                        // ui/* passthrough: post {type:kind, ...params} to the webview
+                        // verbatim (panel/picker open state). View-only — never the bridge.
+                        [this](const std::string& kind, const nlohmann::json& params){
+                            nlohmann::json m = params.is_object() ? params : nlohmann::json::object();
+                            m["type"] = kind;
+                            if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(m.dump()).c_str());
+                        },
+                        // ackData: read back the SEMANTIC-cursor ack the web side
+                        // resolved for `frameId` ({cursor:{x,y,vis,press}, resolved:[...]}).
+                        // Returns null if the ack for this frame carried no cursor obj
+                        // (literal path / not yet seen) — the runner treats that as no-op.
+                        [this](int frameId) -> nlohmann::json {
+                            if (m_lastAckCursorFrame != frameId) return nullptr;
+                            return nlohmann::json{
+                                {"cursor",   m_lastAckCursor},
+                                {"resolved", m_lastAckResolved}};
+                        });
 
                     recordBudgetMs = r->FrameCount() *
                                      (host::ClipRunner::kAckDeadlineMs + 1000.0) + 30000.0;
@@ -4955,6 +5027,36 @@ int HostWindowImpl::Run(int nCmdShow)
                         {
                             Log("[record] move tmp -> out failed: %s\n", ec2.message().c_str());
                             recordExitCode = 4;   // publish failure -> non-zero exit
+                        }
+                        // Verify sidecar: a target-bearing run accumulated the
+                        // per-frame resolved cursor centers — write them next to the
+                        // frames so a downstream script can check the cursor landed on
+                        // each authored element. Literal runs skip it (empty array).
+                        else if (m_clipRunner->IsTargetCursor())
+                        {
+                            // One sidecar row per frame on a clean run (step 4a
+                            // appends or aborts). A short sidecar means a frame was
+                            // captured without resolve validation — fail, don't ship.
+                            if ((int)m_clipRunner->Sidecar().size() != m_clipRunner->FrameCount())
+                            {
+                                Log("[record] cursor sidecar incomplete: %d of %d frames\n",
+                                    (int)m_clipRunner->Sidecar().size(), m_clipRunner->FrameCount());
+                                recordExitCode = 4;
+                            }
+                            const std::filesystem::path sidecar =
+                                std::filesystem::path(recordOutDir) / L"cursor-sidecar.json";
+                            std::ofstream f(sidecar, std::ios::binary | std::ios::trunc);
+                            if (f)
+                            {
+                                f << m_clipRunner->Sidecar().dump(2);
+                                Log("[record] wrote cursor sidecar (%d frames)\n",
+                                    (int)m_clipRunner->Sidecar().size());
+                            }
+                            else
+                            {
+                                Log("[record] cursor sidecar write failed\n");
+                                recordExitCode = 4;
+                            }
                         }
                     }
                     Log("[record] done: %d frames, exit %d\n",

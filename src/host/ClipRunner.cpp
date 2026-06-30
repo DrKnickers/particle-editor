@@ -7,12 +7,15 @@ namespace host {
 
 bool ClipRunner::Init(const std::string& timelineJson, std::string& err) {
     if (!clip::ParseTimeline(timelineJson, m_tl, err)) { m_exitCode = 2; return false; }
+    m_targetCursor = clip::CursorTrackIsTargetBearing(m_tl.cursor);
     return true;
 }
 
-void ClipRunner::SetHooks(DispatchFn d, StepFn s, CursorFn c, AckFn a, CaptureFn cap, LogFn log) {
+void ClipRunner::SetHooks(DispatchFn d, StepFn s, CursorFn c, AckFn a, CaptureFn cap, LogFn log,
+                          UiPushFn ui, AckDataFn ackData) {
     m_dispatch = std::move(d); m_step = std::move(s); m_cursor = std::move(c);
     m_ack = std::move(a); m_capture = std::move(cap); m_log = std::move(log);
+    m_uiPush = std::move(ui); m_ackData = std::move(ackData);
 }
 
 bool ClipRunner::DispatchKind(const std::string& kind, const nlohmann::json& params) {
@@ -66,6 +69,9 @@ ClipRunner::Status ClipRunner::Tick() {
 
     if (m_frame == 0 && !m_preflighted) {
         m_preflighted = true;
+        if (m_log)
+            m_log("[record-cursor] track=" + std::to_string(m_tl.cursor.size())
+                  + " keys, " + (m_targetCursor ? "target-bearing" : "literal"));
         if (!Preflight()) { m_done = true; return Status::Done; }
     }
 
@@ -86,7 +92,15 @@ ClipRunner::Status ClipRunner::Tick() {
         if (!DispatchKind("engine/set/camera", p)) { m_done = true; return Status::Done; }
     }
     // track-key tweens: scrub one keyframe's value, pinned in time (oldTime==newTime).
+    // A tween is INACTIVE before its t0: skip the dispatch so the key keeps its
+    // authored (or a prior tween's) value until this tween's window opens. Without
+    // this, every tween writes its clamped `from` value every frame from t=0, so two
+    // tweens on the same key (e.g. a down-scrub then a later restore-to-original)
+    // fight — the restore's held `from` would clobber the resting value during the
+    // lead-in. After t1 the tween still dispatches (holds `to`), so later tweens in
+    // the list win the overlap; that's how a high→low→high arc is expressed.
     for (const auto& tk : m_tl.trackKeys) {
+        if (t < tk.t0) continue;
         const double v = clip::EvalTrackKeyValue(tk, t);
         nlohmann::json p = {
             {"id", tk.id}, {"track", tk.track},
@@ -94,21 +108,81 @@ ClipRunner::Status ClipRunner::Tick() {
         };
         if (!DispatchKind("emitters/set-track-key", p)) { m_done = true; return Status::Done; }
     }
-    if (!m_tl.cursor.empty() && m_cursor) {
-        const clip::CursorState cs = clip::EvalCursor(m_tl.cursor, t);
-        m_cursor(cs.x, cs.y, cs.vis, cs.press);
+    // Cursor: two paths. LITERAL tracks keep posting the resolved (x,y) per frame
+    // via the cursor lambda (host owns the device-px geometry). TARGET-BEARING
+    // tracks instead post a per-frame {type:"ui/cursor-tick", t, frame}; the web
+    // side resolved the selectors against its own live DOM (it streamed the track
+    // once during post-settle) and returns the cursor + resolved set in the ack.
+    if (!m_tl.cursor.empty()) {
+        if (m_targetCursor) {
+            if (m_uiPush)
+                m_uiPush("ui/cursor-tick",
+                         nlohmann::json{{"t", t}, {"frame", m_frame}});
+        } else if (m_cursor) {
+            const clip::CursorState cs = clip::EvalCursor(m_tl.cursor, t);
+            m_cursor(cs.x, cs.y, cs.vis, cs.press);
+        }
     }
 
     // 3. Discrete at-events at or before t, fired once each via the forward index (ats sorted).
     while (m_nextAt < m_tl.ats.size() && m_tl.ats[m_nextAt].t <= t) {
         const clip::AtEvent& ev = m_tl.ats[m_nextAt];
-        if (!DispatchKind(ev.kind, ev.params)) { m_done = true; return Status::Done; }
+        // ui/* events are view-only: post verbatim to the webview (panel/picker
+        // open state, etc.), never the bridge dispatcher. Fire-and-forget — a
+        // missing listener is a no-op, so no exit-3 gating like a bridge call.
+        if (ev.kind.rfind("ui/", 0) == 0) {
+            if (m_uiPush) m_uiPush(ev.kind, ev.params);
+        } else if (!DispatchKind(ev.kind, ev.params)) {
+            m_done = true; return Status::Done;
+        }
         ++m_nextAt;
     }
 
-    // 4. Commit-ack + grab. Ack timeout is best-effort (log + continue), not fatal.
-    if (m_ack && !m_ack(m_frame, kAckDeadlineMs) && m_log)
-        m_log("record: ack timeout frame " + std::to_string(m_frame));
+    // 4. Commit-ack + grab. For a LITERAL track an ack timeout is best-effort
+    // (log + continue). For a TARGET track the ack carries the resolve set that
+    // step 4a validates — a timeout means we'd capture an UNVALIDATED frame (a
+    // press miss could slip through silently), so it's fatal.
+    if (m_ack && !m_ack(m_frame, kAckDeadlineMs)) {
+        if (m_log) m_log("record: ack timeout frame " + std::to_string(m_frame));
+        if (m_targetCursor) { m_exitCode = 3; m_done = true; return Status::Done; }
+    }
+
+    // 4a. Target-bearing cursor: read back what the web side resolved this frame.
+    // A PRESS frame whose target matched nothing is a mis-authored clip (a click /
+    // drag landing on empty space) — abort LOUD (exit 3). A NON-press TRANSIT frame
+    // may legitimately pass over a not-yet-mounted target (e.g. the atlas dock mid-
+    // open, or a curve key whose channel just defocused); the web hides the cursor
+    // for those, so they're benign. Accumulate the resolved set into the sidecar.
+    if (m_targetCursor && m_ackData) {
+        const nlohmann::json ack = m_ackData(m_frame);
+        // Strict shape: a target frame MUST come back with a well-formed cursor +
+        // resolved array. A malformed/missing ack is treated as a hard failure
+        // rather than silently captured unvalidated.
+        if (!ack.is_object() || !ack.contains("cursor") || !ack["cursor"].is_object()
+            || !ack.contains("resolved") || !ack["resolved"].is_array()) {
+            if (m_log) m_log("[record-cursor] malformed/missing ack at frame " + std::to_string(m_frame));
+            m_exitCode = 3; m_done = true; return Status::Done;
+        }
+        const auto& resolved = ack["resolved"];
+        const bool pressed = ack["cursor"].value("press", false);
+        if (pressed) {
+            for (const auto& r : resolved) {
+                if (!r.value("ok", false)) {   // missing/false ok ⇒ unresolved ⇒ fatal on a press
+                    const std::string ref = r.value("ref", std::string{});
+                    if (m_log)
+                        m_log("[record-cursor] press target '" + ref
+                              + "' did not resolve at frame " + std::to_string(m_frame));
+                    m_exitCode = 3; m_done = true; return Status::Done;
+                }
+            }
+        }
+        m_sidecar.push_back({
+            {"frame", m_frame},
+            {"cursor", ack["cursor"]},
+            {"resolved", resolved},
+        });
+    }
+
     if (m_capture && !m_capture(m_frame)) { m_exitCode = 4; m_done = true; return Status::Done; }
 
     ++m_frame;
