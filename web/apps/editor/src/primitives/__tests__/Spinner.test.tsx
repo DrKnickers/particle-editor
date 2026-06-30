@@ -164,6 +164,83 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenLastCalledWith(5.2);
   });
 
+  // Reference-object "slides to origin on panel close" bug: the shared Spinner
+  // froze its displayed text whenever the input was focused, even if the user
+  // hadn't typed. So an external `value` change that arrived while focused (a
+  // gizmo drag moving the reference object) updated the prop but not the visible
+  // text, and the blur fired on closing the panel committed the STALE text —
+  // clobbering the live value back to its pre-focus number. The field must
+  // instead (a) track external changes while focused-but-untouched and (b) only
+  // commit on blur when the user actually edited.
+  it("focused-but-untouched field tracks an external value change (not stale)", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <Spinner value={0} onChange={onChange} decimals={1} aria-label="s" />
+    );
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    fireEvent.focus(input); // user clicks in but types nothing
+    rerender(<Spinner value={-130} onChange={onChange} decimals={1} aria-label="s" />); // gizmo moves it
+    expect(input.value).toBe("-130.0"); // tracks, not stale "0.0"
+  });
+
+  it("blur with no keystrokes does not commit (no clobber of an external change)", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <Spinner value={0} onChange={onChange} decimals={1} aria-label="s" />
+    );
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    fireEvent.focus(input);
+    rerender(<Spinner value={-130} onChange={onChange} decimals={1} aria-label="s" />);
+    onChange.mockClear();
+    fireEvent.blur(input); // panel/popover closes -> blur, but user never typed
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // Optimistic-echo gap: when the field emits a value, a bridge-backed caller's
+  // `value` prop lags before it echoes back. The field must HOLD the optimistic
+  // text instead of flashing back to the stale prop for a frame (the
+  // reference-object spinner flicker), then reconcile to the echo — or to a
+  // genuinely different external change.
+  it("holds the optimistic value across the async echo gap, then reconciles", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />
+    );
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    const incr = screen.getByLabelText("Increment");
+    // arrow-click → emits 6, but the controlled prop hasn't echoed yet (still 5)
+    fireEvent.mouseDown(incr, { clientY: 100, button: 0 });
+    fireEvent.mouseUp(incr);
+    fireEvent.click(incr);
+    expect(onChange).toHaveBeenLastCalledWith(6);
+    rerender(<Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />);
+    expect(input.value).toBe("6"); // optimistic held, NOT flashed back to "5"
+    rerender(<Spinner value={6} onChange={onChange} step={1} decimals={0} aria-label="s" />);
+    expect(input.value).toBe("6"); // echo arrived
+    rerender(<Spinner value={-130} onChange={onChange} step={1} decimals={0} aria-label="s" />);
+    expect(input.value).toBe("-130"); // a real external change reconciles
+  });
+
+  // The optimistic guard must reconcile on echo even when the user TYPED before
+  // stepping (so the focused+edited skip would otherwise run first): the guard
+  // must not outlive the echo and later swallow an external change back to the
+  // pre-step baseline.
+  it("optimistic guard does not get stuck when the user typed before stepping", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />
+    );
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "5" } }); // a keystroke → edited=true
+    fireEvent.keyDown(input, { key: "ArrowUp" }); // steps to 6; pendingBase armed at 5
+    expect(onChange).toHaveBeenLastCalledWith(6);
+    rerender(<Spinner value={6} onChange={onChange} step={1} decimals={0} aria-label="s" />); // echo
+    fireEvent.blur(input); // edited cleared; "6" === 6 so no commit
+    rerender(<Spinner value={5} onChange={onChange} step={1} decimals={0} aria-label="s" />); // external change back to baseline
+    expect(input.value).toBe("5"); // reconciles, not stuck at "6"
+  });
+
   // an-audit-finding: holding an arrow button auto-repeats the step (legacy
   // hold-to-repeat, Spinner.cpp:438-455).
   it("holding the increment arrow auto-repeats", () => {

@@ -161,8 +161,9 @@ may live at the end of the file.
 
 ### Fixed
 
-- Reference objects (imported game units) now remember their own position and rotation — switching to a different unit no longer leaves it floating above the ground with the previous object's placement, and switching back to a unit restores where you put it
 - Reference objects no longer show their muzzle flashes stuck on — the editor now hides muzzle-flash geometry to match the in-game look, where a unit's muzzle flash appears only while it fires
+- A reference object you positioned with the gizmo no longer slides back to the origin when you close the reference-object picker (or deselect it) — the placement is kept, and the picker's position fields now track the gizmo live instead of showing a stale value
+- Reference objects (imported game units) now remember their own position and rotation — switching to a different unit no longer leaves it floating above the ground with the previous object's placement, and switching back to a unit restores where you put it
 - Browsing for a file (Import Emitters' **Browse**, and the skydome/ground texture pickers) no longer replaces or discards your open particle system — it only returns the chosen path
 - Changing the mod load order now shows an error if it couldn't be applied (for example, a layer's shaders failed to reload) instead of silently appearing to take effect
 - A failed save now reports the error instead of silently appearing to succeed

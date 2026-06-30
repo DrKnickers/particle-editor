@@ -112,6 +112,29 @@ export function Spinner({
   // Keep displayed text in sync when value prop changes from outside
   // (but NOT during active text editing — we track that with isFocused).
   const isFocused = useRef(false);
+  // Whether the user has actually TYPED into the field since focusing. A bare
+  // focus (click in, then click away) leaves this false. It gates two things so
+  // a focused-but-untouched field can never go stale or clobber the live value:
+  //   - the external-resync effect still updates the text while focused (so a
+  //     gizmo drag moving the reference object shows up in the spinner), and
+  //   - blur only commits the text when the user genuinely edited it.
+  // Set on keystroke (input onChange); cleared on focus/blur.
+  const edited = useRef(false);
+  // Latest `value` prop, readable from event-handler closures (wheel/scrub/hold)
+  // without re-binding them every render.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  // Optimistic-echo guard. When the field emits a new value via onChange, the
+  // controlled `value` prop can lag before it reflects it — a bridge-backed
+  // caller (the reference-object transform) round-trips through the host and
+  // echoes back asynchronously. `pendingBase` records the prop value at emit
+  // time; while the prop is still that baseline (genuinely awaiting the echo)
+  // the resync effect keeps the optimistic text rather than flashing back to
+  // the stale value for a frame. Any real prop movement — the echo or a fresh
+  // external change (a gizmo drag) — reconciles immediately. null = nothing
+  // pending. Comparing against the BASELINE (not the emitted value) also
+  // sidesteps float-ULP differences between what we sent and what echoes back.
+  const pendingBase = useRef<number | null>(null);
 
   const commit = useCallback((raw: string, modifiers?: { shift?: boolean; ctrl?: boolean }) => {
     const parsed = parseValue(raw);
@@ -127,12 +150,13 @@ export function Spinner({
     }
     final = clamp(parsed, min, max);
     setText(fmt(final));
-    if (final !== value) onChange(final);
+    if (final !== value) { pendingBase.current = valueRef.current; onChange(final); }
   }, [value, onChange, min, max, fmt]);
 
   const adjustBy = useCallback((delta: number) => {
     const next = clamp(value + delta, min, max);
     setText(fmt(next));
+    pendingBase.current = valueRef.current;
     onChange(next);
   }, [value, onChange, min, max, fmt]);
 
@@ -153,11 +177,21 @@ export function Spinner({
 
   const handleBlur = () => {
     isFocused.current = false;
-    commit(text);
+    // Only write back text the user actually edited. A blur with no keystrokes
+    // (clicking away, the panel/popover closing, focus stolen) must NOT commit
+    // the field's text — if `value` changed externally while focused (a gizmo
+    // drag moving the reference object), the un-updated text is stale and would
+    // clobber the live value (the reference-object "slides to origin on close"
+    // bug). Discard the untouched field and re-show the live value instead.
+    if (edited.current) commit(text);
+    else setText(fmt(value));
+    edited.current = false;
   };
 
   const handleFocus = () => {
     isFocused.current = true;
+    edited.current = false;
+    pendingBase.current = null; // fresh interaction — drop any prior optimistic guard
     // Update text from value in case it was changed externally while unfocused.
     setText(fmt(value));
   };
@@ -196,6 +230,7 @@ export function Spinner({
       // (0.1+0.1+0.1 = 0.30000000000000004).
       const next = clamp(Math.round((d.value + delta) * 1e6) / 1e6, d.min, d.max);
       setText(d.fmt(next));
+      pendingBase.current = valueRef.current;
       d.onChange(next);
     };
     el.addEventListener("wheel", onWheelNative, { passive: false });
@@ -257,6 +292,7 @@ export function Spinner({
         const next = clamp(heldValue.current + dir * step, min, max);
         heldValue.current = next;
         setText(fmt(next));
+        pendingBase.current = valueRef.current;
         onChange(next);
       }, HOLD_REPEAT_MS);
     }, HOLD_DELAY_MS);
@@ -281,6 +317,7 @@ export function Spinner({
       setText(fmt(next));
       // Fire onChange during drag (each px move fires); drag-release will
       // fire again on the final value. Callers that debounce are fine.
+      pendingBase.current = valueRef.current;
       onChange(next);
     };
 
@@ -303,16 +340,32 @@ export function Spinner({
   // Clear any pending hold timers on unmount.
   useEffect(() => clearHoldTimers, [clearHoldTimers]);
 
-  // Keep text in sync when prop changes from outside (not while editing).
-  // Effect runs post-commit so the displayed value reflects external
-  // updates (e.g. undo, mod-switch, parent rerender with a transformed
-  // value like FieldSpinner's displayInvertedPercent) without requiring
-  // the user to focus the input first. Guarded on isFocused/dragging so
-  // mid-edit typing is never clobbered. Deps are kept primitive (value,
-  // dp, dragging) so the effect doesn't run on every render and clobber
-  // in-flight `setText` from `onChange`.
+  // Keep text in sync when prop changes from outside (not while actively
+  // editing). Effect runs post-commit so the displayed value reflects external
+  // updates (e.g. undo, mod-switch, a gizmo drag moving the reference object,
+  // parent rerender with a transformed value like FieldSpinner's
+  // displayInvertedPercent) without requiring the user to focus the input
+  // first. Skipped only while the user is genuinely mid-edit (focused AND has
+  // typed) or scrubbing/holding, so in-flight typing is never clobbered — but a
+  // focused-but-untouched field still tracks `value` so it can't go stale. Deps
+  // are kept primitive (value, dp, dragging) so the effect doesn't run on every
+  // render and clobber in-flight `setText` from `onChange`.
   useEffect(() => {
-    if (isFocused.current || dragging || holdingRef.current) return;
+    if (dragging || holdingRef.current) return;
+    // Reconcile the optimistic-echo guard FIRST — before the focus/edit skip —
+    // so it can never outlive the echo: once the prop moves off the baseline it
+    // was armed at, the value we emitted has been confirmed (or superseded), so
+    // drop the guard even if the user is also mid-typing. (Otherwise a
+    // type-then-arrow sequence could leave a stale baseline armed and later
+    // swallow an external change back to that exact value.)
+    if (pendingBase.current !== null && value !== pendingBase.current) {
+      pendingBase.current = null;
+    }
+    if (isFocused.current && edited.current) return; // active typing — keep in-flight text
+    // Optimistic-echo gap: a value we just emitted hasn't echoed into the prop
+    // yet (prop still at the baseline). Keep the optimistic text the emit path
+    // set rather than flashing back to the stale value for a frame.
+    if (pendingBase.current !== null) return;
     const expected = value.toFixed(dp);
     setText((prev) => (prev === expected ? prev : expected));
   }, [value, dp, dragging]);
@@ -336,7 +389,7 @@ export function Spinner({
         value={text}
         disabled={disabled}
         aria-label={ariaLabel}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => { edited.current = true; setText(e.target.value); }}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
         onFocus={handleFocus}
