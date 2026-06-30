@@ -46,20 +46,28 @@ a { color:inherit; }
 /* ---- Top bar ---- */
 .topbar {
   display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:nowrap;
   gap:1rem; max-width:var(--maxw); margin:0 auto;
   padding:1.25rem 1.5rem; border-bottom:1px solid var(--rule);
 }
-.wordmark { font-weight:600; color:var(--paper); text-decoration:none; letter-spacing:-.01em; }
+.wordmark { font-weight:600; color:var(--paper); text-decoration:none; letter-spacing:-.01em; white-space:nowrap; }
 .wordmark .dot { color:var(--accent); font-size:.7em; vertical-align:.15em; }
-.topnav { display:flex; align-items:center; gap:1.25rem; }
-.topnav a:not(.btn-primary) { font-family:var(--mono); font-size:.8rem; color:var(--body); text-decoration:none; }
+.topnav { display:flex; align-items:center; flex:0 1 auto; gap:1.25rem; margin-left:auto; min-width:0; }
+.topnav a, .topnav .btn-primary, .motion-toggle { white-space:nowrap; }
+.topnav a:not(.btn-primary) {
+  display:inline-flex; align-items:center;
+  font-family:var(--mono); font-size:.8rem; color:var(--body); text-decoration:none;
+}
 .topnav a:not(.btn-primary):hover { color:var(--paper); }
 /* the nav Download = the footer's release button, sized for the bar */
-.topnav .btn-primary { font-size:.82rem; padding:.42rem .85rem; }
+.topnav .btn-primary {
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:.82rem; padding:.42rem .85rem;
+}
 .motion-toggle {
   font-family:var(--mono); font-size:.78rem; color:var(--body);
   background:transparent; border:1px solid var(--rule); border-radius:2px;
-  padding:.3rem .6rem; cursor:pointer;
+  min-width:3.625rem; padding:.3rem .6rem; cursor:pointer;
 }
 .motion-toggle:hover, .motion-toggle:focus-visible { color:var(--paper); border-color:var(--accent); }
 
@@ -90,9 +98,16 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
 
 /* ---- Feature sections ---- */
 .feature { padding:5rem 1.5rem; border-top:1px solid var(--rule); }
-.numeral {
-  font-family:var(--mono); font-size:clamp(2.5rem, 7vw, 5rem); font-weight:500;
-  color:transparent; -webkit-text-stroke:1px var(--accent); margin:0 0 .5rem;
+.section-label {
+  display:flex; align-items:center; gap:.75rem;
+  font-family:var(--mono); font-size:.78rem; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--faint); margin:0 0 .85rem;
+}
+.section-number {
+  display:inline-grid; place-items:center;
+  width:2rem; height:2rem;
+  font-size:1.65rem; line-height:1; letter-spacing:0; text-transform:none;
+  color:transparent; -webkit-text-stroke:1px var(--accent);
 }
 .feature h2 {
   font-size:clamp(1.8rem, 3.5vw, 2.8rem); font-weight:600; letter-spacing:-.025em;
@@ -135,9 +150,31 @@ body.loaded .reveal:nth-child(6) { animation-delay:.58s; }
 
 /* ---- Responsive ---- */
 @media (max-width:720px) {
-  .topbar { padding:1rem; }
+  .topbar { padding:1rem; gap:.85rem; }
   .topnav { gap:.9rem; }
   .hero { padding:3rem 1rem 2.5rem; }
   .feature, .site-footer { padding:3.5rem 1rem; }
   main, .site-footer { padding-left:0; padding-right:0; }
+}
+
+@media (max-width:520px) {
+  .topbar { padding:.85rem 1rem; gap:.7rem; }
+  .topnav { justify-content:flex-end; gap:.6rem; }
+  .topnav .nav-download {
+    width:2.75rem; min-width:2.75rem; height:2.75rem;
+    padding:0;
+  }
+  .nav-download-label { display:none; }
+  .topnav .nav-source { min-height:2.75rem; font-size:.76rem; }
+  .motion-toggle {
+    min-width:3.625rem; height:2.75rem;
+    padding:.3rem .5rem; text-align:center;
+  }
+}
+
+@media (max-width:360px) {
+  .topbar { padding:.8rem .75rem; gap:.35rem; }
+  .wordmark { font-size:.94rem; }
+  .topnav { gap:.35rem; }
+  .topnav .nav-source { font-size:.72rem; }
 }

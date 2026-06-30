@@ -46,9 +46,13 @@ if ("IntersectionObserver" in window) {
   lazy.forEach(makeEligible);          // no IO → treat all as eligible
 }
 
-// Reflect motion state in the DOM + the control. Visible label = accessible name.
+// Reflect motion state in the DOM + the control. Visible label stays compact;
+// aria-label/title carry the full action.
 function applyMotion() {
-  toggle.textContent = motionOn ? "Pause motion" : "Play motion";
+  toggle.textContent = motionOn ? "Pause" : "Play";
+  const motionLabel = motionOn ? "Pause motion" : "Play motion";
+  toggle.setAttribute("aria-label", motionLabel);
+  toggle.title = motionLabel;
   if (motionOn) { for (const v of eligible) startVideo(v); }
   else { for (const v of videos) v.pause(); }
 }

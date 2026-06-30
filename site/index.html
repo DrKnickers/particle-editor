@@ -3,14 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Particle Editor — Effects, rendered faithfully.</title>
-  <meta name="description" content="A modern editor for .alo particle systems, with a live preview that runs the game's own Forces of Corruption shaders.">
-  <link rel="icon" href="favicon.ico" sizes="any">
+  <title>Particle Editor — Effects, previewed in context.</title>
+  <meta name="description" content="A modern editor for .alo particle systems, with scene references, mod-stack awareness, atlas picking, and a live preview for Empire at War effects.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
   <!-- Open Graph / Twitter (image URL filled at rollout — site-media release) -->
-  <meta property="og:title" content="Particle Editor — Effects, rendered faithfully.">
-  <meta property="og:description" content="A modern editor for .alo particle systems, with a live preview that runs the game's own Forces of Corruption shaders.">
+  <meta property="og:title" content="Particle Editor — Effects, previewed in context.">
+  <meta property="og:description" content="A modern editor for .alo particle systems, with scene references, mod-stack awareness, atlas picking, and a live preview for Empire at War effects.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://github.com/DrKnickers/particle-editor/releases/download/site-media/og.jpg">
   <meta name="twitter:card" content="summary_large_image">
@@ -27,9 +26,11 @@
   <header class="topbar">
     <a class="wordmark" href="#top"><span class="dot" aria-hidden="true">●</span> Particle Editor</a>
     <nav class="topnav" aria-label="Primary">
-      <a class="btn-primary" href="https://github.com/DrKnickers/particle-editor/releases/latest">↓ Download</a>
-      <a href="https://github.com/DrKnickers/particle-editor">source</a>
-      <button type="button" id="motion-toggle" class="motion-toggle">Pause motion</button>
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label"> Download</span>
+      </a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <button type="button" id="motion-toggle" class="motion-toggle" aria-label="Pause motion" title="Pause motion">Pause</button>
     </nav>
   </header>
 
@@ -37,15 +38,15 @@
     <!-- Hero -->
     <section class="hero" aria-labelledby="hero-h">
       <p class="kicker">Particle effects editor — Empire at War</p>
-      <h1 id="hero-h">Effects, rendered faithfully.</h1>
-      <p class="lede">A modern editor for <code>.alo</code> particle systems, with a live preview
-        that runs the game's own Forces of Corruption shaders. Author emitters, curves, and
-        atlases, all within the editor.</p>
+      <h1 id="hero-h">Effects, previewed in game context.</h1>
+      <p class="lede">Author <code>.alo</code> particle systems with the references that make tuning practical:
+        game units for scale, skydomes for backdrop, mod stacks for assets, and a live viewport beside
+        the controls.</p>
       <p class="actions">
         <a class="btn-primary" href="https://github.com/DrKnickers/particle-editor/releases/latest">↓ Download for Windows</a>
         <a class="btn-quiet" href="https://github.com/DrKnickers/particle-editor">View the source</a>
       </p>
-      <p class="hero-note">Windows x64 · requires a copy of the game</p>
+      <p class="hero-note">Windows x64 · uses your game install for full context</p>
       <figure class="clip clip-hero" aria-label="The editor previewing a particle effect over a game model.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -53,11 +54,12 @@
       </figure>
     </section>
 
-    <!-- Feature 01 -->
+    <!-- Scene context -->
     <section class="feature" aria-labelledby="f1-h">
-      <p class="numeral" aria-hidden="true">01</p>
-      <h2 id="f1-h">Not an approximation.</h2>
-      <p class="feature-copy">Real game models, skydomes, and the actual FoC shader pipeline drive the preview.</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">1</span> Scene Context</p>
+      <h2 id="f1-h">Judge scale before you launch the game.</h2>
+      <p class="feature-copy">Bring in an in-game unit as a reference, load a skydome, and tune the
+        particle against the scene it belongs in.</p>
       <figure class="clip" aria-label="The preview rendering a real game model with the game's shaders.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -65,22 +67,37 @@
       </figure>
     </section>
 
-    <!-- Feature 02 (poster-only until A grows the clip) -->
+    <!-- Authoring workflow -->
     <section class="feature" aria-labelledby="f2-h">
-      <p class="numeral" aria-hidden="true">02</p>
-      <h2 id="f2-h">A live preview.</h2>
-      <p class="feature-copy">Emitters, curves, and atlas frames update in the viewport as you edit them.</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">2</span> Authoring Workflow</p>
+      <h2 id="f2-h">Reorder emitters by feel.</h2>
+      <p class="feature-copy">Drag emitters into the order you need, inspect the properties that matter,
+        and keep timing, color, and alpha curves close to the live viewport.</p>
       <figure class="clip">
         <img class="clip-img" data-poster="preview-poster.jpg" width="1280" height="960"
              alt="The editor's curve and emitter panels beside the live viewport.">
       </figure>
     </section>
 
-    <!-- Feature 03 (poster-only until A grows the clip) -->
+    <!-- Atlas picker -->
     <section class="feature" aria-labelledby="f3-h">
-      <p class="numeral" aria-hidden="true">03</p>
-      <h2 id="f3-h">A modern workspace.</h2>
-      <p class="feature-copy">Dockable panels, transform gizmos, mod-layer stacking, and an adaptive viewport.</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">3</span> Atlas Picker</p>
+      <h2 id="f3-h">Pick frames visually.</h2>
+      <p class="feature-copy">Browse atlas frames as images instead of filenames, compare alpha and step
+        variants, and choose the texture slice that fits the effect you are building.</p>
+      <figure class="clip">
+        <video class="clip-video" loop muted playsinline preload="none"
+               width="1280" height="960"
+               data-clip="f02.mp4" data-poster="f02-poster.jpg"></video>
+      </figure>
+    </section>
+
+    <!-- Mod stack -->
+    <section class="feature" aria-labelledby="f4-h">
+      <p class="section-label"><span class="section-number" aria-hidden="true">4</span> Mod Stack Awareness</p>
+      <h2 id="f4-h">Work in the stack you actually ship.</h2>
+      <p class="feature-copy">Pick the active mod, keep layered assets visible, and edit against the same
+        content assumptions your Empire at War setup will load.</p>
       <figure class="clip">
         <img class="clip-img" data-poster="workspace-poster.jpg" width="1280" height="960"
              alt="The editor's dockable panel layout with a transform gizmo in the viewport.">
@@ -94,7 +111,7 @@
     <p class="actions">
       <a class="btn-primary" href="https://github.com/DrKnickers/particle-editor/releases/latest">↓ Latest release (.zip)</a>
     </p>
-    <p class="footer-meta">MIT-licensed · forked from GlyphXTools/particle-editor · Windows x64 · requires a copy of the game for full rendering</p>
+    <p class="footer-meta">MIT-licensed · forked from GlyphXTools/particle-editor · Windows x64 · uses your game install for full scene context</p>
   </footer>
 
   <script type="module" src="main.js"></script>
