@@ -125,6 +125,15 @@ describe("EmitterTree", () => {
     // rendered as a row.
     const items = screen.getAllByRole("treeitem");
     expect(items).toHaveLength(6);
+
+    // Each row button carries the EXACT positional `testid:emitter-row:<id>` a
+    // --record clip targets (same id emitters/move/select use). Assert every id
+    // 0..5 is present exactly once — a prefix count alone would pass with a
+    // duplicated or malformed id, but the timeline depends on the exact contract.
+    for (let id = 0; id < 6; id += 1) {
+      expect(document.querySelectorAll(`button[data-testid="emitter-row:${id}"]`)).toHaveLength(1);
+    }
+    expect(document.querySelectorAll('[data-testid^="emitter-row:"]')).toHaveLength(6);
   });
 
   // ─── Reorder glide — stableId keying ─────────────────────────────

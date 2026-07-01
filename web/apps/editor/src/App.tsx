@@ -34,6 +34,7 @@ import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 import { RecordCursor } from "@/components/RecordCursor";
 import { parseCursorMessage, postFrameAcked } from "@/lib/record-cursor-bridge";
 import { evalRecordCursor } from "@/lib/record-cursor-eval";
+import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record-cursor-drag";
 import { parseCursorTickMessage, parseCursorTrackMessage, type RecordCursorKey } from "@/lib/record-cursor-track";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
@@ -204,6 +205,11 @@ function AppShell() {
   // Entirely dormant outside --record.
   const [recordCursor, setRecordCursor] = useState({ x: 0, y: 0, visible: false, pressed: false });
   const recordCursorTrackRef = useRef<RecordCursorKey[] | null>(null);
+  // --record synthetic drag: turns the per-frame cursor press/move into REAL pointer
+  // events so a clip can drive a live reorder gesture (lifted chip + make-room gap +
+  // drop). See lib/record-cursor-drag.ts. Dormant outside --record (only the cursor
+  // paths below touch it).
+  const recordDragStateRef = useRef(createRecordDragState());
   useEffect(() => {
     const wv = window.chrome?.webview as
       | {
@@ -216,6 +222,10 @@ function AppShell() {
     const onMsg = (e: { data: unknown }) => {
       const track = parseCursorTrackMessage(e.data);
       if (track) {
+        // A track swap mid-drag would strand a live synthetic gesture — abort it
+        // (pointercancel, no commit) before the new track starts. See gap 1 /
+        // invariant 2 in record-cursor-drag.ts.
+        resetRecordDrag(recordDragStateRef.current);
         recordCursorTrackRef.current = track;
         return;
       }
@@ -226,6 +236,11 @@ function AppShell() {
         if (!keys) return;
         const cursor = evalRecordCursor(keys, tick.t);
         setRecordCursor({ x: cursor.x, y: cursor.y, visible: cursor.vis, pressed: cursor.press });
+        // Drive a real drag from the frame's press/move BEFORE the ack, so the
+        // gesture's chip+gap are in the DOM by the time the host grabs the frame.
+        // `ok` gates the down/move so an unresolved press never clicks (0,0); point
+        // ("literal") targets are always ok, so they drive it too (gaps 2 & 3).
+        applyRecordDrag({ x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok }, recordDragStateRef.current);
         requestAnimationFrame(() =>
           requestAnimationFrame(() =>
             wv.postMessage?.(
@@ -249,6 +264,14 @@ function AppShell() {
       const c = parseCursorMessage(e.data);
       if (!c) return;
       setRecordCursor(c);
+      // Legacy per-frame ("literal") cursor path drives the drag too — a literal
+      // coordinate is always resolved (no ref to miss), so ok:true. Without this,
+      // only the target-based track would reorder (gap 3). NOTE: this deprecated
+      // protocol is always authored with real coords; parseCursorMessage coerces a
+      // missing x/y to 0, so a hand-crafted literal message with pressed:true and no
+      // coords would arm at (0,0) — an accepted latent gap for the legacy path only
+      // (no dragging literal clip exists; new clips use the target track).
+      applyRecordDrag({ x: c.x, y: c.y, press: c.pressed, ok: true }, recordDragStateRef.current);
       const frame =
         typeof (e.data as { frame?: number })?.frame === "number" ? (e.data as { frame: number }).frame : 0;
       requestAnimationFrame(() => requestAnimationFrame(() => postFrameAcked(frame)));

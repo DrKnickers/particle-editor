@@ -278,6 +278,16 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     expect(screen.getByText(/Unmodded — base game only/)).toBeTruthy(); // empty-stack copy
   });
 
+  // Each active-stack row carries a positional `testid:stack-row:<i>` so a --record
+  // clip can target it (paths use Windows backslashes host-side, so index, not path).
+  it("tags each active-stack row with a positional stack-row testid", async () => {
+    renderMenuBar(makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha", "C:/test/GameData/Mods/Beta"] }));
+    await openModsMenu();
+    await waitFor(() => { expect(document.querySelector('[data-testid="stack-row:0"]')).toBeTruthy(); });
+    expect(document.querySelector('[data-testid="stack-row:1"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="stack-row:2"]')).toBeNull(); // only two rows
+  });
+
   // The catalog lives in the Add mod… flyout now. Adding a no-nested mod from an
   // empty stack dispatches set-layers with that one path.
   it("Add mod… adds a no-nested mod to the stack", async () => {

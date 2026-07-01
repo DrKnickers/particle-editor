@@ -740,6 +740,10 @@ export function MenuBar({
                         {menuDrag.gap === i && menuDrag.dragIndex !== null && menuGapSpacer}
                         <li
                           data-flip-key={p}
+                          // Positional (not path) id: the host returns Windows
+                          // backslash paths and eqPath doesn't normalize slashes, so a
+                          // --record clip targets the row by index (testid:stack-row:<i>).
+                          data-testid={`stack-row:${i}`}
                           onPointerDown={menuDrag.startDrag(i)}
                           className={cn(
                             "relative flex h-[var(--row-h)] touch-none select-none items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 pl-1 pr-1 text-xs",

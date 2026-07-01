@@ -664,6 +664,10 @@ function EmitterRow({
               }
             }}
             data-emitter-id={node.id}
+            // --record clips target a row by its positional emitter index
+            // (testid:emitter-row:<node.id>) — node.id is the same handle
+            // emitters/move/select use, so it's stable within a render.
+            data-testid={`emitter-row:${node.id}`}
             data-link-group={node.linkGroup}
             data-link-hover={linkHover ? "true" : "false"}
             data-selected={isSelected ? "true" : "false"}
