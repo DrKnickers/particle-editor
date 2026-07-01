@@ -19,6 +19,7 @@
 
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { type ReactNode, type ReactElement } from "react";
+import { useRecording } from "@/lib/record-mode";
 
 type TipProps = {
   content: ReactNode;
@@ -28,8 +29,15 @@ type TipProps = {
 };
 
 export function Tip({ content, side = "top", align = "center", children }: TipProps) {
-  // No hooks above this return — the early-out is render-order safe even
-  // when a conditional site's content flips between string and undefined.
+  // Under --record the synthetic cursor fires no blur/pointer-leave, so a Radix
+  // tooltip opened by focus during setup would pin open for the whole clip
+  // (observed: a stuck "Redo" tooltip) — render the child bare so no tooltip can
+  // attach. `useRecording` is the only hook and is unconditional + first, so the
+  // early-outs below stay render-order safe.
+  const recording = useRecording();
+  if (recording) return children;
+  // The early-out is render-order safe even when a conditional site's content
+  // flips between string and undefined.
   if (content === null || content === undefined || content === "") return children;
   const body = typeof content === "string" ? <span className="tip-body">{content}</span> : content;
   return (

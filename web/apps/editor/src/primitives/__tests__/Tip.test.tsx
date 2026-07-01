@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Tip } from "../Tip";
+import { markRecording, __resetRecordModeForTests } from "@/lib/record-mode";
 import { BridgeContext } from "@/lib/bridge-context";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
@@ -17,6 +18,8 @@ function renderTip(ui: React.ReactElement, bridge: Bridge | null = null) {
 }
 
 describe("Tip", () => {
+  beforeEach(() => __resetRecordModeForTests());
+
   it("renders the trigger unchanged (asChild — no wrapper element)", () => {
     renderTip(
       <Tip content="Save the file"><button aria-label="Save">S</button></Tip>,
@@ -50,6 +53,32 @@ describe("Tip", () => {
     );
     act(() => screen.getByRole("button", { name: "Plain" }).focus());
     expect(document.querySelector(".tip-surface")).toBeNull();
+  });
+
+  it("suppresses the tooltip under --record (no blur to close a focus-opened tip)", () => {
+    markRecording();
+    renderTip(
+      <Tip content="Save the file"><button aria-label="Save">S</button></Tip>,
+    );
+    // Even with focus (the record path that pins a tooltip open), no tip renders.
+    act(() => screen.getByRole("button", { name: "Save" }).focus());
+    expect(screen.queryByText("Save the file")).toBeNull(); // behavior, not just the class
+    expect(document.querySelector(".tip-surface")).toBeNull();
+    // The trigger itself still renders normally.
+    expect(screen.getByRole("button", { name: "Save" })).not.toHaveAttribute("title");
+  });
+
+  it("drops an ALREADY-OPEN focus tooltip when record mode latches mid-session", () => {
+    // The exact stuck-tooltip repro: a tooltip opens via focus while interactive,
+    // THEN the host starts recording. This is why record-mode is a reactive store
+    // (not a plain module boolean) — the open Tip must re-render and drop itself.
+    renderTip(
+      <Tip content="Save the file"><button aria-label="Save">S</button></Tip>,
+    );
+    act(() => screen.getByRole("button", { name: "Save" }).focus());
+    expect(screen.getAllByText("Save the file").length).toBeGreaterThan(0); // open first
+    act(() => markRecording()); // host begins --record → latch flips
+    expect(screen.queryByText("Save the file")).toBeNull(); // the pinned tip is gone
   });
 
   it("forwards side and align to the content", () => {

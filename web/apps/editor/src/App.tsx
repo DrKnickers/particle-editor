@@ -33,6 +33,7 @@ import { applyModelShadows, readModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 import { RecordCursor } from "@/components/RecordCursor";
 import { parseCursorMessage, postFrameAcked } from "@/lib/record-cursor-bridge";
+import { latchRecordModeFromMessage } from "@/lib/record-mode";
 import { evalRecordCursor } from "@/lib/record-cursor-eval";
 import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record-cursor-drag";
 import { parseCursorTickMessage, parseCursorTrackMessage, type RecordCursorKey } from "@/lib/record-cursor-track";
@@ -220,6 +221,11 @@ function AppShell() {
       | undefined;
     if (!wv?.addEventListener) return;
     const onMsg = (e: { data: unknown }) => {
+      // Latch record mode on the first record-cursor message (track or legacy
+      // ui/cursor) — suppresses focus-pinned tooltips (Tip). One guarded wiring
+      // point; a no-op for tick/other messages. See lib/record-mode.ts.
+      latchRecordModeFromMessage(e.data);
+
       const track = parseCursorTrackMessage(e.data);
       if (track) {
         // A track swap mid-drag would strand a live synthetic gesture — abort it
