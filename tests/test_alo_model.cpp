@@ -480,14 +480,78 @@ int main(int argc, char** argv) {
         CHECK(wrong, "no mesh chunk -> WrongFileException");
     }
     {
-        // Truncated mid-vertex-blob -> ReadException
+        // Truncated payload: ChunkReader rejects the declared child size before
+        // read allocation/underflow, so this is structural BadFileException.
         Bytes mat = material("Skydome.fx", { texParam("BaseTexture", "x.dds") });
         Bytes geo = geometry(4, 2, "alD3dVertNU2C");
         Bytes file = assemble({ mesh("trunc", { { mat, geo } }) });
         file.resize(file.size() - 200);  // chop the tail
         bool threw = false;
-        try { parseBytes(file); } catch (ReadException&) { threw = true; } catch (...) {}
-        CHECK(threw, "truncated file -> ReadException");
+        try { parseBytes(file); } catch (BadFileException&) { threw = true; } catch (...) {}
+        CHECK(threw, "truncated file -> BadFileException");
+    }
+    {
+        // Skeleton/connection floods are structurally valid but must not grow
+        // unbounded vectors from untrusted files.
+        const uint32_t tooMany = 4097;
+        float identity[12] = { 1,0,0,0, 0,1,0,0, 0,0,1,0 };
+        std::vector<Bytes> bones;
+        bones.reserve(tooMany);
+        for (uint32_t i = 0; i < tooMany; ++i)
+            bones.push_back(bone("B" + std::to_string(i), 0xFFFFFFFFu, 1, false, 0, identity));
+        Bytes file = assemble({
+            skeleton(bones),
+            mesh("flood", { { material("MeshGloss.fx", {}), geometry(4, 2, "alD3dVertN") } }),
+        });
+        bool threw = false;
+        try { parseBytes(file); } catch (BadFileException&) { threw = true; } catch (...) {}
+        CHECK(threw, "too many skeleton bones -> BadFileException");
+    }
+    {
+        const uint32_t tooMany = 4097;
+        std::vector<Bytes> objs;
+        objs.reserve(tooMany);
+        for (uint32_t i = 0; i < tooMany; ++i)
+            objs.push_back(connectionObj(i, 0));
+        Bytes file = assemble({
+            mesh("flood", { { material("MeshGloss.fx", {}), geometry(4, 2, "alD3dVertN") } }),
+            connections(objs),
+        });
+        bool threw = false;
+        try { parseBytes(file); } catch (BadFileException&) { threw = true; } catch (...) {}
+        CHECK(threw, "too many object/bone connections -> BadFileException");
+    }
+    {
+        // Boundary: exactly kMaxAloBones (4096) still loads -- the cap rejects the
+        // 4097th, not the 4096th (proves the ceiling is not off-by-one).
+        const uint32_t atCap = 4096;
+        float identity[12] = { 1,0,0,0, 0,1,0,0, 0,0,1,0 };
+        std::vector<Bytes> bones;
+        bones.reserve(atCap);
+        for (uint32_t i = 0; i < atCap; ++i)
+            bones.push_back(bone("B" + std::to_string(i), 0xFFFFFFFFu, 1, false, 0, identity));
+        Bytes file = assemble({
+            skeleton(bones),
+            mesh("atcap", { { material("MeshGloss.fx", {}), geometry(4, 2, "alD3dVertN") } }),
+        });
+        bool threw = false;
+        try { parseBytes(file); } catch (...) { threw = true; }
+        CHECK(!threw, "exactly kMaxAloBones skeleton bones still loads");
+    }
+    {
+        // Boundary: exactly kMaxAloConnections (4096) still loads.
+        const uint32_t atCap = 4096;
+        std::vector<Bytes> objs;
+        objs.reserve(atCap);
+        for (uint32_t i = 0; i < atCap; ++i)
+            objs.push_back(connectionObj(i, 0));
+        Bytes file = assemble({
+            mesh("atcap", { { material("MeshGloss.fx", {}), geometry(4, 2, "alD3dVertN") } }),
+            connections(objs),
+        });
+        bool threw = false;
+        try { parseBytes(file); } catch (...) { threw = true; }
+        CHECK(!threw, "exactly kMaxAloConnections connections still loads");
     }
 
     // ---- skeleton (0x200) + connections (0x600) decode ---------------

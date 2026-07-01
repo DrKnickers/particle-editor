@@ -49,6 +49,38 @@ static unsigned long readInteger(ChunkReader& reader)
 	return letohl(value);
 }
 
+static unsigned long readPackedInteger(ChunkReader& reader, long& remaining)
+{
+	uint32_t value;
+	Verify(remaining >= (long)sizeof(uint32_t));
+	reader.read(&value, sizeof(value));
+	remaining -= (long)sizeof(value);
+	return letohl(value);
+}
+
+static void readPackedBytes(ChunkReader& reader, void* buffer, long size, long& remaining)
+{
+	Verify(size >= 0 && remaining >= size);
+	if (size > 0)
+	{
+		reader.read(buffer, size);
+		remaining -= size;
+	}
+}
+
+static void skipPackedBytes(ChunkReader& reader, long size, long& remaining)
+{
+	Verify(size >= 0 && remaining >= size);
+	char buffer[256];
+	while (size > 0)
+	{
+		const long n = std::min<long>(size, (long)sizeof(buffer));
+		reader.read(buffer, n);
+		size -= n;
+		remaining -= n;
+	}
+}
+
 // Map a raw file integer to a valid InterpolationType, falling
 // back to the linear default for anything outside {IT_UNKNOWN..IT_STEP}.
 static ParticleSystem::Emitter::Track::InterpolationType clampInterpolation(unsigned long raw)
@@ -1089,23 +1121,24 @@ ParticleSystem::ParticleSystem(IFile* file)
 	        else if (type == 0x0003)
 	        {
 	            // Per-group link-exempt flags.
-	            uint32_t count = (uint32_t)readInteger(reader);
+	            long remaining = reader.size();
+	            uint32_t count = (uint32_t)readPackedInteger(reader, remaining);
 	            for (uint32_t i = 0; i < count; ++i)
 	            {
-	                uint32_t groupId      = (uint32_t)readInteger(reader);
-	                uint32_t flagsBytes   = (uint32_t)readInteger(reader);
+	                uint32_t groupId      = (uint32_t)readPackedInteger(reader, remaining);
+	                uint32_t flagsBytes   = (uint32_t)readPackedInteger(reader, remaining);
+	                Verify(remaining >= 0 && flagsBytes <= (uint32_t)remaining);
 	                LinkExemptFlags flags = GetDefaultLinkExemptFlags();
 	                uint32_t toRead = (flagsBytes <= sizeof(LinkExemptFlags))
 	                                ? flagsBytes
 	                                : (uint32_t)sizeof(LinkExemptFlags);
 	                if (toRead > 0)
-	                    reader.read(&flags, toRead);
+	                    readPackedBytes(reader, &flags, (long)toRead, remaining);
 	                // Drain any trailing bytes from a future-version blob.
 	                if (flagsBytes > sizeof(LinkExemptFlags))
 	                {
 	                    long discardSize = (long)(flagsBytes - sizeof(LinkExemptFlags));
-	                    std::vector<char> discard((size_t)discardSize);
-	                    reader.read(discard.data(), discardSize);
+	                    skipPackedBytes(reader, discardSize, remaining);
 	                }
 	                // Defensive: drop entries for groupId 0 (invalid)
 	                // or entries equal to v1 defaults (the writer

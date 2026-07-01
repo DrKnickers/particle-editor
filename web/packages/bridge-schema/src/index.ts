@@ -1172,7 +1172,7 @@ type ResponseForB<R extends Request> =
   R extends { kind: "emitters/list" }             ? EmitterTreeDto :
   R extends { kind: "emitters/select" }           ? Record<string, never> :
   R extends { kind: "emitters/update" }           ? Record<string, never> :
-  R extends { kind: "emitters/import-from-file" } ? { imported: number } :
+  R extends { kind: "emitters/import-from-file" } ? { ok: true; imported: number } :
   R extends { kind: "emitters/preview-from-file" } ?
     | { ok: true; tree: EmitterTreeNode }
     | { ok: false; error: string } :

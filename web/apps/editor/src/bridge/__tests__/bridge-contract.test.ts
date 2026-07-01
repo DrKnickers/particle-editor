@@ -22,6 +22,8 @@ import type {
   EmitterTreeNode,
   EngineStateDto,
   Event,
+  Request,
+  ResponseFor,
 } from "@particle-editor/bridge-schema";
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 
@@ -38,6 +40,12 @@ beforeEach(() => {
 });
 
 describe("MockBridge contract", () => {
+  it("types emitters/import-from-file like the native success payload", () => {
+    type ImportFromFileRequest = Extract<Request, { kind: "emitters/import-from-file" }>;
+    const response = { ok: true, imported: 1 } satisfies ResponseFor<ImportFromFileRequest>;
+    expect(response).toEqual({ ok: true, imported: 1 });
+  });
+
   it("engine/state/snapshot returns the full DTO shape", async () => {
     const b = new MockBridge();
     const s = await b.request({ kind: "engine/state/snapshot", params: {} });

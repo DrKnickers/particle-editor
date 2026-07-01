@@ -161,6 +161,7 @@ may live at the end of the file.
 
 ### Fixed
 
+- A particle effect with custom link-group "exempt" settings now saves and reloads correctly instead of producing a file the editor couldn't reopen; malformed or oversized `.alo` files also no longer hang or exhaust memory when loading
 - Reference objects no longer show their muzzle flashes stuck on — the editor now hides muzzle-flash geometry to match the in-game look, where a unit's muzzle flash appears only while it fires
 - A reference object you positioned with the gizmo no longer slides back to the origin when you close the reference-object picker (or deselect it) — the placement is kept, and the picker's position fields now track the gizmo live instead of showing a stale value
 - Reference objects (imported game units) now remember their own position and rotation — switching to a different unit no longer leaves it floating above the ground with the previous object's placement, and switching back to a unit restores where you put it

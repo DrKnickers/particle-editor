@@ -25,6 +25,7 @@
 #include "ChunkFile.h"
 #include "files.h"
 #include "exceptions.h"
+#include "LinkGroup.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -189,6 +190,59 @@ int main()
                 CHECK(e->blendMode == (unsigned long)ParticleSystem::BLEND_SCANLINES, "round-trip: blendMode survives");
             }
             delete rp;
+        }
+    }
+
+    {
+        ParticleSystem ps;
+        buildOne(ps);
+        LinkExemptFlags flags = GetDefaultLinkExemptFlags();
+        flags.lifetime = true;
+        ps.setLinkExemptFlags(42u, flags);
+
+        Bytes image = serialize(ps);
+        bool other = false;
+        ParticleSystem* rp = NULL;
+        bool ok = loads(image, &rp, other);
+        CHECK(ok && !other && rp, "round-trip: custom link-exempt chunk reloads cleanly");
+        if (rp)
+        {
+            const LinkExemptFlags& loaded = rp->getLinkExemptFlags(42u);
+            CHECK(loaded.lifetime, "round-trip: custom link-exempt flag survives");
+            CHECK(loaded.colorTexture, "round-trip: default exempt flags are preserved with custom entry");
+            delete rp;
+        }
+    }
+
+    // --- link-exempt (0x0003) hardening: a corrupt packed size/count must be
+    // rejected, not drive an unbounded read or allocation (release-audit).
+    {
+        ParticleSystem ps;
+        buildOne(ps);
+        LinkExemptFlags flags = GetDefaultLinkExemptFlags();
+        flags.lifetime = true;
+        const uint32_t gid = 0x00ABCDEFu;   // distinctive -> unique byte signature
+        ps.setLinkExemptFlags(gid, flags);
+        const Bytes image = serialize(ps);
+
+        // Each entry stores groupId then flagsBytes (both little-endian u32); the
+        // entry count precedes entry 0. Locate the pair by its unique signature.
+        Bytes sig(8);
+        putU32(sig, 0, gid);
+        putU32(sig, 4, (uint32_t)sizeof(LinkExemptFlags));
+        long at = findUnique(image, sig);
+        CHECK(at >= 4, "hardening: located link-exempt (groupId,flagsBytes) pair");
+        if (at >= 4)
+        {
+            // (i) flagsBytes far larger than the chunk must be rejected.
+            Bytes big = image;
+            putU32(big, (size_t)at + 4, 0x7FFFFFFFu);
+            expectBadFile(big, "hardening: oversized link-exempt flagsBytes rejected");
+
+            // (ii) entry count far larger than the chunk must be rejected.
+            Bytes many = image;
+            putU32(many, (size_t)at - 4, 0x7FFFFFFFu);
+            expectBadFile(many, "hardening: oversized link-exempt count rejected");
         }
     }
 

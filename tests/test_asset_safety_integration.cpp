@@ -8,10 +8,12 @@
 #include "SkydomeEnvironment.h"
 #include "files.h"
 #include "managers.h"
+#include "ResourceLimits.h"
 
 #include <array>
 #include <cstdio>
 #include <map>
+#include <sstream>
 #include <set>
 #include <string>
 #include <vector>
@@ -35,17 +37,37 @@ struct HugeFile : IFile
     unsigned long write(const void*, unsigned long) override { return 0; }
 };
 
+struct ClaimedSizeFile : IFile
+{
+    unsigned long claimedSize;
+    unsigned long pos = 0;
+    bool* readAttempted;
+    ClaimedSizeFile(unsigned long size, bool* readFlag)
+        : claimedSize(size), readAttempted(readFlag) {}
+    bool eof() override { return pos >= size(); }
+    unsigned long size() override { return claimedSize; }
+    void seek(unsigned long offset) override { pos = offset < claimedSize ? offset : claimedSize; }
+    unsigned long tell() override { return pos; }
+    unsigned long read(void*, unsigned long n) override { *readAttempted = true; pos += n; return 0; }
+    unsigned long write(const void*, unsigned long) override { return 0; }
+};
+
 struct MockFM : IFileManager
 {
     std::map<std::string, std::string> files;
     std::set<std::string> hugeFiles;
+    std::map<std::string, unsigned long> claimedSizeFiles;
     std::vector<std::string> calls;
     bool hugeReadAttempted = false;
+    bool claimedReadAttempted = false;
 
     IFile* getFile(const std::string& path) override
     {
         calls.push_back(path);
         if (hugeFiles.count(path)) return new HugeFile(&hugeReadAttempted);
+        auto claimed = claimedSizeFiles.find(path);
+        if (claimed != claimedSizeFiles.end())
+            return new ClaimedSizeFile(claimed->second, &claimedReadAttempted);
         auto it = files.find(path);
         if (it == files.end()) return nullptr;
         MemoryFile* mf = new MemoryFile();
@@ -153,6 +175,48 @@ static void testCatalogSizeCap()
     CHECK(!rosterFm.hugeReadAttempted, "oversized roster Lua is not read before skip");
 }
 
+static void testCatalogAggregateCap()
+{
+    std::printf("[catalog aggregate cap]\n");
+    MockFM fm;
+    fm.files["Data\\XML\\GameObjectFiles.xml"] =
+        "<Game_Object_Files>"
+        "  <File>Small.xml</File>"
+        "  <File>WouldOverflow.xml</File>"
+        "</Game_Object_Files>";
+    fm.files["Data\\XML\\Small.xml"] = "<Objects></Objects>";
+    fm.claimedSizeFiles["Data\\XML\\WouldOverflow.xml"] = kMaxXmlFileBytes;
+
+    GameObjectCatalog cat;
+    const bool ok = BuildGameObjectCatalog(fm, cat);
+    CHECK(ok, "catalog build tolerates aggregate XML byte budget overflow");
+    CHECK(!fm.claimedReadAttempted, "aggregate-overflow XML file is not read before skip");
+}
+
+static void testCatalogFileCountCap()
+{
+    std::printf("[catalog file count cap]\n");
+    MockFM fm;
+    std::ostringstream gof;
+    gof << "<Game_Object_Files>";
+    for (unsigned long i = 0; i < kMaxCatalogXmlFileCount; ++i)
+        gof << "<File>Missing" << i << ".xml</File>";
+    gof << "<File>BeyondCap.xml</File>";
+    gof << "</Game_Object_Files>";
+    fm.files["Data\\XML\\GameObjectFiles.xml"] = gof.str();
+    fm.files["Data\\XML\\BeyondCap.xml"] = "<Objects></Objects>";
+
+    GameObjectCatalog cat;
+    const bool ok = BuildGameObjectCatalog(fm, cat);
+    CHECK(ok, "catalog build tolerates a file list beyond the count cap");
+
+    bool readBeyondCap = false;
+    for (const std::string& call : fm.calls)
+        if (call == "Data\\XML\\BeyondCap.xml")
+            readBeyondCap = true;
+    CHECK(!readBeyondCap, "catalog does not read files beyond the file-count cap");
+}
+
 static void testSkydomePathGates()
 {
     std::printf("[skydome path gates]\n");
@@ -200,6 +264,8 @@ int main()
     std::printf("test_asset_safety_integration\n");
     testCatalogPathGates();
     testCatalogSizeCap();
+    testCatalogAggregateCap();
+    testCatalogFileCountCap();
     testSkydomePathGates();
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");

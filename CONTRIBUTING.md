@@ -19,7 +19,7 @@ If the editor crashed and produced a dialog with an exception trace, paste that 
 The workflow is conventional:
 
 1. **Fork → branch → commit → PR against `master`.** All work goes through PRs, including from maintainers.
-2. **Build before opening.** *Debug | x64* and *Release | x64* must both compile clean. CI runs these automatically once your PR is open.
+2. **Build before opening.** *Debug | x64* and *Release | x64* must both compile clean. The public mirror CI runs these automatically once your PR is open; the private working repo skips the heavy C++ job, so local C++ builds remain required there.
 3. **PR body uses the [PULL_REQUEST_TEMPLATE](.github/PULL_REQUEST_TEMPLATE.md) shape** — *Summary* + *Test plan checklist*. Match the existing PR shape; readers and maintainers rely on it.
 4. **One feature per PR.** Bundle the docs update for that feature into the same PR. Don't mix unrelated changes — easier to review, easier to revert.
 

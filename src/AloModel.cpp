@@ -2,6 +2,7 @@
 
 #include "ChunkFile.h"
 #include "exceptions.h"
+#include "ResourceLimits.h"
 
 #include <string.h>   // _stricmp / _strnicmp (case-insensitive shader-name match)
 
@@ -315,7 +316,8 @@ namespace
 
     // r is positioned inside a 0x200 skeleton container. The 0x201 info leaf
     // (and its boneCount) is intentionally ignored -- we trust the actual count
-    // of 0x202 children (a stub 0x201 may lie). TOLERANT (never throws).
+    // of 0x202 children (a stub 0x201 may lie). Unexpected child shapes stay
+    // tolerant, but a child-count flood is structurally malformed and rejected.
     void ReadSkeleton(ChunkReader& r, std::vector<AloBone>& bones)
     {
         ChunkType t;
@@ -323,6 +325,7 @@ namespace
         {
             if (t == CHUNK_BONE)
             {
+                Verify(bones.size() < kMaxAloBones);
                 bones.emplace_back();
                 ReadBone(r, bones.back());
             }
@@ -336,7 +339,8 @@ namespace
 
     // r is positioned inside a 0x600 connections container. Reads the 0x602
     // object->bone entries; skips 0x601 counts + 0x603/0x604 proxies/dazzles.
-    // TOLERANT: a non-4-byte mini is skipped rather than throwing.
+    // TOLERANT: a non-4-byte mini is skipped rather than throwing. A flood of
+    // connection entries is rejected before growing the vector without bound.
     void ReadConnections(ChunkReader& r, std::vector<AloConnection>& conns)
     {
         ChunkType t;
@@ -344,6 +348,7 @@ namespace
         {
             if (t == CHUNK_CONN_OBJECT)
             {
+                Verify(conns.size() < kMaxAloConnections);
                 AloConnection c;
                 ChunkType mt;
                 while ((mt = r.nextMini()) != -1)

@@ -57,11 +57,22 @@
 [CmdletBinding()]
 param(
     [string] $Stage    = (Join-Path (Get-Location) 'release-stage'),
-    [string] $RepoRoot = (Split-Path -Parent $PSScriptRoot),
+    [string] $RepoRoot = '',
     [string] $OutZip
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $scriptRoot = $PSScriptRoot
+    if ([string]::IsNullOrWhiteSpace($scriptRoot) -and $MyInvocation.MyCommand.Path) {
+        $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+    }
+    if ([string]::IsNullOrWhiteSpace($scriptRoot)) {
+        throw "[package-release] Could not resolve script directory; pass -RepoRoot explicitly."
+    }
+    $RepoRoot = Split-Path -Parent $scriptRoot
+}
 
 # Normalize to absolute paths and REFUSE a destructive -Stage (the stage is Remove-Item'd below):
 # never the filesystem root, the repo root, or an ancestor of the repo.
@@ -92,6 +103,17 @@ function Assert-Staged {
         throw "[package-release] Empty staged artifact: $Relative"
     }
 }
+function Test-PathIsOrContains {
+    param([string]$Parent, [string]$Child)
+    $parentNorm = [System.IO.Path]::GetFullPath($Parent).TrimEnd([char]'\', [char]'/')
+    $childNorm  = [System.IO.Path]::GetFullPath($Child).TrimEnd([char]'\', [char]'/')
+    return ($childNorm -eq $parentNorm -or
+        $childNorm.StartsWith($parentNorm + $sep, [System.StringComparison]::OrdinalIgnoreCase))
+}
+function Test-PathsOverlap {
+    param([string]$A, [string]$B)
+    return ((Test-PathIsOrContains $A $B) -or (Test-PathIsOrContains $B $A))
+}
 
 Write-Host "Particle Editor -- release staging" -ForegroundColor Cyan
 Write-Host "  RepoRoot : $RepoRoot"
@@ -106,6 +128,17 @@ $d3dxSource   = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist', 'd3dx9_43
 $distSource   = [System.IO.Path]::Combine($RepoRoot, 'web', 'apps', 'editor', 'dist')
 $distIndex    = [System.IO.Path]::Combine($distSource, 'index.html')
 $distAssets   = [System.IO.Path]::Combine($distSource, 'assets')
+$sourceRoots  = @(
+    [pscustomobject]@{ Label = 'native release output'; Path = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release') }
+    [pscustomobject]@{ Label = 'vendored D3DX redist'; Path = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist') }
+    [pscustomobject]@{ Label = 'web bundle dist'; Path = $distSource }
+)
+
+foreach ($sourceRoot in $sourceRoots) {
+    if (Test-PathsOverlap $Stage $sourceRoot.Path) {
+        throw "[package-release] Refusing -Stage '$Stage' because it overlaps required source: $($sourceRoot.Label) -> $($sourceRoot.Path). Use a dedicated staging directory."
+    }
+}
 
 Test-RequiredSource 'ParticleEditor.exe'      $exeSource    'Leaf'
 Test-RequiredSource 'WebView2Loader.dll'      $loaderSource 'Leaf'

@@ -164,13 +164,21 @@ namespace
         const XMLNode* root = xml.getRoot();
         if (root == nullptr) return false;
 
+        // De-dup as we collect so the file-count cap bounds DISTINCT names: a
+        // flood of duplicate <File> entries must not push a later legitimate file
+        // past kMaxCatalogXmlFileCount (release-audit follow-up). Downstream dedup
+        // stays as a belt-and-suspenders no-op on this already-unique list.
+        std::set<std::string> seen;
         for (unsigned i = 0; i < root->getNumChildren(); ++i)
         {
             const XMLNode* c = root->getChild(i);
             if (c->getName() != L"File") continue;          // tolerate comments / other elements
             std::string fn = trim(WideToAnsi(c->getData()));
             if (!IsSafeRelativeAssetName(fn)) continue;
-            if (!fn.empty()) files.push_back(fn);
+            if (fn.empty()) continue;
+            if (!seen.insert(fn).second) continue;          // skip duplicates
+            if (files.size() >= kMaxCatalogXmlFileCount) break;
+            files.push_back(fn);
         }
         return true;
     }
@@ -182,7 +190,8 @@ namespace
     // empty (skipped downstream). A MEG-packed file's SubFile clamps the read to
     // its own extent, so reading size() bytes from offset 0 yields exactly it.
     void readObjectFileBytes(IFileManager& fm, const std::string& fileName,
-                             std::vector<char>& bytes)
+                             std::vector<char>& bytes,
+                             unsigned long long& catalogXmlBytes)
     {
         bytes.clear();
         if (!IsSafeRelativeAssetName(fileName)) return;
@@ -194,6 +203,12 @@ namespace
             f->Release();
             return;
         }
+        if ((unsigned long long)sz > (unsigned long long)kMaxCatalogXmlTotalBytes - catalogXmlBytes)
+        {
+            f->Release();
+            return;
+        }
+        catalogXmlBytes += sz;
         if (sz > 0)
         {
             bytes.resize(sz);
@@ -615,7 +630,13 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
     {
         std::set<std::string> seenFiles;
         for (const std::string& fn : files)
-            if (seenFiles.insert(fn).second) uniqueFiles.push_back(fn);
+        {
+            if (seenFiles.insert(fn).second)
+            {
+                if (uniqueFiles.size() >= kMaxCatalogXmlFileCount) break;
+                uniqueFiles.push_back(fn);
+            }
+        }
     }
     const size_t n = uniqueFiles.size();
 
@@ -630,8 +651,9 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
 
     // Phase 1 -- READ (serial): the only fm access in the parse stage.
     std::vector<std::vector<char>> blobs(n);
+    unsigned long long catalogXmlBytes = 0;
     for (size_t i = 0; i < n; ++i)
-        readObjectFileBytes(fm, uniqueFiles[i], blobs[i]);
+        readObjectFileBytes(fm, uniqueFiles[i], blobs[i], catalogXmlBytes);
     const auto tParseStart = clk::now();
 
     // Phase 2 -- PARSE (parallel): perFile[i] written by exactly one worker

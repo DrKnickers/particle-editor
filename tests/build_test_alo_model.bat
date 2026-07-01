@@ -8,6 +8,7 @@ if errorlevel 1 ( echo vcvars failed & exit /b 1 )
 
 set ROOT=%~dp0..
 pushd "%ROOT%"
+if not exist tests\obj mkdir tests\obj
 
 cl /nologo /EHsc /std:c++17 /MDd /Zi ^
    /DUNICODE /D_UNICODE /D_DEBUG /D_WINDOWS /D_CRT_SECURE_NO_WARNINGS ^

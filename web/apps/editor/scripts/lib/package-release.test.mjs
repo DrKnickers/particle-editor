@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, statSync } from "node:fs";
+import { copyFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -45,19 +45,29 @@ function buildFixture(root, omit = []) {
 }
 
 // Run the packager against a fresh temp fixture; returns { res, stage, zip }.
-function runCase(t, omit = [], { withZip = true } = {}) {
+function runCase(
+  t,
+  omit = [],
+  { withZip = true, passRepoRoot = true, useFixtureScript = false, stagePath } = {},
+) {
   assert.ok(shell, "PowerShell (pwsh/powershell) is required under CI but was not found");
   const tmp = mkdtempSync(path.join(tmpdir(), "pkgrel-"));
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
   const repo = path.join(tmp, "fixtures");
-  const stage = path.join(tmp, "stage");
+  const stage = stagePath ? stagePath({ tmp, repo }) : path.join(tmp, "stage");
   const zip = path.join(tmp, "out.zip");
   buildFixture(repo, omit);
-  const args = ["-NoProfile", "-File", SCRIPT, "-Stage", stage, "-RepoRoot", repo];
+  const script = useFixtureScript ? path.join(repo, "scripts", "package-release.ps1") : SCRIPT;
+  if (useFixtureScript) {
+    mkdirSync(path.dirname(script), { recursive: true });
+    copyFileSync(SCRIPT, script);
+  }
+  const args = ["-NoProfile", "-File", script, "-Stage", stage];
+  if (passRepoRoot) args.push("-RepoRoot", repo);
   if (withZip) args.push("-OutZip", zip);
   const res = spawnSync(shell, args, { encoding: "utf8" });
   assert.equal(res.error, undefined, `spawn error: ${res.error}`);
-  return { res, stage, zip };
+  return { res, repo, stage, zip };
 }
 
 const staged = (stage, ...parts) => existsSync(path.join(stage, ...parts));
@@ -81,6 +91,36 @@ test("case 1b: stages a complete bundle WITHOUT -OutZip (post-stage asserts run)
   assert.equal(res.status, 0, `expected success; stderr:\n${res.stderr}`);
   assert.ok(staged(stage, "web", "apps", "editor", "dist", "assets", "index-stub.js"), "assets staged");
   assert.ok(staged(stage, "web", "apps", "editor", "dist", "fonts", "stub.woff2"), "fonts staged");
+});
+
+test("case 1c: -File default RepoRoot resolves from the script path", skipOpt, (t) => {
+  const { res, stage, zip } = runCase(t, [], { passRepoRoot: false, useFixtureScript: true });
+  assert.equal(res.status, 0, `expected success; stderr:\n${res.stderr}`);
+  assert.ok(staged(stage, "x64", "Release", "ParticleEditor.exe"), "exe staged");
+  assert.ok(staged(stage, "web", "apps", "editor", "dist", "index.html"), "default RepoRoot found fixture dist");
+  assert.ok(existsSync(zip) && statSync(zip).size > 0, "release zip created + verified");
+});
+
+test("case 1d: refuses -Stage paths that overlap required sources before deleting them", skipOpt, (t) => {
+  for (const c of [
+    {
+      label: "stage is an ancestor of native output",
+      stagePath: ({ repo }) => path.join(repo, "x64"),
+      preserved: ["x64", "Release", "ParticleEditor.exe"],
+      rx: /Refusing -Stage.*overlaps required source.*native release output/s,
+    },
+    {
+      label: "stage is inside the web bundle",
+      stagePath: ({ repo }) => path.join(repo, "web", "apps", "editor", "dist", "scratch-stage"),
+      preserved: ["web", "apps", "editor", "dist", "assets", "index-stub.js"],
+      rx: /Refusing -Stage.*overlaps required source.*web bundle dist/s,
+    },
+  ]) {
+    const { res, repo } = runCase(t, [], { withZip: false, stagePath: c.stagePath });
+    assert.notEqual(res.status, 0, `${c.label}: expected non-zero exit`);
+    assert.match(res.stderr, c.rx, `${c.label}: stderr did not match ${c.rx}:\n${res.stderr}`);
+    assert.ok(existsSync(path.join(repo, ...c.preserved)), `${c.label}: source fixture preserved`);
+  }
 });
 
 // Negative cases: each must exit non-zero with the specific error substring (not just any failure).
