@@ -320,6 +320,8 @@ int main()
         CHECK(IsAllowedRecordKind("ui/picker-collapse"));
         CHECK(IsAllowedRecordKind("engine/set/reference-object-lock"));   // the actual clip-dispatch gate
         CHECK(drive::IsAllowedBridgeKind("engine/set/reference-object-lock"));
+        CHECK(IsAllowedRecordKind("engine/set/reference-object-transform"));   // clip pins swapped units to a common centroid
+        CHECK(drive::IsAllowedBridgeKind("engine/set/reference-object-transform"));
         CHECK(!drive::IsAllowedBridgeKind("emitters/delete"));
         CHECK(!drive::IsAllowedBridgeKind("ui/show-panel"));
         CHECK(!drive::IsAllowedBridgeKind("ui/open-picker"));

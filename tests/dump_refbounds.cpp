@@ -48,6 +48,42 @@ int main(int argc, char** argv)
     D3DXVECTOR3 mn, mx;
     bool hasBox = mesh.GetBoundingBox(mn, mx);
 
+    // Footprint (ground-contact) center: the (X,Y) centroid of vertices in the
+    // bottom Z-band (feet), placement-applied exactly like the bounds. This is
+    // the "where the unit stands" anchor — unlike the full-AABB X,Y center it is
+    // not skewed by a body that sprawls fore/aft (e.g. the AT-AT's long hull).
+    // Two passes over the placed vertices: find global minZ/maxZ, then average
+    // (x,y) over the lowest 12% of height.
+    {
+        float gMinZ = 1e30f, gMaxZ = -1e30f;
+        auto forEachPlaced = [&](auto&& fn) {
+            for (const RefSubMeshGpu& s : mesh.SubMeshes()) {
+                const unsigned char* vb = s.vertexBytes.data();
+                for (uint32_t v = 0; v < s.vertexCount; ++v) {
+                    const float* p = reinterpret_cast<const float*>(vb + (size_t)v * s.stride);
+                    D3DXVECTOR3 pos(p[0], p[1], p[2]), placed;
+                    D3DXVec3TransformCoord(&placed, &pos, &s.placement);
+                    fn(placed);
+                }
+            }
+        };
+        forEachPlaced([&](const D3DXVECTOR3& p){ if (p.z<gMinZ) gMinZ=p.z; if (p.z>gMaxZ) gMaxZ=p.z; });
+        const float band = gMinZ + 0.12f * (gMaxZ - gMinZ);
+        double sx=0, sy=0; size_t nb=0;
+        forEachPlaced([&](const D3DXVECTOR3& p){ if (p.z<=band){ sx+=p.x; sy+=p.y; ++nb; } });
+        if (nb) printf(">>> FOOTPRINT (bottom 12%% Z-band, %zu verts): X=%.4f  Y=%.4f\n",
+                       nb, sx/nb, sy/nb);
+        // Full-model center of gravity in the XY plane, approximated by the
+        // vertex centroid (unweighted mean of every kept vertex). This is a
+        // proxy, not a true mass/volume centroid: it is weighted by mesh
+        // tessellation density, so a heavily-subdivided region pulls it. Good
+        // enough to co-locate two units' ground positions; do not treat it as
+        // physically exact.
+        double cx=0, cy=0; size_t na=0;
+        forEachPlaced([&](const D3DXVECTOR3& p){ cx+=p.x; cy+=p.y; ++na; });
+        if (na) printf(">>> COG (all %zu verts, XY plane): X=%.4f  Y=%.4f\n", na, cx/na, cy/na);
+    }
+
     printf("=== %s ===\n", argv[1]);
     printf("kept sub-meshes: %zu   skippedSkinned=%d\n",
            mesh.SubMeshes().size(), mesh.SkippedSkinned() ? 1 : 0);
