@@ -43,7 +43,11 @@ import { runWhenIdle } from "@/lib/run-after-paint";
 const GRID_GAP = 4;
 const GRID_MIN_CELL = 44;
 const GRID_MAX_CELL = 160;
+// Stable empty dead-cell set so the "no dead cells" state never churns identity (React
+// bails the re-render when setDeadCells is handed the same reference).
+const EMPTY_DEAD_CELLS: ReadonlySet<number> = new Set();
 import { getPreviewCached, useTextureEpoch } from "@/lib/atlas-preview-cache";
+import { computeDeadCells } from "@/lib/atlas-dead-cells";
 import { useModStack } from "@/lib/mod-stack";
 import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
 
@@ -159,6 +163,12 @@ export function AtlasPickerPanel({
   // `preview` is derived from these two + showAlpha (below).
   const [flatPrev, setFlatPrev]         = useState<PreviewState>({ kind: "loading" }); // alpha OFF (color channel)
   const [rawPrev,  setRawPrev]          = useState<PreviewState>({ kind: "loading" }); // alpha ON  (real alpha)
+  // "Effectively empty" frames (max alpha ≈ 0) — they render invisible particles yet preview
+  // fine (the picker shows RGB), so the grid dims + disables them. Sampled from rawPrev (the
+  // alpha-mode preview, which carries real transparency). ADVISORY + async: empty until the
+  // sample resolves, so a frame picked during the load window is still honored — the guards
+  // in onCellClick / the confirm modal re-check this set at commit time.
+  const [deadCells, setDeadCells]       = useState<ReadonlySet<number>>(EMPTY_DEAD_CELLS);
   // Honor-alpha toggle. Default OFF: particle atlases are usually ADDITIVE (the
   // visible content lives in RGB while alpha ~0), so with normal blending those
   // frames look "missing". OFF forces every pixel fully opaque (alpha=255) so the
@@ -447,6 +457,21 @@ export function AtlasPickerPanel({
     return () => { live = false; cancelInactive(); };
   }, [colorTexture, eligible, previewInputKey, tooLarge]);
 
+  // Dead-cell detection: once the alpha-mode preview (rawPrev) resolves, sample it off an
+  // offscreen canvas and flag effectively-empty frames so the grid can dim + disable them.
+  // Keyed on the raw preview's data URI + side, so it re-runs on any texture/mod/epoch change
+  // and resets to empty while (re)loading. computeDeadCells is fail-safe — an empty set on any
+  // decode/canvas failure (incl. jsdom), so detection simply doesn't dim anything on failure.
+  const rawUri = rawPrev.kind === "ok" ? rawPrev.dataUri : null;
+  useEffect(() => {
+    if (!rawUri || side < 2) { setDeadCells(EMPTY_DEAD_CELLS); return; }
+    let live = true;
+    void computeDeadCells(rawUri, side).then((d) => {
+      if (live) setDeadCells(d.size ? d : EMPTY_DEAD_CELLS);
+    });
+    return () => { live = false; };
+  }, [rawUri, side]);
+
   // The displayed preview is the active mode's prefetched result — a synchronous
   // pick, so toggling Alpha is instant (no bridge round-trip, no loading flash).
   const preview: PreviewState = showAlpha ? rawPrev : flatPrev;
@@ -599,6 +624,9 @@ export function AtlasPickerPanel({
 
   function onCellClick(k: number) {
     if (offIndex || keyTimes.length === 0) return;
+    // Effectively-empty frame: block assignment (mouse AND keyboard route through here) and
+    // announce, so a keyboard/screen-reader user isn't left with a silent no-op.
+    if (deadCells.has(k)) { setAnnouncement(`Frame ${k} is empty — nothing to assign`); return; }
     if (frame === null && keyTimes.length > 1) {
       if (emitterId !== null) setConfirmTarget({ frame: k, emitterId, keyTimes });
       return;
@@ -799,6 +827,7 @@ export function AtlasPickerPanel({
                   srcH={okPreview.srcH}
                   selected={k === highlight}
                   focused={k === rovingTarget}
+                  isDead={deadCells.has(k)}
                   onHover={setHover}
                   onClick={stableCellClick}
                 />
@@ -855,6 +884,13 @@ export function AtlasPickerPanel({
         onConfirm={() => {
           const t = confirmTarget!;
           setConfirmTarget(null);
+          // Re-check at commit: the modal opened before (or the async sample landed while) it
+          // was up, so the stored frame could now be known-dead. Don't assign an empty frame.
+          if (deadCells.has(t.frame)) {
+            setAnnouncement(`Frame ${t.frame} is empty — nothing to assign`);
+            focusCell(t.frame);
+            return;
+          }
           void commitAssign(t.frame, t.emitterId, t.keyTimes).then(() => focusCell(t.frame));
         }}
         onCancel={() => {
@@ -918,6 +954,7 @@ const Cell = memo(function Cell({
   srcH,
   selected,
   focused,
+  isDead,
   onHover,
   onClick,
 }: {
@@ -927,6 +964,7 @@ const Cell = memo(function Cell({
   srcH: number;
   selected: boolean;
   focused: boolean;
+  isDead: boolean;
   onHover: (k: number | null) => void;
   onClick?: (k: number) => void;
 }) {
@@ -942,27 +980,36 @@ const Cell = memo(function Cell({
       data-testid="atlas-cell"
       data-frame={k}
       data-selected={selected ? "true" : "false"}
+      data-dead={isDead ? "true" : "false"}
       role="option"
       aria-selected={selected}
-      aria-label={`Frame ${k}`}
+      aria-disabled={isDead || undefined}
+      aria-label={isDead ? `Frame ${k}, empty` : `Frame ${k}`}
       tabIndex={focused ? 0 : -1}
-      className={`group relative aspect-square rounded-[var(--radius-sm)] bg-bg-2 transition hover:scale-[1.06] hover:z-10 motion-reduce:hover:scale-100 ${
-        selected ? "border-2" : "border border-border"
-      } focus-ring`}
+      className={`group relative aspect-square rounded-[var(--radius-sm)] bg-bg-2 transition ${
+        isDead ? "cursor-not-allowed" : "hover:scale-[1.06] hover:z-10 motion-reduce:hover:scale-100"
+      } ${selected ? "border-2" : "border border-border"} focus-ring`}
       style={style}
       onMouseEnter={() => onHover(k)}
       onMouseLeave={() => onHover(null)}
       onClick={() => onClick?.(k)}
     >
-      {/* Hover affordance = a subtle scale-lift (on the cell) + this tint
-          overlay (~22%). Geometry carries it on loud thumbnails and stacks cleanly
-          with the amber selection ring + blue focus outline (those are colour
-          cues; the lift scales the whole cell, rings and all). No outset shadow —
-          the grid scroll container would clip it. */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[var(--overlay-hover)] opacity-0 transition-opacity group-hover:opacity-100 motion-reduce:transition-none"
-      />
+      {/* Dead cell → wash the SPRITE toward the panel gray via a scrim overlay, NOT root
+          opacity, so the selection ring (border/shadow on the root) and the frame-index badge
+          (rendered after this span) stay crisp. Non-dead → the interactive hover tint (~22%);
+          a dead cell isn't activatable, so it gets no hover cue. */}
+      {isDead ? (
+        <span
+          data-testid="atlas-cell-dead-scrim"
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-[inherit] bg-bg-2 opacity-60"
+        />
+      ) : (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[var(--overlay-hover)] opacity-0 transition-opacity group-hover:opacity-100 motion-reduce:transition-none"
+        />
+      )}
       {/* Frame-index badge: ALWAYS visible so each thumbnail names its atlas index
           at a glance. Amber pill when assigned (matches the selection ring); a
           FIXED translucent scrim otherwise — it sits over arbitrary sprite imagery,
