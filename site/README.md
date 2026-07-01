@@ -14,9 +14,10 @@ node web/apps/editor/tests-site/serve.mjs   # serves site/ on http://localhost:5
 ```
 
 By default the page loads posters/clips from the `site-media` release URLs. To preview with
-**local placeholder media**, drop files into `site/media-local/` (gitignored) named
-`hero.mp4`, `hero-poster.jpg`, `faithful.mp4`, `faithful-poster.jpg`, `preview-poster.jpg`,
-`workspace-poster.jpg`, then point the page at them with the **`?media=` query parameter**:
+**local placeholder media**, drop files into `site/media-local/` (gitignored) — the page
+references `hero.mp4`, `faith.mp4`, `f02.mp4` (atlas picker), `f02-reorder.mp4` (F2 emitter
+reorder), and `f04.mp4` (F4 mod stack), each with a matching `*-poster.jpg` — then point the
+page at them with the **`?media=` query parameter**:
 
 ```
 http://localhost:5175/?media=media-local/
@@ -138,5 +139,6 @@ curl.exe -L --max-time 40 -o NUL -w "faith=%{http_code} bytes=%{size_download}`n
 
 Initial deployment note: the uploaded demo was captured from the running local preview
 at `http://localhost:5175/?media=media-local/`, not from committed media. The served
-WIP referenced `hero.mp4` / `hero-poster.jpg`, `faith.mp4` / `faith-poster.jpg`,
-`preview-poster.jpg`, and `workspace-poster.jpg`; those binaries remain out of git.
+WIP referenced `hero.mp4`, `faith.mp4`, `f02.mp4`, `f02-reorder.mp4`, and `f04.mp4` (each
+with its `*-poster.jpg`); those binaries remain out of git. (The F2/F4 cards were stills
+— `preview-poster.jpg` / `workspace-poster.jpg` — until the drag clips landed in #445.)
