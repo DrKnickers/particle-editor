@@ -117,7 +117,7 @@ the loose override is loading.
 
 <!-- Media: tutorial-01-ingame-proof -->
 
-## What You Learned
+## Takeaways
 
 You made the smallest useful particle edit: one file, one visible emitter, one obvious change. That
 workflow is the base loop for the rest of the course:
