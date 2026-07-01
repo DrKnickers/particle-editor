@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeFlipDeltas, type FlipPositions } from "@/lib/flip";
+import { computeFlipDeltas, pickFlipDuration, type FlipPositions } from "@/lib/flip";
 
 const m = (entries: Array<[number, number]>): FlipPositions => new Map(entries);
 
@@ -21,5 +21,21 @@ describe("computeFlipDeltas", () => {
   });
   it("empty maps → empty deltas", () => {
     expect(computeFlipDeltas(m([]), m([])).size).toBe(0);
+  });
+});
+
+describe("pickFlipDuration", () => {
+  const d = { dragMs: 120, settleMs: 200, recordDragMs: 800 };
+  it("record + active drag → the long record duration (spans slow captures)", () => {
+    expect(pickFlipDuration(true, true, d)).toBe(800);
+  });
+  it("record + settle → normal settle (matches the ~200ms chip despawn, not 800)", () => {
+    expect(pickFlipDuration(true, false, d)).toBe(200);
+  });
+  it("live editor + active drag → normal drag duration", () => {
+    expect(pickFlipDuration(false, true, d)).toBe(120);
+  });
+  it("live editor + settle → normal settle duration", () => {
+    expect(pickFlipDuration(false, false, d)).toBe(200);
   });
 });

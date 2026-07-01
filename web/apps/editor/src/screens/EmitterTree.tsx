@@ -83,7 +83,8 @@ import {
 import { markEmittersCopied, useEmitterClipboardHasContent } from "@/lib/emitter-clipboard";
 import { rectFromPoints, emittersInMarquee, mergeMarqueeSelection } from "@/lib/marquee";
 import { computeAutoscrollDelta } from "@/lib/drag-autoscroll";
-import { computeFlipDeltas, type FlipPositions } from "@/lib/flip";
+import { computeFlipDeltas, pickFlipDuration, type FlipPositions } from "@/lib/flip";
+import { useRecording } from "@/lib/record-mode";
 import {
   computeRootGapIndex,
   isDescendant,
@@ -186,6 +187,14 @@ const CHIP_SPRING = 0.25;
 // snappier than the post-drop settle.
 const FLIP_DRAG_MS = 120;
 const FLIP_SETTLE_MS = 200;
+// --record only, active-drag glide (see pickFlipDuration in lib/flip.ts): the FLIP
+// glide is a wall-clock CSS transition, but the capture loop grabs each frame only
+// after a slow paint+PrintWindow (tens of ms of REAL time per frame). At
+// FLIP_DRAG_MS the transition finishes between captures, so the reorder is never
+// caught mid-glide and the rows snap in the recorded clip. This value is
+// EMPIRICALLY TUNED to the capture cadence (≈800ms spans ~8 captured frames) — not
+// an animation-feel choice; re-verify against a --record clip before changing it.
+const FLIP_RECORD_MS = 800;
 
 // [glide] Chip despawn: on release the chip flies into the landing gap (or
 // the reparent target row) while fading; cancels/no-ops fade in place.
@@ -1505,6 +1514,7 @@ export function EmitterTree({ bridge }: Props) {
     (primaryBtn ?? container).focus();
   }, [flatRows, primaryId]);
 
+  const recording = useRecording();
   const flipPositionsRef = useRef<FlipPositions>(new Map());
   useLayoutEffect(() => {
     const sc = treeScrollRef.current;
@@ -1519,13 +1529,23 @@ export function EmitterTree({ bridge }: Props) {
       });
     }
     flipPositionsRef.current = next;
+    // prefers-reduced-motion skips the glide — EXCEPT under --record, where the
+    // glide must render into the captured clip regardless of the host's setting.
     if (
+      !recording &&
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
       return;
     }
-    const durationMs = draggingId !== null ? FLIP_DRAG_MS : FLIP_SETTLE_MS;
+    // Long wall-clock transition only for the --record active-drag glide (so it
+    // spans multiple slow captures); the settle keeps FLIP_SETTLE_MS to stay in
+    // step with the drag-chip despawn. See pickFlipDuration.
+    const durationMs = pickFlipDuration(recording, draggingId !== null, {
+      dragMs: FLIP_DRAG_MS,
+      settleMs: FLIP_SETTLE_MS,
+      recordDragMs: FLIP_RECORD_MS,
+    });
     for (const [stableId, dy] of computeFlipDeltas(prev, next)) {
       const el = els.get(stableId);
       if (el === undefined) continue;
@@ -1542,7 +1562,7 @@ export function EmitterTree({ bridge }: Props) {
       el.style.transition = `transform ${durationMs}ms ease`;
       el.style.transform = "";
     }
-  }, [flatRows, draggingId, indicator]);
+  }, [flatRows, draggingId, indicator, recording]);
 
   // Subscribe to menu-driven rename
   // requests. The MenuBar's "Rename Emitter" item writes the target

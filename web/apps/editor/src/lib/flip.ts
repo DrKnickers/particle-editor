@@ -25,3 +25,23 @@ export function computeFlipDeltas(
   }
   return deltas;
 }
+
+/** Pick the FLIP transition duration (ms). Kept pure so the record-mode policy is
+ *  unit-tested without a DOM.
+ *
+ *  The glide is a wall-clock CSS transition. Under `--record` the capture loop
+ *  grabs each frame only after a slow paint+PrintWindow (tens of ms of REAL time),
+ *  so a normal-length transition finishes between grabs and the reorder is never
+ *  caught mid-glide (rows snap in the clip). Only the ACTIVE-DRAG glide gets the
+ *  long `recordDragMs` (empirically tuned to that capture cadence) so it spans
+ *  many captures. The post-drop SETTLE keeps `settleMs` even under record — a long
+ *  settle would out-last the ~200ms drag-chip despawn, so the chip would vanish
+ *  while rows were still gliding; matching the chip is both correct and enough. */
+export function pickFlipDuration(
+  recording: boolean,
+  dragging: boolean,
+  d: { dragMs: number; settleMs: number; recordDragMs: number },
+): number {
+  if (recording && dragging) return d.recordDragMs;
+  return dragging ? d.dragMs : d.settleMs;
+}
