@@ -112,6 +112,30 @@ curl.exe -L --max-time 30 -o NUL -w "hero=%{http_code} bytes=%{size_download}`n"
 curl.exe -L --max-time 30 -o NUL -w "faith=%{http_code} bytes=%{size_download}`n" https://particle.example.com/media-local/faith.mp4
 ```
 
+### Update a single clip in place (targeted — no full refresh)
+
+The full-refresh recipe above **wipes** `media-local/` (`rm -rf`), so it needs *every*
+clip staged locally. To push just one re-rendered clip (e.g. after re-shooting `hero`)
+without disturbing the others, copy the new file(s) to a `.tmp` name and then **atomically
+`mv`** into place — so Caddy never serves a half-written file mid-upload:
+
+```powershell
+$key  = "$env:USERPROFILE\.ssh\particle-demo-site-key"
+$dest = "/var/www/particle-editor-demo/media-local"
+scp -i $key site/media-local/hero.mp4        "particledeploy@66.163.126.124:$dest/hero.mp4.tmp"
+scp -i $key site/media-local/hero-poster.jpg "particledeploy@66.163.126.124:$dest/hero-poster.jpg.tmp"
+ssh -i $key particledeploy@66.163.126.124 `
+  "set -e; cd $dest; mv -f hero.mp4.tmp hero.mp4; mv -f hero-poster.jpg.tmp hero-poster.jpg"
+```
+
+Verify the served bytes match the new local file (size is a quick discriminator; an `md5`
+compare is definitive), and confirm an untouched clip is unchanged:
+
+```powershell
+curl.exe -L --max-time 40 -o NUL -w "hero=%{http_code} bytes=%{size_download}`n"  https://particle.example.com/media-local/hero.mp4
+curl.exe -L --max-time 40 -o NUL -w "faith=%{http_code} bytes=%{size_download}`n" https://particle.example.com/media-local/faith.mp4
+```
+
 Initial deployment note: the uploaded demo was captured from the running local preview
 at `http://localhost:5175/?media=media-local/`, not from committed media. The served
 WIP referenced `hero.mp4` / `hero-poster.jpg`, `faith.mp4` / `faith-poster.jpg`,
