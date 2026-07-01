@@ -107,6 +107,16 @@ Look for the direction of the bright face, ring, or splash. From the front, the 
 as a hit on a shield surface. From the side, you should be able to tell whether the effect is too
 flat, too thick, or misaligned for the context you imagine.
 
+### Note: Link Particles to the Impact Instance
+
+For impact-style particles, select emitters that should follow the impact orientation and check
+`Link particles to instance` in the Basic tab's Connection section. This is separate from the
+`Parent speed inherit:` control used in Tutorial 3.
+
+A useful authoring convention is to make the particle's important motion point along positive Z. For
+a shield hit, that means the effect can be oriented to move outward from the impact, back toward the
+direction the projectile came from before it struck the shield.
+
 <!-- Media: tutorial-04-orient-preview -->
 
 ## 6. Final Preview Check
