@@ -3,8 +3,8 @@
 This tutorial starts from a blank particle and builds a bright green laser shot with a short muzzle
 flash in the same particle system.
 
-The goal is to practice a common projectile layout: one group of emitters travels with the shot, and
-another group flashes briefly at the launch point.
+The goal is to practice a common projectile layout: one emitter forms the moving shot with a built-in
+tail, and a small muzzle-flash group bursts briefly at the launch point.
 
 <!-- Media: tutorial-03-opening-result -->
 
@@ -12,8 +12,8 @@ another group flashes briefly at the launch point.
 
 By the end of this page, the particle will contain two readable parts:
 
-- a bright green laser shot with a short trail;
-- a quick muzzle flash that stays near the firing point.
+- a bright green laser core with a built-in tail;
+- a quick muzzle flash with a white-hot core and a softer green outer glow.
 
 This tutorial stays in the editor preview. At the end, there is a short note about how this kind of
 particle would normally be used by a game projectile.
@@ -21,10 +21,10 @@ particle would normally be used by a game projectile.
 ## What this teaches
 
 - Starting from a blank particle.
-- Building an effect from separate emitter groups.
+- Building a projectile core with the built-in tail controls.
+- Building a muzzle flash from a core and an outer glow.
 - Using additive color for a readable energy shot.
-- Using `Parent speed inherit:` to separate moving projectile emitters from a stationary muzzle
-  flash.
+- Using `Parent speed inherit:` to separate a moving projectile from a stationary muzzle flash.
 - Judging projectile effects by motion, timing, and silhouette.
 
 ## Before You Start
@@ -58,61 +58,65 @@ of the shot.
 
 <!-- Media: tutorial-03-projectile-core -->
 
-## 2. Add a Short Trail
+## 2. Use the Built-In Tail
 
-Add a second emitter for the trail or afterglow. Keep it in the same projectile group in the Emitter
-Tree so the moving-shot part of the particle stays easy to understand.
+With `Projectile_Core` still selected, use the Tail section in the Property Panel. Enable `Has tail`
+and adjust `Tail length:` until the shot has a clear streak behind it.
 
-The trail should support the core rather than overpower it. Make it slightly softer, shorter, or
-more transparent than the projectile body. If the whole effect becomes a glowing block, reduce the
-trail alpha, scale, or lifetime.
+The tail should support the core rather than overpower it. If the whole effect becomes a glowing
+block, shorten the tail, reduce the scale, or lower the alpha. The goal is a readable laser shot,
+not a solid rectangle.
 
-## 3. Let the Projectile Emitters Ride the Shot
+## 3. Let the Projectile Ride the Shot
 
-Select the projectile core and trail emitters. In the Property Panel, find `Parent speed inherit:`
-and set these emitters near full inheritance so they ride with the parent motion.
+Select the projectile core emitter. In the Property Panel, find `Parent speed inherit:` and set it
+near full inheritance so the projectile rides with the parent motion.
 
 This makes the projectile part behave like it belongs to the moving projectile object. The core and
-trail should travel together instead of being left behind at the spawn point.
+tail should travel together instead of being left behind at the spawn point.
 
 <!-- Media: tutorial-03-inherit-parent-speed -->
 
 ## 4. Add the Muzzle Flash
 
-Add a new emitter group for the muzzle flash. Keep the name direct, such as `Muzzle_Flash`, so the
-Emitter Tree shows the two ideas clearly:
+Add a new emitter for the bright center of the muzzle flash. Keep the name direct, such as
+`Muzzle_Core`, so the Emitter Tree shows the two ideas clearly:
 
 ```text
-Projectile_Core / Projectile_Trail: moving shot
-Muzzle_Flash: launch flash
+Projectile_Core: moving shot and tail
+Muzzle_Core: white-hot launch flash
 ```
 
-The muzzle flash should be wider and shorter than the projectile core. It can share the same green
-energy color, but it should feel like a burst at the weapon mouth rather than a second projectile.
+Make this emitter very short-lived, bright, and compact. A white or nearly white core works well
+because it reads as the hottest part of the flash.
 
 <!-- Media: tutorial-03-muzzle-flash -->
 
-## 5. Keep the Muzzle Flash at the Launch Point
+## 5. Add the Outer Glow and Keep It at the Launch Point
 
-Select the muzzle flash emitter. In the Property Panel, set `Parent speed inherit:` near zero so the
-flash stays close to the launch point.
+Add a second muzzle-flash emitter named something like `Muzzle_Glow`. Make it wider, softer, and
+slightly greener than the white core.
 
-This is the main distinction in the tutorial. Projectile and trail emitters ride the projectile.
-Muzzle flash emitters do not. If the flash stretches into a long streak, shorten its lifetime,
-reduce its scale, or lower its parent-speed inheritance.
+Select both muzzle flash emitters. In the Property Panel, set `Parent speed inherit:` near zero so
+the flash stays close to the launch point.
+
+This is the main distinction in the tutorial. The projectile core rides the projectile. Muzzle flash
+emitters do not. If the flash stretches into a long streak, shorten its lifetime, reduce its scale,
+or lower its parent-speed inheritance.
 
 <!-- Media: tutorial-03-no-parent-speed -->
 
 ## 6. Check the Two Groups Together
 
 Use the Preview Viewport to watch the full particle in motion. The shot should have a clear leading
-core, a supporting trail, and a brief launch flash.
+core, a built-in tail, a white-hot muzzle core, and a softer outer flash.
 
 Use these questions as a quick check:
 
 - Can you tell which part is the moving projectile?
+- Does the built-in tail make the projectile motion easier to read?
 - Does the muzzle flash disappear quickly?
-- Does the trail support the shot without covering the target?
+- Does the outer glow support the white core without becoming a second projectile?
 - Do the emitter names still make the two groups easy to understand?
 
 <!-- Media: tutorial-03-final-preview -->
@@ -125,6 +129,6 @@ launch flash read on screen.
 
 ## Takeaways
 
-Projectile particles are easier to reason about when you separate the moving shot from the launch
-flash. Use `Parent speed inherit:` to decide which emitters ride with the projectile and which ones
-stay near the firing point.
+Projectile particles are easier to reason about when the moving shot and launch flash have separate
+jobs. Use the built-in tail for the projectile streak, then use `Parent speed inherit:` to decide
+which emitters ride with the projectile and which ones stay near the firing point.
