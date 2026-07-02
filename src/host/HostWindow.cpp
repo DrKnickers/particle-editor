@@ -2764,7 +2764,9 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     // the host HWND to Windows's suggested rect (recommended
     // per-monitor-v2 best practice).
     case WM_DPICHANGED:
-        if (m_compositionController)
+        // In --record we pin RasterizationScale to the timeline's `scale` (see the
+        // record branch); don't let a stray DPI-change clobber it back to monitor DPI.
+        if (m_compositionController && !m_recordMode)
         {
             ComPtr<ICoreWebView2Controller3> ctrl3;
             if (webController && SUCCEEDED(webController.As(&ctrl3)) && ctrl3)
@@ -4844,6 +4846,24 @@ int HostWindowImpl::Run(int nCmdShow)
                     //     sub-rect, a bit smaller after chrome).
                     SetWindowPos(hMain, nullptr, 0, 0, tl.width, tl.height,
                                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+
+                    // (b2) render the WebView chrome at tl.scale device-pixel ratio so
+                    //      a zoomed crop (e.g. the F4 mod picker) stays sharp: the same
+                    //      CSS layout (width/scale wide) rasterizes at higher device px.
+                    //      MUST disable ShouldDetectMonitorScaleChanges first or WebView2's
+                    //      auto-detection reverts our value to the monitor DPI. Gate on
+                    //      scale>1: default (unscaled) clips keep the monitor-DPI scale set
+                    //      at window setup, so their behavior is unchanged on any display.
+                    if (tl.scale > 1.0 && webController)
+                    {
+                        ComPtr<ICoreWebView2Controller3> ctrl3;
+                        if (SUCCEEDED(webController.As(&ctrl3)) && ctrl3)
+                        {
+                            ctrl3->put_ShouldDetectMonitorScaleChanges(FALSE);
+                            HRESULT shr = ctrl3->put_RasterizationScale(tl.scale);
+                            Log("[record] put_RasterizationScale(%.2f) hr=0x%08lx\n", tl.scale, shr);
+                        }
+                    }
 
                     // (c) freeze the sim clock; record steps it once per frame.
                     SetPreviewPaused(true);

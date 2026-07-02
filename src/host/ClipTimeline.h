@@ -53,6 +53,9 @@ struct AtEvent { double t = 0; std::string kind; nlohmann::json params; };
 
 struct Timeline {
     int            fps = 0, width = 0, height = 0;
+    double         scale = 1.0;               // WebView chrome rasterization scale (DPR). >1 renders
+                                              // the UI at higher pixel density so a zoomed crop stays
+                                              // sharp; CSS layout width = width/scale (drives reflow).
     double         durationMs = 0;
     std::string    out;                       // output DIRECTORY (utf-8)
     double         openSettleMs = kDefaultSettleMs;
@@ -316,8 +319,20 @@ inline bool ParseTimeline(const std::string& json, Timeline& out, std::string& e
         || !reqPos("height", hD, true) || !reqPos("durationMs", durD, false)) return false;
     out.fps = (int)fpsD; out.width = (int)wD; out.height = (int)hD; out.durationMs = durD;
 
+    // Optional render scale (WebView chrome DPR). >1 renders the UI at higher pixel
+    // density so a zoomed crop (e.g. the F4 mod picker) stays sharp. Cursor point
+    // coords are device px, so author them at width/height scale; element refs
+    // auto-scale (getBoundingClientRect × devicePixelRatio). Default 1.0.
+    if (j.contains("scale")) {
+        if (!j["scale"].is_number()) { err = "'scale' must be a number"; return false; }
+        out.scale = j["scale"].get<double>();
+        if (out.scale < 1.0 || out.scale > 4.0) { err = "'scale' must be in [1.0, 4.0]"; return false; }
+    }
+
     if (60 % out.fps != 0) { err = "'fps' must divide 60 (e.g. 60, 30, 20, 15)"; return false; }
-    if (out.width < kMinWidth)   { err = "'width' below the min-layout floor (chrome reflows)"; return false; }
+    // The chrome reflows on CSS width, which is width/scale (scale renders the same
+    // CSS layout at higher device px), so the min-layout floor applies there.
+    if (out.width / out.scale < kMinWidth) { err = "'width'/'scale' (CSS layout width) below the min-layout floor (chrome reflows)"; return false; }
     if (out.height < kMinHeight) { err = "'height' below the sanity floor"; return false; }
     // Reject a timeline that rounds to zero frames (silent empty output otherwise).
     if (FrameCount(out) < 1) { err = "'durationMs' * 'fps' yields < 1 frame"; return false; }

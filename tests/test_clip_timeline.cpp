@@ -203,6 +203,13 @@ int main()
         CHECK(rejects(R"({"fps":60,"width":400,"height":1080,"durationMs":1000,"out":"o","tracks":[]})"));  // width < floor
         CHECK(rejects(R"({"fps":60,"width":1280,"height":200,"durationMs":1000,"out":"o","tracks":[]})"));  // height < floor
         { Timeline t; std::string e; CHECK(ParseTimeline(R"({"fps":30,"width":1280,"height":720,"durationMs":1000,"out":"o","tracks":[]})", t, e)); }  // 720p accepted
+        // scale (WebView DPR): default 1.0; range [1,4]; the width floor applies to CSS width = width/scale.
+        { Timeline t; std::string e; CHECK(ParseTimeline(R"({"fps":60,"width":1280,"height":960,"durationMs":1000,"out":"o","tracks":[]})", t, e) && Near(t.scale, 1.0)); } // default 1.0
+        { Timeline t; std::string e; CHECK(ParseTimeline(R"({"fps":60,"width":2560,"height":1920,"scale":2,"durationMs":1000,"out":"o","tracks":[]})", t, e) && Near(t.scale, 2.0)); } // 2x accepted (2560/2=1280>=floor)
+        CHECK(rejects(R"({"fps":60,"width":1280,"height":960,"scale":2,"durationMs":1000,"out":"o","tracks":[]})"));   // width/scale=640 < floor
+        CHECK(rejects(R"({"fps":60,"width":2560,"height":1920,"scale":0.5,"durationMs":1000,"out":"o","tracks":[]})")); // scale < 1
+        CHECK(rejects(R"({"fps":60,"width":2560,"height":1920,"scale":5,"durationMs":1000,"out":"o","tracks":[]})"));   // scale > 4
+        CHECK(rejects(R"({"fps":60,"width":2560,"height":1920,"scale":"2","durationMs":1000,"out":"o","tracks":[]})")); // scale not a number
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":0,"out":"o","tracks":[]})"));    // durationMs <= 0
         CHECK(rejects(R"({"fps":30,"width":1920,"height":1080,"durationMs":10,"out":"o","tracks":[]})"));   // rounds to 0 frames
         CHECK(rejects(R"({"fps":30,"width":1920,"height":1080,"durationMs":1000,"out":"C:\\x","tracks":[]})")); // out absolute (drive)
