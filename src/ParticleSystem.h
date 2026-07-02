@@ -57,6 +57,39 @@ public:
     static const int BLEND_DECAL_BUMP          = 12;
     static const int BLEND_SCANLINES           = 13;
 
+    // Blend-mode classification — the single source of truth for "does this
+    // blend mode gate visible output on the texture's alpha?" (i.e. does an
+    // alpha~=0 frame render invisibly). The Atlas-Frames picker mirrors this
+    // host-side via the `blendAlphaGated` field of the emitter-properties DTO;
+    // the web never re-derives it (it cannot — the answer lives in the shaders).
+    //
+    // Ground truth: each mode renders through ShaderNames[blendMode] (see
+    // src/engine.cpp — the table dispatched at EmitterInstance.cpp:979 via
+    // Engine::GetShader). A mode is alpha-gated iff that shader's pass sets
+    // SrcBlend = SRCALPHA:
+    //   2  PrimAlpha, 5 PrimDepthSpriteAlpha, 7 PrimDiffuseAlpha,
+    //   11 PrimParticleBumpAlpha, 13 PrimAlphaScanlines  -> SRCALPHA (gated).
+    // NOT gated: 0 PrimOpaque, 1 PrimAdditive, 3/6 modulate, 4 depth-additive,
+    // 8/9 stencil, 10 heat, and — note — 12 PrimDecalBumpAlpha, which blends
+    // DestBlend=SRCCOLOR / SrcBlend=DESTCOLOR (a decal MULTIPLY, alpha-independent)
+    // (reference/foc-shaders/Engine/PrimDecalBumpAlpha.fx:152-154). For 2/5/7 the
+    // fixed-function switch at EmitterInstance.cpp:718 agrees (m_alphaSrcBlend ==
+    // D3DBLEND_SRCALPHA); the shader-only modes 11/12/13 fall through that switch,
+    // so the shader — not the switch — is authoritative. If a shader's SrcBlend
+    // changes, update this AND tests/test_blend_mode_classify.cpp.
+    static inline bool blendModeIsAlphaGated(int mode) {
+        switch (mode) {
+            case BLEND_TRANSPARENT:          // 2  PrimAlpha
+            case BLEND_DEPTH_TRANSPARENT:    // 5  PrimDepthSpriteAlpha
+            case BLEND_DIFFUSE_TRANSPARENT:  // 7  PrimDiffuseAlpha
+            case BLEND_BUMP:                 // 11 PrimParticleBumpAlpha
+            case BLEND_SCANLINES:            // 13 PrimAlphaScanlines
+                return true;
+            default:                         // incl. 12 PrimDecalBumpAlpha (multiply)
+                return false;
+        }
+    }
+
     // Ground behavior
     static const int GROUND_NONE      = 0;
     static const int GROUND_DISAPPEAR = 1;

@@ -3699,6 +3699,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
             {"colorTexture",             emit->colorTexture},
             {"normalTexture",            emit->normalTexture},
             {"blendMode",                static_cast<int>(emit->blendMode)},
+            {"blendAlphaGated",          ParticleSystem::blendModeIsAlphaGated(static_cast<int>(emit->blendMode))},
             {"textureSize",              static_cast<int>(emit->textureSize)},
             {"nTriangles",               static_cast<int>(emit->nTriangles)},
             {"doColorAddGrayscale",      emit->doColorAddGrayscale},

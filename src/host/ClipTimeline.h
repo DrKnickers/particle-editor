@@ -222,7 +222,6 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     if (kind == "ui/open-picker")   return true;
     if (kind == "ui/focus-channel") return true;  // focus a curve channel mid-clip
     if (kind == "ui/select-key")    return true;  // select a curve key (lights the atlas preview/highlight)
-    if (kind == "ui/atlas-alpha")   return true;  // toggle the Atlas-Frames Alpha preview mode
     if (kind == "ui/pose-drag")     return true;  // pose a frozen reorder drag (chip+gap) for a clip still
     if (kind == "ui/set-picker-search") return true;  // drive a picker's search box (the cursor can't type)
     if (kind == "ui/picker-collapse")   return true;  // force-collapse picker sections (e.g. Heroes) under a search

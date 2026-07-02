@@ -551,6 +551,15 @@ export type EmitterPropertiesDto = {
   colorTexture: string;
   normalTexture: string;
   blendMode: number;
+  /**
+   * Host-derived: does this emitter's blend mode gate visible output on the
+   * texture's alpha? Mirrors `ParticleSystem::blendModeIsAlphaGated` (each mode's
+   * shader SrcBlend) — true for Transparent (2) / Depth-transparent (5) /
+   * Diffuse-transparent (7) / bump (11) / scanlines (13); NOT decal-bump (12, a
+   * multiply). The web READS this; it never re-derives blend classification
+   * (single source = engine).
+   */
+  blendAlphaGated: boolean;
   textureSize: number;
   nTriangles: number;
   doColorAddGrayscale: boolean;

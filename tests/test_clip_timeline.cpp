@@ -135,17 +135,17 @@ int main()
     // Generic testid element ref: any [data-testid] element is targetable.
     {
         const char* js = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o",
-          "tracks":[{"cursor":[{"t":0,"vis":true,"press":false,"target":{"kind":"element","ref":"testid:atlas-alpha-toggle"}}]}]})";
+          "tracks":[{"cursor":[{"t":0,"vis":true,"press":false,"target":{"kind":"element","ref":"testid:some-button"}}]}]})";
         Timeline tl; std::string err;
         CHECK(ParseTimeline(js, tl, err));
         CHECK(tl.cursor.size() == 1);
         CHECK(tl.cursor[0].target.kind == CursorTarget::Kind::Element);
-        CHECK(tl.cursor[0].target.ref == "testid:atlas-alpha-toggle");
+        CHECK(tl.cursor[0].target.ref == "testid:some-button");
     }
     // A testid id is free-form and may itself contain ':' — accept by prefix.
     {
         CHECK(IsValidCursorElementRef("testid:a:b:c"));
-        CHECK(IsValidCursorElementRef("testid:atlas-alpha-toggle"));
+        CHECK(IsValidCursorElementRef("testid:some-button"));
         CHECK(!IsValidCursorElementRef("testid:"));    // empty id rejected
         CHECK(!IsValidCursorElementRef("button:ok"));  // unknown prefix rejected
     }
@@ -314,7 +314,7 @@ int main()
         CHECK(IsAllowedRecordKind("ui/show-panel"));
         CHECK(IsAllowedRecordKind("ui/open-picker"));
         CHECK(IsAllowedRecordKind("ui/select-key"));
-        CHECK(IsAllowedRecordKind("ui/atlas-alpha"));
+        CHECK(!IsAllowedRecordKind("ui/atlas-alpha"));   // removed with the Alpha toggle — no longer a valid record-kind
         CHECK(IsAllowedRecordKind("ui/pose-drag"));
         CHECK(IsAllowedRecordKind("ui/set-picker-search"));
         CHECK(IsAllowedRecordKind("ui/picker-collapse"));

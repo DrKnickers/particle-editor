@@ -77,6 +77,7 @@ may live at the end of the file.
 
 ### Changed
 
+- The Atlas Frame Picker now previews each frame the way the emitter's blend mode actually renders it, and only dims genuinely-empty frames on blend modes where an empty frame renders as nothing — so the preview matches the viewport automatically, per emitter. The manual "Alpha" toggle is gone; the blend mode drives it
 - New app icon — an azure spline-and-particle mark on a dark Windows-style tile — now appears in the taskbar, window title bar, and Alt-Tab, and is used as the landing page's favicon (replacing the placeholders)
 - Switching mod layers no longer leaves a broken reference-object selection: if the selected object isn't in the new stack the selection clears to None, and it's restored automatically when you switch back to a stack that has it (your saved selection is kept)
 - A locked reference object no longer blocks camera navigation — clicking and dragging on a frozen object now pans/zooms the view straight through it, so you can frame an effect against the object without unlocking it first

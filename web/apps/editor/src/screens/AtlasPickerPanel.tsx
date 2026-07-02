@@ -19,7 +19,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useAtlasContext } from "@/lib/atlas-context";
-import { parseAtlasAlphaMessage } from "@/lib/record-focus-bridge";
 import { ToolPanel } from "@/components/ToolPanel";
 import { AtlasConfirmModal } from "@/components/AtlasConfirmModal";
 import {
@@ -85,7 +84,7 @@ const COLD_START_GRIDW = 215;
 // matches) renders the grid SYNCHRONOUSLY on the first frame, before the slide
 // starts, so the tween runs uncontended. The fetch still runs to confirm/refresh.
 // null until the first successful fetch.
-let lastEmitterProps: { id: number; textureSize: number; colorTexture: string } | null = null;
+let lastEmitterProps: { id: number; textureSize: number; colorTexture: string; blendAlphaGated: boolean } | null = null;
 
 /** Test-only: clear the module-level caches (seeded emitter props + the last
  *  settled grid width) so neither can leak across independent test cases — a
@@ -103,30 +102,6 @@ type PreviewState =
   | { kind: "ok"; dataUri: string; srcW: number; srcH: number }
   | { kind: "missing" }
   | { kind: "broken" };
-
-// ─── persisted "show texture alpha" preference ────────────────────────────────
-// Mirrors the localStorage pref pattern (e.g. model-shadows.ts). Default OFF:
-// additive frames (alpha ~0) are visible by default, which is the common need.
-
-const SHOW_ALPHA_KEY = "atlas.showAlpha";
-
-/** Read the persisted toggle; defaults to OFF (false) when absent/unreadable. */
-function readShowAlpha(): boolean {
-  try {
-    return localStorage.getItem(SHOW_ALPHA_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/** Persist the toggle (stored as "1"/"0"); silent on private-mode/quota errors. */
-function writeShowAlpha(on: boolean): void {
-  try {
-    localStorage.setItem(SHOW_ALPHA_KEY, on ? "1" : "0");
-  } catch {
-    /* private-mode / quota — in-memory UI state still reflects the choice */
-  }
-}
 
 // ─── component ───────────────────────────────────────────────────────────────
 
@@ -157,10 +132,10 @@ export function AtlasPickerPanel({
     lastEmitterProps && lastEmitterProps.id === emitterId ? lastEmitterProps.textureSize : 1);
   const [colorTexture, setColorTexture] = useState(() =>
     lastEmitterProps && lastEmitterProps.id === emitterId ? lastEmitterProps.colorTexture : "");
-  // Both alpha modes are prefetched and held independently so flipping the Alpha
-  // toggle is a synchronous swap — no per-toggle bridge round-trip and no loading
-  // flash (that uncached host re-decode was the reported ~3s lag). The displayed
-  // `preview` is derived from these two + showAlpha (below).
+  // Both alpha modes are prefetched and held independently so a blend-mode change
+  // is a synchronous swap — no per-change bridge round-trip and no loading flash
+  // (that uncached host re-decode was the reported ~3s lag). The displayed
+  // `preview` is derived from these two + blendAlphaGated (below).
   const [flatPrev, setFlatPrev]         = useState<PreviewState>({ kind: "loading" }); // alpha OFF (color channel)
   const [rawPrev,  setRawPrev]          = useState<PreviewState>({ kind: "loading" }); // alpha ON  (real alpha)
   // "Effectively empty" frames (max alpha ≈ 0) — they render invisible particles yet preview
@@ -169,12 +144,12 @@ export function AtlasPickerPanel({
   // sample resolves, so a frame picked during the load window is still honored — the guards
   // in onCellClick / the confirm modal re-check this set at commit time.
   const [deadCells, setDeadCells]       = useState<ReadonlySet<number>>(EMPTY_DEAD_CELLS);
-  // Honor-alpha toggle. Default OFF: particle atlases are usually ADDITIVE (the
-  // visible content lives in RGB while alpha ~0), so with normal blending those
-  // frames look "missing". OFF forces every pixel fully opaque (alpha=255) so the
-  // additive RGB shows; ON renders the texture's real alpha. Persisted like other
-  // UI prefs.
-  const [showAlpha, setShowAlpha]       = useState<boolean>(readShowAlpha);
+  // Whether the emitter's blend mode gates visible output on alpha — host-derived
+  // (ParticleSystem::blendModeIsAlphaGated), shipped in the emitter-properties DTO.
+  // Drives BOTH the displayed preview (alpha vs flat) and dead-cell dimming. Seeded
+  // from the module cache so a re-open renders correctly on the first frame.
+  const [blendAlphaGated, setBlendAlphaGated] = useState<boolean>(() =>
+    lastEmitterProps && lastEmitterProps.id === emitterId ? lastEmitterProps.blendAlphaGated : false);
   const [hover, setHover]               = useState<number | null>(null);
   const [focusIndex, setFocusIndex]     = useState<number | null>(null); // keyboard cursor
   const [confirmTarget, setConfirmTarget] = useState<{ frame: number; emitterId: number; keyTimes: number[] } | null>(null);
@@ -199,24 +174,6 @@ export function AtlasPickerPanel({
   bridgeRef.current = bridge;
   stackRef.current = stack;
   useEffect(() => { emitterIdRef.current = emitterId; }, [emitterId]);
-  useEffect(() => { writeShowAlpha(showAlpha); }, [showAlpha]);
-  // --record: the host posts ui/atlas-alpha to flip the Alpha preview mode (the
-  // synthetic cursor's click on the toggle is view-only, so the state flips here).
-  useEffect(() => {
-    const wv = window.chrome?.webview as
-      | {
-          addEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-          removeEventListener?: (e: string, h: (ev: { data: unknown }) => void) => void;
-        }
-      | undefined;
-    if (!wv?.addEventListener) return;
-    const onMsg = (e: { data: unknown }) => {
-      const a = parseAtlasAlphaMessage(e.data);
-      if (a) setShowAlpha(a.on);
-    };
-    wv.addEventListener("message", onMsg);
-    return () => wv.removeEventListener?.("message", onMsg);
-  }, []);
   useEffect(() => () => { if (pulseTimer.current) clearTimeout(pulseTimer.current); }, []);
   useEffect(() => () => roRef.current?.disconnect(), []);
 
@@ -309,9 +266,10 @@ export function AtlasPickerPanel({
           if (!live) return;
           setTextureSize(r.properties.textureSize);
           setColorTexture(r.properties.colorTexture);
+          setBlendAlphaGated(r.properties.blendAlphaGated);
           // Cache for the next RE-OPEN's synchronous first-render seed (above).
           if (emitterId !== null)
-            lastEmitterProps = { id: emitterId, textureSize: r.properties.textureSize, colorTexture: r.properties.colorTexture };
+            lastEmitterProps = { id: emitterId, textureSize: r.properties.textureSize, colorTexture: r.properties.colorTexture, blendAlphaGated: r.properties.blendAlphaGated };
           if (again) { again = false; fetchProps(); } // trailing fetch for events that arrived mid-flight
         })
         .catch((err) => {
@@ -352,11 +310,11 @@ export function AtlasPickerPanel({
   const eligible = side >= 2;
 
   // Prefetch BOTH alpha modes whenever the texture/atlas (or mod-stack/epoch)
-  // changes — NOT on the showAlpha toggle. Each mode paints into its own state as
-  // soon as it resolves; the toggle then selects between two in-hand previews
-  // (instant, no fetch). showAlpha is read here only to PRIORITISE the active
+  // changes — NOT on a blend-mode change. Each mode paints into its own state as
+  // soon as it resolves; blendAlphaGated then selects between two in-hand previews
+  // (instant, no fetch). blendAlphaGated is read here only to PRIORITISE the active
   // mode's fetch for first paint, and is intentionally absent from the deps so a
-  // toggle never re-runs this effect (no ESLint here, so no exhaustive-deps note).
+  // blend-mode change never re-runs this effect (no ESLint here, so no exhaustive-deps note).
   const previewInputKey = eligible && !tooLarge && colorTexture
     ? `${emitterId ?? "none"}::${textureEpoch}::${stackKey}::${colorTexture}`
     : null;
@@ -442,12 +400,14 @@ export function AtlasPickerPanel({
     // Active mode first (synchronous) so first paint isn't gated behind the other
     // mode's decode. The INACTIVE mode is deferred to the first idle slot after
     // first paint so it doesn't compete with the active mode's decode (perf-audit
-    // P1b). showAlpha is NOT in this effect's deps, so a toggle never re-runs it —
-    // the inactive load runs exactly once (from the idle callback), so there's no
-    // duplicate fetch; a toggle before idle fires briefly shows the loading
-    // placeholder (bounded by the idle timeout).
+    // P1b). blendAlphaGated is NOT in this effect's deps: both modes load either
+    // way (active sync, inactive on idle), so priority only affects first-paint
+    // latency, never correctness. blendAlphaGated is set in the same batch as
+    // colorTexture on the get-properties fetch, so this effect re-runs with the
+    // fresh value; a pure blend-mode edit leaves colorTexture unchanged (both
+    // previews already cached), so the preview flips with no re-fetch.
     let cancelInactive = () => {};
-    if (showAlpha) {
+    if (blendAlphaGated) {
       void load(false, setRawPrev);                                          // active: raw
       cancelInactive = runWhenIdle(() => { void load(true, setFlatPrev); });  // inactive: flat
     } else {
@@ -462,19 +422,23 @@ export function AtlasPickerPanel({
   // Keyed on the raw preview's data URI + side, so it re-runs on any texture/mod/epoch change
   // and resets to empty while (re)loading. computeDeadCells is fail-safe — an empty set on any
   // decode/canvas failure (incl. jsdom), so detection simply doesn't dim anything on failure.
+  // GATED on blendAlphaGated: only alpha-gated modes render nothing for an alpha-0 frame;
+  // additive/inverse/none modes show the RGB, so an "empty-alpha" frame is NOT dead there.
   const rawUri = rawPrev.kind === "ok" ? rawPrev.dataUri : null;
   useEffect(() => {
-    if (!rawUri || side < 2) { setDeadCells(EMPTY_DEAD_CELLS); return; }
+    if (!blendAlphaGated || !rawUri || side < 2) { setDeadCells(EMPTY_DEAD_CELLS); return; }
     let live = true;
     void computeDeadCells(rawUri, side).then((d) => {
       if (live) setDeadCells(d.size ? d : EMPTY_DEAD_CELLS);
     });
     return () => { live = false; };
-  }, [rawUri, side]);
+  }, [blendAlphaGated, rawUri, side]);
 
-  // The displayed preview is the active mode's prefetched result — a synchronous
-  // pick, so toggling Alpha is instant (no bridge round-trip, no loading flash).
-  const preview: PreviewState = showAlpha ? rawPrev : flatPrev;
+  // The displayed preview follows the emitter's blend mode: alpha-gated modes show
+  // the real-alpha preview (rawPrev), others the flat additive preview (flatPrev).
+  // Both are prefetched, so the switch on a blend-mode change is a synchronous pick
+  // (no bridge round-trip, no loading flash).
+  const preview: PreviewState = blendAlphaGated ? rawPrev : flatPrev;
 
   // Warm the browser's image DECODE cache for BOTH modes as soon as their data
   // URIs load. The data is already prefetched, but the browser only decodes a
@@ -854,20 +818,6 @@ export function AtlasPickerPanel({
             <span data-testid="atlas-meta" className="min-w-0 flex-1 truncate">
               {meta}
             </span>
-            <button
-              type="button"
-              data-testid="atlas-alpha-toggle"
-              aria-pressed={showAlpha}
-              title="Show texture alpha (off shows additive RGB)"
-              onClick={() => setShowAlpha((v) => !v)}
-              className={`shrink-0 rounded border px-1 transition-colors focus-ring ${
-                showAlpha
-                  ? "border-[var(--accent)] bg-[var(--accent)] text-black hover:bg-[var(--accent-2)]"
-                  : "border-border text-text-3 hover:bg-hover hover:text-text"
-              }`}
-            >
-              Alpha
-            </button>
             {interpolation && (
               <span className="shrink-0 rounded border border-border px-1">
                 {interpolation}
@@ -1097,9 +1047,10 @@ function PreviewBox({
     return () => { live = false; };
   }, [dataUri]);
 
-  // (Re)draw when the image is ready, the frame, or the preview changes. (An
-  // alpha toggle swaps the active preview's dataUri, which re-runs the img-load
-  // effect → imgReady toggles → this redraws — so no showAlpha dep is needed.)
+  // (Re)draw when the image is ready, the frame, or the preview changes. (A
+  // blend-mode change swaps the active preview's dataUri, which re-runs the
+  // img-load effect → imgReady toggles → this redraws — so no blendAlphaGated dep
+  // is needed.)
   // Guarded inside drawHero against a missing 2d context (jsdom).
   useEffect(() => {
     const canvas = canvasRef.current;

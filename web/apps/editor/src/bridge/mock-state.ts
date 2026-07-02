@@ -1429,6 +1429,10 @@ export function makeFixtureProperties(id: number): EmitterPropertiesDto {
     colorTexture: "",
     normalTexture: "",
     blendMode: 0,
+    // Test double supplies canned host output; it does NOT classify (the web
+    // never re-maps blend modes). blendMode 0 (None) is not alpha-gated. Tests
+    // exercising the gated path patch `blendAlphaGated: true` explicitly.
+    blendAlphaGated: false,
     textureSize: 1,
     nTriangles: 1,
     doColorAddGrayscale: false,

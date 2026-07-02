@@ -373,44 +373,65 @@ describe("AtlasPickerPanel", () => {
   });
 
 
-  it("alpha toggle: defaults OFF (additive RGB), flips, and persists", async () => {
-    setup({ textureSize: 16 });
-    const toggle = await screen.findByTestId("atlas-alpha-toggle");
-    // default OFF → honoring real alpha is not pressed
-    expect(toggle.getAttribute("aria-pressed")).toBe("false");
-    expect(window.localStorage.getItem("atlas.showAlpha")).toBe("0");
-    fireEvent.click(toggle);
-    await waitFor(() => expect(toggle.getAttribute("aria-pressed")).toBe("true"));
-    expect(window.localStorage.getItem("atlas.showAlpha")).toBe("1");
-  });
+  // The manual Alpha toggle + its localStorage persistence were removed — the
+  // emitter's blend mode (blendAlphaGated) now drives the preview. These tests
+  // assert BOTH modes still prefetch and that blendAlphaGated selects the active
+  // (first-fetched, displayed) mode. (The mock returns the same PNG for both
+  // flatten modes, so the active/first fetch is the observable proxy for "which
+  // preview is shown".)
+  const previewFlattenParams = (calls: ReadonlyArray<readonly unknown[]>) =>
+    calls
+      .map((c) => c[0] as { kind: string; params: { flattenAlpha?: boolean } })
+      .filter((r) => r.kind === "textures/get-preview")
+      .map((r) => r.params.flattenAlpha);
 
-  it("alpha toggle: reads the persisted ON preference on mount", async () => {
-    window.localStorage.setItem("atlas.showAlpha", "1");
-    setup({ textureSize: 16 });
-    const toggle = await screen.findByTestId("atlas-alpha-toggle");
-    expect(toggle.getAttribute("aria-pressed")).toBe("true");
-  });
-
-  it("prefetches BOTH alpha modes upfront so the toggle needs no new fetch", async () => {
+  it("prefetches BOTH alpha modes upfront; blendAlphaGated=false → flat is the active fetch; no toggle", async () => {
     const bridge = new MockBridge();
     const req = vi.spyOn(bridge, "request");
-    const previewParams = () =>
-      req.mock.calls
-        .map(([r]) => r as { kind: string; params: { flattenAlpha?: boolean } })
-        .filter((r) => r.kind === "textures/get-preview")
-        .map((r) => r.params.flattenAlpha);
-    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: false });
     publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
     render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
-    // Both modes fetch upfront on load: flattenAlpha true (color, the default
-    // active mode) AND false (real alpha) — order-independent, so sort.
-    await waitFor(() => expect([...previewParams()].sort()).toEqual([false, true]));
-    const before = previewParams().length;
-    // Flipping the toggle is a SYNCHRONOUS swap of the already-loaded mode — it
-    // must NOT trigger another get-preview round-trip (that was the ~3s lag).
-    fireEvent.click(await screen.findByTestId("atlas-alpha-toggle"));
-    await waitFor(() => expect(screen.getByTestId("atlas-alpha-toggle").getAttribute("aria-pressed")).toBe("true"));
-    expect(previewParams().length).toBe(before);
+    // Both modes fetch upfront (color + real-alpha), order-independent → sort.
+    await waitFor(() => expect([...previewFlattenParams(req.mock.calls)].sort()).toEqual([false, true]));
+    // Not-alpha-gated → the FLAT (color) preview is active → fetched first.
+    expect(previewFlattenParams(req.mock.calls)[0]).toBe(true);
+    // The manual Alpha toggle is gone.
+    expect(screen.queryByTestId("atlas-alpha-toggle")).toBeNull();
+  });
+
+  it("blendAlphaGated=true → the real-alpha preview is the active (first) fetch", async () => {
+    const bridge = new MockBridge();
+    const req = vi.spyOn(bridge, "request");
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: true });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
+    // Alpha-gated → the real-alpha preview (flattenAlpha=false) is active → first.
+    await waitFor(() => expect(previewFlattenParams(req.mock.calls)[0]).toBe(false));
+  });
+
+  it("a gating-only blend-mode flip issues NO new preview fetch (both modes already cached)", async () => {
+    // Guards the perf invariant the old toggle test protected: a same-texture
+    // blend-mode change refetches emitter-properties but must NOT re-fetch previews
+    // (both alpha modes are already in hand → the swap is synchronous).
+    const bridge = new MockBridge();
+    const req = vi.spyOn(bridge, "request");
+    const handlers: Array<(e: unknown) => void> = [];
+    const realOn = bridge.on.bind(bridge);
+    vi.spyOn(bridge, "on").mockImplementation((kind, cb) => {
+      if (kind === "emitters/tree/changed") handlers.push(cb as (e: unknown) => void);
+      return realOn(kind, cb as never);
+    });
+    const previewCount = () =>
+      req.mock.calls.filter(([r]) => (r as { kind: string }).kind === "textures/get-preview").length;
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: false });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
+    await waitFor(() => expect(previewCount()).toBe(2)); // both modes prefetched
+    // Flip ONLY the blend classification (same texture) via a tree/changed refetch.
+    useMockEmitterProperties.getState().patch(1, { blendAlphaGated: true });
+    act(() => { handlers.forEach((h) => h({ kind: "emitters/tree/changed" })); });
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
+    expect(previewCount()).toBe(2); // unchanged — no redundant fetch
   });
 
   it("renders the full grid unconditionally (no dock-slide deferral)", async () => {
@@ -419,7 +440,7 @@ describe("AtlasPickerPanel", () => {
     // the full grid + hero are present from the first frame (no gate). The hero
     // shows too.
     setup({ textureSize: 16 });
-    await screen.findByTestId("atlas-alpha-toggle"); // header is up
+    await screen.findByTestId("atlas-meta"); // header is up
     await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16)); // full grid mounted
     expect(screen.queryByTestId("atlas-scroll")).not.toBeNull();   // scroll region present
     expect(screen.queryByTestId("atlas-hero")).not.toBeNull();     // hero preview present
@@ -432,10 +453,8 @@ describe("AtlasPickerPanel", () => {
     setup({ textureSize: 16 });
     const scroll = await screen.findByTestId("atlas-scroll");
     expect(scroll.className).not.toContain("bg-black");
-    // flip alpha ON — still must not gain bg-black
-    fireEvent.click(await screen.findByTestId("atlas-alpha-toggle"));
-    await waitFor(() => expect(screen.getByTestId("atlas-alpha-toggle").getAttribute("aria-pressed")).toBe("true"));
-    expect(screen.getByTestId("atlas-scroll").className).not.toContain("bg-black");
+    // The backing is class-based and mode-independent — the dedicated
+    // "alpha-gated mode" test below covers the gated render.
   });
 
   it("color mode (default): container backing is the uniform gray (bg-bg-2); cells are cheap", async () => {
@@ -479,29 +498,24 @@ describe("AtlasPickerPanel", () => {
     expect(cell.className).toContain("motion-reduce:hover:scale-100");
   });
 
-  it("alpha mode: the CONTAINER stays the uniform gray (no checkerboard); cells unchanged", async () => {
-    setup({ textureSize: 16 });
-    // capture a cell's crop style BEFORE the toggle…
-    const cellBefore = await waitFor(() => {
+  it("alpha-gated mode: the CONTAINER stays the uniform gray (no checkerboard); cells unchanged", async () => {
+    // Render an alpha-gated emitter directly (the mode that used to require the
+    // Alpha toggle ON). The container must stay uniform bg-bg-2 gray — no checkerboard.
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: true });
+    publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
+    render(<AtlasPickerPanel bridge={new MockBridge()} onClose={() => {}} />);
+    const cell = await waitFor(() => {
       const c = screen.getAllByTestId("atlas-cell").find((x) => x.getAttribute("data-frame") === "6")!;
       expect(c.style.backgroundImage).not.toBe("");
-      return c.style.cssText;
+      return c;
     });
-    fireEvent.click(screen.getByTestId("atlas-alpha-toggle"));
-    await waitFor(() => expect(screen.getByTestId("atlas-alpha-toggle").getAttribute("aria-pressed")).toBe("true"));
-    // No checkerboard anywhere: the container keeps its uniform bg-bg-2 gray in
-    // alpha mode too (transparent frame pixels reveal that same gray). No inline
-    // checker gradients, no checker base colour.
     const grid = screen.getByRole("listbox", { name: /atlas frames/i });
     expect(grid.className).toContain("bg-bg-2");
     expect(grid.style.backgroundImage).not.toContain("var(--atlas-checker-");
     expect(grid.style.backgroundColor).not.toBe("var(--atlas-checker-l)");
-    // …the cell's crop style is UNCHANGED across the toggle (mode-independent):
-    // still just the shared var crop, no checker, no inline background-color.
-    const cellAfter = screen.getAllByTestId("atlas-cell").find((x) => x.getAttribute("data-frame") === "6")!;
-    expect(cellAfter.style.cssText).toBe(cellBefore);
-    expect(cellAfter.style.backgroundImage).toBe("var(--atlas-url)");
-    expect(cellAfter.style.backgroundImage).not.toContain("var(--atlas-checker-");
+    // The cell crop is mode-independent: just the shared var crop, no checker.
+    expect(cell.style.backgroundImage).toBe("var(--atlas-url)");
+    expect(cell.style.backgroundImage).not.toContain("var(--atlas-checker-");
   });
 
   it("keeps keyboard focus in the grid when the atlas shrinks under it", async () => {
@@ -621,19 +635,26 @@ describe("AtlasPickerPanel", () => {
     expect(screen.queryAllByTestId("atlas-cell")).toHaveLength(0); // no stale emitter-1 grid
   });
 
-  it("surfaces an INACTIVE-mode preview failure when toggled into (not silent)", async () => {
-    // Default active mode is color (flattenAlpha=true). Fail the INACTIVE alpha mode
-    // (flattenAlpha=false) — its failure is otherwise invisible until toggled into.
+  it("surfaces an INACTIVE-mode preview failure when the blend mode switches into it (not silent)", async () => {
+    // Not-alpha-gated → active mode is color (flattenAlpha=true). Fail the INACTIVE
+    // alpha mode (flattenAlpha=false) — its failure is invisible until the blend
+    // mode makes it active (via an emitters/tree/changed refetch).
     const bridge = new MockBridge();
-    // `r.params.flattenAlpha` is now type-narrowed (no cast) once kind is checked.
+    const handlers: Array<(e: unknown) => void> = [];
+    const realOn = bridge.on.bind(bridge);
+    vi.spyOn(bridge, "on").mockImplementation((kind, cb) => {
+      if (kind === "emitters/tree/changed") handlers.push(cb as (e: unknown) => void);
+      return realOn(kind, cb as never);
+    });
     rejectMatching(bridge, (r) => r.kind === "textures/get-preview" && r.params.flattenAlpha === false);
-    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds" });
+    useMockEmitterProperties.getState().patch(1, { textureSize: 16, colorTexture: "fire.dds", blendAlphaGated: false });
     publishAtlasContext({ emitterId: 1, focusedTrack: "index", interpolation: "step", selection: { frame: 5, keyTimes: [0.3] } });
     render(<AtlasPickerPanel bridge={bridge} onClose={() => {}} />);
     // active (color) mode renders fine…
     await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
-    // …toggle Alpha → the failed mode becomes active → the broken placeholder shows.
-    fireEvent.click(screen.getByTestId("atlas-alpha-toggle"));
+    // …the emitter becomes alpha-gated → the failed alpha mode becomes active → broken.
+    useMockEmitterProperties.getState().patch(1, { blendAlphaGated: true });
+    act(() => { handlers.forEach((h) => h({ kind: "emitters/tree/changed" })); });
     await waitFor(() => expect(screen.getByText(/could not be read/i)).toBeTruthy());
   });
 

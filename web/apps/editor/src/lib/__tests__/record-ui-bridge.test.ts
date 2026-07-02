@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAtlasAlphaMessage, parseOpenPickerMessage, parsePoseDragMessage, parseSelectKeyMessage, parseShowPanelMessage } from "../record-focus-bridge";
+import { parseOpenPickerMessage, parsePoseDragMessage, parseSelectKeyMessage, parseShowPanelMessage } from "../record-focus-bridge";
 
 describe("record-ui-bridge", () => {
   it("parses ui/show-panel messages", () => {
@@ -56,14 +56,6 @@ describe("record-ui-bridge", () => {
     });
   });
 
-  it("parses ui/atlas-alpha and rejects a non-boolean `on`", () => {
-    expect(parseAtlasAlphaMessage({ type: "ui/atlas-alpha", on: true })).toEqual({ on: true });
-    expect(parseAtlasAlphaMessage(JSON.stringify({ type: "ui/atlas-alpha", on: false }))).toEqual({ on: false });
-    expect(parseAtlasAlphaMessage({ type: "ui/atlas-alpha" })).toBeNull();
-    expect(parseAtlasAlphaMessage({ type: "ui/atlas-alpha", on: "true" })).toBeNull();
-    expect(parseAtlasAlphaMessage({ type: "ui/select-key", on: true })).toBeNull();
-  });
-
   it("parses ui/pose-drag and validates target + integer indices", () => {
     expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: 0, gap: 2 })).toEqual({
       target: "stack",
@@ -76,7 +68,7 @@ describe("record-ui-bridge", () => {
       gap: 0,
     });
     // wrong type / bad target / non-integer / negative all reject
-    expect(parsePoseDragMessage({ type: "ui/atlas-alpha", target: "stack", from: 0, gap: 0 })).toBeNull();
+    expect(parsePoseDragMessage({ type: "ui/select-key", target: "stack", from: 0, gap: 0 })).toBeNull();
     expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "mods", from: 0, gap: 0 })).toBeNull();
     expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: 1.5, gap: 0 })).toBeNull();
     expect(parsePoseDragMessage({ type: "ui/pose-drag", target: "stack", from: -1, gap: 0 })).toBeNull();

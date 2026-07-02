@@ -91,19 +91,6 @@ export function parseSelectKeyMessage(data: unknown): { track: string; time: num
   return { track: m.track, time: m.time };
 }
 
-/**
- * Parse a host->web ui/atlas-alpha push; returns `{ on }` for that message, or null
- * otherwise. The host sends it during --record so a scripted atlas beat can toggle the
- * Atlas-Frames "Alpha" preview mode (additive RGB vs flattened alpha) — the synthetic
- * cursor click is view-only, so the actual state flips through this. Same transport
- * caveats as parseFocusChannelMessage.
- */
-export function parseAtlasAlphaMessage(data: unknown): { on: boolean } | null {
-  const m = coerceMessage(data);
-  if (!m || m.type !== "ui/atlas-alpha") return null;
-  return typeof m.on === "boolean" ? { on: m.on } : null;
-}
-
 export type PoseDragTarget = "stack" | "emitter";
 
 /**
