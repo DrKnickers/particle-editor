@@ -290,7 +290,7 @@ void ModManager::RestoreLastLayerStack()
     printf("[Mods] Restored %zu layer(s)\n", present.size()); fflush(stdout);
 }
 
-bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers)
+bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allowPersist)
 {
     // Canonicalise, drop non-existent folders, and dedup (case-insensitive),
     // preserving order. The existence filter keeps m_layerStack / GetLayerStack()
@@ -345,7 +345,7 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers)
     //    On a failed reload we leave the registry untouched so the next launch boots
     //    the last-known-good stack, not one whose shaders failed to load.
     //    (--drive / m_ephemeral never rewrites the daily driver's mod stack.)
-    if (!m_ephemeral && modlayers::ShouldPersistLayers(ok))
+    if (allowPersist && !m_ephemeral && modlayers::ShouldPersistLayers(ok))
     {
         WriteLastLayers(m_layerStack);
         WriteLastMod(primary);

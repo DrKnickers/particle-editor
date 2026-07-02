@@ -95,7 +95,10 @@ public:
     // kept in sync for the one-time legacy-selection migration), swaps the texture palette to the primary
     // layer, clears the thumbnail cache, and reloads engine assets (if bound).
     // Returns false if the engine shader reload failed (state still rolls forward).
-    bool SetLayerStack(const std::vector<std::wstring>& absoluteLayers);
+    // allowPersist=false suppresses the registry write on top of the ephemeral
+    // gate (the dispatcher passes the test-host settings gate through here so a
+    // --test-host run never rewrites the daily driver's LastLayers/LastMod).
+    bool SetLayerStack(const std::vector<std::wstring>& absoluteLayers, bool allowPersist = true);
 
     // Read-only accessors.
     const std::vector<ModEntry>& GetMods() const { return m_mods; }

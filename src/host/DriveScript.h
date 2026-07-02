@@ -17,7 +17,7 @@ namespace drive {
 
 struct Vec3d { double x = 0, y = 0, z = 0; };
 
-enum class StepKind { Bridge, Capture, Settle, Camera, SelectEmitter };
+enum class StepKind { Bridge, Capture, Settle, Camera, SelectEmitter, AssertState, AssertViewportNonblack, BridgeSelftest };
 
 struct Step {
     StepKind kind = StepKind::Bridge;
@@ -34,6 +34,12 @@ struct Step {
     // SelectEmitter (exactly one of these non-empty):
     std::string  selName;
     std::string  selStableId;
+    // AssertState:
+    std::string  assertPath;
+    nlohmann::json assertEquals;
+    // AssertViewportNonblack:
+    int          viewportThreshold = 96;
+    double       regionX0 = 0.30, regionY0 = 0.16, regionX1 = 0.75, regionY1 = 0.64;
 };
 
 struct Script {
@@ -41,7 +47,7 @@ struct Script {
     std::vector<Step> steps;
 };
 
-enum class Outcome { Ok, Failed, Malformed };
+enum class Outcome { Ok, Failed, Malformed, AssertFailed };
 
 struct CameraVecs { Vec3d position, target, up; };
 
@@ -229,6 +235,24 @@ inline EmitterResolve ResolveEmitterId(const std::string& listEnvelope,
 
 // --- parse + validate ------------------------------------------------------
 
+inline bool IsValidJsonPointer(const std::string& path)
+{
+    try {
+        (void)nlohmann::json::json_pointer(path);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+inline bool IsValidUnitRegion(double x0, double y0, double x1, double y1)
+{
+    return std::isfinite(x0) && std::isfinite(y0) &&
+           std::isfinite(x1) && std::isfinite(y1) &&
+           x0 >= 0.0 && y0 >= 0.0 && x1 <= 1.0 && y1 <= 1.0 &&
+           x0 < x1 && y0 < y1;
+}
+
 inline bool ParseScript(const std::string& json, Script& out, std::string& err)
 {
     out = Script{};
@@ -281,6 +305,81 @@ inline bool ParseScript(const std::string& json, Script& out, std::string& err)
             }
             if (step.bridgeKind == "file/open" && !FileOpenHasPath(step.params)) {
                 err = "file/open requires an explicit non-empty 'path'"; return false;
+            }
+        } else if (s.contains("assert-state")) {
+            const auto& a = s["assert-state"];
+            if (!a.is_object()) { err = "'assert-state' must be an object"; return false; }
+            if (!a.contains("kind") || !a["kind"].is_string()) {
+                err = "'assert-state.kind' must be a string"; return false;
+            }
+            step.kind = StepKind::AssertState;
+            step.bridgeKind = a["kind"].get<std::string>();
+            if (!IsAllowedBridgeKind(step.bridgeKind)) {
+                err = "kind not permitted in --drive: " + step.bridgeKind; return false;
+            }
+            if (a.contains("params")) {
+                if (!a["params"].is_object()) { err = "'assert-state.params' must be an object"; return false; }
+                step.params = a["params"];
+            } else {
+                step.params = nlohmann::json::object();
+            }
+            // Same guard as plain bridge steps: file/open with no path opens the
+            // MODAL native dialog and deadlocks an unattended run.
+            if (step.bridgeKind == "file/open" && !FileOpenHasPath(step.params)) {
+                err = "file/open requires an explicit non-empty 'path'"; return false;
+            }
+            if (!a.contains("path") || !a["path"].is_string()) {
+                err = "'assert-state.path' must be a JSON pointer string"; return false;
+            }
+            step.assertPath = a["path"].get<std::string>();
+            if (!IsValidJsonPointer(step.assertPath)) {
+                err = "'assert-state.path' must be an RFC-6901 JSON pointer"; return false;
+            }
+            if (!a.contains("equals")) { err = "'assert-state.equals' is required"; return false; }
+            step.assertEquals = a["equals"];
+        } else if (s.contains("assert-viewport-nonblack")) {
+            const auto& a = s["assert-viewport-nonblack"];
+            if (!a.is_object()) { err = "'assert-viewport-nonblack' must be an object"; return false; }
+            step.kind = StepKind::AssertViewportNonblack;
+            if (a.contains("threshold")) {
+                if (!a["threshold"].is_number_integer()) {
+                    err = "'assert-viewport-nonblack.threshold' must be an integer"; return false;
+                }
+                step.viewportThreshold = a["threshold"].get<int>();
+                if (step.viewportThreshold < 1 || step.viewportThreshold > 765) {
+                    err = "'assert-viewport-nonblack.threshold' must be between 1 and 765"; return false;
+                }
+            }
+            if (a.contains("region")) {
+                const auto& r = a["region"];
+                if (!r.is_array() || r.size() != 4 || !r[0].is_number() || !r[1].is_number() ||
+                    !r[2].is_number() || !r[3].is_number()) {
+                    err = "'assert-viewport-nonblack.region' must be four numbers"; return false;
+                }
+                step.regionX0 = r[0].get<double>();
+                step.regionY0 = r[1].get<double>();
+                step.regionX1 = r[2].get<double>();
+                step.regionY1 = r[3].get<double>();
+                if (!IsValidUnitRegion(step.regionX0, step.regionY0, step.regionX1, step.regionY1)) {
+                    err = "'assert-viewport-nonblack.region' must satisfy 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1"; return false;
+                }
+            }
+        } else if (s.contains("bridge-selftest")) {
+            const auto& a = s["bridge-selftest"];
+            if (!a.is_object()) { err = "'bridge-selftest' must be an object"; return false; }
+            if (!a.contains("kind") || !a["kind"].is_string()) {
+                err = "'bridge-selftest.kind' must be a string"; return false;
+            }
+            step.kind = StepKind::BridgeSelftest;
+            step.bridgeKind = a["kind"].get<std::string>();
+            if (!IsAllowedBridgeKind(step.bridgeKind)) {
+                err = "kind not permitted in --drive: " + step.bridgeKind; return false;
+            }
+            // The selftest wire always sends empty params, so a path-required
+            // kind would open the MODAL file dialog and deadlock the run.
+            if (step.bridgeKind == "file/open") {
+                err = "'bridge-selftest' does not permit file/open (no params surface; "
+                      "the empty-path form opens a modal dialog)"; return false;
             }
         } else if (s.contains("capture")) {
             if (!s["capture"].is_string() || s["capture"].get<std::string>().empty()) {

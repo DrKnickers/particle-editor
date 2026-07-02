@@ -206,6 +206,7 @@ async function main() {
       "tests/track-editor.spec.ts",
       "tests/property-tabs.spec.ts",
       "tests/mods-contract.spec.ts",
+      "tests/mod-stack.spec.ts",
       "tests/leave-particles.spec.ts",
       "tests/autosave-recovery.spec.ts",
       "tests/splitters.spec.ts",

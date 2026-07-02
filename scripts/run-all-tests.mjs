@@ -17,7 +17,11 @@
 //                     path — bare test_resource_strings would prefer stale Release)
 //   playwright-native 41 specs vs the real app over CDP (pnpm test:native)
 //   msbuild-release   x64 Release (drive-smoke hard-requires the Release exe)
+//   render-goldens    deterministic --capture scenes vs checked-in goldens
+//                     (ffmpeg SSIM ≥ 0.9995 — see scripts/render-goldens.mjs)
 //   drive-smoke       tasks/drive-smoke.ps1 — real-pixel non-black --drive smoke
+//                     + the oracle-step scenarios (assert-state / nonblack /
+//                     production-wire bridge-selftest)
 //
 // Missing prereqs are FAILURES with actionable messages by default; silent skips
 // are the enemy of a gate. `--allow-missing <lane>` downgrades that lane's missing
@@ -232,6 +236,17 @@ const LANES = [
   {
     name: "msbuild-release",
     run: () => (SKIP_BUILD ? skip("--skip-build") : msbuild("Release") === 0 ? pass : fail("x64 Release build")),
+  },
+  {
+    name: "render-goldens",
+    deps: ["msbuild-release"],
+    run: () => {
+      const p = prereq("render-goldens", existsSync(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first");
+      if (p) return p;
+      return runExe(process.execPath, [join(repoRoot, "scripts", "render-goldens.mjs")]) === 0
+        ? pass
+        : fail("render goldens (bless intentional changes with scripts/render-goldens.mjs --update)");
+    },
   },
   {
     name: "drive-smoke",

@@ -16,6 +16,8 @@
 #include <gdiplus.h>
 #include "GdiplusEncode.h"   // host::GdiplusEncoderClsid (DRY cpp-host-1)
 #include <cstdio>      // fwprintf / stderr for SnapWindowOneShot diagnostics
+#include <algorithm>   // std::clamp (ProbeWindowMaxLuma region)
+#include <vector>      // ProbeWindowMaxLuma pixel buffer
 
 #ifndef PW_RENDERFULLCONTENT
 #define PW_RENDERFULLCONTENT 0x00000002
@@ -65,6 +67,62 @@ bool CaptureWindowToPng(HWND hwnd, const std::wstring& path)
     DeleteDC(mem);
     ReleaseDC(nullptr, screen);
     return saved && pw;
+}
+
+int ProbeWindowMaxLuma(HWND hwnd, double x0, double y0, double x1, double y1)
+{
+    RECT rc = {};
+    if (!hwnd || !GetWindowRect(hwnd, &rc)) return -1;
+    const int w = rc.right - rc.left;
+    const int h = rc.bottom - rc.top;
+    if (w <= 0 || h <= 0) return -1;
+
+    HDC     screen = GetDC(nullptr);
+    HDC     mem    = screen ? CreateCompatibleDC(screen) : nullptr;
+    HBITMAP bmp    = (screen && mem) ? CreateCompatibleBitmap(screen, w, h) : nullptr;
+    int result = -1;
+    if (screen && mem && bmp)
+    {
+        HGDIOBJ oldb  = SelectObject(mem, bmp);
+        const BOOL pw = PrintWindow(hwnd, mem, PW_RENDERFULLCONTENT);
+        SelectObject(mem, oldb);
+        if (pw)
+        {
+            BITMAPINFO bi = {};
+            bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+            bi.bmiHeader.biWidth       = w;
+            bi.bmiHeader.biHeight      = -h;  // top-down rows
+            bi.bmiHeader.biPlanes      = 1;
+            bi.bmiHeader.biBitCount    = 32;  // BGRA
+            bi.bmiHeader.biCompression = BI_RGB;
+            std::vector<unsigned char> px(static_cast<size_t>(w) * h * 4);
+            if (GetDIBits(mem, bmp, 0, h, px.data(), &bi, DIB_RGB_COLORS) == h)
+            {
+                const int rx0 = std::clamp(static_cast<int>(x0 * w), 0, w);
+                const int rx1 = std::clamp(static_cast<int>(x1 * w), 0, w);
+                const int ry0 = std::clamp(static_cast<int>(y0 * h), 0, h);
+                const int ry1 = std::clamp(static_cast<int>(y1 * h), 0, h);
+                if (rx1 > rx0 && ry1 > ry0)
+                {
+                    int best = 0;
+                    for (int y = ry0; y < ry1; ++y)
+                    {
+                        const unsigned char* row = px.data() + (static_cast<size_t>(y) * w + rx0) * 4;
+                        for (int x = rx0; x < rx1; ++x, row += 4)
+                        {
+                            const int s = row[0] + row[1] + row[2];  // B+G+R
+                            if (s > best) best = s;
+                        }
+                    }
+                    result = best;
+                }
+            }
+        }
+    }
+    if (bmp) DeleteObject(bmp);
+    if (mem) DeleteDC(mem);
+    if (screen) ReleaseDC(nullptr, screen);
+    return result;
 }
 
 int SnapWindowOneShot(const wchar_t* windowClass, const std::wstring& path)

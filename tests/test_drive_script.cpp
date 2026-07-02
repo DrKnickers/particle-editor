@@ -5,7 +5,8 @@
 #include "DriveScript.h"
 
 static int g_fail = 0;
-#define CHECK(cond) do { if (!(cond)) { \
+static int g_check = 0;
+#define CHECK(cond) do { ++g_check; if (!(cond)) { \
     std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond); ++g_fail; } } while (0)
 
 int main()
@@ -55,6 +56,17 @@ int main()
         CHECK(!ParseScript(R"({"steps":[{"kind":"file/open","params":{}}]})", s, err));
         CHECK(!ParseScript(R"({"steps":[{"kind":"file/open"}]})", s, err));
         CHECK(ParseScript(R"({"steps":[{"kind":"file/open","params":{"path":"C:\\x.alo"}}]})", s, err));
+    }
+    // --- ...and the assertion steps can't smuggle an empty-path file/open past
+    //     that guard (the modal native dialog would deadlock an unattended run) ---
+    {
+        Script s; std::string err;
+        CHECK(!ParseScript(
+            R"({"steps":[{"assert-state":{"kind":"file/open","path":"/ok","equals":true}}]})", s, err));
+        CHECK(ParseScript(
+            R"({"steps":[{"assert-state":{"kind":"file/open","params":{"path":"C:\\x.alo"},"path":"/ok","equals":true}}]})",
+            s, err));
+        CHECK(!ParseScript(R"({"steps":[{"bridge-selftest":{"kind":"file/open"}}]})", s, err));
     }
     // --- `open` sugar expands to a leading file/open; collision with explicit file/open rejected ---
     {
@@ -107,6 +119,58 @@ int main()
         // camera.target parsing (3-element array)
         CHECK(ParseScript(R"({"steps":[{"camera":{"dist":10,"target":[1,2,3]}}]})", s, err));
         CHECK(s.steps[0].target.x == 1.0 && s.steps[0].target.y == 2.0 && s.steps[0].target.z == 3.0);
+    }
+
+    // --- assertion/selftest step shapes: defaults and explicit fields ---
+    {
+        Script s; std::string err;
+        CHECK(ParseScript(R"({"steps":[{"assert-state":{"kind":"emitters/list","path":"/root","equals":{"children":[]}}}]})", s, err));
+        CHECK(s.steps[0].kind == StepKind::AssertState);
+        CHECK(s.steps[0].bridgeKind == "emitters/list");
+        CHECK(s.steps[0].params.is_object() && s.steps[0].params.empty());
+        CHECK(s.steps[0].assertPath == "/root");
+        CHECK(s.steps[0].assertEquals == nlohmann::json({{"children", nlohmann::json::array()}}));
+
+        CHECK(ParseScript(R"({"steps":[{"assert-state":{"kind":"emitters/select","params":{"id":7},"path":"/selected","equals":true}}]})", s, err));
+        CHECK(s.steps[0].kind == StepKind::AssertState);
+        CHECK(s.steps[0].bridgeKind == "emitters/select");
+        CHECK(s.steps[0].params["id"] == 7);
+        CHECK(s.steps[0].assertPath == "/selected");
+        CHECK(s.steps[0].assertEquals == true);
+
+        CHECK(ParseScript(R"({"steps":[{"assert-viewport-nonblack":{}}]})", s, err));
+        CHECK(s.steps[0].kind == StepKind::AssertViewportNonblack);
+        CHECK(s.steps[0].viewportThreshold == 96);
+        CHECK(s.steps[0].regionX0 == 0.30 && s.steps[0].regionY0 == 0.16);
+        CHECK(s.steps[0].regionX1 == 0.75 && s.steps[0].regionY1 == 0.64);
+
+        CHECK(ParseScript(R"({"steps":[{"assert-viewport-nonblack":{"threshold":200,"region":[0.1,0.2,0.3,0.4]}}]})", s, err));
+        CHECK(s.steps[0].kind == StepKind::AssertViewportNonblack);
+        CHECK(s.steps[0].viewportThreshold == 200);
+        CHECK(s.steps[0].regionX0 == 0.1 && s.steps[0].regionY0 == 0.2);
+        CHECK(s.steps[0].regionX1 == 0.3 && s.steps[0].regionY1 == 0.4);
+
+        CHECK(ParseScript(R"({"steps":[{"bridge-selftest":{"kind":"emitters/list"}}]})", s, err));
+        CHECK(s.steps[0].kind == StepKind::BridgeSelftest);
+        CHECK(s.steps[0].bridgeKind == "emitters/list");
+    }
+
+    // --- assertion/selftest validation failures ---
+    {
+        Script s; std::string err;
+        CHECK(!ParseScript(R"({"steps":[{"assert-state":{"kind":"file/save","path":"/x","equals":1}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"bridge-selftest":{"kind":"file/save"}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-state":{"kind":"emitters/list","path":"root","equals":1}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-state":{"kind":"emitters/list","path":"/bad~2escape","equals":1}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-state":{"kind":"emitters/list","path":"/x"}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-state":{"kind":"emitters/list","params":[1],"path":"/x","equals":1}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-viewport-nonblack":{"threshold":0}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-viewport-nonblack":{"threshold":766}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-viewport-nonblack":{"threshold":96.5}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-viewport-nonblack":{"region":[0.1,0.2,0.3]}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-viewport-nonblack":{"region":[0.5,0.2,0.5,0.4]}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-viewport-nonblack":{"region":[-0.1,0.2,0.3,0.4]}}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"assert-viewport-nonblack":{"region":[0.1,0.2,1.1,0.4]}}]})", s, err));
     }
 
     // --- parse edge cases ---
@@ -208,7 +272,7 @@ int main()
         CHECK(!r4.id.has_value());
     }
 
-    if (g_fail == 0) std::printf("=== DriveScript: ALL PASS ===\n");
-    else             std::printf("=== DriveScript: %d FAIL ===\n", g_fail);
+    if (g_fail == 0) std::printf("=== DriveScript: ALL PASS (%d checks) ===\n", g_check);
+    else             std::printf("=== DriveScript: %d FAIL (%d checks) ===\n", g_fail, g_check);
     return g_fail ? 1 : 0;
 }

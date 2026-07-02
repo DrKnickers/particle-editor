@@ -1537,7 +1537,9 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (pit != params.end() && pit->is_array())
             for (const auto& e : *pit)
                 if (e.is_string()) paths.push_back(Utf8ToWide(e.get<std::string>()));
-        bool ok = m_modManager->SetLayerStack(paths);
+        // Same persistence gate every settings write uses: a --test-host run
+        // must never rewrite the daily driver's LastLayers/LastMod.
+        bool ok = m_modManager->SetLayerStack(paths, !(m_testHost && !m_settingsLive));
         TexturePalette::ClearBridgeThumbCache();
         EmitEngineStateChanged();
         json stackArr = json::array();

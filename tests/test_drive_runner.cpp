@@ -7,7 +7,8 @@
 #include "DriveRunner.h"
 
 static int g_fail = 0;
-#define CHECK(cond) do { if (!(cond)) { \
+static int g_check = 0;
+#define CHECK(cond) do { ++g_check; if (!(cond)) { \
     std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond); ++g_fail; } } while (0)
 
 using host::DriveRunner;
@@ -46,6 +47,12 @@ static int RunToDone(DriveRunner& r, double& now, int maxIters = 100000) {
         if (++i > maxIters) { CHECK(!"RunToDone exceeded iteration cap"); break; }
     }
     return r.ExitCode();
+}
+
+static bool Contains(const std::vector<std::string>& lines, const std::string& needle) {
+    for (const auto& line : lines)
+        if (line.find(needle) != std::string::npos) return true;
+    return false;
 }
 
 int main()
@@ -158,14 +165,131 @@ int main()
         CHECK(capAt >= 400.0 && capAt < 500.0);   // ~settle end, NOT 400+150
     }
 
-    // 10. TotalSettleMs sums settle steps (watchdog budget input).
+    // 10. assert-state dispatches through the bridge and compares data by JSON pointer.
+    {
+        double now = 0; Bridge b;
+        b.okResp = R"({"type":"res","ok":true,"data":{"root":{"count":2}}})";
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"assert-state":{"kind":"layout/scene-rect","path":"/root/count","equals":2}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [](const std::string&){});
+        CHECK(RunToDone(r, now) == 0);
+        CHECK(b.kinds.size() == 1 && b.kinds[0] == "layout/scene-rect");
+    }
+    {
+        double now = 0; Bridge b; std::vector<std::string> logs;
+        b.okResp = R"({"type":"res","ok":true,"data":{"root":{"count":1}}})";
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"assert-state":{"kind":"layout/scene-rect","path":"/root/count","equals":2}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [&](const std::string& line){ logs.push_back(line); });
+        CHECK(RunToDone(r, now) == 6);
+        CHECK(Contains(logs, "drive: assert-state mismatch"));
+        CHECK(Contains(logs, "actual=1 expected=2"));
+    }
+    {
+        double now = 0; Bridge b; std::vector<std::string> logs;
+        b.okResp = R"({"type":"res","ok":true,"data":{"root":{}}})";
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"assert-state":{"kind":"layout/scene-rect","path":"/root/count","equals":2}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [&](const std::string& line){ logs.push_back(line); });
+        CHECK(RunToDone(r, now) == 6);
+        CHECK(Contains(logs, "drive: assert-state unresolved"));
+    }
+    {
+        double now = 0; Bridge b; b.failNextBridge = true;
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"assert-state":{"kind":"layout/scene-rect","path":"/root/count","equals":2}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [](const std::string&){});
+        CHECK(RunToDone(r, now) == 3);
+    }
+
+    // 11. assert-viewport-nonblack maps probe failures and dark regions to assertion failure.
+    {
+        double now = 0; Bridge b; double x0 = -1, y0 = -1, x1 = -1, y1 = -1;
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"assert-viewport-nonblack":{"threshold":100,"region":[0.1,0.2,0.3,0.4]}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [](const std::string&){});
+        r.SetProbeHook([&](double ax0, double ay0, double ax1, double ay1) {
+            x0 = ax0; y0 = ay0; x1 = ax1; y1 = ay1; return 120;
+        });
+        CHECK(RunToDone(r, now) == 0);
+        CHECK(x0 == 0.1 && y0 == 0.2 && x1 == 0.3 && y1 == 0.4);
+    }
+    {
+        double now = 0; Bridge b; std::vector<std::string> logs;
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"assert-viewport-nonblack":{"threshold":100}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [&](const std::string& line){ logs.push_back(line); });
+        r.SetProbeHook([](double, double, double, double) { return 99; });
+        CHECK(RunToDone(r, now) == 6);
+        CHECK(Contains(logs, "drive: viewport probe max=99 threshold=100"));
+    }
+    {
+        double now = 0; Bridge b; std::vector<std::string> logs;
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"assert-viewport-nonblack":{}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [&](const std::string& line){ logs.push_back(line); });
+        r.SetProbeHook([](double, double, double, double) { return -1; });
+        CHECK(RunToDone(r, now) == 6);
+        CHECK(Contains(logs, "drive: viewport probe failed"));
+    }
+    {
+        double now = 0; Bridge b; std::vector<std::string> logs;
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"assert-viewport-nonblack":{}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [&](const std::string& line){ logs.push_back(line); });
+        CHECK(RunToDone(r, now) == 6);
+        CHECK(Contains(logs, "drive: probe hook unavailable"));
+    }
+
+    // 12. bridge-selftest uses the selftest hook with the pinned timeout.
+    {
+        double now = 0; Bridge b; std::string seenKind; int seenTimeout = 0;
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"bridge-selftest":{"kind":"emitters/list"}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [](const std::string&){});
+        r.SetSelftestHook([&](const std::string& kind, int timeoutMs) {
+            seenKind = kind; seenTimeout = timeoutMs; return true;
+        });
+        CHECK(RunToDone(r, now) == 0);
+        CHECK(seenKind == "emitters/list" && seenTimeout == 10000);
+    }
+    {
+        double now = 0; Bridge b; std::vector<std::string> logs;
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"bridge-selftest":{"kind":"emitters/list"}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [&](const std::string& line){ logs.push_back(line); });
+        r.SetSelftestHook([](const std::string&, int) { return false; });
+        CHECK(RunToDone(r, now) == 6);
+        CHECK(Contains(logs, "drive: bridge selftest failed"));
+    }
+    {
+        double now = 0; Bridge b; std::vector<std::string> logs;
+        DriveRunner r; std::string err;
+        CHECK(r.Init(R"({"steps":[{"bridge-selftest":{"kind":"emitters/list"}}]})", err));
+        r.SetHooks(std::ref(b), [](const std::string&){ return true; },
+                   [&]{ return now; }, [&](const std::string& line){ logs.push_back(line); });
+        CHECK(RunToDone(r, now) == 6);
+        CHECK(Contains(logs, "drive: selftest hook unavailable"));
+    }
+
+    // 13. TotalSettleMs sums settle steps (watchdog budget input).
     {
         DriveRunner r; std::string err;
         CHECK(r.Init(R"({"steps":[{"settle":200},{"kind":"engine/set/bloom"},{"settle":300}]})", err));
         CHECK(r.TotalSettleMs() == 500.0);
     }
 
-    // 11. Camera step dispatches engine/set/camera (orbit -> concrete vectors).
+    // 14. Camera step dispatches engine/set/camera (orbit -> concrete vectors).
     {
         double now = 0; Bridge b;
         DriveRunner r; std::string err;
@@ -176,7 +300,7 @@ int main()
         CHECK(b.kinds.size() == 1 && b.kinds[0] == "engine/set/camera");
     }
 
-    if (g_fail == 0) std::printf("=== DriveRunner: ALL PASS ===\n");
-    else             std::printf("=== DriveRunner: %d FAIL ===\n", g_fail);
+    if (g_fail == 0) std::printf("=== DriveRunner: ALL PASS (%d checks) ===\n", g_check);
+    else             std::printf("=== DriveRunner: %d FAIL (%d checks) ===\n", g_fail, g_check);
     return g_fail ? 1 : 0;
 }

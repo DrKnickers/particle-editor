@@ -17,6 +17,12 @@ bool CaptureWindowToPng(HWND hwnd, const std::wstring& path);
 // code (0 = ok, 1 = window not found OR capture failed). No engine/WebView2.
 int SnapWindowOneShot(const wchar_t* windowClass, const std::wstring& path);
 
+// --drive assert-viewport-nonblack probe: PrintWindow the composed window and
+// return the max R+G+B (0..765) inside the fractional region [x0,y0)x[x1,y1)
+// of the window rect, or -1 on any capture/read failure. Fresh capture per
+// call (no caching) — pure GDI (GetDIBits), no GDI+ needed.
+int ProbeWindowMaxLuma(HWND hwnd, double x0, double y0, double x1, double y1);
+
 }  // namespace host
 
 #endif  // HOST_WINDOWCAPTURE_H

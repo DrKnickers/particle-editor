@@ -776,6 +776,16 @@ struct HostWindowImpl
     int            m_lastAckCursorFrame = -1;
     nlohmann::json m_lastAckCursor;          // {x,y,vis,press}
     nlohmann::json m_lastAckResolved = nlohmann::json::array();  // [{ref,x,y,ok}]
+    // --drive bridge-selftest handshake: RunDriveSelftest arms the token +
+    // nested-pumps; OnWebMessage completes it when the tokened result arrives
+    // over the real page->host postMessage wire (single UI thread, no atomics).
+    std::string  m_selftestToken;
+    bool         m_selftestDone = false;
+    bool         m_selftestOk = false;
+    // --capture layout-determinism gate (see OnWebMessage + the capture loop).
+    bool         m_sceneRectSeen = false;
+    LONGLONG     m_captureGateStartQpc = 0;
+    bool         m_captureGateWarned = false;
     std::unique_ptr<host::ClipRunner> m_clipRunner;
     std::wstring m_perfWebViewProfile;
     FILE*       logFile = nullptr;
@@ -837,6 +847,7 @@ struct HostWindowImpl
 
     void Log(const char* fmt, ...);
     void OpenLog();
+    bool RunDriveSelftest(const std::string& kind, int timeoutMs);
     void CloseLog();
 
     // InitD3D9 dropped; the Engine owns the live D3D9 device. The
@@ -930,6 +941,103 @@ void HostWindowImpl::CloseLog()
         fclose(logFile);
         logFile = nullptr;
     }
+}
+
+// --drive bridge-selftest: round-trip one allowlisted request through the
+// PRODUCTION page->host channel. ExecuteScript makes the page call
+// window.bridge.request(kind) — in a non-CDP --drive run window.bridge IS the
+// real NativeBridge — and post a tokened result back over the same wire;
+// OnWebMessage completes the wait. A dropped wire fails by timeout.
+bool HostWindowImpl::RunDriveSelftest(const std::string& kind, int timeoutMs)
+{
+    if (useTestHost)
+    {
+        // --test-host swaps window.bridge for the host-object channel, so the
+        // "production wire" premise doesn't hold — refuse rather than lie green.
+        Log("drive: bridge-selftest requires a non-test-host --drive run\n");
+        return false;
+    }
+    if (!webView)
+    {
+        Log("drive: bridge-selftest — WebView2 not ready\n");
+        return false;
+    }
+
+    static unsigned s_selftestSeq = 0;
+    const std::string token =
+        std::to_string(GetTickCount64()) + "-" + std::to_string(++s_selftestSeq);
+    m_selftestToken = token;
+    m_selftestDone = false;
+    m_selftestOk = false;
+
+    // kind is allowlist-validated at parse time; token is host-generated — both
+    // are safe to embed in single-quoted JS.
+    // A faithful inline mini-client of the production wire protocol: the same
+    // {type:"req",id,kind,params} envelope NativeBridge sends (bridge/native.ts:80)
+    // and the same {type:"res",id,ok} matching it awaits (:133). Deliberately NOT
+    // window.bridge: that diagnostic global is currently a broken TestHostBridge
+    // in every non-test-host launch (hostObjects.<name> is a truthy lazy proxy
+    // even with nothing registered — latent bug, tracked separately). This tests
+    // what matters: page->host postMessage, dispatcher handling, host->page
+    // response delivery. setTimeout(0) defers out of the ExecuteScript
+    // evaluation context, where postMessage throws 0x80070490.
+    const std::string js =
+        "setTimeout(function(){"
+        "var post=function(ok,why){try{window.chrome.webview.postMessage(JSON.stringify("
+        "{kind:'drive/selftest-result',token:'" + token + "',ok:!!ok,why:why||''}));}catch(e){}};"
+        "var wv=window.chrome&&window.chrome.webview;"
+        "if(!wv||typeof wv.postMessage!=='function'){post(false,'no-webview');return;}"
+        "var id='selftest-" + token + "';var done=false;"
+        "var onMsg=function(e){var m=e.data;"
+        "if(typeof m==='string'){try{m=JSON.parse(m);}catch(err){return;}}"
+        "if(!m||m.type!=='res'||m.id!==id)return;done=true;"
+        "post(!!m.ok,m.ok?'':'res-error: '+(m.error||''));};"
+        "wv.addEventListener('message',onMsg);"
+        "try{wv.postMessage(JSON.stringify({type:'req',id:id,kind:'" + kind + "',params:{}}));}"
+        "catch(e){post(false,'post-threw: '+(e&&e.message||''));return;}"
+        "setTimeout(function(){if(!done)post(false,'response-timeout');},8000);"
+        "},0);";
+    const HRESULT hr = webView->ExecuteScript(
+        Utf8ToWide(js).c_str(),
+        Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [](HRESULT, LPCWSTR) -> HRESULT { return S_OK; }).Get());
+    if (FAILED(hr))
+    {
+        Log("drive: bridge-selftest — ExecuteScript failed (0x%08X)\n", (unsigned)hr);
+        m_selftestToken.clear();
+        return false;
+    }
+
+    // Nested pump: the result arrives as a WebView2-delivered window message, so
+    // we must keep dispatching while waiting. Drive mode is single-purpose and
+    // the outer loop calls Tick() explicitly (not via messages), so this can't
+    // re-enter the runner.
+    const ULONGLONG start = GetTickCount64();
+    while (!m_selftestDone && GetTickCount64() - start < (ULONGLONG)timeoutMs)
+    {
+        MSG msg;
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+        {
+            if (msg.message == WM_QUIT)
+            {
+                // Don't swallow shutdown inside the nested pump: re-post so the
+                // outer loop sees it, and abort the wait (fails the step).
+                PostQuitMessage(static_cast<int>(msg.wParam));
+                Log("drive: bridge-selftest aborted by WM_QUIT\n");
+                m_selftestToken.clear();
+                return false;
+            }
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        if (m_selftestDone) break;
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
+    }
+    const bool ok = m_selftestDone && m_selftestOk;
+    Log("drive: bridge-selftest %s (kind=%s)\n",
+        ok ? "OK" : (m_selftestDone ? "FAILED" : "TIMEOUT"), kind.c_str());
+    m_selftestToken.clear();
+    return ok;
 }
 
 void HostWindowImpl::Log(const char* fmt, ...)
@@ -1261,6 +1369,24 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         Log("[capture] app/ready received (React first paint)\n");
         return;
     }
+    // --drive bridge-selftest result: the page posts {"kind":"drive/selftest-result",
+    // "token":…, "ok":…} over the REAL postMessage wire — its arrival here IS the
+    // thing under test. Host-lifecycle signal like app/ready (the dispatcher drops
+    // non-"req" messages) — intercept + return. Token must match the armed step.
+    if (msgKind == L"drive/selftest-result")
+    {
+        nlohmann::json msg = nlohmann::json::parse(WideToUtf8(json), nullptr, false);
+        if (!msg.is_discarded() && !m_selftestToken.empty()
+            && msg.value("token", std::string{}) == m_selftestToken)
+        {
+            m_selftestOk = msg.value("ok", false);
+            m_selftestDone = true;
+            if (!m_selftestOk)
+                Log("drive: selftest page-side failure: %s\n",
+                    msg.value("why", std::string("?")).c_str());
+        }
+        return;
+    }
     if (msgKind == L"perf/clock-calibration")
     {
         nlohmann::json msg = nlohmann::json::parse(WideToUtf8(json), nullptr, false);
@@ -1385,6 +1511,13 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         perfMsgKinds.clear();
         perfMsgLastEmit = rpNow;
     }
+
+    // --capture determinism gate: note the first layout/scene-rect BEFORE
+    // dispatching it — the capture loop holds its frame counter until React's
+    // layout has landed, because that message resizes the engine RT (counting
+    // from process start raced it and produced phase-dependent capture sizes).
+    if (msgKind == L"layout/scene-rect")
+        m_sceneRectSeen = true;
 
     if (dispatcher)
         dispatcher->Dispatch(WideToUtf8(json));
@@ -4759,6 +4892,12 @@ int HostWindowImpl::Run(int nCmdShow)
                         },
                         [df = driveFreq]{ return df > 0 ? QpcMs(PerfQpcNow(), df) : 0.0; },
                         [this](const std::string& msg){ Log("%s\n", msg.c_str()); });
+                    r->SetProbeHook([this](double x0, double y0, double x1, double y1){
+                        return host::ProbeWindowMaxLuma(hMain, x0, y0, x1, y1);
+                    });
+                    r->SetSelftestHook([this](const std::string& kind, int timeoutMs){
+                        return RunDriveSelftest(kind, timeoutMs);
+                    });
                     driveBudgetMs = r->TotalSettleMs() + 60000.0;
                     driveRunner = std::move(r);
                 }
@@ -5154,6 +5293,34 @@ int HostWindowImpl::Run(int nCmdShow)
                 // at the spawn point and never overlapping — which is
                 // exactly the additive-over-smoke case we need to see).
                 Sleep(16);
+                // Layout-determinism gate: hold the frame counter until React's
+                // first paint AND first layout/scene-rect have landed — the
+                // scene-rect resizes the engine RT, so counting from process
+                // start raced it and captures came out at the pre- OR
+                // post-layout size depending on system load. 10 s cap so a
+                // changed UI degrades to the old (ungated) behavior, loudly.
+                if (!(m_uiReady && m_sceneRectSeen))
+                {
+                    if (m_captureGateStartQpc == 0) m_captureGateStartQpc = PerfQpcNow();
+                    const LONGLONG gqf = PerfQpcFreq();
+                    const double heldMs = gqf > 0
+                        ? QpcMs(PerfQpcNow() - m_captureGateStartQpc, gqf)
+                        : 10000.0;
+                    if (heldMs < 10000.0)
+                        continue;
+                    if (!m_captureGateWarned)
+                    {
+                        m_captureGateWarned = true;
+                        Log("[capture] layout gate timed out (uiReady=%d sceneRect=%d) — proceeding ungated\n",
+                            (int)m_uiReady, (int)m_sceneRectSeen);
+                        // Also on stdout: an ungated capture is racy-sized, so
+                        // golden consumers (scripts/render-goldens.mjs) must be
+                        // able to SEE the degradation and fail the scene rather
+                        // than flake against a fixed-size golden.
+                        printf("[capture] layout-gate-timeout — capture size may be pre-layout\n");
+                        fflush(stdout);
+                    }
+                }
                 if (++capturedFrames >= m_captureFrames)
                 {
                     // (1) engine RT — UNCHANGED: the engine's own pre-composite

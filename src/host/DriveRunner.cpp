@@ -1,10 +1,26 @@
 #include "DriveRunner.h"
 
 #include <cassert>
+#include <string>
 
 // The Do*/Tick asserts below encode the invariant that ParseScript is the SOLE
 // Step factory (it validates every step's required fields). They can only fire
 // on a Step hand-built outside ParseScript, which no current path does.
+namespace {
+
+int ExitCodeForOutcome(drive::Outcome outcome)
+{
+    switch (outcome) {
+        case drive::Outcome::Ok:           return 0;
+        case drive::Outcome::Failed:       return 3;
+        case drive::Outcome::Malformed:    return 3;
+        case drive::Outcome::AssertFailed: return 6;
+    }
+    return 3;
+}
+
+}  // namespace
+
 namespace host {
 
 bool DriveRunner::Init(const std::string& scriptJson, std::string& err)
@@ -15,6 +31,18 @@ bool DriveRunner::Init(const std::string& scriptJson, std::string& err)
 
 void DriveRunner::SetHooks(DispatchFn d, CaptureFn c, NowMsFn n, LogFn l)
 { m_dispatch = std::move(d); m_capture = std::move(c); m_now = std::move(n); m_log = std::move(l); }
+
+void DriveRunner::SetProbeHook(ProbeFn p)
+{ m_probe = std::move(p); }
+
+void DriveRunner::SetSelftestHook(SelftestFn s)
+{ m_selftest = std::move(s); }
+
+void DriveRunner::SetAssertFailed(const std::string& message)
+{
+    if (m_log) m_log("drive: " + message);
+    m_exitCode = ExitCodeForOutcome(drive::Outcome::AssertFailed);
+}
 
 double DriveRunner::TotalSettleMs() const
 {
@@ -27,9 +55,10 @@ bool DriveRunner::DispatchKind(const std::string& kind, const nlohmann::json& pa
 {
     const std::string env = drive::BuildRequestEnvelope(++m_reqId, kind, params);
     const std::string res = m_dispatch(env);
-    if (drive::ClassifyResponse(res) != drive::Outcome::Ok) {
+    const drive::Outcome outcome = drive::ClassifyResponse(res);
+    if (outcome != drive::Outcome::Ok) {
         if (m_log) m_log("drive: step '" + kind + "' FAILED: " + res);
-        m_exitCode = 3;
+        m_exitCode = ExitCodeForOutcome(outcome);
         return false;
     }
     m_lastVisualChangeMs = m_now();
@@ -89,6 +118,81 @@ bool DriveRunner::DoCapture(const drive::Step& s)
     return true;
 }
 
+bool DriveRunner::DoAssertState(const drive::Step& s)
+{
+    assert(!s.bridgeKind.empty());
+    const std::string req = drive::BuildRequestEnvelope(++m_reqId, s.bridgeKind, s.params);
+    const std::string res = m_dispatch(req);
+
+    nlohmann::json envelope;
+    try {
+        envelope = nlohmann::json::parse(res);
+    } catch (...) {
+        if (m_log) m_log("drive: step '" + s.bridgeKind + "' FAILED: " + res);
+        m_exitCode = ExitCodeForOutcome(drive::Outcome::Failed);
+        return false;
+    }
+
+    if (!envelope.is_object() || !envelope.contains("ok") || !envelope["ok"].is_boolean() ||
+        !envelope["ok"].get<bool>()) {
+        if (m_log) m_log("drive: step '" + s.bridgeKind + "' FAILED: " + res);
+        m_exitCode = ExitCodeForOutcome(drive::Outcome::Failed);
+        return false;
+    }
+
+    const nlohmann::json data = envelope.contains("data") ? envelope["data"] : nlohmann::json();
+    const nlohmann::json::json_pointer ptr(s.assertPath);
+    try {
+        const nlohmann::json& actual = data.at(ptr);
+        if (actual != s.assertEquals) {
+            SetAssertFailed("assert-state mismatch path '" + s.assertPath + "': actual=" +
+                            actual.dump() + " expected=" + s.assertEquals.dump());
+            return false;
+        }
+    } catch (...) {
+        SetAssertFailed("assert-state unresolved path '" + s.assertPath + "': actual=<unresolved> expected=" +
+                        s.assertEquals.dump());
+        return false;
+    }
+
+    m_lastVisualChangeMs = m_now();
+    m_preCaptureFloorMs = (s.bridgeKind == "file/open") ? 500.0 : m_script.defaultSettleMs;
+    return true;
+}
+
+bool DriveRunner::DoAssertViewportNonblack(const drive::Step& s)
+{
+    if (!m_probe) {
+        SetAssertFailed("probe hook unavailable");
+        return false;
+    }
+    const int maxRgb = m_probe(s.regionX0, s.regionY0, s.regionX1, s.regionY1);
+    if (maxRgb < 0) {
+        SetAssertFailed("viewport probe failed max=" + std::to_string(maxRgb));
+        return false;
+    }
+    if (maxRgb < s.viewportThreshold) {
+        SetAssertFailed("viewport probe max=" + std::to_string(maxRgb) +
+                        " threshold=" + std::to_string(s.viewportThreshold));
+        return false;
+    }
+    return true;
+}
+
+bool DriveRunner::DoBridgeSelftest(const drive::Step& s)
+{
+    assert(!s.bridgeKind.empty());
+    if (!m_selftest) {
+        SetAssertFailed("selftest hook unavailable for kind '" + s.bridgeKind + "'");
+        return false;
+    }
+    if (!m_selftest(s.bridgeKind, 10000)) {
+        SetAssertFailed("bridge selftest failed for kind '" + s.bridgeKind + "'");
+        return false;
+    }
+    return true;
+}
+
 DriveRunner::Status DriveRunner::Tick()
 {
     assert(m_dispatch && m_capture && m_now);   // SetHooks must precede Tick
@@ -115,9 +219,12 @@ DriveRunner::Status DriveRunner::Tick()
             if (m_exitCode == 0) ++m_index;
             return m_exitCode == 0 ? Status::Running : Status::Done;
         }
-        case drive::StepKind::Bridge:        { if (DoBridge(s))        ++m_index; return m_exitCode ? Status::Done : Status::Running; }
-        case drive::StepKind::Camera:        { if (DoCamera(s))        ++m_index; return m_exitCode ? Status::Done : Status::Running; }
-        case drive::StepKind::SelectEmitter: { if (DoSelectEmitter(s)) ++m_index; return m_exitCode ? Status::Done : Status::Running; }
+        case drive::StepKind::Bridge:                 { if (DoBridge(s))                 ++m_index; return m_exitCode ? Status::Done : Status::Running; }
+        case drive::StepKind::Camera:                 { if (DoCamera(s))                 ++m_index; return m_exitCode ? Status::Done : Status::Running; }
+        case drive::StepKind::SelectEmitter:          { if (DoSelectEmitter(s))          ++m_index; return m_exitCode ? Status::Done : Status::Running; }
+        case drive::StepKind::AssertState:            { if (DoAssertState(s))            ++m_index; return m_exitCode ? Status::Done : Status::Running; }
+        case drive::StepKind::AssertViewportNonblack: { if (DoAssertViewportNonblack(s)) ++m_index; return m_exitCode ? Status::Done : Status::Running; }
+        case drive::StepKind::BridgeSelftest:         { if (DoBridgeSelftest(s))         ++m_index; return m_exitCode ? Status::Done : Status::Running; }
     }
     return Status::Done;
 }
