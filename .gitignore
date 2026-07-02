@@ -311,3 +311,4 @@ frame_*.png
 # are regenerable noise.
 src/Resources/icon-src/out/
 __pycache__/
+.gate.lock

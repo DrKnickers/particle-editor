@@ -85,6 +85,26 @@ wstring AppDataDir()
     return wstring();
 }
 
+wstring PaletteDir()
+{
+    // Test seam only; production leaves ALO_PALETTE_DIR unset. The override
+    // directory must already exist (IniPath's CreateDirectoryW is single-level;
+    // the test pre-creates its temp dir).
+    wchar_t overrideBuf[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"ALO_PALETTE_DIR", overrideBuf, _countof(overrideBuf));
+    if (n > 0 && n < _countof(overrideBuf)) return wstring(overrideBuf, n);
+    if (n >= _countof(overrideBuf))
+    {
+        vector<wchar_t> dynamicBuf(n);
+        n = GetEnvironmentVariableW(L"ALO_PALETTE_DIR", dynamicBuf.data(), (DWORD)dynamicBuf.size());
+        if (n > 0 && n < dynamicBuf.size()) return wstring(dynamicBuf.data(), n);
+    }
+
+    const wstring appData = AppDataDir();
+    if (appData.empty()) return wstring();
+    return appData + L"\\AloParticleEditor";
+}
+
 wstring IniGetString(const wstring& iniPath, const wstring& section,
                      const wstring& key, const wstring& defaultValue)
 {
@@ -155,10 +175,9 @@ wstring Store::IniPath() const
     if (m_iniPathChecked) return m_iniPathCache;
     m_iniPathChecked = true;
 
-    const wstring appData = AppDataDir();
-    if (appData.empty()) { m_iniPathCache.clear(); return m_iniPathCache; }
+    const wstring dir = PaletteDir();
+    if (dir.empty()) { m_iniPathCache.clear(); return m_iniPathCache; }
 
-    const wstring dir = appData + L"\\AloParticleEditor";
     CreateDirectoryW(dir.c_str(), NULL);
     m_iniPathCache = dir + L"\\texture-palettes.ini";
     return m_iniPathCache;

@@ -57,6 +57,16 @@ To check/refresh the a11y goldens, run `pnpm --filter ./apps/editor a11y:drift` 
 
 See [`README.md`](README.md) for runtime details and [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md) → *Reference* → *Build Environment Requirements* for the canonical build matrix.
 
+## Running the tests — one command
+
+```
+node scripts/run-all-tests.mjs
+```
+
+That is the whole verification recipe: it runs every automated layer in dependency order — web typecheck, Vitest (~1,230 tests), the web bundle build, script tests, mock-browser Playwright, all standalone C++ unit tests (`tests/test_*.cpp`, built via their `build_*.bat`s), both MSBuild configs, the native Playwright suite against the real `ParticleEditor.exe`, and the `--drive` pixel smoke — and exits nonzero if anything fails, with a per-lane summary. Expect the full run to take minutes (it rebuilds everything on purpose; a green gate on stale binaries is worse than a slow one).
+
+Useful flags: `--list` (lane names), `--lane vitest,cpp-unit` (subset), `--allow-missing drive-smoke` (downgrade a missing prereq to a visible SKIP on machines without the game install), `--skip-build` (unsafe, for iterating). Individual lanes remain available directly: `pnpm --filter ./apps/editor test` / `test:web` / `test:native`, and `node scripts/run-native-unit-tests.mjs --filter <name>` for a single C++ test.
+
 ## Static analysis
 
 `cppcheck` runs over the C++ with no build or compile database

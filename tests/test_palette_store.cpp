@@ -4,22 +4,18 @@
 // mod-switch, recent/pin lifecycle, eviction, persistence, and edge
 // cases without driving any GUI.
 //
-// Side effect: backs up and restores the user's real INI file at
-// %APPDATA%\AloParticleEditor\texture-palettes.ini so the test runs
-// don't clobber palette state. If the test crashes mid-run, the
-// backup file (.bak) remains and can be moved back manually.
+// Uses ALO_PALETTE_DIR to redirect persistence into a unique temp
+// directory before Store construction. The test never reads or writes
+// %APPDATA%\AloParticleEditor\texture-palettes.ini; a crashed run can
+// leave only temp files behind.
 //
 // Build (from repo root):
-//   cl /EHsc /std:c++17 /Fe:test_palette_store.exe ^
-//      tests/test_palette_store.cpp src/UI/PaletteStore.cpp ^
-//      src/crc32.cpp src/utils.cpp /I src ^
-//      Shell32.lib User32.lib Advapi32.lib
+//   tests\build_test_palette_store.bat
 // Run:
-//   .\test_palette_store.exe
+//   tests\test_palette_store.exe
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <shlobj.h>
 #include "UI/TexturePalette.h"
 #include <cstdio>
 #include <cstdlib>
@@ -30,8 +26,8 @@ using namespace TexturePalette;
 
 static int g_passed = 0;
 static int g_failed = 0;
+static std::wstring g_paletteDir;
 static std::wstring g_iniPath;
-static std::wstring g_backupPath;
 
 #define ASSERT_TRUE(cond) do { \
     if (cond) { ++g_passed; } \
@@ -51,6 +47,39 @@ static std::wstring g_backupPath;
 } while(0)
 
 // ---- Helpers ------------------------------------------------------------
+
+static bool CreateTempPaletteDir()
+{
+    wchar_t tempRoot[MAX_PATH];
+    DWORD n = GetTempPathW(_countof(tempRoot), tempRoot);
+    if (n == 0 || n >= _countof(tempRoot)) return false;
+
+    for (DWORD attempt = 0; attempt < 100; ++attempt)
+    {
+        wchar_t candidate[MAX_PATH];
+        swprintf_s(candidate, L"%sAloPaletteStoreTest-%lu-%llu-%lu",
+                   tempRoot,
+                   GetCurrentProcessId(),
+                   (unsigned long long)GetTickCount64(),
+                   attempt);
+        if (CreateDirectoryW(candidate, NULL))
+        {
+            g_paletteDir = candidate;
+            g_iniPath = g_paletteDir + L"\\texture-palettes.ini";
+            return true;
+        }
+        if (GetLastError() != ERROR_ALREADY_EXISTS) return false;
+    }
+    return false;
+}
+
+static void CleanupTempPaletteDir()
+{
+    Store::Instance().ClearActiveMod();
+    DeleteFileW(g_iniPath.c_str());
+    RemoveDirectoryW(g_paletteDir.c_str());
+    SetEnvironmentVariableW(L"ALO_PALETTE_DIR", NULL);
+}
 
 static void ResetState()
 {
@@ -338,31 +367,36 @@ static void test_empty_mod_path_is_noop()
     ASSERT_EQ(Store::Instance().Recents(SLOT_COLOR).size(), (size_t)1);
 }
 
+static void test_seam_ini_lands_in_temp_dir()
+{
+    // Seam proof: the ini must physically exist under the ALO_PALETTE_DIR temp
+    // dir. If PaletteDir() ever regresses to ignoring the env var, every other
+    // test here would still pass (round-tripping through the REAL APPDATA store)
+    // — this is the one assertion that catches that silently-dangerous state.
+    std::printf("test_seam_ini_lands_in_temp_dir\n");
+    ResetState();
+    Store::Instance().SetActiveMod(L"C:\\Test\\ModA");
+    Store::Instance().TouchRecent(L"seam-proof.tga", SLOT_COLOR);
+    const std::wstring ini = g_paletteDir + L"\\texture-palettes.ini";
+    ASSERT_TRUE(GetFileAttributesW(ini.c_str()) != INVALID_FILE_ATTRIBUTES);
+}
+
 // ---- Driver -------------------------------------------------------------
 
 int main()
 {
-    // Resolve INI path the same way PaletteStore does.
-    wchar_t appData[MAX_PATH];
-    if (SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, appData) != S_OK)
+    if (!CreateTempPaletteDir())
     {
-        std::fprintf(stderr, "SHGetFolderPathW failed\n");
+        std::fprintf(stderr, "Failed to create temp palette directory.\n");
         return 1;
     }
-    g_iniPath    = std::wstring(appData) + L"\\AloParticleEditor\\texture-palettes.ini";
-    g_backupPath = g_iniPath + L".test_backup";
-
-    // Backup the user's real INI before touching anything.
-    CreateDirectoryW((std::wstring(appData) + L"\\AloParticleEditor").c_str(), NULL);
-    if (GetFileAttributesW(g_iniPath.c_str()) != INVALID_FILE_ATTRIBUTES)
+    if (!SetEnvironmentVariableW(L"ALO_PALETTE_DIR", g_paletteDir.c_str()))
     {
-        if (!CopyFileW(g_iniPath.c_str(), g_backupPath.c_str(), FALSE))
-        {
-            std::fprintf(stderr, "Failed to back up INI; refusing to run tests.\n");
-            return 1;
-        }
-        std::printf("Backed up INI to %ls\n", g_backupPath.c_str());
+        std::fprintf(stderr, "Failed to set ALO_PALETTE_DIR.\n");
+        CleanupTempPaletteDir();
+        return 1;
     }
+    std::printf("Using temp palette dir: %ls\n", g_paletteDir.c_str());
 
     // Run tests.
     test_cold_start_empty();
@@ -380,14 +414,9 @@ int main()
     test_clear_active_mod();
     test_malformed_filenames_rejected();
     test_empty_mod_path_is_noop();
+    test_seam_ini_lands_in_temp_dir();
 
-    // Restore the user's INI.
-    DeleteFileW(g_iniPath.c_str());
-    if (GetFileAttributesW(g_backupPath.c_str()) != INVALID_FILE_ATTRIBUTES)
-    {
-        MoveFileW(g_backupPath.c_str(), g_iniPath.c_str());
-        std::printf("Restored INI from backup.\n");
-    }
+    CleanupTempPaletteDir();
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
