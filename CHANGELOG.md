@@ -77,6 +77,8 @@ may live at the end of the file.
 
 ### Changed
 
+- The app icon now stays legible at taskbar and title-bar sizes — small renders simplify to a bolder spline + particle on a brighter tile, and the icon ships exact 20/24/40px variants so Windows shows a crisp icon instead of a resampled one
+- Landing page: the editor clips now display about a third larger — media breaks out of the text column — and the hero editor window is visible above the fold instead of a toolbar sliver; all clips are re-rendered at 1.5× render scale so UI text stays crisp at the larger size
 - The Atlas Frame Picker now previews each frame the way the emitter's blend mode actually renders it, and only dims genuinely-empty frames on blend modes where an empty frame renders as nothing — so the preview matches the viewport automatically, per emitter. The manual "Alpha" toggle is gone; the blend mode drives it
 - New app icon — an azure spline-and-particle mark on a dark Windows-style tile — now appears in the taskbar, window title bar, and Alt-Tab, and is used as the landing page's favicon (replacing the placeholders)
 - Switching mod layers no longer leaves a broken reference-object selection: if the selected object isn't in the new stack the selection clears to None, and it's restored automatically when you switch back to a stack that has it (your saved selection is kept)

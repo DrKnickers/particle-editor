@@ -13,12 +13,33 @@ RESOURCES = HERE.parent
 REPO = RESOURCES.parent.parent
 SITE = REPO / "site"
 
-SIZES = (16, 32, 48, 64, 128, 256)
+SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 ACCENT = "#4a8bff"
 MARK_SCALE = 1.15
 MARK_ANCHOR = (0.51, 0.50)
 MARK_OFFSET = (-0.010, 0.0108)
 ENDPOINT_FILL = "#10223a"
+
+PLATE_TOP, PLATE_BOTTOM = "#172232", "#070a10"
+# Lifted plate for taskbar/titlebar sizes: the standard plate is only
+# ~1.0–1.25:1 contrast against Win11 dark chrome (~#1f2228) and the tile
+# silhouette vanishes.
+PLATE_TOP_LIFTED, PLATE_BOTTOM_LIFTED = "#2a3d5c", "#101827"
+
+# Small-size legibility ramp. Below 48px the detail layers stop reading — at
+# 16px the tube is ~1px, the highlight and endpoint-ring strokes are sub-pixel,
+# and the glow only muddies the downscale — so ramped sizes draw plate +
+# fattened tube + enlarged particle only. Multipliers taper upward: the smaller
+# the render, the more the surviving shapes must be exaggerated. 20/24/40 exist
+# so the common Windows cases (taskbar @100% DPI, titlebar @100–150%) get an
+# exact entry instead of a resample of 16/32.  size: (tube_x, particle_x, plate_lift)
+RAMP = {
+    16: (2.2, 1.35, 1.0),
+    20: (2.0, 1.32, 1.0),
+    24: (1.8, 1.28, 1.0),
+    32: (1.5, 1.20, 0.55),
+    40: (1.35, 1.12, 0.35),
+}
 
 
 def hex_rgb(value: str) -> tuple[int, int, int]:
@@ -104,11 +125,13 @@ def rounded_mask(size: int, radius: int) -> Image.Image:
     return mask
 
 
-def draw_plate(base: Image.Image) -> None:
+def draw_plate(base: Image.Image, lift: float = 0.0) -> None:
     size = base.size[0]
     radius = round(size * 0.235)
     mask = rounded_mask(size, radius)
 
+    top = "#%02x%02x%02x" % mix(PLATE_TOP, PLATE_TOP_LIFTED, lift)
+    bottom = "#%02x%02x%02x" % mix(PLATE_BOTTOM, PLATE_BOTTOM_LIFTED, lift)
     plate = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     pixels = plate.load()
     for y in range(size):
@@ -116,7 +139,7 @@ def draw_plate(base: Image.Image) -> None:
         for x in range(size):
             x_t = x / max(size - 1, 1)
             t = min(1.0, max(0.0, y_t * 0.86 + (1 - x_t) * 0.14))
-            pixels[x, y] = (*mix("#172232", "#070a10", t), 255)
+            pixels[x, y] = (*mix(top, bottom, t), 255)
     plate.putalpha(mask)
 
     shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
@@ -126,10 +149,11 @@ def draw_plate(base: Image.Image) -> None:
 
     draw = ImageDraw.Draw(base, "RGBA")
     inset = max(1, round(size * 0.005))
+    rim_alpha = round(38 + (110 - 38) * lift)
     draw.rounded_rectangle(
         (inset, inset, size - 1 - inset, size - 1 - inset),
         radius=max(1, round(size * 0.22)),
-        outline=(122, 165, 234, 38),
+        outline=(122, 165, 234, rim_alpha),
         width=max(1, round(size * 0.004)),
     )
 
@@ -202,6 +226,19 @@ def draw_mark(base: Image.Image) -> None:
     draw_particle(base, mark_point(size, 0.525, 0.505), size * 0.142 * MARK_SCALE)
 
 
+def draw_mark_ramped(base: Image.Image, tube_mult: float, particle_mult: float) -> None:
+    """Small-size mark: spline + particle only. The highlight and endpoint-ring
+    strokes are sub-pixel below 48px, and the glow only muddies the downscale."""
+    size = base.size[0]
+    p0 = mark_point(size, 0.245, 0.605)
+    p1 = mark_point(size, 0.390, 0.365)
+    p2 = mark_point(size, 0.615, 0.665)
+    p3 = mark_point(size, 0.775, 0.375)
+    points = bezier(p0, p1, p2, p3)
+    draw_tube(base, points, max(2, round(size * 0.031 * MARK_SCALE * tube_mult)), (124, 185, 255, 250))
+    draw_particle(base, mark_point(size, 0.525, 0.505), size * 0.142 * MARK_SCALE * particle_mult)
+
+
 def scale_for(size: int) -> int:
     if size <= 64:
         return 6
@@ -214,9 +251,13 @@ def render(size: int, plate: bool) -> Image.Image:
     scale = scale_for(size)
     large = size * scale
     image = Image.new("RGBA", (large, large), (0, 0, 0, 0))
+    ramp = RAMP.get(size)
     if plate:
-        draw_plate(image)
-    draw_mark(image)
+        draw_plate(image, lift=ramp[2] if ramp else 0.0)
+    if ramp:
+        draw_mark_ramped(image, ramp[0], ramp[1])
+    else:
+        draw_mark(image)
     return image.resize((size, size), Image.Resampling.LANCZOS) if scale != 1 else image
 
 
@@ -291,23 +332,25 @@ def mark_svg(include_plate: bool) -> str:
 
 
 def preview_sheet(images: dict[int, Image.Image], mark: Image.Image) -> Image.Image:
-    sheet = Image.new("RGBA", (1460, 820), hex_rgb("#0b0d12") + (255,))
+    step = 224
+    width = 80 + step * len(SIZES)
+    sheet = Image.new("RGBA", (width, 820), hex_rgb("#0b0d12") + (255,))
     draw = ImageDraw.Draw(sheet)
-    draw.text((60, 46), "logo.ico - no-handle spline particle mark", fill="#eef1f6")
+    draw.text((60, 46), "logo.ico - no-handle spline particle mark (legibility ramp <= 40px)", fill="#eef1f6")
     for index, size in enumerate(SIZES):
-        x = 80 + index * 224
+        x = 80 + index * step
         icon = images[size].resize((160, 160), Image.Resampling.NEAREST)
         sheet.alpha_composite(icon, (x, 96))
         draw.text((x + 58, 284), f"{size}px", fill="#9aa1ad")
-    draw.line((60, 336, 1400, 336), fill="#222833", width=2)
-    for index, size in enumerate((16, 32, 48)):
+    draw.line((60, 336, width - 60, 336), fill="#222833", width=2)
+    for index, size in enumerate((16, 20, 24, 32)):
         x = 140 + index * 315
         icon = images[size].resize((224, 224), Image.Resampling.NEAREST)
         sheet.alpha_composite(icon, (x, 392))
-        draw.text((x + 82, 690), f"{size}px true pixels", fill="#cdd3dd")
-    sheet.alpha_composite(mark.resize((224, 224), Image.Resampling.LANCZOS), (1090, 392))
-    draw.text((1128, 690), "transparent mark", fill="#cdd3dd")
-    return sheet.resize((730, 410), Image.Resampling.LANCZOS)
+        draw.text((x + 60, 690), f"{size}px true pixels", fill="#cdd3dd")
+    sheet.alpha_composite(mark.resize((224, 224), Image.Resampling.LANCZOS), (width - 370, 392))
+    draw.text((width - 340, 690), "transparent mark", fill="#cdd3dd")
+    return sheet.resize((width // 2, 410), Image.Resampling.LANCZOS)
 
 
 def main() -> None:

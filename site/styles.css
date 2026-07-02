@@ -92,9 +92,11 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
 .btn-quiet:hover { color:var(--paper); }
 
 /* ---- Hero ---- */
-.hero { padding:5rem 1.5rem 4rem; }
+/* Vertical mass above the hero clip is budgeted so the clip's top third crests
+   the fold on a 1080p display — the visitor should see the toolbar AND the effect. */
+.hero { padding:3.5rem 1.5rem 4rem; }
 .hero h1 {
-  font-size:clamp(2.4rem, 6vw, 4.6rem); font-weight:600; letter-spacing:-.035em;
+  font-size:clamp(2.4rem, 6vw, 4rem); font-weight:600; letter-spacing:-.035em;
   line-height:1.02; color:var(--paper); margin:0 0 1.5rem;
 }
 .lede { font-size:clamp(1.05rem, 1.6vw, 1.3rem); max-width:46ch; color:var(--body); margin:0; }
@@ -120,10 +122,28 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
 .feature-copy { font-size:clamp(1rem, 1.4vw, 1.2rem); max-width:50ch; margin:0; }
 
 /* ---- Clip frames (light against the dark) ---- */
+/* Media breaks out of the 1080px text column: text stays narrow (readable measure),
+   clips widen to 1320px so the editor reads as the exhibit, not an illustration.
+   Centered via margins, NOT transform — the .reveal animation ends at transform:none
+   and would clobber a translateX(-50%). The 3rem gutter exceeds typical
+   scrollbar widths, so the 100vw-includes-scrollbar quirk doesn't cause
+   horizontal overflow. */
 .clip {
-  margin:2.5rem 0 0; border-radius:6px; overflow:hidden;
+  --clip-w:min(1320px, calc(100vw - 3rem));
+  width:var(--clip-w);
+  margin:2.5rem 0 0 calc((100% - var(--clip-w)) / 2);
+  border-radius:6px; overflow:hidden;
   background:radial-gradient(120% 120% at 50% 35%, var(--frame-1), var(--frame-2));
   border:1px solid var(--rule); position:relative;
+}
+/* The hero clip is the page's exhibit A: pull it up toward the fold and give it
+   gravitational weight — an azure under-glow (the one rationed accent) plus a
+   grounding shadow so it doesn't recede into the starfield. */
+.clip-hero {
+  margin-top:1.75rem;
+  box-shadow:
+    0 40px 90px -30px rgba(74,139,255,.18),
+    0 20px 50px rgba(0,0,0,.55);
 }
 /* Clips are shot 4:3 (1280×960) to reveal more of the curve editor. */
 .clip-video, .clip-img { display:block; width:100%; height:auto; aspect-ratio:4/3; object-fit:cover; }

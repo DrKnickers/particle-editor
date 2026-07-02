@@ -304,3 +304,10 @@ tests/max_verts.txt
 *.mp4
 frame_*.png
 /clips/
+
+# Icon generator byproducts: build.py writes its canonical outputs into the
+# repo (src/Resources/logo.ico, site/favicon.*, icon-src/*.svg/png) and
+# scratch/intermediate artifacts into out/; out/ and Python bytecode caches
+# are regenerable noise.
+src/Resources/icon-src/out/
+__pycache__/
