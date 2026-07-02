@@ -67,6 +67,8 @@ That is the whole verification recipe: it runs every automated layer in dependen
 
 Useful flags: `--list` (lane names), `--lane vitest,cpp-unit` (subset), `--allow-missing drive-smoke` (downgrade a missing prereq to a visible SKIP on machines without the game install), `--skip-build` (unsafe, for iterating). Individual lanes remain available directly: `pnpm --filter ./apps/editor test` / `test:web` / `test:native`, and `node scripts/run-native-unit-tests.mjs --filter <name>` for a single C++ test.
 
+A scheduled task `full-gate-nightly` also runs the whole gate on a fresh `master` every night (04:30 local, dev box) and files/refreshes a **`nightly gate failure`** GitHub issue when anything breaks — so a regression that slips past a PR gets surfaced within a day. Its prompt is [`docs/automation/full-gate-nightly-routine.md`](docs/automation/full-gate-nightly-routine.md); if you edit that doc, **re-register** the task (they don't auto-sync), same as the weekly a11y task above.
+
 ## Static analysis
 
 `cppcheck` runs over the C++ with no build or compile database
