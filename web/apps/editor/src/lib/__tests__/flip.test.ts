@@ -32,6 +32,12 @@ describe("pickFlipDuration", () => {
   it("record + settle → normal settle (matches the ~200ms chip despawn, not 800)", () => {
     expect(pickFlipDuration(true, false, d)).toBe(200);
   });
+  it("record + settle + opt-in recordSettleMs → the long record settle (consumer also stretches its chip)", () => {
+    expect(pickFlipDuration(true, false, { ...d, recordSettleMs: 800 })).toBe(800);
+  });
+  it("live editor ignores recordSettleMs", () => {
+    expect(pickFlipDuration(false, false, { ...d, recordSettleMs: 800 })).toBe(200);
+  });
   it("live editor + active drag → normal drag duration", () => {
     expect(pickFlipDuration(false, true, d)).toBe(120);
   });

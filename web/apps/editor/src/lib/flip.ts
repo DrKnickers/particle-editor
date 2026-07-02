@@ -34,14 +34,17 @@ export function computeFlipDeltas(
  *  so a normal-length transition finishes between grabs and the reorder is never
  *  caught mid-glide (rows snap in the clip). Only the ACTIVE-DRAG glide gets the
  *  long `recordDragMs` (empirically tuned to that capture cadence) so it spans
- *  many captures. The post-drop SETTLE keeps `settleMs` even under record — a long
- *  settle would out-last the ~200ms drag-chip despawn, so the chip would vanish
- *  while rows were still gliding; matching the chip is both correct and enough. */
+ *  many captures. The post-drop SETTLE defaults to `settleMs` even under record —
+ *  a long settle would out-last the ~200ms drag-chip despawn, so the chip would
+ *  vanish while rows were still gliding; matching the chip is both correct and
+ *  enough. A consumer that ALSO stretches its chip despawn under record can opt
+ *  the settle in via `recordSettleMs` (the same finishes-between-captures math
+ *  applies to the commit reflow — a 200ms settle snaps in the clip too). */
 export function pickFlipDuration(
   recording: boolean,
   dragging: boolean,
-  d: { dragMs: number; settleMs: number; recordDragMs: number },
+  d: { dragMs: number; settleMs: number; recordDragMs: number; recordSettleMs?: number },
 ): number {
-  if (recording && dragging) return d.recordDragMs;
+  if (recording) return dragging ? d.recordDragMs : (d.recordSettleMs ?? d.settleMs);
   return dragging ? d.dragMs : d.settleMs;
 }
