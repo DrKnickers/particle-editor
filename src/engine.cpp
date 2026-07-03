@@ -19,6 +19,7 @@
 #include "GizmoSizing.h"   // pure screen-uniform gizmo-handle formula
 #include "PlaneHandle.h"   // pure ground-plane handle math (RayPlaneOffset, HandleHit, etc.)
 #include "GizmoRibbon.h"   // aesthetics: camera-facing ribbon quad expansion
+#include "ParticleMipFilter.h" // #481: ALO_PARTICLE_MIPFILTER override parser (unit-tested)
 #include "RingFade.h"      // aesthetics: ring back-face alpha falloff
 #include "SelectionBoxStyle.h" // aesthetics: selection-box bracket/dash geometry
 #include "ReferenceObjectWorld.h" // pure reference-object world-matrix builder (scale+rot+trans)
@@ -186,6 +187,19 @@ void SetPreviewPaused(bool paused)
 bool IsPreviewPaused()
 {
     return g_previewPaused;
+}
+
+// #481 capture determinism: pause the preview clock at a FIXED sim time.
+// SetPreviewPaused(true) freezes at the current (process-age-dependent) wall
+// time, which leaves any m_time-consuming shader (scanline scroll, heat phase)
+// run-dependent even under seeded RNG + fixed frame stepping. Headless capture
+// paths freeze at a constant anchor instead so shader time is identical every
+// run. Unpause (SetPreviewPaused(false)) re-derives the wall offset from the
+// anchor, so this composes with the existing pause/step machinery.
+void FreezePreviewClockAt(TimeF anchor)
+{
+    g_previewPaused      = true;
+    g_previewPauseAnchor = anchor;
 }
 
 void StepPreviewFrames(int frames)
@@ -1088,10 +1102,66 @@ bool Engine::Render()
     m_pDevice->SetRenderState(D3DRS_ZENABLE,      TRUE);
     m_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 
+    // Particle mip sampling (#481): draw the non-heat particle pass with
+    // MIPFILTER = NONE on both texture stages. The Prim* particle shaders —
+    // unlike every mesh shader, which declares MIPFILTER=LINEAR in its
+    // sampler_state / FIXEDFUNCTION state block — declare NO sampler
+    // filtering at all, and D3D9's device default mip filter is NONE. With
+    // the editor's previous always-trilinear stages, a small on-screen
+    // sprite sampled the game texture's own box-filtered deep mips, whose
+    // alpha cutout is smeared away (P_ASTEROIDS mip 6 is a-0.4..0.75
+    // everywhere) and whose normals average to ndotl~0 — rendering
+    // bump-mode (blend 11) asteroids as near-black squares. Mip-0 sampling
+    // restores the rock-shaped cutouts that match the observed in-game
+    // look. NOTE this is the editor-side setting consistent with that
+    // observed result, not a probed copy of the game's literal sampler
+    // calls (instrumenting swfoc.exe is the open follow-up); the env
+    // override below exists to A/B against the old behavior at runtime:
+    //   ALO_PARTICLE_MIPFILTER=linear   -> pre-#481 trilinear
+    //   ALO_PARTICLE_MIPFILTER=bias:<f> -> trilinear with LOD bias <f>
+    // The bracket saves/restores all four touched sampler states so
+    // nothing leaks into later passes regardless of mode.
+    DWORD oldMip0 = 0, oldMip1 = 0, oldBias0 = 0, oldBias1 = 0;
+    m_pDevice->GetSamplerState(0, D3DSAMP_MIPFILTER,     &oldMip0);
+    m_pDevice->GetSamplerState(1, D3DSAMP_MIPFILTER,     &oldMip1);
+    m_pDevice->GetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, &oldBias0);
+    m_pDevice->GetSamplerState(1, D3DSAMP_MIPMAPLODBIAS, &oldBias1);
+    {
+        static int s_read = 0;
+        static ParticleMipFilterMode s_mip;
+        if (!s_read)
+        {
+            s_read = 1;
+            char b[32] = {0};
+            GetEnvironmentVariableA("ALO_PARTICLE_MIPFILTER", b, sizeof(b));
+            s_mip = ParseParticleMipFilter(b);
+            if (!s_mip.recognized)
+            {
+                printf("[particle-mip] ALO_PARTICLE_MIPFILTER='%s' not recognized "
+                       "(want 'linear' or 'bias:<f>') — using default mip-0 sampling\n", b);
+                fflush(stdout);
+            }
+        }
+        const DWORD mipFilter = (s_mip.mode == ParticleMipFilterMode::MODE_NONE)
+                              ? D3DTEXF_NONE : D3DTEXF_LINEAR;
+        m_pDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, mipFilter);
+        m_pDevice->SetSamplerState(1, D3DSAMP_MIPFILTER, mipFilter);
+        if (s_mip.mode == ParticleMipFilterMode::MODE_BIAS)
+        {
+            DWORD bias; memcpy(&bias, &s_mip.bias, sizeof(bias));
+            m_pDevice->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, bias);
+            m_pDevice->SetSamplerState(1, D3DSAMP_MIPMAPLODBIAS, bias);
+        }
+    }
+
     for (auto& instance : m_instances)
     {
         instance->RenderNormal(m_pDevice);
 	}
+    m_pDevice->SetSamplerState(0, D3DSAMP_MIPFILTER,     oldMip0);
+    m_pDevice->SetSamplerState(1, D3DSAMP_MIPFILTER,     oldMip1);
+    m_pDevice->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, oldBias0);
+    m_pDevice->SetSamplerState(1, D3DSAMP_MIPMAPLODBIAS, oldBias1);
     m_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
 
 	// Resolve the multisampled scene surface into the non-MS scene texture

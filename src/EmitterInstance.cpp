@@ -993,6 +993,42 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
             for (UINT i = 0; i < nPasses; i++)
             {
                 pEffect->BeginPass(i);
+                // [bump-alpha] Once-per-blend-mode dump of the alpha-deciding device
+                // state read INSIDE BeginPass — i.e. exactly what the .fxo pass set
+                // (or failed to set) for this draw. This is the probe that
+                // discriminates "shader pass carries its blend/alpha-test state"
+                // from "the draw inherits stale state" for issue #481. Same
+                // ALO_SHADER_DIAG gate as norm-dbg, so production runs stay silent.
+                if (NormDiagEnabled() && i == 0)
+                {
+                    static unsigned s_blendDumped = 0;
+                    const unsigned bit = 1u << (m_emitter.blendMode & 31);
+                    if (!(s_blendDumped & bit))
+                    {
+                        s_blendDumped |= bit;
+                        DWORD ab=0,sb=0,db=0,ate=0,aref=0,afunc=0,zw=0;
+                        pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE,&ab);
+                        pDevice->GetRenderState(D3DRS_SRCBLEND,        &sb);
+                        pDevice->GetRenderState(D3DRS_DESTBLEND,       &db);
+                        pDevice->GetRenderState(D3DRS_ALPHATESTENABLE, &ate);
+                        pDevice->GetRenderState(D3DRS_ALPHAREF,        &aref);
+                        pDevice->GetRenderState(D3DRS_ALPHAFUNC,       &afunc);
+                        pDevice->GetRenderState(D3DRS_ZWRITEENABLE,    &zw);
+                        // Sampler mip state read INSIDE BeginPass proves the engine's
+                        // particle-bracket setting (engine.cpp, #481) survives the
+                        // effect pass — the Prim* .fxo passes set no sampler state,
+                        // so these must report the bracket's values at the draw.
+                        DWORD mip0=0,mip1=0,bias0=0,bias1=0;
+                        pDevice->GetSamplerState(0, D3DSAMP_MIPFILTER,     &mip0);
+                        pDevice->GetSamplerState(1, D3DSAMP_MIPFILTER,     &mip1);
+                        pDevice->GetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, &bias0);
+                        pDevice->GetSamplerState(1, D3DSAMP_MIPMAPLODBIAS, &bias1);
+                        float fb0, fb1; memcpy(&fb0, &bias0, sizeof(fb0)); memcpy(&fb1, &bias1, sizeof(fb1));
+                        NormDbg("[bump-alpha] blend=%lu passes=%u AB=%lu SRC=%lu DST=%lu AT=%lu AREF=%lu AFUNC=%lu ZW=%lu MIP0=%lu MIP1=%lu BIAS0=%.2f BIAS1=%.2f\n",
+                                m_emitter.blendMode, nPasses, ab, sb, db, ate, aref, afunc, zw,
+                                mip0, mip1, fb0, fb1);
+                    }
+                }
                 if (dbg && i == 0)
                 {
                     IDirect3DBaseTexture9* bt = NULL; pDevice->GetTexture(1, &bt);

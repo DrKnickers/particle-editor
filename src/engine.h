@@ -96,6 +96,7 @@ TimeF GetTimeF();
 void  SetPreviewPaused(bool paused);
 bool  IsPreviewPaused();
 void  StepPreviewFrames(int frames);  // no-op when not paused
+void  FreezePreviewClockAt(TimeF anchor);  // pause at a FIXED sim time (headless capture determinism, #481)
 
 class ParticleSystemInstance;
 class EmitterInstance;

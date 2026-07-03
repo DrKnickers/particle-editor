@@ -4438,6 +4438,11 @@ int HostWindowImpl::Run(int nCmdShow)
             engine->BuildCatalogSync();
             engine->SetReferenceObject(WideToAnsi(m_captureRef));
             engine->SetReferenceObjectVisible(true);
+            // Deterministic sim/shader time for --capture-ref too: freeze the
+            // preview clock at a fixed anchor (stepped 1/60 per counted frame in
+            // the capture loop) so m_time-consuming mesh shaders render
+            // identically every run. Mirrors the --capture .alo path (#481).
+            FreezePreviewClockAt(0.0f);
             {
                 const ReferenceObjectStatus refStatus = engine->GetReferenceObjectStatus();
                 if (refStatus == ReferenceObjectStatus::Ok)
@@ -4579,6 +4584,23 @@ int HostWindowImpl::Run(int nCmdShow)
                     cfg.position       = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
                     cfg.maxLifetimeSec = 0.0f;  // no cap — emit through the capture
                     spawnerDriver->SetConfig(cfg);
+                    // Deterministic sim for the render-golden lane, same recipe as
+                    // the --record path (ClipRunner):
+                    //  (a) fixed PRNG seed — seeded HERE (after load/mod-scan)
+                    //      because expat re-seeds the CRT PRNG with entropy on the
+                    //      first XML_Parse per thread (GameObjectCatalog.cpp
+                    //      footgun), so an earlier seed doesn't survive;
+                    //  (b) frozen preview clock, stepped exactly 1/60 s per COUNTED
+                    //      frame in the capture loop below. Without the freeze the
+                    //      sim runs on wall time, and the layout gate holds the
+                    //      frame counter for a machine-load-dependent while — so
+                    //      the sim time in the captured frame varied run-to-run
+                    //      for any time-evolving fixture (bit-identical was only
+                    //      ever true for time-stable scenes). The spawner burst
+                    //      fires on the first Tick at the frozen anchor
+                    //      (SpawnerDriver::Tick rewrites dt<=0 to 1/60).
+                    srand(0x5EEDu);
+                    FreezePreviewClockAt(0.0f);   // fixed anchor: m_time-consuming shaders render identical every run
                     spawnerDriver->Trigger(particleSystem.get(), engine.get());
                 }
                 // Apply the requested skydome slot so a --capture run can render
@@ -5460,6 +5482,14 @@ int HostWindowImpl::Run(int nCmdShow)
                         fflush(stdout);
                     }
                 }
+                // Advance the frozen sim clock by exactly one 60 Hz frame per
+                // COUNTED frame (no-op unless the capture spawn path paused the
+                // preview clock above). Placed after the layout gate so gate-held
+                // pump frames render the frozen scene without advancing sim time —
+                // the captured frame is then always at sim time capturedFrames/60,
+                // independent of UI cold-start duration. Consumed by the NEXT
+                // RenderD3D9 at the top of the loop.
+                StepPreviewFrames(1);
                 if (++capturedFrames >= m_captureFrames)
                 {
                     // (1) engine RT — UNCHANGED: the engine's own pre-composite

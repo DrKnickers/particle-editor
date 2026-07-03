@@ -166,6 +166,7 @@ may live at the end of the file.
 
 ### Fixed
 
+- Bump-mapped particles (normal/depth-textured emitters — e.g. explosion debris rocks) no longer render as dark squares at small sizes; they keep their alpha-cutout rock shapes, matching the in-game look
 - A particle effect with custom link-group "exempt" settings now saves and reloads correctly instead of producing a file the editor couldn't reopen; malformed or oversized `.alo` files also no longer hang or exhaust memory when loading
 - Reference objects no longer show their muzzle flashes stuck on — the editor now hides muzzle-flash geometry to match the in-game look, where a unit's muzzle flash appears only while it fires
 - A reference object you positioned with the gizmo no longer slides back to the origin when you close the reference-object picker (or deselect it) — the placement is kept, and the picker's position fields now track the gizmo live instead of showing a stale value
