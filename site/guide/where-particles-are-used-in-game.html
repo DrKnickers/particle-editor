@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Where Particles Are Used In-Game — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html" class="active" aria-current="page">Where Particles Are Used In-Game</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Reference <span class="kicker-count">· 3 of 4</span></p>
+<h1 id="where-particles-are-used-in-game">Where Particles Are Used In-Game</h1>
+<p>Particles show up in many parts of Empire at War and Forces of Corruption: damage states, explosions, weapon fire, shield hits, ion effects, ability effects, projectiles, and model-attached proxies. Knowing the game context helps you decide what the effect should communicate.</p>
+<h2 id="hardpoint-damage">Hardpoint Damage</h2>
+<p>Hardpoints can reference damage particles that appear when the hardpoint is damaged. The XML tags often point at bones in the unit model, and geometry or particles parented to those bones are hidden until the hardpoint reaches the relevant damage state.</p>
+<p>The first two tutorials use <code>P_HP_IMPERIAL_DAMAGE.ALO</code> because hardpoint damage smoke is easy to recognize and easy to prove in a normal battle.</p>
+<p>For authoring, location and readability matter most. Damage smoke should feel attached to the damaged part of the ship without hiding too much of the model.</p>
+<h2 id="death-and-explosion-effects">Death and Explosion Effects</h2>
+<p>Units and hardpoints can reference death explosion particles. These effects usually combine flashes, smoke, debris-like motion, and sound. Large set-piece effects, such as an ion cannon-style blast, use the same authoring concerns at a bigger scale: the player should understand the source, direction, and result quickly.</p>
+<h2 id="weapon-fire-impacts-and-ion-effects">Weapon Fire, Impacts, and Ion Effects</h2>
+<p>Weapon particles can appear at muzzle flashes, projectile visuals, trails, shield hits, armor hits, ground impacts, and ion-style disruption effects. These can use similar authoring ideas, but orientation and surface context matter. Tutorial 4 uses a shield impact because it gives a clear reason to think about direction.</p>
+<h2 id="ability-and-state-effects">Ability and State Effects</h2>
+<p>Some ability and special-effect visuals use particles to communicate state instead of direct damage: activation, disablement, recharge, area of effect, or an ionized target. These effects need to read quickly because the player is usually trying to understand what a unit can do next.</p>
+<h2 id="projectiles-and-muzzle-flashes">Projectiles and Muzzle Flashes</h2>
+<p>Projectile visuals may be meshes, particles, or a mix of both. Some modders use a particle as the projectile model itself. A common layout uses one group of emitters for the projectile core and trail, and another group for a muzzle flash that does not inherit the projectile's travel speed.</p>
+<p>Tutorial 3 builds both ideas in one particle so you can practice the authoring pattern without opening a modeling tool.</p>
+<h2 id="model-attached-particles-and-proxies">Model-Attached Particles and Proxies</h2>
+<p>An Alamo model can include a proxy that points to a particle. This is a common way to attach effects to a model, including damage effects, engine or glow details, and custom muzzle flashes. For authoring, the attachment point is part of the effect: the same particle can read very differently depending on where the model places it.</p>
+<p>The editor tutorials mention proxies as game context, but they stay focused on particle authoring rather than model authoring.</p>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./file-structure.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">File Structure</span></a>
+        <a class="pager-next" href="./game-concepts-glossary.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Game Concepts Glossary</span></a>
+      </nav>
+    </main>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#hardpoint-damage">Hardpoint Damage</a></li>
+      <li class="lvl-2"><a href="#death-and-explosion-effects">Death and Explosion Effects</a></li>
+      <li class="lvl-2"><a href="#weapon-fire-impacts-and-ion-effects">Weapon Fire, Impacts, and Ion Effects</a></li>
+      <li class="lvl-2"><a href="#ability-and-state-effects">Ability and State Effects</a></li>
+      <li class="lvl-2"><a href="#projectiles-and-muzzle-flashes">Projectiles and Muzzle Flashes</a></li>
+      <li class="lvl-2"><a href="#model-attached-particles-and-proxies">Model-Attached Particles and Proxies</a></li>
+      </ul>
+    </nav>
+  </div>
+</body>
+</html>

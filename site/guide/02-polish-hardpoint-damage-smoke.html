@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2. Polish Hardpoint Damage Smoke — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="active" aria-current="page">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 2 of 4</span></p>
+<h1 id="tutorial-2-polish-hardpoint-damage-smoke">Tutorial 2: Polish Hardpoint Damage Smoke</h1>
+<p>This tutorial starts from the obvious green proof edit and turns it into believable dark hardpoint damage smoke with a subtle warm tint near the source.</p>
+<p>Keep the edit easy to understand while moving from proof-of-loading toward a usable game effect.</p>
+<!-- Media: tutorial-02-opening-result -->
+<h2 id="outcome">Outcome</h2>
+<p>By the end of this page, the hardpoint damage smoke will read as dark gray smoke with a little warm light near the root of the effect. This tutorial stays in the editor preview; Tutorial 1 already proved the override path in game.</p>
+<h2 id="what-this-teaches">What this teaches</h2>
+<ul>
+<li>Turning an exaggerated proof edit into a believable effect.</li>
+<li>Using color to imply heat and lighting.</li>
+<li>Using alpha to fade smoke out cleanly.</li>
+<li>Using scale to make smoke disperse over its lifetime.</li>
+<li>Judging an effect by first principles rather than exact numeric recipes.</li>
+</ul>
+<h2 id="before-you-start">Before You Start</h2>
+<p>Start with the <code>P_HP_IMPERIAL_DAMAGE.ALO</code> loose override from Tutorial 1:</p>
+<pre><code class="language-text">ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>Open it in the editor. The smoke may still be bright green from the proof edit.</p>
+<h2 id="1-return-the-smoke-to-a-dark-base-color">1. Return the Smoke to a Dark Base Color</h2>
+<p>Select the smoke emitter in the Emitter Tree. In the Property Panel or Curve Editor, bring the color back toward a dark gray.</p>
+<p>A useful target is not pure black. Smoke still needs to catch some light, especially near the damage source. Think in terms of a dark neutral base:</p>
+<pre><code class="language-text">Red:   low to medium-low
+Green: low to medium-low
+Blue:  low to medium-low
+Alpha: strong at birth, fading later
+</code></pre>
+<p>Watch the Preview Viewport while you adjust. If the smoke disappears, it is probably too dark, too transparent, or both.</p>
+<!-- Media: tutorial-02-color-warm-tint -->
+<h2 id="2-add-a-warm-tint-near-the-source">2. Add a Warm Tint Near the Source</h2>
+<p>Hardpoint damage usually implies heat, sparks, or fire somewhere inside the damaged part. Fake that lighting by making the early smoke slightly warmer, then letting it cool as it ages.</p>
+<p>In the Curve Editor, adjust the color near the start of the smoke lifetime so it has a small red or orange bias. Keep the later part of the lifetime closer to neutral gray.</p>
+<p>This does not need to become flame. A subtle warm tint is enough to connect the smoke to the damage source.</p>
+<h2 id="3-fade-the-smoke-with-alpha">3. Fade the Smoke with Alpha</h2>
+<p>Use the Alpha track to make the smoke fade out. A common shape is:</p>
+<pre><code class="language-text">Birth:      visible
+Middle:     still readable
+End:        transparent
+</code></pre>
+<p>The ending matters most. Smoke that fades out feels like it disperses. Smoke that simply stops feels like it was switched off.</p>
+<!-- Media: tutorial-02-alpha-fade -->
+<h2 id="4-let-the-smoke-grow-as-it-fades">4. Let the Smoke Grow as It Fades</h2>
+<p>Use the Scale track to make the smoke larger over its lifetime. This helps sell the idea that hot smoke is spreading away from the damage source.</p>
+<p>The shape does not need to be dramatic. A small-to-larger scale curve is enough:</p>
+<pre><code class="language-text">Birth:      compact
+Middle:     wider
+End:        widest, but fading out
+</code></pre>
+<p>Preview the color, alpha, and scale together. These controls work as a group: darker smoke may need more alpha, larger smoke may need a softer fade, and a warmer birth color may need a shorter visible duration.</p>
+<!-- Media: tutorial-02-scale-growth -->
+<h2 id="5-check-the-effect-at-gameplay-readability">5. Check the Effect at Gameplay Readability</h2>
+<p>Use the Preview Viewport to judge the effect as a whole. A good hardpoint damage smoke effect is visible enough to tell the player something is damaged, but not so loud that it becomes the most important thing on screen.</p>
+<p>Use these questions as a quick check:</p>
+<ul>
+<li>Does the effect still read as smoke?</li>
+<li>Does the warm tint feel like heat from the damage source?</li>
+<li>Does the smoke fade instead of popping away?</li>
+<li>Does the effect stay readable without covering too much of the ship?</li>
+</ul>
+<!-- Media: tutorial-02-final-preview -->
+<h2 id="takeaways">Takeaways</h2>
+<p>The exact values of a particle matter less than the result they create: color, alpha, and scale should work together to communicate heat, smoke, and fading motion. Change one idea at a time and preview the result in motion.</p>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./01-make-a-hardpoint-damage-effect-obvious.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">1. Make a Hardpoint Damage Effect Obvious</span></a>
+        <a class="pager-next" href="./03-build-a-laser-shot-and-muzzle-flash.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">3. Build a Laser Shot and Muzzle Flash</span></a>
+      </nav>
+    </main>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#outcome">Outcome</a></li>
+      <li class="lvl-2"><a href="#what-this-teaches">What this teaches</a></li>
+      <li class="lvl-2"><a href="#before-you-start">Before You Start</a></li>
+      <li class="lvl-2"><a href="#1-return-the-smoke-to-a-dark-base-color">1. Return the Smoke to a Dark Base Color</a></li>
+      <li class="lvl-2"><a href="#2-add-a-warm-tint-near-the-source">2. Add a Warm Tint Near the Source</a></li>
+      <li class="lvl-2"><a href="#3-fade-the-smoke-with-alpha">3. Fade the Smoke with Alpha</a></li>
+      <li class="lvl-2"><a href="#4-let-the-smoke-grow-as-it-fades">4. Let the Smoke Grow as It Fades</a></li>
+      <li class="lvl-2"><a href="#5-check-the-effect-at-gameplay-readability">5. Check the Effect at Gameplay Readability</a></li>
+      <li class="lvl-2"><a href="#takeaways">Takeaways</a></li>
+      </ul>
+    </nav>
+  </div>
+</body>
+</html>

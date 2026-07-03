@@ -9,10 +9,11 @@
 //                                           exit 1 if stale (guards against forgetting to rebuild)
 //
 // The Markdown renderer covers the subset a guide needs: ATX headings, paragraphs, unordered
-// and ordered lists (one nesting level), fenced code blocks, blockquotes, horizontal rules,
-// inline code / bold / italic / links / images, and raw block-level HTML passthrough (a line
-// starting with '<') for embeds. It is NOT full CommonMark — if the guide outgrows this,
-// swap in a real parser. All output links are relative, so the site works at any Pages subpath.
+// and ordered lists (one nesting level), pipe tables, fenced code blocks, blockquotes, horizontal
+// rules, inline code / bold / italic / links / images, and raw block-level HTML passthrough
+// (a line starting with '<') for embeds. It is NOT full CommonMark — if the guide outgrows this,
+// swap in a real parser. Internal page links are emitted relative (./slug.html) so the site works
+// at any Pages subpath; external http(s)/mailto and #anchor links pass through unchanged.
 
 import fs from "node:fs";
 import { join, resolve, dirname } from "node:path";
@@ -44,7 +45,40 @@ const NUL = String.fromCharCode(0);
 const isSafeHref = (h) =>
   /^(https?:|mailto:)/.test(h) || /^(#|\.{0,2}\/)/.test(h) || /^[\w][\w\-./]*(#[\w-]*)?$/.test(h);
 
-function renderInline(text) {
+function resolveGuideHref(href, { knownSlugs, pageAnchors, sourcePage }) {
+  if (/^(https?:|mailto:)/.test(href) || /^(#|\.{1,2}\/)/.test(href)) return href;
+
+  if (/^[a-z0-9-]+$/.test(href) && knownSlugs.has(href)) return `./${href}.html`;
+
+  const anchoredSlug = href.match(/^([a-z0-9-]+)#([\w-]*)$/);
+  if (anchoredSlug && knownSlugs.has(anchoredSlug[1])) {
+    // A cross-page anchor must exist as a heading id on the TARGET page — otherwise the
+    // link would 200 but silently land at the top (the guide.spec hash-strip blind spot).
+    if (!pageAnchors.get(anchoredSlug[1])?.has(anchoredSlug[2])) {
+      throw new Error(`Invalid guide link in ${sourcePage}: ${href} — no heading id "${anchoredSlug[2]}" on page "${anchoredSlug[1]}"`);
+    }
+    return `./${anchoredSlug[1]}.html#${anchoredSlug[2]}`;
+  }
+
+  throw new Error(`Invalid guide link in ${sourcePage}: ${href}`);
+}
+
+// Heading ids per page, pre-scanned so cross-page anchors validate at build time.
+// Mirrors the heading branch in renderMarkdown() exactly (trailing-# strip + slugify);
+// fenced code blocks are skipped so a commented "# heading" in code can't count.
+function headingIdsFor(md) {
+  const ids = new Set();
+  let inFence = false;
+  for (const line of md.replace(/\r\n?/g, "\n").split("\n")) {
+    if (/^```/.test(line)) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) ids.add(slugify(h[2].trim().replace(/\s+#+\s*$/, "")));
+  }
+  return ids;
+}
+
+function renderInline(text, context) {
   // Protect inline code spans first so emphasis/link regexes never touch their contents.
   const codes = [];
   text = text.replace(/`([^`]+)`/g, (_, c) => {
@@ -61,9 +95,12 @@ function renderInline(text) {
   );
   text = text.replace(
     /\[([^\]]+)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
-    (_, t, href, title) => isSafeHref(href)
-      ? `<a href="${escapeHtml(href)}"${title ? ` title="${title}"` : ""}>${t}</a>`
-      : t,
+    (_, t, href, title) => {
+      const resolvedHref = resolveGuideHref(href, context);
+      return isSafeHref(resolvedHref)
+        ? `<a href="${escapeHtml(resolvedHref)}"${title ? ` title="${title}"` : ""}>${t}</a>`
+        : t;
+    },
   );
   text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   text = text.replace(/__([^_]+)__/g, "<strong>$1</strong>");
@@ -76,7 +113,7 @@ function renderInline(text) {
 
 // Parse one list starting at `start`; returns { html, next }. Supports one nesting level
 // via indentation (a line indented >= baseIndent + 2 belongs to the previous item).
-function parseList(lines, start) {
+function parseList(lines, start, context) {
   const baseIndent = lines[start].match(/^(\s*)/)[1].length;
   const ordered = /^\s*\d+\.\s+/.test(lines[start]);
   const items = [];
@@ -89,7 +126,7 @@ function parseList(lines, start) {
     const indent = m[1].length;
     if (indent < baseIndent) break;
     if (indent >= baseIndent + 2 && items.length) {
-      const nested = parseList(lines, i);
+      const nested = parseList(lines, i, context);
       items[items.length - 1].children = nested.html;
       i = nested.next;
       continue;
@@ -99,25 +136,66 @@ function parseList(lines, start) {
   }
   const tag = ordered ? "ol" : "ul";
   const body = items
-    .map((it) => `<li>${renderInline(it.text)}${it.children ? "\n" + it.children : ""}</li>`)
+    .map((it) => `<li>${renderInline(it.text, context)}${it.children ? "\n" + it.children : ""}</li>`)
     .join("\n");
   return { html: `<${tag}>\n${body}\n</${tag}>`, next: i };
 }
 
+function parsePipeCells(line) {
+  const cells = line.trim().split("|").map((cell) => cell.trim());
+  if (cells[0] === "") cells.shift();
+  if (cells[cells.length - 1] === "") cells.pop();
+  return cells;
+}
+
+function isPipeTableStart(lines, start) {
+  if (start + 1 >= lines.length || !/^\s*\|/.test(lines[start])) return false;
+  const headers = parsePipeCells(lines[start]);
+  const separators = parsePipeCells(lines[start + 1]);
+  return headers.length > 0 &&
+    headers.length === separators.length &&
+    /^\s*\|[\s|:-]*$/.test(lines[start + 1]) &&
+    separators.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")));
+}
+
+function parsePipeTable(lines, start, context) {
+  const headers = parsePipeCells(lines[start]);
+  const rows = [];
+  let i = start + 2;
+  while (i < lines.length && /^\s*\|/.test(lines[i])) {
+    rows.push(parsePipeCells(lines[i]));
+    i++;
+  }
+
+  const head = headers.map((cell) => `<th>${renderInline(cell, context)}</th>`).join("");
+  const body = rows
+    .map((row) => `<tr>${row.map((cell) => `<td>${renderInline(cell, context)}</td>`).join("")}</tr>`)
+    .join("\n");
+  return {
+    html: `<table>\n<thead>\n<tr>${head}</tr>\n</thead>\n<tbody>\n${body ? `${body}\n` : ""}</tbody>\n</table>`,
+    next: i,
+  };
+}
+
 // Render Markdown to { html, toc }. `toc` collects h2/h3 for the "On this page" rail.
-function renderMarkdown(md) {
+function renderMarkdown(md, context) {
   const lines = md.replace(/\r\n?/g, "\n").split("\n");
   const out = [];
   const toc = [];
   let i = 0;
-  const isBreak = (l) =>
-    /^\s*$/.test(l) ||
-    /^(#{1,6})\s/.test(l) ||
-    /^```/.test(l) ||
-    /^>\s?/.test(l) ||
-    /^\s*</.test(l) ||
-    /^\s*(?:[-*+]|\d+\.)\s+/.test(l) ||
-    /^(-{3,}|\*{3,}|_{3,})\s*$/.test(l);
+  const isBreak = (idx) => {
+    const l = lines[idx];
+    return (
+      /^\s*$/.test(l) ||
+      /^(#{1,6})\s/.test(l) ||
+      /^```/.test(l) ||
+      /^>\s?/.test(l) ||
+      /^\s*</.test(l) ||
+      /^\s*(?:[-*+]|\d+\.)\s+/.test(l) ||
+      /^(-{3,}|\*{3,}|_{3,})\s*$/.test(l) ||
+      isPipeTableStart(lines, idx)
+    );
+  };
 
   while (i < lines.length) {
     const line = lines[i];
@@ -140,7 +218,7 @@ function renderMarkdown(md) {
       const text = h[2].trim().replace(/\s+#+\s*$/, "");
       const id = slugify(text);
       if (level === 2 || level === 3) toc.push({ id, text, level });
-      out.push(`<h${level} id="${id}">${renderInline(text)}</h${level}>`);
+      out.push(`<h${level} id="${id}">${renderInline(text, context)}</h${level}>`);
       i++;
       continue;
     }
@@ -150,7 +228,7 @@ function renderMarkdown(md) {
     if (/^>\s?/.test(line)) {
       const buf = [];
       while (i < lines.length && /^>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^>\s?/, "")); i++; }
-      out.push(`<blockquote>${renderInline(buf.join(" "))}</blockquote>`);
+      out.push(`<blockquote>${renderInline(buf.join(" "), context)}</blockquote>`);
       continue;
     }
 
@@ -162,16 +240,23 @@ function renderMarkdown(md) {
     }
 
     if (/^\s*(?:[-*+]|\d+\.)\s+/.test(line)) {
-      const lst = parseList(lines, i);
+      const lst = parseList(lines, i, context);
       out.push(lst.html);
       i = lst.next;
       continue;
     }
 
+    if (isPipeTableStart(lines, i)) {
+      const table = parsePipeTable(lines, i, context);
+      out.push(table.html);
+      i = table.next;
+      continue;
+    }
+
     // paragraph: gather until a block break
     const buf = [];
-    while (i < lines.length && !isBreak(lines[i])) { buf.push(lines[i]); i++; }
-    out.push(`<p>${renderInline(buf.join(" "))}</p>`);
+    while (i < lines.length && !isBreak(i)) { buf.push(lines[i]); i++; }
+    out.push(`<p>${renderInline(buf.join(" "), context)}</p>`);
   }
   return { html: out.join("\n"), toc };
 }
@@ -200,7 +285,27 @@ function tocHtml(toc) {
   return `    <nav class="toc" aria-label="On this page">\n      <p class="toc-label">On this page</p>\n      <ul>\n${items}\n      </ul>\n    </nav>`;
 }
 
-function pageHtml({ title, guideHref, sidebar, content, toc }) {
+// Wayfinding kicker above the h1 — "TUTORIALS · 3 OF 4" in the landing's section-label
+// voice (styling in guide.css; uppercase is CSS-applied).
+function kickerHtml(page) {
+  const count = page.sectionCount > 1
+    ? ` <span class="kicker-count">· ${page.sectionIndex} of ${page.sectionCount}</span>`
+    : "";
+  return `<p class="guide-kicker">${escapeHtml(page.section)}${count}</p>`;
+}
+
+// Prev/next reading path at the end of each page, from flattened nav order.
+function pagerHtml(prev, next) {
+  if (!prev && !next) return "";
+  const side = (page, cls, eyebrow) => page
+    ? `        <a class="${cls}" href="./${encodeURIComponent(page.slug)}.html"><span class="pager-eyebrow">${eyebrow}</span><span class="pager-title">${escapeHtml(page.title)}</span></a>`
+    : "";
+  return `      <nav class="guide-pager" aria-label="Guide pages">
+${[side(prev, "pager-prev", "← Previous"), side(next, "pager-next", "Next →")].filter(Boolean).join("\n")}
+      </nav>`;
+}
+
+function pageHtml({ title, guideHref, sidebar, kicker, content, pager, toc }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -266,8 +371,10 @@ ${sidebar}
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
+${kicker}
 ${content}
       </article>
+${pager}
     </main>
 ${toc}
   </div>
@@ -298,21 +405,38 @@ function redirectHtml(firstSlug) {
 
 function build() {
   const nav = JSON.parse(fs.readFileSync(join(SRC, "nav.json"), "utf8"));
-  const pages = nav.sections.flatMap((s) => s.pages);
+  // Flatten with section metadata so each page knows its kicker (section · N of M)
+  // and its prev/next neighbours in reading order.
+  const pages = nav.sections.flatMap((s) =>
+    s.pages.map((p, i) => ({ ...p, section: s.label, sectionIndex: i + 1, sectionCount: s.pages.length })));
   if (!pages.length) throw new Error("nav.json lists no pages");
+  const knownSlugs = new Set(pages.map((p) => p.slug));
 
   const guideHref = `./${pages[0].slug}.html`; // the "Guide" nav link targets the first page
-  const outputs = new Map(); // relative path under site/guide -> html
+
+  // Pre-read every page and index its heading ids, so links can validate cross-page
+  // anchors during the render pass below.
+  const sources = new Map(); // slug -> markdown
+  const pageAnchors = new Map(); // slug -> Set<heading id>
   for (const p of pages) {
     const mdPath = join(SRC, `${p.slug}.md`);
     if (!fs.existsSync(mdPath)) throw new Error(`nav.json references ${p.slug} but ${mdPath} is missing`);
     const md = fs.readFileSync(mdPath, "utf8");
-    const { html, toc } = renderMarkdown(md);
+    sources.set(p.slug, md);
+    pageAnchors.set(p.slug, headingIdsFor(md));
+  }
+
+  const outputs = new Map(); // relative path under site/guide -> html
+  for (const [idx, p] of pages.entries()) {
+    const md = sources.get(p.slug);
+    const { html, toc } = renderMarkdown(md, { knownSlugs, pageAnchors, sourcePage: p.slug });
     outputs.set(`${p.slug}.html`, pageHtml({
       title: p.title,
       guideHref,
       sidebar: sidebarHtml(nav, p.slug),
+      kicker: kickerHtml(p),
       content: html,
+      pager: pagerHtml(pages[idx - 1], pages[idx + 1]),
       toc: tocHtml(toc),
     }));
   }

@@ -19,10 +19,16 @@ node scripts/build-guide.mjs --check   # exit 1 if committed HTML is stale vs th
 ```
 
 Adding a page = drop `guide-src/<slug>.md`, list it in `guide-src/nav.json` (which drives
-the sidebar), rebuild, and **commit both the Markdown and the generated HTML** — deploys
-ship the committed HTML as-is; nothing builds it in CI (by design). Run `--check` before
-review to catch a forgotten rebuild. The renderer covers a documented Markdown subset
-(headings, lists, fenced code, blockquotes, links/images, raw HTML blocks — no tables).
+the sidebar, the per-page kicker, and the prev/next pager), rebuild, and **commit both the
+Markdown and the generated HTML** — deploys ship the committed HTML as-is; nothing builds
+it in CI (by design). Run `--check` before review to catch a forgotten rebuild or an
+orphaned page. The renderer covers a documented Markdown subset (headings, lists, fenced
+code, blockquotes, links/images, pipe tables, raw HTML blocks). Internal page links are
+written as bare lowercase page slugs (`[Setup](setup)`) — the build resolves them against
+`nav.json` and **fails on an unknown slug or a leftover wiki-style page ref** (external
+`http(s)`/`mailto`, `#anchors`, and explicit `./`/`../` paths pass through unchanged), so
+broken cross-references can't ship. Hidden `<!-- Media: … -->` comments in tutorial pages
+are anchors for the clip workstream — preserve them.
 
 ## Local preview
 

@@ -2,9 +2,29 @@
   "title": "Guide",
   "sections": [
     {
-      "label": "Getting Started",
+      "label": "Start Here",
       "pages": [
-        { "slug": "introduction", "title": "Introduction" }
+        { "slug": "home", "title": "Guide Home" },
+        { "slug": "setup", "title": "Setup" },
+        { "slug": "particle-authoring-primer", "title": "Particle Authoring Primer" }
+      ]
+    },
+    {
+      "label": "Tutorials",
+      "pages": [
+        { "slug": "01-make-a-hardpoint-damage-effect-obvious", "title": "1. Make a Hardpoint Damage Effect Obvious" },
+        { "slug": "02-polish-hardpoint-damage-smoke", "title": "2. Polish Hardpoint Damage Smoke" },
+        { "slug": "03-build-a-laser-shot-and-muzzle-flash", "title": "3. Build a Laser Shot and Muzzle Flash" },
+        { "slug": "04-recolor-and-orient-a-shield-impact", "title": "4. Recolor and Orient a Shield Impact" }
+      ]
+    },
+    {
+      "label": "Reference",
+      "pages": [
+        { "slug": "app-ui-quick-reference", "title": "App UI Quick Reference" },
+        { "slug": "file-structure", "title": "File Structure" },
+        { "slug": "where-particles-are-used-in-game", "title": "Where Particles Are Used In-Game" },
+        { "slug": "game-concepts-glossary", "title": "Game Concepts Glossary" }
       ]
     }
   ]

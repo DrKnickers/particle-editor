@@ -1,0 +1,69 @@
+# Game Concepts Glossary
+
+Terms used throughout the tutorials.
+
+## Particle `.alo`
+
+A particle system file. In these tutorials, `.alo` means an effect made from emitters, not a mesh
+model.
+
+## Emitter
+
+One part of a particle system. An emitter creates particles over time or in bursts.
+
+## Track
+
+A lifetime curve for a value such as Red, Green, Blue, Alpha, Scale, Index, or Rotation. Tracks make
+particles change from birth to death.
+
+## Texture or Atlas
+
+The image used by a particle. Some textures contain many frames in one image; the Index track chooses
+which frame to show.
+
+## Blend Mode
+
+How the particle mixes with the scene behind it. Additive blending is useful for glow and energy.
+Transparent blending is useful for smoke, dust, and debris-like effects.
+
+## MEG Archive
+
+A packed game archive. Stock particles are usually extracted from `Models.meg`.
+
+## Internal Path
+
+The path the game uses inside its archives, such as `DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO`.
+
+## Loose Override
+
+A file placed directly in a mod's `Data` folder using the same internal path as a stock file.
+
+## Modpath
+
+The launch argument that tells the game which mod folder to load.
+
+## Hardpoint
+
+A damageable part of a unit, often with its own visuals, particles, and death effect.
+
+## `Damage_Particles`
+
+A hardpoint XML reference used for damage-state particle effects.
+
+## `Death_Explosion_Particles`
+
+An XML reference used for the particle effect that plays when something dies or explodes.
+
+## `Particles.xml`
+
+A game XML file used by particle references. The tutorials mention it only when explaining how new
+separate particles become reachable by the game.
+
+## Alamo Proxy
+
+A reference inside an Alamo model that can point to another asset, including a particle effect.
+
+## `GameObjectFiles.xml`
+
+A file list that tells the game which object XML files to load. Mods may use this kind of list to
+add extra XML files and keep object definitions organized.

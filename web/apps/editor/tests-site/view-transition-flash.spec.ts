@@ -1,5 +1,5 @@
 // Detects the intermittent WHITE FLASH when navigating between the landing page ("/") and
-// the guide ("/guide/introduction.html") under cross-document View Transitions.
+// the guide ("/guide/home.html") under cross-document View Transitions.
 //
 // Why pixels, not computed styles: getComputedStyle can report the correct dark background
 // while Chromium still briefly paints a white canvas during a skipped/degraded transition.
@@ -116,8 +116,8 @@ test("cross-page view transition never paints a light frame", async ({ page, con
   const offenders: string[] = [];
   for (let i = 0; i < ITERATIONS; i++) {
     const toGuide = await sampleDuring(page, () => Promise.all([
-      page.waitForURL("**/guide/introduction.html"),
-      page.locator('header.topbar a[href="guide/introduction.html"]').click(),
+      page.waitForURL("**/guide/home.html"),
+      page.locator('header.topbar a[href="guide/home.html"]').click(),
     ]));
     const toHome = await sampleDuring(page, () => Promise.all([
       page.waitForURL("http://localhost:5175/"),

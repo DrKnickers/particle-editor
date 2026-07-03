@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>1. Make a Hardpoint Damage Effect Obvious — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html" class="active" aria-current="page">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 1 of 4</span></p>
+<h1 id="tutorial-1-make-a-hardpoint-damage-effect-obvious">Tutorial 1: Make a Hardpoint Damage Effect Obvious</h1>
+<p>This first tutorial makes one intentionally loud edit: it overrides the Star Destroyer hardpoint damage smoke particle and turns the smoke bright green.</p>
+<p>The goal is not to make a pretty effect yet. The goal is to prove that the editor can open a shipped particle, save a loose override into a tutorial mod, and produce a change that is obvious in game.</p>
+<!-- Media: tutorial-01-opening-result -->
+<h2 id="outcome">Outcome</h2>
+<p>By the end of this page, your tutorial mod will contain this loose override:</p>
+<pre><code class="language-text">Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>When a Star Destroyer hardpoint is damaged in a normal battle, its damage smoke should be bright green instead of the stock smoke color.</p>
+<h2 id="what-this-teaches">What this teaches</h2>
+<ul>
+<li>Opening an existing particle from a mod folder.</li>
+<li>Reading the Emitter Tree well enough to find the visible smoke emitter.</li>
+<li>Using the Property Panel and Curve Editor to make an obvious color change.</li>
+<li>Saving a loose override without changing the rest of the game files.</li>
+<li>Checking the result in game with one clear proof point.</li>
+</ul>
+<h2 id="before-you-start">Before You Start</h2>
+<p>Create a small tutorial mod folder using the normal game path layout:</p>
+<pre><code class="language-text">corruption\Mods\ParticleTutorial\Data\Art\Models\
+</code></pre>
+<p>Extract <code>P_HP_IMPERIAL_DAMAGE.ALO</code> from the game's <code>.meg</code> archives, then place a copy at:</p>
+<pre><code class="language-text">corruption\Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>The editor automatically locates the game install and mod folders. If you need to extract the shipped <code>.alo</code> first, use an external MEG archive tool such as <a href="https://modtools.petrolution.net/tools/MegEditor">MEG Editor</a>.</p>
+<h2 id="1-open-the-override-copy">1. Open the Override Copy</h2>
+<p>Open the copy in your tutorial mod folder:</p>
+<pre><code class="language-text">ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>Use the Preview Viewport to confirm the particle is alive. If the effect is hard to see, use the Spawner so the effect repeats while you inspect it.</p>
+<!-- Media: tutorial-01-open-override -->
+<h2 id="2-find-the-smoke-emitter">2. Find the Smoke Emitter</h2>
+<p>In the Emitter Tree, select the emitters one at a time and watch the Preview Viewport. For this lesson, look for the emitter that produces the broad damage smoke rather than small sparks or glow.</p>
+<p>The useful habit is simple: select one emitter, observe what it contributes, then move to the next. Particles become much easier to author when you can connect an emitter row to a visible part of the effect.</p>
+<h2 id="3-make-the-smoke-bright-green">3. Make the Smoke Bright Green</h2>
+<p>With the smoke emitter selected, use the Property Panel to find its color controls. If the color is animated over the particle lifetime, use the Curve Editor to edit the color keys.</p>
+<p>For this proof edit, make the smoke an unmistakable green:</p>
+<pre><code class="language-text">Red:   low
+Green: high
+Blue:  low
+Alpha: leave readable
+</code></pre>
+<p>This is deliberately exaggerated. Later tutorials will bring the effect back toward a believable game-art style.</p>
+<!-- Media: tutorial-01-green-color-edit -->
+<h2 id="4-save-the-override">4. Save the Override</h2>
+<p>Save the file back into the tutorial mod folder. The important part is that the file remains a loose override at the same game path:</p>
+<pre><code class="language-text">Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>Because this tutorial edits an existing shipped particle at the same path, the game can use it as an override. No new particle registration is needed for this lesson.</p>
+<!-- Media: tutorial-01-save-override -->
+<h3 id="note-names-filenames-and-new-particles">Note: Names, Filenames, and New Particles</h3>
+<p>The particle name and the particle filename are related, but they are not the same thing. If you want to make a genuinely separate particle instead of overriding an existing one, use <strong>Save As</strong> in the editor so the file and internal particle identity are saved intentionally.</p>
+<p>A separate particle also needs to be referenced somewhere the game can reach it. Common routes are game XML/<code>Particles.xml</code> entries or an Alamo proxy placed in an <code>.alo</code> model.</p>
+<h2 id="5-verify-the-result-in-game">5. Verify the Result In Game</h2>
+<p>Start a normal battle where a Star Destroyer can take hardpoint damage. Once a hardpoint begins using the damage particle, the smoke should be bright green. That obvious color is your proof that the loose override is loading.</p>
+<!-- Media: tutorial-01-ingame-proof -->
+<h2 id="takeaways">Takeaways</h2>
+<p>You made the smallest useful particle edit: one file, one visible emitter, one obvious change. That workflow is the base loop for the rest of the course:</p>
+<ul>
+<li>open or create a particle;</li>
+<li>identify what each emitter contributes;</li>
+<li>change one visual idea at a time;</li>
+<li>save into a mod path the game can load;</li>
+<li>verify the result in context.</li>
+</ul>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./particle-authoring-primer.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Particle Authoring Primer</span></a>
+        <a class="pager-next" href="./02-polish-hardpoint-damage-smoke.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">2. Polish Hardpoint Damage Smoke</span></a>
+      </nav>
+    </main>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#outcome">Outcome</a></li>
+      <li class="lvl-2"><a href="#what-this-teaches">What this teaches</a></li>
+      <li class="lvl-2"><a href="#before-you-start">Before You Start</a></li>
+      <li class="lvl-2"><a href="#1-open-the-override-copy">1. Open the Override Copy</a></li>
+      <li class="lvl-2"><a href="#2-find-the-smoke-emitter">2. Find the Smoke Emitter</a></li>
+      <li class="lvl-2"><a href="#3-make-the-smoke-bright-green">3. Make the Smoke Bright Green</a></li>
+      <li class="lvl-2"><a href="#4-save-the-override">4. Save the Override</a></li>
+      <li class="lvl-3"><a href="#note-names-filenames-and-new-particles">Note: Names, Filenames, and New Particles</a></li>
+      <li class="lvl-2"><a href="#5-verify-the-result-in-game">5. Verify the Result In Game</a></li>
+      <li class="lvl-2"><a href="#takeaways">Takeaways</a></li>
+      </ul>
+    </nav>
+  </div>
+</body>
+</html>
