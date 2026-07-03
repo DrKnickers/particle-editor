@@ -5130,10 +5130,13 @@ int HostWindowImpl::Run(int nCmdShow)
                     //      a zoomed crop (e.g. the F4 mod picker) stays sharp: the same
                     //      CSS layout (width/scale wide) rasterizes at higher device px.
                     //      MUST disable ShouldDetectMonitorScaleChanges first or WebView2's
-                    //      auto-detection reverts our value to the monitor DPI. Gate on
-                    //      scale>1: default (unscaled) clips keep the monitor-DPI scale set
-                    //      at window setup, so their behavior is unchanged on any display.
-                    if (tl.scale > 1.0 && webController)
+                    //      auto-detection reverts our value to the monitor DPI. Pinned for
+                    //      EVERY record run — scale:1 included — so a non-100% monitor
+                    //      can't skew authored coordinates/CSS layout (record output must
+                    //      be display-independent; wiki-media pipeline spec §1.7. This
+                    //      changes scale:1 behavior on non-100% displays: determinism
+                    //      wins). The batch preflight asserts the log line below.
+                    if (webController)
                     {
                         ComPtr<ICoreWebView2Controller3> ctrl3;
                         if (SUCCEEDED(webController.As(&ctrl3)) && ctrl3)

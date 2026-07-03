@@ -301,6 +301,7 @@ tests/max_verts.txt
 .serena/
 
 # --record clip outputs — NEVER tracked (host on a site-media release, embed by URL)
+out/wiki-media/
 *.mp4
 frame_*.png
 /clips/
@@ -311,4 +312,5 @@ frame_*.png
 # are regenerable noise.
 src/Resources/icon-src/out/
 __pycache__/
+scripts/wiki-media/config.local.json
 .gate.lock

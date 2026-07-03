@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "items": [
+    {
+      "id": "fixture-pass",
+      "kind": "clip",
+      "timeline": "scripts/wiki-media/__tests__/fixtures/fixture.timeline.json",
+      "output": "wiki/fixture-pass.mp4",
+      "poster": "wiki/fixture-pass.jpg",
+      "framing": "full-app",
+      "loop": "none",
+      "encode": {
+        "posterFrame": 0
+      },
+      "acceptance": [
+        "fixture acceptance"
+      ]
+    }
+  ]
+}

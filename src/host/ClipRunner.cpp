@@ -1,4 +1,5 @@
 #include "ClipRunner.h"
+#include "SavePathConfine.h"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -29,10 +30,70 @@ bool ClipRunner::DispatchKind(const std::string& kind, const nlohmann::json& par
         if (m_log) m_log("record: step failed: " + kind);
         m_exitCode = 3; return false;
     }
+    // Per-kind payload validation (wiki-media pipeline spec §1.4): these kinds
+    // report refusals/skips inside a TOP-LEVEL-OK envelope, which
+    // ClassifyResponse can't see. A refused add or a skipped property patch
+    // recorded as success would silently produce a wrong clip — abort loud.
+    const bool isAddKind = kind == "emitters/add-root"
+                        || kind == "emitters/add-lifetime-child"
+                        || kind == "emitters/add-death-child";
+    if (isAddKind || kind == "emitters/set-properties") {
+        nlohmann::json j;
+        try { j = nlohmann::json::parse(resp); } catch (...) { j = nlohmann::json::object(); }
+        const nlohmann::json data = j.contains("data") && j["data"].is_object()
+                                      ? j["data"] : nlohmann::json::object();
+        if (isAddKind) {
+            const long long newId = data.contains("newId") && data["newId"].is_number()
+                                      ? data["newId"].get<long long>() : -1;
+            if (newId < 0) {
+                if (m_log) m_log("record: dispatch: " + kind + " refused (newId="
+                                 + std::to_string(newId) + ")");
+                m_exitCode = 3; return false;
+            }
+        } else {
+            const nlohmann::json skipped = data.value("skipped", nlohmann::json::array());
+            if (skipped.is_array() && !skipped.empty()) {
+                if (m_log) m_log("record: dispatch: emitters/set-properties skipped fields: "
+                                 + skipped.dump());
+                m_exitCode = 3; return false;
+            }
+        }
+    }
+    return true;
+}
+
+// file/save confinement (spec §1.3): every save event needs an explicit path
+// (the dialog fallback would hang an unattended run) resolving under the
+// timeline's saveRoot. Runs in preflight so a mis-authored save aborts before
+// any frame is captured.
+bool ClipRunner::PreflightSaves() {
+    for (const auto& ev : m_tl.ats) {
+        if (ev.kind != "file/save") continue;
+        if (m_tl.saveRoot.empty()) {
+            if (m_log) m_log("record: preflight: file/save requires saveRoot");
+            m_exitCode = 3; return false;
+        }
+        std::string pathUtf8;
+        if (ev.params.is_object() && ev.params.contains("path") && ev.params["path"].is_string())
+            pathUtf8 = ev.params["path"].get<std::string>();
+        if (pathUtf8.empty()) {
+            if (m_log) m_log("record: preflight: file/save at " + std::to_string(ev.t)
+                             + "ms requires params.path (dialog fallback is not record-safe)");
+            m_exitCode = 3; return false;
+        }
+        std::string err;
+        if (!clip::ConfineSavePath(clip::ConfineUtf8ToWide(m_tl.saveRoot),
+                                   clip::ConfineUtf8ToWide(pathUtf8), nullptr, err)) {
+            if (m_log) m_log("record: preflight: file/save at " + std::to_string(ev.t)
+                             + "ms rejected: " + err);
+            m_exitCode = 3; return false;
+        }
+    }
     return true;
 }
 
 bool ClipRunner::Preflight() {
+    if (!PreflightSaves()) return false;
     if (m_tl.trackKeys.empty()) return true;
     // distinct emitter ids referenced by track-key tweens
     std::vector<int> ids;

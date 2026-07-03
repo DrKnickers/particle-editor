@@ -3787,21 +3787,34 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         // Helper macros — keep the per-field branch concise. Each
         // branch reads through `at()` only after a `contains()` check
         // so missing keys are a no-op.
+        //
+        // applied/skipped: the helpers classify each consumed key (type-ok →
+        // applied, wrong type → skipped + fallback); the post-walk below adds
+        // unconsumed keys (unknown field names) to skipped. The --record guard
+        // (ClipRunner, pipeline spec §1.5) aborts on non-empty skipped so a
+        // typo'd tutorial patch can't record a silent no-op as success. Live UI
+        // callers ignore these extra response fields.
+        json appliedArr = json::array();
+        json skippedArr = json::array();
         auto getBool = [&](const char* key, bool fallback) -> bool {
-            if (patch.contains(key) && patch.at(key).is_boolean()) return patch.at(key).get<bool>();
+            if (patch.contains(key) && patch.at(key).is_boolean()) { appliedArr.push_back(key); return patch.at(key).get<bool>(); }
+            skippedArr.push_back(key);
             return fallback;
         };
         auto getFloat = [&](const char* key, float fallback) -> float {
-            if (patch.contains(key) && patch.at(key).is_number()) return patch.at(key).get<float>();
+            if (patch.contains(key) && patch.at(key).is_number()) { appliedArr.push_back(key); return patch.at(key).get<float>(); }
+            skippedArr.push_back(key);
             return fallback;
         };
         auto getInt = [&](const char* key, int fallback) -> int {
-            if (patch.contains(key) && patch.at(key).is_number_integer()) return patch.at(key).get<int>();
-            if (patch.contains(key) && patch.at(key).is_number()) return static_cast<int>(patch.at(key).get<double>());
+            if (patch.contains(key) && patch.at(key).is_number_integer()) { appliedArr.push_back(key); return patch.at(key).get<int>(); }
+            if (patch.contains(key) && patch.at(key).is_number()) { appliedArr.push_back(key); return static_cast<int>(patch.at(key).get<double>()); }
+            skippedArr.push_back(key);
             return fallback;
         };
         auto getString = [&](const char* key, const std::string& fallback) -> std::string {
-            if (patch.contains(key) && patch.at(key).is_string()) return patch.at(key).get<std::string>();
+            if (patch.contains(key) && patch.at(key).is_string()) { appliedArr.push_back(key); return patch.at(key).get<std::string>(); }
+            skippedArr.push_back(key);
             return fallback;
         };
 
@@ -3833,13 +3846,17 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (patch.contains("textureSize"))             emit->textureSize = static_cast<unsigned long>(getInt("textureSize", static_cast<int>(emit->textureSize)));
         if (patch.contains("nTriangles"))              emit->nTriangles = static_cast<unsigned long>(getInt("nTriangles", static_cast<int>(emit->nTriangles)));
         if (patch.contains("doColorAddGrayscale"))     emit->doColorAddGrayscale = getBool("doColorAddGrayscale", emit->doColorAddGrayscale);
-        if (patch.contains("randomColors") && patch.at("randomColors").is_array() && patch.at("randomColors").size() == 4)
+        if (patch.contains("randomColors"))
         {
-            for (int i = 0; i < 4; i++)
-            {
-                if (patch.at("randomColors")[i].is_number())
-                    emit->randomColors[i] = patch.at("randomColors")[i].get<float>();
-            }
+            const json& rc = patch.at("randomColors");
+            // All-or-nothing: apply only if it's a 4-array of numbers. A wrong
+            // shape or a non-numeric element leaves the field untouched and is
+            // reported in `skipped` so the --record validator aborts rather than
+            // recording a partial/garbage apply as success.
+            bool ok = rc.is_array() && rc.size() == 4;
+            for (size_t i = 0; ok && i < 4; i++) ok = rc[i].is_number();
+            if (ok) { for (int i = 0; i < 4; i++) emit->randomColors[i] = rc[i].get<float>(); appliedArr.push_back("randomColors"); }
+            else    { skippedArr.push_back("randomColors"); }
         }
         if (patch.contains("hasTail"))                 emit->hasTail = getBool("hasTail", emit->hasTail);
         if (patch.contains("tailSize"))                emit->tailSize = getFloat("tailSize", emit->tailSize);
@@ -3849,13 +3866,13 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (patch.contains("affectedByWind"))          emit->affectedByWind = getBool("affectedByWind", emit->affectedByWind);
 
         // ── Physics ────────────────────────────────────────────────
-        if (patch.contains("acceleration") && patch.at("acceleration").is_array() && patch.at("acceleration").size() == 3)
+        if (patch.contains("acceleration"))
         {
-            for (int i = 0; i < 3; i++)
-            {
-                if (patch.at("acceleration")[i].is_number())
-                    emit->acceleration[i] = patch.at("acceleration")[i].get<float>();
-            }
+            const json& ac = patch.at("acceleration");
+            bool ok = ac.is_array() && ac.size() == 3;
+            for (size_t i = 0; ok && i < 3; i++) ok = ac[i].is_number();
+            if (ok) { for (int i = 0; i < 3; i++) emit->acceleration[i] = ac[i].get<float>(); appliedArr.push_back("acceleration"); }
+            else    { skippedArr.push_back("acceleration"); }
         }
         if (patch.contains("gravity"))                 emit->gravity = getFloat("gravity", emit->gravity);
         if (patch.contains("inwardSpeed"))             emit->inwardSpeed = getFloat("inwardSpeed", emit->inwardSpeed);
@@ -3873,6 +3890,7 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         // ── Groups (NUM_GROUPS=3) ──────────────────────────────────
         if (patch.contains("groups") && patch.at("groups").is_array())
         {
+            appliedArr.push_back("groups");
             const json& gs = patch.at("groups");
             const int n = std::min<int>(ParticleSystem::NUM_GROUPS,
                                         static_cast<int>(gs.size()));
@@ -3917,7 +3935,17 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         }
 
         propagateLinkGroup(emit); // F4: keep link-group siblings in sync
-        sendOk(json::object());
+
+        // Any patch key no branch consumed is an unknown field name → skipped.
+        for (auto it = patch.begin(); it != patch.end(); ++it)
+        {
+            bool seen = false;
+            for (const auto& k : appliedArr) if (k.get<std::string>() == it.key()) { seen = true; break; }
+            if (!seen)
+                for (const auto& k : skippedArr) if (k.get<std::string>() == it.key()) { seen = true; break; }
+            if (!seen) skippedArr.push_back(it.key());
+        }
+        sendOk(json{{"applied", appliedArr}, {"skipped", skippedArr}});
         markDirty();
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -4454,15 +4482,20 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         else
         {
             int targetIdx = trackNameToIndex(lockToName);
-            // Reject invalid targets (must be 0..3 AND earlier than us)
-            // by falling back to self-pointer = unlock.
+            // A non-null lockTo must resolve to a valid RGBA channel EARLIER than
+            // us. Previously an invalid name silently fell back to unlock and still
+            // returned OK — harmless for the React UI (its dropdown only offers
+            // valid targets) but a silent-wrong-state trap for --record, where a
+            // typo'd channel would record as success. Reject it so the record
+            // dispatch aborts (ClassifyResponse sees the error).
             if (targetIdx >= 0 && targetIdx < 4 && targetIdx < channelIdx)
             {
                 desired = &target->trackContents[targetIdx];
             }
             else
             {
-                desired = &target->trackContents[channelIdx];
+                sendErr("invalid lockTo channel (must be an earlier RGBA channel)");
+                return res;
             }
         }
 

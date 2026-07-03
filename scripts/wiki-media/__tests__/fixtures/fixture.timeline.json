@@ -1,0 +1,23 @@
+{
+  "fps": 60,
+  "width": 1280,
+  "height": 960,
+  "durationMs": 1000,
+  "out": "scripts/wiki-media/__tests__/.tmp/fixture-frames",
+  "tracks": [
+    {
+      "at": 0,
+      "kind": "engine/set/reference-object",
+      "params": {
+        "name": ""
+      }
+    },
+    {
+      "at": 30,
+      "kind": "engine/set/reference-object-visible",
+      "params": {
+        "visible": false
+      }
+    }
+  ]
+}

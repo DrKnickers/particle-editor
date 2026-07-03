@@ -88,7 +88,15 @@ int main()
         CHECK(IsAllowedRecordKind("emitters/select"));
         CHECK(!IsAllowedRecordKind("engine/set/paused"));
         CHECK(!IsAllowedRecordKind("engine/action/step-frames"));
-        CHECK(!IsAllowedRecordKind("file/save"));
+        // Wiki-media tutorial kinds are allowlisted (each guarded at dispatch/preflight,
+        // not by the allowlist): file/save (saveRoot confinement), the add-* family
+        // (newId<0 abort), set-properties (skipped-fields abort), set-track-lock.
+        CHECK(IsAllowedRecordKind("file/save"));
+        CHECK(IsAllowedRecordKind("emitters/add-root"));
+        CHECK(IsAllowedRecordKind("emitters/add-lifetime-child"));
+        CHECK(IsAllowedRecordKind("emitters/add-death-child"));
+        CHECK(IsAllowedRecordKind("emitters/set-properties"));
+        CHECK(IsAllowedRecordKind("emitters/set-track-lock"));
     }
     // Happy-path parse with each track shape + open sugar.
     {
@@ -197,6 +205,7 @@ int main()
     // Validation rejections — each must return false with a non-empty err.
     {
         auto rejects = [](const char* js) { Timeline t; std::string e; return !ParseTimeline(js, t, e) && !e.empty(); };
+        auto accepts = [](const char* js) { Timeline t; std::string e; return ParseTimeline(js, t, e) && e.empty(); };
         CHECK(rejects("not json"));
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080})"));                 // missing durationMs/out/tracks
         CHECK(rejects(R"({"fps":24,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[]})")); // fps !| 60
@@ -215,7 +224,9 @@ int main()
         CHECK(rejects(R"({"fps":30,"width":1920,"height":1080,"durationMs":1000,"out":"C:\\x","tracks":[]})")); // out absolute (drive)
         CHECK(rejects(R"({"fps":30,"width":1920,"height":1080,"durationMs":1000,"out":"/x","tracks":[]})"));    // out leading slash
         CHECK(rejects(R"({"fps":30,"width":1920,"height":1080,"durationMs":1000,"out":"a/../b","tracks":[]})")); // out parent-traversal
-        CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"at":0,"kind":"file/save"}]})"));
+        // file/save is now allowlisted, so it PARSES (its saveRoot/path confinement is a
+        // preflight concern — ClipRunner::PreflightSaves, exit 3 — not a parse-shape check).
+        CHECK(accepts(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"at":0,"kind":"file/save"}]})"));
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"at":0,"kind":"engine/set/paused","params":{"paused":true}}]})"));
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"at":0,"kind":"ui/cursor"}]})"));
         CHECK(rejects(R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[{"at":0,"kind":"file/open","params":{}}]})"));

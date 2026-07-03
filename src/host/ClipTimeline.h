@@ -63,6 +63,8 @@ struct Timeline {
     double         openSettleMs = kDefaultSettleMs;
     bool           loop = false;
     std::string    openPath;                  // from `open` sugar (optional)
+    std::string    saveRoot;                  // confinement root for file/save targets (optional;
+                                              // REQUIRED by preflight if any file/save event exists)
     std::vector<Tween>         tweens;
     std::vector<TrackKeyTween> trackKeys;
     std::vector<CursorKey>     cursor;            // sorted by t
@@ -230,6 +232,29 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     if (kind == "ui/pose-drag")     return true;  // pose a frozen reorder drag (chip+gap) for a clip still
     if (kind == "ui/set-picker-search") return true;  // drive a picker's search box (the cursor can't type)
     if (kind == "ui/picker-collapse")   return true;  // force-collapse picker sections (e.g. Heroes) under a search
+    // Wiki-media tutorial kinds (pipeline spec §1). Each is guarded, not trusted:
+    // file/save is dialog-free ONLY with an explicit params.path, and record
+    // additionally confines the target under the timeline's `saveRoot`
+    // (ClipRunner::Preflight, SavePathConfine.h) — a pathless save would pop
+    // GetSaveFileNameW and hang the unattended run, so preflight rejects it.
+    if (kind == "file/save") return true;
+    // The add-* handlers are direct engine wrappers (no dialog). Their refusal
+    // shape is sendOk({newId:-1}) — top-level success — so ClipRunner validates
+    // the response payload and aborts (exit 3) on newId < 0.
+    if (kind == "emitters/add-root")           return true;
+    if (kind == "emitters/add-lifetime-child") return true;
+    if (kind == "emitters/add-death-child")    return true;
+    // set-properties silently skips unknown/mistyped patch fields; the handler
+    // reports {applied,skipped} and ClipRunner aborts on a non-empty skipped so
+    // a typo'd tutorial patch can't record a no-op as success.
+    if (kind == "emitters/set-properties")     return true;
+    // set-track-lock re-points a channel's track alias (the curve editor's
+    // "Lock to" control). REQUIRED before per-channel color keys on a NEW
+    // emitter: the default ctor aliases G/B/A onto Red (ParticleSystem.cpp
+    // "Point Green, Blue and Alpha tracks to Red"), so without an unlock every
+    // per-channel set-track-key funnels into one shared track (renders white).
+    // Dialog-free; bad id/channel returns sendErr (envelope-checked).
+    if (kind == "emitters/set-track-lock")     return true;
     if (!drive::IsAllowedBridgeKind(kind)) return false;
     if (kind == "engine/set/paused") return false;
     return true;
@@ -302,13 +327,16 @@ inline bool ParseCursorTarget(const nlohmann::json& value, CursorTarget& out, st
 }
 
 // Expand ${TOKEN}s across a parsed timeline's PATH-BEARING fields only: the `open`
-// sugar, an explicit file/open event's `path`, and each mods/set-layers `paths`
-// entry. Deliberately NOT every param string — a value like a ui/set-picker-search
-// `text` is arbitrary user text that could legitimately contain "${...}" and must
-// not be treated as a token (which would wrongly fail-loud). A timeline with no
-// ${...} in these fields is unchanged even when `tokens` is empty; a ${...} with no
-// matching token FAILS LOUD (err set, false returned) rather than resolving to a
-// broken path. Separate from ParseTimeline so both stay independently testable.
+// sugar, the `saveRoot` confinement root, an explicit file/open OR file/save event's
+// `path`, and each mods/set-layers `paths` entry. Deliberately NOT every param string
+// — a value like a ui/set-picker-search `text` is arbitrary user text that could
+// legitimately contain "${...}" and must not be treated as a token (which would
+// wrongly fail-loud). A timeline with no ${...} in these fields is unchanged even when
+// `tokens` is empty; a ${...} with no matching token FAILS LOUD (err set, false
+// returned) rather than resolving to a broken path. Save fields are expanded here so
+// the preflight save-confinement check (ClipRunner::PreflightSaves) sees the RESOLVED
+// paths, not the literal ${...} — otherwise a tokenized save always fails confinement.
+// Separate from ParseTimeline so both stay independently testable.
 inline bool ExpandTimelineTokens(Timeline& tl,
                                  const std::map<std::string, std::string>& tokens,
                                  std::string& err) {
@@ -318,9 +346,15 @@ inline bool ExpandTimelineTokens(Timeline& tl,
         if (!e.empty()) { err = "open: " + e; return false; }
         tl.openPath = v;
     }
+    if (!tl.saveRoot.empty()) {
+        std::string e;
+        std::string v = ExpandPathTokens(tl.saveRoot, tokens, e);
+        if (!e.empty()) { err = "saveRoot: " + e; return false; }
+        tl.saveRoot = v;
+    }
     for (auto& ev : tl.ats) {
         std::string e;
-        if (ev.kind == "file/open") {
+        if (ev.kind == "file/open" || ev.kind == "file/save") {
             auto it = ev.params.find("path");
             if (it != ev.params.end() && it->is_string()) {
                 std::string v = ExpandPathTokens(it->get<std::string>(), tokens, e);
@@ -408,6 +442,16 @@ inline bool ParseTimeline(const std::string& json, Timeline& out, std::string& e
         if (!j["open"].is_string() || j["open"].get<std::string>().empty()) { err = "'open' must be a non-empty path"; return false; }
         if (hasExplicitOpen) { err = "'open' sugar and an explicit file/open event are mutually exclusive"; return false; }
         out.openPath = j["open"].get<std::string>();
+    }
+
+    // saveRoot: shape-only here (non-empty string). Whether it is present when a
+    // file/save event needs it — and whether each save target resolves under it —
+    // is a PREFLIGHT concern (exit 3), keeping parse errors purely structural.
+    if (j.contains("saveRoot")) {
+        if (!j["saveRoot"].is_string() || j["saveRoot"].get<std::string>().empty()) {
+            err = "'saveRoot' must be a non-empty string"; return false;
+        }
+        out.saveRoot = j["saveRoot"].get<std::string>();
     }
 
     for (const auto& tr : j["tracks"]) {

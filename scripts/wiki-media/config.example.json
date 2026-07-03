@@ -1,0 +1,6 @@
+{
+  "exe": "x64/Release/ParticleEditor.exe",
+  "focMods": "<path> Wars Empire at War/corruption/Mods",
+  "extraction": "<path>",
+  "outDir": "out/wiki-media"
+}

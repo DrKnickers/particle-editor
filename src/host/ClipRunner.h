@@ -73,7 +73,8 @@ private:
     nlohmann::json m_sidecar = nlohmann::json::array();  // verify sidecar (target run only)
 
     bool m_preflighted = false;
-    bool Preflight();   // verify every track-key target exists; false + exit 3 on miss
+    bool Preflight();       // track-key targets exist + save confinement; false + exit 3 on miss
+    bool PreflightSaves();  // file/save path+saveRoot confinement (SavePathConfine.h)
 
     bool DispatchKind(const std::string& kind, const nlohmann::json& params);  // false + exit 3 on fail
 };
