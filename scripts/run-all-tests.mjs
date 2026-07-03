@@ -15,7 +15,7 @@
 //   msbuild-debug     x64 Debug ParticleEditor.sln (test:native launches this exe)
 //   cpp-unit-exe      needs-exe native tests against the FRESH Debug exe (explicit
 //                     path — bare test_resource_strings would prefer stale Release)
-//   playwright-native 41 specs vs the real app over CDP (pnpm test:native)
+//   playwright-native all registered specs vs the real app over CDP (pnpm test:native)
 //   msbuild-release   x64 Release (drive-smoke hard-requires the Release exe)
 //   render-goldens    deterministic --capture scenes vs checked-in goldens
 //                     (ffmpeg SSIM ≥ 0.9995 — see scripts/render-goldens.mjs)

@@ -26,5 +26,18 @@ export default defineConfig({
     exclude: ["node_modules/**", "dist/**", "tests/**"],
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
+    // Report-only coverage (no thresholds yet — see tasks/todo.md follow-ups).
+    // Run via `pnpm test:coverage`; plain `pnpm test` skips instrumentation.
+    // Scoped to src/ so Playwright helpers and node scripts don't dilute the
+    // numbers. Only true test-support files are excluded — shipped-but-
+    // jsdom-unreachable code (bridge/test-host.ts, PrimitivesGallery) stays
+    // IN so the report never overstates coverage of production code; their
+    // real coverage lives in the native Playwright lane.
+    coverage: {
+      provider: "v8",
+      include: ["src/**"],
+      exclude: ["src/**/__tests__/**", "src/test-setup.ts"],
+      reporter: ["text-summary", "html", "json-summary"],
+    },
   },
 });

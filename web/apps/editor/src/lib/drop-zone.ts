@@ -20,11 +20,11 @@ export type DropZone = "above" | "onto" | "below";
 
 /** Compute drop zone from a y-coordinate relative to a row's top edge.
  *  Upper third = "above" (reorder above), middle third = "onto"
- *  (reparent under), lower third = "below" (reorder below). The bounds
- *  use strict-less comparisons so the middle band is exclusive at both
- *  ends — matches what the user sees because the insertion-line
- *  rendering is most discoverable when the click happens deep inside
- *  the row, not on the literal pixel-edge between bands. */
+ *  (reparent under), lower third = "below" (reorder below). Boundary
+ *  semantics (pinned by drop-zone.test.ts): "above" is y < third
+ *  (strict, so y === third lands "onto"), "below" is
+ *  y >= rowHeight - third (inclusive) — the middle band is inclusive
+ *  at its top edge and exclusive at its bottom edge. */
 export function computeDropZone(yWithinRow: number, rowHeight: number): DropZone {
   if (rowHeight <= 0) return "onto";
   const third = rowHeight / 3;

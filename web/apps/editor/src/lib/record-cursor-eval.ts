@@ -135,8 +135,10 @@ export function evalRecordCursor(keys: readonly RecordCursorKey[], t: number): E
     }
     if (br.ok) {
       // The due element vanished (e.g. its channel defocused as we leave it) but
-      // the destination is ready — head there. `resolved` carries a's ok:false so
-      // the host fails ONLY if this is a press frame.
+      // the destination is ready — head there. `resolved` reports the
+      // DESTINATION entry (computed unconditionally above); a's failure is
+      // surfaced only via this frame's top-level ok:false, never per-entry.
+      // (Pinned by record-cursor-eval.test.ts.)
       return { x: br.x, y: br.y, ok: false, vis: b.vis, press: b.press, resolved };
     }
     // Neither end resolvable mid-transit — hide the cursor this frame.

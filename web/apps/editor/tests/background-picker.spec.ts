@@ -123,21 +123,30 @@ test("engine/set/skydome-custom-path persists across snapshots (slot 9)", async 
   expect(after).toBe("C:/fake/test.dds");
 });
 
-test("undo/perform reports applied:false when no captures have been recorded", async () => {
-  // Task 2.4 caveat: UndoStack is constructed in HostWindow and reachable
-  // through the bridge, but engine setters are not yet wrapped in
-  // Capture() calls. Until Phase 3 emitter work lands, every undo
-  // request resolves with `applied:false`. This spec asserts the
-  // surface is wired end-to-end without claiming functional undo of
-  // engine state.
+test("undo/perform dispatches end-to-end and resolves with a boolean `applied`", async () => {
+  // This spec asserts only that the undo/perform handler is wired
+  // end-to-end through the bridge (its original Task 2.4 intent).
+  // It originally asserted `applied:false` on the premise that no
+  // captures existed yet — that premise is stale: undo capture landed
+  // with the emitter work (functional coverage lives in
+  // undo-navigation.spec.ts), and earlier specs in the shared-host
+  // run legitimately seed captures (e.g. atlas-picker.spec.ts commits
+  // track-key edits), so `applied` is order-dependent by design.
   const r = await page.evaluate(async () => {
     const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
       .bridge;
     if (!b) throw new Error("window.bridge not attached");
-    return b.request({
+    const undone = (await b.request({
       kind: "undo/perform",
       params: { direction: "undo" },
-    });
+    })) as { applied?: unknown };
+    // Keep the shared host state-neutral: if the undo applied (an
+    // earlier spec's capture), redo it so later specs see the state
+    // those specs left behind.
+    if (undone.applied === true) {
+      await b.request({ kind: "undo/perform", params: { direction: "redo" } });
+    }
+    return undone;
   });
-  expect(r).toMatchObject({ applied: false });
+  expect(typeof (r as { applied?: unknown }).applied).toBe("boolean");
 });

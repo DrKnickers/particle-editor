@@ -205,6 +205,16 @@ async function main() {
       "tests/emitter-keyboard.spec.ts",
       "tests/track-editor.spec.ts",
       "tests/property-tabs.spec.ts",
+      // PreferencesDialog host round-trips (Edit → Preferences…): MSAA
+      // level via engine/query/msaa-levels `current`, plus toggle
+      // persistence across reopen. Restores every setting it mutates.
+      "tests/preferences.spec.ts",
+      // AtlasPickerPanel click-to-assign: index-channel key selection
+      // auto-opens the docked picker; cell clicks write frames via
+      // emitters/set-track-key (incl. the differing-frames confirm
+      // modal). Runtime-skips when the seed texture can't be decoded
+      // (textures/get-preview != ok — game data unreachable).
+      "tests/atlas-picker.spec.ts",
       "tests/mods-contract.spec.ts",
       "tests/mod-stack.spec.ts",
       "tests/leave-particles.spec.ts",
