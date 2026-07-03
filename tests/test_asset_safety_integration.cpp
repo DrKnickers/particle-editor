@@ -259,6 +259,52 @@ static void testSkydomePathGates()
     expectNoRiskyGetFile(fm, beforeAll, "unsafe LoadAllSkydomeLists GOF <File> path never reaches getFile");
 }
 
+static void testAssetReadSizeCaps()
+{
+    std::printf("[asset read size caps]\n");
+
+    // ALO-model whole-file read (SkydomeEnvironment::ResolveSkydomeModel) rejects an
+    // oversized safe-named model before allocating — the read must never be attempted.
+    MockFM fm;
+    fm.claimedSizeFiles["Data\\Art\\Models\\Huge.alo"] = kMaxAloModelBytes + 1u;
+    SkydomeRef huge;
+    huge.name = "Huge";
+    huge.modelPath = "Huge.alo";
+    std::vector<unsigned char> bytes;
+    CHECK(!ResolveSkydomeModel(fm, huge, bytes), "oversized ALO model is treated as unresolvable");
+    CHECK(bytes.empty(), "oversized ALO model yields no bytes");
+    CHECK(!fm.claimedReadAttempted, "oversized ALO model is not read before the cap rejects it");
+
+    // The shared capped reader that the texture sites use rejects on size() alone,
+    // before any read (loadTextureExact needs a device, so exercise the helper directly).
+    bool textureRead = false;
+    IFile* bigTex = new ClaimedSizeFile(kMaxTextureAssetBytes + 1u, &textureRead);
+    bool threw = false;
+    try { (void)ReadAndReleaseCapped(bigTex, kMaxTextureAssetBytes); }
+    catch (...) { threw = true; }
+    CHECK(threw, "ReadAndReleaseCapped throws on an oversized texture asset");
+    CHECK(!textureRead, "ReadAndReleaseCapped does not read an oversized asset before rejecting");
+
+    // Same helper guards the shader loaders (main.cpp) at the shader cap.
+    bool shaderRead = false;
+    IFile* bigShader = new ClaimedSizeFile(kMaxShaderAssetBytes + 1u, &shaderRead);
+    bool shaderThrew = false;
+    try { (void)ReadAndReleaseCapped(bigShader, kMaxShaderAssetBytes); }
+    catch (...) { shaderThrew = true; }
+    CHECK(shaderThrew, "ReadAndReleaseCapped throws on an oversized shader asset");
+    CHECK(!shaderRead, "ReadAndReleaseCapped does not read an oversized shader before rejecting");
+
+    // Regression guard: a within-cap model must still resolve normally.
+    MockFM okFm;
+    okFm.files["Data\\Art\\Models\\Ok.alo"] = std::string(64, 'x');
+    SkydomeRef ok;
+    ok.name = "Ok";
+    ok.modelPath = "Ok.alo";
+    std::vector<unsigned char> okBytes;
+    CHECK(ResolveSkydomeModel(okFm, ok, okBytes) && okBytes.size() == 64,
+          "within-cap ALO model resolves normally");
+}
+
 int main()
 {
     std::printf("test_asset_safety_integration\n");
@@ -267,6 +313,7 @@ int main()
     testCatalogAggregateCap();
     testCatalogFileCountCap();
     testSkydomePathGates();
+    testAssetReadSizeCaps();
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");
     return g_failed ? 1 : 0;

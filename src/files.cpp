@@ -4,19 +4,26 @@
 using namespace std;
 
 // Read every byte of `file` into a freshly-allocated buffer, Release
-// the file reference, return the bytes. Throws ReadException on partial
-// read or empty file (Releases before throwing). Takes ownership of the
-// IFile* reference.
-vector<unsigned char> ReadAndRelease(IFile* file)
+// the file reference, return the bytes. Throws ReadException on a null
+// pointer, an empty file, an oversize file (size() > maxBytes, 0 = no
+// cap), or a partial read — Releasing the (non-null) file before it
+// throws. Takes ownership of the IFile* reference.
+vector<unsigned char> ReadAndReleaseCapped(IFile* file, unsigned long maxBytes)
 {
 	if (file == NULL) throw ReadException();
 	const unsigned long size = file->size();
-	if (size == 0) { file->Release(); throw ReadException(); }
+	// Reject empty OR oversized before allocating (maxBytes == 0 disables the cap).
+	if (size == 0 || (maxBytes != 0 && size > maxBytes)) { file->Release(); throw ReadException(); }
 	vector<unsigned char> bytes(size);
 	const unsigned long got = file->read(bytes.data(), size);
 	file->Release();
 	if (got != size) throw ReadException();
 	return bytes;
+}
+
+vector<unsigned char> ReadAndRelease(IFile* file)
+{
+	return ReadAndReleaseCapped(file, 0);
 }
 
 //

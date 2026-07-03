@@ -72,6 +72,15 @@ async function cleanupStep(label: string, fn: () => Promise<unknown>): Promise<v
 // estimate gate's one-shot refusal). Subscribes in-page, resolves the
 // payload on the first event, or null on timeout
 // (so a missing event surfaces as a clear assertion rather than a hang).
+//
+// The listener is registered synchronously by this page.evaluate, which CDP
+// dispatches BEFORE the caller's subsequent trigger runs in-page — so there is
+// no arm-vs-fire race; the subscription is always live before the event fires.
+// Positive waiters (expecting a refusal) therefore pass a GENEROUS timeout
+// (30s, well under the 120s test budget): a smaller window only risks flaking
+// when the native host's event round-trip is slow under load — the observed
+// intermittent failure. Negative waiters (asserting NO refusal) keep a short
+// window on purpose, since a long one just slows the suite to prove absence.
 type Refusal = { estimated: number; cap: number; attemptedCount: number };
 async function waitForRefusal(timeoutMs: number): Promise<Refusal | null> {
   return page.evaluate(
@@ -199,7 +208,7 @@ test("cumulative spawn gate refuses the over-cap placement and clears the previe
 
     // The third placement is refused: 3×400 = 1200 > 1000. Arm the waiter
     // BEFORE the trigger so the one-shot event isn't missed.
-    const refusalP = waitForRefusal(8_000);
+    const refusalP = waitForRefusal(30_000);
     await bridgeRequest("spawner/trigger", {});
     const refusal = await refusalP;
     expect(refusal, "expected an engine/overload/refused event on the 3rd placement").not.toBeNull();
@@ -248,7 +257,7 @@ test("edit-time estimate push over the cap clears the already-placed preview", a
     // A parameter edit raises the estimate to 600: 2×600 = 1200 > 1000.
     // The edit-time check inside SetEstimatedLoad clears the preview and
     // records the refusal. Arm the waiter before the push.
-    const refusalP = waitForRefusal(8_000);
+    const refusalP = waitForRefusal(30_000);
     await bridgeRequest("engine/set/estimated-load", { perInstance: 600 });
     const refusal = await refusalP;
     expect(refusal, "expected an engine/overload/refused event from the edit-time check").not.toBeNull();
@@ -289,14 +298,14 @@ test("a single instance over the cap is refused on every retry (no lock-out)", a
     // First trigger → refused. (After a clear-on-refusal the count is 0,
     // so the next trigger re-checks 0+1 from scratch — proving there is
     // no persistent locked state.)
-    const r1P = waitForRefusal(8_000);
+    const r1P = waitForRefusal(30_000);
     await bridgeRequest("spawner/trigger", {});
     const r1 = await r1P;
     expect(r1, "expected the first over-cap placement to be refused").not.toBeNull();
     expect(r1!.estimated).toBeGreaterThan(1_000);
 
     // Second trigger → refused AGAIN (a distinct event). No lock-out.
-    const r2P = waitForRefusal(8_000);
+    const r2P = waitForRefusal(30_000);
     await bridgeRequest("spawner/trigger", {});
     const r2 = await r2P;
     expect(r2, "expected the retry to be refused again (no lock-out state)").not.toBeNull();

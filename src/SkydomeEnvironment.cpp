@@ -2,7 +2,8 @@
 
 #include "managers.h"     // IFileManager
 #include "xml.h"          // XMLTree / XMLNode
-#include "files.h"        // IFile, ReadAndRelease
+#include "files.h"        // IFile, ReadAndReleaseCapped
+#include "ResourceLimits.h" // kMaxAloModelBytes
 #include "utils.h"        // WideToAnsi
 #include "AssetPathSafety.h"
 
@@ -250,7 +251,7 @@ bool ResolveSkydomeModel(IFileManager& fm, const SkydomeRef& ref, std::vector<un
     IFile* f = fm.getFile(std::string("Data\\Art\\Models\\") + ref.modelPath);
     if (f == nullptr) return false;
 
-    try { outBytes = ReadAndRelease(f); }   // takes ownership + Releases f (even on throw)
+    try { outBytes = ReadAndReleaseCapped(f, kMaxAloModelBytes); }   // takes ownership + Releases f (even on throw / oversize)
     catch (...) { return false; }
     return !outBytes.empty();
 }

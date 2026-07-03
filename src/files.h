@@ -79,12 +79,21 @@ public:
 	SubFile(IFile* file, unsigned long start, unsigned long size);
 };
 
-// Read every byte of `file` into a fresh buffer,
-// Release() the file reference, return the bytes. Throws ReadException
-// on partial read, empty file, or null pointer (Releases before
-// throwing). Consolidates the load-once-and-decode sites (textures,
-// shaders, thumbnails) that previously leaked the IFile and ignored the
-// read return value.
+// UNCAPPED whole-file read: read every byte of `file` into a fresh buffer,
+// Release() the file reference, return the bytes. Throws ReadException on partial
+// read, empty file, or null pointer (Releases the non-null file before throwing).
+// This is the raw primitive (== ReadAndReleaseCapped(file, 0)); for any read of a
+// mod-influenced ASSET prefer ReadAndReleaseCapped with a ResourceLimits.h cap, so
+// a safe-named but pathologically large file can't force a huge allocation (#415).
 std::vector<unsigned char> ReadAndRelease(IFile* file);
+
+// Like ReadAndRelease, but rejects a file whose size() exceeds `maxBytes` BEFORE
+// allocating — so a safe-named but pathologically large loose/MEG-backed asset
+// can't force a huge allocation (#415). Throws ReadException on oversize, empty,
+// null, or partial read (Releases the non-null file before throwing). `maxBytes
+// == 0` means "no cap" — identical to ReadAndRelease. Callers pass the relevant
+// cap from ResourceLimits.h (kMaxTextureAssetBytes / kMaxAloModelBytes /
+// kMaxShaderAssetBytes).
+std::vector<unsigned char> ReadAndReleaseCapped(IFile* file, unsigned long maxBytes);
 
 #endif

@@ -127,6 +127,19 @@ function msbuild(config) {
   return runExe(msbuildPath, [sln, `/p:Configuration=${config}`, "/p:Platform=x64", "/m", "/v:minimal"]);
 }
 
+// Build a single vcxproj for one x64 config, reusing the same MSBuild locator as
+// msbuild() above. Used to materialize a prerequisite static lib without paying
+// for a full-solution build. No /t:Restore: this is only used for package-free
+// projects (e.g. expatw_static). Returns the process exit code.
+function msbuildProject(projectPath, config) {
+  if (!msbuildPath) msbuildPath = findMsbuild();
+  if (!msbuildPath) {
+    log("MSBuild not found via vswhere — install VS with the C++ workload.");
+    return 1;
+  }
+  return runExe(msbuildPath, [projectPath, `/p:Configuration=${config}`, "/p:Platform=x64", "/m", "/v:minimal"]);
+}
+
 // ---------------------------------------------------------------------------
 // Lane bodies. Each returns { status: "PASS"|"FAIL"|"SKIP", note? }.
 const pass = { status: "PASS" };
@@ -181,6 +194,21 @@ const LANES = [
   {
     name: "cpp-unit",
     run: () => {
+      // Four expat-linking tests (test_xml_billion_laughs -> Release, the other
+      // three -> Debug) link a prebuilt expatw_static.lib via /LIBPATH but never
+      // build it. On a fresh worktree that lib doesn't exist yet — the msbuild
+      // lanes that produce it run AFTER this one — so the link fails with
+      // LNK1181. Materialize it here (both configs) as a prereq. Building just
+      // this one small static-lib project keeps the lane early and fast; a dev
+      // machine with a prior full build simply rebuilds it as a no-op. (#483)
+      if (!SKIP_BUILD) {
+        const expatProj = join(repoRoot, "libs", "expat-2.2.0", "expatw_static.vcxproj");
+        for (const cfg of ["Debug", "Release"]) {
+          if (msbuildProject(expatProj, cfg) !== 0) {
+            return fail(`expatw_static ${cfg} build (prereq for expat-linking unit tests)`);
+          }
+        }
+      }
       const args = [join(repoRoot, "scripts", "run-native-unit-tests.mjs"), "--exclude-needs-exe"];
       if (SKIP_BUILD) args.push("--skip-build");
       return runExe(process.execPath, args) === 0 ? pass : fail("native unit lane");

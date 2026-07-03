@@ -18,6 +18,7 @@
 #include <cstdarg>     // [shader-gate] va_list for ShaderLog
 
 #include "exceptions.h"
+#include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps, #415)
 #include "UI/TexturePalette.h"
 #include "SpawnerDriver.h"
 #include "UndoStack.h"
@@ -124,7 +125,7 @@ class TextureManager : public ITextureManager
 		// (which the previous code leaked) and enforces exact-byte reads.
 		try
 		{
-			return createTexture(pDevice, ReadAndRelease(file));
+			return createTexture(pDevice, ReadAndReleaseCapped(file, kMaxTextureAssetBytes));
 		}
 		catch (ReadException&)
 		{
@@ -150,7 +151,7 @@ public:
 			// violated the refcounted IFile abstraction).
 			try
 			{
-				pTexture = createTexture(pDevice, ReadAndRelease(file));
+				pTexture = createTexture(pDevice, ReadAndReleaseCapped(file, kMaxTextureAssetBytes));
 			}
 			catch (ReadException&) {}
 		}
@@ -298,7 +299,7 @@ class ShaderManager : public IShaderManager
 		// (was leaked) and enforces exact-byte reads.
 		try
 		{
-			return createShader(pDevice, ReadAndRelease(file));
+			return createShader(pDevice, ReadAndReleaseCapped(file, kMaxShaderAssetBytes));
 		}
 		catch (ReadException&)
 		{
@@ -324,7 +325,7 @@ public:
 			// violated the refcounted IFile abstraction).
 			try
 			{
-				pShader = createShader(pDevice, ReadAndRelease(file));
+				pShader = createShader(pDevice, ReadAndReleaseCapped(file, kMaxShaderAssetBytes));
 			}
 			catch (ReadException&) {}
 		}

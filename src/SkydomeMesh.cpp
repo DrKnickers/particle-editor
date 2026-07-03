@@ -7,7 +7,8 @@
 
 #include "Effect.h"
 #include "managers.h"   // IShaderManager, IFileManager
-#include "files.h"      // IFile, ReadAndRelease
+#include "files.h"      // IFile, ReadAndReleaseCapped
+#include "ResourceLimits.h" // kMaxTextureAssetBytes
 #include "exceptions.h" // wexception (Load boundary catch)
 #include "AssetPathSafety.h"
 
@@ -85,7 +86,7 @@ namespace
         IFile* file = fm.getFile(path);
         if (!file) return nullptr;
         std::vector<unsigned char> bytes;
-        try { bytes = ReadAndRelease(file); }
+        try { bytes = ReadAndReleaseCapped(file, kMaxTextureAssetBytes); }
         catch (const ReadException&) { return nullptr; }
         if (bytes.empty()) return nullptr;
         IDirect3DTexture9* tex = nullptr;

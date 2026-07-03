@@ -9,6 +9,7 @@
 #include <cstdio>    // [shadow-leak hunt] fopen/fprintf for the ALO_DUMP_RSTATE probe
 #include "engine.h"
 #include "exceptions.h"
+#include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps, #415)
 #include "resource.h"
 #include "ParticleSystemInstance.h"
 #include "EmitterInstance.h"
@@ -101,7 +102,7 @@ static IDirect3DTexture9* LoadTextureViaFileManager(IDirect3DDevice9* pDevice,
     std::vector<unsigned char> bytes;
     try
     {
-        bytes = ReadAndRelease(file);
+        bytes = ReadAndReleaseCapped(file, kMaxTextureAssetBytes);
     }
     catch (ReadException&)
     {
@@ -1547,7 +1548,7 @@ static bool LoadGroundTextureViaFileManager(IDirect3DDevice9*    pDevice,
     std::vector<unsigned char> bytes;
     try
     {
-        bytes = ReadAndRelease(file);   // exact-byte read; Releases the file ref
+        bytes = ReadAndReleaseCapped(file, kMaxTextureAssetBytes);   // exact-byte read (size-capped); Releases the file ref
     }
     catch (...)
     {

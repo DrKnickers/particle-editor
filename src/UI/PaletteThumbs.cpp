@@ -17,6 +17,7 @@
 #include "../utils.h"     // WideToAnsi
 #include "../managers.h"  // IFileManager
 #include "../files.h"     // IFile
+#include "../ResourceLimits.h"  // kMaxTextureAssetBytes
 #include "../AssetPathSafety.h"
 
 #include <d3d9.h>
@@ -103,6 +104,9 @@ bool ReadTextureBytes(IFileManager* fm, const wstring& filename, vector<char>& o
     if (file == nullptr) return false;
 
     const unsigned long size = file->size();
+    // A safe name can still resolve to a huge asset; cap before the allocation so
+    // an adversarial mod can't force a giant resize off file->size() (#415).
+    if (size > kMaxTextureAssetBytes) { file->Release(); return false; }
     out.resize(size);
     // A truncated read must fail, not silently hand a zero-padded
     // buffer to the decoder as if it were complete. Also Release() the

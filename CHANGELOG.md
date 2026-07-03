@@ -254,6 +254,7 @@ may live at the end of the file.
 
 ### Security
 
+- Close the last mod-asset allocation gap from the #413 audit: whole-file reads of textures, models, and shaders now reject an oversized file before allocating its buffer, so a safe-named but very large mod asset can no longer force a huge memory allocation
 - Extend the malformed/malicious mod-file hardening to every place the editor reads mod assets — skydome and ground textures, reference models, palette previews, and the game-object catalog — so a path in any of them stays inside the mod folder, with hard size limits that reject oversized or malformed data
 - Harden the editor against malformed or maliciously crafted mod files: untrusted `.alo`, `.meg`, and `.xml` files are now rejected cleanly instead of risking a crash, and a texture/shader name embedded in an `.alo` can no longer reach outside the mod folder or trigger an outbound network request when the file is opened
 - Web UI host enforces an origin allow-list, blocking off-origin navigation, popups, and permission requests
