@@ -93,6 +93,7 @@
 #include "../Autosave.h"  // two-tier autosave timers + clean-exit cleanup
 #include "DriveRunner.h"  // --drive: scripted non-CDP composite capture
 #include "ClipRunner.h"   // --record: deterministic clip recording (PNG sequence)
+#include "AsyncFrameEncoder.h"   // --record Branch B: background PNG encode (tasks/todo.md §3)
 
 using namespace Microsoft::WRL;
 
@@ -776,6 +777,69 @@ struct HostWindowImpl
     int            m_lastAckCursorFrame = -1;
     nlohmann::json m_lastAckCursor;          // {x,y,vis,press}
     nlohmann::json m_lastAckResolved = nlohmann::json::array();  // [{ref,x,y,ok}]
+    // [record-timing] Per-segment QPC accumulators for the record frame loop
+    // (permanent Phase-0 instrumentation, tasks/todo.md §3). The four segments
+    // are accumulated inside the ClipRunner hooks (dispatch/ack lambdas;
+    // barrier/png split inside the capture lambda); the Tick call site pushes
+    // one entry per frame. Buckets are exhaustive by construction:
+    //   wall ≈ setup + Σframe + pump(between-tick loop overhead, incl. the
+    //          unconditional pre-tick RenderD3D9)
+    //   frame ≈ dispatch + ack + barrier + png + other(in-Tick, un-hooked)
+    // The ack-wait loop's inner RenderD3D9 calls count as ACK time (they run
+    // inside the ack hook), per the plan's segment definitions.
+    struct RecordTiming
+    {
+        std::vector<double> dispatch, ack, barrier, png, frame;   // per-frame ms
+        double curDispatch = 0, curAck = 0, curBarrier = 0, curPng = 0;
+        double setupMs = 0.0;        // record-branch start -> first Tick
+        bool   sawFirstTick = false;
+    };
+    RecordTiming m_recordTiming;
+    // --record-timing-verbose: per-frame [record-timing] lines (default off —
+    // 60 fps logging would perturb the measurement). Probed from the raw
+    // command line rather than threaded through Run()/HostWindow ctor: a
+    // log-verbosity toggle doesn't justify 4 files of signature churn, and
+    // main.cpp's argv loop ignores unknown --flags harmlessly.
+    bool m_recordTimingVerbose =
+        wcsstr(GetCommandLineW(), L"--record-timing-verbose") != nullptr;
+    // End-of-run summary (also emitted on the record watchdog so a timed-out
+    // run still yields its measurement). p99/max reported beside p95 because
+    // the 2000 ms ack deadline is fatal at p100, not p95 (plan §4 risk 1).
+    // Defined in-class: the enclosing region around the file's later helpers
+    // is an anonymous namespace, where a host::HostWindowImpl member can't be
+    // defined (C2888). (std::min) parenthesized against windows.h's min macro.
+    void LogRecordTimingSummary(double wallMs)
+    {
+        auto total = [](const std::vector<double>& v) {
+            double s = 0.0; for (double x : v) s += x; return s; };
+        auto pct = [](std::vector<double> v, double p) -> double {
+            if (v.empty()) return 0.0;
+            std::sort(v.begin(), v.end());
+            const size_t idx = (std::min)(v.size() - 1,
+                static_cast<size_t>(p * static_cast<double>(v.size() - 1) + 0.5));
+            return v[idx]; };
+        auto line = [&](const char* name, const std::vector<double>& v) {
+            const double t = total(v);
+            Log("[record-timing] %-8s total=%8.0fms avg=%6.1fms p95=%6.1fms "
+                "p99=%6.1fms max=%6.1fms\n",
+                name, t, v.empty() ? 0.0 : t / static_cast<double>(v.size()),
+                pct(v, 0.95), pct(v, 0.99),
+                v.empty() ? 0.0 : *std::max_element(v.begin(), v.end()));
+        };
+        const RecordTiming& rt = m_recordTiming;
+        const double frameTotal = total(rt.frame);
+        const double segTotal = total(rt.dispatch) + total(rt.ack)
+                              + total(rt.barrier)  + total(rt.png);
+        Log("[record-timing] frames=%zu wall=%.0fms setup=%.0fms tick=%.0fms "
+            "pump=%.0fms other-in-tick=%.0fms\n",
+            rt.frame.size(), wallMs, rt.setupMs, frameTotal,
+            wallMs - rt.setupMs - frameTotal, frameTotal - segTotal);
+        line("dispatch", rt.dispatch);
+        line("ack",      rt.ack);
+        line("barrier",  rt.barrier);
+        line("png",      rt.png);
+        line("frame",    rt.frame);
+    }
     // --drive bridge-selftest handshake: RunDriveSelftest arms the token +
     // nested-pumps; OnWebMessage completes it when the tokened result arrives
     // over the real page->host postMessage wire (single UI thread, no atomics).
@@ -4819,6 +4883,11 @@ int HostWindowImpl::Run(int nCmdShow)
     const LONGLONG recordFreq  = PerfQpcFreq();
     double    recordBudgetMs   = 0.0;
     std::wstring recordTmpDir, recordOutDir;
+    // Branch B: one background PNG-encode worker per record run. shared_ptr
+    // because the capture hook (stored in m_clipRunner, a member that can
+    // outlive this frame of Run) captures a copy — after the explicit
+    // Finish() below, late destruction does no GDI+ work.
+    std::shared_ptr<host::AsyncFrameEncoder> recordEncoder;
     constexpr int kBarrierPresents = 3;   // DComp-present barrier before each grab
                                           // (each present is DwmFlush'd in the capture
                                           // hook so the composited frame lands before
@@ -5098,9 +5167,21 @@ int HostWindowImpl::Run(int nCmdShow)
 
                     // (g) hooks.
                     const std::wstring tmpDir = recordTmpDir;
+                    // Branch B: start the background encoder BEFORE the hooks
+                    // capture it. Ctor pre-warms the PNG CLSID on this (UI)
+                    // thread (GdiplusEncode.h's cache is not first-call
+                    // thread-safe) and spawns the single worker.
+                    recordEncoder = std::make_shared<host::AsyncFrameEncoder>(
+                        128ull * 1024 * 1024,
+                        [this](const std::string& s){ Log("[record] %s\n", s.c_str()); });
                     r->SetHooks(
                         // dispatch (allowlisted bridge req -> response)
-                        [this](const std::string& req){ return dispatcher->DispatchSync(req); },
+                        [this, rf = recordFreq](const std::string& req){
+                            const LONGLONG t0 = PerfQpcNow();
+                            std::string resp = dispatcher->DispatchSync(req);
+                            m_recordTiming.curDispatch += QpcMs(PerfQpcNow() - t0, rf);
+                            return resp;
+                        },
                         // step the preview clock + drive the spawner ONCE at the
                         // fixed virtual dt (RenderD3D9's spawner tick is skipped in
                         // record mode, so this is the only advance per frame).
@@ -5126,19 +5207,24 @@ int HostWindowImpl::Run(int nCmdShow)
                                                 {"visible",vis},{"pressed",press},{"frame",m_recordFrame}};
                             if (webView) webView->PostWebMessageAsJson(host::Utf8ToWide(m.dump()).c_str());
                         },
-                        // ack: pumped wait for ui/frame-acked >= frameId (bounded)
+                        // ack: pumped wait for ui/frame-acked >= frameId (bounded).
+                        // [record-timing] the whole hook (incl. its inner
+                        // RenderD3D9 pumps) accrues to the ACK segment.
                         [this, rf = recordFreq](int frameId, double deadlineMs){
                             const LONGLONG s = PerfQpcNow();
+                            bool acked = false;
                             for (;;)
                             {
                                 MSG mw;
                                 while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
                                 { TranslateMessage(&mw); DispatchMessage(&mw); }
-                                if (m_lastAckedFrame >= frameId) return true;
-                                if (rf > 0 && QpcMs(PerfQpcNow() - s, rf) >= deadlineMs) return false;
+                                if (m_lastAckedFrame >= frameId) { acked = true; break; }
+                                if (rf > 0 && QpcMs(PerfQpcNow() - s, rf) >= deadlineMs) break;
                                 RenderD3D9();
                                 Sleep(4);
                             }
+                            m_recordTiming.curAck += QpcMs(PerfQpcNow() - s, rf);
+                            return acked;
                         },
                         // capture: present the latest engine frame, then BLOCK on the
                         // compositor before PrintWindow reads the window. Each
@@ -5152,11 +5238,25 @@ int HostWindowImpl::Run(int nCmdShow)
                         // completes, so the just-presented frame is on the window before
                         // we grab. Interleaved (not just trailing) so the final present is
                         // always followed by a composited pass.
-                        [this, tmpDir, bp = kBarrierPresents](int idx){
+                        [this, tmpDir, bp = kBarrierPresents, rf = recordFreq,
+                         enc = recordEncoder](int idx){
+                            // [record-timing] barrier (present+flush loop) and
+                            // png are timed separately. Branch B: png is now
+                            // GRAB + ENQUEUE only — the compress+write runs on
+                            // the encoder worker (AsyncFrameEncoder.h), so the
+                            // png segment no longer contains the zlib cost.
+                            const LONGLONG b0 = PerfQpcNow();
                             for (int i = 0; i < bp; ++i) { RenderD3D9(); DwmFlush(); }
+                            const LONGLONG b1 = PerfQpcNow();
                             wchar_t name[40];
                             swprintf_s(name, L"\\frame_%05d.png", idx);
-                            return host::CaptureWindowToPng(hMain, tmpDir + name);
+                            host::AsyncFrameEncoder::Frame f;
+                            f.path = tmpDir + name;
+                            const bool ok = host::GrabWindowPixels(hMain, f.bgra, f.w, f.h)
+                                            && enc->Enqueue(std::move(f));
+                            m_recordTiming.curBarrier += QpcMs(b1 - b0, rf);
+                            m_recordTiming.curPng     += QpcMs(PerfQpcNow() - b1, rf);
+                            return ok;
                         },
                         [this](const std::string& s){ Log("[record] %s\n", s.c_str()); },
                         // ui/* passthrough: post {type:kind, ...params} to the webview
@@ -5186,9 +5286,41 @@ int HostWindowImpl::Run(int nCmdShow)
             else
             {
                 m_recordFrame = m_clipRunner->CurrentFrame();
-                if (m_clipRunner->Tick() == host::ClipRunner::Status::Done)
+                // [record-timing] stamp setup (branch start -> first Tick) once;
+                // time each Tick; the hooks accumulated the four segments.
+                if (!m_recordTiming.sawFirstTick)
+                {
+                    m_recordTiming.sawFirstTick = true;
+                    m_recordTiming.setupMs = elapsedMs;
+                }
+                m_recordTiming.curDispatch = m_recordTiming.curAck = 0.0;
+                m_recordTiming.curBarrier  = m_recordTiming.curPng = 0.0;
+                const LONGLONG tickStart = PerfQpcNow();
+                const auto tickStatus = m_clipRunner->Tick();
+                m_recordTiming.frame.push_back(QpcMs(PerfQpcNow() - tickStart, recordFreq));
+                m_recordTiming.dispatch.push_back(m_recordTiming.curDispatch);
+                m_recordTiming.ack.push_back(m_recordTiming.curAck);
+                m_recordTiming.barrier.push_back(m_recordTiming.curBarrier);
+                m_recordTiming.png.push_back(m_recordTiming.curPng);
+                if (m_recordTimingVerbose)
+                    Log("[record-timing] f=%d frame=%.1f dispatch=%.1f ack=%.1f "
+                        "barrier=%.1f png=%.1f\n",
+                        m_recordFrame, m_recordTiming.frame.back(),
+                        m_recordTiming.curDispatch, m_recordTiming.curAck,
+                        m_recordTiming.curBarrier, m_recordTiming.curPng);
+                if (tickStatus == host::ClipRunner::Status::Done)
                 {
                     recordExitCode = m_clipRunner->ExitCode();
+                    // Branch B: drain + join the background encoder BEFORE the
+                    // publish decision — .tmp is never renamed on a dirty
+                    // drain (a queued frame's write can fail after its Tick
+                    // already returned success; plan risk 4).
+                    if (recordEncoder && !recordEncoder->Finish() && recordExitCode == 0)
+                    {
+                        Log("[record] async encode failed at %ls\n",
+                            recordEncoder->FailedPath().c_str());
+                        recordExitCode = 4;
+                    }
                     // Move the completed sequence into place on success only.
                     if (recordExitCode == 0)
                     {
@@ -5232,6 +5364,8 @@ int HostWindowImpl::Run(int nCmdShow)
                             }
                         }
                     }
+                    LogRecordTimingSummary(recordFreq > 0
+                        ? QpcMs(PerfQpcNow() - recordStart, recordFreq) : 0.0);
                     Log("[record] done: %d frames, exit %d\n",
                         m_clipRunner->FrameCount(), recordExitCode);
                     quit = true;
@@ -5239,6 +5373,11 @@ int HostWindowImpl::Run(int nCmdShow)
                 else if (elapsedMs >= recordBudgetMs)
                 {
                     Log("[record] watchdog: exceeded %.0f ms budget\n", recordBudgetMs);
+                    // [record-timing] a timed-out run still yields its numbers.
+                    LogRecordTimingSummary(elapsedMs);
+                    // Branch B: join the encoder before quitting (exit 5 stands
+                    // regardless of the drain result).
+                    if (recordEncoder) recordEncoder->Finish();
                     recordExitCode = 5; quit = true;
                 }
             }
@@ -5435,6 +5574,10 @@ int HostWindowImpl::Run(int nCmdShow)
     timeEndPeriod(1);
 
     g_self = nullptr;
+    // Branch B: a WM_QUIT escape from the pump (user closed the record window)
+    // bypasses the Done/watchdog joins above — the encoder worker MUST be
+    // joined before GdiplusShutdown or it races process-level GDI+ teardown.
+    if (recordEncoder) recordEncoder->Finish();
     // Matching shutdown for the GdiplusStartup above. Safe
     // here because the message pump has drained: no dispatcher
     // handlers (CaptureSnapshotPng et al) can run after WM_QUIT.

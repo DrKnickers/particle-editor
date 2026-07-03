@@ -69,6 +69,55 @@ bool CaptureWindowToPng(HWND hwnd, const std::wstring& path)
     return saved && pw;
 }
 
+bool GrabWindowPixels(HWND hwnd, std::vector<unsigned char>& bgra, int& w, int& h)
+{
+    RECT rc = {};
+    if (!hwnd || !GetWindowRect(hwnd, &rc)) return false;
+    w = rc.right - rc.left;
+    h = rc.bottom - rc.top;
+    if (w <= 0 || h <= 0) return false;
+
+    HDC     screen = GetDC(nullptr);
+    HDC     mem    = screen ? CreateCompatibleDC(screen) : nullptr;
+    HBITMAP bmp    = (screen && mem) ? CreateCompatibleBitmap(screen, w, h) : nullptr;
+    bool ok = false;
+    if (screen && mem && bmp)
+    {
+        HGDIOBJ oldb  = SelectObject(mem, bmp);
+        const BOOL pw = PrintWindow(hwnd, mem, PW_RENDERFULLCONTENT);
+        SelectObject(mem, oldb);
+        if (pw)
+        {
+            BITMAPINFO bi = {};
+            bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+            bi.bmiHeader.biWidth       = w;
+            bi.bmiHeader.biHeight      = -h;  // top-down rows
+            bi.bmiHeader.biPlanes      = 1;
+            bi.bmiHeader.biBitCount    = 32;  // BGRA
+            bi.bmiHeader.biCompression = BI_RGB;
+            bgra.resize(static_cast<size_t>(w) * h * 4);
+            ok = (GetDIBits(mem, bmp, 0, h, bgra.data(), &bi, DIB_RGB_COLORS) == h);
+        }
+    }
+    if (bmp) DeleteObject(bmp);
+    if (mem) DeleteDC(mem);
+    if (screen) ReleaseDC(nullptr, screen);
+    return ok;
+}
+
+bool EncodeBgraToPng(const unsigned char* bgra, int w, int h, const std::wstring& path)
+{
+    if (!bgra || w <= 0 || h <= 0) return false;
+    CLSID clsid = {};
+    if (!host::GdiplusEncoderClsid(L"image/png", clsid)) return false;
+    // 32bppRGB: the X8 alpha byte from the DDB is ignored (undefined after
+    // PrintWindow); output parity vs the old HBITMAP path is gated by the
+    // per-frame SSIM acceptance in tasks/todo.md §5.
+    Gdiplus::Bitmap gb(w, h, w * 4, PixelFormat32bppRGB,
+                       const_cast<BYTE*>(bgra));
+    return gb.Save(path.c_str(), &clsid, nullptr) == Gdiplus::Ok;
+}
+
 int ProbeWindowMaxLuma(HWND hwnd, double x0, double y0, double x1, double y1)
 {
     RECT rc = {};

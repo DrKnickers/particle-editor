@@ -3,8 +3,24 @@
 
 #include <windows.h>
 #include <string>
+#include <vector>
 
 namespace host {
+
+// [record-async-encode] Split of CaptureWindowToPng for the record loop's
+// background PNG encoder (tasks/todo.md Branch B): the GRAB stays synchronous
+// on the record thread (pixels captured at the same instant as the old inline
+// path — determinism-neutral by construction); the encode+write moves to a
+// worker. Grab = PrintWindow(PW_RENDERFULLCONTENT) + GetDIBits into top-down
+// BGRA (stride w*4). Returns false on any capture/read failure.
+bool GrabWindowPixels(HWND hwnd, std::vector<unsigned char>& bgra, int& w, int& h);
+
+// Encode a GrabWindowPixels buffer to PNG. GDI+ must be initialized and the
+// "image/png" encoder CLSID pre-warmed on the UI thread before calling this
+// off-thread (GdiplusEncode.h's CLSID cache is not safe for a concurrent
+// FIRST call — see its header note). Alpha is ignored (32bppRGB): the DDB
+// alpha channel PrintWindow leaves behind is undefined.
+bool EncodeBgraToPng(const unsigned char* bgra, int w, int h, const std::wstring& path);
 
 // Capture the fully composed window (DWM/DirectComposition flatten of the
 // WebView2 UI visual + the D3D9 engine visual) to a PNG via
