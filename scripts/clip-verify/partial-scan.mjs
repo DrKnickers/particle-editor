@@ -63,6 +63,10 @@ function listPngFrames(framesDir, start) {
     .filter((name) => name.toLowerCase().endsWith(".png"))
     .sort()
     .map((name, index) => ({ name, number: frameNumber(name, index), file: join(framesDir, name) }))
+    // NUMERIC order, not lexicographic: frame_100000 sorts before frame_99998
+    // as a string, which would misalign dip indices past 5 digits (and the
+    // sequence path's ffmpeg order is always numeric).
+    .sort((a, b) => a.number - b.number)
     .filter((frame) => frame.number >= start);
 }
 
@@ -70,6 +74,38 @@ function parseYavg(output) {
   const match = String(output).match(/lavfi\.signalstats\.YAVG=([-+]?\d+(?:\.\d+)?)/);
   if (!match) throw new Error("ffmpeg output did not include lavfi.signalstats.YAVG");
   return Number(match[1]);
+}
+
+// All YAVG values from a sequence-input run, in frame order. Full float
+// syntax incl. scientific notation (same guard as scripts/lib/ssim.mjs:
+// a near-black "1.23e-05" would otherwise truncate to a very-wrong 1.23).
+export function parseYavgAll(output) {
+  const out = [];
+  const re = /lavfi\.signalstats\.YAVG=([-+]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+  let m;
+  while ((m = re.exec(String(output))) !== null) out.push(Number(m[1]));
+  return out;
+}
+
+// Fast path: ONE ffmpeg invocation over the whole frame_%05d.png sequence
+// instead of one process per frame (the per-file loop cost 50-80 s per clip
+// in the batch renderer's gates). Same crop+signalstats filter on the same
+// pixels => numerically identical YAVG values (parity-verified against the
+// per-file path on real clip frames). Returns null when the sequence read
+// doesn't line up with the directory listing (gaps in numbering, stray
+// .png names) — the caller falls back to the per-file path, preserving the
+// old tolerance for arbitrary frame dirs.
+function measureYavgSequence(framesDir, start, crop, expectedCount) {
+  const filter = "crop=" + crop.w + ":" + crop.h + ":" + crop.x + ":" + crop.y + ",signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-";
+  const result = spawnSync("ffmpeg", [
+    "-v", "error",
+    "-start_number", String(start),
+    "-i", join(framesDir, "frame_%05d.png"),
+    "-vf", filter, "-f", "null", "-",
+  ], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  if (result.status !== 0) return null;
+  const yavg = parseYavgAll((result.stdout || "") + "\n" + (result.stderr || ""));
+  return yavg.length === expectedCount ? yavg : null;
 }
 
 function measureYavg(file, crop) {
@@ -109,7 +145,8 @@ function main(argv) {
     const drop = numOpt(args, "drop", DEFAULT_DROP);
     const frames = listPngFrames(args.frames, start);
     if (frames.length === 0) throw new Error("no png frames found in " + args.frames + " at or after " + start);
-    const yavg = frames.map((frame) => measureYavg(frame.file, crop));
+    const yavg = measureYavgSequence(args.frames, start, crop, frames.length)
+              ?? frames.map((frame) => measureYavg(frame.file, crop));
     const dips = detectIsolatedDips(yavg, drop);
     for (const dip of dips) {
       const frame = frames[dip.index];
