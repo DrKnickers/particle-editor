@@ -1,0 +1,119 @@
+/* Particle Editor — guide docs layout.
+   Reuses the design tokens declared in styles.css (:root — --bg, --paper, --accent, --mono …);
+   both stylesheets are loaded on every guide page, so this file only adds the docs layout
+   (sidebar · article · on-this-page rail) and prose typography. */
+
+body.guide {
+  /* The landing page's entrance fade-up targets .hero/.feature/.site-footer children,
+     none of which exist here — the guide's own entrance is the .guide-layout stagger
+     below. All motion is pure CSS; no JS is required to reveal content. */
+}
+
+/* Share the landing page's content frame (--maxw, 1.5rem gutters) so the sidebar's
+   left edge lines up with the wordmark and the landing content — no horizontal jump
+   when navigating between the two surfaces. */
+.guide-layout {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr) 196px;
+  gap: 2.5rem;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 5rem;
+  align-items: start;
+}
+
+/* ---- Sidebar ---- */
+.guide-sidebar { position: sticky; top: 1.5rem; }
+.side-title { font-weight: 600; color: var(--paper); font-size: .95rem; margin: 0 0 1.1rem; }
+.side-group { margin-bottom: 1.5rem; }
+.side-label {
+  font-family: var(--mono); font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--faint); margin: 0 0 .55rem;
+}
+.guide-sidebar ul { list-style: none; margin: 0; padding: 0; }
+.guide-sidebar a {
+  display: block; font-size: .9rem; color: var(--body); text-decoration: none;
+  padding: .3rem 0 .3rem .8rem; margin-left: -.8rem;
+  border-left: 2px solid transparent;
+}
+.guide-sidebar a:hover { color: var(--paper); }
+.guide-sidebar a.active { color: var(--accent); border-left-color: var(--accent); }
+
+/* ---- Article ---- */
+.guide-main { min-width: 0; }
+.guide-article { max-width: 70ch; }
+.guide-article > *:first-child { margin-top: 0; }
+.guide-article h1 {
+  font-size: clamp(2rem, 4vw, 2.8rem); font-weight: 600; letter-spacing: -.03em;
+  color: var(--paper); line-height: 1.08; margin: 0 0 1.25rem;
+}
+.guide-article h2 {
+  font-size: 1.6rem; font-weight: 600; letter-spacing: -.02em; color: var(--paper);
+  margin: 2.75rem 0 .9rem; padding-top: .5rem; border-top: 1px solid var(--rule);
+}
+.guide-article h3 { font-size: 1.2rem; font-weight: 600; color: var(--paper); margin: 2rem 0 .6rem; }
+.guide-article p { margin: 0 0 1.1rem; }
+.guide-article a { color: var(--accent); text-decoration: none; }
+.guide-article a:hover { text-decoration: underline; text-underline-offset: .2em; }
+.guide-article strong { color: var(--paper); font-weight: 600; }
+.guide-article ul, .guide-article ol { margin: 0 0 1.1rem; padding-left: 1.4rem; }
+.guide-article li { margin: .35rem 0; }
+.guide-article li > ul, .guide-article li > ol { margin: .35rem 0 .2rem; }
+.guide-article blockquote {
+  margin: 1.3rem 0; padding: .7rem 1.1rem; border-left: 3px solid var(--accent);
+  background: rgba(74, 139, 255, .06); border-radius: 0 4px 4px 0; color: var(--body);
+}
+.guide-article blockquote > :last-child { margin-bottom: 0; }
+.guide-article code {
+  font-family: var(--mono); font-size: .88em; color: var(--paper);
+  background: rgba(238, 241, 246, .08); padding: .12em .38em; border-radius: 3px;
+}
+.guide-article pre {
+  margin: 1.3rem 0; padding: 1rem 1.1rem; overflow-x: auto;
+  background: var(--frame-2); border: 1px solid var(--rule); border-radius: 6px;
+}
+.guide-article pre code { background: none; padding: 0; font-size: .85rem; line-height: 1.6; }
+.guide-article hr { border: none; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+
+/* ---- On this page ---- */
+.toc { position: sticky; top: 1.5rem; }
+.toc-label {
+  font-family: var(--mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--faint); margin: 0 0 .6rem;
+}
+.toc ul { list-style: none; margin: 0; padding: 0; }
+.toc a {
+  display: block; font-size: .82rem; color: var(--faint); text-decoration: none;
+  padding: .22rem 0 .22rem .7rem; border-left: 2px solid transparent;
+}
+.toc a:hover { color: var(--paper); }
+.toc li.lvl-3 a { padding-left: 1.4rem; font-size: .78rem; }
+
+/* ---- Subtle one-shot fade-up on load (CSS-only, echoes the landing reveal) ----
+   Gated on prefers-reduced-motion: no-preference so reduced-motion users — and any
+   scenario where the animation doesn't run — get the content at full opacity
+   immediately, never stuck hidden. The columns stagger in like the landing sections. */
+@media (prefers-reduced-motion: no-preference) {
+  /* html[data-vt] = a cross-document view transition ran (inline pagereveal hook): its
+     new-page fade-in is the entrance, so skip the stagger — animating content from
+     opacity:0 during the transition shows a half-empty page and churns the live
+     new-page snapshot. */
+  html:not([data-vt]) .guide-layout > * { animation: guide-up .55s cubic-bezier(.22, .61, .36, 1) both; }
+  html:not([data-vt]) .guide-sidebar { animation-delay: .04s; }
+  html:not([data-vt]) .guide-main    { animation-delay: .12s; }
+  html:not([data-vt]) .toc           { animation-delay: .20s; }
+}
+@keyframes guide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---- Responsive: collapse to a single column ---- */
+@media (max-width: 960px) {
+  .guide-layout { grid-template-columns: 1fr; gap: 1.75rem; }
+  .guide-sidebar { position: static; }
+  .toc { display: none; }
+}
+@media (max-width: 720px) {
+  .guide-layout { padding: 1.75rem 1rem 3.5rem; }
+}

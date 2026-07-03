@@ -1,0 +1,11 @@
+{
+  "title": "Guide",
+  "sections": [
+    {
+      "label": "Getting Started",
+      "pages": [
+        { "slug": "introduction", "title": "Introduction" }
+      ]
+    }
+  ]
+}

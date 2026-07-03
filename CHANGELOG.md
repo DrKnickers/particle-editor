@@ -27,6 +27,7 @@ may live at the end of the file.
 
 ### Added
 
+- The landing site now has a user guide — Markdown-authored pages rendered in the site's look with a sidebar and per-page contents rail, linked from the top bar; navigating between the landing page and the guide fades smoothly instead of hard-cutting
 - Public landing page — a static GitHub Pages showcase for the editor in `site/`, with looping UI clips and a download CTA; built now, deploys to the public fork at the (gated) rollout
 - The Import Emitters list is now fully keyboard-navigable — arrow keys move between emitters, ←/→ collapse/expand, Home/End jump, and Space/Enter selects
 - The editor now tells you when an `.alo` has no particle emitters (a model file, not a particle effect) — both when importing emitters and when opening a file, instead of showing an empty list / empty editor with no explanation

@@ -3,6 +3,30 @@
    + IBM Plex Mono, one rationed azure accent (the editor's blue), a faint starfield echoing
    the viewport, restrained fade-up on load. All text AA-verified (axe). */
 
+/* ---- Self-hosted fonts (latin subsets, pulled from Google Fonts' woff2) ----
+   Same-origin + preloaded in each page's <head>, so text paints in the real faces
+   with no third-party render-blocking request (occasional white flash on navigation)
+   and no fallback-font swap shifting the top-bar buttons (jitter on load).
+   Schibsted Grotesk ships as one variable file covering wght 400–600. */
+@font-face {
+  font-family:"Schibsted Grotesk";
+  font-style:normal; font-weight:400 600; font-display:swap;
+  src:url("fonts/schibsted-grotesk-latin.woff2") format("woff2");
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family:"IBM Plex Mono";
+  font-style:normal; font-weight:400; font-display:swap;
+  src:url("fonts/ibm-plex-mono-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family:"IBM Plex Mono";
+  font-style:normal; font-weight:500; font-display:swap;
+  src:url("fonts/ibm-plex-mono-latin-500.woff2") format("woff2");
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   --bg:#0b0d12;  --paper:#eef1f6;  --body:#9aa1ad;  --faint:#79818e;
   --accent:#4a8bff;  --rule:rgba(238,241,246,.12);
@@ -13,14 +37,23 @@
 }
 
 *,*::before,*::after { box-sizing:border-box; }
-html { scroll-behavior:smooth; }
+/* Background lives on the root element (not just body) so the page canvas is always
+   dark — during a view transition the body→canvas background propagation briefly drops,
+   and without this the browser paints its default white canvas for a frame (the flash). */
+html { scroll-behavior:smooth; background-color:var(--bg); }
 body {
   margin:0; color:var(--body);
   font-family:var(--sans); font-weight:400; line-height:1.55;
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
-  /* Faint viewport-style starfield — static CSS, no motion, no perf cost. Fixed to the
-     viewport so it reads as depth behind the content. */
   background-color:var(--bg);
+}
+/* Faint viewport-style starfield — static CSS, no motion, no perf cost. A position:fixed
+   pseudo-element (NOT background-attachment:fixed): flash-hunt frame evidence showed the
+   cross-document view-transition capturing the OLD page's snapshot as pure white, and
+   fixed-attachment root backgrounds are a known snapshot-hostile feature — this renders
+   identically while keeping the snapshot path ordinary. */
+body::before {
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
   background-image:
     radial-gradient(1.3px 1.3px at 9% 14%, rgba(238,241,246,.55), transparent),
     radial-gradient(1px 1px at 22% 38%, rgba(238,241,246,.32), transparent),
@@ -38,7 +71,7 @@ body {
     radial-gradient(1px 1px at 74% 86%, rgba(238,241,246,.26), transparent),
     radial-gradient(1.2px 1.2px at 86% 64%, rgba(238,241,246,.3), transparent),
     radial-gradient(1px 1px at 96% 82%, rgba(238,241,246,.22), transparent);
-  background-repeat:no-repeat; background-attachment:fixed;
+  background-repeat:no-repeat;
 }
 code { font-family:var(--mono); font-size:.92em; color:var(--paper); }
 a { color:inherit; }
@@ -124,7 +157,7 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
 /* ---- Clip frames (light against the dark) ---- */
 /* Media breaks out of the 1080px text column: text stays narrow (readable measure),
    clips widen to 1320px so the editor reads as the exhibit, not an illustration.
-   Centered via margins, NOT transform — the .reveal animation ends at transform:none
+   Centered via margins, NOT transform — the entrance `up` animation ends at transform:none
    and would clobber a translateX(-50%). The 3rem gutter exceeds typical
    scrollbar widths, so the 100vw-includes-scrollbar quirk doesn't cause
    horizontal overflow. */
@@ -156,20 +189,73 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
 .site-footer .actions { justify-content:center; }
 .footer-meta { font-family:var(--mono); font-size:.78rem; color:var(--faint); margin:2rem 0 0; }
 
-/* ---- Motion: one orchestrated staggered fade-up on load ---- */
+/* ---- Motion: one orchestrated staggered fade-up on first load ----
+   Pure CSS — no JS gating. The old version had main.js add .reveal{opacity:0} after the
+   module script arrived over the network, which (a) let content paint visible, vanish, then
+   fade back in, and (b) rewrote the whole page's styles MID view-transition, forcing a
+   compositor texture rebuild that could paint a white frame. animation-fill-mode:both keeps
+   children hidden until their delayed start, so no separate opacity:0 pre-state exists to
+   strand content hidden. Suppressed under html[data-vt] (set by the inline pagereveal hook
+   in each page's head) — when a cross-document view transition runs, its new-page fade-in
+   is the entrance. */
 @keyframes up { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
-.reveal { opacity:0; }
-body.loaded .reveal { animation:up .6s cubic-bezier(.22,.61,.36,1) forwards; }
-body.loaded .reveal:nth-child(1) { animation-delay:.08s; }
-body.loaded .reveal:nth-child(2) { animation-delay:.18s; }
-body.loaded .reveal:nth-child(3) { animation-delay:.28s; }
-body.loaded .reveal:nth-child(4) { animation-delay:.38s; }
-body.loaded .reveal:nth-child(5) { animation-delay:.48s; }
-body.loaded .reveal:nth-child(6) { animation-delay:.58s; }
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > * {
+    animation:up .6s cubic-bezier(.22,.61,.36,1) both;
+  }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(1) { animation-delay:.08s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(2) { animation-delay:.18s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(3) { animation-delay:.28s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(4) { animation-delay:.38s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(5) { animation-delay:.48s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(6) { animation-delay:.58s; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior:auto; }
-  .reveal, body.loaded .reveal { animation:none !important; opacity:1 !important; transform:none !important; }
+}
+
+/* ---- Cross-page transitions (progressive enhancement) ----
+   Opt the landing and the guide into cross-document view transitions so navigating
+   between them dips through the dark backdrop and fades the incoming page in, instead
+   of a hard cut. Same-origin only; browsers without support (Firefox, older Safari)
+   just navigate normally — no fallback needed. */
+@view-transition { navigation: auto; }
+/* Backstop: paint the transition overlay's pseudo chain dark (also inlined in every page
+   head, so it survives a slow styles.css). */
+::view-transition,
+::view-transition-group(root),
+::view-transition-image-pair(root),
+::view-transition-new(root) { background-color: var(--bg); }
+/* NEVER show the old-page snapshot: flash-hunt frame evidence (two runs, both directions,
+   survived the starfield fix) shows Chromium racily capturing the outgoing page as PURE
+   WHITE, and that image composites ON TOP of every backstop — it cannot be painted over.
+   Hiding it turns the crossfade into a brief dip through the dark backdrop, from which the
+   new page fades in: structurally white-proof. Also inlined in each page head. */
+::view-transition-old(root) { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-new(root) { animation: vt-in .32s cubic-bezier(.22,.61,.36,1) both; }
+}
+@keyframes vt-in  { from { opacity:0; } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(root) { animation:none; }
+}
+/* The top bar is pixel-identical on both pages (incl. the invisible Pause placeholder), so
+   lift it out of the root dip into its own transition group: old snapshot hidden (same
+   untrusted capture as the root's), new bar shown instantly with no animation — it reads as
+   one continuous bar while the page content fades beneath it. Also inlined in each head. */
+.topbar { view-transition-name: topbar; }
+::view-transition-old(topbar) { display: none; }
+::view-transition-new(topbar) { animation: none; }
+/* The Pause toggle is the one element that differs between the two bars (the guide carries
+   an invisible placeholder), so the instant topbar hard-cuts it. Its own group keeps the
+   UA's default cross-fade: fade-out leaving the landing, fade-in arriving — geometry is
+   identical so nothing moves. Old image trusted here: the racy white capture was only ever
+   observed on the root snapshot, and worst case is a button-sized blink. */
+.motion-toggle { view-transition-name: motion-toggle; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(motion-toggle) { display: none; }
+  ::view-transition-new(motion-toggle) { animation: none; }
 }
 
 /* ---- Responsive ---- */

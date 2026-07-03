@@ -1,8 +1,28 @@
-# Particle Editor — landing page
+# Particle Editor — landing page + guide
 
-A static, single-page landing site for the public mirror (`DrKnickers/particle-editor`).
-Plain HTML/CSS/JS — no build step, no framework. Decoupled from the source-sync pipeline
-(it is **not** in `tasks/public-manifest.txt`).
+A static site for the public mirror (`DrKnickers/particle-editor`): the landing page at the
+root plus a user guide under `guide/`. Plain HTML/CSS/JS — no framework, no CI build step
+(the guide's HTML is prerendered locally and committed). Decoupled from the source-sync
+pipeline (it is **not** in `tasks/public-manifest.txt`). Fonts are self-hosted in `fonts/`
+(latin woff2 subsets of Schibsted Grotesk + IBM Plex Mono, preloaded from each page head —
+no third-party requests from the shipped pages).
+
+## Guide (Markdown → committed HTML)
+
+Guide pages are authored as Markdown in `guide-src/` and prerendered into `guide/*.html` by
+a zero-dependency script (Node built-ins only — no npm install):
+
+```bash
+# from the repo root
+node scripts/build-guide.mjs           # render guide-src/*.md -> site/guide/*.html
+node scripts/build-guide.mjs --check   # exit 1 if committed HTML is stale vs the Markdown
+```
+
+Adding a page = drop `guide-src/<slug>.md`, list it in `guide-src/nav.json` (which drives
+the sidebar), rebuild, and **commit both the Markdown and the generated HTML** — deploys
+ship the committed HTML as-is; nothing builds it in CI (by design). Run `--check` before
+review to catch a forgotten rebuild. The renderer covers a documented Markdown subset
+(headings, lists, fenced code, blockquotes, links/images, raw HTML blocks — no tables).
 
 ## Local preview
 
@@ -73,6 +93,17 @@ particle.example.com {
     encode zstd gzip
     file_server
 }
+```
+
+**⚠ `main.js` deploy trap (lesson):** the VPS copy of `main.js` carries a local-only
+patch — its `MEDIA_BASE` fallback is `"media-local/"`, while the repo copy falls back to the
+`site-media` release URL. Any deploy that uploads `main.js` must re-apply the patch and
+verify, or the demo's clips silently break:
+
+```powershell
+ssh -i $env:USERPROFILE\.ssh\particle-demo-site-key particledeploy@66.163.126.124 `
+  "cd /var/www/particle-editor-demo && sed -i 's#override ?? \"https://github.com/DrKnickers/particle-editor/releases/download/site-media/\"#override ?? \"media-local/\"#' main.js"
+curl.exe -sL https://particle.example.com/main.js | Select-String media-local/
 ```
 
 Normal content updates do **not** need sudo or Caddy changes. This Windows machine has

@@ -60,7 +60,7 @@ toggle.addEventListener("click", () => { userChoice = !motionOn; motionOn = user
 mq.addEventListener("change", (e) => { if (userChoice === null) { motionOn = !e.matches; applyMotion(); } });
 applyMotion();                         // reflect initial state (esp. "Play motion" under reduce)
 
-// Load animation: tag the reveal elements, flip on load (CSS guards reduced-motion).
-document.querySelectorAll(".hero > *, .feature > *, .site-footer > *")
-  .forEach(el => el.classList.add("reveal"));
-window.addEventListener("load", () => document.body.classList.add("loaded"));
+// Entrance motion is pure CSS now (styles.css "Motion" block) — this module previously
+// tagged .reveal + flipped body.loaded, but a network-fetched script mutating every
+// element's opacity AFTER first paint caused appear→vanish→fade on arrival and forced a
+// whole-page style invalidation mid view-transition (intermittent white frame).
