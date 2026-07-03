@@ -10,8 +10,10 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <map>
 #include "third_party/nlohmann/json.hpp"
 #include "DriveScript.h"   // drive::ComputeOrbitCamera, IsAllowedBridgeKind, Build/Classify
+#include "ClipPathTokens.h" // ${GAME}-style path-token expansion (pure)
 
 namespace clip {
 
@@ -297,6 +299,47 @@ inline bool ParseCursorTarget(const nlohmann::json& value, CursorTarget& out, st
         return true;
     }
     err = "cursor target has unknown kind"; return false;
+}
+
+// Expand ${TOKEN}s across a parsed timeline's PATH-BEARING fields only: the `open`
+// sugar, an explicit file/open event's `path`, and each mods/set-layers `paths`
+// entry. Deliberately NOT every param string — a value like a ui/set-picker-search
+// `text` is arbitrary user text that could legitimately contain "${...}" and must
+// not be treated as a token (which would wrongly fail-loud). A timeline with no
+// ${...} in these fields is unchanged even when `tokens` is empty; a ${...} with no
+// matching token FAILS LOUD (err set, false returned) rather than resolving to a
+// broken path. Separate from ParseTimeline so both stay independently testable.
+inline bool ExpandTimelineTokens(Timeline& tl,
+                                 const std::map<std::string, std::string>& tokens,
+                                 std::string& err) {
+    if (!tl.openPath.empty()) {
+        std::string e;
+        std::string v = ExpandPathTokens(tl.openPath, tokens, e);
+        if (!e.empty()) { err = "open: " + e; return false; }
+        tl.openPath = v;
+    }
+    for (auto& ev : tl.ats) {
+        std::string e;
+        if (ev.kind == "file/open") {
+            auto it = ev.params.find("path");
+            if (it != ev.params.end() && it->is_string()) {
+                std::string v = ExpandPathTokens(it->get<std::string>(), tokens, e);
+                if (!e.empty()) { err = ev.kind + ": " + e; return false; }
+                *it = v;
+            }
+        } else if (ev.kind == "mods/set-layers") {
+            auto it = ev.params.find("paths");
+            if (it != ev.params.end() && it->is_array()) {
+                for (auto& pe : *it) {
+                    if (!pe.is_string()) continue;
+                    std::string v = ExpandPathTokens(pe.get<std::string>(), tokens, e);
+                    if (!e.empty()) { err = ev.kind + ": " + e; return false; }
+                    pe = v;
+                }
+            }
+        }
+    }
+    return true;
 }
 
 inline bool ParseTimeline(const std::string& json, Timeline& out, std::string& err) {

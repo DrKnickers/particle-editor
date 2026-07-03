@@ -5054,10 +5054,59 @@ int HostWindowImpl::Run(int nCmdShow)
                 // Parse the timeline (need width/height/openPath for the gate).
                 std::string err;
                 auto r = std::make_unique<host::ClipRunner>();
-                if (!r->Init(ReadFileUtf8(m_recordScriptPath), err))
+                // ${GAME} -> the resolved game install root (argv-or-registry, the
+                // same root mods are discovered under), so a timeline's mod path
+                // (e.g. "${GAME}/Mods/Mod") survives a reinstall
+                // elsewhere. Trailing separator stripped so the token joins cleanly
+                // with "/Mods/...". Only defined when a root is known — a timeline
+                // using ${GAME} without one fails loud in Init (exit 2).
                 {
-                    Log("[record] bad timeline: %s\n", err.c_str());
-                    recordExitCode = r->ExitCode();   // 2
+                    std::map<std::string, std::string> tokens;
+                    if (modManager && !modManager->GameRoots().empty()
+                        && !modManager->GameRoots().front().empty())
+                    {
+                        std::wstring g = modManager->GameRoots().front();
+                        while (!g.empty() && (g.back() == L'\\' || g.back() == L'/')) g.pop_back();
+                        tokens["GAME"] = WideToUtf8(g);
+                    }
+                    r->SetPathTokens(std::move(tokens));
+                }
+                const bool initOk = r->Init(ReadFileUtf8(m_recordScriptPath), err);
+                // Strict mod-layer existence: token expansion (${GAME}) already ran
+                // in Init, but ModManager::SetLayerStack SILENTLY DROPS a missing
+                // directory and still reports success (records unmodded). Pre-check
+                // the resolved non-empty layer paths so a wrong ${GAME} root or an
+                // uninstalled mod FAILS LOUD instead of quietly rendering the
+                // base-game look — the whole point of the token's fail-loud
+                // contract. Empty `paths` (explicit Unmodded) is fine.
+                std::string layerErr;
+                if (initOk)
+                {
+                    for (const auto& ev : r->TL().ats)
+                    {
+                        if (ev.kind != "mods/set-layers") continue;
+                        auto pit = ev.params.find("paths");
+                        if (pit == ev.params.end() || !pit->is_array()) continue;
+                        for (const auto& pe : *pit)
+                        {
+                            if (!pe.is_string()) continue;
+                            const std::string p = pe.get<std::string>();
+                            if (p.empty()) continue;
+                            const DWORD attr = GetFileAttributesW(Utf8ToWide(p).c_str());
+                            if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY))
+                            {
+                                layerErr = "mod layer not found: " + p
+                                         + " (check the game install / ${GAME} root)";
+                                break;
+                            }
+                        }
+                        if (!layerErr.empty()) break;
+                    }
+                }
+                if (!initOk || !layerErr.empty())
+                {
+                    Log("[record] bad timeline: %s\n", (!layerErr.empty() ? layerErr : err).c_str());
+                    recordExitCode = 2;   // Init-fail and mod-miss are both exit 2
                     quit = true;
                 }
                 else

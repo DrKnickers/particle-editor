@@ -343,6 +343,41 @@ int main()
         CHECK(IsAllowedRecordKind("engine/set/bloom-strength"));
     }
 
+    // ExpandTimelineTokens: ${GAME} reaches openPath + mods/set-layers.paths,
+    // expands exactly once, leaves non-path params (ui/set-picker-search text)
+    // untouched, and fails loud on an unknown token. (#494 portability follow-up.)
+    {
+        const std::map<std::string, std::string> tok = {{"GAME", "D:/g/corruption"}};
+
+        Timeline tl;
+        tl.openPath = "${GAME}/x.alo";
+        tl.ats.push_back({0.0, "mods/set-layers",
+                          nlohmann::json{{"paths", {"${GAME}/Mods/Mod"}}}});
+        tl.ats.push_back({0.0, "ui/set-picker-search",
+                          nlohmann::json{{"text", "${GAME}"}}});   // literal user text, NOT a path
+        std::string err;
+        CHECK(ExpandTimelineTokens(tl, tok, err));
+        CHECK(err.empty());
+        CHECK(tl.openPath == "D:/g/corruption/x.alo");
+        CHECK(tl.ats[0].params["paths"][0].get<std::string>() == "D:/g/corruption/Mods/Mod");
+        CHECK(tl.ats[1].params["text"].get<std::string>() == "${GAME}");   // scoped: unchanged
+
+        // unknown token in a path field -> fail loud, no partial mutation contract
+        Timeline bad;
+        bad.ats.push_back({0.0, "mods/set-layers",
+                           nlohmann::json{{"paths", {"${NOPE}/Mods/X"}}}});
+        std::string berr;
+        CHECK(!ExpandTimelineTokens(bad, tok, berr));
+        CHECK(!berr.empty());
+
+        // no ${...} anywhere -> succeeds even with an empty token table
+        Timeline plain;
+        plain.openPath = "<path>";
+        std::string perr;
+        CHECK(ExpandTimelineTokens(plain, {}, perr));
+        CHECK(perr.empty() && plain.openPath == "<path>");
+    }
+
     if (g_fail) { std::printf("\n%d CHECK(s) FAILED\n", g_fail); return 1; }
     std::printf("all clip-timeline tests passed\n");
     return 0;

@@ -7,6 +7,10 @@ namespace host {
 
 bool ClipRunner::Init(const std::string& timelineJson, std::string& err) {
     if (!clip::ParseTimeline(timelineJson, m_tl, err)) { m_exitCode = 2; return false; }
+    // Resolve ${TOKEN}s (e.g. ${GAME}/Mods/X) against the host-supplied table.
+    // Fail loud (exit 2) so a moved install / typo'd token can't silently render
+    // a broken path — for a mod layer that would quietly drop back to unmodded.
+    if (!clip::ExpandTimelineTokens(m_tl, m_pathTokens, err)) { m_exitCode = 2; return false; }
     m_targetCursor = clip::CursorTrackIsTargetBearing(m_tl.cursor);
     return true;
 }

@@ -2,7 +2,9 @@
 #define HOST_CLIP_RUNNER_H
 
 #include <functional>
+#include <map>
 #include <string>
+#include <utility>       // std::move (SetPathTokens setter)
 #include "ClipTimeline.h"
 
 namespace host {
@@ -26,6 +28,12 @@ public:
     using LogFn       = std::function<void(const std::string&)>;
 
     enum class Status { Running, Done };
+
+    // Path tokens expanded in timeline `open` + at-event params at Init (e.g.
+    // {"GAME": "<game root>"} lets a timeline say "${GAME}/Mods/X"). Must be set
+    // BEFORE Init. Absent tokens are fine unless a timeline actually uses one, in
+    // which case Init fails loud (exit 2). See ClipPathTokens.h.
+    void SetPathTokens(std::map<std::string, std::string> tokens) { m_pathTokens = std::move(tokens); }
 
     bool Init(const std::string& timelineJson, std::string& err);  // false + exitCode=2 on bad timeline
 
@@ -55,6 +63,7 @@ private:
     int    m_reqId = 0;
     size_t m_nextAt = 0;         // index of the next un-fired at-event (ats are sorted)
     bool   m_done = false;
+    std::map<std::string, std::string> m_pathTokens;   // ${TOKEN} table (host-supplied, pre-Init)
 
     DispatchFn m_dispatch; StepFn m_step; CursorFn m_cursor;
     AckFn m_ack; CaptureFn m_capture; LogFn m_log; UiPushFn m_uiPush;

@@ -103,6 +103,10 @@ public:
     // Read-only accessors.
     const std::vector<ModEntry>& GetMods() const { return m_mods; }
     const std::vector<std::wstring>& GetLayerStack() const { return m_layerStack; }
+    // Resolved game install root(s) (argv-or-registry, primary first) — the same
+    // roots mods are discovered under. The --record path resolves a ${GAME} token
+    // against GameRoots().front() so a clip's mod path survives a reinstall.
+    const std::vector<std::wstring>& GameRoots() const { return m_gameRoots; }
     // Primary layer = top of the stack (highest precedence), or empty when Unmodded.
     // The single-path "active mod" view for the texture palette, file dialogs, and
     // the snapshot's activeModPath (the quick-switch checkmark).
