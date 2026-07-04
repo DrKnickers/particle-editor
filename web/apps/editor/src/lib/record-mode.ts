@@ -21,12 +21,20 @@ import { parseCursorMessage } from "./record-cursor-bridge";
 
 type RecordModeStore = {
   recording: boolean;
+  // Headless --record (PE_RECORD_HEADLESS): CapturePreview grabs client content
+  // only (the native title bar is never captured), so the branded RecordTitleStrip
+  // stands in for it. Latched from the host's one-shot ui/record-headless push.
+  // Implies `recording`. Reactive (not a ref) so the strip mounts on the latch.
+  headless: boolean;
   setRecording: () => void;
+  setHeadless: () => void;
 };
 
 const useStore = create<RecordModeStore>((set) => ({
   recording: false,
+  headless: false,
   setRecording: () => set({ recording: true }),
+  setHeadless: () => set({ recording: true, headless: true }),
 }));
 
 /** Subscribe to whether this page is running under --record. */
@@ -34,10 +42,21 @@ export function useRecording(): boolean {
   return useStore((s) => s.recording);
 }
 
+/** Subscribe to whether this is a HEADLESS --record run (title strip shown). */
+export function useRecordHeadless(): boolean {
+  return useStore((s) => s.headless);
+}
+
 /** Latch record mode on — called when the host's cursor track (or a legacy
  *  `ui/cursor` message) arrives in App.tsx's listener. Idempotent. */
 export function markRecording(): void {
   useStore.getState().setRecording();
+}
+
+/** Latch HEADLESS record mode — called when the host's ui/record-headless push
+ *  arrives. Also sets `recording`. Idempotent. */
+export function markHeadless(): void {
+  useStore.getState().setHeadless();
 }
 
 /** Latch record mode iff `data` is a record-cursor host message — the cursor
@@ -51,5 +70,5 @@ export function latchRecordModeFromMessage(data: unknown): void {
 
 /** Test-only: clear the latch (the store is a module singleton that survives across tests). */
 export function __resetRecordModeForTests(): void {
-  useStore.setState({ recording: false });
+  useStore.setState({ recording: false, headless: false });
 }
