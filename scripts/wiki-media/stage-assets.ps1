@@ -1,11 +1,11 @@
-# stage-assets.ps1 — build the wiki-media tutorial fixture tree (pipeline spec §6).
+# stage-assets.ps1 - build the wiki-media tutorial fixture tree (pipeline spec section 6).
 #
 # Creates <focMods>\ParticleTutorial\Data\Art\Models, copies the two vanilla source
 # effects in as loose overrides, then runs the builder timelines (record runs whose
 # frames are discarded; each ends in a confined file/save) to derive the tutorial
 # stage files under <focMods>\ParticleTutorial\_stages.
 #
-# IP guard: every write target must resolve OUTSIDE the repo — vanilla-derived .alo
+# IP guard: every write target must resolve OUTSIDE the repo - vanilla-derived .alo
 # files never enter git. Hard-fails otherwise.
 #
 # Usage:
@@ -34,13 +34,13 @@ $base = Join-Path $cfg.focMods 'ParticleTutorial'
 $models = Join-Path $base 'Data\Art\Models'
 $stages = Join-Path $base '_stages'
 
-# ── IP guard: no stage target may live inside the repo ─────────────────────
+# -- IP guard: no stage target may live inside the repo ---------------------
 $baseFull = [System.IO.Path]::GetFullPath($base)
 if ($baseFull.ToLowerInvariant().StartsWith($repoRoot.ToLowerInvariant())) {
-    Fail "stage base '$baseFull' resolves inside the repo '$repoRoot' — game-derived .alo files must not enter git"
+    Fail "stage base '$baseFull' resolves inside the repo '$repoRoot' - game-derived .alo files must not enter git"
 }
 
-# ── Source copies (pristine each run) ───────────────────────────────────────
+# -- Source copies (pristine each run) ---------------------------------------
 $sources = @('P_HP_IMPERIAL_DAMAGE.ALO', 'P_SHIELD_BLAST_LARGE00.ALO')
 $srcDir = Join-Path $cfg.extraction 'ART\MODELS'
 
@@ -71,7 +71,7 @@ foreach ($name in $sources) {
     Write-Host "[stage-assets] staged copy: $name"
 }
 
-# ── Builder timelines (ordered — later stages consume earlier ones) ─────────
+# -- Builder timelines (ordered - later stages consume earlier ones) ---------
 if (-not $SkipBuilders) {
     if (-not (Test-Path $exe)) { Fail "exe not found: $exe" }
     $builderDir = Join-Path $repoRoot 'tasks\wiki-media\tutorials\_stage'
