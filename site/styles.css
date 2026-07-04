@@ -183,6 +183,40 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
 /* hover-accent ring on playable clips */
 .clip:has(.clip-video):hover { border-color:rgba(74,139,255,.5); }
 
+/* ---- Toolset grid (section 6) ---- */
+.toolset-body { margin-top:2.5rem; }
+.cluster { margin:0 0 2.3rem; }
+.cluster:last-child { margin-bottom:0; }
+.cluster-label {
+  font-family:var(--mono); font-size:.78rem; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--faint); margin:0 0 1rem;
+}
+.qol-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:.75rem; }
+.qcard {
+  border:1px solid var(--rule); border-radius:8px; background:var(--frame-1);
+  padding:1rem 1.05rem; transition:border-color .18s ease, transform .18s ease;
+}
+.qcard:hover { border-color:rgba(74,139,255,.45); transform:translateY(-2px); }
+.qcard-ico {
+  width:34px; height:34px; border-radius:7px; border:1px solid var(--rule);
+  display:flex; align-items:center; justify-content:center; margin-bottom:.7rem;
+}
+.qcard-ico svg { width:18px; height:18px; stroke:var(--accent); fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+.qcard h3 { font-size:1rem; font-weight:600; color:var(--paper); margin:0 0 .3rem; }
+.qcard p { font-size:.86rem; line-height:1.5; margin:0; color:var(--body); }
+.essentials-label {
+  font-family:var(--mono); font-size:.74rem; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--faint); margin:1.5rem 0 .8rem;
+}
+.essentials { display:flex; flex-wrap:wrap; gap:.55rem; margin:0; padding:0; }
+.essentials li { list-style:none; }
+.essentials-chip {
+  font-family:var(--mono); font-size:.78rem; color:var(--body);
+  border:1px solid var(--rule); border-radius:2px; padding:.42rem .7rem;
+  display:inline-flex; align-items:center; gap:.45rem;
+}
+.essentials-chip svg { width:14px; height:14px; stroke:var(--accent); fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+
 /* ---- Footer ---- */
 .site-footer { padding:5rem 1.5rem 6rem; border-top:1px solid var(--rule); text-align:center; }
 .site-footer h2 { font-size:clamp(1.8rem,3.5vw,2.6rem); font-weight:600; color:var(--paper); margin:0 0 1.5rem; }
