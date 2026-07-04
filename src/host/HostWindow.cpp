@@ -94,6 +94,7 @@
 #include "DriveRunner.h"  // --drive: scripted non-CDP composite capture
 #include "ClipRunner.h"   // --record: deterministic clip recording (PNG sequence)
 #include "AsyncFrameEncoder.h"   // --record Branch B: background PNG encode (tasks/todo.md §3)
+#include "HeadlessComposite.h"   // host::CompositeUiOverEngine (headless --record composite)
 
 using namespace Microsoft::WRL;
 
@@ -790,7 +791,12 @@ struct HostWindowImpl
     struct RecordTiming
     {
         std::vector<double> dispatch, ack, barrier, png, frame;   // per-frame ms
+        // Headless-capture buckets (PE_RECORD_HEADLESS): `capture` = the
+        // CapturePreview UI grab + decode; `composite` = engine readback +
+        // CPU alpha-composite. They replace barrier+png on the headless path.
+        std::vector<double> capture, composite;
         double curDispatch = 0, curAck = 0, curBarrier = 0, curPng = 0;
+        double curCapture = 0, curComposite = 0;
         double setupMs = 0.0;        // record-branch start -> first Tick
         bool   sawFirstTick = false;
     };
@@ -802,6 +808,30 @@ struct HostWindowImpl
     // main.cpp's argv loop ignores unknown --flags harmlessly.
     bool m_recordTimingVerbose =
         wcsstr(GetCommandLineW(), L"--record-timing-verbose") != nullptr;
+    // Headless capture path (Stage 1): CapturePreview UI + engine-RT readback +
+    // CPU composite + message-ack, so a --record run is fast with the editor
+    // MINIMIZED (no DwmFlush/PrintWindow/rAF-ack presentation dependency). Env
+    // gate PE_RECORD_HEADLESS=1 (the legacy PrintWindow path stays the default,
+    // for the golden-diff gate). Probed once; see the ack + capture hooks.
+    bool m_recordHeadless = [] {
+        wchar_t b[8] = {};
+        return GetEnvironmentVariableW(L"PE_RECORD_HEADLESS", b, 8) > 0
+            && b[0] != L'0';
+    }();
+    // --record-minimized: minimize the record window before the frame loop so
+    // the machine is free during a headless render. Only meaningful WITH
+    // PE_RECORD_HEADLESS (the legacy PrintWindow/rAF path stalls minimized).
+    // This is the mechanism the machine-free acceptance test + Stage-3
+    // build.mjs auto-minimize use.
+    bool m_recordMinimized =
+        wcsstr(GetCommandLineW(), L"--record-minimized") != nullptr;
+    // Headless ack result for the LAST frame. In headless mode a missing ack
+    // means the web's synchronous (flushSync) commit failed — the DOM did NOT
+    // update, so capturing would publish a STALE frame. ClipRunner only aborts
+    // TARGET clips on an ack timeout (literal clips continue), so the headless
+    // capture hook checks this and fails the frame (exit 4) for BOTH — a
+    // withheld ack is never silently captured. (pre-PR review finding 1.)
+    bool m_headlessAckOk = true;
     // End-of-run summary (also emitted on the record watchdog so a timed-out
     // run still yields its measurement). p99/max reported beside p95 because
     // the 2000 ms ack deadline is fatal at p100, not p95 (plan §4 risk 1).
@@ -829,7 +859,8 @@ struct HostWindowImpl
         const RecordTiming& rt = m_recordTiming;
         const double frameTotal = total(rt.frame);
         const double segTotal = total(rt.dispatch) + total(rt.ack)
-                              + total(rt.barrier)  + total(rt.png);
+                              + total(rt.barrier)  + total(rt.png)
+                              + total(rt.capture)  + total(rt.composite);
         Log("[record-timing] frames=%zu wall=%.0fms setup=%.0fms tick=%.0fms "
             "pump=%.0fms other-in-tick=%.0fms\n",
             rt.frame.size(), wallMs, rt.setupMs, frameTotal,
@@ -838,8 +869,104 @@ struct HostWindowImpl
         line("ack",      rt.ack);
         line("barrier",  rt.barrier);
         line("png",      rt.png);
+        if (m_recordHeadless)
+        {
+            line("capture",   rt.capture);    // CapturePreview grab + decode
+            line("composite", rt.composite);  // engine readback + composite
+        }
         line("frame",    rt.frame);
     }
+
+    // Headless UI-layer grab: CapturePreview the WebView to a PNG mem-stream
+    // (presentation-INDEPENDENT — it forces a fresh render even minimized,
+    // proven in Stage 0), decode via GDI+ to straight (non-premultiplied)
+    // BGRA. The viewport region comes back alpha=0 (transparent); panels
+    // opaque. Returns false on any failure (→ capture hook returns false →
+    // ClipRunner exit 4, no publish). UI-thread only.
+    bool CapturePreviewToBgra(std::vector<unsigned char>& outBgra, int& outW, int& outH)
+    {
+        if (!webView) return false;
+        Microsoft::WRL::ComPtr<IStream> stream;
+        stream.Attach(SHCreateMemStream(nullptr, 0));
+        if (!stream) return false;
+
+        auto done  = std::make_shared<bool>(false);
+        auto hrOut = std::make_shared<HRESULT>(E_FAIL);
+        // Capture `stream` in the handler so it outlives the async op even if the
+        // pumped wait below TIMES OUT and returns (releasing our local ComPtr):
+        // WebView2 writes into the stream during the op, so a premature free
+        // would be a write-after-free. The handler holds the last ref and drops
+        // it when the (post-timeout) completion fires. (pre-PR review, defensive.)
+        HRESULT hr = webView->CapturePreview(
+            COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, stream.Get(),
+            Microsoft::WRL::Callback<ICoreWebView2CapturePreviewCompletedHandler>(
+                [done, hrOut, keepAlive = stream](HRESULT result) -> HRESULT {
+                    *hrOut = result; *done = true; return S_OK;
+                }).Get());
+        if (FAILED(hr)) return false;
+
+        // Pumped wait, bounded (2 s) — shared_ptr flags so a timed-out wait
+        // can't dangle the callback's captures. The pump also lets the
+        // WebView2 completion marshal onto this UI thread.
+        //
+        // Kick RenderD3D9()+DwmFlush() each spin: CapturePreview's async readback
+        // completes on a DWM/DComp composition cycle, which is THROTTLED when the
+        // window is minimized (the same throttle that stalls the rAF-ack). A bare
+        // engine Present isn't enough — DwmFlush() FORCES the composition pass
+        // (only ~13 ms minimized, per Stage 0), and WebView2 is composition-hosted
+        // in the same visual tree, so its preview render lands on that pass. This
+        // mirrors the legacy capture barrier (`RenderD3D9(); DwmFlush();`) that
+        // kept CapturePreview alive minimized in the Stage-0 spike. Without it the
+        // completion stalls multi-second intermittently (f0 ~100 ms, f1 > 2 s →
+        // exit 4). RenderD3D9 skips the spawner tick in record mode (idempotent).
+        const ULONGLONG t0 = GetTickCount64();
+        while (!*done)
+        {
+            MSG mw;
+            while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
+            { TranslateMessage(&mw); DispatchMessage(&mw); }
+            if (*done) break;
+            if (GetTickCount64() - t0 >= 2000) break;
+            RenderD3D9();
+            DwmFlush();
+        }
+        if (!*done || FAILED(*hrOut)) return false;
+
+        LARGE_INTEGER zero = {};
+        if (FAILED(stream->Seek(zero, STREAM_SEEK_SET, nullptr))) return false;
+        Gdiplus::Bitmap bmp(stream.Get(), FALSE);
+        if (bmp.GetLastStatus() != Gdiplus::Ok) return false;
+        const int w = static_cast<int>(bmp.GetWidth());
+        const int h = static_cast<int>(bmp.GetHeight());
+        if (w <= 0 || h <= 0) return false;
+
+        // Allocate BEFORE LockBits so no throwing op (resize/bad_alloc) runs
+        // while the bitmap is locked — otherwise the unlock is skipped and the
+        // bitmap leaks locked. (pre-PR review finding 2.)
+        const size_t rowBytes = static_cast<size_t>(w) * 4u;
+        outBgra.resize(rowBytes * static_cast<size_t>(h));
+
+        Gdiplus::Rect rc(0, 0, w, h);
+        Gdiplus::BitmapData bd = {};
+        // 32bppARGB (straight, NOT PARGB) — CapturePreview PNG is straight alpha.
+        if (bmp.LockBits(&rc, Gdiplus::ImageLockModeRead,
+                         PixelFormat32bppARGB, &bd) != Gdiplus::Ok)
+            return false;
+        // SIGNED stride: GDI+ Scan0 points at the display-top row; Stride is
+        // NEGATIVE for a bottom-up lock, so ptrdiff_t arithmetic is required —
+        // unsigned math would blow up to a huge offset → OOB. (finding 1.)
+        const auto* base = static_cast<const uint8_t*>(bd.Scan0);
+        for (int y = 0; y < h; ++y)
+            memcpy(outBgra.data() + static_cast<size_t>(y) * rowBytes,
+                   base + static_cast<ptrdiff_t>(y) * bd.Stride, rowBytes);
+        bmp.UnlockBits(&bd);
+        outW = w; outH = h;
+        return true;
+    }
+
+    // CPU composite for the headless path lives in HeadlessComposite.h
+    // (host::CompositeUiOverEngine) so the pixel math is unit-testable without
+    // the GUI. See tests/test_headless_composite.cpp.
     // --drive bridge-selftest handshake: RunDriveSelftest arms the token +
     // nested-pumps; OnWebMessage completes it when the tokened result arrives
     // over the real page->host postMessage wire (single UI thread, no atomics).
@@ -1376,6 +1503,12 @@ void HostWindowImpl::ResizeWebViewToClient()
     // budget pressure to justify it.)
     RECT r;
     GetClientRect(hMain, &r);
+    // A minimized window has a 0-area client rect; pushing that to put_Bounds
+    // makes WebView2 stop rendering — which stalls CapturePreview in headless
+    // record (the async readback never gets a fresh render). Keep the last good
+    // bounds; on restore WM_SIZE fires again with the real rect. (Harmless
+    // generally: a minimized window shows nothing, so a 0-resize is pure waste.)
+    if (IsIconic(hMain) || r.right - r.left <= 0 || r.bottom - r.top <= 0) return;
     webController->put_Bounds(r);
     // When main resizes, the viewport popup's screen position
     // may need to change too (the main HWND's client origin shifted
@@ -5185,6 +5318,30 @@ int HostWindowImpl::Run(int nCmdShow)
                         }
                     }
 
+                    // (e0) headless capture mode: tell the web to ack each frame
+                    //      SYNCHRONOUSLY (flushSync, no double-rAF) — the
+                    //      CapturePreview path forces the paint, so the rAF
+                    //      "proof of paint" wait (which stalls minimized) is
+                    //      dropped. Latched once here, before the frame loop; the
+                    //      legacy foreground path never sends it (double-rAF stays,
+                    //      so the golden-diff baseline is unchanged).
+                    if (m_recordHeadless && webView)
+                    {
+                        nlohmann::json hm = {{"type","ui/record-headless"}};
+                        webView->PostWebMessageAsJson(host::Utf8ToWide(hm.dump()).c_str());
+                    }
+
+                    // Minimize the window for a machine-free render. Headless
+                    // capture (CapturePreview + engine RT readback + message-ack)
+                    // is presentation-independent, so frames stay ~fast minimized;
+                    // the legacy path would stall at ~2 s/frame, so guard on
+                    // headless mode.
+                    if (m_recordMinimized && m_recordHeadless)
+                    {
+                        ShowWindow(hMain, SW_MINIMIZE);
+                        Log("[record] window minimized for headless capture\n");
+                    }
+
                     // (e1) hide the right-dock (Spawner/Lighting/Atlas) panel so the
                     //      recorded clip shows a clean layout + more curve editor.
                     {
@@ -5207,9 +5364,14 @@ int HostWindowImpl::Run(int nCmdShow)
                     //      wait the first frames capture the still-open right dock (the
                     //      Spawner panel), so the hide-panel + focus-channel must settle
                     //      here, BEFORE t=0. Paused sim => no particle/clock advance.
+                    //      HEADLESS also waits for layout/scene-rect (like --capture) so
+                    //      CaptureSnapshotBgra crops to the true viewport, not the full-RT
+                    //      fallback — consistent with the --capture gate (pre-PR finding 2).
                     {
                         const LONGLONG s = PerfQpcNow();
-                        while (QpcMs(PerfQpcNow() - s, recordFreq) < 500)
+                        while (QpcMs(PerfQpcNow() - s, recordFreq) < 500 ||
+                               (m_recordHeadless && !m_sceneRectSeen &&
+                                QpcMs(PerfQpcNow() - s, recordFreq) < 3000))
                         {
                             MSG mw;
                             while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
@@ -5218,6 +5380,10 @@ int HostWindowImpl::Run(int nCmdShow)
                             Sleep(8);
                         }
                     }
+                    if (m_recordHeadless && !m_sceneRectSeen)
+                        Log("[record] WARNING headless: no layout/scene-rect after settle — "
+                            "engine readback falls back to the full RT (offstage pixels are "
+                            "hidden by opaque panels, so registration is unaffected)\n");
 
                     // (e4) semantic-targeting cursor: stream the cursor TRACK to the
                     //      web side ONCE here (it resolves the selectors against its
@@ -5287,17 +5453,25 @@ int HostWindowImpl::Run(int nCmdShow)
                         [this, rf = recordFreq](int frameId, double deadlineMs){
                             const LONGLONG s = PerfQpcNow();
                             bool acked = false;
+                            // Headless (message-ack): the web posts the rich ack
+                            // SYNCHRONOUSLY (flushSync, no double-rAF), so pump the
+                            // queue until it lands — NO RenderD3D9, no rAF/present
+                            // dependency (that ~2 s/frame stall is exactly what this
+                            // removes). Short deadline fails fast: a missing ack on a
+                            // target clip is a loud exit 3, never a silent stale frame.
+                            const double dl = m_recordHeadless ? 500.0 : deadlineMs;
                             for (;;)
                             {
                                 MSG mw;
                                 while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
                                 { TranslateMessage(&mw); DispatchMessage(&mw); }
                                 if (m_lastAckedFrame >= frameId) { acked = true; break; }
-                                if (rf > 0 && QpcMs(PerfQpcNow() - s, rf) >= deadlineMs) break;
-                                RenderD3D9();
-                                Sleep(4);
+                                if (rf > 0 && QpcMs(PerfQpcNow() - s, rf) >= dl) break;
+                                if (!m_recordHeadless) RenderD3D9();
+                                Sleep(m_recordHeadless ? 1 : 4);
                             }
                             m_recordTiming.curAck += QpcMs(PerfQpcNow() - s, rf);
+                            if (m_recordHeadless) m_headlessAckOk = acked;
                             return acked;
                         },
                         // capture: present the latest engine frame, then BLOCK on the
@@ -5314,6 +5488,46 @@ int HostWindowImpl::Run(int nCmdShow)
                         // always followed by a composited pass.
                         [this, tmpDir, bp = kBarrierPresents, rf = recordFreq,
                          enc = recordEncoder](int idx){
+                            wchar_t name[40];
+                            swprintf_s(name, L"\\frame_%05d.png", idx);
+                            host::AsyncFrameEncoder::Frame f;
+                            f.path = tmpDir + name;
+
+                            // Headless composite (PE_RECORD_HEADLESS): render the
+                            // engine once, read its RT (AlphaCompositor D3D9
+                            // readback, scene-cropped), CapturePreview the UI, and
+                            // alpha-composite in-proc. NO DwmFlush / PrintWindow /
+                            // DWM-present dependency → fast even minimized. Any
+                            // failure returns false → ClipRunner exit 4, no publish.
+                            if (m_recordHeadless)
+                            {
+                                // A withheld/timed-out ack (finding 1) means the
+                                // web's flushSync commit failed — the DOM is STALE.
+                                // Fail the frame loudly rather than publish it.
+                                if (!m_headlessAckOk)
+                                { Log("[record] headless ack failed at frame %d — DOM not committed\n", idx); return false; }
+                                const LONGLONG tR0 = PerfQpcNow();
+                                RenderD3D9();   // advance the engine RT this frame
+                                const LONGLONG tC0 = PerfQpcNow();
+                                std::vector<unsigned char> uiBgra; int uiW = 0, uiH = 0;
+                                if (!CapturePreviewToBgra(uiBgra, uiW, uiH))
+                                { Log("[record] headless CapturePreview failed at frame %d\n", idx); return false; }
+                                const LONGLONG tC1 = PerfQpcNow();
+                                std::vector<unsigned char> engBgra;
+                                int eW = 0, eH = 0, eX = 0, eY = 0;
+                                if (!alphaCompositor ||
+                                    !alphaCompositor->CaptureSnapshotBgra(engBgra, eW, eH, eX, eY))
+                                { Log("[record] headless engine readback failed at frame %d\n", idx); return false; }
+                                host::CompositeUiOverEngine(uiBgra, uiW, uiH,
+                                                      engBgra, eW, eH, eX, eY,
+                                                      f.bgra, f.w, f.h);
+                                const bool ok = enc->Enqueue(std::move(f));
+                                m_recordTiming.curCapture   += QpcMs(tC1 - tC0, rf);
+                                m_recordTiming.curComposite += QpcMs((tC0 - tR0) +
+                                                               (PerfQpcNow() - tC1), rf);
+                                return ok;
+                            }
+
                             // [record-timing] barrier (present+flush loop) and
                             // png are timed separately. Branch B: png is now
                             // GRAB + ENQUEUE only — the compress+write runs on
@@ -5322,10 +5536,6 @@ int HostWindowImpl::Run(int nCmdShow)
                             const LONGLONG b0 = PerfQpcNow();
                             for (int i = 0; i < bp; ++i) { RenderD3D9(); DwmFlush(); }
                             const LONGLONG b1 = PerfQpcNow();
-                            wchar_t name[40];
-                            swprintf_s(name, L"\\frame_%05d.png", idx);
-                            host::AsyncFrameEncoder::Frame f;
-                            f.path = tmpDir + name;
                             const bool ok = host::GrabWindowPixels(hMain, f.bgra, f.w, f.h)
                                             && enc->Enqueue(std::move(f));
                             m_recordTiming.curBarrier += QpcMs(b1 - b0, rf);
@@ -5369,6 +5579,7 @@ int HostWindowImpl::Run(int nCmdShow)
                 }
                 m_recordTiming.curDispatch = m_recordTiming.curAck = 0.0;
                 m_recordTiming.curBarrier  = m_recordTiming.curPng = 0.0;
+                m_recordTiming.curCapture  = m_recordTiming.curComposite = 0.0;
                 const LONGLONG tickStart = PerfQpcNow();
                 const auto tickStatus = m_clipRunner->Tick();
                 m_recordTiming.frame.push_back(QpcMs(PerfQpcNow() - tickStart, recordFreq));
@@ -5376,12 +5587,15 @@ int HostWindowImpl::Run(int nCmdShow)
                 m_recordTiming.ack.push_back(m_recordTiming.curAck);
                 m_recordTiming.barrier.push_back(m_recordTiming.curBarrier);
                 m_recordTiming.png.push_back(m_recordTiming.curPng);
+                m_recordTiming.capture.push_back(m_recordTiming.curCapture);
+                m_recordTiming.composite.push_back(m_recordTiming.curComposite);
                 if (m_recordTimingVerbose)
                     Log("[record-timing] f=%d frame=%.1f dispatch=%.1f ack=%.1f "
-                        "barrier=%.1f png=%.1f\n",
+                        "barrier=%.1f png=%.1f capture=%.1f composite=%.1f\n",
                         m_recordFrame, m_recordTiming.frame.back(),
                         m_recordTiming.curDispatch, m_recordTiming.curAck,
-                        m_recordTiming.curBarrier, m_recordTiming.curPng);
+                        m_recordTiming.curBarrier, m_recordTiming.curPng,
+                        m_recordTiming.curCapture, m_recordTiming.curComposite);
                 if (tickStatus == host::ClipRunner::Status::Done)
                 {
                     recordExitCode = m_clipRunner->ExitCode();

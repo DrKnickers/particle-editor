@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { makeBridge } from "@/bridge";
 import { signalAppReady } from "@/lib/app-ready";
@@ -32,7 +33,7 @@ import { applyMsaaLevel, readMsaaLevel } from "@/lib/msaa-quality";
 import { applyModelShadows, readModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 import { RecordCursor } from "@/components/RecordCursor";
-import { parseCursorMessage, postFrameAcked } from "@/lib/record-cursor-bridge";
+import { parseCursorMessage, postFrameAcked, isRecordHeadlessMessage, commitAndAck } from "@/lib/record-cursor-bridge";
 import { latchRecordModeFromMessage } from "@/lib/record-mode";
 import { evalRecordCursor } from "@/lib/record-cursor-eval";
 import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record-cursor-drag";
@@ -206,6 +207,13 @@ function AppShell() {
   // Entirely dormant outside --record.
   const [recordCursor, setRecordCursor] = useState({ x: 0, y: 0, visible: false, pressed: false });
   const recordCursorTrackRef = useRef<RecordCursorKey[] | null>(null);
+  // --record HEADLESS mode (host sends ui/record-headless once): ack each frame
+  // SYNCHRONOUSLY — flushSync the cursor/drag DOM commit, then post immediately,
+  // dropping the double-rAF "proof of paint" wait (which stalls when the window
+  // isn't presented / is minimized). The host's CapturePreview forces the paint,
+  // so the rAF wait is redundant here. Legacy foreground record keeps the
+  // double-rAF (so the golden-diff baseline is byte-for-byte unchanged).
+  const recordHeadlessRef = useRef(false);
   // --record synthetic drag: turns the per-frame cursor press/move into REAL pointer
   // events so a clip can drive a live reorder gesture (lifted chip + make-room gap +
   // drop). See lib/record-cursor-drag.ts. Dormant outside --record (only the cursor
@@ -226,6 +234,12 @@ function AppShell() {
       // point; a no-op for tick/other messages. See lib/record-mode.ts.
       latchRecordModeFromMessage(e.data);
 
+      // Latch headless-capture mode (host → web, once, before the frame loop).
+      if (isRecordHeadlessMessage(e.data)) {
+        recordHeadlessRef.current = true;
+        return;
+      }
+
       const track = parseCursorTrackMessage(e.data);
       if (track) {
         // A track swap mid-drag would strand a live synthetic gesture — abort it
@@ -241,35 +255,38 @@ function AppShell() {
         const keys = recordCursorTrackRef.current;
         if (!keys) return;
         const cursor = evalRecordCursor(keys, tick.t);
-        setRecordCursor({ x: cursor.x, y: cursor.y, visible: cursor.vis, pressed: cursor.press });
-        // Drive a real drag from the frame's press/move BEFORE the ack, so the
-        // gesture's chip+gap are in the DOM by the time the host grabs the frame.
-        // `ok` gates the down/move so an unresolved press never clicks (0,0); point
-        // ("literal") targets are always ok, so they drive it too (gaps 2 & 3).
-        applyRecordDrag({ x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok }, recordDragStateRef.current);
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() =>
-            wv.postMessage?.(
-              JSON.stringify({
-                type: "ui/frame-acked",
-                frame: tick.frame,
-                cursor: {
-                  x: cursor.x,
-                  y: cursor.y,
-                  vis: cursor.vis,
-                  press: cursor.press,
-                  resolved: cursor.resolved,
-                },
-              }),
-            ),
-          ),
-        );
+        const ackMsg = JSON.stringify({
+          type: "ui/frame-acked",
+          frame: tick.frame,
+          cursor: {
+            x: cursor.x,
+            y: cursor.y,
+            vis: cursor.vis,
+            press: cursor.press,
+            resolved: cursor.resolved,
+          },
+        });
+        // Apply the frame's cursor + a real drag from its press/move BEFORE the
+        // ack, so the gesture's chip+gap are in the DOM by the time the host
+        // grabs the frame. `ok` gates the down/move so an unresolved press never
+        // clicks (0,0); point ("literal") targets are always ok, so they drive it
+        // too (gaps 2 & 3).
+        // Apply cursor + drag (headless flushSyncs BOTH so the drag chip/gap in
+        // other components commit pre-ack), then ack. See commitAndAck.
+        commitAndAck({
+          headless: recordHeadlessRef.current,
+          applyFrame: () => {
+            setRecordCursor({ x: cursor.x, y: cursor.y, visible: cursor.vis, pressed: cursor.press });
+            applyRecordDrag({ x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok }, recordDragStateRef.current);
+          },
+          post: () => wv.postMessage?.(ackMsg),
+          flushSync,
+        });
         return;
       }
 
       const c = parseCursorMessage(e.data);
       if (!c) return;
-      setRecordCursor(c);
       // Legacy per-frame ("literal") cursor path drives the drag too — a literal
       // coordinate is always resolved (no ref to miss), so ok:true. Without this,
       // only the target-based track would reorder (gap 3). NOTE: this deprecated
@@ -277,10 +294,17 @@ function AppShell() {
       // missing x/y to 0, so a hand-crafted literal message with pressed:true and no
       // coords would arm at (0,0) — an accepted latent gap for the legacy path only
       // (no dragging literal clip exists; new clips use the target track).
-      applyRecordDrag({ x: c.x, y: c.y, press: c.pressed, ok: true }, recordDragStateRef.current);
       const frame =
         typeof (e.data as { frame?: number })?.frame === "number" ? (e.data as { frame: number }).frame : 0;
-      requestAnimationFrame(() => requestAnimationFrame(() => postFrameAcked(frame)));
+      commitAndAck({
+        headless: recordHeadlessRef.current,
+        applyFrame: () => {
+          setRecordCursor(c);
+          applyRecordDrag({ x: c.x, y: c.y, press: c.pressed, ok: true }, recordDragStateRef.current);
+        },
+        post: () => postFrameAcked(frame),
+        flushSync,
+      });
     };
     wv.addEventListener("message", onMsg);
     return () => wv.removeEventListener?.("message", onMsg);
