@@ -106,6 +106,7 @@
 <li>Building a projectile core with the built-in tail controls.</li>
 <li>Adding a projectile glow that also uses the built-in tail controls.</li>
 <li>Building a muzzle flash from a core and an outer glow.</li>
+<li>Using <code>Bursts</code> generation so the muzzle flash fires once instead of streaming continuously.</li>
 <li>Using additive color for a readable energy shot.</li>
 <li>Using <code>Parent speed inherit:</code> to separate a moving projectile from a stationary muzzle flash.</li>
 <li>Using the Spawner panel to launch particle instances in a chosen direction at a chosen speed.</li>
@@ -133,7 +134,7 @@ Scale:       narrow enough to read as a shot, not a cloud
 <p>Add a second projectile emitter named something like <code>Projectile_Glow</code>. This emitter should be slightly wider, softer, and less intense than the core. It gives the shot presence without replacing the crisp center.</p>
 <p>Use the Tail section on this emitter too. Enable <code>Has tail</code> and give the glow its own <code>Tail length:</code>. The glow tail can be a little broader or softer than the core tail, but it should still point in the same direction and support the same motion.</p>
 <h2 id="4-let-the-projectile-emitters-ride-the-shot">4. Let the Projectile Emitters Ride the Shot</h2>
-<p>Select the projectile core and projectile glow emitters. In the Property Panel, find <code>Parent speed inherit:</code> and set them near full inheritance so the projectile rides with the parent motion.</p>
+<p>Set <code>Parent speed inherit:</code> near full inheritance on both the projectile core and the projectile glow, one emitter at a time in the Property Panel, so the projectile rides with the parent motion.</p>
 <p>This makes the projectile part behave like it belongs to the moving projectile object. The core and glow tails should travel together instead of being left behind at the spawn point.</p>
 <figure class="guide-media" aria-label="Show the projectile core and glow using built-in tail controls and inheriting parent speed."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-inherit-parent-speed.mp4" data-poster="tutorial-03-inherit-parent-speed-poster.jpg"></video></figure>
 <h2 id="5-launch-test-instances-with-the-spawner">5. Launch Test Instances with the Spawner</h2>
@@ -148,10 +149,11 @@ Projectile_Glow: softer projectile glow and tail
 Muzzle_Core: white-hot launch flash
 </code></pre>
 <p>Make this emitter very short-lived, bright, and compact. A white or nearly white core works well because it reads as the hottest part of the flash.</p>
+<p>A muzzle flash fires once at the moment of launch, so it should generate as a burst, not a continuous stream. In the <strong>Basic</strong> tab, open the <strong>Generation</strong> section and set the Generation mode to <code>Bursts</code> (rather than <code>Continuous stream</code>). A single burst — <code>Bursts: 1</code> with a small <code>Particles/burst:</code> — gives one clean flash instead of an emitter that keeps re-emitting for the whole life of the shot. This burst-versus-stream choice, together with the short lifetime, is what makes a launch flash read as a flash and not a steady jet.</p>
 <figure class="guide-media" aria-label="Show adding the short muzzle flash emitters: a white core and softer green outer glow."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-muzzle-flash.mp4" data-poster="tutorial-03-muzzle-flash-poster.jpg"></video></figure>
 <h2 id="7-add-the-outer-glow-and-keep-it-at-the-launch-point">7. Add the Outer Glow and Keep It at the Launch Point</h2>
-<p>Add a second muzzle-flash emitter named something like <code>Muzzle_Glow</code>. Make it wider, softer, and slightly greener than the white core.</p>
-<p>Select both muzzle flash emitters. In the Property Panel, set <code>Parent speed inherit:</code> near zero so the flash stays close to the launch point.</p>
+<p>Add a second muzzle-flash emitter named something like <code>Muzzle_Glow</code>. Make it wider, softer, and slightly greener than the white core. Give it the same <code>Bursts</code> Generation mode as the core, so the outer glow fires with the flash instead of streaming on its own.</p>
+<p>Set <code>Parent speed inherit:</code> near zero on both muzzle flash emitters, one at a time in the Property Panel, so the flash stays close to the launch point.</p>
 <p>This is the main distinction in the tutorial. The projectile core and projectile glow ride the projectile. Muzzle flash emitters do not. If the flash stretches into a long streak, shorten its lifetime, reduce its scale, or lower its parent-speed inheritance.</p>
 <figure class="guide-media" aria-label="Show muzzle-flash emitters not inheriting parent speed."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-no-parent-speed.mp4" data-poster="tutorial-03-no-parent-speed-poster.jpg"></video></figure>
 <h2 id="8-check-the-two-groups-together">8. Check the Two Groups Together</h2>
@@ -161,6 +163,7 @@ Muzzle_Core: white-hot launch flash
 <li>Can you tell which part is the moving projectile?</li>
 <li>Do the built-in tails make the projectile motion easier to read?</li>
 <li>Does the projectile glow support the core without blurring the shot into a blob?</li>
+<li>Does the muzzle flash fire as a single burst rather than a continuous stream?</li>
 <li>Does the muzzle flash disappear quickly?</li>
 <li>Does the outer glow support the white core without becoming a second projectile?</li>
 <li>Do the emitter names still make the two groups easy to understand?</li>
