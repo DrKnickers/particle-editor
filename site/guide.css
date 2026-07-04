@@ -109,6 +109,18 @@ body.guide {
 .guide-article ul > li::marker { color: var(--faint); }
 .guide-article ol > li::marker { font-family: var(--mono); font-size: .85em; color: var(--faint); }
 
+/* ---- Tutorial media — clips/stills embedded from the wiki-media manifest ----
+   Sized to the article measure, NOT the landing .clip (whose 100vw full-bleed width would
+   overflow this narrower column). The inner .clip-video/.clip-img sizing (4:3, object-fit)
+   is shared from styles.css; here we only frame it: hairline, radius, the same recessed
+   radial as the landing clips, and the one rationed azure accent on hover. */
+.guide-media {
+  margin: 1.75rem 0; max-width: 100%;
+  border: 1px solid var(--rule); border-radius: 6px; overflow: hidden;
+  background: radial-gradient(120% 120% at 50% 35%, var(--frame-1), var(--frame-2));
+}
+.guide-media:has(.clip-video):hover { border-color: rgba(74, 139, 255, .5); }
+
 /* ---- Prev / Next pager — the reading path continues without a trip back to the sidebar.
    Mono eyebrow + paper title, hairline above, azure on hover; mirrors the landing's
    restrained link language. Emitted by the build from nav order. ---- */

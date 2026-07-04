@@ -49,9 +49,11 @@ page at them with the **`?media=` query parameter**:
 http://localhost:5175/?media=media-local/
 ```
 
-`main.js` reads the media base in this order: `window.__MEDIA_BASE__` (set by the smoke) →
-the `?media=` query param → the release URL. The repo's smoke
-(`pnpm --filter @particle-editor/editor test:site`) generates the placeholders with ffmpeg.
+Both `main.js` (landing clips) and `guide-media.js` (guide tutorial clips) read the media base
+in the same order: `window.__MEDIA_BASE__` (set by the smoke) → the `?media=` query param → the
+release URL — so the `?media=media-local/` preview also drives guide media (the guide references
+each clip/still by its `tutorial-XX-…` manifest id). The repo's smoke
+(`pnpm --filter @particle-editor/editor test:site`) generates the landing placeholders with ffmpeg.
 
 ## Media (HARD RULE)
 
@@ -70,8 +72,8 @@ At rollout (user-gated, on the fork):
 1. Create the fork and the `site-media` release; upload the clips + posters.
 2. Install `site/deploy/pages.yml` as `.github/workflows/pages.yml` on the fork.
 3. Enable Pages (source: GitHub Actions).
-4. Confirm `MEDIA_BASE` in `main.js` points at the release and the OG image URL resolves.
-5. Run the rollout-gate URL check (every `site-media` URL returns 200) before the deploy.
+4. Confirm `MEDIA_BASE` in **both** `main.js` and `guide-media.js` points at the release, and the OG image URL resolves.
+5. Run the rollout-gate URL check (every `site-media` URL returns 200 — landing clips AND the guide's `tutorial-XX-…` media) before the deploy.
 6. Manual iOS Safari smoke (Chromium can't cover iOS `playsinline` / Low-Power-Mode).
 
 Default URL: `https://drknickers.github.io/particle-editor/`.
@@ -101,15 +103,18 @@ particle.example.com {
 }
 ```
 
-**⚠ `main.js` deploy trap (lesson):** the VPS copy of `main.js` carries a local-only
-patch — its `MEDIA_BASE` fallback is `"media-local/"`, while the repo copy falls back to the
-`site-media` release URL. Any deploy that uploads `main.js` must re-apply the patch and
-verify, or the demo's clips silently break:
+**⚠ `main.js` / `guide-media.js` deploy trap (lesson):** the VPS copies of `main.js`
+**and `guide-media.js`** carry a local-only patch — their `MEDIA_BASE` fallback is
+`"media-local/"`, while the repo copies fall back to the `site-media` release URL. Both files
+share the identical fallback line, so any deploy that uploads either must re-apply the patch to
+**both** and verify, or the demo's clips silently break (`main.js` = landing clips,
+`guide-media.js` = guide tutorial clips):
 
 ```powershell
 ssh -i $env:USERPROFILE\.ssh\particle-demo-site-key particledeploy@66.163.126.124 `
-  "cd /var/www/particle-editor-demo && sed -i 's#override ?? \"https://github.com/DrKnickers/particle-editor/releases/download/site-media/\"#override ?? \"media-local/\"#' main.js"
+  "cd /var/www/particle-editor-demo && sed -i 's#override ?? \"https://github.com/DrKnickers/particle-editor/releases/download/site-media/\"#override ?? \"media-local/\"#' main.js guide-media.js"
 curl.exe -sL https://particle.example.com/main.js | Select-String media-local/
+curl.exe -sL https://particle.example.com/guide-media.js | Select-String media-local/
 ```
 
 Normal content updates do **not** need sudo or Caddy changes. This Windows machine has

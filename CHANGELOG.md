@@ -27,6 +27,7 @@ may live at the end of the file.
 
 ### Added
 
+- The guide's tutorial pages now embed their walkthrough media inline — each step's recorded editor clip (with pause/replay controls) plays as you scroll to it, alongside the before/after screenshots — instead of empty placeholders; the media ships from the shared release at the (gated) site rollout
 - The site guide now carries the full tutorial course — Setup, a Particle Authoring Primer, four hands-on tutorials, and four quick references — with per-page wayfinding ("Tutorials · 3 of 4"), previous/next links at the bottom of every page, and readable link tables
 - The landing site now has a user guide — Markdown-authored pages rendered in the site's look with a sidebar and per-page contents rail, linked from the top bar; navigating between the landing page and the guide fades smoothly instead of hard-cutting
 - Public landing page — a static GitHub Pages showcase for the editor in `site/`, with looping UI clips and a download CTA; built now, deploys to the public fork at the (gated) rollout

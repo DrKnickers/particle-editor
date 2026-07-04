@@ -17,12 +17,17 @@
 
 import fs from "node:fs";
 import { join, resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SITE = resolve(HERE, "..", "site");
 const SRC = join(SITE, "guide-src");
 const OUT = join(SITE, "guide");
+// The wiki-media manifest is the source of truth for each tutorial clip/still: it maps a
+// media id to its kind (clip/image) and manual flag. `<!-- Media: <id> -->` anchors in the
+// Markdown resolve against it (renderMedia below). The id IS the flat media basename, so
+// there is no separate mapping table.
+const MANIFEST = resolve(HERE, "..", "tasks", "wiki-media", "manifest.json");
 
 // ---- Markdown → HTML (dependency-free subset renderer) ------------------------------------
 
@@ -76,6 +81,42 @@ function headingIdsFor(md) {
     if (h) ids.add(slugify(h[2].trim().replace(/\s+#+\s*$/, "")));
   }
   return ids;
+}
+
+// Resolve a `<!-- Media: <id> -->` anchor into the site's lazy embed markup, driven by the
+// wiki-media manifest. The embed filenames are the manifest's own `output`/`poster` values —
+// exactly what the render runner produces and uploads — so the guide and the pipeline cannot
+// silently disagree on a filename. site/guide-media.js (guide) and site/main.js (landing) are
+// two separate resolvers that share ONLY this data-clip/data-poster filename convention (their
+// behaviour differs: the landing has a global motion toggle, the guide does not); each joins
+// the value to the media release at runtime, so the HTML stays binary-free. An unknown id — or
+// a filename that isn't a flat release basename — fails the build.
+function renderMedia(id, { media, sourcePage }) {
+  const item = media.get(id);
+  if (!item) {
+    throw new Error(`Unknown media id "${id}" in ${sourcePage} — add it to tasks/wiki-media/manifest.json`);
+  }
+  // The single manual shot (in-game proof) is a real game screenshot captured post-launch;
+  // keep an inert anchor so the slot stays documented and nothing broken renders until then.
+  if (item.manual) return `<!-- Media (manual, added post-launch): ${escapeHtml(id)} -->`;
+  const label = item.purpose ? escapeHtml(item.purpose) : "";
+  // The resolver does MEDIA_BASE + value, so each name must be a flat release basename; a path
+  // (a stale wiki/tutorial-XX/ prefix) would resolve to a nonexistent release subpath.
+  const flat = (name, field) => {
+    if (!name) throw new Error(`Media "${id}" in ${sourcePage}: missing manifest ${field}`);
+    if (/[\\/]/.test(name)) throw new Error(`Media "${id}" in ${sourcePage}: ${field} "${name}" must be a flat release filename (no path)`);
+    return escapeHtml(name);
+  };
+  if (item.kind === "image") {
+    // A still is its own image; the resolver sets img.src from data-poster (= its output file).
+    return `<figure class="guide-media"><img class="clip-img" data-poster="${flat(item.output, "output")}" alt="${label}"></figure>`;
+  }
+  // Default: a clip. `controls` gives the pause/replay mechanism a looping tutorial clip needs
+  // (WCAG 2.2.2) — apt for teaching, unlike the landing's ambient clips. The 4:3 dims reserve
+  // layout to avoid a shift.
+  return `<figure class="guide-media"${label ? ` aria-label="${label}"` : ""}>` +
+    `<video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" ` +
+    `data-clip="${flat(item.output, "output")}" data-poster="${flat(item.poster, "poster")}"></video></figure>`;
 }
 
 function renderInline(text, context) {
@@ -232,6 +273,15 @@ function renderMarkdown(md, context) {
       continue;
     }
 
+    // A media anchor is a comment, so it would otherwise fall into the raw-HTML passthrough
+    // below and emit inertly — intercept it FIRST and expand to the manifest-driven embed.
+    const mediaComment = line.match(/^\s*<!--\s*Media:\s*([\w-]+)\s*-->\s*$/);
+    if (mediaComment) {
+      out.push(renderMedia(mediaComment[1], context));
+      i++;
+      continue;
+    }
+
     if (/^\s*</.test(line)) {
       const buf = [];
       while (i < lines.length && !/^\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
@@ -378,6 +428,10 @@ ${pager}
     </main>
 ${toc}
   </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
 </body>
 </html>
 `;
@@ -405,6 +459,15 @@ function redirectHtml(firstSlug) {
 
 function build() {
   const nav = JSON.parse(fs.readFileSync(join(SRC, "nav.json"), "utf8"));
+  // Index the wiki-media manifest so `<!-- Media: id -->` anchors resolve to the right
+  // embed kind (and fail loudly on an id the manifest doesn't know).
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST, "utf8"));
+  const media = new Map(
+    (manifest.items ?? []).map((it) => [it.id, {
+      kind: it.kind || "clip", manual: !!it.manual, purpose: it.purpose,
+      output: it.output, poster: it.poster,
+    }]),
+  );
   // Flatten with section metadata so each page knows its kicker (section · N of M)
   // and its prev/next neighbours in reading order.
   const pages = nav.sections.flatMap((s) =>
@@ -429,7 +492,7 @@ function build() {
   const outputs = new Map(); // relative path under site/guide -> html
   for (const [idx, p] of pages.entries()) {
     const md = sources.get(p.slug);
-    const { html, toc } = renderMarkdown(md, { knownSlugs, pageAnchors, sourcePage: p.slug });
+    const { html, toc } = renderMarkdown(md, { knownSlugs, pageAnchors, sourcePage: p.slug, media });
     outputs.set(`${p.slug}.html`, pageHtml({
       title: p.title,
       guideHref,
@@ -444,30 +507,40 @@ function build() {
   return outputs;
 }
 
-const check = process.argv.includes("--check");
-const outputs = build();
+function runCli() {
+  const check = process.argv.includes("--check");
+  const outputs = build();
 
-if (check) {
-  const drift = [];
-  for (const [rel, html] of outputs) {
-    const path = join(OUT, rel);
-    const current = fs.existsSync(path) ? fs.readFileSync(path, "utf8") : null;
-    if (current !== html) drift.push(rel);
-  }
-  // Orphans: generated pages whose nav.json entry was removed/renamed would otherwise
-  // linger deployed forever — flag any .html in site/guide/ the build no longer produces.
-  if (fs.existsSync(OUT)) {
-    for (const f of fs.readdirSync(OUT)) {
-      if (f.endsWith(".html") && !outputs.has(f)) drift.push(`${f} (orphaned — no longer generated; delete it)`);
+  if (check) {
+    const drift = [];
+    for (const [rel, html] of outputs) {
+      const path = join(OUT, rel);
+      const current = fs.existsSync(path) ? fs.readFileSync(path, "utf8") : null;
+      if (current !== html) drift.push(rel);
     }
+    // Orphans: generated pages whose nav.json entry was removed/renamed would otherwise
+    // linger deployed forever — flag any .html in site/guide/ the build no longer produces.
+    if (fs.existsSync(OUT)) {
+      for (const f of fs.readdirSync(OUT)) {
+        if (f.endsWith(".html") && !outputs.has(f)) drift.push(`${f} (orphaned — no longer generated; delete it)`);
+      }
+    }
+    if (drift.length) {
+      console.error(`guide output is stale — run "node scripts/build-guide.mjs" and commit:\n  ${drift.join("\n  ")}`);
+      process.exit(1);
+    }
+    console.log(`guide up to date (${outputs.size} files)`);
+  } else {
+    fs.mkdirSync(OUT, { recursive: true });
+    for (const [rel, html] of outputs) fs.writeFileSync(join(OUT, rel), html);
+    console.log(`wrote ${outputs.size} files to site/guide/`);
   }
-  if (drift.length) {
-    console.error(`guide output is stale — run "node scripts/build-guide.mjs" and commit:\n  ${drift.join("\n  ")}`);
-    process.exit(1);
-  }
-  console.log(`guide up to date (${outputs.size} files)`);
-} else {
-  fs.mkdirSync(OUT, { recursive: true });
-  for (const [rel, html] of outputs) fs.writeFileSync(join(OUT, rel), html);
-  console.log(`wrote ${outputs.size} files to site/guide/`);
 }
+
+// Run the build only when invoked as a CLI, so unit tests can import the pure helpers
+// (renderMedia/renderMarkdown) without triggering a filesystem build at import time.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runCli();
+}
+
+export { renderMedia, renderMarkdown, build };

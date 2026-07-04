@@ -92,7 +92,7 @@
 <h1 id="tutorial-2-polish-hardpoint-damage-smoke">Tutorial 2: Polish Hardpoint Damage Smoke</h1>
 <p>This tutorial starts from the obvious green proof edit and turns it into believable dark hardpoint damage smoke with a subtle warm tint near the source.</p>
 <p>Keep the edit easy to understand while moving from proof-of-loading toward a usable game effect.</p>
-<!-- Media: tutorial-02-opening-result -->
+<figure class="guide-media"><img class="clip-img" data-poster="tutorial-02-opening-result.png" alt="Show the polished dark smoke target result."></figure>
 <h2 id="outcome">Outcome</h2>
 <p>By the end of this page, the hardpoint damage smoke will read as dark gray smoke with a little warm light near the root of the effect. This tutorial stays in the editor preview; Tutorial 1 already proved the override path in game.</p>
 <h2 id="what-this-teaches">What this teaches</h2>
@@ -117,7 +117,7 @@ Blue:  low to medium-low
 Alpha: strong at birth, fading later
 </code></pre>
 <p>Watch the Preview Viewport while you adjust. If the smoke disappears, it is probably too dark, too transparent, or both.</p>
-<!-- Media: tutorial-02-color-warm-tint -->
+<figure class="guide-media" aria-label="Show adjusting color over lifetime from proof green toward dark smoke with warm source tint."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-color-warm-tint.mp4" data-poster="tutorial-02-color-warm-tint-poster.jpg"></video></figure>
 <h2 id="2-add-a-warm-tint-near-the-source">2. Add a Warm Tint Near the Source</h2>
 <p>Hardpoint damage usually implies heat, sparks, or fire somewhere inside the damaged part. Fake that lighting by making the early smoke slightly warmer, then letting it cool as it ages.</p>
 <p>In the Curve Editor, adjust the color near the start of the smoke lifetime so it has a small red or orange bias. Keep the later part of the lifetime closer to neutral gray.</p>
@@ -129,7 +129,7 @@ Middle:     still readable
 End:        transparent
 </code></pre>
 <p>The ending matters most. Smoke that fades out feels like it disperses. Smoke that simply stops feels like it was switched off.</p>
-<!-- Media: tutorial-02-alpha-fade -->
+<figure class="guide-media" aria-label="Show shaping alpha so the smoke fades out instead of popping."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-alpha-fade.mp4" data-poster="tutorial-02-alpha-fade-poster.jpg"></video></figure>
 <h2 id="4-let-the-smoke-grow-as-it-fades">4. Let the Smoke Grow as It Fades</h2>
 <p>Use the Scale track to make the smoke larger over its lifetime. This helps sell the idea that hot smoke is spreading away from the damage source.</p>
 <p>The shape does not need to be dramatic. A small-to-larger scale curve is enough:</p>
@@ -138,7 +138,7 @@ Middle:     wider
 End:        widest, but fading out
 </code></pre>
 <p>Preview the color, alpha, and scale together. These controls work as a group: darker smoke may need more alpha, larger smoke may need a softer fade, and a warmer birth color may need a shorter visible duration.</p>
-<!-- Media: tutorial-02-scale-growth -->
+<figure class="guide-media" aria-label="Show scale growth so smoke expands naturally over lifetime."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-scale-growth.mp4" data-poster="tutorial-02-scale-growth-poster.jpg"></video></figure>
 <h2 id="5-check-the-effect-at-gameplay-readability">5. Check the Effect at Gameplay Readability</h2>
 <p>Use the Preview Viewport to judge the effect as a whole. A good hardpoint damage smoke effect is visible enough to tell the player something is damaged, but not so loud that it becomes the most important thing on screen.</p>
 <p>Use these questions as a quick check:</p>
@@ -148,7 +148,7 @@ End:        widest, but fading out
 <li>Does the smoke fade instead of popping away?</li>
 <li>Does the effect stay readable without covering too much of the ship?</li>
 </ul>
-<!-- Media: tutorial-02-final-preview -->
+<figure class="guide-media" aria-label="Show the polished smoke playing in the editor preview at a normal camera distance."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-final-preview.mp4" data-poster="tutorial-02-final-preview-poster.jpg"></video></figure>
 <h2 id="takeaways">Takeaways</h2>
 <p>The exact values of a particle matter less than the result they create: color, alpha, and scale should work together to communicate heat, smoke, and fading motion. Change one idea at a time and preview the result in motion.</p>
       </article>
@@ -172,5 +172,9 @@ End:        widest, but fading out
       </ul>
     </nav>
   </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
 </body>
 </html>

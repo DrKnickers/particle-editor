@@ -92,7 +92,7 @@
 <h1 id="tutorial-4-recolor-and-orient-a-shield-impact">Tutorial 4: Recolor and Orient a Shield Impact</h1>
 <p>This tutorial overrides <code>P_SHIELD_BLAST_LARGE00.ALO</code>, recolors it into an obvious purple variant, and uses the editor preview to study impact orientation.</p>
 <p>Shield impacts are directional effects. They need to read as something striking a surface, with shape and facing that support the color change.</p>
-<!-- Media: tutorial-04-opening-result -->
+<figure class="guide-media" aria-label="Show the final purple shield impact result before the user begins."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-04-opening-result.mp4" data-poster="tutorial-04-opening-result-poster.jpg"></video></figure>
 <h2 id="outcome">Outcome</h2>
 <p>By the end of this page, your tutorial mod will contain this loose override:</p>
 <pre><code class="language-text">Data\Art\Models\P_SHIELD_BLAST_LARGE00.ALO
@@ -116,7 +116,7 @@
 <pre><code class="language-text">ParticleTutorial\Data\Art\Models\P_SHIELD_BLAST_LARGE00.ALO
 </code></pre>
 <p>Use the Preview Viewport to watch the impact play a few times before changing anything. Look for the main flash, any ring or splash shape, and any fading glow after the hit.</p>
-<!-- Media: tutorial-04-open-override -->
+<figure class="guide-media" aria-label="Show opening the loose override copy of P_SHIELD_BLAST_LARGE00.ALO."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-04-open-override.mp4" data-poster="tutorial-04-open-override-poster.jpg"></video></figure>
 <h2 id="2-identify-the-impact-emitters">2. Identify the Impact Emitters</h2>
 <p>Select emitters one at a time in the Emitter Tree and watch what changes in the Preview Viewport. For this lesson, focus on the emitters that make the visible shield-hit read:</p>
 <ul>
@@ -134,7 +134,7 @@ Blue:  high
 Alpha: keep readable
 </code></pre>
 <p>Keep the center of the impact bright enough to read as energy. If everything becomes the same flat purple, give the core a little more brightness and let the outer glow be softer.</p>
-<!-- Media: tutorial-04-recolor-purple -->
+<figure class="guide-media" aria-label="Show changing the shield impact color to an obvious purple variant."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-04-recolor-purple.mp4" data-poster="tutorial-04-recolor-purple-poster.jpg"></video></figure>
 <h2 id="4-preserve-the-impact-shape">4. Preserve the Impact Shape</h2>
 <p>After recoloring, watch the effect in motion. A shield impact should still feel like a hit: quick arrival, strong center, expanding or fading energy, then a clean disappearance.</p>
 <p>Use these questions while you tune:</p>
@@ -151,7 +151,7 @@ Alpha: keep readable
 <h3 id="note-link-particles-to-the-impact-instance">Note: Link Particles to the Impact Instance</h3>
 <p>For impact-style particles, select emitters that should follow the impact orientation and check <code>Link particles to instance</code> in the Basic tab's Connection section. This is separate from the <code>Parent speed inherit:</code> control used in Tutorial 3.</p>
 <p>A useful authoring convention is to make the particle's important motion point along positive Z. For a shield hit, that means the effect can be oriented to move outward from the impact, back toward the direction the projectile came from before it struck the shield.</p>
-<!-- Media: tutorial-04-orient-preview -->
+<figure class="guide-media" aria-label="Show using Link particles to instance and rotating or framing the preview to understand shield-impact orientation."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-04-orient-preview.mp4" data-poster="tutorial-04-orient-preview-poster.jpg"></video></figure>
 <h2 id="6-final-preview-check">6. Final Preview Check</h2>
 <p>Watch the finished particle at a normal preview distance. The goal is a clear purple shield hit, not the loudest possible purple glow.</p>
 <p>Use this final check:</p>
@@ -162,7 +162,7 @@ Alpha: keep readable
 <li>The effect has a readable facing direction.</li>
 <li>The impact disappears without a distracting pop.</li>
 </ul>
-<!-- Media: tutorial-04-final-preview -->
+<figure class="guide-media" aria-label="Show the final purple shield impact in the editor preview."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-04-final-preview.mp4" data-poster="tutorial-04-final-preview-poster.jpg"></video></figure>
 <h2 id="takeaways">Takeaways</h2>
 <p>Impact particles need shape and direction as much as color. Recoloring can prove the edit, but orientation is what makes the effect feel attached to a surface in the game.</p>
       </article>
@@ -188,5 +188,9 @@ Alpha: keep readable
       </ul>
     </nav>
   </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
 </body>
 </html>

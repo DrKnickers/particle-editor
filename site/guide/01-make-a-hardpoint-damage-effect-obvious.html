@@ -92,7 +92,7 @@
 <h1 id="tutorial-1-make-a-hardpoint-damage-effect-obvious">Tutorial 1: Make a Hardpoint Damage Effect Obvious</h1>
 <p>This first tutorial makes one intentionally loud edit: it overrides the Star Destroyer hardpoint damage smoke particle and turns the smoke bright green.</p>
 <p>The goal is not to make a pretty effect yet. The goal is to prove that the editor can open a shipped particle, save a loose override into a tutorial mod, and produce a change that is obvious in game.</p>
-<!-- Media: tutorial-01-opening-result -->
+<figure class="guide-media"><img class="clip-img" data-poster="tutorial-01-opening-result.png" alt="Show the final bright green hardpoint damage smoke result before the user begins."></figure>
 <h2 id="outcome">Outcome</h2>
 <p>By the end of this page, your tutorial mod will contain this loose override:</p>
 <pre><code class="language-text">Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
@@ -119,7 +119,7 @@
 <pre><code class="language-text">ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
 </code></pre>
 <p>Use the Preview Viewport to confirm the particle is alive. If the effect is hard to see, use the Spawner so the effect repeats while you inspect it.</p>
-<!-- Media: tutorial-01-open-override -->
+<figure class="guide-media" aria-label="Show opening the loose override copy of P_HP_IMPERIAL_DAMAGE.ALO."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-open-override.mp4" data-poster="tutorial-01-open-override-poster.jpg"></video></figure>
 <h2 id="2-find-the-smoke-emitter">2. Find the Smoke Emitter</h2>
 <p>In the Emitter Tree, select the emitters one at a time and watch the Preview Viewport. For this lesson, look for the emitter that produces the broad damage smoke rather than small sparks or glow.</p>
 <p>The useful habit is simple: select one emitter, observe what it contributes, then move to the next. Particles become much easier to author when you can connect an emitter row to a visible part of the effect.</p>
@@ -132,19 +132,19 @@ Blue:  low
 Alpha: leave readable
 </code></pre>
 <p>This is deliberately exaggerated. Later tutorials will bring the effect back toward a believable game-art style.</p>
-<!-- Media: tutorial-01-green-color-edit -->
+<figure class="guide-media" aria-label="Show changing the smoke color to bright green in the editor UI."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-green-color-edit.mp4" data-poster="tutorial-01-green-color-edit-poster.jpg"></video></figure>
 <h2 id="4-save-the-override">4. Save the Override</h2>
 <p>Save the file back into the tutorial mod folder. The important part is that the file remains a loose override at the same game path:</p>
 <pre><code class="language-text">Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
 </code></pre>
 <p>Because this tutorial edits an existing shipped particle at the same path, the game can use it as an override. No new particle registration is needed for this lesson.</p>
-<!-- Media: tutorial-01-save-override -->
+<figure class="guide-media" aria-label="Show saving the loose override after the proof edit."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-save-override.mp4" data-poster="tutorial-01-save-override-poster.jpg"></video></figure>
 <h3 id="note-names-filenames-and-new-particles">Note: Names, Filenames, and New Particles</h3>
 <p>The particle name and the particle filename are related, but they are not the same thing. If you want to make a genuinely separate particle instead of overriding an existing one, use <strong>Save As</strong> in the editor so the file and internal particle identity are saved intentionally.</p>
 <p>A separate particle also needs to be referenced somewhere the game can reach it. Common routes are game XML/<code>Particles.xml</code> entries or an Alamo proxy placed in an <code>.alo</code> model.</p>
 <h2 id="5-verify-the-result-in-game">5. Verify the Result In Game</h2>
 <p>Start a normal battle where a Star Destroyer can take hardpoint damage. Once a hardpoint begins using the damage particle, the smoke should be bright green. That obvious color is your proof that the loose override is loading.</p>
-<!-- Media: tutorial-01-ingame-proof -->
+<!-- Media (manual, added post-launch): tutorial-01-ingame-proof -->
 <h2 id="takeaways">Takeaways</h2>
 <p>You made the smallest useful particle edit: one file, one visible emitter, one obvious change. That workflow is the base loop for the rest of the course:</p>
 <ul>
@@ -176,5 +176,9 @@ Alpha: leave readable
       </ul>
     </nav>
   </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
 </body>
 </html>
