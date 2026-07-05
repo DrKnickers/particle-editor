@@ -2038,10 +2038,14 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
         Log("[host] DocumentTitleChanged handler registered\n");
     }
 
-    // Fit to client.
+    // Fit to client. Skip a minimized/degenerate seed (#509 same-class guard):
+    // a 0-area put_Bounds makes WebView2 stop rendering; a later positive-size
+    // WM_SIZE (→ ResizeWebViewToClient) re-seeds. Non-iconic startup is the
+    // normal case, so this is a no-op except a rare start-minimized launch.
     RECT bounds;
     GetClientRect(hMain, &bounds);
-    controller->put_Bounds(bounds);
+    if (!IsIconic(hMain) && bounds.right - bounds.left > 0 && bounds.bottom - bounds.top > 0)
+        controller->put_Bounds(bounds);
 
     // Viewport is now a top-level WS_POPUP
     // owned by hMain (created in WM_CREATE). DWM
@@ -2415,12 +2419,15 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
             return bhr;
         }
         // Seed the tree to the current client size so the first paint
-        // is sized correctly. SetSize commits internally.
+        // is sized correctly. SetSize commits internally. Skip a
+        // minimized/degenerate seed (#509 same-class guard): a 0-/negative-area
+        // SetSize corrupts the surface; a later positive-size WM_SIZE re-seeds.
         RECT r;
         GetClientRect(hMain, &r);
         const int clientW = r.right  - r.left;
         const int clientH = r.bottom - r.top;
-        m_compositor->SetSize(clientW, clientH);
+        if (!IsIconic(hMain) && clientW > 0 && clientH > 0)
+            m_compositor->SetSize(clientW, clientH);
 
         // Attach engine visual BEHIND the
         // WebView2 visual. On failure, log
@@ -3155,6 +3162,18 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             const LONG originalTop = params->rgrc[0].top;
             const LRESULT dwp = DefWindowProcW(hwnd, WM_NCCALCSIZE, wp, lp);
             if (dwp != 0) return dwp;
+            // A minimized window's proposed client rect is degenerate
+            // (bottom - top == 0). The caption reclaim below (top += 1 / top +=
+            // frameY) would invert it to a NEGATIVE-height client rect —
+            // GetClientRect then reports win=0x-1, which zeroes the D3D9
+            // backbuffer and drives the React viewport layout degenerate,
+            // stalling the headless --record-minimized capture (#509, a #508
+            // regression). Leave DefWindowProc's (0-height, non-inverted) rect
+            // as-is while iconic; a later positive-size WM_SIZE re-seeds the
+            // client size on restore. (The compositor/WebView sinks apply the
+            // same non-positive-size policy at their own sites — the WebView2
+            // setup seeds and the WM_SIZE / ResizeWebViewToClient sinks.)
+            if (IsIconic(hwnd)) return 0;
             // Reclaim ONLY the caption/top into the client (removes the native
             // title bar); keep the L/R/bottom frame DefWindowProc computed.
             params->rgrc[0].top = originalTop;
@@ -3254,7 +3273,13 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         {
             RECT r;
             GetClientRect(hwnd, &r);
-            m_compositor->SetSize(r.right - r.left, r.bottom - r.top);
+            // A minimized/degenerate client rect (#509: WM_NCCALCSIZE could even
+            // yield a NEGATIVE height) must not reach the compositor — a 0- or
+            // negative-area SetSize corrupts the surface. Same non-positive-size
+            // policy as ResizeWebViewToClient's put_Bounds sink; a later
+            // positive-size WM_SIZE re-seeds on restore.
+            if (!IsIconic(hwnd) && r.right - r.left > 0 && r.bottom - r.top > 0)
+                m_compositor->SetSize(r.right - r.left, r.bottom - r.top);
         }
         // Frameless title bar: sync the maximize↔restore glyph, DEDUPED — WM_SIZE
         // sends SIZE_RESTORED on every resize-drag tick, so a raw emit would flood
