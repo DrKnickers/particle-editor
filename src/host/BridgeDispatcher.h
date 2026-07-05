@@ -215,6 +215,10 @@ public:
     // changes. Replaces the MockBridge-driven mock-only timer source —
     // SpawnerPanel's badge subscription is unchanged.
     void EmitSpawnerActiveCount(int count);
+    // Frameless title bar: emit so the web TitleBar swaps the maximize↔restore
+    // glyph. Returns false if the web isn't wired yet (m_emit null) so the host
+    // can replay the state once React is ready (see HostWindowImpl).
+    bool EmitWindowState(bool maximized);
 
     // Editor-level file state.
     //

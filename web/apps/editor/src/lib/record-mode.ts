@@ -21,10 +21,10 @@ import { parseCursorMessage } from "./record-cursor-bridge";
 
 type RecordModeStore = {
   recording: boolean;
-  // Headless --record (PE_RECORD_HEADLESS): CapturePreview grabs client content
-  // only (the native title bar is never captured), so the branded RecordTitleStrip
-  // stands in for it. Latched from the host's one-shot ui/record-headless push.
-  // Implies `recording`. Reactive (not a ref) so the strip mounts on the latch.
+  // Headless --record (PE_RECORD_HEADLESS): the TitleBar HIDES its window controls
+  // (a close button in a tutorial clip is noise). Latched from the host's one-shot
+  // ui/record-headless push. Implies `recording`. Reactive (not a ref) so the
+  // TitleBar re-renders on the latch.
   headless: boolean;
   setRecording: () => void;
   setHeadless: () => void;

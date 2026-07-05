@@ -1437,6 +1437,33 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         return res;
     }
 
+    // -------- window/minimize | window/maximize | window/close ----------
+    //
+    // The frameless custom title bar's controls act on the top-level HWND.
+    // minimize/maximize call ShowWindow directly (maximize TOGGLES restore via
+    // IsZoomed). close posts WM_CLOSE — the SAME entry the native frame-X used,
+    // so the dirty-doc Save prompt (WM_CLOSE → app/close-requested) still fires;
+    // never a direct DestroyWindow.
+    if (kind == "window/minimize")
+    {
+        sendOk(json::object());
+        if (m_hostHwnd != nullptr) ShowWindow(m_hostHwnd, SW_MINIMIZE);
+        return res;
+    }
+    if (kind == "window/maximize")
+    {
+        sendOk(json::object());
+        if (m_hostHwnd != nullptr)
+            ShowWindow(m_hostHwnd, IsZoomed(m_hostHwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        return res;
+    }
+    if (kind == "window/close")
+    {
+        sendOk(json::object());
+        if (m_hostHwnd != nullptr) PostMessage(m_hostHwnd, WM_CLOSE, 0, 0);
+        return res;
+    }
+
     // -------- mods/list, mods/refresh, mods/set-layers --------
     //
     // Three thin wrappers around ModManager. ModManager owns the
@@ -6302,6 +6329,18 @@ void BridgeDispatcher::EmitSpawnerActiveCount(int count)
         {"payload", {{"count", count}}},
     };
     m_emit(env.dump());
+}
+
+bool BridgeDispatcher::EmitWindowState(bool maximized)
+{
+    if (!m_emit) return false;   // web not wired yet — caller replays on app/ready
+    json env = {
+        {"type",    "evt"},
+        {"kind",    "window/state"},
+        {"payload", {{"maximized", maximized}}},
+    };
+    m_emit(env.dump());
+    return true;
 }
 
 } // namespace host

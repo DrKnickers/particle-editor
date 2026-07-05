@@ -713,6 +713,25 @@ struct HostWindowImpl
     // spike's Shutdown sequence in dxgi_spike.cpp:783).
     std::unique_ptr<host::Compositor>          m_compositor;
     ComPtr<ICoreWebView2CompositionController> m_compositionController;
+    // Frameless title bar: QI of the composition controller for
+    // GetNonClientRegionAtPoint (WM_NCHITTEST caption drag). Null on an older
+    // WebView2 Runtime → HTCAPTION fallback. m_ncRegionEnabled tracks whether
+    // put_IsNonClientRegionSupportEnabled(TRUE) succeeded.
+    ComPtr<ICoreWebView2CompositionController4> m_compositionController4;
+    bool m_ncRegionEnabled = false;
+    // Frameless title bar: emit window/state only on an ACTUAL maximized↔restored
+    // CHANGE (WM_SIZE sends SIZE_RESTORED on every resize tick — a raw emit would
+    // flood the bridge), and only once the emit can reach the web. A
+    // launch-maximized state fires its first WM_SIZE before React/m_emit exists,
+    // so EmitWindowState no-ops there; app/ready replays it. -1 = not yet sent.
+    int m_lastMaximizedSent = -1;
+    void EmitWindowStateIfChanged()
+    {
+        if (!dispatcher) return;
+        const int cur = IsZoomed(hMain) ? 1 : 0;
+        if (cur == m_lastMaximizedSent) return;
+        if (dispatcher->EmitWindowState(cur != 0)) m_lastMaximizedSent = cur;
+    }
 
     // Cursor sync. Under HWND hosting,
     // WebView2's child HWND owns the cursor via its own WM_SETCURSOR
@@ -1564,6 +1583,17 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
     {
         m_uiReady = true;
         Log("[capture] app/ready received (React first paint)\n");
+        // Frameless title bar: replay the current maximized state now that the web
+        // can receive it — a launch-maximized window's first WM_SIZE fired before
+        // React existed, so the initial glyph would otherwise be stuck at Maximize.
+        // app/ready is the ONE moment the web is guaranteed mounted + subscribed (the
+        // page itself posts it), so FORCE the emit: reset the dedupe first. Without
+        // this, a WM_SIZE in the [dispatcher-ready, app/ready] gap can latch
+        // m_lastMaximizedSent to a value the web never actually received (the emit
+        // lambda silently drops when webView is null yet EmitWindowState still
+        // reports success), permanently short-circuiting this replay. (pre-PR review.)
+        m_lastMaximizedSent = -1;
+        EmitWindowStateIfChanged();
         return;
     }
     // --drive bridge-selftest result: the page posts {"kind":"drive/selftest-result",
@@ -1870,6 +1900,23 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
             {
                 settings->put_AreDevToolsEnabled(TRUE);
                 Log("[host] test-host: DevTools enabled (F12)\n");
+            }
+            // Frameless custom title bar: enable non-client region support so the
+            // web title bar's `app-region: drag` region is reported as the window
+            // caption (queried in WM_NCHITTEST via the composition controller).
+            // Versioned interface (Settings9, runtime 1.0.2420.47+); takes effect
+            // on the NEXT navigation (this runs before Navigate). A QI/put_ failure
+            // on an older runtime leaves the flag false → host HTCAPTION fallback.
+            ComPtr<ICoreWebView2Settings9> settings9;
+            if (SUCCEEDED(settings.As(&settings9)) && settings9 &&
+                SUCCEEDED(settings9->put_IsNonClientRegionSupportEnabled(TRUE)))
+            {
+                m_ncRegionEnabled = true;
+                Log("[host] WebView2 non-client region support ENABLED (frameless title bar)\n");
+            }
+            else
+            {
+                Log("[host] WebView2 non-client region support UNAVAILABLE — HTCAPTION fallback\n");
             }
         }
     }
@@ -2248,6 +2295,14 @@ HRESULT HostWindowImpl::OnCompositionControllerReady(
     m_compositionController = ctl;
     Log("[host] composition: controller ready, QI to base for shared setup\n");
 
+    // Frameless title bar: QI to ICoreWebView2CompositionController4 for
+    // GetNonClientRegionAtPoint (used in WM_NCHITTEST to translate the web title
+    // bar's app-region:drag into HTCAPTION). Null on an older runtime → fallback.
+    if (SUCCEEDED(m_compositionController.As(&m_compositionController4)) && m_compositionController4)
+        Log("[host] composition: NonClientRegion query interface (Controller4) ready\n");
+    else
+        Log("[host] composition: Controller4 unavailable — HTCAPTION fallback for drag\n");
+
     // QI down to ICoreWebView2Controller. The composition controller
     // does NOT inherit from ICoreWebView2Controller in the IDL — they
     // are sibling interfaces returned from different creation paths,
@@ -2565,6 +2620,42 @@ void HostWindowImpl::ForwardMouseToCompositionWebView2(UINT msg, WPARAM wp, LPAR
 }
 
 // ---------- WndProc dispatch ----------
+
+// Frameless title bar: a maximized borderless window fills the whole monitor and
+// would cover an auto-hide taskbar so it can never re-show. Query the auto-hide
+// bar per edge and leave a 1px sliver on its actual edge (top/left/right/bottom)
+// so the reveal still works. Resolve the monitor from the PROPOSED rect (rgrc[0]),
+// not the HWND: during a cross-monitor maximize the window's current position still
+// resolves to the old monitor, so MonitorFromWindow would inset the wrong monitor's
+// taskbar edge. (pre-PR Win32 review.)
+static void InsetForAutoHideTaskbar(RECT& client)
+{
+    APPBARDATA state = { sizeof(state) };
+    if (!(SHAppBarMessage(ABM_GETSTATE, &state) & ABS_AUTOHIDE)) return;
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfo(MonitorFromRect(&client, MONITOR_DEFAULTTONEAREST), &mi))
+    {
+        client.bottom -= 1;   // fallback: assume the common bottom edge
+        return;
+    }
+    for (const UINT edge : { ABE_BOTTOM, ABE_TOP, ABE_LEFT, ABE_RIGHT })
+    {
+        APPBARDATA q = { sizeof(q) };
+        q.uEdge = edge;
+        q.rc    = mi.rcMonitor;   // query the bar on this window's monitor
+        if (SHAppBarMessage(ABM_GETAUTOHIDEBAREX, &q))
+        {
+            switch (edge)
+            {
+                case ABE_TOP:    client.top    += 1; break;
+                case ABE_LEFT:   client.left   += 1; break;
+                case ABE_RIGHT:  client.right  -= 1; break;
+                default:         client.bottom -= 1; break;   // ABE_BOTTOM
+            }
+            return;
+        }
+    }
+}
 
 LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -3049,6 +3140,111 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
 
+    // ---- Frameless custom title bar (pre-PR Win32 review recipe) ----
+    // The WebView is a COMPOSITION controller (no child HWND), so the host owns
+    // ALL hit-testing: the web title bar's `app-region: drag` becomes HTCAPTION
+    // only because WM_NCHITTEST translates it (via GetNonClientRegionAtPoint).
+    // Returning HTCAPTION for the caption band hands DefWindowProc the full native
+    // caption behavior — drag-move, double-click-maximize, drag-to-restore,
+    // Alt+Space / right-click system menu — for free. WM_NC* aren't intercepted by
+    // the client-area mouse forwarding, so those reach DefWindowProc unimpeded.
+    case WM_NCCALCSIZE:
+        if (wp == TRUE)
+        {
+            auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
+            const LONG originalTop = params->rgrc[0].top;
+            const LRESULT dwp = DefWindowProcW(hwnd, WM_NCCALCSIZE, wp, lp);
+            if (dwp != 0) return dwp;
+            // Reclaim ONLY the caption/top into the client (removes the native
+            // title bar); keep the L/R/bottom frame DefWindowProc computed.
+            params->rgrc[0].top = originalTop;
+            const UINT dpi = GetDpiForWindow(hwnd);
+            const int frameY = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi)
+                             + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+            if (IsZoomed(hwnd))
+            {
+                // Maximized: add the frame inset so the client doesn't spill into
+                // the invisible overhang; keep a sliver on an auto-hide taskbar.
+                params->rgrc[0].top += frameY;
+                InsetForAutoHideTaskbar(params->rgrc[0]);
+            }
+            else
+            {
+                params->rgrc[0].top += 1;   // 1px top keeps the resize/shadow line
+            }
+            return 0;
+        }
+        break;
+
+    case WM_NCHITTEST:
+    {
+        LRESULT dwmHit = 0;
+        if (DwmDefWindowProc(hwnd, msg, wp, lp, &dwmHit)) return dwmHit;
+
+        const POINT screenPt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+        RECT wr; GetWindowRect(hwnd, &wr);
+        const UINT dpi = GetDpiForWindow(hwnd);
+        const int frameX = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+        const int frameY = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+
+        // Resize edges/corners take priority over the drag band — the top ~frameY
+        // is a resize grip even though it overlaps the title bar. Not when maximized.
+        if (!IsZoomed(hwnd))
+        {
+            if (screenPt.y < wr.top + frameY)
+            {
+                if (screenPt.x < wr.left + frameX)   return HTTOPLEFT;
+                if (screenPt.x >= wr.right - frameX)  return HTTOPRIGHT;
+                return HTTOP;
+            }
+            if (screenPt.y >= wr.bottom - frameY)
+            {
+                if (screenPt.x < wr.left + frameX)   return HTBOTTOMLEFT;
+                if (screenPt.x >= wr.right - frameX)  return HTBOTTOMRIGHT;
+                return HTBOTTOM;
+            }
+            if (screenPt.x < wr.left + frameX)   return HTLEFT;
+            if (screenPt.x >= wr.right - frameX)  return HTRIGHT;
+        }
+
+        // Ask WebView2 whether this pixel is the web title bar's caption region.
+        POINT clientPt = screenPt; ScreenToClient(hwnd, &clientPt);
+        if (m_ncRegionEnabled && m_compositionController4)
+        {
+            COREWEBVIEW2_NON_CLIENT_REGION_KIND kind = COREWEBVIEW2_NON_CLIENT_REGION_KIND_CLIENT;
+            if (SUCCEEDED(m_compositionController4->GetNonClientRegionAtPoint(clientPt, &kind)))
+                return kind == COREWEBVIEW2_NON_CLIENT_REGION_KIND_CAPTION ? HTCAPTION : HTCLIENT;
+        }
+        // Fallback (WebView2 Runtime lacks non-client support): the fixed 34px
+        // TitleBar strip minus the 3×46px controls on the right is the caption.
+        {
+            const int stripH = MulDiv(34, dpi, 96);
+            const int controlsW = MulDiv(46 * 3, dpi, 96);
+            RECT cr; GetClientRect(hwnd, &cr);
+            if (clientPt.y >= 0 && clientPt.y < stripH && clientPt.x < cr.right - controlsW)
+                return HTCAPTION;
+        }
+        return HTCLIENT;
+    }
+
+    // Frameless title bar: right-click the caption → the window system menu.
+    // Alt+Space works via DefWindowProc, but a custom frame doesn't get the
+    // right-click menu for free, so show it explicitly at the cursor and route
+    // the chosen command back through WM_SYSCOMMAND (min/max/restore/move/close).
+    case WM_NCRBUTTONUP:
+        if (wp == HTCAPTION)
+        {
+            if (HMENU sysMenu = GetSystemMenu(hwnd, FALSE))
+            {
+                const int cmd = TrackPopupMenu(
+                    sysMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                    GET_X_LPARAM(lp), GET_Y_LPARAM(lp), 0, hwnd, nullptr);
+                if (cmd) PostMessage(hwnd, WM_SYSCOMMAND, static_cast<WPARAM>(cmd), 0);
+            }
+            return 0;
+        }
+        break;
+
     case WM_SIZE:
         ResizeWebViewToClient();
         // The DComp tree's root visual clip
@@ -3060,6 +3256,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             GetClientRect(hwnd, &r);
             m_compositor->SetSize(r.right - r.left, r.bottom - r.top);
         }
+        // Frameless title bar: sync the maximize↔restore glyph, DEDUPED — WM_SIZE
+        // sends SIZE_RESTORED on every resize-drag tick, so a raw emit would flood
+        // the bridge with {maximized:false}. Skip minimize (glyph doesn't change).
+        if (wp != SIZE_MINIMIZED)
+            EmitWindowStateIfChanged();
         return 0;
 
     // [resize-perf] During the modal sizemove loop DefWindowProc
@@ -4404,6 +4605,25 @@ int HostWindowImpl::Run(int nCmdShow)
         CoUninitialize();
         CloseLog();
         return 1;
+    }
+
+    // Frameless custom title bar: force a WM_NCCALCSIZE re-evaluation so the native
+    // caption is dropped immediately (the web TitleBar replaces it), and extend the
+    // DWM frame a hair so the window keeps its drop shadow + smooth resize. The
+    // {0,0,0,1} margin is the review's shadow-only starting point — DEVICE-VERIFY
+    // the shadow (and watch for a 1px top hairline) and tune if needed.
+    {
+        if (!SetWindowPos(hMain, nullptr, 0, 0, 0, 0,
+                          SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE))
+        {
+            Log("[frameless] WARN: SWP_FRAMECHANGED failed (err=%lu) — caption may not drop\n", GetLastError());
+        }
+        MARGINS shadowMargins = { 0, 0, 0, 1 };
+        const HRESULT hrDwm = DwmExtendFrameIntoClientArea(hMain, &shadowMargins);
+        if (FAILED(hrDwm))
+        {
+            Log("[frameless] WARN: DwmExtendFrameIntoClientArea failed (hr=0x%08lX) — no drop shadow\n", static_cast<unsigned long>(hrDwm));
+        }
     }
 
     // Theme the native title bar to the OS app theme at startup so it

@@ -69,6 +69,11 @@ const DEFERRED: readonly string[] = [
   // Real .alo import requires FileManager + ParticleSystem the browser-mode
   // host doesn't own (the preview path, emitters/preview-from-file, IS mocked).
   "emitters/import-from-file",
+  // Frameless title-bar window controls act on the native HWND — the native
+  // host owns them; browser mode has no window to minimize/maximize/close.
+  "window/minimize",
+  "window/maximize",
+  "window/close",
 ];
 
 describe("bridge contract drift (schema Request kinds vs MockBridge)", () => {

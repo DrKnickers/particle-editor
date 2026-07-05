@@ -1,3 +1,7 @@
+- text: Particle Editor a11y-base-state.alo
+- button "Minimize"
+- button "Maximize"
+- button "Close"
 - banner:
   - menubar:
     - menuitem "File" [expanded]

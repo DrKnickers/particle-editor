@@ -634,6 +634,14 @@ export type Request =
   | { kind: "file/save-as";               params: Record<string, never> } // always opens native picker
   | { kind: "file/recent/list";           params: Record<string, never> }
 
+  // Window controls — the frameless custom title bar's min / max-restore / close
+  // buttons. `window/maximize` toggles maximize↔restore. `window/close` routes
+  // through the SAME dirty-close flow as the native frame-X (posts WM_CLOSE →
+  // app/close-requested → Save prompt), never a direct teardown.
+  | { kind: "window/minimize";            params: Record<string, never> }
+  | { kind: "window/maximize";            params: Record<string, never> }
+  | { kind: "window/close";               params: Record<string, never> }
+
   // Texture browse — host-side native file dialog for an emitter's
   // color/bump texture. Opens in the active mod's texture folder,
   // filtered to *.tga;*.dds; returns the chosen file's basename (or ""
@@ -1271,6 +1279,9 @@ type ResponseForB<R extends Request> =
   R extends { kind: "app/quit" }                  ? Record<string, never> :
   R extends { kind: "engine/action/reset-view-settings" } ? Record<string, never> :
   R extends { kind: "register-accelerators" }     ? Record<string, never> :
+  R extends { kind: "window/minimize" }           ? Record<string, never> :
+  R extends { kind: "window/maximize" }           ? Record<string, never> :
+  R extends { kind: "window/close" }              ? Record<string, never> :
   never;
 
 export type ResponseFor<R extends Request> =
@@ -1302,6 +1313,10 @@ export type Event =
   // dirty doc, so the app pops the same Save/Discard/Cancel prompt File→Exit
   // uses (the host can't render the React prompt itself).
   | { kind: "app/close-requested";    payload: Record<string, never> }
+  // Frameless title bar: host emits on WM_SIZE (SIZE_MAXIMIZED / SIZE_RESTORED)
+  // so the TitleBar swaps the maximize↔restore glyph + applies the maximized
+  // overhang padding. MockBridge never emits it (browser mode has no window).
+  | { kind: "window/state";           payload: { maximized: boolean } }
   | { kind: "undo/changed";           payload: { canUndo: boolean; canRedo: boolean; label?: string } }
   | { kind: "accelerator/pressed";    payload: { combo: string } }
   | { kind: "spawner/active-count";   payload: { count: number } }

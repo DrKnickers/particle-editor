@@ -1668,6 +1668,11 @@ export class MockBridge implements Bridge {
       // ---------------- emitters / undo: not yet implemented ----------------
       case "emitters/update":
       case "emitters/import-from-file":
+      // Frameless title-bar controls act on the native HWND; browser mode has no
+      // window to drive, so they fail loudly (see contract-drift DEFERRED list).
+      case "window/minimize":
+      case "window/maximize":
+      case "window/close":
         throw new Error(`MockBridge: '${req.kind}' not implemented`);
 
       // Browser-mode undo is a no-op — the mock doesn't capture

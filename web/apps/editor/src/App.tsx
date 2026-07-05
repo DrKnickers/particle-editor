@@ -35,7 +35,7 @@ import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 import { RecordCursor } from "@/components/RecordCursor";
 import { parseCursorMessage, postFrameAcked, isRecordHeadlessMessage, commitAndAck } from "@/lib/record-cursor-bridge";
 import { latchRecordModeFromMessage, markHeadless } from "@/lib/record-mode";
-import { RecordTitleStrip } from "@/components/RecordTitleStrip";
+import { TitleBar } from "@/components/TitleBar";
 import { evalRecordCursor } from "@/lib/record-cursor-eval";
 import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record-cursor-drag";
 import { parseCursorTickMessage, parseCursorTrackMessage, type RecordCursorKey } from "@/lib/record-cursor-track";
@@ -238,7 +238,7 @@ function AppShell() {
       // Latch headless-capture mode (host → web, once, before the frame loop).
       if (isRecordHeadlessMessage(e.data)) {
         recordHeadlessRef.current = true;
-        markHeadless(); // reactive latch → mounts the RecordTitleStrip
+        markHeadless(); // reactive latch → TitleBar hides its window controls
         return;
       }
 
@@ -326,8 +326,9 @@ function AppShell() {
           feel-tunable — adjust at the user smoke if flagged. */}
       <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
         <div data-testid="app-shell" className="flex h-full w-full flex-col text-text">
-          {/* Branded title strip — headless --record only (Stage 2). Inert otherwise. */}
-          <RecordTitleStrip currentFilePath={currentFilePath} dirty={dirty} />
+          {/* The app's frameless custom title bar (replaces the native Win32
+              caption). Always shown; window controls auto-hide in headless record. */}
+          <TitleBar bridge={bridge} currentFilePath={currentFilePath} dirty={dirty} />
           {/* Top bar */}
           <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-bg px-4 text-sm">
             <MenuBar
