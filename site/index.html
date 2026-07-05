@@ -68,9 +68,8 @@
     <section class="hero" aria-labelledby="hero-h">
       <p class="kicker">Particle effects editor · Empire at War</p>
       <h1 id="hero-h">Effects, previewed in game context.</h1>
-      <p class="lede">A <code>.alo</code> particle editor that previews effects in real game context:
-        a game unit for scale, a skydome and ground for backdrop, your mod stack for assets, and a
-        live viewport beside the controls.</p>
+      <p class="lede">An updated <code>.alo</code> particle editor that previews effects with game context:
+        a game unit for scale, a skydome and ground for backdrop, your mod stack for assets, and more.</p>
       <p class="actions">
         <a class="btn-primary" href="https://github.com/DrKnickers/particle-editor/releases/latest">↓ Download for Windows</a>
         <a class="btn-quiet" href="https://github.com/DrKnickers/particle-editor">View the source</a>
@@ -86,9 +85,9 @@
     <!-- 1 · Scene context -->
     <section class="feature" aria-labelledby="s1-h">
       <p class="section-label"><span class="section-number" aria-hidden="true">1</span> Scene context</p>
-      <h2 id="s1-h">Reference the scene the effect belongs in.</h2>
+      <h2 id="s1-h">Reference the scene.</h2>
       <p class="feature-copy">Drop in a game unit for scale, load a skydome and ground, and tune the particle
-        against that scene instead of a blank background.</p>
+        against that scene.</p>
       <figure class="clip" aria-label="An explosion effect looping beside a game unit on a ground map.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -99,10 +98,9 @@
     <!-- 2 · Mod stack -->
     <section class="feature" aria-labelledby="s2-h">
       <p class="section-label"><span class="section-number" aria-hidden="true">2</span> Mod stack</p>
-      <h2 id="s2-h">Edit against your mod load order.</h2>
+      <h2 id="s2-h">Edit against your mod and submods.</h2>
       <p class="feature-copy">Set the active mod stack and its order. The editor resolves the same asset
-        overrides your Empire at War install will — models, textures, and the mod's own engine shaders — so
-        effects preview with the exact content you ship.</p>
+        overrides as your Empire at War install — models, textures, and shaders.</p>
       <figure class="clip" aria-label="A cursor dragging mod layers into a new load order.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -114,8 +112,8 @@
     <section class="feature" aria-labelledby="s3-h">
       <p class="section-label"><span class="section-number" aria-hidden="true">3</span> Spawner</p>
       <h2 id="s3-h">Preview effects in flight.</h2>
-      <p class="feature-copy">Fire the effect as a repeating burst, or launch it along an arc — velocity,
-        gravity, and wobble — to see how a projectile's effect reads while it travels.</p>
+      <p class="feature-copy">Fire the effect as a repeating burst, or launch it along an arc to see how
+        your effect reads in motion.</p>
       <figure class="clip" aria-label="A hypervelocity gun slug streaking left to right across a starfield.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -126,9 +124,8 @@
     <!-- 4 · Emitter order -->
     <section class="feature" aria-labelledby="s4-h">
       <p class="section-label"><span class="section-number" aria-hidden="true">4</span> Emitter order</p>
-      <h2 id="s4-h">Reorder emitters and watch the draw order change.</h2>
-      <p class="feature-copy">Drag emitters into a new draw order in the live viewport — smoke in front of the
-        fire, or behind it — and see the composite update as you drop.</p>
+      <h2 id="s4-h">Reorder emitters with ease.</h2>
+      <p class="feature-copy">Drag and drop emitters and preview the new draw order in the live viewport.</p>
       <figure class="clip" aria-label="A cursor dragging a smoke emitter to the front of a fireball.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -140,8 +137,7 @@
     <section class="feature" aria-labelledby="s5-h">
       <p class="section-label"><span class="section-number" aria-hidden="true">5</span> Atlas picker</p>
       <h2 id="s5-h">Pick atlas frames as images.</h2>
-      <p class="feature-copy">Browse an atlas as a grid of frames, each rendered in the emitter's blend mode
-        with empty frames dimmed, and click the one you want.</p>
+      <p class="feature-copy">Browse an atlas as a grid of frames and click the one you want.</p>
       <figure class="clip" aria-label="A cursor clicking texture frames in the atlas grid.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -171,7 +167,7 @@
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h9l5 5v11H5zM14 4v5h5M12 12v6m0 0 2.5-2.5M12 18l-2.5-2.5"/></svg></div>
               <h3>Import emitters</h3>
-              <p>Bring emitters in from another <code>.alo</code> as one undo step.</p>
+              <p>Bring in some or all of the emitters in from another <code>.alo</code>.</p>
             </article>
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></div>
@@ -191,12 +187,12 @@
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></div>
               <h3>Pause + frame-step</h3>
-              <p>Freeze and step the simulation (F8/F9/F10) to inspect a burst.</p>
+              <p>Freeze and step the simulation to inspect fine movement.</p>
             </article>
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-.9 4M20 5v6h-6"/></svg></div>
               <h3>Reload live</h3>
-              <p>Reload textures and shaders (F5/F6) without restarting — iterate on custom shaders live.</p>
+              <p>Reload textures and shaders without restarting — iterate on custom shaders and textures live.</p>
             </article>
           </div>
         </div>
