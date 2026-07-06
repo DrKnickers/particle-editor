@@ -19,8 +19,8 @@ If the editor crashed and produced a dialog with an exception trace, paste that 
 The workflow is conventional:
 
 1. **Fork → branch → commit → PR against `master`.** All work goes through PRs, including from maintainers.
-2. **Build before opening.** *Debug | x64* and *Release | x64* must both compile clean. The public mirror CI runs these automatically once your PR is open; the private working repo skips the heavy C++ job, so local C++ builds remain required there.
-3. **PR body uses the [PULL_REQUEST_TEMPLATE](.github/PULL_REQUEST_TEMPLATE.md) shape** — *Summary* + *Test plan checklist*. Match the existing PR shape; readers and maintainers rely on it.
+2. **Build before opening.** *Debug | x64* and *Release | x64* must both compile clean. The public mirror CI runs these automatically once your PR is open; the private working repo has GitHub Actions disabled entirely, so all verification there is local (`node scripts/run-all-tests.mjs`).
+3. **PR body uses the established shape** — *Summary* + *Test plan checklist*. Match the existing PRs; readers and maintainers rely on it.
 4. **One feature per PR.** Bundle the docs update for that feature into the same PR. Don't mix unrelated changes — easier to review, easier to revert.
 
 ### Commit messages
@@ -38,11 +38,11 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 
 ### What goes where in docs
 
-- **[CHANGELOG.md](CHANGELOG.md)** — public-facing release history, updated only when a new version ships.
+- **[CHANGELOG.md](CHANGELOG.md)** — public-facing release history. A feature PR adds one user-facing bullet under `## [Unreleased]` when it lands (no bullet for non-user-facing changes — docs, CI, internal refactors); cutting a release rolls that section up. Format rules live in the file's preamble.
 - **[DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md)** — per-PR engineering detail. Every non-trivial PR adds an entry with *What ships* / *How we tackled it* / *Issues encountered* — see existing entries for the shape. After adding the entry, run `scripts/build-devlog-index.ps1` to refresh the generated `## Index` at the top (don't hand-edit the index). It's a big file — to find past work, read the `## Index`, not the whole file.
 - **[ROADMAP.md](ROADMAP.md)** — planned work, grouped by horizon. Items are named descriptively; the section is the tier, and a GitHub issue (`#NN`) gives a stable handle when one is needed.
 
-The full project conventions live in [`CLAUDE.md`](CLAUDE.md) at the repo root — that's the authoritative spec for how Plans get written, how lessons get captured, and how the trust-but-verify rule applies. Worth a read before non-trivial work.
+Project conventions live in [`CLAUDE.md`](CLAUDE.md) at the repo root (the always-on rules and gates) plus the process playbooks it points to under [`docs/process/`](docs/process/) — planning, verification, and shipping. Worth a read before non-trivial work.
 
 ## Build — it takes TWO builds
 
@@ -80,10 +80,8 @@ cppcheck --enable=warning,style,performance,portability --std=c++17 \
   -I src src/ChunkReader.cpp src/ChunkWriter.cpp src/AloModel.cpp
 ```
 
-A 2026-06 pass flagged `ChunkReader::m_position` / `m_miniOffset` left
-uninitialized in the constructor — since fixed (both zero-init defensively).
-(`clang-tidy` / `clangd` are also available but need a
-`compile_commands.json`, which the VS-generator MSBuild build doesn't emit.)
+(`clang-tidy` / `clangd` are also available but need a `compile_commands.json`,
+which the VS-generator MSBuild build doesn't emit.)
 
 ## Code of conduct
 
