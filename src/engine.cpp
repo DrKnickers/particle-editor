@@ -258,6 +258,10 @@ void Engine::KillParticleSystem(ParticleSystemInstance* instance)
 	}
 
 	instance->Detach();
+	// [D2] The killed instance's emitter teardown + count decay happen
+	// inside Update's instance pass — make sure a paused frame runs it
+	// (the kill doesn't change the top-level list size until then).
+	InvalidatePausedIdleSkip();
 }
 
 void Engine::Clear()
@@ -822,20 +826,37 @@ void Engine::Update()
 	// construction) must count toward this frame's latch; a reset here
 	// would erase them.
 
-    // Update existing instances
-    for (auto it = m_instances.begin(); it != m_instances.end();)
+    // Update existing instances.
+    //
+    // [D2] Paused-idle skip: when the sim clock is FROZEN (paused preview,
+    // GetTimeF returns the pause anchor) this loop re-walks every particle
+    // with an unchanged currentTime — kills/resets/curve evaluations all
+    // recompute last frame's results (pure CPU waste that scales with the
+    // population). Skip it once one full pass has run at this exact time,
+    // unless the instance LIST changed (a paused spawner trigger / kill
+    // must still get its first pass so new particles appear). Any stepped
+    // frame (record / frame-step) advances currentTime and runs normally —
+    // weather reset-on-death timing is unaffected. m_numParticles is a
+    // running delta, so skipping leaves it correctly frozen.
+    if (currentTime != m_lastUpdatedSimTime
+        || m_instances.size() != m_lastUpdatedInstanceCount)
     {
-        m_numParticles += (*it)->Update(currentTime);
+        for (auto it = m_instances.begin(); it != m_instances.end();)
+        {
+            m_numParticles += (*it)->Update(currentTime);
 
-		// Check if the instance is dead and nobody's referring to it anymore
-		if ((*it)->IsDead() && (*it)->Detached())
-		{
-			it = m_instances.erase(it);
-		}
-		else
-		{
-			++it;
-		}
+            // Check if the instance is dead and nobody's referring to it anymore
+            if ((*it)->IsDead() && (*it)->Detached())
+            {
+                it = m_instances.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        m_lastUpdatedSimTime        = currentTime;
+        m_lastUpdatedInstanceCount  = m_instances.size();
     }
 
 	// Latch with a clear-delay debounce: refusals only occur on frames
@@ -1341,16 +1362,38 @@ bool Engine::Render()
 	}
 
 	const LONGLONG _ptBloom1 = EngQpcNow();   // bloom ends / distort begins
-	// Now render to the heat texture
-	IDirect3DSurface9* pDistortSurface;
-	m_pDistortTexture->GetSurfaceLevel(0, &pDistortSurface);
-	m_pDevice->SetRenderTarget(0, pDistortSurface);
-	SAFE_RELEASE(pDistortSurface);
-
-	m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(129,128,255), 1.0f, 0);
+	// Now render to the heat texture.
+	//
+	// [D3] Zero-heat skip: with no live heat particles this pass only
+	// re-clears the distort RT to the neutral normal (129,128,255) and
+	// scans instances to draw nothing — skip it once the RT is ALREADY
+	// neutral. The composite below is untouched: it still samples the
+	// (neutral) distort texture through the game's real SceneHeat.fx
+	// (ZFunc=ALWAYS, so the skipped Z-clear can't affect it; the scene
+	// pass owns its own Z-clear at the top of Render). m_distortRtNeutral
+	// starts false and is re-armed false wherever the distort RT is
+	// (re)created (ResetParameters), so a fresh/reset RT always gets one
+	// explicit neutral clear before the skip may engage.
+	bool anyHeat = false;
 	for (auto& instance : m_instances)
-    {
-        instance->RenderHeat(m_pDevice);
+	{
+		if (instance->HasLiveHeat()) { anyHeat = true; break; }
+	}
+	if (anyHeat || !m_distortRtNeutral)
+	{
+		IDirect3DSurface9* pDistortSurface;
+		m_pDistortTexture->GetSurfaceLevel(0, &pDistortSurface);
+		m_pDevice->SetRenderTarget(0, pDistortSurface);
+		SAFE_RELEASE(pDistortSurface);
+
+		m_pDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(129,128,255), 1.0f, 0);
+		for (auto& instance : m_instances)
+		{
+			instance->RenderHeat(m_pDevice);
+		}
+		// Heat drew → the RT holds distortion (re-clear next frame);
+		// nothing drew → it is freshly neutral and stays skippable.
+		m_distortRtNeutral = !anyHeat;
 	}
 
 	const LONGLONG _ptDistort1 = EngQpcNow();  // distort ends / composite begins
@@ -1446,6 +1489,11 @@ void Engine::OnParticleSystemChanged(int track)
     {
 		instance->onParticleSystemChanged(*this, track);
 	}
+	// [D2] Bust the paused-idle skip: while paused, on-screen particles
+	// only reflect an edit when the Update loop re-evaluates their curves
+	// at the frozen time — a paused curve/property edit must repaint now,
+	// not on unpause. (-1 can never equal a real GetTimeF value.)
+	m_lastUpdatedSimTime = -1.0f;
 }
 
 void Engine::GetViewPort(D3DVIEWPORT9* viewport) const
@@ -2603,6 +2651,9 @@ void Engine::ResetParameters()
 			SAFE_RELEASE(m_pSceneTexture);
 			throw runtime_error("Unable to create texture");
 		}
+		// [D3] Fresh RT contents are undefined — force one neutral clear
+		// before the zero-heat skip may engage (see Render's heat pass).
+		m_distortRtNeutral = false;
 
         if (FAILED(m_pDevice->CreateDepthStencilSurface(m_presentationParameters.BackBufferWidth, m_presentationParameters.BackBufferHeight, m_presentationParameters.AutoDepthStencilFormat, D3DMULTISAMPLE_NONE, 0, TRUE, &m_pDepthStencilSurface, NULL)))
         {
@@ -4626,30 +4677,45 @@ void Engine::RenderUnitGrid()
     const float extent  = 800.0f;                   // half-size: lines span +/-extent
     const int   cells   = (int)(extent / spacing);  // lines each side of centre
     if (cells <= 0) return;
-    const float span = cells * spacing;             // half-extent on a cell boundary
-    const float z    = m_groundZ + 0.05f;           // tiny lift above the ground quad
-    const D3DCOLOR kMinor = D3DCOLOR_RGBA( 70,  70,  85, 255);
-    const D3DCOLOR kMajor = D3DCOLOR_RGBA(120, 120, 150, 255);
+    const float z = m_groundZ + 0.05f;              // tiny lift above the ground quad
 
-    std::vector<EmitterInstance::Vertex> verts;
-    verts.reserve((size_t)(cells * 2 + 1) * 4);
-    auto addLine = [&](float ax, float ay, float bx, float by, D3DCOLOR c)
+    // [D5] Vertex cache: the build is O(cells) over 144-byte vertices
+    // (~6.4k at spacing 1) and its only variable inputs are spacing and
+    // groundZ (extent / colors / major cadence are the literals below) —
+    // rebuilding every visible frame was pure heap+CPU churn. File-static
+    // is safe: one Engine per process, render is single-threaded, and the
+    // CPU-side cache survives device resets by construction.
+    static std::vector<EmitterInstance::Vertex> s_gridVerts;
+    static float s_gridSpacing = -1.0f;   // -1 = never built
+    static float s_gridZ       = 0.0f;
+    if (spacing != s_gridSpacing || z != s_gridZ)
     {
-        EmitterInstance::Vertex v0 = {}, v1 = {};
-        v0.Position = D3DXVECTOR3(ax, ay, z); v0.Color = c;
-        v1.Position = D3DXVECTOR3(bx, by, z); v1.Color = c;
-        verts.push_back(v0);
-        verts.push_back(v1);
-    };
-    for (int i = -cells; i <= cells; ++i)
-    {
-        const float p = i * spacing;
-        const D3DCOLOR c = (i % 5 == 0) ? kMajor : kMinor;   // major every 5 cells
-        addLine(p, -span, p,  span, c);   // line parallel to Y (constant X)
-        addLine(-span, p,  span, p, c);   // line parallel to X (constant Y)
+        const float span = cells * spacing;         // half-extent on a cell boundary
+        const D3DCOLOR kMinor = D3DCOLOR_RGBA( 70,  70,  85, 255);
+        const D3DCOLOR kMajor = D3DCOLOR_RGBA(120, 120, 150, 255);
+
+        s_gridVerts.clear();
+        s_gridVerts.reserve((size_t)(cells * 2 + 1) * 4);
+        auto addLine = [&](float ax, float ay, float bx, float by, D3DCOLOR c)
+        {
+            EmitterInstance::Vertex v0 = {}, v1 = {};
+            v0.Position = D3DXVECTOR3(ax, ay, z); v0.Color = c;
+            v1.Position = D3DXVECTOR3(bx, by, z); v1.Color = c;
+            s_gridVerts.push_back(v0);
+            s_gridVerts.push_back(v1);
+        };
+        for (int i = -cells; i <= cells; ++i)
+        {
+            const float p = i * spacing;
+            const D3DCOLOR c = (i % 5 == 0) ? kMajor : kMinor;   // major every 5 cells
+            addLine(p, -span, p,  span, c);   // line parallel to Y (constant X)
+            addLine(-span, p,  span, p, c);   // line parallel to X (constant Y)
+        }
+        s_gridSpacing = spacing;
+        s_gridZ       = z;
     }
 
-    DrawWorldLines(m_pDevice, m_pDeclaration, verts.data(), (int)(verts.size() / 2));
+    DrawWorldLines(m_pDevice, m_pDeclaration, s_gridVerts.data(), (int)(s_gridVerts.size() / 2));
 }
 
 // Screen->world ray for the cursor. Shared with GetCursorPos3D

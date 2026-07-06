@@ -3,6 +3,7 @@
 #include <cstdarg>
 #include <windows.h>
 #include "EmitterInstance.h"
+#include "ParticleCompaction.h"
 #include "ParticleSystemInstance.h"
 using namespace std;
 
@@ -890,23 +891,9 @@ int EmitterInstance::Update(TimeF currentTime)
 
 	if (!kills.empty())
 	{
-        size_t firstKilled = *kills.begin();
-		for (set<size_t>::reverse_iterator i = kills.rbegin(); i != kills.rend(); i++)
-		{
-			m_primitives   .erase(m_primitives   .begin() + *i);
-			m_particleIndex.erase(m_particleIndex.begin() + *i);
-            numParticles--;
-		}
+        const size_t removed = CompactKilledParticleSlots(m_primitives, m_particleIndex, kills);
+        numParticles -= static_cast<int>(removed);
 		kills.clear();
-
-		if (!m_primitives.empty())
-		{
-			// Reassign indices
-			for (size_t i = firstKilled; i < m_primitives.size(); i++)
-			{
-				m_particleIndex[i]->m_indicesIndex = i;
-			}
-		}
 	}
     return numParticles;
 }

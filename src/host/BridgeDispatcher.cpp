@@ -3986,6 +3986,11 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         }
         sendOk(json{{"applied", appliedArr}, {"skipped", skippedArr}});
         markDirty();
+        // [D2] Property edits change particle appearance via fields read in
+        // UpdateParticle (tailSize, linkToSystem, isHeatParticle, ...) but
+        // don't flow through OnParticleSystemChanged — a paused preview
+        // must still repaint this edit (review finding 1).
+        if (m_engine) m_engine->InvalidatePausedIdleSkip();
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
         return res;

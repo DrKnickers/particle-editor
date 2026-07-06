@@ -87,6 +87,10 @@ public:
 	void  Render(IDirect3DDevice9* pDevice);
 	void  StopSpawning();
 	bool  IsHeatEmitter() const   { return !m_engine.GetHeatDebug() && m_emitter.isHeatParticle; }
+	// [D3] Zero-heat skip probe: a heat emitter with live particles. Cheap
+	// (two flags + a size check) — Engine::Render polls this per frame to
+	// skip the distort RT clear + RenderHeat scan when nothing would draw.
+	bool  HasLiveHeat()   const   { return !m_primitives.empty() && IsHeatEmitter(); }
 	bool  IsRoot()        const   { return m_emitter.parent == NULL; }
 	ParticleSystemInstance& GetSystem() { return m_system; }
 

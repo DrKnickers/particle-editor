@@ -104,6 +104,15 @@ void ParticleSystemInstance::RenderHeat(IDirect3DDevice9* pDevice)
 	}
 }
 
+bool ParticleSystemInstance::HasLiveHeat() const
+{
+    for (const auto& emitter : m_emitters)
+    {
+        if (emitter->HasLiveHeat()) return true;
+    }
+    return false;
+}
+
 void ParticleSystemInstance::SetPosition(const D3DXVECTOR3& position)
 {
     m_position = position;

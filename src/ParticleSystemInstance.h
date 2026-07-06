@@ -94,6 +94,10 @@ public:
 	int  Update(TimeF currentTime);
 	void RenderNormal(IDirect3DDevice9* pDevice);
 	void RenderHeat(IDirect3DDevice9* pDevice);
+	// [D3] True when any emitter would draw in RenderHeat this frame —
+	// Engine::Render's zero-heat skip probe (see EmitterInstance::HasLiveHeat).
+	// Body in the .cpp: EmitterInstance is only fwd-declared here.
+	bool HasLiveHeat() const;
 	void StopSpawning();
 	EmitterInstance* SpawnEmitter(TimeF currentTime, size_t idxEmitter, Object3D* parent);
 

@@ -178,6 +178,11 @@ public:
 	IDirect3DTexture9* GetTexture(const std::string& name) const;
 
 	void OnParticleSystemChanged(int track);
+	// [D2] Force the next Update to run a full instance pass even with a
+	// frozen clock — for mutations that change particle APPEARANCE without
+	// flowing through OnParticleSystemChanged (emitters/set-properties) or
+	// changing the instance-list size (KillParticleSystem cleanup).
+	void InvalidatePausedIdleSkip() { m_lastUpdatedSimTime = -1.0f; }
 
 	const D3DXMATRIX& GetProjectionMatrix()   const { return m_projection; }
 	// Combined view*projection (recomputed wherever view or projection
@@ -1176,6 +1181,16 @@ private:
 	IDirect3DTexture9*	m_pSceneTexture;
     IDirect3DSurface9*  m_pDepthStencilSurface;
 	IDirect3DTexture9*	m_pDistortTexture;
+	// [D3] True while the distort RT verifiably holds the neutral normal
+	// (129,128,255) — lets Render skip the heat clear+scan on zero-heat
+	// frames. Re-armed false wherever the RT is (re)created so a fresh
+	// surface always gets one explicit clear before the skip engages.
+	bool                m_distortRtNeutral = false;
+	// [D2] Paused-idle skip state (see Update): the last sim time a full
+	// instance pass ran at, and the list size after it — a frozen clock
+	// with an unchanged list means the pass would only recompute itself.
+	TimeF               m_lastUpdatedSimTime       = -1.0f;
+	size_t              m_lastUpdatedInstanceCount = 0;
 	// Offscreen MSAA surfaces. When m_msaaActive the scene draws into these;
 	// StretchRect resolves m_pMsaaColor into m_pSceneTexture (non-MS) before the
 	// bloom/distort/compose post-process chain reads it. D3DPOOL_DEFAULT — released
