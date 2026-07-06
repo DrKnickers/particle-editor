@@ -787,6 +787,8 @@ struct HostWindowImpl
     std::wstring m_recordScriptPath;
     bool         m_recordMode = false;
     bool         m_automationMode = false;
+    int          m_recordTimelineFps = 0;    // latched at timeline-Init success; locks the
+                                             // stats-tick FPS readout to the clip's virtual rate
     int          m_recordFrame = 0;          // current emitted frame (echoed in the ui/cursor `frame`)
     int          m_lastAckedFrame = -1;      // set by OnWebMessage on ui/frame-acked
     // Extended ack payload for the SEMANTIC-targeting cursor path: when a
@@ -3110,7 +3112,15 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_TIMER:
         if (wp == kStatsTimerId && dispatcher)
         {
-            float fps      = fpsMeasurer.getFPS();
+            // Record mode: the sim advances exactly tl.fps virtual frames/sec
+            // (StepPreviewFrames), so the wall-clock render rate is the wrong
+            // number to show — and it swings with the capture barriers, which
+            // made the FPS chip a run-variant in recorded clips. Locked from
+            // the moment the timeline parses (before frame 0's settle) so no
+            // captured frame ever carries a wall-clock value.
+            float fps      = (m_recordMode && m_recordTimelineFps > 0)
+                               ? static_cast<float>(m_recordTimelineFps)
+                               : fpsMeasurer.getFPS();
             int emitters   = engine ? engine->GetNumEmitters()  : 0;
             int particles  = engine ? engine->GetNumParticles() : 0;
             int instances  = engine ? engine->GetNumInstances() : 0;
@@ -5494,6 +5504,13 @@ int HostWindowImpl::Run(int nCmdShow)
                 else
                 {
                     const clip::Timeline tl = r->TL();   // small copy for the gate
+
+                    // Lock the stats-tick FPS readout to the clip's virtual rate
+                    // from this point on — BEFORE the settle loops below, so the
+                    // 4 Hz timer can never paint a wall-clock FPS into a frame
+                    // that ends up captured (the chip was a run-variant; see the
+                    // WM_TIMER handler note).
+                    m_recordTimelineFps = tl.fps;
 
                     // (a) deterministic particle RNG (Goal-A motion correctness).
                     srand(0x5EEDu);

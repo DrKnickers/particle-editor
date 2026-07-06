@@ -54,6 +54,17 @@ describe("StatusBar", () => {
     expect(screen.getByText("1.00, -2.50, 3.46")).toBeInTheDocument();
   });
 
+  it("rounds the FPS readout from stats ticks", () => {
+    const { bridge, emit } = makeBridge();
+    render(<StatusBar bridge={bridge} />);
+    emit("stats/tick", {
+      fps: 59.6, emitters: 2, particles: 16384, instances: 3, overload: false,
+    });
+
+    const fpsLabel = screen.getByText("FPS");
+    expect(fpsLabel.nextElementSibling).toHaveTextContent(/^60$/);
+  });
+
   // Preview spawn-overload guard: while stats/tick
   // reports overload=true, the Particles readout tints amber; it reverts
   // when the overload clears. Feel test: the readout is a passive
