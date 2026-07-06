@@ -151,7 +151,9 @@ export function AtlasPickerPanel({
   // from the module cache so a re-open renders correctly on the first frame.
   const [blendAlphaGated, setBlendAlphaGated] = useState<boolean>(() =>
     lastEmitterProps && lastEmitterProps.id === emitterId ? lastEmitterProps.blendAlphaGated : false);
-  const [hover, setHover]               = useState<number | null>(null);
+  const hoverRef                        = useRef<number | null>(null);
+  const hoverPreviewRedrawRef             = useRef<(() => void) | null>(null);
+  const hoverPreviewRafRef                = useRef<number | null>(null);
   const [focusIndex, setFocusIndex]     = useState<number | null>(null); // keyboard cursor
   const [confirmTarget, setConfirmTarget] = useState<{ frame: number; emitterId: number; keyTimes: number[] } | null>(null);
   const [announcement, setAnnouncement] = useState("");
@@ -172,9 +174,22 @@ export function AtlasPickerPanel({
   const bridgeRef = useRef(bridge);
   const stackRef = useRef(stack);
   const emitterIdRef = useRef<number | null>(emitterId);
+  const scheduleHoverPreviewRedraw = useCallback(() => {
+    if (hoverPreviewRafRef.current !== null) return;
+    hoverPreviewRafRef.current = window.requestAnimationFrame(() => {
+      hoverPreviewRafRef.current = null;
+      hoverPreviewRedrawRef.current?.();
+    });
+  }, []);
+  const registerHoverPreviewRedraw = useCallback((redraw: (() => void) | null) => {
+    hoverPreviewRedrawRef.current = redraw;
+  }, []);
   bridgeRef.current = bridge;
   stackRef.current = stack;
   useEffect(() => { emitterIdRef.current = emitterId; }, [emitterId]);
+  useEffect(() => () => {
+    if (hoverPreviewRafRef.current !== null) window.cancelAnimationFrame(hoverPreviewRafRef.current);
+  }, []);
   useEffect(() => () => { if (pulseTimer.current) clearTimeout(pulseTimer.current); }, []);
   useEffect(() => () => roRef.current?.disconnect(), []);
 
@@ -502,8 +517,9 @@ export function AtlasPickerPanel({
   useEffect(() => {
     if (focusInGridRef.current) restoreFocusRef.current = true;
     setFocusIndex(frame === null ? null : resolveFrame(frame, side));
-    setHover(null);
-  }, [emitterId, colorTexture, side]);
+    hoverRef.current = null;
+    scheduleHoverPreviewRedraw();
+  }, [emitterId, colorTexture, scheduleHoverPreviewRedraw, side]);
 
   // ── derived display values ────────────────────────────────────────────────
 
@@ -601,8 +617,7 @@ export function AtlasPickerPanel({
   // STABLE click handler passed to cells so React.memo(Cell) can skip ALL cells
   // on an alpha toggle (which re-renders only the grid container). A "latest
   // ref" keeps the wrapper identity fixed while always invoking the current
-  // onCellClick (no stale closure over frame/keyTimes/emitterId). `setHover`
-  // (onHover) is already stable, so with this both cell callbacks are stable.
+  // onCellClick (no stale closure over frame/keyTimes/emitterId).
   const onCellClickRef = useRef(onCellClick);
   onCellClickRef.current = onCellClick;
   const stableCellClick = useRef((k: number) => onCellClickRef.current(k)).current;
@@ -616,12 +631,21 @@ export function AtlasPickerPanel({
   const highlight    = frame === null ? null : resolveFrame(frame, side);
   // Clamp the keyboard cursor against the live grid (backstop for the stale-index reset).
   const safeFocus    = focusIndex !== null && focusIndex < totalCells ? focusIndex : null;
-  // Clamp hover too, so a stale hover index (e.g. mid texture-swap, before the
-  // reset effect clears it) can never feed cropStyle an out-of-range frame.
-  const safeHover    = hover !== null && hover < totalCells ? hover : null;
   // The single tabbable cell: cursor, else the assigned frame, else 0 (never null).
   const rovingTarget = safeFocus ?? highlight ?? 0;
-  const previewFrame = safeHover ?? safeFocus ?? highlight; // precedence (?? — frame 0 valid)
+  const previewFrame = safeFocus ?? highlight; // hover is drawn imperatively from hoverRef
+  const setHoverPreview = useCallback((next: number | null) => {
+    const safeNext = next !== null && next >= 0 && next < totalCells ? next : null;
+    if (hoverRef.current === safeNext) return;
+    hoverRef.current = safeNext;
+    scheduleHoverPreviewRedraw();
+  }, [scheduleHoverPreviewRedraw, totalCells]);
+  useEffect(() => {
+    if (hoverRef.current !== null && hoverRef.current >= totalCells) {
+      hoverRef.current = null;
+      scheduleHoverPreviewRedraw();
+    }
+  }, [scheduleHoverPreviewRedraw, totalCells]);
   // Responsive grid sizing: ~sqrt(n) columns filling the measured
   // (and slide-frozen) width, with a min-cell floor so large atlases stay dense.
   const layout = fitGridLayout(totalCells, gridW, GRID_GAP, GRID_MIN_CELL, GRID_MAX_CELL);
@@ -725,6 +749,8 @@ export function AtlasPickerPanel({
             rawFrame={frame}
             total={totalCells}
             pulse={pulse}
+            hoverFrameRef={hoverRef}
+            onRegisterHoverRedraw={registerHoverPreviewRedraw}
           />
         </div>
         {/* Scrollable cell grid. The grid reflows responsively to this region's
@@ -747,57 +773,26 @@ export function AtlasPickerPanel({
           className="atlas-grid-scroll min-h-0 flex-1 overflow-y-auto p-3"
           style={{ scrollbarGutter: "stable both-edges" }}
         >
-          <div
-            ref={gridRef}
-            role="listbox"
-            aria-label="Atlas frames"
-            aria-multiselectable={false}
-            onKeyDown={onGridKeyDown}
+          <AtlasFrameGrid
+            gridRef={gridRef}
+            okPreview={okPreview}
+            totalCells={totalCells}
+            side={side}
+            highlight={highlight}
+            rovingTarget={rovingTarget}
+            deadCells={deadCells}
+            layout={layout}
+            onGridKeyDown={onGridKeyDown}
             onFocusCapture={() => { focusInGridRef.current = true; }}
             onBlurCapture={(e) => {
               // Clear only on a deliberate move to another real element; a cell
-              // unmounting under focus blurs with relatedTarget null (→ <body>),
+              // unmounting under focus blurs with relatedTarget null (-> <body>),
               // which we keep so the restore effect can re-home focus.
               if (e.relatedTarget) focusInGridRef.current = false;
             }}
-            className="mx-auto grid justify-center gap-1 bg-bg-2"
-            // Responsive column count (`layout.cols`, ~√n capped to the measured
-            // width — frozen during the dock slide). Cells are FIXED-px
-            // (layout.cell, from the same frozen fit), so the grid is a STATIC
-            // block: during the slide its size doesn't change, and the dock
-            // panel's overflow:hidden simply CLIPS it as it widens (revealing it)
-            // instead of 1fr cells resizing/reflowing live. max-width caps the
-            // grid to GRID_MAX_CELL per column so small atlases get big,
-            // space-filling cells. The fixed-px column tracks would otherwise
-            // left-pack inside the full-width grid box, so `justify-center`
-            // centres the tracks horizontally and `mx-auto` centres the box once
-            // the max-width cap makes it narrower than the region. The active
-            // atlas image is exposed as --atlas-url for the cells; the container's
-            // own bg-bg-2 (matching the cells) fills the gaps in both modes.
-            style={{
-              gridTemplateColumns: `repeat(${layout.cols}, ${layout.cell}px)`,
-              maxWidth: `${layout.cols * GRID_MAX_CELL + (layout.cols - 1) * GRID_GAP}px`,
-              ...(okPreview
-                ? ({ ["--atlas-url"]: `url(${okPreview.dataUri})` } as React.CSSProperties)
-                : {}),
-            }}
-          >
-            {okPreview &&
-              Array.from({ length: totalCells }, (_, k) => (
-                <Cell
-                  key={k}
-                  k={k}
-                  side={side}
-                  srcW={okPreview.srcW}
-                  srcH={okPreview.srcH}
-                  selected={k === highlight}
-                  focused={k === rovingTarget}
-                  isDead={deadCells.has(k)}
-                  onHover={setHover}
-                  onClick={stableCellClick}
-                />
-              ))}
-          </div>
+            onHover={setHoverPreview}
+            onClick={stableCellClick}
+          />
         </div>
       </>
     );
@@ -893,6 +888,90 @@ function cropStyle(
     backgroundPosition: `${posX} ${posY}`,
   };
 }
+
+function useRenderCount(): number {
+  const count = useRef(0);
+  count.current += 1;
+  return count.current;
+}
+
+type OkPreviewState = Extract<PreviewState, { kind: "ok" }>;
+type AtlasGridLayout = ReturnType<typeof fitGridLayout>;
+
+const AtlasFrameGrid = memo(function AtlasFrameGrid({
+  gridRef,
+  okPreview,
+  totalCells,
+  side,
+  highlight,
+  rovingTarget,
+  deadCells,
+  layout,
+  onGridKeyDown,
+  onFocusCapture,
+  onBlurCapture,
+  onHover,
+  onClick,
+}: {
+  gridRef: React.RefObject<HTMLDivElement | null>;
+  okPreview: OkPreviewState | null;
+  totalCells: number;
+  side: number;
+  highlight: number | null;
+  rovingTarget: number;
+  deadCells: ReadonlySet<number>;
+  layout: AtlasGridLayout;
+  onGridKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  onFocusCapture: () => void;
+  onBlurCapture: (e: React.FocusEvent<HTMLDivElement>) => void;
+  onHover: (k: number | null) => void;
+  onClick: (k: number) => void;
+}) {
+  const renderCount = useRenderCount();
+
+  return (
+    <div
+      ref={gridRef}
+      role="listbox"
+      aria-label="Atlas frames"
+      aria-multiselectable={false}
+      data-render-count={renderCount}
+      onKeyDown={onGridKeyDown}
+      onFocusCapture={onFocusCapture}
+      onBlurCapture={onBlurCapture}
+      className="mx-auto grid justify-center gap-1 bg-bg-2"
+      // Responsive column count (layout.cols, ~sqrt(n) capped to the measured
+      // width — frozen during the dock slide). Cells are FIXED-px
+      // (layout.cell, from the same frozen fit), so the grid is a STATIC
+      // block: during the slide its size doesn't change, and the dock
+      // panel's overflow:hidden simply CLIPS it as it widens (revealing it)
+      // instead of 1fr cells resizing/reflowing live.
+      style={{
+        gridTemplateColumns: `repeat(${layout.cols}, ${layout.cell}px)`,
+        maxWidth: `${layout.cols * GRID_MAX_CELL + (layout.cols - 1) * GRID_GAP}px`,
+        ...(okPreview
+          ? ({ ["--atlas-url"]: `url(${okPreview.dataUri})` } as React.CSSProperties)
+          : {}),
+      }}
+    >
+      {okPreview &&
+        Array.from({ length: totalCells }, (_, k) => (
+          <Cell
+            key={k}
+            k={k}
+            side={side}
+            srcW={okPreview.srcW}
+            srcH={okPreview.srcH}
+            selected={k === highlight}
+            focused={k === rovingTarget}
+            isDead={deadCells.has(k)}
+            onHover={onHover}
+            onClick={onClick}
+          />
+        ))}
+    </div>
+  );
+});
 
 // React.memo so a grid-container re-render on the alpha toggle (which only swaps
 // --atlas-url and the container backing) SKIPS every cell — the cell's props
@@ -1015,6 +1094,8 @@ function PreviewBox({
   rawFrame,
   total,
   pulse,
+  hoverFrameRef,
+  onRegisterHoverRedraw,
 }: {
   preview: PreviewState;
   side: number;
@@ -1022,13 +1103,22 @@ function PreviewBox({
   rawFrame: number | null;
   total: number;
   pulse: boolean;
+  hoverFrameRef: React.MutableRefObject<number | null>;
+  onRegisterHoverRedraw: (redraw: (() => void) | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const badgeRef = useRef<HTMLSpanElement | null>(null);
+  const captionRef = useRef<HTMLSpanElement | null>(null);
+  const placeholderRef = useRef<HTMLSpanElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const imgUriRef = useRef<string | null>(null); // dataUri the loaded img belongs to
   const [imgReady, setImgReady] = useState(false);
 
   const dataUri = preview.kind === "ok" ? preview.dataUri : null;
+  const displayFrame = hoverFrameRef.current ?? frame;
+  const placeholderText = rawFrame === null
+    ? "Hover or select a frame"
+    : `Frame ${rawFrame} — outside the ${side}×${side} atlas (in-game sampling is off-grid)`;
 
   // Load the active preview's dataUri into an HTMLImageElement once per dataUri
   // (cached via imgUriRef so the same atlas isn't reloaded on a frame / alpha
@@ -1048,24 +1138,52 @@ function PreviewBox({
     return () => { live = false; };
   }, [dataUri]);
 
-  // (Re)draw when the image is ready, the frame, or the preview changes. (A
-  // blend-mode change swaps the active preview's dataUri, which re-runs the
-  // img-load effect → imgReady toggles → this redraws — so no blendAlphaGated dep
-  // is needed.)
-  // Guarded inside drawHero against a missing 2d context (jsdom).
-  useEffect(() => {
+  const paintDisplay = useCallback(() => {
+    const nextFrame = hoverFrameRef.current ?? frame;
+    const hasFrame = nextFrame !== null;
+    const canDraw = preview.kind === "ok" && hasFrame;
     const canvas = canvasRef.current;
+    const badge = badgeRef.current;
+    const caption = captionRef.current;
+    const placeholder = placeholderRef.current;
+
+    if (canvas) canvas.style.display = canDraw ? "" : "none";
+    if (badge) {
+      badge.style.display = hasFrame ? "" : "none";
+      badge.textContent = hasFrame ? String(nextFrame) : "";
+    }
+    if (caption) {
+      caption.style.display = hasFrame ? "" : "none";
+      caption.textContent = hasFrame ? `Frame ${nextFrame} / ${total}` : "";
+    }
+    if (placeholder) {
+      placeholder.style.display = hasFrame ? "none" : "";
+      placeholder.textContent = hasFrame ? "" : placeholderText;
+    }
+
     const img = imgRef.current;
-    if (!canvas || !img || !imgReady) return;
-    if (preview.kind !== "ok" || frame === null) return;
-    drawHero(canvas, img, frame, side);
-  }, [imgReady, frame, side, preview.kind]);
+    if (!canvas || !img || !imgReady || !canDraw) return;
+    drawHero(canvas, img, nextFrame, side);
+  }, [frame, hoverFrameRef, imgReady, placeholderText, preview.kind, side, total]);
+
+  // The parent owns hover as a ref and schedules one redraw per frame. This
+  // callback gives that scheduler an imperative, latest-value-wins paint target
+  // without re-rendering the atlas grid on mouse movement.
+  useEffect(() => {
+    onRegisterHoverRedraw(paintDisplay);
+    return () => onRegisterHoverRedraw(null);
+  }, [onRegisterHoverRedraw, paintDisplay]);
+
+  // (Re)draw when the image is ready, the keyboard/selection frame changes, or
+  // the preview swaps. Hover redraws come through the registered rAF callback.
+  useEffect(() => {
+    paintDisplay();
+  }, [paintDisplay]);
 
   const pulseStyle: React.CSSProperties = pulse
     ? { boxShadow: "0 0 0 2px var(--atlas-selected), 0 0 16px color-mix(in srgb, var(--atlas-selected) 60%, transparent)" }
     : {};
-
-  const showCanvas = preview.kind === "ok" && frame !== null;
+  const hasDisplayFrame = displayFrame !== null;
 
   return (
     <div
@@ -1073,29 +1191,30 @@ function PreviewBox({
       className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded border border-border bg-bg-2 text-center text-xs text-text-3"
       style={{ ...pulseStyle, transition: "box-shadow var(--motion-slow-in) var(--ease-entrance)" }}
     >
-      {showCanvas && (
+      {preview.kind === "ok" && (
         <canvas
           ref={canvasRef}
           className="absolute inset-0"
-          style={{ width: "100%", height: "100%" }}
+          style={{ width: "100%", height: "100%", display: hasDisplayFrame ? undefined : "none" }}
         />
       )}
-      {frame !== null ? (
-        <>
-          <span className="absolute left-1.5 top-1.5 rounded bg-[var(--atlas-selected)] px-1.5 text-[11px] font-semibold text-black">
-            {frame}
-          </span>
-          <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1 pt-3 text-xs font-semibold text-white">
-            Frame {frame} / {total}
-          </span>
-        </>
-      ) : (
-        <span>
-          {rawFrame === null
-            ? "Hover or select a frame"
-            : `Frame ${rawFrame} — outside the ${side}×${side} atlas (in-game sampling is off-grid)`}
-        </span>
-      )}
+      <span
+        ref={badgeRef}
+        className="absolute left-1.5 top-1.5 rounded bg-[var(--atlas-selected)] px-1.5 text-[11px] font-semibold text-black"
+        style={{ display: hasDisplayFrame ? undefined : "none" }}
+      >
+        {hasDisplayFrame ? displayFrame : ""}
+      </span>
+      <span
+        ref={captionRef}
+        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1 pt-3 text-xs font-semibold text-white"
+        style={{ display: hasDisplayFrame ? undefined : "none" }}
+      >
+        {hasDisplayFrame ? `Frame ${displayFrame} / ${total}` : ""}
+      </span>
+      <span ref={placeholderRef} style={{ display: hasDisplayFrame ? "none" : undefined }}>
+        {hasDisplayFrame ? "" : placeholderText}
+      </span>
     </div>
   );
 }

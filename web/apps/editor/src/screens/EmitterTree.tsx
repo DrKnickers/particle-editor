@@ -81,7 +81,7 @@ import {
   useEmitterSelectionStore,
 } from "@/lib/emitter-selection";
 import { markEmittersCopied, useEmitterClipboardHasContent } from "@/lib/emitter-clipboard";
-import { rectFromPoints, emittersInMarquee, mergeMarqueeSelection } from "@/lib/marquee";
+import { rectFromPoints, emittersInMarquee, mergeMarqueeSelection, type Rect } from "@/lib/marquee";
 import { computeAutoscrollDelta } from "@/lib/drag-autoscroll";
 import { computeFlipDeltas, pickFlipDuration, type FlipPositions } from "@/lib/flip";
 import { useRecording } from "@/lib/record-mode";
@@ -205,6 +205,61 @@ const CHIP_EXIT_MS = 160;
 type DropParams =
   | { mode: "reparent"; id: number; targetId: number; slot: "lifetime" | "death" }
   | { mode: "reorder"; id: number; rootIndex: number };
+
+type MarqueeRowsSnapshot = {
+  rows: { id: number; rect: Rect }[];
+  rowKey: string;
+};
+
+function sortedIds(ids: number[]): number[] {
+  return [...ids].sort((a, b) => a - b);
+}
+
+function sameSortedIds(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function rowIdentityKey(ids: number[]): string {
+  return ids.join("|");
+}
+
+function scrollContentOrigin(sc: HTMLElement): { left: number; top: number } {
+  const rect = sc.getBoundingClientRect();
+  return { left: rect.left - sc.scrollLeft, top: rect.top - sc.scrollTop };
+}
+
+function toScrollContentRect(sc: HTMLElement, rect: Rect): Rect {
+  const origin = scrollContentOrigin(sc);
+  return {
+    left: rect.left - origin.left,
+    top: rect.top - origin.top,
+    right: rect.right - origin.left,
+    bottom: rect.bottom - origin.top,
+  };
+}
+
+function captureMarqueeRows(sc: HTMLElement | null): MarqueeRowsSnapshot {
+  if (sc === null) return { rows: [], rowKey: "" };
+  const origin = scrollContentOrigin(sc);
+  const rows = [...sc.querySelectorAll<HTMLElement>("[data-emitter-id]")]
+    .map((el) => {
+      const id = Number(el.dataset.emitterId);
+      const r = el.getBoundingClientRect();
+      return {
+        id,
+        rect: {
+          left: r.left - origin.left,
+          top: r.top - origin.top,
+          right: r.right - origin.left,
+          bottom: r.bottom - origin.top,
+        },
+      };
+    })
+    .filter((row) => Number.isFinite(row.id));
+  return { rows, rowKey: rowIdentityKey(rows.map((row) => row.id)) };
+}
 
 /** [multi-drag] Measure every root block's extent (root row + whole subtree)
  *  in scroll-CONTENT space at drag activation. Measured, never assumed — row
@@ -1339,11 +1394,24 @@ export function EmitterTree({ bridge }: Props) {
   // lists the dragged emitter names vertically, in their emitter-list order.
   // `null` outside a multi-drag (single-drag uses the per-row insertion line).
   const [dragChip, setDragChip] = useState<
-    // `exit` set = despawn in flight: the chip transitions to that point
+    // Exit set = despawn in flight: the chip transitions to that point
     // (the landing gap / reparent row, or its own spot for a cancel) while
     // fading, then a timeout clears the state.
-    { x: number; y: number; names: string[]; exit?: { x: number; y: number } } | null
+    { names: string[]; exit?: { x: number; y: number } } | null
   >(null);
+  const dragChipRef = useRef<HTMLDivElement | null>(null);
+  const dragChipPositionRef = useRef({ x: 0, y: 0 });
+  const writeDragChipTransform = useCallback((x: number, y: number) => {
+    dragChipPositionRef.current = { x, y };
+    const el = dragChipRef.current;
+    if (el !== null) el.style.transform = "translate3d(" + x + "px, " + y + "px, 0)";
+  }, []);
+  const setDragChipElement = useCallback((el: HTMLDivElement | null) => {
+    dragChipRef.current = el;
+    if (el === null) return;
+    const { x, y } = dragChipPositionRef.current;
+    el.style.transform = "translate3d(" + x + "px, " + y + "px, 0)";
+  }, []);
   // [pointer-drag] Set true when a real drag completes so the synthetic
   // click that follows pointerup (when down+up land on the same row) does
   // NOT also fire row selection. Reset on the next pointerdown and in
@@ -1783,7 +1851,7 @@ export function EmitterTree({ bridge }: Props) {
         chipPos.x += (target.x - chipPos.x) * CHIP_SPRING;
         chipPos.y += (target.y - chipPos.y) * CHIP_SPRING;
       }
-      setDragChip({ x: chipPos.x, y: chipPos.y, names: chipNames });
+      writeDragChipTransform(chipPos.x, chipPos.y);
     };
 
     // While the pointer sits in an edge zone of the scroll viewport,
@@ -1813,6 +1881,10 @@ export function EmitterTree({ bridge }: Props) {
         active = true;
         setDraggingId(source.id);
         setDraggingIds(dimIds);
+        if (hasChip) {
+          setDragChip({ names: chipNames });
+          writeDragChipTransform(chipPos.x, chipPos.y);
+        }
         // Snapshot geometry NOW — but first finish any in-flight reorder
         // glide instantly: the snapshot reads getBoundingClientRect, which
         // INCLUDES live FLIP transforms, so a re-grab within the ~200ms glide
@@ -2003,8 +2075,27 @@ export function EmitterTree({ bridge }: Props) {
   // `mergeBase` is what swept rows union with (the prior selection only when
   // additive); `prior` is always the pre-marquee selection, restored on Esc.
   const marqueeRef = useRef<
-    { mergeBase: number[]; prior: number[]; startX: number; startY: number } | null
+    | {
+        mergeBase: number[];
+        prior: number[];
+        startX: number;
+        startY: number;
+        rows: { id: number; rect: Rect }[];
+        rowKey: string;
+        lastSelectionSorted: number[];
+      }
+    | null
   >(null);
+
+  useLayoutEffect(() => {
+    const m = marqueeRef.current;
+    if (m === null) return;
+    const latestRowKey = rowIdentityKey(orderedIds);
+    if (m.rowKey === latestRowKey) return;
+    const snapshot = captureMarqueeRows(treeScrollRef.current);
+    m.rows = snapshot.rows;
+    m.rowKey = snapshot.rowKey;
+  }, [orderedIds]);
 
   const handleScrollPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -2018,28 +2109,34 @@ export function EmitterTree({ bridge }: Props) {
       const prior = [...useEmitterSelectionStore.getState().ids];
       const additive = e.ctrlKey || e.metaKey;
       const mergeBase = additive ? prior : [];
-      marqueeRef.current = { mergeBase, prior, startX: e.clientX, startY: e.clientY };
+      const snapshot = captureMarqueeRows(treeScrollRef.current);
+      marqueeRef.current = {
+        mergeBase,
+        prior,
+        startX: e.clientX,
+        startY: e.clientY,
+        rows: snapshot.rows,
+        rowKey: snapshot.rowKey,
+        lastSelectionSorted: sortedIds(prior),
+      };
 
       const onMove = (ev: PointerEvent) => {
         const m = marqueeRef.current;
         if (m === null) return;
-        const mq = rectFromPoints(m.startX, m.startY, ev.clientX, ev.clientY);
-        const rows = [...document.querySelectorAll("[data-emitter-id]")].map((el) => {
-          const r = el.getBoundingClientRect();
-          return {
-            id: Number((el as HTMLElement).dataset.emitterId),
-            rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
-          };
-        });
-        const swept = emittersInMarquee(rows, mq);
-        const { ids, primary } = mergeMarqueeSelection(m.mergeBase, swept);
-        useEmitterSelectionStore.getState().setIds(ids, primary);
+        const mqViewport = rectFromPoints(m.startX, m.startY, ev.clientX, ev.clientY);
         const sc = treeScrollRef.current;
+        const mq = sc !== null ? toScrollContentRect(sc, mqViewport) : mqViewport;
+        const swept = emittersInMarquee(m.rows, mq);
+        const { ids, primary } = mergeMarqueeSelection(m.mergeBase, swept);
+        const nextSorted = sortedIds(ids);
+        if (!sameSortedIds(m.lastSelectionSorted, nextSorted)) {
+          m.lastSelectionSorted = nextSorted;
+          useEmitterSelectionStore.getState().setIds(ids, primary);
+        }
         if (sc !== null) {
-          const cr = sc.getBoundingClientRect();
           setMarqueeBox({
-            left: mq.left - cr.left + sc.scrollLeft,
-            top: mq.top - cr.top + sc.scrollTop,
+            left: mq.left,
+            top: mq.top,
             width: mq.right - mq.left,
             height: mq.bottom - mq.top,
           });
@@ -2323,25 +2420,25 @@ export function EmitterTree({ bridge }: Props) {
           drag accent to match the gap affordance. */}
       {dragChip && (
         <div
+          ref={setDragChipElement}
           data-testid="drag-chip"
           data-exiting={dragChip.exit ? "true" : "false"}
           aria-hidden
           // drag-chip-enter: pop-in on spawn (components.css; reduced-motion
-          // disables it). Exit mode overrides position with the landing spot
-          // + fades/shrinks via an inline transition — see finish().
+          // disables it). Exit mode transitions transform to the landing spot
+          // + fades/shrinks via an inline transition - see finish().
           className="drag-chip-enter pointer-events-none fixed z-50 rounded-md border border-accent bg-bg-2/95 px-2 py-1 text-xs text-accent shadow-[var(--shadow-soft)]"
           style={
             dragChip.exit
               ? {
-                  left: dragChip.exit.x,
-                  top: dragChip.exit.y,
+                  left: 0,
+                  top: 0,
                   opacity: 0,
-                  transform: "scale(0.85)",
+                  transform: "translate3d(" + dragChip.exit.x + "px, " + dragChip.exit.y + "px, 0) scale(0.85)",
                   transition:
-                    `left ${CHIP_EXIT_MS}ms ease-in, top ${CHIP_EXIT_MS}ms ease-in, ` +
-                    `opacity ${CHIP_EXIT_MS}ms ease-in, transform ${CHIP_EXIT_MS}ms ease-in`,
+                    "transform " + CHIP_EXIT_MS + "ms ease-in, opacity " + CHIP_EXIT_MS + "ms ease-in",
                 }
-              : { left: dragChip.x, top: dragChip.y }
+              : { left: 0, top: 0 }
           }
         >
           {dragChip.names.slice(0, 4).map((name, i) => (

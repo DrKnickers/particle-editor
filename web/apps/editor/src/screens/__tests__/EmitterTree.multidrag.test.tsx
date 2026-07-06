@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { Profiler, type ReactElement } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
@@ -395,6 +395,37 @@ describe("EmitterTree multi-drag preview", () => {
     fireEvent(document, new Event("visibilitychange"));
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
     expectAbortedNoCommit(bridge, flashBtn);
+  });
+
+  it("pointer moves during an active reorder drag do not re-render the tree", async () => {
+    const bridge = makeStubBridge();
+    let renderCount = 0;
+    renderWithTooltips(
+      <Profiler id="emitter-tree-reorder-drag" onRender={() => { renderCount += 1; }}>
+        <EmitterTree bridge={bridge} />
+      </Profiler>,
+    );
+    await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Flash"));
+    const smokeBtn = screen.getByText("Smoke").closest("button")!;
+    const sparksBtn = screen.getByText("Sparks").closest("button")!;
+    const flashBtn = screen.getByText("Flash").closest("button")!;
+    stubRect(smokeBtn, 0, 24);
+    stubRect(sparksBtn, 24, 24);
+    stubRect(flashBtn, 48, 24);
+
+    fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 40, clientY: 26 });
+    expect(screen.getByTestId("drag-chip")).toBeInTheDocument();
+    const afterActivation = renderCount;
+
+    for (let i = 0; i < 6; i += 1) {
+      fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 40 + i, clientY: 26 });
+    }
+
+    expect(renderCount).toBe(afterActivation);
+    fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 46, clientY: 26 });
   });
 
   it("the cursor chip caps at 4 names + a '+k more' line for big selections", async () => {

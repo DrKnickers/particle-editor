@@ -1311,6 +1311,44 @@ describe("curve morph (structural changes)", () => {
     expect(overlay.querySelector("polyline"), "non-focus overlay must have a polyline").not.toBeNull();
   });
 
+  it("dragging one focus key does not re-render another channel's static layer", () => {
+    const tracks = [
+      trk("red", [k(0, 0), k(50, 0.5), k(100, 1)], "linear"),
+      trk("green", [k(0, 0), k(50, 0.25), k(100, 0.75)], "linear"),
+    ];
+    const onKeyDragEnd = vi.fn();
+    const { container } = render(
+      <CurveEditor
+        tracks={tracks}
+        channels={[MORPH_RED_CHANNEL, MORPH_GREEN_CHANNEL]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        onKeyDragEnd={onKeyDragEnd}
+      />,
+    );
+    const svg = container.querySelector('[data-testid="curve-editor-svg"]') as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    const greenLayer = () => container.querySelector('[data-testid="curve-layer-green"]') as SVGGElement;
+    const before = Number(greenLayer().getAttribute("data-render-count"));
+    expect(before).toBeGreaterThan(0);
+
+    const redKey = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="50"][data-channel-id="red"]',
+    ) as SVGCircleElement;
+    fireEvent.pointerDown(redKey, { button: 0, pointerId: 42, clientX: 300, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 42, clientX: 320, clientY: 140 });
+    fireEvent.pointerMove(svg, { pointerId: 42, clientX: 340, clientY: 120 });
+    fireEvent.pointerMove(svg, { pointerId: 42, clientX: 360, clientY: 100 });
+    fireEvent.pointerUp(svg, { pointerId: 42, clientX: 360, clientY: 100 });
+
+    expect(greenLayer().getAttribute("data-render-count")).toBe(String(before));
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+  });
+
   it("a drag-committed move does not re-morph the dragged channel, but its locked follower morphs", async () => {
     restoreMatchMedia = stubMatchMediaMotionOn();
 

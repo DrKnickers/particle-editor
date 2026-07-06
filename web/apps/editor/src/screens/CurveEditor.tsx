@@ -55,7 +55,7 @@
 //     mode is unchanged: empty-canvas pointer-down still fires
 //     `onCanvasAdd` and marquee is suppressed.
 
-import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from "react";
+import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent, type Ref } from "react";
 import type { InterpolationType, TrackDto, TrackName } from "@particle-editor/bridge-schema";
 import { useCurveMorph, type SuppressedMove } from "../lib/use-curve-morph";
 
@@ -1111,6 +1111,264 @@ type MultiProps = {
   marqueeRef?: Ref<CurveMarqueeHandle>;
 };
 
+
+type CurvePoint = { x: number; y: number; time: number; value: number };
+
+type CurveLayerModel = {
+  channel: ChannelDef;
+  track: TrackDto;
+  points: CurvePoint[];
+  range: { min: number; max: number };
+};
+
+type CurveLayerCacheEntry = {
+  channel: ChannelDef;
+  track: TrackDto;
+  width: number;
+  height: number;
+  timeMin: number;
+  timeMax: number;
+  displayMin: number;
+  displayMax: number;
+  layer: CurveLayerModel;
+};
+
+type CurveDragState = {
+  keyTime: number;
+  startTime: number;
+  startValue: number;
+  startClientX: number;
+  startClientY: number;
+  currentTime: number;
+  currentValue: number;
+  moved: boolean;
+  pointerId: number;
+  target: Element | null;
+  isGroup: boolean;
+  groupDTime: number;
+  groupDValue: number;
+};
+
+function useLayerRenderCount(): number {
+  const countRef = useRef(0);
+  countRef.current += 1;
+  return countRef.current;
+}
+
+type StaticChannelLayerProps = {
+  layer: CurveLayerModel;
+  focusEnabled: boolean;
+  hidden: boolean;
+};
+
+const StaticChannelLayer = memo(function StaticChannelLayer({
+  layer,
+  focusEnabled,
+  hidden,
+}: StaticChannelLayerProps) {
+  const { channel, track, points } = layer;
+  const renderCount = useLayerRenderCount();
+  const interp = track.interpolation;
+  const smoothPath = useMemo(
+    () => (points.length >= 2 && interp === "smooth" ? buildSmoothPath(points) : ""),
+    [interp, points],
+  );
+  const stepPoints = useMemo(
+    () => (points.length >= 2 && interp === "step" ? buildStepPolyline(points) : ""),
+    [interp, points],
+  );
+  const linearPoints = useMemo(
+    () => (points.length >= 2 && interp === "linear" ? points.map((p) => String(p.x) + "," + String(p.y)).join(" ") : ""),
+    [interp, points],
+  );
+  const layerOpacity = focusEnabled ? 0.4 : 1;
+  const strokeW = 2;
+  const markerR = focusEnabled ? 3 : 4;
+  const markerStroke = focusEnabled ? "none" : "var(--curve-marker-stroke)";
+  const markerStrokeW = focusEnabled ? 0 : 1;
+  const markerTestId = focusEnabled ? undefined : "curve-key";
+  return (
+    <g
+      data-testid={"curve-layer-" + channel.id}
+      data-channel-id={channel.id}
+      data-key-count={points.length}
+      data-focus="false"
+      data-render-count={renderCount}
+      style={{ opacity: layerOpacity, visibility: hidden ? "hidden" : undefined }}
+    >
+      {smoothPath !== "" && (
+        <path fill="none" stroke={channel.color} strokeWidth={strokeW} d={smoothPath} pointerEvents="none" />
+      )}
+      {stepPoints !== "" && (
+        <polyline fill="none" stroke={channel.color} strokeWidth={strokeW} points={stepPoints} pointerEvents="none" />
+      )}
+      {linearPoints !== "" && (
+        <polyline fill="none" stroke={channel.color} strokeWidth={strokeW} points={linearPoints} pointerEvents="none" />
+      )}
+      {points.map((p, i) => (
+        <circle
+          key={i}
+          {...(markerTestId !== undefined ? { "data-testid": markerTestId } : {})}
+          data-channel-id={channel.id}
+          data-key-time={p.time}
+          cx={p.x}
+          cy={p.y}
+          r={markerR}
+          fill={channel.color}
+          stroke={markerStroke}
+          strokeWidth={markerStrokeW}
+          pointerEvents="none"
+        />
+      ))}
+    </g>
+  );
+});
+
+type FocusChannelLayerProps = {
+  layer: CurveLayerModel;
+  renderPoints: CurvePoint[];
+  focusReadOnly: boolean;
+  selectedKeyTimes?: ReadonlySet<number>;
+  focusBorderTimes: ReadonlySet<number>;
+  hidden: boolean;
+  height: number;
+  onKeyClick?: (time: number, event: React.MouseEvent | React.PointerEvent) => void;
+  onKeyContextMenu?: (
+    time: number,
+    isBorder: boolean,
+    clientX: number,
+    clientY: number,
+  ) => void;
+  startDrag: (
+    event: ReactPointerEvent<SVGCircleElement>,
+    keyTime: number,
+    keyValue: number,
+  ) => void;
+  dragRef: MutableRefObject<CurveDragState | null>;
+  dragConsumedClickRef: MutableRefObject<boolean>;
+};
+
+const FocusChannelLayer = memo(function FocusChannelLayer({
+  layer,
+  renderPoints,
+  focusReadOnly,
+  selectedKeyTimes,
+  focusBorderTimes,
+  hidden,
+  height,
+  onKeyClick,
+  onKeyContextMenu,
+  startDrag,
+  dragRef,
+  dragConsumedClickRef,
+}: FocusChannelLayerProps) {
+  const { channel, track } = layer;
+  const renderCount = useLayerRenderCount();
+  const interp = track.interpolation;
+  const fillGradId = "curve-fill-" + channel.id;
+  const fillPath = useMemo(
+    () => (renderPoints.length >= 2 ? buildFillPath(renderPoints, interp, height) : ""),
+    [height, interp, renderPoints],
+  );
+  const smoothPath = useMemo(
+    () => (renderPoints.length >= 2 && interp === "smooth" ? buildSmoothPath(renderPoints) : ""),
+    [interp, renderPoints],
+  );
+  const stepPoints = useMemo(
+    () => (renderPoints.length >= 2 && interp === "step" ? buildStepPolyline(renderPoints) : ""),
+    [interp, renderPoints],
+  );
+  const linearPoints = useMemo(
+    () => (renderPoints.length >= 2 && interp === "linear" ? renderPoints.map((p) => String(p.x) + "," + String(p.y)).join(" ") : ""),
+    [interp, renderPoints],
+  );
+  return (
+    <g
+      data-testid={"curve-layer-" + channel.id}
+      data-channel-id={channel.id}
+      data-key-count={renderPoints.length}
+      data-focus="true"
+      data-readonly={focusReadOnly ? "true" : "false"}
+      data-render-count={renderCount}
+      style={{ visibility: hidden ? "hidden" : undefined }}
+    >
+      <defs>
+        <linearGradient id={fillGradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={channel.color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={channel.color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {fillPath !== "" && (
+        <path data-testid="curve-fill" fill={"url(#" + fillGradId + ")"} stroke="none" d={fillPath} pointerEvents="none" />
+      )}
+      {smoothPath !== "" && (
+        <path data-testid="curve-path" fill="none" stroke={channel.color} strokeWidth={3} strokeDasharray={focusReadOnly ? READONLY_DASH : undefined} d={smoothPath} pointerEvents="none" />
+      )}
+      {stepPoints !== "" && (
+        <polyline data-testid="curve-polyline" data-interpolation="step" fill="none" stroke={channel.color} strokeWidth={3} strokeDasharray={focusReadOnly ? READONLY_DASH : undefined} points={stepPoints} pointerEvents="none" />
+      )}
+      {linearPoints !== "" && (
+        <polyline data-testid="curve-polyline" data-interpolation="linear" fill="none" stroke={channel.color} strokeWidth={3} strokeDasharray={focusReadOnly ? READONLY_DASH : undefined} points={linearPoints} pointerEvents="none" />
+      )}
+      {renderPoints.map((p, i) => {
+        const selected = selectedKeyTimes?.has(p.time) ?? false;
+        const isBorder = focusBorderTimes.has(p.time);
+        const hitR = selected ? 18 : 14;
+        const visR = selected ? 6.5 : 5;
+        const markerFill = focusReadOnly ? "none" : selected ? "var(--curve-marker-core)" : channel.color;
+        const markerStroke = focusReadOnly ? channel.color : selected ? channel.color : "none";
+        const markerStrokeWidth = focusReadOnly ? 2 : selected ? 2.5 : 0;
+        return (
+          <g key={i}>
+            <circle
+              data-testid="curve-key"
+              data-channel-id={channel.id}
+              data-key-time={p.time}
+              data-selected={selected ? "true" : "false"}
+              data-border={isBorder ? "true" : "false"}
+              cx={p.x}
+              cy={p.y}
+              r={hitR}
+              fill="transparent"
+              stroke="transparent"
+              style={{ cursor: onKeyClick ? "pointer" : undefined }}
+              onPointerDown={(e) => startDrag(e, p.time, p.value)}
+              onContextMenu={(e) => {
+                if (focusReadOnly) return;
+                if (!onKeyContextMenu) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onKeyContextMenu(p.time, isBorder, e.clientX, e.clientY);
+              }}
+              onClick={(e) => {
+                if (focusReadOnly) return;
+                e.stopPropagation();
+                if (dragConsumedClickRef.current) {
+                  dragConsumedClickRef.current = false;
+                  return;
+                }
+                if (dragRef.current === null) {
+                  onKeyClick?.(p.time, e);
+                }
+              }}
+            />
+            <circle
+              className="curve-key-marker"
+              data-selected={selected ? "true" : "false"}
+              cx={p.x}
+              cy={p.y}
+              r={visR}
+              fill={markerFill}
+              stroke={markerStroke}
+              strokeWidth={markerStrokeWidth}
+              pointerEvents="none"
+            />
+          </g>
+        );
+      })}
+    </g>
+  );
+});
 function MultiChannelCurves({
   tracks,
   channels,
@@ -1202,20 +1460,55 @@ function MultiChannelCurves({
   // per-channel scaling). The per-channel `range` we keep on each
   // layer is still the channel's OWN engine-allowed range — the
   // drag value-clamp downstream reads it from `focusLayer.range`.
-  const layers = (tracks ?? []).flatMap((t) => {
-    const channel = channels.find((c) => c.trackName === t.name);
-    if (channel === undefined) return [];
-    if (!(visibleChannels[channel.id] ?? channel.defaultOn)) return [];
-    const range = valueRangeForTrack(t);
-    const projY = displayRange ?? range;
-    const points = t.keys.map((k) => ({
-      x: project(k.time, timeMin, timeMax, width),
-      y: height - project(k.value, projY.min, projY.max, height),
-      time: k.time,
-      value: k.value,
-    }));
-    return [{ channel, track: t, points, range }];
-  });
+  const layerCacheRef = useRef<Map<string, CurveLayerCacheEntry>>(new Map());
+  const layers = useMemo<CurveLayerModel[]>(() => {
+    const nextCache = new Map<string, CurveLayerCacheEntry>();
+    const nextLayers: CurveLayerModel[] = [];
+    for (const t of tracks ?? []) {
+      const channel = channels.find((c) => c.trackName === t.name);
+      if (channel === undefined) continue;
+      if (!(visibleChannels[channel.id] ?? channel.defaultOn)) continue;
+      const range = valueRangeForTrack(t);
+      const projY = displayRange ?? range;
+      const prev = layerCacheRef.current.get(channel.id);
+      if (
+        prev !== undefined
+        && prev.channel === channel
+        && prev.track === t
+        && prev.width === width
+        && prev.height === height
+        && prev.timeMin === timeMin
+        && prev.timeMax === timeMax
+        && prev.displayMin === projY.min
+        && prev.displayMax === projY.max
+      ) {
+        nextCache.set(channel.id, prev);
+        nextLayers.push(prev.layer);
+        continue;
+      }
+      const points = t.keys.map((k) => ({
+        x: project(k.time, timeMin, timeMax, width),
+        y: height - project(k.value, projY.min, projY.max, height),
+        time: k.time,
+        value: k.value,
+      }));
+      const layer = { channel, track: t, points, range };
+      nextCache.set(channel.id, {
+        channel,
+        track: t,
+        width,
+        height,
+        timeMin,
+        timeMax,
+        displayMin: projY.min,
+        displayMax: projY.max,
+        layer,
+      });
+      nextLayers.push(layer);
+    }
+    layerCacheRef.current = nextCache;
+    return nextLayers;
+  }, [channels, displayRange, height, timeMax, timeMin, tracks, visibleChannels, width]);
 
   // Locate the focus layer (when a focusChannel is set). Even when a
   // focus channel is set but its track isn't in `layers` (e.g. it's
@@ -1232,24 +1525,32 @@ function MultiChannelCurves({
   // ── Drag state. Held in refs so pointer-move handlers don't trigger
   // a re-render on every pixel; setDragTick flushes a render when we
   // need the dragged circle to track the cursor.
-  const dragRef = useRef<{
-    keyTime: number;
-    startTime: number;
-    startValue: number;
-    startClientX: number;
-    startClientY: number;
-    currentTime: number;
-    currentValue: number;
-    moved: boolean;
-    pointerId: number;
-    target: Element | null;
-    // Group-drag: when the grabbed key is part of a multi-selection,
-    // the whole selection shifts by (groupDTime, groupDValue).
-    isGroup: boolean;
-    groupDTime: number;
-    groupDValue: number;
-  } | null>(null);
+  const dragRef = useRef<CurveDragState | null>(null);
   const [, setDragTick] = useState(0);
+  const dragFrameRef = useRef<number | null>(null);
+  const scheduleDragTick = useCallback(() => {
+    if (dragFrameRef.current !== null) return;
+    if (typeof requestAnimationFrame !== "function") {
+      setDragTick((n) => n + 1);
+      return;
+    }
+    dragFrameRef.current = requestAnimationFrame(() => {
+      dragFrameRef.current = null;
+      setDragTick((n) => n + 1);
+    });
+  }, []);
+  const flushDragTick = useCallback(() => {
+    if (dragFrameRef.current !== null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(dragFrameRef.current);
+    }
+    dragFrameRef.current = null;
+    setDragTick((n) => n + 1);
+  }, []);
+  useEffect(() => () => {
+    if (dragFrameRef.current !== null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(dragFrameRef.current);
+    }
+  }, []);
 
   // ── Morph animation. morphSuppressRef stays null this task (the
   // recording is wired at the drag-commit site). dragRef must be
@@ -1313,12 +1614,15 @@ function MultiChannelCurves({
   const dragConsumedClickRef = useRef(false);
 
   // Border keys on the focus track. First + last by time order.
-  const focusBorderTimes = new Set<number>();
-  if (focusLayer !== null && focusLayer.track.keys.length > 0) {
-    const ks = focusLayer.track.keys;
-    focusBorderTimes.add(ks[0]!.time);
-    focusBorderTimes.add(ks[ks.length - 1]!.time);
-  }
+  const focusBorderTimes = useMemo(() => {
+    const times = new Set<number>();
+    if (focusLayer !== null && focusLayer.track.keys.length > 0) {
+      const ks = focusLayer.track.keys;
+      times.add(ks[0]!.time);
+      times.add(ks[ks.length - 1]!.time);
+    }
+    return times;
+  }, [focusLayer])
 
   const focusRange = focusLayer?.range ?? { min: 0, max: 1 };
   // The focus channel's engine-allowed bounds — used for the drag
@@ -1442,7 +1746,7 @@ function MultiChannelCurves({
       if (drag.moved) {
         onGroupDragMove?.(drag.groupDTime, drag.groupDValue);
       }
-      setDragTick((n) => n + 1);
+      scheduleDragTick();
       return;
     }
     let nextTime = unproject(x, timeMin, timeMax, width);
@@ -1479,7 +1783,7 @@ function MultiChannelCurves({
     if (drag.moved) {
       onKeyDragMove?.(drag.keyTime, drag.currentTime, drag.currentValue);
     }
-    setDragTick((n) => n + 1);
+    scheduleDragTick();
   };
 
   /** Pointer-up — commit drag, commit marquee, or treat as click. */
@@ -1526,7 +1830,7 @@ function MultiChannelCurves({
         try { el.releasePointerCapture(event.pointerId); } catch { /* swallow */ }
       }
     }
-    setDragTick((n) => n + 1);
+    flushDragTick();
     if (isGroup) {
       // Commit the whole-selection shift (or treat a no-move as a
       // plain key click so it falls back to single-select).
@@ -1594,7 +1898,7 @@ function MultiChannelCurves({
     if (drag === null) return;
     if (event.pointerId !== drag.pointerId) return;
     dragRef.current = null;
-    setDragTick((n) => n + 1);
+    flushDragTick();
     // Notify the parent so it can roll back any live-drag state
     // (Time / Value spinner overlay) that came from `onKeyDragMove`.
     onKeyDragCancel?.();
@@ -1831,77 +2135,16 @@ function MultiChannelCurves({
           with regular markers; in focus mode the markers shrink and
           drop their dark stroke so the focus layer's r=5 stroked
           circles stay visually primary. */}
-      {layers.map(({ channel, track, points }) => {
-        const isFocus = focusEnabled && focusLayer !== null && channel.id === focusLayer.channel.id;
-        if (isFocus) return null; // focus layer rendered separately below
-        const interp = track.interpolation;
-        const layerOpacity = focusEnabled ? 0.4 : 1;
-        const strokeW = 2;
-        // Marker shape: in view-only mode, fully-styled circles
-        // (matching the view-only appearance). In focus mode, smaller
-        // filled dots with no stroke — visible enough to read where
-        // the control points sit on the dim curve, quiet enough that
-        // the focus channel's keys remain the eye's target.
-        const markerR = focusEnabled ? 3 : 4;
-        const markerStroke = focusEnabled ? "none" : "var(--curve-marker-stroke)";
-        const markerStrokeW = focusEnabled ? 0 : 1;
-        // In focus mode the markers are non-interactive scenery — no
-        // testid (the `curve-key` testid means "an interactive key
-        // circle"), no key click handlers. View-only mode keeps the
-        // legacy testid so callers can still query them.
-        const markerTestId = focusEnabled ? undefined : "curve-key";
+      {layers.map((layer) => {
+        const isFocus = focusEnabled && focusLayer !== null && layer.channel.id === focusLayer.channel.id;
+        if (isFocus) return null;
         return (
-          <g
-            key={channel.id}
-            data-testid={`curve-layer-${channel.id}`}
-            data-channel-id={channel.id}
-            data-key-count={points.length}
-            data-focus="false"
-            style={{ opacity: layerOpacity, visibility: morph.isActive(channel.id) ? "hidden" : undefined }}
-          >
-            {points.length >= 2 && interp === "smooth" && (
-              <path
-                fill="none"
-                stroke={channel.color}
-                strokeWidth={strokeW}
-                d={buildSmoothPath(points)}
-                pointerEvents="none"
-              />
-            )}
-            {points.length >= 2 && interp === "step" && (
-              <polyline
-                fill="none"
-                stroke={channel.color}
-                strokeWidth={strokeW}
-                points={buildStepPolyline(points)}
-                pointerEvents="none"
-              />
-            )}
-            {points.length >= 2 && interp === "linear" && (
-              <polyline
-                fill="none"
-                stroke={channel.color}
-                strokeWidth={strokeW}
-                points={points.map((p) => `${p.x},${p.y}`).join(" ")}
-                pointerEvents="none"
-              />
-            )}
-            {points.map((p, i) => (
-              <circle
-                key={i}
-                {...(markerTestId !== undefined ? { "data-testid": markerTestId } : {})}
-                data-channel-id={channel.id}
-                data-key-time={p.time}
-                cx={p.x}
-                cy={p.y}
-                r={markerR}
-                fill={channel.color}
-                stroke={markerStroke}
-                strokeWidth={markerStrokeW}
-                pointerEvents="none"
-              />
-            ))}
-          </g>
+          <StaticChannelLayer
+            key={layer.channel.id}
+            layer={layer}
+            focusEnabled={focusEnabled}
+            hidden={morph.isActive(layer.channel.id)}
+          />
         );
       })}
 
@@ -1932,163 +2175,24 @@ function MultiChannelCurves({
 
       {/* Focus layer — full opacity, thicker stroke, interactive
           circles. Rendered last so it draws above the dimmed
-          background layers. A vertical gradient fill emanates from
-          the curve down to the canvas floor (focus-only — keeping
-          non-focus layers free of fills avoids stacked-translucent
-          clutter when many channels are visible). */}
-      {focusLayer !== null && (() => {
-        const { channel, track } = focusLayer;
-        const interp = track.interpolation;
-        const fillGradId = `curve-fill-${channel.id}`;
-        return (
-          <g
-            key={channel.id}
-            data-testid={`curve-layer-${channel.id}`}
-            data-channel-id={channel.id}
-            data-key-count={focusRenderPoints.length}
-            data-focus="true"
-            data-readonly={focusReadOnly ? "true" : "false"}
-            style={{ visibility: morph.isActive(channel.id) ? "hidden" : undefined }}
-          >
-            {/* Gradient definition — objectBoundingBox units mean the
-                stops are positioned within the fill path's own bbox,
-                so 0% lands at the top of the curve (highest point of
-                the fill area) and 100% lands at the canvas floor.
-                That produces the "colour emanating from the curve,
-                fading to transparent" effect rather than a
-                canvas-wide top-to-bottom wash. */}
-            <defs>
-              <linearGradient id={fillGradId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={channel.color} stopOpacity="0.25" />
-                <stop offset="100%" stopColor={channel.color} stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            {focusRenderPoints.length >= 2 && (
-              <path
-                data-testid="curve-fill"
-                fill={`url(#${fillGradId})`}
-                stroke="none"
-                d={buildFillPath(focusRenderPoints, interp, height)}
-                pointerEvents="none"
-              />
-            )}
-            {focusRenderPoints.length >= 2 && interp === "smooth" && (
-              <path
-                data-testid="curve-path"
-                fill="none"
-                stroke={channel.color}
-                strokeWidth={3}
-                strokeDasharray={focusReadOnly ? READONLY_DASH : undefined}
-                d={buildSmoothPath(focusRenderPoints)}
-                pointerEvents="none"
-              />
-            )}
-            {focusRenderPoints.length >= 2 && interp === "step" && (
-              <polyline
-                data-testid="curve-polyline"
-                data-interpolation="step"
-                fill="none"
-                stroke={channel.color}
-                strokeWidth={3}
-                strokeDasharray={focusReadOnly ? READONLY_DASH : undefined}
-                points={buildStepPolyline(focusRenderPoints)}
-                pointerEvents="none"
-              />
-            )}
-            {focusRenderPoints.length >= 2 && interp === "linear" && (
-              <polyline
-                data-testid="curve-polyline"
-                data-interpolation="linear"
-                fill="none"
-                stroke={channel.color}
-                strokeWidth={3}
-                strokeDasharray={focusReadOnly ? READONLY_DASH : undefined}
-                points={focusRenderPoints.map((p) => `${p.x},${p.y}`).join(" ")}
-                pointerEvents="none"
-              />
-            )}
-            {focusRenderPoints.map((p, i) => {
-              const selected = selectedKeyTimes?.has(p.time) ?? false;
-              const isBorder = focusBorderTimes.has(p.time);
-              // Border keys (first / last in time order) used to render
-              // with a slate fill + accent-blue stroke to signal "you
-              // can't delete or drag-in-time this one". The visual
-              // inconsistency (mid-curve red, edges blue) outweighed
-              // the value — the same restrictions are still enforced
-              // by the Delete handler + drag-time clamp, and the
-              // `data-border` attribute below tags them for callers
-              // that need the distinction programmatically.
-              // Keys always render in their channel's colour. The
-              // selected marker uses the inverted-core style: compact
-              // canvas-background fill + thick channel-colour stroke
-              // (r=6.5, strokeWidth=2.5, fill=var(--curve-marker-core)).
-              // Crisp, zero blur, theme-proof. Unselected: r=5 solid fill.
-              const hitR = selected ? 18 : 14;
-              const visR = selected ? 6.5 : 5;
-              // Inverted-core: selected → bg fill + channel stroke.
-              // Unselected → channel fill, no stroke.
-              // focusReadOnly (locked channel) → hollow: fill=none, channel stroke.
-              // focusReadOnly takes precedence; locked channels are never selected.
-              const markerFill = focusReadOnly ? "none" : selected ? "var(--curve-marker-core)" : channel.color;
-              const markerStroke = focusReadOnly ? channel.color : selected ? channel.color : "none";
-              const markerStrokeWidth = focusReadOnly ? 2 : selected ? 2.5 : 0;
-              return (
-                <g key={i}>
-                  <circle
-                    data-testid="curve-key"
-                    data-channel-id={channel.id}
-                    data-key-time={p.time}
-                    data-selected={selected ? "true" : "false"}
-                    data-border={isBorder ? "true" : "false"}
-                    cx={p.x}
-                    cy={p.y}
-                    r={hitR}
-                    fill="transparent"
-                    stroke="transparent"
-                    style={{ cursor: onKeyClick ? "pointer" : undefined }}
-                    onPointerDown={(e) => startDrag(e, p.time, p.value)}
-                    onContextMenu={(e) => {
-                      if (focusReadOnly) return;
-                      if (!onKeyContextMenu) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onKeyContextMenu(p.time, isBorder, e.clientX, e.clientY);
-                    }}
-                    onClick={(e) => {
-                      if (focusReadOnly) return;
-                      e.stopPropagation();
-                      // Suppress the synthetic click that the browser
-                      // fires after a drag. Without this, a group drag ends
-                      // with this (the grabbed) key's trailing click calling
-                      // onKeyClick, which collapses the multi-selection down
-                      // to just this one key. The backdrop already guards on
-                      // dragConsumedClickRef; the key circle must too.
-                      if (dragConsumedClickRef.current) {
-                        dragConsumedClickRef.current = false;
-                        return;
-                      }
-                      if (dragRef.current === null) {
-                        onKeyClick?.(p.time, e);
-                      }
-                    }}
-                  />
-                  <circle
-                    className="curve-key-marker"
-                    data-selected={selected ? "true" : "false"}
-                    cx={p.x}
-                    cy={p.y}
-                    r={visR}
-                    fill={markerFill}
-                    stroke={markerStroke}
-                    strokeWidth={markerStrokeWidth}
-                    pointerEvents="none"
-                  />
-                </g>
-              );
-            })}
-          </g>
-        );
-      })()}
+          background layers. */}
+      {focusLayer !== null && (
+        <FocusChannelLayer
+          key={focusLayer.channel.id}
+          layer={focusLayer}
+          renderPoints={focusRenderPoints}
+          focusReadOnly={focusReadOnly}
+          selectedKeyTimes={selectedKeyTimes}
+          focusBorderTimes={focusBorderTimes}
+          hidden={morph.isActive(focusLayer.channel.id)}
+          height={height}
+          onKeyClick={onKeyClick}
+          onKeyContextMenu={onKeyContextMenu}
+          startDrag={startDrag}
+          dragRef={dragRef}
+          dragConsumedClickRef={dragConsumedClickRef}
+        />
+      )}
 
       {/* Marquee rectangle */}
       {marquee !== null && marquee.movedPastSlop && (

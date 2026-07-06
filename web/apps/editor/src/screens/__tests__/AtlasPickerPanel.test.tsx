@@ -498,6 +498,25 @@ describe("AtlasPickerPanel", () => {
     expect(cell.className).toContain("motion-reduce:hover:scale-100");
   });
 
+  it("hover moves do not re-render the atlas grid", async () => {
+    setup({ textureSize: 16 });
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
+
+    const renderAttr = grid.getAttribute("data-render-count");
+    expect(renderAttr).not.toBeNull();
+    const before = Number(renderAttr);
+    expect(before).toBeGreaterThan(0);
+
+    const cells = screen.getAllByTestId("atlas-cell");
+    for (const k of [1, 2, 3, 4, 5, 6]) {
+      fireEvent.mouseEnter(cells[k]);
+      fireEvent.mouseLeave(cells[k]);
+    }
+
+    expect(Number(grid.getAttribute("data-render-count"))).toBe(before);
+  });
+
   it("alpha-gated mode: the CONTAINER stays the uniform gray (no checkerboard); cells unchanged", async () => {
     // Render an alpha-gated emitter directly (the mode that used to require the
     // Alpha toggle ON). The container must stay uniform bg-bg-2 gray — no checkerboard.
