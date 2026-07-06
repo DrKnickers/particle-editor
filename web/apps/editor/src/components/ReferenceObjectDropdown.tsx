@@ -8,16 +8,14 @@ import { ChevronDown } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { AnimatedPopover } from "@/components/AnimatedPopover";
 import { parseOpenPickerMessage } from "@/lib/record-focus-bridge";
-import { useEngineSnapshot } from "@/lib/use-engine-snapshot";
+import { useEngineField } from "@/lib/use-engine-snapshot";
 import { ReferenceObjectPickerBody } from "@/screens/ReferenceObjectPicker";
 
 type Props = { bridge: Bridge };
 
 export function ReferenceObjectDropdown({ bridge }: Props) {
-  const snap = useEngineSnapshot(bridge);
   const [open, setOpen] = useState(false);
-
-  const name = snap?.referenceObjectName ?? "";
+  const name = useEngineField(bridge, (s) => s.referenceObjectName) ?? "";
   const label = name === "" ? "None" : name;
 
   useEffect(() => {

@@ -12,28 +12,30 @@ import { ChevronDown } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { AnimatedPopover } from "@/components/AnimatedPopover";
 import { parseOpenPickerMessage } from "@/lib/record-focus-bridge";
-import { useEngineSnapshot } from "@/lib/use-engine-snapshot";
+import { useEngineField } from "@/lib/use-engine-snapshot";
 import { BackgroundPickerBody } from "@/screens/BackgroundPicker";
 import { colorrefToHex } from "@/lib/colorref";
 
 type Props = { bridge: Bridge };
 
 export function BackgroundDropdown({ bridge }: Props) {
-  const snap = useEngineSnapshot(bridge);
   const [open, setOpen] = useState(false);
+  const slot = useEngineField(bridge, (s) => s.skydomeSlot) ?? 0;
+  const skydomePrimaryStatus = useEngineField(bridge, (s) => s.skydomePrimaryStatus) ?? "none";
+  const skydomeSecondaryStatus = useEngineField(bridge, (s) => s.skydomeSecondaryStatus) ?? "none";
+  const background = useEngineField(bridge, (s) => s.background);
 
-  const slot = snap?.skydomeSlot ?? 0;
   // A game dome takes render precedence — but show the dome swatch
   // only when it actually loaded (status "ok"), mirroring the picker body's
   // gameDomeRendering. A selected-but-failed dome falls back to the simple
   // background, so its swatch must too (not paint the dome gradient).
   const gameDomeRendering =
-    (snap?.skydomePrimaryStatus ?? "none") === "ok" ||
-    (snap?.skydomeSecondaryStatus ?? "none") === "ok";
+    skydomePrimaryStatus === "ok" ||
+    skydomeSecondaryStatus === "ok";
   const swatchStyle: React.CSSProperties = gameDomeRendering
     ? { background: "linear-gradient(180deg, #2a3a5a 0%, #141c2b 100%)" }
     : slot === 0
-      ? { backgroundColor: snap ? colorrefToHex(snap.background) : "#000000" }
+      ? { backgroundColor: background === undefined ? "#000000" : colorrefToHex(background) }
       : { backgroundColor: "var(--bg-3)" }; // legacy texture slot — no thumbnail
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   initModStack,
   getModStack,
+  refreshModStack,
   __setModStackForTests,
   __resetModStackForTests,
 } from "../mod-stack";
@@ -90,6 +91,37 @@ describe("initModStack", () => {
     await vi.waitFor(() => expect(getModStack()).toEqual(["B", "A"]));
   });
 
+  it("does not request mods/list when activeModPath is unchanged", async () => {
+    const bridge = makeFakeBridge(["A"]);
+    initModStack(bridge as never);
+    await vi.waitFor(() => expect(getModStack()).toEqual(["A"]));
+
+    bridge.fire("engine/state/changed", { activeModPath: "A" });
+    await vi.waitFor(() => expect(bridge.request).toHaveBeenCalledTimes(2));
+
+    bridge.request.mockClear();
+    bridge.fire("engine/state/changed", { activeModPath: "A" });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(bridge.request).not.toHaveBeenCalled();
+  });
+
+  it("requests mods/list once when activeModPath changes", async () => {
+    const bridge = makeFakeBridge(["A"]);
+    initModStack(bridge as never);
+    await vi.waitFor(() => expect(getModStack()).toEqual(["A"]));
+
+    bridge.fire("engine/state/changed", { activeModPath: "A" });
+    await vi.waitFor(() => expect(bridge.request).toHaveBeenCalledTimes(2));
+
+    bridge.request.mockClear();
+    bridge.stackRef.current = ["B", "A"];
+    bridge.fire("engine/state/changed", { activeModPath: "B" });
+
+    expect(bridge.request).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(getModStack()).toEqual(["B", "A"]));
+  });
+
   it("calls invalidatePreviewCache when engine/state/changed fires with a CHANGED stack", async () => {
     const invalidate = vi.spyOn(cache, "invalidatePreviewCache");
     const bridge = makeFakeBridge(["A"]);
@@ -124,5 +156,30 @@ describe("initModStack", () => {
     const off = initModStack(bridge as never);
     expect(typeof off).toBe("function");
     expect(() => off()).not.toThrow();
+  });
+
+  // Same-front stack edits (reorder/remove/append of a secondary layer)
+  // don't change activeModPath, so the broadcast gate won't fire —
+  // mods/set-layers call sites use refreshModStack() to force the fetch.
+  it("refreshModStack forces a mods/list fetch even when activeModPath is unchanged", async () => {
+    const bridge = makeFakeBridge(["A", "B"]);
+    initModStack(bridge as never);
+    await vi.waitFor(() => expect(getModStack()).toEqual(["A", "B"]));
+
+    bridge.request.mockClear();
+    bridge.stackRef.current = ["A", "C"]; // front unchanged, tail edited
+    refreshModStack();
+
+    expect(bridge.request).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(getModStack()).toEqual(["A", "C"]));
+  });
+
+  it("refreshModStack is a no-op after dispose", () => {
+    const bridge = makeFakeBridge(["A"]);
+    const off = initModStack(bridge as never);
+    off();
+    bridge.request.mockClear();
+    expect(() => refreshModStack()).not.toThrow();
+    expect(bridge.request).not.toHaveBeenCalled();
   });
 });

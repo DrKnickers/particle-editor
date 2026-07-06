@@ -190,6 +190,14 @@ public:
     // bar push; EmitEngineStateChanged is the post-setter broadcast.
     void EmitEngineStateChanged();
 
+    // Deliver any live-coalesced trailing broadcast (see the
+    // m_stateEmitPending block for the full contract). Called from the
+    // paced idle branch (once per display frame), the top of
+    // Dispatch/DispatchSync (a pending evt must land BEFORE the next
+    // response), and the 4 Hz stats timer (heartbeat through modal
+    // dialogs' own message pumps). No-op when nothing is pending.
+    void FlushPendingEmits();
+
     // Commit the reference object's CURRENT transform after a
     // host-side manipulator drag: gated persist + markDirty + EmitEngineStateChanged.
     // The per-move drag already set the transform on the engine (+ emitted so the
@@ -358,6 +366,25 @@ private:
     unsigned long long m_lastTreeEmitTick   = 0;
     unsigned long long m_lastStateEmitTick  = 0;
     static constexpr unsigned long long kRecordEmitThrottleMs = 33;
+
+    // Live-mode trailing coalesce (perf remediation B1): interactive drags
+    // call the two broadcasts at pointer-move rate, and each emit serializes
+    // a full engine-state snapshot / the whole emitter tree. The FIRST emit
+    // in a burst still goes out immediately (leading edge — spinners track
+    // the drag live); a follow-up within kEmitCoalesceMs only marks PENDING,
+    // delivered by FlushPendingEmits() (call sites documented on its decl).
+    // Worst-case staleness is one display frame (idle-branch flush), or one
+    // stats tick (250 ms) inside a modal dialog's own pump. NOT active in
+    // --record (#510's leading-edge throttle owns that mode — its clip gates
+    // assert the ~30 Hz cadence) and NOT in --drive (m_ephemeral: a
+    // drive-assert must see every change, per the #510 note above).
+    bool               m_stateEmitPending = false;
+    bool               m_treeEmitPending  = false;
+    static constexpr unsigned long long kEmitCoalesceMs = 16;
+
+    // Unconditional builders behind the coalesce gates (the pre-B1 bodies).
+    void EmitEngineStateChangedNow();
+    void EmitEmittersTreeChangedNow();
 
     // Test seam: set from the ALO_SETTINGS_LIVE env var at construction.
     // When true it LIFTS the `--test-host` settings gate, so the

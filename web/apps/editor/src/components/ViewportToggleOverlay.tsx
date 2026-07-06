@@ -4,15 +4,45 @@
 // discoverable way to lock the reference object so a left-drag pans/orbits instead
 // of nudging the model. Reads the engine snapshot (like Toolbar/MenuBar) and writes
 // the existing engine/set/* commands — no new state.
-import { useEffect, useState } from "react";
 import { PanelBottom, Grid2x2, Sun, Lock, LockOpen } from "lucide-react";
 import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
+import { useEngineField } from "@/lib/use-engine-snapshot";
 import { pillScrimMode, pillBackdropColor } from "@/lib/colorref";
 import { Tip } from "@/primitives/Tip";
 
 type Props = { bridge: Bridge };
 
 const ICON = { size: 16, strokeWidth: 2, "aria-hidden": true } as const;
+
+type ViewportToggleState = Pick<
+  EngineStateDto,
+  | "ground"
+  | "gridVisible"
+  | "bloom"
+  | "referenceObjectLocked"
+  | "referenceObjectName"
+  | "groundColor"
+  | "background"
+>;
+
+const selectViewportToggleState = (s: EngineStateDto): ViewportToggleState => ({
+  ground: s.ground,
+  gridVisible: s.gridVisible,
+  bloom: s.bloom,
+  referenceObjectLocked: s.referenceObjectLocked,
+  referenceObjectName: s.referenceObjectName,
+  groundColor: s.groundColor,
+  background: s.background,
+});
+
+const sameViewportToggleState = (a: ViewportToggleState, b: ViewportToggleState) =>
+  a.ground === b.ground &&
+  a.gridVisible === b.gridVisible &&
+  a.bloom === b.bloom &&
+  a.referenceObjectLocked === b.referenceObjectLocked &&
+  a.referenceObjectName === b.referenceObjectName &&
+  a.groundColor === b.groundColor &&
+  a.background === b.background;
 
 function ToggleButton(props: {
   label: string;
@@ -50,24 +80,7 @@ function ToggleButton(props: {
 }
 
 export function ViewportToggleOverlay({ bridge }: Props) {
-  const [state, setState] = useState<EngineStateDto | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    bridge
-      .request({ kind: "engine/state/snapshot", params: {} })
-      .then((s) => {
-        // Seed only — a live `engine/state/changed` may have arrived before this
-        // initial fetch resolved; don't clobber it with the (now stale) snapshot.
-        if (!cancelled) setState((prev) => prev ?? s);
-      })
-      .catch(() => {});
-    const off = bridge.on("engine/state/changed", (e) => setState(e.payload));
-    return () => {
-      cancelled = true;
-      off();
-    };
-  }, [bridge]);
+  const state = useEngineField(bridge, selectViewportToggleState, sameViewportToggleState);
 
   const ground = state?.ground ?? false;
   const grid = state?.gridVisible ?? false;

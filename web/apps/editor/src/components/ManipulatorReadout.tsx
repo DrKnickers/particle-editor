@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Bridge, Event } from "@particle-editor/bridge-schema";
+import { useEngineField } from "@/lib/use-engine-snapshot";
 
 type DragActive = Extract<Event, { kind: "engine/manipulator/drag" }>["payload"] & { active: true };
 
@@ -22,20 +23,25 @@ export function ManipulatorReadout({
 }: { bridge: Bridge; overlayRef: React.RefObject<HTMLElement | null> }) {
   const [drag, setDrag] = useState<DragActive | null>(null);
   const pillRef = useRef<HTMLDivElement>(null);
+  const hideDragForReference = useEngineField(
+    bridge,
+    (s) => s.referenceObjectName === "" || s.referenceObjectLocked,
+  ) ?? false;
 
   useEffect(() => {
     const off1 = bridge.on("engine/manipulator/drag", (e) => {
       setDrag(e.payload.active ? e.payload : null);
     });
-    // Belt-and-suspenders: if the reference object is cleared (mod-switch /
-    // new-file → name "") or locked mid-something (gizmo gone), hide the pill.
-    // (Deselect/lock don't route through the host drag-end sites; these are the
-    // real DTO signals — there is no `referenceObjectSelected` field.)
-    const off2 = bridge.on("engine/state/changed", (e) => {
-      if (e.payload.referenceObjectName === "" || e.payload.referenceObjectLocked) setDrag(null);
-    });
-    return () => { off1(); off2(); };
+    return () => { off1(); };
   }, [bridge]);
+
+  // Belt-and-suspenders: if the reference object is cleared (mod-switch /
+  // new-file → name "") or locked mid-something (gizmo gone), hide the pill.
+  // (Deselect/lock don't route through the host drag-end sites; these are the
+  // real DTO signals — there is no `referenceObjectSelected` field.)
+  useEffect(() => {
+    if (hideDragForReference) setDrag(null);
+  }, [hideDragForReference]);
 
   if (!drag || !drag.visible) return null;
 

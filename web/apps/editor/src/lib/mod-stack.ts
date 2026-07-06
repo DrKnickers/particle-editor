@@ -49,8 +49,24 @@ export function getModStack(): string[] {
  *
  * Called once at app startup (via useSeedModStack) and directly in unit tests.
  */
+/**
+ * Force a mods/list refresh through the live initModStack subscription.
+ * The engine/state/changed gate below keys on activeModPath (the FRONT
+ * layer only — src/ModManager.h GetPrimaryLayerPath), so a stack edit
+ * that keeps the front unchanged (reorder / remove / append of a
+ * secondary layer) would otherwise leave this store stale. The two
+ * mods/set-layers call sites (MenuBar, LoadOrderDialog) call this after
+ * a successful apply. No-op before initModStack runs.
+ */
+export function refreshModStack(): void {
+  activeRefresh?.();
+}
+let activeRefresh: (() => void) | null = null;
+
 export function initModStack(bridge: Bridge): () => void {
   let latest = 0;
+  let hasSeenActiveModPath = false;
+  let lastSeenActiveModPath: string | null | undefined;
 
   const refresh = (): void => {
     const seq = ++latest;
@@ -74,10 +90,17 @@ export function initModStack(bridge: Bridge): () => void {
   // calling initModStack directly drive this via a faked requestIdleCallback.)
   const cancelSeed = runWhenIdle(refresh);
 
-  // Re-seed on every host-side state broadcast (file open, mod switch, etc.).
-  const off = bridge.on("engine/state/changed", refresh);
+  const off = bridge.on("engine/state/changed", (e) => {
+    const activeModPath = e.payload?.activeModPath;
+    if (hasSeenActiveModPath && activeModPath === lastSeenActiveModPath) return;
+    hasSeenActiveModPath = true;
+    lastSeenActiveModPath = activeModPath;
+    refresh();
+  });
+  activeRefresh = refresh;
   return () => {
     latest++; // invalidate any in-flight (deferred) refresh so it bails before setState
+    if (activeRefresh === refresh) activeRefresh = null;
     cancelSeed();
     off();
   };

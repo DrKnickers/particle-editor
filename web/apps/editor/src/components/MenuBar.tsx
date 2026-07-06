@@ -26,13 +26,14 @@ import { cn } from "@/lib/utils";
 import { useStackReorder } from "@/lib/use-stack-reorder";
 import type {
   Bridge,
-  EngineStateDto,
   EmitterTreeNode,
   LayerRef,
 } from "@particle-editor/bridge-schema";
 import { promptSaveChanges, useFileState } from "@/lib/file-state";
 import { runFileOp, useFileOpErrorStore } from "@/lib/file-op";
 import { runWhenIdle } from "@/lib/run-after-paint";
+import { useEngineField } from "@/lib/use-engine-snapshot";
+import { refreshModStack } from "@/lib/mod-stack";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
 import { bumpTextureEpoch } from "@/lib/atlas-preview-cache";
 import {
@@ -128,7 +129,6 @@ export function MenuBar({
   onOpenRescaleDialog,
   onResetPanelLayout,
 }: Props) {
-  const [state, setState] = useState<EngineStateDto | null>(null);
   // View → Reset View Settings prompt visibility.
   const [resetViewOpen, setResetViewOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
@@ -182,6 +182,10 @@ export function MenuBar({
     // The snapshot carries activePath but not the full stack list, so re-fetch
     // mods/list to refresh the summary + per-layer checkmarks.
     await refreshModsList();
+    // Also refresh the SHARED mod-stack store: its engine/state/changed
+    // gate keys on activeModPath (the FRONT layer), so a same-front stack
+    // edit (reorder/remove/append of a secondary layer) wouldn't reach it.
+    refreshModStack();
   };
   const handleModRefresh = async () => {
     try {
@@ -233,13 +237,6 @@ export function MenuBar({
 
   useEffect(() => {
     let cancelled = false;
-    bridge
-      .request({ kind: "engine/state/snapshot", params: {} })
-      .then((s) => {
-        if (!cancelled) setState(s);
-      })
-      .catch((err) => console.warn("[MenuBar] snapshot failed:", err));
-    const off = bridge.on("engine/state/changed", (e) => setState(e.payload));
     // Prime the mods list at mount — DEFERRED to the first idle slot after first
     // interactive paint (perf-audit P1a startup fan-out). Active mod arrives via
     // the eager snapshot; the list changes rarely and the live engine/state/changed
@@ -248,7 +245,6 @@ export function MenuBar({
     return () => {
       cancelled = true;
       cancelModsSeed();
-      off();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridge]);
@@ -278,15 +274,17 @@ export function MenuBar({
     return () => wv.removeEventListener?.("message", onMsg);
   }, []);
 
-  const ground = state?.ground ?? false;
-  const gridVisible = state?.gridVisible ?? false;
-  const refLocked = state?.referenceObjectLocked ?? false;
-  const hasRefObject = (state?.referenceObjectName ?? "") !== "";
+  const ground = useEngineField(bridge, (s) => s.ground) ?? false;
+  const gridVisible = useEngineField(bridge, (s) => s.gridVisible) ?? false;
+  const refLocked = useEngineField(bridge, (s) => s.referenceObjectLocked) ?? false;
+  const hasRefObject = (useEngineField(bridge, (s) => s.referenceObjectName) ?? "") !== "";
   // Bloom on/off now lives in the viewport display-options overlay (it moved off
   // the toolbar); its settings stay in the Lighting pane — so no bloom state is
   // read here (no View-menu Bloom item).
-  const paused = state?.paused ?? false;
-  const heatDebug = state?.heatDebug ?? false;
+  const paused = useEngineField(bridge, (s) => s.paused) ?? false;
+  const heatDebug = useEngineField(bridge, (s) => s.heatDebug) ?? false;
+  const canUndo = useEngineField(bridge, (s) => s.canUndo) ?? false;
+  const canRedo = useEngineField(bridge, (s) => s.canRedo) ?? false;
 
   // Primary selection drives the Emitters-menu item enabled state.
   // Rename / Rescale / Add Child operate on the primary; Add Root is
@@ -540,7 +538,7 @@ export function MenuBar({
           >
             <Menubar.Item
               className={ITEM}
-              disabled={!state?.canUndo}
+              disabled={!canUndo}
               onSelect={send({
                 kind: "undo/perform",
                 params: { direction: "undo" },
@@ -550,7 +548,7 @@ export function MenuBar({
             </Menubar.Item>
             <Menubar.Item
               className={ITEM}
-              disabled={!state?.canRedo}
+              disabled={!canRedo}
               onSelect={send({
                 kind: "undo/perform",
                 params: { direction: "redo" },

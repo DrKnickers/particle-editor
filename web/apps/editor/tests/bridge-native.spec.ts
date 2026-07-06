@@ -123,6 +123,52 @@ test("engine/set/ground-z mutates state and fires engine/state/changed", async (
   expect(result.event!.groundZ).toBeCloseTo(17.5, 5);
 });
 
+test("setter burst: coalesced state events still deliver the final value (B1)", async () => {
+  // Perf-plan B1 contract: EmitEngineStateChanged live-coalesces bursts
+  // (leading edge immediate, follow-ups pending, trailing flush from the
+  // idle branch / next dispatch). Invariants a regression would break:
+  //   1. every response in a rapid setter burst still resolves;
+  //   2. the trailing engine/state/changed is NEVER lost — an event
+  //      carrying the FINAL value arrives even with no follow-up request
+  //      (the idle-branch flush), so the web can't be left stale;
+  //   3. at least one event fired (leading edge intact).
+  const result = await page.evaluate(async () => {
+    type AnyBridge = {
+      request(r: { kind: string; params: object }): Promise<unknown>;
+      on(kind: string, h: (e: { payload: unknown }) => void): () => void;
+    };
+    const b = (window as { bridge?: AnyBridge }).bridge;
+    if (!b) throw new Error("window.bridge not attached");
+
+    const seen: number[] = [];
+    const off = b.on("engine/state/changed", (e) => {
+      seen.push((e.payload as { groundZ: number }).groundZ);
+    });
+    const N = 20;
+    const finalZ = 42.5;
+    for (let i = 1; i <= N; i++) {
+      const z = i === N ? finalZ : i * 0.5;
+      await b.request({ kind: "engine/set/ground-z", params: { z } });
+    }
+    // No further requests: the trailing emit must arrive via the host's
+    // idle-branch flush (≤ one display frame) — grace-wait well past it.
+    await new Promise((r) => setTimeout(r, 250));
+    off();
+    return { events: seen.length, sawFinal: seen.includes(finalZ) };
+  });
+
+  // Restore the baseline groundZ BEFORE asserting, so a failed assertion
+  // can't leak mutated state into later specs on the shared page.
+  await page.evaluate(async () => {
+    const b = (window as { bridge?: { request(r: object): Promise<unknown> } }).bridge!;
+    await b.request({ kind: "engine/set/ground-z", params: { z: 0 } });
+  });
+
+  expect(result.events).toBeGreaterThanOrEqual(1); // leading edge intact
+  expect(result.events).toBeLessThanOrEqual(21);   // sanity: ≤ N + trailing
+  expect(result.sawFinal).toBe(true);              // trailing emit never lost
+});
+
 test("engine/set/background round-trips a COLORREF", async () => {
   const result = await page.evaluate(async () => {
     const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })

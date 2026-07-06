@@ -10,6 +10,7 @@ import type { Bridge, LayerRef } from "@particle-editor/bridge-schema";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
 import { useStackReorder } from "@/lib/use-stack-reorder";
+import { refreshModStack } from "@/lib/mod-stack";
 
 type Props = { bridge: Bridge; open: boolean; onOpenChange: (open: boolean) => void; onApplied?: () => void };
 
@@ -91,6 +92,10 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
           );
           return;
         }
+        // Shared mod-stack store: same-front stack edits don't change
+        // activeModPath, so the broadcast gate won't refresh it (see
+        // refreshModStack's doc note).
+        refreshModStack();
         onApplied?.();
         onOpenChange(false);
       } catch (err) {

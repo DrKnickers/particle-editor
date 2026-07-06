@@ -153,23 +153,62 @@ export function ViewportSlot({ bridge }: Props) {
       void bridge.request({ kind: "viewport/input", params }).catch(() => {});
     };
 
+    let pendingMouseMove: ViewportInputEvent | null = null;
+    let pendingMouseMoveFrame: number | null = null;
+
+    const cancelPendingMouseMoveFrame = () => {
+      if (pendingMouseMoveFrame === null) return;
+      window.cancelAnimationFrame(pendingMouseMoveFrame);
+      pendingMouseMoveFrame = null;
+    };
+
+    const flushPendingMouseMove = () => {
+      cancelPendingMouseMoveFrame();
+      if (!pendingMouseMove) return;
+      const params = pendingMouseMove;
+      pendingMouseMove = null;
+      send(params);
+    };
+
+    const sendOrBufferMouseMove = (params: ViewportInputEvent) => {
+      if (document.visibilityState !== "visible") {
+        flushPendingMouseMove();
+        send(params);
+        return;
+      }
+      pendingMouseMove = params;
+      if (pendingMouseMoveFrame !== null) return;
+      pendingMouseMoveFrame = window.requestAnimationFrame(() => {
+        pendingMouseMoveFrame = null;
+        if (!pendingMouseMove) return;
+        const latest = pendingMouseMove;
+        pendingMouseMove = null;
+        send(latest);
+      });
+    };
+
     const onPointerDown = (e: PointerEvent) => {
       try { canvas.setPointerCapture(e.pointerId); } catch { /* not supported */ }
       send(makeMouseEvent("mousedown", e, e.clientX, e.clientY));
     };
     const onPointerMove = (e: PointerEvent) => {
-      send(makeMouseEvent("mousemove", e, e.clientX, e.clientY));
+      sendOrBufferMouseMove(makeMouseEvent("mousemove", e, e.clientX, e.clientY));
     };
     const onPointerUp = (e: PointerEvent) => {
       try { canvas.releasePointerCapture(e.pointerId); } catch { /* not held */ }
+      flushPendingMouseMove();
       send(makeMouseEvent("mouseup", e, e.clientX, e.clientY));
     };
     const onPointerCancel = (e: PointerEvent) => {
       try { canvas.releasePointerCapture(e.pointerId); } catch { /* not held */ }
+      flushPendingMouseMove();
       // pointercancel → synthesize a mouseup so the engine's drag state
       // unwinds (matches the WM_CAPTURECHANGED defensive cleanup at
       // HostWindow.cpp:1169).
       send(makeMouseEvent("mouseup", e, e.clientX, e.clientY));
+    };
+    const onLostPointerCapture = () => {
+      flushPendingMouseMove();
     };
     // Disable the default browser context menu over the canvas so RMB-
     // drag isn't interrupted by a popup. The right-click event still
@@ -194,7 +233,11 @@ export function ViewportSlot({ bridge }: Props) {
     };
 
     const onBlur = () => {
+      flushPendingMouseMove();
       send(blurEvent);
+    };
+    const onVisibilityChange = () => {
+      flushPendingMouseMove();
     };
 
     // When a modal OPENS (count 0→1), end any cursor-bound Shift spawn before the
@@ -203,7 +246,10 @@ export function ViewportSlot({ bridge }: Props) {
     // (#7↔#12 integration.)
     let prevModalCount = useModalOpen.getState().count;
     const unsubModalOpen = useModalOpen.subscribe((s) => {
-      if (prevModalCount === 0 && s.count > 0) send(blurEvent);
+      if (prevModalCount === 0 && s.count > 0) {
+        flushPendingMouseMove();
+        send(blurEvent);
+      }
       prevModalCount = s.count;
     });
 
@@ -211,22 +257,28 @@ export function ViewportSlot({ bridge }: Props) {
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointercancel", onPointerCancel);
+    canvas.addEventListener("lostpointercapture", onLostPointerCapture);
     canvas.addEventListener("contextmenu", onContextMenu);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointercancel", onPointerCancel);
+      canvas.removeEventListener("lostpointercapture", onLostPointerCapture);
       canvas.removeEventListener("contextmenu", onContextMenu);
       canvas.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      cancelPendingMouseMoveFrame();
+      pendingMouseMove = null;
       unsubModalOpen();
     };
   }, [bridge]);

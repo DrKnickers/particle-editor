@@ -7,7 +7,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { ChevronDown } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { AnimatedPopover } from "@/components/AnimatedPopover";
-import { useEngineSnapshot } from "@/lib/use-engine-snapshot";
+import { useEngineField } from "@/lib/use-engine-snapshot";
 import {
   GroundTexturePanelBody,
   BUNDLED_GROUND_SLOTS,
@@ -19,12 +19,11 @@ type Props = { bridge: Bridge };
 const SOLID_COLOR_SLOT = 4;
 
 export function GroundDropdown({ bridge }: Props) {
-  const snap = useEngineSnapshot(bridge);
-
-  const slot = snap?.groundTexture ?? 0;
+  const slot = useEngineField(bridge, (s) => s.groundTexture) ?? 0;
+  const groundSolidColor = useEngineField(bridge, (s) => s.groundSolidColor);
   const bundled = BUNDLED_GROUND_SLOTS.find((s) => s.slot === slot);
   const swatchStyle: React.CSSProperties = slot === SOLID_COLOR_SLOT
-    ? { backgroundColor: snap ? colorrefToHex(snap.groundSolidColor) : "#888888" }
+    ? { backgroundColor: groundSolidColor === undefined ? "#888888" : colorrefToHex(groundSolidColor) }
     : bundled
       ? { background: bundled.gradient }
       : { backgroundColor: "var(--bg-3)" }; // custom slot — no thumbnail yet

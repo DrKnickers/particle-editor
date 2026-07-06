@@ -6,6 +6,7 @@
 // event fires; the component renders placeholder em-dashes.
 import { useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
+import { useEngineField } from "@/lib/use-engine-snapshot";
 
 type Stats = { fps: number; emitters: number; particles: number; instances: number; overload: boolean };
 type Cursor3D = { x: number; y: number; z: number };
@@ -16,16 +17,9 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   // PAUSED indicator. Mirrors the Toolbar's pause signal
   // (engine/state snapshot + changed → EngineStateDto.paused) so the
   // status bar shows the paused state without a new bridge command.
-  const [paused, setPaused] = useState(false);
+  const paused = useEngineField(bridge, (s) => s.paused) ?? false;
 
   useEffect(() => {
-    bridge
-      .request({ kind: "engine/state/snapshot", params: {} })
-      .then((s) => setPaused(s.paused))
-      .catch(() => {});
-    const offState = bridge.on("engine/state/changed", (e) => {
-      setPaused(e.payload.paused);
-    });
     const offStats = bridge.on("stats/tick", (e) => {
       setStats(e.payload);
     });
@@ -45,7 +39,6 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
       }
     });
     return () => {
-      offState();
       offStats();
       offCursor();
       offFreeze();

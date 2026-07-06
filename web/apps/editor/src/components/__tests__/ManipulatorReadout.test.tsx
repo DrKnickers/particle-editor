@@ -5,7 +5,10 @@ import { ManipulatorReadout } from "../ManipulatorReadout";
 function fakeBridge() {
   const handlers: Record<string, ((e: any) => void)[]> = {};
   return {
-    bridge: { on: (k: string, h: (e: any) => void) => { (handlers[k] ??= []).push(h); return () => {}; } } as any,
+    bridge: {
+      request: () => Promise.resolve({ referenceObjectName: "Cantina", referenceObjectLocked: false }),
+      on: (k: string, h: (e: any) => void) => { (handlers[k] ??= []).push(h); return () => {}; },
+    } as any,
     emit: (kind: string, payload: any) => act(() => { (handlers[kind] ?? []).forEach((h) => h({ kind, payload })); }),
   };
 }

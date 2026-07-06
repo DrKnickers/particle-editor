@@ -3112,6 +3112,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_TIMER:
         if (wp == kStatsTimerId && dispatcher)
         {
+            // [B1] Heartbeat flush: modal dialogs (file pickers etc.) run
+            // their own message pump, which starves the paced idle branch —
+            // but still dispatches WM_TIMER, so a coalesced trailing
+            // broadcast is at worst one stats tick (250 ms) stale there.
+            dispatcher->FlushPendingEmits();
             // Record mode: the sim advances exactly tl.fps virtual frames/sec
             // (StepPreviewFrames), so the wall-clock render rate is the wrong
             // number to show — and it swings with the capture barriers, which
@@ -5953,6 +5958,10 @@ int HostWindowImpl::Run(int nCmdShow)
             if (now >= nextFrameQpc)
             {
                 RenderD3D9();
+                // [B1] Deliver any live-coalesced trailing broadcast once per
+                // display frame — the primary flush path (the DispatchSync-top
+                // and stats-timer flushes cover pump-starved cases).
+                if (dispatcher) dispatcher->FlushPendingEmits();
                 // Schedule from "now", not "+= budget": a slow frame must
                 // not bank catch-up renders (cap semantics, not vsync).
                 nextFrameQpc = now + frameBudgetQpc;

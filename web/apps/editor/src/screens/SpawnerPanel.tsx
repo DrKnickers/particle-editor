@@ -89,14 +89,20 @@ export function SpawnerPanel({ bridge }: Props) {
     bridge
       .request({ kind: "engine/state/snapshot", params: {} })
       .then((s) => {
-        if (!cancelled) setConfig(s.spawner);
+        // Shape guard: a snapshot without `spawner` (stub bridges in
+        // tests) must not clobber the default config — this panel's
+        // contract is that `config` is never undefined (useState note
+        // above). Latent until B3's useSyncExternalStore store made
+        // React flush the queued undefined synchronously.
+        if (!cancelled && s?.spawner) setConfig(s.spawner);
       })
       .catch((err) => console.warn("[SpawnerPanel] snapshot failed:", err));
 
     const offState = bridge.on("engine/state/changed", (e) => {
       // Skip our own echoes — every commit triggers a state/changed,
       // and applying it back into the same store is wasteful.
-      const inbound = e.payload.spawner;
+      const inbound = e.payload?.spawner;
+      if (!inbound) return; // same shape guard as the seed above
       if (
         lastCommitted.current &&
         JSON.stringify(lastCommitted.current) === JSON.stringify(inbound)

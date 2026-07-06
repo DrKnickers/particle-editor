@@ -86,6 +86,54 @@ function findViewportInputCalls(
     .filter((req) => req.kind === "viewport/input");
 }
 
+function findMouseMoveInputs(
+  bridge: { request: ReturnType<typeof vi.fn> },
+): Array<Record<string, unknown>> {
+  return findViewportInputCalls(bridge)
+    .map((req) => req.params)
+    .filter((params) => params.type === "mousemove");
+}
+
+function installFakeRaf() {
+  const callbacks = new Map<number, FrameRequestCallback>();
+  let nextId = 1;
+  const request = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+    const id = nextId++;
+    callbacks.set(id, cb);
+    return id;
+  });
+  const cancel = vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+    callbacks.delete(id);
+  });
+  return {
+    request,
+    flush() {
+      const pending = [...callbacks.values()];
+      callbacks.clear();
+      pending.forEach((cb) => cb(16));
+    },
+    restore() {
+      request.mockRestore();
+      cancel.mockRestore();
+    },
+  };
+}
+
+function setDocumentVisibilityState(value: DocumentVisibilityState): () => void {
+  const ownDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => value,
+  });
+  return () => {
+    if (ownDescriptor) {
+      Object.defineProperty(document, "visibilityState", ownDescriptor);
+    } else {
+      Reflect.deleteProperty(document, "visibilityState");
+    }
+  };
+}
+
 describe("ViewportSlot — input forwarding", () => {
   afterEach(() => {
     cleanup();
@@ -129,13 +177,82 @@ describe("ViewportSlot — input forwarding", () => {
     expect(inputs[0]?.params.buttons).toBe(MK_LBUTTON | MK_SHIFT);
   });
 
-  it("pointermove on canvas dispatches viewport/input { type: 'mousemove' }", () => {
-    const bridge = makeStubBridge();
-    render(<ViewportSlot bridge={bridge} />);
-    const canvas = screen.getByTestId("viewport-canvas");
-    fireEvent.pointerMove(canvas, { clientX: 50, clientY: 75, buttons: 0 });
-    const inputs = findViewportInputCalls(bridge);
-    expect(inputs.some((r) => r.params.type === "mousemove")).toBe(true);
+  it("pointermove on canvas dispatches viewport/input { type: 'mousemove' } after animation frame", () => {
+    const raf = installFakeRaf();
+    try {
+      const bridge = makeStubBridge();
+      render(<ViewportSlot bridge={bridge} />);
+      const canvas = screen.getByTestId("viewport-canvas");
+      fireEvent.pointerMove(canvas, { clientX: 50, clientY: 75, buttons: 0 });
+      expect(findMouseMoveInputs(bridge)).toHaveLength(0);
+      raf.flush();
+      expect(findMouseMoveInputs(bridge)).toHaveLength(1);
+    } finally {
+      raf.restore();
+    }
+  });
+
+  it("coalesces pointermove events to the latest coordinates per animation frame", () => {
+    const raf = installFakeRaf();
+    try {
+      const bridge = makeStubBridge();
+      render(<ViewportSlot bridge={bridge} />);
+      const canvas = screen.getByTestId("viewport-canvas");
+
+      fireEvent.pointerMove(canvas, { clientX: 10, clientY: 20, buttons: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 30, clientY: 40, buttons: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 50, clientY: 60, buttons: 1 });
+
+      expect(raf.request).toHaveBeenCalledTimes(1);
+      expect(findMouseMoveInputs(bridge)).toHaveLength(0);
+
+      raf.flush();
+
+      const moves = findMouseMoveInputs(bridge);
+      expect(moves).toHaveLength(1);
+      expect(moves[0]).toMatchObject({ type: "mousemove", x: 50, y: 60 });
+    } finally {
+      raf.restore();
+    }
+  });
+
+  it("flushes a buffered pointermove before pointerup dispatches mouseup", () => {
+    const raf = installFakeRaf();
+    try {
+      const bridge = makeStubBridge();
+      render(<ViewportSlot bridge={bridge} />);
+      const canvas = screen.getByTestId("viewport-canvas");
+
+      fireEvent.pointerMove(canvas, { clientX: 10, clientY: 20, buttons: 1 });
+      expect(findMouseMoveInputs(bridge)).toHaveLength(0);
+
+      fireEvent.pointerUp(canvas, { clientX: 11, clientY: 21, button: 0, buttons: 0, pointerId: 1 });
+
+      const inputTypes = findViewportInputCalls(bridge).map((req) => req.params.type);
+      expect(inputTypes.slice(-2)).toEqual(["mousemove", "mouseup"]);
+    } finally {
+      raf.restore();
+    }
+  });
+
+  it("sends pointermove immediately when document visibility is hidden", () => {
+    const raf = installFakeRaf();
+    const restoreVisibility = setDocumentVisibilityState("hidden");
+    try {
+      const bridge = makeStubBridge();
+      render(<ViewportSlot bridge={bridge} />);
+      const canvas = screen.getByTestId("viewport-canvas");
+
+      fireEvent.pointerMove(canvas, { clientX: 70, clientY: 80, buttons: 1 });
+
+      expect(raf.request).not.toHaveBeenCalled();
+      expect(findMouseMoveInputs(bridge)).toEqual([
+        expect.objectContaining({ type: "mousemove", x: 70, y: 80 }),
+      ]);
+    } finally {
+      restoreVisibility();
+      raf.restore();
+    }
   });
 
   it("wheel on canvas dispatches viewport/input { type: 'wheel' } with sign-flipped delta", () => {

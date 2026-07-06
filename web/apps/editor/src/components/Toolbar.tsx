@@ -17,14 +17,13 @@
 // Uses the design's semantic CSS classes from components.css:
 //   .toolbar, .tb-group, .tb-btn, .tb-divider, .tb-spacer
 
-import { useEffect, useState } from "react";
 import {
   FilePlus, FolderOpen, Save, SaveAll,
   Undo2, Redo2,
   Play, Pause, ChevronRight, ChevronsRight,
   Sparkles, CirclePlus, Lightbulb, LayoutGrid,
 } from "lucide-react";
-import type { Bridge, EngineStateDto } from "@particle-editor/bridge-schema";
+import type { Bridge } from "@particle-editor/bridge-schema";
 import { BackgroundDropdown } from "@/components/BackgroundDropdown";
 import { ReferenceObjectDropdown } from "@/components/ReferenceObjectDropdown";
 import { GroundDropdown } from "@/components/GroundDropdown";
@@ -32,34 +31,24 @@ import { useRightDock, toggleDock } from "@/lib/right-dock";
 import { Tip } from "@/primitives/Tip";
 import { promptSaveChanges } from "@/lib/file-state";
 import { runFileOp } from "@/lib/file-op";
+import { useEngineField } from "@/lib/use-engine-snapshot";
 
 type Props = { bridge: Bridge };
 
 const ICON = { className: "size-3.5" } as const;
 
 export function Toolbar({ bridge }: Props) {
-  const [state, setState] = useState<EngineStateDto | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    bridge.request({ kind: "engine/state/snapshot", params: {} })
-      .then((s) => { if (!cancelled) setState(s); })
-      .catch((err) => console.warn("[Toolbar] snapshot failed:", err));
-    const off = bridge.on("engine/state/changed", (e) => setState(e.payload));
-    return () => { cancelled = true; off(); };
-  }, [bridge]);
-
-  const paused = state?.paused ?? false;
-  const canUndo = state?.canUndo ?? false;
-  const canRedo = state?.canRedo ?? false;
+  const paused = useEngineField(bridge, (s) => s.paused) ?? false;
+  const canUndo = useEngineField(bridge, (s) => s.canUndo) ?? false;
+  const canRedo = useEngineField(bridge, (s) => s.canRedo) ?? false;
   // leave-particles is a sim-behaviour toggle (default on); the ground/grid/bloom
   // visibility toggles moved to the viewport display-options overlay.
-  const leaveParticles = state?.leaveParticles ?? true;
+  const leaveParticles = useEngineField(bridge, (s) => s.leaveParticles) ?? true;
   const dock = useRightDock();
   const spawnerVisible = dock === "spawner";
   const lightingVisible = dock === "lighting";
   const atlasVisible = dock === "atlas";
-  const hasSelectedEmitter = state != null && state.selectedEmitterId != null;
+  const hasSelectedEmitter = useEngineField(bridge, (s) => s.selectedEmitterId) != null;
 
   return (
     <div data-testid="toolbar" className="toolbar">

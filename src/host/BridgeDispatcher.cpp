@@ -1022,6 +1022,10 @@ void BridgeDispatcher::SetEngine(Engine* engine)
 
 void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
 {
+    // [B1] Any coalesced trailing broadcast lands BEFORE this request's
+    // response — preserving the bridge-contract ordering (state events
+    // never arrive after a response that post-dates them).
+    FlushPendingEmits();
     json parsed;
     try
     {
@@ -1074,6 +1078,8 @@ void BridgeDispatcher::Dispatch(const std::string& jsonRequest)
 
 std::string BridgeDispatcher::DispatchSync(const std::string& jsonRequest)
 {
+    // [B1] See Dispatch — pending evt before the next response.
+    FlushPendingEmits();
     json parsed;
     try
     {
@@ -5946,15 +5952,27 @@ void BridgeDispatcher::EmitManipulatorDrag(const json& payload)
 void BridgeDispatcher::EmitEmittersTreeChanged()
 {
     if (!m_emit) return;
+    const unsigned long long now = GetTickCount64();
     // [#510] Record-only coalesce: skip building + pushing the tree if the last
     // push was < kRecordEmitThrottleMs ago, so a record's rapid host-side edits
     // don't flood the web with re-fetches. Leading-edge; continuous edits still
     // deliver ~30 Hz.
     if (m_recordEmitThrottle) {
-        const unsigned long long now = GetTickCount64();
         if (now - m_lastTreeEmitTick < kRecordEmitThrottleMs) return;
-        m_lastTreeEmitTick = now;
     }
+    // [B1] Live trailing coalesce (see the header field block). Drive
+    // (m_ephemeral) is exempt: asserts must see every change.
+    else if (!m_ephemeral && now - m_lastTreeEmitTick < kEmitCoalesceMs) {
+        m_treeEmitPending = true;
+        return;
+    }
+    m_lastTreeEmitTick = now;
+    m_treeEmitPending  = false;
+    EmitEmittersTreeChangedNow();
+}
+
+void BridgeDispatcher::EmitEmittersTreeChangedNow()
+{
     // Build the synthetic root + per-actual-root children, matching the
     // shape returned by `emitters/list`.
     json children = json::array();
@@ -6040,12 +6058,24 @@ void BridgeDispatcher::CaptureReferenceTransformUndoPoint()
 void BridgeDispatcher::EmitEngineStateChanged()
 {
     if (!m_emit || !m_engine) return;
+    const unsigned long long now = GetTickCount64();
     // [#510] Record-only coalesce (see EmitEmittersTreeChanged).
     if (m_recordEmitThrottle) {
-        const unsigned long long now = GetTickCount64();
         if (now - m_lastStateEmitTick < kRecordEmitThrottleMs) return;
-        m_lastStateEmitTick = now;
     }
+    // [B1] Live trailing coalesce (see the header field block). Drive
+    // (m_ephemeral) is exempt: asserts must see every change.
+    else if (!m_ephemeral && now - m_lastStateEmitTick < kEmitCoalesceMs) {
+        m_stateEmitPending = true;
+        return;
+    }
+    m_lastStateEmitTick = now;
+    m_stateEmitPending  = false;
+    EmitEngineStateChangedNow();
+}
+
+void BridgeDispatcher::EmitEngineStateChangedNow()
+{
     json spawnerJson = m_spawnerDriver
         ? SpawnerConfigToJson(m_spawnerDriver->GetConfig())
         : m_spawnerConfig;
@@ -6061,6 +6091,26 @@ void BridgeDispatcher::EmitEngineStateChanged()
         {"payload", BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId, activeModPath, leaveParticles, canUndo, canRedo)},
     };
     m_emit(env.dump());
+}
+
+void BridgeDispatcher::FlushPendingEmits()
+{
+    // Trailing edge of the [B1] live coalesce. Emit order matches the
+    // paired-broadcast order every mutating handler uses (tree first,
+    // then state), so a web listener that refetches on tree/changed sees
+    // the settled state snapshot arrive after it, same as a direct emit.
+    if (m_treeEmitPending && m_emit)
+    {
+        m_treeEmitPending  = false;
+        m_lastTreeEmitTick = GetTickCount64();
+        EmitEmittersTreeChangedNow();
+    }
+    if (m_stateEmitPending && m_emit && m_engine)
+    {
+        m_stateEmitPending  = false;
+        m_lastStateEmitTick = GetTickCount64();
+        EmitEngineStateChangedNow();
+    }
 }
 
 bool BridgeDispatcher::ComputeCanUndo() const
