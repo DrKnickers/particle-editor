@@ -911,6 +911,8 @@ export class MockBridge implements Bridge {
         return { dataUri: null, status: "missing" as const };
 
       case "textures/get-preview": {
+        // Browser mode has no async native decode worker, so the mock remains
+        // synchronous and never returns status:"pending".
         const f = req.params.filename;
         if (f === "__missing__.dds") return { status: "missing" } as const;
         if (f === "__broken__.dds") return { status: "broken" } as const;

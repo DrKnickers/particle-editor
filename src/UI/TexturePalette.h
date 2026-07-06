@@ -165,6 +165,27 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
                                 int maxBound = 1024,
                                 bool flattenAlpha = true);
 
+// [C3] Async split of GetTexturePreview. DecodeTexturePreviewBgra runs the
+// DEVICE-BOUND half on the UI thread (file/MEG read + D3DX decode into a
+// SCRATCH texture + optional alpha flatten + one tightly-packed pixel copy);
+// the returned raw BGRA can then be PNG-encoded + base64'd on a worker via
+// EncodePackedBgraToPngBytes (pure CPU; GDI+ CLSID cache must be pre-warmed
+// on the UI thread — see PreviewEncodeWorker's ctor). GetTexturePreview is
+// the synchronous composition of the two (behavior unchanged).
+struct PreviewPixels {
+    std::string status;   // "ok" | "missing" | "broken"
+    int srcW = 0, srcH = 0;      // true source dims (pre-clamp)
+    int outW = 0, outH = 0;      // decoded/clamped dims (== bgra dims)
+    std::vector<uint8_t> bgra;   // tightly packed outW*outH*4, BGRA
+};
+PreviewPixels DecodeTexturePreviewBgra(const std::wstring& filename,
+                                       IFileManager* fileManager,
+                                       IDirect3DDevice9* device,
+                                       int maxBound = 1024,
+                                       bool flattenAlpha = true);
+bool EncodePackedBgraToPngBytes(const uint8_t* bgra, int w, int h,
+                                std::vector<uint8_t>& outPng);
+
 } // namespace TexturePalette
 
 #endif

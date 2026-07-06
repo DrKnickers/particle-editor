@@ -3557,6 +3557,12 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         UpdatePacingBudget(hwnd);
         break;
 
+    case WM_APP_PREVIEW_READY:
+        // [C3] Background preview encode finished — cache + notify the web
+        // (BridgeDispatcher::DrainPreviewResults emits textures/preview-ready).
+        if (dispatcher) dispatcher->DrainPreviewResults();
+        return 0;
+
     case WM_WINDOWPOSCHANGED:
         // WM_WINDOWPOSCHANGED fires for every position/
         // size change BEFORE WM_SIZE / WM_MOVE / WM_PAINT.
@@ -6322,6 +6328,9 @@ int HostWindowImpl::Run(int nCmdShow)
     // bypasses the Done/watchdog joins above — the encoder worker MUST be
     // joined before GdiplusShutdown or it races process-level GDI+ teardown.
     if (recordEncoder) recordEncoder->Finish();
+    // [C3] Join the preview-encode worker for the same reason — it encodes
+    // via GDI+ and must not race process-level GDI+ teardown.
+    if (dispatcher) dispatcher->ShutdownPreviewWorker();
     // Matching shutdown for the GdiplusStartup above. Safe
     // here because the message pump has drained: no dispatcher
     // handlers (CaptureSnapshotPng et al) can run after WM_QUIT.

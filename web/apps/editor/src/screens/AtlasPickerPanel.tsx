@@ -398,12 +398,15 @@ export function AtlasPickerPanel({
               throw err;
             });
         },
+        { bridge: bridgeRef.current, filename: colorTexture, flattenAlpha },
       )
         .then((r) => {
           if (!live) return;
           set(r.status === "ok"
             ? { kind: "ok", dataUri: r.dataUri, srcW: r.srcW, srcH: r.srcH }
-            : { kind: r.status });
+            : r.status === "pending"
+              ? { kind: "loading" }
+              : { kind: r.status });
         })
         .catch((err) => {
           // Log the failing mode — the two modes resolve independently and only

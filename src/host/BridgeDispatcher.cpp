@@ -1575,6 +1575,10 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         // must never rewrite the daily driver's LastLayers/LastMod.
         bool ok = m_modManager->SetLayerStack(paths, !(m_testHost && !m_settingsLive));
         TexturePalette::ClearBridgeThumbCache();
+        // [C3] Same lifecycle for the preview LRU: a same-named texture from
+        // the new stack must not serve the old stack's pixels. The epoch bump
+        // (inside PreviewCacheClear) also invalidates in-flight encodes.
+        PreviewCacheClear();
         EmitEngineStateChanged();
         json stackArr = json::array();
         for (const auto& p : m_modManager->GetLayerStack()) stackArr.push_back(WideToUtf8(p));
@@ -2109,6 +2113,12 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         if (!requireEngine(kind.c_str())) return res;
         m_engine->InvalidateSkydomeListCache();   // explicit disk re-read -> refresh skydome XML too
         m_engine->ReloadTextures();
+        // [C3] Reload re-reads the same filenames with NEW pixels, so the
+        // (stack, filename)-keyed preview LRU + thumb cache are stale even
+        // though the stack didn't change. Drop both (the epoch bump also
+        // invalidates any in-flight encode). Mirrors the web bumpTextureEpoch.
+        TexturePalette::ClearBridgeThumbCache();
+        PreviewCacheClear();
         sendOk(json::object());
         // No dirty: reload-textures re-reads disk; user state is unchanged.
         EmitEngineStateChanged();
@@ -2700,19 +2710,63 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
                 {"filename", filename},
                 {"flattenAlpha", flattenAlpha}
             });
+
+        // [C3] LRU hit: full result, synchronously — repeats cost nothing.
+        const std::string cacheKey = filename + (flattenAlpha ? "|1" : "|0");
+        if (auto hit = m_previewLruIdx.find(cacheKey); hit != m_previewLruIdx.end())
+        {
+            // Move to MRU.
+            m_previewLru.splice(m_previewLru.begin(), m_previewLru, hit->second);
+            const PreviewCacheEntry& e = hit->second->second;
+            if (e.status == "ok")
+                sendOk(json{{"status", "ok"}, {"dataUri", e.dataUri},
+                            {"srcW", e.srcW}, {"srcH", e.srcH}});
+            else
+                sendOk(json{{"status", e.status}});
+            if (span) span->End(e.status + "-cached");
+            return res;
+        }
+
+        // In-flight dedupe: the encode is already queued; the caller waits
+        // for the same preview-ready event the first requester armed.
+        if (m_previewInFlight.count(cacheKey))
+        {
+            sendOk(json{{"status", "pending"}});
+            if (span) span->End("pending-dup");
+            return res;
+        }
+
+        // Miss: the DEVICE-BOUND half runs here (UI thread) — file/MEG read,
+        // D3DX decode to SCRATCH, flatten, one packed copy. The measured-heavy
+        // PNG encode + base64 goes to the worker; the response is `pending`
+        // and `textures/preview-ready` fires when the dataUri is cached.
         IDirect3DDevice9* dev = m_engine ? m_engine->GetDevice() : nullptr;
-        const TexturePalette::PreviewResult p = TexturePalette::GetTexturePreview(
+        TexturePalette::PreviewPixels px = TexturePalette::DecodeTexturePreviewBgra(
             Utf8ToWide(filename), m_fileManager, dev, 1024, flattenAlpha);
-        if (p.status == "ok")
-            sendOk(json{
-                {"status", "ok"},
-                {"dataUri", p.dataUri},
-                {"srcW",   p.srcW},
-                {"srcH",   p.srcH},
-            });
-        else
-            sendOk(json{{"status", p.status}});
-        if (span) span->End(p.status);
+        if (px.status != "ok")
+        {
+            // Terminal failures answer (and cache) immediately — no encode.
+            PreviewCachePut(cacheKey, PreviewCacheEntry{px.status, "", px.srcW, px.srcH});
+            sendOk(json{{"status", px.status}});
+            if (span) span->End(px.status);
+            return res;
+        }
+
+        if (!m_previewWorker)
+            m_previewWorker = std::make_unique<host::PreviewEncodeWorker>(
+                m_hostHwnd, WM_APP_PREVIEW_READY);
+        host::PreviewEncodeWorker::Job job;
+        job.key = cacheKey;
+        job.filename = Utf8ToWide(filename);
+        job.flattenAlpha = flattenAlpha;
+        job.srcW = px.srcW; job.srcH = px.srcH;
+        job.outW = px.outW; job.outH = px.outH;
+        job.bgra = std::move(px.bgra);
+        job.epoch = m_previewEpoch;
+        m_previewInFlight.insert(cacheKey);
+        m_previewWorker->Enqueue(std::move(job));
+        sendOk(json{{"status", "pending"}});
+        if (span) span->End("pending");
         return res;
     }
 
@@ -6096,6 +6150,60 @@ void BridgeDispatcher::EmitEngineStateChangedNow()
         {"payload", BuildEngineStateSnapshot(m_engine, m_currentFilePath, m_dirty, spawnerJson, m_selectedEmitterId, activeModPath, leaveParticles, canUndo, canRedo)},
     };
     m_emit(env.dump());
+}
+
+// [C3] Insert (or overwrite) a preview cache entry at MRU; evict at cap.
+void BridgeDispatcher::PreviewCachePut(const std::string& key, PreviewCacheEntry entry)
+{
+    if (auto it = m_previewLruIdx.find(key); it != m_previewLruIdx.end())
+    {
+        it->second->second = std::move(entry);
+        m_previewLru.splice(m_previewLru.begin(), m_previewLru, it->second);
+        return;
+    }
+    m_previewLru.emplace_front(key, std::move(entry));
+    m_previewLruIdx[key] = m_previewLru.begin();
+    while (m_previewLru.size() > kPreviewLruCap)
+    {
+        m_previewLruIdx.erase(m_previewLru.back().first);
+        m_previewLru.pop_back();
+    }
+}
+
+// [C3] Mod-stack change: drop everything + bump the epoch so in-flight
+// worker results (old stack's pixels) are discarded on arrival.
+void BridgeDispatcher::PreviewCacheClear()
+{
+    m_previewLru.clear();
+    m_previewLruIdx.clear();
+    m_previewInFlight.clear();
+    ++m_previewEpoch;
+}
+
+// [C3] UI thread, under the WM_APP_PREVIEW_READY handler: cache each
+// finished encode and tell the web to refetch. Stale-epoch results are
+// dropped (mod switched while the encode was in flight).
+void BridgeDispatcher::DrainPreviewResults()
+{
+    if (!m_previewWorker) return;
+    for (auto& r : m_previewWorker->TakeFinished())
+    {
+        if (r.epoch != m_previewEpoch) continue;
+        m_previewInFlight.erase(r.key);
+        PreviewCachePut(r.key, PreviewCacheEntry{r.status, std::move(r.dataUri),
+                                                 r.srcW, r.srcH});
+        if (m_emit)
+        {
+            json env = {
+                {"type", "evt"},
+                {"kind", "textures/preview-ready"},
+                {"payload", {{"filename", WideToUtf8(r.filename)},
+                             {"flattenAlpha", r.flattenAlpha},
+                             {"status", r.status}}},
+            };
+            m_emit(env.dump());
+        }
+    }
 }
 
 void BridgeDispatcher::FlushPendingEmits()

@@ -21,3 +21,10 @@ static const UINT WM_APP_QUIT_CONFIRMED = WM_APP + 2;
 // cursor-bound spawn (and tears down an in-flight OBJECT_Z placement drag) so a
 // real blur can't leak the attached preview (release-audit #7).
 static const UINT WM_APP_VIEWPORT_BLUR = WM_APP + 3;
+
+// [C3] Posted by PreviewEncodeWorker once per finished background preview
+// encode. The wndproc handler calls BridgeDispatcher::DrainPreviewResults,
+// which caches the dataUri + emits `textures/preview-ready` so the web
+// refetches (now a cache hit). Posted from the worker thread — PostMessage
+// is the documented cross-thread hand-back.
+static const UINT WM_APP_PREVIEW_READY = WM_APP + 4;

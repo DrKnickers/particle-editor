@@ -1107,6 +1107,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "textures/get-preview" }
     ? // discriminated on status so illegal states are unrepresentable
       | { status: "ok"; dataUri: string; srcW: number; srcH: number } // srcW/H = ORIGINAL DDS dims (pre-downsample)
+      | { status: "pending" }
       | { status: "missing" }
       | { status: "broken" } :
   R extends { kind: "textures/palette/toggle-pin" }
@@ -1309,6 +1310,9 @@ export type Event =
   | { kind: "stats/frozen-changed";   payload: { frozen: boolean } }
   | { kind: "dirty/changed";          payload: { dirty: boolean } }
   | { kind: "recent/changed";         payload: { paths: string[] } }
+  // Async texture preview completion. A matching get-preview refetch after
+  // this event is expected to be a synchronous cache hit in the host.
+  | { kind: "textures/preview-ready"; payload: { filename: string; flattenAlpha: boolean; status: "ok" | "broken" } }
   // Host emits this when the native frame-X / Alt-F4 is hit on a
   // dirty doc, so the app pops the same Save/Discard/Cancel prompt File→Exit
   // uses (the host can't render the React prompt itself).

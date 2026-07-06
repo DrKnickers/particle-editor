@@ -28,7 +28,10 @@
 
 #include <cstdint>
 #include <functional>
+#include <list>
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -40,6 +43,7 @@
 // Autosave::OrphanSession is held by value in the recovery stash.
 #include "../Autosave.h"
 #include "../UndoStack.h"   // full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
+#include "PreviewEncodeWorker.h"   // [C3] async texture-preview encode
 
 class Engine;
 class ParticleSystem;
@@ -94,6 +98,17 @@ public:
     // picker will run unparented (works, but doesn't block input on the
     // main window — set this in HostWindow once hMain exists).
     void SetHostHwnd(HWND hwnd) { m_hostHwnd = hwnd; }
+
+    // [C3] Async texture-preview pipeline. The get-preview handler serves LRU
+    // hits synchronously; a miss decodes on the UI thread (device-bound) and
+    // hands the raw pixels to PreviewEncodeWorker, answering {status:pending}.
+    // The worker PostMessages WM_APP_PREVIEW_READY; the wndproc calls
+    // DrainPreviewResults, which caches the finished dataUri and emits
+    // `textures/preview-ready` so the web refetches (a cache hit).
+    // ShutdownPreviewWorker joins the worker — MUST run before
+    // GdiplusShutdown (the worker encodes via GDI+).
+    void DrainPreviewResults();
+    void ShutdownPreviewWorker() { if (m_previewWorker) m_previewWorker->Finish(); }
     // Enable the record-only emit throttle (issue #510). Set true ONLY for a
     // --record run (never --drive). See m_recordEmitThrottle.
     void SetRecordEmitThrottle(bool on) { m_recordEmitThrottle = on; }
@@ -407,6 +422,25 @@ private:
     HWND               m_hostHwnd = nullptr;
     ::ModManager*      m_modManager = nullptr;  // mods/* surface
     InputDispatcher*   m_input      = nullptr;  // viewport/input
+
+    // [C3] Preview LRU + in-flight dedupe + epoch (see DrainPreviewResults).
+    // Key = "<filename>|<0/1 flattenAlpha>" (maxBound is a handler constant).
+    // Epoch bumps on mod-stack changes (next to ClearBridgeThumbCache) so a
+    // result encoded pre-switch can never populate the post-switch cache.
+    struct PreviewCacheEntry {
+        std::string status, dataUri;
+        int srcW = 0, srcH = 0;
+    };
+    std::list<std::pair<std::string, PreviewCacheEntry>> m_previewLru;  // front = MRU
+    std::map<std::string,
+             std::list<std::pair<std::string, PreviewCacheEntry>>::iterator>
+                        m_previewLruIdx;
+    std::set<std::string> m_previewInFlight;
+    unsigned            m_previewEpoch = 0;
+    static constexpr size_t kPreviewLruCap = 64;
+    std::unique_ptr<host::PreviewEncodeWorker> m_previewWorker;
+    void PreviewCachePut(const std::string& key, PreviewCacheEntry entry);
+    void PreviewCacheClear();
 
     // host-state plumbing — pointers borrowed from HostWindow.
     // `m_pParticleSystem` is a pointer-to-unique_ptr so file/new and

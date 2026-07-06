@@ -126,7 +126,9 @@ bool ReadTextureBytes(IFileManager* fm, const wstring& filename, vector<char>& o
 // non-square texture encodes correctly. Honors lr.Pitch on the source read.
 // Returns false on any D3D/GDI+ failure. Extracted (and de-squared) from the
 // PNG-encode block previously inlined in DecodeToPngBytes.
-bool EncodeTextureToPngBytes(IDirect3DTexture9* tex, int w, int h, vector<uint8_t>& outPng)
+// [C3] Extract a tightly-packed BGRA copy of level 0 so the texture can be
+// released before any (possibly off-thread) encode touches the pixels.
+static bool CopyTexturePackedBgra(IDirect3DTexture9* tex, int w, int h, vector<uint8_t>& outBgra)
 {
     IDirect3DSurface9* surf = nullptr;
     if (FAILED(tex->GetSurfaceLevel(0, &surf))) return false;
@@ -137,48 +139,24 @@ bool EncodeTextureToPngBytes(IDirect3DTexture9* tex, int w, int h, vector<uint8_
         surf->Release();
         return false;
     }
-
-    // Copy out into a tightly-packed BGRA buffer so the source surface can be
-    // unlocked/released before GDI+ touches the pixels.
     const int stride = w * 4;
-    vector<uint8_t> dib((size_t)stride * (size_t)h);
+    outBgra.resize((size_t)stride * (size_t)h);
     for (int y = 0; y < h; ++y)
-        memcpy(dib.data() + (size_t)y * stride,
+        memcpy(outBgra.data() + (size_t)y * stride,
                (const uint8_t*)lr.pBits + (size_t)y * lr.Pitch,
                (size_t)stride);
     surf->UnlockRect();
     surf->Release();
-
-    CLSID pngClsid = {};
-    if (!host::GdiplusEncoderClsid(L"image/png", pngClsid)) return false;
-
-    // D3DFMT_A8R8G8B8 is BGRA in memory, matching GDI+ PixelFormat32bppARGB.
-    Gdiplus::Bitmap bmp(w, h, stride, PixelFormat32bppARGB, dib.data());
-    if (bmp.GetLastStatus() != Gdiplus::Ok) return false;
-
-    IStream* stream = nullptr;
-    if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) || stream == nullptr)
-        return false;
-    if (bmp.Save(stream, &pngClsid, nullptr) != Gdiplus::Ok)
-    {
-        stream->Release();
-        return false;
-    }
-
-    LARGE_INTEGER zero = {};
-    stream->Seek(zero, STREAM_SEEK_SET, nullptr);
-    STATSTG stat = {};
-    if (FAILED(stream->Stat(&stat, STATFLAG_NONAME))) { stream->Release(); return false; }
-    const size_t n = (size_t)stat.cbSize.QuadPart;
-    outPng.resize(n);
-    ULONG readBytes = 0;
-    if (FAILED(stream->Read(outPng.data(), (ULONG)n, &readBytes)) || readBytes != n)
-    {
-        stream->Release();
-        return false;
-    }
-    stream->Release();
     return true;
+}
+
+// [C3] Thin wrapper: copy the texture's pixels, then hand off to the
+// namespace-scoped (worker-callable) TexturePalette::EncodePackedBgraToPngBytes.
+bool EncodeTextureToPngBytes(IDirect3DTexture9* tex, int w, int h, vector<uint8_t>& outPng)
+{
+    vector<uint8_t> dib;
+    if (!CopyTexturePackedBgra(tex, w, h, dib)) return false;
+    return TexturePalette::EncodePackedBgraToPngBytes(dib.data(), w, h, outPng);
 }
 
 // Decode `filename` to PNG bytes (on Ok). The return value reports
@@ -211,6 +189,51 @@ ThumbStatus DecodeToPngBytes(IFileManager* fm, IDirect3DDevice9* device,
 } // namespace
 
 namespace TexturePalette {
+
+// [C3] Pure-CPU half of the preview path: packed BGRA -> PNG bytes via GDI+.
+// Public (declared in the header) so PreviewEncodeWorker can call it OFF the
+// UI thread — safe PROVIDED the GDI+ encoder CLSID cache was pre-warmed on
+// the UI thread first (GdiplusEncoderClsid's cache is not first-call
+// thread-safe; PreviewEncodeWorker's ctor warms it, same as AsyncFrameEncoder).
+bool EncodePackedBgraToPngBytes(const uint8_t* bgra, int w, int h, vector<uint8_t>& outPng)
+{
+    if (!bgra || w <= 0 || h <= 0) return false;
+    const int stride = w * 4;
+
+    CLSID pngClsid = {};
+    if (!host::GdiplusEncoderClsid(L"image/png", pngClsid)) return false;
+
+    // D3DFMT_A8R8G8B8 is BGRA in memory, matching GDI+ PixelFormat32bppARGB.
+    // GDI+ never writes through this pointer for a Save, but the Bitmap ctor
+    // takes a non-const scan0.
+    Gdiplus::Bitmap bmp(w, h, stride, PixelFormat32bppARGB,
+                        const_cast<uint8_t*>(bgra));
+    if (bmp.GetLastStatus() != Gdiplus::Ok) return false;
+
+    IStream* stream = nullptr;
+    if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) || stream == nullptr)
+        return false;
+    if (bmp.Save(stream, &pngClsid, nullptr) != Gdiplus::Ok)
+    {
+        stream->Release();
+        return false;
+    }
+
+    LARGE_INTEGER zero = {};
+    stream->Seek(zero, STREAM_SEEK_SET, nullptr);
+    STATSTG stat = {};
+    if (FAILED(stream->Stat(&stat, STATFLAG_NONAME))) { stream->Release(); return false; }
+    const size_t n = (size_t)stat.cbSize.QuadPart;
+    outPng.resize(n);
+    ULONG readBytes = 0;
+    if (FAILED(stream->Read(outPng.data(), (ULONG)n, &readBytes)) || readBytes != n)
+    {
+        stream->Release();
+        return false;
+    }
+    stream->Release();
+    return true;
+}
 
 ThumbnailResult GetThumbnail(const std::wstring& filename,
                              IFileManager* fileManager,
@@ -254,11 +277,11 @@ void ClearBridgeThumbCache()
     g_bridgeThumbCache.clear();
 }
 
-PreviewResult GetTexturePreview(const std::wstring& filename,
-                                IFileManager* fileManager,
-                                IDirect3DDevice9* device,
-                                int maxBound,
-                                bool flattenAlpha)
+PreviewPixels DecodeTexturePreviewBgra(const std::wstring& filename,
+                                       IFileManager* fileManager,
+                                       IDirect3DDevice9* device,
+                                       int maxBound,
+                                       bool flattenAlpha)
 {
     const bool perfOn = host::perf::Enabled();
     std::unique_ptr<host::perf::Span> totalSpan;
@@ -269,7 +292,7 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
             {"flattenAlpha", flattenAlpha}
         });
     }
-    PreviewResult out;
+    PreviewPixels out;
     if (device == nullptr || filename.empty() || fileManager == nullptr) {
         out.status = "missing";
         if (totalSpan) totalSpan->End("missing");
@@ -398,6 +421,38 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
         }
     }
 
+    // [C3] Stop at raw pixels: one tightly-packed copy off the SCRATCH
+    // texture, then release it. The PNG encode + base64 (the measured bulk
+    // of the cost) can run on a worker from here.
+    const bool copied = CopyTexturePackedBgra(tex, tw, th, out.bgra);
+    tex->Release();
+    if (!copied) {
+        if (totalSpan) totalSpan->End("broken");
+        out.status = "broken";
+        return out;
+    }
+    out.outW = tw;
+    out.outH = th;
+    out.status = "ok";
+    if (totalSpan) totalSpan->End("ok");
+    return out;
+}
+
+PreviewResult GetTexturePreview(const std::wstring& filename,
+                                IFileManager* fileManager,
+                                IDirect3DDevice9* device,
+                                int maxBound,
+                                bool flattenAlpha)
+{
+    const bool perfOn = host::perf::Enabled();
+    PreviewPixels px = DecodeTexturePreviewBgra(filename, fileManager, device,
+                                                maxBound, flattenAlpha);
+    PreviewResult out;
+    out.status = px.status;
+    out.srcW   = px.srcW;
+    out.srcH   = px.srcH;
+    if (px.status != "ok") return out;
+
     vector<uint8_t> png;
     bool ok = false;
     {
@@ -405,21 +460,17 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
         if (perfOn) {
             encodeSpan = std::make_unique<host::perf::Span>("texture.preview.png_encode", nlohmann::json{
                 {"filename", WideToAnsi(filename)},
-                {"targetW", tw},
-                {"targetH", th}
+                {"targetW", px.outW},
+                {"targetH", px.outH}
             });
         }
-        ok = EncodeTextureToPngBytes(tex, tw, th, png);
+        ok = EncodePackedBgraToPngBytes(px.bgra.data(), px.outW, px.outH, png);
         if (encodeSpan) encodeSpan->End(ok ? "ok" : "broken");
     }
-    tex->Release();
     if (!ok) {
-        if (totalSpan) totalSpan->End("broken");
         out.status = "broken";
         return out;
     }
-
-    out.status  = "ok";
     {
         std::unique_ptr<host::perf::Span> base64Span;
         if (perfOn) {
@@ -431,7 +482,6 @@ PreviewResult GetTexturePreview(const std::wstring& filename,
         out.dataUri = "data:image/png;base64," + host::Base64Encode(png.data(), png.size());
         if (base64Span) base64Span->End("ok");
     }
-    if (totalSpan) totalSpan->End("ok");
     return out;
 }
 
