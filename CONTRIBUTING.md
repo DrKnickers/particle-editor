@@ -81,10 +81,9 @@ cppcheck --enable=warning,style,performance,portability --std=c++17 \
 ```
 
 A 2026-06 pass flagged `ChunkReader::m_position` / `m_miniOffset` left
-uninitialized in the constructor (`src/ChunkReader.cpp:140`) — worth fixing
-next time that file is open. (`clang-tidy` / `clangd` are also available but
-need a `compile_commands.json`, which the VS-generator MSBuild build doesn't
-emit.)
+uninitialized in the constructor — since fixed (both zero-init defensively).
+(`clang-tidy` / `clangd` are also available but need a
+`compile_commands.json`, which the VS-generator MSBuild build doesn't emit.)
 
 ## Code of conduct
 

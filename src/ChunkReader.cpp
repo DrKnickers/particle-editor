@@ -171,6 +171,8 @@ ChunkReader::ChunkReader(IFile* file)
 	m_curDepth   = 0;
 	m_size       = -1;
 	m_miniSize   = -1;
+	m_position   = 0;
+	m_miniOffset = 0;
 }
 
 ChunkReader::~ChunkReader()
