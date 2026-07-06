@@ -599,6 +599,7 @@ export function BasicTab({
           checked={properties.linkToSystem}
           onCheckedChange={(v) => onCommit({ linkToSystem: v })}
           inlineLabel
+          testId="basic-link-to-system"
         />
         <FieldSelect
           label="Emit mode:"
