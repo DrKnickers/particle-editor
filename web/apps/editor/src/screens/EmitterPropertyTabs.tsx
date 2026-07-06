@@ -47,6 +47,7 @@ import type {
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
 import { Section } from "@/components/Section";
+import { requestTreeRefetch } from "@/lib/tree-refetch";
 
 // Blend mode dropdown options — mirrors the legacy `BlendModes[]` table
 // at [src/UI/Emitter.cpp:20-31]. The engine has additional blend mode
@@ -158,15 +159,16 @@ export function EmitterPropertyTabs({ bridge }: Props) {
 
   // Fetch helper. Discards responses for stale selection.
   const fetchProps = useCallback(
-    (id: number | null) => {
+    (id: number | null, coalesceTreeRefetch = false) => {
       if (id === null) {
         setProperties(null);
         inFlightFor.current = null;
         return;
       }
       inFlightFor.current = id;
-      bridge
-        .request({ kind: "emitters/get-properties", params: { id } })
+      const req = { kind: "emitters/get-properties", params: { id } } as const;
+      const request = coalesceTreeRefetch ? requestTreeRefetch(bridge, req) : bridge.request(req);
+      request
         .then((res) => {
           if (inFlightFor.current !== id) return;
           setProperties(res.properties);
@@ -187,7 +189,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
   // Re-fetch on tree mutations.
   useEffect(() => {
     const off = bridge.on("emitters/tree/changed", () => {
-      fetchProps(selectedId);
+      fetchProps(selectedId, true);
     });
     return off;
   }, [bridge, fetchProps, selectedId]);

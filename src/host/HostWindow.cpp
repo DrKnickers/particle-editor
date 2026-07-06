@@ -988,6 +988,72 @@ struct HostWindowImpl
     // CPU composite for the headless path lives in HeadlessComposite.h
     // (host::CompositeUiOverEngine) so the pixel math is unit-testable without
     // the GUI. See tests/test_headless_composite.cpp.
+    // [E5] Frame-pacing budget from the monitor the window actually sits on
+    // (the old startup-only EnumDisplaySettings(nullptr) read the PRIMARY
+    // display: it capped a 144 Hz secondary at 60 and over-drove a 60 Hz
+    // secondary from a 144 Hz primary). Recomputed on WM_DISPLAYCHANGE and
+    // when WM_WINDOWPOSCHANGED lands the window on a different monitor.
+    HMONITOR m_pacingMonitor  = nullptr;
+    DWORD    m_pacingHz       = 0;
+    LONGLONG m_frameBudgetQpc = 0;
+    void UpdatePacingBudget(HWND hwnd)
+    {
+        DWORD hz = 60;   // fallback, matches the old default
+        HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFOEXW mi = {};
+        mi.cbSize = sizeof(mi);
+        DEVMODEW dm = {};
+        dm.dmSize = sizeof(dm);
+        // 0 and 1 mean "hardware default" per EnumDisplaySettings docs —
+        // treat anything below 30 as unknown and keep the 60 Hz fallback.
+        if (mon && GetMonitorInfoW(mon, &mi)
+            && EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm)
+            && dm.dmDisplayFrequency >= 30)
+        {
+            hz = dm.dmDisplayFrequency;
+        }
+        m_pacingMonitor = mon;
+        const bool changed = (hz != m_pacingHz);
+        m_pacingHz = hz;
+        m_frameBudgetQpc = PerfQpcFreq() > 0
+            ? PerfQpcFreq() / static_cast<LONGLONG>(hz) : 0;
+        if (changed)
+            Log("[resize-perf] pump paced to %lu Hz (budget %.2f ms)\n",
+                static_cast<unsigned long>(hz), 1000.0 / static_cast<double>(hz));
+    }
+
+    // [C4] Deferred-autosave latch (see the WM_TIMER autosave note): the
+    // timer tick latches; the paced idle branch services right after a
+    // presented frame when no mouse capture / size-move is active. force
+    // = the busy-override (pending a full RECENT interval). The WM_DESTROY
+    // path doesn't flush — it DELETES this session's autosaves on a clean
+    // close, so a last-gasp write would be deleted one line later; the
+    // dirty-close guard owns unsaved-changes safety at quit.
+    bool               m_autosavePending      = false;
+    Autosave::Tier     m_autosavePendingTier  = Autosave::Tier::Recent;
+    unsigned long long m_autosavePendingSince = 0;
+    void ServicePendingAutosave(bool force)
+    {
+        if (!m_autosavePending) return;
+        if (!force && (GetCapture() != nullptr || m_inSizeMove)) return;
+        m_autosavePending = false;
+        const Autosave::Tier tier = m_autosavePendingTier;
+        m_autosavePendingTier = Autosave::Tier::Recent;
+        // Re-check the dirty gate at service time — a save between the
+        // timer tick and this slot makes the write pointless.
+        if (!dispatcher || !particleSystem || !dispatcher->GetDirty()) return;
+        const LONGLONG t0 = PerfQpcNow();
+        const bool wrote = Autosave::Write(
+            *particleSystem, dispatcher->GetCurrentFilePath(), tier);
+        // 1 write / ≥30 s — cheap to always log; the ms figure is the
+        // follow-up datum for whether a worker-thread write is warranted.
+        Log("[autosave] %s tier=%s in %.1f ms%s\n",
+            wrote ? "wrote" : "write-FAILED",
+            tier == Autosave::Tier::Recent ? "recent" : "stable",
+            PerfUsSince(t0) / 1000.0,
+            force ? " (busy-override)" : "");
+    }
+
     // --drive bridge-selftest handshake: RunDriveSelftest arms the token +
     // nested-pumps; OnWebMessage completes it when the tokened result arrives
     // over the real page->host postMessage wire (single UI thread, no atomics).
@@ -3099,9 +3165,14 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // Two-tier autosave timers (30 s recent / 5 min stable),
         // mirroring the legacy main.cpp. Gated on !useTestHost so harness
         // runs never write autosave files — those would orphan into a
-        // recovery prompt for the user's real editor. WM_TIMER writes the
-        // live ParticleSystem (dirty-gated) below.
-        if (!useTestHost && !m_automationMode)   // --drive: no autosave (would orphan a recovery prompt)
+        // recovery prompt for the user's real editor. WM_TIMER latches the
+        // dirty-gated write (see the [C4] note below). Also gated on
+        // !captureMode ([C4] review): a --capture run skips the paced idle
+        // branch that services the latch, so its pending write could only
+        // land via the busy-override — and an ephemeral capture has no
+        // business writing recovery files anyway (same orphan-prompt
+        // rationale as --drive).
+        if (!useTestHost && !m_automationMode && m_captureAlo.empty())
         {
             SetTimer(hwnd, Autosave::RECENT_TIMER_ID, Autosave::RECENT_INTERVAL_MS, nullptr);
             SetTimer(hwnd, Autosave::STABLE_TIMER_ID, Autosave::STABLE_INTERVAL_MS, nullptr);
@@ -3134,22 +3205,39 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         // Autosave tick. Best-effort + dirty-gated — skip the write
         // when nothing changed since the last save (no point autosaving an
-        // unmodified saved file). Runs on the host UI thread between frames
-        // (single-threaded pump), same as legacy's WM_TIMER write.
+        // unmodified saved file).
+        //
+        // [C4] DEFERRED: the timer no longer writes inline — a WM_TIMER can
+        // fire mid-gesture (gizmo drag, splitter, modal resize pump) and the
+        // serialize+temp-write+rename then stalls the UI thread at the worst
+        // moment. The tick just latches m_autosavePending; the paced idle
+        // branch services it right after a presented frame when no capture /
+        // size-move is active (ServicePendingAutosave). Busy-override: if the
+        // pending write can't land within one RECENT interval (continuous
+        // gesture), the NEXT timer tick forces it inline — the crash-safety
+        // window is bounded at ~2x the tier cadence, never unbounded.
         else if ((wp == Autosave::RECENT_TIMER_ID || wp == Autosave::STABLE_TIMER_ID)
                  && dispatcher && particleSystem && dispatcher->GetDirty())
         {
             Autosave::Tier tier = (wp == Autosave::RECENT_TIMER_ID)
                                 ? Autosave::Tier::Recent
                                 : Autosave::Tier::Stable;
-            bool wrote = Autosave::Write(*particleSystem, dispatcher->GetCurrentFilePath(), tier);
-#ifndef NDEBUG
-            fprintf(stderr, "[autosave] %s tier=%s\n",
-                    wrote ? "wrote" : "write-FAILED",
-                    tier == Autosave::Tier::Recent ? "recent" : "stable");
-#else
-            (void)wrote;
-#endif
+            // Stable outranks Recent if both end up pending (rarer cadence,
+            // and the stable slot is the one recovery prefers).
+            if (m_autosavePendingTier != Autosave::Tier::Stable)
+                m_autosavePendingTier = tier;
+            if (!m_autosavePending)
+            {
+                m_autosavePending = true;
+                m_autosavePendingSince = GetTickCount64();
+            }
+            else if (GetTickCount64() - m_autosavePendingSince
+                     >= Autosave::RECENT_INTERVAL_MS)
+            {
+                // Busy-override: still pending a full interval later —
+                // write now regardless of gesture state.
+                ServicePendingAutosave(true);
+            }
         }
         // [resize-perf] quiescence safety net — fires
         // 150 ms after size ticks stop; normally a no-op (per-tick
@@ -3436,6 +3524,12 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         layout.RefreshScreenPosition();
         return 0;
 
+    case WM_DISPLAYCHANGE:
+        // [E5] Display mode changed (resolution/refresh-rate switch, monitor
+        // hot-plug): re-derive the pacing budget. DefWindowProc continues.
+        UpdatePacingBudget(hwnd);
+        break;
+
     case WM_WINDOWPOSCHANGED:
         // WM_WINDOWPOSCHANGED fires for every position/
         // size change BEFORE WM_SIZE / WM_MOVE / WM_PAINT.
@@ -3458,6 +3552,25 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // driver (the idle pump is starved in here). The
         // kResizeSettleTimerId one-shot is a safety net that re-resets
         // only if a mid-gesture reset failed.
+        // [E5] A move can land the window on a different monitor —
+        // re-derive the pacing budget from that monitor's refresh rate.
+        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY) != m_pacingMonitor)
+            UpdatePacingBudget(hwnd);
+        // [C1] Position-only ticks (window drags: SWP_NOSIZE set) skip the
+        // predict/render chain — the client extent is unchanged, so
+        // PredictAndApply would early-out into RefreshScreenPosition anyway,
+        // and the unconditional RenderD3D9 was pure extra work on top of the
+        // paced idle loop (one wasted render per drag tick). The popup still
+        // tracks the move. SWP_FRAMECHANGED is excluded: a non-client recalc
+        // can change the CLIENT extent even under SWP_NOSIZE (window rect
+        // unchanged), so those ticks keep the full predict/render path.
+        if (hViewport && lp != 0
+            && (reinterpret_cast<const WINDOWPOS*>(lp)->flags & SWP_NOSIZE)
+            && !(reinterpret_cast<const WINDOWPOS*>(lp)->flags & SWP_FRAMECHANGED))
+        {
+            layout.RefreshScreenPosition();
+            break;  // DefWindowProc still generates WM_MOVE etc.
+        }
         if (hViewport)
         {
             // [resize-perf] time the per-tick chain and
@@ -5263,24 +5376,11 @@ int HostWindowImpl::Run(int nCmdShow)
     bool quit = false;
     int  capturedFrames = 0;
 
-    DWORD displayHz = 60;
-    {
-        DEVMODEW dm = {};
-        dm.dmSize = sizeof(dm);
-        // 0 and 1 mean "hardware default" per EnumDisplaySettings docs —
-        // treat anything below 30 as unknown and keep the 60 Hz fallback.
-        if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm)
-            && dm.dmDisplayFrequency >= 30)
-        {
-            displayHz = dm.dmDisplayFrequency;
-        }
-    }
-    const LONGLONG frameBudgetQpc =
-        PerfQpcFreq() > 0 ? PerfQpcFreq() / static_cast<LONGLONG>(displayHz) : 0;
+    // [E5] Budget from the window's own monitor (helper logs the paced-to
+    // line); WM_DISPLAYCHANGE + monitor moves recompute it live.
+    UpdatePacingBudget(hMain);
     LONGLONG nextFrameQpc = PerfQpcNow();
     timeBeginPeriod(1);
-    Log("[resize-perf] pump paced to %lu Hz (budget %.2f ms)\n",
-        static_cast<unsigned long>(displayHz), 1000.0 / static_cast<double>(displayHz));
 
     // --drive: scripted non-CDP composite capture. Its own top-level pump
     // branch (below) — built+ticked here, NOT under captureMode (which is false
@@ -5962,9 +6062,12 @@ int HostWindowImpl::Run(int nCmdShow)
                 // display frame — the primary flush path (the DispatchSync-top
                 // and stats-timer flushes cover pump-starved cases).
                 if (dispatcher) dispatcher->FlushPendingEmits();
+                // [C4] Service a deferred autosave in the same idle slot —
+                // after the present, never mid-gesture (see the latch note).
+                ServicePendingAutosave(false);
                 // Schedule from "now", not "+= budget": a slow frame must
                 // not bank catch-up renders (cap semantics, not vsync).
-                nextFrameQpc = now + frameBudgetQpc;
+                nextFrameQpc = now + m_frameBudgetQpc;
             }
             // Sleep until input or the next frame slot, whichever first.
             // Round the wait UP to whole ms so an early wake doesn't spin

@@ -49,6 +49,7 @@ import { getPreviewCached, useTextureEpoch } from "@/lib/atlas-preview-cache";
 import { computeDeadCells } from "@/lib/atlas-dead-cells";
 import { useModStack } from "@/lib/mod-stack";
 import { emitPerfTrace, makePerfSpanId } from "@/lib/perf-trace";
+import { requestTreeRefetch } from "@/lib/tree-refetch";
 
 // Module-level cache of the last settled grid width. The panel UNMOUNTS when the
 // dock closes, so component state is lost; persisting the width here lets a
@@ -234,7 +235,7 @@ export function AtlasPickerPanel({
     let live = true;
     let inFlight = false;
     let again = false;
-    const fetchProps = () => {
+    const fetchProps = (coalesceTreeRefetch = false) => {
       if (inFlight) { again = true; return; } // coalesce an event burst into one round-trip
       inFlight = true;
       const startMs = performance.now();
@@ -246,8 +247,8 @@ export function AtlasPickerPanel({
         emitterId,
         rendererStartMs: startMs,
       });
-      void bridge
-        .request({ kind: "emitters/get-properties", params: { id: emitterId } })
+      const req = { kind: "emitters/get-properties", params: { id: emitterId } } as const;
+      void (coalesceTreeRefetch ? requestTreeRefetch(bridge, req) : bridge.request(req))
         .then((r) => {
           inFlight = false;
           const endMs = performance.now();
@@ -296,7 +297,7 @@ export function AtlasPickerPanel({
     // on an emitter-selection change. Coalesced above so an edit burst is one
     // round-trip; setTextureSize/setColorTexture bail on unchanged values, so
     // unrelated edits cost a cheap read and no re-render.
-    const off = bridge.on("emitters/tree/changed", fetchProps);
+    const off = bridge.on("emitters/tree/changed", () => fetchProps(true));
     return () => {
       live = false;
       off();
