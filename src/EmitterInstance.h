@@ -52,6 +52,15 @@ private:
 	vector<Particle*>      m_particleIndex;
 	Particle*			   m_particleList;
 
+	// [D6] Reused pack scratch for the dynamic-VB draw: m_vertices is a
+	// high-water array with dead-slot holes, so PackLiveQuads compacts the
+	// live quads (in m_primitives draw order) into these dense buffers, which
+	// Engine::DrawParticlesDynamic uploads. Members (not per-frame locals) so
+	// there is no per-frame allocation once they reach high-water.
+	vector<Vertex>		   m_packedVerts;
+	vector<uint16_t>	   m_packedIndices;
+	void PackLiveQuads();
+
 	// Rendering
 	D3DXMATRIX			m_textureTransform;
 	const D3DXMATRIX*	m_billboard;
