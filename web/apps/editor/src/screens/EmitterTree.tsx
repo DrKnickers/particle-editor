@@ -1189,6 +1189,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
               <Menubar.Item
                 onSelect={addRoot}
                 className={NEW_EMITTER_MENU_ITEM}
+                data-testid="new-emitter-root"
               >
                 Root Emitter
               </Menubar.Item>

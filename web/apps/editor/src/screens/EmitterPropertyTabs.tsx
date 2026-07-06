@@ -432,6 +432,7 @@ export function BasicTab({
           onCommit={(v) => onCommit({ name: v })}
           label="Name"
           wide
+          testId="emitter-name-input"
         />
       </div>
 
@@ -632,6 +633,7 @@ function FieldText({
   value,
   onCommit,
   wide,
+  testId,
 }: {
   label: string;
   value: string;
@@ -641,6 +643,8 @@ function FieldText({
    *  Used by the Name row, which needs the design source's custom
    *  60px 1fr grid template. */
   wide?: boolean;
+  /** Optional data-testid on the <input> (record-cursor / a11y drivers). */
+  testId?: string;
 }) {
   // Local text state so the user can type freely; commit on blur or
   // Enter to avoid per-keystroke bridge spam.
@@ -671,6 +675,7 @@ function FieldText({
       aria-label={label}
       spellCheck={false}
       autoComplete="off"
+      data-testid={testId}
     />
   );
   if (wide) {
@@ -884,11 +889,14 @@ function FieldCheckbox({
   disabled,
   onCheckedChange,
   inlineLabel,
+  testId,
 }: {
   label: string;
   checked: boolean;
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
+  /** Optional data-testid on the checkbox root (record-cursor / a11y drivers). */
+  testId?: string;
   /** When true, allow the label to wrap onto multiple lines instead of
    *  truncating with ellipsis — a fallback for an extremely narrow
    *  inspector. With the `.form-row-check` grid (below) the label gets
@@ -909,6 +917,7 @@ function FieldCheckbox({
       <Checkbox.Root
         checked={checked}
         disabled={disabled}
+        data-testid={testId}
         onCheckedChange={(v) => onCheckedChange(v === true)}
         className={`flex h-[18px] w-[18px] items-center justify-center rounded border border-border-2 bg-bg-2 transition focus-ring col-2 justify-self-end ${
           disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:border-border-2"
@@ -1192,6 +1201,7 @@ export function AppearanceTab({
           label="Has tail"
           checked={properties.hasTail}
           onCheckedChange={(v) => onCommit({ hasTail: v })}
+          testId="appearance-has-tail"
         />
         {/* Tail length uses unit="x" per legacy .rc:421. */}
         <FieldSpinner
@@ -1203,6 +1213,7 @@ export function AppearanceTab({
           disabled={!tailEnabled}
           onCommit={(v) => onCommit({ tailSize: v })}
           widthBoost="mid"
+          testId="spinner-tail-length"
         />
       </Section>
 
@@ -1381,6 +1392,7 @@ export function PhysicsTab({
           unit="%"
           disabled={!nonWeather}
           onCommit={(v) => onCommit({ parentLinkStrength: v / 100 })}
+          testId="spinner-parent-link"
         />
         <FieldCheckbox
           label="Affected by wind"

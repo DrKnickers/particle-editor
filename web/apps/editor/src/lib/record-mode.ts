@@ -47,6 +47,13 @@ export function useRecordHeadless(): boolean {
   return useStore((s) => s.headless);
 }
 
+/** Non-hook read of the latch — for non-React consumers (e.g. the curve morph
+ *  snaps instead of gliding under --record: the rAF-driven glide freezes when the
+ *  window is minimized in headless record, holding a stale curve for seconds). */
+export function isRecording(): boolean {
+  return useStore.getState().recording;
+}
+
 /** Latch record mode on — called when the host's cursor track (or a legacy
  *  `ui/cursor` message) arrives in App.tsx's listener. Idempotent. */
 export function markRecording(): void {

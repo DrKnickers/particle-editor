@@ -7,7 +7,17 @@ import { inflateSync } from "node:zlib";
 
 const DEFAULT_FPS = 60;
 const DEFAULT_CRF = 16;
-const DEFAULT_CROP = "1264:952:8:0";
+// Stage 3 (headless composite record): the capture is now the client area 1:1 —
+// 1264x951, no native border (X=0) and the branded frameless title bar at the top
+// (part of the app). Legacy foreground PrintWindow was 1264x952 with an 8px left
+// border (X=8). Height rounded DOWN to an even 950 so the crop is a clean pixel
+// crop (libx264 4:2:0 needs even dims; an odd 951 would force encode.mjs's
+// scale=trunc(ih/2)*2 to RESAMPLE 951->950, blurring the frame).
+const DEFAULT_CROP = "1264:950:0:0";
+// Exact dims of the headless composite capture (client area 1:1). Every clip crop
+// must fit inside these — the preflight validates DEFAULT_CROP against them.
+const HEADLESS_CAPTURE_W = 1264;
+const HEADLESS_CAPTURE_H = 951;
 const DEFAULT_START = 0;
 const DEFAULT_CROSSFADE = 1.0;
 const DEFAULT_LULL_LUMA_THRESHOLD = 3.0;
@@ -244,6 +254,10 @@ function effectiveEncode(item) {
     posterFrame: encode.posterFrame,
     dropBlackBelow: encode.dropBlackBelow,
     lullLumaThreshold: encode.lullLumaThreshold == null ? DEFAULT_LULL_LUMA_THRESHOLD : encode.lullLumaThreshold,
+    // Dynamic zoom segments ([{t0,t1,rect,easeMs}], post-trim px / source seconds).
+    // Deep validation lives in encode.mjs assertZoom — build.mjs only threads the
+    // segments through with the post-trim frame size derived from the crop.
+    zoom: encode.zoom,
   };
 }
 
@@ -458,10 +472,15 @@ function checkLullLuma(frameDir, item) {
   return { ok: leadLuma <= threshold && tailLuma <= threshold, message: "lead=" + leadLuma.toFixed(2) + " tail=" + tailLuma.toFixed(2) + " threshold=" + threshold };
 }
 
+// Stage 3: clips render through the headless composite path (engine RT +
+// CapturePreview UI, composited on the CPU) — occlusion-immune with the editor
+// minimized, so a batch can run while the machine is in use. The crop
+// (DEFAULT_CROP) is tuned to the headless capture dims, so this is the ONLY
+// supported render mode; a foreground fallback would need its own crop.
 function runRender(item, timelinePath, tools, repoRoot, entry) {
-  var args = ["--record", timelinePath];
+  var args = ["--record", timelinePath, "--record-minimized"];
   entry.commands.render = descriptorCommand(tools.render, args);
-  var result = runTool(tools, "render", args, { cwd: repoRoot });
+  var result = runTool(tools, "render", args, { cwd: repoRoot, env: { PE_RECORD_HEADLESS: "1" } });
   entry.exit.render = result.status;
   if (result.status !== 0) return { ok: false, message: "render exited " + result.status };
   return { ok: true };
@@ -512,6 +531,12 @@ function runEncode(item, frameDir, config, tools, repoRoot, entry) {
   var args = ["--frames", frameDir, "--fps", String(encode.fps), "--out", paths.clip, "--start", String(encode.start), "--loop", item.loop, "--crf", String(encode.crf), "--crop", encode.crop];
   if (item.loop === "crossfade") args.push("--crossfade", String(encode.crossfade));
   if (encode.dropBlackBelow != null) args.push("--drop-black-below", String(encode.dropBlackBelow));
+  if (encode.zoom != null) {
+    // Segments are authored in the post-trim space, so the frame size the zoom
+    // math needs is exactly the chrome-trim crop's W:H.
+    var zoomFrame = parseCrop(encode.crop);
+    args.push("--zoom", JSON.stringify({ w: zoomFrame.w, h: zoomFrame.h, segments: encode.zoom }));
+  }
   if (paths.poster) {
     args.push("--poster", paths.poster);
     if (encode.posterFrame == null) {
@@ -669,6 +694,11 @@ function runBatchPreflight(config, tools, repoRoot) {
   var probe = join(repoRoot, "tasks", "wiki-media", "tutorials", "_stage", "probe.timeline.json");
   var timeline = readJson(probe);
   var frameDir = resolveFrameDir(repoRoot, probe, timeline);
+  // Preflight renders the probe FOREGROUND (NOT headless): its only job is to prove
+  // the rasterization pin (put_RasterizationScale 1.00) + a non-black first frame. The
+  // minimal probe timeline fails the headless capture path (exit 4) even though real
+  // clips render headless fine, so keep the probe foreground. Crop bounds are validated
+  // against the HEADLESS capture dims below (what every clip encode actually crops from).
   var result = runTool(tools, "render", ["--record", probe], { cwd: repoRoot });
   if (result.status !== 0) throw new Error("preflight render exited " + result.status);
   // The rasterization-pin proof lives in stdout for the MOCK exe but in a per-PID
@@ -689,8 +719,12 @@ function runBatchPreflight(config, tools, repoRoot) {
   if (!/put_RasterizationScale\(1\.00\).*hr=0x00000000/s.test(logs)) throw new Error("preflight did not log put_RasterizationScale(1.00) hr=0x00000000 (checked stdout + newest host-record log)");
   var first = framePath(frameDir, 0);
   var png = parsePng(readFileSync(first));
-  if (png.width !== 1280 || png.height !== 960) throw new Error("preflight frame is " + png.width + "x" + png.height + ", expected 1280x960");
-  assertCropInBounds(DEFAULT_CROP, png.width, png.height);
+  if (png.width <= 0 || png.height <= 0) {
+    throw new Error("preflight frame is degenerate: " + png.width + "x" + png.height);
+  }
+  // Validate the clip crop against the HEADLESS capture dims (1264x951) — the frame
+  // every clip encode crops from — NOT the foreground probe's own size.
+  assertCropInBounds(DEFAULT_CROP, HEADLESS_CAPTURE_W, HEADLESS_CAPTURE_H);
   if (pngMeanLuma(first) <= 1.0) throw new Error("preflight first frame is all-black");
 }
 

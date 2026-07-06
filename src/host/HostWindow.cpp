@@ -4681,6 +4681,10 @@ int HostWindowImpl::Run(int nCmdShow)
                                                     /*ephemeral*/m_automationMode);
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
+    // [#510] Throttle the panel-refresh broadcasts during a --record run only
+    // (NOT --drive, whose asserts must see every state change) so the driver's
+    // rapid host-side edits don't saturate the web + starve the capture/ack loop.
+    dispatcher->SetRecordEmitThrottle(!m_recordScriptPath.empty());
     // ModManager is already discovered + restored in the impl
     // ctor. Bind it so the dispatcher can service `mods/list`,
     // `mods/select`, `mods/refresh` and include `activeModPath` in

@@ -134,3 +134,53 @@ test("encode produces yuv420p + even dims + faststart", { skip: !ffmpegReady && 
   assert.ok(moov >= 0 && mdat >= 0, "moov/mdat atoms not found");
   assert.ok(moov < mdat, "+faststart not applied (moov after mdat)");
 });
+
+// --- dynamic zoom ------------------------------------------------------------
+import { assertZoom, buildZoomFilters } from "./encode.mjs";
+
+const ZOOM1 = { w: 1264, h: 950, segments: [{ t0: 2, t1: 6, rect: [0, 96, 632, 475], easeMs: 400 }] };
+
+test("zoom: validation rejects the unsound combinations", () => {
+  // loop modes reorder frames — n-based zoom would land wrong
+  assert.throws(() => assertZoom(ZOOM1, { loop: "pingpong", fps: 60 }), /loop=none/);
+  assert.throws(() => assertZoom(ZOOM1, { dropBlackBelow: 35, fps: 60 }), /drop-black-below/);
+  // rect aspect must match the frame aspect (magnification, not reframe)
+  assert.throws(() => assertZoom({ w: 1264, h: 950, segments: [{ t0: 2, t1: 6, rect: [0, 0, 632, 300], easeMs: 400 }] }, { fps: 60 }), /aspect/);
+  // rect must stay in bounds
+  assert.throws(() => assertZoom({ w: 1264, h: 950, segments: [{ t0: 2, t1: 6, rect: [700, 500, 632, 475], easeMs: 400 }] }, { fps: 60 }), /bounds/);
+  // segment must be longer than its two eases
+  assert.throws(() => assertZoom({ w: 1264, h: 950, segments: [{ t0: 2, t1: 2.5, rect: [0, 0, 632, 475], easeMs: 400 }] }, { fps: 60 }), /shorter than/);
+  // overlapping segments rejected
+  assert.throws(() => assertZoom({ w: 1264, h: 950, segments: [
+    { t0: 2, t1: 6, rect: [0, 0, 632, 475], easeMs: 400 },
+    { t0: 5, t1: 9, rect: [0, 0, 632, 475], easeMs: 400 },
+  ] }, { fps: 60 }), /non-overlapping/);
+  // a segment starting before the --start trim is unrepresentable in `n`
+  assert.throws(() => assertZoom(ZOOM1, { fps: 60, start: 200 }), /--start/);
+  // odd frame dims would floor BELOW the crop size at a segment's Z=1 rest
+  // endpoints (trunc(h*1/2)*2 < h when h is odd) — reject before it reaches ffmpeg
+  assert.throws(() => assertZoom({ w: 1263, h: 950, segments: ZOOM1.segments }, { fps: 60 }), /EVEN/);
+  assert.throws(() => assertZoom({ w: 1264, h: 951, segments: ZOOM1.segments }, { fps: 60 }), /EVEN/);
+  // a segment exactly 2x its ease has zero hold time between ramps — degenerate, reject
+  assert.throws(() => assertZoom({ w: 1264, h: 950, segments: [{ t0: 2, t1: 2.8, rect: [0, 0, 632, 475], easeMs: 400 }] }, { fps: 60 }), /shorter than/);
+  // the happy path validates clean
+  assertZoom(ZOOM1, { loop: "none", fps: 60, start: 30 });
+});
+
+test("zoom: generated filters use the spiked construct (animated scale + static crop in n)", () => {
+  const [scaleF, cropF] = buildZoomFilters({ zoom: ZOOM1, fps: 60, start: 30 });
+  // animated magnification must evaluate per frame and never animate crop w/h
+  assert.ok(scaleF.includes("eval=frame"), "scale must be eval=frame");
+  assert.ok(cropF.startsWith("crop=1264:950:"), "crop output size must be static");
+  // crop x/y must be pure functions of n (crop's iw freezes at config time — spiked)
+  assert.ok(!/x='[^']*\biw\b/.test(cropF) && !/y='[^']*\biw\b/.test(cropF), "crop x/y must not reference iw");
+  // frame domain is post-start-trim: t0=2s @60fps, start=30 → n=90
+  assert.ok(scaleF.includes("(n-90)"), "ease-in must start at n=90 (t0*fps - start)");
+  assert.ok(scaleF.includes("(330-n)"), "ease-out must end at n=330 (t1*fps - start)");
+  // both filters land in the -vf chain between the chrome trim and the invariants
+  const args = buildFfmpegArgs({ framesDir: "d", fps: 60, out: "o.mp4", start: 30, crop: "1264:950:0:0", zoom: ZOOM1 }).join(" ");
+  assert.ok(args.indexOf("crop=1264:950:0:0") < args.indexOf("eval=frame"), "zoom must run after the chrome trim");
+  assert.ok(args.indexOf("eval=frame") < args.indexOf("format=yuv420p"), "zoom must run before the invariants");
+  // no zoom → no zoom filters
+  assert.ok(!buildFfmpegArgs({ framesDir: "d", fps: 60, out: "o.mp4" }).join(" ").includes("eval=frame"), "zoom should be opt-in");
+});

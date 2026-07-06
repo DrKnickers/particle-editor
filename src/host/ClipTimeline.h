@@ -48,6 +48,11 @@ struct CursorTarget {
 struct CursorKey {
     double t = 0, x = 0, y = 0;
     bool vis = false, press = false;
+    // Opt-in: a press on this key ALSO dispatches a real click (+ input focus)
+    // on the resolved element web-side (record-cursor-activate.ts). Default
+    // false keeps legacy pointer-events-only presses, so existing clips whose
+    // theatrical presses sit on live controls (e.g. Spawn now) are untouched.
+    bool activate = false;
     CursorTarget target;
 };
 
@@ -176,7 +181,7 @@ inline nlohmann::json BuildCursorTrackJson(const std::vector<CursorKey>& keys) {
         } else {
             target = nlohmann::json::object();
         }
-        out["keys"].push_back({ {"t", k.t}, {"vis", k.vis}, {"press", k.press}, {"target", target} });
+        out["keys"].push_back({ {"t", k.t}, {"vis", k.vis}, {"press", k.press}, {"activate", k.activate}, {"target", target} });
     }
     return out;
 }
@@ -217,6 +222,12 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     // "clicks" (set the index track to a chosen frame, with dwells) rather than a
     // per-frame scrub that makes the picker grid jump. In-memory, dialog-free.
     if (kind == "emitters/set-track-key") return true;
+    // emitters/add-track-key inserts a NEW key (click-to-add commit) — needed by
+    // walkthrough clips whose target curve has mid-track keys (e.g. the tutorial-3
+    // 0→peak@10%→0 muzzle pulse), which set-track-key alone can't create (it only
+    // moves the two default border keys). In-memory, dialog-free; bad id/track
+    // returns sendErr (envelope-checked), unknown-track cannot silent-OK.
+    if (kind == "emitters/add-track-key") return true;
     // engine/set/skydome-environment {context, primaryName, secondaryName} is the
     // name-based game-dome selector the Background picker actually uses (NOT the
     // legacy slot-index API). Persist is gated by !m_ephemeral, so record-safe.
@@ -510,6 +521,10 @@ inline bool ParseTimeline(const std::string& json, Timeline& out, std::string& e
                 CursorKey ck;
                 ck.t = k.value("t", 0.0);
                 ck.vis = k.value("vis", false); ck.press = k.value("press", false);
+                if (k.contains("activate")) {
+                    if (!k["activate"].is_boolean()) { err = "cursor key 'activate' must be a boolean"; return false; }
+                    ck.activate = k["activate"].get<bool>();
+                }
                 const bool hasTarget = k.contains("target");
                 const bool hasX = k.contains("x");
                 const bool hasY = k.contains("y");

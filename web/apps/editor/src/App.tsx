@@ -38,6 +38,7 @@ import { latchRecordModeFromMessage, markHeadless } from "@/lib/record-mode";
 import { TitleBar } from "@/components/TitleBar";
 import { evalRecordCursor } from "@/lib/record-cursor-eval";
 import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record-cursor-drag";
+import { applyRecordActivation, createRecordActivateState, resetRecordActivation } from "@/lib/record-cursor-activate";
 import { parseCursorTickMessage, parseCursorTrackMessage, type RecordCursorKey } from "@/lib/record-cursor-track";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
@@ -220,6 +221,9 @@ function AppShell() {
   // drop). See lib/record-cursor-drag.ts. Dormant outside --record (only the cursor
   // paths below touch it).
   const recordDragStateRef = useRef(createRecordDragState());
+  // Opt-in click/focus dispatch for `"activate": true` cursor keys (see
+  // lib/record-cursor-activate.ts). Dormant outside --record like the drag.
+  const recordActivateStateRef = useRef(createRecordActivateState());
   useEffect(() => {
     const wv = window.chrome?.webview as
       | {
@@ -248,6 +252,7 @@ function AppShell() {
         // (pointercancel, no commit) before the new track starts. See gap 1 /
         // invariant 2 in record-cursor-drag.ts.
         resetRecordDrag(recordDragStateRef.current);
+        resetRecordActivation(recordActivateStateRef.current);
         recordCursorTrackRef.current = track;
         return;
       }
@@ -255,7 +260,13 @@ function AppShell() {
       const tick = parseCursorTickMessage(e.data);
       if (tick) {
         const keys = recordCursorTrackRef.current;
-        if (!keys) return;
+        if (!keys) {
+          // Cursor-free clip: no cursor state to apply, but the per-frame tick
+          // is still the headless commit+ack heartbeat — the host fails the
+          // frame (exit 4) if the ack never lands. Nothing to flush; ack directly.
+          postFrameAcked(tick.frame);
+          return;
+        }
         const cursor = evalRecordCursor(keys, tick.t);
         const ackMsg = JSON.stringify({
           type: "ui/frame-acked",
@@ -279,7 +290,11 @@ function AppShell() {
           headless: recordHeadlessRef.current,
           applyFrame: () => {
             setRecordCursor({ x: cursor.x, y: cursor.y, visible: cursor.vis, pressed: cursor.press });
-            applyRecordDrag({ x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok }, recordDragStateRef.current);
+            applyRecordDrag({ x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate }, recordDragStateRef.current);
+            applyRecordActivation(
+              { x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate },
+              recordActivateStateRef.current,
+            );
           },
           post: () => wv.postMessage?.(ackMsg),
           flushSync,

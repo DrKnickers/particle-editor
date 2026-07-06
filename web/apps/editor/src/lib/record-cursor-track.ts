@@ -12,6 +12,10 @@ export interface RecordCursorKey {
   t: number;
   vis: boolean;
   press: boolean;
+  /** Opt-in: a press on this key also dispatches real click/focus on the target
+   *  (record-cursor-activate). Absent/false keeps the legacy pointer-events-only
+   *  behavior, so existing clips are untouched. */
+  activate: boolean;
   target: CursorTarget;
 }
 
@@ -74,8 +78,9 @@ function parseKey(value: unknown): RecordCursorKey | null {
   const key = value as Record<string, unknown>;
   if (!isFiniteNumber(key.t)) return null;
   if (typeof key.vis !== "boolean" || typeof key.press !== "boolean") return null;
+  if (key.activate !== undefined && typeof key.activate !== "boolean") return null;
   const target = parseTarget(key.target);
-  return target ? { t: key.t, vis: key.vis, press: key.press, target } : null;
+  return target ? { t: key.t, vis: key.vis, press: key.press, activate: key.activate === true, target } : null;
 }
 
 export function parseCursorTrackMessage(data: unknown): RecordCursorKey[] | null {

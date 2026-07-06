@@ -42,6 +42,18 @@ describe("record-cursor-drag", () => {
     expect(state.prevPress).toBe(true);
   });
 
+  it("never arms a drag on an activate:true press (invariant 4: activate and drag are mutually exclusive)", () => {
+    const downs: PointerEvent[] = [];
+    const off = listen(row, "pointerdown", downs);
+    const state = createRecordDragState();
+
+    applyRecordDrag({ x: 200, y: 100, press: true, ok: true, activate: true }, state, { dpr: 2, doc: document });
+    off();
+
+    expect(downs).toHaveLength(0);
+    expect(state.prevPress).toBe(false);
+  });
+
   it("redirects the pointerdown to the reorderable row when the cursor lands on an inner control", () => {
     // The stack gesture bails if the pointerdown target is inside an inner button (the
     // row's remove control), which would strand the drag (armed here, no gesture there).

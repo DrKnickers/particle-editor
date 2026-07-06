@@ -94,6 +94,9 @@ public:
     // picker will run unparented (works, but doesn't block input on the
     // main window — set this in HostWindow once hMain exists).
     void SetHostHwnd(HWND hwnd) { m_hostHwnd = hwnd; }
+    // Enable the record-only emit throttle (issue #510). Set true ONLY for a
+    // --record run (never --drive). See m_recordEmitThrottle.
+    void SetRecordEmitThrottle(bool on) { m_recordEmitThrottle = on; }
 
     // inject the ModManager that owns mod discovery + active-
     // mod state. The dispatcher routes `mods/list`, `mods/select`, and
@@ -341,6 +344,20 @@ private:
     // writes so a --drive run performs NO registry writes (without enabling the
     // test-host-only CDP/a11y behaviors). Set once at construction.
     bool               m_ephemeral = false;
+
+    // --record throttle (issue #510): during a clip record the driver scrubs
+    // curves host-side, firing emitters/tree/changed + engine/state/changed far
+    // faster than the capture rate. Each push makes the web re-fetch the whole
+    // tree/props/tracks/mods, which saturates the web thread and starves the
+    // per-frame capture/ack protocol -> 0 frames. When enabled, coalesce those two
+    // broadcasts to ~kRecordEmitThrottleMs (leading-edge). RECORD-ONLY: never for
+    // --drive (a drive-assert reads state via DriveRunner and must see every
+    // change). Panels still update at ~30 Hz — visually identical for a <=60fps
+    // clip, and the record's end-hold captures the settled state.
+    bool               m_recordEmitThrottle = false;
+    unsigned long long m_lastTreeEmitTick   = 0;
+    unsigned long long m_lastStateEmitTick  = 0;
+    static constexpr unsigned long long kRecordEmitThrottleMs = 33;
 
     // Test seam: set from the ALO_SETTINGS_LIVE env var at construction.
     // When true it LIFTS the `--test-host` settings gate, so the

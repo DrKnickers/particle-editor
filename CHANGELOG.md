@@ -80,6 +80,7 @@ may live at the end of the file.
 
 ### Changed
 
+- The laser-shot tutorial's walkthrough clips now show the actual clicks and typing each step takes — renaming an emitter by typing into the name box, picking an atlas frame in the picker, dropping keys onto the colour curves, switching Bursts generation, dialling the Spawner's velocity, and adjusting Parent-speed-inherit in the Physics tab — and zoom in on the relevant panel so the controls are readable at embed size
 - Landing page reorganized into a numbered walkthrough — Scene context, Mod stack, Spawner, Emitter order, Atlas picker, then a grouped Toolset grid (Authoring · Preview & viewport · Files & reliability) — with a new Spawner clip showing a projectile effect in flight and copy that calls out mod-shader resolution and live reload
 - The app icon now stays legible at taskbar and title-bar sizes — small renders simplify to a bolder spline + particle on a brighter tile, and the icon ships exact 20/24/40px variants so Windows shows a crisp icon instead of a resampled one
 - Landing page: the editor clips now display about a third larger — media breaks out of the text column — and the hero editor window is visible above the fold instead of a toolbar sliver

@@ -66,6 +66,12 @@ export interface RecordDragCursor {
    *  (0,0) sentinel or NaN; it must NOT synthesize a click/drag. (Point/"literal"
    *  targets are always ok:true, so they drive the drag like resolved element refs.) */
   ok: boolean;
+  /** Opt-in activation flag from the governing key. A press is EITHER a reorder-drag
+   *  gesture (activate:false) OR a real click/focus owned by record-cursor-activate
+   *  (activate:true) — never both. When true, the drag must NOT arm: otherwise an
+   *  activate-click on a curve key would ALSO fire this gesture's pointerdown on the
+   *  key and wedge its pointer-capture drag, swallowing the activation click. */
+  activate?: boolean;
 }
 
 const POINTER_ID = 1;
@@ -99,7 +105,9 @@ export function applyRecordDrag(
     // DOWN — only on a RESOLVED frame with FINITE coords (invariant 1): an unresolved
     // press reports (0,0)/NaN, so arming here would click the corner. Abort + retry
     // next frame. Literal point targets are always ok, so they arm normally.
-    if (!cursor.ok || !finite) return;
+    // An activate:true press is a click, not a drag — activation owns it; never arm
+    // (invariant 4: activate and drag are mutually exclusive per press).
+    if (cursor.activate || !cursor.ok || !finite) return;
     const hit = doc.elementFromPoint(clientX, clientY);
     if (!hit) return;
     // Redirect an inner-control hit to the reorderable row so the gesture accepts it

@@ -7,11 +7,11 @@ describe("record-cursor-track", () => {
       parseCursorTrackMessage({
         type: "ui/cursor-track",
         keys: [
-          { t: 0, vis: true, press: false, target: { kind: "point", x: 10, y: 20 } },
+          { t: 0, vis: true, press: false, activate: false, target: { kind: "point", x: 10, y: 20 } },
         ],
       }),
     ).toEqual([
-      { t: 0, vis: true, press: false, target: { kind: "point", x: 10, y: 20 } },
+      { t: 0, vis: true, press: false, activate: false, target: { kind: "point", x: 10, y: 20 } },
     ]);
   });
 
@@ -21,16 +21,16 @@ describe("record-cursor-track", () => {
         JSON.stringify({
           type: "ui/cursor-track",
           keys: [
-            { t: 0, vis: true, press: false, target: { kind: "element", ref: "curve-key:red:0" } },
-            { t: 1, vis: true, press: true, target: { kind: "element", ref: "atlas-tile:3" } },
-            { t: 2, vis: false, press: false, target: { kind: "element", ref: "channel-row:alpha" } },
+            { t: 0, vis: true, press: false, activate: false, target: { kind: "element", ref: "curve-key:red:0" } },
+            { t: 1, vis: true, press: true, activate: false, target: { kind: "element", ref: "atlas-tile:3" } },
+            { t: 2, vis: false, press: false, activate: false, target: { kind: "element", ref: "channel-row:alpha" } },
           ],
         }),
       ),
     ).toEqual([
-      { t: 0, vis: true, press: false, target: { kind: "element", ref: "curve-key:red:0" } },
-      { t: 1, vis: true, press: true, target: { kind: "element", ref: "atlas-tile:3" } },
-      { t: 2, vis: false, press: false, target: { kind: "element", ref: "channel-row:alpha" } },
+      { t: 0, vis: true, press: false, activate: false, target: { kind: "element", ref: "curve-key:red:0" } },
+      { t: 1, vis: true, press: true, activate: false, target: { kind: "element", ref: "atlas-tile:3" } },
+      { t: 2, vis: false, press: false, activate: false, target: { kind: "element", ref: "channel-row:alpha" } },
     ]);
   });
 
@@ -38,20 +38,33 @@ describe("record-cursor-track", () => {
     expect(
       parseCursorTrackMessage({
         type: "ui/cursor-track",
-        keys: [{ t: 0, vis: true, press: false, target: { kind: "element", ref: "testid:a:b:c" } }],
+        keys: [{ t: 0, vis: true, press: false, activate: false, target: { kind: "element", ref: "testid:a:b:c" } }],
       }),
-    ).toEqual([{ t: 0, vis: true, press: false, target: { kind: "element", ref: "testid:a:b:c" } }]);
+    ).toEqual([{ t: 0, vis: true, press: false, activate: false, target: { kind: "element", ref: "testid:a:b:c" } }]);
     // a bare "testid:" with no id is still rejected
     expect(
       parseCursorTrackMessage({
         type: "ui/cursor-track",
-        keys: [{ t: 0, vis: true, press: false, target: { kind: "element", ref: "testid:" } }],
+        keys: [{ t: 0, vis: true, press: false, activate: false, target: { kind: "element", ref: "testid:" } }],
       }),
     ).toBeNull();
   });
 
   it("rejects malformed cursor tracks", () => {
     expect(parseCursorTrackMessage({ type: "ui/cursor-track", keys: [] })).toBeNull();
+    // activate is opt-in per key: parses through when true, rejects non-boolean
+    expect(
+      parseCursorTrackMessage({
+        type: "ui/cursor-track",
+        keys: [{ t: 0, vis: true, press: true, activate: true, target: { kind: "point", x: 1, y: 2 } }],
+      }),
+    ).toEqual([{ t: 0, vis: true, press: true, activate: true, target: { kind: "point", x: 1, y: 2 } }]);
+    expect(
+      parseCursorTrackMessage({
+        type: "ui/cursor-track",
+        keys: [{ t: 0, vis: true, press: true, activate: "yes", target: { kind: "point", x: 1, y: 2 } }],
+      }),
+    ).toBeNull();
     expect(
       parseCursorTrackMessage({
         type: "ui/cursor-track",
@@ -61,13 +74,13 @@ describe("record-cursor-track", () => {
     expect(
       parseCursorTrackMessage({
         type: "ui/cursor-track",
-        keys: [{ t: 0, vis: true, press: false, target: { kind: "element", ref: "button:ok" } }],
+        keys: [{ t: 0, vis: true, press: false, activate: false, target: { kind: "element", ref: "button:ok" } }],
       }),
     ).toBeNull();
     expect(
       parseCursorTrackMessage({
         type: "ui/cursor-track",
-        keys: [{ t: 0, vis: true, press: false, target: { kind: "point", x: Infinity, y: 0 } }],
+        keys: [{ t: 0, vis: true, press: false, activate: false, target: { kind: "point", x: Infinity, y: 0 } }],
       }),
     ).toBeNull();
   });

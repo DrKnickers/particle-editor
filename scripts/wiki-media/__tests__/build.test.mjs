@@ -292,6 +292,34 @@ test("a clip missing encode.posterFrame fails during the item encode step withou
   assert.equal(result.report[0].exit.encode, 1);
 });
 
+test("encode.zoom threads through to the encode command with the post-trim frame size", async (t) => {
+  const dir = tempDir(t);
+  const zoomTimeline = writeTimeline(dir, "zoomed");
+  const segments = [{ t0: 2, t1: 6, rect: [0, 96, 632, 475], easeMs: 400 }];
+
+  const result = await runFixtureBatch(t, {
+    version: 2,
+    items: [
+      clip({
+        id: "zoomed",
+        timeline: zoomTimeline,
+        encode: { start: 30, posterFrame: 120, crop: "1264:950:0:0", zoom: segments },
+      }),
+    ],
+  }, { dir });
+
+  assert.equal(result.exitCode, 0);
+  const encodeCommand = result.report[0].commands.encode;
+  assert.ok(encodeCommand.includes("--zoom"), "encode command must carry --zoom");
+  // frame size comes from the chrome-trim crop, segments pass through verbatim
+  const m = encodeCommand.match(/--zoom "?(\{.*?\})"?(?: |$)/);
+  assert.ok(m, "zoom JSON present: " + encodeCommand);
+  const zoomArg = JSON.parse(m[1].replace(/\\"/g, '"'));
+  assert.equal(zoomArg.w, 1264);
+  assert.equal(zoomArg.h, 950);
+  assert.deepEqual(zoomArg.segments, segments);
+});
+
 test("--only filtering limits the processed ids", async (t) => {
   const dir = tempDir(t);
   const keepTimeline = writeTimeline(dir, "keep");

@@ -17,6 +17,7 @@
 // the static curve-fill-<channelId> gradient in CurveEditor.tsx.
 // Non-focus channels render a stroked line only, no fill path.
 
+import { isRecording } from "@/lib/record-mode";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TrackDto } from "@particle-editor/bridge-schema";
 import {
@@ -441,7 +442,12 @@ export function useCurveMorph(args: {
   const dimsRef = useRef({ width, height });
   dimsRef.current = { width, height };
 
+  // Record mode snaps like prefers-reduced-motion: the glide runs on rAF, which
+  // stalls in a minimized (headless --record) window — the fallback timeout is
+  // background-throttled too, so a glide would hold a STALE curve for seconds
+  // after a scripted key edit. Deterministic clips want the snap anyway.
   const motionOk = (): boolean =>
+    !isRecording() &&
     typeof window.matchMedia === "function" &&
     !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 

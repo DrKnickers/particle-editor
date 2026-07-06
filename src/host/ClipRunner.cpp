@@ -178,7 +178,8 @@ ClipRunner::Status ClipRunner::Tick() {
     // tracks instead post a per-frame {type:"ui/cursor-tick", t, frame}; the web
     // side resolved the selectors against its own live DOM (it streamed the track
     // once during post-settle) and returns the cursor + resolved set in the ack.
-    if (!m_tl.cursor.empty()) {
+    const bool cursorFree = m_tl.cursor.empty();
+    if (!cursorFree) {
         if (m_targetCursor) {
             if (m_uiPush)
                 m_uiPush("ui/cursor-tick",
@@ -201,6 +202,18 @@ ClipRunner::Status ClipRunner::Tick() {
             m_done = true; return Status::Done;
         }
         ++m_nextAt;
+    }
+
+    if (cursorFree && m_uiPush) {
+        // Cursor-FREE timeline: still post the per-frame tick — it is the ack
+        // carrier. The web acks a tick with no streamed track (no cursor to
+        // apply), and without that heartbeat every headless frame times out at
+        // the ack gate and the whole record fails (exit 4, "DOM not committed").
+        // Posted AFTER the at-events above (not alongside step 2) so a same-
+        // frame ui/* push (e.g. ui/show-panel) is enqueued to the webview
+        // before this frame's tick — postMessage delivery is FIFO, so the web
+        // applies the at-event before it acks+captures this frame.
+        m_uiPush("ui/cursor-tick", nlohmann::json{{"t", t}, {"frame", m_frame}});
     }
 
     // 4. Commit-ack + grab. For a LITERAL track an ack timeout is best-effort

@@ -3,8 +3,8 @@
 This tutorial starts from a blank particle and builds a bright green laser shot with a projectile
 core, projectile glow, and short muzzle flash in the same particle system.
 
-The goal is to practice a common projectile layout: two emitters form the moving shot and its glow,
-and a small muzzle-flash group bursts briefly at the launch point.
+The goal is to practice a common projectile layout: a small stack of emitters forms the moving shot
+and its glow, and a muzzle-flash group bursts briefly at the launch point.
 
 <!-- Media: tutorial-03-opening-result -->
 
@@ -80,6 +80,12 @@ Use the Tail section on this emitter too. Enable `Has tail` and give the glow it
 The glow tail can be a little broader or softer than the core tail, but it should still point in the
 same direction and support the same motion.
 
+If the shot still feels thin, a third, even softer layer works well: duplicate the glow idea as
+`Projectile_Glow_Soft`, make it noticeably wider and much fainter, and let it act as a halo around
+the other two. Very low intensity at a large scale adds presence without blowing out the shot.
+
+<!-- Media: tutorial-03-glow-layers -->
+
 ## 4. Let the Projectile Emitters Ride the Shot
 
 Set `Parent speed inherit:` near full inheritance on both the projectile core and the projectile
@@ -110,9 +116,10 @@ Add a new emitter for the bright center of the muzzle flash. Keep the name direc
 `Muzzle_Core`, so the Emitter Tree shows the two ideas clearly:
 
 ```text
-Projectile_Core: moving shot core and tail
-Projectile_Glow: softer projectile glow and tail
-Muzzle_Core: white-hot launch flash
+Projectile_Core:      moving shot core and tail
+Projectile_Glow:      softer projectile glow and tail
+Projectile_Glow_Soft: faint wide halo around the shot
+Muzzle_Core:          white-hot launch flash
 ```
 
 Make this emitter very short-lived, bright, and compact. A white or nearly white core works well
@@ -130,8 +137,12 @@ makes a launch flash read as a flash and not a steady jet.
 ## 7. Add the Outer Glow and Keep It at the Launch Point
 
 Add a second muzzle-flash emitter named something like `Muzzle_Glow`. Make it wider, softer, and
-slightly greener than the white core. Give it the same `Bursts` Generation mode as the core, so the
-outer glow fires with the flash instead of streaming on its own.
+greener than the white core. Give it the same `Bursts` Generation mode as the core, so the outer
+glow fires with the flash instead of streaming on its own. The same halo idea from the projectile
+applies here too: a third `Muzzle_Glow_Soft` emitter, wider and much fainter again, rounds the flash
+off without making it bigger in feel.
+
+<!-- Media: tutorial-03-muzzle-glow-props -->
 
 Set `Parent speed inherit:` near zero on both muzzle flash emitters, one at a time in the Property
 Panel, so the flash stays close to the launch point.

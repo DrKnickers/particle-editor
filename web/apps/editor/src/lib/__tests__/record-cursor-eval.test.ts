@@ -4,11 +4,11 @@ import { evalRecordCursor, resolveTargetCenter } from "../record-cursor-eval";
 import { useDockAnim } from "../dock-anim";
 
 function pointKey(t: number, x: number, y: number, vis: boolean, press: boolean): RecordCursorKey {
-  return { t, vis, press, target: { kind: "point", x, y } };
+  return { t, vis, press, activate: false, target: { kind: "point", x, y } };
 }
 
 function elementKey(t: number, ref: string, vis: boolean, press: boolean): RecordCursorKey {
-  return { t, vis, press, target: { kind: "element", ref: ref as CursorElementRef } };
+  return { t, vis, press, activate: false, target: { kind: "element", ref: ref as CursorElementRef } };
 }
 
 /** Mount a div with the given attributes and a fixed client rect (jsdom's

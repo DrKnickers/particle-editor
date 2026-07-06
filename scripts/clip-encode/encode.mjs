@@ -40,7 +40,97 @@ function assertCrop(crop) {
   }
 }
 
-function buildFilterParts({ fps, dropBlackBelow, crop }) {
+// --- dynamic zoom (encode-time, per-clip segments) ---------------------------
+//
+// zoom = { w, h, segments: [{ t0, t1, rect: [x, y, w, h], easeMs }] }
+//   w/h    : the post-chrome-trim frame size the segments are authored against
+//            (== the static crop's W:H, or the raw frame size when no crop).
+//   t0/t1  : SOURCE seconds — t0 is when the ease-IN begins, t1 when the
+//            ease-OUT completes (full zoom is held in between).
+//   rect   : target region in post-trim pixels; MUST match the frame aspect
+//            (the zoom is a magnification, not a reframe).
+//
+// ffmpeg mechanics (spiked 2026-07-05): `crop` evaluates w/h ONCE at config —
+// they cannot animate — and its `iw` freezes at the link's config-time size, so
+// x/y must be pure functions of `n`. The working construct is an animated
+// magnification (`scale` with eval=frame; its expressions DO accept `n`)
+// followed by a STATIC-size crop whose x/y track the scaled-up target center:
+//   scale=w='trunc(W*Z(n)/2)*2':h='trunc(H*Z(n)/2)*2':eval=frame,
+//   crop=W:H:x='clip(cx(n)*Z(n)-W/2, 0, W*Z(n)-W)':y=…
+// Z(n) eases 1→Zs→1 per segment (smoothstep), cx/cy ease frame-center→rect-center.
+// Frame numbers are the POST-start-trim stream indices: n = round(t*fps) - start.
+export function assertZoom(zoom, { loop = "none", dropBlackBelow = null, fps, start = 0 } = {}) {
+  if (zoom == null) return;
+  if (loop !== "none") throw new Error("zoom requires loop=none (loop modes reorder frames; n-based zoom expressions would land on the wrong frames)");
+  if (dropBlackBelow != null) throw new Error("zoom cannot combine with drop-black-below (dropped frames renumber the stream)");
+  const { w, h, segments } = zoom;
+  // Even dims required: the magnification stage floors to even parity
+  // (trunc(w*Z/2)*2) so libx264 4:2:0 stays satisfied at every eased Z,
+  // including Z=1 at a segment's rest endpoints. An odd w/h would floor
+  // BELOW the static crop size at Z=1 and the crop could never fit.
+  if (!Number.isInteger(w) || !Number.isInteger(h) || w <= 0 || h <= 0 || w % 2 !== 0 || h % 2 !== 0) throw new Error("zoom.w/h must be positive EVEN integers (the post-trim frame size)");
+  if (!Array.isArray(segments) || segments.length === 0) throw new Error("zoom.segments must be a non-empty array");
+  if (segments.length > 8) throw new Error("zoom supports at most 8 segments (expression length)");
+  let prevEnd = -Infinity;
+  for (const s of segments) {
+    const { t0, t1, rect, easeMs } = s;
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0) throw new Error(`zoom segment t0/t1 invalid: ${JSON.stringify(s)}`);
+    if (!Number.isFinite(easeMs) || easeMs <= 0) throw new Error("zoom segment easeMs must be > 0");
+    const ease = easeMs / 1000;
+    // Strictly greater: at exactly 2*ease the rise and fall ramps meet with
+    // zero hold time, which is a degenerate (not just minimal) segment.
+    if (t1 - t0 <= 2 * ease) throw new Error(`zoom segment shorter than its two eases: ${JSON.stringify(s)}`);
+    if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite)) throw new Error("zoom segment rect must be [x, y, w, h]");
+    const [rx, ry, rw, rh] = rect;
+    if (rw <= 0 || rh <= 0 || rx < 0 || ry < 0 || rx + rw > w || ry + rh > h) throw new Error(`zoom rect out of ${w}x${h} bounds: ${JSON.stringify(rect)}`);
+    // aspect must match: the construct magnifies, it does not letterbox.
+    if (Math.abs(rw / rh - w / h) > 0.005 * (w / h)) throw new Error(`zoom rect aspect ${rw}x${rh} != frame aspect ${w}x${h}`);
+    if (t0 < prevEnd) throw new Error("zoom segments must be sorted and non-overlapping");
+    prevEnd = t1;
+    const n0 = Math.round(t0 * fps) - start;
+    if (n0 < 0) throw new Error(`zoom segment starts before the --start trim (t0=${t0}s, start frame ${start})`);
+  }
+}
+
+// Smoothstep-eased 0→1→0 profile for one segment, as an ffmpeg expression in `n`:
+// rise over [A, A+E], hold, fall over [D-E, D]. `clip()` bounds each ramp.
+function segProfile(A, D, E) {
+  const rise = `clip((n-${A})/${E},0,1)`;
+  const fall = `clip((${D}-n)/${E},0,1)`;
+  // smoothstep(u) = u*u*(3-2u), applied to both ramps (their product is the hold-aware profile)
+  return `(pow(${rise},2)*(3-2*${rise}))*(pow(${fall},2)*(3-2*${fall}))`;
+}
+
+export function buildZoomFilters({ zoom, fps, start = 0 }) {
+  if (zoom == null) return [];
+  const { w, h, segments } = zoom;
+  const zTerms = [];   // Σ (Zs-1)*P_i
+  const cxTerms = [];  // Σ (rcx - W/2)*P_i
+  const cyTerms = [];
+  for (const s of segments) {
+    const easeF = (s.easeMs / 1000) * fps;
+    const A = (Math.round(s.t0 * fps) - start).toFixed(0);
+    const D = (Math.round(s.t1 * fps) - start).toFixed(0);
+    const E = easeF.toFixed(3);
+    const P = segProfile(A, D, E);
+    const Zs = w / s.rect[2];
+    const rcx = s.rect[0] + s.rect[2] / 2;
+    const rcy = s.rect[1] + s.rect[3] / 2;
+    zTerms.push(`(${(Zs - 1).toFixed(6)})*${P}`);
+    cxTerms.push(`(${(rcx - w / 2).toFixed(3)})*${P}`);
+    cyTerms.push(`(${(rcy - h / 2).toFixed(3)})*${P}`);
+  }
+  const Z = `(1+${zTerms.join("+")})`;
+  const CX = `(${w / 2}+${cxTerms.join("+")})`;
+  const CY = `(${h / 2}+${cyTerms.join("+")})`;
+  // scale to the magnified size (even dims), then crop the static W:H window
+  // centered on the eased target center, clamped inside the scaled frame.
+  const scaleF = `scale=w='trunc(${w}*${Z}/2)*2':h='trunc(${h}*${Z}/2)*2':eval=frame:flags=lanczos`;
+  const cropF = `crop=${w}:${h}:x='clip(${CX}*${Z}-${w / 2},0,${w}*${Z}-${w})':y='clip(${CY}*${Z}-${h / 2},0,${h}*${Z}-${h})'`;
+  return [scaleF, cropF];
+}
+
+function buildFilterParts({ fps, dropBlackBelow, crop, zoom = null, start = 0 }) {
   const pre = [];
   if (dropBlackBelow != null) {
     // Measure per-frame luma, keep only frames brighter than the threshold, then
@@ -54,19 +144,22 @@ function buildFilterParts({ fps, dropBlackBelow, crop }) {
   // — crop=1264:952:8:0 keeps the title bar, drops the black L/R/B border). Runs
   // first so the even-dims + yuv420p invariants apply to the trimmed frame.
   const cropPart = crop ? `crop=${crop},` : "";
-  const post = `${cropPart}scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p`;
+  // Dynamic zoom operates in the POST-trim space, before the final invariants.
+  const zoomPart = zoom ? `${buildZoomFilters({ zoom, fps, start }).join(",")},` : "";
+  const post = `${cropPart}${zoomPart}scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p`;
   return { pre, post };
 }
 
 export function buildFfmpegArgs({ framesDir, fps, out, start = 0, loop = "none",
                                   dropBlackBelow = null, crossfadeSec = 1.0, frameCount = null, crf = 20,
-                                  crop = null }) {
+                                  crop = null, zoom = null }) {
   assertCrop(crop);
+  assertZoom(zoom, { loop, dropBlackBelow, fps: Number(fps), start });
   const args = ["-y", "-framerate", String(fps)];
   if (start) args.push("-start_number", String(start));
   args.push("-i", join(framesDir, "frame_%05d.png"));
 
-  const { pre, post } = buildFilterParts({ fps, dropBlackBelow, crop });
+  const { pre, post } = buildFilterParts({ fps: Number(fps), dropBlackBelow, crop, zoom, start });
   const preChain = pre.length ? `${pre.join(",")},` : "";
 
   if (loop === "pingpong") {
@@ -194,7 +287,9 @@ if (process.argv[1] && process.argv[1].endsWith("encode.mjs")) {
   if (!a.frames || !a.fps || !a.out) {
     console.error("usage: node encode.mjs --frames <dir> --fps <n> --out <clip.mp4> [--poster <p.jpg>]\n" +
                   "  [--start <n>] [--loop pingpong|crossfade] [--crossfade <sec>]\n" +
-                  "  [--crf <n>] [--drop-black-below <luma>] [--poster-frame <n>] [--crop W:H:X:Y]");
+                  "  [--crf <n>] [--drop-black-below <luma>] [--poster-frame <n>] [--crop W:H:X:Y]\n" +
+                  "  [--zoom '<json>']  {w,h,segments:[{t0,t1,rect:[x,y,w,h],easeMs}]} — dynamic\n" +
+                  "                     zoom segments in post-trim px / source seconds (loop=none only)");
     process.exit(2);
   }
   if (!existsSync(a.frames)) {
@@ -203,6 +298,11 @@ if (process.argv[1] && process.argv[1].endsWith("encode.mjs")) {
   }
   const start = numOpt(a, "start", 0);
   const loop = a.loop || "none";
+  let zoom = null;
+  if (a.zoom != null) {
+    try { zoom = JSON.parse(a.zoom); }
+    catch { console.error(`--zoom must be valid JSON, got "${a.zoom}"`); process.exit(2); }
+  }
   run("ffmpeg", buildFfmpegArgs({
     framesDir: a.frames, fps: a.fps, out: a.out,
     start,
@@ -212,6 +312,7 @@ if (process.argv[1] && process.argv[1].endsWith("encode.mjs")) {
     frameCount: loop === "crossfade" ? countFrames(a.frames, start) : null,
     crf: numOpt(a, "crf", 20),
     crop: a.crop ?? null,
+    zoom,
   }));
   if (a.poster) {
     const posterFrame = numOpt(a, "poster-frame", start);

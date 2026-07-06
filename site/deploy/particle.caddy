@@ -1,0 +1,18 @@
+# particle.example.com — the Particle Editor demo site (static).
+#
+# This project OWNS this vhost. It is deployed to the shared Caddy on the VPS
+# as a drop-in fragment: /etc/caddy/conf.d/particle.caddy — NOT inside the
+# plex-stack-managed /etc/caddy/Caddyfile. The plex Caddyfile carries a single
+# `import /etc/caddy/conf.d/*.caddy` (DrKnickers/plex-stack#2) that pulls this
+# in, so a plex Caddyfile re-sync/restore can never wipe our routing again and
+# we never edit their file.
+#
+# Deploy: scp this file to particledeploy@<vps>:/etc/caddy/conf.d/particle.caddy
+# then reload Caddy. Site content lives at /var/www/particle-editor-demo
+# (root site + /guide + /media-local), owned by particledeploy.
+
+particle.example.com {
+	root * /var/www/particle-editor-demo
+	encode gzip
+	file_server
+}

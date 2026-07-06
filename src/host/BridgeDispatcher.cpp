@@ -23,6 +23,7 @@
 #include "../UndoStack.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -4656,8 +4657,22 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     {
         int id = params.value("id", -1);
         std::string trackName = params.value("track", std::string{});
-        float time  = params.value("time",  0.0f);
-        float value = params.value("value", 0.0f);
+        // `time`/`value` must be present + numeric — a missing field defaulting
+        // to 0.0f would silently insert a wrong key (e.g. a typo'd param name
+        // in a --record clip records as success, publishing a bad curve).
+        if (!params.contains("time") || !params["time"].is_number()
+            || !params.contains("value") || !params["value"].is_number())
+        {
+            sendErr("add-track-key requires numeric 'time' and 'value'");
+            return res;
+        }
+        float time  = params["time"].get<float>();
+        float value = params["value"].get<float>();
+        if (!std::isfinite(time) || !std::isfinite(value))
+        {
+            sendErr("add-track-key 'time'/'value' must be finite");
+            return res;
+        }
 
         ParticleSystem::Emitter* target = getEmitterById(id);
         if (target == nullptr)
@@ -4676,8 +4691,10 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
         ParticleSystem::Emitter::Track* track = target->tracks[trackIdx];
         if (track == nullptr)
         {
-            // No track slot bound — silent ok with the request shape.
-            sendOk(json{{"time", time}, {"value", value}});
+            // No track slot bound — fail loud (was a silent ok with the
+            // request shape, which let a record clip "succeed" while no key
+            // was ever inserted).
+            sendErr("no track slot bound for this channel");
             return res;
         }
 
@@ -5924,6 +5941,15 @@ void BridgeDispatcher::EmitManipulatorDrag(const json& payload)
 void BridgeDispatcher::EmitEmittersTreeChanged()
 {
     if (!m_emit) return;
+    // [#510] Record-only coalesce: skip building + pushing the tree if the last
+    // push was < kRecordEmitThrottleMs ago, so a record's rapid host-side edits
+    // don't flood the web with re-fetches. Leading-edge; continuous edits still
+    // deliver ~30 Hz.
+    if (m_recordEmitThrottle) {
+        const unsigned long long now = GetTickCount64();
+        if (now - m_lastTreeEmitTick < kRecordEmitThrottleMs) return;
+        m_lastTreeEmitTick = now;
+    }
     // Build the synthetic root + per-actual-root children, matching the
     // shape returned by `emitters/list`.
     json children = json::array();
@@ -6009,6 +6035,12 @@ void BridgeDispatcher::CaptureReferenceTransformUndoPoint()
 void BridgeDispatcher::EmitEngineStateChanged()
 {
     if (!m_emit || !m_engine) return;
+    // [#510] Record-only coalesce (see EmitEmittersTreeChanged).
+    if (m_recordEmitThrottle) {
+        const unsigned long long now = GetTickCount64();
+        if (now - m_lastStateEmitTick < kRecordEmitThrottleMs) return;
+        m_lastStateEmitTick = now;
+    }
     json spawnerJson = m_spawnerDriver
         ? SpawnerConfigToJson(m_spawnerDriver->GetConfig())
         : m_spawnerConfig;

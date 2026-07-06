@@ -300,8 +300,12 @@ tests/max_verts.txt
 # data is intentionally never tracked here.
 .serena/
 
-# --record clip outputs — NEVER tracked (host on a site-media release, embed by URL)
-out/wiki-media/
+# --record clip outputs — NEVER tracked (host on a site-media release, embed by URL).
+# The whole /out/ tree is scratch render output (wiki-media clips, ad-hoc
+# validation renders like out/stage3-validate/) — never just out/wiki-media/,
+# or a stray out/<anything-else>/ leaves the untracked top-level dir showing
+# in `git status` and inviting an accidental `git add -A`.
+/out/
 *.mp4
 frame_*.png
 /clips/
