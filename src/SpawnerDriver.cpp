@@ -84,7 +84,9 @@ SpawnerDriver::SpawnerDriver()
     : m_phase(Phase::Waiting),
       m_burstRemaining(0),
       m_timeUntilNextInstance(0.0f),
-      m_timeUntilNextBurst(0.0f)
+      m_timeUntilNextBurst(0.0f),
+      m_pendingBursts(0),
+      m_burstBegun(false)
 {
 }
 
@@ -116,6 +118,8 @@ void SpawnerDriver::SetConfig(const SpawnerConfig& cfg)
         m_burstRemaining        = 0;
         m_timeUntilNextInstance = 0.0f;
         m_timeUntilNextBurst    = m_cfg.intervalSec;   // wait one interval before first burst
+        m_pendingBursts         = 0;                   // queued manual triggers die with the mode
+        m_burstBegun            = false;
     }
     else if (enabledChanged && m_cfg.enabled && m_phase == Phase::Waiting)
     {
@@ -140,14 +144,38 @@ void SpawnerDriver::StartBurst()
     m_phase                 = Phase::BurstFiring;
     m_burstRemaining        = m_cfg.burstSize;
     m_timeUntilNextInstance = 0.0f;     // first instance fires this frame
+    m_burstBegun            = false;    // Tick hasn't processed this burst yet
 }
 
 void SpawnerDriver::Trigger(const ParticleSystem* sys, Engine* engine)
 {
     if (m_cfg.mode != SpawnerConfig::Mode::Manual) return;
-    if (m_phase == Phase::BurstFiring) return;     // ignore re-trigger mid-burst
     if (sys == NULL || engine == NULL) return;
+    if (m_phase == Phase::BurstFiring)
+    {
+        // An armed burst that Tick hasn't begun emitting yet is NOT
+        // "mid-burst": Trigger only arms, so two bridge triggers inside
+        // one frame window would otherwise coalesce (distinct commands
+        // silently dropped — the preview-overload spec flake). Queue it.
+        // Once the burst has begun, re-triggers stay debounced (button
+        // hammering mid-burst doesn't stack bursts).
+        if (!m_burstBegun && m_pendingBursts < MAX_PENDING_BURSTS)
+            ++m_pendingBursts;
+        return;
+    }
     StartBurst();
+}
+
+void SpawnerDriver::CancelPending()
+{
+    m_pendingBursts = 0;
+    if (m_phase == Phase::BurstFiring && !m_burstBegun)
+    {
+        // Armed but Tick never processed it: safe to disarm outright.
+        m_phase              = Phase::Waiting;
+        m_burstRemaining     = 0;
+        m_timeUntilNextBurst = m_cfg.intervalSec;
+    }
 }
 
 void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* engine)
@@ -172,6 +200,7 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
     // or we hit a per-frame / live-instance cap.
     if (m_phase == Phase::BurstFiring)
     {
+        m_burstBegun = true;   // re-triggers from here on are mid-burst (debounced)
         m_timeUntilNextInstance -= dtSeconds;
 
         int spawnsThisFrame = 0;
@@ -218,6 +247,7 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
                 m_cfg.enabled    = false;
                 m_burstRemaining = 0;
                 m_phase          = Phase::Waiting;
+                m_pendingBursts  = 0;   // queued bursts would refuse-and-clear again
                 break;
             }
 
@@ -230,6 +260,14 @@ void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* eng
         {
             m_phase = Phase::Waiting;
             m_timeUntilNextBurst = m_cfg.intervalSec;
+            // A manual trigger queued while this burst was armed-but-unbegun
+            // fires next: re-arm now, emit on the next Tick. (Zero after a
+            // gate refusal — the branch above cleared the queue.)
+            if (m_pendingBursts > 0)
+            {
+                --m_pendingBursts;
+                StartBurst();
+            }
         }
     }
 }

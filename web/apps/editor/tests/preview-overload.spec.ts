@@ -76,11 +76,16 @@ async function cleanupStep(label: string, fn: () => Promise<unknown>): Promise<v
 // The listener is registered synchronously by this page.evaluate, which CDP
 // dispatches BEFORE the caller's subsequent trigger runs in-page — so there is
 // no arm-vs-fire race; the subscription is always live before the event fires.
-// Positive waiters (expecting a refusal) therefore pass a GENEROUS timeout
-// (30s, well under the 120s test budget): a smaller window only risks flaking
-// when the native host's event round-trip is slow under load — the observed
-// intermittent failure. Negative waiters (asserting NO refusal) keep a short
-// window on purpose, since a long one just slows the suite to prove absence.
+// Positive waiters (expecting a refusal) pass a GENEROUS timeout (30s, well
+// under the 120s test budget) as headroom for the host's 4 Hz poll-forward
+// under load. Negative waiters (asserting NO refusal) keep a short window on
+// purpose, since a long one just slows the suite to prove absence.
+//
+// (The 2026-07-06 intermittent timeout here was NOT event delivery: Trigger()
+// only ARMS a burst — placement happens on the next render-loop Tick — and the
+// old mid-burst debounce silently dropped a second trigger landing in the same
+// frame window, so the over-cap placement never happened and no refusal was
+// ever recorded. Fixed in SpawnerDriver: pre-begun triggers now queue.)
 type Refusal = { estimated: number; cap: number; attemptedCount: number };
 async function waitForRefusal(timeoutMs: number): Promise<Refusal | null> {
   return page.evaluate(
@@ -196,6 +201,10 @@ test("cumulative spawn gate refuses the over-cap placement and clears the previe
   await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 1_000 });
   // estimate 400: 1×400=400 ok, 2×400=800 ok, 3×400=1200 > 1000 → refuse.
   await bridgeRequest("engine/set/estimated-load", { perInstance: 400 });
+  // Known-zero baseline: a live instance leaked by an earlier spec file would
+  // shift the refusal to an earlier trigger — before the waiter is armed.
+  await bridgeRequest("engine/action/clear", {});
+  expect(await readInstanceCount(5_000), "expected a clean 0-instance baseline").toBe(0);
 
   const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
   const origSpawner = snapshot.spawner;
@@ -243,6 +252,10 @@ test("edit-time estimate push over the cap clears the already-placed preview", a
   await bridgeRequest("engine/set/paused", { paused: false });
   await bridgeRequest("engine/set/overload-guard", { enabled: true, maxParticles: 1_000 });
   await bridgeRequest("engine/set/estimated-load", { perInstance: 400 });
+  // Known-zero baseline (see the cumulative spec above): leftover instances
+  // would change which trigger crosses the cap.
+  await bridgeRequest("engine/action/clear", {});
+  expect(await readInstanceCount(5_000), "expected a clean 0-instance baseline").toBe(0);
 
   const snapshot = await bridgeRequest<{ spawner: unknown }>("engine/state/snapshot", {});
   const origSpawner = snapshot.spawner;

@@ -68,6 +68,11 @@ public:
     static const int   MAX_ACTIVE_INSTANCES   = 50;
     static const int   MAX_SPAWNS_PER_FRAME   = 5;
     static const int   MAX_BURST_SIZE         = 10;
+    // Cap on queued pre-begun manual triggers. Only bridge automation can
+    // queue more than 1 (all queuing happens inside a single frame window);
+    // 16 bursts already exceed MAX_ACTIVE_INSTANCES at any burstSize, so
+    // nothing legitimate needs more — this just bounds hostile spam.
+    static const int   MAX_PENDING_BURSTS     = 16;
     static constexpr float MAX_SPACING_SEC    = 10.0f;
     static constexpr float MAX_INTERVAL_SEC   = 60.0f;
     static constexpr float MAX_LIFETIME_SEC   = 600.0f;
@@ -86,9 +91,21 @@ public:
     // before engine->Update().
     void Tick(float dtSeconds, const ParticleSystem* sys, Engine* engine);
 
-    // Manual fire. In Manual mode: kicks off one burst.
-    // In Auto mode (or when a burst is already in flight): no-op.
+    // Manual fire. In Manual mode: kicks off one burst. If a burst is
+    // armed but Tick hasn't begun emitting it yet, the trigger is QUEUED
+    // (fires after the current burst) — never silently dropped. Once a
+    // burst has begun emitting, re-triggers are debounced. In Auto mode:
+    // no-op.
     void Trigger(const ParticleSystem* sys, Engine* engine);
+
+    // Abort not-yet-begun manual work: clears the queued-trigger backlog
+    // and, if the armed burst hasn't begun emitting, disarms it. A burst
+    // that has already begun keeps firing (stop's long-standing in-flight
+    // semantics). Called from the spawner/stop bridge handler and from
+    // the host's refusal mirror in EmitStatsTick — the latter covers
+    // engine-recorded refusals that happen OUTSIDE Tick (the edit-time
+    // SetEstimatedLoad clear), which the Tick refusal branch can't see.
+    void CancelPending();
 
     // Static variant for callers that have a config but no driver
     // instance (e.g. dialog code mid-edit). Same math as the instance
@@ -108,6 +125,20 @@ private:
     int           m_burstRemaining;       // instances left in current burst
     float         m_timeUntilNextInstance;
     float         m_timeUntilNextBurst;   // Auto: countdown to next burst start
+
+    // Manual triggers that arrived while a burst was armed but had not yet
+    // BEGUN emitting (no Tick ran since StartBurst). Trigger() only arms;
+    // emission happens on the next render-loop Tick — so back-to-back
+    // bridge `spawner/trigger` requests can land inside one frame window,
+    // and dropping them there silently coalesces distinct commands (the
+    // preview-overload spec flake). Queued bursts fire one per Tick after
+    // the current burst completes. Genuine mid-burst re-triggers (burst
+    // has begun) are still debounced. A gate refusal clears the queue
+    // (its bursts would refuse-and-clear again — banner churn). Bounded
+    // in practice by triggers-per-frame; only bridge automation can
+    // exceed 1, and the estimate gate/instance cap bound the effect.
+    int           m_pendingBursts;
+    bool          m_burstBegun;           // current burst has entered Tick emission
 
     void StartBurst();
 };

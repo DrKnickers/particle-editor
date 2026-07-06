@@ -3308,9 +3308,14 @@ json BridgeDispatcher::DispatchInternal(const nlohmann::json& parsed)
     if (kind == "spawner/stop")
     {
         // flip enabled=false on the live driver. Auto-mode
-        // bursts stop scheduling; manual triggers still work.
+        // bursts stop scheduling; manual triggers still work — but any
+        // armed-yet-unbegun burst and queued triggers are cancelled
+        // (SetConfig can't do it: in Manual mode enabled is already
+        // false, so there's no transition for it to see). A burst that
+        // has begun emitting finishes, as it always has.
         if (m_spawnerDriver)
         {
+            m_spawnerDriver->CancelPending();
             SpawnerConfig cfg = m_spawnerDriver->GetConfig();
             cfg.enabled = false;
             m_spawnerDriver->SetConfig(cfg);
@@ -6317,9 +6322,17 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
             // panel toggle don't know. Mirror spawner/stop: update the
             // live driver first (EmitEngineStateChanged reads it), then
             // sync the JSON cache, then broadcast so the panel toggle
-            // reflects the disabled state.
+            // reflects the disabled state. CancelPending also covers
+            // refusals recorded OUTSIDE SpawnerDriver::Tick (the
+            // edit-time SetEstimatedLoad clear), whose armed/queued
+            // manual bursts the Tick refusal branch never sees. Residual
+            // window: a Tick can fire a queued burst before this ≤250 ms
+            // poll runs — safe, since the spawn-time gate re-checks the
+            // cap; worst case is a duplicate banner, never an over-cap
+            // placement.
             if (m_spawnerDriver)
             {
+                m_spawnerDriver->CancelPending();
                 SpawnerConfig cfg = m_spawnerDriver->GetConfig();
                 cfg.enabled = false;
                 m_spawnerDriver->SetConfig(cfg);

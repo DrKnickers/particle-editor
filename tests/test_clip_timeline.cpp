@@ -174,21 +174,23 @@ int main()
         CursorKey a; a.t = 0; a.vis = true; a.press = false;
         a.target.kind = CursorTarget::Kind::Element; a.target.ref = "curve-key:red:25";
         keys.push_back(a);
-        CursorKey b; b.t = 250; b.vis = true; b.press = true;
+        CursorKey b; b.t = 250; b.vis = true; b.press = true; b.activate = true;
         b.target.kind = CursorTarget::Kind::Point; b.target.x = 10.5; b.target.y = 20.25;
         keys.push_back(b);
         const auto msg = BuildCursorTrackJson(keys);
         CHECK(msg["type"] == "ui/cursor-track");
         CHECK(msg["keys"].is_array() && msg["keys"].size() == 2);
-        CHECK(msg["keys"][0].size() == 4);
+        CHECK(msg["keys"][0].size() == 5);   // t, vis, press, activate, target
         CHECK(Near(msg["keys"][0]["t"].get<double>(), 0.0));
         CHECK(msg["keys"][0]["vis"] == true && msg["keys"][0]["press"] == false);
+        CHECK(msg["keys"][0]["activate"] == false);   // default: pointer-events-only press
         CHECK(msg["keys"][0]["target"].size() == 2);
         CHECK(msg["keys"][0]["target"]["kind"] == "element");
         CHECK(msg["keys"][0]["target"]["ref"] == "curve-key:red:25");
-        CHECK(msg["keys"][1].size() == 4);
+        CHECK(msg["keys"][1].size() == 5);
         CHECK(Near(msg["keys"][1]["t"].get<double>(), 250.0));
         CHECK(msg["keys"][1]["vis"] == true && msg["keys"][1]["press"] == true);
+        CHECK(msg["keys"][1]["activate"] == true);
         CHECK(msg["keys"][1]["target"].size() == 3);
         CHECK(msg["keys"][1]["target"]["kind"] == "point");
         CHECK(Near(msg["keys"][1]["target"]["x"].get<double>(), 10.5));

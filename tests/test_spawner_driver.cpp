@@ -332,6 +332,94 @@ int main()
         CHECK(varied, "jittered axis actually varies across spawns");
     }
 
+    // ---- L: manual triggers arriving before the armed burst begins are
+    // QUEUED, never dropped (SpawnerDriver.cpp Trigger/Tick pending-burst
+    // path). Regression for the preview-overload spec flake: two
+    // back-to-back bridge spawner/trigger requests can land inside one
+    // render-frame window; the old mid-burst debounce swallowed the second
+    // (it couldn't tell "armed, Tick hasn't run yet" from "mid-burst"), so
+    // the third trigger placed instance #2 instead of refusing at #3 and
+    // engine/overload/refused never fired. Genuine mid-burst re-triggers
+    // (burst has begun emitting) stay debounced — not coverable here: the
+    // NULL-spawn stub refuses the first instance, so a burst can never be
+    // begun-and-still-firing (see "NOT covered" in the header).
+    {
+        // L1: the pre-begun queue survives a cap-dropped burst. At the
+        // instance cap the first burst is dropped WITHOUT disarming; the
+        // queued second burst must still fire once the cap clears. On the
+        // pre-fix code the second Trigger was silently dropped and this
+        // second Tick spawned nothing.
+        g_activeCount = SpawnerDriver::MAX_ACTIVE_INSTANCES;
+        SpawnerDriver d;
+        SpawnerConfig c;
+        c.mode = SpawnerConfig::Mode::Manual;
+        d.SetConfig(c);
+        int before = g_spawnCalls;
+        d.Trigger(FakeSystem(), FakeEngine());   // arms burst 1
+        d.Trigger(FakeSystem(), FakeEngine());   // pre-Tick: queues burst 2
+        d.Tick(0.016f, FakeSystem(), FakeEngine());   // burst 1 cap-dropped
+        CHECK(g_spawnCalls == before, "at the cap: no spawn call for the dropped burst");
+        g_activeCount = 0;
+        d.Tick(0.016f, FakeSystem(), FakeEngine());   // queued burst 2 fires
+        CHECK(g_spawnCalls == before + 1,
+              "a trigger queued before the burst began survives a cap-dropped burst");
+    }
+    {
+        // L2: a gate refusal (NULL spawn) drops the queue along with the
+        // disarm — queued bursts would refuse-and-clear again next Tick
+        // (banner churn), mirroring the auto-mode churn stop.
+        g_activeCount = 0;
+        SpawnerDriver d;
+        SpawnerConfig c;
+        c.mode = SpawnerConfig::Mode::Manual;
+        d.SetConfig(c);
+        int before = g_spawnCalls;
+        d.Trigger(FakeSystem(), FakeEngine());   // arms burst 1
+        d.Trigger(FakeSystem(), FakeEngine());   // queues burst 2
+        d.Tick(0.016f, FakeSystem(), FakeEngine());   // burst 1: refused -> disarm
+        CHECK(g_spawnCalls == before + 1, "refused burst made exactly one spawn attempt");
+        d.Tick(0.016f, FakeSystem(), FakeEngine());
+        d.Tick(0.016f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before + 1, "gate refusal drops the queued burst too");
+    }
+    {
+        // L3: NULL-guarded triggers never queue (mirrors test D for the
+        // queue path — a rejected trigger must not leave a pending burst).
+        g_activeCount = SpawnerDriver::MAX_ACTIVE_INSTANCES;
+        SpawnerDriver d;
+        SpawnerConfig c;
+        c.mode = SpawnerConfig::Mode::Manual;
+        d.SetConfig(c);
+        int before = g_spawnCalls;
+        d.Trigger(FakeSystem(), FakeEngine());   // arms burst 1
+        d.Trigger(NULL, FakeEngine());           // rejected: must not queue
+        d.Trigger(FakeSystem(), NULL);           // rejected: must not queue
+        d.Tick(0.016f, FakeSystem(), FakeEngine());   // burst 1 cap-dropped
+        g_activeCount = 0;
+        d.Tick(0.016f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before, "NULL-guarded triggers left nothing queued");
+    }
+    {
+        // L4: CancelPending (spawner/stop + the host's refusal mirror)
+        // drops BOTH the armed-but-unbegun burst and the queue; a fresh
+        // Trigger afterwards still works (no lock-out).
+        g_activeCount = 0;
+        SpawnerDriver d;
+        SpawnerConfig c;
+        c.mode = SpawnerConfig::Mode::Manual;
+        d.SetConfig(c);
+        int before = g_spawnCalls;
+        d.Trigger(FakeSystem(), FakeEngine());   // arms burst 1
+        d.Trigger(FakeSystem(), FakeEngine());   // queues burst 2
+        d.CancelPending();
+        d.Tick(0.016f, FakeSystem(), FakeEngine());
+        d.Tick(0.016f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before, "CancelPending disarms the unbegun burst and the queue");
+        d.Trigger(FakeSystem(), FakeEngine());
+        d.Tick(0.016f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before + 1, "a fresh Trigger after CancelPending spawns again");
+    }
+
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");
     return g_failed ? 1 : 0;
