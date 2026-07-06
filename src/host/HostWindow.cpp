@@ -820,6 +820,12 @@ struct HostWindowImpl
         double curCapture = 0, curComposite = 0;
         double setupMs = 0.0;        // record-branch start -> first Tick
         bool   sawFirstTick = false;
+        // [R1] adaptive-barrier accounting: total DwmFlush presents across
+        // the run (avg = total/frames in the summary) and whether the
+        // composition-timing probe ever failed (permanent fixed-3 fallback
+        // must be VISIBLE, not silent).
+        unsigned barrierFlushTotal   = 0;
+        bool     barrierProbeFailed  = false;
     };
     RecordTiming m_recordTiming;
     // --record-timing-verbose: per-frame [record-timing] lines (default off —
@@ -859,6 +865,10 @@ struct HostWindowImpl
     // Defined in-class: the enclosing region around the file's later helpers
     // is an anonymous namespace, where a host::HostWindowImpl member can't be
     // defined (C2888). (std::min) parenthesized against windows.h's min macro.
+    // [R3] Snapshot of the encoder's back-pressure stats, taken just before
+    // the summary is logged (the encoder object lives in Run()'s locals).
+    host::AsyncFrameEncoder::QueueStats m_recordEncoderStats = {};
+
     void LogRecordTimingSummary(double wallMs)
     {
         auto total = [](const std::vector<double>& v) {
@@ -896,6 +906,23 @@ struct HostWindowImpl
             line("composite", rt.composite);  // engine readback + composite
         }
         line("frame",    rt.frame);
+        // [R1] Adaptive-barrier proof line: avg flushes/frame (fixed-3 was
+        // the old behavior; ~2.0 = adaptive working) + loud fallback flag.
+        if (!rt.barrier.empty() || rt.barrierFlushTotal > 0)
+            Log("[record-timing] barrier-adaptive avg=%.2f flushes/frame%s\n",
+                rt.frame.empty() ? 0.0
+                    : static_cast<double>(rt.barrierFlushTotal)
+                      / static_cast<double>(rt.frame.size()),
+                rt.barrierProbeFailed ? "  (PROBE FAILED — fixed-3 fallback)" : "");
+        // [R3] Encoder back-pressure: time the grab thread spent BLOCKED on
+        // the 128 MB queue cap (silently folded into png/capture before) +
+        // queue high-water marks — the second-worker/faster-encoder
+        // decision datum.
+        if (m_recordEncoderStats.waitCount > 0 || m_recordEncoderStats.depthHighWater > 0)
+            Log("[record-timing] queue    blocked=%8.0fms x%u  hw=%zuMB depth=%zu\n",
+                m_recordEncoderStats.waitMsTotal, m_recordEncoderStats.waitCount,
+                m_recordEncoderStats.bytesHighWater / (1024 * 1024),
+                m_recordEncoderStats.depthHighWater);
     }
 
     // Headless UI-layer grab: CapturePreview the WebView to a PNG mem-stream
@@ -5839,7 +5866,14 @@ int HostWindowImpl::Run(int nCmdShow)
                                 if (m_lastAckedFrame >= frameId) { acked = true; break; }
                                 if (rf > 0 && QpcMs(PerfQpcNow() - s, rf) >= dl) break;
                                 if (!m_recordHeadless) RenderD3D9();
-                                Sleep(m_recordHeadless ? 1 : 4);
+                                // [R4] Message-aware wait: the ack ARRIVES as a
+                                // window message, so wake the instant it posts
+                                // instead of sleeping a fixed 1/4 ms past it.
+                                // Cap keeps the foreground path's render cadence
+                                // (~4 ms) and the old worst-case wait unchanged.
+                                MsgWaitForMultipleObjectsEx(
+                                    0, nullptr, m_recordHeadless ? 1 : 4,
+                                    QS_ALLINPUT, MWMO_INPUTAVAILABLE);
                             }
                             m_recordTiming.curAck += QpcMs(PerfQpcNow() - s, rf);
                             if (m_recordHeadless) m_headlessAckOk = acked;
@@ -5904,8 +5938,41 @@ int HostWindowImpl::Run(int nCmdShow)
                             // GRAB + ENQUEUE only — the compress+write runs on
                             // the encoder worker (AsyncFrameEncoder.h), so the
                             // png segment no longer contains the zlib cost.
+                            //
+                            // [R1] Adaptive barrier: the fixed 3x flush existed
+                            // because Present1'd engine frames land on DComp's
+                            // NEXT composition pass — 3 was a safe worst case.
+                            // Probe the global compositor frame counter
+                            // (DwmGetCompositionTimingInfo requires a NULL hwnd
+                            // on Win8.1+): once composition has advanced ≥2
+                            // passes past the pre-present sample (one that may
+                            // have missed our present + one that must include
+                            // it), the frame is on the window — stop early.
+                            // Cap stays bp (= the old fixed count); any probe
+                            // failure falls back to fixed-bp and is surfaced
+                            // in the summary, never silent.
                             const LONGLONG b0 = PerfQpcNow();
-                            for (int i = 0; i < bp; ++i) { RenderD3D9(); DwmFlush(); }
+                            DWM_TIMING_INFO ti0 = {};
+                            ti0.cbSize = sizeof(ti0);
+                            const bool probe0 =
+                                SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &ti0));
+                            if (!probe0) m_recordTiming.barrierProbeFailed = true;
+                            for (int i = 0; i < bp; ++i)
+                            {
+                                RenderD3D9(); DwmFlush();
+                                ++m_recordTiming.barrierFlushTotal;
+                                if (!probe0) continue;   // fixed-bp fallback
+                                DWM_TIMING_INFO ti = {};
+                                ti.cbSize = sizeof(ti);
+                                if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &ti)))
+                                {
+                                    if (ti.cFrame >= ti0.cFrame + 2) break;
+                                }
+                                else
+                                {
+                                    m_recordTiming.barrierProbeFailed = true;
+                                }
+                            }
                             const LONGLONG b1 = PerfQpcNow();
                             const bool ok = host::GrabWindowPixels(hMain, f.bgra, f.w, f.h)
                                             && enc->Enqueue(std::move(f));
@@ -6023,6 +6090,8 @@ int HostWindowImpl::Run(int nCmdShow)
                             }
                         }
                     }
+                    // [R3] Snapshot queue stats before the summary reads them.
+                    if (recordEncoder) m_recordEncoderStats = recordEncoder->GetQueueStats();
                     LogRecordTimingSummary(recordFreq > 0
                         ? QpcMs(PerfQpcNow() - recordStart, recordFreq) : 0.0);
                     Log("[record] done: %d frames, exit %d\n",
@@ -6033,6 +6102,7 @@ int HostWindowImpl::Run(int nCmdShow)
                 {
                     Log("[record] watchdog: exceeded %.0f ms budget\n", recordBudgetMs);
                     // [record-timing] a timed-out run still yields its numbers.
+                    if (recordEncoder) m_recordEncoderStats = recordEncoder->GetQueueStats();
                     LogRecordTimingSummary(elapsedMs);
                     // Branch B: join the encoder before quitting (exit 5 stands
                     // regardless of the drain result).

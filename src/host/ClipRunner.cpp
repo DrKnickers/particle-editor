@@ -154,7 +154,11 @@ ClipRunner::Status ClipRunner::Tick() {
             {"target",   {cv.target.x,   cv.target.y,   cv.target.z}},
             {"up",       {cv.up.x,       cv.up.y,       cv.up.z}},
         };
+        // [R5] Post-t1 the orbit holds a constant pose — skip the re-send.
+        // Cache cleared by any at-event (see step 3).
+        if (p == m_lastCamSent) continue;
         if (!DispatchKind("engine/set/camera", p)) { m_done = true; return Status::Done; }
+        m_lastCamSent = std::move(p);
     }
     // track-key tweens: scrub one keyframe's value, pinned in time (oldTime==newTime).
     // A tween is INACTIVE before its t0: skip the dispatch so the key keeps its
@@ -164,14 +168,39 @@ ClipRunner::Status ClipRunner::Tick() {
     // fight — the restore's held `from` would clobber the resting value during the
     // lead-in. After t1 the tween still dispatches (holds `to`), so later tweens in
     // the list win the overlap; that's how a high→low→high arc is expressed.
-    for (const auto& tk : m_tl.trackKeys) {
-        if (t < tk.t0) continue;
-        const double v = clip::EvalTrackKeyValue(tk, t);
-        nlohmann::json p = {
-            {"id", tk.id}, {"track", tk.track},
-            {"oldTime", tk.keyTime}, {"newTime", tk.keyTime}, {"newValue", v},
-        };
-        if (!DispatchKind("emitters/set-track-key", p)) { m_done = true; return Status::Done; }
+    // [R5] Per-TARGET winner dedupe: evaluate every active tween in list
+    // order first (later-in-list wins — the documented overlap semantics:
+    // the engine only ever saw the LAST write per frame anyway), then
+    // dispatch one winner per (id, track, keyTime) target, and only when
+    // it differs from the last value actually sent. First-appearance
+    // dispatch order preserved.
+    {
+        std::vector<std::pair<std::string, nlohmann::json>> winners;   // ordered
+        std::map<std::string, size_t> winnerIdx;
+        for (const auto& tk : m_tl.trackKeys) {
+            if (t < tk.t0) continue;
+            const double v = clip::EvalTrackKeyValue(tk, t);
+            nlohmann::json p = {
+                {"id", tk.id}, {"track", tk.track},
+                {"oldTime", tk.keyTime}, {"newTime", tk.keyTime}, {"newValue", v},
+            };
+            const std::string key = std::to_string(tk.id) + ":" + tk.track
+                                  + ":" + std::to_string(tk.keyTime);
+            auto it = winnerIdx.find(key);
+            if (it == winnerIdx.end()) {
+                winnerIdx.emplace(key, winners.size());
+                winners.emplace_back(key, std::move(p));
+            } else {
+                winners[it->second].second = std::move(p);   // later tween wins
+            }
+        }
+        for (auto& [key, p] : winners) {
+            const double v = p["newValue"].get<double>();
+            auto last = m_lastTrackKeySent.find(key);
+            if (last != m_lastTrackKeySent.end() && last->second == v) continue;
+            if (!DispatchKind("emitters/set-track-key", p)) { m_done = true; return Status::Done; }
+            m_lastTrackKeySent[key] = v;
+        }
     }
     // Cursor: two paths. LITERAL tracks keep posting the resolved (x,y) per frame
     // via the cursor lambda (host owns the device-px geometry). TARGET-BEARING
@@ -200,6 +229,13 @@ ClipRunner::Status ClipRunner::Tick() {
             if (m_uiPush) m_uiPush(ev.kind, ev.params);
         } else if (!DispatchKind(ev.kind, ev.params)) {
             m_done = true; return Status::Done;
+        } else {
+            // [R5] A bridge at-event may have changed the same state a tween
+            // hold covers (camera pose, a key's value) — drop BOTH dedupe
+            // caches so the holds re-assert on the next frame. Conservative
+            // (any bridge at-event clears everything); at-events are sparse.
+            m_lastCamSent = nlohmann::json();
+            m_lastTrackKeySent.clear();
         }
         ++m_nextAt;
     }

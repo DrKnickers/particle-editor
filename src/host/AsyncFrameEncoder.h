@@ -25,6 +25,7 @@
 
 #include <windows.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <functional>
@@ -80,16 +81,40 @@ public:
         std::unique_lock<std::mutex> lk(m_mu);
         if (m_failed) return false;
         const size_t bytes = f.bgra.size();
-        m_space.wait(lk, [&] {
-            return m_failed || m_stopping || m_bytes + bytes <= m_maxBytes || m_queue.empty();
-        });
+        // [R3] Time the cap-block: when the queue is full this wait inherits
+        // the worker's PNG-encode variance INTO frame time, invisibly — the
+        // record-timing summary reads these so back-pressure is a first-class
+        // number, not a mystery bump in the png/capture buckets.
+        if (m_bytes + bytes > m_maxBytes && !m_queue.empty())
+        {
+            const auto w0 = std::chrono::steady_clock::now();
+            m_space.wait(lk, [&] {
+                return m_failed || m_stopping || m_bytes + bytes <= m_maxBytes || m_queue.empty();
+            });
+            m_queueWaitMsTotal += std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - w0).count();
+            ++m_queueWaitCount;
+        }
         // Enqueue after Finish() began would silently drop the frame — report
         // it as a failure rather than lie about having accepted it.
         if (m_failed || m_stopping) return false;
         m_bytes += bytes;
         m_queue.push_back(std::move(f));
+        if (m_bytes > m_bytesHighWater) m_bytesHighWater = m_bytes;
+        if (m_queue.size() > m_depthHighWater) m_depthHighWater = m_queue.size();
         m_work.notify_one();
         return true;
+    }
+
+    // [R3] Back-pressure telemetry for the record-timing summary: total ms
+    // spent blocked on the queue cap + how often, and queue high-water marks.
+    struct QueueStats { double waitMsTotal; unsigned waitCount;
+                        size_t bytesHighWater; size_t depthHighWater; };
+    QueueStats GetQueueStats() const
+    {
+        std::lock_guard<std::mutex> lk(m_mu);
+        return { m_queueWaitMsTotal, m_queueWaitCount,
+                 m_bytesHighWater, m_depthHighWater };
     }
 
     // Drain the queue, stop and join the worker. Idempotent. Returns true if
@@ -159,6 +184,11 @@ private:
     bool                    m_finished = false;
     std::wstring            m_failedPath;
     LogFn                   m_log;
+    // [R3] back-pressure telemetry (guarded by m_mu; see GetQueueStats).
+    double                  m_queueWaitMsTotal = 0.0;
+    unsigned                m_queueWaitCount   = 0;
+    size_t                  m_bytesHighWater   = 0;
+    size_t                  m_depthHighWater   = 0;
     std::thread             m_worker;
 };
 

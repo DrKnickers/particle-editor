@@ -77,15 +77,31 @@ bool GrabWindowPixels(HWND hwnd, std::vector<unsigned char>& bgra, int& w, int& 
     h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0) return false;
 
-    HDC     screen = GetDC(nullptr);
-    HDC     mem    = screen ? CreateCompatibleDC(screen) : nullptr;
-    HBITMAP bmp    = (screen && mem) ? CreateCompatibleBitmap(screen, w, h) : nullptr;
-    bool ok = false;
-    if (screen && mem && bmp)
+    // [R2] Persistent capture context: a --record run grabs the SAME-sized
+    // window 30-60x/s; per-frame CreateCompatibleDC/CreateCompatibleBitmap +
+    // Delete churned GDI handles and added frame jitter. Cache the DC/bitmap
+    // keyed by (w,h); recreate only on size change. Single UI thread; GDI
+    // reclaims the pair at process exit (a --record process is ephemeral).
+    static HDC     s_mem = nullptr;
+    static HBITMAP s_bmp = nullptr;
+    static int     s_w = 0, s_h = 0;
+
+    HDC screen = GetDC(nullptr);
+    if (!screen) return false;
+    if (!s_mem) s_mem = CreateCompatibleDC(screen);
+    if (s_mem && (!s_bmp || s_w != w || s_h != h))
     {
-        HGDIOBJ oldb  = SelectObject(mem, bmp);
-        const BOOL pw = PrintWindow(hwnd, mem, PW_RENDERFULLCONTENT);
-        SelectObject(mem, oldb);
+        if (s_bmp) { DeleteObject(s_bmp); s_bmp = nullptr; }
+        s_bmp = CreateCompatibleBitmap(screen, w, h);
+        s_w = w; s_h = h;
+    }
+
+    bool ok = false;
+    if (s_mem && s_bmp)
+    {
+        HGDIOBJ oldb  = SelectObject(s_mem, s_bmp);
+        const BOOL pw = PrintWindow(hwnd, s_mem, PW_RENDERFULLCONTENT);
+        SelectObject(s_mem, oldb);
         if (pw)
         {
             BITMAPINFO bi = {};
@@ -96,12 +112,10 @@ bool GrabWindowPixels(HWND hwnd, std::vector<unsigned char>& bgra, int& w, int& 
             bi.bmiHeader.biBitCount    = 32;  // BGRA
             bi.bmiHeader.biCompression = BI_RGB;
             bgra.resize(static_cast<size_t>(w) * h * 4);
-            ok = (GetDIBits(mem, bmp, 0, h, bgra.data(), &bi, DIB_RGB_COLORS) == h);
+            ok = (GetDIBits(s_mem, s_bmp, 0, h, bgra.data(), &bi, DIB_RGB_COLORS) == h);
         }
     }
-    if (bmp) DeleteObject(bmp);
-    if (mem) DeleteDC(mem);
-    if (screen) ReleaseDC(nullptr, screen);
+    ReleaseDC(nullptr, screen);
     return ok;
 }
 

@@ -64,6 +64,17 @@ private:
     size_t m_nextAt = 0;         // index of the next un-fired at-event (ats are sorted)
     bool   m_done = false;
     std::map<std::string, std::string> m_pathTokens;   // ${TOKEN} table (host-supplied, pre-Init)
+    // [R5] Tween dispatch dedupe — the last VALUE sent per continuous track.
+    // Post-t1 holds re-evaluate to the same number every frame; re-dispatching
+    // burns a bridge round-trip + a web re-render per frame for no state
+    // change. Deduped at the TARGET level: all tweens on a target evaluate in
+    // list order first (later-in-list wins, the documented overlap semantics),
+    // then the single WINNER is compared to the last-sent value. Both caches
+    // are cleared whenever any discrete at-event fires (an at-event can
+    // change the same state, after which a hold must re-assert); the at-event
+    // loop itself is never deduped (one-shot semantics).
+    nlohmann::json m_lastCamSent;                       // last engine/set/camera params
+    std::map<std::string, double> m_lastTrackKeySent;   // "id:track:keyTime" -> value
 
     DispatchFn m_dispatch; StepFn m_step; CursorFn m_cursor;
     AckFn m_ack; CaptureFn m_capture; LogFn m_log; UiPushFn m_uiPush;
