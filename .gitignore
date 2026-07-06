@@ -309,6 +309,8 @@ tests/max_verts.txt
 *.mp4
 frame_*.png
 /clips/
+# video-bug-repro skill scratch (change frames, contact sheets, drill dumps)
+/vid-repro/
 
 # Icon generator byproducts: build.py writes its canonical outputs into the
 # repo (src/Resources/logo.ico, site/favicon.*, icon-src/*.svg/png) and
