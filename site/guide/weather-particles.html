@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Particle Authoring Primer — Particle Editor guide</title>
+  <title>Weather Particles — Particle Editor guide</title>
   <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
        inline rules cover the frames before styles.css arrives — kills the white flash on
        navigation / view transitions. The @view-transition opt-in and the dark backstop across
@@ -64,7 +64,7 @@
       <ul>
       <li><a href="./home.html">Guide Home</a></li>
       <li><a href="./setup.html">Setup</a></li>
-      <li><a href="./particle-authoring-primer.html" class="active" aria-current="page">Particle Authoring Primer</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -91,56 +91,28 @@
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
-      <li><a href="./weather-particles.html">Weather Particles</a></li>
+      <li><a href="./weather-particles.html" class="active" aria-current="page">Weather Particles</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Start Here <span class="kicker-count">· 3 of 3</span></p>
-<h1 id="particle-authoring-primer">Particle Authoring Primer</h1>
-<p>Particle <code>.alo</code> files are particle systems, not mesh/model files. A particle system contains emitters, and emitters produce particles over time.</p>
-<p>Most effects come from a small set of first principles: lifetime, emission rate or bursts, color, alpha, scale, texture or atlas frame, blend mode, and motion. Tracks change those values over each particle's lifetime.</p>
-<p>Use additive blending for glows and energy effects. Use transparent blending for smoke, dust, and debris-like effects.</p>
-<h2 id="emitters">Emitters</h2>
-<p>A finished effect is usually several simple emitters working together. One emitter might make the main smoke shape, another might add a hot glow, and a third might add sparks. When editing an existing particle, select one emitter at a time and watch the Preview Viewport until you know what that emitter contributes.</p>
-<h2 id="lifetimes">Lifetimes</h2>
-<p>Most particle values change from birth to death. A smoke particle might start small and opaque, grow larger, drift away, and fade out. A flash might start bright and vanish almost immediately. The Curve Editor is where those lifetime changes become visible.</p>
-<p>Useful starting questions:</p>
+<p class="guide-kicker">Coming Soon <span class="kicker-count">· 4 of 5</span></p>
+<h1 id="weather-particles">Weather Particles</h1>
+<p><strong>Status:</strong> Planned — not yet written.</p>
+<p>This page will cover what the Weather particle setting actually is and where it's used.</p>
+<p>Notes to fold in, from a Discord conversation with <strong>IRampagingRhin0</strong>:</p>
 <ul>
-<li>What should the particle look like at birth?</li>
-<li>What should it look like halfway through its life?</li>
-<li>How should it disappear?</li>
+<li>Explain what a weather particle is — the poster said they'd never used one and hadn't seen any stock particle have it selected, so this needs a clear example, not just a definition.</li>
 </ul>
-<h2 id="game-context">Game Context</h2>
-<p>Particles are not just abstract visuals. A good effect helps the player read what is happening in the game. A hardpoint damage effect should sit near the damaged hardpoint. A weapon impact should face or imply the surface it hit. A projectile trail should make the projectile's motion easier to follow without covering the target.</p>
-<h2 id="common-rules-of-thumb">Common Rules of Thumb</h2>
-<ul>
-<li>Use short lifetimes for flashes, sparks, and impacts.</li>
-<li>Use longer lifetimes for smoke, dust, and lingering energy.</li>
-<li>Fade smoke out with alpha rather than letting it vanish abruptly.</li>
-<li>Let smoke grow as it fades so it feels like it is dispersing.</li>
-<li>Keep glows and energy effects brighter near the source.</li>
-<li>Keep expensive-looking or noisy effects readable at normal gameplay zoom.</li>
-<li>Make one change at a time, then preview it in motion.</li>
-</ul>
-<p>Treat these as starting points, not rules. Once you understand why an effect reads clearly, you can choose when to bend the pattern.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./setup.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Setup</span></a>
-        <a class="pager-next" href="./01-make-a-hardpoint-damage-effect-obvious.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">1. Make a Hardpoint Damage Effect Obvious</span></a>
+        <a class="pager-prev" href="./blend-modes.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Blend Modes</span></a>
+        <a class="pager-next" href="./generation-types.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Particle Generation Types</span></a>
       </nav>
     </main>
-    <nav class="toc" aria-label="On this page">
-      <p class="toc-label">On this page</p>
-      <ul>
-      <li class="lvl-2"><a href="#emitters">Emitters</a></li>
-      <li class="lvl-2"><a href="#lifetimes">Lifetimes</a></li>
-      <li class="lvl-2"><a href="#game-context">Game Context</a></li>
-      <li class="lvl-2"><a href="#common-rules-of-thumb">Common Rules of Thumb</a></li>
-      </ul>
-    </nav>
+
   </div>
   <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
        MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with

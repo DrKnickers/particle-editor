@@ -85,6 +85,16 @@
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
+    <div class="side-group">
+      <p class="side-label">Coming Soon</p>
+      <ul>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./weather-particles.html">Weather Particles</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      </ul>
+    </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
@@ -126,7 +136,7 @@ Lifetime:    short
 Scale:       narrow enough to read as a shot, not a cloud
 </code></pre>
 <p>Use the Preview Viewport while you adjust. The projectile core should read immediately as the center of the shot.</p>
-<figure class="guide-media" aria-label="Show creating the projectile core emitter before adding glow and tails."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-projectile-core.mp4" data-poster="tutorial-03-projectile-core-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show building the projectile core the way a user actually would: rename the default emitter by typing, step the spinner, pick the atlas frame, click the color pulse keys onto the curve, and set tail + parent speed."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-projectile-core.mp4" data-poster="tutorial-03-projectile-core-poster.jpg"></video></figure>
 <h2 id="2-use-the-built-in-tail-on-the-core">2. Use the Built-In Tail on the Core</h2>
 <p>With <code>Projectile_Core</code> still selected, use the Tail section in the Property Panel. Enable <code>Has tail</code> and adjust <code>Tail length:</code> until the shot has a clear streak behind it.</p>
 <p>The tail should support the core rather than overpower it. If the whole effect becomes a glowing block, shorten the tail, reduce the scale, or lower the alpha. The goal is a readable laser shot, not a solid rectangle.</p>
@@ -138,12 +148,12 @@ Scale:       narrow enough to read as a shot, not a cloud
 <h2 id="4-let-the-projectile-emitters-ride-the-shot">4. Let the Projectile Emitters Ride the Shot</h2>
 <p>Set <code>Parent speed inherit:</code> near full inheritance on both the projectile core and the projectile glow, one emitter at a time in the Property Panel, so the projectile rides with the parent motion.</p>
 <p>This makes the projectile part behave like it belongs to the moving projectile object. The core and glow tails should travel together instead of being left behind at the spawn point.</p>
-<figure class="guide-media" aria-label="Show the projectile core and glow using built-in tail controls and inheriting parent speed."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-inherit-parent-speed.mp4" data-poster="tutorial-03-inherit-parent-speed-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show the Parent speed inherit control in the Physics tab: full inheritance rides the shot, zero leaves the particles at the launch point."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-inherit-parent-speed.mp4" data-poster="tutorial-03-inherit-parent-speed-poster.jpg"></video></figure>
 <h2 id="5-launch-test-instances-with-the-spawner">5. Launch Test Instances with the Spawner</h2>
 <p>Open the Spawner panel and use it to preview the projectile as a launched particle instance rather than a static loop. Start with <code>Manual</code> mode so each test spawn is deliberate.</p>
 <p>Set the Velocity fields to launch the particle in a clear direction. For example, put a positive value in <code>Velocity X</code> and leave <code>Velocity Y</code> and <code>Velocity Z</code> near zero. Higher velocity values make the shot move faster; lower values make it easier to inspect the tail.</p>
 <p>Use <code>Spawn now</code> to fire a test instance. If the shot is hard to read in motion, adjust the core, glow, tail length, or velocity and spawn another instance.</p>
-<figure class="guide-media" aria-label="Show using the Spawner panel to launch the particle in a chosen direction at a chosen speed."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-spawner-direction.mp4" data-poster="tutorial-03-spawner-direction-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show launching test instances with the Spawner: dial Velocity X to a positive value, then click Spawn now to fire the shot in that direction."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-spawner-direction.mp4" data-poster="tutorial-03-spawner-direction-poster.jpg"></video></figure>
 <h2 id="6-add-the-muzzle-flash">6. Add the Muzzle Flash</h2>
 <p>Add a new emitter for the bright center of the muzzle flash. Keep the name direct, such as <code>Muzzle_Core</code>, so the Emitter Tree shows the two ideas clearly:</p>
 <pre><code class="language-text">Projectile_Core:      moving shot core and tail
@@ -153,13 +163,13 @@ Muzzle_Core:          white-hot launch flash
 </code></pre>
 <p>Make this emitter very short-lived, bright, and compact. A white or nearly white core works well because it reads as the hottest part of the flash.</p>
 <p>A muzzle flash fires once at the moment of launch, so it should generate as a burst, not a continuous stream. In the <strong>Basic</strong> tab, open the <strong>Generation</strong> section and set the Generation mode to <code>Bursts</code> (rather than <code>Continuous stream</code>). A single burst — <code>Bursts: 1</code> with a small <code>Particles/burst:</code> — gives one clean flash instead of an emitter that keeps re-emitting for the whole life of the shot. This burst-versus-stream choice, together with the short lifetime, is what makes a launch flash read as a flash and not a steady jet.</p>
-<figure class="guide-media" aria-label="Show adding the white muzzle-flash core: Bursts generation, short lifetime, and the 0→1→0 white pulse."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-muzzle-flash.mp4" data-poster="tutorial-03-muzzle-flash-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show building the muzzle-flash core the way a user actually would: add a new emitter, rename it by typing, switch to Bursts, and step every setting to the finished values."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-muzzle-flash.mp4" data-poster="tutorial-03-muzzle-flash-poster.jpg"></video></figure>
 <h2 id="7-add-the-outer-glow-and-keep-it-at-the-launch-point">7. Add the Outer Glow and Keep It at the Launch Point</h2>
 <p>Add a second muzzle-flash emitter named something like <code>Muzzle_Glow</code>. Make it wider, softer, and greener than the white core. Give it the same <code>Bursts</code> Generation mode as the core, so the outer glow fires with the flash instead of streaming on its own. The same halo idea from the projectile applies here too: a third <code>Muzzle_Glow_Soft</code> emitter, wider and much fainter again, rounds the flash off without making it bigger in feel.</p>
 <figure class="guide-media"><img class="clip-img" data-poster="tutorial-03-muzzle-glow-props.png" alt="Show the finished muzzle group: Muzzle_Glow's Bursts settings with the full three-layer flash frozen at peak."></figure>
 <p>Set <code>Parent speed inherit:</code> near zero on both muzzle flash emitters, one at a time in the Property Panel, so the flash stays close to the launch point.</p>
 <p>This is the main distinction in the tutorial. The projectile core and projectile glow ride the projectile. Muzzle flash emitters do not. If the flash stretches into a long streak, shorten its lifetime, reduce its scale, or lower its parent-speed inheritance.</p>
-<figure class="guide-media" aria-label="Show muzzle-flash emitters not inheriting parent speed."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-no-parent-speed.mp4" data-poster="tutorial-03-no-parent-speed-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show adjusting Parent speed inherit to 0 on the muzzle emitters in the Physics tab, so the flash stays at the launch point instead of streaking with the shot."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-no-parent-speed.mp4" data-poster="tutorial-03-no-parent-speed-poster.jpg"></video></figure>
 <h2 id="8-check-the-two-groups-together">8. Check the Two Groups Together</h2>
 <p>Use the Preview Viewport to watch the full particle in motion. The shot should have a clear leading core, a softer projectile glow, built-in tails, a white-hot muzzle core, and a softer outer flash.</p>
 <p>Use these questions as a quick check:</p>

@@ -12,6 +12,11 @@ const GUIDE_SLUGS = [
   "file-structure",
   "where-particles-are-used-in-game",
   "game-concepts-glossary",
+  "basic-controls",
+  "stacking-emitters-and-children",
+  "blend-modes",
+  "weather-particles",
+  "generation-types",
 ];
 
 // After Phase 2 each `<!-- Media: id -->` anchor is expanded (by build-guide.mjs, from the
@@ -61,8 +66,8 @@ test("guide structure: pages, sidebar, active nav, kicker, toc", async ({ page }
 
     await expect(page.locator("h1")).toHaveCount(1);
     await expect(page.locator(".guide-sidebar")).toHaveCount(1);
-    await expect(page.locator(".guide-sidebar .side-group")).toHaveCount(3);
-    await expect(page.locator(".guide-sidebar a")).toHaveCount(11);
+    await expect(page.locator(".guide-sidebar .side-group")).toHaveCount(4);
+    await expect(page.locator(".guide-sidebar a")).toHaveCount(16);
 
     const current = page.locator('.guide-sidebar a[aria-current="page"]');
     await expect(current).toHaveCount(1);
@@ -114,7 +119,7 @@ test("guide pager: first, middle, and final pages expose expected directions", a
   await expect(page.locator(".guide-pager .pager-prev")).toHaveCount(0);
   await expect(page.locator(".guide-pager .pager-next")).toHaveCount(1);
 
-  await page.goto("/guide/game-concepts-glossary.html");
+  await page.goto("/guide/generation-types.html");
   await expect(page.locator(".guide-pager .pager-prev")).toHaveCount(1);
   await expect(page.locator(".guide-pager .pager-next")).toHaveCount(0);
 
@@ -123,6 +128,14 @@ test("guide pager: first, middle, and final pages expose expected directions", a
     .toHaveAttribute("href", "./02-polish-hardpoint-damage-smoke.html");
   await expect(page.locator(".guide-pager .pager-next"))
     .toHaveAttribute("href", "./04-recolor-and-orient-a-shield-impact.html");
+
+  // game-concepts-glossary used to be the final page (no next); the "Coming Soon" section
+  // now follows it, so it must expose both directions — this is the actual behavior change
+  // the new nav section introduces, not just a shifted final-page slug.
+  await page.goto("/guide/game-concepts-glossary.html");
+  await expect(page.locator(".guide-pager .pager-prev")).toHaveCount(1);
+  await expect(page.locator(".guide-pager .pager-next"))
+    .toHaveAttribute("href", "./basic-controls.html");
 });
 
 test("guide home tables: structured tables with body links", async ({ page }) => {

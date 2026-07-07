@@ -26,6 +26,16 @@
         { "slug": "where-particles-are-used-in-game", "title": "Where Particles Are Used In-Game" },
         { "slug": "game-concepts-glossary", "title": "Game Concepts Glossary" }
       ]
+    },
+    {
+      "label": "Coming Soon",
+      "pages": [
+        { "slug": "basic-controls", "title": "Basic Editor Controls" },
+        { "slug": "stacking-emitters-and-children", "title": "Stacking Emitters and Using Children" },
+        { "slug": "blend-modes", "title": "Blend Modes" },
+        { "slug": "weather-particles", "title": "Weather Particles" },
+        { "slug": "generation-types", "title": "Particle Generation Types" }
+      ]
     }
   ]
 }
