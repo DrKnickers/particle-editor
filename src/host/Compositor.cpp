@@ -497,19 +497,78 @@ HRESULT Compositor::Init()
         return S_OK;
     }
 
-    // V2 factory function, V1 IID — same shape as WebView2APISample
-    // and dxgi_spike.cpp:InitDComp. An earlier attempt used V2
-    // IDCompositionDesktopDevice and still produced white; a later one
-    // reverted to V1. The spike confirmed V1 works on this rig.
-    HRESULT hr = DCompositionCreateDevice2(
-        nullptr, IID_PPV_ARGS(m_impl->device.GetAddressOf()));
-    if (FAILED(hr) || !m_impl->device)
+    // DirectComposition device creation can fail transiently while DWM is still
+    // settling — notably 0x8007139F (ERROR_INVALID_STATE) on a freshly-attached
+    // virtual display (e.g. a Chrome Remote Desktop session). Retry a few times
+    // with a short backoff before treating the failure as fatal; a genuinely
+    // composition-less session still fails after the attempts (the caller's
+    // FailFatalComposition stays the final fallback). NOTE: whether a real
+    // 0x8007139F actually clears on retry is UNPROVEN — this is a mitigation,
+    // pending an on-CRD log; see tasks/2026-07-07-compositor-init-retry-plan.md.
+    //
+    // Sleep (not a message pump) between attempts is a deliberate, conservative
+    // choice: Init runs on the WebView2 STA env-completion callback before the
+    // compositor/tree exists, where pumping risks re-entrancy, and DWM readiness
+    // is driven by DWM rather than our message loop. If on-CRD logs show retries
+    // never clear, a pumped MsgWait backoff is the next lever to try.
+    //
+    // V2 factory function, V1 IID — same shape as WebView2APISample and
+    // dxgi_spike.cpp:InitDComp. The spike confirmed V1 works on this rig.
+    constexpr int   kInitAttempts  = 4;    // 1 try + 3 retries
+    constexpr DWORD kInitBackoffMs = 120;  // ~360 ms worst case before fatal
+
+    // Test-only fault injection: force the first N attempts to fail with the real
+    // CRD HRESULT so the retry+recovery path can be exercised on a healthy box.
+    // Inert unless ALO_COMP_INIT_FAIL_FIRST is set — it MUST NOT be set in a
+    // gate/capture shell, whose environment is inherited by spawned hosts.
+    int injectFail = 0;
     {
-        m_impl->LogLine("[COMP-fail] DCompositionCreateDevice2 hr=" + FormatHresult(hr));
-        return hr;
+        wchar_t buf[16] = {};
+        DWORD n = GetEnvironmentVariableW(L"ALO_COMP_INIT_FAIL_FIRST", buf, 16);
+        if (n > 0 && n < 16)
+        {
+            // Stop accumulating once the count exceeds kInitAttempts — any larger
+            // value means "fail every attempt" and this bounds injectFail well
+            // below INT_MAX (no signed overflow on a long numeric string).
+            for (DWORD i = 0; i < n && buf[i] >= L'0' && buf[i] <= L'9' &&
+                              injectFail <= kInitAttempts; ++i)
+                injectFail = injectFail * 10 + (buf[i] - L'0');
+        }
+        if (injectFail > 0)
+            m_impl->LogLine("[COMP] fault-injection active: fail first " +
+                            std::to_string(injectFail) + " attempt(s)");
     }
-    m_impl->LogLine("[COMP-init] DComp V1 device created");
-    return S_OK;
+
+    HRESULT hr = E_FAIL;
+    for (int attempt = 1; attempt <= kInitAttempts; ++attempt)
+    {
+        const std::string tag = " (attempt " + std::to_string(attempt) + "/" +
+                                std::to_string(kInitAttempts) + ")";
+        if (attempt <= injectFail)
+        {
+            hr = HRESULT_FROM_WIN32(ERROR_INVALID_STATE);  // == 0x8007139F
+        }
+        else
+        {
+            hr = DCompositionCreateDevice2(
+                nullptr, IID_PPV_ARGS(m_impl->device.ReleaseAndGetAddressOf()));
+            // A reported success with a null device is NOT a success — treat it as
+            // a failure so it retries and, if it never resolves, the caller still
+            // goes fatal (rather than proceeding with no compositor).
+            if (SUCCEEDED(hr) && !m_impl->device)
+                hr = E_POINTER;
+            if (SUCCEEDED(hr))
+            {
+                m_impl->LogLine("[COMP-init] DComp V1 device created" + tag);
+                return S_OK;
+            }
+        }
+        m_impl->LogLine("[COMP-fail] DCompositionCreateDevice2 hr=" +
+                        FormatHresult(hr) + tag);
+        if (attempt < kInitAttempts)
+            Sleep(kInitBackoffMs);
+    }
+    return hr;  // all attempts failed — caller goes fatal (final fallback)
 }
 
 HRESULT Compositor::AttachWebView2(ICoreWebView2CompositionController* ctl)
