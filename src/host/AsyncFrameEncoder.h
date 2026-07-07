@@ -9,9 +9,10 @@
 // disk write run here, on ONE background worker.
 //
 // Review-driven requirements (tasks/todo.md §3 Branch B + risks 3/4):
-//  - CLSID pre-warm: the ctor resolves the "image/png" encoder CLSID on the
-//    CALLING (UI) thread — GdiplusEncode.h's cache is not safe for a
-//    concurrent first call from two threads.
+//  - [R3b] The worker encodes via WIC (WicEncode.h), NOT GDI+ — the old
+//    GDI+ CLSID pre-warm is gone with its consumer (the worker no longer
+//    touches GdiplusEncode.h's cache, so that concurrency axis is closed
+//    by construction). The worker initializes MTA COM for WIC itself.
 //  - Byte-capped queue (default 128 MB), computed from actual frame sizes
 //    (f04 grabs ~18 MB/frame at 3200x1460); Enqueue BLOCKS while full, so the
 //    worst case degrades to the old serial behavior — never unbounded memory.
@@ -35,8 +36,7 @@
 #include <utility>
 #include <vector>
 
-#include "GdiplusEncode.h"
-#include "WindowCapture.h"
+#include "WicEncode.h"     // [R3b] WIC PNG core for the worker (GDI+ stays for one-shots)
 
 namespace host {
 
@@ -56,14 +56,8 @@ public:
                                LogFn log = nullptr)
         : m_maxBytes(maxQueuedBytes), m_log(std::move(log))
     {
-        // Pre-warm the shared CLSID cache on this (UI) thread; the worker's
-        // lookups then always hit the cache read path. JPEG too: any first-call
-        // for a different MIME on the UI thread mid-record (e.g. a stray modal
-        // screenshot via AlphaCompositor) would push_back into the vector the
-        // worker iterates — warming both closes that axis outright.
-        CLSID warm = {};
-        (void)host::GdiplusEncoderClsid(L"image/png", warm);
-        (void)host::GdiplusEncoderClsid(L"image/jpeg", warm);
+        // [R3b] No GDI+ CLSID pre-warm anymore: the worker encodes via WIC
+        // and never reads GdiplusEncode.h's cache (see the header comment).
         m_worker = std::thread([this] { WorkerLoop(); });
     }
 
@@ -144,6 +138,18 @@ public:
 private:
     void WorkerLoop()
     {
+        // [R3b] WIC needs COM on this thread (the worker is a bare
+        // std::thread — nothing initialized COM here before). MTA: the
+        // factory is created + used only on this thread. A failed init is
+        // not fatal here — the WIC encode below will fail loudly and latch
+        // m_failed, same as any encode failure.
+        const HRESULT coHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        struct ComScope
+        {
+            HRESULT hr;
+            ~ComScope() { if (hr == S_OK || hr == S_FALSE) CoUninitialize(); }
+        } comScope{coHr};
+
         for (;;)
         {
             Frame f;
@@ -159,7 +165,9 @@ private:
                 m_space.notify_all();
             }
             if (alreadyFailed) continue;   // failed runs discard, not encode
-            if (!host::EncodeBgraToPng(f.bgra.data(), f.w, f.h, f.path))
+            // [R3b] WIC core (FilterOption=None) replacing the GDI+ encode —
+            // measured ≈49 ms/frame at 3200×1460 on GDI+; see WicEncode.h.
+            if (!host::EncodeBgraToPngWic(f.bgra.data(), f.w, f.h, f.path))
             {
                 std::lock_guard<std::mutex> lk(m_mu);
                 if (!m_failed)

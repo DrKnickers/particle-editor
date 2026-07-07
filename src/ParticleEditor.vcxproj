@@ -137,6 +137,7 @@
     <ClInclude Include="host\InputDispatcher.h" />
     <ClInclude Include="host\HostBridgeProxy.h" />
     <ClInclude Include="host\HostWindow.h" />
+    <ClInclude Include="host\WicEncode.h" />
     <ClInclude Include="host\WindowCapture.h" />
     <ClInclude Include="host\StringConv.h" />
     <ClInclude Include="host\GdiplusEncode.h" />
@@ -189,6 +190,14 @@
     <ClCompile Include="host\BridgeDispatch_Shell.cpp" />
     <ClCompile Include="host\BridgeDispatch_Spawner.cpp" />
     <ClCompile Include="host\CaptureRunner.cpp" />
+    <ClCompile Include="host\WicEncode.cpp">
+      <!-- Same include-order override as Compositor.cpp: wincodec.h is a
+           modern Win10-SDK header; the project-level include order puts the
+           June-2010 DXSDK first (engine needs its d3dx9.h), whose stale
+           winerror/dxgitype definitions collide. Win10 SDK first for this
+           TU only; it includes no DXSDK headers. -->
+      <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;$(SolutionDir)src</AdditionalIncludeDirectories>
+    </ClCompile>
     <ClCompile Include="host\DriveRunner.cpp" />
     <ClCompile Include="host\ClipRunner.cpp" />
     <ClCompile Include="host\PerfTrace.cpp" />
