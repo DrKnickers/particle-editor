@@ -295,19 +295,6 @@ public:
 	// the first poll), so the host can log GPU-wait pressure ([PERF]).
 	int  WaitEndFrameQuery();
 
-	// [D6] Draw one emitter's live particle quads from the shared DYNAMIC
-	// buffers (replaces DrawIndexedPrimitiveUP). `vertices` is `vertexCount`
-	// packed vertices of `stride` bytes; `indices` is `indexCount` uint16s —
-	// both in the SAME order the UP path drew, so blend/draw order is exact.
-	// Inherits the currently-bound vertex declaration (as the UP path did);
-	// binds stream 0 + the index buffer and issues one DrawIndexedPrimitive.
-	// No-op on empty input or a lock/create failure (a dropped frame, never
-	// a crash). Buffers grow by doubling and are released on device reset.
-	void DrawParticlesDynamic(const void* vertices, UINT vertexCount, UINT stride,
-	                          const uint16_t* indices, UINT indexCount);
-	// Release the D6 particle buffers before a device Reset; recreated lazily.
-	void ReleaseParticleDynamicBuffers();
-
 	// [PERF] round-2 sub-profiling — per-pass CPU-submit timing (us) of the
 	// last Render() call; the host folds these into the [PERF2] host.log
 	// line. `present` includes the AlphaCompositor::Composite() synchronous
@@ -1282,18 +1269,6 @@ private:
 	D3DPRESENT_PARAMETERS			m_presentationParameters;
 	IDirect3DDevice9Ex*				m_pDevice;
 	IDirect3DVertexDeclaration9*	m_pDeclaration;
-
-	// [D6] Shared DYNAMIC vertex/index buffers for particle draws. The old
-	// DrawIndexedPrimitiveUP path made the driver copy the whole high-water
-	// vertex array (dead-slot holes included) into a temp buffer on EVERY
-	// call, with a stall. These DYNAMIC|WRITEONLY buffers + D3DLOCK_DISCARD
-	// let the driver rename the buffer instead, and the caller uploads only
-	// LIVE particles. D3DPOOL_DEFAULT — released before every device Reset
-	// (ReleaseParticleDynamicBuffers) and recreated lazily in the draw.
-	IDirect3DVertexBuffer9*			m_pParticleVB = nullptr;
-	IDirect3DIndexBuffer9*			m_pParticleIB = nullptr;
-	UINT							m_particleVBBytes = 0;   // current VB capacity
-	UINT							m_particleIBBytes = 0;   // current IB capacity
 
 	// D3D9Ex event query for cross-device
 	// GPU sync. Lazy-created on first IssueEndFrameQuery; released in

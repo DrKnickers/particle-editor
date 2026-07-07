@@ -2099,7 +2099,6 @@ void Engine::Reset()
 
 	ReleaseBloomTargets();
 	ReleaseShadowMaskTargets();   // [soft-shadows] DEFAULT-pool mask RTs
-	ReleaseParticleDynamicBuffers();   // [D6] DEFAULT-pool particle VB/IB
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
     SAFE_RELEASE(m_pDepthStencilSurface);
@@ -2291,10 +2290,6 @@ bool Engine::ResetForResize()
 	// hygiene for the recreate.
 	ReleaseBloomTargets();
 	ReleaseShadowMaskTargets();   // [soft-shadows] DEFAULT-pool mask RTs
-	// [D6] ResetEx PRESERVES DEFAULT-pool resources, so this isn't strictly
-	// required here (unlike the vanilla Reset() path) — released for the same
-	// lifetime-hygiene reason as the RTs above; the next draw recreates.
-	ReleaseParticleDynamicBuffers();
 	SAFE_RELEASE(m_pDistortTexture);
 	SAFE_RELEASE(m_pSceneTexture);
 	SAFE_RELEASE(m_pDepthStencilSurface);
@@ -2432,73 +2427,6 @@ int Engine::WaitEndFrameQuery()
 		if (spins > 64) SwitchToThread();
 	}
 	return spins;
-}
-
-// [D6] Release the shared particle DYNAMIC buffers. D3DPOOL_DEFAULT, so this
-// MUST run before every IDirect3DDevice9::Reset (Reset / ResetForResize) and
-// at teardown; the next DrawParticlesDynamic lazily recreates against the
-// post-reset device.
-void Engine::ReleaseParticleDynamicBuffers()
-{
-	SAFE_RELEASE(m_pParticleVB);
-	SAFE_RELEASE(m_pParticleIB);
-	m_particleVBBytes = 0;
-	m_particleIBBytes = 0;
-}
-
-void Engine::DrawParticlesDynamic(const void* vertices, UINT vertexCount, UINT stride,
-                                  const uint16_t* indices, UINT indexCount)
-{
-	if (m_pDevice == NULL || vertexCount == 0 || indexCount == 0) return;
-	const UINT vbBytes = vertexCount * stride;
-	const UINT ibBytes = indexCount * (UINT)sizeof(uint16_t);
-
-	// Grow-by-doubling (never shrink): converges to the largest emitter's
-	// high-water in a few frames, so steady state does zero recreates.
-	if (m_particleVBBytes < vbBytes)
-	{
-		SAFE_RELEASE(m_pParticleVB);
-		UINT cap = m_particleVBBytes ? m_particleVBBytes : vbBytes;
-		while (cap < vbBytes) cap *= 2;
-		// 0 FVF: the draw uses the currently-bound vertex DECLARATION (as the
-		// UP path did), not a fixed-function FVF.
-		if (FAILED(m_pDevice->CreateVertexBuffer(cap, D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY,
-			0, D3DPOOL_DEFAULT, &m_pParticleVB, NULL)))
-		{
-			m_particleVBBytes = 0;
-			return;
-		}
-		m_particleVBBytes = cap;
-	}
-	if (m_particleIBBytes < ibBytes)
-	{
-		SAFE_RELEASE(m_pParticleIB);
-		UINT cap = m_particleIBBytes ? m_particleIBBytes : ibBytes;
-		while (cap < ibBytes) cap *= 2;
-		if (FAILED(m_pDevice->CreateIndexBuffer(cap, D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY,
-			D3DFMT_INDEX16, D3DPOOL_DEFAULT, &m_pParticleIB, NULL)))
-		{
-			m_particleIBBytes = 0;
-			return;
-		}
-		m_particleIBBytes = cap;
-	}
-
-	// DISCARD: hand back a fresh buffer region so an in-flight prior draw
-	// isn't disturbed and the lock never stalls (the whole point vs the UP
-	// path's per-call copy). Lock only the bytes we write.
-	void* p = NULL;
-	if (FAILED(m_pParticleVB->Lock(0, vbBytes, &p, D3DLOCK_DISCARD)) || p == NULL) return;
-	memcpy(p, vertices, vbBytes);
-	m_pParticleVB->Unlock();
-
-	if (FAILED(m_pParticleIB->Lock(0, ibBytes, &p, D3DLOCK_DISCARD)) || p == NULL) return;
-	memcpy(p, indices, ibBytes);
-	m_pParticleIB->Unlock();
-
-	m_pDevice->SetStreamSource(0, m_pParticleVB, 0, stride);
-	m_pDevice->SetIndices(m_pParticleIB);
-	m_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, vertexCount, 0, indexCount / 3);
 }
 
 // adapter LUID accessor for the multi-GPU
@@ -6480,7 +6408,6 @@ Engine::~Engine()
 	// Released in Reset()/ResetForResize() but was leaked
 	// at shutdown when no final Reset ran.
 	SAFE_RELEASE(m_pEndFrameQuery);
-	ReleaseParticleDynamicBuffers();   // [D6] particle VB/IB (same leak-guard rationale)
 	// MSAA surfaces
 	SAFE_RELEASE(m_pMsaaColor);
 	SAFE_RELEASE(m_pMsaaDepth);

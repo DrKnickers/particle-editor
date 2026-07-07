@@ -903,41 +903,10 @@ void EmitterInstance::StopSpawning()
     m_doneSpawning = true;
 }
 
-// [D6] Compact the live quads into m_packedVerts / m_packedIndices for the
-// dynamic-VB draw. m_primitives is the LIVE, draw-ordered list (D1 compaction);
-// each entry's index[0] is the particle's m_verticesIndex — the base of its 4
-// vertices in the holed m_vertices array. We copy those 4 verts densely and
-// emit the SAME triangle pattern the UP path used ({0,2,3, 2,0,1} within the
-// quad), just rebased to the packed position. Result is byte-identical geometry
-// in identical draw order, so blend output is unchanged.
-void EmitterInstance::PackLiveQuads()
-{
-	const size_t n = m_primitives.size();
-	m_packedVerts.resize(n * NUM_VERTICES_PER_PARTICLE);
-	m_packedIndices.resize(n * (3 * NUM_TRIANGLES_PER_PARTICLE));
-	for (size_t j = 0; j < n; ++j)
-	{
-		const uint16_t srcBase = m_primitives[j].index[0];   // == particle m_verticesIndex
-		Vertex* dst = &m_packedVerts[j * NUM_VERTICES_PER_PARTICLE];
-		dst[0] = m_vertices[srcBase + 0];
-		dst[1] = m_vertices[srcBase + 1];
-		dst[2] = m_vertices[srcBase + 2];
-		dst[3] = m_vertices[srcBase + 3];
-		const uint16_t b = (uint16_t)(j * NUM_VERTICES_PER_PARTICLE);
-		uint16_t* idx = &m_packedIndices[j * 6];
-		idx[0] = b + 0; idx[1] = b + 2; idx[2] = b + 3;
-		idx[3] = b + 2; idx[4] = b + 0; idx[5] = b + 1;
-	}
-}
-
 void EmitterInstance::Render(IDirect3DDevice9* pDevice)
 {
     if (!m_primitives.empty() && m_emitter.visible)
 	{
-		// [D6] Pack the live quads ONCE per Render (both the heat and normal
-		// draw paths below upload the same packed data via the engine's
-		// shared dynamic VB/IB instead of DrawIndexedPrimitiveUP).
-		PackLiveQuads();
 		pDevice->SetTexture(0, m_pColorTexture);
 		pDevice->SetTexture(1, m_pNormalTexture);
 		static int s_normDbg = 0;
@@ -983,9 +952,7 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
 			pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 			pDevice->SetRenderState(D3DRS_SRCBLEND,  D3DBLEND_SRCALPHA);
 			pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-    		m_engine.DrawParticlesDynamic(m_packedVerts.data(), (UINT)m_packedVerts.size(),
-    		                              sizeof(Vertex), m_packedIndices.data(),
-    		                              (UINT)m_packedIndices.size());
+    		pDevice->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, (UINT)m_vertices.size(), 2 * (UINT)m_primitives.size(), &m_primitives[0], D3DFMT_INDEX16, &m_vertices[0], sizeof(Vertex));
 		}
 		else
 		{
@@ -1063,9 +1030,7 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
                     if (bt) bt->Release();
                     s_normDbg++;
                 }
-    		    m_engine.DrawParticlesDynamic(m_packedVerts.data(), (UINT)m_packedVerts.size(),
-    		                                  sizeof(Vertex), m_packedIndices.data(),
-    		                                  (UINT)m_packedIndices.size());
+    		    pDevice->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, (UINT)m_vertices.size(), 2 * (UINT)m_primitives.size(), &m_primitives[0], D3DFMT_INDEX16, &m_vertices[0], sizeof(Vertex));
                 pEffect->EndPass();
             }
             pEffect->End();
