@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Profiler, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { makeBridge } from "@/bridge";
@@ -52,12 +52,24 @@ const DEMO_PARAM = new URLSearchParams(window.location.search).get("demo");
 function AppShell() {
   const bridge = useMemo(() => {
     const b = makeBridge();
-    // Attach to window.bridge so Playwright (via CDP) and
-    // anyone poking at DevTools can drive the bridge. Diagnostic-only —
-    // no production code path reads window.bridge.
+    // Synchronous exposure for the native Playwright contract specs, which read
+    // window.bridge in beforeAll without awaiting an effect. For
+    // NativeBridge/TestHostBridge the instance only routes requests, so which of
+    // StrictMode's two dev-mode factory invocations wins here is immaterial.
     exposeBridgeForTests(b);
     return b;
   }, []);
+  // Re-expose the COMMITTED, memoized bridge. StrictMode double-invokes the
+  // useMemo factory in dev, so the synchronous exposure above can land on the
+  // discarded second MockBridge instance while the tree uses this one — which
+  // breaks bridge.on-based (event) test harnesses (e.g. the profiler audit's
+  // synthetic cursor storm, which emits on window.bridge and expects StatusBar's
+  // listener to fire). This effect runs with the instance the tree actually uses,
+  // correcting window.bridge for event delivery. No-op in production
+  // (window.bridge is diagnostic-only; StrictMode double-invoke is dev-only).
+  useEffect(() => {
+    exposeBridgeForTests(bridge);
+  }, [bridge]);
 
   // keep the host's DComp composition backing painted
   // the current theme `--bg` so transparent panel gaps / splitter seams /
@@ -356,7 +368,20 @@ function AppShell() {
           </header>
 
           {/* Toolbar — 4 groups (File · Edit · View · Render) */}
-          <Toolbar bridge={bridge} />
+          {/* DEV-only <Profiler> for the re-render audit (tests-web/profiler-audit.spec.ts);
+              folds away in prod builds. See tasks/2026-07-07-react-profiler-audit-plan.md. */}
+          {import.meta.env.DEV ? (
+            <Profiler
+              id="Toolbar"
+              onRender={(id, phase, actualDuration, baseDuration, startTime, commitTime) =>
+                window.__profilerAudit?.record(id, phase, actualDuration, baseDuration, startTime, commitTime)
+              }
+            >
+              <Toolbar bridge={bridge} />
+            </Profiler>
+          ) : (
+            <Toolbar bridge={bridge} />
+          )}
 
           {/* Main row — PanelLayout owns the three-column +
               two-inner-vertical-split structure with draggable separators
@@ -368,7 +393,18 @@ function AppShell() {
           <PanelLayout key={panelLayoutEpoch} bridge={bridge} />
 
           {/* Status bar */}
-          <StatusBar bridge={bridge} />
+          {import.meta.env.DEV ? (
+            <Profiler
+              id="StatusBar"
+              onRender={(id, phase, actualDuration, baseDuration, startTime, commitTime) =>
+                window.__profilerAudit?.record(id, phase, actualDuration, baseDuration, startTime, commitTime)
+              }
+            >
+              <StatusBar bridge={bridge} />
+            </Profiler>
+          ) : (
+            <StatusBar bridge={bridge} />
+          )}
 
           {/* Sub-dialogs. Mounted at app level so menu
               triggers from anywhere can drive them and Radix portals don't

@@ -40,7 +40,7 @@
 // the toolbar's Spawner button — the new mount reads from the
 // appropriate key with the appropriate defaults.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Profiler, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator, usePanelRef, type Layout } from "react-resizable-panels";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useRightDock, setDock } from "@/lib/right-dock";
@@ -585,7 +585,18 @@ export function PanelLayout({ bridge }: Props) {
                   data-testid="quadrant-emitter-tree"
                   className="h-full w-full min-h-0 overflow-hidden flex flex-col p-3 text-sm"
                 >
-                  <EmitterTree bridge={bridge} />
+                  {import.meta.env.DEV ? (
+                    <Profiler
+                      id="EmitterTree"
+                      onRender={(id, phase, actualDuration, baseDuration, startTime, commitTime) =>
+                        window.__profilerAudit?.record(id, phase, actualDuration, baseDuration, startTime, commitTime)
+                      }
+                    >
+                      <EmitterTree bridge={bridge} />
+                    </Profiler>
+                  ) : (
+                    <EmitterTree bridge={bridge} />
+                  )}
                 </aside>
               </Panel>
               <Separator className="ce-splitter ce-splitter-h" />
@@ -649,7 +660,18 @@ export function PanelLayout({ bridge }: Props) {
               data-testid="quadrant-curve-editor"
               className="h-full w-full min-h-0 border-t border-border"
             >
-              <CurveEditorPanel bridge={bridge} />
+              {import.meta.env.DEV ? (
+                <Profiler
+                  id="CurveEditorPanel"
+                  onRender={(id, phase, actualDuration, baseDuration, startTime, commitTime) =>
+                    window.__profilerAudit?.record(id, phase, actualDuration, baseDuration, startTime, commitTime)
+                  }
+                >
+                  <CurveEditorPanel bridge={bridge} />
+                </Profiler>
+              ) : (
+                <CurveEditorPanel bridge={bridge} />
+              )}
             </div>
           </Panel>
         </Group>
@@ -701,7 +723,18 @@ export function PanelLayout({ bridge }: Props) {
           ) : displayDock === "lighting" ? (
             <LightingPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
           ) : displayDock === "atlas" ? (
-            <AtlasPickerPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+            import.meta.env.DEV ? (
+              <Profiler
+                id="AtlasPickerPanel"
+                onRender={(id, phase, actualDuration, baseDuration, startTime, commitTime) =>
+                  window.__profilerAudit?.record(id, phase, actualDuration, baseDuration, startTime, commitTime)
+                }
+              >
+                <AtlasPickerPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+              </Profiler>
+            ) : (
+              <AtlasPickerPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
+            )
           ) : null}
         </aside>
       </Panel>

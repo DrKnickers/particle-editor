@@ -9,6 +9,9 @@ import "@/styles/globals.css";
 // seam module from the production bundle entirely (see src/dev/atlas-test-seam.ts).
 if (import.meta.env.DEV) {
   void import("@/dev/atlas-test-seam").then((m) => m.installAtlasTestSeam());
+  // DEV-ONLY: install the React Profiler audit seam (window.__profilerAudit).
+  // Same dynamic-import stripping guarantee (see src/dev/profiler-audit.ts).
+  void import("@/dev/profiler-audit").then((m) => m.installProfilerAuditSeam());
 }
 
 createRoot(document.getElementById("root")!).render(
