@@ -6,7 +6,7 @@
 // Per clip: record (ParticleEditor.exe --record) -> gates -> encode, each clip
 // advancing independently through its pipeline (no cross-clip barrier). The
 // record processes are safe to run concurrently: --record gets a per-PID
-// WebView2 profile + log and never persists state (HostWindow.cpp:1528,
+// WebView2 profile + log and never persists state (HostWindow.cpp,
 // ComputeUserDataFolder). Windows must not be MINIMIZED while recording
 // (PrintWindow reads the DWM composition surface); overlap is fine.
 //
@@ -113,8 +113,8 @@ const CLIPS = [
 
 // Child-log signatures that fail a clip even when frames look plausible
 // (multi-instance GPU/DComp contention -> empty/frozen viewport; plan risk 12).
-// Verbatim substrings of the host's actual log lines (HostWindow.cpp:2253/2262
-// + the [COMP-engine-*] family) — review-corrected: the original guesses
+// Verbatim substrings of the host's actual log lines (HostWindow.cpp,
+// the [COMP-engine-*] family) — review-corrected: the original guesses
 // ("AttachEngineVisual failed") matched nothing.
 const LOG_FAIL_SIGNATURES = [
   "[COMP-engine-fail]",

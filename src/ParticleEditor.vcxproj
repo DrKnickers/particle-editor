@@ -127,7 +127,9 @@
     <ClInclude Include="host\BridgeDispatchShared.h" />
     <ClInclude Include="host\BridgeRequestContext.h" />
     <ClInclude Include="host\DriveScript.h" />
+    <ClInclude Include="host\CaptureRunner.h" />
     <ClInclude Include="host\DriveRunner.h" />
+    <ClInclude Include="host\HostRunUtil.h" />
     <ClInclude Include="host\ClipTimeline.h" />
     <ClInclude Include="host\ClipRunner.h" />
     <ClInclude Include="host\Compositor.h" />
@@ -182,6 +184,7 @@
     <ClCompile Include="host\BridgeDispatch_File.cpp" />
     <ClCompile Include="host\BridgeDispatch_Shell.cpp" />
     <ClCompile Include="host\BridgeDispatch_Spawner.cpp" />
+    <ClCompile Include="host\CaptureRunner.cpp" />
     <ClCompile Include="host\DriveRunner.cpp" />
     <ClCompile Include="host\ClipRunner.cpp" />
     <ClCompile Include="host\PerfTrace.cpp" />

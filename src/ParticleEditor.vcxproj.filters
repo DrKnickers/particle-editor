@@ -108,6 +108,12 @@
     <ClInclude Include="host\BridgeRequestContext.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\CaptureRunner.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\HostRunUtil.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\HostBridgeProxy.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -228,6 +234,9 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\LayoutBroker.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\CaptureRunner.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\PerfTrace.cpp">
