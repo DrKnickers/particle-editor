@@ -17,7 +17,7 @@ static void check(int mode, bool expected) {
 }
 
 int main() {
-    // Alpha-gated <=> the mode's shader (engine.cpp ShaderNames[blendMode]) uses
+    // Alpha-gated <=> the mode's shader (engine_render.cpp ShaderNames[blendMode]) uses
     // SrcBlend = SRCALPHA: PrimAlpha(2), PrimDepthSpriteAlpha(5),
     // PrimDiffuseAlpha(7), PrimParticleBumpAlpha(11), PrimAlphaScanlines(13).
     check(ParticleSystem::BLEND_TRANSPARENT,          true);   // 2  PrimAlpha

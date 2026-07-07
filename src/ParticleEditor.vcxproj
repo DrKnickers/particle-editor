@@ -97,6 +97,7 @@
     <ClInclude Include="Effect.h" />
     <ClInclude Include="EmitterInstance.h" />
     <ClInclude Include="engine.h" />
+    <ClInclude Include="engine_internal.h" />
     <ClInclude Include="exceptions.h" />
     <ClInclude Include="files.h" />
     <ClInclude Include="LinkGroup.h" />
@@ -151,6 +152,9 @@
     <ClCompile Include="Effect.cpp" />
     <ClCompile Include="EmitterInstance.cpp" />
     <ClCompile Include="engine.cpp" />
+    <ClCompile Include="engine_environment.cpp" />
+    <ClCompile Include="engine_reference.cpp" />
+    <ClCompile Include="engine_render.cpp" />
     <ClCompile Include="files.cpp" />
     <ClCompile Include="LinkGroup.cpp" />
     <ClCompile Include="main.cpp" />

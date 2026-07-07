@@ -42,6 +42,9 @@
     <ClInclude Include="engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="engine_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="exceptions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -156,6 +159,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="engine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="engine_environment.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="engine_reference.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="engine_render.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="files.cpp">
