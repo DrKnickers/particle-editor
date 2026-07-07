@@ -41,6 +41,7 @@
 // exposes).
 #include "host/Run.h"
 #include "host/WindowCapture.h"
+#include "host/WebViewModalPolicy.h"  // IsFullyInteractiveSession — gate the pre-host data-path picker
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -610,7 +611,7 @@ static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 // Writes happen on every change; matches LastMod / ModNickname.
 
 
-static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, vector<wstring>* outGameRoots = NULL )
+static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, vector<wstring>* outGameRoots = NULL, bool interactive = true )
 {
 	auto valueCountForOption = [](const std::wstring& arg) -> size_t
 	{
@@ -696,6 +697,15 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, v
 		}
 		catch (FileNotFoundException&)
 		{
+			// Headless/automation launches (--capture/--drive/--record/--test-host)
+			// have no user to answer a folder picker — it would hang the run. Fail
+			// cleanly (main exits -1); the missing data path is on stderr + the log.
+			if (!interactive)
+			{
+				fwprintf(stderr, L"[host] game data path not found and no interactive session to prompt for one — exiting\n");
+				fileManager = NULL;
+				break;
+			}
 			// This path didn't work; ask the user to select a path
             const wstring title = LoadString(IDS_QUERY_DATA_PATH);
 
@@ -1395,7 +1405,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// ModManager. createFileManager already discovers them
 		// internally; pass &gameRoots to extract.
 		std::vector<std::wstring> gameRoots;
-		FileManager* fileManager = createFileManager(NULL, argv, &gameRoots);
+		const bool interactiveSession = IsFullyInteractiveSession(
+			!captureAlo.empty() || !captureRef.empty(),
+			!driveScriptPath.empty() || !recordScriptPath.empty(),
+			testHost);
+		FileManager* fileManager = createFileManager(NULL, argv, &gameRoots, interactiveSession);
 		if (fileManager == NULL)
 		{
 			// User cancelled the data-path picker. Exit cleanly with the

@@ -778,6 +778,15 @@ struct HostWindowImpl
     std::wstring m_recordScriptPath;
     bool         m_recordMode = false;
     bool         m_automationMode = false;
+    // True only when a human is present to dismiss a blocking modal — i.e. NOT in
+    // any headless mode (capture / drive-or-record / test-host). Every fatal or
+    // preflight MessageBoxW is gated on this so a headless run never hangs on a
+    // dialog nobody can click (the log line + non-zero exit still carry the error).
+    bool IsFullyInteractive() const
+    {
+        return IsFullyInteractiveSession(
+            !m_captureAlo.empty() || !m_captureRef.empty(), m_automationMode, useTestHost);
+    }
     int          m_recordTimelineFps = 0;    // latched at timeline-Init success; locks the
                                              // stats-tick FPS readout to the clip's virtual rate
     int          m_recordFrame = 0;          // current emitted frame (echoed in the ui/cursor `frame`)
@@ -1359,22 +1368,27 @@ void HostWindowImpl::Log(const char* fmt, ...)
 // (Compositor::Init / Environment3 QI) and the async
 // WM_APP_COMPOSITION_FALLBACK handler. host.log is flushed first so the
 // failure HRESULT survives the hard exit.
-void HostWindowImpl::FailFatalComposition(HRESULT hr)
+[[noreturn]] void HostWindowImpl::FailFatalComposition(HRESULT hr)
 {
     Log("[host] FATAL: composition unavailable (hr=0x%08lx) — exiting\n", hr);
     CloseLog();
 
-    wchar_t msg[640];
-    _snwprintf_s(msg, _TRUNCATE,
-        L"Particle Editor could not initialize its DirectComposition "
-        L"rendering surface (error 0x%08lX).\n\n"
-        L"This build renders the viewport through DirectComposition + WebView2 "
-        L"composition hosting and cannot run without it. Make sure your GPU "
-        L"drivers are up to date and that the WebView2 runtime is installed.\n\n"
-        L"The editor will now close.",
-        static_cast<unsigned long>(hr));
-    MessageBoxW(nullptr, msg, L"Particle Editor — composition unavailable",
-                MB_OK | MB_ICONERROR);
+    // Interactive only — a headless/automation run has no user to dismiss the box
+    // and would hang forever on it; the log line + exit(1) already carry the error.
+    if (IsFullyInteractive())
+    {
+        wchar_t msg[640];
+        _snwprintf_s(msg, _TRUNCATE,
+            L"Particle Editor could not initialize its DirectComposition "
+            L"rendering surface (error 0x%08lX).\n\n"
+            L"This build renders the viewport through DirectComposition + WebView2 "
+            L"composition hosting and cannot run without it. Make sure your GPU "
+            L"drivers are up to date and that the WebView2 runtime is installed.\n\n"
+            L"The editor will now close.",
+            static_cast<unsigned long>(hr));
+        MessageBoxW(nullptr, msg, L"Particle Editor — composition unavailable",
+                    MB_OK | MB_ICONERROR);
+    }
     ExitProcess(1);
 }
 
@@ -3116,10 +3130,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         catch (const std::exception& e)
         {
             Log("[host] Engine construction threw: %s\n", e.what());
-            // --drive is unattended: a modal would hang the run with nothing to
-            // dismiss it. Skip the dialog in ephemeral mode (the pump's
-            // engine-null arm exits non-zero instead).
-            if (!m_automationMode)
+            // Any headless mode is unattended: a modal would hang the run with
+            // nothing to dismiss it (the pump's engine-null arm exits non-zero
+            // instead). Covers --capture/--capture-ref/--test-host, not just
+            // --drive/--record — IsFullyInteractive() is the complete predicate.
+            if (IsFullyInteractive())
                 MessageBoxA(hwnd, e.what(), "Engine init failed", MB_ICONERROR);
             // Continue — viewport will still clear, just without engine state.
         }
@@ -4639,15 +4654,17 @@ int HostWindowImpl::Run(int nCmdShow)
         {
             Log("[host] dev-ui: probe failed — server not reachable\n");
             CloseLog();
-            MessageBoxW(nullptr,
-                L"Dev UI mode requested but no dev server detected at http://localhost:5174.\n\n"
-                L"Did you forget to run `pnpm dev` in `web/apps/editor/`?\n\n"
-                L"Start the dev server in one terminal:\n"
-                L"    cd web/apps/editor\n"
-                L"    pnpm dev\n\n"
-                L"Then relaunch ParticleEditor.exe --dev-ui.",
-                L"Dev UI server not detected",
-                MB_OK | MB_ICONERROR);
+            // Interactive only (headless has no user to dismiss it; logs + exits).
+            if (IsFullyInteractive())
+                MessageBoxW(nullptr,
+                    L"Dev UI mode requested but no dev server detected at http://localhost:5174.\n\n"
+                    L"Did you forget to run `pnpm dev` in `web/apps/editor/`?\n\n"
+                    L"Start the dev server in one terminal:\n"
+                    L"    cd web/apps/editor\n"
+                    L"    pnpm dev\n\n"
+                    L"Then relaunch ParticleEditor.exe --dev-ui.",
+                    L"Dev UI server not detected",
+                    MB_OK | MB_ICONERROR);
             return 1;
         }
         Log("[host] dev-ui: probe OK — navigating to Vite server\n");
@@ -4667,18 +4684,24 @@ int HostWindowImpl::Run(int nCmdShow)
     // creating any window. If missing the dialog is the only visible artifact.
     if (!WebView2RuntimeInstalled())
     {
-        Log("[host] WebView2 runtime not found — showing install dialog\n");
-        int r = MessageBoxW(nullptr,
-            L"Particle Editor requires the Microsoft Edge WebView2 Runtime.\n\n"
-            L"Install it from https://aka.ms/webview2 and relaunch.\n\n"
-            L"Click OK to open the download page in your browser.\n"
-            L"Click Cancel to exit.",
-            L"WebView2 Runtime Required",
-            MB_OKCANCEL | MB_ICONERROR);
-        if (r == IDOK)
+        Log("[host] WebView2 runtime not found\n");
+        // Interactive only: a headless run has no user to answer the OK/Cancel
+        // prompt and would hang on it — it just logs + exits(1) below.
+        if (IsFullyInteractive())
         {
-            ShellExecuteW(nullptr, L"open", L"https://aka.ms/webview2",
-                          nullptr, nullptr, SW_SHOWNORMAL);
+            Log("[host] showing WebView2 install dialog\n");
+            int r = MessageBoxW(nullptr,
+                L"Particle Editor requires the Microsoft Edge WebView2 Runtime.\n\n"
+                L"Install it from https://aka.ms/webview2 and relaunch.\n\n"
+                L"Click OK to open the download page in your browser.\n"
+                L"Click Cancel to exit.",
+                L"WebView2 Runtime Required",
+                MB_OKCANCEL | MB_ICONERROR);
+            if (r == IDOK)
+            {
+                ShellExecuteW(nullptr, L"open", L"https://aka.ms/webview2",
+                              nullptr, nullptr, SW_SHOWNORMAL);
+            }
         }
         CoUninitialize();
         CloseLog();
@@ -4866,14 +4889,14 @@ int HostWindowImpl::Run(int nCmdShow)
         swprintf(msg, 256,
                  L"WebView2 initialisation failed (0x%08lx).\n"
                  L"Is the Evergreen runtime installed?", hr);
-        // A headless --capture run must never pop a modal (it disrupts the user's
-        // screen and tells them nothing) — log + bail instead. The isolated capture
-        // profile above should prevent this failure, but guard the dialog regardless.
-        const bool captureRun = !m_captureAlo.empty() || !m_captureRef.empty();
-        if (ShouldShowWebViewInitErrorModal(captureRun, m_ephemeral))
+        // A headless run must never pop a modal (no user to dismiss it, and it
+        // tells them nothing) — log + bail instead. The isolated capture profile
+        // above should prevent this failure, but guard the dialog regardless.
+        // (Covers --drive/--record/--test-host too, not just --capture.)
+        if (IsFullyInteractive())
             MessageBoxW(hMain, msg, L"Particle Editor", MB_ICONERROR);
         else
-            Log("[capture] WebView2 init failed (0x%08lx) — bailing headlessly\n", hr);
+            Log("[host] WebView2 init failed (0x%08lx) — bailing headlessly\n", hr);
         DestroyWindow(hMain);
         g_self = nullptr;
         CoUninitialize();

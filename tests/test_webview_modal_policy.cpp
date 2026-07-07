@@ -1,8 +1,9 @@
-// Regression test for unattended WebView2 init-failure UI policy.
+// Regression test for the host's blocking-modal visibility policy.
 //
-// Interactive launches should show the install/error modal. Unattended launch
-// modes (--capture and --drive/ephemeral) must log and exit instead of blocking
-// forever behind a MessageBox.
+// A blocking MessageBoxW is only useful when a human is present to dismiss it.
+// Every fatal/preflight modal in HostWindow is gated on IsFullyInteractiveSession
+// so a headless run (capture / drive-or-record / test-host) never hangs forever
+// behind a dialog nobody can click — it logs + exits instead.
 
 #include "host/WebViewModalPolicy.h"
 
@@ -18,14 +19,27 @@ int main()
 {
     std::printf("test_webview_modal_policy\n");
 
-    CHECK(ShouldShowWebViewInitErrorModal(false, false),
+    // Args: (capture, automation, testHost). Interactive == none set.
+    CHECK(IsFullyInteractiveSession(false, false, false),
           "interactive launch shows the modal");
-    CHECK(!ShouldShowWebViewInitErrorModal(true, false),
-          "capture launch suppresses the modal");
-    CHECK(!ShouldShowWebViewInitErrorModal(false, true),
-          "drive/ephemeral launch suppresses the modal");
-    CHECK(!ShouldShowWebViewInitErrorModal(true, true),
-          "capture+ephemeral launch suppresses the modal");
+
+    // Each headless mode alone suppresses the modal.
+    CHECK(!IsFullyInteractiveSession(true, false, false),
+          "capture (--capture/--capture-ref) suppresses the modal");
+    CHECK(!IsFullyInteractiveSession(false, true, false),
+          "automation (--drive/--record) suppresses the modal");
+    CHECK(!IsFullyInteractiveSession(false, false, true),
+          "test-host (--test-host, CDP/Playwright) suppresses the modal");
+
+    // Any combination stays suppressed (no way to become interactive again).
+    CHECK(!IsFullyInteractiveSession(true, true, false),
+          "capture+automation suppresses the modal");
+    CHECK(!IsFullyInteractiveSession(true, false, true),
+          "capture+test-host suppresses the modal");
+    CHECK(!IsFullyInteractiveSession(false, true, true),
+          "automation+test-host suppresses the modal");
+    CHECK(!IsFullyInteractiveSession(true, true, true),
+          "all headless flags suppress the modal");
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");
