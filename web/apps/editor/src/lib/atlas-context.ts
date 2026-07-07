@@ -37,6 +37,19 @@ export function getAtlasContext(): AtlasContext {
   return useStore.getState();
 }
 
+/** Non-reactive subscription: the listener fires on every publish that
+ *  REPLACES the store root with a non-`Object.is`-equal value, WITHOUT
+ *  re-rendering the caller. Use this — not the reactive `useAtlasContext`
+ *  hook — for a consumer that lives in the SAME render tree as the publisher,
+ *  where a reactive selector would create a self-feedback re-render loop (see
+ *  use-atlas-autoopen.ts). `publishAtlasContext` builds a fresh object on every
+ *  call, so every publish notifies. Returns the unsubscribe fn. */
+export function subscribeAtlasContext(
+  listener: (ctx: AtlasContext, prevCtx: AtlasContext) => void,
+): () => void {
+  return useStore.subscribe(listener);
+}
+
 /** Narrow read hook — pass a selector so consumers re-render only on their slice. */
 export function useAtlasContext<T>(selector: (c: AtlasContext) => T): T {
   return useStore(selector);
