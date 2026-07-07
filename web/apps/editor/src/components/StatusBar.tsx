@@ -4,12 +4,61 @@
 // `cursor/position-3d`, emitted at ~30 Hz while the
 // mouse is over the viewport popup. In browser mode (MockBridge) neither
 // event fires; the component renders placeholder em-dashes.
-import { useEffect, useState } from "react";
+//
+// The four stats cells live in a React.memo'd StatsCells child so the ~30 Hz
+// cursor updates (which re-render this parent) SKIP them — they only re-render
+// when `stats` actually changes (stats/tick, 4 Hz). See the #549 Profiler audit:
+// StatusBar was re-rendering all five cells on every cursor move.
+import { memo, useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 
 type Stats = { fps: number; emitters: number; particles: number; instances: number; overload: boolean };
 type Cursor3D = { x: number; y: number; z: number };
+
+// A single label/value readout cell. Pure + module-level so it closes over
+// nothing and stays cheap to call from both StatsCells and the cursor cell.
+function cell(label: string, value: string, dim: boolean, warn = false) {
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <span className="text-text-3">{label}</span>
+      <span
+        className={`font-mono tabular-nums ${
+          warn ? "text-warning-fg" : dim ? "text-text-3" : "text-text-2"
+        }`}
+      >
+        {value}
+      </span>
+    </span>
+  );
+}
+
+// Test-only render counter for StatsCells — lets a jsdom test prove that a
+// cursor/position-3d event does NOT re-render the stats cells (memo working),
+// while a stats/tick event does. Inert in production (a plain integer).
+let statsCellsRenders = 0;
+export function __statsCellsRenderCount(): number {
+  return statsCellsRenders;
+}
+
+// The FPS/Emitters/Particles/Instances cells (+ their separators), memoized on
+// the `stats` prop. Returns a fragment so the flex layout is identical to the
+// inline version — StatsCells adds no DOM node of its own.
+const StatsCells = memo(function StatsCells({ stats }: { stats: Stats | null }) {
+  statsCellsRenders++;
+  const placeholder = stats === null;
+  return (
+    <>
+      {cell("FPS", placeholder ? "—" : stats!.fps.toFixed(0), placeholder)}
+      <span className="text-text-3">·</span>
+      {cell("Emitters", placeholder ? "—" : stats!.emitters.toString(), placeholder)}
+      <span className="text-text-3">·</span>
+      {cell("Particles", placeholder ? "—" : stats!.particles.toString(), placeholder, !placeholder && stats!.overload)}
+      <span className="text-text-3">·</span>
+      {cell("Instances", placeholder ? "—" : stats!.instances.toString(), placeholder)}
+    </>
+  );
+});
 
 export function StatusBar({ bridge }: { bridge: Bridge }) {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -31,7 +80,8 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
     // cells fall back to `—` placeholders. The host stops emitting
     // stats/tick while frozen, so the cleared state stays cleared.
     // Cursor is cleared too since it's part of the StatusBar's
-    // volatile per-frame surface.
+    // volatile per-frame surface. (Clearing stats flows into StatsCells
+    // via its `stats` prop → it re-renders to placeholders, as before.)
     const offFreeze = bridge.on("stats/frozen-changed", (e) => {
       if (e.payload.frozen) {
         setStats(null);
@@ -45,27 +95,6 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
     };
   }, [bridge]);
 
-  const s = stats;
-  const placeholder = s === null;
-
-  // Preview spawn-overload guard: while stats/tick latches overload, the
-  // Particles value cell tints amber. The OverloadBanner over the viewport
-  // is the primary surface; this is the persistent low-key echo. (No
-  // tooltip — the readout is a passive non-button, and the banner already
-  // states the cause.)
-  const cell = (label: string, value: string, dim = placeholder, warn = false) => (
-    <span className="flex items-baseline gap-1.5">
-      <span className="text-text-3">{label}</span>
-      <span
-        className={`font-mono tabular-nums ${
-          warn ? "text-warning-fg" : dim ? "text-text-3" : "text-text-2"
-        }`}
-      >
-        {value}
-      </span>
-    </span>
-  );
-
   // 2dp cursor readout, matching legacy ("Mouse: x, y, z" at 2dp).
   const cursorText = cursor === null
     ? "—"
@@ -73,13 +102,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
 
   return (
     <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-border bg-bg px-4 text-xs">
-      {cell("FPS", placeholder ? "—" : s!.fps.toFixed(0))}
-      <span className="text-text-3">·</span>
-      {cell("Emitters", placeholder ? "—" : s!.emitters.toString())}
-      <span className="text-text-3">·</span>
-      {cell("Particles", placeholder ? "—" : s!.particles.toString(), placeholder, !placeholder && s!.overload)}
-      <span className="text-text-3">·</span>
-      {cell("Instances", placeholder ? "—" : s!.instances.toString())}
+      <StatsCells stats={stats} />
       <span className="text-text-3">·</span>
       {cell("Cursor", cursorText, cursor === null)}
       {/* Right-aligned group: PAUSED state + always-on spawn hint
