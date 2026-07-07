@@ -102,6 +102,12 @@
     <ClInclude Include="host\BridgeDispatcher.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\BridgeDispatchShared.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\BridgeRequestContext.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\HostBridgeProxy.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
@@ -192,6 +198,24 @@
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\BridgeDispatcher.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Assets.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Emitters.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Engine.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_File.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Shell.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Spawner.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
     <ClCompile Include="host\HostBridgeProxy.cpp">

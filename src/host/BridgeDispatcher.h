@@ -21,8 +21,10 @@
 //                                         frame anyway)
 //   - engine/query/*         (3 of)     → IsGroundSlotEmpty / IsSkydomeSlotEmpty
 //                                         / IsBloomAvailable
-// Everything else (emitters/*, file/*, undo/*, spawner/*) still returns
-// `{ ok: false, error: "not implemented yet" }`.
+// All domains (engine/*, emitters/*, linkGroups/*, file/*, undo/*,
+// autosave/*, textures/*, mods/*, window/layout/viewport/*, spawner/*,
+// settings/*) are implemented in per-domain TUs (BridgeDispatch_*.cpp);
+// only an unmatched kind returns `{ ok: false, error: "not implemented yet" }`.
 #ifndef HOST_BRIDGE_DISPATCHER_H
 #define HOST_BRIDGE_DISPATCHER_H
 
@@ -43,10 +45,10 @@
 // Autosave::OrphanSession is held by value in the recovery stash.
 #include "../Autosave.h"
 #include "../UndoStack.h"   // full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
+#include "../ParticleSystem.h"   // full def needed for ParticleSystem::Emitter* in getEmitterById
 #include "PreviewEncodeWorker.h"   // [C3] async texture-preview encode
 
 class Engine;
-class ParticleSystem;
 class ParticleSystemInstance;
 class SpawnerDriver;
 class IFileManager;
@@ -57,6 +59,7 @@ namespace host {
 class AcceleratorBridge;
 class LayoutBroker;
 class InputDispatcher;
+struct BridgeRequestContext;   // BridgeRequestContext.h (Phase A dispatch split)
 
 class BridgeDispatcher
 {
@@ -296,6 +299,20 @@ private:
     // serialise it unambiguously.
     nlohmann::json DispatchInternal(const nlohmann::json& reqEnvelope);
 
+    // ---- Per-domain kind dispatchers (Phase A split) ----
+    // Each lives in its own TU (BridgeDispatch_<Domain>.cpp), holds that
+    // domain's `kind ==` handlers moved out of DispatchInternal's ladder,
+    // and returns true when it handled `kind` (response written via ctx).
+    // DispatchInternal calls all six in sequence; kinds are exact-match and
+    // mutually exclusive, so call order carries no semantics.
+    friend struct BridgeRequestContext;   // RequireEngine/MarkDirty need privates
+    bool TryDispatchEngine  (BridgeRequestContext& ctx, const std::string& kind);
+    bool TryDispatchEmitters(BridgeRequestContext& ctx, const std::string& kind);  // + linkGroups/*
+    bool TryDispatchFile    (BridgeRequestContext& ctx, const std::string& kind);  // + autosave/undo
+    bool TryDispatchAssets  (BridgeRequestContext& ctx, const std::string& kind);  // textures/mods
+    bool TryDispatchShell   (BridgeRequestContext& ctx, const std::string& kind);  // window/layout/viewport/host/app/debug/stats/…
+    bool TryDispatchSpawner (BridgeRequestContext& ctx, const std::string& kind);  // + settings
+
     // Emits a `dirty/changed` event with the current m_dirty value.
     void EmitDirtyChanged();
     // Emits a `recent/changed` event with the current m_recentFiles
@@ -332,6 +349,25 @@ private:
     // Preserves both capture paths: coalesceKey!=0 -> CapturePreCoalesced,
     // else -> Capture, matching the lambda it replaces.
     void CaptureUndoPoint(DWORD coalesceKey);
+
+    // ---- Promoted DispatchInternal helpers ----
+    // Formerly lambdas defined mid-ladder inside DispatchInternal; promoted to
+    // members so kind handlers can move into per-domain translation units
+    // (BridgeDispatch_*.cpp). Names keep the lambda camelCase so the dozens of
+    // ladder call sites are untouched by the promotion.
+
+    // Lookup helper: emitter pointer by integer index. Returns nullptr on
+    // out-of-range / no-system / null-slot.
+    ParticleSystem::Emitter* getEmitterById(int id);
+    // PRE-mutation undo capture; forwards to CaptureUndoPoint (which folds in
+    // the engine's ref-transform aux). coalesceKey 0 = never coalesce
+    // (structural ops must never fold across an add/delete/move).
+    void captureUndo(DWORD coalesceKey = 0);
+    // F4 link-group propagation: after a shared (non-exempt) field edit on a
+    // linked emitter, copy non-exempt params to every group sibling. MUST run
+    // AFTER the mutation; reseats all live cursor iterators via
+    // Engine::OnParticleSystemChanged(-1) at this single choke point.
+    void propagateLinkGroup(ParticleSystem::Emitter* edited);
 
     // Walks the currently-bound ParticleSystem's emitters and,
     // for every positive linkGroup with exactly one member, demotes

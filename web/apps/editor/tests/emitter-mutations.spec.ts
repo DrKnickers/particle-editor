@@ -444,7 +444,8 @@ test("load-time sweep — opening a legacy .alo with a singleton group auto-demo
   // produce: emitter 0 at linkGroup=0, emitter 1 at linkGroup=1
   // (alone — a legacy singleton). On file/open, the host's
   // load-time `EnforceSingleMemberLinkGroups` sweep
-  // ([BridgeDispatcher.cpp:1591](../../src/host/BridgeDispatcher.cpp))
+  // (BridgeDispatcher.cpp; the file/open handler that invokes it now
+  // lives in src/host/BridgeDispatch_File.cpp)
   // fires right after the ParticleSystem swap, demoting emitter 1
   // to linkGroup=0. The dirty bit MUST stay false — the correction
   // is normalization, not user-driven mutation.
