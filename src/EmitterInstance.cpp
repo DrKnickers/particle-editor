@@ -967,6 +967,11 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
             const Effect::Handles& handles = pShader->getHandles();
             ID3DXEffect* pEffect = pShader->getD3DEffect();
             pEffect->SetVector(handles.hEyeObjPosition, &eyeObjPosition);
+            if (handles.hDistanceFadeVals)
+            {
+                D3DXVECTOR4 distanceFade(0.0f, 1.0f, 0.0f, 0.0f);   // (0,1)=no fade; editor-only, engine sets real vals in-game
+                pEffect->SetVector(handles.hDistanceFadeVals, &distanceFade);
+            }
 
             // [shadow-leak hunt] Env-gated (ALO_DUMP_RSTATE) snapshot of the FULL
             // device state the particle is ABOUT to draw with — captured here, before

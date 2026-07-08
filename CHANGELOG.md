@@ -172,6 +172,7 @@ may live at the end of the file.
 
 ### Fixed
 
+- Mode-11 bump particles no longer preview at ~50% opacity under Mod/Mod's modified bump shader — the editor now sets the shader's distance-fade parameter to a full-alpha value instead of leaving it unset
 - Bump-mapped particles (normal/depth-textured emitters — e.g. explosion debris rocks) no longer render as dark squares at small sizes; they keep their alpha-cutout rock shapes, matching the in-game look
 - A particle effect with custom link-group "exempt" settings now saves and reloads correctly instead of producing a file the editor couldn't reopen; malformed or oversized `.alo` files also no longer hang or exhaust memory when loading
 - Reference objects no longer show their muzzle flashes stuck on — the editor now hides muzzle-flash geometry to match the in-game look, where a unit's muzzle flash appears only while it fires
