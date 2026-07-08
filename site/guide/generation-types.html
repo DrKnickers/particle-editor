@@ -64,6 +64,7 @@
       <ul>
       <li><a href="./home.html">Guide Home</a></li>
       <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
       </ul>
     </div>
@@ -80,38 +81,75 @@
       <p class="side-label">Reference</p>
       <ul>
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html" class="active" aria-current="page">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
-    <div class="side-group">
-      <p class="side-label">Coming Soon</p>
-      <ul>
-      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
-      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
-      <li><a href="./blend-modes.html">Blend Modes</a></li>
-      <li><a href="./weather-particles.html">Weather Particles</a></li>
-      <li><a href="./generation-types.html" class="active" aria-current="page">Particle Generation Types</a></li>
-      </ul>
-    </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Coming Soon <span class="kicker-count">· 5 of 5</span></p>
+<p class="guide-kicker">Reference <span class="kicker-count">· 2 of 7</span></p>
 <h1 id="particle-generation-types">Particle Generation Types</h1>
-<p><strong>Status:</strong> Planned — not yet written.</p>
-<p>This page will cover each generation type and what it does to how particles spawn.</p>
-<p>Notes to fold in, from a Discord conversation with <strong>IRampagingRhin0</strong>:</p>
+<p>The generation type decides <em>how</em> an emitter releases its particles: in timed bursts, in a steady stream, or as camera-following weather. You pick one of the three in the Property Panel under Basic, in the Generation section. They are mutually exclusive — choosing one turns the others off — and each reveals its own set of fields.</p>
+<h2 id="bursts">Bursts</h2>
+<p>Burst mode releases particles in discrete groups rather than continuously. It is the right choice for one-off or repeating events: an explosion, an impact, a puff, a muzzle flash.</p>
+<p>Its fields:</p>
 <ul>
-<li>&quot;Here's what each generation particle does&quot; — a per-type reference.</li>
+<li><strong>Bursts</strong> — how many bursts to fire. Combined with the burst delay, this controls whether the</li>
 </ul>
+<p>  effect happens once or repeats.</p>
+<ul>
+<li><strong>Burst delay</strong> — the time, in seconds, between one burst and the next.</li>
+<li><strong>Particles/burst</strong> — how many particles each burst releases at once.</li>
+</ul>
+<p>For a single event, use one burst. For a repeating rhythm — a sputtering fire, a pulsing beacon — use several bursts with a delay between them.</p>
+<h2 id="continuous-stream">Continuous Stream</h2>
+<p>Continuous mode releases particles at a steady rate for as long as the effect is active. It is the right choice for ongoing effects: smoke rising from damage, an engine trail, a dust cloud, flowing energy.</p>
+<p>Its one field:</p>
+<ul>
+<li><strong>Particles/second</strong> — the spawn rate. Higher values make a denser, thicker stream; lower values</li>
+</ul>
+<p>  make a sparse, wispy one.</p>
+<p>Continuous is usually the mode you reach for when an effect should simply keep going rather than happen and stop.</p>
+<h2 id="weather-particle">Weather Particle</h2>
+<p>Weather mode is a special rendering type for large-scale environmental effects like rain and snow. Instead of emitting from a point, it fills a cube of space that follows the camera — centered on a point out in front of the viewpoint — so the effect covers the view no matter where the camera moves, the way falling weather should.</p>
+<p>This is why you may not have seen it on a normal effect: it is not for hardpoint or weapon particles, it is for blanketing a scene. If you have never used one, that is expected; reach for it only when you want weather across the environment rather than a localized effect.</p>
+<p>Its fields:</p>
+<ul>
+<li><strong>Particles</strong> — how many particles fill the cube. Unlike Continuous, weather does not emit at a</li>
+</ul>
+<p>  per-second rate: it spawns this many particles once, up front, to populate the volume.</p>
+<ul>
+<li><strong>Distance from camera</strong> — how far in front of the camera the cube's center sits.</li>
+<li><strong>Cube size</strong> — the size of the volume the weather fills. A larger cube covers more of the scene</li>
+</ul>
+<p>  but spreads the same particle count more thinly.</p>
+<h2 id="choosing-a-type">Choosing a Type</h2>
+<ul>
+<li>Something that happens as an event → <strong>Bursts</strong>.</li>
+<li>Something that keeps going while active → <strong>Continuous stream</strong>.</li>
+<li>Weather that should blanket the whole scene around the camera → <strong>Weather particle</strong>.</li>
+</ul>
+<p>Switching away from Weather returns you to whichever of Bursts or Continuous you were using before, so you can toggle Weather on to test it without losing your earlier setup.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./weather-particles.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Weather Particles</span></a>
+        <a class="pager-prev" href="./app-ui-quick-reference.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">App UI Quick Reference</span></a>
+        <a class="pager-next" href="./blend-modes.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Blend Modes</span></a>
       </nav>
     </main>
-
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#bursts">Bursts</a></li>
+      <li class="lvl-2"><a href="#continuous-stream">Continuous Stream</a></li>
+      <li class="lvl-2"><a href="#weather-particle">Weather Particle</a></li>
+      <li class="lvl-2"><a href="#choosing-a-type">Choosing a Type</a></li>
+      </ul>
+    </nav>
   </div>
   <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
        MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with

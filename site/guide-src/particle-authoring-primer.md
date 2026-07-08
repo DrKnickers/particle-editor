@@ -17,6 +17,23 @@ main smoke shape, another might add a hot glow, and a third might add sparks. Wh
 existing particle, select one emitter at a time and watch the Preview Viewport until you know what
 that emitter contributes.
 
+## Render Order
+
+When several emitters overlap on screen, the order they draw in — top to bottom in the Emitter
+Tree — decides which one appears on top. Particles do not sort themselves by depth or distance;
+the first emitter in the list draws first, and every emitter after it draws over what came before,
+the same way the game itself renders them.
+
+This matters most once blend modes are involved. An Additive glow drawn after a Transparent smoke
+layer shows through the smoke and brightens it; the same glow drawn before the smoke gets covered
+by it instead. If a layered effect is not reading the way you expect, check the emitter order
+before you start second-guessing the individual emitter's settings.
+
+Reorder emitters by dragging them in the Emitter Tree. One thing to know: reordering does not
+reach into a preview that is already running. If you drag an emitter to a new position and the
+Preview Viewport looks unchanged, stop and restart the preview (or reload the particle) so it
+picks up the new order.
+
 ## Lifetimes
 
 Most particle values change from birth to death. A smoke particle might start small and opaque, grow

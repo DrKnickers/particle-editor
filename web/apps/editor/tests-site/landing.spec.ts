@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 // Stems must match the data-clip/data-poster names in site/index.html (and global-setup.mjs).
 const SITE = fileURLToPath(new URL("../../../../site", import.meta.url));
 const MEDIA = resolve(SITE, "media-local");
-const STEMS = ["hero", "faith", "f02-reorder", "f02", "f04"];
+const STEMS = ["hero", "faith", "f04", "spawner", "f02-reorder", "f02"];
 const REQUIRED = STEMS.flatMap((s) => [`${s}.mp4`, `${s}-poster.jpg`]).map((f) => resolve(MEDIA, f));
 const HAS_MEDIA = REQUIRED.every((p) => existsSync(p));
 
@@ -19,13 +19,13 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => { (window as any).__MEDIA_BASE__ = "/media-local/"; });
 });
 
-test("structure: hero, 4 features, footer; no uncaught JS errors", async ({ page }) => {
+test("structure: hero, 6 features, footer; no uncaught JS errors", async ({ page }) => {
   const jsErrors: string[] = [];
   page.on("pageerror", (e) => jsErrors.push(String(e))); // uncaught JS only — resource
                                                           // errors don't count
   await page.goto("/");
   await expect(page.locator("h1")).toHaveText("Effects, previewed in game context.");
-  await expect(page.locator("section.feature")).toHaveCount(4);
+  await expect(page.locator("section.feature")).toHaveCount(6);
   await expect(page.locator("header.topbar")).toBeVisible();
   await expect(page.locator("footer.site-footer")).toBeVisible();
   expect(jsErrors, jsErrors.join("\n")).toHaveLength(0);
@@ -34,7 +34,7 @@ test("structure: hero, 4 features, footer; no uncaught JS errors", async ({ page
 test("clip slots: loop/muted/playsinline + reserved 4:3 dims + poster set", async ({ page }) => {
   await page.goto("/");
   const vids = page.locator("video.clip-video");
-  await expect(vids).toHaveCount(STEMS.length); // hero + 4 features
+  await expect(vids).toHaveCount(STEMS.length); // hero + 5 feature clips (s6 is a link grid, no clip)
   const n = await vids.count();
   for (let i = 0; i < n; i++) {
     const v = vids.nth(i);
@@ -91,7 +91,7 @@ test("hero clip actually plays (best-effort autoplay)", async ({ page }) => {
 test("lazy loading: below-fold clips request nothing until scrolled in", async ({ page }) => {
   const clipReqs: string[] = [];
   page.on("request", (r) => {
-    if (/\/(?:faith|f02-reorder|f02|f04)[^/]*\.mp4(?:[?#]|$)/.test(r.url())) clipReqs.push(r.url());
+    if (/\/(?:faith|spawner|f02-reorder|f02|f04)[^/]*\.mp4(?:[?#]|$)/.test(r.url())) clipReqs.push(r.url());
   });
   await page.goto("/");
   await page.waitForTimeout(600); // hero (eager) may load; below-fold must not
@@ -117,8 +117,10 @@ test("pause control: toggles playback, flips label, blocks lazy load while pause
   await expect(btn).toHaveText("Play"); // compact visible label; aria-label carries "Play motion"
   await expect(btn).toHaveAttribute("aria-label", "Play motion");
   await expect(hero).toHaveJSProperty("paused", true);
-  // the below-fold lazy clip, scrolled in WHILE paused, must not load (empty currentSrc)
-  const lazy = page.locator("video.clip-video").last();
+  // a below-fold lazy clip, scrolled in WHILE paused, must not load (empty currentSrc).
+  // Target f04 explicitly so it matches the request-watch regex above (don't use .last(),
+  // which is f02 and would leave the lazyReqs assertion watching a clip we never scroll).
+  const lazy = page.locator('video[data-clip="f04.mp4"]');
   await lazy.scrollIntoViewIfNeeded();
   await page.waitForTimeout(400);
   expect(await lazy.evaluate((v: HTMLVideoElement) => v.currentSrc)).toBe("");

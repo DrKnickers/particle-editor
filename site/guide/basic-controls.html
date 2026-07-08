@@ -64,6 +64,7 @@
       <ul>
       <li><a href="./home.html">Guide Home</a></li>
       <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html" class="active" aria-current="page">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
       </ul>
     </div>
@@ -80,39 +81,66 @@
       <p class="side-label">Reference</p>
       <ul>
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
-    <div class="side-group">
-      <p class="side-label">Coming Soon</p>
-      <ul>
-      <li><a href="./basic-controls.html" class="active" aria-current="page">Basic Editor Controls</a></li>
-      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
-      <li><a href="./blend-modes.html">Blend Modes</a></li>
-      <li><a href="./weather-particles.html">Weather Particles</a></li>
-      <li><a href="./generation-types.html">Particle Generation Types</a></li>
-      </ul>
-    </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Coming Soon <span class="kicker-count">· 1 of 5</span></p>
+<p class="guide-kicker">Start Here <span class="kicker-count">· 3 of 4</span></p>
 <h1 id="basic-editor-controls">Basic Editor Controls</h1>
-<p><strong>Status:</strong> Planned — not yet written.</p>
-<p>This page will cover the fundamental viewport interactions that aren't obvious from the UI alone — the &quot;here's how you do things&quot; basics a new user has no way to discover on their own.</p>
-<p>Notes to fold in, from a Discord conversation with <strong>IRampagingRhin0</strong>:</p>
+<p>A few core viewport interactions are not obvious from the UI alone. This page covers the ones a new user has no reliable way to discover: previewing a particle in the scene, moving the camera, and selecting things.</p>
+<h2 id="preview-a-particle-hold-shift">Preview a Particle: Hold Shift</h2>
+<p>Loading a particle does not, by itself, put it in the Preview Viewport. To see the current effect, <strong>hold Shift</strong>. While Shift is held, the particle spawns at the cursor and follows it around the viewport, so you can move the mouse to judge the effect from different positions.</p>
+<p>Release Shift and the preview goes away. This makes Shift a quick, non-destructive way to check an effect: hold to look, release to clear.</p>
+<h2 id="place-a-particle-click-while-holding-shift">Place a Particle: Click While Holding Shift</h2>
+<p>To leave a preview in the scene instead of clearing it, <strong>click the left mouse button while Shift is held</strong>. The effect detaches from the cursor and keeps emitting where you dropped it, which is useful when you want to compare an edit against a copy already running, or inspect an effect from a fixed spot while you work.</p>
+<p>After the click, dragging the mouse up and down adjusts the placed effect's height before you let go. Left and right stay fixed at the point where you clicked.</p>
+<p>This Shift-to-preview, click-to-place pattern is easy to miss — nothing on screen announces it — so reach for it whenever an effect does not appear to be showing.</p>
+<h2 id="move-the-camera">Move the Camera</h2>
+<p>The camera orbits a target point in the scene. Every camera move scales with how far you are zoomed in, so it stays controllable whether you are close to a small effect or pulled back from a large one.</p>
+<table>
+<thead>
+<tr><th>Action</th><th>Input</th></tr>
+</thead>
+<tbody>
+<tr><td>Orbit (rotate around the effect)</td><td>Right mouse button, drag</td></tr>
+<tr><td>Pan (slide the view)</td><td>Left mouse button, drag</td></tr>
+<tr><td>Zoom</td><td>Hold Ctrl and drag either button, or use the scroll wheel</td></tr>
+</tbody>
+</table>
+<p>The scroll wheel zooms in small steps and is usually the easiest way to close in on detail. Ctrl-drag zoom is smoother for large distance changes.</p>
+<h2 id="select-an-emitter">Select an Emitter</h2>
+<p>Select emitters in the Emitter Tree, not the viewport. Selecting one makes it the edit target — its properties and lifetime curves fill the panels — so you can work on that emitter's settings without disturbing the others. (Selection changes what you edit, not what is drawn; to hide an emitter in the viewport, toggle its visibility.)</p>
 <ul>
-<li>Holding Shift previews a particle in the viewport; clicking places it. The poster didn't know this until being told directly — call it out explicitly rather than assuming it's discoverable.</li>
+<li><strong>Click</strong> a row to select a single emitter.</li>
+<li><strong>Shift-click</strong> another row to select every emitter from the first selection to that row.</li>
+<li><strong>Ctrl-click</strong> (or Cmd-click) a row to add or remove it from a multi-selection.</li>
 </ul>
+<h2 id="select-and-move-a-reference-object">Select and Move a Reference Object</h2>
+<p>If the scene has a reference object — a unit or model shown for context — click its body in the viewport to select it, as long as it is not locked. A selected reference object shows drag handles for moving and rotating it.</p>
+<p>While dragging a handle, <strong>hold Shift for finer control</strong>: movement and rotation slow to a fraction of normal speed, which helps when you need to line an effect up precisely against the model.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./game-concepts-glossary.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Game Concepts Glossary</span></a>
-        <a class="pager-next" href="./stacking-emitters-and-children.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Stacking Emitters and Using Children</span></a>
+        <a class="pager-prev" href="./setup.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Setup</span></a>
+        <a class="pager-next" href="./particle-authoring-primer.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Particle Authoring Primer</span></a>
       </nav>
     </main>
-
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#preview-a-particle-hold-shift">Preview a Particle: Hold Shift</a></li>
+      <li class="lvl-2"><a href="#place-a-particle-click-while-holding-shift">Place a Particle: Click While Holding Shift</a></li>
+      <li class="lvl-2"><a href="#move-the-camera">Move the Camera</a></li>
+      <li class="lvl-2"><a href="#select-an-emitter">Select an Emitter</a></li>
+      <li class="lvl-2"><a href="#select-and-move-a-reference-object">Select and Move a Reference Object</a></li>
+      </ul>
+    </nav>
   </div>
   <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
        MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with

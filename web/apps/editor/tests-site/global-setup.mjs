@@ -14,7 +14,7 @@ import { resolve } from "node:path";
 const SITE = fileURLToPath(new URL("../../../../site", import.meta.url));
 const MEDIA = resolve(SITE, "media-local");
 // Must match the data-clip/data-poster names in site/index.html.
-const STEMS = ["hero", "faith", "f02-reorder", "f02", "f04"];
+const STEMS = ["hero", "faith", "f04", "spawner", "f02-reorder", "f02"];
 const CLIPS = STEMS.map((s) => `${s}.mp4`);
 const POSTERS = STEMS.map((s) => `${s}-poster.jpg`);
 

@@ -15,14 +15,13 @@ const GUIDE_SLUGS = [
   "basic-controls",
   "stacking-emitters-and-children",
   "blend-modes",
-  "weather-particles",
   "generation-types",
 ];
 
 // After Phase 2 each `<!-- Media: id -->` anchor is expanded (by build-guide.mjs, from the
 // wiki-media manifest) into a <video>/<img> embed — except the one manual in-game-proof shot,
 // which stays an inert comment. The EXACT ordered filenames below (not just counts) are the
-// contract: they sum to the 22 manifest items (19 clips + 2 stills + 1 manual) and lock each
+// contract: they sum to the 24 manifest items (19 clips + 4 stills + 1 manual) and lock each
 // page's ids AND their order, so a duplicated/swapped/renamed anchor can't pass on count alone.
 const RELEASE_BASE = "https://github.com/DrKnickers/particle-editor/releases/download/site-media/";
 const TUTORIAL_MEDIA = new Map([
@@ -39,7 +38,7 @@ const TUTORIAL_MEDIA = new Map([
   ["03-build-a-laser-shot-and-muzzle-flash", {
     clips: ["tutorial-03-opening-result.mp4", "tutorial-03-projectile-core.mp4", "tutorial-03-inherit-parent-speed.mp4",
       "tutorial-03-spawner-direction.mp4", "tutorial-03-muzzle-flash.mp4", "tutorial-03-no-parent-speed.mp4", "tutorial-03-final-preview.mp4"],
-    stills: [],
+    stills: ["tutorial-03-glow-layers.png", "tutorial-03-muzzle-glow-props.png"],
     manualComment: 0,
   }],
   ["04-recolor-and-orient-a-shield-impact", {
@@ -66,8 +65,8 @@ test("guide structure: pages, sidebar, active nav, kicker, toc", async ({ page }
 
     await expect(page.locator("h1")).toHaveCount(1);
     await expect(page.locator(".guide-sidebar")).toHaveCount(1);
-    await expect(page.locator(".guide-sidebar .side-group")).toHaveCount(4);
-    await expect(page.locator(".guide-sidebar a")).toHaveCount(16);
+    await expect(page.locator(".guide-sidebar .side-group")).toHaveCount(3);
+    await expect(page.locator(".guide-sidebar a")).toHaveCount(15);
 
     const current = page.locator('.guide-sidebar a[aria-current="page"]');
     await expect(current).toHaveCount(1);
@@ -119,7 +118,9 @@ test("guide pager: first, middle, and final pages expose expected directions", a
   await expect(page.locator(".guide-pager .pager-prev")).toHaveCount(0);
   await expect(page.locator(".guide-pager .pager-next")).toHaveCount(1);
 
-  await page.goto("/guide/generation-types.html");
+  // game-concepts-glossary is the last page in reading order (final entry of Reference),
+  // so it exposes a prev but no next.
+  await page.goto("/guide/game-concepts-glossary.html");
   await expect(page.locator(".guide-pager .pager-prev")).toHaveCount(1);
   await expect(page.locator(".guide-pager .pager-next")).toHaveCount(0);
 
@@ -129,13 +130,13 @@ test("guide pager: first, middle, and final pages expose expected directions", a
   await expect(page.locator(".guide-pager .pager-next"))
     .toHaveAttribute("href", "./04-recolor-and-orient-a-shield-impact.html");
 
-  // game-concepts-glossary used to be the final page (no next); the "Coming Soon" section
-  // now follows it, so it must expose both directions — this is the actual behavior change
-  // the new nav section introduces, not just a shifted final-page slug.
-  await page.goto("/guide/game-concepts-glossary.html");
-  await expect(page.locator(".guide-pager .pager-prev")).toHaveCount(1);
+  // basic-controls now lives mid-"Start Here" (setup → basic-controls → primer). Assert its
+  // pager wiring so a regression that drops the newly-promoted page from reading order is caught.
+  await page.goto("/guide/basic-controls.html");
+  await expect(page.locator(".guide-pager .pager-prev"))
+    .toHaveAttribute("href", "./setup.html");
   await expect(page.locator(".guide-pager .pager-next"))
-    .toHaveAttribute("href", "./basic-controls.html");
+    .toHaveAttribute("href", "./particle-authoring-primer.html");
 });
 
 test("guide home tables: structured tables with body links", async ({ page }) => {
