@@ -109,6 +109,20 @@ const CLIPS = [
     // empty, so the default viewport crop would probe nothing.
     partialScan: { start: 60, crop: "1786:1400:330:30" },
   },
+  {
+    name: "spawner",                             // README.md:237-254 (added #503, wired here)
+    timeline: "tasks/clips/spawner.timeline.json",
+    frames: "clips/spawner",
+    encode: ["--frames", "clips/spawner", "--fps", "60", "--loop", "none",
+             "--crop", "1264:952:8:0", "--crf", "16",
+             "--out", "site/media-local/spawner.mp4",
+             "--poster", "site/media-local/spawner-poster.jpg"],
+    // No cursor interaction (static invisible cursor point) and no loop round-trip
+    // (--loop none, hard cut) — cursor-on-target and seam-match don't apply here;
+    // partialScan (run for every clip) is the only meaningful automated gate.
+    gates: [],
+    partialScan: { start: 0 },                  // default viewport crop
+  },
 ];
 
 // Child-log signatures that fail a clip even when frames look plausible
