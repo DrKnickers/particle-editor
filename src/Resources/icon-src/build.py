@@ -12,6 +12,11 @@ OUT = HERE / "out"
 RESOURCES = HERE.parent
 REPO = RESOURCES.parent.parent
 SITE = REPO / "site"
+# The desktop editor's in-app title bar renders its corner icon from this PNG
+# (see web/apps/editor/src/components/TitleBar.tsx). It is the ramped 40px tile
+# — the exact taskbar/exe artwork — so the in-app mark matches the taskbar. The
+# title bar shows it at 20px CSS, so 40px covers 1x–2x DPI crisply.
+WEB_ASSETS = REPO / "web" / "apps" / "editor" / "src" / "assets"
 
 SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 ACCENT = "#4a8bff"
@@ -384,6 +389,11 @@ def main() -> None:
     mark.save(OUT / "mark_1024.png", optimize=True)
     preview_sheet(tile_images, render(256, plate=False)).save(OUT / "preview_sheet.png", optimize=True)
 
+    # In-app title-bar mark for the desktop editor — the ramped 40px tile, so
+    # the corner icon matches the taskbar/exe icon exactly.
+    WEB_ASSETS.mkdir(parents=True, exist_ok=True)
+    tile_images[40].save(WEB_ASSETS / "app-mark.png", optimize=True)
+
     print(f"Wrote {RESOURCES / 'logo.ico'}")
     print(f"Wrote {SITE / 'favicon.ico'}")
     print(f"Wrote {SITE / 'favicon.svg'}")
@@ -391,6 +401,7 @@ def main() -> None:
     print(f"Wrote {HERE / 'mark.svg'}")
     print(f"Wrote {HERE / 'master_1024.png'}")
     print(f"Wrote {HERE / 'mark_1024.png'}")
+    print(f"Wrote {WEB_ASSETS / 'app-mark.png'}")
     print("Packed sizes:", ", ".join(str(size) for size in SIZES))
 
 

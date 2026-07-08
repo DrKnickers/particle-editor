@@ -27,6 +27,7 @@ may live at the end of the file.
 
 ### Added
 
+- The in-app title bar's corner icon now matches the Windows taskbar/exe icon instead of the fainter tile-less brand mark
 - The guide's Basic Controls, Blend Modes, Generation Types, and Stacking Emitters & Children pages are no longer placeholders — each now covers its topic in full (viewport controls, all 10 blend modes, the Bursts/Continuous/Weather generation modes, and sibling vs. child-emitter stacking); the standalone Weather Particles stub is gone (folded into Generation Types, since Weather is a generation mode, not a separate topic), the "Coming Soon" nav section is dissolved now that its pages are written, and the Particle Authoring Primer gained a new Render Order section
 - The guide's tutorial pages now embed their walkthrough media inline — each step's recorded editor clip (with pause/replay controls) plays as you scroll to it, alongside the before/after screenshots — instead of empty placeholders; the media ships from the shared release at the (gated) site rollout
 - The site guide now carries the full tutorial course — Setup, a Particle Authoring Primer, four hands-on tutorials, and four quick references — with per-page wayfinding ("Tutorials · 3 of 4"), previous/next links at the bottom of every page, and readable link tables
