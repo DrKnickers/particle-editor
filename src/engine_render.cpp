@@ -118,14 +118,27 @@ void Engine::InitBloomEffect()
 	m_hBloomTechnique           = NULL;
 	m_bloomPassCount            = 0;
 
-	// Open the diagnostic file. Failure here is non-fatal; we'll
-	// still try to introspect and just skip the file output.
-	std::wstring logPath = ExeDirectory() + L"bloom-diagnostic.log";
+	// Diagnostic introspection (the parameter/technique dump + verdict, written
+	// to bloom-diagnostic.log and the console) is gated behind ALO_SHADER_DIAG so
+	// a normal user run generates nothing. Set the env var to capture the paper
+	// trail when investigating a "bloom greyed out" report. The handle-caching
+	// and m_bloomReady logic below always runs, regardless of this flag.
+	static int s_bloomDiag = -1;
+	if (s_bloomDiag < 0) { char b[8]; s_bloomDiag = (GetEnvironmentVariableA("ALO_SHADER_DIAG", b, sizeof(b)) > 0) ? 1 : 0; }
+	const bool diag = (s_bloomDiag != 0);
+
+	// Open the diagnostic file only under the diag flag. Failure here is
+	// non-fatal; we'll still introspect and just skip the file output.
 	FILE* f = NULL;
-	_wfopen_s(&f, logPath.c_str(), L"w");
+	if (diag)
+	{
+		std::wstring logPath = ExeDirectory() + L"bloom-diagnostic.log";
+		_wfopen_s(&f, logPath.c_str(), L"w");
+	}
 
 	auto logf = [&](const char* fmt, ...)
 	{
+		if (!diag) return;
 		char buf[1024];
 		va_list ap;
 		va_start(ap, fmt);
@@ -169,7 +182,7 @@ void Engine::InitBloomEffect()
 	// Enumerate every parameter — names + types, so a future bloom-
 	// matcher tweak knows exactly what the shader actually exposes.
 	logf("[bloom]   Parameters:\n");
-	for (UINT i = 0; i < desc.Parameters; ++i)
+	if (diag) for (UINT i = 0; i < desc.Parameters; ++i)
 	{
 		D3DXHANDLE hParam = pFx->GetParameter(NULL, i);
 		D3DXPARAMETER_DESC pd;
@@ -210,7 +223,7 @@ void Engine::InitBloomEffect()
 
 	// Enumerate every technique by name.
 	logf("[bloom]   Techniques:\n");
-	for (UINT i = 0; i < desc.Techniques; ++i)
+	if (diag) for (UINT i = 0; i < desc.Techniques; ++i)
 	{
 		D3DXHANDLE hTech = pFx->GetTechnique(i);
 		D3DXTECHNIQUE_DESC td;

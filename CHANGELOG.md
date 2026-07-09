@@ -82,6 +82,7 @@ may live at the end of the file.
 
 ### Changed
 
+- The editor no longer writes a `bloom-diagnostic.log` next to the exe (or prints the bloom parameter dump) on every run — that introspection is now opt-in via the `ALO_SHADER_DIAG` environment variable (#PR pending)
 - The hardpoint-damage, smoke-polish, and shield-impact tutorials' walkthrough clips now show the actual clicks each edit takes — focusing a colour channel by clicking its row, stepping key values on the Value spinner, flashing the active mod stack from the Mods menu, and ticking Link-particles-to-instance after collapsing the sections above it — and zoom in on the panel being edited so the controls are readable at embed size, matching the laser-shot tutorial's style
 - The laser-shot tutorial's walkthrough clips now show the actual clicks and typing each step takes — renaming an emitter by typing into the name box, picking an atlas frame in the picker, dropping keys onto the colour curves, switching Bursts generation, dialling the Spawner's velocity, and adjusting Parent-speed-inherit in the Physics tab — and zoom in on the relevant panel so the controls are readable at embed size
 - Landing page reorganized into a numbered walkthrough — Scene context, Mod stack, Spawner, Emitter order, Atlas picker, then a grouped Toolset grid (Authoring · Preview & viewport · Files & reliability) — with a new Spawner clip showing a projectile effect in flight and copy that calls out mod-shader resolution and live reload
