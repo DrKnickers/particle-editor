@@ -82,6 +82,7 @@ may live at the end of the file.
 
 ### Changed
 
+- Link-group badges in the emitter tree now show the bare group number ("1") instead of "G1"
 - The editor no longer writes a `bloom-diagnostic.log` next to the exe (or prints the bloom parameter dump) on every run — that introspection is now opt-in via the `ALO_SHADER_DIAG` environment variable (#PR pending)
 - The hardpoint-damage, smoke-polish, and shield-impact tutorials' walkthrough clips now show the actual clicks each edit takes — focusing a colour channel by clicking its row, stepping key values on the Value spinner, flashing the active mod stack from the Mods menu, and ticking Link-particles-to-instance after collapsing the sections above it — and zoom in on the panel being edited so the controls are readable at embed size, matching the laser-shot tutorial's style
 - The laser-shot tutorial's walkthrough clips now show the actual clicks and typing each step takes — renaming an emitter by typing into the name box, picking an atlas frame in the picker, dropping keys onto the colour curves, switching Bursts generation, dialling the Spawner's velocity, and adjusting Parent-speed-inherit in the Physics tab — and zoom in on the relevant panel so the controls are readable at embed size
@@ -173,6 +174,10 @@ may live at the end of the file.
 
 ### Fixed
 
+- Face-camera (screen-oriented) particles no longer freeze their orientation while the preview is paused — they keep re-orienting to the camera as you orbit the view
+- The Blend Mode dropdown no longer wraps or overflows for long labels (e.g. "Diffuse transparent") — it now truncates to one line
+- A failing Ctrl+S (and a parked Ctrl+O/Ctrl+N behind the unsaved-changes prompt) no longer trips an unhandled internal error — the failure is now caught and handled the same way other save/open failures are
+- A corrupted or malformed `.alo` file with an invalid chunk header now fails to load with a clear error instead of risking a crash on load
 - Mode-11 bump particles no longer preview at ~50% opacity under Mod/Mod's modified bump shader — the editor now sets the shader's distance-fade parameter to a full-alpha value instead of leaving it unset
 - Bump-mapped particles (normal/depth-textured emitters — e.g. explosion debris rocks) no longer render as dark squares at small sizes; they keep their alpha-cutout rock shapes, matching the in-game look
 - A particle effect with custom link-group "exempt" settings now saves and reloads correctly instead of producing a file the editor couldn't reopen; malformed or oversized `.alo` files also no longer hang or exhaust memory when loading

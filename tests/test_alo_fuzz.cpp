@@ -18,19 +18,18 @@
 //     and bones/connections respect their 4096 caps (AloModel.cpp:328,351;
 //     ResourceLimits.h:17-18).
 //
-// KNOWN LATENT BUG (deliberately excluded, NOT fixed here -- fixing it is a
-// src change): if a mutation flips the container/data kind of a chunk type
-// the decoder dispatches on (e.g. skeleton 0x200 arriving as a DATA chunk),
-// the sub-reader's `while (r.next() != -1)` walk escapes the (never-entered)
-// chunk and consumes SIBLING chunks plus the parent's own -1 terminator, so
-// the caller's next() call double-pops ChunkReader::m_curDepth to -1 --
-// a Debug assert (ChunkReader.cpp:52) / OOB read of m_offsets[-1] in Release.
-// Same class via nextMini's `assert(m_size >= 0)` (ChunkReader.cpp:11) when a
-// mini-chunk host (0x10102-0x10106 / 0x602) is flipped to a container. The
-// mutator below detects kind-vs-type mismatches on recognised chunk types and
-// SKIPS those mutants (counted + printed) so the lane stays green while the
-// bug exists; delete expectedKindMismatch() once the decoder guards its
-// dispatch sites.
+// DISPATCH-KIND FLIPS (now COVERED, issue #487): flipping the container/data
+// kind of a chunk type the decoder dispatches on used to crash it -- a chunk
+// expected as a CONTAINER but arriving as DATA (e.g. skeleton 0x200 as a data
+// chunk) made the sub-reader's `while (r.next() != -1)` walk escape the chunk,
+// consume SIBLING chunks plus the parent's -1 terminator, and double-pop
+// ChunkReader::m_curDepth to -1 (Debug assert ChunkReader.cpp:52 / Release OOB
+// read of m_offsets[-1]); same class via nextMini's `assert(m_size >= 0)`
+// (ChunkReader.cpp:11) when a mini-chunk host (0x10102-0x10106 / 0x602) was
+// flipped to a container. AloModel.cpp now guards its dispatch sites
+// (VerifyContainer / VerifyDataLeaf) so these mutants take the documented
+// BadFile path instead. The former expectedKindMismatch() skip has been
+// removed, so the fuzzer now exercises this whole class rather than dodging it.
 //
 // Standalone console exe; see tests/build_test_alo_fuzz.bat.
 
@@ -154,52 +153,6 @@ static uint32_t xr()
     return g_rng = x;
 }
 
-// ---- known-bug detector (see header comment) --------------------------------
-// Walks the mutant's declared chunk tree; true if any RECOGNISED chunk type
-// carries the wrong container/data kind -- the double-pop trigger. Conservative:
-// walks every container (the decoder skips unknown ones), so it may skip a few
-// mutants the decoder would survive; that costs coverage, never soundness.
-static bool kindIsKnown(uint32_t t, bool& expectContainer)
-{
-    switch (t)
-    {
-        case 0x200: case 0x202: case 0x400: case 0x600:
-        case 0x10000: case 0x10100:
-            expectContainer = true;  return true;
-        case 0x201: case 0x203: case 0x205: case 0x206:
-        case 0x401: case 0x402: case 0x601: case 0x602:
-        case 0x10001: case 0x10002: case 0x10004: case 0x10005: case 0x10007:
-        case 0x10101: case 0x10102: case 0x10103: case 0x10104: case 0x10105: case 0x10106:
-            expectContainer = false; return true;
-        default:
-            return false;
-    }
-}
-static uint32_t rdU32(const Bytes& b, size_t at)
-{
-    return (uint32_t)b[at] | ((uint32_t)b[at + 1] << 8)
-         | ((uint32_t)b[at + 2] << 16) | ((uint32_t)b[at + 3] << 24);
-}
-static bool expectedKindMismatch(const Bytes& b, size_t off, size_t end, int depth)
-{
-    if (depth > 8) return false;
-    while (off + 8 <= end)
-    {
-        const uint32_t type = rdU32(b, off);
-        const uint32_t size = rdU32(b, off + 4);
-        const bool     isContainer = (size & 0x80000000u) != 0;
-        const uint64_t payload     = size & 0x7FFFFFFFu;
-        bool expectContainer = false;
-        if (kindIsKnown(type, expectContainer) && isContainer != expectContainer)
-            return true;
-        if (off + 8 + payload > end) return false;   // overrun: reader rejects it first
-        if (isContainer && expectedKindMismatch(b, off + 8, off + 8 + (size_t)payload, depth + 1))
-            return true;
-        off += 8 + (size_t)payload;
-    }
-    return false;
-}
-
 // ---- one decode attempt with outcome classification -------------------------
 enum Outcome
 {
@@ -298,7 +251,7 @@ int main()
     // a u32 (length/count/type field) overwrite at a random offset.
     {
         const int kRounds = 2000;
-        size_t badExc = 0, badInv = 0, rejected = 0, loaded = 0, skippedKnownBug = 0;
+        size_t badExc = 0, badInv = 0, rejected = 0, loaded = 0;
         int firstBadRound = -1;
         for (int round = 0; round < kRounds; ++round)
         {
@@ -335,11 +288,6 @@ int main()
                     break;
                 }
             }
-            if (expectedKindMismatch(img, 0, img.size(), 0))
-            {
-                ++skippedKnownBug;   // dispatch-kind double-pop; see header comment
-                continue;
-            }
             switch (decode(img))
             {
                 case LOADED_OK:     ++loaded;   break;
@@ -348,25 +296,17 @@ int main()
                 case BAD_EXCEPTION: ++badExc;   if (firstBadRound < 0) firstBadRound = round; break;
             }
         }
-        std::printf("  mutation rounds: %d total, %zu rejected, %zu loaded, "
-                    "%zu skipped (known dispatch-kind bug)\n",
-                    kRounds, rejected, loaded, skippedKnownBug);
+        std::printf("  mutation rounds: %d total, %zu rejected, %zu loaded\n",
+                    kRounds, rejected, loaded);
         if (firstBadRound >= 0)
             std::printf("  first bad round: %d (re-run with g_rng traced)\n", firstBadRound);
         CHECK(badExc == 0, "mutations: only documented exception types escape");
         CHECK(badInv == 0, "mutations: no clean load ever violates invariants");
-        CHECK(rejected + loaded + skippedKnownBug == (size_t)kRounds,
+        CHECK(rejected + loaded == (size_t)kRounds,
               "mutations: every round classified");
         // Sanity on the harness itself: the corpus must actually hit both sides.
         CHECK(rejected > 0, "mutations: corpus produced rejects (mutator not a no-op)");
         CHECK(loaded > 0, "mutations: corpus produced survivors (parser is tolerant by design)");
-        // Bound the known-bug skips: today the deterministic corpus skips ~33
-        // of 2000 rounds (dispatch-kind double-pop, see header). If a future
-        // edit to the base image or mutator pushes the skip fraction anywhere
-        // near half the corpus, the fuzzer has silently degenerated — fail
-        // loudly instead of shipping a green no-op lane.
-        CHECK(skippedKnownBug < (size_t)kRounds / 2,
-              "mutations: known-bug skips must stay a small fraction of the corpus");
     }
 
     // ---- the base image still round-trips after the fuzz (no global state) ----

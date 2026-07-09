@@ -67,6 +67,32 @@ describe("useAppAccelerators", () => {
     expect(b.request).toHaveBeenCalledWith({ kind: "file/save", params: {} });
   });
 
+  it("Ctrl+S whose file/save REJECTS is caught — no unhandled rejection (#489)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+
+    const b = makeFakeBridge();
+    // Transport-level failure (bridge not ready / dead pipe): runFileOp
+    // surfaces it in the error modal and then RE-THROWS. Before the fix the
+    // fire-and-forget `void runFileOp(...)` let that reject escape unhandled.
+    b.request.mockImplementation((req: { kind: string }) => {
+      if (req.kind === "file/save") return Promise.reject(new Error("transport dead"));
+      if (req.kind === "engine/state/snapshot")
+        return Promise.resolve({ ground: false, paused: false, heatDebug: false });
+      return Promise.resolve({});
+    });
+    render(<Harness bridge={b} />);
+    b.fire("Ctrl+S");
+    await flush();
+    await flush();
+
+    process.off("unhandledRejection", unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith("[accel] Ctrl+S save failed:", expect.any(Error));
+    warn.mockRestore();
+  });
+
   it("Ctrl+Y → undo/perform redo", () => {
     const b = makeFakeBridge();
     render(<Harness bridge={b} />);

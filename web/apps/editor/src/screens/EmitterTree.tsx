@@ -881,9 +881,10 @@ function EmitterRow({
                   {node.name}
                 </span>
               )}
-              {/* Badge: small G{n} chip at the right end of the name cell,
-                  coloured to the group. Shrinks-0 so it stays visible even
-                  when the name truncates. Clicking selects the whole group. */}
+              {/* Badge: small group-number chip at the right end of the name
+                  cell, coloured to the group. Shrinks-0 so it stays visible
+                  even when the name truncates. Clicking selects the whole
+                  group. */}
               {isLinked && (
                 <Tip
                   content={`Select link group ${node.linkGroup}`}
@@ -907,7 +908,7 @@ function EmitterRow({
                       onSelectLinkGroup(node.linkGroup);
                     }}
                   >
-                    G{node.linkGroup}
+                    {node.linkGroup}
                   </span>
                 </Tip>
               )}

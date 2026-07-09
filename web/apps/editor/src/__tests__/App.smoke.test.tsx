@@ -10,14 +10,12 @@
 // useSeedFileState → formatWindowTitle). Deep behavior lives in the
 // per-component suites.
 
-// KNOWN MOCK ARTIFACT (verified against the native source): AppShell's
-// startup pushes (engine/set/msaa-level, engine/set/model-shadows,
-// engine/set/soft-shadows) are view-only preferences that the native
-// host explicitly never marks dirty (BridgeDispatcher.cpp ~1949), but
-// MockBridge's isMutating() blanket `engine/set/*` rule doesn't exclude
-// them — so the app boots DIRTY under the mock. The title assertions
-// below therefore tolerate the `● ` dirty prefix instead of asserting a
-// clean boot. If the mock parity gap is fixed, tighten them.
+// BOOT-CLEAN PARITY (issue #488, fixed): AppShell's startup pushes
+// (engine/set/msaa-level, engine/set/model-shadows, engine/set/soft-shadows)
+// are view-only preferences the native host explicitly never marks dirty
+// (BridgeDispatch_Engine.cpp:426-458). MockBridge's isMutating() now excludes
+// all three, matching the host — so the app boots CLEAN under the mock and
+// the title assertions below require no `● ` dirty prefix.
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -94,8 +92,8 @@ describe("App — smoke render against the MockBridge", () => {
       expect(useFileStateStore.getState().currentFilePath).toBe("C:/mods/fire.alo");
     });
     await waitFor(() => {
-      // Tolerates the mock's spurious boot-dirty `● ` prefix (see header note).
-      expect(document.title).toMatch(/^(● )?fire\.alo — Particle Editor$/);
+      // Boots CLEAN (no `● ` dirty prefix) — see header note (#488).
+      expect(document.title).toBe("fire.alo — Particle Editor");
     });
     // file/recent/list seed landed too.
     await waitFor(() => {

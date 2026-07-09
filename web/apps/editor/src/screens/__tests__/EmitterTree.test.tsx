@@ -847,17 +847,17 @@ describe("EmitterTree", () => {
     expect(screen.queryByTestId("emitter-link-dot-5")).toBeNull();
   });
 
-  it("linked row renders a badge with text G{n}; unlinked row renders no badge", async () => {
+  it("linked row renders a badge with the bare group number; unlinked row renders no badge", async () => {
     const bridge = makeStubBridge();
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => {
       expect(screen.getByText("Smoke")).toBeInTheDocument();
     });
 
-    // Smoke (id=0, linkGroup=1) → badge present with text "G1".
+    // Smoke (id=0, linkGroup=1) → badge present with bare group number "1".
     const badge0 = screen.getByTestId("emitter-link-badge-0");
     expect(badge0).toBeInTheDocument();
-    expect(badge0.textContent).toBe("G1");
+    expect(badge0.textContent).toBe("1");
     // Badge is decorative — aria-hidden keeps a11y goldens stable.
     expect(badge0.getAttribute("aria-hidden")).toBe("true");
 

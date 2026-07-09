@@ -92,7 +92,12 @@ export function useAppAccelerators(bridge: Bridge): void {
           });
           break;
         case "Ctrl+S":
-          void runFileOp(bridge, { kind: "file/save", params: {} });
+          // runFileOp surfaces any failure in the error modal and then
+          // re-throws; swallow the rejection here so a failing Ctrl+S never
+          // becomes an unhandled promise rejection (#489).
+          runFileOp(bridge, { kind: "file/save", params: {} }).catch((err) =>
+            console.warn("[accel] Ctrl+S save failed:", err),
+          );
           break;
         // ── Edit ──
         case "Ctrl+Del":

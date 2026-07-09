@@ -162,7 +162,12 @@ export function useSeedFileState(bridge: Bridge): void {
 export function promptSaveChanges(action: () => void | Promise<void>): void {
   const dirty = useFileStateStore.getState().dirty;
   if (!dirty) {
-    void action();
+    // Fire-and-forget: the action may be a file op that rejects (runFileOp
+    // re-throws after surfacing the error). Swallow so it never escapes as an
+    // unhandled promise rejection (#489).
+    Promise.resolve(action()).catch((err) =>
+      console.warn("[file-state] pending action failed:", err),
+    );
     return;
   }
   useFileStateStore.getState().setPendingAction(action);

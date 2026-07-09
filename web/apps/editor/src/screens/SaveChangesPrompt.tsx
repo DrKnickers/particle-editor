@@ -102,7 +102,14 @@ export function SaveChangesPrompt({ bridge }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => void handleDiscard()}
+          onClick={() =>
+            // "Don't Save" runs the parked action (Ctrl+O/Ctrl+N), which may
+            // reject; runFileOp already surfaces file failures, so swallow to
+            // avoid an unhandled promise rejection (#489).
+            void handleDiscard().catch((err) =>
+              console.warn("[save-prompt] discard action failed:", err),
+            )
+          }
           aria-label="Don't Save"
           className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
         >

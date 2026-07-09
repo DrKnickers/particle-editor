@@ -92,6 +92,14 @@ function isMutating(kind: Request["kind"]): boolean {
   // has no engine sim so the value has no effect here.
   if (kind === "engine/set/estimated-load") return false;
   if (kind === "engine/set/heat-debug") return false;
+  // MSAA level, model-shadows, and soft-shadows are view-only display
+  // preferences — the native host's handlers explicitly never mark the
+  // document dirty (BridgeDispatcher.cpp: "View-only display preference").
+  // Excluding them here keeps browser/jsdom mode from booting dirty off
+  // AppShell's startup pushes of these kinds.
+  if (kind === "engine/set/msaa-level") return false;
+  if (kind === "engine/set/model-shadows") return false;
+  if (kind === "engine/set/soft-shadows") return false;
   // stats/set-frozen is a test-only knob; never mutating.
   if (kind === "stats/set-frozen") return false;
   if (kind.startsWith("engine/set/")) return true;

@@ -982,8 +982,15 @@ function FieldSelect({
           aria-label={label}
           className="flex h-[var(--row-h)] w-full items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text transition hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Select.Value>{selected?.label ?? ""}</Select.Value>
-          <Select.Icon>
+          {/* Radix Select.Value strips className, so wrap it in a truncating
+              span — white-space:nowrap + overflow-hidden + ellipsis apply to
+              the selected-label text through the wrapper. min-w-0 lets this
+              flex child shrink so long labels (e.g. "Diffuse transparent")
+              ellipsize instead of wrapping onto a second line (#573). */}
+          <span className="min-w-0 truncate">
+            <Select.Value>{selected?.label ?? ""}</Select.Value>
+          </span>
+          <Select.Icon className="shrink-0">
             <ChevronDown className="size-3 text-text-3" />
           </Select.Icon>
         </Select.Trigger>

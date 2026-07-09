@@ -300,6 +300,21 @@ const Engine::Camera& Engine::GetCamera() const
 
 void Engine::SetCamera( const Camera& camera )
 {
+	// A camera move changes GetBillboardMatrix(), and screen-oriented
+	// (!isWorldOriented) particles bake that matrix into their vertices on the
+	// CPU in EmitterInstance::UpdateParticle. While the preview is paused the
+	// sim clock is frozen, so the [D2] paused-idle skip in UpdateParticles would
+	// otherwise elide the re-bake and the quads freeze edge-on as the view
+	// orbits (#576). Force one more Update pass when the camera actually moves.
+	// Guarded on a REAL change so a static paused frame (no orbit) still skips
+	// and the idle-recompute elision is preserved.
+	if (camera.Position != m_eye.Position
+		|| camera.Target != m_eye.Target
+		|| camera.Up     != m_eye.Up)
+	{
+		InvalidatePausedIdleSkip();
+	}
+
 	m_eye = camera;
 
 	// Construct matrices
