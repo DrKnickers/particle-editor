@@ -233,6 +233,16 @@ void Engine::RenderReferenceObject()
         fx->SetMatrixArray(h.hSphLightAll,    m_sphLightAll,  3);
         fx->SetMatrixArray(h.hSphLightFill,   m_sphLightFill, 3);
         fx->SetFloat(h.hTime,                 GetTimeF());
+        // Distance fade: mirror the particle path (EmitterInstance::Render). The
+        // editor never authors real DISTANCE_FADE_VALS, so a mesh shader that
+        // strips the baked default reads (0,0) -> Compute_Distance_Fade == 0 and
+        // the mesh previews at reduced alpha. Force (0,1) = no fade -> full alpha;
+        // a no-op on stock shaders whose baked default already resolves to 1.0.
+        if (h.hDistanceFadeVals)
+        {
+            D3DXVECTOR4 distanceFade(0.0f, 1.0f, 0.0f, 0.0f);   // (0,1)=no fade; editor-only, engine sets real vals in-game
+            fx->SetVector(h.hDistanceFadeVals, &distanceFade);
+        }
 
         // Skinned (RSkin) sub-mesh: render in BIND POSE. The RSkin VS uses
         // m_viewProj (world->clip) + a float4x3 m_skinMatrixArray[24] bone palette
