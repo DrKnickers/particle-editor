@@ -39,7 +39,7 @@
 //   --list                print lanes and exit
 
 import { spawnSync } from "node:child_process";
-import { existsSync, statSync, writeFileSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, statSync, writeFileSync, readFileSync, unlinkSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -274,6 +274,45 @@ const LANES = [
       return runExe(process.execPath, [join(repoRoot, "scripts", "render-goldens.mjs")]) === 0
         ? pass
         : fail("render goldens (bless intentional changes with scripts/render-goldens.mjs --update)");
+    },
+  },
+  {
+    // #510: the ONLY lane that exercises `--record` (render-goldens uses
+    // --capture, drive-smoke uses --drive). Records ~15 frames of a
+    // self-contained fixture .alo (no game install) and asserts the output got
+    // >0 NON-BLANK PNGs — the coverage whose absence let #510 (0-frame records)
+    // go unnoticed. Drives the HEADLESS path (PE_RECORD_HEADLESS=1 +
+    // --record-minimized) so it guards the offscreen-composition + message-ack
+    // mechanism the #510 fix rests on (and runs without popping a window onto
+    // the gate desktop). Frame count + a max-byte floor are the pass signals: a
+    // blank/black capture (e.g. composition-disabled session) yields tiny PNGs,
+    // so the floor catches the loud→silent shift GrabWindowPixels would allow.
+    name: "record-smoke",
+    deps: ["msbuild-release", "web-build"],
+    run: () => {
+      const checks = [
+        [existsSync(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first"],
+        [existsSync(distIndex), "web dist/ missing (headless record renders the UI)", "run the web-build lane first"],
+      ];
+      for (const [ok, what, hint] of checks) { const p = prereq("record-smoke", ok, what, hint); if (p) return p; }
+      const outDir = join(repoRoot, "tests", ".tmp", "record-smoke-frames");
+      const clean = () => { rmSync(outDir, { recursive: true, force: true }); rmSync(outDir + ".tmp", { recursive: true, force: true }); };
+      clean();
+      const r = spawnSync(releaseExe,
+        ["--record", join(repoRoot, "tests", "record-smoke.timeline.json"), "--record-minimized"],
+        { cwd: repoRoot, encoding: "utf8", timeout: 90000, stdio: "ignore",
+          env: { ...process.env, PE_RECORD_HEADLESS: "1" } });
+      let frames = [];
+      try { frames = readdirSync(outDir).filter((f) => /^frame_\d+\.png$/.test(f)); }
+      catch { /* out dir missing → 0 frames (record aborted before the tmp→out rename) */ }
+      let maxBytes = 0;
+      for (const f of frames) { try { maxBytes = Math.max(maxBytes, statSync(join(outDir, f)).size); } catch { /* raced */ } }
+      clean();
+      if (frames.length === 0) return fail(`headless --record produced 0 frames; exe exit ${r.status}`);
+      // A real 1280x960 UI render PNG is tens-to-hundreds of KB; a blank/black
+      // frame compresses to a few KB. 20KB cleanly separates them.
+      if (maxBytes < 20000) return fail(`headless --record frames look blank (max ${maxBytes} bytes across ${frames.length}); exe exit ${r.status}`);
+      return pass;
     },
   },
   {

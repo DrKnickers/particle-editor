@@ -5328,8 +5328,16 @@ int HostWindowImpl::Run(int nCmdShow)
                     // headless mode.
                     if (m_recordMinimized && m_recordHeadless)
                     {
-                        ShowWindow(hMain, SW_MINIMIZE);
-                        Log("[record] window minimized for headless capture\n");
+                        // Move the window fully OFFSCREEN instead of minimizing it.
+                        // A minimized window is throttled by DWM (composition only
+                        // advances on forced DwmFlush cycles), which made
+                        // CapturePreview's completion take 12-15 flush spins
+                        // (~47ms/frame). An offscreen-but-visible window keeps
+                        // normal composition, so CapturePreview completes in 1-2
+                        // cycles — while staying invisible to the user. (#510)
+                        SetWindowPos(hMain, nullptr, -32000, -32000, 0, 0,
+                                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                        Log("[record] window moved offscreen for headless capture\n");
                     }
 
                     // (e1) hide the right-dock (Spawner/Lighting/Atlas) panel so the
@@ -5490,39 +5498,22 @@ int HostWindowImpl::Run(int nCmdShow)
                             host::AsyncFrameEncoder::Frame f;
                             f.path = tmpDir + name;
 
-                            // Headless composite (PE_RECORD_HEADLESS): render the
-                            // engine once, read its RT (AlphaCompositor D3D9
-                            // readback, scene-cropped), CapturePreview the UI, and
-                            // alpha-composite in-proc. NO DwmFlush / PrintWindow /
-                            // DWM-present dependency → fast even minimized. Any
-                            // failure returns false → ClipRunner exit 4, no publish.
-                            if (m_recordHeadless)
+                            // Headless (PE_RECORD_HEADLESS): the record window is
+                            // moved OFFSCREEN (not minimized — see the SetWindowPos
+                            // above), so it composites normally AND can't be occluded
+                            // by any other window. That makes the fast foreground
+                            // capture path below (barrier + GrabWindowPixels) both
+                            // correct and occlusion-immune for headless too. The old
+                            // headless path used CapturePreview + a CPU composite,
+                            // whose CapturePreview completion needed 12-15 DwmFlush
+                            // cycles (~50ms/frame); the window grab is ~20ms. (#510)
+                            if (m_recordHeadless && !m_headlessAckOk)
                             {
-                                // A withheld/timed-out ack (finding 1) means the
-                                // web's flushSync commit failed — the DOM is STALE.
-                                // Fail the frame loudly rather than publish it.
-                                if (!m_headlessAckOk)
-                                { Log("[record] headless ack failed at frame %d — DOM not committed\n", idx); return false; }
-                                const LONGLONG tR0 = PerfQpcNow();
-                                RenderD3D9();   // advance the engine RT this frame
-                                const LONGLONG tC0 = PerfQpcNow();
-                                std::vector<unsigned char> uiBgra; int uiW = 0, uiH = 0;
-                                if (!CapturePreviewToBgra(uiBgra, uiW, uiH))
-                                { Log("[record] headless CapturePreview failed at frame %d\n", idx); return false; }
-                                const LONGLONG tC1 = PerfQpcNow();
-                                std::vector<unsigned char> engBgra;
-                                int eW = 0, eH = 0, eX = 0, eY = 0;
-                                if (!alphaCompositor ||
-                                    !alphaCompositor->CaptureSnapshotBgra(engBgra, eW, eH, eX, eY))
-                                { Log("[record] headless engine readback failed at frame %d\n", idx); return false; }
-                                host::CompositeUiOverEngine(uiBgra, uiW, uiH,
-                                                      engBgra, eW, eH, eX, eY,
-                                                      f.bgra, f.w, f.h);
-                                const bool ok = enc->Enqueue(std::move(f));
-                                m_recordTiming.curCapture   += QpcMs(tC1 - tC0, rf);
-                                m_recordTiming.curComposite += QpcMs((tC0 - tR0) +
-                                                               (PerfQpcNow() - tC1), rf);
-                                return ok;
+                                // A withheld/timed-out ack means the web's flushSync
+                                // commit failed — the DOM is STALE. Fail the frame
+                                // loudly rather than publish it.
+                                Log("[record] headless ack failed at frame %d — DOM not committed\n", idx);
+                                return false;
                             }
 
                             // [record-timing] barrier (present+flush loop) and
