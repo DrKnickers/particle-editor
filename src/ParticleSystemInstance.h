@@ -94,6 +94,8 @@ public:
 	int  Update(TimeF currentTime);
 	void RenderNormal(IDirect3DDevice9* pDevice);
 	void RenderHeat(IDirect3DDevice9* pDevice);
+	// Shared rank-ordered draw pass for RenderNormal/RenderHeat (#574).
+	void RenderByRank(IDirect3DDevice9* pDevice, bool wantHeat);
 	// [D3] True when any emitter would draw in RenderHeat this frame —
 	// Engine::Render's zero-heat skip probe (see EmitterInstance::HasLiveHeat).
 	// Body in the .cpp: EmitterInstance is only fwd-declared here.

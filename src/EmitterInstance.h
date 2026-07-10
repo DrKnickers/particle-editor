@@ -92,6 +92,11 @@ public:
 	// skip the distort RT clear + RenderHeat scan when nothing would draw.
 	bool  HasLiveHeat()   const   { return !m_primitives.empty() && IsHeatEmitter(); }
 	bool  IsRoot()        const   { return m_emitter.parent == NULL; }
+	// Authored rank = the wrapped emitter's position in the ParticleSystem's
+	// emitter list (kept in sync on add/remove/reorder — ParticleSystem.cpp).
+	// Drives the rank-ordered draw pass so lazily-spawned children honor their
+	// list position vs siblings instead of always drawing last (#574).
+	size_t GetSourceRank() const  { return m_emitter.index; }
 	ParticleSystemInstance& GetSystem() { return m_system; }
 
 	EmitterInstance(TimeF currentTime, ParticleSystemInstance& system, Engine& engine, ParticleSystem::Emitter& emitter, Object3D* parent, int* numParticles);

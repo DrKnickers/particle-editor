@@ -176,6 +176,7 @@ may live at the end of the file.
 
 - Heavy particle systems (e.g. Mod's) that repeatedly refused to render in the preview — even after raising the overload cap to its maximum — now render correctly; the preview's overload estimate no longer wildly over-projects particle counts for chains where a child emitter spawns on its parent's death
 - The Atlas Frame Picker now correctly highlights the wrapped frame when an index-curve value runs past the last atlas cell (e.g. index 4 on a 4-frame atlas now shows frame 0, matching the game), instead of losing the selection highlight
+- Child emitters (spawned during a parent's life or on its death) now preview drawn behind or in front of their siblings according to their authored rank, instead of always drawing on top regardless of rank
 - The Atlas Frame Picker no longer freezes the editor for several seconds when opened on a large atlas texture (e.g. a 256-frame Mod particle atlas) — the frame grid now draws in a single canvas paint instead of one DOM element per frame, so opening, scrolling, and closing the picker stay smooth regardless of atlas size
 - Face-camera (screen-oriented) particles no longer freeze their orientation while the preview is paused — they keep re-orienting to the camera as you orbit the view
 - The Blend Mode dropdown no longer wraps or overflows for long labels (e.g. "Diffuse transparent") — it now truncates to one line

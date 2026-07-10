@@ -1,6 +1,9 @@
 #include "ParticleSystemInstance.h"
 #include "EmitterInstance.h"
 #include "SpawnerPath.h"
+#include "EmitterDrawOrder.h"
+#include <vector>
+#include <utility>
 using namespace std;
 
 void ParticleSystemInstance::onParticleSystemChanged(const Engine& engine, int track)
@@ -82,26 +85,37 @@ int ParticleSystemInstance::Update(TimeF currentTime)
     return nParticles;
 }
 
+// Draw the emitters matching `wantHeat` in authored RANK order (Emitter::index),
+// not m_emitters spawn order. Root emitters are spawned in index order so this
+// is a no-op ordering for root-only systems; it only reorders lazily-spawned
+// children (spawnDuringLife/spawnOnDeath), which are appended at the tail
+// regardless of rank and would otherwise always draw on top of their
+// list-earlier siblings (#574). The pure ordering decision — filter by heat,
+// stable-sort by rank — lives in ComputeEmitterDrawOrder (unit-tested,
+// tests/test_emitter_draw_order.cpp); this just gathers the keys and draws.
+void ParticleSystemInstance::RenderByRank(IDirect3DDevice9* pDevice, bool wantHeat)
+{
+    std::vector<EmitterInstance*> insts;
+    std::vector<std::pair<size_t, bool>> keys;
+    insts.reserve(m_emitters.size());
+    keys.reserve(m_emitters.size());
+    for (auto& emitter : m_emitters)
+    {
+        insts.push_back(emitter.get());
+        keys.push_back({ emitter->GetSourceRank(), emitter->IsHeatEmitter() });
+    }
+    for (size_t idx : ComputeEmitterDrawOrder(keys, wantHeat))
+        insts[idx]->Render(pDevice);
+}
+
 void ParticleSystemInstance::RenderNormal(IDirect3DDevice9* pDevice)
 {
-    for (auto& emitter : m_emitters)
-	{
-        if (!emitter->IsHeatEmitter())
-        {
-            emitter->Render(pDevice);
-        }
-	}
+    RenderByRank(pDevice, /*wantHeat=*/false);
 }
 
 void ParticleSystemInstance::RenderHeat(IDirect3DDevice9* pDevice)
 {
-    for (auto& emitter : m_emitters)
-	{
-        if (emitter->IsHeatEmitter())
-        {
-            emitter->Render(pDevice);
-        }
-	}
+    RenderByRank(pDevice, /*wantHeat=*/true);
 }
 
 bool ParticleSystemInstance::HasLiveHeat() const
