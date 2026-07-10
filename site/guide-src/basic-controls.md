@@ -26,6 +26,8 @@ Left and right stay fixed at the point where you clicked.
 This Shift-to-preview, click-to-place pattern is easy to miss — nothing on screen announces it — so
 reach for it whenever an effect does not appear to be showing.
 
+<!-- Media (planned): ref-shift-preview -->
+
 ## Move the Camera
 
 The camera orbits a target point in the scene. Every camera move scales with how far you are zoomed
@@ -39,6 +41,8 @@ in, so it stays controllable whether you are close to a small effect or pulled b
 
 The scroll wheel zooms in small steps and is usually the easiest way to close in on detail. Ctrl-drag
 zoom is smoother for large distance changes.
+
+<!-- Media (planned): ref-camera-controls -->
 
 ## Select an Emitter
 

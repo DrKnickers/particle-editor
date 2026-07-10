@@ -11,9 +11,11 @@ Emitter Tree. Each one is independent, plays at the same time, and originates fr
 their visuals layer on top of one another. An explosion might be one emitter for the flash, one for
 the fireball, one for the smoke, and one for the flying sparks.
 
-Add a new root emitter by right-clicking in the Emitter Tree and choosing **New Root Emitter**. The
-habit that keeps this manageable is to keep each emitter responsible for one visual part, and to
-select emitters one at a time while previewing so you always know what each one contributes.
+Add a new root emitter by right-clicking in the Emitter Tree and choosing **New Root Emitter** —
+the tree's **+** button and the Emitters menu offer the same commands, so use whichever is under
+your cursor. The habit that keeps this manageable is to keep each emitter responsible for one
+visual part, and to select emitters one at a time while previewing so you always know what each
+one contributes.
 
 Stacking is the default answer. Reach for child emitters only when a part of the effect needs to be
 tied to another emitter's particles rather than standing on its own.
@@ -50,3 +52,9 @@ Ask where the sub-effect should come from:
 
 When in doubt, stack siblings. Children are the specialized tool for the cases where a part of the
 effect must ride on another emitter's particles.
+
+[Tutorial 5: Build an Explosion](05-build-an-explosion) puts both patterns to work — four
+stacked root emitters plus a Lifetime Child that gives every flying spark its own smoke trail.
+
+<!-- Media (planned): ref-lifetime-child-trail -->
+<!-- Media (planned): ref-death-child-pop -->

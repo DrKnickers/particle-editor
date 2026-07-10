@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>5. Build an Explosion — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html" class="active" aria-current="page">5. Build an Explosion</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 5 of 5</span></p>
+<h1 id="tutorial-5-build-an-explosion">Tutorial 5: Build an Explosion</h1>
+<p>This tutorial starts from a blank particle and builds a complete explosion: a white-hot flash, an expanding fireball, lingering smoke, and a shell of flying sparks that leave their own trails.</p>
+<p>An explosion is the classic stacked effect — every layer is simple on its own, and the result comes from how the layers are timed against each other. This is also the first tutorial where child emitters and the Physics tab do real work.</p>
+<!-- Media (planned): tutorial-05-opening-result -->
+<h2 id="outcome">Outcome</h2>
+<p>By the end of this page, the particle will contain four coordinated parts:</p>
+<ul>
+<li>a short white-hot flash that sells the instant of detonation;</li>
+<li>a fireball that expands and burns out;</li>
+<li>dark smoke that grows, lingers, and fades last;</li>
+<li>a radial shell of sparks, each trailing its own smoke.</li>
+</ul>
+<p>This tutorial stays in the editor preview, like Tutorial 3. At the end there is a short note about how explosions are referenced by the game.</p>
+<h2 id="what-this-teaches">What this teaches</h2>
+<ul>
+<li>Choreographing several burst emitters against one another with lifetime and delay.</li>
+<li>Animating a texture atlas with the Index track and step interpolation.</li>
+<li>Using render order deliberately in a layered effect.</li>
+<li>Giving particles radial motion with the Initial speed shape in the Physics tab.</li>
+<li>Attaching a Lifetime Child so each moving particle carries its own sub-effect.</li>
+<li>Keeping a multi-emitter effect readable and affordable.</li>
+</ul>
+<p>Three reference pages carry the background for this tutorial: <a href="./generation-types.html">Particle Generation Types</a>, <a href="./motion-and-physics.html">Motion and Physics</a>, and <a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a>.</p>
+<h2 id="before-you-start">Before You Start</h2>
+<p>Create a blank particle with <strong>File → New</strong>, then save it into the tutorial mod folder with <strong>Save As</strong>:</p>
+<pre><code class="language-text">ParticleTutorial\Data\Art\Models\P_TUTORIAL_EXPLOSION.ALO
+</code></pre>
+<p>This is a new tutorial particle, not an override of a shipped one. Keep it in the editor for this lesson. No extraction is needed for this tutorial.</p>
+<h2 id="1-make-the-flash">1. Make the Flash</h2>
+<p>A new particle starts with one default emitter. Rename it <code>Flash</code> in the <strong>Name</strong> field at the top of the <strong>Basic</strong> tab.</p>
+<p>The flash is the shortest, brightest thing in the effect — the frame or two that reads as <em>detonation</em>:</p>
+<pre><code class="language-text">Generation:  Bursts — Bursts: 1, a small Particles/burst
+Lifetime:    very short (a fraction of a second)
+Blend mode:  Additive
+Color:       white or nearly white at birth, warming toward orange at death
+Scale:       starts small, grows fast across its short life
+</code></pre>
+<p>Set the Generation mode to <code>Bursts</code> in the <strong>Basic</strong> tab's <strong>Generation</strong> section, exactly as in Tutorial 3's muzzle flash — one burst, so the flash happens once rather than streaming. Use the Curve Editor's Scale track to make it swell over its brief life.</p>
+<p>Preview with the Spawner. At this stage the whole effect is one bright pop — that is correct.</p>
+<!-- Media (planned): tutorial-05-flash-burst -->
+<h2 id="2-add-the-fireball">2. Add the Fireball</h2>
+<p>Add a second root emitter (right-click in the Emitter Tree → <strong>New Root Emitter</strong>) and name it <code>Fireball</code>. This is the rolling ball of flame that follows the flash:</p>
+<pre><code class="language-text">Generation:  Bursts — one burst, a few particles
+Lifetime:    short, but clearly longer than the flash
+Blend mode:  Additive
+Color:       orange, cooling toward red as it ages
+Scale:       grows over the lifetime
+</code></pre>
+<p>Now give it motion inside the texture itself. Open the Texture/Atlas Picker and choose a texture with flame or explosion frames. If the frames form an animation sequence, drive them with the <strong>Index</strong> track in the Curve Editor: put the first frame's number at 0% and the last frame's number at 100%. Index keys use <strong>step</strong> interpolation by default, which is what you want — each frame holds and then flips to the next, playing the sequence like a flipbook across the particle's life (see <a href="./curve-editor-basics.html">Curve Editor Basics</a>).</p>
+<p>Even without an animated sequence, picking a noisy flame frame and letting scale and color do the work reads well. The fireball should feel like it inflates out of the flash.</p>
+<!-- Media (planned): tutorial-05-fireball-index -->
+<h2 id="3-add-the-smoke-and-put-it-in-its-place">3. Add the Smoke — and Put It in Its Place</h2>
+<p>Add a third root emitter named <code>Smoke</code>. This layer is pure Tutorial 2 skills:</p>
+<pre><code class="language-text">Generation:  Bursts — one burst, a few particles
+Lifetime:    the longest in the effect, several times the fireball's
+Blend mode:  Transparent
+Color:       dark gray, slightly warm at birth
+Alpha:       visible at birth, fading to 0 at death
+Scale:       growing the whole time
+</code></pre>
+<p>The smoke is what remains after the fire: it should still be dispersing after the flash and fireball are gone.</p>
+<p>Now use render order deliberately. Emitters draw top-to-bottom in the Emitter Tree — later emitters draw over earlier ones. Drag the emitters so the additive flash and fireball draw <strong>after</strong> the smoke; that way the fire brightens through the smoke instead of being covered by it. One trap from the <a href="./particle-authoring-primer.html">Primer</a>: reordering does not reach a preview that is already running — restart the preview to see the new order.</p>
+<!-- Media (planned): tutorial-05-smoke-render-order -->
+<h2 id="4-add-the-sparks-and-give-each-one-a-trail">4. Add the Sparks — and Give Each One a Trail</h2>
+<p>Add a fourth root emitter named <code>Sparks</code>: one burst with more, much smaller particles, additive, bright yellow-white fading toward orange.</p>
+<p>The sparks need to <em>fly</em>. Open the <strong>Physics</strong> tab and, in the <strong>Initial speed</strong> section, set the shape <code>Type:</code> to <strong>Sphere</strong> and give it a radius — the radius is the launch speed. Every spark now gets a velocity pointing somewhere on that sphere, so the burst sprays outward in all directions. Check <code>Constrain to surface</code> for an even shell, or leave it unchecked for a more ragged, natural spray. (The full explanation of speed shapes is in <a href="./motion-and-physics.html">Motion and Physics</a>.)</p>
+<p>Two touches make the sparks read better:</p>
+<ul>
+<li>In the Generation section, set <strong>Minimum lifetime</strong> and <strong>Maximum lifetime</strong> apart so sparks</li>
+</ul>
+<p>  die at different times instead of vanishing as one.</p>
+<ul>
+<li>A little <strong>Gravity acceleration</strong> in the Physics tab bends the straight radial flight into</li>
+</ul>
+<p>  arcs — right for a ground explosion; skip it for a space effect.</p>
+<p>Now the child emitter. Right-click <code>Sparks</code> in the Emitter Tree and choose <strong>Add Lifetime Child</strong>. The child emits continuously <em>from each spark</em> while that spark is alive — this is how every spark gets its own trail. Keep the child light:</p>
+<pre><code class="language-text">Blend mode:  Transparent
+Color:       dark, ember-smoke gray
+Lifetime:    short
+Scale:       small, and much smaller than the smoke layer
+Rate:        a low Particles/second
+</code></pre>
+<p>If you want an ending beat as well, <strong>Add Death Child</strong> on <code>Sparks</code> pops a tiny flash where each spark burns out.</p>
+<!-- Media (planned): tutorial-05-sparks-children -->
+<h3 id="keep-the-multiplication-in-check">Keep the Multiplication in Check</h3>
+<p>A child runs once <em>per parent particle</em>: thirty sparks with a trailing child is thirty little emitters. That multiplication is the point — and it is also how an effect quietly becomes expensive. If the editor slows or the effect turns into mush, lower the spark count or the child's rate first. Keep child effects light.</p>
+<h2 id="5-choreograph-the-timing">5. Choreograph the Timing</h2>
+<p>Watch the whole effect with the Spawner and tune the layers as a sequence, not as four separate things. The target rhythm:</p>
+<pre><code class="language-text">Flash:     gone almost immediately
+Fireball:  inflates through the flash, burns out quickly
+Sparks:    fly while the fireball burns, die off raggedly
+Smoke:     revealed as the fire fades, lingers longest, fades last
+</code></pre>
+<p>Two timing tools beyond lifetime:</p>
+<ul>
+<li><strong>Initial spawn delay</strong> (Basic tab, <strong>Emitter Timing</strong> section) holds an emitter back — a</li>
+</ul>
+<p>  small delay on the smoke lets the fireball own the first instant.</p>
+<ul>
+<li><strong>Burst delay</strong> with more than one burst turns a single boom into a rumble of secondary pops,</li>
+</ul>
+<p>  if you want one.</p>
+<h2 id="6-final-check">6. Final Check</h2>
+<p>Use these questions on the finished effect:</p>
+<ul>
+<li>Does the first instant read as a detonation (flash), not a fade-in?</li>
+<li>Does the fireball feel like it comes <em>out of</em> the flash?</li>
+<li>Do the sparks fly in all directions and die at different times?</li>
+<li>Does each spark visibly carry its own trail?</li>
+<li>Is the smoke the last thing standing, and does it fade rather than pop?</li>
+<li>Does the whole effect still read at a normal gameplay camera distance?</li>
+</ul>
+<!-- Media (planned): tutorial-05-final-preview -->
+<h2 id="game-use-note">Game Use Note</h2>
+<p>In a full mod, an effect like this is what plays behind tags such as <code>Death_Explosion_Particles</code> on units and hardpoints — usually paired with a sound event so the audio and visual land together. Since this tutorial's particle is a new file rather than an override, the game would need something pointing at it before it appears in play; overriding an existing shipped explosion at its own path (the Tutorial 1 workflow) is the simplest route if you want to see your explosion in game.</p>
+<h2 id="takeaways">Takeaways</h2>
+<p>An explosion is not one effect — it is a flash, a fireball, smoke, and debris agreeing about timing. Stack simple emitters, give each one job, use the Physics speed shape for radial motion, use children for per-particle sub-effects, and tune the layers as a sequence.</p>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./04-recolor-and-orient-a-shield-impact.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">4. Recolor and Orient a Shield Impact</span></a>
+        <a class="pager-next" href="./app-ui-quick-reference.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">App UI Quick Reference</span></a>
+      </nav>
+    </main>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#outcome">Outcome</a></li>
+      <li class="lvl-2"><a href="#what-this-teaches">What this teaches</a></li>
+      <li class="lvl-2"><a href="#before-you-start">Before You Start</a></li>
+      <li class="lvl-2"><a href="#1-make-the-flash">1. Make the Flash</a></li>
+      <li class="lvl-2"><a href="#2-add-the-fireball">2. Add the Fireball</a></li>
+      <li class="lvl-2"><a href="#3-add-the-smoke-and-put-it-in-its-place">3. Add the Smoke — and Put It in Its Place</a></li>
+      <li class="lvl-2"><a href="#4-add-the-sparks-and-give-each-one-a-trail">4. Add the Sparks — and Give Each One a Trail</a></li>
+      <li class="lvl-3"><a href="#keep-the-multiplication-in-check">Keep the Multiplication in Check</a></li>
+      <li class="lvl-2"><a href="#5-choreograph-the-timing">5. Choreograph the Timing</a></li>
+      <li class="lvl-2"><a href="#6-final-check">6. Final Check</a></li>
+      <li class="lvl-2"><a href="#game-use-note">Game Use Note</a></li>
+      <li class="lvl-2"><a href="#takeaways">Takeaways</a></li>
+      </ul>
+    </nav>
+  </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
+</body>
+</html>

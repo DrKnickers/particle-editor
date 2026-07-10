@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,16 +85,18 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 1 of 4</span></p>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 1 of 5</span></p>
 <h1 id="tutorial-1-make-a-hardpoint-damage-effect-obvious">Tutorial 1: Make a Hardpoint Damage Effect Obvious</h1>
 <p>This first tutorial makes one intentionally loud edit: it overrides the Star Destroyer hardpoint damage smoke particle and turns the smoke bright green.</p>
 <p>The goal is not to make a pretty effect yet. The goal is to prove that the editor can open a shipped particle, save a loose override into a tutorial mod, and produce a change that is obvious in game.</p>
@@ -122,19 +126,22 @@
 <p>Open the copy in your tutorial mod folder:</p>
 <pre><code class="language-text">ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
 </code></pre>
-<p>Use the Preview Viewport to confirm the particle is alive. If the effect is hard to see, use the Spawner so the effect repeats while you inspect it.</p>
+<p>Use the Preview Viewport to confirm the particle is alive. Loading a file does not, by itself, play the effect — <strong>hold Shift</strong> to preview it at the cursor, or click while holding Shift to drop a copy that keeps playing (see <a href="./basic-controls.html">Basic Editor Controls</a>). If the effect is hard to see, use the Spawner so the effect repeats while you inspect it.</p>
 <figure class="guide-media" aria-label="Show opening the loose override copy of P_HP_IMPERIAL_DAMAGE.ALO."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-open-override.mp4" data-poster="tutorial-01-open-override-poster.jpg"></video></figure>
 <h2 id="2-find-the-smoke-emitter">2. Find the Smoke Emitter</h2>
-<p>In the Emitter Tree, select the emitters one at a time and watch the Preview Viewport. For this lesson, look for the emitter that produces the broad damage smoke rather than small sparks or glow.</p>
-<p>The useful habit is simple: select one emitter, observe what it contributes, then move to the next. Particles become much easier to author when you can connect an emitter row to a visible part of the effect.</p>
+<p>This particle is a friendly first case: it contains a single emitter, named <code>smoke</code>, and that one emitter is the whole effect. Select it in the Emitter Tree — its properties fill the Property Panel and its lifetime curves fill the Curve Editor, making it the edit target.</p>
+<p>Most shipped particles have several emitters, and then the useful habit is: select one emitter, observe what it contributes in the Preview Viewport, then move to the next. Tutorial 4 opens a two-emitter particle and leans on exactly that habit. Particles become much easier to author when you can connect an emitter row to a visible part of the effect.</p>
 <h2 id="3-make-the-smoke-bright-green">3. Make the Smoke Bright Green</h2>
-<p>With the smoke emitter selected, use the Property Panel to find its color controls. If the color is animated over the particle lifetime, use the Curve Editor to edit the color keys.</p>
-<p>For this proof edit, make the smoke an unmistakable green:</p>
-<pre><code class="language-text">Red:   low
-Green: high
-Blue:  low
-Alpha: leave readable
-</code></pre>
+<p>Color lives on the emitter's Red, Green, and Blue tracks in the Curve Editor (new to the Curve Editor? <a href="./curve-editor-basics.html">Curve Editor Basics</a> covers the mechanics). The stock smoke starts from a pale blue-green — roughly Red <code>0.5</code>, Green <code>1.0</code>, Blue <code>1.0</code> at birth.</p>
+<p>Make it unmistakably green by removing everything that isn't green, one channel at a time:</p>
+<ol>
+<li>In the Curve Editor's channel list, click the <strong>Blue</strong> row to focus it.</li>
+<li>Click the track's key at the left edge (0% — the particle's birth) to select it.</li>
+<li>Step the key's <strong>Value:</strong> spinner down to <code>0.05</code>.</li>
+<li>Repeat for the <strong>Red</strong> channel: focus it, select its key at 0%, set the value to <code>0.05</code>.</li>
+<li>Leave <strong>Green</strong> at <code>1.0</code>, and leave Alpha alone so the smoke stays readable.</li>
+</ol>
+<p>If a channel has more keys later in its lifetime, bring them down the same way — the goal is for green to dominate from birth to death. Watch the Preview Viewport as you go: the smoke should turn a loud, saturated green.</p>
 <p>This is deliberately exaggerated. Later tutorials will bring the effect back toward a believable game-art style.</p>
 <figure class="guide-media" aria-label="Show changing the smoke color to bright green in the editor UI."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-green-color-edit.mp4" data-poster="tutorial-01-green-color-edit-poster.jpg"></video></figure>
 <h2 id="4-save-the-override">4. Save the Override</h2>
@@ -147,7 +154,8 @@ Alpha: leave readable
 <p>The particle name and the particle filename are related, but they are not the same thing. If you want to make a genuinely separate particle instead of overriding an existing one, use <strong>Save As</strong> in the editor so the file and internal particle identity are saved intentionally.</p>
 <p>A separate particle also needs to be referenced somewhere the game can reach it. Common routes are game XML/<code>Particles.xml</code> entries or an Alamo proxy placed in an <code>.alo</code> model.</p>
 <h2 id="5-verify-the-result-in-game">5. Verify the Result In Game</h2>
-<p>Start a normal battle where a Star Destroyer can take hardpoint damage. Once a hardpoint begins using the damage particle, the smoke should be bright green. That obvious color is your proof that the loose override is loading.</p>
+<p>Launch the game with the tutorial mod active — the <code>MODPATH=Mods\ParticleTutorial</code> launch argument from <a href="./setup.html#launch-the-game-with-the-tutorial-mod">Setup</a>. Without it, the game loads only stock files and this check cannot pass.</p>
+<p>Start a normal battle where a Star Destroyer can take hardpoint damage. Once a hardpoint begins using the damage particle, the smoke should be bright green. That obvious color is your proof that the loose override is loading. If it is still stock-colored, the <a href="./troubleshooting.html">Troubleshooting</a> page walks the likely causes in order.</p>
 <!-- Media (manual, added post-launch): tutorial-01-ingame-proof -->
 <h2 id="takeaways">Takeaways</h2>
 <p>You made the smallest useful particle edit: one file, one visible emitter, one obvious change. That workflow is the base loop for the rest of the course:</p>
@@ -160,7 +168,7 @@ Alpha: leave readable
 </ul>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./particle-authoring-primer.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Particle Authoring Primer</span></a>
+        <a class="pager-prev" href="./curve-editor-basics.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Curve Editor Basics</span></a>
         <a class="pager-next" href="./02-polish-hardpoint-damage-smoke.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">2. Polish Hardpoint Damage Smoke</span></a>
       </nav>
     </main>

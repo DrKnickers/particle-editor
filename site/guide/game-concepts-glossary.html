@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,16 +85,18 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html" class="active" aria-current="page">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Reference <span class="kicker-count">· 7 of 7</span></p>
+<p class="guide-kicker">Reference <span class="kicker-count">· 9 of 9</span></p>
 <h1 id="game-concepts-glossary">Game Concepts Glossary</h1>
 <p>Terms used throughout the tutorials.</p>
 <h2 id="particle-alo">Particle <code>.alo</code></h2>
@@ -101,6 +105,24 @@
 <p>One part of a particle system. An emitter creates particles over time or in bursts.</p>
 <h2 id="track">Track</h2>
 <p>A lifetime curve for a value such as Red, Green, Blue, Alpha, Scale, Index, or Rotation. Tracks make particles change from birth to death.</p>
+<h2 id="track-key">Track Key</h2>
+<p>A point on a track that pins a value at a moment of the particle's life. The Curve Editor fills in the values between keys using each key's interpolation (linear, smooth, or step).</p>
+<h2 id="burst">Burst</h2>
+<p>A discrete release of particles, as opposed to a continuous stream. Bursts are the generation mode for one-off events such as flashes, impacts, and explosions.</p>
+<h2 id="root-emitter">Root Emitter</h2>
+<p>An emitter that plays on its own from the effect's origin. Stacking several root emitters is the standard way to build a layered effect.</p>
+<h2 id="lifetime-child">Lifetime Child</h2>
+<p>A child emitter that emits continuously from each of its parent emitter's particles while that particle is alive — how a moving particle gets a trail.</p>
+<h2 id="death-child">Death Child</h2>
+<p>A child emitter that fires once where each of its parent emitter's particles dies — how a particle gets an ending event, like a pop or flash.</p>
+<h2 id="tail">Tail</h2>
+<p>A built-in streak drawn behind a particle, enabled per emitter with <code>Has tail</code> and sized with <code>Tail length:</code>. Used for projectile cores and glows.</p>
+<h2 id="parent-speed-inherit">Parent Speed Inherit</h2>
+<p>A Physics-tab percentage controlling how much of the spawning object's motion a particle keeps. Full inheritance rides along (projectile layers); zero stays put (muzzle flashes).</p>
+<h2 id="link-particles-to-instance">Link Particles to Instance</h2>
+<p>A Basic-tab Connection option that makes particles follow the orientation of the effect instance — used for directional impacts such as shield hits.</p>
+<h2 id="spawner">Spawner</h2>
+<p>The editor panel that repeats or launches the effect on demand, including with a chosen velocity, so brief or moving effects are easier to inspect.</p>
 <h2 id="texture-or-atlas">Texture or Atlas</h2>
 <p>The image used by a particle. Some textures contain many frames in one image; the Index track chooses which frame to show.</p>
 <h2 id="blend-mode">Blend Mode</h2>
@@ -127,7 +149,7 @@
 <p>A file list that tells the game which object XML files to load. Mods may use this kind of list to add extra XML files and keep object definitions organized.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./where-particles-are-used-in-game.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Where Particles Are Used In-Game</span></a>
+        <a class="pager-prev" href="./troubleshooting.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Troubleshooting</span></a>
       </nav>
     </main>
     <nav class="toc" aria-label="On this page">
@@ -136,6 +158,15 @@
       <li class="lvl-2"><a href="#particle-alo">Particle `.alo`</a></li>
       <li class="lvl-2"><a href="#emitter">Emitter</a></li>
       <li class="lvl-2"><a href="#track">Track</a></li>
+      <li class="lvl-2"><a href="#track-key">Track Key</a></li>
+      <li class="lvl-2"><a href="#burst">Burst</a></li>
+      <li class="lvl-2"><a href="#root-emitter">Root Emitter</a></li>
+      <li class="lvl-2"><a href="#lifetime-child">Lifetime Child</a></li>
+      <li class="lvl-2"><a href="#death-child">Death Child</a></li>
+      <li class="lvl-2"><a href="#tail">Tail</a></li>
+      <li class="lvl-2"><a href="#parent-speed-inherit">Parent Speed Inherit</a></li>
+      <li class="lvl-2"><a href="#link-particles-to-instance">Link Particles to Instance</a></li>
+      <li class="lvl-2"><a href="#spawner">Spawner</a></li>
       <li class="lvl-2"><a href="#texture-or-atlas">Texture or Atlas</a></li>
       <li class="lvl-2"><a href="#blend-mode">Blend Mode</a></li>
       <li class="lvl-2"><a href="#meg-archive">MEG Archive</a></li>

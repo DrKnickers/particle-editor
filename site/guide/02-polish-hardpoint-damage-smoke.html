@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html" class="active" aria-current="page">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,16 +85,18 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 2 of 4</span></p>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 2 of 5</span></p>
 <h1 id="tutorial-2-polish-hardpoint-damage-smoke">Tutorial 2: Polish Hardpoint Damage Smoke</h1>
 <p>This tutorial starts from the obvious green proof edit and turns it into believable dark hardpoint damage smoke with a subtle warm tint near the source.</p>
 <p>Keep the edit easy to understand while moving from proof-of-loading toward a usable game effect.</p>
@@ -113,7 +117,7 @@
 </code></pre>
 <p>Open it in the editor. The smoke may still be bright green from the proof edit.</p>
 <h2 id="1-return-the-smoke-to-a-dark-base-color">1. Return the Smoke to a Dark Base Color</h2>
-<p>Select the smoke emitter in the Emitter Tree. In the Property Panel or Curve Editor, bring the color back toward a dark gray.</p>
+<p>Select the <code>smoke</code> emitter in the Emitter Tree. In the Curve Editor, bring the color tracks back toward a dark gray — same mechanics as Tutorial 1's green edit: focus a channel, select its keys, step the value (see <a href="./curve-editor-basics.html">Curve Editor Basics</a> if you need the controls).</p>
 <p>A useful target is not pure black. Smoke still needs to catch some light, especially near the damage source. Think in terms of a dark neutral base:</p>
 <pre><code class="language-text">Red:   low to medium-low
 Green: low to medium-low
@@ -127,7 +131,7 @@ Alpha: strong at birth, fading later
 <p>In the Curve Editor, adjust the color near the start of the smoke lifetime so it has a small red or orange bias. Keep the later part of the lifetime closer to neutral gray.</p>
 <p>This does not need to become flame. A subtle warm tint is enough to connect the smoke to the damage source.</p>
 <h2 id="3-fade-the-smoke-with-alpha">3. Fade the Smoke with Alpha</h2>
-<p>Use the Alpha track to make the smoke fade out. A common shape is:</p>
+<p>Use the Alpha track to make the smoke fade out — this is the worked example from <a href="./curve-editor-basics.html">Curve Editor Basics</a>: focus Alpha, select the key at the right edge, bring its value to zero. A common shape is:</p>
 <pre><code class="language-text">Birth:      visible
 Middle:     still readable
 End:        transparent

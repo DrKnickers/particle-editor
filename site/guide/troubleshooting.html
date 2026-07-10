@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>File Structure — Particle Editor guide</title>
+  <title>Troubleshooting — Particle Editor guide</title>
   <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
        inline rules cover the frames before styles.css arrives — kills the white flash on
        navigation / view transitions. The @view-transition opt-in and the dark backstop across
@@ -87,53 +87,100 @@
       <li><a href="./blend-modes.html">Blend Modes</a></li>
       <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
-      <li><a href="./file-structure.html" class="active" aria-current="page">File Structure</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
-      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./troubleshooting.html" class="active" aria-current="page">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Reference <span class="kicker-count">· 6 of 9</span></p>
-<h1 id="file-structure">File Structure</h1>
-<p>Particle tutorial files live in a mod folder that mirrors the game's <code>DATA</code> paths. The matching path inside the game archives is the internal path.</p>
-<p>For example, this loose file:</p>
-<pre><code class="language-text">Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
-</code></pre>
-<p>maps to this internal game path:</p>
-<pre><code class="language-text">DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO
-</code></pre>
-<p>Because the loose file uses the same internal path as the stock particle, the game can load it as an override.</p>
-<h2 id="where-particle-files-live">Where Particle Files Live</h2>
-<p>Shipped particle <code>.alo</code> files normally live under:</p>
-<pre><code class="language-text">DATA\ART\MODELS\
-</code></pre>
-<p>They are packed in <code>Models.meg</code> in a stock install. Tutorial overrides use the matching loose path inside the mod:</p>
-<pre><code class="language-text">corruption\Mods\&lt;ModName&gt;\Data\Art\Models\
-</code></pre>
-<h2 id="loose-overrides">Loose Overrides</h2>
-<p>A loose override is a file placed directly in a mod's <code>Data</code> folder instead of packed into a <code>.meg</code>. For tutorial work, loose files are useful because you can see, replace, and remove them directly.</p>
-<p>The important habit is path matching:</p>
-<pre><code class="language-text">Stock internal path: DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO
-Mod loose path:      Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
-</code></pre>
-<h2 id="xml-organization">XML Organization</h2>
-<p>Particles can also be referenced from XML. Some mods place all object references in the stock-style XML files, while others use file lists such as <code>GameObjectFiles.xml</code> to reference additional XML files for better organization.</p>
-<p>When you override an existing particle file at the same path, you usually do not need to touch XML. When you create a new separate particle, something in the game or a model proxy still needs to point at it.</p>
+<p class="guide-kicker">Reference <span class="kicker-count">· 8 of 9</span></p>
+<h1 id="troubleshooting-why-can-t-i-see-my-effect">Troubleshooting: Why Can't I See My Effect?</h1>
+<p>The fixes for &quot;nothing is showing&quot; live in several different places — the viewport, the emitter settings, the file path, the game launch. This page collects them in the order worth checking.</p>
+<h2 id="nothing-appears-in-the-preview-viewport">Nothing Appears in the Preview Viewport</h2>
+<p>Loading a particle does not, by itself, play it in the viewport.</p>
+<ul>
+<li><strong>Hold Shift.</strong> The effect spawns at the cursor and follows it while Shift is held. Click</li>
+</ul>
+<p>  while holding Shift to drop a copy that keeps playing. This is the single most missed control   in the editor — see <a href="./basic-controls.html">Basic Editor Controls</a>.</p>
+<ul>
+<li><strong>Use the Spawner</strong> to repeat the effect automatically while you work, which is easier than</li>
+</ul>
+<p>  holding Shift for a long tuning session.</p>
+<ul>
+<li><strong>Brief effects are easy to miss.</strong> A one-burst flash plays once and is gone; use the Spawner</li>
+</ul>
+<p>  to re-trigger it.</p>
+<h2 id="the-effect-plays-but-is-nearly-invisible">The Effect Plays but Is Nearly Invisible</h2>
+<ul>
+<li><strong>Additive blending makes dark colors disappear.</strong> Additive only ever brightens the scene, so</li>
+</ul>
+<p>  a black or near-black additive particle draws nothing. Either brighten the color or switch to   Transparent blending — see <a href="./blend-modes.html">Blend Modes</a>.</p>
+<ul>
+<li><strong>Check the Alpha track.</strong> If alpha is at or near zero across the lifetime, the particle is</li>
+</ul>
+<p>  there but transparent. See <a href="./curve-editor-basics.html">Curve Editor Basics</a>.</p>
+<ul>
+<li><strong>Check the Scale track.</strong> A scale near zero renders the particle too small to see; a huge</li>
+</ul>
+<p>  scale can also read as nothing when the camera is inside the effect. Zoom out.</p>
+<ul>
+<li><strong>Check emitter visibility.</strong> Emitters can be hidden in the Emitter Tree; a hidden emitter</li>
+</ul>
+<p>  keeps its settings but draws nothing.</p>
+<h2 id="an-edit-doesn-t-show-up-in-the-preview">An Edit Doesn't Show Up in the Preview</h2>
+<ul>
+<li><strong>Reordering emitters does not reach a running preview.</strong> If you dragged an emitter to a new</li>
+</ul>
+<p>  position in the tree and the viewport looks unchanged, restart the preview (or reload the   particle) so it picks up the new draw order.</p>
+<ul>
+<li><strong>Bump map and Decal bump map need the normal texture.</strong> If that texture is missing or flat,</li>
+</ul>
+<p>  these modes have nothing to shade against — see <a href="./blend-modes.html">Blend Modes</a>.</p>
+<ul>
+<li><strong>Physics fields grayed out?</strong> Weather generation disables most of the Physics tab — see</li>
+</ul>
+<p>  <a href="./motion-and-physics.html">Motion and Physics</a>.</p>
+<h2 id="the-edit-works-in-the-editor-but-not-in-the-game">The Edit Works in the Editor but Not in the Game</h2>
+<p>Work through these in order:</p>
+<ol>
+<li><strong>Was the game launched with the mod?</strong> A mod folder does nothing unless the game is started</li>
+</ol>
+<p>   with its Modpath — see <a href="./setup.html">Setup</a>. This is the most common miss: everything on disk is    correct, but the game was launched plain and loaded only stock files.</p>
+<ol>
+<li><strong>Does the loose path match the internal path exactly?</strong> The override only works when the</li>
+</ol>
+<p>   file sits at the same path the game uses internally:    ``<code>text    Stock internal path: DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO    Mod loose path:      Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO    </code>``    A typo in any folder name, or the file landing one level too deep or too shallow, silently    loses the override. See <a href="./file-structure.html">File Structure</a>.</p>
+<ol>
+<li><strong>Is the right thing being damaged/fired in game?</strong> A hardpoint damage particle only plays</li>
+</ol>
+<p>   once a hardpoint reaches its damage state; a death explosion only plays on death. Make sure    the moment you are watching for is actually the moment that references your particle — see    <a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a>.</p>
+<ol>
+<li><strong>Did you save the file you think you saved?</strong> Check the titlebar for the open filename and</li>
+</ol>
+<p>   an unsaved-changes marker, and confirm the file's modified time on disk.</p>
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="./basic-controls.html">Basic Editor Controls</a> — Shift preview, camera, selection.</li>
+<li><a href="./setup.html">Setup</a> — mod folder layout and launching the game with the mod.</li>
+<li><a href="./file-structure.html">File Structure</a> — internal paths and loose overrides.</li>
+</ul>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./stacking-emitters-and-children.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Stacking Emitters and Using Children</span></a>
-        <a class="pager-next" href="./where-particles-are-used-in-game.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Where Particles Are Used In-Game</span></a>
+        <a class="pager-prev" href="./where-particles-are-used-in-game.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Where Particles Are Used In-Game</span></a>
+        <a class="pager-next" href="./game-concepts-glossary.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Game Concepts Glossary</span></a>
       </nav>
     </main>
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>
-      <li class="lvl-2"><a href="#where-particle-files-live">Where Particle Files Live</a></li>
-      <li class="lvl-2"><a href="#loose-overrides">Loose Overrides</a></li>
-      <li class="lvl-2"><a href="#xml-organization">XML Organization</a></li>
+      <li class="lvl-2"><a href="#nothing-appears-in-the-preview-viewport">Nothing Appears in the Preview Viewport</a></li>
+      <li class="lvl-2"><a href="#the-effect-plays-but-is-nearly-invisible">The Effect Plays but Is Nearly Invisible</a></li>
+      <li class="lvl-2"><a href="#an-edit-doesn-t-show-up-in-the-preview">An Edit Doesn't Show Up in the Preview</a></li>
+      <li class="lvl-2"><a href="#the-edit-works-in-the-editor-but-not-in-the-game">The Edit Works in the Editor but Not in the Game</a></li>
+      <li class="lvl-2"><a href="#related-pages">Related Pages</a></li>
       </ul>
     </nav>
   </div>

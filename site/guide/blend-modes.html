@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,19 +85,22 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html" class="active" aria-current="page">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Reference <span class="kicker-count">· 3 of 7</span></p>
+<p class="guide-kicker">Reference <span class="kicker-count">· 3 of 9</span></p>
 <h1 id="blend-modes">Blend Modes</h1>
 <p>The blend mode decides how a particle mixes with whatever is behind it. It is one of the biggest levers on how an effect reads, so it is worth knowing what each option does. Set it in the Property Panel under Appearance, in the Rendering section, with the Blend mode field.</p>
 <p>The two you will use most are Additive and Transparent. Additive adds light to the scene and is right for anything glowing. Transparent is ordinary see-through blending and is right for anything solid- looking that fades, such as smoke.</p>
+<!-- Media (planned): ref-blend-mode-grid -->
 <h2 id="the-modes">The Modes</h2>
 <table>
 <thead>
@@ -116,6 +121,7 @@
 </table>
 <h2 id="about-the-depth-modes">About the &quot;Depth&quot; Modes</h2>
 <p>The Depth additive, Depth transparent, and Depth inverse modes pair each blend with a <em>depth sprite</em>: they read the emitter's depth texture to give every particle real per-pixel depth instead of the flat billboard quad's single depth value. That lets a particle meet solid geometry correctly — sorting and occluding against it pixel by pixel, rather than the whole quad popping wholly in front of or behind the surface. Use a depth mode when an effect sits against or passes through scene geometry; use the plain mode when it floats in open space, since the plain mode is cheaper.</p>
+<!-- Media (planned): ref-depth-mode-compare -->
 <h2 id="the-bump-modes-need-the-normal-texture">The Bump Modes Need the Normal Texture</h2>
 <p>Bump map and Decal bump map read the emitter's normal texture to work. If that texture is missing or flat, these modes have nothing to shade against and will not look as intended. Selecting Bump map also forces the editor's &quot;Always face camera&quot; option on — the checkbox shows checked and disabled — reflecting that bump-mapped particles are meant to be viewed head-on.</p>
 <h2 id="modes-the-editor-does-not-expose">Modes the Editor Does Not Expose</h2>
@@ -123,7 +129,7 @@
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./generation-types.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Particle Generation Types</span></a>
-        <a class="pager-next" href="./stacking-emitters-and-children.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Stacking Emitters and Using Children</span></a>
+        <a class="pager-next" href="./motion-and-physics.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Motion and Physics</span></a>
       </nav>
     </main>
     <nav class="toc" aria-label="On this page">

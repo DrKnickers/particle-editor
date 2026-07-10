@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="active" aria-current="page">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,16 +85,18 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 4 of 4</span></p>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 4 of 5</span></p>
 <h1 id="tutorial-4-recolor-and-orient-a-shield-impact">Tutorial 4: Recolor and Orient a Shield Impact</h1>
 <p>This tutorial overrides <code>P_SHIELD_BLAST_LARGE00.ALO</code>, recolors it into an obvious purple variant, and uses the editor preview to study impact orientation.</p>
 <p>Shield impacts are directional effects. They need to read as something striking a surface, with shape and facing that support the color change.</p>
@@ -122,15 +126,11 @@
 <p>Use the Preview Viewport to watch the impact play a few times before changing anything. Look for the main flash, any ring or splash shape, and any fading glow after the hit.</p>
 <figure class="guide-media" aria-label="Show opening the loose override copy of P_SHIELD_BLAST_LARGE00.ALO."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-04-open-override.mp4" data-poster="tutorial-04-open-override-poster.jpg"></video></figure>
 <h2 id="2-identify-the-impact-emitters">2. Identify the Impact Emitters</h2>
-<p>Select emitters one at a time in the Emitter Tree and watch what changes in the Preview Viewport. For this lesson, focus on the emitters that make the visible shield-hit read:</p>
-<ul>
-<li>the bright center or first flash;</li>
-<li>the broader energy ring or splash;</li>
-<li>any fading glow that lingers after the strike.</li>
-</ul>
-<p>Start with the emitters you can identify clearly. The useful habit is to connect each selected emitter to one visible part of the impact.</p>
+<p>This particle has two emitters: <code>ripple</code> and <code>splash</code>. Select them one at a time in the Emitter Tree and watch what changes in the Preview Viewport — this is the select-and-observe habit from Tutorial 1, now on a particle where it earns its keep. Work out which emitter makes the broad shield-face ripple and which makes the splash of energy at the hit point before changing anything.</p>
+<p>The useful habit is to connect each selected emitter to one visible part of the impact. On particles with many emitters, toggling an emitter's visibility in the tree is another quick way to isolate its contribution.</p>
+<!-- Media (planned): tutorial-04-identify-emitters -->
 <h2 id="3-recolor-the-impact-purple">3. Recolor the Impact Purple</h2>
-<p>With the visible impact emitters selected one at a time, use the Property Panel or Curve Editor to shift the color toward purple.</p>
+<p>With <code>ripple</code> and <code>splash</code> selected one at a time, use the Curve Editor's color tracks to shift the color toward purple (the mechanics are in <a href="./curve-editor-basics.html">Curve Editor Basics</a>). Both emitters are energy effects, so their additive blending means brighter values read as more light — see <a href="./blend-modes.html">Blend Modes</a>.</p>
 <p>A simple target is:</p>
 <pre><code class="language-text">Red:   high
 Green: low
@@ -172,7 +172,7 @@ Alpha: keep readable
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./03-build-a-laser-shot-and-muzzle-flash.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">3. Build a Laser Shot and Muzzle Flash</span></a>
-        <a class="pager-next" href="./app-ui-quick-reference.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">App UI Quick Reference</span></a>
+        <a class="pager-next" href="./05-build-an-explosion.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">5. Build an Explosion</span></a>
       </nav>
     </main>
     <nav class="toc" aria-label="On this page">

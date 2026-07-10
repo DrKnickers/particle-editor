@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,31 +85,36 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Start Here <span class="kicker-count">· 1 of 4</span></p>
+<p class="guide-kicker">Start Here <span class="kicker-count">· 1 of 5</span></p>
 <h1 id="particle-editor-guide">Particle Editor Guide</h1>
 <p>This guide teaches you how to use Particle Editor and how to author practical Empire at War / Forces of Corruption particle effects — editing <code>.alo</code> particle systems against the references that make tuning real: game units for scale, skydomes for backdrop, mod stacks for assets, and a live viewport beside the controls.</p>
 <p>Start with <a href="./setup.html">Setup</a>, then follow the numbered tutorials in order. Returning users can jump straight to the quick references.</p>
 <h2 id="tutorial-path">Tutorial Path</h2>
 <table>
 <thead>
-<tr><th>Page</th><th>What It Teaches</th></tr>
+<tr><th>Page</th><th>What It Teaches</th><th>Time</th></tr>
 </thead>
 <tbody>
-<tr><td><a href="./setup.html">Setup</a></td><td>Create a small tutorial mod folder and prepare to extract shipped particles.</td></tr>
-<tr><td><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></td><td>Learn the basic ideas behind emitters, tracks, blend modes, and particle lifetime.</td></tr>
-<tr><td><a href="./01-make-a-hardpoint-damage-effect-obvious.html">Tutorial 1: Make a Hardpoint Damage Effect Obvious</a></td><td>Override a shipped Star Destroyer damage particle and make it bright green so the edit is easy to prove.</td></tr>
-<tr><td><a href="./02-polish-hardpoint-damage-smoke.html">Tutorial 2: Polish Hardpoint Damage Smoke</a></td><td>Turn the proof edit into believable dark smoke with a subtle warm tint.</td></tr>
-<tr><td><a href="./03-build-a-laser-shot-and-muzzle-flash.html">Tutorial 3: Build a Laser Shot and Muzzle Flash</a></td><td>Build a blank particle into a green laser shot with separate projectile and muzzle-flash emitter groups.</td></tr>
-<tr><td><a href="./04-recolor-and-orient-a-shield-impact.html">Tutorial 4: Recolor and Orient a Shield Impact</a></td><td>Override a shield impact particle, recolor it purple, and study impact orientation in the editor preview.</td></tr>
+<tr><td><a href="./setup.html">Setup</a></td><td>Create a small tutorial mod folder, extract shipped particles, and launch the game with the mod.</td><td>~15 min</td></tr>
+<tr><td><a href="./basic-controls.html">Basic Editor Controls</a></td><td>The viewport controls that nothing on screen announces: Shift to preview, camera movement, selection.</td><td>~5 min</td></tr>
+<tr><td><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></td><td>Learn the basic ideas behind emitters, tracks, blend modes, and particle lifetime.</td><td>~10 min</td></tr>
+<tr><td><a href="./curve-editor-basics.html">Curve Editor Basics</a></td><td>Tracks, keys, the value spinners, and interpolation — the mechanics every tutorial uses.</td><td>~5 min</td></tr>
+<tr><td><a href="./01-make-a-hardpoint-damage-effect-obvious.html">Tutorial 1: Make a Hardpoint Damage Effect Obvious</a></td><td>Override a shipped Star Destroyer damage particle and make it bright green so the edit is easy to prove.</td><td>~20 min</td></tr>
+<tr><td><a href="./02-polish-hardpoint-damage-smoke.html">Tutorial 2: Polish Hardpoint Damage Smoke</a></td><td>Turn the proof edit into believable dark smoke with a subtle warm tint.</td><td>~20 min</td></tr>
+<tr><td><a href="./03-build-a-laser-shot-and-muzzle-flash.html">Tutorial 3: Build a Laser Shot and Muzzle Flash</a></td><td>Build a blank particle into a green laser shot with separate projectile and muzzle-flash emitter groups.</td><td>~30 min</td></tr>
+<tr><td><a href="./04-recolor-and-orient-a-shield-impact.html">Tutorial 4: Recolor and Orient a Shield Impact</a></td><td>Override a shield impact particle, recolor it purple, and study impact orientation in the editor preview.</td><td>~20 min</td></tr>
+<tr><td><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a></td><td>Build a full explosion from scratch: flash, animated fireball, smoke, and sparks with child-emitter trails.</td><td>~40 min</td></tr>
 </tbody>
 </table>
 <h2 id="quick-references">Quick References</h2>
@@ -117,8 +124,13 @@
 </thead>
 <tbody>
 <tr><td><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></td><td>Finding the main editor panels and controls by their visible labels.</td></tr>
+<tr><td><a href="./generation-types.html">Particle Generation Types</a></td><td>Choosing between bursts, continuous streams, and weather particles.</td></tr>
+<tr><td><a href="./blend-modes.html">Blend Modes</a></td><td>Choosing how a particle mixes with the scene behind it.</td></tr>
+<tr><td><a href="./motion-and-physics.html">Motion and Physics</a></td><td>Initial position and speed shapes, acceleration, gravity, and ground behavior.</td></tr>
+<tr><td><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></td><td>Combining emitters: siblings, lifetime children, and death children.</td></tr>
 <tr><td><a href="./file-structure.html">File Structure</a></td><td>Understanding loose overrides, internal paths, and where particle files live.</td></tr>
 <tr><td><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></td><td>Seeing the common places particles are referenced by the game.</td></tr>
+<tr><td><a href="./troubleshooting.html">Troubleshooting</a></td><td>Working out why an effect is not visible — in the editor or in the game.</td></tr>
 <tr><td><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></td><td>Looking up the terms used throughout the tutorials.</td></tr>
 </tbody>
 </table>

@@ -4,6 +4,8 @@ Particles show up in many parts of Empire at War and Forces of Corruption: damag
 explosions, weapon fire, shield hits, ion effects, ability effects, projectiles, and model-attached
 proxies. Knowing the game context helps you decide what the effect should communicate.
 
+<!-- Media (planned): ref-ingame-usage -->
+
 ## Hardpoint Damage
 
 Hardpoints can reference damage particles that appear when the hardpoint is damaged. The XML tags
@@ -22,6 +24,9 @@ Units and hardpoints can reference death explosion particles. These effects usua
 smoke, debris-like motion, and sound. Large set-piece effects, such as an ion cannon-style blast,
 use the same authoring concerns at a bigger scale: the player should understand the source,
 direction, and result quickly.
+
+[Tutorial 5](05-build-an-explosion) builds exactly this kind of effect — flash, fireball, smoke,
+and sparks — from a blank particle.
 
 ## Weapon Fire, Impacts, and Ion Effects
 

@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html" class="active" aria-current="page">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,16 +85,18 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Start Here <span class="kicker-count">· 4 of 4</span></p>
+<p class="guide-kicker">Start Here <span class="kicker-count">· 4 of 5</span></p>
 <h1 id="particle-authoring-primer">Particle Authoring Primer</h1>
 <p>Particle <code>.alo</code> files are particle systems, not mesh/model files. A particle system contains emitters, and emitters produce particles over time.</p>
 <p>Most effects come from a small set of first principles: lifetime, emission rate or bursts, color, alpha, scale, texture or atlas frame, blend mode, and motion. Tracks change those values over each particle's lifetime.</p>
@@ -102,15 +106,19 @@
 <h2 id="render-order">Render Order</h2>
 <p>When several emitters overlap on screen, the order they draw in — top to bottom in the Emitter Tree — decides which one appears on top. Particles do not sort themselves by depth or distance; the first emitter in the list draws first, and every emitter after it draws over what came before, the same way the game itself renders them.</p>
 <p>This matters most once blend modes are involved. An Additive glow drawn after a Transparent smoke layer shows through the smoke and brightens it; the same glow drawn before the smoke gets covered by it instead. If a layered effect is not reading the way you expect, check the emitter order before you start second-guessing the individual emitter's settings.</p>
+<!-- Media (planned): ref-render-order -->
 <p>Reorder emitters by dragging them in the Emitter Tree. One thing to know: reordering does not reach into a preview that is already running. If you drag an emitter to a new position and the Preview Viewport looks unchanged, stop and restart the preview (or reload the particle) so it picks up the new order.</p>
 <h2 id="lifetimes">Lifetimes</h2>
-<p>Most particle values change from birth to death. A smoke particle might start small and opaque, grow larger, drift away, and fade out. A flash might start bright and vanish almost immediately. The Curve Editor is where those lifetime changes become visible.</p>
+<p>Most particle values change from birth to death. A smoke particle might start small and opaque, grow larger, drift away, and fade out. A flash might start bright and vanish almost immediately. The Curve Editor is where those lifetime changes become visible — <a href="./curve-editor-basics.html">Curve Editor Basics</a> covers its controls.</p>
 <p>Useful starting questions:</p>
 <ul>
 <li>What should the particle look like at birth?</li>
 <li>What should it look like halfway through its life?</li>
 <li>How should it disappear?</li>
 </ul>
+<h2 id="textures-and-atlas-frames">Textures and Atlas Frames</h2>
+<p>Every particle draws an image, and the image carries as much of the effect's character as the motion does — the same emitter reads as smoke, fire, or energy depending on the texture it draws.</p>
+<p>Many particle textures are <strong>atlases</strong>: one image holding a grid of frames. The emitter's <strong>Index</strong> track chooses which frame each particle shows, and because Index keys step from one whole frame to the next rather than blending, a rising Index curve plays the frames like a flipbook across the particle's life. That is how a single particle can show a rolling, animated flame. Use the Texture/Atlas Picker to see a texture's frames and pick one; use the Index track in the Curve Editor when the frames should animate.</p>
 <h2 id="game-context">Game Context</h2>
 <p>Particles are not just abstract visuals. A good effect helps the player read what is happening in the game. A hardpoint damage effect should sit near the damaged hardpoint. A weapon impact should face or imply the surface it hit. A projectile trail should make the projectile's motion easier to follow without covering the target.</p>
 <h2 id="common-rules-of-thumb">Common Rules of Thumb</h2>
@@ -127,7 +135,7 @@
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./basic-controls.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Basic Editor Controls</span></a>
-        <a class="pager-next" href="./01-make-a-hardpoint-damage-effect-obvious.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">1. Make a Hardpoint Damage Effect Obvious</span></a>
+        <a class="pager-next" href="./curve-editor-basics.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Curve Editor Basics</span></a>
       </nav>
     </main>
     <nav class="toc" aria-label="On this page">
@@ -136,6 +144,7 @@
       <li class="lvl-2"><a href="#emitters">Emitters</a></li>
       <li class="lvl-2"><a href="#render-order">Render Order</a></li>
       <li class="lvl-2"><a href="#lifetimes">Lifetimes</a></li>
+      <li class="lvl-2"><a href="#textures-and-atlas-frames">Textures and Atlas Frames</a></li>
       <li class="lvl-2"><a href="#game-context">Game Context</a></li>
       <li class="lvl-2"><a href="#common-rules-of-thumb">Common Rules of Thumb</a></li>
       </ul>

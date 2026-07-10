@@ -53,33 +53,41 @@ Open the copy in your tutorial mod folder:
 ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
 ```
 
-Use the Preview Viewport to confirm the particle is alive. If the effect is hard to see, use the
-Spawner so the effect repeats while you inspect it.
+Use the Preview Viewport to confirm the particle is alive. Loading a file does not, by itself,
+play the effect — **hold Shift** to preview it at the cursor, or click while holding Shift to
+drop a copy that keeps playing (see [Basic Editor Controls](basic-controls)). If the effect is
+hard to see, use the Spawner so the effect repeats while you inspect it.
 
 <!-- Media: tutorial-01-open-override -->
 
 ## 2. Find the Smoke Emitter
 
-In the Emitter Tree, select the emitters one at a time and watch the Preview Viewport. For this
-lesson, look for the emitter that produces the broad damage smoke rather than small sparks or glow.
+This particle is a friendly first case: it contains a single emitter, named `smoke`, and that one
+emitter is the whole effect. Select it in the Emitter Tree — its properties fill the Property
+Panel and its lifetime curves fill the Curve Editor, making it the edit target.
 
-The useful habit is simple: select one emitter, observe what it contributes, then move to the next.
-Particles become much easier to author when you can connect an emitter row to a visible part of the
-effect.
+Most shipped particles have several emitters, and then the useful habit is: select one emitter,
+observe what it contributes in the Preview Viewport, then move to the next. Tutorial 4 opens a
+two-emitter particle and leans on exactly that habit. Particles become much easier to author when
+you can connect an emitter row to a visible part of the effect.
 
 ## 3. Make the Smoke Bright Green
 
-With the smoke emitter selected, use the Property Panel to find its color controls. If the color is
-animated over the particle lifetime, use the Curve Editor to edit the color keys.
+Color lives on the emitter's Red, Green, and Blue tracks in the Curve Editor (new to the Curve
+Editor? [Curve Editor Basics](curve-editor-basics) covers the mechanics). The stock smoke starts
+from a pale blue-green — roughly Red `0.5`, Green `1.0`, Blue `1.0` at birth.
 
-For this proof edit, make the smoke an unmistakable green:
+Make it unmistakably green by removing everything that isn't green, one channel at a time:
 
-```text
-Red:   low
-Green: high
-Blue:  low
-Alpha: leave readable
-```
+1. In the Curve Editor's channel list, click the **Blue** row to focus it.
+2. Click the track's key at the left edge (0% — the particle's birth) to select it.
+3. Step the key's **Value:** spinner down to `0.05`.
+4. Repeat for the **Red** channel: focus it, select its key at 0%, set the value to `0.05`.
+5. Leave **Green** at `1.0`, and leave Alpha alone so the smoke stays readable.
+
+If a channel has more keys later in its lifetime, bring them down the same way — the goal is for
+green to dominate from birth to death. Watch the Preview Viewport as you go: the smoke should
+turn a loud, saturated green.
 
 This is deliberately exaggerated. Later tutorials will bring the effect back toward a believable
 game-art style.
@@ -111,9 +119,14 @@ game XML/`Particles.xml` entries or an Alamo proxy placed in an `.alo` model.
 
 ## 5. Verify the Result In Game
 
+Launch the game with the tutorial mod active — the `MODPATH=Mods\ParticleTutorial` launch
+argument from [Setup](setup#launch-the-game-with-the-tutorial-mod). Without it, the game loads
+only stock files and this check cannot pass.
+
 Start a normal battle where a Star Destroyer can take hardpoint damage. Once a hardpoint begins
 using the damage particle, the smoke should be bright green. That obvious color is your proof that
-the loose override is loading.
+the loose override is loading. If it is still stock-colored, the
+[Troubleshooting](troubleshooting) page walks the likely causes in order.
 
 <!-- Media: tutorial-01-ingame-proof -->
 

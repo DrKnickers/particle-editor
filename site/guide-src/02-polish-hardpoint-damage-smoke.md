@@ -33,8 +33,9 @@ Open it in the editor. The smoke may still be bright green from the proof edit.
 
 ## 1. Return the Smoke to a Dark Base Color
 
-Select the smoke emitter in the Emitter Tree. In the Property Panel or Curve Editor, bring the color
-back toward a dark gray.
+Select the `smoke` emitter in the Emitter Tree. In the Curve Editor, bring the color tracks back
+toward a dark gray — same mechanics as Tutorial 1's green edit: focus a channel, select its keys,
+step the value (see [Curve Editor Basics](curve-editor-basics) if you need the controls).
 
 A useful target is not pure black. Smoke still needs to catch some light, especially near the damage
 source. Think in terms of a dark neutral base:
@@ -64,7 +65,9 @@ source.
 
 ## 3. Fade the Smoke with Alpha
 
-Use the Alpha track to make the smoke fade out. A common shape is:
+Use the Alpha track to make the smoke fade out — this is the worked example from
+[Curve Editor Basics](curve-editor-basics): focus Alpha, select the key at the right edge, bring
+its value to zero. A common shape is:
 
 ```text
 Birth:      visible

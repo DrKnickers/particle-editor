@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,24 +85,28 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html" class="active" aria-current="page">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Reference <span class="kicker-count">· 6 of 7</span></p>
+<p class="guide-kicker">Reference <span class="kicker-count">· 7 of 9</span></p>
 <h1 id="where-particles-are-used-in-game">Where Particles Are Used In-Game</h1>
 <p>Particles show up in many parts of Empire at War and Forces of Corruption: damage states, explosions, weapon fire, shield hits, ion effects, ability effects, projectiles, and model-attached proxies. Knowing the game context helps you decide what the effect should communicate.</p>
+<!-- Media (planned): ref-ingame-usage -->
 <h2 id="hardpoint-damage">Hardpoint Damage</h2>
 <p>Hardpoints can reference damage particles that appear when the hardpoint is damaged. The XML tags often point at bones in the unit model, and geometry or particles parented to those bones are hidden until the hardpoint reaches the relevant damage state.</p>
 <p>The first two tutorials use <code>P_HP_IMPERIAL_DAMAGE.ALO</code> because hardpoint damage smoke is easy to recognize and easy to prove in a normal battle.</p>
 <p>For authoring, location and readability matter most. Damage smoke should feel attached to the damaged part of the ship without hiding too much of the model.</p>
 <h2 id="death-and-explosion-effects">Death and Explosion Effects</h2>
 <p>Units and hardpoints can reference death explosion particles. These effects usually combine flashes, smoke, debris-like motion, and sound. Large set-piece effects, such as an ion cannon-style blast, use the same authoring concerns at a bigger scale: the player should understand the source, direction, and result quickly.</p>
+<p><a href="./05-build-an-explosion.html">Tutorial 5</a> builds exactly this kind of effect — flash, fireball, smoke, and sparks — from a blank particle.</p>
 <h2 id="weapon-fire-impacts-and-ion-effects">Weapon Fire, Impacts, and Ion Effects</h2>
 <p>Weapon particles can appear at muzzle flashes, projectile visuals, trails, shield hits, armor hits, ground impacts, and ion-style disruption effects. These can use similar authoring ideas, but orientation and surface context matter. Tutorial 4 uses a shield impact because it gives a clear reason to think about direction.</p>
 <h2 id="ability-and-state-effects">Ability and State Effects</h2>
@@ -114,7 +120,7 @@
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./file-structure.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">File Structure</span></a>
-        <a class="pager-next" href="./game-concepts-glossary.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Game Concepts Glossary</span></a>
+        <a class="pager-next" href="./troubleshooting.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Troubleshooting</span></a>
       </nav>
     </main>
     <nav class="toc" aria-label="On this page">

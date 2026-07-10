@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,18 +85,21 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html" class="active" aria-current="page">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Reference <span class="kicker-count">· 2 of 7</span></p>
+<p class="guide-kicker">Reference <span class="kicker-count">· 2 of 9</span></p>
 <h1 id="particle-generation-types">Particle Generation Types</h1>
 <p>The generation type decides <em>how</em> an emitter releases its particles: in timed bursts, in a steady stream, or as camera-following weather. You pick one of the three in the Property Panel under Basic, in the Generation section. They are mutually exclusive — choosing one turns the others off — and each reveals its own set of fields.</p>
+<!-- Media (planned): ref-generation-types -->
 <h2 id="bursts">Bursts</h2>
 <p>Burst mode releases particles in discrete groups rather than continuously. It is the right choice for one-off or repeating events: an explosion, an impact, a puff, a muzzle flash.</p>
 <p>Its fields:</p>
@@ -128,6 +133,8 @@
 <li><strong>Cube size</strong> — the size of the volume the weather fills. A larger cube covers more of the scene</li>
 </ul>
 <p>  but spreads the same particle count more thinly.</p>
+<h2 id="particle-lifetime">Particle Lifetime</h2>
+<p>Alongside the mode fields, the Generation section carries <strong>Minimum lifetime:</strong> and <strong>Maximum lifetime:</strong> — how long each particle lives, in seconds, whichever generation mode is active. With the two values equal, every particle lives the same span. Setting them apart gives each particle a random lifespan in that range, which makes a burst die off raggedly — sparks winking out one by one — instead of the whole group vanishing on the same frame.</p>
 <h2 id="choosing-a-type">Choosing a Type</h2>
 <ul>
 <li>Something that happens as an event → <strong>Bursts</strong>.</li>
@@ -147,6 +154,7 @@
       <li class="lvl-2"><a href="#bursts">Bursts</a></li>
       <li class="lvl-2"><a href="#continuous-stream">Continuous Stream</a></li>
       <li class="lvl-2"><a href="#weather-particle">Weather Particle</a></li>
+      <li class="lvl-2"><a href="#particle-lifetime">Particle Lifetime</a></li>
       <li class="lvl-2"><a href="#choosing-a-type">Choosing a Type</a></li>
       </ul>
     </nav>

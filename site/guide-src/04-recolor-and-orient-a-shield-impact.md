@@ -54,20 +54,24 @@ main flash, any ring or splash shape, and any fading glow after the hit.
 
 ## 2. Identify the Impact Emitters
 
-Select emitters one at a time in the Emitter Tree and watch what changes in the Preview Viewport.
-For this lesson, focus on the emitters that make the visible shield-hit read:
+This particle has two emitters: `ripple` and `splash`. Select them one at a time in the Emitter
+Tree and watch what changes in the Preview Viewport — this is the select-and-observe habit from
+Tutorial 1, now on a particle where it earns its keep. Work out which emitter makes the broad
+shield-face ripple and which makes the splash of energy at the hit point before changing
+anything.
 
-- the bright center or first flash;
-- the broader energy ring or splash;
-- any fading glow that lingers after the strike.
+The useful habit is to connect each selected emitter to one visible part of the impact. On
+particles with many emitters, toggling an emitter's visibility in the tree is another quick way
+to isolate its contribution.
 
-Start with the emitters you can identify clearly. The useful habit is to connect each selected
-emitter to one visible part of the impact.
+<!-- Media (planned): tutorial-04-identify-emitters -->
 
 ## 3. Recolor the Impact Purple
 
-With the visible impact emitters selected one at a time, use the Property Panel or Curve Editor to
-shift the color toward purple.
+With `ripple` and `splash` selected one at a time, use the Curve Editor's color tracks to shift
+the color toward purple (the mechanics are in [Curve Editor Basics](curve-editor-basics)). Both
+emitters are energy effects, so their additive blending means brighter values read as more light
+— see [Blend Modes](blend-modes).
 
 A simple target is:
 

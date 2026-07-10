@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,21 +85,23 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html" class="active" aria-current="page">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Reference <span class="kicker-count">· 4 of 7</span></p>
+<p class="guide-kicker">Reference <span class="kicker-count">· 5 of 9</span></p>
 <h1 id="stacking-emitters-and-using-children">Stacking Emitters and Using Children</h1>
 <p>Most finished effects are not one emitter doing everything — they are several simple emitters working together. This page covers two ways to combine emitters: stacking independent emitters side by side, and attaching a child emitter to another emitter so it rides along with each particle.</p>
 <h2 id="stacking-emitters-siblings">Stacking Emitters (Siblings)</h2>
 <p>The straightforward way to build a complex effect is to stack several <strong>root emitters</strong> in the Emitter Tree. Each one is independent, plays at the same time, and originates from the same place, so their visuals layer on top of one another. An explosion might be one emitter for the flash, one for the fireball, one for the smoke, and one for the flying sparks.</p>
-<p>Add a new root emitter by right-clicking in the Emitter Tree and choosing <strong>New Root Emitter</strong>. The habit that keeps this manageable is to keep each emitter responsible for one visual part, and to select emitters one at a time while previewing so you always know what each one contributes.</p>
+<p>Add a new root emitter by right-clicking in the Emitter Tree and choosing <strong>New Root Emitter</strong> — the tree's <strong>+</strong> button and the Emitters menu offer the same commands, so use whichever is under your cursor. The habit that keeps this manageable is to keep each emitter responsible for one visual part, and to select emitters one at a time while previewing so you always know what each one contributes.</p>
 <p>Stacking is the default answer. Reach for child emitters only when a part of the effect needs to be tied to another emitter's particles rather than standing on its own.</p>
 <h2 id="child-emitters">Child Emitters</h2>
 <p>A child emitter is attached to a parent emitter and spawns relative to the parent's individual particles, not to the effect as a whole. That is the key difference from a sibling: a sibling plays from the origin, while a child follows or reacts to each parent particle wherever it goes.</p>
@@ -122,9 +126,12 @@
 <li>Triggered at the moment each parent particle ends → make it a <strong>Death Child</strong>.</li>
 </ul>
 <p>When in doubt, stack siblings. Children are the specialized tool for the cases where a part of the effect must ride on another emitter's particles.</p>
+<p><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a> puts both patterns to work — four stacked root emitters plus a Lifetime Child that gives every flying spark its own smoke trail.</p>
+<!-- Media (planned): ref-lifetime-child-trail -->
+<!-- Media (planned): ref-death-child-pop -->
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./blend-modes.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Blend Modes</span></a>
+        <a class="pager-prev" href="./motion-and-physics.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Motion and Physics</span></a>
         <a class="pager-next" href="./file-structure.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">File Structure</span></a>
       </nav>
     </main>

@@ -32,8 +32,8 @@ particle would normally be used by a game projectile.
 
 ## Before You Start
 
-Create a blank particle in the editor. Save it in the tutorial mod folder with a new tutorial name,
-for example:
+Create a blank particle with **File → New**, then use **Save As** to save it in the tutorial mod
+folder with a new tutorial name, for example:
 
 ```text
 ParticleTutorial\Data\Art\Models\P_TUTORIAL_GREEN_LASER.ALO
@@ -44,8 +44,9 @@ this lesson.
 
 ## 1. Create the Projectile Core
 
-Start with one emitter for the moving laser body. In the Emitter Tree, give it a clear name such as
-`Projectile_Core` so it is easy to separate from the muzzle flash emitters later.
+A new particle starts with one default emitter — that becomes the moving laser body. Select it in
+the Emitter Tree and rename it in the **Name** field at the top of the **Basic** tab. A clear name
+such as `Projectile_Core` makes it easy to separate from the muzzle flash emitters later.
 
 For the visual target, think narrow, bright, and short-lived:
 
@@ -55,6 +56,10 @@ Blend mode:  additive
 Lifetime:    short
 Scale:       narrow enough to read as a shot, not a cloud
 ```
+
+The blend mode lives in the **Appearance** tab's Rendering section — Additive is the right choice
+for anything that glows (see [Blend Modes](blend-modes)). Lifetime is set with the Minimum/Maximum
+lifetime fields in the **Basic** tab's Generation section.
 
 Use the Preview Viewport while you adjust. The projectile core should read immediately as the center
 of the shot.
@@ -72,7 +77,9 @@ not a solid rectangle.
 
 ## 3. Add the Projectile Glow
 
-Add a second projectile emitter named something like `Projectile_Glow`. This emitter should be
+Add a second projectile emitter: right-click in the Emitter Tree and choose **New Root Emitter**
+(the tree's **+** button and the Emitters menu offer the same choice). Name it something like
+`Projectile_Glow`. This emitter should be
 slightly wider, softer, and less intense than the core. It gives the shot presence without replacing
 the crisp center.
 
@@ -89,7 +96,9 @@ the other two. Very low intensity at a large scale adds presence without blowing
 ## 4. Let the Projectile Emitters Ride the Shot
 
 Set `Parent speed inherit:` near full inheritance on both the projectile core and the projectile
-glow, one emitter at a time in the Property Panel, so the projectile rides with the parent motion.
+glow — it lives in the **Physics** tab's Initial speed section (see
+[Motion and Physics](motion-and-physics)) — one emitter at a time, so the projectile rides with
+the parent motion.
 
 This makes the projectile part behave like it belongs to the moving projectile object. The core and
 glow tails should travel together instead of being left behind at the spawn point.
@@ -130,7 +139,8 @@ continuous stream. In the **Basic** tab, open the **Generation** section and set
 to `Bursts` (rather than `Continuous stream`). A single burst — `Bursts: 1` with a small
 `Particles/burst:` — gives one clean flash instead of an emitter that keeps re-emitting for the
 whole life of the shot. This burst-versus-stream choice, together with the short lifetime, is what
-makes a launch flash read as a flash and not a steady jet.
+makes a launch flash read as a flash and not a steady jet. (The full rundown of the three
+generation modes is in [Particle Generation Types](generation-types).)
 
 <!-- Media: tutorial-03-muzzle-flash -->
 

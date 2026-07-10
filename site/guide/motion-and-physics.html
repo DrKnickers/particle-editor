@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motion and Physics — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html" class="active" aria-current="page">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Reference <span class="kicker-count">· 4 of 9</span></p>
+<h1 id="motion-and-physics">Motion and Physics</h1>
+<p>The Physics tab in the Property Panel controls where particles start and how they move: initial position, initial speed, acceleration, and what happens at the ground. Tutorial 3 uses exactly one of these controls (<code>Parent speed inherit:</code>); this page covers the rest, and it is the reference to have open when you build the explosion in <a href="./05-build-an-explosion.html">Tutorial 5</a>.</p>
+<!-- Media (planned): ref-radial-burst -->
+<h2 id="random-shapes-how-position-and-speed-are-rolled">Random Shapes: How Position and Speed Are Rolled</h2>
+<p>The <strong>Initial position</strong> and <strong>Initial speed</strong> sections each start with a shape picker (<code>Type:</code>) that decides how the value is randomized for every new particle:</p>
+<table>
+<thead>
+<tr><th>Type</th><th>Fields</th><th>What each particle gets</th></tr>
+</thead>
+<tbody>
+<tr><td>Exact</td><td><code>Value:</code></td><td>The same fixed X/Y/Z every time. No randomness.</td></tr>
+<tr><td>Box</td><td><code>Min:</code> / <code>Max:</code></td><td>A random point inside a box between the two corners.</td></tr>
+<tr><td>Cube</td><td><code>Side length:</code></td><td>A random point inside a cube of that size, centered on the emitter.</td></tr>
+<tr><td>Sphere</td><td><code>Radius:</code></td><td>A random point inside a sphere. Check <code>Constrain to surface</code> to pick points <strong>on</strong> the sphere's shell instead.</td></tr>
+<tr><td>Cylinder</td><td>radius and height</td><td>A random point inside a cylinder, with its own <code>Constrain to surface</code> option.</td></tr>
+</tbody>
+</table>
+<p>The trick to reading this table: for <strong>Initial position</strong> the shape scatters <em>where particles spawn</em>; for <strong>Initial speed</strong> the same shape scatters <em>which direction and how fast they fly</em>. A speed vector is just a point in the shape — its direction from the center is the flight direction, and its distance is the speed.</p>
+<p>That makes <strong>Sphere on Initial speed the radial-burst tool</strong>: every particle gets a velocity pointing somewhere on a sphere, so the emitter sprays in all directions at once. With <code>Constrain to surface</code> checked, every particle flies at exactly the same speed (the radius) — a clean, even shell, which is what an explosion's debris wants. Unchecked, speeds vary from zero up to the radius, which reads more ragged and natural for sparks.</p>
+<h2 id="initial-speed-extras">Initial Speed Extras</h2>
+<ul>
+<li><strong>Inward speed:</strong> adds motion along the line between each particle and the emitter's center.</li>
+</ul>
+<p>  A positive value pulls particles inward — useful for implosion or intake effects. A negative   value pushes them outward, on top of whatever the speed shape rolled.</p>
+<ul>
+<li><strong>Parent speed inherit:</strong> how much of the spawning object's motion the particle keeps, from</li>
+</ul>
+<p>  0 to 100%. Tutorial 3 covers the classic use: projectile layers at full inheritance ride the   shot; muzzle-flash layers at zero stay at the launch point.</p>
+<ul>
+<li><strong>Affected by wind:</strong> lets the scene's wind push the particles.</li>
+</ul>
+<h2 id="acceleration">Acceleration</h2>
+<p>Where Initial speed sets motion once at birth, the Acceleration section bends it continuously:</p>
+<ul>
+<li><strong>X / Y / Z:</strong> a constant push in a fixed direction. The everyday use is a small +Z value to</li>
+</ul>
+<p>  make smoke rise.</p>
+<ul>
+<li><strong>Gravity acceleration:</strong> a downward pull. Give debris a little gravity and its straight</li>
+</ul>
+<p>  radial flight becomes an arc.</p>
+<ul>
+<li><strong>Inward acceleration:</strong> like Inward speed, but applied continuously — particles curve toward</li>
+</ul>
+<p>  the emitter (positive) or away from it (negative) over their whole life.</p>
+<ul>
+<li><strong>Object space acceleration:</strong> applies the X/Y/Z push in the emitter's own orientation</li>
+</ul>
+<p>  instead of world directions, so the push turns with the object the effect is attached to.</p>
+<h2 id="ground-interaction">Ground Interaction</h2>
+<p><code>Behavior:</code> decides what a particle does when it reaches the ground:</p>
+<ul>
+<li><strong>None</strong> — ignores the ground and passes through.</li>
+<li><strong>Disappear</strong> — the particle dies on contact.</li>
+<li><strong>Bounce</strong> — the particle reflects; <code>Bounciness:</code> (enabled only for this behavior) sets how</li>
+</ul>
+<p>  much energy it keeps.</p>
+<ul>
+<li><strong>Stick</strong> — the particle stops and stays where it landed.</li>
+</ul>
+<h2 id="one-caveat-weather-mode">One Caveat: Weather Mode</h2>
+<p>When an emitter's Generation is set to <strong>Weather particle</strong> (see <a href="./generation-types.html">Particle Generation Types</a>), most of this tab disables — weather particles fill a camera-following volume rather than flying from an emitter, so initial position, acceleration, gravity, and ground interaction do not apply. Initial speed, Inward speed, and Affected by wind stay active. If Physics fields are unexpectedly grayed out, check the Generation section first.</p>
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a> — puts the Sphere speed shape,</li>
+</ul>
+<p>  lifetime variation, and gravity to work.</p>
+<ul>
+<li><a href="./generation-types.html">Particle Generation Types</a> — bursts vs. streams vs. weather.</li>
+<li><a href="./curve-editor-basics.html">Curve Editor Basics</a> — the lifetime curves these motions pair with.</li>
+</ul>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./blend-modes.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Blend Modes</span></a>
+        <a class="pager-next" href="./stacking-emitters-and-children.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Stacking Emitters and Using Children</span></a>
+      </nav>
+    </main>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#random-shapes-how-position-and-speed-are-rolled">Random Shapes: How Position and Speed Are Rolled</a></li>
+      <li class="lvl-2"><a href="#initial-speed-extras">Initial Speed Extras</a></li>
+      <li class="lvl-2"><a href="#acceleration">Acceleration</a></li>
+      <li class="lvl-2"><a href="#ground-interaction">Ground Interaction</a></li>
+      <li class="lvl-2"><a href="#one-caveat-weather-mode">One Caveat: Weather Mode</a></li>
+      <li class="lvl-2"><a href="#related-pages">Related Pages</a></li>
+      </ul>
+    </nav>
+  </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
+</body>
+</html>

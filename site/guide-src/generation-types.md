@@ -5,6 +5,8 @@ stream, or as camera-following weather. You pick one of the three in the Propert
 in the Generation section. They are mutually exclusive — choosing one turns the others off — and each
 reveals its own set of fields.
 
+<!-- Media (planned): ref-generation-types -->
+
 ## Bursts
 
 Burst mode releases particles in discrete groups rather than continuously. It is the right choice for
@@ -52,6 +54,14 @@ Its fields:
 - **Distance from camera** — how far in front of the camera the cube's center sits.
 - **Cube size** — the size of the volume the weather fills. A larger cube covers more of the scene
   but spreads the same particle count more thinly.
+
+## Particle Lifetime
+
+Alongside the mode fields, the Generation section carries **Minimum lifetime:** and
+**Maximum lifetime:** — how long each particle lives, in seconds, whichever generation mode is
+active. With the two values equal, every particle lives the same span. Setting them apart gives
+each particle a random lifespan in that range, which makes a burst die off raggedly — sparks
+winking out one by one — instead of the whole group vanishing on the same frame.
 
 ## Choosing a Type
 

@@ -8,6 +8,8 @@ The two you will use most are Additive and Transparent. Additive adds light to t
 for anything glowing. Transparent is ordinary see-through blending and is right for anything solid-
 looking that fades, such as smoke.
 
+<!-- Media (planned): ref-blend-mode-grid -->
+
 ## The Modes
 
 | Mode | What it does | Reach for it when |
@@ -31,6 +33,8 @@ billboard quad's single depth value. That lets a particle meet solid geometry co
 occluding against it pixel by pixel, rather than the whole quad popping wholly in front of or behind
 the surface. Use a depth mode when an effect sits against or passes through scene geometry; use the
 plain mode when it floats in open space, since the plain mode is cheaper.
+
+<!-- Media (planned): ref-depth-mode-compare -->
 
 ## The Bump Modes Need the Normal Texture
 

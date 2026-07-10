@@ -66,6 +66,7 @@
       <li><a href="./setup.html" class="active" aria-current="page">Setup</a></li>
       <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,16 +85,18 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Start Here <span class="kicker-count">· 2 of 4</span></p>
+<p class="guide-kicker">Start Here <span class="kicker-count">· 2 of 5</span></p>
 <h1 id="setup">Setup</h1>
 <p>The tutorial course assumes you already have Particle Editor installed.</p>
 <p>The editor automatically locates the game install and mod folders. The tutorials use a small loose file mod called <code>ParticleTutorial</code> so every edit is easy to find and easy to remove.</p>
@@ -104,8 +108,9 @@
 <pre><code class="language-text">DATA\ART\MODELS\
 </code></pre>
 <p>When a particle file is placed there, the game can load it as a loose override.</p>
+<!-- Media (planned): ref-mod-folder-tree -->
 <h2 id="extract-shipped-particle-files">Extract Shipped Particle Files</h2>
-<p>Most stock particles are packed inside the game's <code>.meg</code> archives, especially <code>Models.meg</code>. Use an external MEG archive tool such as <a href="https://modtools.petrolution.net/tools/MegEditor">MEG Editor</a> to extract the files used by these tutorials.</p>
+<p>Most stock particles are packed inside the game's <code>.meg</code> archives, especially <code>Models.meg</code>. The editor works on loose <code>.alo</code> files, so a shipped particle has to be extracted to disk before you can open and edit it. Use an external MEG archive tool such as <a href="https://modtools.petrolution.net/tools/MegEditor">MEG Editor</a> to extract the files used by these tutorials.</p>
 <p>For the first two tutorials, extract:</p>
 <pre><code class="language-text">DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO
 </code></pre>
@@ -118,7 +123,17 @@
 <p>Then place it beside the hardpoint damage particle in the same <code>Art\Models</code> folder.</p>
 <h2 id="open-the-tutorial-mod-in-the-editor">Open the Tutorial Mod in the Editor</h2>
 <p>Launch Particle Editor and choose the tutorial mod when you open files. The editor normally finds the game install and mod folders automatically. Your job is to keep the loose file path consistent with the game's <code>DATA</code> layout.</p>
-<p>If an edit is not showing up in game, first check that the file is in the tutorial mod folder with the same path and filename as the stock asset you meant to override.</p>
+<h2 id="launch-the-game-with-the-tutorial-mod">Launch the Game with the Tutorial Mod</h2>
+<p>A mod folder does nothing on its own — the game only loads it when launched with a <code>Modpath</code> argument naming it. This is the step that makes Tutorial 1's in-game check work.</p>
+<p><strong>Steam:</strong> right-click <em>Star Wars Empire at War: Forces of Corruption</em> in your library, open <strong>Properties</strong>, and put this in the launch options:</p>
+<pre><code class="language-text">MODPATH=Mods\ParticleTutorial
+</code></pre>
+<p><strong>Disk / shortcut installs:</strong> add the same argument to a shortcut that launches <code>swfoc.exe</code>:</p>
+<pre><code class="language-text">swfoc.exe MODPATH=Mods\ParticleTutorial
+</code></pre>
+<p>The path is relative to the <code>corruption</code> folder, so it matches the mod folder you created above. When you are done with the tutorials, remove the launch option and the game goes back to loading only stock files.</p>
+<h2 id="if-an-edit-is-not-showing-up-in-game">If an Edit Is Not Showing Up in Game</h2>
+<p>Check two things in order: first, that the game was actually launched with the <code>Modpath</code> argument above — this is the most common miss; second, that the file is in the tutorial mod folder with the same path and filename as the stock asset you meant to override. The <a href="./troubleshooting.html">Troubleshooting</a> page has the full checklist.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./home.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Guide Home</span></a>
@@ -131,6 +146,8 @@
       <li class="lvl-2"><a href="#create-the-tutorial-mod-folder">Create the Tutorial Mod Folder</a></li>
       <li class="lvl-2"><a href="#extract-shipped-particle-files">Extract Shipped Particle Files</a></li>
       <li class="lvl-2"><a href="#open-the-tutorial-mod-in-the-editor">Open the Tutorial Mod in the Editor</a></li>
+      <li class="lvl-2"><a href="#launch-the-game-with-the-tutorial-mod">Launch the Game with the Tutorial Mod</a></li>
+      <li class="lvl-2"><a href="#if-an-edit-is-not-showing-up-in-game">If an Edit Is Not Showing Up in Game</a></li>
       </ul>
     </nav>
   </div>

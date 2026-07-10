@@ -66,6 +66,7 @@
       <li><a href="./setup.html">Setup</a></li>
       <li><a href="./basic-controls.html" class="active" aria-current="page">Basic Editor Controls</a></li>
       <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -75,6 +76,7 @@
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -83,16 +85,18 @@
       <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
       <li><a href="./generation-types.html">Particle Generation Types</a></li>
       <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Start Here <span class="kicker-count">· 3 of 4</span></p>
+<p class="guide-kicker">Start Here <span class="kicker-count">· 3 of 5</span></p>
 <h1 id="basic-editor-controls">Basic Editor Controls</h1>
 <p>A few core viewport interactions are not obvious from the UI alone. This page covers the ones a new user has no reliable way to discover: previewing a particle in the scene, moving the camera, and selecting things.</p>
 <h2 id="preview-a-particle-hold-shift">Preview a Particle: Hold Shift</h2>
@@ -102,6 +106,7 @@
 <p>To leave a preview in the scene instead of clearing it, <strong>click the left mouse button while Shift is held</strong>. The effect detaches from the cursor and keeps emitting where you dropped it, which is useful when you want to compare an edit against a copy already running, or inspect an effect from a fixed spot while you work.</p>
 <p>After the click, dragging the mouse up and down adjusts the placed effect's height before you let go. Left and right stay fixed at the point where you clicked.</p>
 <p>This Shift-to-preview, click-to-place pattern is easy to miss — nothing on screen announces it — so reach for it whenever an effect does not appear to be showing.</p>
+<!-- Media (planned): ref-shift-preview -->
 <h2 id="move-the-camera">Move the Camera</h2>
 <p>The camera orbits a target point in the scene. Every camera move scales with how far you are zoomed in, so it stays controllable whether you are close to a small effect or pulled back from a large one.</p>
 <table>
@@ -115,6 +120,7 @@
 </tbody>
 </table>
 <p>The scroll wheel zooms in small steps and is usually the easiest way to close in on detail. Ctrl-drag zoom is smoother for large distance changes.</p>
+<!-- Media (planned): ref-camera-controls -->
 <h2 id="select-an-emitter">Select an Emitter</h2>
 <p>Select emitters in the Emitter Tree, not the viewport. Selecting one makes it the edit target — its properties and lifetime curves fill the panels — so you can work on that emitter's settings without disturbing the others. (Selection changes what you edit, not what is drawn; to hide an emitter in the viewport, toggle its visibility.)</p>
 <ul>
