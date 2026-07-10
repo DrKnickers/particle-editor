@@ -96,23 +96,6 @@ public:
     // initialized by the host (HostWindow::Run). UI-thread only.
     bool CaptureSnapshotToFile(const std::wstring& path);
 
-    // Capture the most recent pre-stamp engine frame as a tightly-packed
-    // BGRA buffer — the ENGINE LAYER of the headless `--record` composite.
-    // Same GetRenderTargetData + LockRect + scene-rect crop as
-    // CaptureSnapshotToFile, but returns raw pixels instead of encoding a
-    // PNG: `outBgra` is filled with cropW*cropH*4 bytes at a tight
-    // cropW*4 stride, top-down. The engine RT is D3DFMT_A8R8G8B8, whose
-    // in-memory byte order is B,G,R,A — already the BGRA that
-    // AsyncFrameEncoder::Frame wants, so no channel swap. `outW`/`outH` are
-    // the crop dimensions; `outX`/`outY` are the crop's client-origin (the
-    // scene-rect offset, or 0,0 for a full-RT capture) so the caller can
-    // place this layer under the UI's transparent viewport hole at the same
-    // origin React positions the viewport (registration by construction).
-    // Returns false on the same conditions as CaptureSnapshotToFile (no RT,
-    // no frame, degenerate size, or a failed readback/lock). UI-thread only.
-    bool CaptureSnapshotBgra(std::vector<unsigned char>& outBgra,
-                             int& outW, int& outH, int& outX, int& outY);
-
     // NT-handle alias of the offscreen render
     // target, allocated in Resize via CreateTexture(USAGE_RENDERTARGET,
     // D3DPOOL_DEFAULT, &sharedHandle). A parallel D3D11 device opens it

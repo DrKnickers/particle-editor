@@ -96,7 +96,6 @@
 #include "CaptureRunner.h" // --capture/--capture-ref: one-shot render + PNG (Phase C split)
 #include "HostRunUtil.h"   // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling (shared with the runners)
 #include "AsyncFrameEncoder.h"   // --record Branch B: background PNG encode (tasks/todo.md §3)
-#include "HeadlessComposite.h"   // host::CompositeUiOverEngine (headless --record composite)
 
 using namespace Microsoft::WRL;
 
@@ -925,96 +924,6 @@ struct HostWindowImpl
                 m_recordEncoderStats.depthHighWater);
     }
 
-    // Headless UI-layer grab: CapturePreview the WebView to a PNG mem-stream
-    // (presentation-INDEPENDENT — it forces a fresh render even minimized,
-    // proven in Stage 0), decode via GDI+ to straight (non-premultiplied)
-    // BGRA. The viewport region comes back alpha=0 (transparent); panels
-    // opaque. Returns false on any failure (→ capture hook returns false →
-    // ClipRunner exit 4, no publish). UI-thread only.
-    bool CapturePreviewToBgra(std::vector<unsigned char>& outBgra, int& outW, int& outH)
-    {
-        if (!webView) return false;
-        Microsoft::WRL::ComPtr<IStream> stream;
-        stream.Attach(SHCreateMemStream(nullptr, 0));
-        if (!stream) return false;
-
-        auto done  = std::make_shared<bool>(false);
-        auto hrOut = std::make_shared<HRESULT>(E_FAIL);
-        // Capture `stream` in the handler so it outlives the async op even if the
-        // pumped wait below TIMES OUT and returns (releasing our local ComPtr):
-        // WebView2 writes into the stream during the op, so a premature free
-        // would be a write-after-free. The handler holds the last ref and drops
-        // it when the (post-timeout) completion fires. (pre-PR review, defensive.)
-        HRESULT hr = webView->CapturePreview(
-            COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, stream.Get(),
-            Microsoft::WRL::Callback<ICoreWebView2CapturePreviewCompletedHandler>(
-                [done, hrOut, keepAlive = stream](HRESULT result) -> HRESULT {
-                    *hrOut = result; *done = true; return S_OK;
-                }).Get());
-        if (FAILED(hr)) return false;
-
-        // Pumped wait, bounded (2 s) — shared_ptr flags so a timed-out wait
-        // can't dangle the callback's captures. The pump also lets the
-        // WebView2 completion marshal onto this UI thread.
-        //
-        // Kick RenderD3D9()+DwmFlush() each spin: CapturePreview's async readback
-        // completes on a DWM/DComp composition cycle, which is THROTTLED when the
-        // window is minimized (the same throttle that stalls the rAF-ack). A bare
-        // engine Present isn't enough — DwmFlush() FORCES the composition pass
-        // (only ~13 ms minimized, per Stage 0), and WebView2 is composition-hosted
-        // in the same visual tree, so its preview render lands on that pass. This
-        // mirrors the legacy capture barrier (`RenderD3D9(); DwmFlush();`) that
-        // kept CapturePreview alive minimized in the Stage-0 spike. Without it the
-        // completion stalls multi-second intermittently (f0 ~100 ms, f1 > 2 s →
-        // exit 4). RenderD3D9 skips the spawner tick in record mode (idempotent).
-        const ULONGLONG t0 = GetTickCount64();
-        while (!*done)
-        {
-            MSG mw;
-            while (PeekMessage(&mw, nullptr, 0, 0, PM_REMOVE))
-            { TranslateMessage(&mw); DispatchMessage(&mw); }
-            if (*done) break;
-            if (GetTickCount64() - t0 >= 2000) break;
-            RenderD3D9();
-            DwmFlush();
-        }
-        if (!*done || FAILED(*hrOut)) return false;
-
-        LARGE_INTEGER zero = {};
-        if (FAILED(stream->Seek(zero, STREAM_SEEK_SET, nullptr))) return false;
-        Gdiplus::Bitmap bmp(stream.Get(), FALSE);
-        if (bmp.GetLastStatus() != Gdiplus::Ok) return false;
-        const int w = static_cast<int>(bmp.GetWidth());
-        const int h = static_cast<int>(bmp.GetHeight());
-        if (w <= 0 || h <= 0) return false;
-
-        // Allocate BEFORE LockBits so no throwing op (resize/bad_alloc) runs
-        // while the bitmap is locked — otherwise the unlock is skipped and the
-        // bitmap leaks locked. (pre-PR review finding 2.)
-        const size_t rowBytes = static_cast<size_t>(w) * 4u;
-        outBgra.resize(rowBytes * static_cast<size_t>(h));
-
-        Gdiplus::Rect rc(0, 0, w, h);
-        Gdiplus::BitmapData bd = {};
-        // 32bppARGB (straight, NOT PARGB) — CapturePreview PNG is straight alpha.
-        if (bmp.LockBits(&rc, Gdiplus::ImageLockModeRead,
-                         PixelFormat32bppARGB, &bd) != Gdiplus::Ok)
-            return false;
-        // SIGNED stride: GDI+ Scan0 points at the display-top row; Stride is
-        // NEGATIVE for a bottom-up lock, so ptrdiff_t arithmetic is required —
-        // unsigned math would blow up to a huge offset → OOB. (finding 1.)
-        const auto* base = static_cast<const uint8_t*>(bd.Scan0);
-        for (int y = 0; y < h; ++y)
-            memcpy(outBgra.data() + static_cast<size_t>(y) * rowBytes,
-                   base + static_cast<ptrdiff_t>(y) * bd.Stride, rowBytes);
-        bmp.UnlockBits(&bd);
-        outW = w; outH = h;
-        return true;
-    }
-
-    // CPU composite for the headless path lives in HeadlessComposite.h
-    // (host::CompositeUiOverEngine) so the pixel math is unit-testable without
-    // the GUI. See tests/test_headless_composite.cpp.
     // [E5] Frame-pacing budget from the monitor the window actually sits on
     // (the old startup-only EnumDisplaySettings(nullptr) read the PRIMARY
     // display: it capped a 144 Hz secondary at 60 and over-drove a 60 Hz
@@ -5363,8 +5272,8 @@ int HostWindowImpl::Run(int nCmdShow)
                     //      Spawner panel), so the hide-panel + focus-channel must settle
                     //      here, BEFORE t=0. Paused sim => no particle/clock advance.
                     //      HEADLESS also waits for layout/scene-rect (like --capture) so
-                    //      CaptureSnapshotBgra crops to the true viewport, not the full-RT
-                    //      fallback — consistent with the --capture gate (pre-PR finding 2).
+                    //      the window grab reads a fully-laid-out viewport, not a
+                    //      mid-reflow one — consistent with the --capture gate.
                     {
                         const LONGLONG s = PerfQpcNow();
                         while (QpcMs(PerfQpcNow() - s, recordFreq) < 500 ||
