@@ -13,6 +13,57 @@ using nlohmann::json;
 
 namespace host {
 
+// Duplicate `source` in `sys` (deep copy via the chunk writer/reader, with a
+// fresh auto-suffixed name) and shift every TRACK_INDEX keyframe on the copy by
+// `delta` — inserting a single t=0 key = delta when the source track is empty.
+// Mirrors legacy EmitterList_DuplicateEmitter + ShiftIndexTrack. Returns the new
+// emitter, or nullptr if the copy/insert failed. Shared by the single and the
+// batch (#575) duplicate-with-index-increment handlers.
+static ParticleSystem::Emitter* DuplicateEmitterWithIndexShift(
+    ParticleSystem* sys, ParticleSystem::Emitter* source, float delta)
+{
+    ParticleSystem::Emitter* dup = nullptr;
+    MemoryFile* memfile = new MemoryFile;
+    try
+    {
+        ChunkWriter writer(memfile);
+        source->copy(writer);
+        memfile->seek(0);
+        ChunkReader reader(memfile);
+        ParticleSystem::Emitter cleanCopy(reader);
+        cleanCopy.name = GenerateDuplicateName(sys, source->name);
+        dup = sys->insertEmitterAfter(source, cleanCopy);
+    }
+    catch (...)
+    {
+        memfile->Release();
+        return nullptr;
+    }
+    memfile->Release();
+    if (dup == nullptr) return nullptr;
+
+    if (delta != 0.0f)
+    {
+        ParticleSystem::Emitter::Track* track = dup->tracks[ParticleSystem::TRACK_INDEX];
+        if (track->keys.empty())
+        {
+            track->keys.insert(ParticleSystem::Emitter::Track::Key(0.0f, delta));
+        }
+        else
+        {
+            std::vector<ParticleSystem::Emitter::Track::Key> tmp(
+                track->keys.begin(), track->keys.end());
+            track->keys.clear();
+            for (size_t i = 0; i < tmp.size(); ++i)
+            {
+                track->keys.insert(ParticleSystem::Emitter::Track::Key(
+                    tmp[i].time, tmp[i].value + delta));
+            }
+        }
+    }
+    return dup;
+}
+
 bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std::string& kind)
 {
     // DispatchInternal-local aliases so the moved ladder blocks below stay
@@ -1403,60 +1454,69 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         captureUndo();
 
         ParticleSystem* sys = m_pParticleSystem->get();
-        ParticleSystem::Emitter* dup = nullptr;
-        MemoryFile* memfile = new MemoryFile;
-        try
-        {
-            ChunkWriter writer(memfile);
-            source->copy(writer);
-            memfile->seek(0);
-            ChunkReader reader(memfile);
-            ParticleSystem::Emitter cleanCopy(reader);
-            cleanCopy.name = GenerateDuplicateName(sys, source->name);
-            dup = sys->insertEmitterAfter(source, cleanCopy);
-        }
-        catch (...)
-        {
-            memfile->Release();
-            ctx.SendErr("emitter copy failed");
-            return true;
-        }
-        memfile->Release();
-
+        ParticleSystem::Emitter* dup = DuplicateEmitterWithIndexShift(sys, source, delta);
         if (dup == nullptr)
         {
-            ctx.SendErr("insertEmitterAfter returned null");
+            ctx.SendErr("emitter copy failed");
             return true;
-        }
-
-        // Mirror legacy ShiftIndexTrack at [src/UI/EmitterList.cpp:2307].
-        // The set's iterators are const, so rebuild via a temporary
-        // vector + clear + reinsert.
-        if (delta != 0.0f)
-        {
-            ParticleSystem::Emitter::Track* track =
-                dup->tracks[ParticleSystem::TRACK_INDEX];
-            if (track->keys.empty())
-            {
-                track->keys.insert(
-                    ParticleSystem::Emitter::Track::Key(0.0f, delta));
-            }
-            else
-            {
-                std::vector<ParticleSystem::Emitter::Track::Key> tmp(
-                    track->keys.begin(), track->keys.end());
-                track->keys.clear();
-                for (size_t i = 0; i < tmp.size(); ++i)
-                {
-                    track->keys.insert(
-                        ParticleSystem::Emitter::Track::Key(
-                            tmp[i].time, tmp[i].value + delta));
-                }
-            }
         }
 
         const int newId = static_cast<int>(dup->index);
         ctx.SendOk(json{{"newId", newId}});
+        ctx.MarkDirty();
+        EmitEngineStateChanged();
+        EmitEmittersTreeChanged();
+        return true;
+    }
+
+    // -------- emitters/duplicate-with-index-increment-many ----------
+    //
+    // Batch of `count` CHAINED duplicates in ONE undo step: each copy is made
+    // from the PREVIOUS copy (not the original source), so its index track
+    // climbs by `delta` per step (source 0, delta 1, count 3 -> +1, +2, +3).
+    // response.newIds are the copies in creation order. (#575)
+    if (kind == "emitters/duplicate-with-index-increment-many")
+    {
+        int id = params.value("id", -1);
+        float delta = params.value("delta", 0.0f);
+        int count = params.value("count", 1);
+        if (count < 1)   count = 1;
+        if (count > 999) count = 999;   // match the dialog spinner's range
+
+        ParticleSystem::Emitter* source = getEmitterById(id);
+        if (source == nullptr)
+        {
+            ctx.SendErr("emitter not found");
+            return true;
+        }
+
+        captureUndo();
+
+        ParticleSystem* sys = m_pParticleSystem->get();
+        std::vector<int> newIds;
+        ParticleSystem::Emitter* cur = source;
+        for (int i = 0; i < count; ++i)
+        {
+            ParticleSystem::Emitter* dup = DuplicateEmitterWithIndexShift(sys, cur, delta);
+            if (dup == nullptr)
+            {
+                if (!newIds.empty())
+                {
+                    // A partial batch already mutated the tree; tell the web so
+                    // it resyncs to the partial state (reversible in one undo via
+                    // the single captureUndo above) instead of going stale.
+                    ctx.MarkDirty();
+                    EmitEngineStateChanged();
+                    EmitEmittersTreeChanged();
+                }
+                ctx.SendErr("emitter copy failed");
+                return true;
+            }
+            newIds.push_back(static_cast<int>(dup->index));
+            cur = dup;   // chain: next copy is made from this one
+        }
+
+        ctx.SendOk(json{{"newIds", newIds}});
         ctx.MarkDirty();
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();

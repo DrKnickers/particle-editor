@@ -775,6 +775,34 @@ describe("MockBridge contract", () => {
     expect(dup.name).toContain("(+5)");
   });
 
+  it("emitters/duplicate-with-index-increment-many returns N chained ids in one call", async () => {
+    const b = new MockBridge();
+    const before = await b.request({ kind: "emitters/list", params: {} });
+    const beforeCount = before.root.children.length;
+
+    const r = await b.request({
+      kind: "emitters/duplicate-with-index-increment-many",
+      params: { id: 0, delta: 2, count: 3 },
+    });
+    expect(Array.isArray(r.newIds)).toBe(true);
+    expect(r.newIds).toHaveLength(3);
+    for (const id of r.newIds) expect(id).toBeGreaterThan(0);
+    expect(new Set(r.newIds).size).toBe(3); // three distinct copies
+
+    // Three new emitters were added under the (root) source in one call.
+    const after = await b.request({ kind: "emitters/list", params: {} });
+    expect(after.root.children.length).toBe(beforeCount + 3);
+
+    // Pin CHAINING (not 3 independent copies of the source): the mock tags each
+    // duplicate's name with a `(+delta)` marker, and because each copy is made
+    // from the PREVIOUS copy, the marker compounds — the 3 copies (in creation
+    // order) carry 1, 2, then 3 markers. Copying the original 3× would give 1
+    // marker each. This is the load-bearing #575 behavior (the index climbs).
+    const marks = (name: string) => (name.match(/\(\+2\)/g) ?? []).length;
+    const copies = after.root.children.slice(beforeCount); // the 3 new copies
+    expect(copies.map((c) => marks(c.name))).toEqual([1, 2, 3]);
+  });
+
   it("engine/action/rescale-emitter round-trips with empty body and fires state/changed", async () => {
     const b = new MockBridge();
     let stateChanges = 0;

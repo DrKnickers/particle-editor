@@ -849,6 +849,7 @@ export type Request =
   | { kind: "emitters/delete";                          params: { id: number } }
   | { kind: "emitters/rename";                          params: { id: number; name: string } }
   | { kind: "emitters/duplicate-with-index-increment";  params: { id: number; delta: number } }
+  | { kind: "emitters/duplicate-with-index-increment-many"; params: { id: number; delta: number; count: number } } // batch: `count` chained duplicates, each made from the previous copy so its index track climbs by `delta` per step; ONE undo step. response.newIds are the copies in creation order
 
   // Emitter mutations
   //
@@ -1231,6 +1232,7 @@ type ResponseForB<R extends Request> =
   R extends { kind: "emitters/delete" }                         ? Record<string, never> :
   R extends { kind: "emitters/rename" }                         ? Record<string, never> :
   R extends { kind: "emitters/duplicate-with-index-increment" } ? { newId: number } :
+  R extends { kind: "emitters/duplicate-with-index-increment-many" } ? { newIds: number[] } :
 
   // Emitter mutations
   R extends { kind: "emitters/add-lifetime-child" } ? { newId: number } :

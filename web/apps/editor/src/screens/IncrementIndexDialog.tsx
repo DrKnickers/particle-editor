@@ -23,18 +23,30 @@ export function IncrementIndexDialog({ bridge }: Props) {
   const close = useTreeContextStore((s) => s.close);
 
   const [delta, setDelta] = useState(1);
+  const [count, setCount] = useState(1);
 
-  // Reset to default each time the dialog opens so a cancel-and-reopen
+  // Reset to defaults each time the dialog opens so a cancel-and-reopen
   // round-trip starts fresh.
   useEffect(() => {
-    if (open) setDelta(1);
+    if (open) {
+      setDelta(1);
+      setCount(1);
+    }
   }, [open]);
 
   const handleOk = () => {
     if (targetId === null) return;
+    // Always use the batch request — with count 1 it makes a single duplicate,
+    // matching the old single-request behavior, and with count > 1 it chains N
+    // duplicates in one undo step (each made from the previous copy so the index
+    // track climbs by `delta` each step).
+    // Round the count to a whole number: the Spinner commits the raw parsed
+    // value (decimals=0 only affects display), so a typed "2.7" shows "3" but
+    // would otherwise send 2.7 and make 2 copies — round so the count sent
+    // matches the integer the user sees. (delta is a genuine float shift.)
     void bridge.request({
-      kind: "emitters/duplicate-with-index-increment",
-      params: { id: targetId, delta },
+      kind: "emitters/duplicate-with-index-increment-many",
+      params: { id: targetId, delta, count: Math.round(count) },
     });
     close();
   };
@@ -50,7 +62,7 @@ export function IncrementIndexDialog({ bridge }: Props) {
     >
       <Modal.Body>
         <div className="flex flex-col gap-3 text-sm">
-          <div className="grid grid-cols-[auto_1fr] items-center gap-x-3">
+          <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2">
             <label className="text-xs text-text-2" htmlFor="increment-delta">
               Increment by
             </label>
@@ -63,11 +75,26 @@ export function IncrementIndexDialog({ bridge }: Props) {
               decimals={0}
               aria-label="Increment by"
             />
+            <label className="text-xs text-text-2" htmlFor="increment-count">
+              Repeat
+            </label>
+            <Spinner
+              value={count}
+              onChange={setCount}
+              min={1}
+              max={999}
+              step={1}
+              decimals={0}
+              aria-label="Repeat count"
+            />
           </div>
           <p className="text-[11px] leading-relaxed text-text-3">
             Duplicates the emitter and shifts every atlas-index keyframe
             on the duplicate by this delta. If the source has no index
             keys, a single key at t=0 is inserted with the chosen value.
+            A repeat count above 1 chains that many duplicates in one step —
+            each made from the previous copy, so the index climbs by the
+            delta each time.
           </p>
         </div>
       </Modal.Body>

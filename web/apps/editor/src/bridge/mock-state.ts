@@ -540,6 +540,31 @@ export function duplicateWithIndexIncrement(
   return { tree: annotated, newId: dup.newId };
 }
 
+/** Batch of `count` CHAINED duplicates: each copy is made from the PREVIOUS
+ *  copy (feeding its newId back in), mirroring the host's single-undo
+ *  `emitters/duplicate-with-index-increment-many` (#575). `count` is clamped to
+ *  [1, 999] (the dialog spinner's range). Returns null only when the very first
+ *  id is missing. */
+export function duplicateWithIndexIncrementMany(
+  tree: EmitterTreeDto,
+  id: number,
+  delta: number,
+  count: number,
+): { tree: EmitterTreeDto; newIds: number[] } | null {
+  const n = Math.max(1, Math.min(999, Math.floor(count)));
+  let cur = tree;
+  let srcId = id;
+  const newIds: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const step = duplicateWithIndexIncrement(cur, srcId, delta);
+    if (step === null) return null;
+    cur = step.tree;
+    srcId = step.newId; // chain off the new copy so the index track keeps climbing
+    newIds.push(step.newId);
+  }
+  return { tree: cur, newIds };
+}
+
 // ─── Add child / Move / Link-group membership helpers ────
 
 /** Add a lifetime child under `parentId`. Refused when the parent

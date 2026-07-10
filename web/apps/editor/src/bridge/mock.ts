@@ -45,6 +45,7 @@ import {
   deleteTrackKeysInOverlay,
   duplicateEmitter,
   duplicateWithIndexIncrement,
+  duplicateWithIndexIncrementMany,
   findEmitterNode,
   makeDefaultEngineState,
   moveEmitterInTree,
@@ -119,6 +120,7 @@ function isMutating(kind: Request["kind"]): boolean {
   if (kind === "emitters/delete") return true;
   if (kind === "emitters/rename") return true;
   if (kind === "emitters/duplicate-with-index-increment") return true;
+  if (kind === "emitters/duplicate-with-index-increment-many") return true;
   // Add-child / move / link-group-membership all
   // change persisted tree state, so they ride the dirty bit.
   if (kind === "emitters/add-lifetime-child") return true;
@@ -1312,6 +1314,21 @@ export class MockBridge implements Bridge {
         this.emit({ kind: "emitters/tree/changed", payload: result.tree });
         this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
         return { newId: result.newId };
+      }
+
+      case "emitters/duplicate-with-index-increment-many": {
+        const cur = useMockEmitterTree.getState().tree;
+        const result = duplicateWithIndexIncrementMany(
+          cur, req.params.id, req.params.delta, req.params.count);
+        if (result === null) {
+          // Mirror the host's error path (SendErr): no copies made.
+          this.emit({ kind: "emitters/tree/changed", payload: cur });
+          return { newIds: [] };
+        }
+        useMockEmitterTree.getState().setTree(result.tree);
+        this.emit({ kind: "emitters/tree/changed", payload: result.tree });
+        this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
+        return { newIds: result.newIds };
       }
 
       // ---------------- emitters/add-* / move / set-membership -

@@ -197,6 +197,69 @@ test("emitters/duplicate-with-index-increment via the bridge appends a new emitt
   }, result.newId);
 });
 
+// ── 3b. Increment Index (batch) → N chained copies in one call (#575) ─
+
+test("emitters/duplicate-with-index-increment-many chains N copies in one call and fires one tree burst", async () => {
+  const result = await page.evaluate(async () => {
+    const bridge = (window as Window & {
+      bridge?: {
+        request: (req: { kind: string; params: unknown }) =>
+          Promise<{ newIds?: number[] }>;
+        on: (kind: string, h: (e: unknown) => void) => () => void;
+      };
+    }).bridge;
+    if (!bridge) throw new Error("bridge missing");
+
+    let treeEvents = 0;
+    const off = bridge.on("emitters/tree/changed", () => { treeEvents++; });
+
+    const before = await bridge.request({
+      kind: "emitters/list",
+      params: {},
+    }) as { root: { children: unknown[] } };
+    const firstId = (before.root.children[0] as { id?: number })?.id;
+    if (firstId === undefined) throw new Error("no emitter");
+
+    const r = await bridge.request({
+      kind: "emitters/duplicate-with-index-increment-many",
+      params: { id: firstId, delta: 2, count: 3 },
+    });
+
+    await Promise.resolve();
+    off();
+
+    const after = await bridge.request({
+      kind: "emitters/list",
+      params: {},
+    }) as { root: { children: unknown[] } };
+
+    return {
+      newIds: r.newIds ?? [],
+      treeEvents,
+      beforeCount: before.root.children.length,
+      afterCount: after.root.children.length,
+    };
+  });
+
+  expect(result.newIds).toHaveLength(3);
+  expect(new Set(result.newIds).size).toBe(3);   // three distinct copies
+  expect(result.treeEvents).toBeGreaterThanOrEqual(1); // one burst for the batch
+  expect(result.afterCount).toBe(result.beforeCount + 3);
+
+  // Cleanup: delete the copies (highest id first so lower ids stay valid).
+  await page.evaluate(async (ids) => {
+    const bridge = (window as Window & {
+      bridge?: {
+        request: (req: { kind: string; params: unknown }) => Promise<unknown>;
+      };
+    }).bridge;
+    if (!bridge) return;
+    for (const id of [...ids].sort((a, b) => b - a)) {
+      await bridge.request({ kind: "emitters/delete", params: { id } });
+    }
+  }, result.newIds);
+});
+
 // ── 4. Link Group Settings — exempt-field list round-trip ────────────
 
 test("linkGroups/list-exempt-fields returns the v1 default exempt set for a fresh group", async () => {
