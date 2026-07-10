@@ -811,12 +811,7 @@ struct HostWindowImpl
     struct RecordTiming
     {
         std::vector<double> dispatch, ack, barrier, png, frame;   // per-frame ms
-        // Headless-capture buckets (PE_RECORD_HEADLESS): `capture` = the
-        // CapturePreview UI grab + decode; `composite` = engine readback +
-        // CPU alpha-composite. They replace barrier+png on the headless path.
-        std::vector<double> capture, composite;
         double curDispatch = 0, curAck = 0, curBarrier = 0, curPng = 0;
-        double curCapture = 0, curComposite = 0;
         double setupMs = 0.0;        // record-branch start -> first Tick
         bool   sawFirstTick = false;
         // [R1] adaptive-barrier accounting: total DwmFlush presents across
@@ -834,21 +829,23 @@ struct HostWindowImpl
     // main.cpp's argv loop ignores unknown --flags harmlessly.
     bool m_recordTimingVerbose =
         wcsstr(GetCommandLineW(), L"--record-timing-verbose") != nullptr;
-    // Headless capture path (Stage 1): CapturePreview UI + engine-RT readback +
-    // CPU composite + message-ack, so a --record run is fast with the editor
-    // MINIMIZED (no DwmFlush/PrintWindow/rAF-ack presentation dependency). Env
-    // gate PE_RECORD_HEADLESS=1 (the legacy PrintWindow path stays the default,
-    // for the golden-diff gate). Probed once; see the ack + capture hooks.
+    // Headless capture path: message-ack (the web posts ui/frame-acked
+    // synchronously via flushSync, no rAF-present dependency) + the same
+    // PrintWindow/GrabWindowPixels grab the foreground path uses, run with the
+    // record window OFFSCREEN (see --record-minimized) so the machine is free.
+    // (#510 replaced the old CapturePreview + CPU-composite path.) Env gate
+    // PE_RECORD_HEADLESS=1. Probed once; see the ack + capture hooks.
     bool m_recordHeadless = [] {
         wchar_t b[8] = {};
         return GetEnvironmentVariableW(L"PE_RECORD_HEADLESS", b, 8) > 0
             && b[0] != L'0';
     }();
-    // --record-minimized: minimize the record window before the frame loop so
-    // the machine is free during a headless render. Only meaningful WITH
-    // PE_RECORD_HEADLESS (the legacy PrintWindow/rAF path stalls minimized).
-    // This is the mechanism the machine-free acceptance test + Stage-3
-    // build.mjs auto-minimize use.
+    // --record-minimized: run the record window OUT OF SIGHT during a headless
+    // render so the machine is free. Since #510 this moves the window OFFSCREEN
+    // (a minimized window throttles DWM composition, which the window grab needs
+    // — see the SetWindowPos in the record branch), NOT SW_MINIMIZE despite the
+    // flag name. Only meaningful WITH PE_RECORD_HEADLESS. This is the mechanism
+    // the machine-free acceptance test + build.mjs auto-minimize use.
     bool m_recordMinimized =
         wcsstr(GetCommandLineW(), L"--record-minimized") != nullptr;
     // Headless ack result for the LAST frame. In headless mode a missing ack
@@ -889,8 +886,7 @@ struct HostWindowImpl
         const RecordTiming& rt = m_recordTiming;
         const double frameTotal = total(rt.frame);
         const double segTotal = total(rt.dispatch) + total(rt.ack)
-                              + total(rt.barrier)  + total(rt.png)
-                              + total(rt.capture)  + total(rt.composite);
+                              + total(rt.barrier)  + total(rt.png);
         Log("[record-timing] frames=%zu wall=%.0fms setup=%.0fms tick=%.0fms "
             "pump=%.0fms other-in-tick=%.0fms\n",
             rt.frame.size(), wallMs, rt.setupMs, frameTotal,
@@ -899,11 +895,6 @@ struct HostWindowImpl
         line("ack",      rt.ack);
         line("barrier",  rt.barrier);
         line("png",      rt.png);
-        if (m_recordHeadless)
-        {
-            line("capture",   rt.capture);    // CapturePreview grab + decode
-            line("composite", rt.composite);  // engine readback + composite
-        }
         line("frame",    rt.frame);
         // [R1] Adaptive-barrier proof line: avg flushes/frame (fixed-3 was
         // the old behavior; ~2.0 = adaptive working) + loud fallback flag.
@@ -1531,8 +1522,8 @@ void HostWindowImpl::ResizeWebViewToClient()
     RECT r;
     GetClientRect(hMain, &r);
     // A minimized window has a 0-area client rect; pushing that to put_Bounds
-    // makes WebView2 stop rendering — which stalls CapturePreview in headless
-    // record (the async readback never gets a fresh render). Keep the last good
+    // makes WebView2 stop rendering — which would blank the headless record's
+    // window grab (WebView2 stops producing fresh UI). Keep the last good
     // bounds; on restore WM_SIZE fires again with the real rect. (Harmless
     // generally: a minimized window shows nothing, so a 0-resize is pure waste.)
     if (IsIconic(hMain) || r.right - r.left <= 0 || r.bottom - r.top <= 0) return;
@@ -5218,32 +5209,30 @@ int HostWindowImpl::Run(int nCmdShow)
                     }
 
                     // (e0) headless capture mode: tell the web to ack each frame
-                    //      SYNCHRONOUSLY (flushSync, no double-rAF) — the
-                    //      CapturePreview path forces the paint, so the rAF
-                    //      "proof of paint" wait (which stalls minimized) is
-                    //      dropped. Latched once here, before the frame loop; the
-                    //      legacy foreground path never sends it (double-rAF stays,
-                    //      so the golden-diff baseline is unchanged).
+                    //      SYNCHRONOUSLY (flushSync, no double-rAF) — the ack is a
+                    //      message commit, not a presented frame, so the rAF
+                    //      "proof of paint" wait (which stalls when the window
+                    //      isn't presented) is dropped. Latched once here, before
+                    //      the frame loop; the legacy foreground path never sends
+                    //      it (double-rAF stays, so the golden-diff baseline is
+                    //      unchanged).
                     if (m_recordHeadless && webView)
                     {
                         nlohmann::json hm = {{"type","ui/record-headless"}};
                         webView->PostWebMessageAsJson(host::Utf8ToWide(hm.dump()).c_str());
                     }
 
-                    // Minimize the window for a machine-free render. Headless
-                    // capture (CapturePreview + engine RT readback + message-ack)
-                    // is presentation-independent, so frames stay ~fast minimized;
-                    // the legacy path would stall at ~2 s/frame, so guard on
-                    // headless mode.
+                    // Run the record window out of sight for a machine-free render.
                     if (m_recordMinimized && m_recordHeadless)
                     {
                         // Move the window fully OFFSCREEN instead of minimizing it.
-                        // A minimized window is throttled by DWM (composition only
-                        // advances on forced DwmFlush cycles), which made
-                        // CapturePreview's completion take 12-15 flush spins
-                        // (~47ms/frame). An offscreen-but-visible window keeps
-                        // normal composition, so CapturePreview completes in 1-2
-                        // cycles — while staying invisible to the user. (#510)
+                        // A minimized window has no composited client area (and DWM
+                        // throttles minimized-window composition anyway), so the
+                        // PrintWindow/GrabWindowPixels grab below would read black or
+                        // stall. An offscreen-but-visible window stays full-size and
+                        // normally composited — correct + fast grab (headless ~90s
+                        // minimized -> ~30s offscreen) — while invisible to the user.
+                        // (#510)
                         SetWindowPos(hMain, nullptr, -32000, -32000, 0, 0,
                                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
                         Log("[record] window moved offscreen for headless capture\n");
@@ -5412,10 +5401,9 @@ int HostWindowImpl::Run(int nCmdShow)
                             // above), so it composites normally AND can't be occluded
                             // by any other window. That makes the fast foreground
                             // capture path below (barrier + GrabWindowPixels) both
-                            // correct and occlusion-immune for headless too. The old
-                            // headless path used CapturePreview + a CPU composite,
-                            // whose CapturePreview completion needed 12-15 DwmFlush
-                            // cycles (~50ms/frame); the window grab is ~20ms. (#510)
+                            // correct and occlusion-immune for headless too. (#510
+                            // replaced the old ~50ms/frame CapturePreview + CPU-
+                            // composite path with this ~20ms window grab.)
                             if (m_recordHeadless && !m_headlessAckOk)
                             {
                                 // A withheld/timed-out ack means the web's flushSync
@@ -5509,7 +5497,6 @@ int HostWindowImpl::Run(int nCmdShow)
                 }
                 m_recordTiming.curDispatch = m_recordTiming.curAck = 0.0;
                 m_recordTiming.curBarrier  = m_recordTiming.curPng = 0.0;
-                m_recordTiming.curCapture  = m_recordTiming.curComposite = 0.0;
                 const LONGLONG tickStart = PerfQpcNow();
                 const auto tickStatus = m_clipRunner->Tick();
                 m_recordTiming.frame.push_back(QpcMs(PerfQpcNow() - tickStart, recordFreq));
@@ -5517,15 +5504,12 @@ int HostWindowImpl::Run(int nCmdShow)
                 m_recordTiming.ack.push_back(m_recordTiming.curAck);
                 m_recordTiming.barrier.push_back(m_recordTiming.curBarrier);
                 m_recordTiming.png.push_back(m_recordTiming.curPng);
-                m_recordTiming.capture.push_back(m_recordTiming.curCapture);
-                m_recordTiming.composite.push_back(m_recordTiming.curComposite);
                 if (m_recordTimingVerbose)
                     Log("[record-timing] f=%d frame=%.1f dispatch=%.1f ack=%.1f "
-                        "barrier=%.1f png=%.1f capture=%.1f composite=%.1f\n",
+                        "barrier=%.1f png=%.1f\n",
                         m_recordFrame, m_recordTiming.frame.back(),
                         m_recordTiming.curDispatch, m_recordTiming.curAck,
-                        m_recordTiming.curBarrier, m_recordTiming.curPng,
-                        m_recordTiming.curCapture, m_recordTiming.curComposite);
+                        m_recordTiming.curBarrier, m_recordTiming.curPng);
                 if (tickStatus == host::ClipRunner::Status::Done)
                 {
                     recordExitCode = m_clipRunner->ExitCode();
