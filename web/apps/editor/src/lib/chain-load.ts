@@ -44,11 +44,38 @@ export type ChainWarning = {
   path: Array<{ name: string; perEmitter: number; cumulative: number }>;
 };
 
+// Sub-frame floor so an instantaneous (≈0-lifetime) parent can't divide the
+// death rate to Infinity.
+const MIN_PARENT_LIFETIME = 1 / 60;
+
+// Per-generation multiplier on the parent's cumulative alive count:
+//   A(node) = A(parent) × linkMultiplier(node, L(parent)).
+// For root/lifetime children this is just the per-emitter estimate E — every
+// alive parent particle continuously hosts one child-emitter instance. For a
+// DEATH child (spawnOnDeath) the child emitter is created once per parent
+// particle DEATH, not per alive parent: at steady state the death rate is
+// A(parent)/L(parent) and each death-child emitter lives ≈ the child's own
+// particle lifetime L(child), so the concurrent child-emitter count is
+// A(parent)·L(child)/L(parent) — the lifetime rule scaled by L(child)/L(parent).
+// This mirrors the engine (spawnOnDeath fires once in KillParticle,
+// EmitterInstance.cpp:679) and fixes the old uniform rule's exponential
+// over-projection of death chains (#562): long-lived parents die rarely, so
+// their death children shrink toward zero instead of multiplying. Per-emitter E
+// still assumes continuous emission — a smaller, documented over-count for
+// one-shot death emitters, kept so the estimate stays one simple rule.
+function linkMultiplier(node: EmitterTreeNode, parentLifetime: number): number {
+  const e = estimatePerEmitter(node.spawn);
+  if (node.role !== "death") return e;
+  const denom = Math.max(parentLifetime, MIN_PARENT_LIFETIME);
+  return Math.max(0, e * (node.spawn.lifetime / denom));
+}
+
 // Walks the tree (synthetic root excluded) and returns stableId →
 // ChainWarning for every row on a root→node path whose cumulative estimate
-// crosses `threshold` (default `CHAIN_WARN_THRESHOLD`). A(child) = A(parent) × E(child): every
-// alive parent particle hosts one child-emitter instance. Life and death
-// children deliberately share the rule — documented approximation.
+// crosses `threshold` (default `CHAIN_WARN_THRESHOLD`). A(node) = A(parent) ×
+// linkMultiplier(node): lifetime children multiply by E (one child emitter per
+// alive parent particle); death children multiply by E·L(child)/L(parent) (one
+// child emitter per parent DEATH — see linkMultiplier / #562).
 export function estimateChainLoad(
   root: EmitterTreeNode,
   // Configurable guard cap when the overload guard is enabled; the
@@ -58,8 +85,11 @@ export function estimateChainLoad(
 ): Map<number, ChainWarning> {
   const out = new Map<number, ChainWarning>();
   type TrailEntry = { stableId: number; name: string; perEmitter: number; cumulative: number };
-  const visit = (node: EmitterTreeNode, parentCumulative: number, trail: TrailEntry[]): void => {
-    const perEmitter = estimatePerEmitter(node.spawn);
+  // `perEmitter` here is the per-generation multiplier (linkMultiplier) — E for
+  // root/lifetime rows, E·L(child)/L(parent) for death rows — so the tooltip's
+  // running product (parentCumulative × perEmitter = cumulative) stays coherent.
+  const visit = (node: EmitterTreeNode, parentCumulative: number, parentLifetime: number, trail: TrailEntry[]): void => {
+    const perEmitter = linkMultiplier(node, parentLifetime);
     const cumulative = parentCumulative * perEmitter;
     const path = [...trail, { stableId: node.stableId, name: node.name, perEmitter, cumulative }];
     if (cumulative > threshold) {
@@ -74,26 +104,27 @@ export function estimateChainLoad(
         }
       }
     }
-    node.children.forEach((c) => visit(c, cumulative, path));
+    node.children.forEach((c) => visit(c, cumulative, node.spawn.lifetime, path));
   };
-  root.children.forEach((c) => visit(c, 1, []));
+  root.children.forEach((c) => visit(c, 1, root.spawn.lifetime, []));
   return out;
 }
 
 /** Total estimated steady-state alive particles for ONE placed instance
  *  of the whole system: Σ over every node of its cumulative alive
- *  estimate (A(node) = A(parent) × E(node); roots start at A = E).
+ *  estimate (A(node) = A(parent) × linkMultiplier(node); roots start at A = E,
+ *  death children scale by E·L(child)/L(parent) — see linkMultiplier / #562).
  *  Drives the preemptive overload gate (engine/set/estimated-load) —
  *  the SAME walk + estimator as the ⚠ chain warning, so the gate and
  *  the glyph can never disagree. */
 export function estimateSystemLoad(root: EmitterTreeNode): number {
   let total = 0;
-  const visit = (node: EmitterTreeNode, parentCumulative: number): void => {
-    const cumulative = parentCumulative * estimatePerEmitter(node.spawn);
+  const visit = (node: EmitterTreeNode, parentCumulative: number, parentLifetime: number): void => {
+    const cumulative = parentCumulative * linkMultiplier(node, parentLifetime);
     total += cumulative;
-    node.children.forEach((c) => visit(c, cumulative));
+    node.children.forEach((c) => visit(c, cumulative, node.spawn.lifetime));
   };
-  root.children.forEach((c) => visit(c, 1));
+  root.children.forEach((c) => visit(c, 1, root.spawn.lifetime));
   return total;
 }
 

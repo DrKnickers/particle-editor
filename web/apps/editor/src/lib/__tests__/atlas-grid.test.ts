@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ATLAS_MAX_SIDE, gridSide, frameCount, isAtlasEligible, isAtlasTooLarge,
-  resolveFrame, cellRect, classifySelection, fitGridLayout } from "../atlas-grid";
+  resolveFrame, wrapFrame, cellRect, classifySelection, fitGridLayout } from "../atlas-grid";
 
 describe("gridSide mirrors floor(sqrt(max(1,n)))", () => {
   it.each([[1,1],[2,1],[3,1],[4,2],[5,2],[9,3],[16,4],[20,4],[25,5],[0,1],[-7,1]])(
@@ -22,6 +22,40 @@ describe("resolveFrame", () => {
   it("out of range -> null", () => {
     expect(resolveFrame(16,4)).toBeNull(); expect(resolveFrame(-1,4)).toBeNull();
     expect(resolveFrame(NaN,4)).toBeNull(); expect(resolveFrame(Infinity,4)).toBeNull();
+  });
+});
+describe("wrapFrame mirrors the engine's index % side² torus", () => {
+  it("in range is unchanged (floored)", () => {
+    expect(wrapFrame(0, 4)).toBe(0);
+    expect(wrapFrame(3, 4)).toBe(3);
+    expect(wrapFrame(2.7, 4)).toBe(2);
+  });
+  it("wraps index == count to 0 (the reported #563 case)", () => {
+    expect(wrapFrame(4, 4)).toBe(0);   // 2×2 atlas, index 4 -> frame 0
+    expect(wrapFrame(16, 16)).toBe(0); // 4×4 atlas, index 16 -> frame 0
+  });
+  it("wraps arbitrary overflow modulo count", () => {
+    expect(wrapFrame(5, 4)).toBe(1);
+    expect(wrapFrame(6, 4)).toBe(2);
+    expect(wrapFrame(9, 4)).toBe(1);
+  });
+  it("wraps for non-power-of-two counts (3×3, 5×5 atlases)", () => {
+    expect(wrapFrame(9, 9)).toBe(0);   // 3×3 atlas, index 9 -> frame 0
+    expect(wrapFrame(10, 9)).toBe(1);
+    expect(wrapFrame(8, 9)).toBe(8);   // in range, unchanged
+    expect(wrapFrame(25, 25)).toBe(0); // 5×5 atlas, index 25 -> frame 0
+    expect(wrapFrame(27, 25)).toBe(2);
+    // NOTE: negative values on a non-power-of-two count intentionally diverge
+    // from the engine's (unsigned int) cast (documented in wrapFrame); positive
+    // overflow — the reported #563 case — matches exactly.
+  });
+  it("floored-modulo for negatives stays in [0,count)", () => {
+    expect(wrapFrame(-1, 4)).toBe(3);
+    expect(wrapFrame(-4, 4)).toBe(0);
+  });
+  it("degenerate inputs pass through", () => {
+    expect(wrapFrame(NaN, 4)).toBeNaN();
+    expect(wrapFrame(5, 0)).toBe(5);
   });
 });
 describe("cellRect per-axis source crop", () => {

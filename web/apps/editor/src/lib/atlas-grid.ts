@@ -13,6 +13,19 @@ export function resolveFrame(value: number, side: number): number | null {
   const f = Math.floor(value);
   return f < 0 || f > side * side - 1 ? null : f;
 }
+// Wrap an out-of-range index-curve value into [0, count) — mirrors the engine,
+// which samples col = texIndex % side (explicit, EmitterInstance.cpp:641) and
+// row via the D3D9-default WRAP texture addressing, so the net displayed cell is
+// texIndex % side² (a torus). An index of `count` therefore shows frame 0. The
+// picker wraps to match, so it highlights the same cell the engine draws.
+// (Negatives use floored-modulo; the engine's unsigned cast only diverges for
+// degenerate negative indices, which are not authorable frames.)
+export function wrapFrame(value: number, count: number): number {
+  if (!Number.isFinite(value) || count <= 0) return value;
+  const m = Math.floor(value) % count;
+  const r = m < 0 ? m + count : m;
+  return r === 0 ? 0 : r; // normalise -0 (from negative multiples) to 0
+}
 export interface CellRect { left: number; top: number; width: number; height: number; }
 export function cellRect(k: number, side: number, srcW: number, srcH: number): CellRect {
   const col = k % side, row = Math.floor(k / side), cw = srcW / side, ch = srcH / side;

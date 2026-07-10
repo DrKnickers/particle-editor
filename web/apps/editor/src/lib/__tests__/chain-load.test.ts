@@ -175,6 +175,49 @@ describe("estimateSystemLoad", () => {
   });
 });
 
+describe("death children (spawnOnDeath) scale by death rate, not alive count (#562)", () => {
+  it("death child = A(parent) × E × L(child)/L(parent), well below the uniform product", () => {
+    // parent E = 100×10 = 1000 (A=1000); death child E = 10×2 = 20.
+    // factor = L(child)/L(parent) = 2/10 = 0.2 → A(child) = 1000×20×0.2 = 4,000.
+    const child = node("debris", { nParticlesPerSecond: 10, lifetime: 2 }, [], "death");
+    const parent = node("smoke", { nParticlesPerSecond: 100, lifetime: 10 }, [child]);
+    // total = 1000 (parent) + 4000 (child) = 5000; uniform rule was 1000 + 20000 = 21000.
+    expect(estimateSystemLoad(syntheticRoot([parent]))).toBeCloseTo(5_000, 6);
+    expect(estimateSystemLoad(syntheticRoot([parent]))).toBeLessThan(21_000);
+  });
+
+  it("a LIFETIME child keeps the uniform product even with differing lifetimes (control)", () => {
+    // Same numbers as above but a lifetime child: no death factor → A(child)=20000.
+    const child = node("embers", { nParticlesPerSecond: 10, lifetime: 2 }, [], "lifetime");
+    const parent = node("smoke", { nParticlesPerSecond: 100, lifetime: 10 }, [child]);
+    expect(estimateSystemLoad(syntheticRoot([parent]))).toBeCloseTo(21_000, 6);
+  });
+
+  it("a deep death chain under long-lived parents no longer explodes exponentially", () => {
+    // smoke(10s) → death debris(2s) → death sparks(0.5s). Long parents die
+    // rarely, so each death link scales DOWN, not up.
+    const sparks = node("sparks", { nParticlesPerSecond: 40, lifetime: 0.5 }, [], "death"); // E=20
+    const debris = node("debris", { nParticlesPerSecond: 50, lifetime: 2 }, [sparks], "death"); // E=100
+    const smoke = node("smoke", { nParticlesPerSecond: 20, lifetime: 10 }, [debris]); // E=200
+    // A: smoke=200; debris=200×100×(2/10)=4,000; sparks=4000×20×(0.5/2)=20,000. total=24,200.
+    // Uniform rule would have been 200 + 20,000 + 400,000 = 420,200 (~17× larger).
+    const total = estimateSystemLoad(syntheticRoot([smoke]));
+    expect(total).toBeCloseTo(24_200, 6);
+    expect(total).toBeLessThan(420_200);
+  });
+
+  it("an instantaneous (0-lifetime) parent clamps the death rate — finite, no Infinity", () => {
+    // Burst parent with lifetime 0 has E>0 but L(parent)=0; the MIN_PARENT_LIFETIME
+    // floor keeps the death factor finite.
+    const child = node("child", { nParticlesPerSecond: 1, lifetime: 1 }, [], "death");
+    const parent = node("flash", {
+      useBursts: true, nParticlesPerBurst: 5, nBursts: 1, burstDelay: 1, lifetime: 0,
+    }, [child]);
+    const total = estimateSystemLoad(syntheticRoot([parent]));
+    expect(Number.isFinite(total)).toBe(true);
+  });
+});
+
 describe("formatChainWarning", () => {
   it("renders header + one line per generation with running product", () => {
     const leaf = node("smoke", { nParticlesPerSecond: 40, lifetime: 1 }, [], "death");
@@ -188,7 +231,9 @@ describe("formatChainWarning", () => {
   });
   it("sub-1 multipliers render with a decimal, not ×0", () => {
     // 50,000 × 0.4 = 20,000 — offending, with a sub-1 child multiplier.
-    const child = node("dust", { nParticlesPerSecond: 2, lifetime: 0.2 }, [], "death");
+    // (lifetime child so the multiplier is E=0.4 directly; a death child would
+    // scale further by L(child)/L(parent) — covered separately below.)
+    const child = node("dust", { nParticlesPerSecond: 2, lifetime: 0.2 }, [], "lifetime");
     const root = node("blast", { nParticlesPerSecond: 50_000, lifetime: 1 }, [child]);
     const w = estimateChainLoad(syntheticRoot([root])).get(child.stableId)!;
     const text = formatChainWarning(w);

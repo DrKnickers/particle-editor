@@ -58,7 +58,7 @@ import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
 } from "@/lib/curve-key-clipboard";
-import { isAtlasEligible } from "@/lib/atlas-grid";
+import { isAtlasEligible, frameCount, wrapFrame } from "@/lib/atlas-grid";
 import { publishAtlasContext } from "@/lib/atlas-context";
 import { useAtlasAutoOpen } from "@/lib/use-atlas-autoopen";
 
@@ -576,10 +576,15 @@ export function CurveEditorPanel({ bridge }: Props) {
     const resolved = [...selectedKeyTimes].filter(
       (t) => focusedTrack?.keys.some((k) => k.time === t),
     );
+    // Wrap out-of-range index values modulo the atlas element count so the picker
+    // highlights the same cell the engine samples (index N on an N-frame atlas
+    // shows frame 0 — see wrapFrame / EmitterInstance.cpp:641). Non-atlas emitters
+    // (side < 2) keep the raw floor; their frame is never consumed by the picker.
+    const n = frameCount(textureSize);
     const floors = resolved
       .map((t) => focusedTrack?.keys.find((k) => k.time === t)?.value)
       .filter((v): v is number => v !== undefined)
-      .map((v) => Math.floor(v));
+      .map((v) => (atlasEligible ? wrapFrame(v, n) : Math.floor(v)));
     const frame = floors.length > 0 && floors.every((f) => f === floors[0]) ? floors[0]! : null;
     // Stabilise the array reference: reuse the previous array when the contents
     // are identical so atlas-context consumers don't re-render unnecessarily
@@ -595,7 +600,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       interpolation: focusedTrack?.interpolation ?? null,
       selection: { frame, keyTimes: resolvedStable },
     });
-  }, [selectedId, focusedChannel.trackName, focusedTrack, selectedKeyTimes]);
+  }, [selectedId, focusedChannel.trackName, focusedTrack, selectedKeyTimes, textureSize, atlasEligible]);
 
   // Mount the auto-open controller (reads the published context + dock store).
   useAtlasAutoOpen({ atlasEligible });

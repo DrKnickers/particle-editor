@@ -1088,15 +1088,16 @@ describe("chain-load warning glyph", () => {
 // The glyph threshold follows the configurable guard cap when the guard
 // is enabled, and falls back to the advisory 10k when disabled.
 //
-// Fixture math (all three tests below patch Smoke id 0 to 200/s × 1 s =
+// Fixture math (all three tests below patch Smoke id 0 to 100/s × 2 s =
 // 200 own particles). Chain load multiplies down each generation:
-// A(child) = A(parent) × E(child) (see lib/chain-load.ts). Smoke's death
+// A(child) = A(parent) × linkMultiplier (see lib/chain-load.ts). Smoke's DEATH
 // child "Smoke puff" (id 2) drives the worst chain: it keeps its fixture
 // defaults — nParticlesPerSecond 10 (makeFixtureProperties) × lifetime 3 s
-// (lifetimeSeed = (|2| % 5) + 1 = 3) = E 30. So worst chain = 200 × 30 =
-// 6,000. That 6,000 sits BELOW the fixed 10k advisory (no glyph when the
-// guard is off / cap ≥ 10k) but the row's OWN 200 sits ABOVE a 100 cap
-// (glyph fires when the guard is on at cap 100).
+// (lifetimeSeed = (|2| % 5) + 1 = 3) = E 30. As a death child it scales by
+// L(child)/L(parent) = 3/2 = 1.5, so worst chain = 200 × 30 × 1.5 = 9,000.
+// That 9,000 sits BELOW the fixed 10k advisory (no glyph when the guard is off
+// / cap ≥ 10k) but the row's OWN 200 sits ABOVE a 100 cap (glyph fires when
+// the guard is on at cap 100).
 describe("chain-warning glyph tracks the configurable guard cap", () => {
   beforeEach(() => {
     useMockEmitterProperties.getState().reset();
@@ -1104,21 +1105,21 @@ describe("chain-warning glyph tracks the configurable guard cap", () => {
   });
 
   it("fires at the guard cap, below the fixed 10k advisory", async () => {
-    // 200/s × 1 s = 200 own particles: above cap 100, but the worst chain
-    // product (200 × 30 = 6,000, see the describe-block fixture-math note)
+    // 100/s × 2 s = 200 own particles: above cap 100, but the worst chain
+    // (200 × 30 × 1.5 = 9,000, see the describe-block fixture-math note)
     // is below the 10k advisory — so the glyph fires only because of the
     // guard cap, not the advisory threshold.
-    useMockEmitterProperties.getState().patch(0, { nParticlesPerSecond: 200, lifetime: 1 });
+    useMockEmitterProperties.getState().patch(0, { nParticlesPerSecond: 100, lifetime: 2 });
     writeOverloadGuard({ enabled: true, maxParticles: 100 });
     renderWithTooltips(<EmitterTree bridge={new MockBridge()} />);
     await screen.findByTestId("emitter-chain-warning-0");
   });
 
   it("falls back to the 10k advisory when the guard is disabled", async () => {
-    // Same 200/s × 1 s = 200; chain max 6,000 (describe-block fixture-math
-    // note) — well below the 10k advisory, so no glyph appears when the
+    // Same 100/s × 2 s = 200; chain max 9,000 (describe-block fixture-math
+    // note) — below the 10k advisory, so no glyph appears when the
     // guard is disabled.
-    useMockEmitterProperties.getState().patch(0, { nParticlesPerSecond: 200, lifetime: 1 });
+    useMockEmitterProperties.getState().patch(0, { nParticlesPerSecond: 100, lifetime: 2 });
     writeOverloadGuard({ enabled: false, maxParticles: 100 });
     renderWithTooltips(<EmitterTree bridge={new MockBridge()} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
@@ -1126,10 +1127,10 @@ describe("chain-warning glyph tracks the configurable guard cap", () => {
   });
 
   it("reacts live to a cap change (Preferences edit, no reload)", async () => {
-    // Start with cap 10,000 (chain max 6,000 < 10,000 → no glyph; see the
+    // Start with cap 10,000 (chain max 9,000 < 10,000 → no glyph; see the
     // describe-block fixture-math note), then lower cap to 100 (own 200 >
     // 100 → glyph appears without a remount).
-    useMockEmitterProperties.getState().patch(0, { nParticlesPerSecond: 200, lifetime: 1 });
+    useMockEmitterProperties.getState().patch(0, { nParticlesPerSecond: 100, lifetime: 2 });
     writeOverloadGuard({ enabled: true, maxParticles: 10_000 });
     renderWithTooltips(<EmitterTree bridge={new MockBridge()} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
