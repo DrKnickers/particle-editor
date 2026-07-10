@@ -16,7 +16,7 @@
 //   6. focusedTrack !== "index"  → "Select keys on the index channel…"
 //   happy path                  → grid + preview box
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useAtlasContext } from "@/lib/atlas-context";
 import { ToolPanel } from "@/components/ToolPanel";
@@ -164,9 +164,14 @@ export function AtlasPickerPanel({
   // the first-ever-open default so even that first open picks the settle's column
   // count — no 5→4 snap (see COLD_START_GRIDW above).
   const [gridW, setGridW] = useState<number>(() => lastAtlasGridW ?? COLD_START_GRIDW);
-  const gridRef = useRef<HTMLDivElement | null>(null);
-  const focusInGridRef = useRef(false);   // does a grid cell currently hold focus?
+  // [#572] The grid is ONE <canvas> painted as a static tall image, so scrolling
+  // needs NO re-render/redraw — we only keep a handle to the scroll container so
+  // keyboard nav can scroll the roving cell into view (adjust scrollTop).
+  const scrollElRef = useRef<HTMLDivElement | null>(null);
+  const gridRef = useRef<HTMLCanvasElement | null>(null); // the listbox <canvas>
+  const focusInGridRef = useRef(false);   // does the grid canvas currently hold focus?
   const restoreFocusRef = useRef(false);  // re-home focus after an atlas change?
+  const kbFocusPendingRef = useRef<number | null>(null); // [#572] cell to scroll into view after a keyboard move
   const roRef = useRef<ResizeObserver | null>(null);
   const lastMeasureRef = useRef<(() => void) | null>(null); // latest measure fn, called at slide settle
   const pulseTimer = useRef<number | undefined>(undefined);
@@ -208,6 +213,7 @@ export function AtlasPickerPanel({
     roRef.current?.disconnect();
     roRef.current = null;
     lastMeasureRef.current = null;
+    scrollElRef.current = el;
     if (!el) return;
     const measure = () => {
       // SLIDE: hold the cached final width; do not re-fit to the narrow
@@ -459,6 +465,12 @@ export function AtlasPickerPanel({
   // (no bridge round-trip, no loading flash).
   const preview: PreviewState = blendAlphaGated ? rawPrev : flatPrev;
 
+  // [#572] The GRID is ONE <canvas> that draws each frame with a single
+  // drawImage from the full-res `preview` image (one paint, no per-cell DOM and
+  // no giant CSS data-URI). So the old downscale/`--atlas-url` machinery is gone
+  // — the canvas grid takes the full-res preview directly (null while loading).
+  const okPreview: OkPreviewState | null = preview.kind === "ok" ? preview : null;
+
   // Warm the browser's image DECODE cache for BOTH modes as soon as their data
   // URIs load. The data is already prefetched, but the browser only decodes a
   // PNG the first time it's painted — so the very first Alpha toggle would pay a
@@ -617,10 +629,10 @@ export function AtlasPickerPanel({
     }
     void commitAssign(k, emitterId, keyTimes);
   }
-  // STABLE click handler passed to cells so React.memo(Cell) can skip ALL cells
-  // on an alpha toggle (which re-renders only the grid container). A "latest
-  // ref" keeps the wrapper identity fixed while always invoking the current
-  // onCellClick (no stale closure over frame/keyTimes/emitterId).
+  // STABLE click handler passed to the grid so React.memo(AtlasFrameGrid) can
+  // skip re-rendering on an alpha toggle. A "latest ref" keeps the wrapper
+  // identity fixed while always invoking the current onCellClick (no stale
+  // closure over frame/keyTimes/emitterId).
   const onCellClickRef = useRef(onCellClick);
   onCellClickRef.current = onCellClick;
   const stableCellClick = useRef((k: number) => onCellClickRef.current(k)).current;
@@ -655,10 +667,37 @@ export function AtlasPickerPanel({
 
   // ── keyboard navigation ─────────────────────────────────────────────
 
+  // [#572] The grid is a single <canvas> listbox, so keyboard focus stays on
+  // that ONE element (the aria-activedescendant moves, not DOM focus). "Focusing"
+  // a cell therefore means: keep focus on the canvas and scroll the cell's row
+  // into view by nudging the scroll container's scrollTop (canvas doesn't reflow,
+  // so there's no per-cell element to scrollIntoView). jsdom-tolerant: all reads
+  // are 0 there and the scrollTop write is a harmless no-op.
+  function scrollFrameIntoView(k: number) {
+    const scroller = scrollElRef.current;
+    const canvas = gridRef.current;
+    if (!scroller || !canvas) return;
+    const cols = Math.max(1, layout.cols);
+    const step = layout.cell + GRID_GAP;
+    const rowTop = Math.floor(k / cols) * step;
+    // Cell top in the scroller's CONTENT space. canvas.offsetTop is 0 (its
+    // offsetParent is the position:relative grid-box), so it misses the
+    // scroller's p-3 (12px) padding above the box; measure the canvas top
+    // relative to the scroller instead — otherwise Down/End nav under-scrolls
+    // by that padding and leaves the active cell clipped. (jsdom returns 0 for
+    // all three terms → top = rowTop, unchanged there.)
+    const canvasTopInContent =
+      canvas.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    const top = canvasTopInContent + rowTop;
+    const bottom = top + layout.cell;
+    const viewTop = scroller.scrollTop;
+    const viewBottom = viewTop + scroller.clientHeight;
+    if (top < viewTop) scroller.scrollTop = top;
+    else if (bottom > viewBottom) scroller.scrollTop = bottom - scroller.clientHeight;
+  }
   function focusCell(k: number) {
-    const el = gridRef.current?.querySelector<HTMLElement>(`[data-frame="${k}"]`);
-    el?.scrollIntoView?.({ block: "nearest", behavior: "auto" }); // instant; jsdom-tolerant
-    el?.focus?.();
+    gridRef.current?.focus?.();
+    scrollFrameIntoView(k);
   }
 
   // If the atlas changed while a grid cell held keyboard focus, the focused cell
@@ -674,11 +713,25 @@ export function AtlasPickerPanel({
   }, [rovingTarget, colorTexture, side]);
 
   function moveTo(next: number) {
+    // [#572] `next` may be scrolled off-screen (e.g. Home/End jumps). Record it
+    // and let the layout effect below scroll it into view after the re-render
+    // updates rovingTarget (→ aria-activedescendant + the redrawn focus outline).
+    kbFocusPendingRef.current = next;
     setFocusIndex(next);
-    focusCell(next);
   }
 
-  function onGridKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+  // [#572] Scroll the pending keyboard target into view once the re-render has
+  // moved rovingTarget. Runs before paint (useLayoutEffect) so the scroll is not
+  // visibly deferred. Only fires for keyboard-driven moves (kbFocusPendingRef set
+  // by moveTo), never on hover/selection-driven rovingTarget changes.
+  useLayoutEffect(() => {
+    const pending = kbFocusPendingRef.current;
+    if (pending === null) return;
+    kbFocusPendingRef.current = null;
+    focusCell(pending);
+  }, [rovingTarget]);
+
+  function onGridKeyDown(e: React.KeyboardEvent<HTMLElement>) {
     if (offIndex) return;
     const cur = rovingTarget;
     // The grid reflows responsively, so up/down must move by the LIVE column
@@ -725,25 +778,20 @@ export function AtlasPickerPanel({
     );
   } else {
     // The hero renders ONE frame via a <canvas> crop (no giant CSS raster). The
-    // cell grid reflows responsively to the measured panel width (more columns
-    // when wide, fewer when narrow). During the dock slide the measure is frozen
-    // at the cached FINAL width and re-fit once at settle, so there's no
-    // single-column transient and no settle-snap.
+    // cell grid is ONE <canvas> that draws every frame in a single paint and
+    // reflows responsively to the measured panel width (more columns when wide,
+    // fewer when narrow). During the dock slide the measure is frozen at the
+    // cached FINAL width and re-fit once at settle, so there's no single-column
+    // transient and no settle-snap.
     //
-    // The active mode's atlas image lives on the GRID CONTAINER (one element),
-    // exposed via the --atlas-url custom property the cells reference. Toggling
-    // alpha re-renders ONLY this container — the N cells' props are unchanged, so
-    // React.memo skips them and the browser just re-resolves --atlas-url and
-    // repaints the shared cell raster once.
-    const okPreview = preview.kind === "ok" ? preview : null;
-    // The container carries the SAME gray as the cells (bg-bg-2). Its gap-1 gaps
-    // therefore match the cells, and in alpha mode the transparent frame pixels
-    // reveal that uniform gray. bg-bg-2 is a theme token, so the gray adapts to
-    // dark/light automatically — no per-mode backing, no checkerboard.
+    // #572: the previous per-cell DOM (up to 1024 divs, each painting a CSS crop
+    // of a shared raster) lagged WebView2 for ~1s on open and on every scroll.
+    // The canvas draws all frames once, scrolls as a static image (no redraw),
+    // and hit-tests interaction by pointer math — one node instead of N.
     body = (
       <>
         {/* Pinned preview box. Its bg-bg-2 backing shows through the canvas's
-            transparent (non-frame) pixels, matching the cells' uniform gray. */}
+            transparent (non-frame) pixels, matching the grid's uniform gray. */}
         <div className="shrink-0 p-3">
           <PreviewBox
             preview={preview}
@@ -756,7 +804,7 @@ export function AtlasPickerPanel({
             onRegisterHoverRedraw={registerHoverPreviewRedraw}
           />
         </div>
-        {/* Scrollable cell grid. The grid reflows responsively to this region's
+        {/* Scrollable canvas grid. The grid reflows responsively to this region's
             measured width (via the callback-ref ResizeObserver). During a dock
             slide the measure no-ops and the grid holds its cached FINAL width,
             re-fitting once at the settle — so it never collapses to a single
@@ -767,7 +815,7 @@ export function AtlasPickerPanel({
             so the RO never re-fit-loops (grid grows → scrollbar → narrower →
             smaller grid → no scrollbar → wider → repeat = flicker); (2) the
             symmetric reservation centres the grid in the panel — a one-sided
-            `stable` gutter pushes the centred tracks ~half a gutter off-centre
+            `stable` gutter pushes the centred canvas ~half a gutter off-centre
             (and a full gutter when no scrollbar shows), visibly misaligning the
             grid from the full-width hero above it (measured: −7px vs 0px). */}
         <div
@@ -788,9 +836,9 @@ export function AtlasPickerPanel({
             onGridKeyDown={onGridKeyDown}
             onFocusCapture={() => { focusInGridRef.current = true; }}
             onBlurCapture={(e) => {
-              // Clear only on a deliberate move to another real element; a cell
-              // unmounting under focus blurs with relatedTarget null (-> <body>),
-              // which we keep so the restore effect can re-home focus.
+              // Clear only on a deliberate move to another real element; a blur
+              // to nothing (relatedTarget null) keeps the flag so the restore
+              // effect can re-home focus onto the grid after an atlas change.
               if (e.relatedTarget) focusInGridRef.current = false;
             }}
             onHover={setHoverPreview}
@@ -863,35 +911,6 @@ function Placeholder({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Compute the cell's CSS background-* crop for frame k.
- *
- * The atlas image is NOT embedded here — it lives on the grid container as the
- * --atlas-url custom property (one image element shared by every cell). The cell
- * only positions that shared raster to its frame, with NO background-color of its
- * own: the uniform gray backing (bg-bg-2) is on the cell element + the container.
- * In color mode the opaque flat crop covers it; in alpha mode the crop's
- * transparent frame pixels reveal the gray. Because srcW/srcH are identical
- * across both alpha modes (same texture dims), this style is STABLE across an
- * alpha toggle — the cell never re-renders on toggle. */
-function cropStyle(
-  k: number,
-  side: number,
-  srcW: number,
-  srcH: number,
-): React.CSSProperties {
-  const r = cellRect(k, side, srcW, srcH);
-  // backgroundSize: the full image is `side` cells wide/tall.
-  // backgroundPosition: position the relevant cell into view.
-  const posX = side > 1 ? `${(r.left / (srcW - r.width)) * 100}%` : "0%";
-  const posY = side > 1 ? `${(r.top / (srcH - r.height)) * 100}%` : "0%";
-  return {
-    backgroundImage: "var(--atlas-url)",
-    backgroundRepeat: "no-repeat",
-    backgroundSize: `${side * 100}% ${side * 100}%`,
-    backgroundPosition: `${posX} ${posY}`,
-  };
-}
-
 function useRenderCount(): number {
   const count = useRef(0);
   count.current += 1;
@@ -900,6 +919,106 @@ function useRenderCount(): number {
 
 type OkPreviewState = Extract<PreviewState, { kind: "ok" }>;
 type AtlasGridLayout = ReturnType<typeof fitGridLayout>;
+
+// Resolve a CSS custom property (or plain computed style) off a live element,
+// with a fallback for jsdom / a missing token. Canvas draws need concrete color
+// strings, not `var(--x)`. Only ever called once a 2d context exists (real
+// browser), so getComputedStyle is safe.
+function cssVar(el: Element, name: string, fallback: string): string {
+  const v = getComputedStyle(el).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
+interface DrawOpts {
+  cols: number;
+  cell: number;
+  side: number;
+  totalCells: number;
+  highlight: number | null;
+  rovingTarget: number;
+  deadCells: ReadonlySet<number>;
+  focusVisible: boolean;
+}
+
+/** [#572] Paint the WHOLE atlas onto the grid canvas in ONE pass: every frame
+ *  via a single drawImage, a dark scrim washing dead cells toward the panel
+ *  gray, an always-on frame-index badge, the amber selection ring on
+ *  `highlight`, and the blue focus outline on `rovingTarget` (when focused).
+ *  Internal resolution = CSS size × min(dpr, 2). No-ops gracefully with no 2d
+ *  context (jsdom) or before the image has loaded (the canvas's own bg-bg-2
+ *  shows through until then). */
+function drawGrid(canvas: HTMLCanvasElement, img: HTMLImageElement | null, o: DrawOpts) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return; // jsdom / no 2d context — no-op
+  const { cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focusVisible } = o;
+  const step = cell + GRID_GAP;
+  const rows = Math.ceil(totalCells / cols);
+  const cssW = cols * cell + (cols - 1) * GRID_GAP;
+  const cssH = rows > 0 ? rows * cell + (rows - 1) * GRID_GAP : 0;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = Math.max(1, Math.round(cssW * dpr));
+  const H = Math.max(1, Math.round(cssH * dpr));
+  if (canvas.width !== W) canvas.width = W;
+  if (canvas.height !== H) canvas.height = H;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS px; the backing is dpr-scaled
+  ctx.clearRect(0, 0, cssW, cssH); // transparent → the canvas's bg-bg-2 shows through
+
+  const amber = cssVar(canvas, "--atlas-selected", "#ffb000");
+  const focusColor = cssVar(canvas, "--accent", "#4ea3ff");
+  const scrimBg = cssVar(canvas, "--overlay-scrim", "rgba(0,0,0,0.55)");
+  const scrimFg = cssVar(canvas, "--overlay-scrim-fg", "#ececec");
+  const panelGray = getComputedStyle(canvas).backgroundColor || "rgb(30,30,30)";
+
+  const at = (k: number) => ({ x: (k % cols) * step, y: Math.floor(k / cols) * step });
+
+  // 1) Frames.
+  if (img) {
+    ctx.imageSmoothingEnabled = true;
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    for (let k = 0; k < totalCells; k++) {
+      const { x, y } = at(k);
+      const r = cellRect(k, side, iw, ih);
+      try { ctx.drawImage(img, r.left, r.top, r.width, r.height, x, y, cell, cell); } catch { /* skip */ }
+    }
+  }
+
+  // 2) Per-cell overlays: dead scrim + the always-on index badge.
+  ctx.textBaseline = "top";
+  ctx.font = "9px system-ui, -apple-system, sans-serif";
+  for (let k = 0; k < totalCells; k++) {
+    const { x, y } = at(k);
+    const selected = k === highlight;
+    if (deadCells.has(k)) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = panelGray;
+      ctx.fillRect(x, y, cell, cell);
+      ctx.restore();
+    }
+    const label = String(k);
+    const tw = Math.ceil(ctx.measureText(label).width);
+    const bw = tw + 6, bh = 12, bx = x + 2, by = y + cell - bh - 2;
+    ctx.fillStyle = selected ? amber : scrimBg;
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = selected ? "#000000" : scrimFg;
+    ctx.fillText(label, bx + 3, by + 2);
+  }
+
+  // 3) Selection ring (amber) on the assigned frame.
+  if (highlight !== null && highlight >= 0 && highlight < totalCells) {
+    const { x, y } = at(highlight);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = amber;
+    ctx.strokeRect(x + 1, y + 1, cell - 2, cell - 2);
+  }
+  // 4) Focus outline (blue) on the roving cell while the grid holds focus.
+  if (focusVisible && rovingTarget >= 0 && rovingTarget < totalCells) {
+    const { x, y } = at(rovingTarget);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = focusColor;
+    ctx.strokeRect(x + 2, y + 2, cell - 4, cell - 4);
+  }
+}
 
 const AtlasFrameGrid = memo(function AtlasFrameGrid({
   gridRef,
@@ -916,7 +1035,7 @@ const AtlasFrameGrid = memo(function AtlasFrameGrid({
   onHover,
   onClick,
 }: {
-  gridRef: React.RefObject<HTMLDivElement | null>;
+  gridRef: React.RefObject<HTMLCanvasElement | null>;
   okPreview: OkPreviewState | null;
   totalCells: number;
   side: number;
@@ -924,139 +1043,156 @@ const AtlasFrameGrid = memo(function AtlasFrameGrid({
   rovingTarget: number;
   deadCells: ReadonlySet<number>;
   layout: AtlasGridLayout;
-  onGridKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  onGridKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
   onFocusCapture: () => void;
-  onBlurCapture: (e: React.FocusEvent<HTMLDivElement>) => void;
+  onBlurCapture: (e: React.FocusEvent<HTMLElement>) => void;
   onHover: (k: number | null) => void;
   onClick: (k: number) => void;
 }) {
   const renderCount = useRenderCount();
+  const cols = Math.max(1, layout.cols);
+  const cell = layout.cell;
+  const rows = Math.ceil(totalCells / cols);
+  const contentH = rows > 0 ? rows * cell + (rows - 1) * GRID_GAP : 0;
+  const innerW = cols * cell + (cols - 1) * GRID_GAP;
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const imgUriRef = useRef<string | null>(null); // dataUri the loaded img belongs to
+  const [imgReady, setImgReady] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  // Store the canvas on BOTH the local ref (draw/hit-test) and the parent's
+  // gridRef (focus + scroll-into-view live in the parent).
+  const setCanvas = useCallback((el: HTMLCanvasElement | null) => {
+    canvasRef.current = el;
+    gridRef.current = el;
+  }, [gridRef]);
+
+  // Load the active preview's dataUri into an HTMLImageElement once per dataUri
+  // (cached via imgUriRef so an alpha toggle / selection change doesn't reload).
+  const dataUri = okPreview?.dataUri ?? null;
+  useEffect(() => {
+    if (!dataUri) { imgRef.current = null; imgUriRef.current = null; setImgReady(false); return; }
+    if (imgUriRef.current === dataUri && imgRef.current) { setImgReady(true); return; }
+    let live = true;
+    setImgReady(false);
+    const img = new Image();
+    img.src = dataUri;
+    const ready = () => { if (!live) return; imgRef.current = img; imgUriRef.current = dataUri; setImgReady(true); };
+    if (typeof img.decode === "function") img.decode().then(ready).catch(() => { /* fall back to onload */ });
+    img.onload = ready;
+    return () => { live = false; };
+  }, [dataUri]);
+
+  // Redraw whenever the image, layout, selection, roving target, dead set, or
+  // focus changes. Scrolling does NOT change any of these → no redraw on scroll.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    drawGrid(canvas, imgReady ? imgRef.current : null, {
+      cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focusVisible: focused,
+    });
+  }, [imgReady, okPreview, cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focused]);
+
+  // Hit-test: map a pointer position to a frame index, or null when the point is
+  // outside the grid or lands in an inter-cell gap.
+  const frameFromEvent = (e: React.MouseEvent): number | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (x < 0 || y < 0) return null;
+    const step = cell + GRID_GAP;
+    const col = Math.floor(x / step);
+    const row = Math.floor(y / step);
+    if (col < 0 || col >= cols || row < 0) return null;
+    if (x - col * step >= cell || y - row * step >= cell) return null; // in the gap
+    const k = row * cols + col;
+    return k >= 0 && k < totalCells ? k : null;
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    const k = frameFromEvent(e);
+    if (k !== null) onClick(k);
+  };
+  const handleMove = (e: React.MouseEvent) => {
+    const k = frameFromEvent(e);
+    onHover(k); // drives the hero preview (via hoverRef; no re-render)
+    const ov = overlayRef.current;
+    if (!ov) return;
+    if (k === null || deadCells.has(k)) { ov.style.display = "none"; return; }
+    const step = cell + GRID_GAP;
+    ov.style.display = "";
+    ov.style.left = `${(k % cols) * step}px`;
+    ov.style.top = `${Math.floor(k / cols) * step}px`;
+    ov.style.width = `${cell}px`;
+    ov.style.height = `${cell}px`;
+  };
+  const handleLeave = () => {
+    onHover(null);
+    if (overlayRef.current) overlayRef.current.style.display = "none";
+  };
+
+  const optId = `atlas-opt-${rovingTarget}`;
+  const activeDead = deadCells.has(rovingTarget);
 
   return (
+    // Fixed-size box (width = the grid's columns, height = ALL rows) centred in
+    // the scroll panel via mx-auto. Holds the single <canvas> listbox, the
+    // imperatively-positioned hover highlight, and the one active a11y option.
     <div
-      ref={gridRef}
-      role="listbox"
-      aria-label="Atlas frames"
-      aria-multiselectable={false}
-      data-render-count={renderCount}
-      onKeyDown={onGridKeyDown}
-      onFocusCapture={onFocusCapture}
-      onBlurCapture={onBlurCapture}
-      className="mx-auto grid justify-center gap-1 bg-bg-2"
-      // Responsive column count (layout.cols, ~sqrt(n) capped to the measured
-      // width — frozen during the dock slide). Cells are FIXED-px
-      // (layout.cell, from the same frozen fit), so the grid is a STATIC
-      // block: during the slide its size doesn't change, and the dock
-      // panel's overflow:hidden simply CLIPS it as it widens (revealing it)
-      // instead of 1fr cells resizing/reflowing live.
-      style={{
-        gridTemplateColumns: `repeat(${layout.cols}, ${layout.cell}px)`,
-        maxWidth: `${layout.cols * GRID_MAX_CELL + (layout.cols - 1) * GRID_GAP}px`,
-        ...(okPreview
-          ? ({ ["--atlas-url"]: `url(${okPreview.dataUri})` } as React.CSSProperties)
-          : {}),
-      }}
+      data-testid="atlas-grid-box"
+      className="relative mx-auto"
+      style={{ width: `${innerW}px`, height: `${contentH}px` }}
     >
-      {okPreview &&
-        Array.from({ length: totalCells }, (_, k) => (
-          <Cell
-            key={k}
-            k={k}
-            side={side}
-            srcW={okPreview.srcW}
-            srcH={okPreview.srcH}
-            selected={k === highlight}
-            focused={k === rovingTarget}
-            isDead={deadCells.has(k)}
-            onHover={onHover}
-            onClick={onClick}
-          />
-        ))}
-    </div>
-  );
-});
-
-// React.memo so a grid-container re-render on the alpha toggle (which only swaps
-// --atlas-url and the container backing) SKIPS every cell — the cell's props
-// (k, side, srcW, srcH, selected, focused) don't change across a toggle, so the
-// browser just re-resolves var(--atlas-url) and repaints the shared raster once.
-const Cell = memo(function Cell({
-  k,
-  side,
-  srcW,
-  srcH,
-  selected,
-  focused,
-  isDead,
-  onHover,
-  onClick,
-}: {
-  k: number;
-  side: number;
-  srcW: number;
-  srcH: number;
-  selected: boolean;
-  focused: boolean;
-  isDead: boolean;
-  onHover: (k: number | null) => void;
-  onClick?: (k: number) => void;
-}) {
-  const style: React.CSSProperties = cropStyle(k, side, srcW, srcH);
-  if (selected) {
-    // amber via border + box-shadow ring so the blue focus OUTLINE can nest
-    style.borderColor = "var(--atlas-selected)";
-    style.boxShadow = "0 0 0 1px var(--atlas-selected), 0 0 12px color-mix(in srgb, var(--atlas-selected) 40%, transparent)";
-  }
-
-  return (
-    <div
-      data-testid="atlas-cell"
-      data-frame={k}
-      data-selected={selected ? "true" : "false"}
-      data-dead={isDead ? "true" : "false"}
-      role="option"
-      aria-selected={selected}
-      aria-disabled={isDead || undefined}
-      aria-label={isDead ? `Frame ${k}, empty` : `Frame ${k}`}
-      tabIndex={focused ? 0 : -1}
-      className={`group relative aspect-square rounded-[var(--radius-sm)] bg-bg-2 transition ${
-        isDead ? "cursor-not-allowed" : "hover:scale-[1.06] hover:z-10 motion-reduce:hover:scale-100"
-      } ${selected ? "border-2" : "border border-border"} focus-ring`}
-      style={style}
-      onMouseEnter={() => onHover(k)}
-      onMouseLeave={() => onHover(null)}
-      onClick={() => onClick?.(k)}
-    >
-      {/* Dead cell → wash the SPRITE toward the panel gray via a scrim overlay, NOT root
-          opacity, so the selection ring (border/shadow on the root) and the frame-index badge
-          (rendered after this span) stay crisp. Non-dead → the interactive hover tint (~22%);
-          a dead cell isn't activatable, so it gets no hover cue. */}
-      {isDead ? (
-        <span
-          data-testid="atlas-cell-dead-scrim"
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[inherit] bg-bg-2 opacity-60"
-        />
-      ) : (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[var(--overlay-hover)] opacity-0 transition-opacity group-hover:opacity-100 motion-reduce:transition-none"
-        />
-      )}
-      {/* Frame-index badge: ALWAYS visible so each thumbnail names its atlas index
-          at a glance. Amber pill when assigned (matches the selection ring); a
-          FIXED translucent scrim otherwise — it sits over arbitrary sprite imagery,
-          so it must not theme-flip (dark scrim + light text reads on both themes). */}
-      <span
-        data-testid="atlas-cell-badge"
-        className={`pointer-events-none absolute bottom-0.5 left-0.5 rounded-sm px-1 text-[9px] leading-tight ${
-          selected
-            ? "bg-[var(--atlas-selected)] font-semibold text-black"
-            : "bg-[var(--overlay-scrim)] text-[var(--overlay-scrim-fg)]"
-        }`}
-      >
-        {k}
-      </span>
+      <canvas
+        ref={setCanvas}
+        role="listbox"
+        aria-label="Atlas frames"
+        aria-multiselectable={false}
+        aria-activedescendant={optId}
+        aria-owns={optId}
+        tabIndex={0}
+        data-testid="atlas-canvas"
+        data-atlas-cols={cols}
+        data-atlas-cell={cell}
+        data-atlas-gap={GRID_GAP}
+        data-atlas-total={totalCells}
+        data-render-count={renderCount}
+        className="block h-full w-full rounded-[var(--radius-sm)] bg-bg-2 focus-ring"
+        onKeyDown={onGridKeyDown}
+        onFocus={() => { setFocused(true); onFocusCapture(); }}
+        onBlur={(e) => { setFocused(false); onBlurCapture(e); }}
+        onClick={handleClick}
+        onMouseMove={handleMove}
+        onMouseLeave={handleLeave}
+      />
+      {/* Hover highlight, positioned imperatively on mousemove so a hover never
+          triggers a React re-render (the atlas grid stays put). */}
+      <div
+        ref={overlayRef}
+        aria-hidden
+        data-testid="atlas-hover-overlay"
+        className="pointer-events-none absolute rounded-[var(--radius-sm)] border-2 border-[var(--overlay-hover)]"
+        style={{ display: "none" }}
+      />
+      {/* The ONE active option, referenced by aria-activedescendant (+ aria-owns)
+          so a screen reader announces "Frame N of totalCells" — and "empty" for a
+          dead frame — without one option element per frame. */}
+      <div
+        role="option"
+        id={optId}
+        data-testid="atlas-active-option"
+        aria-selected={rovingTarget === highlight}
+        aria-disabled={activeDead || undefined}
+        aria-label={activeDead ? `Frame ${rovingTarget}, empty` : `Frame ${rovingTarget}`}
+        aria-posinset={rovingTarget + 1}
+        aria-setsize={totalCells}
+        className="sr-only"
+      />
     </div>
   );
 });

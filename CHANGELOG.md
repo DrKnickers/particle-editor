@@ -174,6 +174,7 @@ may live at the end of the file.
 
 ### Fixed
 
+- The Atlas Frame Picker no longer freezes the editor for several seconds when opened on a large atlas texture (e.g. a 256-frame Mod particle atlas) — the frame grid now draws in a single canvas paint instead of one DOM element per frame, so opening, scrolling, and closing the picker stay smooth regardless of atlas size
 - Face-camera (screen-oriented) particles no longer freeze their orientation while the preview is paused — they keep re-orienting to the camera as you orbit the view
 - The Blend Mode dropdown no longer wraps or overflows for long labels (e.g. "Diffuse transparent") — it now truncates to one line
 - A failing Ctrl+S (and a parked Ctrl+O/Ctrl+N behind the unsaved-changes prompt) no longer trips an unhandled internal error — the failure is now caught and handled the same way other save/open failures are

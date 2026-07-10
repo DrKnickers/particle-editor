@@ -5,7 +5,11 @@
 import { test, expect, type Page } from "@playwright/test";
 
 const PANEL = '[role="dialog"][aria-label="Atlas Frames"]';
-const CELL = '[data-testid="atlas-cell"]';
+// Post-#572 the grid is a single <canvas> inside a fixed-size mx-auto box; there
+// are no per-cell elements. Centering + column count are read off the box + the
+// geometry the canvas publishes (data-atlas-cols/-cell/-gap).
+const CANVAS = '[data-testid="atlas-canvas"]';
+const BOX = '[data-testid="atlas-grid-box"]';
 
 /** Open the Atlas Picker over an N-cell atlas and wait for the grid to render. */
 async function openAtlas(page: Page, textureSize = 64): Promise<void> {
@@ -13,29 +17,34 @@ async function openAtlas(page: Page, textureSize = 64): Promise<void> {
   await page.waitForFunction(() => typeof window.__atlasTest?.seedAtlas === "function");
   await page.evaluate((ts) => window.__atlasTest!.seedAtlas({ textureSize: ts }), textureSize);
   await expect(page.getByRole("listbox", { name: /atlas frames/i })).toBeVisible();
-  await expect(page.locator(CELL).first()).toBeVisible();
+  await expect(page.locator(BOX)).toBeVisible();
 }
 
-/** Measure the cell block's horizontal center vs the panel center, the column
- *  count (distinct cell x-positions), and the cell count. All in the browser. */
+/** Measure the grid box's horizontal center vs the panel center, the column
+ *  count (data-atlas-cols), the box width, and the width the published geometry
+ *  implies (cols*cell + (cols-1)*gap). All in the browser. */
 async function measure(page: Page) {
   return page.evaluate(
-    ({ panelSel, cellSel }) => {
+    ({ panelSel, boxSel, canvasSel }) => {
       const panel = document.querySelector(panelSel) as HTMLElement | null;
       if (!panel) throw new Error(`panel not found: ${panelSel}`); // explicit > opaque null-deref
-      const cells = Array.from(document.querySelectorAll(cellSel)) as HTMLElement[];
-      const rects = cells.map((c) => c.getBoundingClientRect());
-      const left = Math.min(...rects.map((r) => r.left));
-      const right = Math.max(...rects.map((r) => r.right));
+      const box = document.querySelector(boxSel) as HTMLElement | null;
+      if (!box) throw new Error(`grid box not found: ${boxSel}`);
+      const canvas = document.querySelector(canvasSel) as HTMLElement | null;
+      if (!canvas) throw new Error(`canvas not found: ${canvasSel}`);
+      const br = box.getBoundingClientRect();
       const pr = panel.getBoundingClientRect();
-      const cols = new Set(rects.map((r) => Math.round(r.left))).size;
+      const cols = Number(canvas.getAttribute("data-atlas-cols"));
+      const cell = Number(canvas.getAttribute("data-atlas-cell"));
+      const gap = Number(canvas.getAttribute("data-atlas-gap"));
       return {
-        n: cells.length,
         cols,
-        offset: (left + right) / 2 - (pr.left + pr.right) / 2,
+        boxWidth: br.width,
+        expectedWidth: cols * cell + (cols - 1) * gap,
+        offset: (br.left + br.right) / 2 - (pr.left + pr.right) / 2,
       };
     },
-    { panelSel: PANEL, cellSel: CELL },
+    { panelSel: PANEL, boxSel: BOX, canvasSel: CANVAS },
   );
 }
 
@@ -43,10 +52,13 @@ test.describe("Atlas Picker grid layout (real browser)", () => {
   test("the grid is horizontally centered in the panel", async ({ page }) => {
     await openAtlas(page, 64);
     const m = await measure(page);
-    expect(m.n).toBe(64);
+    // The box width matches the published grid geometry (cols*cell + gaps), so
+    // its center is a faithful stand-in for the old per-cell block center.
+    expect(m.cols).toBeGreaterThan(0);
+    expect(Math.abs(m.boxWidth - m.expectedWidth)).toBeLessThanOrEqual(1);
     // The #287 fix (ToolPanel bodyScroll={false} + scrollbar-gutter both-edges +
-    // justify-center) centers the grid; a regression to a one-sided gutter would
-    // push it ~7-15px off. Allow ±3px for sub-pixel + scrollbar rounding.
+    // justify-center / mx-auto box) centers the grid; a regression to a one-sided
+    // gutter would push it ~7-15px off. Allow ±3px for sub-pixel + scrollbar rounding.
     expect(Math.abs(m.offset)).toBeLessThanOrEqual(3);
   });
 

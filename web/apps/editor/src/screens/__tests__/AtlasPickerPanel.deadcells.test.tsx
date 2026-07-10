@@ -1,10 +1,14 @@
 // Dead-cell treatment in AtlasPickerPanel: frames whose atlas cell is effectively empty
-// (alpha ≈ 0) are dimmed, aria-disabled, and non-selectable (mouse AND keyboard), with an
-// aria-live announcement so the block isn't silent; the confirm modal re-checks at commit.
+// (alpha ≈ 0) are dimmed (a scrim drawn on the grid canvas), announced as "empty" on the
+// active a11y option, and non-selectable (mouse AND keyboard); the confirm modal re-checks
+// at commit.
 //
-// The pixel logic lives in the pure `deadCellsFromAlpha` (unit-tested separately); jsdom has
-// no real canvas, so here we mock the impure `computeDeadCells` shell to inject a known set —
-// exactly the seam the plan review asked for.
+// [#572] The grid is ONE <canvas>, so per-cell "dimmed" pixels can't be queried in jsdom.
+// These tests verify the OBSERVABLE contract instead: the active option (whichever cell is
+// roving) announces aria-disabled + "empty" for a dead frame, and clicks/Enter on a dead
+// frame announce "empty" and do NOT assign. The pixel logic lives in the pure
+// `deadCellsFromAlpha` (unit-tested separately); here we mock the impure `computeDeadCells`
+// shell to inject a known set — exactly the seam the plan review asked for.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 
@@ -46,9 +50,7 @@ function setup(
 
 // For the transition cases: the picker refetches emitter-properties on the
 // `emitters/tree/changed` broadcast (AtlasPickerPanel.tsx), NOT on a same-emitterId
-// context republish. Build the bridge inline and fire the captured handler,
-// mirroring AtlasPickerPanel.test.tsx's tree/changed tests. (setup() hides its
-// bridge, so it can't be used here.)
+// context republish. Build the bridge inline and fire the captured handler.
 function renderWithTreeChanged(blendAlphaGated: boolean) {
   const bridge = new MockBridge();
   const handlers: Array<(e: unknown) => void> = [];
@@ -64,31 +66,47 @@ function renderWithTreeChanged(blendAlphaGated: boolean) {
   return { fireChanged };
 }
 
-const cell = (k: number) =>
-  screen.getAllByTestId("atlas-cell").find((c) => c.getAttribute("data-frame") === String(k))!;
-const isDimmed = (k: number) =>
-  cell(k).querySelector('[data-testid="atlas-cell-dead-scrim"]') !== null;
+// ── canvas-grid helpers (4 cols × 50px cells, gap 4) ─────────────────────────
+const listbox = () => screen.getByRole("listbox", { name: /atlas frames/i });
+const activeDesc = () => listbox().getAttribute("aria-activedescendant");
+const activeOption = () => screen.getByTestId("atlas-active-option");
+function frameCenter(k: number, cols = 4, cell = 50) {
+  const step = cell + 4;
+  return { clientX: (k % cols) * step + cell / 2, clientY: Math.floor(k / cols) * step + cell / 2 };
+}
+const clickFrame = (k: number) => fireEvent.click(listbox(), frameCenter(k));
+// Move the roving cursor to frame k (small k) from anywhere: Home then k ArrowRights.
+function rovingTo(grid: HTMLElement, k: number) {
+  fireEvent.keyDown(grid, { key: "Home" });
+  for (let i = 0; i < k; i++) fireEvent.keyDown(grid, { key: "ArrowRight" });
+}
 
 describe("AtlasPickerPanel — dead cells", () => {
-  it("marks the sampled dead frame disabled + dimmed, and leaves the rest alive", async () => {
+  it("announces the sampled dead frame as disabled/empty, and leaves the rest alive", async () => {
     vi.mocked(computeDeadCells).mockResolvedValue(new Set([2]));
     setup();
-    await waitFor(() => expect(cell(2).getAttribute("data-dead")).toBe("true"));
-    expect(cell(2).getAttribute("aria-disabled")).toBe("true");
-    expect(cell(2).getAttribute("aria-label")).toMatch(/empty/i);
-    expect(cell(2).className).toContain("cursor-not-allowed");
-    expect(isDimmed(2)).toBe(true);                    // dimmed via the scrim (not root opacity)
-    // A live neighbor is untouched.
-    expect(cell(3).getAttribute("data-dead")).toBe("false");
-    expect(cell(3).getAttribute("aria-disabled")).toBeNull();
-    expect(isDimmed(3)).toBe(false);
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    await waitFor(() => expect(activeDesc()).toBe("atlas-opt-5")); // cursor settled before nav
+    rovingTo(grid, 2);
+    await waitFor(() => expect(activeDesc()).toBe("atlas-opt-2"));
+    await waitFor(() => expect(activeOption().getAttribute("aria-disabled")).toBe("true"));
+    expect(activeOption().getAttribute("aria-label")).toMatch(/empty/i);
+    // A live neighbor (3) is untouched.
+    fireEvent.keyDown(grid, { key: "ArrowRight" });
+    await waitFor(() => expect(activeDesc()).toBe("atlas-opt-3"));
+    expect(activeOption().getAttribute("aria-disabled")).toBeNull();
+    expect(activeOption().getAttribute("aria-label")).not.toMatch(/empty/i);
   });
 
   it("blocks assigning a dead frame by MOUSE and announces it (no silent no-op)", async () => {
     vi.mocked(computeDeadCells).mockResolvedValue(new Set([2]));
     setup();
-    await waitFor(() => expect(cell(2).getAttribute("data-dead")).toBe("true"));
-    fireEvent.click(cell(2));
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    await waitFor(() => expect(activeDesc()).toBe("atlas-opt-5")); // cursor settled before nav
+    // Confirm the dead set has landed (roving 2 reads disabled) before clicking.
+    rovingTo(grid, 2);
+    await waitFor(() => expect(activeOption().getAttribute("aria-disabled")).toBe("true"));
+    clickFrame(2);
     await waitFor(() => expect(screen.getByText(/frame 2 is empty/i)).toBeTruthy());
     expect(screen.queryByText(/assigned frame 2/i)).toBeNull();
   });
@@ -96,8 +114,9 @@ describe("AtlasPickerPanel — dead cells", () => {
   it("blocks assigning a dead frame by KEYBOARD (Enter) and announces it", async () => {
     vi.mocked(computeDeadCells).mockResolvedValue(new Set([0]));
     setup({ frame: null, keyTimes: [0.3] }); // no assignment → roving target defaults to frame 0
-    await waitFor(() => expect(cell(0).getAttribute("data-dead")).toBe("true"));
-    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Enter" });
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    await waitFor(() => expect(activeOption().getAttribute("aria-disabled")).toBe("true"));
+    fireEvent.keyDown(grid, { key: "Enter" });
     await waitFor(() => expect(screen.getByText(/frame 0 is empty/i)).toBeTruthy());
     expect(screen.queryByText(/assigned frame 0/i)).toBeNull();
   });
@@ -109,11 +128,11 @@ describe("AtlasPickerPanel — dead cells", () => {
     let resolveDead!: (s: Set<number>) => void;
     vi.mocked(computeDeadCells).mockReturnValue(new Promise<Set<number>>((r) => { resolveDead = r; }));
     setup({ frame: null, keyTimes: [0.3, 0.7] });
+    await screen.findByRole("listbox", { name: /atlas frames/i });
     await waitFor(() => expect(computeDeadCells).toHaveBeenCalled()); // effect fired, sample pending
-    fireEvent.click(cell(4));                                          // deadCells empty → modal opens
+    clickFrame(4);                                                    // deadCells empty → modal opens
     await waitFor(() => expect(screen.getByText(/set all to frame 4/i)).toBeTruthy());
-    await act(async () => { resolveDead(new Set([4])); });            // frame 4 dies mid-modal
-    await waitFor(() => expect(cell(4).getAttribute("data-dead")).toBe("true"));
+    await act(async () => { resolveDead(new Set([4])); });           // frame 4 dies mid-modal
     fireEvent.click(screen.getByRole("button", { name: /set all/i }));
     await waitFor(() => expect(screen.getByText(/frame 4 is empty/i)).toBeTruthy());
     expect(screen.queryByText(/assigned frame 4/i)).toBeNull();
@@ -122,47 +141,56 @@ describe("AtlasPickerPanel — dead cells", () => {
   it("still assigns a live (non-dead) frame", async () => {
     vi.mocked(computeDeadCells).mockResolvedValue(new Set([2]));
     setup();
-    await waitFor(() => expect(cell(2).getAttribute("data-dead")).toBe("true"));
-    fireEvent.click(cell(3));
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    await waitFor(() => expect(activeDesc()).toBe("atlas-opt-5")); // cursor settled before nav
+    rovingTo(grid, 2);
+    await waitFor(() => expect(activeOption().getAttribute("aria-disabled")).toBe("true")); // dead set landed
+    clickFrame(3);
     await waitFor(() => expect(screen.getByText(/assigned frame 3/i)).toBeTruthy());
   });
 
   it("dims nothing when the texture has no empty cells", async () => {
     vi.mocked(computeDeadCells).mockResolvedValue(new Set<number>());
     setup();
-    await waitFor(() => expect(screen.getAllByTestId("atlas-cell")).toHaveLength(16));
-    expect(screen.getAllByTestId("atlas-cell").every((c) => c.getAttribute("data-dead") === "false")).toBe(true);
+    await screen.findByRole("listbox", { name: /atlas frames/i });
+    // No frame is blocked → clicking a frame assigns it.
+    clickFrame(2);
+    await waitFor(() => expect(screen.getByText(/assigned frame 2/i)).toBeTruthy());
   });
 
   it("does NOT dim dead frames when the emitter is not alpha-gated", async () => {
     vi.mocked(computeDeadCells).mockResolvedValue(new Set([2]));
     setup({ frame: 5, keyTimes: [0.3] }, /* blendAlphaGated */ false);
-    // Grid renders; the effect early-returns without dimming, and computeDeadCells
-    // is never consulted for an additive/non-gated emitter.
-    await waitFor(() => expect(cell(0)).toBeTruthy());
-    expect(cell(2).getAttribute("data-dead")).toBe("false");
-    expect(isDimmed(2)).toBe(false);
+    await screen.findByRole("listbox", { name: /atlas frames/i });
+    // The effect early-returns without dimming, and computeDeadCells is never
+    // consulted for an additive/non-gated emitter → frame 2 assigns normally.
+    clickFrame(2);
+    await waitFor(() => expect(screen.getByText(/assigned frame 2/i)).toBeTruthy());
     expect(computeDeadCells).not.toHaveBeenCalled();
   });
 
   it("clears dimming when blendAlphaGated flips true → false", async () => {
     vi.mocked(computeDeadCells).mockResolvedValue(new Set([2]));
     const { fireChanged } = renderWithTreeChanged(/* blendAlphaGated */ true);
-    await waitFor(() => expect(cell(2).getAttribute("data-dead")).toBe("true"));
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    await waitFor(() => expect(activeDesc()).toBe("atlas-opt-5")); // cursor settled before nav
+    rovingTo(grid, 2);
+    await waitFor(() => expect(activeOption().getAttribute("aria-disabled")).toBe("true"));
     useMockEmitterProperties.getState().patch(1, { blendAlphaGated: false });
-    fireChanged(); // picker refetches → now not gated
-    await waitFor(() => expect(cell(2).getAttribute("data-dead")).toBe("false"));
-    expect(isDimmed(2)).toBe(false);
+    fireChanged(); // picker refetches → now not gated → dimming clears
+    await waitFor(() => expect(activeOption().getAttribute("aria-disabled")).toBeNull());
   });
 
   it("runs detection when blendAlphaGated flips false → true", async () => {
     vi.mocked(computeDeadCells).mockResolvedValue(new Set([2]));
     const { fireChanged } = renderWithTreeChanged(/* blendAlphaGated */ false);
-    await waitFor(() => expect(cell(0)).toBeTruthy());
-    expect(cell(2).getAttribute("data-dead")).toBe("false");
+    const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    await waitFor(() => expect(activeDesc()).toBe("atlas-opt-5")); // cursor settled before nav
+    rovingTo(grid, 2);
+    await waitFor(() => expect(activeDesc()).toBe("atlas-opt-2"));
+    expect(activeOption().getAttribute("aria-disabled")).toBeNull(); // not gated yet
     useMockEmitterProperties.getState().patch(1, { blendAlphaGated: true });
-    fireChanged(); // picker refetches → now gated
-    await waitFor(() => expect(cell(2).getAttribute("data-dead")).toBe("true"));
-    expect(isDimmed(2)).toBe(true);
+    fireChanged(); // picker refetches → now gated → detection runs
+    await waitFor(() => expect(activeOption().getAttribute("aria-disabled")).toBe("true"));
   });
 });

@@ -169,20 +169,29 @@ describe("record-cursor-eval — element target resolution", () => {
   });
 
   it("gates atlas-tile refs on the dock being settled (grid mounted AND not animating)", () => {
+    // Post-#572 the grid is a single <canvas>; the resolver reads its geometry
+    // from the data-attrs (no per-cell DOM) and computes frame N's center.
     addEl(
-      { "data-testid": "atlas-cell", "data-frame": "3" },
-      { left: 200, top: 100, width: 40, height: 40 },
+      {
+        "data-testid": "atlas-canvas",
+        "data-atlas-cols": "4",
+        "data-atlas-cell": "40",
+        "data-atlas-gap": "4",
+        "data-atlas-total": "16",
+      },
+      { left: 200, top: 100, width: 172, height: 40 }, // 4*40 + 3*4 = 172
     );
     const ref = { kind: "element", ref: "atlas-tile:3" } as const;
-    // Grid not mounted → unresolved even though the element exists.
+    // Grid not mounted → unresolved even though the canvas exists.
     useDockAnim.setState({ animating: false, atlasGridMounted: false });
     expect(resolveTargetCenter(ref).ok).toBe(false);
     // Mounted but the dock slide is still animating → unresolved.
     useDockAnim.setState({ animating: true, atlasGridMounted: true });
     expect(resolveTargetCenter(ref).ok).toBe(false);
-    // Settled → resolves to the cell center.
+    // Settled → resolves to frame 3's center. col=3, row=0, step=44 →
+    // client (200 + 3*44 + 40/2, 100 + 0 + 40/2) = (352, 120), ×dpr(=1).
     useDockAnim.setState({ animating: false, atlasGridMounted: true });
-    expect(resolveTargetCenter(ref)).toEqual({ x: 220, y: 120, ok: true });
+    expect(resolveTargetCenter(ref)).toEqual({ x: 352, y: 120, ok: true });
   });
 
   it("holds a resolved element key at its center and reports it in `resolved`", () => {

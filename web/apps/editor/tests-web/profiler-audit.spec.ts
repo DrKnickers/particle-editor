@@ -155,24 +155,32 @@ test("react re-render audit: per-component commit counts under scripted interact
     }
   });
 
-  // --- AtlasPickerPanel: open via the atlas seam, then hover several cells.
-  //     Hover is imperative (rAF canvas repaint) — expected to NOT re-render the
-  //     panel; this confirms the #532 protection. Required: seedAtlas must exist
-  //     and the grid must mount, so a 0 here is a real finding, not an absence. ---
-  let atlasCells = 0;
+  // --- AtlasPickerPanel: open via the atlas seam, then hover several frames.
+  //     Post-#572 the grid is a single <canvas> (no per-cell DOM); hover is
+  //     imperative (rAF canvas repaint) — expected to NOT re-render the panel;
+  //     this confirms the #532 protection. Required: seedAtlas must exist and the
+  //     grid must mount, so a 0 here is a real finding, not an absence. ---
+  let atlasFramesHovered = 0;
   const atlasSeedable = await page.evaluate(
     () => typeof window.__atlasTest?.seedAtlas === "function",
   );
   expect(atlasSeedable, "atlas seam present (seedAtlas)").toBe(true);
   await page.evaluate(() => window.__atlasTest!.seedAtlas({ textureSize: 64 }));
-  await page.locator('[data-testid="atlas-cell"]').first().waitFor();
-  atlasCells = await page.locator('[data-testid="atlas-cell"]').count();
+  const atlasCanvas = page.locator('[data-testid="atlas-canvas"]');
+  await atlasCanvas.first().waitFor();
+  const atlasGeom = await atlasCanvas.evaluate((el) => ({
+    cols: Number(el.getAttribute("data-atlas-cols")),
+    cell: Number(el.getAttribute("data-atlas-cell")),
+    gap: Number(el.getAttribute("data-atlas-gap")),
+  }));
   results["atlas-hover"] = await measure(page, async () => {
-    const cells = page.locator('[data-testid="atlas-cell"]');
-    const n = Math.min(await cells.count(), 8);
-    for (let i = 0; i < n; i++) {
-      await cells.nth(i).hover();
+    const step = atlasGeom.cell + atlasGeom.gap;
+    for (let f = 0; f < 8; f++) {
+      const x = (f % atlasGeom.cols) * step + atlasGeom.cell / 2;
+      const y = Math.floor(f / atlasGeom.cols) * step + atlasGeom.cell / 2;
+      await atlasCanvas.hover({ position: { x, y } });
       await page.waitForTimeout(20);
+      atlasFramesHovered++;
     }
   });
 
@@ -297,7 +305,7 @@ test("react re-render audit: per-component commit counts under scripted interact
 
   // AtlasPickerPanel was genuinely measured (grid mounted), so its 0-on-hover row
   // is a real finding, not an absent measurement.
-  expect(atlasCells, "atlas grid mounted (cells present)").toBeGreaterThan(0);
+  expect(atlasFramesHovered, "atlas grid mounted (canvas hovered)").toBeGreaterThan(0);
 
   // Toolbar was exercised (pause toggle and/or selection re-rendered it).
   const toolbarSeen =

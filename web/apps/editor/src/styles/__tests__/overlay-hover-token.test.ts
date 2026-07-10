@@ -1,4 +1,4 @@
-// Intent guard for the atlas-cell hover tint (--overlay-hover). The className
+// Intent guard for the atlas frame hover tint (--overlay-hover). The className
 // test guards only the scale lift, so without this a silent revert of the tint
 // (or a wrong-block edit hitting the light override) would pass green.
 //
@@ -33,7 +33,7 @@ function overlayHover(marker: string): { channel: string; alpha: number } {
   return { channel: parts.slice(0, 3).join(","), alpha: Number(parts[3]) };
 }
 
-describe("--overlay-hover (atlas-cell hover tint)", () => {
+describe("--overlay-hover (atlas frame hover tint)", () => {
   it("dark (:root) is a white tint brighter than the old 0.14", () => {
     const { channel, alpha } = overlayHover(":root {");
     expect(channel).toBe("255,255,255");

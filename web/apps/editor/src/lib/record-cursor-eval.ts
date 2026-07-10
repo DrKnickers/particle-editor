@@ -26,23 +26,30 @@ const UNRESOLVED: ResolvedCursorCenter = { x: Number.NaN, y: Number.NaN, ok: fal
 function quoteAttr(value: string): string {
   return JSON.stringify(value);
 }
-function selectorForRef(ref: string): { selector: string; atlasTile: boolean } | null {
+
+// An atlas-tile ref points at frame N on the single <canvas> grid (post-#572,
+// no per-cell DOM); every other ref maps to a plain CSS selector.
+type RefTarget = { atlasTile: false; selector: string } | { atlasTile: true; frame: number };
+
+function selectorForRef(ref: string): RefTarget | null {
   // testid: free-form id (may contain ':') — match by prefix, use the whole remainder.
   if (ref.startsWith("testid:") && ref.length > "testid:".length) {
-    return { selector: `[data-testid=${quoteAttr(ref.slice("testid:".length))}]`, atlasTile: false };
+    return { atlasTile: false, selector: `[data-testid=${quoteAttr(ref.slice("testid:".length))}]` };
   }
   const parts = ref.split(":");
   if (parts[0] === "curve-key" && parts.length === 3) {
     return {
-      selector: `[data-testid="curve-key"][data-channel-id=${quoteAttr(parts[1])}][data-key-time=${quoteAttr(parts[2])}]`,
       atlasTile: false,
+      selector: `[data-testid="curve-key"][data-channel-id=${quoteAttr(parts[1])}][data-key-time=${quoteAttr(parts[2])}]`,
     };
   }
   if (parts[0] === "atlas-tile" && parts.length === 2) {
-    return { selector: `[data-testid="atlas-cell"][data-frame=${quoteAttr(parts[1])}]`, atlasTile: true };
+    const frame = Number(parts[1]);
+    if (!Number.isInteger(frame) || frame < 0) return null;
+    return { atlasTile: true, frame };
   }
   if (parts[0] === "channel-row" && parts.length === 2) {
-    return { selector: `[data-testid=${quoteAttr(`curve-channel-row-${parts[1]}`)}]`, atlasTile: false };
+    return { atlasTile: false, selector: `[data-testid=${quoteAttr(`curve-channel-row-${parts[1]}`)}]` };
   }
   return null;
 }
@@ -52,12 +59,49 @@ function atlasSettled(): boolean {
   return atlasGridMounted && !animating;
 }
 
+// Frame N's center on the atlas <canvas>, in the same device-pixel scene space
+// computeSceneRect uses. There is no per-cell element anymore, so we derive the
+// cell rect from the canvas's client box + the grid geometry it publishes
+// (data-atlas-cols/-cell/-gap): frame N sits at row=floor(N/cols), col=N%cols,
+// with top-left (col*(cell+gap), row*(cell+gap)) and size cell×cell. The center
+// is computed in client coords, then scaled by DPR and rounded — matching
+// scene-rect.ts computeSceneRect's client→scene mapping.
+function resolveAtlasTileCenter(frame: number): ResolvedCursorCenter {
+  const canvas = document.querySelector<HTMLElement>('[data-testid="atlas-canvas"]');
+  if (!canvas) return { ...UNRESOLVED };
+  const cols = Number(canvas.getAttribute("data-atlas-cols"));
+  const cell = Number(canvas.getAttribute("data-atlas-cell"));
+  const gap = Number(canvas.getAttribute("data-atlas-gap"));
+  const total = Number(canvas.getAttribute("data-atlas-total"));
+  if (!Number.isFinite(cols) || !Number.isFinite(cell) || !Number.isFinite(gap) || cols < 1) {
+    return { ...UNRESOLVED };
+  }
+  // Reject a frame index past the grid: the canvas has no per-cell element to
+  // miss on, so without this an out-of-range atlas-tile:N would resolve to a
+  // phantom off-grid point (a mis-authored clip must fail loudly, matching the
+  // pre-canvas selector's null result).
+  if (!Number.isFinite(total) || frame >= total) return { ...UNRESOLVED };
+  const col = frame % cols;
+  const row = Math.floor(frame / cols);
+  const step = cell + gap;
+  const r = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  return {
+    x: Math.round((r.left + col * step + cell / 2) * dpr),
+    y: Math.round((r.top + row * step + cell / 2) * dpr),
+    ok: true,
+  };
+}
+
 export function resolveTargetCenter(target: CursorTarget): ResolvedCursorCenter {
   if (target.kind === "point") return { x: target.x, y: target.y, ok: true };
 
   const mapped = selectorForRef(target.ref);
   if (!mapped) return { ...UNRESOLVED };
-  if (mapped.atlasTile && !atlasSettled()) return { ...UNRESOLVED };
+  if (mapped.atlasTile) {
+    if (!atlasSettled()) return { ...UNRESOLVED };
+    return resolveAtlasTileCenter(mapped.frame);
+  }
 
   const el = document.querySelector<HTMLElement>(mapped.selector);
   if (!el) return { ...UNRESOLVED };

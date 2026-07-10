@@ -32,7 +32,7 @@
 // composed path: real curve-editor clicks → atlas context → dock →
 // real host track mutation.
 
-import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { test, expect, chromium, type Page, type Browser, type Locator } from "@playwright/test";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 
@@ -186,6 +186,23 @@ async function cleanup(id: number, times: number[]) {
   });
 }
 
+// Helper — click frame N on the single <canvas> grid (post-#572: no per-cell
+// DOM). Reads the grid geometry the canvas publishes (data-atlas-cols/-cell/
+// -gap), computes frame N's center relative to the canvas top-left, and clicks
+// there — the inverse of the component's frameFromEvent hit-test.
+async function clickAtlasFrame(atlas: Locator, frame: number): Promise<void> {
+  const canvas = atlas.locator('[data-testid="atlas-canvas"]');
+  await expect(canvas).toBeVisible({ timeout: 10_000 }); // preview fetch + decode
+  const pos = await canvas.evaluate((el, f) => {
+    const cols = Number(el.getAttribute("data-atlas-cols"));
+    const cell = Number(el.getAttribute("data-atlas-cell"));
+    const gap = Number(el.getAttribute("data-atlas-gap"));
+    const step = cell + gap;
+    return { x: (f % cols) * step + cell / 2, y: Math.floor(f / cols) * step + cell / 2 };
+  }, frame);
+  await canvas.click({ position: pos });
+}
+
 // ── 1. Auto-open + single-key click-to-assign ────────────────────────
 
 test("selecting an index key on an atlas-eligible emitter auto-opens the picker; clicking a cell assigns the frame", async () => {
@@ -215,9 +232,7 @@ test("selecting an index key on an atlas-eligible emitter auto-opens the picker;
 
     // Click frame 3 in the grid — assigns it to the selected key (single
     // key → selection.frame is non-null → direct commit, no confirm).
-    const cell = atlas.locator('[data-testid="atlas-cell"][data-frame="3"]');
-    await expect(cell).toBeVisible({ timeout: 10_000 }); // preview fetch + decode
-    await cell.click();
+    await clickAtlasFrame(atlas, 3);
 
     await expect
       .poll(() => indexKeyValueAt(firstId, keyTime), { timeout: 5_000 })
@@ -262,9 +277,7 @@ test("two selected index keys with differing frames surface AtlasConfirmModal; S
 
     // Clicking a cell with a mixed-frame multi-selection must NOT commit —
     // it opens the confirm modal.
-    const cell = atlas.locator('[data-testid="atlas-cell"][data-frame="5"]');
-    await expect(cell).toBeVisible({ timeout: 10_000 });
-    await cell.click();
+    await clickAtlasFrame(atlas, 5);
 
     const modal = page
       .locator('[role="dialog"][data-state="open"]')

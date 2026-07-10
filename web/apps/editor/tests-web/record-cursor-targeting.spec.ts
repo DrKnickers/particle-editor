@@ -5,7 +5,7 @@ async function seedTargets(page: Page): Promise<void> {
   await page.evaluate(() => {
     document.body.insertAdjacentHTML(
       "beforeend",
-      "\n        <div id=\"record-cursor-targets\" style=\"position:fixed;left:20px;top:30px;z-index:1\">\n          <button data-testid=\"curve-key\" data-channel-id=\"red\" data-key-time=\"0\" style=\"position:absolute;left:10px;top:20px;width:18px;height:18px\">key</button>\n          <button data-testid=\"atlas-cell\" data-frame=\"3\" style=\"position:absolute;left:50px;top:20px;width:24px;height:24px\">3</button>\n          <div data-testid=\"curve-channel-row-alpha\" style=\"position:absolute;left:10px;top:70px;width:120px;height:28px\">alpha</div>\n        </div>\n      ",
+      "\n        <div id=\"record-cursor-targets\" style=\"position:fixed;left:20px;top:30px;z-index:1\">\n          <button data-testid=\"curve-key\" data-channel-id=\"red\" data-key-time=\"0\" style=\"position:absolute;left:10px;top:20px;width:18px;height:18px\">key</button>\n          <canvas data-testid=\"atlas-canvas\" data-atlas-cols=\"4\" data-atlas-cell=\"24\" data-atlas-gap=\"4\" data-atlas-total=\"16\" style=\"position:absolute;left:50px;top:20px;width:108px;height:24px\"></canvas>\n          <div data-testid=\"curve-channel-row-alpha\" style=\"position:absolute;left:10px;top:70px;width:120px;height:28px\">alpha</div>\n        </div>\n      ",
     );
   });
 }
