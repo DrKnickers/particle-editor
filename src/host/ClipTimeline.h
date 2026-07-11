@@ -266,6 +266,17 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     // per-channel set-track-key funnels into one shared track (renders white).
     // Dialog-free; bad id/channel returns sendErr (envelope-checked).
     if (kind == "emitters/set-track-lock")     return true;
+    // preview/* — the scripted mirror of the native Shift-hover spawn
+    // (BridgeDispatch_Spawner.cpp), added for the guide's ref-shift-preview
+    // clip: attach spawns a cursor-bound instance at an unprojected client
+    // (x,y), move re-positions it along the cursor path, place detaches it
+    // (Shift-click), kill removes it (Shift release). Dialog-free, in-memory,
+    // engine-only; a misordered call (move/place/kill with nothing attached)
+    // is SendErr, which aborts the run — record-only, never on the drive list.
+    if (kind == "preview/attach") return true;
+    if (kind == "preview/move")   return true;
+    if (kind == "preview/place")  return true;
+    if (kind == "preview/kill")   return true;
     if (!drive::IsAllowedBridgeKind(kind)) return false;
     if (kind == "engine/set/paused") return false;
     return true;

@@ -26,7 +26,7 @@ Left and right stay fixed at the point where you clicked.
 This Shift-to-preview, click-to-place pattern is easy to miss — nothing on screen announces it — so
 reach for it whenever an effect does not appear to be showing.
 
-<!-- Media (planned): ref-shift-preview -->
+<!-- Media: ref-shift-preview -->
 
 ## Move the Camera
 

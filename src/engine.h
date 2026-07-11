@@ -446,6 +446,17 @@ public:
     int GetNumEmitters()  const { return m_numEmitters;  }
     int GetNumParticles() const { return m_numParticles; }
     int GetNumInstances() const { return (int)m_instances.size(); }
+    // True while `p` is a live entry of m_instances. Lets a holder of a raw
+    // instance pointer re-validate it before deref — every Engine::Clear()
+    // (file/new, file/open, the overload hard-guard) frees all instances with
+    // no per-holder invalidation hook, so raw borrows dangle silently
+    // otherwise (the record preview/* kinds are the first such holder).
+    bool HasInstance(const ParticleSystemInstance* p) const
+    {
+        for (const auto& inst : m_instances)
+            if (inst.get() == p) return true;
+        return false;
+    }
 
     // Count of currently-alive instances that were emitted by the
     // SpawnerDriver (vs. Shift-click spawns or future sources). Used

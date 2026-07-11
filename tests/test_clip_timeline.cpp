@@ -92,6 +92,12 @@ int main()
         // not by the allowlist): file/save (saveRoot confinement), the add-* family
         // (newId<0 abort), set-properties (skipped-fields abort), set-track-lock.
         CHECK(IsAllowedRecordKind("file/save"));
+        // preview/* — the scripted mirror of the native Shift-hover spawn
+        // (guide ref-shift-preview clip); record-only, misordered calls SendErr.
+        CHECK(IsAllowedRecordKind("preview/attach"));
+        CHECK(IsAllowedRecordKind("preview/move"));
+        CHECK(IsAllowedRecordKind("preview/place"));
+        CHECK(IsAllowedRecordKind("preview/kill"));
         CHECK(IsAllowedRecordKind("emitters/add-root"));
         CHECK(IsAllowedRecordKind("emitters/add-lifetime-child"));
         CHECK(IsAllowedRecordKind("emitters/add-death-child"));

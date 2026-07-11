@@ -5,6 +5,7 @@
 #include "BridgeDispatcher.h"
 #include "BridgeDispatchShared.h"
 #include "BridgeRequestContext.h"
+#include "../MouseCursor.h"
 
 using nlohmann::json;
 
@@ -269,6 +270,113 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx, const std::
         return true;
     }
 
+    // -----------------------------------------------------------------
+    // preview/* — the scripted mirror of the native Shift-hover spawn
+    // (HostWindow's WM_KEYDOWN VK_SHIFT path), added so the guide's
+    // ref-shift-preview clip can show the feature. Record-only kinds
+    // (allowlisted in ClipTimeline.h; the web UI never sends them).
+    //
+    //   preview/attach {x,y}  spawn an instance parented to a dispatcher-
+    //                         owned MouseCursor anchor at the unprojected
+    //                         client (x,y) — the Shift-press behavior.
+    //   preview/move {x,y}    re-position the anchor; the instance follows
+    //                         in world space exactly like the native
+    //                         feature (fired along the cursor path).
+    //   preview/place {}      detach — the instance keeps emitting where
+    //                         it is (the Shift-click place behavior).
+    //   preview/kill {}       remove it (the Shift-release behavior).
+    //
+    // The anchor's UpdateVelocity is deliberately NOT called: it derives
+    // velocity from QueryPerformanceCounter deltas, which would make the
+    // parent-speed fling nondeterministic under the stepped record clock.
+    // Position-follow (the taught behavior) doesn't need it. Failures are
+    // SendErr so an authoring mistake aborts the record run (exit 3)
+    // instead of silently rendering an empty viewport.
+    //
+    // [UAF guard] m_recordPreviewAttached is a raw borrow into
+    // Engine::m_instances, and EVERY Engine::Clear() (file/new, file/open,
+    // the overload hard-guard's refusal/edit-time clears) frees all
+    // instances with no per-holder invalidation hook — the pointer goes
+    // non-null-but-dangling, which the null checks alone can't catch
+    // (review finding on the preview/* commit). Re-validate against the
+    // live instance list before every use; a stale borrow self-heals to
+    // "nothing attached", which then SendErrs loudly on move/place/kill.
+    // (The file-op teardowns in BridgeDispatch_File.cpp also null it
+    // eagerly, closing the free+realloc aliasing window for that family.)
+    if (kind.rfind("preview/", 0) == 0
+        && m_recordPreviewAttached
+        && m_engine
+        && !m_engine->HasInstance(m_recordPreviewAttached))
+    {
+        m_recordPreviewAttached = nullptr;
+    }
+    if (kind == "preview/attach")
+    {
+        if (!m_engine || !m_pParticleSystem || !*m_pParticleSystem
+            || (*m_pParticleSystem)->getEmitters().empty())
+        {
+            ctx.SendErr("preview/attach: no engine or empty particle system");
+            return true;
+        }
+        if (m_recordPreviewAttached)
+        {
+            ctx.SendErr("preview/attach: already attached");
+            return true;
+        }
+        const int x = params.value("x", 0);
+        const int y = params.value("y", 0);
+        D3DXVECTOR3 pos;
+        GetCursorPos3D(m_engine, (short)x, (short)y, pos);
+        m_recordPreviewCursor.SetPosition(pos);
+        m_recordPreviewAttached =
+            m_engine->SpawnParticleSystem(**m_pParticleSystem, &m_recordPreviewCursor);
+        if (!m_recordPreviewAttached)
+        {
+            ctx.SendErr("preview/attach: spawn refused");
+            return true;
+        }
+        ctx.SendOk(json::object());
+        return true;
+    }
+    if (kind == "preview/move")
+    {
+        if (!m_engine || !m_recordPreviewAttached)
+        {
+            ctx.SendErr("preview/move: nothing attached");
+            return true;
+        }
+        const int x = params.value("x", 0);
+        const int y = params.value("y", 0);
+        D3DXVECTOR3 pos;
+        GetCursorPos3D(m_engine, (short)x, (short)y, pos);
+        m_recordPreviewCursor.SetPosition(pos);
+        ctx.SendOk(json::object());
+        return true;
+    }
+    if (kind == "preview/place")
+    {
+        if (!m_engine || !m_recordPreviewAttached)
+        {
+            ctx.SendErr("preview/place: nothing attached");
+            return true;
+        }
+        m_engine->DetachParticleSystem(m_recordPreviewAttached);
+        m_recordPreviewAttached = nullptr;
+        ctx.SendOk(json::object());
+        return true;
+    }
+    if (kind == "preview/kill")
+    {
+        if (!m_engine || !m_recordPreviewAttached)
+        {
+            ctx.SendErr("preview/kill: nothing attached");
+            return true;
+        }
+        m_engine->KillParticleSystem(m_recordPreviewAttached);
+        m_recordPreviewAttached = nullptr;
+        ctx.SendOk(json::object());
+        return true;
+    }
 
     return false;   // kind not in this domain
 }

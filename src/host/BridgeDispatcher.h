@@ -46,6 +46,7 @@
 #include "../Autosave.h"
 #include "../UndoStack.h"   // full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
 #include "../ParticleSystem.h"   // full def needed for ParticleSystem::Emitter* in getEmitterById
+#include "../MouseCursor.h"       // by-value record-preview anchor (preview/* record kinds)
 #include "PreviewEncodeWorker.h"   // [C3] async texture-preview encode
 
 class Engine;
@@ -493,6 +494,15 @@ private:
     // can drop the cursor-bound instance before its parent system goes
     // away. Engine pointer is already cached in m_engine.
     ParticleSystemInstance**         m_ppAttachedParticleSystem = nullptr;
+
+    // [record-preview] Cursor-bound preview instance for the preview/*
+    // record kinds (BridgeDispatch_Spawner.cpp) — the scripted mirror of
+    // the native Shift-hover spawn. The anchor is a dispatcher-lifetime
+    // Object3D (instances parented to it never outlive it); the raw
+    // instance pointer is only valid while attached and is cleared by
+    // preview/place (detach) and preview/kill.
+    MouseCursor                      m_recordPreviewCursor;
+    ParticleSystemInstance*          m_recordPreviewAttached = nullptr;
 
     // Editor-level file state. Owned here
     // rather than on Engine because they're editor concerns (not

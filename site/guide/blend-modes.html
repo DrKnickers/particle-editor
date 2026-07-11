@@ -121,7 +121,7 @@
 </table>
 <h2 id="about-the-depth-modes">About the &quot;Depth&quot; Modes</h2>
 <p>The Depth additive, Depth transparent, and Depth inverse modes pair each blend with a <em>depth sprite</em>: they read the emitter's depth texture to give every particle real per-pixel depth instead of the flat billboard quad's single depth value. That lets a particle meet solid geometry correctly — sorting and occluding against it pixel by pixel, rather than the whole quad popping wholly in front of or behind the surface. Use a depth mode when an effect sits against or passes through scene geometry; use the plain mode when it floats in open space, since the plain mode is cheaper.</p>
-<!-- Media (planned): ref-depth-mode-compare -->
+<figure class="guide-media"><img class="clip-img" data-poster="ref-depth-mode-compare.png" alt="Side-by-side of a particle intersecting a reference model: plain mode's flat quad pop vs a depth mode meeting the surface per-pixel."></figure>
 <h2 id="the-bump-modes-need-the-normal-texture">The Bump Modes Need the Normal Texture</h2>
 <p>Bump map and Decal bump map read the emitter's normal texture to work. If that texture is missing or flat, these modes have nothing to shade against and will not look as intended. Selecting Bump map also forces the editor's &quot;Always face camera&quot; option on — the checkbox shows checked and disabled — reflecting that bump-mapped particles are meant to be viewed head-on.</p>
 <h2 id="modes-the-editor-does-not-expose">Modes the Editor Does Not Expose</h2>

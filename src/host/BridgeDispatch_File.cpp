@@ -118,6 +118,10 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
             m_engine->KillParticleSystem(*m_ppAttachedParticleSystem);
             *m_ppAttachedParticleSystem = nullptr;
         }
+        // The record preview borrow dies with the document too — null it
+        // eagerly (Clear() frees the instance; see the preview/* UAF guard
+        // in BridgeDispatch_Spawner.cpp).
+        m_recordPreviewAttached = nullptr;
         if (m_pParticleSystem)
         {
             *m_pParticleSystem = std::make_unique<ParticleSystem>();
@@ -321,6 +325,10 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
             m_engine->KillParticleSystem(*m_ppAttachedParticleSystem);
             *m_ppAttachedParticleSystem = nullptr;
         }
+        // The record preview borrow dies with the document too — null it
+        // eagerly (Clear() frees the instance; see the preview/* UAF guard
+        // in BridgeDispatch_Spawner.cpp).
+        m_recordPreviewAttached = nullptr;
         if (m_pParticleSystem)
         {
             *m_pParticleSystem = std::move(loaded);
@@ -637,6 +645,9 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
                     m_engine->KillParticleSystem(*m_ppAttachedParticleSystem);
                     *m_ppAttachedParticleSystem = nullptr;
                 }
+                // Record preview borrow: same document-teardown null (see the
+                // preview/* UAF guard in BridgeDispatch_Spawner.cpp).
+                m_recordPreviewAttached = nullptr;
                 if (m_pParticleSystem) *m_pParticleSystem = std::move(loaded);
                 EnforceSingleMemberLinkGroups();
                 if (m_undo) m_undo->Clear();

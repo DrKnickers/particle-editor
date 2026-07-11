@@ -34,7 +34,7 @@ occluding against it pixel by pixel, rather than the whole quad popping wholly i
 the surface. Use a depth mode when an effect sits against or passes through scene geometry; use the
 plain mode when it floats in open space, since the plain mode is cheaper.
 
-<!-- Media (planned): ref-depth-mode-compare -->
+<!-- Media: ref-depth-mode-compare -->
 
 ## The Bump Modes Need the Normal Texture
 
