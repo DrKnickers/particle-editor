@@ -64,7 +64,7 @@ The useful habit is to connect each selected emitter to one visible part of the 
 particles with many emitters, toggling an emitter's visibility in the tree is another quick way
 to isolate its contribution.
 
-<!-- Media (planned): tutorial-04-identify-emitters -->
+<!-- Media: tutorial-04-identify-emitters -->
 
 ## 3. Recolor the Impact Purple
 

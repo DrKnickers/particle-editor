@@ -8,7 +8,7 @@ The two you will use most are Additive and Transparent. Additive adds light to t
 for anything glowing. Transparent is ordinary see-through blending and is right for anything solid-
 looking that fades, such as smoke.
 
-<!-- Media (planned): ref-blend-mode-grid -->
+<!-- Media: ref-blend-mode-grid -->
 
 ## The Modes
 

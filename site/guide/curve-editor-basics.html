@@ -99,7 +99,7 @@
 <p class="guide-kicker">Start Here <span class="kicker-count">· 5 of 5</span></p>
 <h1 id="curve-editor-basics">Curve Editor Basics</h1>
 <p>Every tutorial in this course asks you to change a value &quot;over the particle's lifetime&quot; — fade the alpha, grow the scale, shift a color. The Curve Editor is where all of that happens, so it is worth five minutes to learn its parts before Tutorial 1 asks you to use them.</p>
-<!-- Media (planned): ref-curve-editor-tour -->
+<figure class="guide-media" aria-label="Tour the Curve Editor: focus a channel, select a key, step the value spinner, insert a key, change interpolation."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-curve-editor-tour.mp4" data-poster="ref-curve-editor-tour-poster.jpg"></video></figure>
 <h2 id="what-a-track-is">What a Track Is</h2>
 <p>A track is a curve that answers one question: <em>what should this value be at each moment of a particle's life?</em> The horizontal axis runs from 0 to 100% — birth on the left, death on the right. It is a percentage, not seconds, so the same curve works whether the particle lives for a tenth of a second or ten seconds. The vertical axis is the value itself.</p>
 <p>Each emitter has seven tracks: <strong>Red</strong>, <strong>Green</strong>, <strong>Blue</strong>, <strong>Alpha</strong>, <strong>Scale</strong>, <strong>Index</strong>, and <strong>Rotation</strong>. The color and alpha tracks run from 0 to 1. Scale is the particle size, Index picks the texture atlas frame, and Rotation controls spin.</p>

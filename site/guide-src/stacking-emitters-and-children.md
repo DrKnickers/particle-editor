@@ -56,5 +56,5 @@ effect must ride on another emitter's particles.
 [Tutorial 5: Build an Explosion](05-build-an-explosion) puts both patterns to work — four
 stacked root emitters plus a Lifetime Child that gives every flying spark its own smoke trail.
 
-<!-- Media (planned): ref-lifetime-child-trail -->
-<!-- Media (planned): ref-death-child-pop -->
+<!-- Media: ref-lifetime-child-trail -->
+<!-- Media: ref-death-child-pop -->

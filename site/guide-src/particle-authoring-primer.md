@@ -29,12 +29,11 @@ layer shows through the smoke and brightens it; the same glow drawn before the s
 by it instead. If a layered effect is not reading the way you expect, check the emitter order
 before you start second-guessing the individual emitter's settings.
 
-<!-- Media (planned): ref-render-order -->
+<!-- Media: ref-render-order -->
 
-Reorder emitters by dragging them in the Emitter Tree. One thing to know: reordering does not
-reach into a preview that is already running. If you drag an emitter to a new position and the
-Preview Viewport looks unchanged, stop and restart the preview (or reload the particle) so it
-picks up the new order.
+Reorder emitters by dragging them in the Emitter Tree. The change applies immediately — even an
+effect already playing in the Preview Viewport redraws in the new order, so you can drag an
+emitter up and down the list and watch the layering change live.
 
 ## Lifetimes
 

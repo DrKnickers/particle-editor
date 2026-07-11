@@ -5,7 +5,7 @@ stream, or as camera-following weather. You pick one of the three in the Propert
 in the Generation section. They are mutually exclusive — choosing one turns the others off — and each
 reveals its own set of fields.
 
-<!-- Media (planned): ref-generation-types -->
+<!-- Media: ref-generation-types -->
 
 ## Bursts
 

@@ -100,7 +100,7 @@
 <h1 id="tutorial-5-build-an-explosion">Tutorial 5: Build an Explosion</h1>
 <p>This tutorial starts from a blank particle and builds a complete explosion: a white-hot flash, an expanding fireball, lingering smoke, and a shell of flying sparks that leave their own trails.</p>
 <p>An explosion is the classic stacked effect — every layer is simple on its own, and the result comes from how the layers are timed against each other. This is also the first tutorial where child emitters and the Physics tab do real work.</p>
-<!-- Media (planned): tutorial-05-opening-result -->
+<figure class="guide-media" aria-label="Show the finished explosion — flash, fireball, smoke, sparks with trails — before the build steps."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-opening-result.mp4" data-poster="tutorial-05-opening-result-poster.jpg"></video></figure>
 <h2 id="outcome">Outcome</h2>
 <p>By the end of this page, the particle will contain four coordinated parts:</p>
 <ul>
@@ -136,7 +136,7 @@ Scale:       starts small, grows fast across its short life
 </code></pre>
 <p>Set the Generation mode to <code>Bursts</code> in the <strong>Basic</strong> tab's <strong>Generation</strong> section, exactly as in Tutorial 3's muzzle flash — one burst, so the flash happens once rather than streaming. Use the Curve Editor's Scale track to make it swell over its brief life.</p>
 <p>Preview with the Spawner. At this stage the whole effect is one bright pop — that is correct.</p>
-<!-- Media (planned): tutorial-05-flash-burst -->
+<figure class="guide-media" aria-label="Show renaming the default emitter to Flash, setting Bursts generation, and the resulting single bright pop."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-flash-burst.mp4" data-poster="tutorial-05-flash-burst-poster.jpg"></video></figure>
 <h2 id="2-add-the-fireball">2. Add the Fireball</h2>
 <p>Add a second root emitter (right-click in the Emitter Tree → <strong>New Root Emitter</strong>) and name it <code>Fireball</code>. This is the rolling ball of flame that follows the flash:</p>
 <pre><code class="language-text">Generation:  Bursts — one burst, a few particles
@@ -147,7 +147,7 @@ Scale:       grows over the lifetime
 </code></pre>
 <p>Now give it motion inside the texture itself. Open the Texture/Atlas Picker and choose a texture with flame or explosion frames. If the frames form an animation sequence, drive them with the <strong>Index</strong> track in the Curve Editor: put the first frame's number at 0% and the last frame's number at 100%. Index keys use <strong>step</strong> interpolation by default, which is what you want — each frame holds and then flips to the next, playing the sequence like a flipbook across the particle's life (see <a href="./curve-editor-basics.html">Curve Editor Basics</a>).</p>
 <p>Even without an animated sequence, picking a noisy flame frame and letting scale and color do the work reads well. The fireball should feel like it inflates out of the flash.</p>
-<!-- Media (planned): tutorial-05-fireball-index -->
+<figure class="guide-media" aria-label="Show picking an animated atlas texture and stepping the Index track so the fireball plays frames like a flipbook."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-fireball-index.mp4" data-poster="tutorial-05-fireball-index-poster.jpg"></video></figure>
 <h2 id="3-add-the-smoke-and-put-it-in-its-place">3. Add the Smoke — and Put It in Its Place</h2>
 <p>Add a third root emitter named <code>Smoke</code>. This layer is pure Tutorial 2 skills:</p>
 <pre><code class="language-text">Generation:  Bursts — one burst, a few particles
@@ -158,8 +158,8 @@ Alpha:       visible at birth, fading to 0 at death
 Scale:       growing the whole time
 </code></pre>
 <p>The smoke is what remains after the fire: it should still be dispersing after the flash and fireball are gone.</p>
-<p>Now use render order deliberately. Emitters draw top-to-bottom in the Emitter Tree — later emitters draw over earlier ones. Drag the emitters so the additive flash and fireball draw <strong>after</strong> the smoke; that way the fire brightens through the smoke instead of being covered by it. One trap from the <a href="./particle-authoring-primer.html">Primer</a>: reordering does not reach a preview that is already running — restart the preview to see the new order.</p>
-<!-- Media (planned): tutorial-05-smoke-render-order -->
+<p>Now use render order deliberately. Emitters draw top-to-bottom in the Emitter Tree — later emitters draw over earlier ones. Drag the emitters so the additive flash and fireball draw <strong>after</strong> the smoke; that way the fire brightens through the smoke instead of being covered by it. The reorder applies live, so keep the effect playing while you drag and watch the fire change from buried to shining through.</p>
+<figure class="guide-media" aria-label="Show dragging the smoke emitter in the tree so the additive fire draws over it, and restarting the preview to pick up the order."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-smoke-render-order.mp4" data-poster="tutorial-05-smoke-render-order-poster.jpg"></video></figure>
 <h2 id="4-add-the-sparks-and-give-each-one-a-trail">4. Add the Sparks — and Give Each One a Trail</h2>
 <p>Add a fourth root emitter named <code>Sparks</code>: one burst with more, much smaller particles, additive, bright yellow-white fading toward orange.</p>
 <p>The sparks need to <em>fly</em>. Open the <strong>Physics</strong> tab and, in the <strong>Initial speed</strong> section, set the shape <code>Type:</code> to <strong>Sphere</strong> and give it a radius — the radius is the launch speed. Every spark now gets a velocity pointing somewhere on that sphere, so the burst sprays outward in all directions. Check <code>Constrain to surface</code> for an even shell, or leave it unchecked for a more ragged, natural spray. (The full explanation of speed shapes is in <a href="./motion-and-physics.html">Motion and Physics</a>.)</p>
@@ -180,7 +180,7 @@ Scale:       small, and much smaller than the smoke layer
 Rate:        a low Particles/second
 </code></pre>
 <p>If you want an ending beat as well, <strong>Add Death Child</strong> on <code>Sparks</code> pops a tiny flash where each spark burns out.</p>
-<!-- Media (planned): tutorial-05-sparks-children -->
+<figure class="guide-media" aria-label="Show setting the Sphere initial-speed shape on Sparks and adding a Lifetime Child so each spark carries a trail."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-sparks-children.mp4" data-poster="tutorial-05-sparks-children-poster.jpg"></video></figure>
 <h3 id="keep-the-multiplication-in-check">Keep the Multiplication in Check</h3>
 <p>A child runs once <em>per parent particle</em>: thirty sparks with a trailing child is thirty little emitters. That multiplication is the point — and it is also how an effect quietly becomes expensive. If the editor slows or the effect turns into mush, lower the spark count or the child's rate first. Keep child effects light.</p>
 <h2 id="5-choreograph-the-timing">5. Choreograph the Timing</h2>
@@ -209,7 +209,7 @@ Smoke:     revealed as the fire fades, lingers longest, fades last
 <li>Is the smoke the last thing standing, and does it fade rather than pop?</li>
 <li>Does the whole effect still read at a normal gameplay camera distance?</li>
 </ul>
-<!-- Media (planned): tutorial-05-final-preview -->
+<figure class="guide-media" aria-label="Show the finished user-authored explosion playing in the full editor."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-final-preview.mp4" data-poster="tutorial-05-final-preview-poster.jpg"></video></figure>
 <h2 id="game-use-note">Game Use Note</h2>
 <p>In a full mod, an effect like this is what plays behind tags such as <code>Death_Explosion_Particles</code> on units and hardpoints — usually paired with a sound event so the audio and visual land together. Since this tutorial's particle is a new file rather than an override, the game would need something pointing at it before it appears in play; overriding an existing shipped explosion at its own path (the Tutorial 1 workflow) is the simplest route if you want to see your explosion in game.</p>
 <h2 id="takeaways">Takeaways</h2>

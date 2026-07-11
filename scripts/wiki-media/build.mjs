@@ -121,6 +121,11 @@ export function validateManifest(manifest) {
     if (!item.id) errors.push(label + ": missing required id");
     if (hasOwn(item, "postprocess")) errors.push(label + ": postprocess is removed in manifest v2");
     if (item.manual) return;
+    // A planned backlog item without a timeline is a production TODO, not yet
+    // renderable — exempt it so a backlog entry can't wedge the whole batch.
+    // Once it gains a timeline (or leaves "planned") the full field
+    // requirements apply. Selecting one anyway reports PENDING (processItem).
+    if (item.status === "planned" && !item.timeline) return;
     var kind = item.kind || "clip";
     // Every non-manual pipeline item is rendered from a timeline — require it up
     // front so a missing field fails validation loudly, not mid-pipeline.
@@ -615,6 +620,12 @@ function processItem(options) {
   var args = options.args;
   var logger = options.logger;
   if (item.manual) return processPending(item);
+  // Planned backlog items with no timeline yet aren't renderable — report
+  // PENDING (visible in the report/console) instead of failing mid-pipeline.
+  if (item.status === "planned" && !item.timeline) {
+    log(logger, item.id + ": planned backlog item (no timeline yet) — PENDING");
+    return processPending(item);
+  }
   if (args.dryRun) return processDryRun(item, config, repoRoot);
   var entry = reportEntry(item);
   try {

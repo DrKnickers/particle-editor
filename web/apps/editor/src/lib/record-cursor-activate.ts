@@ -10,6 +10,15 @@
 // Semantics mirror a real click (pointerdown→mousedown→focus→pointerup→mouseup→
 // click): synthetic PointerEvents do NOT auto-derive mouse events, and Radix Tabs
 // (among others) listens on mousedown — so the mouse triple is dispatched here.
+// The pointer pair is dispatched here TOO (2026-07-10): Radix Menubar triggers
+// (the emitter tree's + menu) open ONLY on pointerdown, and the drag module
+// deliberately skips activate presses (mutual exclusivity), so without a
+// pointerdown from this module an activate click on a menubar trigger focuses
+// the button but never opens the menu — the tutorial-03 muzzle-flash add-emitter
+// beat regressed exactly this way. A real browser sends the full sextet in this
+// order; matching it is strictly more faithful. (Radix's own same-gesture guard
+// keeps the trailing click from toggling the just-opened menu closed — verified
+// live against the mock app.)
 //   press false→true (activate, ok, finite):
 //     - if a text-entry element currently has focus and the hit lands outside it,
 //       blur it first (a real pointerdown moves focus away — FieldText commits on
@@ -61,6 +70,19 @@ function makeMouseEvent(type: string, clientX: number, clientY: number): MouseEv
   });
 }
 
+function makePointerEvent(type: string, clientX: number, clientY: number): PointerEvent {
+  return new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+    clientX,
+    clientY,
+  });
+}
+
 export function applyRecordActivation(
   cursor: RecordActivateCursor,
   state: RecordActivateState,
@@ -82,6 +104,10 @@ export function applyRecordActivation(
     if (!cursor.activate || !cursor.ok || !finite) return;
     const hit = doc.elementFromPoint(clientX, clientY);
     if (!hit) return;
+    // pointerdown FIRST (real event order) — Radix Menubar triggers open here and
+    // nowhere else. The drag module never arms on activate presses, so this is the
+    // gesture's only pointerdown.
+    hit.dispatchEvent(makePointerEvent("pointerdown", clientX, clientY));
     // mousedown precedes focus (its default action) — Radix Tabs et al. activate here.
     hit.dispatchEvent(makeMouseEvent("mousedown", clientX, clientY));
     // Focus-change next: blur a focused text-entry when the press lands outside
@@ -102,8 +128,14 @@ export function applyRecordActivation(
     const armed = state.armed;
     state.armed = null;
     if (!armed || !armed.isConnected) return;
-    // Release must land back on the armed element (or within it / it within the
-    // release hit) — a release elsewhere is a cancel, like a real mouse.
+    // pointerup ALWAYS fires on the armed element, even when the release lands
+    // elsewhere — real pointer-capture semantics route pointerup to the captor
+    // regardless of position, and skipping it would strand any gesture the
+    // pointerdown armed (e.g. an EmitterTree row's reorder drag would keep its
+    // document listeners + capture and silently eat every later gesture).
+    armed.dispatchEvent(makePointerEvent("pointerup", finite ? clientX : 0, finite ? clientY : 0));
+    // The CLICK (and its mouseup) stays containment-gated: a release elsewhere
+    // is a cancel, like a real mouse.
     const hit = finite ? doc.elementFromPoint(clientX, clientY) : null;
     if (!hit || !(armed.contains(hit) || hit.contains(armed))) return;
     armed.dispatchEvent(makeMouseEvent("mouseup", finite ? clientX : 0, finite ? clientY : 0));

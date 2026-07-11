@@ -160,3 +160,58 @@ describe("record-cursor-activate", () => {
     expect(state.armed).toBeNull();
   });
 });
+
+// 2026-07-10 regression guard: the activation gesture must include the POINTER
+// pair in real-event order (pointerdown -> mousedown at press; pointerup ->
+// mouseup -> click at release). Radix Menubar triggers (the emitter tree's +
+// menu) open only on pointerdown, and the drag module deliberately skips
+// activate presses — so a mouse-only activation focuses the trigger but never
+// opens the menu (the tutorial-03 muzzle-flash add-emitter regression).
+describe("record-cursor-activate pointer pair", () => {
+  let button: HTMLButtonElement;
+  let origEFP: typeof document.elementFromPoint;
+
+  beforeEach(() => {
+    button = document.createElement("button");
+    document.body.appendChild(button);
+    origEFP = document.elementFromPoint;
+    document.elementFromPoint = (() => button) as typeof document.elementFromPoint;
+  });
+
+  afterEach(() => {
+    document.elementFromPoint = origEFP;
+    button.remove();
+  });
+
+  it("dispatches pointerdown before mousedown, and pointerup before mouseup/click", () => {
+    const sink: Event[] = [];
+    const offs = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].map((t) =>
+      listen(button, t, sink),
+    );
+    const state = createRecordActivateState();
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true }, state, { dpr: 1 });
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true }, state, { dpr: 1 });
+    offs.forEach((off) => off());
+
+    expect(sink.map((e) => e.type)).toEqual(["pointerdown", "mousedown", "pointerup", "mouseup", "click"]);
+    // jsdom's PointerEvent drops pointerType/isPrimary — assert only what the
+    // environment carries; the real browser gets pointerType "mouse" (see module).
+    expect(sink[0].bubbles).toBe(true);
+  });
+
+  it("an off-target release still fires pointerup on the armed element (gesture cleanup) but no click", () => {
+    const other = document.createElement("div");
+    document.body.appendChild(other);
+    const sink: Event[] = [];
+    const offs = ["pointerdown", "pointerup", "mouseup", "click"].map((t) => listen(button, t, sink));
+    const state = createRecordActivateState();
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true }, state, { dpr: 1 });
+    // release lands on a different, non-containing element
+    document.elementFromPoint = (() => other) as typeof document.elementFromPoint;
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true }, state, { dpr: 1 });
+    offs.forEach((off) => off());
+    other.remove();
+
+    expect(sink.map((e) => e.type)).toEqual(["pointerdown", "pointerup"]);
+  });
+});

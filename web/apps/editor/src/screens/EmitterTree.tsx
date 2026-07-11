@@ -1253,6 +1253,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
                 onSelect={addLifetime}
                 disabled={!canAddLifetime}
                 className={NEW_EMITTER_MENU_ITEM}
+                data-testid="new-emitter-lifetime-child"
               >
                 Lifetime Child
               </Menubar.Item>
@@ -1260,6 +1261,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
                 onSelect={addDeath}
                 disabled={!canAddDeath}
                 className={NEW_EMITTER_MENU_ITEM}
+                data-testid="new-emitter-death-child"
               >
                 Death Child
               </Menubar.Item>

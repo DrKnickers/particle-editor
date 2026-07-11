@@ -410,3 +410,21 @@ test("a failing verify gate records gate=fail, does not abort the batch, and yie
   // Any FAIL -> non-zero batch exit.
   assert.notEqual(result.exitCode, 0);
 });
+
+// Planned-backlog exemption (2026-07-10): a status:"planned" item with no timeline
+// is a production TODO — it must not wedge manifest validation, but the carve-out
+// must stay narrow: an exact-match status only, and only while the timeline is absent.
+test("validateManifest exempts planned items without a timeline — and nothing else", async () => {
+  const { validateManifest } = await import("../build.mjs");
+  const base = { kind: "clip", publish: true, output: "x.mp4", poster: "x-poster.jpg", framing: "full-app", loop: "none" };
+  // exempt: planned + no timeline
+  assert.deepEqual(validateManifest({ items: [{ id: "a", status: "planned" }] }), []);
+  // NOT exempt: typo'd status still fails loudly on the missing timeline
+  const typo = validateManifest({ items: [{ id: "b", status: "Planned" }] });
+  assert.ok(typo.some((e) => e.includes("missing required timeline")), typo.join("; "));
+  // NOT exempt: planned WITH a timeline gets the full field requirements
+  const withTl = validateManifest({ items: [{ id: "c", status: "planned", timeline: "t.json", kind: "clip" }] });
+  assert.ok(withTl.some((e) => e.includes("missing required")), withTl.join("; "));
+  // a fully-specified rendered item still validates clean
+  assert.deepEqual(validateManifest({ items: [{ id: "d", status: "rendered", timeline: "t.json", ...base }] }), []);
+});

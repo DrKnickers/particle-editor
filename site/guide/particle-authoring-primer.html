@@ -106,8 +106,8 @@
 <h2 id="render-order">Render Order</h2>
 <p>When several emitters overlap on screen, the order they draw in — top to bottom in the Emitter Tree — decides which one appears on top. Particles do not sort themselves by depth or distance; the first emitter in the list draws first, and every emitter after it draws over what came before, the same way the game itself renders them.</p>
 <p>This matters most once blend modes are involved. An Additive glow drawn after a Transparent smoke layer shows through the smoke and brightens it; the same glow drawn before the smoke gets covered by it instead. If a layered effect is not reading the way you expect, check the emitter order before you start second-guessing the individual emitter's settings.</p>
-<!-- Media (planned): ref-render-order -->
-<p>Reorder emitters by dragging them in the Emitter Tree. One thing to know: reordering does not reach into a preview that is already running. If you drag an emitter to a new position and the Preview Viewport looks unchanged, stop and restart the preview (or reload the particle) so it picks up the new order.</p>
+<figure class="guide-media" aria-label="Show an additive glow drawn before vs after a transparent smoke layer by dragging emitter order in the tree."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-render-order.mp4" data-poster="ref-render-order-poster.jpg"></video></figure>
+<p>Reorder emitters by dragging them in the Emitter Tree. The change applies immediately — even an effect already playing in the Preview Viewport redraws in the new order, so you can drag an emitter up and down the list and watch the layering change live.</p>
 <h2 id="lifetimes">Lifetimes</h2>
 <p>Most particle values change from birth to death. A smoke particle might start small and opaque, grow larger, drift away, and fade out. A flash might start bright and vanish almost immediately. The Curve Editor is where those lifetime changes become visible — <a href="./curve-editor-basics.html">Curve Editor Basics</a> covers its controls.</p>
 <p>Useful starting questions:</p>

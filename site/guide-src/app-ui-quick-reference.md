@@ -2,7 +2,7 @@
 
 These are the editor surfaces named in the tutorials.
 
-<!-- Media (planned): ref-ui-overview -->
+<!-- Media: ref-ui-overview -->
 
 ## Emitter Tree
 

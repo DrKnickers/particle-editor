@@ -4,7 +4,7 @@ Every tutorial in this course asks you to change a value "over the particle's li
 the alpha, grow the scale, shift a color. The Curve Editor is where all of that happens, so it is
 worth five minutes to learn its parts before Tutorial 1 asks you to use them.
 
-<!-- Media (planned): ref-curve-editor-tour -->
+<!-- Media: ref-curve-editor-tour -->
 
 ## What a Track Is
 

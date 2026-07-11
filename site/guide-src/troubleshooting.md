@@ -29,9 +29,6 @@ Loading a particle does not, by itself, play it in the viewport.
 
 ## An Edit Doesn't Show Up in the Preview
 
-- **Reordering emitters does not reach a running preview.** If you dragged an emitter to a new
-  position in the tree and the viewport looks unchanged, restart the preview (or reload the
-  particle) so it picks up the new draw order.
 - **Bump map and Decal bump map need the normal texture.** If that texture is missing or flat,
   these modes have nothing to shade against — see [Blend Modes](blend-modes).
 - **Physics fields grayed out?** Weather generation disables most of the Physics tab — see

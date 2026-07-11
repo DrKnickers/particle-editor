@@ -7,7 +7,7 @@ An explosion is the classic stacked effect — every layer is simple on its own,
 comes from how the layers are timed against each other. This is also the first tutorial where
 child emitters and the Physics tab do real work.
 
-<!-- Media (planned): tutorial-05-opening-result -->
+<!-- Media: tutorial-05-opening-result -->
 
 ## Outcome
 
@@ -68,7 +68,7 @@ Curve Editor's Scale track to make it swell over its brief life.
 
 Preview with the Spawner. At this stage the whole effect is one bright pop — that is correct.
 
-<!-- Media (planned): tutorial-05-flash-burst -->
+<!-- Media: tutorial-05-flash-burst -->
 
 ## 2. Add the Fireball
 
@@ -93,7 +93,7 @@ across the particle's life (see [Curve Editor Basics](curve-editor-basics)).
 Even without an animated sequence, picking a noisy flame frame and letting scale and color do
 the work reads well. The fireball should feel like it inflates out of the flash.
 
-<!-- Media (planned): tutorial-05-fireball-index -->
+<!-- Media: tutorial-05-fireball-index -->
 
 ## 3. Add the Smoke — and Put It in Its Place
 
@@ -114,10 +114,10 @@ fireball are gone.
 Now use render order deliberately. Emitters draw top-to-bottom in the Emitter Tree — later
 emitters draw over earlier ones. Drag the emitters so the additive flash and fireball draw
 **after** the smoke; that way the fire brightens through the smoke instead of being covered by
-it. One trap from the [Primer](particle-authoring-primer): reordering does not reach a preview
-that is already running — restart the preview to see the new order.
+it. The reorder applies live, so keep the effect playing while you drag and watch the fire
+change from buried to shining through.
 
-<!-- Media (planned): tutorial-05-smoke-render-order -->
+<!-- Media: tutorial-05-smoke-render-order -->
 
 ## 4. Add the Sparks — and Give Each One a Trail
 
@@ -153,7 +153,7 @@ Rate:        a low Particles/second
 If you want an ending beat as well, **Add Death Child** on `Sparks` pops a tiny flash where
 each spark burns out.
 
-<!-- Media (planned): tutorial-05-sparks-children -->
+<!-- Media: tutorial-05-sparks-children -->
 
 ### Keep the Multiplication in Check
 
@@ -192,7 +192,7 @@ Use these questions on the finished effect:
 - Is the smoke the last thing standing, and does it fade rather than pop?
 - Does the whole effect still read at a normal gameplay camera distance?
 
-<!-- Media (planned): tutorial-05-final-preview -->
+<!-- Media: tutorial-05-final-preview -->
 
 ## Game Use Note
 

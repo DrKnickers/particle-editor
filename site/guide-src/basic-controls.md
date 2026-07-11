@@ -42,7 +42,7 @@ in, so it stays controllable whether you are close to a small effect or pulled b
 The scroll wheel zooms in small steps and is usually the easiest way to close in on detail. Ctrl-drag
 zoom is smoother for large distance changes.
 
-<!-- Media (planned): ref-camera-controls -->
+<!-- Media: ref-camera-controls -->
 
 ## Select an Emitter
 

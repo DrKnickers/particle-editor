@@ -6,7 +6,7 @@ one of these controls (`Parent speed inherit:`); this page covers the rest, and 
 reference to have open when you build the explosion in
 [Tutorial 5](05-build-an-explosion).
 
-<!-- Media (planned): ref-radial-burst -->
+<!-- Media: ref-radial-burst -->
 
 ## Random Shapes: How Position and Speed Are Rolled
 
