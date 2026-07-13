@@ -152,32 +152,89 @@ function renderInline(text, context) {
   return text;
 }
 
-// Parse one list starting at `start`; returns { html, next }. Supports one nesting level
-// via indentation (a line indented >= baseIndent + 2 belongs to the previous item).
+// Parse one list starting at `start`; returns { html, next }. Each item holds an ordered list
+// of blocks so an item can carry soft-wrapped prose (joined with a space, matching paragraph
+// behaviour), a fenced code block, and one nested list — in source order. A blank line still
+// ends the list. Without the continuation/fence handling a wrapped item silently split into a
+// single-item list plus a stray paragraph, and an indented fence rendered as inline mush.
 function parseList(lines, start, context) {
   const baseIndent = lines[start].match(/^(\s*)/)[1].length;
   const ordered = /^\s*\d+\.\s+/.test(lines[start]);
-  const items = [];
+  const items = []; // each: { blocks: [ {t:"text",v} | {t:"code",lang,v} | {t:"list",v} ] }
   let i = start;
+  const cur = () => items[items.length - 1];
+  const appendText = (frag) => {
+    const last = cur().blocks[cur().blocks.length - 1];
+    if (last && last.t === "text") last.v += " " + frag;
+    else cur().blocks.push({ t: "text", v: frag });
+  };
+
   while (i < lines.length) {
     const l = lines[i];
-    if (/^\s*$/.test(l)) break;
+    if (/^\s*$/.test(l)) {
+      // A blank line ends the list UNLESS it is an intra-list blank (a "loose" list): the next
+      // non-blank line is either another marker (a blank-separated sibling/nested item) or
+      // continuation-indented content (an in-item block, e.g. how a WYSIWYG editor serializes a
+      // fenced code block inside a list item). Skip the blank(s) and keep going in that case.
+      let j = i + 1;
+      while (j < lines.length && /^\s*$/.test(lines[j])) j++;
+      if (items.length && j < lines.length) {
+        const nextIndent = lines[j].match(/^(\s*)/)[1].length;
+        const nextIsMarker = /^\s*(?:[-*+]|\d+\.)\s+/.test(lines[j]);
+        if ((nextIsMarker && nextIndent >= baseIndent) || (!nextIsMarker && nextIndent >= baseIndent + 2)) {
+          i = j;
+          continue;
+        }
+      }
+      break;
+    }
     const m = l.match(/^(\s*)(?:[-*+]|\d+\.)\s+(.*)$/);
-    if (!m) break;
-    const indent = m[1].length;
-    if (indent < baseIndent) break;
-    if (indent >= baseIndent + 2 && items.length) {
-      const nested = parseList(lines, i, context);
-      items[items.length - 1].children = nested.html;
-      i = nested.next;
+    if (m) {
+      const indent = m[1].length;
+      if (indent < baseIndent) break;
+      if (indent >= baseIndent + 2 && items.length) {
+        const nested = parseList(lines, i, context);
+        cur().blocks.push({ t: "list", v: nested.html });
+        i = nested.next;
+        continue;
+      }
+      items.push({ blocks: [{ t: "text", v: m[2] }] });
+      i++;
       continue;
     }
-    items.push({ text: m[2], children: "" });
+    // A non-marker line is only meaningful as continuation of the current item.
+    if (!items.length) break;
+    const indent = l.match(/^(\s*)/)[1].length;
+    if (indent <= baseIndent) break; // not indented under the item — the list is over
+    const fence = l.match(/^\s*```\s*(\S+)?\s*$/);
+    if (fence) {
+      const strip = new RegExp(`^\\s{0,${indent}}`);
+      i++;
+      const buf = [];
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { buf.push(lines[i].replace(strip, "")); i++; }
+      i++; // consume closing fence
+      cur().blocks.push({ t: "code", lang: fence[1] || "", v: buf.join("\n") });
+      continue;
+    }
+    appendText(l.trim());
     i++;
   }
+
   const tag = ordered ? "ol" : "ul";
   const body = items
-    .map((it) => `<li>${renderInline(it.text, context)}${it.children ? "\n" + it.children : ""}</li>`)
+    .map((it) => {
+      const inner = it.blocks
+        .map((b) => {
+          if (b.t === "text") return renderInline(b.v, context);
+          if (b.t === "code") {
+            const cls = b.lang ? ` class="language-${b.lang}"` : "";
+            return `<pre><code${cls}>${escapeHtml(b.v)}\n</code></pre>`;
+          }
+          return "\n" + b.v; // nested list
+        })
+        .join("");
+      return `<li>${inner}</li>`;
+    })
     .join("\n");
   return { html: `<${tag}>\n${body}\n</${tag}>`, next: i };
 }

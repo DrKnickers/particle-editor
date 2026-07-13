@@ -37,14 +37,14 @@ emitter up and down the list and watch the layering change live.
 
 ## Lifetimes
 
-Most particle values change from birth to death. A smoke particle might start small and opaque, grow
+Most particle values change from start to death. A smoke particle might start small and opaque, grow
 larger, drift away, and fade out. A flash might start bright and vanish almost immediately. The Curve
 Editor is where those lifetime changes become visible — [Curve Editor Basics](curve-editor-basics)
 covers its controls.
 
 Useful starting questions:
 
-- What should the particle look like at birth?
+- What should the particle look like at start?
 - What should it look like halfway through its life?
 - How should it disappear?
 

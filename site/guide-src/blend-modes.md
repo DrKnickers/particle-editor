@@ -15,7 +15,7 @@ looking that fades, such as smoke.
 | Mode | What it does | Reach for it when |
 |------|--------------|-------------------|
 | None | No blending. The particle is drawn opaque and simply covers what is behind it; its alpha is ignored. | You genuinely want a solid, fully opaque sprite. Rare for particles. |
-| Additive | Adds the particle's color to the scene, so it only ever brightens. Dark parts of the texture become invisible. | Glows, fire, plasma, energy, sparks — anything that gives off light. |
+| Additive | Adds the particle's color to the scene, so it only ever brightens. Dark parts of the texture become invisible, and the **alpha channel is ignored** — brightness comes entirely from color, so fade an additive effect with its color or scale, never with alpha. | Glows, fire, plasma, energy, sparks — anything that gives off light. |
 | Transparent | Ordinary alpha blending: the particle's alpha controls how much you see it over the background. | Smoke, dust, debris, and most soft opaque effects that fade in and out. |
 | Inverse | Multiplies the scene by the particle's color, so it darkens instead of brightening. White leaves the scene unchanged; black drives it toward black. | Scorch marks, dark smoke, shadowy or draining effects. |
 | Depth additive | Additive, but depth-aware (see below). | An additive effect that overlaps scene geometry and should intersect it correctly instead of popping in front of it. |

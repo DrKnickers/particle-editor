@@ -26,7 +26,7 @@ particle would normally be used by a game projectile.
 - Building a muzzle flash from a core and an outer glow.
 - Using `Bursts` generation so the muzzle flash fires once instead of streaming continuously.
 - Using additive color for a readable energy shot.
-- Using `Parent speed inherit:` to separate a moving projectile from a stationary muzzle flash.
+- Using `Parent speed inherit` to separate a moving projectile from a stationary muzzle flash.
 - Using the Spawner panel to launch particle instances in a chosen direction at a chosen speed.
 - Judging projectile effects by motion, timing, and silhouette.
 
@@ -69,10 +69,11 @@ of the shot.
 ## 2. Use the Built-In Tail on the Core
 
 With `Projectile_Core` still selected, use the Tail section in the Property Panel. Enable `Has tail`
-and adjust `Tail length:` until the shot has a clear streak behind it.
+and adjust `Tail length` until the shot has a clear streak behind it.
 
 The tail should support the core rather than overpower it. If the whole effect becomes a glowing
-block, shorten the tail, reduce the scale, or lower the alpha. The goal is a readable laser shot,
+block, shorten the tail, reduce the scale, or dim the color. (The core is additive, so lowering
+alpha would do nothing — see [Blend Modes](blend-modes).) The goal is a readable laser shot,
 not a solid rectangle.
 
 ## 3. Add the Projectile Glow
@@ -83,7 +84,7 @@ Add a second projectile emitter: right-click in the Emitter Tree and choose **Ne
 slightly wider, softer, and less intense than the core. It gives the shot presence without replacing
 the crisp center.
 
-Use the Tail section on this emitter too. Enable `Has tail` and give the glow its own `Tail length:`.
+Use the Tail section on this emitter too. Enable `Has tail` and give the glow its own `Tail length`.
 The glow tail can be a little broader or softer than the core tail, but it should still point in the
 same direction and support the same motion.
 
@@ -95,7 +96,7 @@ the other two. Very low intensity at a large scale adds presence without blowing
 
 ## 4. Let the Projectile Emitters Ride the Shot
 
-Set `Parent speed inherit:` near full inheritance on both the projectile core and the projectile
+Set `Parent speed inherit` near full inheritance on both the projectile core and the projectile
 glow — it lives in the **Physics** tab's Initial speed section (see
 [Motion and Physics](motion-and-physics)) — one emitter at a time, so the projectile rides with
 the parent motion.
@@ -134,10 +135,18 @@ Muzzle_Core:          white-hot launch flash
 Make this emitter very short-lived, bright, and compact. A white or nearly white core works well
 because it reads as the hottest part of the flash.
 
+Shape the brightness with the color tracks rather than a constant: start the channels at zero,
+peak them early — within the first tenth of the life — and let them decay to black. This
+fast-in, slow-out envelope is how the shipped effects handle every flash-like event (the
+explosion example in [Tutorial 5](05-build-an-explosion) peaks its flash at 10% too): the pop
+reads as an *event* with attack and decay rather than a sprite switching on and off. And since
+several additive layers will overlap at the launch point, keep each layer's peak modest — additive
+layers sum, and stacked layers at full brightness clip to a shapeless white square.
+
 A muzzle flash fires once at the moment of launch, so it should generate as a burst, not a
 continuous stream. In the **Basic** tab, open the **Generation** section and set the Generation mode
 to `Bursts` (rather than `Continuous stream`). A single burst — `Bursts: 1` with a small
-`Particles/burst:` — gives one clean flash instead of an emitter that keeps re-emitting for the
+`Particles/burst` — gives one clean flash instead of an emitter that keeps re-emitting for the
 whole life of the shot. This burst-versus-stream choice, together with the short lifetime, is what
 makes a launch flash read as a flash and not a steady jet. (The full rundown of the three
 generation modes is in [Particle Generation Types](generation-types).)
@@ -154,7 +163,7 @@ off without making it bigger in feel.
 
 <!-- Media: tutorial-03-muzzle-glow-props -->
 
-Set `Parent speed inherit:` near zero on both muzzle flash emitters, one at a time in the Property
+Set `Parent speed inherit` near zero on both muzzle flash emitters, one at a time in the Property
 Panel, so the flash stays close to the launch point.
 
 This is the main distinction in the tutorial. The projectile core and projectile glow ride the
@@ -190,5 +199,5 @@ launch flash read on screen.
 
 Projectile particles are easier to reason about when the moving shot and launch flash have separate
 jobs. Use built-in tails for the projectile core and glow, use the Spawner panel to test direction
-and speed, then use `Parent speed inherit:` to decide which emitters ride with the projectile and
+and speed, then use `Parent speed inherit` to decide which emitters ride with the projectile and
 which ones stay near the firing point.

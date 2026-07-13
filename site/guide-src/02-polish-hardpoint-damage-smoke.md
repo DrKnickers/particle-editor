@@ -19,6 +19,8 @@ already proved the override path in game.
 - Using color to imply heat and lighting.
 - Using alpha to fade smoke out cleanly.
 - Using scale to make smoke disperse over its lifetime.
+- Using the randomization parameters — Minimum lifetime, Minimum scale, Rotation variance — so the
+  puffs stop looking like copies of one particle.
 - Judging an effect by first principles rather than exact numeric recipes.
 
 ## Before You Start
@@ -38,14 +40,20 @@ toward a dark gray — same mechanics as Tutorial 1's green edit: focus a channe
 step the value (see [Curve Editor Basics](curve-editor-basics) if you need the controls).
 
 A useful target is not pure black. Smoke still needs to catch some light, especially near the damage
-source. Think in terms of a dark neutral base:
+source — and the stock file itself tells you where "believable" lives: before Tutorial 1's green
+edit, all three of its color channels converged to a dark neutral `0.255` by the end of the life.
+Think in terms of a dark neutral base:
 
 ```text
 Red:   low to medium-low
 Green: low to medium-low
 Blue:  low to medium-low
-Alpha: strong at birth, fading later
+End:   all three channels converging — smoke cools into one gray
 ```
+
+The convergence matters as much as the darkness: early in the life the channels can differ (that
+is the next section's warm tint), but by death they should meet at the same value, because aged
+smoke has no color of its own.
 
 Watch the Preview Viewport while you adjust. If the smoke disappears, it is probably too dark, too
 transparent, or both.
@@ -67,16 +75,20 @@ source.
 
 Use the Alpha track to make the smoke fade out — this is the worked example from
 [Curve Editor Basics](curve-editor-basics): focus Alpha, select the key at the right edge, bring
-its value to zero. A common shape is:
+its value to zero. But look at the stock file's own Alpha curve before writing yours, because it
+does something the naive version misses — it fades **in** as well as out:
 
 ```text
-Birth:      visible
-Middle:     still readable
-End:        transparent
+0%:    0            (invisible at birth)
+~10%:  peak         (fully faded in)
+100%:  0            (fully dispersed)
 ```
 
-The ending matters most. Smoke that fades out feels like it disperses. Smoke that simply stops feels
-like it was switched off.
+Both ends matter, for different reasons. Smoke that fades out feels like it disperses; smoke that
+simply stops feels switched off. And smoke that starts at full opacity *pops* into existence —
+the quick ramp over the first tenth of the life is what makes each puff appear softly. Fast in,
+slow out is the standard envelope for almost anything soft, and you will meet it again on the
+explosion's smoke in [Tutorial 5](05-build-an-explosion).
 
 <!-- Media: tutorial-02-alpha-fade -->
 
@@ -85,21 +97,51 @@ like it was switched off.
 Use the Scale track to make the smoke larger over its lifetime. This helps sell the idea that hot
 smoke is spreading away from the damage source.
 
-The shape does not need to be dramatic. A small-to-larger scale curve is enough:
+The shape does not need to be dramatic — the stock emitter grows from `25` to `40` across its
+whole eight-second life, a gentle 60% swell:
 
 ```text
-Birth:      compact
+Start:      compact
 Middle:     wider
 End:        widest, but fading out
 ```
 
 Preview the color, alpha, and scale together. These controls work as a group: darker smoke may need
-more alpha, larger smoke may need a softer fade, and a warmer birth color may need a shorter visible
+more alpha, larger smoke may need a softer fade, and a warmer start color may need a shorter visible
 duration.
 
 <!-- Media: tutorial-02-scale-growth -->
 
-## 5. Check the Effect at Gameplay Readability
+## 5. Break the Uniformity
+
+Play the effect and look closely: if every puff of smoke is the same size, lives the same length,
+and holds the same angle, the effect reads as *copies of one particle* — and real smoke never
+does. The fix is not more emitters. The stock file already demonstrates it — check its spinners
+and you will find every one of these in use:
+
+- **Minimum lifetime** (Basic tab, in the Generation section under **Maximum lifetime**). The
+  maximum is the lifetime you designed; the minimum, given as a percentage of it, lets each
+  particle live a random span in between. The stock smoke sets it all the way down to `18%` of
+  its eight-second maximum — some puffs are gone in under two seconds while others drift for
+  eight, which is most of why the plume looks alive.
+- **Minimum scale** (Appearance tab, Textures section). The same idea for size: each particle's
+  whole Scale curve is multiplied by a random factor between this percentage and 100%. The stock
+  smoke uses `75%` — family-resembling puffs, no two identical.
+- **Random rotation direction** (Appearance tab, Rotation section) plus a small value on the
+  **Rotation** track. Each particle spins slowly, half of them clockwise and half counter-
+  clockwise, so the cloud churns instead of holding one frozen orientation. (The **Rotation
+  average/variance** spinners next to it serve a different purpose — a random *starting angle*,
+  rolled as the average scaled by ± the variance, used when **Fixed random rotation** is checked;
+  Tutorial 5's flipbook fireball shows that one in action.)
+- **Affected by wind** (Physics tab) — the stock smoke also checks this, letting the scene's wind
+  push the plume so it does not rise in a perfectly straight column.
+
+The principle behind all of them: **variety should come from randomization inside the emitter,
+not from duplicating emitters.** A duplicate costs performance and future maintenance; these
+spinners cost nothing. This idea returns at full scale in
+[Tutorial 5](05-build-an-explosion), where it carries most of the explosion's texture.
+
+## 6. Check the Effect at Gameplay Readability
 
 Use the Preview Viewport to judge the effect as a whole. A good hardpoint damage smoke effect is
 visible enough to tell the player something is damaged, but not so loud that it becomes the most
@@ -110,6 +152,7 @@ Use these questions as a quick check:
 - Does the effect still read as smoke?
 - Does the warm tint feel like heat from the damage source?
 - Does the smoke fade instead of popping away?
+- Do the puffs differ in size, angle, and life span — or do they look like copies?
 - Does the effect stay readable without covering too much of the ship?
 
 <!-- Media: tutorial-02-final-preview -->

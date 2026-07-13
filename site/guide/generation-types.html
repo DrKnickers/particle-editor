@@ -104,10 +104,7 @@
 <p>Burst mode releases particles in discrete groups rather than continuously. It is the right choice for one-off or repeating events: an explosion, an impact, a puff, a muzzle flash.</p>
 <p>Its fields:</p>
 <ul>
-<li><strong>Bursts</strong> — how many bursts to fire. Combined with the burst delay, this controls whether the</li>
-</ul>
-<p>  effect happens once or repeats.</p>
-<ul>
+<li><strong>Bursts</strong> — how many bursts to fire. Combined with the burst delay, this controls whether the effect happens once or repeats.</li>
 <li><strong>Burst delay</strong> — the time, in seconds, between one burst and the next.</li>
 <li><strong>Particles/burst</strong> — how many particles each burst releases at once.</li>
 </ul>
@@ -116,25 +113,20 @@
 <p>Continuous mode releases particles at a steady rate for as long as the effect is active. It is the right choice for ongoing effects: smoke rising from damage, an engine trail, a dust cloud, flowing energy.</p>
 <p>Its one field:</p>
 <ul>
-<li><strong>Particles/second</strong> — the spawn rate. Higher values make a denser, thicker stream; lower values</li>
+<li><strong>Particles/second</strong> — the spawn rate. Higher values make a denser, thicker stream; lower values make a sparse, wispy one.</li>
 </ul>
-<p>  make a sparse, wispy one.</p>
 <p>Continuous is usually the mode you reach for when an effect should simply keep going rather than happen and stop.</p>
 <h2 id="weather-particle">Weather Particle</h2>
 <p>Weather mode is a special rendering type for large-scale environmental effects like rain and snow. Instead of emitting from a point, it fills a cube of space that follows the camera — centered on a point out in front of the viewpoint — so the effect covers the view no matter where the camera moves, the way falling weather should.</p>
 <p>This is why you may not have seen it on a normal effect: it is not for hardpoint or weapon particles, it is for blanketing a scene. If you have never used one, that is expected; reach for it only when you want weather across the environment rather than a localized effect.</p>
 <p>Its fields:</p>
 <ul>
-<li><strong>Particles</strong> — how many particles fill the cube. Unlike Continuous, weather does not emit at a</li>
-</ul>
-<p>  per-second rate: it spawns this many particles once, up front, to populate the volume.</p>
-<ul>
+<li><strong>Particles</strong> — how many particles fill the cube. Unlike Continuous, weather does not emit at a per-second rate: it spawns this many particles once, up front, to populate the volume.</li>
 <li><strong>Distance from camera</strong> — how far in front of the camera the cube's center sits.</li>
-<li><strong>Cube size</strong> — the size of the volume the weather fills. A larger cube covers more of the scene</li>
+<li><strong>Cube size</strong> — the size of the volume the weather fills. A larger cube covers more of the scene but spreads the same particle count more thinly.</li>
 </ul>
-<p>  but spreads the same particle count more thinly.</p>
 <h2 id="particle-lifetime">Particle Lifetime</h2>
-<p>Alongside the mode fields, the Generation section carries <strong>Minimum lifetime:</strong> and <strong>Maximum lifetime:</strong> — how long each particle lives, in seconds, whichever generation mode is active. With the two values equal, every particle lives the same span. Setting them apart gives each particle a random lifespan in that range, which makes a burst die off raggedly — sparks winking out one by one — instead of the whole group vanishing on the same frame.</p>
+<p>Alongside the mode fields, the Generation section carries the particle lifespan, whichever generation mode is active. <strong>Maximum lifetime:</strong> is the designed lifespan in seconds. <strong>Minimum lifetime:</strong> is a <em>percentage of that maximum</em> — at <code>100%</code> every particle lives the full span; lower it and each particle rolls a random lifespan between that fraction and the maximum. Lowering it makes a burst die off raggedly — sparks winking out one by one — instead of the whole group vanishing on the same frame.</p>
 <h2 id="choosing-a-type">Choosing a Type</h2>
 <ul>
 <li>Something that happens as an event → <strong>Bursts</strong>.</li>

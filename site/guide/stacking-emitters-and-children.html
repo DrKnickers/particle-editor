@@ -98,7 +98,7 @@
       <article class="guide-article">
 <p class="guide-kicker">Reference <span class="kicker-count">· 5 of 9</span></p>
 <h1 id="stacking-emitters-and-using-children">Stacking Emitters and Using Children</h1>
-<p>Most finished effects are not one emitter doing everything — they are several simple emitters working together. This page covers two ways to combine emitters: stacking independent emitters side by side, and attaching a child emitter to another emitter so it rides along with each particle.</p>
+<p>Most finished effects are not one emitter doing everything — they are several simple emitters working together. This page covers three ways to organize that: stacking independent emitters side by side, attaching a child emitter to another emitter so it rides along with each particle, and linking several emitters into a <strong>Link Group</strong> so copies of one design stay editable as one.</p>
 <h2 id="stacking-emitters-siblings">Stacking Emitters (Siblings)</h2>
 <p>The straightforward way to build a complex effect is to stack several <strong>root emitters</strong> in the Emitter Tree. Each one is independent, plays at the same time, and originates from the same place, so their visuals layer on top of one another. An explosion might be one emitter for the flash, one for the fireball, one for the smoke, and one for the flying sparks.</p>
 <p>Add a new root emitter by right-clicking in the Emitter Tree and choosing <strong>New Root Emitter</strong> — the tree's <strong>+</strong> button and the Emitters menu offer the same commands, so use whichever is under your cursor. The habit that keeps this manageable is to keep each emitter responsible for one visual part, and to select emitters one at a time while previewing so you always know what each one contributes.</p>
@@ -107,26 +107,30 @@
 <p>A child emitter is attached to a parent emitter and spawns relative to the parent's individual particles, not to the effect as a whole. That is the key difference from a sibling: a sibling plays from the origin, while a child follows or reacts to each parent particle wherever it goes.</p>
 <p>Each emitter can have up to one child of each kind. Add them by right-clicking a parent emitter in the Emitter Tree:</p>
 <ul>
-<li><strong>Add Lifetime Child</strong> — a child that emits continuously <em>while each parent particle is alive</em>. It</li>
+<li><strong>Add Lifetime Child</strong> — a child that emits continuously <em>while each parent particle is alive</em>. It travels with the parent particle, so it is how you put a trail on something that moves. If the parent emits fast-moving sparks, a lifetime child can give each spark its own smoke trail.</li>
+<li><strong>Add Death Child</strong> — a child that fires <em>when each parent particle dies</em>. It bursts at the spot where the parent particle ended, so it is how you make an ending event. If the parent emits embers, a death child can pop a small flash as each ember burns out.</li>
 </ul>
-<p>  travels with the parent particle, so it is how you put a trail on something that moves. If the   parent emits fast-moving sparks, a lifetime child can give each spark its own smoke trail.</p>
-<ul>
-<li><strong>Add Death Child</strong> — a child that fires <em>when each parent particle dies</em>. It bursts at the spot</li>
-</ul>
-<p>  where the parent particle ended, so it is how you make an ending event. If the parent emits embers,   a death child can pop a small flash as each ember burns out.</p>
 <p>Because the child is bound to each parent particle, one parent emitting many particles produces many little child effects — one trailing or triggering per particle. That multiplication is the whole point, but it also means a busy parent with a heavy child can add up quickly, so keep child effects light.</p>
+<h2 id="link-groups-copies-that-stay-in-sync">Link Groups: Copies That Stay in Sync</h2>
+<p>Sometimes the right design is <em>several copies of the same emitter</em>. Tutorial 5's debris is the canonical case: each debris emitter throws one chunk per burst, so four identical copies give four independent chunks — but four separate copies would be a maintenance trap, because every future tweak would have to be repeated on all of them by hand.</p>
+<p>A <strong>Link Group</strong> solves this. Linked emitters share their design: edit any one member and the edit propagates to every other member. To create one, select the emitters (click, then <strong>Ctrl+click</strong> the others, or <strong>Shift+click</strong> a range), right-click → <strong>Set Link Group…</strong>, and choose <strong>Create new group</strong>. Members show a colored link dot in the Emitter Tree.</p>
+<p>Two related commands complete the tool:</p>
+<ul>
+<li><strong>Link Group Settings…</strong> lists every parameter with a share/exempt checkbox. Checked fields propagate across the group; unchecked (<em>exempt</em>) fields stay per-emitter. Exempting is how you deliberately vary members — for example, exempt <strong>Initial spawn delay</strong> to stagger the copies in time while their look stays locked together.</li>
+<li><strong>Leave Link Group</strong> removes one member without disturbing the rest.</li>
+</ul>
+<p>Joining an <em>existing</em> group adopts that group's shared values — the Set Link Group dialog previews which of your fields would be overwritten before you confirm.</p>
+<p>Do not reach for a Link Group to create <em>variety</em> — the randomization parameters (Minimum lifetime, Minimum scale, Rotation variance) already make one emitter's particles differ from each other, at no cost. A Link Group is for when you need more <em>instances</em> of a design: more debris chunks, more identical jets, more of the same thing happening at once.</p>
 <h2 id="which-one-to-use">Which One to Use</h2>
 <p>Ask where the sub-effect should come from:</p>
 <ul>
-<li>From the same place as the rest of the effect, playing alongside it → make it a <strong>sibling</strong> (a new</li>
-</ul>
-<p>  root emitter).</p>
-<ul>
+<li>From the same place as the rest of the effect, playing alongside it → make it a <strong>sibling</strong> (a new root emitter).</li>
 <li>Following each parent particle as it moves → make it a <strong>Lifetime Child</strong>.</li>
 <li>Triggered at the moment each parent particle ends → make it a <strong>Death Child</strong>.</li>
+<li>Several identical instances of one design → duplicate it and make the copies a <strong>Link Group</strong>.</li>
 </ul>
 <p>When in doubt, stack siblings. Children are the specialized tool for the cases where a part of the effect must ride on another emitter's particles.</p>
-<p><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a> puts both patterns to work — four stacked root emitters plus a Lifetime Child that gives every flying spark its own smoke trail.</p>
+<p><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a> puts the patterns to work — stacked root emitters for the layers, and a four-member Link Group for the debris.</p>
 <figure class="guide-media" aria-label="Show a parent emitting moving particles, then Add Lifetime Child giving each one its own trail."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-lifetime-child-trail.mp4" data-poster="ref-lifetime-child-trail-poster.jpg"></video></figure>
 <figure class="guide-media" aria-label="Show Add Death Child making a small flash fire where each parent particle dies."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-death-child-pop.mp4" data-poster="ref-death-child-pop-poster.jpg"></video></figure>
       </article>
@@ -140,6 +144,7 @@
       <ul>
       <li class="lvl-2"><a href="#stacking-emitters-siblings">Stacking Emitters (Siblings)</a></li>
       <li class="lvl-2"><a href="#child-emitters">Child Emitters</a></li>
+      <li class="lvl-2"><a href="#link-groups-copies-that-stay-in-sync">Link Groups: Copies That Stay in Sync</a></li>
       <li class="lvl-2"><a href="#which-one-to-use">Which One to Use</a></li>
       </ul>
     </nav>

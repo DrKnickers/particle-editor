@@ -132,16 +132,22 @@
 <p>This particle is a friendly first case: it contains a single emitter, named <code>smoke</code>, and that one emitter is the whole effect. Select it in the Emitter Tree — its properties fill the Property Panel and its lifetime curves fill the Curve Editor, making it the edit target.</p>
 <p>Most shipped particles have several emitters, and then the useful habit is: select one emitter, observe what it contributes in the Preview Viewport, then move to the next. Tutorial 4 opens a two-emitter particle and leans on exactly that habit. Particles become much easier to author when you can connect an emitter row to a visible part of the effect.</p>
 <h2 id="3-make-the-smoke-bright-green">3. Make the Smoke Bright Green</h2>
-<p>Color lives on the emitter's Red, Green, and Blue tracks in the Curve Editor (new to the Curve Editor? <a href="./curve-editor-basics.html">Curve Editor Basics</a> covers the mechanics). The stock smoke starts from a pale blue-green — roughly Red <code>0.5</code>, Green <code>1.0</code>, Blue <code>1.0</code> at birth.</p>
-<p>Make it unmistakably green by removing everything that isn't green, one channel at a time:</p>
+<p>Color lives on the emitter's Red, Green, and Blue tracks in the Curve Editor (new to the Curve Editor? <a href="./curve-editor-basics.html">Curve Editor Basics</a> covers the mechanics). Understand what these tracks actually are before editing them: each one is a <em>tint multiplier</em> applied to the particle's texture over its life. <code>1.0</code> on all three channels shows the texture's own colors; lowering a channel removes that color component from the result. A colored particle is usually a grayscale texture times whatever the R/G/B tracks say.</p>
+<p>Before changing anything, <em>read</em> the stock values: click each channel row in turn and look at the key values the file actually uses. In this particle you will find the smoke starts at Red <code>0.5</code>, Green <code>1.0</code>, Blue <code>1.0</code> — a pale blue-green — and all three channels converge to a dark neutral <code>0.255</code> by the end of the life, with a stop near 50% shaping the transition. That is the whole color story of the stock effect: a tinted birth cooling into gray ash. Getting into the habit of reading a shipped particle's numbers before touching them is how the rest of this guide's &quot;open something stock and study it&quot; advice works in practice.</p>
+<p>While you are looking, notice two other things about this emitter — both come back in later tutorials:</p>
+<ul>
+<li><strong>It streams; it doesn't burst.</strong> The Generation mode is Continuous at 5 particles/second, because damage smoke should pour out for as long as the hardpoint is damaged. One-off events (explosions, muzzle flashes) use Bursts instead — that contrast is <a href="./generation-types.html">Particle Generation Types</a>.</li>
+<li><strong>The Alpha track starts at <code>0</code></strong>, rises to its peak within the first tenth of the life, and then spends the rest fading back out. Smoke that faded only <em>out</em> would pop into existence at full opacity; the quick ramp-in is what makes each puff appear softly.</li>
+</ul>
+<p>Now make the smoke unmistakably green by removing everything that isn't green, one channel at a time:</p>
 <ol>
 <li>In the Curve Editor's channel list, click the <strong>Blue</strong> row to focus it.</li>
-<li>Click the track's key at the left edge (0% — the particle's birth) to select it.</li>
+<li>Click the track's key at the left edge (0% — the particle's start) to select it.</li>
 <li>Step the key's <strong>Value:</strong> spinner down to <code>0.05</code>.</li>
 <li>Repeat for the <strong>Red</strong> channel: focus it, select its key at 0%, set the value to <code>0.05</code>.</li>
 <li>Leave <strong>Green</strong> at <code>1.0</code>, and leave Alpha alone so the smoke stays readable.</li>
 </ol>
-<p>If a channel has more keys later in its lifetime, bring them down the same way — the goal is for green to dominate from birth to death. Watch the Preview Viewport as you go: the smoke should turn a loud, saturated green.</p>
+<p>If a channel has more keys later in its lifetime, bring them down the same way — the goal is for green to dominate from start to death. Watch the Preview Viewport as you go: the smoke should turn a loud, saturated green.</p>
 <p>This is deliberately exaggerated. Later tutorials will bring the effect back toward a believable game-art style.</p>
 <figure class="guide-media" aria-label="Show changing the smoke color to bright green in the editor UI."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-green-color-edit.mp4" data-poster="tutorial-01-green-color-edit-poster.jpg"></video></figure>
 <h2 id="4-save-the-override">4. Save the Override</h2>

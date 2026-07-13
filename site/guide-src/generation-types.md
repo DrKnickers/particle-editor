@@ -57,11 +57,12 @@ Its fields:
 
 ## Particle Lifetime
 
-Alongside the mode fields, the Generation section carries **Minimum lifetime:** and
-**Maximum lifetime:** — how long each particle lives, in seconds, whichever generation mode is
-active. With the two values equal, every particle lives the same span. Setting them apart gives
-each particle a random lifespan in that range, which makes a burst die off raggedly — sparks
-winking out one by one — instead of the whole group vanishing on the same frame.
+Alongside the mode fields, the Generation section carries the particle lifespan, whichever
+generation mode is active. **Maximum lifetime:** is the designed lifespan in seconds.
+**Minimum lifetime:** is a *percentage of that maximum* — at `100%` every particle lives the full
+span; lower it and each particle rolls a random lifespan between that fraction and the maximum.
+Lowering it makes a burst die off raggedly — sparks winking out one by one — instead of the
+whole group vanishing on the same frame.
 
 ## Choosing a Type
 

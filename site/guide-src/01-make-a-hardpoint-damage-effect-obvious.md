@@ -74,19 +74,42 @@ you can connect an emitter row to a visible part of the effect.
 ## 3. Make the Smoke Bright Green
 
 Color lives on the emitter's Red, Green, and Blue tracks in the Curve Editor (new to the Curve
-Editor? [Curve Editor Basics](curve-editor-basics) covers the mechanics). The stock smoke starts
-from a pale blue-green — roughly Red `0.5`, Green `1.0`, Blue `1.0` at birth.
+Editor? [Curve Editor Basics](curve-editor-basics) covers the mechanics). Understand what these
+tracks actually are before editing them: each one is a *tint multiplier* applied to the particle's
+texture over its life. `1.0` on all three channels shows the texture's own colors; lowering a
+channel removes that color component from the result. A colored particle is usually a grayscale
+texture times whatever the R/G/B tracks say.
 
-Make it unmistakably green by removing everything that isn't green, one channel at a time:
+Before changing anything, *read* the stock values: click each channel row in turn and look at the
+key values the file actually uses. In this particle you will find the smoke starts at
+Red `0.5`, Green `1.0`, Blue `1.0` — a pale blue-green — and all three channels converge to a
+dark neutral `0.255` by the end of the life, with a stop near 50% shaping the transition. That
+is the whole color story of the stock effect: a tinted birth cooling into gray ash. Getting into
+the habit of reading a shipped particle's numbers before touching them is how the rest of this
+guide's "open something stock and study it" advice works in practice.
+
+While you are looking, notice two other things about this emitter — both come back in later
+tutorials:
+
+- **It streams; it doesn't burst.** The Generation mode is Continuous at 5 particles/second,
+  because damage smoke should pour out for as long as the hardpoint is damaged. One-off events
+  (explosions, muzzle flashes) use Bursts instead — that contrast is
+  [Particle Generation Types](generation-types).
+- **The Alpha track starts at `0`**, rises to its peak within the first tenth of the life, and
+  then spends the rest fading back out. Smoke that faded only *out* would pop into existence at
+  full opacity; the quick ramp-in is what makes each puff appear softly.
+
+Now make the smoke unmistakably green by removing everything that isn't green, one channel at a
+time:
 
 1. In the Curve Editor's channel list, click the **Blue** row to focus it.
-2. Click the track's key at the left edge (0% — the particle's birth) to select it.
+2. Click the track's key at the left edge (0% — the particle's start) to select it.
 3. Step the key's **Value:** spinner down to `0.05`.
 4. Repeat for the **Red** channel: focus it, select its key at 0%, set the value to `0.05`.
 5. Leave **Green** at `1.0`, and leave Alpha alone so the smoke stays readable.
 
 If a channel has more keys later in its lifetime, bring them down the same way — the goal is for
-green to dominate from birth to death. Watch the Preview Viewport as you go: the smoke should
+green to dominate from start to death. Watch the Preview Viewport as you go: the smoke should
 turn a loud, saturated green.
 
 This is deliberately exaggerated. Later tutorials will bring the effect back toward a believable

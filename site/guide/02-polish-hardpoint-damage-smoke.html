@@ -109,6 +109,7 @@
 <li>Using color to imply heat and lighting.</li>
 <li>Using alpha to fade smoke out cleanly.</li>
 <li>Using scale to make smoke disperse over its lifetime.</li>
+<li>Using the randomization parameters — Minimum lifetime, Minimum scale, Rotation variance — so the puffs stop looking like copies of one particle.</li>
 <li>Judging an effect by first principles rather than exact numeric recipes.</li>
 </ul>
 <h2 id="before-you-start">Before You Start</h2>
@@ -118,12 +119,13 @@
 <p>Open it in the editor. The smoke may still be bright green from the proof edit.</p>
 <h2 id="1-return-the-smoke-to-a-dark-base-color">1. Return the Smoke to a Dark Base Color</h2>
 <p>Select the <code>smoke</code> emitter in the Emitter Tree. In the Curve Editor, bring the color tracks back toward a dark gray — same mechanics as Tutorial 1's green edit: focus a channel, select its keys, step the value (see <a href="./curve-editor-basics.html">Curve Editor Basics</a> if you need the controls).</p>
-<p>A useful target is not pure black. Smoke still needs to catch some light, especially near the damage source. Think in terms of a dark neutral base:</p>
+<p>A useful target is not pure black. Smoke still needs to catch some light, especially near the damage source — and the stock file itself tells you where &quot;believable&quot; lives: before Tutorial 1's green edit, all three of its color channels converged to a dark neutral <code>0.255</code> by the end of the life. Think in terms of a dark neutral base:</p>
 <pre><code class="language-text">Red:   low to medium-low
 Green: low to medium-low
 Blue:  low to medium-low
-Alpha: strong at birth, fading later
+End:   all three channels converging — smoke cools into one gray
 </code></pre>
+<p>The convergence matters as much as the darkness: early in the life the channels can differ (that is the next section's warm tint), but by death they should meet at the same value, because aged smoke has no color of its own.</p>
 <p>Watch the Preview Viewport while you adjust. If the smoke disappears, it is probably too dark, too transparent, or both.</p>
 <figure class="guide-media" aria-label="Show adjusting color over lifetime from proof green toward dark smoke with warm source tint."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-color-warm-tint.mp4" data-poster="tutorial-02-color-warm-tint-poster.jpg"></video></figure>
 <h2 id="2-add-a-warm-tint-near-the-source">2. Add a Warm Tint Near the Source</h2>
@@ -131,29 +133,39 @@ Alpha: strong at birth, fading later
 <p>In the Curve Editor, adjust the color near the start of the smoke lifetime so it has a small red or orange bias. Keep the later part of the lifetime closer to neutral gray.</p>
 <p>This does not need to become flame. A subtle warm tint is enough to connect the smoke to the damage source.</p>
 <h2 id="3-fade-the-smoke-with-alpha">3. Fade the Smoke with Alpha</h2>
-<p>Use the Alpha track to make the smoke fade out — this is the worked example from <a href="./curve-editor-basics.html">Curve Editor Basics</a>: focus Alpha, select the key at the right edge, bring its value to zero. A common shape is:</p>
-<pre><code class="language-text">Birth:      visible
-Middle:     still readable
-End:        transparent
+<p>Use the Alpha track to make the smoke fade out — this is the worked example from <a href="./curve-editor-basics.html">Curve Editor Basics</a>: focus Alpha, select the key at the right edge, bring its value to zero. But look at the stock file's own Alpha curve before writing yours, because it does something the naive version misses — it fades <strong>in</strong> as well as out:</p>
+<pre><code class="language-text">0%:    0            (invisible at birth)
+~10%:  peak         (fully faded in)
+100%:  0            (fully dispersed)
 </code></pre>
-<p>The ending matters most. Smoke that fades out feels like it disperses. Smoke that simply stops feels like it was switched off.</p>
+<p>Both ends matter, for different reasons. Smoke that fades out feels like it disperses; smoke that simply stops feels switched off. And smoke that starts at full opacity <em>pops</em> into existence — the quick ramp over the first tenth of the life is what makes each puff appear softly. Fast in, slow out is the standard envelope for almost anything soft, and you will meet it again on the explosion's smoke in <a href="./05-build-an-explosion.html">Tutorial 5</a>.</p>
 <figure class="guide-media" aria-label="Show shaping alpha so the smoke fades out instead of popping."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-alpha-fade.mp4" data-poster="tutorial-02-alpha-fade-poster.jpg"></video></figure>
 <h2 id="4-let-the-smoke-grow-as-it-fades">4. Let the Smoke Grow as It Fades</h2>
 <p>Use the Scale track to make the smoke larger over its lifetime. This helps sell the idea that hot smoke is spreading away from the damage source.</p>
-<p>The shape does not need to be dramatic. A small-to-larger scale curve is enough:</p>
-<pre><code class="language-text">Birth:      compact
+<p>The shape does not need to be dramatic — the stock emitter grows from <code>25</code> to <code>40</code> across its whole eight-second life, a gentle 60% swell:</p>
+<pre><code class="language-text">Start:      compact
 Middle:     wider
 End:        widest, but fading out
 </code></pre>
-<p>Preview the color, alpha, and scale together. These controls work as a group: darker smoke may need more alpha, larger smoke may need a softer fade, and a warmer birth color may need a shorter visible duration.</p>
+<p>Preview the color, alpha, and scale together. These controls work as a group: darker smoke may need more alpha, larger smoke may need a softer fade, and a warmer start color may need a shorter visible duration.</p>
 <figure class="guide-media" aria-label="Show scale growth so smoke expands naturally over lifetime."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-scale-growth.mp4" data-poster="tutorial-02-scale-growth-poster.jpg"></video></figure>
-<h2 id="5-check-the-effect-at-gameplay-readability">5. Check the Effect at Gameplay Readability</h2>
+<h2 id="5-break-the-uniformity">5. Break the Uniformity</h2>
+<p>Play the effect and look closely: if every puff of smoke is the same size, lives the same length, and holds the same angle, the effect reads as <em>copies of one particle</em> — and real smoke never does. The fix is not more emitters. The stock file already demonstrates it — check its spinners and you will find every one of these in use:</p>
+<ul>
+<li><strong>Minimum lifetime</strong> (Basic tab, in the Generation section under <strong>Maximum lifetime</strong>). The maximum is the lifetime you designed; the minimum, given as a percentage of it, lets each particle live a random span in between. The stock smoke sets it all the way down to <code>18%</code> of its eight-second maximum — some puffs are gone in under two seconds while others drift for eight, which is most of why the plume looks alive.</li>
+<li><strong>Minimum scale</strong> (Appearance tab, Textures section). The same idea for size: each particle's whole Scale curve is multiplied by a random factor between this percentage and 100%. The stock smoke uses <code>75%</code> — family-resembling puffs, no two identical.</li>
+<li><strong>Random rotation direction</strong> (Appearance tab, Rotation section) plus a small value on the <strong>Rotation</strong> track. Each particle spins slowly, half of them clockwise and half counter- clockwise, so the cloud churns instead of holding one frozen orientation. (The <strong>Rotation average/variance</strong> spinners next to it serve a different purpose — a random <em>starting angle</em>, rolled as the average scaled by ± the variance, used when <strong>Fixed random rotation</strong> is checked; Tutorial 5's flipbook fireball shows that one in action.)</li>
+<li><strong>Affected by wind</strong> (Physics tab) — the stock smoke also checks this, letting the scene's wind push the plume so it does not rise in a perfectly straight column.</li>
+</ul>
+<p>The principle behind all of them: <strong>variety should come from randomization inside the emitter, not from duplicating emitters.</strong> A duplicate costs performance and future maintenance; these spinners cost nothing. This idea returns at full scale in <a href="./05-build-an-explosion.html">Tutorial 5</a>, where it carries most of the explosion's texture.</p>
+<h2 id="6-check-the-effect-at-gameplay-readability">6. Check the Effect at Gameplay Readability</h2>
 <p>Use the Preview Viewport to judge the effect as a whole. A good hardpoint damage smoke effect is visible enough to tell the player something is damaged, but not so loud that it becomes the most important thing on screen.</p>
 <p>Use these questions as a quick check:</p>
 <ul>
 <li>Does the effect still read as smoke?</li>
 <li>Does the warm tint feel like heat from the damage source?</li>
 <li>Does the smoke fade instead of popping away?</li>
+<li>Do the puffs differ in size, angle, and life span — or do they look like copies?</li>
 <li>Does the effect stay readable without covering too much of the ship?</li>
 </ul>
 <figure class="guide-media" aria-label="Show the polished smoke playing in the editor preview at a normal camera distance."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-final-preview.mp4" data-poster="tutorial-02-final-preview-poster.jpg"></video></figure>
@@ -175,7 +187,8 @@ End:        widest, but fading out
       <li class="lvl-2"><a href="#2-add-a-warm-tint-near-the-source">2. Add a Warm Tint Near the Source</a></li>
       <li class="lvl-2"><a href="#3-fade-the-smoke-with-alpha">3. Fade the Smoke with Alpha</a></li>
       <li class="lvl-2"><a href="#4-let-the-smoke-grow-as-it-fades">4. Let the Smoke Grow as It Fades</a></li>
-      <li class="lvl-2"><a href="#5-check-the-effect-at-gameplay-readability">5. Check the Effect at Gameplay Readability</a></li>
+      <li class="lvl-2"><a href="#5-break-the-uniformity">5. Break the Uniformity</a></li>
+      <li class="lvl-2"><a href="#6-check-the-effect-at-gameplay-readability">6. Check the Effect at Gameplay Readability</a></li>
       <li class="lvl-2"><a href="#takeaways">Takeaways</a></li>
       </ul>
     </nav>

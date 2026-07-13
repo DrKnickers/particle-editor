@@ -14,7 +14,7 @@ One part of a particle system. An emitter creates particles over time or in burs
 ## Track
 
 A lifetime curve for a value such as Red, Green, Blue, Alpha, Scale, Index, or Rotation. Tracks make
-particles change from birth to death.
+particles change from start to death.
 
 ## Track Key
 
@@ -41,10 +41,23 @@ particle is alive — how a moving particle gets a trail.
 A child emitter that fires once where each of its parent emitter's particles dies — how a particle
 gets an ending event, like a pop or flash.
 
+## Link Group
+
+Several emitters joined so they share one design: an edit to any member propagates to all of them.
+Fields can be marked *exempt* in Link Group Settings to stay per-emitter. Used for identical
+copies of one emitter — like an explosion's debris chunks — that must stay editable as one.
+
+## Minimum Lifetime / Minimum Scale
+
+Randomization parameters. Maximum lifetime is the designed value; Minimum lifetime (a percentage
+of it) lets each particle live a random span in between. Minimum scale does the same for size,
+scaling each particle's whole Scale curve by a random factor. The main tools for variety without
+extra emitters.
+
 ## Tail
 
 A built-in streak drawn behind a particle, enabled per emitter with `Has tail` and sized with
-`Tail length:`. Used for projectile cores and glows.
+`Tail length`. Used for projectile cores and glows.
 
 ## Parent Speed Inherit
 

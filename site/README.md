@@ -16,7 +16,16 @@ a zero-dependency script (Node built-ins only — no npm install):
 # from the repo root
 node scripts/build-guide.mjs           # render guide-src/*.md -> site/guide/*.html
 node scripts/build-guide.mjs --check   # exit 1 if committed HTML is stale vs the Markdown
+node scripts/guide-edit.mjs            # WYSIWYG editing session (see below)
 ```
+
+For prose editing, `scripts/guide-edit.mjs` serves a side-by-side editor at
+`http://localhost:4178/` — a rich WYSIWYG pane (Toast UI, loaded from its CDN) on the left and
+the *real* built page on the right. Saves write the Markdown, re-run the real build, and a
+rendered-diff guard in the header shows exactly what changed in the shipped HTML vs the last
+commit, so an editor round-trip can never silently alter a page. Media anchors appear as locked
+chips; a Markdown-mode toggle sits at the bottom-left for raw edits. Dev-only — not part of any
+build or gate.
 
 Adding a page = drop `guide-src/<slug>.md`, list it in `guide-src/nav.json` (which drives
 the sidebar, the per-page kicker, and the prev/next pager), rebuild, and **commit both the

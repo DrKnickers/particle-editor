@@ -101,7 +101,7 @@
 <p>Every tutorial in this course asks you to change a value &quot;over the particle's lifetime&quot; — fade the alpha, grow the scale, shift a color. The Curve Editor is where all of that happens, so it is worth five minutes to learn its parts before Tutorial 1 asks you to use them.</p>
 <figure class="guide-media" aria-label="Tour the Curve Editor: focus a channel, select a key, step the value spinner, insert a key, change interpolation."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-curve-editor-tour.mp4" data-poster="ref-curve-editor-tour-poster.jpg"></video></figure>
 <h2 id="what-a-track-is">What a Track Is</h2>
-<p>A track is a curve that answers one question: <em>what should this value be at each moment of a particle's life?</em> The horizontal axis runs from 0 to 100% — birth on the left, death on the right. It is a percentage, not seconds, so the same curve works whether the particle lives for a tenth of a second or ten seconds. The vertical axis is the value itself.</p>
+<p>A track is a curve that answers one question: <em>what should this value be at each moment of a particle's life?</em> The horizontal axis runs from 0 to 100% — start on the left, death on the right. It is a percentage, not seconds, so the same curve works whether the particle lives for a tenth of a second or ten seconds. The vertical axis is the value itself.</p>
 <p>Each emitter has seven tracks: <strong>Red</strong>, <strong>Green</strong>, <strong>Blue</strong>, <strong>Alpha</strong>, <strong>Scale</strong>, <strong>Index</strong>, and <strong>Rotation</strong>. The color and alpha tracks run from 0 to 1. Scale is the particle size, Index picks the texture atlas frame, and Rotation controls spin.</p>
 <p>The curve is made of <strong>keys</strong> — points that pin a value at a time. Between keys, the editor fills in the value using the key's interpolation (see below). A track with a single key is simply a constant value.</p>
 <h2 id="the-channel-list">The Channel List</h2>
@@ -111,15 +111,9 @@
 <p>With the <strong>Select tool</strong> active (the default):</p>
 <ul>
 <li><strong>Click a key</strong> to select it. Click an empty part of the canvas to clear the selection.</li>
-<li>The <strong>Time:</strong> and <strong>Value:</strong> spinners show the selected key's numbers. Editing the Value</li>
-</ul>
-<p>  spinner is the precise way to set a key — more repeatable than dragging.</p>
-<ul>
+<li>The <strong>Time:</strong> and <strong>Value:</strong> spinners show the selected key's numbers. Editing the Value spinner is the precise way to set a key — more repeatable than dragging.</li>
 <li>You can also <strong>drag a key</strong> directly on the canvas to move it.</li>
-<li>The <strong>first and last keys of a track are pinned</strong> to 0% and 100%: you can change their value,</li>
-</ul>
-<p>  but not their time. Every particle needs a defined value at birth and at death.</p>
-<ul>
+<li>The <strong>first and last keys of a track are pinned</strong> to 0% and 100%: you can change their value, but not their time. Every particle needs a defined value at start and at death.</li>
 <li>Remove keys with the <strong>Delete selected keys</strong> button (or the Delete key).</li>
 </ul>
 <h2 id="adding-keys">Adding Keys</h2>
@@ -129,9 +123,8 @@
 <ul>
 <li><strong>Linear</strong> — a straight line to the next key. The default for most tracks.</li>
 <li><strong>Smooth</strong> — an eased curve into the next key, for changes that should feel gradual.</li>
-<li><strong>Step</strong> — holds the value flat, then jumps at the next key. This is the default for the</li>
+<li><strong>Step</strong> — holds the value flat, then jumps at the next key. This is the default for the <strong>Index</strong> track, and the right choice for it: an atlas frame is a whole number, and stepping between frames plays them like a flipbook instead of blurring between them.</li>
 </ul>
-<p>  <strong>Index</strong> track, and the right choice for it: an atlas frame is a whole number, and stepping   between frames plays them like a flipbook instead of blurring between them.</p>
 <p>Select a key (or several) and use the interpolation buttons to change its mode.</p>
 <h2 id="locked-channels">Locked Channels</h2>
 <p>Some shipped particles drive several channels from a single curve — you may open a file and find a channel marked as locked to another track. A locked channel is read-only and mirrors the track it is locked to. Use the <strong>Lock-to</strong> control to change this: set it to <strong>None</strong> to give the channel its own independent curve, or lock it to another track when you want two channels to always match.</p>
@@ -140,21 +133,27 @@
 <ol>
 <li>Select the smoke emitter in the Emitter Tree.</li>
 <li>In the channel list, toggle <strong>Alpha</strong> on and click its row to focus it.</li>
-<li>Click the key at the right edge (100% — the particle's death) and set its</li>
+<li>Click the key at the right edge (100% — the particle's death) and set its <strong>Value:</strong> to <code>0</code>.</li>
+<li>If the alpha needs to hold before fading, switch to the Insert tool and click to add a key around 50% at the start value, then switch back to the Select tool.</li>
 </ol>
-<p>   <strong>Value:</strong> to <code>0</code>.</p>
-<ol>
-<li>If the alpha needs to hold before fading, switch to the Insert tool and click to add a key</li>
-</ol>
-<p>   around 50% at the birth value, then switch back to the Select tool.</p>
 <p>Watch the Preview Viewport: the smoke now thins as it ages and disappears instead of popping away. That one habit — pick a track, pick a key, set a value, watch the preview — is most of what particle authoring is.</p>
+<p>This alpha fade works because smoke uses <strong>Transparent</strong> blending. An <strong>Additive</strong> effect — a glow, a flash, fire — ignores the Alpha track entirely, so to fade one out you bring its color or scale down toward the end instead (see <a href="./blend-modes.html">Blend Modes</a>).</p>
+<h2 id="the-envelope-fade-in-then-out">The Envelope: Fade In, Then Out</h2>
+<p>One curve shape appears in shipped particles more than any other, and it is worth knowing by name. Almost nothing starts at its maximum: the value begins at <code>0</code>, rises to its peak within the first ~10% of the life, and spends the remaining ~90% falling back to <code>0</code>.</p>
+<pre><code class="language-text">value
+ peak |   /\_
+      |  /   \___
+      | /        \____
+    0 |/              \____
+      0%   10%              100%  (particle life)
+</code></pre>
+<p>Smoke uses it on Alpha so puffs appear softly instead of popping into existence. Flashes use it on the color tracks so a detonation has attack and decay instead of switching on and off. When an effect feels mechanical and you cannot say why, check whether its curves start at full value — the missing ramp-in is usually the answer.</p>
 <h2 id="related-pages">Related Pages</h2>
 <ul>
 <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a> — why values change over a lifetime.</li>
 <li><a href="./motion-and-physics.html">Motion and Physics</a> — the motion controls that pair with these curves.</li>
-<li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">Tutorial 1</a> — uses the color tracks for its</li>
+<li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">Tutorial 1</a> — uses the color tracks for its first real edit.</li>
 </ul>
-<p>  first real edit.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./particle-authoring-primer.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Particle Authoring Primer</span></a>
@@ -171,6 +170,7 @@
       <li class="lvl-2"><a href="#interpolation">Interpolation</a></li>
       <li class="lvl-2"><a href="#locked-channels">Locked Channels</a></li>
       <li class="lvl-2"><a href="#a-worked-example-fade-smoke-out">A Worked Example: Fade Smoke Out</a></li>
+      <li class="lvl-2"><a href="#the-envelope-fade-in-then-out">The Envelope: Fade In, Then Out</a></li>
       <li class="lvl-2"><a href="#related-pages">Related Pages</a></li>
       </ul>
     </nav>

@@ -9,7 +9,7 @@ worth five minutes to learn its parts before Tutorial 1 asks you to use them.
 ## What a Track Is
 
 A track is a curve that answers one question: *what should this value be at each moment of a
-particle's life?* The horizontal axis runs from 0 to 100% — birth on the left, death on the
+particle's life?* The horizontal axis runs from 0 to 100% — start on the left, death on the
 right. It is a percentage, not seconds, so the same curve works whether the particle lives for
 a tenth of a second or ten seconds. The vertical axis is the value itself.
 
@@ -40,7 +40,7 @@ With the **Select tool** active (the default):
   spinner is the precise way to set a key — more repeatable than dragging.
 - You can also **drag a key** directly on the canvas to move it.
 - The **first and last keys of a track are pinned** to 0% and 100%: you can change their value,
-  but not their time. Every particle needs a defined value at birth and at death.
+  but not their time. Every particle needs a defined value at start and at death.
 - Remove keys with the **Delete selected keys** button (or the Delete key).
 
 ## Adding Keys
@@ -78,11 +78,35 @@ The most common curve in this course, start to finish:
 3. Click the key at the right edge (100% — the particle's death) and set its
    **Value:** to `0`.
 4. If the alpha needs to hold before fading, switch to the Insert tool and click to add a key
-   around 50% at the birth value, then switch back to the Select tool.
+   around 50% at the start value, then switch back to the Select tool.
 
 Watch the Preview Viewport: the smoke now thins as it ages and disappears instead of popping
 away. That one habit — pick a track, pick a key, set a value, watch the preview — is most of
 what particle authoring is.
+
+This alpha fade works because smoke uses **Transparent** blending. An **Additive** effect — a
+glow, a flash, fire — ignores the Alpha track entirely, so to fade one out you bring its color
+or scale down toward the end instead (see [Blend Modes](blend-modes)).
+
+## The Envelope: Fade In, Then Out
+
+One curve shape appears in shipped particles more than any other, and it is worth knowing by
+name. Almost nothing starts at its maximum: the value begins at `0`, rises to its peak within
+the first ~10% of the life, and spends the remaining ~90% falling back to `0`.
+
+```text
+value
+ peak |   /\_
+      |  /   \___
+      | /        \____
+    0 |/              \____
+      0%   10%              100%  (particle life)
+```
+
+Smoke uses it on Alpha so puffs appear softly instead of popping into existence. Flashes use it
+on the color tracks so a detonation has attack and decay instead of switching on and off. When an
+effect feels mechanical and you cannot say why, check whether its curves start at full value —
+the missing ramp-in is usually the answer.
 
 ## Related Pages
 

@@ -98,73 +98,64 @@
       <article class="guide-article">
 <p class="guide-kicker">Reference <span class="kicker-count">· 4 of 9</span></p>
 <h1 id="motion-and-physics">Motion and Physics</h1>
-<p>The Physics tab in the Property Panel controls where particles start and how they move: initial position, initial speed, acceleration, and what happens at the ground. Tutorial 3 uses exactly one of these controls (<code>Parent speed inherit:</code>); this page covers the rest, and it is the reference to have open when you build the explosion in <a href="./05-build-an-explosion.html">Tutorial 5</a>.</p>
+<p>The Physics tab in the Property Panel answers three questions, in order, for every particle an emitter makes:</p>
+<ol>
+<li><strong>Where is it born?</strong> — the <em>Initial position</em> section.</li>
+<li><strong>Which way does it launch, and how fast?</strong> — the <em>Initial speed</em> section.</li>
+<li><strong>How does its path bend over time?</strong> — the <em>Acceleration</em> section.</li>
+</ol>
+<p>Every motion effect you will ever build is some combination of answers to those three questions, so it is worth reading each section below with its question in mind. Tutorial 3 uses exactly one of these controls (<code>Parent speed inherit</code>); this page covers the rest, and it is the reference to have open when you build the explosion in <a href="./05-build-an-explosion.html">Tutorial 5</a>.</p>
 <figure class="guide-media" aria-label="Show setting Initial speed Type to Sphere and the burst turning into an even radial shell; toggle Constrain to surface."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-radial-burst.mp4" data-poster="ref-radial-burst-poster.jpg"></video></figure>
 <h2 id="random-shapes-how-position-and-speed-are-rolled">Random Shapes: How Position and Speed Are Rolled</h2>
-<p>The <strong>Initial position</strong> and <strong>Initial speed</strong> sections each start with a shape picker (<code>Type:</code>) that decides how the value is randomized for every new particle:</p>
+<p>The <strong>Initial position</strong> and <strong>Initial speed</strong> sections each start with a shape picker (<code>Type</code>) that decides how the value is randomized for every new particle:</p>
 <table>
 <thead>
 <tr><th>Type</th><th>Fields</th><th>What each particle gets</th></tr>
 </thead>
 <tbody>
-<tr><td>Exact</td><td><code>Value:</code></td><td>The same fixed X/Y/Z every time. No randomness.</td></tr>
-<tr><td>Box</td><td><code>Min:</code> / <code>Max:</code></td><td>A random point inside a box between the two corners.</td></tr>
-<tr><td>Cube</td><td><code>Side length:</code></td><td>A random point inside a cube of that size, centered on the emitter.</td></tr>
-<tr><td>Sphere</td><td><code>Radius:</code></td><td>A random point inside a sphere. Check <code>Constrain to surface</code> to pick points <strong>on</strong> the sphere's shell instead.</td></tr>
+<tr><td>Exact</td><td><code>Value</code></td><td>The same fixed X/Y/Z every time. No randomness.</td></tr>
+<tr><td>Box</td><td><code>Min</code> / <code>Max</code></td><td>A random point inside a box between the two corners.</td></tr>
+<tr><td>Cube</td><td><code>Side length</code></td><td>A random point inside a cube of that size, centered on the emitter.</td></tr>
+<tr><td>Sphere</td><td><code>Radius</code></td><td>A random point inside a sphere. Check <code>Constrain to surface</code> to pick points <strong>on</strong> the sphere's shell instead.</td></tr>
 <tr><td>Cylinder</td><td>radius and height</td><td>A random point inside a cylinder, with its own <code>Constrain to surface</code> option.</td></tr>
 </tbody>
 </table>
 <p>The trick to reading this table: for <strong>Initial position</strong> the shape scatters <em>where particles spawn</em>; for <strong>Initial speed</strong> the same shape scatters <em>which direction and how fast they fly</em>. A speed vector is just a point in the shape — its direction from the center is the flight direction, and its distance is the speed.</p>
-<p>That makes <strong>Sphere on Initial speed the radial-burst tool</strong>: every particle gets a velocity pointing somewhere on a sphere, so the emitter sprays in all directions at once. With <code>Constrain to surface</code> checked, every particle flies at exactly the same speed (the radius) — a clean, even shell, which is what an explosion's debris wants. Unchecked, speeds vary from zero up to the radius, which reads more ragged and natural for sparks.</p>
+<p>That makes <strong>Sphere on Initial speed the radial-burst tool</strong>: every particle gets a velocity pointing somewhere on a sphere, so the emitter sprays in all directions at once. With <code>Constrain to surface</code> checked, every particle flies at exactly the same speed (the radius); unchecked, speeds vary from zero up to the radius, which reads more ragged.</p>
+<h2 id="two-ways-to-fly-outward">Two Ways to Fly Outward</h2>
+<p>&quot;Everything flies away from the center&quot; can be built two different ways, and they read differently on screen:</p>
+<ul>
+<li><strong>Random-direction spray</strong> — put the Sphere on <strong>Initial speed</strong>. Each particle rolls its own direction, unrelated to where it was born. The result is chaotic and lively: embers, sparks, splinters. This is how Tutorial 5's sparks work.</li>
+<li><strong>Radial launch</strong> — put the Sphere on <strong>Initial position</strong> with <code>Constrain to surface</code> checked, then drive the speed with a large <em>negative</em> <strong>Inward speed</strong> (see below). Each particle is born on a shell and pushed straight along the line from the center through its own birth point — every path is dead-straight and radial, like shrapnel. This is how Tutorial 5's debris works.</li>
+</ul>
+<p>The spray randomizes <em>direction</em>; the radial launch locks direction to <em>birth position</em>. Choose by what the layer represents: burning fragments scatter, thrown wreckage flies straight.</p>
 <h2 id="initial-speed-extras">Initial Speed Extras</h2>
 <ul>
-<li><strong>Inward speed:</strong> adds motion along the line between each particle and the emitter's center.</li>
-</ul>
-<p>  A positive value pulls particles inward — useful for implosion or intake effects. A negative   value pushes them outward, on top of whatever the speed shape rolled.</p>
-<ul>
-<li><strong>Parent speed inherit:</strong> how much of the spawning object's motion the particle keeps, from</li>
-</ul>
-<p>  0 to 100%. Tutorial 3 covers the classic use: projectile layers at full inheritance ride the   shot; muzzle-flash layers at zero stay at the launch point.</p>
-<ul>
+<li><strong>Inward speed:</strong> adds motion along the line between each particle and the emitter's center. A positive value pulls particles inward — useful for implosion or intake effects. A negative value pushes them outward, on top of whatever the speed shape rolled.</li>
+<li><strong>Parent speed inherit:</strong> how much of the spawning object's motion the particle keeps, from 0 to 100%. Tutorial 3 covers the classic use: projectile layers at full inheritance ride the shot; muzzle-flash layers at zero stay at the launch point.</li>
 <li><strong>Affected by wind:</strong> lets the scene's wind push the particles.</li>
 </ul>
 <h2 id="acceleration">Acceleration</h2>
-<p>Where Initial speed sets motion once at birth, the Acceleration section bends it continuously:</p>
+<p>Where Initial speed sets motion once at start, the Acceleration section bends it continuously:</p>
 <ul>
-<li><strong>X / Y / Z:</strong> a constant push in a fixed direction. The everyday use is a small +Z value to</li>
+<li><strong>X / Y / Z:</strong> a constant push in a fixed direction. The everyday use is a small +Z value to make smoke rise.</li>
+<li><strong>Gravity acceleration:</strong> a single number that scales a built-in straight-down push. <code>1</code> is a standard downward pull; <code>0</code> is weightless; and a <strong>negative value pushes up</strong> — the idiomatic way to make hot smoke and fire rise (Tutorial 5's smoke uses <code>-0.9</code>) without configuring an acceleration vector by hand. Give debris a little positive gravity and its straight radial flight becomes an arc.</li>
+<li><strong>Inward acceleration:</strong> like Inward speed, but applied continuously — particles curve toward the emitter (positive) or away from it (negative) over their whole life.</li>
+<li><strong>Object space acceleration:</strong> applies the X/Y/Z push in the emitter's own orientation instead of world directions, so the push turns with the object the effect is attached to.</li>
 </ul>
-<p>  make smoke rise.</p>
-<ul>
-<li><strong>Gravity acceleration:</strong> a downward pull. Give debris a little gravity and its straight</li>
-</ul>
-<p>  radial flight becomes an arc.</p>
-<ul>
-<li><strong>Inward acceleration:</strong> like Inward speed, but applied continuously — particles curve toward</li>
-</ul>
-<p>  the emitter (positive) or away from it (negative) over their whole life.</p>
-<ul>
-<li><strong>Object space acceleration:</strong> applies the X/Y/Z push in the emitter's own orientation</li>
-</ul>
-<p>  instead of world directions, so the push turns with the object the effect is attached to.</p>
 <h2 id="ground-interaction">Ground Interaction</h2>
-<p><code>Behavior:</code> decides what a particle does when it reaches the ground:</p>
+<p><code>Behavior</code> decides what a particle does when it reaches the ground:</p>
 <ul>
 <li><strong>None</strong> — ignores the ground and passes through.</li>
 <li><strong>Disappear</strong> — the particle dies on contact.</li>
-<li><strong>Bounce</strong> — the particle reflects; <code>Bounciness:</code> (enabled only for this behavior) sets how</li>
-</ul>
-<p>  much energy it keeps.</p>
-<ul>
+<li><strong>Bounce</strong> — the particle reflects; <code>Bounciness</code> (enabled only for this behavior) sets how much energy it keeps.</li>
 <li><strong>Stick</strong> — the particle stops and stays where it landed.</li>
 </ul>
 <h2 id="one-caveat-weather-mode">One Caveat: Weather Mode</h2>
 <p>When an emitter's Generation is set to <strong>Weather particle</strong> (see <a href="./generation-types.html">Particle Generation Types</a>), most of this tab disables — weather particles fill a camera-following volume rather than flying from an emitter, so initial position, acceleration, gravity, and ground interaction do not apply. Initial speed, Inward speed, and Affected by wind stay active. If Physics fields are unexpectedly grayed out, check the Generation section first.</p>
 <h2 id="related-pages">Related Pages</h2>
 <ul>
-<li><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a> — puts the Sphere speed shape,</li>
-</ul>
-<p>  lifetime variation, and gravity to work.</p>
-<ul>
+<li><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a> — puts the Sphere speed shape, lifetime variation, and gravity to work.</li>
 <li><a href="./generation-types.html">Particle Generation Types</a> — bursts vs. streams vs. weather.</li>
 <li><a href="./curve-editor-basics.html">Curve Editor Basics</a> — the lifetime curves these motions pair with.</li>
 </ul>
@@ -178,6 +169,7 @@
       <p class="toc-label">On this page</p>
       <ul>
       <li class="lvl-2"><a href="#random-shapes-how-position-and-speed-are-rolled">Random Shapes: How Position and Speed Are Rolled</a></li>
+      <li class="lvl-2"><a href="#two-ways-to-fly-outward">Two Ways to Fly Outward</a></li>
       <li class="lvl-2"><a href="#initial-speed-extras">Initial Speed Extras</a></li>
       <li class="lvl-2"><a href="#acceleration">Acceleration</a></li>
       <li class="lvl-2"><a href="#ground-interaction">Ground Interaction</a></li>

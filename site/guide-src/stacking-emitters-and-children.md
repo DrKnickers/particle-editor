@@ -1,8 +1,9 @@
 # Stacking Emitters and Using Children
 
 Most finished effects are not one emitter doing everything — they are several simple emitters working
-together. This page covers two ways to combine emitters: stacking independent emitters side by side,
-and attaching a child emitter to another emitter so it rides along with each particle.
+together. This page covers three ways to organize that: stacking independent emitters side by side,
+attaching a child emitter to another emitter so it rides along with each particle, and linking
+several emitters into a **Link Group** so copies of one design stay editable as one.
 
 ## Stacking Emitters (Siblings)
 
@@ -41,6 +42,34 @@ little child effects — one trailing or triggering per particle. That multiplic
 point, but it also means a busy parent with a heavy child can add up quickly, so keep child effects
 light.
 
+## Link Groups: Copies That Stay in Sync
+
+Sometimes the right design is *several copies of the same emitter*. Tutorial 5's debris is the
+canonical case: each debris emitter throws one chunk per burst, so four identical copies give four
+independent chunks — but four separate copies would be a maintenance trap, because every future
+tweak would have to be repeated on all of them by hand.
+
+A **Link Group** solves this. Linked emitters share their design: edit any one member and the edit
+propagates to every other member. To create one, select the emitters (click, then **Ctrl+click**
+the others, or **Shift+click** a range), right-click → **Set Link Group…**, and choose **Create
+new group**. Members show a colored link dot in the Emitter Tree.
+
+Two related commands complete the tool:
+
+- **Link Group Settings…** lists every parameter with a share/exempt checkbox. Checked fields
+  propagate across the group; unchecked (*exempt*) fields stay per-emitter. Exempting is how you
+  deliberately vary members — for example, exempt **Initial spawn delay** to stagger the copies in
+  time while their look stays locked together.
+- **Leave Link Group** removes one member without disturbing the rest.
+
+Joining an *existing* group adopts that group's shared values — the Set Link Group dialog previews
+which of your fields would be overwritten before you confirm.
+
+Do not reach for a Link Group to create *variety* — the randomization parameters (Minimum
+lifetime, Minimum scale, Rotation variance) already make one emitter's particles differ from each
+other, at no cost. A Link Group is for when you need more *instances* of a design: more debris
+chunks, more identical jets, more of the same thing happening at once.
+
 ## Which One to Use
 
 Ask where the sub-effect should come from:
@@ -49,12 +78,13 @@ Ask where the sub-effect should come from:
   root emitter).
 - Following each parent particle as it moves → make it a **Lifetime Child**.
 - Triggered at the moment each parent particle ends → make it a **Death Child**.
+- Several identical instances of one design → duplicate it and make the copies a **Link Group**.
 
 When in doubt, stack siblings. Children are the specialized tool for the cases where a part of the
 effect must ride on another emitter's particles.
 
-[Tutorial 5: Build an Explosion](05-build-an-explosion) puts both patterns to work — four
-stacked root emitters plus a Lifetime Child that gives every flying spark its own smoke trail.
+[Tutorial 5: Build an Explosion](05-build-an-explosion) puts the patterns to work — stacked root
+emitters for the layers, and a four-member Link Group for the debris.
 
 <!-- Media: ref-lifetime-child-trail -->
 <!-- Media: ref-death-child-pop -->
