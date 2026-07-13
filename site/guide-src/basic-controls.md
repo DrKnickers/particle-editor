@@ -6,6 +6,10 @@ selecting things.
 
 ## Preview a Particle: Hold Shift
 
+> **The single most missed control.** Nothing on screen announces it: to see any effect at all,
+> **hold Shift**. If a particle you just opened looks like an empty viewport, this is almost
+> certainly why.
+
 Loading a particle does not, by itself, put it in the Preview Viewport. To see the current effect,
 **hold Shift**. While Shift is held, the particle spawns at the cursor and follows it around the
 viewport, so you can move the mouse to judge the effect from different positions.
@@ -46,14 +50,14 @@ zoom is smoother for large distance changes.
 
 ## Select an Emitter
 
-Select emitters in the Emitter Tree, not the viewport. Selecting one makes it the edit target — its
-properties and lifetime curves fill the panels — so you can work on that emitter's settings without
-disturbing the others. (Selection changes what you edit, not what is drawn; to hide an emitter in
+Select emitters — the engines inside an effect that each produce one kind of particle — in the
+Emitter Tree, not the viewport. Selecting one makes it the edit target — its properties and lifetime
+curves fill the panels — so you can work on that emitter's settings without disturbing the others. (Selection changes what you edit, not what is drawn; to hide an emitter in
 the viewport, toggle its visibility.)
 
 - **Click** a row to select a single emitter.
-- **Shift-click** another row to select every emitter from the first selection to that row.
-- **Ctrl-click** (or Cmd-click) a row to add or remove it from a multi-selection.
+- **Shift+click** another row to select every emitter from the first selection to that row.
+- **Ctrl+click** (or Cmd+click) a row to add or remove it from a multi-selection.
 
 ## Select and Move a Reference Object
 

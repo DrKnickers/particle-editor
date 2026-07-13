@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="active" aria-current="page">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -96,7 +98,7 @@
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 4 of 5</span></p>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 5 of 7</span></p>
 <h1 id="tutorial-4-recolor-and-orient-a-shield-impact">Tutorial 4: Recolor and Orient a Shield Impact</h1>
 <p>This tutorial overrides <code>P_SHIELD_BLAST_LARGE00.ALO</code>, recolors it into an obvious purple variant, and uses the editor preview to study impact orientation.</p>
 <p>Shield impacts are directional effects. They need to read as something striking a surface, with shape and facing that support the color change.</p>
@@ -130,8 +132,8 @@
 <p>This particle has two emitters: <code>ripple</code> and <code>splash</code>. Select them one at a time in the Emitter Tree and watch what changes in the Preview Viewport — this is the select-and-observe habit from Tutorial 1, now on a particle where it earns its keep. Work out which emitter makes the broad shield-face ripple and which makes the splash of energy at the hit point before changing anything.</p>
 <p>Then dig into how each one is built, because the two emitters answer &quot;how do I make an effect feel attached to a surface?&quot; in two different ways:</p>
 <ul>
-<li><strong><code>ripple</code></strong> is a flat expanding ring <em>on</em> the shield face. Check its Appearance tab: the world-oriented option is on, so the quad lies flat in the world instead of turning to face the camera — that is what pins it to the shield plane. Its Initial position is <code>Exact (0, 0, 0.02)</code>: two hundredths of a unit <em>above</em> the surface, just enough that the ring never clips into the shield it sits on. It never moves — its Scale track does all the work, expanding from <code>2</code> to <code>25</code> across a 0.3-second life. And its Index track holds a single atlas frame (a ring shape) rather than the default glow.</li>
-<li><strong><code>splash</code></strong> is the energy kicked back off the surface. Ten particles, born in a tight 0.4-radius sphere at the hit point, launched along <strong>positive Z</strong> — its Initial speed is a Box reaching from <code>(0,0,0)</code> to <code>(0,0,20)</code>, i.e. straight up off the surface at up to 20 units/s. A positive <strong>Inward speed</strong> of <code>5</code> then pulls each particle back toward the center as it flies, curving the spray into a fountain rather than a straight jet. These are camera-facing (the default), because sparks of energy should read from any angle.</li>
+<li><strong><code>ripple</code></strong> is a flat expanding ring <em>on</em> the shield face. Check its Appearance tab: the world-oriented option is on, so the flat square carrying the ring stays lying against the surface instead of turning to face the camera. Its Initial position is <code>Exact (0, 0, 0.02)</code>: two hundredths of a unit <em>above</em> the surface, just enough that the ring never clips into the shield it sits on. It never moves — its Scale track does all the work, expanding from <code>2</code> to <code>25</code> across a 0.3-second life. And its Index track holds a single atlas frame (a ring shape) rather than the default glow.</li>
+<li><strong><code>splash</code></strong> is the energy kicked back off the surface. Ten particles, born in a tight 0.4-radius sphere at the hit point, launched along <strong>positive Z</strong> — its Initial speed is a Box reaching from <code>(0,0,0)</code> to <code>(0,0,20)</code>, i.e. straight up off the surface at up to 20 units/s. A positive <strong>Inward speed</strong> of <code>5</code> aims each particle slightly back toward the center at birth, tightening the spray into a fountain rather than a straight jet. It changes only the launch direction — it does not keep pulling as the particle flies. These are camera-facing (the default), because sparks of energy should read from any angle.</li>
 </ul>
 <p>One structural detail worth noticing: both emitters set <code>Minimum lifetime</code> to 100% — <em>no</em> lifetime randomness. An impact is a single crisp event; every particle arriving and dying on schedule is what makes it feel synchronized to the hit. Compare that with the smoke tutorials, where lifetime randomness is exactly what you want. Randomization is a choice, not a default.</p>
 <p>The useful habit is to connect each selected emitter to one visible part of the impact. On particles with many emitters, toggling an emitter's visibility in the tree is another quick way to isolate its contribution.</p>
@@ -139,13 +141,19 @@
 <h2 id="3-recolor-the-impact-purple">3. Recolor the Impact Purple</h2>
 <p>With <code>ripple</code> and <code>splash</code> selected one at a time, use the Curve Editor's color tracks to shift the color toward purple (the mechanics are in <a href="./curve-editor-basics.html">Curve Editor Basics</a>). Both emitters are energy effects, so their additive blending means brighter values read as more light — see <a href="./blend-modes.html">Blend Modes</a>.</p>
 <p>Read the stock color first: both emitters are a blue-teal built from Green and Blue (the ripple starts around Green <code>0.5</code>, Blue <code>0.75</code>) with Red left low, and every channel falls to <code>0</code> by the end of the life — an additive effect fades out by dimming to black, since alpha does nothing here. Recoloring to purple is therefore a <em>channel-balance</em> change: raise Red, cut Green, keep Blue.</p>
-<p>A simple target is:</p>
-<pre><code class="language-text">Red:   high
-Green: low
-Blue:  high
-End:   all channels to 0 — keep the dim-to-black ending intact
-</code></pre>
-<p>Because these emitters are additive, only the color tracks matter — the Alpha track has no effect, and brightness <em>is</em> the color. Keep the center of the impact bright enough to read as energy. If everything becomes the same flat purple, give the core a little more brightness and let the outer glow be softer.</p>
+<p>A simple starting target (start values; every channel still ends at <code>0</code>):</p>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>Red</td><td>~0.6 (raised from ~0 — this is what turns the blue into purple)</td></tr>
+<tr><td>Green</td><td>~0.1 (cut from ~0.5)</td></tr>
+<tr><td>Blue</td><td>~0.75 (kept — the stock blue anchor)</td></tr>
+<tr><td>End</td><td>all channels to 0 — keep the dim-to-black ending intact</td></tr>
+</tbody>
+</table>
+<p>Because these emitters are additive, only the color tracks matter — the Alpha track has no effect, and brightness <em>is</em> the color. Keep the <code>ripple</code> ring a touch brighter (try Red <code>~0.7</code>) so the core of the impact reads as energy, and let <code>splash</code> sit slightly dimmer (Red <code>~0.5</code>) as the softer outer kick. If everything becomes the same flat purple, widen that brightness gap between the two.</p>
 <figure class="guide-media" aria-label="Show changing the shield impact color to an obvious purple variant."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-04-recolor-purple.mp4" data-poster="tutorial-04-recolor-purple-poster.jpg"></video></figure>
 <h2 id="4-preserve-the-impact-shape">4. Preserve the Impact Shape</h2>
 <p>After recoloring, watch the effect in motion. A shield impact should still feel like a hit: quick arrival, strong center, expanding or fading energy, then a clean disappearance.</p>
@@ -161,8 +169,8 @@ End:   all channels to 0 — keep the dim-to-black ending intact
 <p>Use the Preview Viewport camera to look at the effect from different angles. A shield impact is not just a ball of light. It should imply a plane or surface being struck.</p>
 <p>Look for the direction of the bright face, ring, or splash. From the front, the impact should read as a hit on a shield surface. From the side, you should be able to tell whether the effect is too flat, too thick, or misaligned for the context you imagine.</p>
 <h3 id="note-link-particles-to-the-impact-instance">Note: Link Particles to the Impact Instance</h3>
-<p>For impact-style particles, select emitters that should follow the impact orientation and check <code>Link particles to instance</code> in the Basic tab's Connection section. This is separate from the <code>Parent speed inherit</code> control used in Tutorial 3.</p>
-<p>When you study a shipped directional effect, check which axis its important motion points along — select each emitter and read its Initial speed values in the Physics tab. In this particle the answer is unambiguous: the splash launches along <strong>positive Z</strong> (its speed Box reaches from zero to <code>+20</code> on Z only), and the ripple lies flat in the X/Y plane facing the same +Z direction. That is the stock convention — the effect's &quot;outward&quot; is +Z, and the game orients that axis away from the struck surface, back toward where the projectile came from. Author your own directional effects along the same axis and they will orient in game the way the stock ones do.</p>
+<p>For impact-style particles, you can check <code>Link particles to instance</code> in the Basic tab's Connection section on emitters that should ride with the impact instance as it moves. This checkbox makes already-spawned particles move with the effect instance's position; it does not rotate them, and it is separate from the <code>Parent speed inherit</code> control used in Tutorial 3. The effect's <em>orientation</em> comes from how it is authored and placed, covered next — not from this checkbox.</p>
+<p>When you study a shipped directional effect, check which axis its important motion points along — select each emitter and read its Initial speed values in the Physics tab. In this particle the answer is unambiguous: the splash launches along <strong>positive Z</strong> (its speed Box reaches from zero to <code>+20</code> on Z only), and the ripple lies flat in the X/Y plane facing the same +Z direction. So the effect's &quot;outward&quot; is authored as +Z. Author your own directional effects along +Z to match the stock ones. The preview can't show how the game aligns that axis onto a struck surface, so test each new directional effect in game before relying on it.</p>
 <figure class="guide-media" aria-label="Show using Link particles to instance and rotating or framing the preview to understand shield-impact orientation."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-04-orient-preview.mp4" data-poster="tutorial-04-orient-preview-poster.jpg"></video></figure>
 <h2 id="6-final-preview-check">6. Final Preview Check</h2>
 <p>Watch the finished particle at a normal preview distance. The goal is a clear purple shield hit, not the loudest possible purple glow.</p>

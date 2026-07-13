@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -107,24 +109,34 @@
 <p>A lifetime curve for a value such as Red, Green, Blue, Alpha, Scale, Index, or Rotation. Tracks make particles change from start to death.</p>
 <h2 id="track-key">Track Key</h2>
 <p>A point on a track that pins a value at a moment of the particle's life. The Curve Editor fills in the values between keys using each key's interpolation (linear, smooth, or step).</p>
+<h2 id="channel">Channel</h2>
+<p>A single row in the Curve Editor's channel list — Red, Green, Blue, Alpha, Scale, Index, or Rotation. Selecting a channel row focuses its track for editing. The channel is the row you pick; the <a href="#track">track</a> is the curve it holds.</p>
 <h2 id="burst">Burst</h2>
 <p>A discrete release of particles, as opposed to a continuous stream. Bursts are the generation mode for one-off events such as flashes, impacts, and explosions.</p>
+<h2 id="continuous-stream">Continuous Stream</h2>
+<p>A generation mode that releases particles at a steady per-second rate for as long as the effect is active — the opposite of a burst. Right for ongoing effects like rising smoke or an engine trail.</p>
+<h2 id="weather-particle">Weather Particle</h2>
+<p>A generation mode for large-scale environmental effects such as rain and snow. Instead of emitting from a point, it fills a camera-following cube of space so the effect blankets the view.</p>
 <h2 id="root-emitter">Root Emitter</h2>
 <p>An emitter that plays on its own from the effect's origin. Stacking several root emitters is the standard way to build a layered effect.</p>
+<h2 id="render-order">Render Order</h2>
+<p>The order emitters draw in, set top-to-bottom in the Emitter Tree: the first draws first and each later emitter draws over the ones before it. It decides which layer appears on top when emitters overlap. (Heat-shimmer emitters are the exception — they draw in a separate pass.)</p>
 <h2 id="lifetime-child">Lifetime Child</h2>
-<p>A child emitter that emits continuously from each of its parent emitter's particles while that particle is alive — how a moving particle gets a trail.</p>
+<p>A child emitter attached to each of its parent's particles for as long as that particle is alive — how a moving particle gets a trail. It emits at its <em>own</em> rate (its own burst or continuous Generation setting), so how thick the trail is depends on the child's settings, not the parent's.</p>
 <h2 id="death-child">Death Child</h2>
 <p>A child emitter that fires once where each of its parent emitter's particles dies — how a particle gets an ending event, like a pop or flash.</p>
 <h2 id="link-group">Link Group</h2>
 <p>Several emitters joined so they share one design: an edit to any member propagates to all of them. Fields can be marked <em>exempt</em> in Link Group Settings to stay per-emitter. Used for identical copies of one emitter — like an explosion's debris chunks — that must stay editable as one.</p>
 <h2 id="minimum-lifetime-minimum-scale">Minimum Lifetime / Minimum Scale</h2>
 <p>Randomization parameters. Maximum lifetime is the designed value; Minimum lifetime (a percentage of it) lets each particle live a random span in between. Minimum scale does the same for size, scaling each particle's whole Scale curve by a random factor. The main tools for variety without extra emitters.</p>
+<h2 id="rotation-and-color-randomization">Rotation and Color Randomization</h2>
+<p>Further per-particle variety controls: <strong>Random rotation direction</strong> (spin each particle clockwise or counter-clockwise), <strong>Rotation average / Rotation variance</strong> (a random starting angle, active when <em>Fixed random rotation</em> is on), and <strong>Random color addition</strong> (a small random color offset per particle). Like Minimum lifetime and Minimum scale, they add variety without extra emitters.</p>
 <h2 id="tail">Tail</h2>
 <p>A built-in streak drawn behind a particle, enabled per emitter with <code>Has tail</code> and sized with <code>Tail length</code>. Used for projectile cores and glows.</p>
 <h2 id="parent-speed-inherit">Parent Speed Inherit</h2>
 <p>A Physics-tab percentage controlling how much of the spawning object's motion a particle keeps. Full inheritance rides along (projectile layers); zero stays put (muzzle flashes).</p>
 <h2 id="link-particles-to-instance">Link Particles to Instance</h2>
-<p>A Basic-tab Connection option that makes particles follow the orientation of the effect instance — used for directional impacts such as shield hits.</p>
+<p>A Basic-tab Connection option that makes already-spawned particles move with the effect instance as it moves. It follows position only — it does not rotate the particles — so it keeps them riding along with a moving instance rather than being left behind at the spawn point.</p>
 <h2 id="spawner">Spawner</h2>
 <p>The editor panel that repeats or launches the effect on demand, including with a chosen velocity, so brief or moving effects are easier to inspect.</p>
 <h2 id="texture-or-atlas">Texture or Atlas</h2>
@@ -139,10 +151,16 @@
 <p>A file placed directly in a mod's <code>Data</code> folder using the same internal path as a stock file.</p>
 <h2 id="modpath">Modpath</h2>
 <p>The launch argument that tells the game which mod folder to load.</p>
+<h2 id="mod-stack">Mod Stack</h2>
+<p>The ordered set of mods the editor loads assets from (the <em>Active load order</em> in the Mods menu). Higher entries override lower ones, so a loose file in your active mod replaces the stock version.</p>
+<h2 id="game-unit">Game Unit</h2>
+<p>The world-space unit the editor and game measure in. Sizes, speeds, and positions are in game units, so an effect authored at the right scale reads correctly in game.</p>
+<h2 id="skydome">Skydome</h2>
+<p>The background environment drawn behind the effect in the preview — the space or sky backdrop. Matching the skydome to the one the effect will appear against makes its brightness and color read truthfully.</p>
 <h2 id="hardpoint">Hardpoint</h2>
 <p>A damageable part of a unit, often with its own visuals, particles, and death effect.</p>
 <h2 id="damage_particles"><code>Damage_Particles</code></h2>
-<p>A hardpoint XML reference used for damage-state particle effects.</p>
+<p>In a hardpoint's XML, <code>Damage_Particles</code> does not name a particle file. It names the hardpoint bone whose damaged version appears after that hardpoint is destroyed.</p>
 <h2 id="death_explosion_particles"><code>Death_Explosion_Particles</code></h2>
 <p>An XML reference used for the particle effect that plays when something dies or explodes.</p>
 <h2 id="particles-xml"><code>Particles.xml</code></h2>
@@ -163,12 +181,17 @@
       <li class="lvl-2"><a href="#emitter">Emitter</a></li>
       <li class="lvl-2"><a href="#track">Track</a></li>
       <li class="lvl-2"><a href="#track-key">Track Key</a></li>
+      <li class="lvl-2"><a href="#channel">Channel</a></li>
       <li class="lvl-2"><a href="#burst">Burst</a></li>
+      <li class="lvl-2"><a href="#continuous-stream">Continuous Stream</a></li>
+      <li class="lvl-2"><a href="#weather-particle">Weather Particle</a></li>
       <li class="lvl-2"><a href="#root-emitter">Root Emitter</a></li>
+      <li class="lvl-2"><a href="#render-order">Render Order</a></li>
       <li class="lvl-2"><a href="#lifetime-child">Lifetime Child</a></li>
       <li class="lvl-2"><a href="#death-child">Death Child</a></li>
       <li class="lvl-2"><a href="#link-group">Link Group</a></li>
       <li class="lvl-2"><a href="#minimum-lifetime-minimum-scale">Minimum Lifetime / Minimum Scale</a></li>
+      <li class="lvl-2"><a href="#rotation-and-color-randomization">Rotation and Color Randomization</a></li>
       <li class="lvl-2"><a href="#tail">Tail</a></li>
       <li class="lvl-2"><a href="#parent-speed-inherit">Parent Speed Inherit</a></li>
       <li class="lvl-2"><a href="#link-particles-to-instance">Link Particles to Instance</a></li>
@@ -179,6 +202,9 @@
       <li class="lvl-2"><a href="#internal-path">Internal Path</a></li>
       <li class="lvl-2"><a href="#loose-override">Loose Override</a></li>
       <li class="lvl-2"><a href="#modpath">Modpath</a></li>
+      <li class="lvl-2"><a href="#mod-stack">Mod Stack</a></li>
+      <li class="lvl-2"><a href="#game-unit">Game Unit</a></li>
+      <li class="lvl-2"><a href="#skydome">Skydome</a></li>
       <li class="lvl-2"><a href="#hardpoint">Hardpoint</a></li>
       <li class="lvl-2"><a href="#damage_particles">`Damage_Particles`</a></li>
       <li class="lvl-2"><a href="#death_explosion_particles">`Death_Explosion_Particles`</a></li>

@@ -30,9 +30,10 @@ from the origin, while a child follows or reacts to each parent particle whereve
 Each emitter can have up to one child of each kind. Add them by right-clicking a parent emitter in
 the Emitter Tree:
 
-- **Add Lifetime Child** — a child that emits continuously *while each parent particle is alive*. It
-  travels with the parent particle, so it is how you put a trail on something that moves. If the
-  parent emits fast-moving sparks, a lifetime child can give each spark its own smoke trail.
+- **Add Lifetime Child** — a child attached to each parent particle *for as long as that particle
+  is alive*. It travels with the parent particle and emits at its own rate (its own Generation
+  setting), so it is how you put a trail on something that moves. If the parent emits fast-moving
+  sparks, a lifetime child can give each spark its own smoke trail.
 - **Add Death Child** — a child that fires *when each parent particle dies*. It bursts at the spot
   where the parent particle ended, so it is how you make an ending event. If the parent emits embers,
   a death child can pop a small flash as each ember burns out.

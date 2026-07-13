@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -98,8 +100,15 @@
       <article class="guide-article">
 <p class="guide-kicker">Start Here <span class="kicker-count">· 2 of 5</span></p>
 <h1 id="setup">Setup</h1>
-<p>The tutorial course assumes you already have Particle Editor installed.</p>
+<p>This course assumes you already have <strong>Particle Editor built and running</strong> on your machine, and that you have a copy of <em>Star Wars: Empire at War — Forces of Corruption</em> installed. (If you still need to build the editor, follow the build-and-run instructions in the project's README / CONTRIBUTING guide first — this page picks up once the editor opens.)</p>
 <p>The editor automatically locates the game install and mod folders. The tutorials use a small loose file mod called <code>ParticleTutorial</code> so every edit is easy to find and easy to remove.</p>
+<h2 id="find-your-game-install">Find Your Game Install</h2>
+<p>Everything below lives inside your Forces of Corruption install. The folder you want is <code>corruption</code> — it holds <code>swfoc.exe</code> (the game executable) and the game's <code>Data\</code> folder. Common locations:</p>
+<ul>
+<li><strong>Steam:</strong> right-click <em>Star Wars: Empire at War — Gold Pack</em> in your library → <strong>Manage → Browse local files</strong>, then open the <code>corruption</code> folder. A typical path is <code>...\steamapps\common\Star Wars Empire at War Gold Pack\corruption</code>.</li>
+<li><strong>Disk / GOG installs:</strong> wherever you installed the game, e.g. <code>C:\Games\...\corruption</code>.</li>
+</ul>
+<p>If you are unsure, search your drive for <code>swfoc.exe</code> — the folder it sits in is your <code>corruption</code> folder.</p>
 <h2 id="create-the-tutorial-mod-folder">Create the Tutorial Mod Folder</h2>
 <p>Create this folder under your Forces of Corruption install:</p>
 <pre><code class="language-text">corruption\Mods\ParticleTutorial\Data\Art\Models\
@@ -110,7 +119,14 @@
 <p>When a particle file is placed there, the game can load it as a loose override.</p>
 <!-- Media (planned): ref-mod-folder-tree -->
 <h2 id="extract-shipped-particle-files">Extract Shipped Particle Files</h2>
-<p>Most stock particles are packed inside the game's <code>.meg</code> archives, especially <code>Models.meg</code>. The editor works on loose <code>.alo</code> files, so a shipped particle has to be extracted to disk before you can open and edit it. Use an external MEG archive tool such as <a href="https://modtools.petrolution.net/tools/MegEditor">MEG Editor</a> to extract the files used by these tutorials.</p>
+<p>Most stock particles are packed inside the game's <code>.meg</code> archives, especially <code>Models.meg</code>. The editor works on loose <code>.alo</code> files, so a shipped particle has to be extracted to disk before you can open and edit it. You do this once, with an external MEG archive tool:</p>
+<ol>
+<li>Download and open an external MEG tool such as <a href="https://modtools.petrolution.net/tools/MegEditor">MEG Editor</a>.</li>
+<li>In it, open the game's <code>Models.meg</code> — it is in your <code>corruption\Data\</code> folder.</li>
+<li>Find the file you need by its internal path (use the tool's search or file list). For the first two tutorials that is <code>DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO</code>.</li>
+<li>Extract it to disk, <strong>keeping its original filename</strong> (<code>P_HP_IMPERIAL_DAMAGE.ALO</code>).</li>
+<li>Copy the extracted file into your tutorial mod folder at the matching path (shown below).</li>
+</ol>
 <p>For the first two tutorials, extract:</p>
 <pre><code class="language-text">DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO
 </code></pre>
@@ -122,9 +138,18 @@
 </code></pre>
 <p>Then place it beside the hardpoint damage particle in the same <code>Art\Models</code> folder.</p>
 <h2 id="open-the-tutorial-mod-in-the-editor">Open the Tutorial Mod in the Editor</h2>
-<p>Launch Particle Editor and choose the tutorial mod when you open files. The editor normally finds the game install and mod folders automatically. Your job is to keep the loose file path consistent with the game's <code>DATA</code> layout.</p>
+<ol>
+<li>Launch Particle Editor.</li>
+<li>Open the <strong>Mods</strong> menu and use <strong>Add mod…</strong> to add <code>ParticleTutorial</code> — it then appears in the <strong>Active load order</strong>. (The editor auto-detects mods in your game install; if <code>ParticleTutorial</code> is not listed, choose <strong>Refresh Mod List</strong> first. If it still does not appear, the editor is likely pointed at a different game install than the one where you made the mod folder — confirm the folder really sits at <code>corruption\Mods\ParticleTutorial\</code> under that install.) You can review or reorder the whole stack with the <strong>Expand to full editor</strong> button in the Mods menu, which opens</li>
+</ol>
+<p>the <strong>Mod Load Order</strong> dialog.</p>
+<ol>
+<li>Open your particle file with <strong>File → Open…</strong> (Ctrl+O). With the tutorial mod active in the load order, the editor reads your loose override from it.</li>
+</ol>
+<p>Throughout, keep the loose file path consistent with the game's <code>DATA</code> layout so the override lines up with the stock asset.</p>
 <h2 id="launch-the-game-with-the-tutorial-mod">Launch the Game with the Tutorial Mod</h2>
-<p>A mod folder does nothing on its own — the game only loads it when launched with a <code>Modpath</code> argument naming it. This is the step that makes Tutorial 1's in-game check work.</p>
+<blockquote><strong>The most common miss.</strong> A mod folder does nothing on its own — the game only loads it when launched with a <code>Modpath</code> argument naming it. If your edit looks right on disk but never shows up in game, this is almost always why.</blockquote>
+<p>This is the step that makes Tutorial 1's in-game check work.</p>
 <p><strong>Steam:</strong> right-click <em>Star Wars Empire at War: Forces of Corruption</em> in your library, open <strong>Properties</strong>, and put this in the launch options:</p>
 <pre><code class="language-text">MODPATH=Mods\ParticleTutorial
 </code></pre>
@@ -143,6 +168,7 @@
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>
+      <li class="lvl-2"><a href="#find-your-game-install">Find Your Game Install</a></li>
       <li class="lvl-2"><a href="#create-the-tutorial-mod-folder">Create the Tutorial Mod Folder</a></li>
       <li class="lvl-2"><a href="#extract-shipped-particle-files">Extract Shipped Particle Files</a></li>
       <li class="lvl-2"><a href="#open-the-tutorial-mod-in-the-editor">Open the Tutorial Mod in the Editor</a></li>

@@ -91,7 +91,7 @@ guide's "open something stock and study it" advice works in practice.
 While you are looking, notice two other things about this emitter — both come back in later
 tutorials:
 
-- **It streams; it doesn't burst.** The Generation mode is Continuous at 5 particles/second,
+- **It streams; it doesn't burst.** The generation is a Continuous stream at 5 particles/second,
   because damage smoke should pour out for as long as the hardpoint is damaged. One-off events
   (explosions, muzzle flashes) use Bursts instead — that contrast is
   [Particle Generation Types](generation-types).
@@ -108,9 +108,11 @@ time:
 4. Repeat for the **Red** channel: focus it, select its key at 0%, set the value to `0.05`.
 5. Leave **Green** at `1.0`, and leave Alpha alone so the smoke stays readable.
 
-If a channel has more keys later in its lifetime, bring them down the same way — the goal is for
-green to dominate from start to death. Watch the Preview Viewport as you go: the smoke should
-turn a loud, saturated green.
+The Red and Blue tracks each carry two more keys — one around 50% and one at the end (both near
+`0.255` in the stock file). Select each of those and set it to `0.05` too, so green dominates from
+start to death; if you leave them, the smoke drifts back toward blue-white over its life as those
+later keys pull the color up. Watch the Preview Viewport as you go: the smoke should turn a loud,
+saturated green.
 
 This is deliberately exaggerated. Later tutorials will bring the effect back toward a believable
 game-art style.
@@ -138,7 +140,8 @@ to make a genuinely separate particle instead of overriding an existing one, use
 editor so the file and internal particle identity are saved intentionally.
 
 A separate particle also needs to be referenced somewhere the game can reach it. Common routes are
-game XML/`Particles.xml` entries or an Alamo proxy placed in an `.alo` model.
+game XML / `Particles.xml` entries or an Alamo proxy placed in an `.alo` model — both defined in the
+[Game Concepts Glossary](game-concepts-glossary).
 
 ## 5. Verify the Result In Game
 

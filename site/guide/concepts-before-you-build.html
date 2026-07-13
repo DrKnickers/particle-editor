@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Troubleshooting — Particle Editor guide</title>
+  <title>Concepts Before You Build — Particle Editor guide</title>
   <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
        inline rules cover the frames before styles.css arrives — kills the white flash on
        navigation / view transitions. The @view-transition opt-in and the dark backstop across
@@ -74,7 +74,7 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
-      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./concepts-before-you-build.html" class="active" aria-current="page">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
@@ -91,65 +91,56 @@
       <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
       <li><a href="./file-structure.html">File Structure</a></li>
       <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
-      <li><a href="./troubleshooting.html" class="active" aria-current="page">Troubleshooting</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
       <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
       </ul>
     </div>
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Reference <span class="kicker-count">· 8 of 9</span></p>
-<h1 id="troubleshooting-why-can-t-i-see-my-effect">Troubleshooting: Why Can't I See My Effect?</h1>
-<p>The fixes for &quot;nothing is showing&quot; live in several different places — the viewport, the emitter settings, the file path, the game launch. This page collects them in the order worth checking.</p>
-<h2 id="nothing-appears-in-the-preview-viewport">Nothing Appears in the Preview Viewport</h2>
-<p>Loading a particle does not, by itself, play it in the viewport.</p>
-<ul>
-<li><strong>Hold Shift.</strong> The effect spawns at the cursor and follows it while Shift is held. Click while holding Shift to drop a copy that keeps playing. This is the single most missed control in the editor — see <a href="./basic-controls.html">Basic Editor Controls</a>.</li>
-<li><strong>Use the Spawner</strong> to repeat the effect automatically while you work, which is easier than holding Shift for a long tuning session.</li>
-<li><strong>Brief effects are easy to miss.</strong> A one-burst flash plays once and is gone; use the Spawner to re-trigger it.</li>
-</ul>
-<h2 id="the-effect-plays-but-is-nearly-invisible">The Effect Plays but Is Nearly Invisible</h2>
-<ul>
-<li><strong>Additive blending makes dark colors disappear.</strong> Additive only ever brightens the scene, so a black or near-black additive particle draws nothing. Either brighten the color or switch to Transparent blending — see <a href="./blend-modes.html">Blend Modes</a>.</li>
-<li><strong>Check the Alpha track.</strong> If alpha is at or near zero across the lifetime, the particle is there but transparent. See <a href="./curve-editor-basics.html">Curve Editor Basics</a>.</li>
-<li><strong>Check the Scale track.</strong> A scale near zero renders the particle too small to see; a huge scale can also read as nothing when the camera is inside the effect. Zoom out.</li>
-<li><strong>Check emitter visibility.</strong> Emitters can be hidden in the Emitter Tree; a hidden emitter keeps its settings but draws nothing.</li>
-</ul>
-<h2 id="an-edit-doesn-t-show-up-in-the-preview">An Edit Doesn't Show Up in the Preview</h2>
-<ul>
-<li><strong>A bump effect shows no shading? Check its texture.</strong> Bump map needs a usable normal texture (the image that controls how light falls across the particle); Decal bump map uses the color texture instead. A missing or flat texture produces little or no visible shading — see <a href="./blend-modes.html">Blend Modes</a>.</li>
-<li><strong>Physics fields grayed out?</strong> Weather particle mode disables most of the Physics tab — see <a href="./motion-and-physics.html">Motion and Physics</a>.</li>
-</ul>
-<h2 id="the-edit-works-in-the-editor-but-not-in-the-game">The Edit Works in the Editor but Not in the Game</h2>
-<p>Work through these in order:</p>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 3 of 7</span></p>
+<h1 id="concepts-before-you-build">Concepts Before You Build</h1>
+<p>Tutorials 1 and 2 changed an effect that already existed — you adjusted colors and curves on a particle that was handed to you. From Tutorial 3 on, you build effects <strong>from a blank file</strong>. That is a bigger jump than it sounds: with nothing on screen, you have to decide what every emitter is and does before anything appears.</p>
+<p>This short page is the bridge. It is not new reference material — it is the handful of decisions you now have to make yourself, each pointing at the fuller page that covers it. Read it once, then keep those pages open as you build.</p>
+<h2 id="the-model-in-one-line">The Model, in One Line</h2>
+<p>You already met the chain in the <a href="./particle-authoring-primer.html">Particle Authoring Primer</a>: a system holds emitters, each emitter spawns many short-lived particles, and each particle draws a texture, changes over its life via tracks, and blends with the scene. Building from scratch is just <em>filling that chain in</em>, one emitter at a time.</p>
+<h2 id="three-decisions-every-new-emitter-needs">Three Decisions Every New Emitter Needs</h2>
+<p>When you add a blank emitter, you are really answering three questions:</p>
 <ol>
-<li><strong>Was the game launched with the mod?</strong> A mod folder does nothing unless the game is started with its Modpath — see <a href="./setup.html">Setup</a>. This is the most common miss: everything on disk is correct, but the game was launched plain and loaded only stock files.</li>
-<li><strong>Does the loose path match the internal path exactly?</strong> The override only works when the file sits at the same path the game uses internally:<pre><code class="language-text">Stock internal path: DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO
-Mod loose path:      Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
-</code></pre>A typo in any folder name, or the file landing one level too deep or too shallow, silently loses the override. See <a href="./file-structure.html">File Structure</a>.</li>
-<li><strong>Is the right thing being damaged/fired in game?</strong> A hardpoint damage particle only plays once a hardpoint reaches its damage state; a death explosion only plays on death. Make sure the moment you are watching for is actually the moment that references your particle — see <a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a>.</li>
-<li><strong>Did you save the file you think you saved?</strong> Check the titlebar for the open filename and an unsaved-changes marker, and confirm the file's modified time on disk.</li>
+<li><strong>How does it release particles?</strong> Once, in a burst? Or continuously, in a stream? An impact or flash is a burst; rising smoke or a trail is continuous. This is the emitter's <em>generation type</em> — see <a href="./generation-types.html">Particle Generation Types</a>.</li>
+<li><strong>How do its particles move and look?</strong> Their launch direction and speed, any acceleration or gravity, the texture they draw, and the blend mode that mixes them with the scene. Motion lives in <a href="./motion-and-physics.html">Motion and Physics</a>; mixing lives in <a href="./blend-modes.html">Blend Modes</a>.</li>
+<li><strong>How does it change over each particle's life?</strong> The Alpha, Scale, Color, and other tracks that make a particle fade, grow, or shift color from birth to death — see <a href="./curve-editor-basics.html">Curve Editor Basics</a>.</li>
 </ol>
-<h2 id="related-pages">Related Pages</h2>
-<ul>
-<li><a href="./basic-controls.html">Basic Editor Controls</a> — Shift preview, camera, selection.</li>
-<li><a href="./setup.html">Setup</a> — mod folder layout and launching the game with the mod.</li>
-<li><a href="./file-structure.html">File Structure</a> — internal paths and loose overrides.</li>
-</ul>
+<h2 id="a-worked-example">A Worked Example</h2>
+<p>Say you want a <strong>rising column of engine smoke</strong>. Filling in the three decisions for its one emitter looks like this:</p>
+<table>
+<thead>
+<tr><th>Decision</th><th>Choice for engine smoke</th></tr>
+</thead>
+<tbody>
+<tr><td>How it releases</td><td>Continuous stream — it keeps going while the engine runs</td></tr>
+<tr><td>Texture + blend</td><td>A soft smoke texture, Transparent blend</td></tr>
+<tr><td>How it moves</td><td>A gentle upward push (negative gravity or a small +Z acceleration), little sideways spread</td></tr>
+<tr><td>How it changes</td><td>Alpha fades in then out; Scale grows as the smoke rises and disperses</td></tr>
+</tbody>
+</table>
+<p>That is one emitter's plan. A finished effect is a few of these, each with its own filled-in row.</p>
+<h2 id="how-layers-combine">How Layers Combine</h2>
+<p>A finished effect is almost never one emitter. You stack several, each with one clear job — a flash, a fireball, smoke, sparks — and their draw order (top to bottom in the Emitter Tree) decides what shows over what. When to stack siblings versus attach a child is covered in <a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a>.</p>
+<p>Keep those five pages within reach. With the model above in mind, the from-scratch tutorials become a matter of <em>filling in the three decisions</em> for each emitter you add — not inventing from nothing.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./where-particles-are-used-in-game.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Where Particles Are Used In-Game</span></a>
-        <a class="pager-next" href="./game-concepts-glossary.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Game Concepts Glossary</span></a>
+        <a class="pager-prev" href="./02-polish-hardpoint-damage-smoke.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">2. Polish Hardpoint Damage Smoke</span></a>
+        <a class="pager-next" href="./03-build-a-laser-shot-and-muzzle-flash.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">3. Build a Laser Shot and Muzzle Flash</span></a>
       </nav>
     </main>
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>
-      <li class="lvl-2"><a href="#nothing-appears-in-the-preview-viewport">Nothing Appears in the Preview Viewport</a></li>
-      <li class="lvl-2"><a href="#the-effect-plays-but-is-nearly-invisible">The Effect Plays but Is Nearly Invisible</a></li>
-      <li class="lvl-2"><a href="#an-edit-doesn-t-show-up-in-the-preview">An Edit Doesn't Show Up in the Preview</a></li>
-      <li class="lvl-2"><a href="#the-edit-works-in-the-editor-but-not-in-the-game">The Edit Works in the Editor but Not in the Game</a></li>
-      <li class="lvl-2"><a href="#related-pages">Related Pages</a></li>
+      <li class="lvl-2"><a href="#the-model-in-one-line">The Model, in One Line</a></li>
+      <li class="lvl-2"><a href="#three-decisions-every-new-emitter-needs">Three Decisions Every New Emitter Needs</a></li>
+      <li class="lvl-2"><a href="#a-worked-example">A Worked Example</a></li>
+      <li class="lvl-2"><a href="#how-layers-combine">How Layers Combine</a></li>
       </ul>
     </nav>
   </div>

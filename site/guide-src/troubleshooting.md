@@ -29,9 +29,11 @@ Loading a particle does not, by itself, play it in the viewport.
 
 ## An Edit Doesn't Show Up in the Preview
 
-- **Bump map and Decal bump map need the normal texture.** If that texture is missing or flat,
-  these modes have nothing to shade against — see [Blend Modes](blend-modes).
-- **Physics fields grayed out?** Weather generation disables most of the Physics tab — see
+- **A bump effect shows no shading? Check its texture.** Bump map needs a usable normal texture
+  (the image that controls how light falls across the particle); Decal bump map uses the color
+  texture instead. A missing or flat texture produces little or no visible shading — see
+  [Blend Modes](blend-modes).
+- **Physics fields grayed out?** Weather particle mode disables most of the Physics tab — see
   [Motion and Physics](motion-and-physics).
 
 ## The Edit Works in the Editor but Not in the Game

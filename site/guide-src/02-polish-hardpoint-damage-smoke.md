@@ -44,12 +44,15 @@ source — and the stock file itself tells you where "believable" lives: before 
 edit, all three of its color channels converged to a dark neutral `0.255` by the end of the life.
 Think in terms of a dark neutral base:
 
-```text
-Red:   low to medium-low
-Green: low to medium-low
-Blue:  low to medium-low
-End:   all three channels converging — smoke cools into one gray
-```
+| Parameter | Value |
+|---|---|
+| Red | ~0.28 (a hair warmer than the others) |
+| Green | ~0.25 |
+| Blue | ~0.22 |
+| End | all three converging to ~0.25 — smoke cools into one gray |
+
+(These are dark-gray targets — well below the stock's bright `0.5–1.0` start. The exact numbers
+are not sacred; keep them low and close together.)
 
 The convergence matters as much as the darkness: early in the life the channels can differ (that
 is the next section's warm tint), but by death they should meet at the same value, because aged
@@ -66,7 +69,9 @@ Hardpoint damage usually implies heat, sparks, or fire somewhere inside the dama
 lighting by making the early smoke slightly warmer, then letting it cool as it ages.
 
 In the Curve Editor, adjust the color near the start of the smoke lifetime so it has a small red or
-orange bias. Keep the later part of the lifetime closer to neutral gray.
+orange bias — at the `0%` key push Red up to about `0.35` while keeping Green and Blue near `0.22`.
+Keep the later part of the lifetime closer to neutral gray, letting all three channels meet around
+`0.25` by the midpoint.
 
 This does not need to become flame. A subtle warm tint is enough to connect the smoke to the damage
 source.
@@ -78,11 +83,11 @@ Use the Alpha track to make the smoke fade out — this is the worked example fr
 its value to zero. But look at the stock file's own Alpha curve before writing yours, because it
 does something the naive version misses — it fades **in** as well as out:
 
-```text
-0%:    0            (invisible at birth)
-~10%:  peak         (fully faded in)
-100%:  0            (fully dispersed)
-```
+| Point in life | Alpha | Meaning |
+|---|---|---|
+| 0% | 0 | invisible at birth |
+| ~10% | ~0.58 | peak — fully faded in; this is the stock file's own peak value |
+| 100% | 0 | fully dispersed |
 
 Both ends matter, for different reasons. Smoke that fades out feels like it disperses; smoke that
 simply stops feels switched off. And smoke that starts at full opacity *pops* into existence —
@@ -100,11 +105,11 @@ smoke is spreading away from the damage source.
 The shape does not need to be dramatic — the stock emitter grows from `25` to `40` across its
 whole eight-second life, a gentle 60% swell:
 
-```text
-Start:      compact
-Middle:     wider
-End:        widest, but fading out
-```
+| Point in life | Scale |
+|---|---|
+| Start | compact |
+| Middle | wider |
+| End | widest, but fading out |
 
 Preview the color, alpha, and scale together. These controls work as a group: darker smoke may need
 more alpha, larger smoke may need a softer fade, and a warmer start color may need a shorter visible
@@ -128,7 +133,8 @@ and you will find every one of these in use:
   whole Scale curve is multiplied by a random factor between this percentage and 100%. The stock
   smoke uses `75%` — family-resembling puffs, no two identical.
 - **Random rotation direction** (Appearance tab, Rotation section) plus a small value on the
-  **Rotation** track. Each particle spins slowly, half of them clockwise and half counter-
+  **Rotation** track (try around `0.2`, easing toward `0`). Each particle spins slowly, half of
+  them clockwise and half counter-
   clockwise, so the cloud churns instead of holding one frozen orientation. (The **Rotation
   average/variance** spinners next to it serve a different purpose — a random *starting angle*,
   rolled as the average scaled by ± the variance, used when **Fixed random rotation** is checked;

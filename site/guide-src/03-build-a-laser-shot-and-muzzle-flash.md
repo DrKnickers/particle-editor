@@ -48,14 +48,21 @@ A new particle starts with one default emitter — that becomes the moving laser
 the Emitter Tree and rename it in the **Name** field at the top of the **Basic** tab. A clear name
 such as `Projectile_Core` makes it easy to separate from the muzzle flash emitters later.
 
-For the visual target, think narrow, bright, and short-lived:
+For the visual target, think narrow, bright, and short-lived. These are starter values — tune them
+in the preview, they are not a fixed recipe:
 
-```text
-Color:       bright green
-Blend mode:  additive
-Lifetime:    short
-Scale:       narrow enough to read as a shot, not a cloud
-```
+| Parameter | Value |
+|---|---|
+| Color | bright green — R 0.15 / G 1.0 / B 0.25 |
+| Blend mode | Additive |
+| Lifetime | ~0.3s (Maximum lifetime) |
+| Scale | narrow — around 3 (a tight bolt, not a cloud) |
+| Generation | Continuous stream, ~10 particles/second (a steady bolt) |
+| Texture | the default master atlas (a soft round dot) |
+
+Keep the rate low: because these are additive, overlapping particles *sum*, so a dense stream of
+full-green cores clips to a shapeless white line. If the bolt whites out, lower the rate or bring
+the green value down until the green reads again.
 
 The blend mode lives in the **Appearance** tab's Rendering section — Additive is the right choice
 for anything that glows (see [Blend Modes](blend-modes)). Lifetime is set with the Minimum/Maximum
@@ -69,7 +76,8 @@ of the shot.
 ## 2. Use the Built-In Tail on the Core
 
 With `Projectile_Core` still selected, use the Tail section in the Property Panel. Enable `Has tail`
-and adjust `Tail length` until the shot has a clear streak behind it.
+and adjust `Tail length` (start around `5` and raise it) until the shot has a clear streak behind
+it — long enough to read as motion, short enough that the bolt still has a defined head.
 
 The tail should support the core rather than overpower it. If the whole effect becomes a glowing
 block, shorten the tail, reduce the scale, or dim the color. (The core is additive, so lowering
@@ -78,9 +86,11 @@ not a solid rectangle.
 
 ## 3. Add the Projectile Glow
 
-Add a second projectile emitter: right-click in the Emitter Tree and choose **New Root Emitter**
-(the tree's **+** button and the Emitters menu offer the same choice). Name it something like
-`Projectile_Glow`. This emitter should be
+Add a second projectile emitter — a **root emitter**, one that plays on its own from the effect's
+origin (as opposed to a *child* emitter, which hangs off another emitter's particles; see
+[Stacking Emitters and Using Children](stacking-emitters-and-children)). Add it from the **Emitters**
+menu → **New Emitter → Root Emitter** (right-clicking in the Emitter Tree offers the same choice).
+Name it something like `Projectile_Glow`. This emitter should be
 slightly wider, softer, and less intense than the core. It gives the shot presence without replacing
 the crisp center.
 
@@ -108,12 +118,15 @@ glow tails should travel together instead of being left behind at the spawn poin
 
 ## 5. Launch Test Instances with the Spawner
 
-Open the Spawner panel and use it to preview the projectile as a launched particle instance rather
-than a static loop. Start with `Manual` mode so each test spawn is deliberate.
+Open the Spawner panel (**Emitters** menu → **Spawner**, or **F7** — see the
+[App UI Quick Reference](app-ui-quick-reference)) and use it to preview the projectile as a launched
+particle instance rather than a static loop. Start with `Manual` mode so each test spawn is
+deliberate.
 
-Set the Velocity fields to launch the particle in a clear direction. For example, put a positive
-value in `Velocity X` and leave `Velocity Y` and `Velocity Z` near zero. Higher velocity values make
-the shot move faster; lower values make it easier to inspect the tail.
+Set the Velocity fields to launch the particle in a clear direction. For example, set
+`Velocity X` to about `50` (units per second) and leave `Velocity Y` and `Velocity Z` at `0`, so
+the shot travels straight along one axis. Higher X values make the shot move faster; lower values
+(try `20`) make it easier to inspect the tail.
 
 Use `Spawn now` to fire a test instance. If the shot is hard to read in motion, adjust the core,
 glow, tail length, or velocity and spawn another instance.
@@ -125,21 +138,34 @@ glow, tail length, or velocity and spawn another instance.
 Add a new emitter for the bright center of the muzzle flash. Keep the name direct, such as
 `Muzzle_Core`, so the Emitter Tree shows the two ideas clearly:
 
-```text
-Projectile_Core:      moving shot core and tail
-Projectile_Glow:      softer projectile glow and tail
-Projectile_Glow_Soft: faint wide halo around the shot
-Muzzle_Core:          white-hot launch flash
-```
+| Emitter | Role |
+|---|---|
+| Projectile_Core | moving shot core and tail |
+| Projectile_Glow | softer projectile glow and tail |
+| Projectile_Glow_Soft | faint wide halo around the shot |
+| Muzzle_Core | white-hot launch flash |
 
 Make this emitter very short-lived, bright, and compact. A white or nearly white core works well
-because it reads as the hottest part of the flash.
+because it reads as the hottest part of the flash. Starter values:
+
+| Parameter | Value |
+|---|---|
+| Lifetime | ~0.1s |
+| Scale | compact — around 10 |
+| Blend mode | Additive |
+| Generation | Bursts — 1 burst, 1–2 particles |
+| Color | near-white with a green tint — R 0.6 / G 1.0 / B 0.6, peaking within the first 10% then decaying to black |
+
+Keep the particle count tiny here (one or two). These muzzle layers are additive and will overlap
+the projectile and each other at the launch point; more particles just sum toward the shapeless
+white square the section below warns about.
 
 Shape the brightness with the color tracks rather than a constant: start the channels at zero,
 peak them early — within the first tenth of the life — and let them decay to black. This
-fast-in, slow-out envelope is how the shipped effects handle every flash-like event (the
-explosion example in [Tutorial 5](05-build-an-explosion) peaks its flash at 10% too): the pop
-reads as an *event* with attack and decay rather than a sprite switching on and off. And since
+fast-in, slow-out envelope is a reliable way to make a flash read well, and you will see it in
+shipped flash effects (the explosion example in [Tutorial 5](05-build-an-explosion) peaks its
+flash at 10% too): the pop reads as an *event* with attack and decay rather than a sprite
+switching on and off. And since
 several additive layers will overlap at the launch point, keep each layer's peak modest — additive
 layers sum, and stacked layers at full brightness clip to a shapeless white square.
 
@@ -166,9 +192,12 @@ off without making it bigger in feel.
 Set `Parent speed inherit` near zero on both muzzle flash emitters, one at a time in the Property
 Panel, so the flash stays close to the launch point.
 
-This is the main distinction in the tutorial. The projectile core and projectile glow ride the
-projectile. Muzzle flash emitters do not. If the flash stretches into a long streak, shorten its
-lifetime, reduce its scale, or lower its parent-speed inheritance.
+> **The one idea to remember here.** `Parent speed inherit` is what separates a *moving* layer from
+> a *staying* one. The projectile core and glow ride the shot (near-full inheritance); the muzzle
+> flash stays at the launch point (near-zero). Same control, opposite settings.
+
+If the flash stretches into a long streak, shorten its lifetime, reduce its scale, or lower its
+parent-speed inheritance.
 
 <!-- Media: tutorial-03-no-parent-speed -->
 

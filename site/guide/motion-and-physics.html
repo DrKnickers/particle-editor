@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -126,33 +128,33 @@
 <p>&quot;Everything flies away from the center&quot; can be built two different ways, and they read differently on screen:</p>
 <ul>
 <li><strong>Random-direction spray</strong> — put the Sphere on <strong>Initial speed</strong>. Each particle rolls its own direction, unrelated to where it was born. The result is chaotic and lively: embers, sparks, splinters. This is how Tutorial 5's sparks work.</li>
-<li><strong>Radial launch</strong> — put the Sphere on <strong>Initial position</strong> with <code>Constrain to surface</code> checked, then drive the speed with a large <em>negative</em> <strong>Inward speed</strong> (see below). Each particle is born on a shell and pushed straight along the line from the center through its own birth point — every path is dead-straight and radial, like shrapnel. This is how Tutorial 5's debris works.</li>
+<li><strong>Radial launch</strong> — put the Sphere on <strong>Initial position</strong> with <code>Constrain to surface</code> checked, then drive the speed with a large <em>negative</em> <strong>Inward speed</strong> (see below). Each particle is born on a shell and pushed straight along the line from the center through its own birth point — and as long as nothing else bends it (leave <strong>Initial speed</strong> at its default and add no acceleration or gravity), every path is dead-straight and radial, like shrapnel. This is how Tutorial 5's debris works — though it adds a little Initial-speed scatter so the chunks aren't <em>perfectly</em> radial.</li>
 </ul>
 <p>The spray randomizes <em>direction</em>; the radial launch locks direction to <em>birth position</em>. Choose by what the layer represents: burning fragments scatter, thrown wreckage flies straight.</p>
 <h2 id="initial-speed-extras">Initial Speed Extras</h2>
 <ul>
 <li><strong>Inward speed:</strong> adds motion along the line between each particle and the emitter's center. A positive value pulls particles inward — useful for implosion or intake effects. A negative value pushes them outward, on top of whatever the speed shape rolled.</li>
-<li><strong>Parent speed inherit:</strong> how much of the spawning object's motion the particle keeps, from 0 to 100%. Tutorial 3 covers the classic use: projectile layers at full inheritance ride the shot; muzzle-flash layers at zero stay at the launch point.</li>
-<li><strong>Affected by wind:</strong> lets the scene's wind push the particles.</li>
+<li><strong>Parent speed inherit:</strong> sets how much of the parent's motion continues to affect each particle, from 0 to 100%. It keeps affecting the particle after launch — it is not just an initial speed. Tutorial 3 covers the classic use: projectile layers at full inheritance ride the shot; muzzle-flash layers at zero stay at the launch point.</li>
+<li><strong>Affected by wind:</strong> adds the scene's wind to each particle's launch speed — a one-time nudge at birth, not a force that keeps pushing over the particle's life.</li>
 </ul>
 <h2 id="acceleration">Acceleration</h2>
 <p>Where Initial speed sets motion once at start, the Acceleration section bends it continuously:</p>
 <ul>
 <li><strong>X / Y / Z:</strong> a constant push in a fixed direction. The everyday use is a small +Z value to make smoke rise.</li>
 <li><strong>Gravity acceleration:</strong> a single number that scales a built-in straight-down push. <code>1</code> is a standard downward pull; <code>0</code> is weightless; and a <strong>negative value pushes up</strong> — the idiomatic way to make hot smoke and fire rise (Tutorial 5's smoke uses <code>-0.9</code>) without configuring an acceleration vector by hand. Give debris a little positive gravity and its straight radial flight becomes an arc.</li>
-<li><strong>Inward acceleration:</strong> like Inward speed, but applied continuously — particles curve toward the emitter (positive) or away from it (negative) over their whole life.</li>
-<li><strong>Object space acceleration:</strong> applies the X/Y/Z push in the emitter's own orientation instead of world directions, so the push turns with the object the effect is attached to.</li>
+<li><strong>Inward acceleration:</strong> like Inward speed, but applied continuously — it keeps bending a particle along the line between its birth point and the emitter center. Positive values bend it inward; negative values bend it outward. That direction is set at birth, so it does not chase a moving emitter.</li>
+<li><strong>Object space acceleration:</strong> intended to make the X/Y/Z acceleration turn with the emitter instead of staying fixed in world directions. The editor preview currently ignores this option, so for motion you can preview here, use ordinary X/Y/Z acceleration instead.</li>
 </ul>
 <h2 id="ground-interaction">Ground Interaction</h2>
 <p><code>Behavior</code> decides what a particle does when it reaches the ground:</p>
 <ul>
 <li><strong>None</strong> — ignores the ground and passes through.</li>
-<li><strong>Disappear</strong> — the particle dies on contact.</li>
-<li><strong>Bounce</strong> — the particle reflects; <code>Bounciness</code> (enabled only for this behavior) sets how much energy it keeps.</li>
-<li><strong>Stick</strong> — the particle stops and stays where it landed.</li>
+<li><strong>Disappear</strong> — the particle becomes invisible on contact (its size drops to zero), but it stays alive and keeps moving until its normal lifetime ends.</li>
+<li><strong>Bounce</strong> — the particle reflects off the ground; <code>Bounciness</code> (enabled only for this behavior) sets how much of its <em>vertical</em> speed it keeps after the bounce.</li>
+<li><strong>Stick</strong> — the particle's height pins to the ground, though any sideways motion keeps carrying it along the surface.</li>
 </ul>
 <h2 id="one-caveat-weather-mode">One Caveat: Weather Mode</h2>
-<p>When an emitter's Generation is set to <strong>Weather particle</strong> (see <a href="./generation-types.html">Particle Generation Types</a>), most of this tab disables — weather particles fill a camera-following volume rather than flying from an emitter, so initial position, acceleration, gravity, and ground interaction do not apply. Initial speed, Inward speed, and Affected by wind stay active. If Physics fields are unexpectedly grayed out, check the Generation section first.</p>
+<p>When an emitter's Generation is set to <strong>Weather particle</strong> (see <a href="./generation-types.html">Particle Generation Types</a>), most of this tab disables — weather particles fill a camera-following volume rather than flying from an emitter, so initial position, acceleration, gravity, inward speed, inward acceleration, and ground interaction do not apply — weather particles skip the radial-launch math entirely. Initial speed and Affected by wind still apply. If Physics fields are unexpectedly grayed out, check the Generation section first.</p>
 <h2 id="related-pages">Related Pages</h2>
 <ul>
 <li><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a> — puts the Sphere speed shape, lifetime variation, and gravity to work.</li>

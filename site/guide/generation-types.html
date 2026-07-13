@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -98,7 +100,7 @@
       <article class="guide-article">
 <p class="guide-kicker">Reference <span class="kicker-count">· 2 of 9</span></p>
 <h1 id="particle-generation-types">Particle Generation Types</h1>
-<p>The generation type decides <em>how</em> an emitter releases its particles: in timed bursts, in a steady stream, or as camera-following weather. You pick one of the three in the Property Panel under Basic, in the Generation section. They are mutually exclusive — choosing one turns the others off — and each reveals its own set of fields.</p>
+<p>The generation type decides <em>how</em> an emitter releases its particles: in timed bursts, in a steady stream, or as camera-following weather. You pick one in the Property Panel under Basic, in the Generation section, and each reveals its own set of fields. Bursts and Continuous stream are an either/or choice; Weather particle can temporarily replace either one, and when you turn Weather off the editor restores your previous Bursts or Continuous stream setting.</p>
 <figure class="guide-media" aria-label="Show the three generation types in sequence: a burst event, a continuous stream, and the camera-following weather cube."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-generation-types.mp4" data-poster="ref-generation-types-poster.jpg"></video></figure>
 <h2 id="bursts">Bursts</h2>
 <p>Burst mode releases particles in discrete groups rather than continuously. It is the right choice for one-off or repeating events: an explosion, an impact, a puff, a muzzle flash.</p>
@@ -110,14 +112,14 @@
 </ul>
 <p>For a single event, use one burst. For a repeating rhythm — a sputtering fire, a pulsing beacon — use several bursts with a delay between them.</p>
 <h2 id="continuous-stream">Continuous Stream</h2>
-<p>Continuous mode releases particles at a steady rate for as long as the effect is active. It is the right choice for ongoing effects: smoke rising from damage, an engine trail, a dust cloud, flowing energy.</p>
+<p>Continuous stream releases particles at a steady rate for as long as the effect is active. It is the right choice for ongoing effects: smoke rising from damage, an engine trail, a dust cloud, flowing energy.</p>
 <p>Its one field:</p>
 <ul>
 <li><strong>Particles/second</strong> — the spawn rate. Higher values make a denser, thicker stream; lower values make a sparse, wispy one.</li>
 </ul>
 <p>Continuous is usually the mode you reach for when an effect should simply keep going rather than happen and stop.</p>
 <h2 id="weather-particle">Weather Particle</h2>
-<p>Weather mode is a special rendering type for large-scale environmental effects like rain and snow. Instead of emitting from a point, it fills a cube of space that follows the camera — centered on a point out in front of the viewpoint — so the effect covers the view no matter where the camera moves, the way falling weather should.</p>
+<p>Weather mode is a special generation type for large-scale environmental effects like rain and snow. Instead of emitting from a point, it fills a cube of space that follows the camera — centered on a point out in front of the viewpoint — so the effect covers the view no matter where the camera moves, the way falling weather should.</p>
 <p>This is why you may not have seen it on a normal effect: it is not for hardpoint or weapon particles, it is for blanketing a scene. If you have never used one, that is expected; reach for it only when you want weather across the environment rather than a localized effect.</p>
 <p>Its fields:</p>
 <ul>
@@ -133,7 +135,7 @@
 <li>Something that keeps going while active → <strong>Continuous stream</strong>.</li>
 <li>Weather that should blanket the whole scene around the camera → <strong>Weather particle</strong>.</li>
 </ul>
-<p>Switching away from Weather returns you to whichever of Bursts or Continuous you were using before, so you can toggle Weather on to test it without losing your earlier setup.</p>
+<p>Switching away from Weather particle returns you to whichever of Bursts or Continuous stream you were using before, so you can toggle Weather on to test it without losing your earlier setup.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./app-ui-quick-reference.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">App UI Quick Reference</span></a>

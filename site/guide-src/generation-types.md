@@ -1,9 +1,10 @@
 # Particle Generation Types
 
 The generation type decides *how* an emitter releases its particles: in timed bursts, in a steady
-stream, or as camera-following weather. You pick one of the three in the Property Panel under Basic,
-in the Generation section. They are mutually exclusive — choosing one turns the others off — and each
-reveals its own set of fields.
+stream, or as camera-following weather. You pick one in the Property Panel under Basic, in the
+Generation section, and each reveals its own set of fields. Bursts and Continuous stream are an
+either/or choice; Weather particle can temporarily replace either one, and when you turn Weather
+off the editor restores your previous Bursts or Continuous stream setting.
 
 <!-- Media: ref-generation-types -->
 
@@ -24,7 +25,7 @@ use several bursts with a delay between them.
 
 ## Continuous Stream
 
-Continuous mode releases particles at a steady rate for as long as the effect is active. It is the
+Continuous stream releases particles at a steady rate for as long as the effect is active. It is the
 right choice for ongoing effects: smoke rising from damage, an engine trail, a dust cloud, flowing
 energy.
 
@@ -38,7 +39,7 @@ happen and stop.
 
 ## Weather Particle
 
-Weather mode is a special rendering type for large-scale environmental effects like rain and snow.
+Weather mode is a special generation type for large-scale environmental effects like rain and snow.
 Instead of emitting from a point, it fills a cube of space that follows the camera — centered on a
 point out in front of the viewpoint — so the effect covers the view no matter where the camera moves,
 the way falling weather should.
@@ -70,5 +71,5 @@ whole group vanishing on the same frame.
 - Something that keeps going while active → **Continuous stream**.
 - Weather that should blanket the whole scene around the camera → **Weather particle**.
 
-Switching away from Weather returns you to whichever of Bursts or Continuous you were using before, so
+Switching away from Weather particle returns you to whichever of Bursts or Continuous stream you were using before, so
 you can toggle Weather on to test it without losing your earlier setup.

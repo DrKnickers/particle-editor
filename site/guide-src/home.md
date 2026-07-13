@@ -1,12 +1,20 @@
 # Particle Editor Guide
 
-This guide teaches you how to use Particle Editor and how to author practical Empire at War /
-Forces of Corruption particle effects — editing `.alo` particle systems against the references
-that make tuning real: game units for scale, skydomes for backdrop, mod stacks for assets, and a
-live viewport beside the controls.
+## What You Are Building
 
-Start with [Setup](setup), then follow the numbered tutorials in order. Returning users can jump
-straight to the quick references.
+A particle effect in Empire at War is not a model — it is a small system that throws out many tiny,
+short-lived images and animates them. A laser bolt, a plume of engine smoke, an explosion, a shield
+flash: all of them are particle effects. You author them as `.alo` particle files, and each file
+holds one or more *emitters* — the little engines that spawn particles. Each emitter decides how its
+particles are born, how they move, what image they draw, and how they change as they age; stack a
+few emitters together and you get a finished effect.
+
+This guide teaches you to build and tune those effects in Particle Editor, judging them against the
+same references the game uses — correct scale, the right background, and your mod's own assets —
+with a live viewport right beside the controls.
+
+Start with [Setup](setup), then follow the pages in order. Returning users can jump straight to the
+quick references.
 
 ## Tutorial Path
 
@@ -18,9 +26,11 @@ straight to the quick references.
 | [Curve Editor Basics](curve-editor-basics) | Tracks, keys, the value spinners, and interpolation — the mechanics every tutorial uses. | ~5 min |
 | [Tutorial 1: Make a Hardpoint Damage Effect Obvious](01-make-a-hardpoint-damage-effect-obvious) | Override a shipped Star Destroyer damage particle and make it bright green so the edit is easy to prove. | ~20 min |
 | [Tutorial 2: Polish Hardpoint Damage Smoke](02-polish-hardpoint-damage-smoke) | Turn the proof edit into believable dark smoke with a subtle warm tint. | ~20 min |
-| [Tutorial 3: Build a Laser Shot and Muzzle Flash](03-build-a-laser-shot-and-muzzle-flash) | Build a blank particle into a green laser shot with separate projectile and muzzle-flash emitter groups. | ~30 min |
+| [Concepts Before You Build](concepts-before-you-build) | The handful of decisions every new emitter needs, before the from-scratch tutorials. | ~5 min |
+| [Tutorial 3: Build a Laser Shot and Muzzle Flash](03-build-a-laser-shot-and-muzzle-flash) | Build a blank particle into a green laser shot with separate projectile and muzzle-flash emitters. | ~30 min |
 | [Tutorial 4: Recolor and Orient a Shield Impact](04-recolor-and-orient-a-shield-impact) | Override a shield impact particle, recolor it purple, and study impact orientation in the editor preview. | ~20 min |
-| [Tutorial 5: Build an Explosion](05-build-an-explosion) | Build a full explosion from scratch: flash, animated fireball, smoke, and sparks with child-emitter trails. | ~40 min |
+| [Tutorial 5: Build an Explosion](05-build-an-explosion) | Build a full explosion from scratch: flash, animated fireball, smoke, and flying sparks. | ~40 min |
+| [Build Your Own Effect](build-your-own-effect) | A capstone brief with no recipe — plan and build a new effect from a description alone. | ~30 min |
 
 ## Quick References
 

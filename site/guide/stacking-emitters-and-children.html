@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -107,7 +109,7 @@
 <p>A child emitter is attached to a parent emitter and spawns relative to the parent's individual particles, not to the effect as a whole. That is the key difference from a sibling: a sibling plays from the origin, while a child follows or reacts to each parent particle wherever it goes.</p>
 <p>Each emitter can have up to one child of each kind. Add them by right-clicking a parent emitter in the Emitter Tree:</p>
 <ul>
-<li><strong>Add Lifetime Child</strong> — a child that emits continuously <em>while each parent particle is alive</em>. It travels with the parent particle, so it is how you put a trail on something that moves. If the parent emits fast-moving sparks, a lifetime child can give each spark its own smoke trail.</li>
+<li><strong>Add Lifetime Child</strong> — a child attached to each parent particle <em>for as long as that particle is alive</em>. It travels with the parent particle and emits at its own rate (its own Generation setting), so it is how you put a trail on something that moves. If the parent emits fast-moving sparks, a lifetime child can give each spark its own smoke trail.</li>
 <li><strong>Add Death Child</strong> — a child that fires <em>when each parent particle dies</em>. It bursts at the spot where the parent particle ended, so it is how you make an ending event. If the parent emits embers, a death child can pop a small flash as each ember burns out.</li>
 </ul>
 <p>Because the child is bound to each parent particle, one parent emitting many particles produces many little child effects — one trailing or triggering per particle. That multiplication is the whole point, but it also means a busy parent with a heavy child can add up quickly, so keep child effects light.</p>

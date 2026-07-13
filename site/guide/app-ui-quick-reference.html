@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -101,24 +103,24 @@
 <p>These are the editor surfaces named in the tutorials.</p>
 <figure class="guide-media"><img class="clip-img" data-poster="ref-ui-overview.png" alt="One annotated full-app still with the main surfaces labeled: Emitter Tree, Property Panel, Curve Editor, Preview Viewport, Spawner, pickers."></figure>
 <h2 id="emitter-tree">Emitter Tree</h2>
-<p>The Emitter Tree lists the emitters in the current particle. Select an emitter here when you want to isolate one visual part of the effect. Right-click (or use the tree's <strong>+</strong> button) to add root and child emitters — see <a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a>.</p>
+<p>The Emitter Tree lists the emitters in the current particle. Select an emitter here when you want to isolate one visual part of the effect. Add emitters from the <strong>Emitters</strong> menu → <strong>New Emitter</strong> (<strong>Root Emitter</strong>, or <strong>Lifetime Child</strong> / <strong>Death Child</strong> when a parent is selected) — see <a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a>.</p>
 <h2 id="property-panel">Property Panel</h2>
 <p>The Property Panel shows the editable fields for the selected emitter. The tutorials use the visible UI labels whenever possible, including the Basic, Appearance, and Physics tabs. The Physics tab's motion controls are covered in <a href="./motion-and-physics.html">Motion and Physics</a>.</p>
 <h2 id="curve-editor">Curve Editor</h2>
 <p>The Curve Editor edits lifetime tracks such as Red, Green, Blue, Alpha, Scale, Index, and Rotation. Use it when a value needs to change over a particle's life instead of staying constant. Its controls — channels, keys, the value spinners, interpolation — are covered in <a href="./curve-editor-basics.html">Curve Editor Basics</a>.</p>
 <h2 id="preview-viewport">Preview Viewport</h2>
 <p>The Preview Viewport shows the particle in motion. Particle edits are easiest to judge while the effect is playing, fading, and repeating.</p>
-<h2 id="texture-atlas-picker">Texture/Atlas Picker</h2>
-<p>The Texture/Atlas Picker helps choose the particle texture or atlas frame. Texture choice can change the feel of an effect, even when the emitter motion stays the same.</p>
+<h2 id="atlas-frame-picker">Atlas Frame Picker</h2>
+<p>Open the <strong>Atlas Frame Picker…</strong> from the <strong>View</strong> menu (the docked panel is titled <strong>Atlas Frames</strong>). It helps you choose the particle texture or atlas frame. Texture choice can change the feel of an effect, even when the emitter motion stays the same.</p>
 <h2 id="spawner">Spawner</h2>
-<p>The Spawner repeats or places the effect so it is easier to inspect. It is especially useful when an effect is brief, hard to trigger, or easier to judge from a specific angle.</p>
-<h2 id="mods-load-order">Mods/Load Order</h2>
-<p>Mods and load order controls tell the editor which game and mod assets to use. For these tutorials, choose the <code>ParticleTutorial</code> mod so loose override files are opened and saved in the tutorial folder.</p>
+<p>Open the Spawner from the <strong>Emitters</strong> menu → <strong>Spawner</strong> (shortcut <strong>F7</strong>). It repeats or places the effect so it is easier to inspect — especially useful when an effect is brief, hard to trigger, or easier to judge from a specific angle. To make the effect play over and over while you tune it, turn the Spawner on with its <strong>Enabled</strong> checkbox (off by default), set the mode to <strong>Auto</strong>, and use the <strong>Interval</strong> spinner to control how often it re-fires.</p>
+<h2 id="mods-load-order">Mods / Load Order</h2>
+<p>The <strong>Mods</strong> menu tells the editor which game and mod assets to use. <strong>Add mod…</strong> adds a mod to the <strong>Active load order</strong>; the <strong>Expand to full editor</strong> button opens the full <strong>Mod Load Order</strong> dialog to review and reorder the stack; <strong>Refresh Mod List</strong> rescans the game install. For these tutorials, add the <code>ParticleTutorial</code> mod so loose override files are opened and saved in the tutorial folder.</p>
 <h2 id="file-actions">File Actions</h2>
-<p>Use New to start a blank particle, Open to load one, Save to update the current file, and Save As when you want to create a separate particle rather than overwrite the current one.</p>
+<p>Use <strong>File → New</strong> to start a blank particle, <strong>Open…</strong> (Ctrl+O) to load one, <strong>Save</strong> to update the current file, and <strong>Save As</strong> when you want to create a separate particle rather than overwrite the current one.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./05-build-an-explosion.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">5. Build an Explosion</span></a>
+        <a class="pager-prev" href="./build-your-own-effect.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Build Your Own Effect</span></a>
         <a class="pager-next" href="./generation-types.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Particle Generation Types</span></a>
       </nav>
     </main>
@@ -129,9 +131,9 @@
       <li class="lvl-2"><a href="#property-panel">Property Panel</a></li>
       <li class="lvl-2"><a href="#curve-editor">Curve Editor</a></li>
       <li class="lvl-2"><a href="#preview-viewport">Preview Viewport</a></li>
-      <li class="lvl-2"><a href="#texture-atlas-picker">Texture/Atlas Picker</a></li>
+      <li class="lvl-2"><a href="#atlas-frame-picker">Atlas Frame Picker</a></li>
       <li class="lvl-2"><a href="#spawner">Spawner</a></li>
-      <li class="lvl-2"><a href="#mods-load-order">Mods/Load Order</a></li>
+      <li class="lvl-2"><a href="#mods-load-order">Mods / Load Order</a></li>
       <li class="lvl-2"><a href="#file-actions">File Actions</a></li>
       </ul>
     </nav>

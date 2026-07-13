@@ -48,8 +48,10 @@ differently on screen:
 - **Radial launch** — put the Sphere on **Initial position** with `Constrain to surface` checked,
   then drive the speed with a large *negative* **Inward speed** (see below). Each particle is
   born on a shell and pushed straight along the line from the center through its own birth
-  point — every path is dead-straight and radial, like shrapnel. This is how Tutorial 5's debris
-  works.
+  point — and as long as nothing else bends it (leave **Initial speed** at its default and add no
+  acceleration or gravity), every path is dead-straight and radial, like shrapnel. This is how
+  Tutorial 5's debris works — though it adds a little Initial-speed scatter so the chunks aren't
+  *perfectly* radial.
 
 The spray randomizes *direction*; the radial launch locks direction to *birth position*. Choose
 by what the layer represents: burning fragments scatter, thrown wreckage flies straight.
@@ -59,10 +61,12 @@ by what the layer represents: burning fragments scatter, thrown wreckage flies s
 - **Inward speed:** adds motion along the line between each particle and the emitter's center.
   A positive value pulls particles inward — useful for implosion or intake effects. A negative
   value pushes them outward, on top of whatever the speed shape rolled.
-- **Parent speed inherit:** how much of the spawning object's motion the particle keeps, from
-  0 to 100%. Tutorial 3 covers the classic use: projectile layers at full inheritance ride the
-  shot; muzzle-flash layers at zero stay at the launch point.
-- **Affected by wind:** lets the scene's wind push the particles.
+- **Parent speed inherit:** sets how much of the parent's motion continues to affect each
+  particle, from 0 to 100%. It keeps affecting the particle after launch — it is not just an
+  initial speed. Tutorial 3 covers the classic use: projectile layers at full inheritance ride
+  the shot; muzzle-flash layers at zero stay at the launch point.
+- **Affected by wind:** adds the scene's wind to each particle's launch speed — a one-time nudge
+  at birth, not a force that keeps pushing over the particle's life.
 
 ## Acceleration
 
@@ -75,29 +79,34 @@ Where Initial speed sets motion once at start, the Acceleration section bends it
   way to make hot smoke and fire rise (Tutorial 5's smoke uses `-0.9`) without configuring an
   acceleration vector by hand. Give debris a little positive gravity and its straight radial
   flight becomes an arc.
-- **Inward acceleration:** like Inward speed, but applied continuously — particles curve toward
-  the emitter (positive) or away from it (negative) over their whole life.
-- **Object space acceleration:** applies the X/Y/Z push in the emitter's own orientation
-  instead of world directions, so the push turns with the object the effect is attached to.
+- **Inward acceleration:** like Inward speed, but applied continuously — it keeps bending a
+  particle along the line between its birth point and the emitter center. Positive values bend it
+  inward; negative values bend it outward. That direction is set at birth, so it does not chase a
+  moving emitter.
+- **Object space acceleration:** intended to make the X/Y/Z acceleration turn with the emitter
+  instead of staying fixed in world directions. The editor preview currently ignores this option,
+  so for motion you can preview here, use ordinary X/Y/Z acceleration instead.
 
 ## Ground Interaction
 
 `Behavior` decides what a particle does when it reaches the ground:
 
 - **None** — ignores the ground and passes through.
-- **Disappear** — the particle dies on contact.
-- **Bounce** — the particle reflects; `Bounciness` (enabled only for this behavior) sets how
-  much energy it keeps.
-- **Stick** — the particle stops and stays where it landed.
+- **Disappear** — the particle becomes invisible on contact (its size drops to zero), but it
+  stays alive and keeps moving until its normal lifetime ends.
+- **Bounce** — the particle reflects off the ground; `Bounciness` (enabled only for this
+  behavior) sets how much of its *vertical* speed it keeps after the bounce.
+- **Stick** — the particle's height pins to the ground, though any sideways motion keeps
+  carrying it along the surface.
 
 ## One Caveat: Weather Mode
 
 When an emitter's Generation is set to **Weather particle** (see
 [Particle Generation Types](generation-types)), most of this tab disables — weather particles
 fill a camera-following volume rather than flying from an emitter, so initial position,
-acceleration, gravity, and ground interaction do not apply. Initial speed, Inward speed, and
-Affected by wind stay active. If Physics fields are unexpectedly grayed out, check the
-Generation section first.
+acceleration, gravity, inward speed, inward acceleration, and ground interaction do not apply —
+weather particles skip the radial-launch math entirely. Initial speed and Affected by wind still
+apply. If Physics fields are unexpectedly grayed out, check the Generation section first.
 
 ## Related Pages
 

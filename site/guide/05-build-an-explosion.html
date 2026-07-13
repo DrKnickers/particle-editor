@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html" class="active" aria-current="page">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -96,21 +98,22 @@
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 5 of 5</span></p>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 6 of 7</span></p>
 <h1 id="tutorial-5-build-an-explosion">Tutorial 5: Build an Explosion</h1>
 <p>This tutorial builds a complete small explosion — the kind that plays when a fighter or a small structure dies. It is modelled on two example particles, <code>P_EXPLOSION_EXAMPLE.ALO</code> and <code>P_EXPLOSION_EXAMPLE_FLIPBOOK.ALO</code>. They are the <em>same</em> explosion built two different ways, and the only thing that differs between them is how the fireball is made.</p>
 <p>An explosion is the classic stacked effect: a flash, a shockwave, a fireball, rising smoke, flying sparks, and tumbling debris — each simple on its own, all agreeing about timing. It is also where three bigger ideas come together: how the Physics tab actually moves particles, how the randomization parameters create variety inside a single emitter, and how a <strong>Link Group</strong> lets several emitters act as one.</p>
 <figure class="guide-media" aria-label="Show the finished explosion — flash, fireball, smoke, sparks with trails — before the build steps."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-opening-result.mp4" data-poster="tutorial-05-opening-result-poster.jpg"></video></figure>
 <h2 id="outcome">Outcome</h2>
-<p>By the end of this page the particle contains six kinds of layer, built from eleven emitters:</p>
+<p>By the end of this page the particle contains six kinds of layer, built from eleven emitters (twelve if you build the layered fireball in Option B):</p>
 <ul>
-<li>a <strong>flash</strong> — the instant white pop of detonation, two additive emitters at two sizes;</li>
+<li>a <strong>flash</strong> — the instant bright warm pop of detonation, two additive emitters at two sizes;</li>
 <li>a <strong>shockwave</strong> — a single expanding ring that sells the pressure of the blast;</li>
 <li>a <strong>fireball</strong> — the rolling ball of flame, built one of two ways (this is the fork below);</li>
 <li><strong>smoke</strong> — two transparent layers that rise, grow, and fade last;</li>
 <li><strong>sparks</strong> — bright additive specks that spray outward and burn for a while;</li>
 <li><strong>debris</strong> — chunks that rocket outward, built as four linked copies of one emitter.</li>
 </ul>
+<blockquote><strong>The minimum readable explosion.</strong> If eleven emitters feels like a lot, build only the first three layers — <strong>flash, fireball, and smoke</strong> — and stop there. Those three already read as an explosion on their own; the shockwave, sparks, and debris are polish you layer on once the core works. Get the minimum reading right first, previewing after each layer, then add the rest.</blockquote>
 <p>The example is a <em>space</em> explosion, so nothing falls. Keep that in mind through the physics sections: every motion choice below is &quot;hot gas and thrown wreckage in vacuum&quot;, not &quot;objects dropping to a floor&quot;.</p>
 <h2 id="the-two-versions">The Two Versions</h2>
 <p>The whole difference between the two example files is the fireball:</p>
@@ -142,52 +145,87 @@
 <li><strong>How does the path bend over time?</strong> — the <strong>Acceleration</strong> section. X/Y/Z is a constant push; <strong>Gravity acceleration</strong> is a shortcut for &quot;a push straight down, scaled by this number&quot;. A <em>negative</em> gravity value therefore pushes <em>up</em> — that is how this file makes hot smoke and fire rise in space without configuring an acceleration vector by hand.</li>
 </ol>
 <p>Now look at how the example answers those questions differently per layer — this table <em>is</em> the design of the explosion:</p>
-<pre><code class="language-text">Layer     Born where?              Launched how?                        Bends how?
-Flash     exactly at center        not at all (Exact 0,0,0)             no
-Shockwave exactly at center        not at all — only its Scale grows    no
-Fire      inside a ball (r≈7.5)    tiny drift + gentle outward push     rises (gravity −0.9)
-Smoke     inside a ball (r≈10)     tiny drift + gentle outward push     rises (gravity −0.9)
-Sparks    inside a ball (r≈10)     random direction + outward push      no (vacuum)
-Debris    ON a shell (r≈4)         hard outward push (Inward −103)      no (vacuum)
-</code></pre>
+<table>
+<thead>
+<tr><th>Layer</th><th>Initial position</th><th>Initial speed</th><th>Acceleration</th></tr>
+</thead>
+<tbody>
+<tr><td>Flash</td><td>exactly at center</td><td>not at all (Exact 0,0,0)</td><td>no</td></tr>
+<tr><td>Shockwave</td><td>exactly at center</td><td>not at all — only its Scale grows</td><td>no</td></tr>
+<tr><td>Fire</td><td>inside a ball (r≈7.5)</td><td>tiny drift + gentle outward push</td><td>rises (gravity −0.9)</td></tr>
+<tr><td>Smoke</td><td>inside a ball (r≈10)</td><td>tiny drift + gentle outward push</td><td>rises (gravity −0.9)</td></tr>
+<tr><td>Sparks</td><td>inside a ball (r≈10)</td><td>random direction + outward push</td><td>no (vacuum)</td></tr>
+<tr><td>Debris</td><td>ON a shell (r≈4)</td><td>hard outward push (Inward −103)</td><td>no (vacuum)</td></tr>
+</tbody>
+</table>
 <p>Two principles fall out of this table:</p>
 <ul>
 <li><strong>Things that &quot;expand&quot; are often not moving at all.</strong> The flash and shockwave never travel — their <em>Scale track</em> grows over a short life. Movement you can fake with scale is cheaper and easier to control than movement you simulate.</li>
-<li><strong>There are two different &quot;fly outward&quot; recipes.</strong> The sparks are born <em>inside</em> a ball and launched in <em>random</em> directions — a chaotic spray. The debris is born <em>on</em> a shell and pushed <em>radially</em> by a big negative Inward speed — every chunk flies dead-straight away from the center, like shrapnel. Random-direction spray reads as embers; radial launch reads as wreckage. Choosing between them is a design decision, not a technicality.</li>
+<li><strong>There are two different &quot;fly outward&quot; recipes.</strong> The sparks are born <em>inside</em> a ball and launched in <em>random</em> directions — a chaotic spray. The debris is born <em>on</em> a shell and pushed <em>radially</em> by a big negative Inward speed — every chunk flies mostly straight outward from the center (with just a little scatter), like shrapnel. Random-direction spray reads as embers; radial launch reads as wreckage. Choosing between them is a design decision, not a technicality.</li>
 </ul>
 <h2 id="2-the-flash-and-the-shockwave">2. The Flash and the Shockwave</h2>
-<p>The flash is the shortest, brightest thing in the effect — the frame or two that reads as <em>detonation</em>. The example makes it from <strong>two</strong> additive emitters, <code>Flash Small</code> and <code>Flash Large</code>, identical except for their Scale tracks — a hot core inside a wider halo. Rename the default emitter <code>Flash Small</code>, add a second root emitter named <code>Flash Large</code>, and give both:</p>
-<pre><code class="language-text">Generation:  Bursts — 2 bursts, 1 particle each, Burst delay 0.08s
-Lifetime:    0.12s  (Maximum lifetime, in the Basic tab's Generation section)
-Blend mode:  Additive
-Physics:     nothing — both position and speed stay Exact 0,0,0
-Scale:       small at 0%, large at 100% — the growth IS the flash
-Color:       white, warming toward orange across the life
-</code></pre>
-<p>Why <strong>two bursts 0.08 seconds apart</strong>? A single flash frame can read as a camera artifact; two overlapping pops a fraction apart read as <em>detonation</em>. This trick — a couple of bursts with a tiny <strong>Burst delay</strong> — recurs in almost every layer of this file, and it is free: no extra emitters, no extra particles per frame.</p>
+<p>The flash is the shortest, brightest thing in the effect — the frame or two that reads as <em>detonation</em>. The example makes it from <strong>two</strong> additive emitters, <code>Flash Small</code> and <code>Flash Large</code> — the same brief pop at two sizes, the larger one wider <em>and</em> dimmer, so it reads as a hot core inside a softer halo. Rename the default emitter <code>Flash Small</code>, add a second root emitter named <code>Flash Large</code>, and give both:</p>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Flash Small</th><th>Flash Large</th></tr>
+</thead>
+<tbody>
+<tr><td>Generation</td><td>Bursts — 2 bursts, 1 particle each, Burst delay 0.08s</td><td>same</td></tr>
+<tr><td>Lifetime</td><td>0.12s (Maximum lifetime, in the Basic tab's Generation section)</td><td>same</td></tr>
+<tr><td>Blend mode</td><td>Additive</td><td>same</td></tr>
+<tr><td>Texture</td><td>the default master atlas; hold Index frame 2 (a soft round glow)</td><td>same</td></tr>
+<tr><td>Physics</td><td>nothing — both position and speed stay Exact 0,0,0</td><td>same</td></tr>
+<tr><td>Scale — grows across the life (the growth IS the flash)</td><td>46 → 84</td><td>81 → 119 (the wider, dimmer halo behind the hot core)</td></tr>
+<tr><td>Color — a warm orange-white (R&gt;G&gt;B) that peaks early, then fades to black</td><td>R 0.20 / G 0.10 / B 0.05 (key at ~10%)</td><td>R 0.10 / G 0.05 / B 0.02 (same shape, dimmer)</td></tr>
+</tbody>
+</table>
+<p>(These are additive, so the <strong>Alpha track does nothing</strong> — the fade comes entirely from the color dropping to black, and from the 0.12-second lifetime.)</p>
+<p>Why <strong>two bursts 0.08 seconds apart</strong>? A single flash frame can read as a camera artifact; two overlapping pops a fraction apart read as <em>detonation</em>. This trick — a couple of bursts with a tiny <strong>Burst delay</strong> — recurs in almost every layer of this file. It stays inexpensive: it avoids adding a second emitter, though the extra burst does spawn one more particle that briefly overlaps the first — cheap, but not literally free.</p>
 <p>Because both emitters are additive, only color and scale matter — the Alpha track does nothing on an additive emitter (see <a href="./blend-modes.html">Blend Modes</a>). Fade the flash by letting its color fall toward the end of the life, not by touching alpha. And study the example's color curve closely, because it teaches two counter-intuitive things at once:</p>
 <ul>
 <li><strong>The color starts at 0, peaks around 10% of the life, then decays</strong> — the same fast-in, slow-out envelope the smoke's alpha uses. Even a flash is not born at maximum.</li>
 <li><strong>The peak value is only ~0.2, not 1.0.</strong> Additive layers <em>stack</em>: two flash particles, the fireball, and the shockwave all brighten the same pixels at t=0, so each layer stays dim to keep the sum from clipping to a white square. When an additive effect blows out, lower each layer's color rather than fighting the scale.</li>
 </ul>
-<p>The shockwave adds one new idea: check <strong>its</strong> example emitter and you will find the world-oriented option enabled — the quad lies flat in the world instead of turning to face the camera. A flat ring expanding along the ground plane (its Scale track runs from under 1 to nearly 190 across 0.375s!) reads as a pressure wave in a way a camera-facing sprite cannot. Give it one burst, one particle, and a small <strong>Initial spawn delay</strong> (~0.05s) so it reads as a <em>consequence</em> of the flash rather than simultaneous with it. Tutorial 4's shield ripple uses this same world-oriented trick to lie flat on the shield surface.</p>
+<p>The shockwave adds one new idea: check <strong>its</strong> example emitter and you will find the world-oriented option enabled — the flat sprite lies flat in the world instead of turning to face the camera. A flat ring expanding along the ground plane (its Scale track runs from under 1 to nearly 190 across 0.375s!) reads as a pressure wave in a way a camera-facing sprite cannot. Build one additive root emitter named <code>Shockwave</code>:</p>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>Blend mode</td><td>Additive</td></tr>
+<tr><td>Lifetime</td><td>0.375s</td></tr>
+<tr><td>Generation</td><td>1 burst × 1 particle, Initial spawn delay ~0.05s</td></tr>
+<tr><td>Appearance</td><td>world-oriented ON; default master atlas, hold Index frame 3 (a ring)</td></tr>
+<tr><td>Physics</td><td>Exact 0,0,0 — it never travels</td></tr>
+<tr><td>Scale</td><td>~0.9 → 187.5 (the whole effect IS the expansion)</td></tr>
+<tr><td>Color</td><td>dim orange — R 0.12 / G 0.06 / B 0.04, peaking ~5% then fading to black</td></tr>
+</tbody>
+</table>
+<p>The small <strong>Initial spawn delay</strong> makes it read as a <em>consequence</em> of the flash rather than simultaneous with it. Tutorial 4's shield ripple uses this same world-oriented trick to lie flat on the shield surface.</p>
 <p>Preview with the Spawner. At this stage the whole effect is one bright pop with a ring pushing out of it — correct so far.</p>
 <figure class="guide-media" aria-label="Show renaming the default emitter to Flash, setting Bursts generation, and the resulting single bright pop."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-flash-burst.mp4" data-poster="tutorial-05-flash-burst-poster.jpg"></video></figure>
 <h2 id="3-the-smoke-volume-rise-and-render-order">3. The Smoke — Volume, Rise, and Render Order</h2>
 <p>Add two transparent root emitters, <code>Smoke</code> and <code>Smoke Slow</code>. Two, because one smoke cloud with one lifetime fades as a single object and the eye notices; two layers with different lifetimes dissolve unevenly, which is what real smoke does:</p>
-<pre><code class="language-text">              Smoke                       Smoke Slow
-Generation:   3 bursts × 10, 0.05s apart  3 bursts × 5, 0.05s apart
-Lifetime:     1.3s max, Minimum 25%       2.0s max, Minimum 75%
-Blend mode:   Transparent                 Transparent
-Alpha:        0 → peak by 10% → long fade to 0 (see below)
-Scale:        swells early, settles       same
-Position:     Sphere, radius ≈ 10         same
-Speed:        a small random drift        same
-Inward speed: ≈ −3 (gentle outward)       same
-Gravity:      −0.9 (rises)                same
-Rotation:     Rotation track ~0.3 falling to ~0, Random rotation direction ON
-</code></pre>
-<p>Read the physics choices against section 1's model. The <strong>Sphere position</strong> gives the cloud <em>volume</em> — thirty quads born at one point look like one flickering card; born inside a ball they look like a cloud. The gentle <strong>negative Inward speed</strong> inflates the cloud outward from the center. The <strong>negative gravity</strong> makes it rise like hot gas. None of these numbers is sacred — what matters is that each one answers one of the three questions deliberately.</p>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Smoke</th><th>Smoke Slow</th></tr>
+</thead>
+<tbody>
+<tr><td>Generation</td><td>3 bursts × 10, 0.05s apart</td><td>3 bursts × 5, 0.05s apart</td></tr>
+<tr><td>Lifetime</td><td>1.3s max, Minimum 25%</td><td>2.0s max, Minimum 75%</td></tr>
+<tr><td>Blend mode</td><td>Transparent</td><td>Transparent</td></tr>
+<tr><td>Texture</td><td>the default master atlas (a soft round puff)</td><td>same</td></tr>
+<tr><td>Color</td><td>warm gray → dark gray: R 0.70 / G 0.49 / B 0.29 → 0.10 / 0.10 / 0.10</td><td>same</td></tr>
+<tr><td>Alpha</td><td>0 → ~0.80 by 10% → fade to 0</td><td>0 → ~0.50 by 10% → fade to 0</td></tr>
+<tr><td>Scale</td><td>14 → ~19</td><td>18 → ~22</td></tr>
+<tr><td>Position</td><td>Sphere, radius ≈ 10</td><td>same</td></tr>
+<tr><td>Speed</td><td>a small random drift</td><td>same</td></tr>
+<tr><td>Inward speed</td><td>≈ −3 (gentle outward)</td><td>same</td></tr>
+<tr><td>Gravity</td><td>−0.9 (rises)</td><td>same</td></tr>
+<tr><td>Rotation</td><td>Rotation track ~0.3 falling to ~0, Random rotation direction ON</td><td>same</td></tr>
+</tbody>
+</table>
+<p>Read the physics choices against section 1's model. The <strong>Sphere position</strong> gives the cloud <em>volume</em> — thirty flat sprites born at one point look like one flickering card; born inside a ball they look like a cloud. The gentle <strong>negative Inward speed</strong> inflates the cloud outward from the center. The <strong>negative gravity</strong> makes it rise like hot gas. None of these numbers is sacred — what matters is that each one answers one of the three questions deliberately.</p>
 <p>Three curve details are worth studying in the example:</p>
 <ul>
 <li>**The alpha fades <em>in</em>, not just out.** The Alpha track starts at <code>0</code>, peaks around 10% of the life, then spends the remaining 90% falling back to <code>0</code>. Without that ramp-in, every puff would <em>pop</em> into existence at full opacity — the single most common tell of an unpolished effect. Fast in, slow out is the standard envelope for almost anything soft.</li>
@@ -201,11 +239,17 @@ Rotation:     Rotation track ~0.3 falling to ~0, Random rotation direction ON
 <h2 id="4-the-fireball-pick-one-of-two-ways">4. The Fireball — Pick One of Two Ways</h2>
 <p>This is where the two example files diverge.</p>
 <h3 id="option-a-flipbook-the-_flipbook-example">Option A — Flipbook (the <code>_FLIPBOOK</code> example)</h3>
-<p>One emitter named <code>Fire</code>. Open the <strong>Texture / Atlas Picker</strong> and choose an explosion atlas — a texture whose cells are successive frames of a burning fireball (the example uses <code>p_particle_explosion1.tga</code>). Then, in the <strong>Appearance</strong> tab's Textures section, set <strong>Texture elements</strong> to match the atlas grid (the example uses 16 — a 4×4 sheet of frames).</p>
-<pre><code class="language-text">Generation:  Bursts — 2 bursts × 2 particles
-Lifetime:    0.7s — long enough to play the frames
-Blend mode:  Additive
-</code></pre>
+<p>One emitter named <code>Fire</code>. Open the <strong>Atlas Frame Picker</strong> and choose an explosion atlas — a texture whose cells are successive frames of a burning fireball (the example uses <code>p_particle_explosion1.tga</code>). Then, in the <strong>Appearance</strong> tab's Textures section, set <strong>Texture elements</strong> to match the atlas grid (the example uses 16 — a 4×4 sheet of frames).</p>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>Generation</td><td>Bursts — 2 bursts × 2 particles</td></tr>
+<tr><td>Lifetime</td><td>0.7s — long enough to play the frames</td></tr>
+<tr><td>Blend mode</td><td>Additive</td></tr>
+</tbody>
+</table>
 <p>Animate the frames with the <strong>Index</strong> track in the Curve Editor. The example steps through all sixteen frames — a key per frame, <code>0</code> at 0% through <code>15</code> at 100% — with <strong>step</strong> interpolation (the Index default), so each frame holds and then flips, playing the sheet like a flipbook across the particle's 0.7s life (see <a href="./curve-editor-basics.html">Curve Editor Basics</a>). One particle now carries a whole pre-animated explosion, which is why this version needs so few particles.</p>
 <p>Two supporting details from the example are worth copying:</p>
 <ul>
@@ -214,44 +258,63 @@ Blend mode:  Additive
 </ul>
 <h3 id="option-b-layered-additive-the-plain-example">Option B — Layered additive (the plain example)</h3>
 <p>No flipbook texture? Build the fire the way <code>P_EXPLOSION_EXAMPLE.ALO</code> does — with motion, count, and randomness instead of animation frames. Two additive emitters:</p>
-<pre><code class="language-text">              Fire                          Fire Details
-Generation:   2 bursts × 11                 3 bursts × 23
-Lifetime:     0.4s max, Minimum 76%         0.35s max, Minimum 14%
-Position:     Sphere r ≈ 7.5                Sphere r ≈ 5
-Inward speed: ≈ −7 (outward)                ≈ −13 (faster outward)
-Gravity:      −0.9 (rises)                  −0.9
-Color:        bright orange → red           same, smaller and busier
-Delay:        none                          Initial spawn delay ≈ 0.09s
-</code></pre>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Fire</th><th>Fire Details</th></tr>
+</thead>
+<tbody>
+<tr><td>Generation</td><td>2 bursts × 11</td><td>3 bursts × 23</td></tr>
+<tr><td>Lifetime</td><td>0.4s max, Minimum 76%</td><td>0.35s max, Minimum 14%</td></tr>
+<tr><td>Position</td><td>Sphere r ≈ 7.5</td><td>Sphere r ≈ 5</td></tr>
+<tr><td>Inward speed</td><td>≈ −7 (outward)</td><td>≈ −13 (faster outward)</td></tr>
+<tr><td>Gravity</td><td>−0.9 (rises)</td><td>−0.9</td></tr>
+<tr><td>Color</td><td>bright orange → red</td><td>same, smaller and busier</td></tr>
+<tr><td>Delay</td><td>none</td><td>Initial spawn delay ≈ 0.09s</td></tr>
+</tbody>
+</table>
 <p><code>Fire</code> is the body of the fireball; <code>Fire Details</code> is the same idea smaller, faster, more numerous, and — look at that spinner — with <strong>Minimum lifetime 14%</strong>: its particles live anywhere from 14% to 100% of 0.35s, so the detail layer flickers and churns instead of pulsing in lockstep. The tiny spawn delay makes the detail <em>follow</em> the body by a frame or two. That is what sells &quot;burning&quot; without a single animation frame.</p>
 <p>Either way, the fireball should feel like it inflates out of the flash.</p>
 <figure class="guide-media" aria-label="Show picking an animated atlas texture and stepping the Index track so the fireball plays frames like a flipbook."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-fireball-index.mp4" data-poster="tutorial-05-fireball-index-poster.jpg"></video></figure>
 <h2 id="5-the-sparks">5. The Sparks</h2>
 <p>One additive emitter named <code>Sparks</code> — the chaotic spray recipe from section 1:</p>
-<pre><code class="language-text">Generation:  Bursts — 2 bursts × 20, 0.1s apart
-Lifetime:    2.0s max, Minimum 22% — embers die at very different times
-Blend mode:  Additive
-Scale:       small; Minimum scale 50% (Appearance tab, Textures section)
-Position:    Sphere, radius ≈ 10 (inside the ball, not the shell)
-Speed:       Sphere, radius ≈ 10 — a random launch direction for every spark
-Inward speed: ≈ −10 (outward bias)
-Gravity:     0 — this is space; embers coast
-</code></pre>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>Generation</td><td>Bursts — 2 bursts × 20, 0.1s apart</td></tr>
+<tr><td>Lifetime</td><td>2.0s max, Minimum 22% — embers die at very different times</td></tr>
+<tr><td>Blend mode</td><td>Additive</td></tr>
+<tr><td>Texture</td><td>default master atlas, hold Index frame 1 (a small spark)</td></tr>
+<tr><td>Color</td><td>bright orange — R 1.0 / G 0.50 / B 0.25, peaking almost immediately, fading to black</td></tr>
+<tr><td>Scale</td><td>≈ 0.7 (small); Minimum scale 50% (Appearance tab, Textures section)</td></tr>
+<tr><td>Position</td><td>Sphere, radius ≈ 10 (inside the ball, not the shell)</td></tr>
+<tr><td>Speed</td><td>Sphere, radius ≈ 10 — a random launch direction for every spark</td></tr>
+<tr><td>Inward speed</td><td>≈ −10 (outward bias)</td></tr>
+<tr><td>Gravity</td><td>0 — this is space; embers coast</td></tr>
+</tbody>
+</table>
 <p>The speed <strong>Sphere</strong> is what makes this a spray: every spark rolls its own direction. The negative Inward speed then biases all of them away from the center so the spray reads as <em>from the blast</em> rather than aimless. And the two randomization spinners — Minimum lifetime 22%, Minimum scale 50% — mean twenty sparks from one emitter arrive in twenty sizes and die across two seconds instead of blinking out together.</p>
 <p>For a ground explosion you would add <strong>Gravity acceleration</strong> here to arc the sparks down; the example leaves it at zero because it is a space effect.</p>
 <h2 id="6-the-debris-one-design-four-linked-copies">6. The Debris — One Design, Four Linked Copies</h2>
-<p>The debris is the shrapnel recipe: chunks born <strong>on</strong> a shell (<code>Constrain to surface</code> checked, radius ≈ 4) and launched radially with a huge outward push (<strong>Inward speed ≈ −103</strong> — by far the fastest thing in the file). Every chunk flies dead-straight away from the center, tumbling as it goes. Build one emitter named <code>Debris</code>:</p>
-<pre><code class="language-text">Generation:  Bursts — 3 bursts × 1 particle, 0.1s apart, Initial spawn delay 0.1s
-Lifetime:    1.5s max, Minimum 75%
-Blend mode:  Transparent (dark chunks against the bright fire)
-Scale:       Minimum scale 1% — chunks roll ANY size from tiny to full
-Position:    Sphere r ≈ 4, Constrain to surface ON
-Speed:       Sphere r ≈ 5 (a little scatter so paths aren't perfectly radial)
-Inward speed: ≈ −103
-Rotation:    Random rotation direction ON — each chunk tumbles its own way
-Texture:     Index track holds ONE atlas frame — this emitter's chunk sprite
-Gravity:     0
-</code></pre>
+<p>The debris is the shrapnel recipe: chunks born <strong>on</strong> a shell (<code>Constrain to surface</code> checked, radius ≈ 4) and launched radially with a huge outward push (<strong>Inward speed ≈ −103</strong> — by far the fastest thing in the file). Each chunk flies nearly straight outward from the center — a small Initial speed adds just enough scatter to keep it natural — tumbling as it goes. Build one emitter named <code>Debris</code>:</p>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>Generation</td><td>Bursts — 3 bursts × 1 particle, 0.1s apart, Initial spawn delay 0.1s</td></tr>
+<tr><td>Lifetime</td><td>1.5s max, Minimum 75%</td></tr>
+<tr><td>Blend mode</td><td>Transparent (dark chunks against the bright fire)</td></tr>
+<tr><td>Scale</td><td>Minimum scale 1% — chunks roll ANY size from tiny to full</td></tr>
+<tr><td>Position</td><td>Sphere r ≈ 4, Constrain to surface ON</td></tr>
+<tr><td>Speed</td><td>Sphere r ≈ 5 (a little scatter so paths aren't perfectly radial)</td></tr>
+<tr><td>Inward speed</td><td>≈ −103</td></tr>
+<tr><td>Rotation</td><td>Random rotation direction ON — each chunk tumbles its own way</td></tr>
+<tr><td>Texture</td><td>Index track holds ONE atlas frame — this emitter's chunk sprite</td></tr>
+<tr><td>Gravity</td><td>0</td></tr>
+</tbody>
+</table>
 <p>Three details deserve a pause:</p>
 <ul>
 <li><strong>Minimum scale 1%.</strong> This one spinner gives you everything from dust flecks to full-size wreckage out of a single emitter. Before this file adds a second debris emitter, it has already extracted the maximum variety from the first one's randomization. That order of operations — <em>exhaust the random parameters, then duplicate</em> — is the habit to copy.</li>
@@ -259,7 +322,7 @@ Gravity:     0
 <li><strong>The Index track picks the chunk's sprite.</strong> With step interpolation and a single held value, the Index track simply selects which atlas frame this emitter's particles show — a jagged chunk, a plate, a strut. Keep that in mind for the next step, because it is the <em>reason</em> the example has four debris emitters.</li>
 </ul>
 <h3 id="now-multiply-it-with-a-link-group">Now multiply it with a Link Group</h3>
-<p>One emitter gives you three chunks — but every one of them shows the <strong>same sprite</strong>, because the Index track is a property of the emitter, not something that can be randomized per particle. Real wreckage is not thirty copies of one silhouette. So the example runs <strong>four copies</strong> of the debris emitter — <code>Debris</code>, <code>Debris_1</code>, <code>Debris_2</code>, <code>Debris_3</code> — identical in every parameter except one: <strong>each copy's Index track holds a different atlas frame</strong> (the example uses frames 5, 6, 7, and 15). Four emitters, four chunk shapes, each rolling its own random sizes and directions.</p>
+<p>One emitter gives you three chunks — but every one of them shows the <strong>same sprite</strong>, because the Index track is a property of the emitter, not something that can be randomized per particle. Real wreckage is not the same silhouette repeated. So the example runs <strong>four copies</strong> of the debris emitter — <code>Debris</code>, <code>Debris_1</code>, <code>Debris_2</code>, <code>Debris_3</code> — identical in every parameter except one: <strong>each copy's Index track holds a different atlas frame</strong> (the example uses frames 5, 6, 7, and 15). Four emitters, four chunk shapes, each rolling its own random sizes and directions.</p>
 <p>But four near-copies would be a maintenance trap: change the color or lifetime of one and you must remember to change all four, forever. This is exactly what a <strong>Link Group</strong> solves. Linked emitters share their design — edit any one member and the edit propagates to all of them — while the fields you deliberately vary (here, the atlas frame) stay per-member.</p>
 <p>Create it:</p>
 <ol>
@@ -271,15 +334,15 @@ Gravity:     0
 <p>Try it: select any one member and change its color or scale. All four update together, and the preview shows the whole debris field changing at once.</p>
 <p>Two more controls complete the picture:</p>
 <ul>
-<li><strong>Link Group Settings…</strong> (right-click any member) lists every parameter with a checkbox: <strong>checked = shared</strong> (edits propagate), <strong>unchecked = exempt</strong> (each member keeps its own value). This is how the example's four members keep four different atlas frames while sharing everything else: the <strong>Atlas index curve</strong> stays per-member, so re-picking one member's frame never stamps it onto the rest. The same move works for any deliberate divergence — exempt <strong>Initial spawn delay</strong>, for instance, and stagger each copy's timing while the look stays locked together.</li>
+<li><strong>Link Group Settings…</strong> (right-click any member) lists every parameter with a checkbox: <strong>checked = shared</strong> (edits propagate), <strong>unchecked = exempt</strong> (each member keeps its own value). This is how the example's four members keep four different atlas frames while sharing everything else: the <strong>Index track</strong> stays per-member, so re-picking one member's frame never stamps it onto the rest. The same move works for any deliberate divergence — exempt <strong>Initial spawn delay</strong>, for instance, and stagger each copy's timing while the look stays locked together.</li>
 <li><strong>Leave Link Group</strong> (right-click a member) pulls one emitter out of the group without affecting the rest.</li>
 </ul>
 <p>When you join emitters into an <em>existing</em> group, the dialog also previews which of their fields the group is about to overwrite — read that list before confirming, because joining adopts the group's shared values.</p>
 <figure class="guide-media" aria-label="Show setting the Sphere initial-speed shape on Sparks and adding a Lifetime Child so each spark carries a trail."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-sparks-children.mp4" data-poster="tutorial-05-sparks-children-poster.jpg"></video></figure>
 <h3 id="keep-the-multiplication-in-check">Keep the Multiplication in Check</h3>
-<p>Eleven emitters, some bursting 20+ particles, all in the first half second — an explosion adds up fast. If the editor slows or the effect turns to mush, lower the particle counts first — <code>Fire Details</code> (3×23) and <code>Sparks</code> (2×20) are the usual culprits. A readable explosion is almost always cheaper than it looks like it needs to be.</p>
+<p>Eleven or twelve emitters, some bursting 20+ particles, all in the first half second — an explosion adds up fast. If the editor slows or the effect turns to mush, lower the particle counts first — <code>Fire Details</code> (3×23) and <code>Sparks</code> (2×20) are the usual culprits. A readable explosion is almost always cheaper than it looks like it needs to be.</p>
 <h2 id="7-variety-without-more-emitters">7. Variety Without More Emitters</h2>
-<p>Step back from the build and notice the pattern in every layer above. The example never has two particles that look identical, yet its emitters are few and simple. The variety comes from four randomization parameters, and knowing them is what keeps your emitter count down:</p>
+<p>Step back from the build and notice the pattern in every layer above. The example never has two particles that look identical, yet its emitters are few and simple. The variety comes from five randomization parameters, and knowing them is what keeps your emitter count down:</p>
 <ul>
 <li><strong>Minimum lifetime</strong> (Basic tab, next to Maximum lifetime) — each particle lives a random fraction between the minimum and 100% of the maximum. The example uses this <em>everywhere</em>: 14% on <code>Fire Details</code> (churn), 22% on <code>Sparks</code> (ragged ember deaths), 25% on <code>Smoke</code> (uneven dissolve).</li>
 <li><strong>Minimum scale</strong> (Appearance tab, Textures section) — each particle's whole Scale curve is multiplied by a random factor between the minimum and 100%. Debris takes this to the extreme with 1%.</li>
@@ -290,21 +353,27 @@ Gravity:     0
 <p>The rule of thumb: <strong>when a layer looks too uniform, reach for these spinners before you reach for another emitter.</strong> A second emitter costs performance and maintenance; a randomization parameter costs nothing. Add an emitter only when you need a genuinely different <em>behavior</em> — a different blend mode, texture, timing, or motion — and if you need several behaving copies, link them.</p>
 <h2 id="8-choreograph-the-timing">8. Choreograph the Timing</h2>
 <p>Watch the whole effect with the Spawner and tune the layers as one sequence. Almost everything in this file happens inside the first half second; only smoke and embers persist past it:</p>
-<pre><code class="language-text">t = 0.00s   Flash bursts (and again at 0.08s). Fireball ignites.
-t ≈ 0.05s   Shockwave launches (its Initial spawn delay).
-t ≈ 0.09s   Fire Details join the fireball.
-t ≈ 0.10s   First debris chunks launch (more at 0.20s, 0.30s).
-t ≈ 0.12s   Flash already dead.
-t ≈ 0.40s   Fireball burnt out. Sparks still flying.
-t ≈ 1.5s+   Debris gone; slow smoke still rising and fading.
-t ≈ 2.0s    Last embers and smoke fade — the effect ends.
-</code></pre>
+<table>
+<thead>
+<tr><th>Time</th><th>What happens</th></tr>
+</thead>
+<tbody>
+<tr><td>t = 0.00s</td><td>Flash bursts (and again at 0.08s). Fireball ignites.</td></tr>
+<tr><td>t ≈ 0.05s</td><td>Shockwave launches (its Initial spawn delay).</td></tr>
+<tr><td>t ≈ 0.09s</td><td>Fire Details join the fireball.</td></tr>
+<tr><td>t ≈ 0.10s</td><td>First debris chunks launch (more at 0.20s, 0.30s).</td></tr>
+<tr><td>t ≈ 0.12s</td><td>Flash already dead.</td></tr>
+<tr><td>t ≈ 0.40s</td><td>Fireball burnt out. Sparks still flying.</td></tr>
+<tr><td>t ≈ 1.5s+</td><td>Debris gone; slow smoke still rising and fading.</td></tr>
+<tr><td>t ≈ 2.0s</td><td>Last embers and smoke fade — the effect ends.</td></tr>
+</tbody>
+</table>
 <p>The two tools that build this schedule are <strong>Initial spawn delay</strong> (Basic tab, Emitter Timing — holds a whole emitter back) and <strong>Burst delay</strong> (Generation — spaces an emitter's own bursts). Notice that no layer starts later than a tenth of a second: an explosion is front-loaded, and the <em>perceived</em> length comes from how things die, not when they start.</p>
 <h2 id="9-final-check">9. Final Check</h2>
 <p>Use these questions on the finished effect:</p>
 <ul>
 <li>Does the first instant read as a detonation (flash), not a fade-in?</li>
-<li>Does the shockwave push out of the flash rather than sitting still?</li>
+<li>Does the shockwave visibly expand outward from the flash rather than sitting still?</li>
 <li>Does the fireball inflate out of the flash — and, if flipbook, do the frames play cleanly?</li>
 <li>Do the sparks spray chaotically while the debris flies straight and tumbles?</li>
 <li>Are there visibly small and large debris chunks (the Minimum scale roll), with different silhouettes (the per-member Index frames)?</li>
@@ -316,11 +385,11 @@ t ≈ 2.0s    Last embers and smoke fade — the effect ends.
 <h2 id="game-use-note">Game Use Note</h2>
 <p>In a full mod, an effect like this is what plays behind tags such as <code>Death_Explosion_Particles</code> on units and hardpoints — usually paired with a sound event so the audio and visual land together. Since this tutorial's particle is a new file rather than an override, the game would need something pointing at it before it appears in play; overriding an existing shipped explosion at its own path (the Tutorial 1 workflow) is the simplest route if you want to see your explosion in game.</p>
 <h2 id="takeaways">Takeaways</h2>
-<p>An explosion is layers agreeing about timing — but the deeper lessons travel to every effect you will build. Answer the three motion questions (<em>born where, launched how, bent how</em>) deliberately for every emitter. Fake motion with Scale when you can; simulate it when you must. Know the two outward recipes: random-direction spray for embers, shell-plus-outward-push for shrapnel. Exhaust the randomization spinners — Minimum lifetime, Minimum scale, Rotation variance — before adding emitters. And when you do need several copies of one design, make it a Link Group so it stays editable as one.</p>
+<p>An explosion is layers agreeing about timing — but the deeper lessons travel to every effect you will build. Answer the three motion questions — <em>initial position, initial speed, acceleration</em> — deliberately for every emitter. Fake motion with Scale when you can; simulate it when you must. Know the two outward recipes: random-direction spray for embers, shell-plus-outward-push for shrapnel. Exhaust the randomization spinners — Minimum lifetime, Minimum scale, Rotation variance — before adding emitters. And when you do need several copies of one design, make it a Link Group so it stays editable as one.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./04-recolor-and-orient-a-shield-impact.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">4. Recolor and Orient a Shield Impact</span></a>
-        <a class="pager-next" href="./app-ui-quick-reference.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">App UI Quick Reference</span></a>
+        <a class="pager-next" href="./build-your-own-effect.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Build Your Own Effect</span></a>
       </nav>
     </main>
     <nav class="toc" aria-label="On this page">

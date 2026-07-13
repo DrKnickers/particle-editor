@@ -48,8 +48,9 @@ Mod loose path:      Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.
 ## XML Organization
 
 Particles can also be referenced from XML. Some mods place all object references in the stock-style
-XML files, while others use file lists such as `GameObjectFiles.xml` to reference additional XML
-files for better organization.
+XML files, while others use file lists such as
+[`GameObjectFiles.xml`](game-concepts-glossary) — a list that tells the game which object XML files
+to load — to reference additional XML files for better organization.
 
 When you override an existing particle file at the same path, you usually do not need to touch XML.
 When you create a new separate particle, something in the game or a model proxy still

@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -120,7 +122,7 @@
 Mod loose path:      Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
 </code></pre>
 <h2 id="xml-organization">XML Organization</h2>
-<p>Particles can also be referenced from XML. Some mods place all object references in the stock-style XML files, while others use file lists such as <code>GameObjectFiles.xml</code> to reference additional XML files for better organization.</p>
+<p>Particles can also be referenced from XML. Some mods place all object references in the stock-style XML files, while others use file lists such as <a href="./game-concepts-glossary.html"><code>GameObjectFiles.xml</code></a> — a list that tells the game which object XML files to load — to reference additional XML files for better organization.</p>
 <p>When you override an existing particle file at the same path, you usually do not need to touch XML. When you create a new separate particle, something in the game or a model proxy still needs to point at it.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">

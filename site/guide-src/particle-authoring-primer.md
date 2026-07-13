@@ -7,8 +7,30 @@ Most effects come from a small set of first principles: lifetime, emission rate 
 color, alpha, scale, texture or atlas frame, blend mode, and motion. Tracks change those values over
 each particle's lifetime.
 
-Use additive blending for glows and energy effects. Use transparent blending for smoke, dust, and
-debris-like effects.
+A particle's *blend mode* decides how it mixes with the scene behind it (covered in full in
+[Blend Modes](blend-modes)): use additive blending for glows and energy effects — it only ever
+brightens — and transparent blending for smoke, dust, and debris-like effects.
+
+## How the Pieces Fit
+
+Every effect you build is the same chain, from the whole system down to a single drawn particle:
+
+```text
+particle system
+  └─ emitter(s)              each one an engine that spawns particles
+       └─ particles          many small, short-lived images
+            ├─ texture / atlas frame       the image each particle draws (an atlas holds several)
+            ├─ tracks: Color, Alpha, Scale…  how it changes over its life
+            ├─ motion (Physics tab)        how it launches, accelerates, settles
+            └─ blend mode                  how it mixes with the scene behind it
+```
+
+Stack several emitters and their particles layer into one effect, with the draw order deciding
+what shows on top. A **child** emitter attaches to another emitter's particles — emitting along
+each one as it lives (a trail on a moving spark) or once when it dies (a pop). Hold this chain in
+mind and every panel in the
+editor is just one link in it: the Emitter Tree is the emitters, the Curve Editor is the tracks,
+the Physics tab is the motion, and the Appearance tab is the texture and blend mode.
 
 ## Emitters
 
@@ -20,9 +42,10 @@ that emitter contributes.
 ## Render Order
 
 When several emitters overlap on screen, the order they draw in — top to bottom in the Emitter
-Tree — decides which one appears on top. Particles do not sort themselves by depth or distance;
-the first emitter in the list draws first, and every emitter after it draws over what came before,
-the same way the game itself renders them.
+Tree — decides which one appears on top. For ordinary particles, emitter order controls the
+stacking: the first emitter draws first, and every emitter after it draws over what came before.
+(Heat-shimmer emitters are handled separately and do not follow this ordinary stacking order.)
+Treat the in-editor order as your reference for how the layers stack.
 
 This matters most once blend modes are involved. An Additive glow drawn after a Transparent smoke
 layer shows through the smoke and brightens it; the same glow drawn before the smoke gets covered
@@ -55,16 +78,18 @@ motion does — the same emitter reads as smoke, fire, or energy depending on th
 
 Many particle textures are **atlases**: one image holding a grid of frames. The emitter's
 **Index** track chooses which frame each particle shows, and because Index keys step from one
-whole frame to the next rather than blending, a rising Index curve plays the frames like a
+whole frame to the next rather than blending, a rising Index track plays the frames like a
 flipbook across the particle's life. That is how a single particle can show a rolling, animated
-flame. Use the Texture/Atlas Picker to see a texture's frames and pick one; use the Index track
-in the Curve Editor when the frames should animate.
+flame. Use the **Atlas Frame Picker** (View menu) to see a texture's frames and pick one; use the
+Index track in the Curve Editor when the frames should animate.
 
 ## Game Context
 
 Particles are not just abstract visuals. A good effect helps the player read what is happening in
-the game. A hardpoint damage effect should sit near the damaged hardpoint. A weapon impact should
-face or imply the surface it hit. A projectile trail should make the projectile's motion easier to
+the game. A hardpoint damage effect should sit near the damaged hardpoint — a *hardpoint* is a
+damageable part of a unit, such as a turret, engine, or shield generator (see the
+[Game Concepts Glossary](game-concepts-glossary)). A weapon impact should face or imply the surface
+it hit. A projectile trail should make the projectile's motion easier to
 follow without covering the target.
 
 ## Common Rules of Thumb

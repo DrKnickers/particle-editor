@@ -127,9 +127,17 @@ test("guide pager: first, middle, and final pages expose expected directions", a
   await expect(page.locator(".guide-pager .pager-prev")).toHaveCount(1);
   await expect(page.locator(".guide-pager .pager-next")).toHaveCount(0);
 
-  await page.goto("/guide/03-build-a-laser-shot-and-muzzle-flash.html");
+  // The "Concepts Before You Build" bridge sits between Tutorial 2 and Tutorial 3, so Tutorial 3's
+  // prev is the bridge (not Tutorial 2). Assert both to guard the bridge's place in reading order.
+  await page.goto("/guide/concepts-before-you-build.html");
   await expect(page.locator(".guide-pager .pager-prev"))
     .toHaveAttribute("href", "./02-polish-hardpoint-damage-smoke.html");
+  await expect(page.locator(".guide-pager .pager-next"))
+    .toHaveAttribute("href", "./03-build-a-laser-shot-and-muzzle-flash.html");
+
+  await page.goto("/guide/03-build-a-laser-shot-and-muzzle-flash.html");
+  await expect(page.locator(".guide-pager .pager-prev"))
+    .toHaveAttribute("href", "./concepts-before-you-build.html");
   await expect(page.locator(".guide-pager .pager-next"))
     .toHaveAttribute("href", "./04-recolor-and-orient-a-shield-impact.html");
 

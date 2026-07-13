@@ -74,9 +74,11 @@
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html" class="active" aria-current="page">1. Make a Hardpoint Damage Effect Obvious</a></li>
       <li><a href="./02-polish-hardpoint-damage-smoke.html">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
       <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>
     <div class="side-group">
@@ -96,7 +98,7 @@
     </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 1 of 5</span></p>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 1 of 7</span></p>
 <h1 id="tutorial-1-make-a-hardpoint-damage-effect-obvious">Tutorial 1: Make a Hardpoint Damage Effect Obvious</h1>
 <p>This first tutorial makes one intentionally loud edit: it overrides the Star Destroyer hardpoint damage smoke particle and turns the smoke bright green.</p>
 <p>The goal is not to make a pretty effect yet. The goal is to prove that the editor can open a shipped particle, save a loose override into a tutorial mod, and produce a change that is obvious in game.</p>
@@ -136,7 +138,7 @@
 <p>Before changing anything, <em>read</em> the stock values: click each channel row in turn and look at the key values the file actually uses. In this particle you will find the smoke starts at Red <code>0.5</code>, Green <code>1.0</code>, Blue <code>1.0</code> — a pale blue-green — and all three channels converge to a dark neutral <code>0.255</code> by the end of the life, with a stop near 50% shaping the transition. That is the whole color story of the stock effect: a tinted birth cooling into gray ash. Getting into the habit of reading a shipped particle's numbers before touching them is how the rest of this guide's &quot;open something stock and study it&quot; advice works in practice.</p>
 <p>While you are looking, notice two other things about this emitter — both come back in later tutorials:</p>
 <ul>
-<li><strong>It streams; it doesn't burst.</strong> The Generation mode is Continuous at 5 particles/second, because damage smoke should pour out for as long as the hardpoint is damaged. One-off events (explosions, muzzle flashes) use Bursts instead — that contrast is <a href="./generation-types.html">Particle Generation Types</a>.</li>
+<li><strong>It streams; it doesn't burst.</strong> The generation is a Continuous stream at 5 particles/second, because damage smoke should pour out for as long as the hardpoint is damaged. One-off events (explosions, muzzle flashes) use Bursts instead — that contrast is <a href="./generation-types.html">Particle Generation Types</a>.</li>
 <li><strong>The Alpha track starts at <code>0</code></strong>, rises to its peak within the first tenth of the life, and then spends the rest fading back out. Smoke that faded only <em>out</em> would pop into existence at full opacity; the quick ramp-in is what makes each puff appear softly.</li>
 </ul>
 <p>Now make the smoke unmistakably green by removing everything that isn't green, one channel at a time:</p>
@@ -147,7 +149,7 @@
 <li>Repeat for the <strong>Red</strong> channel: focus it, select its key at 0%, set the value to <code>0.05</code>.</li>
 <li>Leave <strong>Green</strong> at <code>1.0</code>, and leave Alpha alone so the smoke stays readable.</li>
 </ol>
-<p>If a channel has more keys later in its lifetime, bring them down the same way — the goal is for green to dominate from start to death. Watch the Preview Viewport as you go: the smoke should turn a loud, saturated green.</p>
+<p>The Red and Blue tracks each carry two more keys — one around 50% and one at the end (both near <code>0.255</code> in the stock file). Select each of those and set it to <code>0.05</code> too, so green dominates from start to death; if you leave them, the smoke drifts back toward blue-white over its life as those later keys pull the color up. Watch the Preview Viewport as you go: the smoke should turn a loud, saturated green.</p>
 <p>This is deliberately exaggerated. Later tutorials will bring the effect back toward a believable game-art style.</p>
 <figure class="guide-media" aria-label="Show changing the smoke color to bright green in the editor UI."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-green-color-edit.mp4" data-poster="tutorial-01-green-color-edit-poster.jpg"></video></figure>
 <h2 id="4-save-the-override">4. Save the Override</h2>
@@ -158,7 +160,7 @@
 <figure class="guide-media" aria-label="Show saving the loose override after the proof edit."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-save-override.mp4" data-poster="tutorial-01-save-override-poster.jpg"></video></figure>
 <h3 id="note-names-filenames-and-new-particles">Note: Names, Filenames, and New Particles</h3>
 <p>The particle name and the particle filename are related, but they are not the same thing. If you want to make a genuinely separate particle instead of overriding an existing one, use <strong>Save As</strong> in the editor so the file and internal particle identity are saved intentionally.</p>
-<p>A separate particle also needs to be referenced somewhere the game can reach it. Common routes are game XML/<code>Particles.xml</code> entries or an Alamo proxy placed in an <code>.alo</code> model.</p>
+<p>A separate particle also needs to be referenced somewhere the game can reach it. Common routes are game XML / <code>Particles.xml</code> entries or an Alamo proxy placed in an <code>.alo</code> model — both defined in the <a href="./game-concepts-glossary.html">Game Concepts Glossary</a>.</p>
 <h2 id="5-verify-the-result-in-game">5. Verify the Result In Game</h2>
 <p>Launch the game with the tutorial mod active — the <code>MODPATH=Mods\ParticleTutorial</code> launch argument from <a href="./setup.html#launch-the-game-with-the-tutorial-mod">Setup</a>. Without it, the game loads only stock files and this check cannot pass.</p>
 <p>Start a normal battle where a Star Destroyer can take hardpoint damage. Once a hardpoint begins using the damage particle, the smoke should be bright green. That obvious color is your proof that the loose override is loading. If it is still stock-colored, the <a href="./troubleshooting.html">Troubleshooting</a> page walks the likely causes in order.</p>

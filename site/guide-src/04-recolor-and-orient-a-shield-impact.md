@@ -68,8 +68,8 @@ Then dig into how each one is built, because the two emitters answer "how do I m
 feel attached to a surface?" in two different ways:
 
 - **`ripple`** is a flat expanding ring *on* the shield face. Check its Appearance tab: the
-  world-oriented option is on, so the quad lies flat in the world instead of turning to face the
-  camera — that is what pins it to the shield plane. Its Initial position is `Exact (0, 0, 0.02)`:
+  world-oriented option is on, so the flat square carrying the ring stays lying against the
+  surface instead of turning to face the camera. Its Initial position is `Exact (0, 0, 0.02)`:
   two hundredths of a unit *above* the surface, just enough that the ring never clips into the
   shield it sits on. It never moves — its Scale track does all the work, expanding from `2` to
   `25` across a 0.3-second life. And its Index track holds a single atlas frame (a ring shape)
@@ -77,9 +77,10 @@ feel attached to a surface?" in two different ways:
 - **`splash`** is the energy kicked back off the surface. Ten particles, born in a tight
   0.4-radius sphere at the hit point, launched along **positive Z** — its Initial speed is a Box
   reaching from `(0,0,0)` to `(0,0,20)`, i.e. straight up off the surface at up to 20 units/s.
-  A positive **Inward speed** of `5` then pulls each particle back toward the center as it
-  flies, curving the spray into a fountain rather than a straight jet. These are camera-facing
-  (the default), because sparks of energy should read from any angle.
+  A positive **Inward speed** of `5` aims each particle slightly back toward the center at birth,
+  tightening the spray into a fountain rather than a straight jet. It changes only the launch
+  direction — it does not keep pulling as the particle flies. These are camera-facing (the
+  default), because sparks of energy should read from any angle.
 
 One structural detail worth noticing: both emitters set `Minimum lifetime` to 100% — *no*
 lifetime randomness. An impact is a single crisp event; every particle arriving and dying on
@@ -105,18 +106,19 @@ end of the life — an additive effect fades out by dimming to black, since alph
 here. Recoloring to purple is therefore a *channel-balance* change: raise Red, cut Green, keep
 Blue.
 
-A simple target is:
+A simple starting target (start values; every channel still ends at `0`):
 
-```text
-Red:   high
-Green: low
-Blue:  high
-End:   all channels to 0 — keep the dim-to-black ending intact
-```
+| Parameter | Value |
+|---|---|
+| Red | ~0.6 (raised from ~0 — this is what turns the blue into purple) |
+| Green | ~0.1 (cut from ~0.5) |
+| Blue | ~0.75 (kept — the stock blue anchor) |
+| End | all channels to 0 — keep the dim-to-black ending intact |
 
-Because these emitters are additive, only the color tracks matter — the Alpha track has no
-effect, and brightness *is* the color. Keep the center of the impact bright enough to read as energy. If everything becomes the same flat
-purple, give the core a little more brightness and let the outer glow be softer.
+Because these emitters are additive, only the color tracks matter — the Alpha track has no effect,
+and brightness *is* the color. Keep the `ripple` ring a touch brighter (try Red `~0.7`) so the
+core of the impact reads as energy, and let `splash` sit slightly dimmer (Red `~0.5`) as the softer
+outer kick. If everything becomes the same flat purple, widen that brightness gap between the two.
 
 <!-- Media: tutorial-04-recolor-purple -->
 
@@ -146,17 +148,20 @@ flat, too thick, or misaligned for the context you imagine.
 
 ### Note: Link Particles to the Impact Instance
 
-For impact-style particles, select emitters that should follow the impact orientation and check
-`Link particles to instance` in the Basic tab's Connection section. This is separate from the
-`Parent speed inherit` control used in Tutorial 3.
+For impact-style particles, you can check `Link particles to instance` in the Basic tab's
+Connection section on emitters that should ride with the impact instance as it moves. This
+checkbox makes already-spawned particles move with the effect instance's position; it does not
+rotate them, and it is separate from the `Parent speed inherit` control used in Tutorial 3. The
+effect's *orientation* comes from how it is authored and placed, covered next — not from this
+checkbox.
 
 When you study a shipped directional effect, check which axis its important motion points along —
 select each emitter and read its Initial speed values in the Physics tab. In this particle the
 answer is unambiguous: the splash launches along **positive Z** (its speed Box reaches from zero
-to `+20` on Z only), and the ripple lies flat in the X/Y plane facing the same +Z direction. That
-is the stock convention — the effect's "outward" is +Z, and the game orients that axis away from
-the struck surface, back toward where the projectile came from. Author your own directional
-effects along the same axis and they will orient in game the way the stock ones do.
+to `+20` on Z only), and the ripple lies flat in the X/Y plane facing the same +Z direction. So
+the effect's "outward" is authored as +Z. Author your own directional effects along +Z to match
+the stock ones. The preview can't show how the game aligns that axis onto a struck surface, so
+test each new directional effect in game before relying on it.
 
 <!-- Media: tutorial-04-orient-preview -->
 
