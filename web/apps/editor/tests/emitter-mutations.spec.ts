@@ -165,8 +165,16 @@ test("emitters/duplicate-with-index-increment via the bridge appends a new emitt
       params: { id: firstId, delta: 3 },
     });
 
-    // Give events one microtask to flush.
-    await Promise.resolve();
+    // Wait (bounded) for the tree/changed event rather than assuming it lands
+    // within one microtask — under load the WebView2 host can deliver it late (#600).
+    await new Promise<void>((resolve) => {
+      const deadline = Date.now() + 2000;
+      const poll = () => {
+        if (treeEvents >= 1 || Date.now() >= deadline) resolve();
+        else setTimeout(poll, 10);
+      };
+      poll();
+    });
     off();
 
     const after = await bridge.request({
@@ -225,7 +233,20 @@ test("emitters/duplicate-with-index-increment-many chains N copies in one call a
       params: { id: firstId, delta: 2, count: 3 },
     });
 
-    await Promise.resolve();
+    // Wait (bounded) for the batch's tree burst rather than assuming it lands
+    // within one microtask — under load the WebView2 host can deliver it late (#600).
+    await new Promise<void>((resolve) => {
+      const deadline = Date.now() + 2000;
+      const poll = () => {
+        if (treeEvents >= 1 || Date.now() >= deadline) resolve();
+        else setTimeout(poll, 10);
+      };
+      poll();
+    });
+    // Settle briefly so any one-per-copy bursts would have arrived, then stop
+    // listening: the batch must fire exactly ONE burst for N copies (#575's
+    // single-captureUndo contract), which the count assertion below verifies.
+    await new Promise((resolve) => setTimeout(resolve, 150));
     off();
 
     const after = await bridge.request({
@@ -243,7 +264,7 @@ test("emitters/duplicate-with-index-increment-many chains N copies in one call a
 
   expect(result.newIds).toHaveLength(3);
   expect(new Set(result.newIds).size).toBe(3);   // three distinct copies
-  expect(result.treeEvents).toBeGreaterThanOrEqual(1); // one burst for the batch
+  expect(result.treeEvents).toBe(1); // exactly one burst for the batch (#575), not one-per-copy
   expect(result.afterCount).toBe(result.beforeCount + 3);
 
   // Cleanup: delete the copies (highest id first so lower ids stay valid).

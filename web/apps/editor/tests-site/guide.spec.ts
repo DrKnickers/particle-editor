@@ -1,27 +1,24 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
-const GUIDE_SLUGS = [
-  "home",
-  "setup",
-  "particle-authoring-primer",
-  "01-make-a-hardpoint-damage-effect-obvious",
-  "02-polish-hardpoint-damage-smoke",
-  "03-build-a-laser-shot-and-muzzle-flash",
-  "04-recolor-and-orient-a-shield-impact",
-  "app-ui-quick-reference",
-  "file-structure",
-  "where-particles-are-used-in-game",
-  "game-concepts-glossary",
-  "basic-controls",
-  "stacking-emitters-and-children",
-  "blend-modes",
-  "generation-types",
-];
+// Derive the guide's pages, order, and section count from nav.json — the SAME single
+// source of truth build-guide.mjs renders the sidebar from — so this spec can't silently
+// drift when a page is added or removed (as it did between #593 and #599: 15 → 19 pages).
+const NAV = JSON.parse(
+  readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), "../../../../site/guide-src/nav.json"),
+    "utf8",
+  ),
+) as { sections: { pages: { slug: string }[] }[] };
+const GUIDE_SLUGS = NAV.sections.flatMap((s) => s.pages.map((p) => p.slug));
+const SECTION_COUNT = NAV.sections.length;
 
 // After Phase 2 each `<!-- Media: id -->` anchor is expanded (by build-guide.mjs, from the
 // wiki-media manifest) into a <video>/<img> embed — except the one manual in-game-proof shot,
 // which stays an inert comment. The EXACT ordered filenames below (not just counts) are the
-// contract: they sum to the 24 manifest items (19 clips + 4 stills + 1 manual) and lock each
+// contract: they sum to the 31 manifest items (26 clips + 4 stills + 1 manual) and lock each
 // page's ids AND their order, so a duplicated/swapped/renamed anchor can't pass on count alone.
 const RELEASE_BASE = "https://github.com/DrKnickers/particle-editor/releases/download/site-media/";
 const TUTORIAL_MEDIA = new Map([
@@ -42,8 +39,14 @@ const TUTORIAL_MEDIA = new Map([
     manualComment: 0,
   }],
   ["04-recolor-and-orient-a-shield-impact", {
-    clips: ["tutorial-04-opening-result.mp4", "tutorial-04-open-override.mp4", "tutorial-04-recolor-purple.mp4",
-      "tutorial-04-orient-preview.mp4", "tutorial-04-final-preview.mp4"],
+    clips: ["tutorial-04-opening-result.mp4", "tutorial-04-open-override.mp4", "tutorial-04-identify-emitters.mp4",
+      "tutorial-04-recolor-purple.mp4", "tutorial-04-orient-preview.mp4", "tutorial-04-final-preview.mp4"],
+    stills: [],
+    manualComment: 0,
+  }],
+  ["05-build-an-explosion", {
+    clips: ["tutorial-05-opening-result.mp4", "tutorial-05-flash-burst.mp4", "tutorial-05-smoke-render-order.mp4",
+      "tutorial-05-fireball-index.mp4", "tutorial-05-sparks-children.mp4", "tutorial-05-final-preview.mp4"],
     stills: [],
     manualComment: 0,
   }],
@@ -65,8 +68,8 @@ test("guide structure: pages, sidebar, active nav, kicker, toc", async ({ page }
 
     await expect(page.locator("h1")).toHaveCount(1);
     await expect(page.locator(".guide-sidebar")).toHaveCount(1);
-    await expect(page.locator(".guide-sidebar .side-group")).toHaveCount(3);
-    await expect(page.locator(".guide-sidebar a")).toHaveCount(15);
+    await expect(page.locator(".guide-sidebar .side-group")).toHaveCount(SECTION_COUNT);
+    await expect(page.locator(".guide-sidebar a")).toHaveCount(GUIDE_SLUGS.length);
 
     const current = page.locator('.guide-sidebar a[aria-current="page"]');
     await expect(current).toHaveCount(1);

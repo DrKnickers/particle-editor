@@ -11,6 +11,8 @@
 //   scripts           node --test script libs — MUST follow web-build: the
 //                     no-test-seam-in-prod guard silently self-skips without dist/
 //   playwright-web    mock-browser Playwright lane (own Vite server)
+//   site              landing + guide static-site Playwright (own node server;
+//                     global-setup renders placeholder media — warns if FFmpeg absent)
 //   cpp-unit          all standalone tests/test_*.cpp except needs-exe ones
 //   msbuild-debug     x64 Debug ParticleEditor.sln (test:native launches this exe)
 //   cpp-unit-exe      needs-exe native tests against the FRESH Debug exe (explicit
@@ -28,8 +30,10 @@
 // prereq to a visible SKIP. A lane failure SKIPs lanes that depend on it (visible,
 // counted as blocked, overall run still fails).
 //
-// Deliberately NOT in the default gate: test:site (writes placeholder media, needs
-// FFmpeg) and a11y:drift (mutates goldens; test:native already runs a11y specs).
+// Deliberately NOT in the default gate: a11y:drift (mutates goldens; test:native
+// already runs a11y specs). test:site now runs as the `site` lane (#599) — its
+// FFmpeg-dependent placeholder render degrades to a warning outside CI, so the guide
+// suite still runs without FFmpeg.
 //
 // Flags:
 //   --lane <a,b,…>        run only these lanes (deps NOT auto-added)
@@ -190,6 +194,15 @@ const LANES = [
   {
     name: "playwright-web",
     run: () => (runCmdLine("pnpm run test:web", editorDir) === 0 ? pass : fail("mock-browser Playwright")),
+  },
+  {
+    name: "site",
+    // Landing + guide static-site Playwright. Self-contained: serve.mjs hosts the
+    // committed repo-root site/ (no dist/, no exe). global-setup renders placeholder
+    // landing media via FFmpeg; outside CI (this gate never sets CI) it degrades to a
+    // warning, so a missing FFmpeg skips only the landing playback specs, never the
+    // guide suite. In-gate so guide.spec can't silently go stale again (#599).
+    run: () => (runCmdLine("pnpm run test:site", editorDir) === 0 ? pass : fail("landing + guide Playwright")),
   },
   {
     name: "cpp-unit",
