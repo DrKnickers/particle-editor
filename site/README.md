@@ -193,3 +193,25 @@ at `http://localhost:5175/?media=media-local/`, not from committed media. The se
 WIP referenced `hero.mp4`, `faith.mp4`, `f02.mp4`, `f02-reorder.mp4`, and `f04.mp4` (each
 with its `*-poster.jpg`); those binaries remain out of git. (The F2/F4 cards were stills
 — `preview-poster.jpg` / `workspace-poster.jpg` — until the drag clips landed in #445.)
+
+### Backup — re-pull to OneDrive after content changes
+
+The VPS docroot is **expendable / redeployable**; the authoritative backup of the served
+`media-local/` binaries (which are out of git) lives on **this Windows box under OneDrive**
+(established 2026-07-13, Phase 0 — see DrKnickers/vps-infra registry gap #1). Because every
+deploy recipe above overwrites the VPS copy, **re-pull after any content change** so the
+backup stays current:
+
+```powershell
+$key = "$env:USERPROFILE\.ssh\particle-demo-site-key"
+$dst = "$env:USERPROFILE\OneDrive\Backups\particle-editor-demo"
+New-Item -ItemType Directory -Force -Path $dst | Out-Null
+scp -r -i $key particledeploy@66.163.126.124:/var/www/particle-editor-demo/* "$dst\"
+```
+
+Then confirm OneDrive has synced (folder shows the "up to date" check) and optionally
+spot-check a file's size against the VPS. The Phase 0 true-up pulled 120 files / 77 MB and
+was checksum + restore-test verified. Runs as the sudo-less `particledeploy` user (same
+site-only key as deploys) — no root, no Caddy interaction. A full restore = this backup
+back to the docroot via the refresh recipe above, then re-apply the `MEDIA_BASE`
+patch.
