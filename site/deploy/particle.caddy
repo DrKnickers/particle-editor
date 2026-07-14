@@ -1,15 +1,18 @@
 # particle.example.com — the Particle Editor demo site (static).
 #
-# This project OWNS this vhost. It is deployed to the shared Caddy on the VPS
-# as a drop-in fragment: /etc/caddy/conf.d/particle.caddy — NOT inside the
-# plex-stack-managed /etc/caddy/Caddyfile. The plex Caddyfile carries a single
-# `import /etc/caddy/conf.d/*.caddy` (DrKnickers/plex-stack#2) that pulls this
-# in, so a plex Caddyfile re-sync/restore can never wipe our routing again and
-# we never edit their file.
+# ⚠️ REFERENCE COPY. Source-of-truth for this vhost fragment moved to
+# **DrKnickers/vps-infra** (`caddy/conf.d/particle.caddy`) in Phase 2 (2026-07-13).
+# Edit the vhost there via a vps-infra PR (which runs `caddy validate` in CI),
+# then the admin deploy path installs it. Do NOT hand-edit the host copy or
+# treat this file as authoritative — keep it in sync with vps-infra if you touch it.
 #
-# Deploy: scp this file to particledeploy@<vps>:/etc/caddy/conf.d/particle.caddy
-# then reload Caddy. Site content lives at /var/www/particle-editor-demo
-# (root site + /guide + /media-local), owned by particledeploy.
+# The vhost is a drop-in fragment at /etc/caddy/conf.d/particle.caddy, pulled in by
+# the root Caddyfile's `import /etc/caddy/conf.d/*.caddy` (so a Caddyfile
+# re-sync/restore never wipes our routing). Fragment installs go through the
+# vps-infra admin deploy path (NOT particledeploy, which can't write /etc/caddy).
+#
+# This repo still owns the SITE CONTENT: /var/www/particle-editor-demo
+# (root site + /guide + /media-local), deployed by particledeploy.
 
 particle.example.com {
 	root * /var/www/particle-editor-demo
