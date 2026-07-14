@@ -97,6 +97,10 @@ public:
 	// Drives the rank-ordered draw pass so lazily-spawned children honor their
 	// list position vs siblings instead of always drawing last (#574).
 	size_t GetSourceRank() const  { return m_emitter.index; }
+	// The wrapped source emitter — its stable identity (pointer) lets the draw
+	// pass map an instance to its authored-list POSITION without trusting the
+	// mutable Emitter::index mirror (#609). Never null; owned by the ParticleSystem.
+	const ParticleSystem::Emitter* GetSourceEmitter() const { return &m_emitter; }
 	ParticleSystemInstance& GetSystem() { return m_system; }
 
 	EmitterInstance(TimeF currentTime, ParticleSystemInstance& system, Engine& engine, ParticleSystem::Emitter& emitter, Object3D* parent, int* numParticles);

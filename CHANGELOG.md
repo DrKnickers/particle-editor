@@ -176,6 +176,8 @@ may live at the end of the file.
 
 ### Fixed
 
+- Child emitters now render behind the parent emitter they were spawned from, matching the game — a spawned child no longer draws on top of its parent
+- Dragging a key in the curve editor now keeps the curve line locked to the cursor instead of lagging behind it on busy effects
 - Heavy particle systems (e.g. Mod's) that repeatedly refused to render in the preview — even after raising the overload cap to its maximum — now render correctly; the preview's overload estimate no longer wildly over-projects particle counts for chains where a child emitter spawns on its parent's death
 - The Atlas Frame Picker now correctly highlights the wrapped frame when an index-curve value runs past the last atlas cell (e.g. index 4 on a 4-frame atlas now shows frame 0, matching the game), instead of losing the selection highlight
 - Child emitters (spawned during a parent's life or on its death) now preview drawn behind or in front of their siblings according to their authored rank, instead of always drawing on top regardless of rank

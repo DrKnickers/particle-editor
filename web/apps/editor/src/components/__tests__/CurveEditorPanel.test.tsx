@@ -13,7 +13,7 @@
 //     (visibleChannels prop wired correctly).
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { ReactElement, ReactNode } from "react";
 import type {
@@ -2059,5 +2059,80 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
       expect(readValue()).toBeGreaterThan(0.5); // borders shift in value
     });
     expect(timeInput().disabled).toBe(true);     // time still pinned for all-border
+  });
+
+  // #610 regression: the live-spinner state write is COALESCED to an animation
+  // frame, not committed synchronously on every pointer-move. This is the fix
+  // for the curve trailing the cursor during a drag — unthrottled per-move
+  // re-renders of this large panel starved the renderer's rAF curve reshape.
+  // Pins deferral: with rAF held, a move must NOT update the spinner; the
+  // update lands only once a frame flushes. A revert to synchronous setState
+  // would fail the pre-flush assertion.
+  it("coalesces the live-spinner write to an animation frame (does not update synchronously per move) (#610)", async () => {
+    const rafCbs: FrameRequestCallback[] = [];
+    const realRaf = window.requestAnimationFrame;
+    const realCaf = window.cancelAnimationFrame;
+    // Capture rAF callbacks instead of auto-firing so we control the flush.
+    window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      rafCbs.push(cb);
+      return rafCbs.length; // 1-based handle
+    }) as typeof window.requestAnimationFrame;
+    window.cancelAnimationFrame = ((id: number) => {
+      if (id >= 1 && id <= rafCbs.length) rafCbs[id - 1] = (() => {}) as FrameRequestCallback;
+    }) as typeof window.cancelAnimationFrame;
+    const flushFrames = () =>
+      act(() => {
+        for (const cb of rafCbs.splice(0)) cb(0);
+      });
+
+    try {
+      const { bridge } = makeStubBridgeRedInterior();
+      render(<CurveEditorPanel bridge={bridge} />);
+      await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
+
+      const keyAt25 = screen.getAllByTestId("curve-key")
+        .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red")!;
+      const keyAt75 = screen.getAllByTestId("curve-key")
+        .find((k) => k.getAttribute("data-key-time") === "75" && k.getAttribute("data-channel-id") === "red")!;
+      fireEvent.click(keyAt25);
+      fireEvent.click(keyAt75, { ctrlKey: true });
+      const panel = screen.getByTestId("curve-editor-panel");
+      await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("2"));
+
+      const svg = document.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+      svg.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+      const readValue = () =>
+        Number((screen.getByLabelText("Selected key value") as HTMLInputElement).value);
+      await waitFor(() =>
+        expect((screen.getByLabelText("Selected key value") as HTMLInputElement).disabled).toBe(false),
+      );
+      // Drain any frames queued by mounting/selection so the drag starts clean.
+      flushFrames();
+      expect(readValue()).toBeCloseTo(0.5, 2);
+
+      // Begin the group drag, then move THREE times within the held frame. Each
+      // callback fires synchronously but the state write is deferred, and the
+      // moves must COALESCE — not schedule a fresh flush apiece.
+      fireEvent.pointerDown(keyAt25, { button: 0, pointerId: 91, clientX: 150, clientY: 225 });
+      fireEvent.pointerMove(svg, { pointerId: 91, clientX: 150, clientY: 215 }); // +10px up
+      fireEvent.pointerMove(svg, { pointerId: 91, clientX: 150, clientY: 205 }); // +20px up
+      fireEvent.pointerMove(svg, { pointerId: 91, clientX: 150, clientY: 195 }); // +30px up → +0.1 value
+
+      // Deferral: with the frame still held, the spinner must NOT have moved.
+      expect(readValue()).toBeCloseTo(0.5, 2);
+      // Coalescing: three moves scheduled FEWER than three frames (the panel's
+      // live-write frame is reused, not re-queued per move; the renderer's own
+      // drag-tick frame coalesces too). A per-move setState would queue ≥3.
+      expect(rafCbs.length).toBeLessThan(3);
+
+      // Flush once: only the LATEST move's value lands (0.5 + 0.1 = 0.6),
+      // proving the intermediate writes collapsed into the last.
+      flushFrames();
+      expect(readValue()).toBeCloseTo(0.6, 1);
+    } finally {
+      window.requestAnimationFrame = realRaf;
+      window.cancelAnimationFrame = realCaf;
+    }
   });
 });

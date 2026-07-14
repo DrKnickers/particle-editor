@@ -473,6 +473,53 @@ export function CurveEditorPanel({ bridge }: Props) {
   // multi-select AVERAGE spinners track the shift in real time (the
   // group analogue of `liveDrag`). Null when no group drag is active.
   const [liveGroup, setLiveGroup] = useState<{ dTime: number; dValue: number } | null>(null);
+
+  // ── Live-drag write coalescing (#610) ──────────────────────────────
+  // Pointer-moves fire above 60 Hz; writing liveDrag/liveGroup to state on
+  // EVERY move re-renders this whole (large) panel each time, saturating the
+  // main thread so the renderer's rAF curve reshape falls behind and the curve
+  // visibly trails the cursor during a drag. Coalesce those writes to at most
+  // once per animation frame: each move stashes the latest value in a ref, and
+  // a single rAF flush commits it to state. The renderer already reshapes the
+  // curve per frame via its own dragRef/scheduleDragTick, so both the spinner
+  // and the curve now update at frame cadence — tight, not laggy. `undefined`
+  // means "nothing pending"; a stashed value is always non-null.
+  const liveDragRaf = useRef<number | null>(null);
+  const pendingLiveDrag = useRef<
+    { keyTime: number; time: number; value: number } | undefined
+  >(undefined);
+  const pendingLiveGroup = useRef<{ dTime: number; dValue: number } | undefined>(undefined);
+  const flushLive = useCallback(() => {
+    liveDragRaf.current = null;
+    if (pendingLiveDrag.current !== undefined) {
+      setLiveDrag(pendingLiveDrag.current);
+      pendingLiveDrag.current = undefined;
+    }
+    if (pendingLiveGroup.current !== undefined) {
+      setLiveGroup(pendingLiveGroup.current);
+      pendingLiveGroup.current = undefined;
+    }
+  }, []);
+  const scheduleLiveFlush = useCallback(() => {
+    if (liveDragRaf.current !== null) return; // a frame is already queued
+    if (typeof requestAnimationFrame !== "function") { flushLive(); return; }
+    liveDragRaf.current = requestAnimationFrame(flushLive);
+  }, [flushLive]);
+  // Drop any queued flush so a pending frame can't resurrect a stale live value
+  // AFTER a drag has committed/cancelled and cleared liveDrag/liveGroup to null.
+  const cancelLiveFlush = useCallback(() => {
+    if (liveDragRaf.current !== null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(liveDragRaf.current);
+    }
+    liveDragRaf.current = null;
+    pendingLiveDrag.current = undefined;
+    pendingLiveGroup.current = undefined;
+  }, []);
+  useEffect(() => () => {
+    if (liveDragRaf.current !== null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(liveDragRaf.current);
+    }
+  }, []);
   const [keyContextMenu, setKeyContextMenu] = useState<
     { time: number; isBorder: boolean; x: number; y: number } | null
   >(null);
@@ -840,6 +887,13 @@ export function CurveEditorPanel({ bridge }: Props) {
 
   const handleKeyDragEnd = useCallback(
     (keyTime: number, newTime: number, newValue: number) => {
+      // Tear down the live-drag overlay FIRST, unconditionally — before the
+      // commit guard can early-return. Otherwise a pointer-move that queued a
+      // coalesced rAF flush right before an end whose commit is refused (track
+      // deselected / locked mid-drag) would let that frame fire afterward and
+      // resurrect the stale drag value onto a later emitter/track (#610 review).
+      cancelLiveFlush();
+      setLiveDrag(null);
       if (selectedId === null || focusedTrack === null || focusLocked) return;
       // The engine stores track key times as float32; a JS-side
       // double like 49.476439790575924 comes back from the bridge
@@ -855,7 +909,6 @@ export function CurveEditorPanel({ bridge }: Props) {
       const engineNewTime = Math.fround(newTime);
       setSelectedKeyTimes(new Set([engineNewTime]));
       setOptimisticSelected({ time: engineNewTime, value: newValue });
-      setLiveDrag(null);
       setTracks((prev) => {
         if (prev === null) return prev;
         return prev.map((t) => {
@@ -877,7 +930,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         },
       }).catch(() => { /* silent — re-fetch on tree/changed */ });
     },
-    [bridge, selectedId, focusedTrack, focusLocked, focusedChannel.trackName],
+    [bridge, selectedId, focusedTrack, focusLocked, focusedChannel.trackName, cancelLiveFlush],
   );
 
   const handleKeyDragStart = useCallback(
@@ -902,21 +955,29 @@ export function CurveEditorPanel({ bridge }: Props) {
 
   const handleKeyDragMove = useCallback(
     (keyTime: number, currentTime: number, currentValue: number) => {
-      setLiveDrag({ keyTime, time: currentTime, value: currentValue });
+      // Coalesced to one state write per frame (#610) — see scheduleLiveFlush.
+      pendingLiveDrag.current = { keyTime, time: currentTime, value: currentValue };
+      scheduleLiveFlush();
     },
-    [],
+    [scheduleLiveFlush],
   );
 
   // Group-drag live move: stash the live (dTime, dValue) so the
   // multi-select average spinners reflect the shift mid-drag.
-  const handleGroupDragMove = useCallback((dTime: number, dValue: number) => {
-    setLiveGroup({ dTime, dValue });
-  }, []);
+  const handleGroupDragMove = useCallback(
+    (dTime: number, dValue: number) => {
+      // Coalesced to one state write per frame (#610) — see scheduleLiveFlush.
+      pendingLiveGroup.current = { dTime, dValue };
+      scheduleLiveFlush();
+    },
+    [scheduleLiveFlush],
+  );
 
   const handleKeyDragCancel = useCallback(() => {
+    cancelLiveFlush();
     setLiveDrag(null);
     setLiveGroup(null);
-  }, []);
+  }, [cancelLiveFlush]);
 
   const handleCanvasAdd = useCallback(
     (time: number, value: number) => {
@@ -1116,11 +1177,12 @@ export function CurveEditorPanel({ bridge }: Props) {
     (dTime: number, dValue: number) => {
       // Drag is over — drop the live delta so the average snaps to the
       // committed (optimistic) positions instead of the in-flight shift.
+      cancelLiveFlush();
       setLiveGroup(null);
       if (focusLocked || (dTime === 0 && dValue === 0)) return;
       applyGroupShift(dTime, dValue);
     },
-    [focusLocked, applyGroupShift],
+    [cancelLiveFlush, focusLocked, applyGroupShift],
   );
 
   // Spinner display values + enablement. Single-key wins; otherwise the
