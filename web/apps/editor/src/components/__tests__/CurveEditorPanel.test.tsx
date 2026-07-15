@@ -2135,4 +2135,253 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
       window.cancelAnimationFrame = realCaf;
     }
   });
+
+  // #613 regression: a SINGLE-key Value spinner edit must update the curve
+  // IMMEDIATELY (optimistic track write, no bridge round-trip) and SNAP (no
+  // morph glide). matchMedia is stubbed so morphs are enabled — a revert of the
+  // suppress would mount the morph overlay, and a revert of the optimistic
+  // setTracks would leave the key un-moved (no refetch fires in this stub).
+  it("single-key Value spinner edit moves the curve at once and does not morph (#613)", async () => {
+    // matchMedia is read-only in jsdom; define it (morphs enabled: reduce=false).
+    const realMatchMedia = (window as Window & typeof globalThis).matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: (q: string) => ({
+        matches: false, media: q, onchange: null,
+        addListener() {}, removeListener() {},
+        addEventListener() {}, removeEventListener() {},
+        dispatchEvent() { return false; },
+      }),
+    });
+    try {
+      const { bridge } = makeStubBridgeRedInterior();
+      render(<CurveEditorPanel bridge={bridge} />);
+      await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
+
+      const keyAt25 = () =>
+        screen.getAllByTestId("curve-key").find(
+          (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
+        )!;
+      fireEvent.click(keyAt25());
+      const panel = screen.getByTestId("curve-editor-panel");
+      await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
+
+      const cyBefore = Number(keyAt25().getAttribute("cy"));
+
+      // Edit the Value spinner up (0.25 -> 0.9) and commit.
+      const valueInput = screen
+        .getByTestId("ce-spinner-value-wrapper")
+        .querySelector("input") as HTMLInputElement;
+      await waitFor(() => expect(valueInput.disabled).toBe(false));
+      fireEvent.focus(valueInput);
+      fireEvent.change(valueInput, { target: { value: "0.9" } });
+      fireEvent.blur(valueInput);
+
+      // Optimistic: the key jumps up immediately (higher value -> smaller cy),
+      // with NO refetch in this stub. A revert of the optimistic setTracks
+      // would leave cy unchanged.
+      await waitFor(() => {
+        expect(Number(keyAt25().getAttribute("cy"))).toBeLessThan(cyBefore - 1);
+      });
+
+      // Suppressed: the change never mounts a morph overlay. A revert of the
+      // suppress would glide (overlay present) since morphs are enabled here.
+      await new Promise((r) => setTimeout(r, 40));
+      expect(document.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    } finally {
+      Object.defineProperty(window, "matchMedia", { configurable: true, value: realMatchMedia });
+    }
+  });
+
+  // #613 regression (scrub race): every set-track-key echoes tree/changed →
+  // get-tracks. During a rapid spinner scrub those refetch responses land LATE,
+  // carrying pre-edit snapshots; without the edit-epoch guard they overwrite the
+  // optimistic tracks and yank the curve backwards ("curve lags the key"). This
+  // pins the guard: a get-tracks response ISSUED BEFORE a newer local edit must
+  // be discarded, leaving the optimistic (newest) curve untouched.
+  it("a stale get-tracks response from before a newer local edit does not yank the curve back (#613)", async () => {
+    const seedTracks: TrackDto[] = TRACK_NAMES.map((name) => ({
+      name,
+      keys: name === "red"
+        ? [
+            { time: 0,   value: 0 },
+            { time: 25,  value: 0.25 },
+            { time: 100, value: 1 },
+          ]
+        : [
+            { time: 0,   value: 0 },
+            { time: 100, value: name === "rotationSpeed" ? -1 : 1 },
+          ],
+      interpolation: "linear" as const,
+      lockedTo: null,
+    }));
+    // The stale snapshot: red@25 = 0.5 (the FIRST edit), not the newest (0.9).
+    const staleTracks = seedTracks.map((t) =>
+      t.name !== "red"
+        ? t
+        : { ...t, keys: t.keys.map((k) => (k.time === 25 ? { time: 25, value: 0.5 } : k)) },
+    );
+
+    // Bridge stub with manual control: the initial get-tracks resolves with the
+    // seed; every LATER get-tracks queues as a deferred the test resolves; the
+    // host's tree/changed emission is fired by hand.
+    const pendingGetTracks: Array<(v: { tracks: TrackDto[] }) => void> = [];
+    const treeChanged: Array<() => void> = [];
+    let firstFetch = true;
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string }) => {
+        if (req.kind === "engine/state/snapshot") {
+          return Promise.resolve({ ...makeDefaultEngineState(), selectedEmitterId: 1 });
+        }
+        if (req.kind === "emitters/get-tracks") {
+          if (firstFetch) {
+            firstFetch = false;
+            return Promise.resolve({ tracks: seedTracks });
+          }
+          return new Promise((res) => { pendingGetTracks.push(res as (v: { tracks: TrackDto[] }) => void); });
+        }
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockImplementation((kind: string, cb: () => void) => {
+        if (kind === "emitters/tree/changed") treeChanged.push(cb);
+        return () => {};
+      }),
+    } as unknown as Bridge;
+
+    render(<CurveEditorPanel bridge={bridge} />);
+    await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
+
+    const keyAt25 = () =>
+      screen.getAllByTestId("curve-key").find(
+        (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
+      )!;
+    fireEvent.click(keyAt25());
+    const panel = screen.getByTestId("curve-editor-panel");
+    await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
+
+    const valueInput = () =>
+      screen.getByTestId("ce-spinner-value-wrapper").querySelector("input") as HTMLInputElement;
+    await waitFor(() => expect(valueInput().disabled).toBe(false));
+
+    // Edit #1 (scrub tick): 0.25 → 0.5. The host echo then triggers a refetch
+    // — issued NOW, so it captures the pre-edit-#2 epoch.
+    fireEvent.focus(valueInput());
+    fireEvent.change(valueInput(), { target: { value: "0.5" } });
+    fireEvent.blur(valueInput());
+    act(() => { for (const cb of treeChanged) cb(); });
+    await waitFor(() => expect(pendingGetTracks.length).toBe(1));
+
+    // Edit #2 (next scrub tick): 0.5 → 0.9. Optimistic curve moves to 0.9.
+    fireEvent.focus(valueInput());
+    fireEvent.change(valueInput(), { target: { value: "0.9" } });
+    fireEvent.blur(valueInput());
+    let cyAt09 = 0;
+    await waitFor(() => {
+      cyAt09 = Number(keyAt25().getAttribute("cy"));
+      expect(cyAt09).toBeGreaterThan(0); // rendered
+      expect(Number(valueInput().value)).toBeCloseTo(0.9, 3);
+    });
+
+    // NOW the stale refetch (issued after edit #1, carrying value 0.5) lands.
+    // The epoch guard must DISCARD it: the curve stays at the optimistic 0.9.
+    await act(async () => {
+      pendingGetTracks[0]!({ tracks: staleTracks });
+      await Promise.resolve();
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(Number(keyAt25().getAttribute("cy"))).toBeCloseTo(cyAt09, 1);
+  });
+
+  // #613 Codex-review regression: the epoch guard must NOT invalidate the
+  // authoritative SELECTION-change fetch. Editing the still-visible OLD emitter
+  // mid-switch bumps the epoch; if the new emitter's fetch were epoch-guarded it
+  // would be discarded and — with no tree/changed to re-fetch — the panel would
+  // be stranded on the old emitter's tracks. The selection fetch is unguarded.
+  it("a selection-change fetch still applies even if a local edit bumped the epoch after it was issued (#613)", async () => {
+    const tracksA: TrackDto[] = TRACK_NAMES.map((name) => ({
+      name,
+      keys: name === "red"
+        ? [{ time: 0, value: 0 }, { time: 25, value: 0.25 }, { time: 100, value: 1 }]
+        : [{ time: 0, value: 0 }, { time: 100, value: name === "rotationSpeed" ? -1 : 1 }],
+      interpolation: "linear" as const,
+      lockedTo: null,
+    }));
+    // Emitter B's red track has a DISTINCTIVE key at t=50 that A lacks.
+    const tracksB: TrackDto[] = TRACK_NAMES.map((name) => ({
+      name,
+      keys: name === "red"
+        ? [{ time: 0, value: 0 }, { time: 50, value: 0.5 }, { time: 100, value: 1 }]
+        : [{ time: 0, value: 0 }, { time: 100, value: name === "rotationSpeed" ? -1 : 1 }],
+      interpolation: "linear" as const,
+      lockedTo: null,
+    }));
+
+    const selectionListeners: Array<(e: { payload: { id: number } }) => void> = [];
+    const pendingBFetch: Array<(v: { tracks: TrackDto[] }) => void> = [];
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string; params?: { id?: number } }) => {
+        if (req.kind === "engine/state/snapshot") {
+          return Promise.resolve({ ...makeDefaultEngineState(), selectedEmitterId: 1 });
+        }
+        if (req.kind === "emitters/get-tracks") {
+          if (req.params?.id === 1) return Promise.resolve({ tracks: tracksA });
+          // Emitter B's fetch is deferred so the test controls when it lands.
+          return new Promise((res) => { pendingBFetch.push(res as (v: { tracks: TrackDto[] }) => void); });
+        }
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockImplementation((kind: string, cb: (e: { payload: { id: number } }) => void) => {
+        if (kind === "emitters/selected") selectionListeners.push(cb);
+        return () => {};
+      }),
+    } as unknown as Bridge;
+
+    render(<CurveEditorPanel bridge={bridge} />);
+    // Emitter A loaded (its t=25 key is present, B's t=50 is not).
+    await waitFor(() =>
+      expect(
+        screen.getAllByTestId("curve-key").some(
+          (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
+        ),
+      ).toBe(true),
+    );
+
+    // Select A's interior key so a spinner edit is possible.
+    fireEvent.click(
+      screen.getAllByTestId("curve-key").find(
+        (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
+      )!,
+    );
+    const panel = screen.getByTestId("curve-editor-panel");
+    await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
+
+    // Switch selection to emitter B → B's get-tracks is issued (and deferred).
+    act(() => { for (const cb of selectionListeners) cb({ payload: { id: 2 } }); });
+    await waitFor(() => expect(pendingBFetch.length).toBe(1));
+
+    // Edit the still-visible A key via the Value spinner → bumps the edit epoch
+    // (bridge id is now 2; the host would no-op with no tree/changed).
+    const valueInput = screen
+      .getByTestId("ce-spinner-value-wrapper")
+      .querySelector("input") as HTMLInputElement;
+    await waitFor(() => expect(valueInput.disabled).toBe(false));
+    fireEvent.focus(valueInput);
+    fireEvent.change(valueInput, { target: { value: "0.7" } });
+    fireEvent.blur(valueInput);
+
+    // NOW emitter B's authoritative fetch lands. Despite the bumped epoch it
+    // must apply (unguarded), so B's tracks show — its distinctive t=50 key
+    // appears and A's t=25 is gone.
+    await act(async () => {
+      pendingBFetch[0]!({ tracks: tracksB });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      const keys = screen.getAllByTestId("curve-key")
+        .filter((k) => k.getAttribute("data-channel-id") === "red")
+        .map((k) => k.getAttribute("data-key-time"));
+      expect(keys).toContain("50");   // B applied
+      expect(keys).not.toContain("25"); // not stranded on A
+    });
+  });
 });

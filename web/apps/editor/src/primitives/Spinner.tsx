@@ -297,6 +297,24 @@ export function Spinner({
       }, HOLD_REPEAT_MS);
     }, HOLD_DELAY_MS);
 
+    // Scrub emission is COALESCED to one onChange per animation frame (latest
+    // value wins), flushed on release. Raw mousemove can outrun the frame rate
+    // (125Hz+ mice), and heavy consumers (CurveEditorPanel writes the track
+    // optimistically + round-trips the bridge per emission, #613) fall behind
+    // when every pixel fires — the displayed text still updates per move, so
+    // the field itself never feels throttled. Per-gesture locals: each press
+    // owns its own rAF/pending state, dropped with the listeners on release.
+    let scrubRafId: number | null = null;
+    let scrubPendingVal: number | null = null;
+    const flushScrub = () => {
+      scrubRafId = null;
+      if (scrubPendingVal === null) return;
+      const v = scrubPendingVal;
+      scrubPendingVal = null;
+      pendingBase.current = valueRef.current;
+      onChange(v);
+    };
+
     const onMove = (me: MouseEvent) => {
       const dy = dragStartY.current - me.clientY; // up = positive = increase
       if (!scrubbedRef.current) {
@@ -315,10 +333,15 @@ export function Spinner({
         max,
       );
       setText(fmt(next));
-      // Fire onChange during drag (each px move fires); drag-release will
-      // fire again on the final value. Callers that debounce are fine.
-      pendingBase.current = valueRef.current;
-      onChange(next);
+      // Queue the coalesced emission (release flushes the tail value).
+      scrubPendingVal = next;
+      if (scrubRafId === null) {
+        if (typeof requestAnimationFrame === "function") {
+          scrubRafId = requestAnimationFrame(flushScrub);
+        } else {
+          flushScrub();
+        }
+      }
     };
 
     const onUp = () => {
@@ -326,6 +349,12 @@ export function Spinner({
       document.removeEventListener("mouseup", onUp);
       clearHoldTimers();
       holdingRef.current = false;
+      // Flush the tail scrub value BEFORE clearing drag state so the final
+      // position always lands exactly once (the queued frame is cancelled).
+      if (scrubRafId !== null && typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(scrubRafId);
+      }
+      flushScrub();
       setDragging(false);
       // Quick click: neither a scrub nor a hold-repeat fired → one step.
       if (!scrubbedRef.current && !repeatedRef.current) {

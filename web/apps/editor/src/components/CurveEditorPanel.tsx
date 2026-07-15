@@ -51,6 +51,7 @@ import type {
   TrackName,
 } from "@particle-editor/bridge-schema";
 import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "@/screens/CurveEditor";
+import type { SuppressedMove } from "@/lib/use-curve-morph";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
 import { parseFocusChannelMessage, parseSelectKeyMessage } from "@/lib/record-focus-bridge";
@@ -450,6 +451,13 @@ export function CurveEditorPanel({ bridge }: Props) {
   // Handle to start a marquee from the axis-label gutters (see
   // CanvasWithAxisLabels.onGutterPointerDown wiring below).
   const curveRef = useRef<CurveMarqueeHandle>(null);
+  // Shared morph-suppress slot, threaded into CurveEditor. The canvas drag
+  // records into it there; the spinner/commit handlers below record into it
+  // here — so a value/time edit these paths already applied optimistically
+  // SNAPS instead of gliding (#613). Without this, spinner edits waited on a
+  // bridge round-trip AND then played the ~180ms morph, so the curve lagged
+  // the number.
+  const morphSuppressRef = useRef<SuppressedMove>(null);
   // Selection state — keyed by key TIME (not array index). Per focus
   // channel; cleared on focus change.
   const [selectedKeyTimes, setSelectedKeyTimes] = useState<Set<number>>(
@@ -527,6 +535,16 @@ export function CurveEditorPanel({ bridge }: Props) {
   // Track which id we last fetched for, so a late-arriving response
   // for a stale selection doesn't clobber current data.
   const inFlightFor = useRef<number | null>(null);
+  // Monotonic LOCAL-EDIT epoch (#613). Every optimistic track write (spinner
+  // commit, drag commit, group shift) bumps it. A get-tracks refetch captures
+  // the epoch when it is ISSUED and its response only applies if no local edit
+  // happened since — otherwise the response is a stale pre-edit snapshot and
+  // applying it would yank the curve backwards. Every host mutation emits its
+  // own tree/changed, so the LAST edit's refetch always passes the guard and
+  // trues the panel up to engine state. During a spinner scrub (a commit per
+  // frame, each echoing tree/changed → refetch), this is what keeps the queue
+  // of in-flight stale snapshots from stomping the optimistic curve.
+  const editEpochRef = useRef(0);
 
   // Snapshot seed + live selection subscription.
   useEffect(() => {
@@ -558,26 +576,37 @@ export function CurveEditorPanel({ bridge }: Props) {
       return;
     }
     let cancelled = false;
-    const fetchTracks = (id: number) => {
+    // `guarded` = subject to the local-edit epoch check. Only tree/changed
+    // REFETCHES are guarded: during a scrub they carry pre-edit snapshots and
+    // must not overwrite the optimistic curve (#613). The SELECTION-change fetch
+    // is authoritative for the new emitter and must ALWAYS apply — otherwise
+    // editing the still-visible OLD emitter's key mid-switch bumps the epoch and
+    // would strand the panel on stale tracks with no tree/changed to re-fetch
+    // (Codex #613 review). `inFlightFor` already discards a superseded selection.
+    const fetchTracks = (id: number, guarded: boolean) => {
       inFlightFor.current = id;
+      const epochAtIssue = editEpochRef.current;
+      const stale = () => guarded && editEpochRef.current !== epochAtIssue;
       bridge
         .request({ kind: "emitters/get-tracks", params: { id } })
         .then((res) => {
           if (cancelled) return;
           if (inFlightFor.current !== id) return;
+          if (stale()) return;
           setTracks(res.tracks);
           setTracksOwnerId(id);
         })
         .catch(() => {
           if (cancelled) return;
           if (inFlightFor.current !== id) return;
+          if (stale()) return;
           setTracks([]);
           setTracksOwnerId(id);
         });
     };
-    fetchTracks(selectedId);
+    fetchTracks(selectedId, /*guarded=*/false); // authoritative selection load
     const off = bridge.on("emitters/tree/changed", () => {
-      if (selectedId !== null) fetchTracks(selectedId);
+      if (selectedId !== null) fetchTracks(selectedId, /*guarded=*/true); // edit echo
     });
     return () => {
       cancelled = true;
@@ -909,6 +938,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       const engineNewTime = Math.fround(newTime);
       setSelectedKeyTimes(new Set([engineNewTime]));
       setOptimisticSelected({ time: engineNewTime, value: newValue });
+      editEpochRef.current += 1; // local edit — in-flight refetches are now stale (#613)
       setTracks((prev) => {
         if (prev === null) return prev;
         return prev.map((t) => {
@@ -1125,8 +1155,22 @@ export function CurveEditorPanel({ bridge }: Props) {
         engineTime: Math.fround(m.newTime),
         newValue: m.newValue,
       }));
+      // Snap (don't glide): record the morph-suppress before the optimistic
+      // overlay so a group SPINNER edit reaches the morph classifier already
+      // suppressed (#613). The canvas group-DRAG also routes here, but records
+      // its suppress in CurveEditor.tsx onPointerUp first; this write overwrites
+      // it with the exact committed moves — equivalent, and harmless.
+      morphSuppressRef.current = {
+        channelId: focusedChannel.id,
+        moves: moves.map((m) => ({
+          oldTime: m.oldTime,
+          newTime: m.wireTime,
+          newValue: m.newValue,
+        })),
+      };
       // Optimistic overlay (same idiom as handleKeyDragEnd).
       const moveMap = new Map(moves.map((m) => [m.oldTime, m]));
+      editEpochRef.current += 1; // local edit — in-flight refetches are now stale (#613)
       setTracks((prev) =>
         prev === null
           ? prev
@@ -1168,7 +1212,7 @@ export function CurveEditorPanel({ bridge }: Props) {
           .catch(() => { /* silent — re-fetch on tree/changed */ });
       }
     },
-    [bridge, selectedId, focusedTrack, focusedChannel.trackName, selectedKeyTimes, borderKeyTimes],
+    [bridge, selectedId, focusedTrack, focusedChannel.trackName, focusedChannel.id, selectedKeyTimes, borderKeyTimes],
   );
 
   // A multi-key canvas drag commits as a single group shift, reusing
@@ -1179,7 +1223,15 @@ export function CurveEditorPanel({ bridge }: Props) {
       // committed (optimistic) positions instead of the in-flight shift.
       cancelLiveFlush();
       setLiveGroup(null);
-      if (focusLocked || (dTime === 0 && dValue === 0)) return;
+      if (focusLocked || (dTime === 0 && dValue === 0)) {
+        // No commit → no optimistic track change to snap. Drop any suppress the
+        // canvas onPointerUp recorded for this gesture (a border-only or
+        // zero-delta drag still records one); otherwise it lingers and, since
+        // movesMatch ignores interpolation, could swallow a later interp-only
+        // morph on this channel (Codex #613 review).
+        morphSuppressRef.current = null;
+        return;
+      }
       applyGroupShift(dTime, dValue);
     },
     [cancelLiveFlush, focusLocked, applyGroupShift],
@@ -1225,8 +1277,36 @@ export function CurveEditorPanel({ bridge }: Props) {
           Math.min(keys[idx + 1]!.time - eps, clampedTime),
         );
       }
-      setSelectedKeyTimes(new Set([clampedTime]));
-      setOptimisticSelected({ time: clampedTime, value: singleSelected.value });
+      // Snap (don't glide) this edit: record the morph-suppress + apply the
+      // track change OPTIMISTICALLY, exactly as a canvas drag-commit does
+      // (#613). Float32-round the committed time to what the engine returns on
+      // refetch so the key keeps its selected highlight (see handleKeyDragEnd).
+      const engineTime = Math.fround(clampedTime);
+      morphSuppressRef.current = {
+        channelId: focusedChannel.id,
+        moves: [{ oldTime, newTime: clampedTime, newValue: singleSelected.value }],
+      };
+      setSelectedKeyTimes(new Set([engineTime]));
+      setOptimisticSelected({ time: engineTime, value: singleSelected.value });
+      editEpochRef.current += 1; // local edit — in-flight refetches are now stale (#613)
+      setTracks((prev) =>
+        prev === null
+          ? prev
+          : prev.map((t) =>
+              t.name !== focusedChannel.trackName
+                ? t
+                : {
+                    ...t,
+                    keys: t.keys
+                      .map((k) =>
+                        k.time === oldTime
+                          ? { time: engineTime, value: singleSelected.value }
+                          : k,
+                      )
+                      .sort((a, b) => a.time - b.time),
+                  },
+            ),
+      );
       void bridge.request({
         kind: "emitters/set-track-key",
         params: {
@@ -1238,7 +1318,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         },
       }).catch(() => { /* silent */ });
     },
-    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusLocked, focusedChannel.trackName, focusedTrack],
+    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusLocked, focusedChannel.trackName, focusedChannel.id, focusedTrack],
   );
 
   const handleValueSpinner = useCallback(
@@ -1257,19 +1337,53 @@ export function CurveEditorPanel({ bridge }: Props) {
       // current keys and we want it to GROW when the user inputs a
       // larger / more negative value. The Spinner already clamps to
       // the channel's engine-allowed bounds (spinnerBoundsForTrack).
-      setOptimisticSelected({ time: singleSelected.time, value: nextValue });
+      //
+      // Snap (don't glide) this edit: record the morph-suppress + apply the
+      // track change OPTIMISTICALLY, exactly as a canvas drag-commit does
+      // (#613) — so the curve tracks the spinner 1:1 instead of waiting on a
+      // bridge round-trip and then easing in over the morph.
+      const t = singleSelected.time;
+      // Float32-canonicalize the committed value: the engine stores + returns
+      // float32, so at high magnitudes (tracks range up to ±1e6) the raw double
+      // and its float32 image differ by more than KEY_MATCH_EPS. Using the
+      // rounded value for the optimistic write AND the suppress keeps them EXACT
+      // (movesMatch), and makes it equal to what the refetch returns — so the
+      // authoritative refetch is a no-op change, not an unsuppressed morph
+      // (Codex #613 review). The bridge still gets the raw value; the host
+      // rounds it identically.
+      const engineValue = Math.fround(nextValue);
+      morphSuppressRef.current = {
+        channelId: focusedChannel.id,
+        moves: [{ oldTime: t, newTime: t, newValue: engineValue }],
+      };
+      setOptimisticSelected({ time: t, value: engineValue });
+      editEpochRef.current += 1; // local edit — in-flight refetches are now stale (#613)
+      setTracks((prev) =>
+        prev === null
+          ? prev
+          : prev.map((tr) =>
+              tr.name !== focusedChannel.trackName
+                ? tr
+                : {
+                    ...tr,
+                    keys: tr.keys.map((k) =>
+                      k.time === t ? { time: k.time, value: engineValue } : k,
+                    ),
+                  },
+            ),
+      );
       void bridge.request({
         kind: "emitters/set-track-key",
         params: {
           id: selectedId,
           track: focusedChannel.trackName,
-          oldTime: singleSelected.time,
-          newTime: singleSelected.time,
+          oldTime: t,
+          newTime: t,
           newValue: nextValue,
         },
       }).catch(() => { /* silent */ });
     },
-    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusLocked, focusedChannel.trackName],
+    [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusLocked, focusedChannel.trackName, focusedChannel.id],
   );
 
   // ── Delete keyboard handler (window-scoped, TYPING_TAGS guard) ────
@@ -1798,6 +1912,7 @@ export function CurveEditorPanel({ bridge }: Props) {
               >
                 <CurveEditor
                   marqueeRef={curveRef}
+                  suppressRef={morphSuppressRef}
                   tracks={tracks}
                   channels={CHANNELS}
                   visibleChannels={visible}

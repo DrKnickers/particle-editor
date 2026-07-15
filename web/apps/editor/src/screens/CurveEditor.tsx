@@ -206,6 +206,12 @@ type Props = {
    *  outside the plot SVG (the axis-label gutters). Only the multi-channel
    *  focus editor implements it; the single-track branch ignores it. */
   marqueeRef?: Ref<CurveMarqueeHandle>;
+  /** Morph-suppress ref, owned by CurveEditorPanel so its spinner/commit
+   *  handlers can SNAP (not glide) a value/time edit they already applied
+   *  optimistically — the same mechanism the canvas drag uses (#610/#613).
+   *  When provided it replaces the internal ref, so both the canvas drag
+   *  (here) and the panel's spinners write to one shared suppress slot. */
+  suppressRef?: MutableRefObject<SuppressedMove>;
 };
 
 /** Imperative handle exposed via `marqueeRef` for starting a marquee
@@ -426,6 +432,7 @@ export function CurveEditor({
   onGroupDragEnd,
   onGroupDragMove,
   onCanvasMarqueeSelect,
+  suppressRef,
 }: Props) {
   // Multi-channel overlay branch. Triggered when the caller provides
   // `tracks` + `channels` + `visibleChannels`. When `focusChannel` is
@@ -461,6 +468,7 @@ export function CurveEditor({
         onGroupDragMove={onGroupDragMove}
         onCanvasMarqueeSelect={onCanvasMarqueeSelect}
         marqueeRef={marqueeRef}
+        suppressRef={suppressRef}
       />
     );
   }
@@ -1109,6 +1117,8 @@ type MultiProps = {
   onGroupDragMove?: (dTime: number, dValue: number) => void;
   onCanvasMarqueeSelect?: (times: number[], shift: boolean) => void;
   marqueeRef?: Ref<CurveMarqueeHandle>;
+  /** Shared morph-suppress ref (see Props.suppressRef). */
+  suppressRef?: MutableRefObject<SuppressedMove>;
 };
 
 
@@ -1395,6 +1405,7 @@ function MultiChannelCurves({
   onGroupDragMove,
   onCanvasMarqueeSelect,
   marqueeRef,
+  suppressRef,
 }: MultiProps) {
   // Live-measured SVG dimensions. We can't simply pass a fixed 600×300
   // viewBox to a stretchy SVG (`preserveAspectRatio="none"`) without
@@ -1552,10 +1563,14 @@ function MultiChannelCurves({
     }
   }, []);
 
-  // ── Morph animation. morphSuppressRef stays null this task (the
-  // recording is wired at the drag-commit site). dragRef must be
-  // declared before this hook so the isDragging closure captures it.
-  const morphSuppressRef = useRef<SuppressedMove>(null);
+  // ── Morph animation. The suppress slot is SHARED: the canvas drag (below)
+  // records into it, and — when CurveEditorPanel passes its own `suppressRef` —
+  // so do the panel's spinner/commit handlers, so a value/time edit that was
+  // already applied optimistically SNAPS instead of gliding (#610/#613). A
+  // local fallback keeps standalone callers (no suppressRef) working. dragRef
+  // must be declared before this hook so the isDragging closure captures it.
+  const localSuppressRef = useRef<SuppressedMove>(null);
+  const morphSuppressRef = suppressRef ?? localSuppressRef;
   const morph = useCurveMorph({
     channels: layers.map((l) => {
       const isFocus = focusLayer !== null && l.channel.id === focusLayer.channel.id;

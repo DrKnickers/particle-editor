@@ -176,6 +176,7 @@ may live at the end of the file.
 
 ### Fixed
 
+- Adjusting a curve key with the Value or Time spinner now updates the curve immediately and stays locked to the number, instead of lagging behind while you scrub
 - Child emitters now render behind the parent emitter they were spawned from, matching the game — a spawned child no longer draws on top of its parent
 - Dragging a key in the curve editor now keeps the curve line locked to the cursor instead of lagging behind it on busy effects
 - Heavy particle systems (e.g. Mod's) that repeatedly refused to render in the preview — even after raising the overload cap to its maximum — now render correctly; the preview's overload estimate no longer wildly over-projects particle counts for chains where a child emitter spawns on its parent's death
