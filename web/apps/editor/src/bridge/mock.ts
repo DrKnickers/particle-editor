@@ -101,6 +101,9 @@ function isMutating(kind: Request["kind"]): boolean {
   if (kind === "engine/set/msaa-level") return false;
   if (kind === "engine/set/model-shadows") return false;
   if (kind === "engine/set/soft-shadows") return false;
+  // Ground-plane visibility is a global VIEW preference (registry-persisted,
+  // not part of the .alo document); native host no longer marks dirty (#617).
+  if (kind === "engine/set/ground") return false;
   // stats/set-frozen is a test-only knob; never mutating.
   if (kind === "stats/set-frozen") return false;
   if (kind.startsWith("engine/set/")) return true;

@@ -84,6 +84,7 @@ inline bool IsAllowedBridgeKind(const std::string& kind)
     if (kind == "engine/set/reference-object-transform") return true;  // position/rotation pin (a clip aligns swapped units' centroids); dropped by the dispatcher while locked
     if (kind == "engine/set/shadow")           return true;
     if (kind == "engine/set/soft-shadows")     return true;
+    if (kind == "engine/state/snapshot")   return true;   // read-only state query (no modal/mutation/persistence) — lets assert-state check /dirty, /ground, …
     if (kind == "file/open")               return true;   // path-required (checked separately)
     if (kind == "emitters/list")           return true;
     if (kind == "emitters/select")         return true;

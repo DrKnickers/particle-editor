@@ -104,6 +104,9 @@
      themes match at the same alpha so the visual weight is
      consistent regardless of background. */
   --curve-grid: rgba(255, 255, 255, 0.08);
+  /* Faint minor sub-grid (#618): ~half the major-grid alpha so the
+     finer lines read as a whisper under the major divisions. */
+  --curve-subgrid: rgba(255, 255, 255, 0.035);
   --curve-axis: #525252;
   /* Fill for the selected-key inverted-core marker — MUST match the curve
      canvas background. Aliased so a canvas bg change can't silently strand it.
@@ -178,6 +181,9 @@
   /* Light-theme grid: ~8% black to match the dark-theme alpha so
      the grid is uniformly subtle across themes. */
   --curve-grid: rgba(0, 0, 0, 0.08);
+  /* Faint minor sub-grid (#618): ~half the major-grid alpha, black to
+     match the light-theme major grid. */
+  --curve-subgrid: rgba(0, 0, 0, 0.035);
   --curve-axis: rgba(0, 0, 0, 0.45);
   /* Flip the neutral curve ink dark so unselected markers + curve lines stay
      legible on the near-white light panel (--panel #f7f7f7). Mirrors the

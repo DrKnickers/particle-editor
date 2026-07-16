@@ -520,6 +520,19 @@ describe("MockBridge contract", () => {
     expect(snap.dirty).toBe(false);
   });
 
+  it("engine/set/ground is view-only (does not mark the doc dirty) (#617)", async () => {
+    // Ground visibility is a global VIEW preference (registry-persisted, not
+    // part of the .alo document); native host no longer marks dirty, so the
+    // mock must match. Contrast engine/set/ground-z (a real doc property),
+    // which still dirties above.
+    const b = new MockBridge();
+    await b.request({ kind: "engine/set/ground", params: { enabled: false } });
+    const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(snap.dirty).toBe(false);
+    // The state patch still applies — only the dirty side-effect is gone.
+    expect(snap.ground).toBe(false);
+  });
+
   it("engine/set/estimated-load resolves ok via the mock", async () => {
     const b = new MockBridge();
     const res = await b.request({

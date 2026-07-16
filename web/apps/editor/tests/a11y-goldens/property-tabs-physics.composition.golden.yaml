@@ -136,6 +136,7 @@
 - button "Interpolation linear" [pressed]
 - button "Interpolation smooth"
 - button "Interpolation step"
+- button "Snap to grid"
 - text: "Lock to:"
 - combobox "Lock-to track" [disabled]: None
 - button "Delete selected keys" [disabled]

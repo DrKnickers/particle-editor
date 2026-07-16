@@ -27,6 +27,7 @@ may live at the end of the file.
 
 ### Added
 
+- The curve editor now has a faint sub-grid and a snap-to-grid toggle — a magnet button in the curve toolbar (off by default, remembered between sessions); turn it on and dragging or inserting keys snaps them to the finer grid on both axes
 - The guide has been revised for readers new to authoring particle effects — 28 factual corrections across blend modes, motion & physics, generation types, the glossary, the primer, troubleshooting, stacking, and the tutorials, each checked directly against the editor's source; Setup now walks all the way through finding your game install, extracting the tutorial mod step by step, and opening it via the real Mods menu (Add mod… / Mod Load Order / Refresh); two new pages — a concept bridge before the from-scratch tutorials and a value-free capstone brief for building your own effect; first-use definitions for emitter / hardpoint / root-vs-child / additive / quad; the home page now opens with a "What you are building" intro and the primer gained an emitter→pixel diagram; the Atlas Picker is now called by its real UI name, "Atlas Frame Picker," and terminology (Index track, Continuous stream, Weather particle) is consistent across every page; and the tutorials' parameter recipes are grounded in the real shipped `.alo` files, render as tables instead of code blocks, and call out key gotchas in styled callout boxes
 - "Duplicate with Index Increment" now has a Repeat count (1–999, default 1) alongside the increment delta — set it above 1 to chain that many duplicates, each stepping the index by the delta from the last copy, in a single undo step
 - The in-app title bar's corner icon now matches the Windows taskbar/exe icon instead of the fainter tile-less brand mark
@@ -176,6 +177,7 @@ may live at the end of the file.
 
 ### Fixed
 
+- The "Show ground" viewport toggle now stays how you left it across restarts, and toggling it no longer marks the file as unsaved
 - Adjusting a curve key with the Value or Time spinner now updates the curve immediately and stays locked to the number, instead of lagging behind while you scrub
 - Child emitters now render behind the parent emitter they were spawned from, matching the game — a spawned child no longer draws on top of its parent
 - Dragging a key in the curve editor now keeps the curve line locked to the cursor instead of lagging behind it on busy effects

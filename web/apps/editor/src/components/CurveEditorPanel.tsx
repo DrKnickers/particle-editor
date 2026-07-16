@@ -43,7 +43,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import * as Select from "@radix-ui/react-select";
-import { ChevronDown, Lock, MousePointer2, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Lock, Magnet, MousePointer2, Plus, Trash2 } from "lucide-react";
+import { readBooleanPref, writeBooleanPref } from "../lib/boolean-pref";
 import type {
   Bridge,
   InterpolationType,
@@ -108,6 +109,9 @@ const TYPING_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 const INTERP_KINDS: readonly InterpolationType[] = Object.freeze([
   "linear", "smooth", "step",
 ]);
+
+/** localStorage key for the curve-editor snap-to-grid toggle (#618). */
+const SNAP_PREF_KEY = "curveEditor.snapToGrid";
 
 /** Tiny inline glyphs for the three interpolation modes. Each is a
  *  16×16 SVG showing the curve shape between two endpoints — clearer
@@ -448,6 +452,18 @@ export function CurveEditorPanel({ bridge }: Props) {
   // visible channel avoids that one-tick churn.
   const [focusChannel, setFocusChannel] = useState<string>("red");
   const [mode, setMode] = useState<EditMode>("select");
+  // Snap-to-grid toggle (#618). Default OFF; persisted to localStorage via the
+  // shared boolean-pref helper (same mechanism as the shadow render prefs).
+  const [snapEnabled, setSnapEnabled] = useState<boolean>(() =>
+    readBooleanPref(SNAP_PREF_KEY, false),
+  );
+  const toggleSnap = useCallback(() => {
+    setSnapEnabled((prev) => {
+      const next = !prev;
+      writeBooleanPref(SNAP_PREF_KEY, next);
+      return next;
+    });
+  }, []);
   // Handle to start a marquee from the axis-label gutters (see
   // CanvasWithAxisLabels.onGutterPointerDown wiring below).
   const curveRef = useRef<CurveMarqueeHandle>(null);
@@ -1017,8 +1033,9 @@ export function CurveEditorPanel({ bridge }: Props) {
         params: { id: selectedId, track: focusedChannel.trackName, time, value },
       }).then((res) => {
         const insertedTime = res.time ?? time;
+        const insertedValue = res.value ?? value;
         setSelectedKeyTimes(new Set([insertedTime]));
-        setOptimisticSelected({ time: insertedTime, value });
+        setOptimisticSelected({ time: insertedTime, value: insertedValue });
       }).catch(() => { /* silent */ });
     },
     [bridge, selectedId, focusLocked, focusedChannel.trackName],
@@ -1662,6 +1679,29 @@ export function CurveEditorPanel({ bridge }: Props) {
 
           <span className="mx-1 h-4 w-px bg-panel-2" aria-hidden />
 
+          {/* Snap-to-grid toggle (#618). A global editor preference — stays
+              enabled even while the channel is locked (it changes future
+              edits, not the current channel's data). */}
+          <Tip content={snapEnabled ? "Snap to grid: on" : "Snap to grid: off"}>
+            <button
+              type="button"
+              aria-label="Snap to grid"
+              aria-pressed={snapEnabled}
+              data-state={snapEnabled ? "on" : "off"}
+              data-testid="curve-snap-toggle"
+              onClick={toggleSnap}
+              className={
+                snapEnabled
+                  ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent focus-ring"
+                  : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 focus-ring"
+              }
+            >
+              <Magnet className="size-3.5" aria-hidden="true" />
+            </button>
+          </Tip>
+
+          <span className="mx-1 h-4 w-px bg-panel-2" aria-hidden />
+
           {/* Lock-to combo. Disabled only when the focus channel has
               no possible targets (Red / Scale / Index / Rotation —
               all of which can only be "None"). For Green/Blue/Alpha
@@ -1913,6 +1953,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                 <CurveEditor
                   marqueeRef={curveRef}
                   suppressRef={morphSuppressRef}
+                  snapEnabled={snapEnabled}
                   tracks={tracks}
                   channels={CHANNELS}
                   visibleChannels={visible}

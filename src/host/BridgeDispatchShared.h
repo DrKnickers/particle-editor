@@ -60,6 +60,7 @@ void PersistSkydomeCustomPath(int slot, const std::wstring& path);
 void PersistSkydomeEnvironment(int context, const std::wstring& primaryName,
                                const std::wstring& secondaryName);
 void PersistBackgroundColor(COLORREF color);
+void PersistShowGround(bool enabled);
 void PersistReferenceObjectName(const std::wstring& name);
 void PersistReferenceObjectVisible(bool visible);
 void PersistReferenceObjectLock(bool locked);

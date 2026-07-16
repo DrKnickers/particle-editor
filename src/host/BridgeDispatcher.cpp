@@ -391,6 +391,28 @@ void PersistBackgroundColor(COLORREF color)
     }
 }
 
+// Persist the ground-plane visibility (ShowGround REG_DWORD 0/1) under the same
+// hive. Ground is a GLOBAL VIEW preference — restored on launch by HostWindow's
+// [view-restore] path and honored headless by CaptureRunner; it is NOT part of
+// the .alo document. The new-UI ground handler previously only called SetGround
+// (no registry write), so a toggled-off ground silently reverted to the ctor
+// default (on) every restart (issue #617). Callers gate on
+// m_testHost/m_settingsLive like the sibling settings so the a11y harness never
+// mutates the dev-box registry.
+void PersistShowGround(bool enabled)
+{
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
+                        &hKey, nullptr) == ERROR_SUCCESS)
+    {
+        DWORD v = enabled ? 1u : 0u;
+        RegSetValueExW(hKey, L"ShowGround", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
+        RegCloseKey(hKey);
+    }
+}
+
 // Persist the imported reference object (selected Name) + its visibility +
 // transform, plus the unit-grid toggle/spacing, under the same hive. New REG
 // keys; the new-UI startup restore reads them back. Empty Name => delete.

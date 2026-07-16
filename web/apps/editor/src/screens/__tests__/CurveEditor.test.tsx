@@ -1662,3 +1662,283 @@ describe("selected-key inverted-core marker geometry", () => {
     }
   });
 });
+
+// ─── Sub-grid + snap-to-grid (#618) ──────────────────────────────────────────
+//
+// Multi-channel path only (production). Canvas is 600×300, time [0,100],
+// value [0,1]. Grid: 10 major cells, 5 minor subdivisions → 50 minor cells,
+// so snap step is 2 (time) / 0.02 (value).
+
+const SNAP_CHANNELS: ChannelDef[] = [
+  { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
+];
+
+function snapTrack(): TrackDto {
+  // Interior key at 50 draggable; border keys at 0 and 100.
+  return {
+    name: "red",
+    keys: [
+      { time: 0, value: 0.5 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 0.5 },
+    ],
+    interpolation: "linear",
+    lockedTo: null,
+  };
+}
+
+function renderSnap(
+  onKeyDragEnd: ReturnType<typeof vi.fn>,
+  snapEnabled: boolean,
+) {
+  const result = render(
+    <CurveEditor
+      tracks={[snapTrack()]}
+      channels={SNAP_CHANNELS}
+      visibleChannels={{ red: true }}
+      focusChannel="red"
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+      snapEnabled={snapEnabled}
+      onKeyDragEnd={onKeyDragEnd}
+    />,
+  );
+  const svg = result.container.querySelector(
+    "[data-testid='curve-editor-svg']",
+  ) as SVGSVGElement;
+  svg.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  return { ...result, svg };
+}
+
+describe("CurveEditor — faint minor sub-grid (#618)", () => {
+  it("renders a curve-subgrid group with the expected minor-line count", () => {
+    const { container } = renderSnap(vi.fn(), false);
+    const subgrid = container.querySelector("[data-testid='curve-subgrid']");
+    expect(subgrid).not.toBeNull();
+    // 50 minor cells over each axis, indices 1..49, skipping the 9 that
+    // coincide with a major line (multiples of 5) → 40 per axis, 80 total.
+    const lines = subgrid!.querySelectorAll("line");
+    expect(lines.length).toBe(80);
+  });
+
+  it("does not draw a minor line coincident with a major line", () => {
+    const { container } = renderSnap(vi.fn(), false);
+    const subgrid = container.querySelector("[data-testid='curve-subgrid']")!;
+    const xs = [...subgrid.querySelectorAll("line")].map((l) => l.getAttribute("x1"));
+    // x=60 is major line #1 (1/10 * 600). No minor line should land there.
+    expect(xs).not.toContain("60");
+    // x=12 is minor line #1 (1/50 * 600) — present.
+    expect(xs).toContain("12");
+  });
+});
+
+describe("CurveEditor — snap-to-grid drag (#618)", () => {
+  it("snaps an interior key drag to the nearest grid stop when snap is ON", () => {
+    const onKeyDragEnd = vi.fn();
+    const { container, svg } = renderSnap(onKeyDragEnd, true);
+    const middle = container.querySelectorAll("[data-testid='curve-key']")[1]! as SVGCircleElement;
+    // Down on the interior key (time 50 → x 300, value 0.5 → y 150).
+    fireEvent.pointerDown(middle, { pointerId: 40, button: 0, clientX: 300, clientY: 150 });
+    // Move off-grid: x 307 → time 51.167 → snaps to 52; y 143 → value 0.5233 → snaps to 0.52.
+    fireEvent.pointerMove(svg, { pointerId: 40, clientX: 307, clientY: 143 });
+    fireEvent.pointerUp(svg, { pointerId: 40, clientX: 307, clientY: 143 });
+
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+    const [oldTime, newTime, newValue] = onKeyDragEnd.mock.calls[0] as [number, number, number];
+    expect(oldTime).toBe(50);
+    expect(newTime).toBeCloseTo(52, 5);
+    expect(newValue).toBeCloseTo(0.52, 5);
+  });
+
+  it("leaves the raw drop position untouched when snap is OFF (guards against always-on)", () => {
+    const onKeyDragEnd = vi.fn();
+    const { container, svg } = renderSnap(onKeyDragEnd, false);
+    const middle = container.querySelectorAll("[data-testid='curve-key']")[1]! as SVGCircleElement;
+    fireEvent.pointerDown(middle, { pointerId: 41, button: 0, clientX: 300, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 41, clientX: 307, clientY: 143 });
+    fireEvent.pointerUp(svg, { pointerId: 41, clientX: 307, clientY: 143 });
+
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+    const [, newTime, newValue] = onKeyDragEnd.mock.calls[0] as [number, number, number];
+    // Raw (unsnapped): time 307/6 ≈ 51.167, value (300-143)/300 ≈ 0.5233.
+    expect(newTime).toBeCloseTo(51.167, 2);
+    expect(newValue).toBeCloseTo(0.5233, 3);
+  });
+
+  it("keeps a border key's time fixed but still snaps its value when snap is ON", () => {
+    const onKeyDragEnd = vi.fn();
+    const { container, svg } = renderSnap(onKeyDragEnd, true);
+    // Border key at time 0 → x 0, value 0.5 → y 150.
+    const first = container.querySelectorAll("[data-testid='curve-key']")[0]! as SVGCircleElement;
+    fireEvent.pointerDown(first, { pointerId: 42, button: 0, clientX: 0, clientY: 150 });
+    // Drag right + up; border keeps time 0, value snaps (0.5233 → 0.52).
+    fireEvent.pointerMove(svg, { pointerId: 42, clientX: 20, clientY: 143 });
+    fireEvent.pointerUp(svg, { pointerId: 42, clientX: 20, clientY: 143 });
+
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+    const [oldTime, newTime, newValue] = onKeyDragEnd.mock.calls[0] as [number, number, number];
+    expect(oldTime).toBe(0);
+    expect(newTime).toBe(0); // border time is fixed regardless of snap
+    expect(newValue).toBeCloseTo(0.52, 5);
+  });
+});
+
+// ─── Group-drag snap (#618) ──────────────────────────────────────────────────
+const SNAP_GROUP_CHANNELS: ChannelDef[] = [
+  { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
+];
+function snapGroupTrack(): TrackDto {
+  return {
+    name: "red",
+    keys: [
+      { time: 0, value: 0 },
+      { time: 25, value: 0.25 },
+      { time: 75, value: 0.75 },
+      { time: 100, value: 1 },
+    ],
+    interpolation: "linear",
+    lockedTo: null,
+  };
+}
+function renderGroupSnap(
+  snapEnabled: boolean,
+  onEnd: ReturnType<typeof vi.fn>,
+) {
+  const { container } = render(
+    <CurveEditor
+      tracks={[snapGroupTrack()]}
+      channels={SNAP_GROUP_CHANNELS}
+      visibleChannels={{ red: true }}
+      focusChannel="red"
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+      selectedKeyTimes={new Set([25, 75])}
+      snapEnabled={snapEnabled}
+      onGroupDragEnd={onEnd}
+    />,
+  );
+  const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+  svg.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  return { container, svg };
+}
+
+describe("CurveEditor — group-drag snap (#618)", () => {
+  it("snaps the group delta so the grabbed anchor lands on a grid stop when ON", () => {
+    const onEnd = vi.fn();
+    const { container, svg } = renderGroupSnap(true, onEnd);
+    // Anchor is t=25 (x=150, v=0.25 → y=225). Drag to x=163 (raw time 27.17 →
+    // snaps to 28 ⇒ dTime 3) and y=200 (raw value 0.3333 → snaps to 0.34 ⇒
+    // dValue 0.09). Non-anchor keys shift by the same snapped delta.
+    const anchor = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
+    )!;
+    fireEvent.pointerDown(anchor, { button: 0, pointerId: 60, clientX: 150, clientY: 225 });
+    fireEvent.pointerMove(svg, { pointerId: 60, clientX: 163, clientY: 200 });
+    fireEvent.pointerUp(svg, { pointerId: 60, clientX: 163, clientY: 200 });
+
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    const [dTime, dValue] = onEnd.mock.calls[0] as [number, number];
+    expect(dTime).toBeCloseTo(3, 5);
+    expect(dValue).toBeCloseTo(0.09, 5);
+  });
+
+  it("leaves the raw group delta when snap is OFF (guards against always-on)", () => {
+    const onEnd = vi.fn();
+    const { container, svg } = renderGroupSnap(false, onEnd);
+    const anchor = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
+    )!;
+    fireEvent.pointerDown(anchor, { button: 0, pointerId: 61, clientX: 150, clientY: 225 });
+    fireEvent.pointerMove(svg, { pointerId: 61, clientX: 163, clientY: 200 });
+    fireEvent.pointerUp(svg, { pointerId: 61, clientX: 163, clientY: 200 });
+
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    const [dTime, dValue] = onEnd.mock.calls[0] as [number, number];
+    expect(dTime).toBeCloseTo(2.1667, 3);
+    expect(dValue).toBeCloseTo(0.0833, 3);
+  });
+});
+
+// ─── Insert snap (#618) — incl. the endpoint-collision + focus-clamp guards ──
+const SNAP_INSERT_CHANNELS: ChannelDef[] = [
+  { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
+];
+function snapInsertTrack(): TrackDto {
+  return {
+    name: "red",
+    keys: [
+      { time: 0, value: 0.5 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 0.5 },
+    ],
+    interpolation: "linear",
+    lockedTo: null,
+  };
+}
+function renderInsertSnap(
+  snapEnabled: boolean,
+  onCanvasAdd: ReturnType<typeof vi.fn>,
+  valueRange: { min: number; max: number } = { min: 0, max: 1 },
+) {
+  const { container } = render(
+    <CurveEditor
+      tracks={[snapInsertTrack()]}
+      channels={SNAP_INSERT_CHANNELS}
+      visibleChannels={{ red: true }}
+      focusChannel="red"
+      valueRange={valueRange}
+      width={600}
+      height={300}
+      insertMode
+      onCanvasAdd={onCanvasAdd}
+      snapEnabled={snapEnabled}
+    />,
+  );
+  const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+  svg.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  const backdrop = container.querySelector("[data-testid='curve-canvas-backdrop']")!;
+  return { container, backdrop };
+}
+
+describe("CurveEditor — insert snap (#618)", () => {
+  it("snaps the inserted (time, value) to the grid when ON", () => {
+    const onCanvasAdd = vi.fn();
+    const { backdrop } = renderInsertSnap(true, onCanvasAdd);
+    // Click at x=163 (raw time 27.17 → 28), y=200 (raw value 0.3333 → 0.34).
+    fireEvent.pointerDown(backdrop, { button: 0, pointerId: 70, clientX: 163, clientY: 200 });
+    expect(onCanvasAdd).toHaveBeenCalledTimes(1);
+    const [time, value] = onCanvasAdd.mock.calls[0] as [number, number];
+    expect(time).toBeCloseTo(28, 5);
+    expect(value).toBeCloseTo(0.34, 5);
+  });
+
+  it("falls back to the raw time when a snapped insert would land on the occupied endpoint", () => {
+    const onCanvasAdd = vi.fn();
+    const { backdrop } = renderInsertSnap(true, onCanvasAdd);
+    // Click near the right edge: x=597 → raw time 99.5 → snaps to 100, which is
+    // the border key. Guard falls back to the raw 99.5 so the host can't nudge
+    // an insert past timeMax (100) and out of range.
+    fireEvent.pointerDown(backdrop, { button: 0, pointerId: 71, clientX: 597, clientY: 150 });
+    expect(onCanvasAdd).toHaveBeenCalledTimes(1);
+    const [time] = onCanvasAdd.mock.calls[0] as [number, number];
+    expect(time).toBeLessThan(100);
+    expect(time).toBeCloseTo(99.5, 3);
+  });
+
+  it("clamps the inserted value to the focus channel's range (not the wider canvas range)", () => {
+    const onCanvasAdd = vi.fn();
+    // Canvas spans 0..2 (as if a wide background channel were visible) while the
+    // focus channel red stays 0..1. Insert (snap OFF) at canvas value 1.5.
+    const { backdrop } = renderInsertSnap(false, onCanvasAdd, { min: 0, max: 2 });
+    // x=180 → time 30 (free slot); y=75 → canvas value (300-75)/300*2 = 1.5.
+    fireEvent.pointerDown(backdrop, { button: 0, pointerId: 72, clientX: 180, clientY: 75 });
+    expect(onCanvasAdd).toHaveBeenCalledTimes(1);
+    const [, value] = onCanvasAdd.mock.calls[0] as [number, number];
+    expect(value).toBe(1); // clamped to red's max, not left at 1.5
+  });
+});

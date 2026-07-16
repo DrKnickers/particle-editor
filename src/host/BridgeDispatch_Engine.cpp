@@ -48,9 +48,16 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
     if (kind == "engine/set/ground")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
-        m_engine->SetGround(params.value("enabled", false));
+        // Ground visibility is a GLOBAL VIEW preference (registry-persisted,
+        // restored on launch; not part of the .alo document) — so, like the
+        // sibling view toggles (paused / overload-guard / msaa / model-shadows),
+        // it must NOT mark the document dirty. Persist it so a toggled-off
+        // ground survives restart (#617).
+        const bool enabled = params.value("enabled", false);
+        m_engine->SetGround(enabled);
         ctx.SendOk(json::object());
-        ctx.MarkDirty();
+        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+            PersistShowGround(enabled);
         EmitEngineStateChanged();
         return true;
     }

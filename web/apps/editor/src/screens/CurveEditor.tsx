@@ -58,6 +58,7 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent, type Ref } from "react";
 import type { InterpolationType, TrackDto, TrackName } from "@particle-editor/bridge-schema";
 import { useCurveMorph, type SuppressedMove } from "../lib/use-curve-morph";
+import { snapToGrid, GRID_SUBDIVISIONS } from "./curve-snap";
 
 /** Channel definition for the multi-channel overlay branch.
  *  `id` is the UI-facing identifier (e.g. "rotation"); `trackName` is
@@ -212,6 +213,10 @@ type Props = {
    *  When provided it replaces the internal ref, so both the canvas drag
    *  (here) and the panel's spinners write to one shared suppress slot. */
   suppressRef?: MutableRefObject<SuppressedMove>;
+  /** When true, dragged/inserted keys snap to the minor sub-grid on both
+   *  axes (#618). Owned + persisted by CurveEditorPanel; the single-track
+   *  legacy branch ignores it (production always renders the multi path). */
+  snapEnabled?: boolean;
 };
 
 /** Imperative handle exposed via `marqueeRef` for starting a marquee
@@ -433,6 +438,7 @@ export function CurveEditor({
   onGroupDragMove,
   onCanvasMarqueeSelect,
   suppressRef,
+  snapEnabled,
 }: Props) {
   // Multi-channel overlay branch. Triggered when the caller provides
   // `tracks` + `channels` + `visibleChannels`. When `focusChannel` is
@@ -469,6 +475,7 @@ export function CurveEditor({
         onCanvasMarqueeSelect={onCanvasMarqueeSelect}
         marqueeRef={marqueeRef}
         suppressRef={suppressRef}
+        snapEnabled={snapEnabled}
       />
     );
   }
@@ -567,6 +574,16 @@ export function CurveEditor({
   const horizontalLines: number[] = [];
   for (let i = 0; i <= gridCells; i++) {
     horizontalLines.push((i / gridCells) * height);
+  }
+  // Faint minor sub-grid (#618) — same layout as the multi-channel renderer
+  // so the two paths stay visually consistent. Major-coincident lines skipped.
+  const minorCells = gridCells * GRID_SUBDIVISIONS;
+  const minorVerticalLines: number[] = [];
+  const minorHorizontalLines: number[] = [];
+  for (let i = 1; i < minorCells; i++) {
+    if (i % GRID_SUBDIVISIONS === 0) continue;
+    minorVerticalLines.push((i / minorCells) * width);
+    minorHorizontalLines.push((i / minorCells) * height);
   }
 
   const interp = track.interpolation;
@@ -919,6 +936,15 @@ export function CurveEditor({
         style={{ cursor: insertMode ? "crosshair" : undefined }}
       />
 
+      {/* Faint minor sub-grid (#618) — before the major grid so majors win. */}
+      <g data-testid="curve-subgrid" stroke="var(--curve-subgrid)" strokeWidth={0.5} pointerEvents="none">
+        {minorVerticalLines.map((x, i) => (
+          <line key={`mv${i}`} x1={x} y1={0} x2={x} y2={height} />
+        ))}
+        {minorHorizontalLines.map((y, i) => (
+          <line key={`mh${i}`} x1={0} y1={y} x2={width} y2={y} />
+        ))}
+      </g>
       {/* Grid */}
       <g data-testid="curve-grid" stroke="var(--curve-grid)" strokeWidth={1} pointerEvents="none">
         {verticalLines.map((x, i) => (
@@ -1119,6 +1145,8 @@ type MultiProps = {
   marqueeRef?: Ref<CurveMarqueeHandle>;
   /** Shared morph-suppress ref (see Props.suppressRef). */
   suppressRef?: MutableRefObject<SuppressedMove>;
+  /** Snap dragged/inserted keys to the minor sub-grid (see Props.snapEnabled). */
+  snapEnabled?: boolean;
 };
 
 
@@ -1406,6 +1434,7 @@ function MultiChannelCurves({
   onCanvasMarqueeSelect,
   marqueeRef,
   suppressRef,
+  snapEnabled,
 }: MultiProps) {
   // Live-measured SVG dimensions. We can't simply pass a fixed 600×300
   // viewBox to a stretchy SVG (`preserveAspectRatio="none"`) without
@@ -1460,6 +1489,17 @@ function MultiChannelCurves({
   const horizontalLines: number[] = [];
   for (let i = 0; i <= gridCells; i++) {
     horizontalLines.push((i / gridCells) * height);
+  }
+  // Faint minor sub-grid (#618): GRID_SUBDIVISIONS minor cells per major
+  // cell. Skip the indices that coincide with a major line (i % subdiv === 0)
+  // so the majors aren't double-stroked (and read at full weight).
+  const minorCells = gridCells * GRID_SUBDIVISIONS;
+  const minorVerticalLines: number[] = [];
+  const minorHorizontalLines: number[] = [];
+  for (let i = 1; i < minorCells; i++) {
+    if (i % GRID_SUBDIVISIONS === 0) continue;
+    minorVerticalLines.push((i / minorCells) * width);
+    minorHorizontalLines.push((i / minorCells) * height);
   }
 
   // For each visible channel, find the track by name + project its
@@ -1730,11 +1770,19 @@ function MultiChannelCurves({
     // (applyGroupShift) and in the render preview below.
     if (drag.isGroup && selectedKeyTimes) {
       const rawTime = unproject(x, timeMin, timeMax, width);
-      const rawValue = Math.max(
-        focusVMin,
-        Math.min(focusVMax, unproject(height - y, canvasVMin, canvasVMax, height)),
-      );
+      // Snap (#618) is ANCHOR-based: snap the grabbed key's own target
+      // position to the grid, so the whole selection shifts by that snapped
+      // delta (non-anchor keys keep their relative spacing). Value snaps to
+      // the visible canvas range; time to [timeMin,timeMax]. Snap happens
+      // BEFORE the endpoint clamp below — if the clamp adjusts it the anchor
+      // may land slightly off-grid (accepted; keeps the selection in bounds).
+      let anchorValue = unproject(height - y, canvasVMin, canvasVMax, height);
+      if (snapEnabled) anchorValue = snapToGrid(anchorValue, canvasVMin, canvasVMax);
+      const rawValue = Math.max(focusVMin, Math.min(focusVMax, anchorValue));
       let dTime = rawTime - drag.startTime;
+      if (snapEnabled) {
+        dTime = snapToGrid(drag.startTime + dTime, timeMin, timeMax) - drag.startTime;
+      }
       const allKeys = focusLayer.track.keys;
       const firstT = allKeys[0]!.time;
       const lastT = allKeys[allKeys.length - 1]!.time;
@@ -1769,6 +1817,14 @@ function MultiChannelCurves({
     // the curve visually); the value is then clamped to the focus
     // channel's engine bounds below so the commit stays legal.
     let nextValue = unproject(height - y, canvasVMin, canvasVMax, height);
+    // Snap (#618): snap to the VISIBLE grid — time to [timeMin,timeMax],
+    // value to the canvas range (what the grid draws) — BEFORE the
+    // border/neighbour and focus clamps so multiset invariants still hold.
+    // When a snapped stop collides with a neighbour the eps-clamp wins and the
+    // key lands valid-but-slightly-off-grid (accepted; rare).
+    if (snapEnabled) {
+      nextValue = snapToGrid(nextValue, canvasVMin, canvasVMax);
+    }
     const isBorder = focusBorderTimes.has(drag.startTime);
     if (isBorder) {
       nextTime = drag.startTime;
@@ -1779,6 +1835,7 @@ function MultiChannelCurves({
         const prevT = keys[idx - 1]!.time;
         const nextT = keys[idx + 1]!.time;
         const eps = 1e-4;
+        if (snapEnabled) nextTime = snapToGrid(nextTime, timeMin, timeMax);
         nextTime = Math.max(prevT + eps, Math.min(nextT - eps, nextTime));
       } else {
         nextTime = drag.startTime;
@@ -1975,11 +2032,26 @@ function MultiChannelCurves({
       if (!onCanvasAdd) return;
       const { x, y } = eventToViewBox(svg, event.clientX, event.clientY, width, height);
       if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-      const time = unproject(x, timeMin, timeMax, width);
-      // Pointer Y → value through the CANVAS range. The host
-      // (`emitters/add-track-key`) clamps to the channel's engine
-      // bounds before committing.
-      const value = unproject(height - y, canvasVMin, canvasVMax, height);
+      let time = unproject(x, timeMin, timeMax, width);
+      // Pointer Y → value through the CANVAS range (the visible grid), then
+      // clamp to the focus channel's engine bounds below — the host inserts
+      // the received value verbatim (it does NOT clamp), so an out-of-range
+      // value would otherwise create an illegal key (#618 review).
+      let value = unproject(height - y, canvasVMin, canvasVMax, height);
+      if (snapEnabled) {
+        const snappedTime = snapToGrid(time, timeMin, timeMax);
+        // Border keys always occupy timeMin/timeMax; the host resolves a
+        // colliding insert by nudging +0.001, which at timeMax lands OUT of
+        // range (#618 review). Only take the snapped time when its stop is
+        // free; otherwise keep the raw drop time (which the host can nudge
+        // safely inward).
+        if (focusLayer === null || !focusLayer.track.keys.some((k) => k.time === snappedTime)) {
+          time = snappedTime;
+        }
+        value = snapToGrid(value, canvasVMin, canvasVMax);
+      }
+      // Insert must honour the focus channel's value range like drag does.
+      value = Math.max(focusVMin, Math.min(focusVMax, value));
       event.stopPropagation();
       onCanvasAdd(time, value);
       return;
@@ -2127,6 +2199,16 @@ function MultiChannelCurves({
           The grid does NOT shift with the focus channel's range —
           it's a fixed 10×10 reference. Per-channel value ranges
           are surfaced via the axis labels rendered below. */}
+      {/* Faint minor sub-grid (#618) — rendered BEFORE the major grid so the
+          major lines paint on top at full weight. */}
+      <g data-testid="curve-subgrid" stroke="var(--curve-subgrid)" strokeWidth={0.5} pointerEvents="none">
+        {minorVerticalLines.map((x, i) => (
+          <line key={`mv${i}`} x1={x} y1={0} x2={x} y2={height} />
+        ))}
+        {minorHorizontalLines.map((y, i) => (
+          <line key={`mh${i}`} x1={0} y1={y} x2={width} y2={y} />
+        ))}
+      </g>
       <g data-testid="curve-grid" stroke="var(--curve-grid)" strokeWidth={1} pointerEvents="none">
         {verticalLines.map((x, i) => (
           <line key={`v${i}`} x1={x} y1={0} x2={x} y2={height} />

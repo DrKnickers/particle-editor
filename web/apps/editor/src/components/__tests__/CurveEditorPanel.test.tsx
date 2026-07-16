@@ -2385,3 +2385,75 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     });
   });
 });
+
+// ─── Snap-to-grid toggle persistence (#618) ──────────────────────────────────
+describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __resetAtlasContext();
+    __resetRightDockForTests();
+  });
+
+  it("defaults OFF and renders in the toolbar", () => {
+    const { bridge } = makeStubBridge(null);
+    render(<CurveEditorPanel bridge={bridge} />);
+    const toggle = screen.getByTestId("curve-snap-toggle");
+    expect(toggle).toBeInTheDocument();
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    // Untouched → no stored value.
+    expect(localStorage.getItem("curveEditor.snapToGrid")).toBeNull();
+  });
+
+  it("flips on/off and persists each state to localStorage", () => {
+    const { bridge } = makeStubBridge(null);
+    render(<CurveEditorPanel bridge={bridge} />);
+    const toggle = screen.getByTestId("curve-snap-toggle");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(localStorage.getItem("curveEditor.snapToGrid")).toBe("1");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(localStorage.getItem("curveEditor.snapToGrid")).toBe("0");
+  });
+
+  it("reads the persisted preference back on mount", () => {
+    localStorage.setItem("curveEditor.snapToGrid", "1");
+    const { bridge } = makeStubBridge(null);
+    render(<CurveEditorPanel bridge={bridge} />);
+    expect(screen.getByTestId("curve-snap-toggle").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("threads snapEnabled to the canvas — a key drag with snap ON commits a SNAPPED value to the bridge", async () => {
+    // Give red an interior key at t=50 so we can drag it freely.
+    const tracks = fixtureTracks().map((t) =>
+      t.name === "red"
+        ? { ...t, keys: [{ time: 0, value: 0.5 }, { time: 50, value: 0.5 }, { time: 100, value: 0.5 }] }
+        : t,
+    );
+    const { bridge } = makeStubBridge(0, tracks);
+    render(<CurveEditorPanel bridge={bridge} />);
+    const svg = (await screen.findByTestId("curve-editor-svg")) as unknown as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    // Turn snap ON, then drag the interior key off-grid: t=50 (x=300, v=0.5 →
+    // y=150) → x=307 (time 51.17 → snaps 52), y=143 (value 0.5233 → snaps 0.52).
+    fireEvent.click(screen.getByTestId("curve-snap-toggle"));
+    const key = document.querySelector(
+      '[data-testid="curve-key"][data-key-time="50"][data-channel-id="red"]',
+    )!;
+    fireEvent.pointerDown(key, { button: 0, pointerId: 80, clientX: 300, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 80, clientX: 307, clientY: 143 });
+    fireEvent.pointerUp(svg, { pointerId: 80, clientX: 307, clientY: 143 });
+
+    const call = bridge.request.mock.calls.find(
+      (c: unknown[]) => (c[0] as { kind: string }).kind === "emitters/set-track-key",
+    );
+    expect(call).toBeDefined();
+    const params = (call![0] as { params: { newTime: number; newValue: number } }).params;
+    expect(params.newTime).toBeCloseTo(52, 4);   // snapped, not raw 51.17
+    expect(params.newValue).toBeCloseTo(0.52, 4); // snapped, not raw 0.5233
+  });
+});

@@ -36,6 +36,10 @@ int main()
         CHECK(ParseScript(R"({"steps":[{"kind":"emitters/select","params":{"id":0}}]})", s, err));
         CHECK(ParseScript(R"({"steps":[{"kind":"layout/scene-rect","params":{"x":0,"y":0,"w":800,"h":600}}]})", s, err));
         CHECK(ParseScript(R"({"steps":[{"kind":"textures/get-preview","params":{"filename":"p_fire.dds"}}]})", s, err));
+        // read-only state query — the assert-state source for the ground-view-only
+        // drive check (#617). Snapshot data carries /dirty, /ground, etc.
+        CHECK(ParseScript(R"({"steps":[{"kind":"engine/state/snapshot"}]})", s, err));
+        CHECK(ParseScript(R"({"steps":[{"assert-state":{"kind":"engine/state/snapshot","path":"/dirty","equals":false}}]})", s, err));
     }
     // --- allowlist: dangerous/unknown kinds REJECTED ---
     {
