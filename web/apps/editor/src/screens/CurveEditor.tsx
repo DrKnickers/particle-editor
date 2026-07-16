@@ -59,6 +59,7 @@ import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, use
 import type { InterpolationType, TrackDto, TrackName } from "@particle-editor/bridge-schema";
 import { useCurveMorph, type SuppressedMove } from "../lib/use-curve-morph";
 import { snapToGrid, GRID_SUBDIVISIONS } from "./curve-snap";
+import { clampGroupTimeShift } from "./curve-group-shift";
 
 /** Channel definition for the multi-channel overlay branch.
  *  `id` is the UI-facing identifier (e.g. "rotation"); `trackName` is
@@ -1783,22 +1784,16 @@ function MultiChannelCurves({
       if (snapEnabled) {
         dTime = snapToGrid(drag.startTime + dTime, timeMin, timeMax) - drag.startTime;
       }
-      const allKeys = focusLayer.track.keys;
-      const firstT = allKeys[0]!.time;
-      const lastT = allKeys[allKeys.length - 1]!.time;
-      const eps = 1e-4;
-      let minSel = Infinity;
-      let maxSel = -Infinity;
-      for (const t of selectedKeyTimes) {
-        if (focusBorderTimes.has(t)) continue;
-        if (t < minSel) minSel = t;
-        if (t > maxSel) maxSel = t;
-      }
-      if (minSel === Infinity) {
-        dTime = 0; // all-border selection — no time shift
-      } else {
-        dTime = Math.max((firstT + eps) - minSel, Math.min((lastT - eps) - maxSel, dTime));
-      }
+      // Bound the rigid shift against the nearest keys that stay put (unselected
+      // keys, selected borders, endpoints) so no moving key lands on another
+      // key's time (#619). Same clamp the commit uses (computeGroupMoves), so
+      // this preview and the commit agree. Returns 0 for an all-border selection.
+      dTime = clampGroupTimeShift(
+        focusLayer.track.keys.map((k) => k.time),
+        selectedKeyTimes,
+        focusBorderTimes,
+        dTime,
+      );
       drag.groupDTime = dTime;
       drag.groupDValue = rawValue - drag.startValue;
       const gdx = event.clientX - drag.startClientX;

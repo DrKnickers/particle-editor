@@ -177,6 +177,8 @@ may live at the end of the file.
 
 ### Fixed
 
+- Dragging a multi-key selection in the curve editor no longer lets a key slide on top of an unselected key (which left a stuck duplicate) — the group now stops just short of any key it would collide with
+- Dragging a multi-key selection up in the curve editor no longer jumps on release for auto-ranging channels (Scale, Index) — the keys commit exactly where the curve showed them mid-drag
 - Dragging the Time spinner's arrow column now keeps moving the selected key for the whole scrub, instead of the key stalling after the first tick while the number ran ahead
 - The "Show ground" viewport toggle now stays how you left it across restarts, and toggling it no longer marks the file as unsaved
 - Adjusting a curve key with the Value or Time spinner now updates the curve immediately and stays locked to the number, instead of lagging behind while you scrub

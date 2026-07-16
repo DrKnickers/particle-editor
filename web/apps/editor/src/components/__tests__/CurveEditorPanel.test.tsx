@@ -21,7 +21,7 @@ import type {
   TrackDto,
 } from "@particle-editor/bridge-schema";
 import { TRACK_NAMES } from "@particle-editor/bridge-schema";
-import { CurveEditorPanel, CHANNELS } from "../CurveEditorPanel";
+import { CurveEditorPanel, CHANNELS, computeGroupMoves } from "../CurveEditorPanel";
 
 // the toolbar buttons mount Tips (Radix Tooltip.Root), which
 // require the app-level Tooltip.Provider — wrapper stands in for it
@@ -1582,6 +1582,24 @@ describe("CurveEditorPanel — multi-key average edit", () => {
     expect(byOld.get(75)).toMatchObject({ oldTime: 75, newTime: 75, newValue: 70 });
   });
 
+  it("commits float32-canonical group values so a large edit doesn't glide on refetch (#620 review)", async () => {
+    // The engine stores/echoes float32. A group edit must commit the fround'd
+    // value (like the single-key path, #613) — otherwise the raw double in the
+    // morph-suppress fails movesMatch against the float32 refetch and the key
+    // glides (the effect grows past |v|~840 where the float32 quantum exceeds
+    // KEY_MATCH_EPS). Values 20/40/60 shifted +0.1 → none float32-exact.
+    const { bridge } = makeStubBridgeMultiInterior(0);
+    await selectScaleInterior(bridge);
+    const valueInput = screen.getByLabelText("Selected key value") as HTMLInputElement;
+    fireEvent.change(valueInput, { target: { value: "40.1" } }); // avg 40 → +0.1
+    fireEvent.blur(valueInput);
+    const calls = setTrackKeyCalls(bridge);
+    expect(calls.length).toBeGreaterThanOrEqual(3);
+    for (const c of calls) {
+      expect(c.newValue).toBe(Math.fround(c.newValue)); // float32-canonical
+    }
+  });
+
   it("editing the Time average shifts the group's times by the delta", async () => {
     const { bridge } = makeStubBridgeMultiInterior(0);
     await selectScaleInterior(bridge);
@@ -1595,6 +1613,32 @@ describe("CurveEditorPanel — multi-key average edit", () => {
     expect(byOld.get(75)!.newTime).toBeCloseTo(85, 3);
     // Values untouched by a pure time shift.
     expect(byOld.get(50)!.newValue).toBe(40);
+  });
+
+  it("a canvas group DRAG commits values clamped to the DISPLAY range, matching the preview (#620)", async () => {
+    // Scale keys 0/25/50/75/100 = values 0/20/40/60/80 → DISPLAY max 80 (the
+    // border at value 80); spinner bounds are 1e6. Grab the lowest interior key
+    // (value 20) and drag it up to the display max (dValue ≈ +60). The higher
+    // selected keys (40, 60) would reach 100/120; the commit must clamp them to
+    // the display max 80 (what the on-canvas preview shows), NOT the wide spinner
+    // bounds — otherwise the curve jumps on release (#620).
+    const { bridge } = makeStubBridgeMultiInterior(0);
+    await selectScaleInterior(bridge);
+    const svg = screen.getByTestId("curve-editor-svg") as unknown as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    const anchor = screen
+      .getAllByTestId("curve-key")
+      .find((k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "scale")!;
+    // key 25 value 20 → y=200; drag straight up past the top (anchor clamps to 80).
+    fireEvent.pointerDown(anchor, { button: 0, pointerId: 95, clientX: 150, clientY: 200 });
+    fireEvent.pointerMove(svg, { pointerId: 95, clientX: 150, clientY: -100 });
+    fireEvent.pointerUp(svg, { pointerId: 95, clientX: 150, clientY: -100 });
+
+    const byOld = new Map(setTrackKeyCalls(bridge).map((c) => [c.oldTime, c]));
+    // Display-bounded to 80, NOT the spinner-bounded 100 / 120.
+    expect(byOld.get(50)!.newValue).toBeCloseTo(80, 3);
+    expect(byOld.get(75)!.newValue).toBeCloseTo(80, 3);
   });
 
   it("disables the Time field when the selection is all border keys", async () => {
@@ -2455,6 +2499,38 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
     const params = (call![0] as { params: { newTime: number; newValue: number } }).params;
     expect(params.newTime).toBeCloseTo(52, 4);   // snapped, not raw 51.17
     expect(params.newValue).toBeCloseTo(0.52, 4); // snapped, not raw 0.5233
+  });
+});
+
+// ─── computeGroupMoves — group-drag clamp (#619 collision, #620 value bounds) ──
+describe("computeGroupMoves (#619/#620)", () => {
+  const keys = [
+    { time: 0, value: 0 },
+    { time: 25, value: 5 },
+    { time: 50, value: 0 },
+    { time: 100, value: 0 },
+  ];
+  const borders = new Set([0, 100]);
+
+  it("bounds a rightward group shift so no selected key crosses an unselected key (#619)", () => {
+    // Select {25}; +30 would reach 55, past the unselected key at 50. The rigid
+    // clamp stops it eps before 50 — no colliding newTime.
+    const moves = computeGroupMoves(keys, new Set([25]), borders, 30, 0, { min: 0, max: 1e6 });
+    expect(moves).toHaveLength(1);
+    expect(moves[0]!.newTime).toBeLessThan(50);
+    expect(moves[0]!.newTime).toBeCloseTo(49.99, 2); // 50 - eps
+    // The committed newTime must not equal any unselected key's time.
+    expect(keys.some((k) => !new Set([25]).has(k.time) && k.time === moves[0]!.newTime)).toBe(false);
+  });
+
+  it("clamps the value to the PASSED bounds so canvas (display) and spinner (engine) differ (#620)", () => {
+    // dValue +20 on value 5 → 25. With the display range (max 10) it clamps to 10
+    // (what a canvas drag commits, matching the preview); with wide spinner bounds
+    // it stays 25 (what a spinner group edit commits).
+    const display = computeGroupMoves(keys, new Set([25]), borders, 0, 20, { min: 0, max: 10 });
+    expect(display[0]!.newValue).toBe(10);
+    const spinner = computeGroupMoves(keys, new Set([25]), borders, 0, 20, { min: 0, max: 1e6 });
+    expect(spinner[0]!.newValue).toBe(25);
   });
 });
 

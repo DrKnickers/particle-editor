@@ -52,6 +52,7 @@ import type {
   TrackName,
 } from "@particle-editor/bridge-schema";
 import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "@/screens/CurveEditor";
+import { clampGroupTimeShift } from "@/screens/curve-group-shift";
 import type { SuppressedMove } from "@/lib/use-curve-morph";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
@@ -256,7 +257,7 @@ function spinnerBoundsForTrack(name: TrackName): {
  *  consume it, so the displayed numbers always match what will commit.
  *  Keep in sync with the morph recorder in CurveEditor.tsx per the note
  *  in `applyGroupShift`. */
-function computeGroupMoves(
+export function computeGroupMoves(
   trackKeys: ReadonlyArray<{ time: number; value: number }>,
   selectedTimes: ReadonlySet<number>,
   borderTimes: ReadonlySet<number>,
@@ -265,15 +266,18 @@ function computeGroupMoves(
   bounds: { min: number; max: number },
 ): Array<{ oldTime: number; newTime: number; newValue: number }> {
   if (trackKeys.length === 0) return [];
-  const firstTime = trackKeys[0]!.time;
-  const lastTime = trackKeys[trackKeys.length - 1]!.time;
-  const eps = (lastTime - firstTime) / 10000 || 1e-4;
+  // Bound the RIGID shift so no moving key crosses a key that stays put (an
+  // unselected key or a selected border) — else a selected key lands on another
+  // key's time and the host multiset gets a duplicate (#619). The same clamp
+  // drives the live-drag preview (CurveEditor.tsx), so preview == commit.
+  const clampedDTime = clampGroupTimeShift(
+    trackKeys.map((k) => k.time), selectedTimes, borderTimes, dTime,
+  );
   const out: Array<{ oldTime: number; newTime: number; newValue: number }> = [];
   for (const k of trackKeys) {
     if (!selectedTimes.has(k.time)) continue;
     const isBorder = borderTimes.has(k.time);
-    let nt = isBorder ? k.time : k.time + dTime;
-    if (!isBorder) nt = Math.min(lastTime - eps, Math.max(firstTime + eps, nt));
+    const nt = isBorder ? k.time : k.time + clampedDTime;
     const nv = Math.min(bounds.max, Math.max(bounds.min, k.value + dValue));
     out.push({ oldTime: k.time, newTime: nt, newValue: nv });
   }
@@ -772,6 +776,15 @@ export function CurveEditorPanel({ bridge }: Props) {
     return { min, max };
   }, [tracks, visible]);
 
+  // The FOCUS channel's own display range (what the canvas preview clamps a
+  // group drag to). A canvas group-drag commit uses this so it matches the
+  // preview and doesn't jump on release (#620); a group SPINNER edit uses the
+  // wider engine bounds instead. Falls back to {0,1} with no focus track.
+  const focusDisplayRange = useMemo<{ min: number; max: number }>(
+    () => (focusedTrack ? valueRangeForTrack(focusedTrack) : { min: 0, max: 1 }),
+    [focusedTrack],
+  );
+
 
   // Border keys on the focus track (first + last in time order).
   const borderKeyTimes = useMemo<ReadonlySet<number>>(() => {
@@ -1131,7 +1144,9 @@ export function CurveEditorPanel({ bridge }: Props) {
         ? computeGroupMoves(
             focusedTrack.keys, selectedKeyTimes, borderKeyTimes,
             liveGroup.dTime, liveGroup.dValue,
-            spinnerBoundsForTrack(focusedChannel.trackName),
+            // liveGroup is set only during a canvas drag → display bounds, so the
+            // spinner average matches the on-canvas preview (#620).
+            focusDisplayRange,
           ).map((m) => ({ time: m.newTime, value: m.newValue }))
         : keys;
     let st = 0;
@@ -1142,7 +1157,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     }
     const n = positions.length || 1;
     return { keys, avgTime: st / n, avgValue: sv / n, editable: anyInterior };
-  }, [selectedKeyTimes, focusedTrack, borderKeyTimes, liveGroup, focusedChannel.trackName]);
+  }, [selectedKeyTimes, focusedTrack, borderKeyTimes, liveGroup, focusDisplayRange]);
 
   // Apply a (dTime, dValue) shift to every selected key. Borders are
   // pinned in time (value still shifts); interior keys clamp to stay
@@ -1153,24 +1168,33 @@ export function CurveEditorPanel({ bridge }: Props) {
   // find(oldTime) on the host's multiset never resolves to a key a
   // prior move just parked there.
   const applyGroupShift = useCallback(
-    (dTime: number, dValue: number) => {
+    // `valueBounds` differs by input method: a canvas group DRAG passes the focus
+    // channel's DISPLAY range so the commit matches the on-canvas preview (no jump
+    // on release, #620); a group SPINNER edit passes the wider engine spinner
+    // bounds so a typed value can legitimately grow the range.
+    (dTime: number, dValue: number, valueBounds: { min: number; max: number }) => {
       if (selectedId === null || focusedTrack === null) return;
       const keys = focusedTrack.keys;
       if (keys.length === 0) return;
-      const sb = spinnerBoundsForTrack(focusedChannel.trackName);
       // NOTE: the clamped nt/nv are the values the engine commits.
       // CurveEditor.tsx (~:1499-1500) records the same clamped values
       // into morphSuppressRef; movesMatch() in use-curve-morph.ts
       // verifies them. `computeGroupMoves` is the single source of this
       // clamp logic (shared with the live spinner average) — keep it in
       // sync with the morph recorder.
+      // Canonicalize BOTH time and value to float32 — the engine stores float32
+      // and echoes it on refetch. The single-key path already fround's the value
+      // (#613); the GROUP path only fround'd time, so a large Scale/Index value
+      // (where the float32 quantum exceeds KEY_MATCH_EPS, ~|v|>840) recorded a
+      // raw double into the morph-suppress and then GLIDED when the authoritative
+      // float32 refetch failed movesMatch (#620 review). Commit the fround'd
+      // value everywhere — wire, suppress, optimistic — so all four agree.
       const moves = computeGroupMoves(
-        keys, selectedKeyTimes, borderKeyTimes, dTime, dValue, sb,
+        keys, selectedKeyTimes, borderKeyTimes, dTime, dValue, valueBounds,
       ).map((m) => ({
         oldTime: m.oldTime,
-        wireTime: m.newTime,
         engineTime: Math.fround(m.newTime),
-        newValue: m.newValue,
+        engineValue: Math.fround(m.newValue),
       }));
       // Snap (don't glide): record the morph-suppress before the optimistic
       // overlay so a group SPINNER edit reaches the morph classifier already
@@ -1181,8 +1205,8 @@ export function CurveEditorPanel({ bridge }: Props) {
         channelId: focusedChannel.id,
         moves: moves.map((m) => ({
           oldTime: m.oldTime,
-          newTime: m.wireTime,
-          newValue: m.newValue,
+          newTime: m.engineTime,
+          newValue: m.engineValue,
         })),
       };
       // Optimistic overlay (same idiom as handleKeyDragEnd).
@@ -1199,7 +1223,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                     keys: t.keys
                       .map((k) => {
                         const m = moveMap.get(k.time);
-                        return m ? { time: m.engineTime, value: m.newValue } : k;
+                        return m ? { time: m.engineTime, value: m.engineValue } : k;
                       })
                       .sort((a, b) => a.time - b.time),
                   },
@@ -1217,13 +1241,13 @@ export function CurveEditorPanel({ bridge }: Props) {
             params: {
               id: selectedId,
               track: focusedChannel.trackName,
-              // Commit the float32 (engineTime) value, NOT the raw double
-              // wireTime, so the time the engine stores + returns on refetch
-              // is EXACTLY what we put in selectedKeyTimes — otherwise the
-              // moved keys lose their selected highlight.
+              // Commit the float32 (engineTime/engineValue), NOT raw doubles, so
+              // what the engine stores + returns on refetch EXACTLY matches the
+              // optimistic overlay + morph-suppress — otherwise the moved keys
+              // lose their selected highlight (time) or glide (large value).
               oldTime: m.oldTime,
               newTime: m.engineTime,
-              newValue: m.newValue,
+              newValue: m.engineValue,
             },
           })
           .catch(() => { /* silent — re-fetch on tree/changed */ });
@@ -1249,9 +1273,11 @@ export function CurveEditorPanel({ bridge }: Props) {
         morphSuppressRef.current = null;
         return;
       }
-      applyGroupShift(dTime, dValue);
+      // Canvas drag → clamp value to the DISPLAY range so the commit matches the
+      // on-canvas preview (no jump on release, #620).
+      applyGroupShift(dTime, dValue, focusDisplayRange);
     },
-    [cancelLiveFlush, focusLocked, applyGroupShift],
+    [cancelLiveFlush, focusLocked, applyGroupShift, focusDisplayRange],
   );
 
   // Spinner display values + enablement. Single-key wins; otherwise the
@@ -1277,7 +1303,8 @@ export function CurveEditorPanel({ bridge }: Props) {
         if (!multiSelected.editable) return;
         const dTime = nextTime - multiSelected.avgTime;
         if (dTime === 0) return;
-        applyGroupShift(dTime, 0);
+        // Spinner edit → engine bounds (a typed value may grow the range).
+        applyGroupShift(dTime, 0, spinnerBoundsForTrack(focusedChannel.trackName));
         return;
       }
       if (singleSelected === null) return;
@@ -1345,7 +1372,8 @@ export function CurveEditorPanel({ bridge }: Props) {
       if (multiSelected !== null) {
         const dValue = nextValue - multiSelected.avgValue;
         if (dValue === 0) return;
-        applyGroupShift(0, dValue);
+        // Spinner edit → engine bounds (a typed value may grow the range).
+        applyGroupShift(0, dValue, spinnerBoundsForTrack(focusedChannel.trackName));
         return;
       }
       if (singleSelected === null) return;

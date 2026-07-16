@@ -1942,3 +1942,59 @@ describe("CurveEditor — insert snap (#618)", () => {
     expect(value).toBe(1); // clamped to red's max, not left at 1.5
   });
 });
+
+// ─── Group-drag collision bound (#619) ───────────────────────────────────────
+describe("CurveEditor — group drag bounds against unselected keys (#619)", () => {
+  const CH: ChannelDef[] = [
+    { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
+  ];
+  // Unselected key at t=40 sits between the two selected keys (25, 75).
+  function track(): TrackDto {
+    return {
+      name: "red",
+      keys: [
+        { time: 0, value: 0.5 },
+        { time: 25, value: 0.5 },
+        { time: 40, value: 0.5 },
+        { time: 75, value: 0.5 },
+        { time: 100, value: 0.5 },
+      ],
+      interpolation: "linear",
+      lockedTo: null,
+    };
+  }
+
+  it("stops the rigid shift before a selected key crosses an unselected key", () => {
+    const onEnd = vi.fn();
+    const { container } = render(
+      <CurveEditor
+        tracks={[track()]}
+        channels={CH}
+        visibleChannels={{ red: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        selectedKeyTimes={new Set([25, 75])}
+        onGroupDragEnd={onEnd}
+      />,
+    );
+    const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    const anchor = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
+    )!;
+    // Grab t=25 (x=150) and drag far right (x=540 → +65 time) — but t=25's right
+    // wall is the unselected t=40, so the rigid shift clamps to ~15 (40-25-eps).
+    fireEvent.pointerDown(anchor, { button: 0, pointerId: 90, clientX: 150, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 90, clientX: 540, clientY: 150 });
+    fireEvent.pointerUp(svg, { pointerId: 90, clientX: 540, clientY: 150 });
+
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    const [dTime] = onEnd.mock.calls[0] as [number, number];
+    // Bounded so 25 + dTime stays below the unselected 40 (eps = 100/10000 = 0.01).
+    expect(dTime).toBeCloseTo(14.99, 2);
+    expect(25 + dTime).toBeLessThan(40);
+  });
+});
