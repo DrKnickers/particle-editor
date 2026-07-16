@@ -1804,12 +1804,17 @@ export function CurveEditorPanel({ bridge }: Props) {
               selected. Disabled when nothing is selected. A border
               single-key disables Time (value-only edit); a multi-select of
               all-border keys does the same. The Spinner `key` binds to
-              track + selection size + displayed value so the input
-              remounts when the selection or its committed value changes. */}
+              track + selection size ONLY — NOT the displayed value. Keying on
+              the value remounted the input on every committed edit, which
+              orphaned an in-flight arrow-column scrub's document listeners on
+              the dead instance and froze its handler at the mousedown key time,
+              so a continuous Time scrub diverged after the first tick (#614).
+              The Spinner's resync effect already tracks external value changes
+              (undo, key-switch, mod-switch) without a remount. */}
           <label className="text-xs text-text-2" htmlFor="ce-spinner-time">Time:&nbsp;</label>
           <div style={{ width: 84 }} data-testid="ce-spinner-time-wrapper">
             <Spinner
-              key={`time:${focusedChannel.trackName}:${selectedKeyTimes.size}:${spinnerTimeValue}`}
+              key={`time:${focusedChannel.trackName}:${selectedKeyTimes.size}`}
               aria-label="Selected key time"
               value={spinnerTimeValue}
               onChange={handleTimeSpinner}
@@ -1831,7 +1836,7 @@ export function CurveEditorPanel({ bridge }: Props) {
               const sb = spinnerBoundsForTrack(focusedChannel.trackName);
               return (
                 <Spinner
-                  key={`value:${focusedChannel.trackName}:${selectedKeyTimes.size}:${spinnerValueValue}`}
+                  key={`value:${focusedChannel.trackName}:${selectedKeyTimes.size}`}
                   aria-label="Selected key value"
                   value={spinnerValueValue}
                   onChange={handleValueSpinner}

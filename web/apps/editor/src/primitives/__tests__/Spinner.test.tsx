@@ -95,6 +95,26 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenLastCalledWith(25);
   });
 
+  // #614: the scrub must emit through the LATEST onChange, not the one captured
+  // at mousedown. A consumer (CurveEditorPanel) recreates its onChange whenever
+  // the committed key state changes; a scrub that kept firing the mousedown
+  // closure would carry a stale reference (frozen oldTime) and diverge.
+  it("a scrub emits through the latest onChange prop, not the one captured at mousedown (#614)", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(
+      <Spinner value={5} onChange={first} step={1} aria-label="test-spinner" />
+    );
+    const column = screen.getByLabelText("Increment").parentElement as HTMLElement;
+    fireEvent.mouseDown(column, { clientY: 100, button: 0 });
+    // Consumer re-renders with a fresh onChange mid-gesture (same instance).
+    rerender(<Spinner value={5} onChange={second} step={1} aria-label="test-spinner" />);
+    fireEvent.mouseMove(document, { clientY: 80 }); // dy=+20 at step 1 → 25
+    fireEvent.mouseUp(document);
+    expect(second).toHaveBeenLastCalledWith(25); // latest handler
+    expect(first).not.toHaveBeenCalled();        // NOT the mousedown closure
+  });
+
   // The arrow column is inset + clipped so its hover/active background
   // can't paint over the input's rounded border (the "outline looks
   // broken on press" bug). Guards the containment classes from being

@@ -177,6 +177,7 @@ may live at the end of the file.
 
 ### Fixed
 
+- Dragging the Time spinner's arrow column now keeps moving the selected key for the whole scrub, instead of the key stalling after the first tick while the number ran ahead
 - The "Show ground" viewport toggle now stays how you left it across restarts, and toggling it no longer marks the file as unsaved
 - Adjusting a curve key with the Value or Time spinner now updates the curve immediately and stays locked to the number, instead of lagging behind while you scrub
 - Child emitters now render behind the parent emitter they were spawned from, matching the game — a spawned child no longer draws on top of its parent

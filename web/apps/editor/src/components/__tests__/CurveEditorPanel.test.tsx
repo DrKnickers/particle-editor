@@ -2457,3 +2457,64 @@ describe("CurveEditorPanel — snap-to-grid toggle (#618)", () => {
     expect(params.newValue).toBeCloseTo(0.52, 4); // snapped, not raw 0.5233
   });
 });
+
+// ─── #614: a continuous TIME-spinner scrub must keep tracking the moving key ──
+describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __resetAtlasContext();
+    __resetRightDockForTests();
+  });
+
+  it("chains oldTime across scrub ticks instead of freezing at the mousedown time", async () => {
+    // rAF sync so each mousemove emits exactly one scrub tick immediately.
+    const raf = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((cb: FrameRequestCallback) => { cb(0); return 1; });
+    const caf = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    try {
+      // red with an interior key at t=25 (Time enabled; draggable).
+      const tracks = fixtureTracks().map((t) =>
+        t.name === "red"
+          ? { ...t, keys: [{ time: 0, value: 0.5 }, { time: 25, value: 0.5 }, { time: 100, value: 0.5 }] }
+          : t,
+      );
+      const { bridge } = makeStubBridge(0, tracks);
+      render(<CurveEditorPanel bridge={bridge} />);
+      await screen.findByTestId("curve-editor-svg");
+
+      // Select the interior key at t=25.
+      const keyAt25 = screen.getAllByTestId("curve-key").find(
+        (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
+      )!;
+      fireEvent.click(keyAt25);
+      const panel = screen.getByTestId("curve-editor-panel");
+      await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
+
+      const timeWrap = screen.getByTestId("ce-spinner-time-wrapper");
+      await waitFor(() =>
+        expect((timeWrap.querySelector("input") as HTMLInputElement).disabled).toBe(false),
+      );
+      const column = timeWrap.querySelector('[aria-label="Increment"]')!.parentElement as HTMLElement;
+
+      // Scrub upward: step 0.1, start t=25. dy=10 → 26 (tick 1), dy=20 → 27 (tick 2).
+      fireEvent.mouseDown(column, { clientY: 100, button: 0 });
+      fireEvent.mouseMove(document, { clientY: 90 });
+      fireEvent.mouseMove(document, { clientY: 80 });
+      fireEvent.mouseUp(document);
+
+      const setKeyCalls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls
+        .filter((c) => (c[0] as { kind: string }).kind === "emitters/set-track-key")
+        .map((c) => (c[0] as { params: { oldTime: number; newTime: number } }).params);
+
+      // Two ticks. Tick 2 must address the key at its CURRENT time (26), not the
+      // frozen mousedown time (25) — else the host no-ops and the key stalls.
+      expect(setKeyCalls.length).toBeGreaterThanOrEqual(2);
+      expect(setKeyCalls[0]!.oldTime).toBeCloseTo(25, 5);
+      expect(setKeyCalls[setKeyCalls.length - 1]!.oldTime).toBeCloseTo(26, 5);
+    } finally {
+      raf.mockRestore();
+      caf.mockRestore();
+    }
+  });
+});

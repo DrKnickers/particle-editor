@@ -124,6 +124,14 @@ export function Spinner({
   // without re-binding them every render.
   const valueRef = useRef(value);
   valueRef.current = value;
+  // Latest `onChange` prop, readable from the scrub/hold document listeners that
+  // are bound ONCE at mousedown. Without this, a continuous gesture keeps firing
+  // the onChange captured at press time; when the consumer recreates its handler
+  // per committed value (CurveEditorPanel does, keyed on the selected key) the
+  // gesture carries a stale closure and diverges after the first tick (#614).
+  // The wheel handler already does this via wheelDepsRef.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   // Optimistic-echo guard. When the field emits a new value via onChange, the
   // controlled `value` prop can lag before it reflects it — a bridge-backed
   // caller (the reference-object transform) round-trips through the host and
@@ -293,7 +301,7 @@ export function Spinner({
         heldValue.current = next;
         setText(fmt(next));
         pendingBase.current = valueRef.current;
-        onChange(next);
+        onChangeRef.current(next); // latest handler — see onChangeRef (#614)
       }, HOLD_REPEAT_MS);
     }, HOLD_DELAY_MS);
 
@@ -312,7 +320,7 @@ export function Spinner({
       const v = scrubPendingVal;
       scrubPendingVal = null;
       pendingBase.current = valueRef.current;
-      onChange(v);
+      onChangeRef.current(v); // latest handler — see onChangeRef (#614)
     };
 
     const onMove = (me: MouseEvent) => {
