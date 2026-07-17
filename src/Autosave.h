@@ -76,6 +76,25 @@ namespace Autosave
                outcome == RecoverOutcome::Discarded;
     }
 
+    // Whether autosave/check-recovery should skip the recovery prompt and
+    // report no orphan, given the host's mode. Suppress when:
+    //   testHost      — the a11y/CDP harness must never get a recovery modal
+    //                   (it would pollute composition captures);
+    //   ephemeral     — automation mode (--record / --drive): the mount-time
+    //                   check fires BEFORE the timeline opens its file, so an
+    //                   unrelated real orphan would otherwise sit center-screen
+    //                   over every captured frame — and automation never writes
+    //                   an autosave of its own to recover;
+    //   hasCurrentFile — a document is already loaded (a CLI file / any
+    //                   non-untitled state), which "wins" over recovery.
+    // Suppression only skips the PROMPT; it never touches the on-disk orphan,
+    // so a normal launch still recovers it. Pure; unit-tested in
+    // tests/test_autosave_recover.cpp.
+    inline bool ShouldSuppressRecoveryPrompt(bool testHost, bool ephemeral, bool hasCurrentFile)
+    {
+        return testHost || ephemeral || hasCurrentFile;
+    }
+
     // Write the system to the chosen tier's autosave path for the
     // current PID. originalFilename is recorded in the .meta sidecar
     // for the recovery prompt to display. No-op + return false on

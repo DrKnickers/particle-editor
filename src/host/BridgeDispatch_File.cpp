@@ -544,15 +544,15 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
     //
     // React calls this once on mount. Scan %TEMP%\AloParticleEditor\ for an
     // orphaned autosave left by a crashed prior session and return it (or
-    // null). Suppressed under --test-host (the harness must never get a
-    // recovery prompt — it would pollute a11y captures) and when a
-    // document is already loaded (a CLI file / any non-untitled state "wins"
-    // over recovery, matching the legacy main.cpp). Stash the live
-    // OrphanSession so autosave/recover can consume its temp paths w/o re-scan.
+    // null). The prompt is suppressed under --test-host, automation mode
+    // (--record / --drive), or when a document is already loaded — see
+    // Autosave::ShouldSuppressRecoveryPrompt for the per-mode rationale. Stash
+    // the live OrphanSession so autosave/recover can consume its temp paths
+    // w/o re-scan.
     if (kind == "autosave/check-recovery")
     {
         m_hasPendingOrphan = false;
-        if (m_testHost || !m_currentFilePath.empty())
+        if (Autosave::ShouldSuppressRecoveryPrompt(m_testHost, m_ephemeral, !m_currentFilePath.empty()))
         {
             ctx.SendOk(json{{"orphan", nullptr}});
             return true;
