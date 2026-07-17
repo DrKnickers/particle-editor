@@ -321,3 +321,6 @@ __pycache__/
 scripts/wiki-media/config.local.json
 .gate.lock
 vid-repro/
+
+# Playwright run artifacts
+test-results/

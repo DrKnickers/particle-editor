@@ -108,13 +108,17 @@ if (-not $SkipBuilders) {
         'build-t3-full.timeline.json',
         'build-t4-purple.timeline.json',
         # Tutorial 5 teardown builders. These run AFTER the $repoExamples copy above
-        # (each opens _stages/t5-example-flipbook.alo and deletes down to the subset
-        # its clip needs), so they must stay after t1-t4 in this ordered list. The old
+        # (each opens one of the staged examples and deletes down to the subset its
+        # clip needs), so they must stay after t1-t4 in this ordered list. The old
         # from-scratch build-t5-explosion.timeline.json is RETIRED: it produced a toy
         # soft-dot explosion unrelated to the guide's example files.
+        # All open t5-example-flipbook.alo EXCEPT build-t5-fire-layered, which opens the
+        # PLAIN t5-example.alo — §4 Option B is the layered fireball, and only the plain
+        # example has the Fire + Fire Details pair.
         'build-t5-flash-shockwave.timeline.json',
         'build-t5-smoke-fire.timeline.json',
         'build-t5-fire-only.timeline.json',
+        'build-t5-fire-layered.timeline.json',
         'build-t5-single-debris.timeline.json'
     )
     foreach ($b in $builders) {

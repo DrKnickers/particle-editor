@@ -59,7 +59,7 @@ function assertCrop(crop) {
 //   crop=W:H:x='clip(cx(n)*Z(n)-W/2, 0, W*Z(n)-W)':y=…
 // Z(n) eases 1→Zs→1 per segment (smoothstep), cx/cy ease frame-center→rect-center.
 // Frame numbers are the POST-start-trim stream indices: n = round(t*fps) - start.
-export function assertZoom(zoom, { loop = "none", dropBlackBelow = null, fps, start = 0 } = {}) {
+export function assertZoom(zoom, { loop = "none", dropBlackBelow = null, fps, start = 0, frameCount = null } = {}) {
   if (zoom == null) return;
   if (loop !== "none") throw new Error("zoom requires loop=none (loop modes reorder frames; n-based zoom expressions would land on the wrong frames)");
   if (dropBlackBelow != null) throw new Error("zoom cannot combine with drop-black-below (dropped frames renumber the stream)");
@@ -76,6 +76,13 @@ export function assertZoom(zoom, { loop = "none", dropBlackBelow = null, fps, st
     const { t0, t1, rect, easeMs } = s;
     if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0) throw new Error(`zoom segment t0/t1 invalid: ${JSON.stringify(s)}`);
     if (!Number.isFinite(easeMs) || easeMs <= 0) throw new Error("zoom segment easeMs must be > 0");
+    // The ease is serialized into the ffmpeg expression as E.toFixed(3) FRAMES
+    // (buildZoomFilters). An ease under one frame is meaningless as a ramp, and a
+    // sub-millifame one rounds to "0.000" -> the rise becomes clip(x/0,0,1), which
+    // is non-finite: the scale expression then has no defined first-frame size and
+    // the JS model (full precision) and ffmpeg (rounded) disagree. Reject it here.
+    const easeFrames = (easeMs / 1000) * fps;
+    if (easeFrames < 1) throw new Error(`zoom segment easeMs=${easeMs} is under one frame at ${fps}fps (${easeFrames.toFixed(4)} frames): the ease serializes to 0.000 and divides by zero`);
     const ease = easeMs / 1000;
     // Strictly greater: at exactly 2*ease the rise and fall ramps meet with
     // zero hold time, which is a degenerate (not just minimal) segment.
@@ -89,44 +96,104 @@ export function assertZoom(zoom, { loop = "none", dropBlackBelow = null, fps, st
     prevEnd = t1;
     const n0 = Math.round(t0 * fps) - start;
     if (n0 < 0) throw new Error(`zoom segment starts before the --start trim (t0=${t0}s, start frame ${start})`);
+    // A segment must FINISH inside the stream. The profile is 0 (=> Z=1) only at
+    // n >= D; if D lands past the last frame the clip ends mid-zoom while frame 0
+    // is un-zoomed, so a looping <video> hard-cuts back to wide on every repeat.
+    // The 1->Zs->1 shape is the loop-safety invariant — this is what enforces it.
+    if (frameCount != null) {
+      const n1 = Math.round(t1 * fps) - start;
+      if (n1 > frameCount - 1)
+        throw new Error(`zoom segment ends past the last frame (t1=${t1}s -> frame ${n1}, last frame ${frameCount - 1}): ` +
+                        `the ease-out would never complete and the clip would end mid-zoom, breaking the loop`);
+    }
   }
+}
+
+// Effective zoom state at one frame — the same Z/CX/CY the ffmpeg expressions
+// compute, evaluated in JS. Used for the poster (a single-image ffmpeg run has
+// n=0, so the animated expressions would always collapse to the Z=1 rest state)
+// and to pin the centring invariant in tests.
+export function evalZoomAt(zoom, { fps, start = 0, n }) {
+  if (zoom == null) return null;
+  const { w, h, segments } = zoom;
+  let z = 1, cx = w / 2, cy = h / 2;
+  for (const s of segments) {
+    const E = (s.easeMs / 1000) * fps;
+    const A = Math.round(s.t0 * fps) - start;
+    const D = Math.round(s.t1 * fps) - start;
+    const cl = (v) => Math.min(1, Math.max(0, v));
+    const ss = (v) => v * v * (3 - 2 * v);
+    const P = ss(cl((n - A) / E)) * ss(cl((D - n) / E));
+    z += (w / s.rect[2] - 1) * P;
+    cx += (s.rect[0] + s.rect[2] / 2 - w / 2) * P;
+    cy += (s.rect[1] + s.rect[3] / 2 - h / 2) * P;
+  }
+  return { z, cx, cy };
 }
 
 // Smoothstep-eased 0→1→0 profile for one segment, as an ffmpeg expression in `n`:
 // rise over [A, A+E], hold, fall over [D-E, D]. `clip()` bounds each ramp.
-function segProfile(A, D, E) {
-  const rise = `clip((n-${A})/${E},0,1)`;
-  const fall = `clip((${D}-n)/${E},0,1)`;
+function segProfile(A, D, E, nvar = "n") {
+  const rise = `clip((${nvar}-${A})/${E},0,1)`;
+  const fall = `clip((${D}-${nvar})/${E},0,1)`;
   // smoothstep(u) = u*u*(3-2u), applied to both ramps (their product is the hold-aware profile)
   return `(pow(${rise},2)*(3-2*${rise}))*(pow(${fall},2)*(3-2*${fall}))`;
 }
 
+// SCALE_N_LEAD — scale (eval=frame) and crop DISAGREE about `n`.
+//
+// Probed on ffmpeg 8.1.1 (see the "zoom: scale/crop agree on the frame index"
+// test, which re-probes it so a version change fails loudly rather than silently
+// re-desyncing): on the FIRST frame `scale` sees n=1 while `crop` sees n=0.
+// (Their `t` is inconsistent the other way — scale's t is 0 there, crop's is not
+// — so neither variable is trustworthy across the pair on its own.)
+//
+// The two stages are one construct: crop's x/y offset is only correct for the
+// magnification scale ACTUALLY applied to that same frame. Left uncorrected they
+// describe different frames — at frame 0 scale magnifies by Z(1) while crop
+// offsets for Z(0) — so the frame opens ~1px shifted and slightly zoomed instead
+// of at rest, and every eased frame carries a one-frame wobble.
+//
+// This is invisible for a segment that starts late (t0 >= ~1.8s: frame 0 is at
+// P=0 either way), which is why it survived unnoticed in the shipped clips. It is
+// NOT invisible for a segment with t0=0: the last frame rests at Z=1 but the
+// first does not, so the 1->Zs->1 loop invariant breaks and a looping <video>
+// snaps on every repeat. Feed scale n-1 so both stages describe the same frame.
+const SCALE_N_LEAD = 1;
+
 export function buildZoomFilters({ zoom, fps, start = 0 }) {
   if (zoom == null) return [];
   const { w, h, segments } = zoom;
-  const zTerms = [];   // Σ (Zs-1)*P_i
-  const cxTerms = [];  // Σ (rcx - W/2)*P_i
-  const cyTerms = [];
-  for (const s of segments) {
-    const easeF = (s.easeMs / 1000) * fps;
-    const A = (Math.round(s.t0 * fps) - start).toFixed(0);
-    const D = (Math.round(s.t1 * fps) - start).toFixed(0);
-    const E = easeF.toFixed(3);
-    const P = segProfile(A, D, E);
-    const Zs = w / s.rect[2];
-    const rcx = s.rect[0] + s.rect[2] / 2;
-    const rcy = s.rect[1] + s.rect[3] / 2;
-    zTerms.push(`(${(Zs - 1).toFixed(6)})*${P}`);
-    cxTerms.push(`(${(rcx - w / 2).toFixed(3)})*${P}`);
-    cyTerms.push(`(${(rcy - h / 2).toFixed(3)})*${P}`);
-  }
-  const Z = `(1+${zTerms.join("+")})`;
-  const CX = `(${w / 2}+${cxTerms.join("+")})`;
-  const CY = `(${h / 2}+${cyTerms.join("+")})`;
+  // Z/CX/CY as expressions over a caller-chosen frame-index expression.
+  const exprs = (nvar) => {
+    const zTerms = [];   // Σ (Zs-1)*P_i
+    const cxTerms = [];  // Σ (rcx - W/2)*P_i
+    const cyTerms = [];
+    for (const s of segments) {
+      const easeF = (s.easeMs / 1000) * fps;
+      const A = (Math.round(s.t0 * fps) - start).toFixed(0);
+      const D = (Math.round(s.t1 * fps) - start).toFixed(0);
+      const E = easeF.toFixed(3);
+      const P = segProfile(A, D, E, nvar);
+      const Zs = w / s.rect[2];
+      const rcx = s.rect[0] + s.rect[2] / 2;
+      const rcy = s.rect[1] + s.rect[3] / 2;
+      zTerms.push(`(${(Zs - 1).toFixed(6)})*${P}`);
+      cxTerms.push(`(${(rcx - w / 2).toFixed(3)})*${P}`);
+      cyTerms.push(`(${(rcy - h / 2).toFixed(3)})*${P}`);
+    }
+    return {
+      Z:  `(1+${zTerms.join("+")})`,
+      CX: `(${w / 2}+${cxTerms.join("+")})`,
+      CY: `(${h / 2}+${cyTerms.join("+")})`,
+    };
+  };
+  const sc = exprs(SCALE_N_LEAD ? `(n-${SCALE_N_LEAD})` : "n");
+  const cr = exprs("n");
   // scale to the magnified size (even dims), then crop the static W:H window
   // centered on the eased target center, clamped inside the scaled frame.
-  const scaleF = `scale=w='trunc(${w}*${Z}/2)*2':h='trunc(${h}*${Z}/2)*2':eval=frame:flags=lanczos`;
-  const cropF = `crop=${w}:${h}:x='clip(${CX}*${Z}-${w / 2},0,${w}*${Z}-${w})':y='clip(${CY}*${Z}-${h / 2},0,${h}*${Z}-${h})'`;
+  const scaleF = `scale=w='trunc(${w}*${sc.Z}/2)*2':h='trunc(${h}*${sc.Z}/2)*2':eval=frame:flags=lanczos`;
+  const cropF = `crop=${w}:${h}:x='clip(${cr.CX}*${cr.Z}-${w / 2},0,${w}*${cr.Z}-${w})':y='clip(${cr.CY}*${cr.Z}-${h / 2},0,${h}*${cr.Z}-${h})'`;
   return [scaleF, cropF];
 }
 
@@ -154,7 +221,16 @@ export function buildFfmpegArgs({ framesDir, fps, out, start = 0, loop = "none",
                                   dropBlackBelow = null, crossfadeSec = 1.0, frameCount = null, crf = 20,
                                   crop = null, zoom = null }) {
   assertCrop(crop);
-  assertZoom(zoom, { loop, dropBlackBelow, fps: Number(fps), start });
+  // Derive the count ourselves rather than trust the caller: the loop-safety bound
+  // (a segment must finish inside the stream) is only enforced when frameCount is
+  // known, so a caller that omits it would silently opt out of the ONE check that
+  // keeps a looping <video> from snapping. Skipped when the dir has no frames yet
+  // (arg-building tests, and a missing dir fails at ffmpeg anyway).
+  if (zoom != null && frameCount == null) {
+    const counted = countFrames(framesDir, start);
+    if (counted > 0) frameCount = counted;
+  }
+  assertZoom(zoom, { loop, dropBlackBelow, fps: Number(fps), start, frameCount });
   const args = ["-y", "-framerate", String(fps)];
   if (start) args.push("-start_number", String(start));
   args.push("-i", join(framesDir, "frame_%05d.png"));
@@ -235,11 +311,33 @@ export function countFrames(framesDir, start = 0) {
   return n;
 }
 
-export function buildPosterArgs({ framesDir, poster, posterFrame = 0, crop = null }) {
+export function buildPosterArgs({ framesDir, poster, posterFrame = 0, crop = null, zoom = null, fps = null, start = 0 }) {
   assertCrop(crop);
   const name = `frame_${String(posterFrame).padStart(5, "0")}.png`;
   const args = ["-y", "-i", join(framesDir, name)];
-  if (crop) args.push("-vf", `crop=${crop}`); // match the video's chrome trim
+  const vf = [];
+  if (crop) vf.push(`crop=${crop}`); // match the video's chrome trim
+  if (zoom != null) {
+    // Match the video's FRAMING at this frame. The animated expressions can't be
+    // reused: ffmpeg sees a single image here, so n=0 and every segment profile
+    // would evaluate to the Z=1 rest state — the poster would show the wide,
+    // un-pushed frame while the video at that timestamp is pushed in. Instead
+    // evaluate Z/CX/CY at posterFrame and emit the equivalent STATIC crop, back-
+    // projected into source pixels (divide the magnified window by Z).
+    const { w, h } = zoom;
+    const { z, cx, cy } = evalZoomAt(zoom, { fps: Number(fps), start, n: posterFrame - start });
+    const cropX = Math.min(Math.max(cx * z - w / 2, 0), w * z - w);
+    const cropY = Math.min(Math.max(cy * z - h / 2, 0), h * z - h);
+    // Even dims for the same 4:2:0 reason as the video path. Rounding UP can push
+    // the window past the source edge (ffmpeg then silently clamps x, so the poster
+    // would frame a different region than the video) — clamp the origin into bounds.
+    const sw = Math.min(Math.round(w / z / 2) * 2, Math.floor(w / 2) * 2);
+    const sh = Math.min(Math.round(h / z / 2) * 2, Math.floor(h / 2) * 2);
+    const sx = Math.min(Math.max(Math.round(cropX / z), 0), w - sw);
+    const sy = Math.min(Math.max(Math.round(cropY / z), 0), h - sh);
+    vf.push(`crop=${sw}:${sh}:${sx}:${sy}`, `scale=${w}:${h}:flags=lanczos`);
+  }
+  if (vf.length) args.push("-vf", vf.join(","));
   args.push("-frames:v", "1", poster);
   return args;
 }
@@ -309,14 +407,19 @@ if (process.argv[1] && process.argv[1].endsWith("encode.mjs")) {
     loop,
     dropBlackBelow: a["drop-black-below"] != null ? numOpt(a, "drop-black-below", null) : null,
     crossfadeSec: numOpt(a, "crossfade", 1.0),
-    frameCount: loop === "crossfade" ? countFrames(a.frames, start) : null,
+    // crossfade DERIVES its xfade offset from this; zoom only VALIDATES against it
+    // (a segment must finish inside the stream), so count for every loop mode.
+    frameCount: (loop === "crossfade" || zoom != null) ? countFrames(a.frames, start) : null,
     crf: numOpt(a, "crf", 20),
     crop: a.crop ?? null,
     zoom,
   }));
   if (a.poster) {
     const posterFrame = numOpt(a, "poster-frame", start);
-    run("ffmpeg", buildPosterArgs({ framesDir: a.frames, poster: a.poster, posterFrame, crop: a.crop ?? null }));
+    run("ffmpeg", buildPosterArgs({
+      framesDir: a.frames, poster: a.poster, posterFrame, crop: a.crop ?? null,
+      zoom, fps: a.fps, start,
+    }));
   }
   console.log(`encoded ${a.out}`);
 }

@@ -279,6 +279,8 @@ Two supporting details from the example are worth copying:
   `average × (1 ± variance)`. Note the mechanic: the variance multiplies the average, so it needs
   a non-zero average to act on.
 
+<!-- Media: tutorial-05-fireball-index -->
+
 ### Option B — Layered additive (the plain example)
 
 No flipbook texture? Build the fire the way `P_EXPLOSION_EXAMPLE.ALO` does — with motion, count,
@@ -302,7 +304,7 @@ without a single animation frame.
 
 Either way, the fireball should feel like it inflates out of the flash.
 
-<!-- Media: tutorial-05-fireball-index -->
+<!-- Media: tutorial-05-fireball-layered -->
 
 ## 5. The Sparks
 

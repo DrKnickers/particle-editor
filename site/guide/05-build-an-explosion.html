@@ -102,7 +102,7 @@
 <h1 id="tutorial-5-build-an-explosion">Tutorial 5: Build an Explosion</h1>
 <p>This tutorial builds a complete small explosion — the kind that plays when a fighter or a small structure dies. It is modelled on two example particles, <code>P_EXPLOSION_EXAMPLE.ALO</code> and <code>P_EXPLOSION_EXAMPLE_FLIPBOOK.ALO</code>. They are the <em>same</em> explosion built two different ways, and the only thing that differs between them is how the fireball is made.</p>
 <p>An explosion is the classic stacked effect: a flash, a shockwave, a fireball, rising smoke, flying sparks, and tumbling debris — each simple on its own, all agreeing about timing. It is also where three bigger ideas come together: how the Physics tab actually moves particles, how the randomization parameters create variety inside a single emitter, and how a <strong>Link Group</strong> lets several emitters act as one.</p>
-<figure class="guide-media" aria-label="Show the finished explosion — flash, fireball, smoke, sparks with trails — before the build steps."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-opening-result.mp4" data-poster="tutorial-05-opening-result-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show the finished example explosion — flash, shockwave, flipbook fireball, smoke, debris and sparks — before the build steps."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-opening-result.mp4" data-poster="tutorial-05-opening-result-poster.jpg"></video></figure>
 <h2 id="outcome">Outcome</h2>
 <p>By the end of this page the particle contains six kinds of layer, built from eleven emitters (twelve if you build the layered fireball in Option B):</p>
 <ul>
@@ -203,7 +203,7 @@
 </table>
 <p>The small <strong>Initial spawn delay</strong> makes it read as a <em>consequence</em> of the flash rather than simultaneous with it. Tutorial 4's shield ripple uses this same world-oriented trick to lie flat on the shield surface.</p>
 <p>Preview with the Spawner. At this stage the whole effect is one bright pop with a ring pushing out of it — correct so far.</p>
-<figure class="guide-media" aria-label="Show renaming the default emitter to Flash, setting Bursts generation, and the resulting single bright pop."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-flash-burst.mp4" data-poster="tutorial-05-flash-burst-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show the example's Flash Small/Large and Shockwave on their own, so the first layer of the explosion reads in isolation."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-flash-burst.mp4" data-poster="tutorial-05-flash-burst-poster.jpg"></video></figure>
 <h2 id="3-the-smoke-volume-rise-and-render-order">3. The Smoke — Volume, Rise, and Render Order</h2>
 <p>Add two transparent root emitters, <code>Smoke</code> and <code>Smoke Slow</code>. Two, because one smoke cloud with one lifetime fades as a single object and the eye notices; two layers with different lifetimes dissolve unevenly, which is what real smoke does:</p>
 <table>
@@ -235,7 +235,7 @@
 <p>Note <code>Minimum lifetime: 25%</code> on the fast smoke. That single spinner means every particle lives a random 25–100% of 1.3 seconds — some puffs vanish quickly, some linger. That is the first appearance of the idea section 6 makes explicit: <em>randomize inside the emitter before you reach for another emitter.</em></p>
 <p>Smoke is transparent, so here the <strong>Alpha track is the fade</strong> — this is the worked example from <a href="./curve-editor-basics.html">Curve Editor Basics</a>.</p>
 <p>Now use render order deliberately. Emitters draw top-to-bottom in the Emitter Tree — later emitters draw over earlier ones. Drag the emitters so the additive flash, shockwave, and fireball draw <strong>after</strong> the smoke; that way the fire brightens <em>through</em> the smoke instead of being buried by it. The reorder applies live, so keep the effect playing while you drag and watch the fire change from covered to shining through.</p>
-<figure class="guide-media" aria-label="Show dragging the smoke emitter in the tree so the additive fire draws over it, and restarting the preview to pick up the order."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-smoke-render-order.mp4" data-poster="tutorial-05-smoke-render-order-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show why author order is draw order: dragging the Fire emitter above the smoke makes it draw behind and go murky; dragging it back makes it shine through again."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-smoke-render-order.mp4" data-poster="tutorial-05-smoke-render-order-poster.jpg"></video></figure>
 <h2 id="4-the-fireball-pick-one-of-two-ways">4. The Fireball — Pick One of Two Ways</h2>
 <p>This is where the two example files diverge.</p>
 <h3 id="option-a-flipbook-the-_flipbook-example">Option A — Flipbook (the <code>_FLIPBOOK</code> example)</h3>
@@ -256,6 +256,7 @@
 <li><strong>The ending is a color fade.</strong> The R/G/B tracks hold at <code>1.0</code> until about 63% of the life, then fall to <code>0</code> — the additive way to fade out (alpha would do nothing). The flipbook's last frames dissolve to black instead of cutting off.</li>
 <li><strong>Fixed random rotation is ON</strong> here — the one emitter in the file that uses it. With only a couple of flipbook particles alive at once, playing the identical animation, a random <em>starting angle</em> per particle is what keeps the copies from looking stamped from the same stencil. The controls (Appearance tab): <strong>Rotation average</strong> sets the base angle in degrees, and <strong>Rotation variance</strong> widens it into a range by <em>scaling</em> the average — each particle rolls <code>average × (1 ± variance)</code>. Note the mechanic: the variance multiplies the average, so it needs a non-zero average to act on.</li>
 </ul>
+<figure class="guide-media" aria-label="Show the flipbook fireball: the Index track stepping the animated explosion atlas frame-by-frame across the particle's life."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-fireball-index.mp4" data-poster="tutorial-05-fireball-index-poster.jpg"></video></figure>
 <h3 id="option-b-layered-additive-the-plain-example">Option B — Layered additive (the plain example)</h3>
 <p>No flipbook texture? Build the fire the way <code>P_EXPLOSION_EXAMPLE.ALO</code> does — with motion, count, and randomness instead of animation frames. Two additive emitters:</p>
 <table>
@@ -274,7 +275,7 @@
 </table>
 <p><code>Fire</code> is the body of the fireball; <code>Fire Details</code> is the same idea smaller, faster, more numerous, and — look at that spinner — with <strong>Minimum lifetime 14%</strong>: its particles live anywhere from 14% to 100% of 0.35s, so the detail layer flickers and churns instead of pulsing in lockstep. The tiny spawn delay makes the detail <em>follow</em> the body by a frame or two. That is what sells &quot;burning&quot; without a single animation frame.</p>
 <p>Either way, the fireball should feel like it inflates out of the flash.</p>
-<figure class="guide-media" aria-label="Show picking an animated atlas texture and stepping the Index track so the fireball plays frames like a flipbook."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-fireball-index.mp4" data-poster="tutorial-05-fireball-index-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show §4 Option B: the layered additive fireball — Fire as the body and Fire Details as the smaller, faster, busier layer that follows it — sold by motion and randomness instead of animation frames."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-fireball-layered.mp4" data-poster="tutorial-05-fireball-layered-poster.jpg"></video></figure>
 <h2 id="5-the-sparks">5. The Sparks</h2>
 <p>One additive emitter named <code>Sparks</code> — the chaotic spray recipe from section 1:</p>
 <table>
@@ -338,7 +339,7 @@
 <li><strong>Leave Link Group</strong> (right-click a member) pulls one emitter out of the group without affecting the rest.</li>
 </ul>
 <p>When you join emitters into an <em>existing</em> group, the dialog also previews which of their fields the group is about to overwrite — read that list before confirming, because joining adopts the group's shared values.</p>
-<figure class="guide-media" aria-label="Show setting the Sphere initial-speed shape on Sparks and adding a Lifetime Child so each spark carries a trail."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-sparks-children.mp4" data-poster="tutorial-05-sparks-children-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show the Debris lesson: one design duplicated three times, the four copies multi-selected, and a link group created so they stay in sync."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-sparks-children.mp4" data-poster="tutorial-05-sparks-children-poster.jpg"></video></figure>
 <h3 id="keep-the-multiplication-in-check">Keep the Multiplication in Check</h3>
 <p>Eleven or twelve emitters, some bursting 20+ particles, all in the first half second — an explosion adds up fast. If the editor slows or the effect turns to mush, lower the particle counts first — <code>Fire Details</code> (3×23) and <code>Sparks</code> (2×20) are the usual culprits. A readable explosion is almost always cheaper than it looks like it needs to be.</p>
 <h2 id="7-variety-without-more-emitters">7. Variety Without More Emitters</h2>
@@ -381,7 +382,7 @@
 <li>Is the smoke the last thing standing, rising and fading rather than popping off?</li>
 <li>Does the whole effect still read at a normal gameplay camera distance?</li>
 </ul>
-<figure class="guide-media" aria-label="Show the finished user-authored explosion playing in the full editor."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-final-preview.mp4" data-poster="tutorial-05-final-preview-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show the finished example explosion playing in the full editor at a normal preview distance."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-final-preview.mp4" data-poster="tutorial-05-final-preview-poster.jpg"></video></figure>
 <h2 id="game-use-note">Game Use Note</h2>
 <p>In a full mod, an effect like this is what plays behind tags such as <code>Death_Explosion_Particles</code> on units and hardpoints — usually paired with a sound event so the audio and visual land together. Since this tutorial's particle is a new file rather than an override, the game would need something pointing at it before it appears in play; overriding an existing shipped explosion at its own path (the Tutorial 1 workflow) is the simplest route if you want to see your explosion in game.</p>
 <h2 id="takeaways">Takeaways</h2>
