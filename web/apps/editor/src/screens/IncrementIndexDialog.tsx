@@ -86,6 +86,7 @@ export function IncrementIndexDialog({ bridge }: Props) {
               step={1}
               decimals={0}
               aria-label="Repeat count"
+              testId="increment-repeat"
             />
           </div>
           <p className="text-[11px] leading-relaxed text-text-3">

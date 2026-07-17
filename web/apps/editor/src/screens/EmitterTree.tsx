@@ -1009,7 +1009,7 @@ function EmitterRow({
               </ContextMenu.Portal>
             </ContextMenu.Sub>
             <ContextMenu.Separator className={separatorClass} />
-            <ContextMenu.Item onSelect={handleIncrement} className={menuItemClass}>
+            <ContextMenu.Item onSelect={handleIncrement} className={menuItemClass} data-testid="ctx-increment-index">
               Increment Index…
             </ContextMenu.Item>
             <ContextMenu.Item onSelect={handleRescale} className={menuItemClass}>

@@ -50,6 +50,11 @@ export type SpinnerProps = {
   density?: SpinnerDensity;
   disabled?: boolean;
   "aria-label"?: string;
+  /** Optional test id. When set, stamps the increment/decrement arrow buttons
+   *  as `${testId}-inc` / `${testId}-dec` so a --record clip (or a test) can
+   *  click a specific spinner's arrow. Off by default — most spinners don't
+   *  need it, and the record cursor targets by testid only. */
+  testId?: string;
 };
 
 function parseValue(raw: string): number | null {
@@ -77,6 +82,7 @@ export function Spinner({
   density = "default",
   disabled = false,
   "aria-label": ariaLabel,
+  testId,
 }: SpinnerProps) {
   const height = ROW_HEIGHT[density];
   // Display decimal places. Default is 2 so every decimal-bearing field
@@ -470,6 +476,7 @@ export function Spinner({
           tabIndex={-1}
           disabled={disabled}
           aria-label="Increment"
+          data-testid={testId ? `${testId}-inc` : undefined}
           className="flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed"
           style={{ fontSize: "7px", lineHeight: 1 }}
         >
@@ -480,6 +487,7 @@ export function Spinner({
           tabIndex={-1}
           disabled={disabled}
           aria-label="Decrement"
+          data-testid={testId ? `${testId}-dec` : undefined}
           className="flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed"
           style={{ fontSize: "7px", lineHeight: 1 }}
         >

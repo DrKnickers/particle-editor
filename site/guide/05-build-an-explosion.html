@@ -328,7 +328,7 @@
 <p>Create it:</p>
 <ol>
 <li>Finish tuning the single <code>Debris</code> emitter first.</li>
-<li>Right-click it → <strong>Duplicate</strong> three times.</li>
+<li>Right-click it → <strong>Increment Index…</strong>. In the dialog, leave <em>Increment by</em> at <strong>1</strong> and set <em>Repeat</em> to <strong>3</strong>, then confirm. That chains three duplicates in one undo step — each made from the previous copy, so its atlas Index climbs by 1 — leaving four emitters (<code>Debris</code>, <code>Debris_1</code>, <code>Debris_2</code>, <code>Debris_3</code>) that already hold indexes 0, 1, 2, and 3: a different chunk sprite each, for free. (The example file hand-picks frames 5, 6, 7, and 15; the increment gives you consecutive frames as a fast start you can re-pick per member afterward.)</li>
 <li>Select all four: click the first, then <strong>Ctrl+click</strong> each of the others (or <strong>Shift+click</strong> for a range).</li>
 <li>Right-click the selection → <strong>Set Link Group…</strong>. In the dialog choose <strong>Create new group</strong> and confirm. Every linked emitter now shows a colored link dot in the Emitter Tree.</li>
 </ol>
@@ -382,7 +382,9 @@
 <li>Is the smoke the last thing standing, rising and fading rather than popping off?</li>
 <li>Does the whole effect still read at a normal gameplay camera distance?</li>
 </ul>
+<p>Here is the finished explosion both ways — the flipbook fireball (Option A) first, then the layered additive build (Option B). Every other layer is identical; only the fireball differs.</p>
 <figure class="guide-media" aria-label="Show the finished example explosion playing in the full editor at a normal preview distance."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-final-preview.mp4" data-poster="tutorial-05-final-preview-poster.jpg"></video></figure>
+<figure class="guide-media" aria-label="Show the finished explosion built the NON-flipbook (layered additive) way, beside the flipbook version, so the reader sees both complete effects at the end."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-final-preview-layered.mp4" data-poster="tutorial-05-final-preview-layered-poster.jpg"></video></figure>
 <h2 id="game-use-note">Game Use Note</h2>
 <p>In a full mod, an effect like this is what plays behind tags such as <code>Death_Explosion_Particles</code> on units and hardpoints — usually paired with a sound event so the audio and visual land together. Since this tutorial's particle is a new file rather than an override, the game would need something pointing at it before it appears in play; overriding an existing shipped explosion at its own path (the Tutorial 1 workflow) is the simplest route if you want to see your explosion in game.</p>
 <h2 id="takeaways">Takeaways</h2>

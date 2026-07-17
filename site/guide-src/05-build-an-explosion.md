@@ -384,7 +384,12 @@ the fields you deliberately vary (here, the atlas frame) stay per-member.
 Create it:
 
 1. Finish tuning the single `Debris` emitter first.
-2. Right-click it → **Duplicate** three times.
+2. Right-click it → **Increment Index…**. In the dialog, leave *Increment by* at **1** and set
+   *Repeat* to **3**, then confirm. That chains three duplicates in one undo step — each made from
+   the previous copy, so its atlas Index climbs by 1 — leaving four emitters (`Debris`, `Debris_1`,
+   `Debris_2`, `Debris_3`) that already hold indexes 0, 1, 2, and 3: a different chunk sprite each,
+   for free. (The example file hand-picks frames 5, 6, 7, and 15; the increment gives you
+   consecutive frames as a fast start you can re-pick per member afterward.)
 3. Select all four: click the first, then **Ctrl+click** each of the others (or **Shift+click**
    for a range).
 4. Right-click the selection → **Set Link Group…**. In the dialog choose **Create new group** and
@@ -485,7 +490,12 @@ Use these questions on the finished effect:
 - Is the smoke the last thing standing, rising and fading rather than popping off?
 - Does the whole effect still read at a normal gameplay camera distance?
 
+Here is the finished explosion both ways — the flipbook fireball (Option A) first, then the layered
+additive build (Option B). Every other layer is identical; only the fireball differs.
+
 <!-- Media: tutorial-05-final-preview -->
+
+<!-- Media: tutorial-05-final-preview-layered -->
 
 ## Game Use Note
 
