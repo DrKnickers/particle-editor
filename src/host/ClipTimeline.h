@@ -53,6 +53,18 @@ struct CursorKey {
     // false keeps legacy pointer-events-only presses, so existing clips whose
     // theatrical presses sit on live controls (e.g. Spawn now) are untouched.
     bool activate = false;
+    // Optional Ctrl/Shift modifiers for the activate-click, threaded to the web
+    // side so a clip can drive a real modifier-click (emitter-tree multi-select).
+    // Both default false = no modifiers (the common case); serialized into the
+    // ui/cursor-track ONLY when set, so existing clips' output is byte-identical.
+    bool modCtrl = false;
+    bool modShift = false;
+    // Optional mouse button for the activate-press: "right" makes the web side
+    // dispatch the real right-click sequence INCLUDING `contextmenu`, the only way
+    // to open a context menu (e.g. the emitter tree's "Set Link Group…", which has
+    // no menubar/toolbar entry). Empty = left (every existing clip); serialized
+    // ONLY when set, so legacy keys stay byte-identical.
+    std::string button;
     CursorTarget target;
 };
 
@@ -181,7 +193,14 @@ inline nlohmann::json BuildCursorTrackJson(const std::vector<CursorKey>& keys) {
         } else {
             target = nlohmann::json::object();
         }
-        out["keys"].push_back({ {"t", k.t}, {"vis", k.vis}, {"press", k.press}, {"activate", k.activate}, {"target", target} });
+        nlohmann::json keyJson = { {"t", k.t}, {"vis", k.vis}, {"press", k.press}, {"activate", k.activate}, {"target", target} };
+        if (k.modCtrl || k.modShift) {
+            keyJson["mods"] = { {"ctrl", k.modCtrl}, {"shift", k.modShift} };
+        }
+        if (!k.button.empty()) {
+            keyJson["button"] = k.button;
+        }
+        out["keys"].push_back(keyJson);
     }
     return out;
 }
@@ -211,6 +230,24 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     // file. `id` is the 0-based emitter-array index; deletion shifts the array,
     // so a timeline removing several must delete highest-index-first.
     if (kind == "emitters/delete") return true;
+    // linkGroups/set-membership {ids, groupId} sets (groupId) or clears (groupId:
+    // null) a link group for a batch of emitters. In-memory + dialog-free. A BUILDER
+    // needs this to hand a clip a clean starting state: the Tutorial-5 example ships
+    // its four Debris already in a link group, so the §6 clip — which teaches
+    // CREATING the group via the UI (multi-select -> Set Link Group) — must start
+    // from an UNLINKED Debris, which only an explicit unlink can produce.
+    //
+    // NOTE (do NOT repeat the neighbouring "record never writes the .alo back"
+    // claim here — it is not true in general): this mutates the in-memory document
+    // and markDirty()s it, and `file/save` IS on this list, so a timeline that
+    // combines them writes the result to disk. That is exactly what the teardown
+    // builders do — but they open a STAGED COPY and save to a DIFFERENT staged path
+    // under `saveRoot`. Preflight only confines a save under saveRoot; it does not
+    // reject params.path == the opened path, so a careless timeline could still
+    // overwrite the asset it opened (a pre-existing hazard shared by emitters/delete
+    // + file/save, not introduced here). Never point a mutating builder at an
+    // original you care about.
+    if (kind == "linkGroups/set-membership") return true;
     // emitters/move {id, direction} reorders the in-memory emitter array (no
     // dialog; .alo not written back). `id` is the 0-based array index and a move
     // shifts the array, so sequential moves in one timeline must account for the
@@ -535,6 +572,26 @@ inline bool ParseTimeline(const std::string& json, Timeline& out, std::string& e
                 if (k.contains("activate")) {
                     if (!k["activate"].is_boolean()) { err = "cursor key 'activate' must be a boolean"; return false; }
                     ck.activate = k["activate"].get<bool>();
+                }
+                if (k.contains("button")) {
+                    if (!k["button"].is_string()) { err = "cursor key 'button' must be a string"; return false; }
+                    const std::string b = k["button"].get<std::string>();
+                    // Fail loud on a typo: silently degrading to a left-click would
+                    // open no context menu and the clip would record a no-op.
+                    if (b != "left" && b != "right") { err = "cursor key 'button' must be \"left\" or \"right\""; return false; }
+                    if (b == "right") ck.button = b;   // left is the default; keep it unserialized
+                }
+                if (k.contains("mods")) {
+                    const auto& m = k["mods"];
+                    if (!m.is_object()) { err = "cursor key 'mods' must be an object"; return false; }
+                    if (m.contains("ctrl")) {
+                        if (!m["ctrl"].is_boolean()) { err = "cursor key 'mods.ctrl' must be a boolean"; return false; }
+                        ck.modCtrl = m["ctrl"].get<bool>();
+                    }
+                    if (m.contains("shift")) {
+                        if (!m["shift"].is_boolean()) { err = "cursor key 'mods.shift' must be a boolean"; return false; }
+                        ck.modShift = m["shift"].get<bool>();
+                    }
                 }
                 const bool hasTarget = k.contains("target");
                 const bool hasX = k.contains("x");

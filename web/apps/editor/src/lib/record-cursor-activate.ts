@@ -44,10 +44,18 @@ export interface RecordActivateState {
   prevPress: boolean;
   /** The element armed by an activating pointerdown; click target on release. */
   armed: Element | null;
+  /** Modifiers captured at press-down, replayed on the release click so the click
+   *  carries the same Ctrl/Shift the gesture started with (the release key may not
+   *  restate them). */
+  armedMods: EventMods;
+  /** Button captured at press-down, replayed on release (same reason as armedMods).
+   *  A right-press releases WITHOUT a click — real browsers fire contextmenu, never
+   *  click, for button 2. */
+  armedButton?: "left" | "right";
 }
 
 export function createRecordActivateState(): RecordActivateState {
-  return { prevPress: false, armed: null };
+  return { prevPress: false, armed: null, armedMods: NO_MODS, armedButton: undefined };
 }
 
 export interface RecordActivateCursor {
@@ -57,29 +65,72 @@ export interface RecordActivateCursor {
   press: boolean;
   ok: boolean;
   activate: boolean;
+  /** Modifier keys held for this activate-click. Applied to the whole dispatched
+   *  gesture (down→click) so a modifier-aware handler (e.g. the emitter tree's
+   *  Ctrl/Shift multi-select) sees them exactly as under a real user gesture.
+   *  Absent = none held. */
+  mods?: { ctrl: boolean; shift: boolean };
+  /** Mouse button for this activate-press. "right" dispatches the real right-click
+   *  sequence with a `contextmenu` event, which is the ONLY way to open a context
+   *  menu (Radix listens on contextmenu). Absent = "left". */
+  button?: "left" | "right";
 }
 
-function makeMouseEvent(type: string, clientX: number, clientY: number): MouseEvent {
+interface EventMods {
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  metaKey: boolean;
+}
+
+const NO_MODS: EventMods = { ctrlKey: false, shiftKey: false, metaKey: false };
+
+// A modifier-carrying click is authored with `ctrl` (platform-neutral); map it to
+// BOTH ctrlKey and metaKey so the intent works on macOS (Cmd) and Windows/Linux
+// (Ctrl) — the app's handlers treat ctrlKey||metaKey as "toggle" (EmitterTree).
+function toEventMods(mods?: { ctrl: boolean; shift: boolean }): EventMods {
+  const ctrl = mods?.ctrl === true;
+  return { ctrlKey: ctrl, metaKey: ctrl, shiftKey: mods?.shift === true };
+}
+
+// DOM semantics, and they differ: `button` names WHICH button changed (0 left,
+// 2 right) and is reported on both press and release; `buttons` is the mask of
+// buttons currently HELD — the button's bit while down, but 0 on release, where
+// nothing is held any more. Getting `buttons` wrong on a release is not cosmetic:
+// ViewportSlot forwards synthetic pointerup into viewport-input, which turns
+// event.buttons into the native mouseup payload — a non-zero mask there tells the
+// host the button is still down.
+function buttonBits(button: "left" | "right" | undefined, held: boolean): { button: number; buttons: number } {
+  const isRight = button === "right";
+  return { button: isRight ? 2 : 0, buttons: held ? (isRight ? 2 : 1) : 0 };
+}
+
+function makeMouseEvent(
+  type: string, clientX: number, clientY: number, mods: EventMods, button: "left" | "right" | undefined, held: boolean,
+): MouseEvent {
   return new MouseEvent(type, {
     bubbles: true,
     cancelable: true,
-    button: 0,
+    ...buttonBits(button, held),
     detail: 1,
     clientX,
     clientY,
+    ...mods,
   });
 }
 
-function makePointerEvent(type: string, clientX: number, clientY: number): PointerEvent {
+function makePointerEvent(
+  type: string, clientX: number, clientY: number, mods: EventMods, button: "left" | "right" | undefined, held: boolean,
+): PointerEvent {
   return new PointerEvent(type, {
     bubbles: true,
     cancelable: true,
-    button: 0,
+    ...buttonBits(button, held),
     pointerId: 1,
     pointerType: "mouse",
     isPrimary: true,
     clientX,
     clientY,
+    ...mods,
   });
 }
 
@@ -104,12 +155,20 @@ export function applyRecordActivation(
     if (!cursor.activate || !cursor.ok || !finite) return;
     const hit = doc.elementFromPoint(clientX, clientY);
     if (!hit) return;
+    const mods = toEventMods(cursor.mods);
+    const button = cursor.button;
     // pointerdown FIRST (real event order) — Radix Menubar triggers open here and
     // nowhere else. The drag module never arms on activate presses, so this is the
     // gesture's only pointerdown.
-    hit.dispatchEvent(makePointerEvent("pointerdown", clientX, clientY));
+    hit.dispatchEvent(makePointerEvent("pointerdown", clientX, clientY, mods, button, /*held*/true));
     // mousedown precedes focus (its default action) — Radix Tabs et al. activate here.
-    hit.dispatchEvent(makeMouseEvent("mousedown", clientX, clientY));
+    hit.dispatchEvent(makeMouseEvent("mousedown", clientX, clientY, mods, button, /*held*/true));
+    // RIGHT press: `contextmenu` is what actually opens a context menu (Radix
+    // ContextMenu listens for it, and it has no menubar/toolbar equivalent). Real
+    // browsers fire it right after mousedown for button 2.
+    if (button === "right") {
+      hit.dispatchEvent(makeMouseEvent("contextmenu", clientX, clientY, mods, button, /*held*/true));
+    }
     // Focus-change next: blur a focused text-entry when the press lands outside
     // it (this is what commits FieldText drafts on "click elsewhere").
     const active = doc.activeElement;
@@ -119,6 +178,8 @@ export function applyRecordActivation(
     const focusable = hit.closest?.(FOCUSABLE_SELECTOR);
     if (focusable) (focusable as HTMLElement).focus?.();
     state.armed = hit;
+    state.armedMods = mods;
+    state.armedButton = button;
     state.prevPress = true;
     return;
   }
@@ -126,25 +187,39 @@ export function applyRecordActivation(
   if (state.prevPress && !cursor.press) {
     state.prevPress = false;
     const armed = state.armed;
+    const mods = state.armedMods;
+    const button = state.armedButton;
     state.armed = null;
+    state.armedMods = NO_MODS;
+    state.armedButton = undefined;
     if (!armed || !armed.isConnected) return;
     // pointerup ALWAYS fires on the armed element, even when the release lands
     // elsewhere — real pointer-capture semantics route pointerup to the captor
     // regardless of position, and skipping it would strand any gesture the
     // pointerdown armed (e.g. an EmitterTree row's reorder drag would keep its
     // document listeners + capture and silently eat every later gesture).
-    armed.dispatchEvent(makePointerEvent("pointerup", finite ? clientX : 0, finite ? clientY : 0));
+    armed.dispatchEvent(makePointerEvent("pointerup", finite ? clientX : 0, finite ? clientY : 0, mods, button, /*held*/false));
     // The CLICK (and its mouseup) stays containment-gated: a release elsewhere
-    // is a cancel, like a real mouse.
+    // is a cancel, like a real mouse. The click carries the press-time modifiers so
+    // a modifier-aware handler (emitter-tree multi-select) branches correctly.
     const hit = finite ? doc.elementFromPoint(clientX, clientY) : null;
     if (!hit || !(armed.contains(hit) || hit.contains(armed))) return;
-    armed.dispatchEvent(makeMouseEvent("mouseup", finite ? clientX : 0, finite ? clientY : 0));
-    armed.dispatchEvent(makeMouseEvent("click", finite ? clientX : 0, finite ? clientY : 0));
+    armed.dispatchEvent(makeMouseEvent("mouseup", finite ? clientX : 0, finite ? clientY : 0, mods, button, /*held*/false));
+    // A RIGHT release fires NO click — real browsers only fire `click` for button 0.
+    // The contextmenu already went out at press-down.
+    if (button === "right") return;
+    armed.dispatchEvent(makeMouseEvent("click", finite ? clientX : 0, finite ? clientY : 0, mods, button, /*held*/false));
   }
 }
 
-/** Reset on cursor-track swap (mirrors resetRecordDrag): drop any armed click. */
+/** Reset on cursor-track swap (mirrors resetRecordDrag): drop any armed click.
+ *  Clears the armed modifiers/button too — today the next press-down always
+ *  overwrites both before any release reads them, so a stale value can't escape,
+ *  but leaving them set would make that an invariant of the call ORDER rather than
+ *  of the state. Reset means reset. */
 export function resetRecordActivation(state: RecordActivateState): void {
   state.prevPress = false;
   state.armed = null;
+  state.armedMods = NO_MODS;
+  state.armedButton = undefined;
 }

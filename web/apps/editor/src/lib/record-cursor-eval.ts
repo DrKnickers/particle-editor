@@ -1,6 +1,6 @@
 import { useDockAnim } from "@/lib/dock-anim";
 import { computeSceneRect } from "@/lib/scene-rect";
-import type { CursorTarget, RecordCursorKey } from "@/lib/record-cursor-track";
+import type { CursorButton, CursorMods, CursorTarget, RecordCursorKey } from "@/lib/record-cursor-track";
 
 export interface ResolvedCursorCenter {
   x: number;
@@ -18,6 +18,12 @@ export interface EvaluatedRecordCursor extends ResolvedCursorCenter {
   /** Opt-in activation flag from the governing key (steps like press): a press
    *  with activate also dispatches real click/focus (record-cursor-activate). */
   activate: boolean;
+  /** Modifier keys from the governing key (steps like press/activate), applied to
+   *  the dispatched activate-click for Ctrl/Shift multi-select. Absent = none. */
+  mods?: CursorMods;
+  /** Mouse button from the governing key (right => the dispatched press fires
+   *  `contextmenu`, opening a context menu). Absent = left. */
+  button?: CursorButton;
   resolved: ResolvedCursorElement[];
 }
 
@@ -126,6 +132,8 @@ function holdKey(key: RecordCursorKey): EvaluatedRecordCursor {
     vis: resolved.ok ? key.vis : false,
     press: key.press,
     activate: key.activate,
+    mods: key.mods,
+    button: key.button,
     resolved: resolvedElementFor(key, resolved),
   };
 }
@@ -175,12 +183,20 @@ export function evalRecordCursor(keys: readonly RecordCursorKey[], t: number): E
         vis: b.vis,
         press: b.press,
         activate: b.activate,
+        mods: b.mods,
+        button: b.button,
         resolved,
       };
     }
+    // EVERY fallback below must carry `mods`/`button` too, exactly like the
+    // resolved return above. The `ar.ok` branch in particular stays ok:true, so it
+    // forwards a PRESSED, activating cursor — dropping the authored fields there
+    // silently degrades a Ctrl-click or a right-click into a plain left click for
+    // as long as the upcoming endpoint is unresolved (a context menu would never
+    // open and the clip would record a no-op).
     if (ar.ok) {
       // Upcoming target not ready yet — hold at the resolved (due) end.
-      return { x: ar.x, y: ar.y, ok: true, vis: b.vis, press: b.press, activate: b.activate, resolved };
+      return { x: ar.x, y: ar.y, ok: true, vis: b.vis, press: b.press, activate: b.activate, mods: b.mods, button: b.button, resolved };
     }
     if (br.ok) {
       // The due element vanished (e.g. its channel defocused as we leave it) but
@@ -188,10 +204,10 @@ export function evalRecordCursor(keys: readonly RecordCursorKey[], t: number): E
       // DESTINATION entry (computed unconditionally above); a's failure is
       // surfaced only via this frame's top-level ok:false, never per-entry.
       // (Pinned by record-cursor-eval.test.ts.)
-      return { x: br.x, y: br.y, ok: false, vis: b.vis, press: b.press, activate: b.activate, resolved };
+      return { x: br.x, y: br.y, ok: false, vis: b.vis, press: b.press, activate: b.activate, mods: b.mods, button: b.button, resolved };
     }
     // Neither end resolvable mid-transit — hide the cursor this frame.
-    return { x: 0, y: 0, ok: false, vis: false, press: b.press, activate: b.activate, resolved };
+    return { x: 0, y: 0, ok: false, vis: false, press: b.press, activate: b.activate, mods: b.mods, button: b.button, resolved };
   }
 
   return holdKey(last);

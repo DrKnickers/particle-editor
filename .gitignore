@@ -320,3 +320,4 @@ src/Resources/icon-src/out/
 __pycache__/
 scripts/wiki-media/config.local.json
 .gate.lock
+vid-repro/

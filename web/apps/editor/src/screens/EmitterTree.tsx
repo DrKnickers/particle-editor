@@ -1053,6 +1053,7 @@ function EmitterRow({
             <ContextMenu.Item
               onSelect={handleSetLinkGroup}
               className={menuItemClass}
+              data-testid="ctx-set-link-group"
             >
               Set Link Group…
             </ContextMenu.Item>
@@ -1277,6 +1278,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           <button
             type="button"
             className={TOOLBAR_BTN}
+            data-testid="emitter-duplicate-btn"
             aria-label="Duplicate emitter"
             disabled={!hasPrimary}
             onClick={duplicatePrimary}

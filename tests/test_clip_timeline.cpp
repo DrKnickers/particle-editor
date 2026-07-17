@@ -202,6 +202,89 @@ int main()
         CHECK(Near(msg["keys"][1]["target"]["x"].get<double>(), 10.5));
         CHECK(Near(msg["keys"][1]["target"]["y"].get<double>(), 20.25));
     }
+    // Record allowlist: linkGroups/set-membership is permitted (a builder needs it to
+    // unlink for the §6 link-group-creation clip's clean start); engine/set/paused stays denied.
+    {
+        CHECK(IsAllowedRecordKind("linkGroups/set-membership") == true);
+        CHECK(IsAllowedRecordKind("emitters/delete") == true);
+        CHECK(IsAllowedRecordKind("engine/set/paused") == false);
+    }
+    // Cursor mods (Ctrl/Shift multi-select): serialized ONLY when set, so keys
+    // without modifiers stay at 5 fields (byte-identical to legacy clips).
+    {
+        std::vector<CursorKey> keys;
+        CursorKey plain; plain.t = 0; plain.vis = true; plain.press = true; plain.activate = true;
+        plain.target.kind = CursorTarget::Kind::Element; plain.target.ref = "testid:emitter-row:2";
+        keys.push_back(plain);
+        CursorKey ctrl; ctrl.t = 100; ctrl.vis = true; ctrl.press = true; ctrl.activate = true; ctrl.modCtrl = true;
+        ctrl.target.kind = CursorTarget::Kind::Element; ctrl.target.ref = "testid:emitter-row:3";
+        keys.push_back(ctrl);
+        CursorKey shift; shift.t = 200; shift.vis = true; shift.press = true; shift.activate = true; shift.modShift = true;
+        shift.target.kind = CursorTarget::Kind::Element; shift.target.ref = "testid:emitter-row:5";
+        keys.push_back(shift);
+        const auto msg = BuildCursorTrackJson(keys);
+        CHECK(msg["keys"][0].size() == 5);                 // no mods -> unchanged shape
+        CHECK(!msg["keys"][0].contains("mods"));
+        CHECK(msg["keys"][1].size() == 6);                 // mods present
+        CHECK(msg["keys"][1]["mods"]["ctrl"] == true && msg["keys"][1]["mods"]["shift"] == false);
+        CHECK(msg["keys"][2]["mods"]["ctrl"] == false && msg["keys"][2]["mods"]["shift"] == true);
+    }
+    // Cursor button (right-click -> contextmenu): serialized ONLY when "right", so
+    // left-button keys stay byte-identical to legacy clips.
+    {
+        std::vector<CursorKey> keys;
+        CursorKey left; left.t = 0; left.vis = true; left.press = true; left.activate = true;
+        left.target.kind = CursorTarget::Kind::Element; left.target.ref = "testid:emitter-row:2";
+        keys.push_back(left);
+        CursorKey right; right.t = 100; right.vis = true; right.press = true; right.activate = true; right.button = "right";
+        right.target.kind = CursorTarget::Kind::Element; right.target.ref = "testid:emitter-row:2";
+        keys.push_back(right);
+        const auto msg = BuildCursorTrackJson(keys);
+        CHECK(msg["keys"][0].size() == 5);                 // default left -> unchanged shape
+        CHECK(!msg["keys"][0].contains("button"));
+        CHECK(msg["keys"][1].size() == 6);
+        CHECK(msg["keys"][1]["button"] == "right");
+    }
+    // Cursor button parse: "right" is kept, "left" stays default/unserialized, and an
+    // unknown button is a hard error (a silent left-click would open no context menu).
+    {
+        const char* js = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[
+          {"cursor":[
+            {"t":0,"vis":true,"press":true,"activate":true,"button":"right","target":{"kind":"element","ref":"testid:emitter-row:2"}},
+            {"t":100,"vis":true,"press":true,"activate":true,"button":"left","target":{"kind":"point","x":1,"y":2}}
+          ]}]})";
+        Timeline tl; std::string err;
+        CHECK(ParseTimeline(js, tl, err));
+        CHECK(tl.cursor.size() == 2);
+        if (tl.cursor.size() == 2) {
+            CHECK(tl.cursor[0].button == "right");
+            CHECK(tl.cursor[1].button.empty());   // "left" == default, not stored
+        }
+        const char* bad = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[
+          {"cursor":[{"t":0,"vis":true,"press":true,"activate":true,"button":"middle","target":{"kind":"point","x":1,"y":2}}]}]})";
+        Timeline tl2; std::string err2;
+        CHECK(!ParseTimeline(bad, tl2, err2));
+    }
+    // Cursor mods parse round-trip: an authored `mods` object is read into the key.
+    {
+        const char* js = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[
+          {"cursor":[
+            {"t":0,"vis":true,"press":true,"activate":true,"mods":{"ctrl":true},"target":{"kind":"element","ref":"testid:emitter-row:3"}},
+            {"t":100,"vis":true,"press":true,"activate":true,"mods":{"shift":true},"target":{"kind":"element","ref":"testid:emitter-row:4"}}
+          ]}]})";
+        Timeline tl; std::string err;
+        CHECK(ParseTimeline(js, tl, err));
+        CHECK(tl.cursor.size() == 2);
+        if (tl.cursor.size() == 2) {
+            CHECK(tl.cursor[0].modCtrl && !tl.cursor[0].modShift);
+            CHECK(!tl.cursor[1].modCtrl && tl.cursor[1].modShift);
+        }
+        // A non-object mods is a hard parse error (fail loud, don't drop).
+        const char* bad = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o","tracks":[
+          {"cursor":[{"t":0,"vis":true,"press":true,"activate":true,"mods":"ctrl","target":{"kind":"point","x":1,"y":2}}]}]})";
+        Timeline tl2; std::string err2;
+        CHECK(!ParseTimeline(bad, tl2, err2));
+    }
     // at-events are sorted ascending after parse (forward-index firing depends on it).
     {
         const char* js = R"({"fps":60,"width":1920,"height":1080,"durationMs":1000,"out":"o",

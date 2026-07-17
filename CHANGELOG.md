@@ -85,6 +85,7 @@ may live at the end of the file.
 
 ### Changed
 
+- Tutorial 5's walkthrough clips now show the real explosion the page is written around — the two downloadable example effects, with their textured flipbook fire, smoke, debris, flash and shockwave — instead of an unrelated placeholder built from plain untextured particles; the step clips now demonstrate the page's actual lessons on that effect: the fire's render order flipping when it is reordered against the smoke, the Index track stepping the flipbook frames in the Atlas Frame Picker, and four debris copies being multi-selected into a link group
 - Link-group badges in the emitter tree now show the bare group number ("1") instead of "G1"
 - The editor no longer writes a `bloom-diagnostic.log` next to the exe (or prints the bloom parameter dump) on every run — that introspection is now opt-in via the `ALO_SHADER_DIAG` environment variable (#PR pending)
 - The hardpoint-damage, smoke-polish, and shield-impact tutorials' walkthrough clips now show the actual clicks each edit takes — focusing a colour channel by clicking its row, stepping key values on the Value spinner, flashing the active mod stack from the Mods menu, and ticking Link-particles-to-instance after collapsing the sections above it — and zoom in on the panel being edited so the controls are readable at embed size, matching the laser-shot tutorial's style

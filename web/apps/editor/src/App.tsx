@@ -304,7 +304,7 @@ function AppShell() {
             setRecordCursor({ x: cursor.x, y: cursor.y, visible: cursor.vis, pressed: cursor.press });
             applyRecordDrag({ x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate }, recordDragStateRef.current);
             applyRecordActivation(
-              { x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate },
+              { x: cursor.x, y: cursor.y, press: cursor.press, ok: cursor.ok, activate: cursor.activate, mods: cursor.mods, button: cursor.button },
               recordActivateStateRef.current,
             );
           },

@@ -58,6 +58,38 @@ describe("record-cursor-eval", () => {
     expect(evalRecordCursor(keys, 1)).toMatchObject({ vis: false, press: true });
   });
 
+  it("carries mods/button on the UNRESOLVED-endpoint fallbacks, not just the resolved return", () => {
+    // The `ar.ok` fallback stays ok:true, so it forwards a pressed, activating
+    // cursor. Dropping the authored fields there silently degrades a right-click or
+    // a Ctrl-click into a plain left click for as long as the upcoming endpoint is
+    // unresolved — a context menu would never open and the clip records a no-op.
+    const from = pointKey(0, 0, 0, true, false);
+    const to: RecordCursorKey = {
+      t: 1000,
+      vis: true,
+      press: true,
+      activate: true,
+      mods: { ctrl: true, shift: false },
+      button: "right",
+      target: { kind: "element", ref: "testid:not-mounted" as CursorElementRef },
+    };
+
+    // mid-transit: `to` cannot resolve, so this takes the ar.ok fallback (ok:true).
+    const mid = evalRecordCursor([from, to], 500);
+    expect(mid.ok).toBe(true);
+    expect(mid.press).toBe(true);
+    expect(mid.activate).toBe(true);
+    expect(mid.button).toBe("right");
+    expect(mid.mods).toEqual({ ctrl: true, shift: false });
+
+    // and the both-unresolved fallback keeps them too
+    const bothBad: RecordCursorKey = { ...from, target: { kind: "element", ref: "testid:also-missing" as CursorElementRef } };
+    const none = evalRecordCursor([bothBad, to], 500);
+    expect(none.ok).toBe(false);
+    expect(none.button).toBe("right");
+    expect(none.mods).toEqual({ ctrl: true, shift: false });
+  });
+
   it("clamps at both ends", () => {
     expect(evalRecordCursor(keys, -1)).toMatchObject({ x: 0, y: 0, vis: true, press: false, ok: true });
     expect(evalRecordCursor(keys, 1001)).toMatchObject({ x: 100, y: 200, vis: false, press: true, ok: true });

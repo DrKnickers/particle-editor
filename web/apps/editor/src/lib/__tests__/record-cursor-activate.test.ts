@@ -76,6 +76,172 @@ describe("record-cursor-activate", () => {
     expect(document.activeElement).not.toBe(button);
   });
 
+  it("a ctrl modifier drives ctrlKey AND metaKey on the click (cross-platform toggle multi-select)", () => {
+    const clicks: MouseEvent[] = [];
+    const off = listen(button, "click", clicks as Event[]);
+    const state = createRecordActivateState();
+
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, mods: { ctrl: true, shift: false } }, state, { dpr: 1 });
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true, mods: { ctrl: true, shift: false } }, state, { dpr: 1 });
+    off();
+
+    expect(clicks).toHaveLength(1);
+    expect(clicks[0].ctrlKey).toBe(true);
+    expect(clicks[0].metaKey).toBe(true); // Cmd on macOS == Ctrl on Win/Linux for toggle
+    expect(clicks[0].shiftKey).toBe(false);
+  });
+
+  it("a shift modifier drives shiftKey on the click (range multi-select)", () => {
+    const clicks: MouseEvent[] = [];
+    const off = listen(button, "click", clicks as Event[]);
+    const state = createRecordActivateState();
+
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, mods: { ctrl: false, shift: true } }, state, { dpr: 1 });
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true, mods: { ctrl: false, shift: true } }, state, { dpr: 1 });
+    off();
+
+    expect(clicks).toHaveLength(1);
+    expect(clicks[0].shiftKey).toBe(true);
+    expect(clicks[0].ctrlKey).toBe(false);
+    expect(clicks[0].metaKey).toBe(false);
+  });
+
+  it("the click carries the PRESS-time modifiers even if the release key omits them", () => {
+    const clicks: MouseEvent[] = [];
+    const off = listen(button, "click", clicks as Event[]);
+    const state = createRecordActivateState();
+
+    // press with ctrl; release without mods — the click must still be a ctrl-click.
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, mods: { ctrl: true, shift: false } }, state, { dpr: 1 });
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true }, state, { dpr: 1 });
+    off();
+
+    expect(clicks).toHaveLength(1);
+    expect(clicks[0].ctrlKey).toBe(true);
+  });
+
+  it("no mods → an unmodified click (existing clips untouched)", () => {
+    const clicks: MouseEvent[] = [];
+    const off = listen(button, "click", clicks as Event[]);
+    const state = createRecordActivateState();
+
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true }, state, { dpr: 1 });
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true }, state, { dpr: 1 });
+    off();
+
+    expect(clicks).toHaveLength(1);
+    expect(clicks[0].ctrlKey).toBe(false);
+    expect(clicks[0].metaKey).toBe(false);
+    expect(clicks[0].shiftKey).toBe(false);
+  });
+
+  it("a right button press dispatches contextmenu (the only way to open a context menu)", () => {
+    const ctx: MouseEvent[] = [];
+    const clicks: MouseEvent[] = [];
+    const offC = listen(button, "contextmenu", ctx as Event[]);
+    const offK = listen(button, "click", clicks as Event[]);
+    const state = createRecordActivateState();
+
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, button: "right" }, state, { dpr: 1 });
+    expect(ctx).toHaveLength(1);            // fires at press-down, like a real browser
+    expect(ctx[0].button).toBe(2);
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true, button: "right" }, state, { dpr: 1 });
+    offC();
+    offK();
+
+    // A right release fires NO click — real browsers only click for button 0.
+    expect(clicks).toHaveLength(0);
+  });
+
+  it("a right press releases with button:2 on pointerup/mouseup and still no click", () => {
+    const ups: MouseEvent[] = [];
+    const off = listen(button, "mouseup", ups as Event[]);
+    const state = createRecordActivateState();
+
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, button: "right" }, state, { dpr: 1 });
+    // release key omits button — the press-time button must still be replayed
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true }, state, { dpr: 1 });
+    off();
+
+    expect(ups).toHaveLength(1);
+    expect(ups[0].button).toBe(2);
+  });
+
+  it("release events report buttons:0 (nothing held) while still naming the changed button", () => {
+    // `buttons` is the HELD mask, not the changed button — a non-zero mask on a
+    // release tells viewport-input the button is still down (native mouseup payload).
+    const downs: MouseEvent[] = [];
+    const ups: MouseEvent[] = [];
+    const clicks: MouseEvent[] = [];
+    const offD = listen(button, "mousedown", downs as Event[]);
+    const offU = listen(button, "mouseup", ups as Event[]);
+    const offK = listen(button, "click", clicks as Event[]);
+    const state = createRecordActivateState();
+
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true }, state, { dpr: 1 });
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true }, state, { dpr: 1 });
+    offD();
+    offU();
+    offK();
+
+    expect(downs[0].buttons).toBe(1);   // left held during the press
+    expect(ups[0].buttons).toBe(0);     // released — nothing held
+    expect(ups[0].button).toBe(0);      // ...but still names the button that changed
+    expect(clicks[0].buttons).toBe(0);
+  });
+
+  it("a right press holds buttons:2 down and releases with buttons:0", () => {
+    const downs: MouseEvent[] = [];
+    const ups: MouseEvent[] = [];
+    const offD = listen(button, "mousedown", downs as Event[]);
+    const offU = listen(button, "mouseup", ups as Event[]);
+    const state = createRecordActivateState();
+
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true, button: "right" }, state, { dpr: 1 });
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true, button: "right" }, state, { dpr: 1 });
+    offD();
+    offU();
+
+    expect(downs[0].buttons).toBe(2);
+    expect(ups[0].buttons).toBe(0);
+    expect(ups[0].button).toBe(2);
+  });
+
+  it("resetRecordActivation clears the armed modifiers/button, not just the armed element", () => {
+    const state = createRecordActivateState();
+    applyRecordActivation(
+      { x: 10, y: 10, press: true, ok: true, activate: true, button: "right", mods: { ctrl: true, shift: true } },
+      state,
+      { dpr: 1 },
+    );
+    expect(state.armedButton).toBe("right");
+    expect(state.armedMods.ctrlKey).toBe(true);
+
+    resetRecordActivation(state);
+
+    expect(state.prevPress).toBe(false);
+    expect(state.armed).toBeNull();
+    expect(state.armedButton).toBeUndefined();
+    expect(state.armedMods).toEqual({ ctrlKey: false, shiftKey: false, metaKey: false });
+  });
+
+  it("a LEFT (default) press fires no contextmenu and still clicks (existing clips untouched)", () => {
+    const ctx: Event[] = [];
+    const clicks: MouseEvent[] = [];
+    const offC = listen(button, "contextmenu", ctx);
+    const offK = listen(button, "click", clicks as Event[]);
+    const state = createRecordActivateState();
+
+    applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true }, state, { dpr: 1 });
+    applyRecordActivation({ x: 10, y: 10, press: false, ok: true, activate: true }, state, { dpr: 1 });
+    offC();
+    offK();
+
+    expect(ctx).toHaveLength(0);
+    expect(clicks).toHaveLength(1);
+    expect(clicks[0].button).toBe(0);
+  });
+
   it("focuses the nearest focusable on the activating press (mousedown default action)", () => {
     document.elementFromPoint = (() => input) as typeof document.elementFromPoint;
     const state = createRecordActivateState();

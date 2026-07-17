@@ -44,6 +44,16 @@ if ($baseFull.ToLowerInvariant().StartsWith($repoRoot.ToLowerInvariant())) {
 $sources = @('P_HP_IMPERIAL_DAMAGE.ALO', 'P_SHIELD_BLAST_LARGE00.ALO')
 $srcDir = Join-Path $cfg.extraction 'ART\MODELS'
 
+# -- Repo example stages (Tutorial 5): the two hand-authored explosion example
+# files ship IN the repo (site/guide/downloads) and are the SOURCE OF TRUTH for
+# the Tutorial-5 clips. Unlike the vanilla $sources (copied from the game
+# extraction), these come from the repo and are copied verbatim into _stages under
+# a clip-facing name. Ordered map: repo-relative source -> staged filename.
+$repoExamples = @(
+    @{ src = 'site/guide/downloads/P_EXPLOSION_EXAMPLE_FLIPBOOK.ALO'; dst = 't5-example-flipbook.alo' },
+    @{ src = 'site/guide/downloads/P_EXPLOSION_EXAMPLE.ALO';          dst = 't5-example.alo' }
+)
+
 if ($Check) {
     $bad = 0
     foreach ($name in $sources) {
@@ -54,6 +64,15 @@ if ($Check) {
         $a = Get-FileHash $src -Algorithm SHA256
         $b = Get-FileHash $dst -Algorithm SHA256
         if ($a.Hash -ne $b.Hash) { Write-Host "[stage-assets] CHECK DRIFT: $name (staged copy != extraction)"; $bad++ }
+    }
+    foreach ($ex in $repoExamples) {
+        $src = Join-Path $repoRoot $ex.src
+        $dst = Join-Path $stages $ex.dst
+        if (-not (Test-Path $src)) { Write-Host "[stage-assets] CHECK MISS: repo example $($ex.src)"; $bad++; continue }
+        if (-not (Test-Path $dst)) { Write-Host "[stage-assets] CHECK MISS: staged $($ex.dst)"; $bad++; continue }
+        $a = Get-FileHash $src -Algorithm SHA256
+        $b = Get-FileHash $dst -Algorithm SHA256
+        if ($a.Hash -ne $b.Hash) { Write-Host "[stage-assets] CHECK DRIFT: $($ex.dst) (staged copy != repo example)"; $bad++ }
     }
     if (Test-Path $stages) {
         Get-ChildItem $stages -Filter '*.alo' | ForEach-Object { Write-Host "[stage-assets] stage present: $($_.Name)" }
@@ -71,6 +90,13 @@ foreach ($name in $sources) {
     Write-Host "[stage-assets] staged copy: $name"
 }
 
+foreach ($ex in $repoExamples) {
+    $src = Join-Path $repoRoot $ex.src
+    if (-not (Test-Path $src)) { Fail "repo example missing: $($ex.src)" }
+    Copy-Item $src (Join-Path $stages $ex.dst) -Force
+    Write-Host "[stage-assets] staged example: $($ex.dst)"
+}
+
 # -- Builder timelines (ordered - later stages consume earlier ones) ---------
 if (-not $SkipBuilders) {
     if (-not (Test-Path $exe)) { Fail "exe not found: $exe" }
@@ -80,7 +106,16 @@ if (-not $SkipBuilders) {
         'build-t2-polished.timeline.json',
         'build-t3-core-glow.timeline.json',
         'build-t3-full.timeline.json',
-        'build-t4-purple.timeline.json'
+        'build-t4-purple.timeline.json',
+        # Tutorial 5 teardown builders. These run AFTER the $repoExamples copy above
+        # (each opens _stages/t5-example-flipbook.alo and deletes down to the subset
+        # its clip needs), so they must stay after t1-t4 in this ordered list. The old
+        # from-scratch build-t5-explosion.timeline.json is RETIRED: it produced a toy
+        # soft-dot explosion unrelated to the guide's example files.
+        'build-t5-flash-shockwave.timeline.json',
+        'build-t5-smoke-fire.timeline.json',
+        'build-t5-fire-only.timeline.json',
+        'build-t5-single-debris.timeline.json'
     )
     foreach ($b in $builders) {
         $tl = Join-Path $builderDir $b

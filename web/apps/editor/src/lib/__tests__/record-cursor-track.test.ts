@@ -34,6 +34,63 @@ describe("record-cursor-track", () => {
     ]);
   });
 
+  it("parses an optional mods object (Ctrl/Shift multi-select) and normalizes missing flags to false", () => {
+    expect(
+      parseCursorTrackMessage({
+        type: "ui/cursor-track",
+        keys: [
+          { t: 0, vis: true, press: true, activate: true, mods: { ctrl: true }, target: { kind: "element", ref: "testid:emitter-row:3" } },
+          { t: 1, vis: true, press: true, activate: true, mods: { shift: true }, target: { kind: "element", ref: "testid:emitter-row:4" } },
+        ],
+      }),
+    ).toEqual([
+      { t: 0, vis: true, press: true, activate: true, mods: { ctrl: true, shift: false }, target: { kind: "element", ref: "testid:emitter-row:3" } },
+      { t: 1, vis: true, press: true, activate: true, mods: { ctrl: false, shift: true }, target: { kind: "element", ref: "testid:emitter-row:4" } },
+    ]);
+  });
+
+  it("omits mods when absent (existing clips parse identically — no mods key)", () => {
+    const parsed = parseCursorTrackMessage({
+      type: "ui/cursor-track",
+      keys: [{ t: 0, vis: true, press: false, activate: false, target: { kind: "point", x: 1, y: 2 } }],
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed![0]).not.toHaveProperty("mods");
+  });
+
+  it("rejects a malformed mods (non-object, or non-boolean flag) rather than dropping it silently", () => {
+    for (const bad of [
+      { t: 0, vis: true, press: true, activate: true, mods: "ctrl", target: { kind: "point", x: 1, y: 2 } },
+      { t: 0, vis: true, press: true, activate: true, mods: { ctrl: 1 }, target: { kind: "point", x: 1, y: 2 } },
+    ]) {
+      expect(parseCursorTrackMessage({ type: "ui/cursor-track", keys: [bad] })).toBeNull();
+    }
+  });
+
+  it("parses an optional button and omits it when absent (left is the default)", () => {
+    const parsed = parseCursorTrackMessage({
+      type: "ui/cursor-track",
+      keys: [
+        { t: 0, vis: true, press: true, activate: true, button: "right", target: { kind: "element", ref: "testid:emitter-row:2" } },
+        { t: 1, vis: true, press: true, activate: true, target: { kind: "point", x: 1, y: 2 } },
+      ],
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed![0].button).toBe("right");
+    expect(parsed![1]).not.toHaveProperty("button");
+  });
+
+  it("rejects an unknown button rather than silently degrading to a left-click", () => {
+    for (const bad of ["middle", "Right", 2, true]) {
+      expect(
+        parseCursorTrackMessage({
+          type: "ui/cursor-track",
+          keys: [{ t: 0, vis: true, press: true, activate: true, button: bad, target: { kind: "point", x: 1, y: 2 } }],
+        }),
+      ).toBeNull();
+    }
+  });
+
   it("accepts a testid ref whose id contains colons (free-form data-testid)", () => {
     expect(
       parseCursorTrackMessage({
