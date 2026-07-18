@@ -10,7 +10,7 @@
 // `deadCellsFromAlpha` (unit-tested separately); here we mock the impure `computeDeadCells`
 // shell to inject a known set — exactly the seam the plan review asked for.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act, cleanup } from "@testing-library/react";
 
 vi.mock("@/lib/atlas-dead-cells", async (orig) => {
   const actual = await orig<typeof import("@/lib/atlas-dead-cells")>();
@@ -35,7 +35,18 @@ beforeEach(() => {
   useDockAnim.setState({ atlasTerminalFirstPaint: false, atlasGridMounted: false });
   vi.mocked(computeDeadCells).mockResolvedValue(new Set<number>());
 });
-afterEach(() => { vi.restoreAllMocks(); });
+// Unmount BEFORE clearing mocks. Hooks run LIFO, so this afterEach fires
+// ahead of Testing Library's auto-cleanup — with the bare restore, a
+// late-resolving preview promise could re-fire the still-mounted panel's
+// dead-cell effect AFTER the history clear, bleeding one computeDeadCells
+// call into the NEXT test's assertions (the not-alpha-gated test flaked on
+// exactly this under CPU load, ~1-in-15). Explicit cleanup() first unmounts
+// (the effect's `live` guards then drop stragglers), then the restore wipes
+// anything the test itself recorded.
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 // textureSize 16 → a 4×4 grid (16 frames). Default selection: a single index key so a click
 // assigns directly (no confirm modal). Override `selection` for the keyboard / confirm cases.

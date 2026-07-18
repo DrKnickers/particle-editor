@@ -11,7 +11,7 @@
 // atlas lays out as 4 cols × 50px cells (step = cell 50 + GRID_GAP 4 = 54).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor, fireEvent, createEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, createEvent, act, cleanup } from "@testing-library/react";
 import { AtlasPickerPanel, __resetAtlasPropsCache } from "../AtlasPickerPanel";
 import { publishAtlasContext, __resetAtlasContext } from "@/lib/atlas-context";
 import { MockBridge } from "@/bridge/mock";
@@ -32,7 +32,13 @@ beforeEach(() => {
   useDockAnim.setState({ atlasTerminalFirstPaint: false, atlasGridMounted: false });
 });
 
-afterEach(() => { vi.restoreAllMocks(); });
+// cleanup() BEFORE the restore — same late-async hazard as the deadcells
+// suite (see its afterEach comment): unmount first so `live` guards drop
+// stragglers, then clear.
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function setup(p?: { textureSize?: number; colorTexture?: string }) {
   useMockEmitterProperties.getState().patch(1, {

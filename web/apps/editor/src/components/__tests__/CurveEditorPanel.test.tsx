@@ -2559,8 +2559,10 @@ describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)",
       render(<CurveEditorPanel bridge={bridge} />);
       await screen.findByTestId("curve-editor-svg");
 
-      // Select the interior key at t=25.
-      const keyAt25 = screen.getAllByTestId("curve-key").find(
+      // Select the interior key at t=25. findAll (not getAll): the SVG mounts
+      // before the async tracks fetch renders the key circles — a sync getAll
+      // raced it under CPU load (the #614 flake).
+      const keyAt25 = (await screen.findAllByTestId("curve-key")).find(
         (k) => k.getAttribute("data-key-time") === "25" && k.getAttribute("data-channel-id") === "red",
       )!;
       fireEvent.click(keyAt25);
