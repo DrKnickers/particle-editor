@@ -87,7 +87,7 @@ export function RandomParam({
           <Select.Content
             position="popper"
             sideOffset={4}
-            className="z-50 min-w-[140px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
+            className="z-50 min-w-[140px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)] popover-animate-in"
           >
             <Select.ScrollUpButton className="flex items-center justify-center py-0.5 text-text-3">
               <ChevronUp className="size-3" />
@@ -115,9 +115,11 @@ export function RandomParam({
         </Select.Portal>
       </Select.Root>
 
-      {/* Spinner rows — conditional on mode */}
+      {/* Spinner rows — conditional on mode. `fade-in-fast` replays the
+          entrance fade on each mode switch (the row remounts), so the swap
+          reads as a transition instead of a hard cut (design pass). */}
       {value.mode === "Constant" && (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 fade-in-fast">
           <Spinner
             value={value.value}
             onChange={(v) => onChange({ mode: "Constant", value: v })}
@@ -132,7 +134,7 @@ export function RandomParam({
       )}
 
       {value.mode === "UniformRange" && (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 fade-in-fast">
           <Spinner
             value={value.min}
             onChange={(min) => onChange({ mode: "UniformRange", min, max: value.max })}
@@ -158,7 +160,7 @@ export function RandomParam({
       )}
 
       {value.mode === "Normal" && (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 fade-in-fast">
           <span className="shrink-0 text-xs text-text-2" aria-label="Mean">µ</span>
           <Spinner
             value={value.mean}

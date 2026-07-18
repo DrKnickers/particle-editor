@@ -2,7 +2,15 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "@/App";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { applyMode, readStoredMode } from "@/lib/theme";
 import "@/styles/globals.css";
+
+// Apply the persisted theme SYNCHRONOUSLY, before the first render — the
+// App-level effect ran after the initial paint, so a light-theme user got a
+// dark first frame (pre-PR review 2026-07-18). applyMode's first call skips
+// the theme-transition cross-fade (no prior data-theme), and App.tsx keeps
+// the live prefers-color-scheme listener for "system" mode.
+applyMode(readStoredMode());
 
 // DEV-ONLY: install the Playwright layout-lane test seam (window.__atlasTest).
 // The dynamic import behind import.meta.env.DEV means `vite build` excludes the

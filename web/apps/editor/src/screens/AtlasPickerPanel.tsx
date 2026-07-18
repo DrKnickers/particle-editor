@@ -763,7 +763,8 @@ export function AtlasPickerPanel({
   let body: React.ReactNode;
 
   if (!colorTexture) {
-    body = <Placeholder>No color texture set.</Placeholder>;
+    // Teaching empty state (design pass, D2): name the fix, not just the fact.
+    body = <Placeholder>No color texture set. Choose one under Appearance → Textures.</Placeholder>;
   } else if (tooLarge) {
     body = <Placeholder>Atlas too large to display ({side}×{side}).</Placeholder>;
   } else if (!eligible) {
@@ -1086,15 +1087,39 @@ const AtlasFrameGrid = memo(function AtlasFrameGrid({
     return () => { live = false; };
   }, [dataUri]);
 
-  // Redraw whenever the image, layout, selection, roving target, dead set, or
-  // focus changes. Scrolling does NOT change any of these → no redraw on scroll.
+  // [design pass] The canvas samples tokens via getComputedStyle at draw time,
+  // so a theme flip would leave it painted in the OLD palette. Watch
+  // <html data-theme> and bump a revision: once immediately (custom properties
+  // flip in the same frame), and once after the ~220ms theme-transition window
+  // (theme.ts) — getComputedStyle(canvas).backgroundColor transitions during
+  // the flip, so the settle redraw picks up the final panel gray.
+  const [themeRev, setThemeRev] = useState(0);
+  useEffect(() => {
+    // Settle-timer is tracked so rapid flips coalesce and unmount can't
+    // leak a pending setState (pre-PR review).
+    let settleTimer: number | undefined;
+    const mo = new MutationObserver(() => {
+      setThemeRev((n) => n + 1);
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => setThemeRev((n) => n + 1), 260);
+    });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => {
+      mo.disconnect();
+      window.clearTimeout(settleTimer);
+    };
+  }, []);
+
+  // Redraw whenever the image, layout, selection, roving target, dead set,
+  // focus, or theme changes. Scrolling does NOT change any of these → no
+  // redraw on scroll.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     drawGrid(canvas, imgReady ? imgRef.current : null, {
       cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focusVisible: focused,
     });
-  }, [imgReady, okPreview, cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focused]);
+  }, [imgReady, okPreview, cols, cell, side, totalCells, highlight, rovingTarget, deadCells, focused, themeRev]);
 
   // Hit-test: map a pointer position to a frame index, or null when the point is
   // outside the grid or lands in an inter-cell gap.
@@ -1123,9 +1148,12 @@ const AtlasFrameGrid = memo(function AtlasFrameGrid({
     onHover(k); // drives the hero preview (via hoverRef; no re-render)
     const ov = overlayRef.current;
     if (!ov) return;
-    if (k === null || deadCells.has(k)) { ov.style.display = "none"; return; }
+    // [design pass] Opacity (not display) so the highlight fades via the
+    // .atlas-hover-fade transition instead of popping; the position jump
+    // between cells stays instant (only opacity transitions).
+    if (k === null || deadCells.has(k)) { ov.style.opacity = "0"; return; }
     const step = cell + GRID_GAP;
-    ov.style.display = "";
+    ov.style.opacity = "1";
     ov.style.left = `${(k % cols) * step}px`;
     ov.style.top = `${Math.floor(k / cols) * step}px`;
     ov.style.width = `${cell}px`;
@@ -1133,7 +1161,7 @@ const AtlasFrameGrid = memo(function AtlasFrameGrid({
   };
   const handleLeave = () => {
     onHover(null);
-    if (overlayRef.current) overlayRef.current.style.display = "none";
+    if (overlayRef.current) overlayRef.current.style.opacity = "0";
   };
 
   const optId = `atlas-opt-${rovingTarget}`;
@@ -1176,8 +1204,8 @@ const AtlasFrameGrid = memo(function AtlasFrameGrid({
         ref={overlayRef}
         aria-hidden
         data-testid="atlas-hover-overlay"
-        className="pointer-events-none absolute rounded-[var(--radius-sm)] border-2 border-[var(--overlay-hover)]"
-        style={{ display: "none" }}
+        className="atlas-hover-fade pointer-events-none absolute rounded-[var(--radius-sm)] border-2 border-[var(--overlay-hover)]"
+        style={{ opacity: 0 }}
       />
       {/* The ONE active option, referenced by aria-activedescendant (+ aria-owns)
           so a screen reader announces "Frame N of totalCells" — and "empty" for a
@@ -1346,7 +1374,10 @@ function PreviewBox({
       </span>
       <span
         ref={captionRef}
-        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1 pt-3 text-xs font-semibold text-white"
+        // Fixed dark scrim + light fg over arbitrary sprite imagery —
+        // intentionally theme-independent (same rationale as --overlay-scrim
+        // in tokens.css); the fg routes through the scrim-fg token.
+        className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1 pt-3 text-xs font-semibold text-[var(--overlay-scrim-fg)]"
         style={{ display: hasDisplayFrame ? undefined : "none" }}
       >
         {hasDisplayFrame ? `Frame ${displayFrame} / ${total}` : ""}

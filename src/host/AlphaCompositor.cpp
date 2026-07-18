@@ -249,7 +249,7 @@ bool AlphaCompositor::CaptureSnapshotPng(std::string& outBase64, int& outW, int&
 
     // Encoded (downscaled) output dims. The snapshot is
     // only ever shown as a modal's frosted-glass backdrop — Dialog.Overlay
-    // paints bg-black/60 + backdrop-blur-sm over it, so a full-res encode is
+    // paints var(--overlay-scrim) (0.55 black) + backdrop-blur-sm over it, so a full-res encode is
     // wasted work. Two knobs cut it: kSnapshotMaxEdge caps the long edge
     // (bounding the upscale/softness under the blur — ~3.4x at 3440 -> 1024);
     // kSnapshotDownscale forces a min reduction even for sub-cap (windowed)

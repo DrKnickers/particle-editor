@@ -211,10 +211,10 @@ test("Ctrl+click on a second emitter row updates data-selected-count to 2", asyn
   await page.waitForFunction(() => {
     const tree = document.querySelector('[data-testid="emitter-tree"]');
     if (!tree) return false;
-    return tree.querySelectorAll("button[data-emitter-id]").length >= 2;
+    return tree.querySelectorAll("[data-emitter-id]").length >= 2;
   });
 
-  const rows = treeContainer.locator("button[data-emitter-id]");
+  const rows = treeContainer.locator("[data-emitter-id]");
   const firstRow  = rows.nth(0);
   const secondRow = rows.nth(1);
 

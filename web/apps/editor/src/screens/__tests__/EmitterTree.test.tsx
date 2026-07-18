@@ -126,12 +126,13 @@ describe("EmitterTree", () => {
     const items = screen.getAllByRole("treeitem");
     expect(items).toHaveLength(6);
 
-    // Each row button carries the EXACT positional `testid:emitter-row:<id>` a
+    // Each row carries the EXACT positional `testid:emitter-row:<id>` a
     // --record clip targets (same id emitters/move/select use). Assert every id
     // 0..5 is present exactly once — a prefix count alone would pass with a
     // duplicated or malformed id, but the timeline depends on the exact contract.
+    // (Tag-agnostic: the row surface is a focusable div since the B2 un-nest.)
     for (let id = 0; id < 6; id += 1) {
-      expect(document.querySelectorAll(`button[data-testid="emitter-row:${id}"]`)).toHaveLength(1);
+      expect(document.querySelectorAll(`[data-testid="emitter-row:${id}"]`)).toHaveLength(1);
     }
     expect(document.querySelectorAll('[data-testid^="emitter-row:"]')).toHaveLength(6);
   });
@@ -300,7 +301,7 @@ describe("EmitterTree", () => {
   function stubAllRows(): number {
     const H = 24;
     [0, 1, 2, 3, 4, 5].forEach((id, i) => {
-      const el = document.querySelector(`button[data-emitter-id="${id}"]`) as HTMLElement | null;
+      const el = document.querySelector(`[data-emitter-id="${id}"]`) as HTMLElement | null;
       if (el) stubRect(el, i * H, H);
     });
     return H;
@@ -320,7 +321,7 @@ describe("EmitterTree", () => {
     // highlight follows the moved root.
     fireEvent.click(screen.getByText("Flash"));
     stubAllRows();
-    const flashBtn = screen.getByText("Flash").closest("button")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
 
     fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
     fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 0, clientY: 75 });
@@ -348,7 +349,7 @@ describe("EmitterTree", () => {
     // Sparks row is [72,96); middle third [80,88) → content y=84.
     fireEvent.click(screen.getByText("Flash"));
     stubAllRows();
-    const flashBtn = screen.getByText("Flash").closest("button")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
 
     fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
     fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 0, clientY: 84 });
@@ -377,8 +378,8 @@ describe("EmitterTree", () => {
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("Sparks")).toBeInTheDocument());
     stubAllRows();
-    const flashBtn  = screen.getByText("Flash").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
+    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
 
     // Drag Flash; hover Sparks' middle third (y=84 in [80,88)) → onto ring.
     fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
@@ -421,7 +422,7 @@ describe("EmitterTree", () => {
       expect(screen.getByText("Sparks")).toBeInTheDocument();
     });
     stubAllRows();
-    const flashBtn = screen.getByText("Flash").closest("button")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
 
     startActiveDrag(flashBtn); // active, valid reorder (gap 1) pending
     expect(screen.getByTestId("drop-gap-at-1")).toBeInTheDocument();
@@ -439,8 +440,8 @@ describe("EmitterTree", () => {
       expect(screen.getByText("Sparks")).toBeInTheDocument();
     });
     stubAllRows();
-    const flashBtn = screen.getByText("Flash").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
 
     startActiveDrag(flashBtn);
     // A right-click during the drag cancels it. (Menu suppression — our
@@ -461,8 +462,8 @@ describe("EmitterTree", () => {
       expect(screen.getByText("Sparks")).toBeInTheDocument();
     });
     stubAllRows();
-    const flashBtn  = screen.getByText("Flash").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
+    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
 
     // A real (threshold-crossing) single-root drag → reorder gap 1.
     fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
@@ -676,7 +677,7 @@ describe("EmitterTree", () => {
     // it's appended INLINE to the END of the name cell (reclaiming the old
     // 10px col 3) and is aria-hidden, so the a11y tree / goldens are
     // unchanged. DOM order stays [eye, name(+dot), role].
-    const rowButton = screen.getByText("Smoke").closest("button")!;
+    const rowButton = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
     expect(rowButton.style.gridTemplateColumns).toBe("18px 18px 1fr");
 
     // The visibility toggle is the FIRST DOM child (auto-placed in column 1).
@@ -1153,6 +1154,11 @@ describe("chain-warning glyph tracks the configurable guard cap", () => {
   it("no chip at fixture-default spawn values (a11y-stability guard)", async () => {
     renderWithTooltips(<EmitterTree bridge={new MockBridge()} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
-    expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument();
+    // waitFor (not an immediate query): if a transient over-cap estimate
+    // flashed the chip during load, usePresence holds it mounted through the
+    // ~200ms exit fade before unmounting (design pass).
+    await waitFor(() =>
+      expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument(),
+    );
   });
 });

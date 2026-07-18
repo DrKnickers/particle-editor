@@ -26,7 +26,7 @@
 // Background pill again, picking a different Tools-menu entry).
 
 import { ChevronDown, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 type ToolPanelProps = {
   title: string;
@@ -64,12 +64,74 @@ export function ToolPanel({
   bodyScroll = true,
 }: ToolPanelProps) {
   const docked = variant === "docked";
+
+  // Focus management (design pass, B4). Non-modal dialog, so no trap — just:
+  // (1) INITIAL FOCUS, only for explicit chrome-triggered opens: if the
+  //     element focused at mount lives in the toolbar or menubar (the panel
+  //     launchers), move focus onto the panel container so a keyboard user
+  //     lands inside instead of having to Tab across the app. Auto-opens
+  //     (e.g. the Atlas panel via use-atlas-autoopen while the user works
+  //     the curve editor) don't match and never steal focus.
+  // (2) FOCUS RETURN at the LOGICAL close — `closing` flips ~260ms before
+  //     the docked unmount (the slot goes inert for the slide-out), so the
+  //     restore must run then, not at unmount; the overlay variant unmounts
+  //     directly, so a cleanup covers it. Restores to the recorded opener
+  //     only if focus is still INSIDE the panel (never yanks focus the user
+  //     moved elsewhere) and the opener is still connected. A dock-to-dock
+  //     swap runs the old panel's cleanup before the new panel's mount
+  //     effect (same commit), so the new panel's initial focus wins.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  // Whether the panel owns (or was the last owner of) focus. The dock slot
+  // turns `inert` in the SAME commit that flips `closing`, and inert boots
+  // contained focus to <body> BEFORE our effect can observe it — so a plain
+  // contains(activeElement) check always misses. Track it instead: focusin
+  // sets it; focusout clears it only when focus moves to a real element
+  // OUTSIDE the panel (relatedTarget null = the inert/unmount kick, keep it).
+  const ownedFocusRef = useRef(false);
+  useEffect(() => {
+    const opener =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Never record the panel itself (or anything inside it) as the opener —
+    // StrictMode's dev double-mount otherwise records the panel container the
+    // FIRST mount pass just focused, and close would "restore" focus into the
+    // inert subtree (→ body). Refs survive the double-mount, so keeping the
+    // first pass's value is correct.
+    if (opener !== null && !rootRef.current?.contains(opener)) {
+      openerRef.current = opener;
+      const fromChrome =
+        opener.closest(".toolbar") !== null || opener.closest('[role="menubar"]') !== null;
+      if (fromChrome) rootRef.current?.focus();
+    }
+  }, []);
+  useEffect(() => {
+    const restore = () => {
+      const root = rootRef.current;
+      const active = document.activeElement;
+      const stillInside = root !== null && root.contains(active);
+      const kickedToBody = ownedFocusRef.current && active === document.body;
+      if (!stillInside && !kickedToBody) return;
+      ownedFocusRef.current = false;
+      const opener = openerRef.current;
+      if (opener && opener.isConnected) opener.focus();
+    };
+    if (closing) restore();
+    return restore; // unmount path (overlay variant / dock swap)
+  }, [closing]);
+
   return (
     <div
+      ref={rootRef}
+      tabIndex={-1}
+      onFocusCapture={() => { ownedFocusRef.current = true; }}
+      onBlurCapture={(e) => {
+        const to = e.relatedTarget as Node | null;
+        if (to !== null && !e.currentTarget.contains(to)) ownedFocusRef.current = false;
+      }}
       className={
         docked
-          ? "flex h-full w-full flex-col border-l border-border bg-bg text-text"
-          : "absolute right-0 top-0 bottom-0 z-10 flex w-80 flex-col border-l border-border bg-bg text-text"
+          ? "flex h-full w-full flex-col border-l border-border bg-bg text-text outline-none"
+          : "absolute right-0 top-0 bottom-0 z-10 flex w-80 flex-col border-l border-border bg-bg text-text outline-none"
       }
       role="dialog"
       aria-label={title}

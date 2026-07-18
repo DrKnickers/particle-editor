@@ -65,9 +65,9 @@ type Props = {
 // Style constants — shared across triggers and items so the Tailwind
 // class strings don't drift between menus.
 const TRIGGER =
-  "px-2 py-1 text-xs font-medium text-text-2 hover:bg-bg-2 rounded data-[state=open]:bg-bg-2 data-[state=open]:text-text outline-none select-none cursor-default";
+  "px-2 py-1 text-xs font-medium text-text-2 transition-colors motion-reduce:transition-none hover:bg-bg-2 rounded data-[state=open]:bg-bg-2 data-[state=open]:text-text outline-none select-none cursor-default";
 const CONTENT =
-  "min-w-[200px] bg-bg-2 border border-border rounded-md shadow-[var(--shadow-soft)] p-1 z-50";
+  "min-w-[200px] bg-bg-2 border border-border rounded-md shadow-[var(--shadow-soft)] p-1 z-50 popover-animate";
 const ITEM =
   "flex items-center gap-2 px-2 py-1 text-xs text-text rounded hover:bg-panel-2 data-[highlighted]:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent select-none";
 const SEPARATOR = "my-1 h-px bg-panel-2";
@@ -789,7 +789,9 @@ export function MenuBar({
                   sideOffset={2}
                   alignOffset={-4}
                 >
-                  <div className="mb-1 flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 px-2">
+                  {/* focus-within accent border = the keyboard-focus cue for the
+                      borderless input inside (design pass; was focus-invisible). */}
+                  <div className="mb-1 flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 px-2 transition-colors motion-reduce:transition-none focus-within:border-accent">
                     <Search className="size-3 shrink-0 text-text-3" strokeWidth={1.5} />
                     <input
                       value={addQuery}

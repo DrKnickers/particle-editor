@@ -369,7 +369,7 @@ export function ImportEmittersDialog({ bridge, open, onOpenChange }: Props) {
               className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-text-3 hover:text-text"
             >
               <ChevronRight
-                className={"size-3.5 transition-transform " + (isCollapsed ? "" : "rotate-90")}
+                className={"size-3.5 transition-transform motion-reduce:transition-none " + (isCollapsed ? "" : "rotate-90")}
               />
             </span>
           ) : (

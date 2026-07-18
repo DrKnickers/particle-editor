@@ -94,9 +94,9 @@ describe("EmitterTree multi-drag preview", () => {
     // Stub the full row geometry — the multi-drag resolver snapshots every
     // root block's rect at activation and works in content space (the jsdom
     // scroll container's rect is all-zero, so content Y == stubbed rect Y).
-    const smokeBtn  = screen.getByText("Smoke").closest("button")!;
-    const flashBtn  = screen.getByText("Flash").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
+    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -142,9 +142,9 @@ describe("EmitterTree multi-drag preview", () => {
     // same gap+chip affordance and the selection-following reorder-many path.
     fireEvent.click(screen.getByText("Flash"));
 
-    const smokeBtn  = screen.getByText("Smoke").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    const flashBtn  = screen.getByText("Flash").closest("button")!;
+    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -174,9 +174,9 @@ describe("EmitterTree multi-drag preview", () => {
     fireEvent.click(screen.getByText("Smoke"));
     fireEvent.click(screen.getByText("Sparks"), { ctrlKey: true });
 
-    const smokeBtn  = screen.getByText("Smoke").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    const flashBtn  = screen.getByText("Flash").closest("button")!;
+    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -202,9 +202,9 @@ describe("EmitterTree multi-drag preview", () => {
     fireEvent.click(screen.getByText("Smoke"));
     fireEvent.click(screen.getByText("Sparks"), { ctrlKey: true });
 
-    const smokeBtn  = screen.getByText("Smoke").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    const flashBtn  = screen.getByText("Flash").closest("button")!;
+    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -250,8 +250,8 @@ describe("EmitterTree multi-drag preview", () => {
     fireEvent.click(screen.getByText("Smoke"));
     fireEvent.click(screen.getByText("Flash"), { ctrlKey: true });
 
-    const smokeBtn  = screen.getByText("Smoke").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
+    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(sparksBtn, 100, 30);
 
     fireEvent.pointerDown(smokeBtn, { button: 0, clientX: 0, clientY: 0 });
@@ -259,7 +259,7 @@ describe("EmitterTree multi-drag preview", () => {
 
     // Both selected roots AND Smoke's child row dim; the non-dragged root
     // doesn't. (Query rows by data-emitter-id — the chip duplicates names.)
-    const row = (id: number) => document.querySelector(`button[data-emitter-id="${id}"]`)!;
+    const row = (id: number) => document.querySelector(`[data-emitter-id="${id}"]`)!;
     expect(row(0)).toHaveAttribute("data-dragging", "true");
     expect(row(1)).toHaveAttribute("data-dragging", "true");
     expect(row(5)).toHaveAttribute("data-dragging", "true");
@@ -273,15 +273,15 @@ describe("EmitterTree multi-drag preview", () => {
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("SmokeLife")).toBeInTheDocument());
 
-    const smokeBtn  = screen.getByText("Smoke").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
+    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(sparksBtn, 100, 30);
 
     fireEvent.pointerDown(smokeBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
     fireEvent.pointerMove(smokeBtn, { pointerType: "mouse", clientX: 0, clientY: 103 });
 
     // Query rows by id — the chip duplicates names, so getByText is ambiguous.
-    const row = (id: number) => document.querySelector(`button[data-emitter-id="${id}"]`)!;
+    const row = (id: number) => document.querySelector(`[data-emitter-id="${id}"]`)!;
     expect(row(0)).toHaveAttribute("data-dragging", "true");   // Smoke (root)
     expect(row(1)).toHaveAttribute("data-dragging", "true");   // SmokeLife (child)
     expect(row(3)).toHaveAttribute("data-dragging", "false");  // Sparks (not dragged)
@@ -318,9 +318,9 @@ describe("EmitterTree multi-drag preview", () => {
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("Flash"));
-    const smokeBtn  = screen.getByText("Smoke").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    const flashBtn  = screen.getByText("Flash").closest("button")!;
+    const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -329,7 +329,7 @@ describe("EmitterTree multi-drag preview", () => {
     fireEvent.pointerDown(flashBtn, { button: 0, pointerType: "mouse", clientX: 0, clientY: 0 });
     fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 40, clientY: 26 });
     expect(screen.getByTestId("drop-gap-at-1")).toBeInTheDocument();
-    expect(document.querySelector('button[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "true");
+    expect(document.querySelector('[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "true");
 
     // A structural mutation lands mid-drag (e.g. Ctrl+Z) → tree/changed fires.
     await act(async () => {
@@ -339,7 +339,7 @@ describe("EmitterTree multi-drag preview", () => {
     // The gesture is aborted: the make-room gap is gone and the dim is
     // cleared — no stale preview against the reshuffled tree.
     expect(screen.queryByTestId("drop-gap-at-1")).toBeNull();
-    expect(document.querySelector('button[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "false");
+    expect(document.querySelector('[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "false");
 
     // Releasing now commits NOTHING — no stale-id reorder/drop.
     fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 40, clientY: 26 });
@@ -358,9 +358,9 @@ describe("EmitterTree multi-drag preview", () => {
       renderWithTooltips(<EmitterTree bridge={bridge} />);
       await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
       fireEvent.click(screen.getByText("Flash"));
-      const smokeBtn  = screen.getByText("Smoke").closest("button")!;
-      const sparksBtn = screen.getByText("Sparks").closest("button")!;
-      const flashBtn  = screen.getByText("Flash").closest("button")!;
+      const smokeBtn  = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+      const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
+      const flashBtn  = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
       stubRect(smokeBtn, 0, 24);
       stubRect(sparksBtn, 24, 24);
       stubRect(flashBtn, 48, 24);
@@ -368,13 +368,13 @@ describe("EmitterTree multi-drag preview", () => {
       fireEvent.pointerMove(flashBtn, { pointerType: "mouse", clientX: 40, clientY: 26 });
       // Positive control: the drag genuinely activated.
       expect(screen.getByTestId("drop-gap-at-1")).toBeInTheDocument();
-      expect(document.querySelector('button[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "true");
+      expect(document.querySelector('[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "true");
       return flashBtn;
     })();
   }
   function expectAbortedNoCommit(bridge: ReturnType<typeof makeStubBridge>, flashBtn: HTMLElement) {
     expect(screen.queryByTestId("drop-gap-at-1")).toBeNull();
-    expect(document.querySelector('button[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "false");
+    expect(document.querySelector('[data-emitter-id="5"]')).toHaveAttribute("data-dragging", "false");
     fireEvent.pointerUp(flashBtn, { button: 0, pointerType: "mouse", clientX: 40, clientY: 26 });
     const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
     expect(calls.find((c) => c.kind === "emitters/reorder-many")).toBeUndefined();
@@ -408,9 +408,9 @@ describe("EmitterTree multi-drag preview", () => {
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("Flash"));
-    const smokeBtn = screen.getByText("Smoke").closest("button")!;
-    const sparksBtn = screen.getByText("Sparks").closest("button")!;
-    const flashBtn = screen.getByText("Flash").closest("button")!;
+    const smokeBtn = screen.getByText("Smoke").closest<HTMLElement>("[data-emitter-id]")!;
+    const sparksBtn = screen.getByText("Sparks").closest<HTMLElement>("[data-emitter-id]")!;
+    const flashBtn = screen.getByText("Flash").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(smokeBtn, 0, 24);
     stubRect(sparksBtn, 24, 24);
     stubRect(flashBtn, 48, 24);
@@ -446,8 +446,8 @@ describe("EmitterTree multi-drag preview", () => {
       fireEvent.click(screen.getByText(n), { ctrlKey: true });
     }
 
-    const r0Btn = screen.getByText("R0").closest("button")!;
-    const r5Btn = screen.getByText("R5").closest("button")!;
+    const r0Btn = screen.getByText("R0").closest<HTMLElement>("[data-emitter-id]")!;
+    const r5Btn = screen.getByText("R5").closest<HTMLElement>("[data-emitter-id]")!;
     stubRect(r5Btn, 100, 30);
 
     fireEvent.pointerDown(r0Btn, { button: 0, clientX: 0, clientY: 0 });

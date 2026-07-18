@@ -446,15 +446,17 @@ describe("AtlasPickerPanel", () => {
     // now an imperatively-positioned overlay over the hovered cell.
     setup({ textureSize: 16 });
     const grid = await screen.findByRole("listbox", { name: /atlas frames/i });
+    // Visibility is opacity-driven (design pass: the overlay fades via
+    // .atlas-hover-fade instead of a display pop; it stays mounted).
     const overlay = screen.getByTestId("atlas-hover-overlay");
-    expect(overlay.style.display).toBe("none");
+    expect(overlay.style.opacity).toBe("0");
     moveToFrame(9); // 4 cols → frame 9 at (row 2, col 1)
-    expect(overlay.style.display).not.toBe("none");
+    expect(overlay.style.opacity).toBe("1");
     expect(overlay.style.width).toBe("50px");
     expect(overlay.style.left).toBe("54px"); // col 1 → 1*(cell 50 + gap 4)
     expect(overlay.style.top).toBe("108px"); // row 2 → 2*(cell 50 + gap 4)
     fireEvent.mouseLeave(grid);
-    expect(overlay.style.display).toBe("none");
+    expect(overlay.style.opacity).toBe("0");
   });
 
   it("hover moves do not re-render the atlas grid", async () => {

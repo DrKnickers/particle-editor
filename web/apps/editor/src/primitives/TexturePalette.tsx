@@ -16,6 +16,7 @@
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { Tip } from "./Tip";
 import type { SpinnerDensity } from "./Spinner";
+import { useRovingIndex } from "@/lib/use-roving-index";
 
 export type TextureItem = {
   path: string;
@@ -55,6 +56,12 @@ export function TexturePalette({
   onClear,
   onReveal,
 }: TexturePaletteProps) {
+  // Single-tab-stop roving focus (design pass, B5): the listbox role
+  // promised arrow-key nav but every cell was its own Tab stop. Wrap-flow
+  // grid → no fixed column count, so Up/Down mirror Left/Right. Starts on
+  // the selected item.
+  const selectedIndex = Math.max(0, items.findIndex((it) => it.path === value));
+  const { itemProps } = useRovingIndex(items.length, { initial: selectedIndex });
   if (items.length === 0) {
     return (
       <div className="flex items-center justify-center rounded border border-dashed border-border-2 p-4 text-xs text-text-3">
@@ -65,7 +72,7 @@ export function TexturePalette({
 
   return (
     <div className="flex flex-wrap gap-1" role="listbox" aria-label="Texture palette">
-      {items.map((item) => {
+      {items.map((item, index) => {
         const selected = value === item.path;
         return (
           <ContextMenu.Root key={item.path}>
@@ -79,6 +86,7 @@ export function TexturePalette({
                   role="option"
                   aria-selected={selected}
                   aria-label={item.label ?? item.path}
+                  {...itemProps(index)}
                   onClick={() => onChange(item.path)}
                   className={`relative overflow-hidden rounded border-2 transition focus-ring ${
                     selected
@@ -108,7 +116,7 @@ export function TexturePalette({
 
             <ContextMenu.Portal>
               <ContextMenu.Content
-                className="z-50 min-w-[160px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
+                className="z-50 min-w-[160px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)] popover-animate"
               >
                 <ContextMenu.Item
                   disabled={!onBrowse}

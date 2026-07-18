@@ -12,6 +12,10 @@
 import { memo, useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useEngineField } from "@/lib/use-engine-snapshot";
+import { usePresence } from "@/lib/use-presence";
+
+// Mirrors --motion-fast-out (tokens.css) — the .fade-animate-fast exit duration.
+const PAUSED_EXIT_MS = 110;
 
 type Stats = { fps: number; emitters: number; particles: number; instances: number; overload: boolean };
 type Cursor3D = { x: number; y: number; z: number };
@@ -67,6 +71,9 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   // (engine/state snapshot + changed → EngineStateDto.paused) so the
   // status bar shows the paused state without a new bridge command.
   const paused = useEngineField(bridge, (s) => s.paused) ?? false;
+  // Presence fade for the PAUSED tag (design pass) — fast tier, so the
+  // indicator eases in/out instead of popping with the 4 Hz cadence around it.
+  const pausedPresence = usePresence(paused, PAUSED_EXIT_MS);
 
   useEffect(() => {
     const offStats = bridge.on("stats/tick", (e) => {
@@ -106,10 +113,18 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
       <span className="text-text-3">·</span>
       {cell("Cursor", cursorText, cursor === null)}
       {/* Right-aligned group: PAUSED state + always-on spawn hint
-          (the legacy main.cpp's permanent rightmost pane). */}
-      <div className="ml-auto flex items-center gap-3">
-        {paused && (
-          <span className="font-mono font-semibold tracking-wide text-warning-fg">
+          (the legacy main.cpp's permanent rightmost pane). aria-live on this
+          PERSISTENT container (not the transient span) so screen readers
+          announce pause/resume — a live region must pre-exist its content
+          change to fire. The spawn hint is static, so PAUSED is the only
+          content delta this region ever announces. */}
+      <div aria-live="polite" className="ml-auto flex items-center gap-3">
+        {pausedPresence.mounted && (
+          <span
+            className="fade-animate-fast font-mono font-semibold tracking-wide text-warning-fg"
+            data-state={pausedPresence.state}
+            onAnimationEnd={pausedPresence.onAnimationEnd}
+          >
             PAUSED
           </span>
         )}

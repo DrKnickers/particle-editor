@@ -437,7 +437,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
         onClick={(e) => { e.stopPropagation(); setActiveKey(rowKey); selectObject(n); }}
         onKeyDown={(e) => onTreeKeyDown(e, rowKey)}
         className={
-          "cursor-pointer truncate rounded px-2 py-0.5 text-sm transition focus-ring " +
+          "cursor-pointer truncate rounded px-2 py-0.5 text-sm transition motion-reduce:transition-none focus-ring " +
           (selected ? "bg-accent/20 text-text" : "text-text hover:bg-panel-2")
         }
       >
@@ -451,11 +451,11 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const labelRow = (label: string, count: number, open: boolean, indent: boolean) => (
     <div
       className={
-        "flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 transition hover:bg-panel-2 " +
+        "flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 transition motion-reduce:transition-none hover:bg-panel-2 " +
         (indent ? "pl-3 text-xs text-text-2" : "text-xs font-medium uppercase tracking-wide text-text-3")
       }
     >
-      <span aria-hidden className={"inline-block w-3 text-text-3 transition-transform " + (open ? "rotate-90" : "")}>
+      <span aria-hidden className={"inline-block w-3 text-text-3 transition-transform motion-reduce:transition-none " + (open ? "rotate-90" : "")}>
         ▸
       </span>
       <span className="flex-1">{label}</span>
@@ -501,7 +501,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                       aria-pressed={active}
                       onClick={() => setFaction(f)}
                       className={
-                        "rounded-full border px-2 py-0.5 text-xs transition focus-ring " +
+                        "rounded-full border px-2 py-0.5 text-xs transition motion-reduce:transition-none focus-ring " +
                         (active
                           ? "border-accent bg-accent/20 text-text"
                           : "border-border text-text-2 hover:bg-panel-2")
@@ -528,7 +528,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                 onClick={() => { setActiveKey("none"); selectObject(NONE); }}
                 onKeyDown={(e) => onTreeKeyDown(e, "none")}
                 className={
-                  "cursor-pointer rounded px-2 py-0.5 text-sm transition focus-ring " +
+                  "cursor-pointer rounded px-2 py-0.5 text-sm transition motion-reduce:transition-none focus-ring " +
                   (name === NONE ? "bg-accent/20 text-text" : "text-text-2 hover:bg-panel-2")
                 }
               >
@@ -624,7 +624,7 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
             type="button"
             onClick={() => setTransform([0, 0, 0], [0, 0, 0])}
             disabled={name === NONE || locked}
-            className="rounded px-2 py-0.5 text-xs text-text-2 transition hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent focus-ring"
+            className="rounded px-2 py-0.5 text-xs text-text-2 transition motion-reduce:transition-none hover:bg-panel-2 hover:text-text disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent focus-ring"
             aria-label="Reset transform to origin"
             title="Reset position + rotation to 0"
           >

@@ -718,6 +718,15 @@ export function PanelLayout({ bridge }: Props) {
           className="h-full w-full overflow-hidden"
           inert={dockClosing}
         >
+          {/* Keyed by the DISPLAYED panel so swapping tools in the open dock
+              (Spawner ↔ Atlas ↔ Lighting) remounts this wrapper and replays
+              the entrance fade — the swap used to hard-cut (design pass).
+              Open/close itself stays the flex-grow dock slide above; resizes
+              don't change the key, so they never retrigger the fade. Rendered
+              only while a panel is displayed, preserving the closed dock's
+              empty-slot DOM contract. */}
+          {displayDock !== null && (
+          <div key={displayDock} className="h-full w-full fade-in-fast">
           {displayDock === "spawner" ? (
             <SpawnerPanel bridge={bridge} />
           ) : displayDock === "lighting" ? (
@@ -736,6 +745,8 @@ export function PanelLayout({ bridge }: Props) {
               <AtlasPickerPanel bridge={bridge} onClose={() => setDock(null)} closing={dockClosing} />
             )
           ) : null}
+          </div>
+          )}
         </aside>
       </Panel>
     </Group>

@@ -3,7 +3,7 @@
 // attempt would be refused by the #138 gate —
 // (instances + 1) × systemLoad > cap, guard enabled.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import { SystemLoadChip } from "../SystemLoadChip";
 import { writeOverloadGuard } from "@/lib/overload-guard";
 import type { Bridge } from "@particle-editor/bridge-schema";
@@ -75,7 +75,7 @@ describe("SystemLoadChip", () => {
     expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument();
   });
 
-  it("reacts live to a cap change", () => {
+  it("reacts live to a cap change", async () => {
     const { bridge } = makeBridge();
     writeOverloadGuard({ enabled: true, maxParticles: 1_000 });
     render(<SystemLoadChip bridge={bridge} systemLoad={2_000} />);
@@ -83,7 +83,11 @@ describe("SystemLoadChip", () => {
     act(() => {
       writeOverloadGuard({ enabled: true, maxParticles: 10_000 });
     });
-    expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument();
+    // usePresence keeps the chip mounted through its exit fade (design pass);
+    // jsdom fires no animationend, so unmount lands on the timeout fallback.
+    await waitFor(() =>
+      expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument(),
+    );
   });
 
   it("respects the strictly-greater boundary (systemLoad === cap is hidden, +1 shows)", () => {
@@ -96,13 +100,17 @@ describe("SystemLoadChip", () => {
     expect(screen.getByTestId("system-load-chip")).toBeInTheDocument();
   });
 
-  it("clears back below the cap when instances drop (preview cleared)", () => {
+  it("clears back below the cap when instances drop (preview cleared)", async () => {
     const { bridge, emit } = makeBridge();
     writeOverloadGuard({ enabled: true, maxParticles: 1_000 });
     render(<SystemLoadChip bridge={bridge} systemLoad={600} />);
     emit("stats/tick", tick(1));
     expect(screen.getByTestId("system-load-chip")).toBeInTheDocument();
     emit("stats/tick", tick(0));
-    expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument();
+    // Exit fade → unmount on usePresence's timeout fallback (no animationend
+    // in jsdom).
+    await waitFor(() =>
+      expect(screen.queryByTestId("system-load-chip")).not.toBeInTheDocument(),
+    );
   });
 });

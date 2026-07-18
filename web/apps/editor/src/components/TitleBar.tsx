@@ -43,7 +43,7 @@ function WinButton({
       tabIndex={-1}
       onClick={onClick}
       className={cn(
-        "flex w-[46px] items-center justify-center text-text-2 transition-colors",
+        "flex w-[46px] items-center justify-center text-text-2 transition-colors motion-reduce:transition-none",
         // Theme-aware hover/pressed via the border tokens — clearly visible AND
         // correct-direction in both modes (lightens on the dark panel, darkens on
         // the light one; press goes one step further). Close keeps the universal

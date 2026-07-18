@@ -535,7 +535,7 @@ export function Spinner({
           disabled={disabled}
           aria-label="Increment"
           data-testid={testId ? `${testId}-inc` : undefined}
-          className="flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed"
+          className="flex flex-1 items-center justify-center text-text-3 transition-colors motion-reduce:transition-none hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed"
           style={{ fontSize: "7px", lineHeight: 1 }}
         >
           ▲
@@ -546,7 +546,7 @@ export function Spinner({
           disabled={disabled}
           aria-label="Decrement"
           data-testid={testId ? `${testId}-dec` : undefined}
-          className="flex flex-1 items-center justify-center text-text-3 hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed"
+          className="flex flex-1 items-center justify-center text-text-3 transition-colors motion-reduce:transition-none hover:bg-panel-2 hover:text-text active:bg-accent-soft active:text-accent disabled:cursor-not-allowed"
           style={{ fontSize: "7px", lineHeight: 1 }}
         >
           ▼

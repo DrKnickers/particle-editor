@@ -22,6 +22,9 @@ export function GroundDropdown({ bridge }: Props) {
   const slot = useEngineField(bridge, (s) => s.groundTexture) ?? 0;
   const groundSolidColor = useEngineField(bridge, (s) => s.groundSolidColor);
   const bundled = BUNDLED_GROUND_SLOTS.find((s) => s.slot === slot);
+  // #888888 depicts the engine's default solid ground color (scene state,
+  // not UI chrome) — intentionally outside the token system, like the
+  // BackgroundDropdown scene swatches (theming audit 2026-07-18).
   const swatchStyle: React.CSSProperties = slot === SOLID_COLOR_SLOT
     ? { backgroundColor: groundSolidColor === undefined ? "#888888" : colorrefToHex(groundSolidColor) }
     : bundled

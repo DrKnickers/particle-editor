@@ -218,7 +218,22 @@ type Props = {
    *  axes (#618). Owned + persisted by CurveEditorPanel; the single-track
    *  legacy branch ignores it (production always renders the multi path). */
   snapEnabled?: boolean;
+  /** Keyboard navigation on the focused plot SVG (design pass, B1). The SVG
+   *  is a single Tab stop; arrows map to actions the PARENT executes against
+   *  its selection + spinner-commit handlers (no mutation logic lives in the
+   *  renderer): Left/Right cycle key selection in time order, Up/Down switch
+   *  the focused channel, Ctrl+arrows nudge the selection's time/value by the
+   *  spinner step, Home/End jump to the first/last key. */
+  onKeyboardNav?: (action: CurveKeyboardNavAction) => void;
 };
+
+/** Keyboard actions the plot SVG can request from its parent (B1). */
+export type CurveKeyboardNavAction =
+  | { kind: "select-step"; dir: 1 | -1 }
+  | { kind: "select-edge"; edge: "first" | "last" }
+  | { kind: "channel-step"; dir: 1 | -1 }
+  | { kind: "nudge-time"; dir: 1 | -1 }
+  | { kind: "nudge-value"; dir: 1 | -1 };
 
 /** Imperative handle exposed via `marqueeRef` for starting a marquee
  *  selection from a client point outside the plot SVG (gutter-initiated).
@@ -440,6 +455,7 @@ export function CurveEditor({
   onCanvasMarqueeSelect,
   suppressRef,
   snapEnabled,
+  onKeyboardNav,
 }: Props) {
   // Multi-channel overlay branch. Triggered when the caller provides
   // `tracks` + `channels` + `visibleChannels`. When `focusChannel` is
@@ -477,6 +493,7 @@ export function CurveEditor({
         marqueeRef={marqueeRef}
         suppressRef={suppressRef}
         snapEnabled={snapEnabled}
+        onKeyboardNav={onKeyboardNav}
       />
     );
   }
@@ -1148,6 +1165,8 @@ type MultiProps = {
   suppressRef?: MutableRefObject<SuppressedMove>;
   /** Snap dragged/inserted keys to the minor sub-grid (see Props.snapEnabled). */
   snapEnabled?: boolean;
+  /** Keyboard navigation requests (see Props.onKeyboardNav). */
+  onKeyboardNav?: (action: CurveKeyboardNavAction) => void;
 };
 
 
@@ -1436,6 +1455,7 @@ function MultiChannelCurves({
   marqueeRef,
   suppressRef,
   snapEnabled,
+  onKeyboardNav,
 }: MultiProps) {
   // Live-measured SVG dimensions. We can't simply pass a fixed 600×300
   // viewBox to a stretchy SVG (`preserveAspectRatio="none"`) without
@@ -1453,6 +1473,11 @@ function MultiChannelCurves({
   const [measured, setMeasured] = useState<{ width: number; height: number }>(
     { width: propWidth, height: propHeight },
   );
+  // [design pass B1] True while the plot SVG itself holds keyboard focus —
+  // gates the sr-only status region below so screen readers hear selection
+  // changes during keyboard nav, but mouse drags (which also change the
+  // selection) stay silent.
+  const [kbdFocused, setKbdFocused] = useState(false);
   // Track the SVG's box size every frame — INCLUDING during the dock slide — so
   // the viewBox follows the container and the curve/grid re-projects crisply at
   // each width. (We do NOT hold the viewBox during the slide: a held viewBox is
@@ -2102,7 +2127,33 @@ function MultiChannelCurves({
     return p;
   });
 
+  // [design pass B1] sr-only polite status: what the keyboard selection is,
+  // announced only while the SVG holds focus (see kbdFocused above).
+  const statusChannel = focusChannel != null ? channels.find((c) => c.id === focusChannel) ?? null : null;
+  const statusKeys = statusChannel !== null
+    ? tracks?.find((t) => t.name === statusChannel.trackName)?.keys ?? []
+    : [];
+  let kbdStatus = "";
+  if (kbdFocused && statusChannel !== null) {
+    const sel = selectedKeyTimes ?? new Set<number>();
+    if (statusKeys.length === 0) {
+      kbdStatus = `${statusChannel.label}: no keys.`;
+    } else if (sel.size === 0) {
+      kbdStatus = `${statusChannel.label}: ${statusKeys.length} keys. Press Left or Right to select one.`;
+    } else if (sel.size === 1) {
+      const t = [...sel][0]!;
+      const idx = statusKeys.findIndex((k) => k.time === t);
+      const key = idx >= 0 ? statusKeys[idx]! : null;
+      kbdStatus = key
+        ? `${statusChannel.label} key ${idx + 1} of ${statusKeys.length}: time ${key.time.toFixed(1)}%, value ${key.value.toFixed(2)}.`
+        : `${statusChannel.label}: 1 key selected.`;
+    } else {
+      kbdStatus = `${statusChannel.label}: ${sel.size} keys selected.`;
+    }
+  }
+
   return (
+    <>
     <svg
       ref={svgRef}
       data-testid="curve-editor-svg"
@@ -2111,8 +2162,32 @@ function MultiChannelCurves({
       data-focus-channel={focusChannel ?? ""}
       data-insert-mode={insertMode ? "true" : "false"}
       data-dragging={drag !== null ? "true" : "false"}
-      role="img"
-      aria-label={`Multi-channel curve overlay, ${layers.length} channels`}
+      // role=group + tabIndex: the plot is a single Tab stop with its own
+      // keyboard nav (design pass, B1) — it stopped being a static image.
+      role="group"
+      tabIndex={focusEnabled && onKeyboardNav ? 0 : undefined}
+      aria-label={`Multi-channel curve plot, ${layers.length} channels. Arrow keys select keys and switch channels; hold Ctrl to nudge.`}
+      onFocus={() => setKbdFocused(true)}
+      onBlur={() => setKbdFocused(false)}
+      onKeyDown={
+        focusEnabled && onKeyboardNav
+          ? (e) => {
+              const ctrl = e.ctrlKey || e.metaKey;
+              let action: CurveKeyboardNavAction | null = null;
+              switch (e.key) {
+                case "ArrowRight": action = ctrl ? { kind: "nudge-time", dir: 1 } : { kind: "select-step", dir: 1 }; break;
+                case "ArrowLeft":  action = ctrl ? { kind: "nudge-time", dir: -1 } : { kind: "select-step", dir: -1 }; break;
+                case "ArrowUp":    action = ctrl ? { kind: "nudge-value", dir: 1 } : { kind: "channel-step", dir: -1 }; break;
+                case "ArrowDown":  action = ctrl ? { kind: "nudge-value", dir: -1 } : { kind: "channel-step", dir: 1 }; break;
+                case "Home":       action = { kind: "select-edge", edge: "first" }; break;
+                case "End":        action = { kind: "select-edge", edge: "last" }; break;
+                default: return;
+              }
+              e.preventDefault();
+              onKeyboardNav(action);
+            }
+          : undefined
+      }
       // viewBox is sized to the SVG's MEASURED CSS dimensions (see
       // the `useLayoutEffect` above), so one viewBox unit equals one
       // CSS pixel. This means `preserveAspectRatio` becomes a
@@ -2126,7 +2201,7 @@ function MultiChannelCurves({
       // `block` removes the inline-baseline gap that a default-inline
       // <svg> would leave under it (descender space in the parent line
       // box), preventing a few-pixel vertical offset from the cell top.
-      className="block h-full w-full select-none"
+      className="block h-full w-full select-none focus-ring-inset"
       // `overflow="visible"` lets the endpoint key circles at time=0,
       // time=100, value=min, value=max render their FULL body even
       // when their centre sits exactly on the grid edge. Without
@@ -2302,5 +2377,9 @@ function MultiChannelCurves({
         />
       )}
     </svg>
+    <div role="status" aria-live="polite" className="sr-only" data-testid="curve-kbd-status">
+      {kbdStatus}
+    </div>
+    </>
   );
 }

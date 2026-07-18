@@ -79,7 +79,7 @@ function CheckToggle({
       <span
         aria-hidden
         className={cn(
-          "flex size-[14px] items-center justify-center rounded-[var(--radius-xs)] border transition-colors peer-disabled:opacity-40 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-[var(--accent)]",
+          "flex size-[14px] items-center justify-center rounded-[var(--radius-xs)] border transition-colors motion-reduce:transition-none peer-disabled:opacity-40 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-[var(--accent)]",
           checked ? "border-accent-strong bg-accent-strong" : "border-border-2 bg-bg-3",
         )}
       >
@@ -199,7 +199,7 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
                     aria-label={m.label}
                     onClick={() => choose(m.value)}
                     className={cn(
-                      "rounded-[var(--radius-xs)] px-[11px] py-[3px] text-[11px] transition-colors focus-ring-inset",
+                      "rounded-[var(--radius-xs)] px-[11px] py-[3px] text-[11px] transition-colors motion-reduce:transition-none focus-ring-inset",
                       mode === m.value
                         ? "bg-accent-soft font-semibold text-accent"
                         : "text-text-3 hover:text-text-2",
@@ -257,7 +257,9 @@ export function PreferencesDialog({ bridge, open, onOpenChange }: Props) {
               >
                 Max preview particles
               </label>
-              <div className="flex h-[var(--row-h-sm)] w-28 items-center overflow-hidden rounded-[var(--radius-sm)] border border-border-2 bg-bg-3">
+              {/* focus-within accent border = the keyboard-focus cue for the
+                  borderless input inside (design pass; was focus-invisible). */}
+              <div className="flex h-[var(--row-h-sm)] w-28 items-center overflow-hidden rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 transition-colors motion-reduce:transition-none focus-within:border-accent">
                 <input
                   id="pref-overload-max"
                   type="number"

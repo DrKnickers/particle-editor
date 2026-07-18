@@ -34,7 +34,7 @@ import { applyModelShadows, readModelShadows } from "@/lib/model-shadows";
 import { applySoftShadows, readSoftShadows } from "@/lib/soft-shadows";
 import { RecordCursor } from "@/components/RecordCursor";
 import { parseCursorMessage, postFrameAcked, isRecordHeadlessMessage, commitAndAck } from "@/lib/record-cursor-bridge";
-import { latchRecordModeFromMessage, markHeadless } from "@/lib/record-mode";
+import { latchRecordModeFromMessage, markHeadless, useRecording } from "@/lib/record-mode";
 import { TitleBar } from "@/components/TitleBar";
 import { evalRecordCursor } from "@/lib/record-cursor-eval";
 import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record-cursor-drag";
@@ -77,6 +77,15 @@ function AppShell() {
   // black host backing. Pushes on mount + on every theme change.
   useBackingColorSync(bridge);
 
+  // Mirror the record-mode latch as <html data-recording> so CSS can hold the
+  // design-pass animations inert during --record (components.css kill-switch —
+  // captured frames must not sample wall-clock CSS motion). Latch-only, like
+  // the store itself: never removed.
+  const recording = useRecording();
+  useEffect(() => {
+    if (recording) document.documentElement.setAttribute("data-recording", "");
+  }, [recording]);
+
   // Tool-panel + right-dock visibility now live inside
   // `PanelLayout`, which mounts the relevant child components directly.
   // The MenuBar drives the right-dock (Spawner / Lighting) via
@@ -104,9 +113,10 @@ function AppShell() {
   // lower-right pane. The previously-mounted EmitterPropertyPanel +
   // its snapshot/event wiring have been removed from this shell.
 
-  // Particle Editor 2026 redesign: apply persisted theme (or OS preference)
-  // before any panel renders so the first paint is correctly themed.
-  // 3-way mode (dark/light/system): system follows prefers-color-scheme live.
+  // Theme: the FIRST apply happens synchronously in main.tsx (pre-render, so
+  // the first paint is correctly themed). This effect re-applies idempotently
+  // (same resolved value → no transition, see theme.ts) and owns the live
+  // prefers-color-scheme listener for "system" mode.
   useEffect(() => {
     applyMode(readStoredMode());
     const mq = window.matchMedia("(prefers-color-scheme: dark)");

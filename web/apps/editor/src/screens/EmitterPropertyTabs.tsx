@@ -279,14 +279,14 @@ export function EmitterPropertyTabs({ bridge }: Props) {
           padding to avoid doubling. */}
       <Tabs.Content
         value="basic"
-        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
+        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable fade-in-fast"
         data-testid="tab-basic-content"
       >
         {renderBody((p) => <BasicTab properties={p} onCommit={commit} />)}
       </Tabs.Content>
       <Tabs.Content
         value="appearance"
-        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
+        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable fade-in-fast"
         data-testid="tab-appearance-content"
       >
         {renderBody((p) => (
@@ -300,7 +300,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
       </Tabs.Content>
       <Tabs.Content
         value="physics"
-        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable"
+        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable fade-in-fast"
         data-testid="tab-physics-content"
       >
         {renderBody((p) => <PhysicsTab properties={p} onCommit={commit} />)}
@@ -314,7 +314,7 @@ function TabTrigger({ value, label }: { value: string; label: string }) {
     <Tabs.Trigger
       value={value}
       data-testid={`tab-trigger-${value}`}
-      className="flex-1 cursor-pointer border-b-2 border-transparent px-3 py-2 text-xs text-text-2 transition data-[state=active]:border-accent data-[state=active]:text-text hover:text-text focus-ring"
+      className="flex-1 cursor-pointer border-b-2 border-transparent px-3 py-2 text-xs text-text-2 transition motion-reduce:transition-none data-[state=active]:border-accent data-[state=active]:text-text hover:text-text focus-ring"
     >
       {label}
     </Tabs.Trigger>
@@ -993,7 +993,7 @@ function FieldSelect({
         <Select.Trigger
           data-testid={testId}
           aria-label={label}
-          className="flex h-[var(--row-h)] w-full items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text transition hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-[var(--row-h)] w-full items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text transition motion-reduce:transition-none hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40"
         >
           {/* Radix Select.Value strips className, so wrap it in a truncating
               span — white-space:nowrap + overflow-hidden + ellipsis apply to
@@ -1011,7 +1011,7 @@ function FieldSelect({
           <Select.Content
             position="popper"
             sideOffset={4}
-            className="z-50 min-w-[160px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
+            className="z-50 min-w-[160px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)] popover-animate-in"
           >
             <Select.Viewport>
               {options.map((opt) => (

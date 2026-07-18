@@ -64,7 +64,7 @@ export function Modal({
   //      it as an opaque <img> portaled into the viewport-quadrant DOM.
   //      The <img> covers the live DComp engine visual beneath the
   //      transparent WebView2, so the user sees the frozen snapshot.
-  //   2. Dialog.Overlay's `bg-black/60 backdrop-blur-sm` then dims +
+  //   2. Dialog.Overlay's `bg-[var(--overlay-scrim)] backdrop-blur-sm` then dims +
   //      blurs everything in its DOM background uniformly (panels AND
   //      the snapshot img) -- both are now WebView2-rendered pixels.
   //   3. Close: clear the snapshot state; the viewport quadrant goes
@@ -144,7 +144,7 @@ export function Modal({
     //      quadrant, so CSS scales it to fill the current bounds as the
     //      window resizes. The content is mildly stale during a drag (the
     //      engine keeps rendering but we don't re-encode), but it sits
-    //      behind Dialog.Overlay's `bg-black/60 backdrop-blur-sm` so
+    //      behind Dialog.Overlay's `bg-[var(--overlay-scrim)] backdrop-blur-sm` so
     //      particle motion blurs to mush -- staleness is invisible.
     //
     //   2. Re-capturing during drag would force a ~10-30 ms JPEG encode
@@ -185,7 +185,7 @@ export function Modal({
     <>
       {/* Frosted-glass backdrop. Portal the snapshot <img>
           into the viewport-quadrant DOM so it sits below Dialog.Overlay
-          in the same compositing tree — Dialog.Overlay's `bg-black/60
+          in the same compositing tree — Dialog.Overlay's `bg-[var(--overlay-scrim)]
           backdrop-blur-sm` then blurs panels + snapshot uniformly. The
           render guard skips when the host returns an empty image
           (MockBridge, fresh engine, just-reset device). the host
@@ -211,7 +211,7 @@ export function Modal({
         <Dialog.Portal>
           <Dialog.Overlay
             data-testid="modal-overlay"
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm modal-overlay-animate"
+            className="fixed inset-0 z-40 bg-[var(--overlay-scrim)] backdrop-blur-sm modal-overlay-animate"
           />
           <Dialog.Content
             // aria-describedby={undefined} opts out of Radix's accessibility

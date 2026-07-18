@@ -1,3 +1,5 @@
+- status
+- contentinfo: "PAUSED ⇧ Shift: spawn instance"
 - dialog "Duplicate with Index Increment":
   - heading "Duplicate with Index Increment" [level=2]
   - button "Close"

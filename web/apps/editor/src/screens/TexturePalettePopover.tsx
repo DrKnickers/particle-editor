@@ -260,7 +260,7 @@ function PaletteCell({
             onClick={() => onApply(entry.filename)}
             aria-label={`Apply ${entry.filename}`}
             data-testid={`palette-apply-${entry.filename}`}
-            className="relative block aspect-square w-full overflow-hidden rounded border border-border-2 transition hover:border-accent focus-ring-inset"
+            className="relative block aspect-square w-full overflow-hidden rounded border border-border-2 transition motion-reduce:transition-none hover:border-accent focus-ring-inset"
           >
             {thumb?.dataUri ? (
               <img src={thumb.dataUri} alt="" className="absolute inset-0 h-full w-full object-cover" />

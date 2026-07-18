@@ -5,7 +5,7 @@
 //   - cursor readout is 2 decimal places (legacy was 2dp).
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import { StatusBar, __statsCellsRenderCount } from "../StatusBar";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
@@ -44,7 +44,11 @@ describe("StatusBar", () => {
     emit("engine/state/changed", { paused: true });
     expect(screen.getByText("PAUSED")).toBeInTheDocument();
     emit("engine/state/changed", { paused: false });
-    expect(screen.queryByText("PAUSED")).not.toBeInTheDocument();
+    // usePresence keeps the tag mounted through its exit fade (design pass);
+    // jsdom fires no animationend, so unmount lands on the timeout fallback.
+    await waitFor(() =>
+      expect(screen.queryByText("PAUSED")).not.toBeInTheDocument(),
+    );
   });
 
   it("renders the cursor readout with 2 decimals", () => {

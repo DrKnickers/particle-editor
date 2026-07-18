@@ -51,7 +51,7 @@ import type {
   TrackDto,
   TrackName,
 } from "@particle-editor/bridge-schema";
-import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "@/screens/CurveEditor";
+import { CurveEditor, type ChannelDef, type CurveKeyboardNavAction, type CurveMarqueeHandle } from "@/screens/CurveEditor";
 import { clampGroupTimeShift } from "@/screens/curve-group-shift";
 import type { SuppressedMove } from "@/lib/use-curve-morph";
 import { Spinner } from "@/primitives/Spinner";
@@ -1431,6 +1431,83 @@ export function CurveEditorPanel({ bridge }: Props) {
     [multiSelected, applyGroupShift, singleSelected, bridge, selectedId, focusLocked, focusedChannel.trackName, focusedChannel.id],
   );
 
+  // [design pass B1] Keyboard actions from the plot SVG. Selection mirrors
+  // handleKeyClick's semantics (clear the optimistic override, replace the
+  // set); nudges route through the EXISTING spinner commit handlers so the
+  // #613 morph-suppress / optimistic / epoch machinery — and undo grouping —
+  // stay the single mutation path. Channel stepping reuses handleRowClick
+  // (focus + visibility + selection-clear) over the currently VISIBLE rows.
+  const handleKeyboardNav = useCallback(
+    (action: CurveKeyboardNavAction) => {
+      switch (action.kind) {
+        case "select-step":
+        case "select-edge": {
+          const keys = focusedTrack?.keys;
+          if (!keys || keys.length === 0) return;
+          let idx: number;
+          if (action.kind === "select-edge") {
+            idx = action.edge === "first" ? 0 : keys.length - 1;
+          } else {
+            const cur =
+              singleSelected !== null
+                ? keys.findIndex((k) => k.time === singleSelected.time)
+                : -1;
+            idx =
+              cur === -1
+                ? action.dir === 1
+                  ? 0
+                  : keys.length - 1
+                : Math.max(0, Math.min(keys.length - 1, cur + action.dir));
+          }
+          setOptimisticSelected(null);
+          setSelectedKeyTimes(new Set([keys[idx]!.time]));
+          return;
+        }
+        case "channel-step": {
+          const rows = CHANNELS.filter((c) => visible[c.id] ?? c.defaultOn);
+          if (rows.length === 0) return;
+          const cur = rows.findIndex((c) => c.id === focusChannel);
+          const next =
+            rows[(cur === -1 ? 0 : cur + action.dir + rows.length) % rows.length]!;
+          if (next.id !== focusChannel) handleRowClick(next.id);
+          return;
+        }
+        case "nudge-time": {
+          const base =
+            multiSelected !== null
+              ? multiSelected.avgTime
+              : singleSelected?.time ?? null;
+          if (base === null) return;
+          // Matches the Time spinner's 0.1 step (legacy parity).
+          handleTimeSpinner(base + action.dir * 0.1);
+          return;
+        }
+        case "nudge-value": {
+          const base =
+            multiSelected !== null
+              ? multiSelected.avgValue
+              : singleSelected?.value ?? null;
+          if (base === null) return;
+          const sb = spinnerBoundsForTrack(focusedChannel.trackName);
+          const next = Math.max(sb.min, Math.min(sb.max, base + action.dir * sb.step));
+          handleValueSpinner(next);
+          return;
+        }
+      }
+    },
+    [
+      focusedTrack,
+      singleSelected,
+      multiSelected,
+      visible,
+      focusChannel,
+      handleRowClick,
+      handleTimeSpinner,
+      handleValueSpinner,
+      focusedChannel.trackName,
+    ],
+  );
+
   // ── Delete keyboard handler (window-scoped, TYPING_TAGS guard) ────
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1645,8 +1722,8 @@ export function CurveEditorPanel({ bridge }: Props) {
                 onClick={() => setMode("select")}
                 className={
                   mode === "select"
-                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
-                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
+                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 transition-colors motion-reduce:transition-none hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
                 }
               >
                 <MousePointer2 className="size-3.5" aria-hidden="true" />
@@ -1667,8 +1744,8 @@ export function CurveEditorPanel({ bridge }: Props) {
                 onClick={() => setMode("insert")}
                 className={
                   mode === "insert"
-                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
-                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
+                    ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 transition-colors motion-reduce:transition-none hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
                 }
               >
                 <Plus className="size-3.5" aria-hidden="true" />
@@ -1695,8 +1772,8 @@ export function CurveEditorPanel({ bridge }: Props) {
                   onClick={() => handleInterpolationClick(kind)}
                   className={
                     isActive
-                      ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent focus-ring"
-                      : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
+                      ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent transition-colors motion-reduce:transition-none focus-ring"
+                      : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 transition-colors motion-reduce:transition-none hover:border-border-2 disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
                   }
                 >
                   {INTERP_ICONS[kind]}
@@ -1720,8 +1797,8 @@ export function CurveEditorPanel({ bridge }: Props) {
               onClick={toggleSnap}
               className={
                 snapEnabled
-                  ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent focus-ring"
-                  : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-border-2 focus-ring"
+                  ? "grid h-6 w-6 place-items-center rounded border border-accent bg-accent-soft text-accent transition-colors motion-reduce:transition-none focus-ring"
+                  : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 transition-colors motion-reduce:transition-none hover:border-border-2 focus-ring"
               }
             >
               <Magnet className="size-3.5" aria-hidden="true" />
@@ -1747,7 +1824,7 @@ export function CurveEditorPanel({ bridge }: Props) {
               id="ce-lock-to-trigger"
               data-testid="ce-lock-to-trigger"
               data-locked={focusLocked ? "true" : "false"}
-              className="flex h-6 min-w-[80px] items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40 data-[locked=true]:border-accent data-[locked=true]:text-accent"
+              className="flex h-6 min-w-[80px] items-center justify-between gap-1 rounded border border-border-2 bg-bg-2 px-2 text-xs text-text transition-colors motion-reduce:transition-none hover:border-border-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40 data-[locked=true]:border-accent data-[locked=true]:text-accent"
               aria-label="Lock-to track"
             >
               <Select.Value placeholder="None" />
@@ -1759,7 +1836,7 @@ export function CurveEditorPanel({ bridge }: Props) {
               <Select.Content
                 position="popper"
                 sideOffset={4}
-                className="z-50 min-w-[120px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
+                className="z-50 min-w-[120px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)] popover-animate-in"
               >
                 <Select.Viewport>
                   {lockToOptions.map((opt) => (
@@ -1817,7 +1894,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                 className={
                   deleteDisabled
                     ? "grid h-6 w-6 place-items-center rounded border border-border bg-bg-2/60 text-text-3 focus-ring"
-                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 hover:border-danger hover:text-danger-fg focus-ring"
+                    : "grid h-6 w-6 place-items-center rounded border border-border-2 bg-bg-2 text-text-2 transition-colors motion-reduce:transition-none hover:border-danger hover:text-danger-fg focus-ring"
                 }
               >
                 <Trash2 className="size-3.5" aria-hidden="true" />
@@ -1968,7 +2045,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                 data-testid="curve-editor-placeholder"
                 className="flex h-full items-center justify-center text-xs text-text-3"
               >
-                Select an emitter to edit its tracks
+                Select an emitter in the Particle System panel to edit its curves
               </div>
             ) : (
               <CanvasWithAxisLabels
@@ -1987,6 +2064,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                   marqueeRef={curveRef}
                   suppressRef={morphSuppressRef}
                   snapEnabled={snapEnabled}
+                  onKeyboardNav={handleKeyboardNav}
                   tracks={tracks}
                   channels={CHANNELS}
                   visibleChannels={visible}

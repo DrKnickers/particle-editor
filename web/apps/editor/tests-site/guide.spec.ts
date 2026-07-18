@@ -49,7 +49,7 @@ const TUTORIAL_MEDIA = new Map([
     // (layered additive). §9 ends by showing the finished explosion BOTH ways: -final-preview
     // (flipbook) then -final-preview-layered (layered).
     clips: ["tutorial-05-opening-result.mp4", "tutorial-05-flash-burst.mp4", "tutorial-05-smoke-render-order.mp4",
-      "tutorial-05-fireball-index.mp4", "tutorial-05-fireball-layered.mp4",
+      "tutorial-05-fireball-build.mp4", "tutorial-05-fireball-index.mp4", "tutorial-05-fireball-layered.mp4",
       "tutorial-05-sparks-children.mp4", "tutorial-05-final-preview.mp4", "tutorial-05-final-preview-layered.mp4"],
     stills: [],
     manualComment: 0,

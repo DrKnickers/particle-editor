@@ -30,17 +30,14 @@
 - complementary:
   - tree "Emitters":
     - treeitem "Hide emitter default" [selected]:
-      - button "Hide emitter default":
-        - button "Hide emitter"
-        - text: default
+      - button "Hide emitter"
+      - text: default
     - treeitem "Hide emitter default lifetime child":
-      - button "Hide emitter default lifetime child":
-        - button "Hide emitter"
-        - text: default ↻
+      - button "Hide emitter"
+      - text: default ↻
     - treeitem "Hide emitter default death child":
-      - button "Hide emitter default death child":
-        - button "Hide emitter"
-        - text: default ✕
+      - button "Hide emitter"
+      - text: default ✕
   - menubar:
     - menuitem "New Emitter"
   - button "Duplicate emitter"
@@ -167,7 +164,8 @@
     - checkbox "Toggle Rotation curve"
     - text: Rotation
 - text: 1 0 0.5
-- img "Multi-channel curve overlay, 3 channels"
+- group "Multi-channel curve plot, 3 channels. Arrow keys select keys and switch channels; hold Ctrl to nudge."
+- status
 - text: 0 25 50 75 100%
 - separator
 - complementary:

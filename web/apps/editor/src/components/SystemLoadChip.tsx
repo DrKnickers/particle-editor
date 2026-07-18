@@ -22,6 +22,10 @@ import { TriangleAlert } from "lucide-react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { fmtCount } from "@/lib/chain-load";
 import { useOverloadGuardConfig } from "@/lib/overload-guard";
+import { usePresence } from "@/lib/use-presence";
+
+// Mirrors --motion-slow-out (tokens.css) — the .fade-animate exit duration.
+const EXIT_MS = 150;
 
 export function SystemLoadChip({
   bridge,
@@ -39,14 +43,20 @@ export function SystemLoadChip({
     return off;
   }, [bridge]);
   // A zero-load effect (no emitters yet, or all disabled) has nothing to warn about.
-  if (!guard.enabled || systemLoad <= 0) return null;
   const projected = (instances + 1) * systemLoad;
-  if (projected <= guard.maxParticles) return null;
+  const visible =
+    guard.enabled && systemLoad > 0 && projected > guard.maxParticles;
+  // Presence fade (design pass): the chip used to pop in/out; usePresence keeps
+  // it mounted through the .fade-animate exit so the warning eases away.
+  const presence = usePresence(visible, EXIT_MS);
+  if (!presence.mounted) return null;
   return (
     <div
       role="status"
       data-testid="system-load-chip"
-      className="mb-1 flex shrink-0 items-center gap-1.5 rounded-sm bg-warning/15 px-2 py-1 text-xs text-text-2"
+      data-state={presence.state}
+      onAnimationEnd={presence.onAnimationEnd}
+      className="fade-animate mb-1 flex shrink-0 items-center gap-1.5 rounded-sm bg-warning/15 px-2 py-1 text-xs text-text-2"
     >
       <TriangleAlert className="size-3.5 shrink-0 text-warning-fg" aria-hidden />
       <span className="tabular-nums">

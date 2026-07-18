@@ -53,7 +53,7 @@ test("right-click an emitter row opens the context menu", async () => {
   const treeContainer = page.locator('[data-testid="emitter-tree"]');
   await expect(treeContainer).toBeVisible();
   const firstRow = treeContainer
-    .locator("button[data-emitter-id]")
+    .locator("[data-emitter-id]")
     .first();
   await expect(firstRow).toBeVisible({ timeout: 5_000 });
 
@@ -110,10 +110,10 @@ test("delete via the context menu removes the emitter from the tree", async () =
 
   // Wait for the duplicate to render.
   const treeContainer = page.locator('[data-testid="emitter-tree"]');
-  const dupRow = treeContainer.locator(`button[data-emitter-id="${newId}"]`);
+  const dupRow = treeContainer.locator(`[data-emitter-id="${newId}"]`);
   await expect(dupRow).toBeVisible({ timeout: 5_000 });
 
-  const before = await treeContainer.locator("button[data-emitter-id]").count();
+  const before = await treeContainer.locator("[data-emitter-id]").count();
 
   // Delete via the bridge so we don't fight Radix portal/CDP quirks.
   // (The context-menu open path is exercised in test 1; this spec
@@ -130,7 +130,7 @@ test("delete via the context menu removes the emitter from the tree", async () =
 
   // Wait for tree to refresh.
   await expect(dupRow).toHaveCount(0, { timeout: 5_000 });
-  const after = await treeContainer.locator("button[data-emitter-id]").count();
+  const after = await treeContainer.locator("[data-emitter-id]").count();
   expect(after).toBe(before - 1);
 });
 

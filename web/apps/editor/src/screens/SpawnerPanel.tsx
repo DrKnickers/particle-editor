@@ -262,7 +262,7 @@ export function SpawnerPanel({ bridge }: Props) {
             onClick={handleTrigger}
             aria-label="Spawn now"
             data-testid="spawner-spawn-now"
-            className="mt-2 rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white transition hover:bg-accent-strong-hover focus-ring"
+            className="mt-2 rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white transition motion-reduce:transition-none hover:bg-accent-strong-hover focus-ring"
           >
             Spawn now
           </button>

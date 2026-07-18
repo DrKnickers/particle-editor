@@ -1,3 +1,5 @@
+- status
+- contentinfo: "PAUSED ⇧ Shift: spawn instance"
 - dialog "Rescale Particle System":
   - heading "Rescale Particle System" [level=2]
   - button "Close"

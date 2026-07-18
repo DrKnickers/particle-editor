@@ -61,7 +61,7 @@ test("F2 on focused tree row enters inline rename (input appears)", async () => 
   }
 
   // Click the row to focus it.
-  const rowSelector = `button[data-emitter-id="${seed.firstId}"]`;
+  const rowSelector = `[data-emitter-id="${seed.firstId}"]`;
   await page.waitForSelector(rowSelector, { timeout: 5_000 });
   await page.click(rowSelector);
   // Press F2 — the React keyboard handler should swap the label for
@@ -117,7 +117,7 @@ test("Delete key on focused tree fires emitters/delete on the selection", async 
   });
 
   // Click the duplicate row to select it, then press Delete.
-  const rowSelector = `button[data-emitter-id="${seed.dupId}"]`;
+  const rowSelector = `[data-emitter-id="${seed.dupId}"]`;
   await page.waitForSelector(rowSelector, { timeout: 5_000 });
   await page.click(rowSelector);
   await page.keyboard.press("Delete");

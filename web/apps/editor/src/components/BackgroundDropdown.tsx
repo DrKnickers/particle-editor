@@ -32,6 +32,10 @@ export function BackgroundDropdown({ bridge }: Props) {
   const gameDomeRendering =
     skydomePrimaryStatus === "ok" ||
     skydomeSecondaryStatus === "ok";
+  // Scene-preview literals, NOT UI chrome: the navy gradient depicts the
+  // default space skydome and #000000 the viewport's unset background — both
+  // represent the 3D scene, which does not theme-flip. Deliberately outside
+  // the token system (theming audit 2026-07-18: benign by design).
   const swatchStyle: React.CSSProperties = gameDomeRendering
     ? { background: "linear-gradient(180deg, #2a3a5a 0%, #141c2b 100%)" }
     : slot === 0

@@ -152,7 +152,9 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
             <div className="mb-[7px] text-[10px] font-semibold uppercase tracking-[0.06em] text-text-3">
               Available mods
             </div>
-            <div className="mb-2 flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 px-2">
+            {/* focus-within accent border = the keyboard-focus cue for the
+                borderless input inside (design pass; was focus-invisible). */}
+            <div className="mb-2 flex h-[var(--row-h)] items-center gap-1.5 rounded-[var(--radius-sm)] border border-border-2 bg-bg-3 px-2 transition-colors motion-reduce:transition-none focus-within:border-accent">
               <Search className="size-3 shrink-0 text-text-3" strokeWidth={1.5} />
               <input
                 value={query}

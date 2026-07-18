@@ -16,6 +16,7 @@
 
 import { useState, useCallback } from "react";
 import { Tip } from "@/primitives/Tip";
+import { useRovingIndex } from "@/lib/use-roving-index";
 import * as Popover from "@radix-ui/react-popover";
 import type { RgbColor } from "./palette-store";
 import { usePaletteStore } from "./palette-store";
@@ -75,7 +76,16 @@ export function ColorButton({
   const [pickerColor, setPickerColor] = useState<RgbColor>(value);
   const [originalColor, setOriginalColor] = useState<RgbColor>(value);
   const [hexText, setHexText] = useState<string>(rgbToHex(value).slice(1).toUpperCase());
+  // Transient invalid flag for the hex field (design pass, C4): a rejected
+  // commit used to silently revert with zero feedback; now the field flashes
+  // the shared aria-invalid danger border until the next valid input.
+  const [hexInvalid, setHexInvalid] = useState(false);
   const [open, setOpen] = useState(false);
+
+  // Roving tabindex per swatch grid (design pass, B5): one Tab stop each
+  // instead of 48 sequential stops through the picker.
+  const basicRoving = useRovingIndex(BASIC_COLORS.length, { columns: 8 });
+  const customRoving = useRovingIndex(slots.length, { columns: 8 });
 
   const swatchStyle = { backgroundColor: rgbToHex(value) };
 
@@ -89,6 +99,7 @@ export function ColorButton({
     setHexText(raw.toUpperCase());
     const rgb = hexToRgb(raw);
     if (rgb) {
+      setHexInvalid(false);
       setPickerColor(rgb);
       onChange(rgb); // Live preview on each valid hex.
     }
@@ -97,10 +108,13 @@ export function ColorButton({
   const handleHexCommit = () => {
     const rgb = hexToRgb(hexText);
     if (rgb) {
+      setHexInvalid(false);
       setPickerColor(rgb);
       onChange(rgb);
     } else {
-      // Revert hex text to the current picker color on invalid input.
+      // Revert hex text to the current picker color on invalid input, and
+      // flag the field so the rejection is visible (C4).
+      setHexInvalid(true);
       setHexText(rgbToHex(pickerColor).slice(1).toUpperCase());
     }
   };
@@ -160,11 +174,13 @@ export function ColorButton({
           side="bottom"
           align="start"
           sideOffset={4}
-          className="z-50 w-72 rounded-md border border-border-2 bg-bg-2 p-3 shadow-[var(--shadow-soft)]"
+          className="z-50 w-72 rounded-md border border-border-2 bg-bg-2 p-3 shadow-[var(--shadow-soft)] popover-animate"
           onOpenAutoFocus={(e) => e.preventDefault()}
           onEscapeKeyDown={handleCancel}
         >
-          {/* Basic colors — 4 rows × 8 columns = 32 slots */}
+          {/* Basic colors — 4 rows × 8 columns = 32 slots. Roving tabindex
+              (design pass, B5): each grid is ONE Tab stop; arrows move within
+              it (Up/Down jump a row of 8). */}
           <div className="mb-2">
             <div className="mb-1 text-[10px] text-text-3">Basic colors</div>
             <div className="grid grid-cols-8 gap-0.5">
@@ -173,6 +189,7 @@ export function ColorButton({
                   <button
                     type="button"
                     aria-label={`Basic color ${rgbToHex(color).toUpperCase()}`}
+                    {...basicRoving.itemProps(i)}
                     onClick={() => handleSelectColor(color)}
                     className="size-5 rounded-sm border border-transparent hover:border-border-2 focus-ring"
                     style={{ backgroundColor: rgbToHex(color) }}
@@ -182,7 +199,7 @@ export function ColorButton({
             </div>
           </div>
 
-          {/* Custom colors — 2 rows × 8 columns = 16 slots */}
+          {/* Custom colors — 2 rows × 8 columns = 16 slots (own roving group). */}
           <div className="mb-3">
             <div className="mb-1 text-[10px] text-text-3">Custom colors</div>
             <div className="grid grid-cols-8 gap-0.5">
@@ -191,6 +208,7 @@ export function ColorButton({
                   <button
                     type="button"
                     aria-label={color ? `Custom color ${rgbToHex(color).toUpperCase()}` : `Custom slot ${i + 1} (empty)`}
+                    {...customRoving.itemProps(i)}
                     onClick={() => { if (color) handleSelectColor(color); }}
                     onContextMenu={(e) => { e.preventDefault(); setSlot(i, null); }}
                     className={`size-5 rounded-sm border hover:border-border-2 focus-ring ${
@@ -213,8 +231,9 @@ export function ColorButton({
               onBlur={handleHexCommit}
               onKeyDown={(e) => { if (e.key === "Enter") { handleHexCommit(); setOpen(false); } }}
               maxLength={6}
-              className="w-20 rounded border border-border-2 bg-panel-2 px-2 py-0.5 font-mono text-xs text-text outline-none transition-colors focus:border-accent"
+              className="w-20 rounded border border-border-2 bg-panel-2 px-2 py-0.5 font-mono text-xs text-text outline-none transition-colors motion-reduce:transition-none focus:border-accent"
               aria-label="Hex color input"
+              aria-invalid={hexInvalid || undefined}
               spellCheck={false}
             />
             <span
@@ -247,7 +266,7 @@ export function ColorButton({
                     const n = parseInt(e.target.value, 10);
                     if (!Number.isNaN(n)) handleSliderChange(ch, n);
                   }}
-                  className="w-12 rounded border border-border-2 bg-panel-2 px-1 py-0.5 text-right font-mono text-[10px] text-text-2 outline-none transition-colors focus:border-accent"
+                  className="w-12 rounded border border-border-2 bg-panel-2 px-1 py-0.5 text-right font-mono text-[10px] text-text-2 outline-none transition-colors motion-reduce:transition-none focus:border-accent"
                   aria-label={`${ch.toUpperCase()} value`}
                 />
               </div>
@@ -301,7 +320,9 @@ export function ColorButton({
             Add to custom colors
           </button>
 
-          <Popover.Arrow className="fill-neutral-700" />
+          {/* Matches the popover surface (bg-bg-2) so it theme-flips; was a
+              Tailwind palette gray that broke on the light theme. */}
+          <Popover.Arrow className="fill-[var(--bg-2)]" />
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

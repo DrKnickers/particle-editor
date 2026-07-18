@@ -277,8 +277,8 @@ function captureRootBlockGeometry(
   const bottoms: number[] = [];
   for (const r of roots) {
     const ids = collectSubtreeIds(r);
-    const firstEl = sc.querySelector(`button[data-emitter-id="${ids[0]}"]`);
-    const lastEl = sc.querySelector(`button[data-emitter-id="${ids[ids.length - 1]}"]`);
+    const firstEl = sc.querySelector(`[data-emitter-id="${ids[0]}"]`);
+    const lastEl = sc.querySelector(`[data-emitter-id="${ids[ids.length - 1]}"]`);
     if (firstEl === null || lastEl === null) return null;
     tops.push(firstEl.getBoundingClientRect().top - scTop);
     bottoms.push(lastEl.getBoundingClientRect().bottom - scTop);
@@ -301,7 +301,7 @@ function captureRowGeometry(
   const tops: number[] = [];
   const bottoms: number[] = [];
   for (const r of rows) {
-    const el = sc.querySelector(`button[data-emitter-id="${r.node.id}"]`);
+    const el = sc.querySelector(`[data-emitter-id="${r.node.id}"]`);
     if (el === null) return null;
     const rect = el.getBoundingClientRect();
     ids.push(r.node.id);
@@ -411,6 +411,9 @@ type RowProps = {
   // non-null when this row sits on a chain whose estimated alive
   // count crosses the warning threshold (guard cap, or the 10k advisory).
   chainWarning: ChainWarning | null;
+  // [design pass] True on the render where this row first appears (add/
+  // paste/duplicate) — the li wears .row-fade-in for its mount.
+  entering: boolean;
 };
 
 // Styled ContextMenu.Content for the emitter-tree row context menu --
@@ -418,7 +421,7 @@ type RowProps = {
 function StyledContextMenuContent({ children, ...rest }: ComponentProps<typeof ContextMenu.Content>) {
   return (
     <ContextMenu.Content
-      className="z-50 min-w-[220px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
+      className="z-50 min-w-[220px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)] popover-animate"
       {...rest}
     >
       {children}
@@ -430,7 +433,7 @@ function StyledContextMenuContent({ children, ...rest }: ComponentProps<typeof C
 function StyledContextSubContent({ children, ...rest }: ComponentProps<typeof ContextMenu.SubContent>) {
   return (
     <ContextMenu.SubContent
-      className="z-50 min-w-[200px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)]"
+      className="z-50 min-w-[200px] rounded-md border border-border-2 bg-bg-2 p-1 shadow-[var(--shadow-soft)] popover-animate"
       {...rest}
     >
       {children}
@@ -443,6 +446,7 @@ function EmitterRow({
   draggingId, draggingIds, indicator, startDrag,
   editing, beginEdit, setEditValue, commitEdit, cancelEdit,
   linkHover, onHoverLinkGroup, onDissolveLinkGroup, onSelectLinkGroup, chainWarning,
+  entering,
 }: RowProps) {
   const { node, depth, siblings } = row;
   const isPrimary = primaryId === node.id;
@@ -693,16 +697,26 @@ function EmitterRow({
       // [glide] the FLIP pass measures + animates rows via this attribute;
       // stableId survives reorders (unlike the positional node.id).
       data-stable-id={node.stableId}
-      className="relative"
+      className={entering ? "relative row-fade-in" : "relative"}
     >
       {/* The reorder affordance is the "make room" gap — a flow spacer in the
           EmitterTree list (see the flatRows map), not a per-row overlay, so the
           rows shift to reveal where the dragged emitter(s) will land. This row
           only paints the reparent onto-ring (reparentTintClass, below). */}
+      {/* [design pass B2] Row surface is a focusable DIV, not a <button> —
+          the visibility toggle inside is a real <button> now, and
+          button-in-button is invalid HTML with ambiguous AT semantics.
+          Roving tabindex: the PRIMARY row is the tree's single Tab stop
+          (tabIndex 0); all other rows are -1 and reached via the
+          container-level arrow-key handler, which focuses by
+          [data-emitter-id]. Enter/Space activate (select) like the old
+          button, guarded to the row itself so the inline-rename input
+          and the eye button keep their own keys. (Comment sits OUTSIDE the
+          Trigger: asChild requires exactly one child.) */}
       <ContextMenu.Root>
         <ContextMenu.Trigger asChild>
-          <button
-            type="button"
+          <div
+            tabIndex={isPrimary ? 0 : -1}
             onPointerDown={(e) => startDrag(node, e)}
             // Hovering a linked row lights up its whole group.
             onPointerEnter={() => onHoverLinkGroup(node.linkGroup || null)}
@@ -714,6 +728,17 @@ function EmitterRow({
                 shiftKey: e.shiftKey,
               })
             }
+            onKeyDown={(e) => {
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onRowClick(node.id, {
+                  ctrlKey: e.ctrlKey,
+                  metaKey: e.metaKey,
+                  shiftKey: e.shiftKey,
+                });
+              }
+            }}
             // Right-click also promotes a non-selected row to single-
             // select before the Radix menu opens — keeps menu state
             // consistent with what the user just targeted.
@@ -738,7 +763,7 @@ function EmitterRow({
             data-primary={isPrimary ? "true" : "false"}
             data-dragging={isDragging ? "true" : "false"}
             className={[
-              "grid w-full items-center gap-1.5 py-0.5 pr-2 text-left text-sm transition-colors",
+              "grid w-full items-center gap-1.5 py-0.5 pr-2 text-left text-sm transition-colors motion-reduce:transition-none",
               "focus-ring-inset",
               "border-l-2",
               borderClass,
@@ -786,13 +811,19 @@ function EmitterRow({
             {/* F1: visibility toggle on the LEFT (replaces the old role
                 dot). Always rendered so the grid columns stay stable
                 during inline rename. */}
+            {/* [design pass B2] Real <button> now that the row wrapper is a
+                div (was span[role=button] nested in a button — invalid).
+                Native Enter/Space activation; keydown stops propagating so
+                the row's own activation handler doesn't double-fire. Roving:
+                tabbable only on the primary row (one extra stop past the
+                row itself keeps the visibility control keyboard-reachable). */}
             <Tip
               content={node.visible ? "Hide emitter" : "Show emitter"}
               side="right"
             >
-              <span
-                role="button"
-                tabIndex={0}
+              <button
+                type="button"
+                tabIndex={isPrimary ? 0 : -1}
                 data-testid={`emitter-vis-${node.id}`}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
@@ -802,23 +833,14 @@ function EmitterRow({
                     params: { id: node.id, visible: !node.visible },
                   });
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void bridge.request({
-                      kind: "emitters/set-visible",
-                      params: { id: node.id, visible: !node.visible },
-                    });
-                  }
-                }}
+                onKeyDown={(e) => e.stopPropagation()}
                 aria-label={node.visible ? "Hide emitter" : "Show emitter"}
-                className="grid place-items-center w-4 h-4 shrink-0 rounded text-text-3 hover:bg-panel-2 hover:text-text cursor-pointer focus-ring"
+                className="grid place-items-center w-4 h-4 shrink-0 rounded text-text-3 transition-colors motion-reduce:transition-none hover:bg-panel-2 hover:text-text cursor-pointer focus-ring"
               >
                 {node.visible
                   ? <Eye className="size-3" />
                   : <EyeOff className="size-3" />}
-              </span>
+              </button>
             </Tip>
             {/* Name cell (col 3): the label (or inline-rename input) with the
                 link dot appended INLINE at its right end on linked rows.
@@ -952,7 +974,7 @@ function EmitterRow({
                 </span>
               </Tip>
             )}
-          </button>
+          </div>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           <StyledContextMenuContent
@@ -1120,7 +1142,7 @@ function EmitterRow({
 // pressed state (lighter bg + slight scale) via Tailwind `active:`,
 // suppressed while disabled.
 const TOOLBAR_BTN =
-  "flex h-7 w-7 items-center justify-center rounded text-text-2 transition hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 focus-ring";
+  "flex h-7 w-7 items-center justify-center rounded text-text-2 transition motion-reduce:transition-none hover:bg-panel-2 hover:text-text active:bg-panel-3 active:scale-95 disabled:cursor-not-allowed disabled:text-text-3 disabled:hover:bg-transparent disabled:active:scale-100 focus-ring";
 
 const NEW_EMITTER_MENU_ITEM =
   "flex select-none items-center gap-2 rounded px-2 py-1 text-xs text-text hover:bg-panel-2 data-[highlighted]:bg-panel-2 outline-none cursor-pointer data-[disabled]:text-text-3 data-[disabled]:cursor-not-allowed data-[disabled]:hover:bg-transparent";
@@ -1239,7 +1261,7 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
           </Tip>
           <Menubar.Portal>
             <Menubar.Content
-              className="min-w-[160px] rounded-md border border-border bg-bg-2 p-1 shadow-[var(--shadow-soft)] z-50"
+              className="min-w-[160px] rounded-md border border-border bg-bg-2 p-1 shadow-[var(--shadow-soft)] z-50 popover-animate"
               align="start"
               sideOffset={4}
             >
@@ -1448,6 +1470,28 @@ export function EmitterTree({ bridge }: Props) {
   const editingRef = useRef<RenameEditingState>(null);
   useEffect(() => { editingRef.current = editing; }, [editing]);
 
+  // [design pass B2, pre-PR fix] Rename commit/cancel unmounts the inline
+  // input, which drops focus to <body> — return it to the edited row so
+  // keyboard flow (F2 → Enter/Escape) continues where it was. Only when
+  // focus actually fell to body: if the user clicked elsewhere mid-edit,
+  // their focus target wins. Declared BEFORE the remount-restore effect
+  // below, so on a commit-driven rebuild this targeted restore runs first
+  // and that effect's body-check then no-ops.
+  const lastEditIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (editing !== null) {
+      lastEditIdRef.current = editing.id;
+      return;
+    }
+    const id = lastEditIdRef.current;
+    if (id === null) return;
+    lastEditIdRef.current = null;
+    if (document.activeElement !== document.body) return;
+    treeContainerRef.current
+      ?.querySelector<HTMLElement>(`[data-emitter-id="${id}"]`)
+      ?.focus();
+  }, [editing]);
+
   const beginEdit = useCallback((id: number, currentName: string) => {
     setEditing({ id, value: currentName, original: currentName });
   }, []);
@@ -1583,12 +1627,36 @@ export function EmitterTree({ bridge }: Props) {
     const container = treeContainerRef.current;
     if (container === null) return;
     const primaryBtn = primaryId !== null
-      ? container.querySelector<HTMLElement>(`button[data-emitter-id="${primaryId}"]`)
+      ? container.querySelector<HTMLElement>(`[data-emitter-id="${primaryId}"]`)
       : null;
     (primaryBtn ?? container).focus();
   }, [flatRows, primaryId]);
 
   const recording = useRecording();
+
+  // [design pass] Entrance fade for newly ADDED rows (add/paste/duplicate).
+  // Sibling reflow is the FLIP glide below; this covers the new row itself,
+  // which used to pop in. Track every stableId ever rendered; a row whose id
+  // is unseen this render wears .row-fade-in for its mount. Exempt: the
+  // initial mount (ref still null), full-tree rebuilds (undo/redo mints
+  // FRESH stableIds for EVERY row — fading the whole tree would read as a
+  // flash, per the remount note above), and --record runs (frame
+  // determinism; CSS side is also killed via [data-recording]).
+  const seenStableIdsRef = useRef<Set<number> | null>(null);
+  const enteringIds = useMemo<ReadonlySet<number>>(() => {
+    const seen = seenStableIdsRef.current;
+    if (seen === null || recording) return new Set();
+    const fresh = flatRows.filter((r) => !seen.has(r.node.stableId));
+    if (fresh.length === 0 || fresh.length === flatRows.length) return new Set();
+    return new Set(fresh.map((r) => r.node.stableId));
+  }, [flatRows, recording]);
+  useEffect(() => {
+    // Replace (not accumulate): the set is "the PREVIOUS render's ids", so it
+    // can't grow unboundedly across a session (pre-PR review). A stableId
+    // deleted and re-added later fades in again — correct, it IS an add.
+    seenStableIdsRef.current = new Set(flatRows.map((r) => r.node.stableId));
+  }, [flatRows]);
+
   const flipPositionsRef = useRef<FlipPositions>(new Map());
   useLayoutEffect(() => {
     const sc = treeScrollRef.current;
@@ -2191,8 +2259,8 @@ export function EmitterTree({ bridge }: Props) {
   const focusRowById = useCallback((id: number) => {
     if (treeContainerRef.current === null) return;
     const btn = treeContainerRef.current.querySelector(
-      `button[data-emitter-id="${id}"]`,
-    ) as HTMLButtonElement | null;
+      `[data-emitter-id="${id}"]`,
+    ) as HTMLElement | null;
     btn?.focus();
   }, []);
 
@@ -2297,7 +2365,11 @@ export function EmitterTree({ bridge }: Props) {
       data-primary-id={primaryId ?? ""}
       data-dragging-id={draggingId ?? ""}
       data-editing-id={editing?.id ?? ""}
-      tabIndex={0}
+      // [design pass B2] -1: rows rove (the primary row is the tree's Tab
+      // stop), so the container no longer takes its own stop — but it stays
+      // programmatically focusable for the initial-load / remount-restore
+      // focus paths above.
+      tabIndex={-1}
       onKeyDown={handleTreeKeyDown}
       // [glide] focus-restore bookkeeping (see treeHadFocusRef): removal of a
       // focused element fires no blur, so this flag is the only record that
@@ -2312,9 +2384,25 @@ export function EmitterTree({ bridge }: Props) {
     >
       {tree !== null && <SystemLoadChip bridge={bridge} systemLoad={systemLoad} />}
       {tree === null ? (
-        <div className="flex-1 min-h-0 text-text-3 text-sm">(loading…)</div>
+        // role="status": announce the loading→loaded transition to AT (the
+        // tree used to swap silently).
+        <div role="status" className="flex-1 min-h-0 text-text-3 text-sm">
+          Loading emitters…
+        </div>
       ) : rootChildren.length === 0 ? (
-        <div className="flex-1 min-h-0 text-text-3 text-sm">(no emitters)</div>
+        // Teaching empty state (design pass, D1): say what belongs here and
+        // point at the next action instead of the old bare "(no emitters)".
+        <div
+          role="status"
+          data-testid="emitter-tree-empty"
+          className="flex flex-1 min-h-0 flex-col items-center justify-center gap-1 px-4 text-center"
+        >
+          <span className="text-sm text-text-2">No emitters yet</span>
+          <span className="text-xs text-text-3">
+            Add one with the + button below, or right-click a row later to
+            duplicate, link, and reorder.
+          </span>
+        </div>
       ) : (
         // Wrap the <ul> in a relative-positioned container so the
         // bracket gutter (absolute, right-aligned) can stack alongside.
@@ -2383,6 +2471,7 @@ export function EmitterTree({ bridge }: Props) {
                   onDissolveLinkGroup={handleDissolveLinkGroup}
                   onSelectLinkGroup={handleSelectLinkGroup}
                   chainWarning={chainWarnings.get(row.node.stableId) ?? null}
+                  entering={enteringIds.has(row.node.stableId)}
                 />
               </Fragment>
             );

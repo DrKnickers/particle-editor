@@ -32,7 +32,11 @@
   --hover: #252525;
   --text: #dddddd;
   --text-2: #ababab;
-  --text-3: #8c8c8c; /* WCAG AA: ~5.5:1 on --bg (was #747474 = ~4.05:1, sub-AA) */
+  --text-3: #8c8c8c; /* WCAG AA verified against --bg ONLY (~5.5:1; was #747474
+     = ~4.05:1, sub-AA). CAUTION: on lighter surfaces the ratio shrinks —
+     ~4.27:1 on --panel-3 (#2a2a2a), below AA for normal text. Safe for
+     large/secondary text everywhere, but don't treat this token as
+     universally AA (design audit 2026-07-18). */
   --accent: #4ea3ff;
   --accent-2: #2f7fd4;
   --accent-soft: rgba(78, 163, 255, 0.16);
@@ -151,7 +155,10 @@
   --hover: #e9e9e9;
   --text: #1f1f1f;
   --text-2: #525252;
-  --text-3: #666666; /* WCAG AA: ~4.85:1 on --bg (was #848484 = ~3.2:1, sub-AA) */
+  --text-3: #666666; /* WCAG AA verified against --bg ONLY (~4.85:1; was
+     #848484 = ~3.2:1, sub-AA). Same caveat as the dark value: lighter
+     surfaces (e.g. --bg-3 #ffffff is fine, but tinted panels vary) are not
+     individually verified — don't treat as universally AA. */
   --accent: #2f7fd4;
   --accent-2: #1f63b0;
   --accent-soft: rgba(47, 127, 212, 0.14);

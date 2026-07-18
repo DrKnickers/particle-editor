@@ -41,9 +41,17 @@ export async function captureDomA11y(page: Page): Promise<string> {
   // ~0ms when no tooltip is exiting (the common case for non-keyboard
   // surfaces); reduced-motion or a dropped animation can't hang it —
   // Radix unmounts on animation end and the 2s timeout backstops.
+  // Same race for menu/popover exits since the 2026-07-18 design pass put
+  // .popover-animate on the menubar dropdowns: a surface opened VIA a menu
+  // (e.g. View → Lighting…) snapshots while the menu plays its 110ms exit,
+  // nondeterministically including the whole menu subtree (dialog-lighting
+  // flaked on exactly this). Radix keeps content mounted while
+  // data-state="closed"; wait for both families to finish exiting.
   await page
     .waitForFunction(
-      () => !document.querySelector('.tip-animate[data-state="closed"]'),
+      () =>
+        !document.querySelector('.tip-animate[data-state="closed"]') &&
+        !document.querySelector('.popover-animate[data-state="closed"]'),
       null,
       { timeout: 2_000 },
     )
