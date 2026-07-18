@@ -214,7 +214,10 @@
   - button "Acceleration (arc)"
   - button "Squiggle amplitude"
   - button "Squiggle frequency"
-- contentinfo: "FPS — · Emitters — · Particles — · Instances — · Cursor — PAUSED ⇧ Shift: spawn instance"
+- contentinfo:
+  - text: FPS — · Emitters — · Particles — · Instances — · Cursor —
+  - status
+  - text: "PAUSED ⇧ Shift: spawn instance"
 - menu "View":
   - menuitem "Ground"
   - menuitem "Grid"

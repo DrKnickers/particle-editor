@@ -1,5 +1,7 @@
 - status
-- contentinfo: "PAUSED ⇧ Shift: spawn instance"
+- contentinfo:
+  - status
+  - text: PAUSED
 - dialog "Import Emitters":
   - heading "Import Emitters" [level=2]
   - button "Close"

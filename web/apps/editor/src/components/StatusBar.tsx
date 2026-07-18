@@ -13,6 +13,7 @@ import { memo, useEffect, useState } from "react";
 import type { Bridge } from "@particle-editor/bridge-schema";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 import { usePresence } from "@/lib/use-presence";
+import { STATUS_FEEDBACK_CLEAR_MS, useStatusFeedback } from "@/lib/status-feedback";
 
 // Mirrors --motion-fast-out (tokens.css) — the .fade-animate-fast exit duration.
 const PAUSED_EXIT_MS = 110;
@@ -75,6 +76,27 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
   // indicator eases in/out instead of popping with the 4 Hz cadence around it.
   const pausedPresence = usePresence(paused, PAUSED_EXIT_MS);
 
+  // Transient action feedback (F4): latest-wins message from the
+  // status-feedback store, auto-cleared after STATUS_FEEDBACK_CLEAR_MS —
+  // epoch-guarded so a rapid follow-up action restarts the timer instead of
+  // being clipped by the previous one's clear.
+  const feedbackMessage = useStatusFeedback((s) => s.message);
+  const feedbackEpoch = useStatusFeedback((s) => s.epoch);
+  const feedbackPresence = usePresence(feedbackMessage !== null, PAUSED_EXIT_MS);
+  // Keep the last text through the exit fade (message is already null then).
+  const [lastFeedback, setLastFeedback] = useState("");
+  useEffect(() => {
+    if (feedbackMessage !== null) setLastFeedback(feedbackMessage);
+  }, [feedbackMessage]);
+  useEffect(() => {
+    if (feedbackMessage === null) return;
+    const t = window.setTimeout(
+      () => useStatusFeedback.getState().clear(feedbackEpoch),
+      STATUS_FEEDBACK_CLEAR_MS,
+    );
+    return () => window.clearTimeout(t);
+  }, [feedbackMessage, feedbackEpoch]);
+
   useEffect(() => {
     const offStats = bridge.on("stats/tick", (e) => {
       setStats(e.payload);
@@ -112,23 +134,37 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
       <StatsCells stats={stats} />
       <span className="text-text-3">·</span>
       {cell("Cursor", cursorText, cursor === null)}
-      {/* Right-aligned group: PAUSED state + always-on spawn hint
-          (the legacy main.cpp's permanent rightmost pane). aria-live on this
-          PERSISTENT container (not the transient span) so screen readers
-          announce pause/resume — a live region must pre-exist its content
-          change to fire. The spawn hint is static, so PAUSED is the only
-          content delta this region ever announces. */}
-      <div aria-live="polite" className="ml-auto flex items-center gap-3">
-        {pausedPresence.mounted && (
-          <span
-            className="fade-animate-fast font-mono font-semibold tracking-wide text-warning-fg"
-            data-state={pausedPresence.state}
-            onAnimationEnd={pausedPresence.onAnimationEnd}
-          >
-            PAUSED
-          </span>
-        )}
-        <span className="text-text-3">⇧ Shift: spawn instance</span>
+      {/* Right-aligned group: transient action feedback + PAUSED + the
+          always-on spawn hint (the legacy main.cpp's permanent rightmost
+          pane). Feedback and PAUSED each own a PERSISTENT polite live region
+          (a live region must pre-exist its content change to fire, and
+          sharing one region would interleave/re-announce unrelated
+          messages — plan-review finding). Feedback sits LEFT of the
+          right-anchored pair and truncates, so the hint never moves. */}
+      <div className="ml-auto flex min-w-0 items-center gap-3">
+        <span role="status" aria-live="polite" className="min-w-0" data-testid="status-feedback">
+          {feedbackPresence.mounted && (
+            <span
+              className="fade-animate-fast block max-w-[300px] truncate whitespace-nowrap text-text-3"
+              data-state={feedbackPresence.state}
+              onAnimationEnd={feedbackPresence.onAnimationEnd}
+            >
+              {feedbackMessage ?? lastFeedback}
+            </span>
+          )}
+        </span>
+        <span aria-live="polite">
+          {pausedPresence.mounted && (
+            <span
+              className="fade-animate-fast font-mono font-semibold tracking-wide text-warning-fg"
+              data-state={pausedPresence.state}
+              onAnimationEnd={pausedPresence.onAnimationEnd}
+            >
+              PAUSED
+            </span>
+          )}
+        </span>
+        <span className="shrink-0 text-text-3">⇧ Shift: spawn instance</span>
       </div>
     </footer>
   );

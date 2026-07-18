@@ -15,6 +15,7 @@ import { create } from "zustand";
 import type { Bridge, EmitterTreeDto, EmitterTreeNode } from "@particle-editor/bridge-schema";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
 import { useFileOpErrorStore } from "@/lib/file-op";
+import { announceWhenOk } from "./status-feedback";
 
 export type DeleteImpact = {
   affectedCount: number; // deduped union of every selected id's subtree
@@ -98,9 +99,15 @@ export function collapseToRoots(ids: number[], tree: EmitterTreeDto | null): num
 // stay valid as earlier-deleted ones vanish.
 export function performDelete(bridge: Bridge, ids: number[], tree: EmitterTreeDto | null): void {
   const roots = collapseToRoots(ids, tree);
-  for (const id of [...roots].sort((a, b) => b - a)) {
-    void bridge.request({ kind: "emitters/delete", params: { id } });
-  }
+  const requests = [...roots]
+    .sort((a, b) => b - a)
+    .map((id) => bridge.request({ kind: "emitters/delete", params: { id } }));
+  // StatusBar feedback once EVERY delete resolves (F4) — a multi-root delete
+  // is one gesture, so it announces once.
+  announceWhenOk(
+    Promise.all(requests),
+    `Deleted ${roots.length === 1 ? "emitter" : `${roots.length} emitters`} — Ctrl+Z to undo`,
+  );
 }
 
 type DeleteConfirmStore = {

@@ -186,4 +186,7 @@
     - button "Mirror Sun" [disabled]
     - button "Reset"
     - button "Bloom"
-- contentinfo: "FPS — · Emitters — · Particles — · Instances — · Cursor — PAUSED ⇧ Shift: spawn instance"
+- contentinfo:
+  - text: FPS — · Emitters — · Particles — · Instances — · Cursor —
+  - status
+  - text: "PAUSED ⇧ Shift: spawn instance"

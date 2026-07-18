@@ -192,6 +192,15 @@ export const CHROME_SURFACES: SurfaceCapture[] = [
 export const DIALOG_SURFACES: SurfaceCapture[] = [
   // ── Menu-triggered Modal dialogs ─────────────────────────────────
   {
+    id: "dialog-keyboard-shortcuts",
+    setup: async (page) => {
+      await page.locator('button:has-text("Help")').click();
+      await page.locator('[data-testid="menu-help-shortcuts"]').click();
+      await page.waitForSelector('[role="dialog"]');
+    },
+    teardown: async (page) => { await dismissModals(page); },
+  },
+  {
     id: "dialog-about",
     setup: async (page) => {
       await page.locator('button:has-text("Help")').click();

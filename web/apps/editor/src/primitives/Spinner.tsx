@@ -503,7 +503,7 @@ export function Spinner({
       {/* Unit suffix — positioned to the left of the arrow column. */}
       {unit && (
         <span
-          className="pointer-events-none absolute text-xs text-text-3"
+          className="pointer-events-none absolute text-xs text-text-3-on-panel"
           style={{ right: `${ARROW_W + 4}px`, top: "50%", transform: "translateY(-50%)" }}
           aria-hidden="true"
         >

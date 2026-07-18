@@ -91,6 +91,15 @@ describe("token contrast (WCAG AA, normal text >= 4.5:1)", () => {
       }
     });
 
+    it(`${name}: --text-3-on-panel clears AA on the WHOLE surface ramp (F6)`, () => {
+      // The on-panel tertiary variant exists precisely to be safe where
+      // --text-3 is not — assert it against every base + panel surface,
+      // including panel-3 (the one --text-3 can't clear on dark).
+      for (const bg of ["bg", "bg-2", "bg-3", "panel", "panel-2", "panel-3"]) {
+        expect(contrast(t("text-3-on-panel"), t(bg))).toBeGreaterThanOrEqual(AA);
+      }
+    });
+
     it(`${name}: --text and --text-2 on --bg (regression guard)`, () => {
       expect(contrast(t("text"), t("bg"))).toBeGreaterThanOrEqual(AA);
       expect(contrast(t("text-2"), t("bg"))).toBeGreaterThanOrEqual(AA);

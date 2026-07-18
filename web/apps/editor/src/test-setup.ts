@@ -107,6 +107,17 @@ if (typeof window.localStorage === "undefined") {
 // shim (so prefers-color-scheme reads always return false → default
 // to light theme in tests; ThemeToggle still exercises localStorage
 // persistence even if the matchMedia branch is dead).
+// jsdom doesn't implement document.elementFromPoint (no layout). Stub a
+// null-returning shim so the ViewportSlot Shift-spawn gate (which hit-tests
+// at keydown) is exercisable — suites that need a hit spy it per case.
+if (typeof document.elementFromPoint === "undefined") {
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    writable: true,
+    value: () => null,
+  });
+}
+
 if (typeof window.matchMedia === "undefined") {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,

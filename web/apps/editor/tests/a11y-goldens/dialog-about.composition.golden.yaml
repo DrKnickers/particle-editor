@@ -1,5 +1,7 @@
 - status
-- contentinfo: "PAUSED ⇧ Shift: spawn instance"
+- contentinfo:
+  - status
+  - text: PAUSED
 - dialog "About Particle Editor":
   - heading "About Particle Editor" [level=2]
   - button "Close"

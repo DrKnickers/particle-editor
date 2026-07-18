@@ -35,6 +35,7 @@ import { runWhenIdle } from "@/lib/run-after-paint";
 import { useEngineField } from "@/lib/use-engine-snapshot";
 import { refreshModStack } from "@/lib/mod-stack";
 import { requestDeleteEmitters } from "@/lib/delete-emitters";
+import { announceWhenOk } from "@/lib/status-feedback";
 import { bumpTextureEpoch } from "@/lib/atlas-preview-cache";
 import {
   useEmitterSelectionPrimary,
@@ -53,6 +54,7 @@ import { RESET_CAMERA } from "@/lib/reset-camera";
 import { Modal } from "@/components/Modal";
 import { PreferencesDialog } from "@/screens/PreferencesDialog";
 import { LoadOrderDialog } from "@/screens/LoadOrderDialog";
+import { ShortcutsDialog } from "@/screens/ShortcutsDialog";
 
 type Props = {
   bridge: Bridge;
@@ -132,6 +134,7 @@ export function MenuBar({
   // View → Reset View Settings prompt visibility.
   const [resetViewOpen, setResetViewOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [menuValue, setMenuValue] = useState("");
 
   // list of discovered mods, fetched separately from the
@@ -357,23 +360,23 @@ export function MenuBar({
   // ── Emitters menu handlers ─────────────────────────────────
 
   const handleAddRoot = () => {
-    void bridge.request({ kind: "emitters/add-root", params: {} });
+    announceWhenOk(bridge.request({ kind: "emitters/add-root", params: {} }), "Added emitter — Ctrl+Z to undo");
   };
 
   const handleAddLifetimeChild = () => {
     if (primaryEmitterId === null) return;
-    void bridge.request({
+    announceWhenOk(bridge.request({
       kind: "emitters/add-lifetime-child",
       params: { parentId: primaryEmitterId },
-    });
+    }), "Added lifetime child — Ctrl+Z to undo");
   };
 
   const handleAddDeathChild = () => {
     if (primaryEmitterId === null) return;
-    void bridge.request({
+    announceWhenOk(bridge.request({
       kind: "emitters/add-death-child",
       params: { parentId: primaryEmitterId },
-    });
+    }), "Added death child — Ctrl+Z to undo");
   };
 
   const handleRenameEmitter = () => {
@@ -398,11 +401,11 @@ export function MenuBar({
   const handleCut = () => {
     const ids = getEmitterSelectionSnapshot().ids;
     if (ids.length === 0) return;
-    void bridge.request({ kind: "emitters/cut", params: { ids } });
+    announceWhenOk(bridge.request({ kind: "emitters/cut", params: { ids } }), `Cut ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
     markEmittersCopied();
   };
   const handlePaste = () => {
-    void bridge.request({ kind: "emitters/paste", params: {} });
+    announceWhenOk(bridge.request({ kind: "emitters/paste", params: {} }), "Pasted — Ctrl+Z to undo");
   };
   const handleDeleteSelection = () => {
     const ids = getEmitterSelectionSnapshot().ids;
@@ -1031,6 +1034,13 @@ export function MenuBar({
             align="start"
             sideOffset={4}
           >
+            <Menubar.Item
+              className={ITEM}
+              data-testid="menu-help-shortcuts"
+              onSelect={() => setShortcutsOpen(true)}
+            >
+              Keyboard Shortcuts&#8230;
+            </Menubar.Item>
             <Menubar.Item className={ITEM} onSelect={() => onOpenAboutDialog()}>
               About
             </Menubar.Item>
@@ -1040,6 +1050,9 @@ export function MenuBar({
     </Menubar.Root>
 
     <PreferencesDialog bridge={bridge} open={prefsOpen} onOpenChange={setPrefsOpen} />
+
+    {/* Help -> Keyboard Shortcuts... (design follow-ups, F1) */}
+    <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
     {/* Mod load-order editor — opened from Mods ▸ Edit Load Order… */}
     <LoadOrderDialog

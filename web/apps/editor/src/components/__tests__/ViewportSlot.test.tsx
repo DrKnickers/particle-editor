@@ -266,14 +266,74 @@ describe("ViewportSlot — input forwarding", () => {
     expect(wheel?.params.deltaY).toBe(-120);  // DOM +100 → Win32 -WHEEL_DELTA
   });
 
-  it("window keydown of VK_SHIFT (keyCode=16) dispatches viewport/input { type: 'keydown', vk: 16 }", () => {
+  // ── Shift-spawn gate (2026-07-18): the Shift KEYDOWN forwards only while
+  // the pointer is over the viewport canvas (elementFromPoint hit-test at
+  // keydown; jsdom has no layout, so the hit-test is spied per case). Keyups
+  // and every other key are ungated.
+
+  it("Shift keydown forwards when the pointer is over the canvas", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
-    fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
-    const inputs = findViewportInputCalls(bridge);
-    const key = inputs.find((r) => r.params.type === "keydown");
-    expect(key).toBeTruthy();
-    expect(key?.params).toMatchObject({ type: "keydown", vk: 16, repeat: false });
+    const canvas = screen.getByTestId("viewport-canvas");
+    const efp = vi.spyOn(document, "elementFromPoint").mockReturnValue(canvas);
+    try {
+      fireEvent.pointerMove(window, { clientX: 50, clientY: 50 });
+      fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
+      const key = findViewportInputCalls(bridge).find((r) => r.params.type === "keydown");
+      expect(key).toBeTruthy();
+      expect(key?.params).toMatchObject({ type: "keydown", vk: 16, repeat: false });
+    } finally {
+      efp.mockRestore();
+    }
+  });
+
+  it("Shift keydown is SUPPRESSED when the pointer is over UI (not the canvas)", () => {
+    const bridge = makeStubBridge();
+    render(
+      <div>
+        <button data-testid="some-ui" type="button">ui</button>
+        <ViewportSlot bridge={bridge} />
+      </div>,
+    );
+    const ui = screen.getByTestId("some-ui");
+    const efp = vi.spyOn(document, "elementFromPoint").mockReturnValue(ui);
+    try {
+      fireEvent.pointerMove(window, { clientX: 5, clientY: 5 });
+      fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
+      expect(findViewportInputCalls(bridge).find((r) => r.params.type === "keydown")).toBeUndefined();
+    } finally {
+      efp.mockRestore();
+    }
+  });
+
+  it("Shift KEYUP always forwards (an active spawn must stay endable off-canvas)", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const efp = vi.spyOn(document, "elementFromPoint").mockReturnValue(document.body);
+    try {
+      fireEvent.pointerMove(window, { clientX: 5, clientY: 5 });
+      fireEvent.keyUp(window, { keyCode: 16, key: "Shift" });
+      const key = findViewportInputCalls(bridge).find((r) => r.params.type === "keyup");
+      expect(key).toBeTruthy();
+      expect(key?.params).toMatchObject({ type: "keyup", vk: 16 });
+    } finally {
+      efp.mockRestore();
+    }
+  });
+
+  it("non-Shift keys forward regardless of pointer position", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const efp = vi.spyOn(document, "elementFromPoint").mockReturnValue(document.body);
+    try {
+      fireEvent.pointerMove(window, { clientX: 5, clientY: 5 });
+      fireEvent.keyDown(window, { keyCode: 70, key: "f" });
+      const key = findViewportInputCalls(bridge).find((r) => r.params.type === "keydown");
+      expect(key).toBeTruthy();
+      expect(key?.params).toMatchObject({ type: "keydown", vk: 70 });
+    } finally {
+      efp.mockRestore();
+    }
   });
 
   it("TYPING_TAGS guard: keydown with target=INPUT does NOT dispatch", () => {
@@ -408,8 +468,8 @@ describe("ViewportSlot — modal-open key suppression (#12)", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
     useModalOpen.setState({ count: 1 });            // a blocking modal is open
-    fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
-    fireEvent.keyUp(window, { keyCode: 16, key: "Shift" });
+    fireEvent.keyDown(window, { keyCode: 70, key: "f" });
+    fireEvent.keyUp(window, { keyCode: 70, key: "f" });
     const keys = findViewportInputCalls(bridge).filter(
       (r) => r.params.type === "keydown" || r.params.type === "keyup",
     );
@@ -419,7 +479,7 @@ describe("ViewportSlot — modal-open key suppression (#12)", () => {
   it("forwards viewport keys when no modal is open", () => {
     const bridge = makeStubBridge();
     render(<ViewportSlot bridge={bridge} />);
-    fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
+    fireEvent.keyDown(window, { keyCode: 70, key: "f" });
     expect(findViewportInputCalls(bridge).some((r) => r.params.type === "keydown")).toBe(true);
   });
 

@@ -65,6 +65,11 @@
   --danger-fg: #e06c75;
   --success-fg: #6fbf7a;
   --warning-fg: #e0a14b;
+  /* Tertiary text FOR PANEL SURFACES (design follow-ups, F6). --text-3 is AA
+     against --bg only; this variant clears AA on the panel ramp too
+     (#999999 on --panel-3 #2a2a2a ≈ 5.0:1). Scope: on-panel fine print
+     (spinner unit suffixes and similar) — not a general text color. */
+  --text-3-on-panel: #999999;
   --atlas-selected: #ffb000;
   /* Atlas-cell overlays. --overlay-scrim is a FIXED translucent scrim for the
      index badge — it sits over arbitrary sprite imagery, so it must NOT
@@ -179,6 +184,9 @@
   --danger-fg: #b53224;
   --success-fg: #2b762f;  /* slightly deeper than #2e7d32 to clear AA on --bg (4.34→4.76) */
   --warning-fg: #8a5a00;
+  /* Light-theme on-panel tertiary: AA on --panel-3 #f0f0f0 (≈ 5.4:1) and
+     every lighter panel. */
+  --text-3-on-panel: #5c5c5c;
   --atlas-selected: #c77700;
   /* Cell hover tint darkens on light (the dark theme lightens). Both bumped
      for visibility over loud/busy thumbnails; light stays a touch below dark's
@@ -214,6 +222,7 @@
   --color-text: var(--text);
   --color-text-2: var(--text-2);
   --color-text-3: var(--text-3);
+  --color-text-3-on-panel: var(--text-3-on-panel);
   --color-accent: var(--accent);
   --color-accent-2: var(--accent-2);
   --color-accent-strong: var(--accent-strong);

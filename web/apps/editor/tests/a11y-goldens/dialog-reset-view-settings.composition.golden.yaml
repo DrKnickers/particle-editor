@@ -1,5 +1,7 @@
 - status
-- contentinfo: "PAUSED ⇧ Shift: spawn instance"
+- contentinfo:
+  - status
+  - text: PAUSED
 - dialog "Reset View Settings":
   - heading "Reset View Settings" [level=2]
   - button "Close"

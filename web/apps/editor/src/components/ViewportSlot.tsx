@@ -12,6 +12,9 @@ import { useDockAnim } from "../lib/dock-anim";
 import { useModalOpen } from "../lib/modal-open";
 import { ManipulatorReadout } from "./ManipulatorReadout";
 import { ViewportToggleOverlay } from "./ViewportToggleOverlay";
+import { useEmitterTreeStore } from "@/lib/emitter-tree";
+import { useRecording } from "@/lib/record-mode";
+import { usePresence } from "@/lib/use-presence";
 
 type Props = { bridge: Bridge };
 
@@ -220,11 +223,33 @@ export function ViewportSlot({ bridge }: Props) {
       send(makeWheelEvent(e, e.clientX, e.clientY));
     };
 
+    // Shift-spawn gate: the Shift KEYDOWN forwards only when the pointer is
+    // actually over the viewport canvas, so pressing Shift while working the
+    // surrounding UI can no longer spawn an instance at a stale cursor
+    // position (user request, 2026-07-18). Hit-tested at keydown via
+    // elementFromPoint against window-tracked coordinates — pointerenter/
+    // leave would go stale during a canvas-captured drag that crosses onto
+    // the UI. Keyups always forward (an active spawn must stay endable),
+    // and every other key is untouched. Note: Shift+LMB INSIDE the viewport
+    // still spawns via the pointer event's own modifier bits (desired).
+    let lastClientX = -1;
+    let lastClientY = -1;
+    const onWindowPointerMove = (e: PointerEvent) => {
+      lastClientX = e.clientX;
+      lastClientY = e.clientY;
+    };
+    const pointerOverCanvas = (): boolean => {
+      if (lastClientX < 0) return false;
+      const el = document.elementFromPoint(lastClientX, lastClientY);
+      return el !== null && (el === canvas || canvas.contains(el));
+    };
+
     // Suppress global viewport keys while any blocking modal is open — otherwise a
     // key pressed with focus on a modal button drives the viewport behind it
     // (release-audit #12).
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || useModalOpen.getState().count > 0) return;
+      if (e.key === "Shift" && !pointerOverCanvas()) return;
       send(makeKeyEvent("keydown", e));
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -264,6 +289,9 @@ export function ViewportSlot({ bridge }: Props) {
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibilityChange);
+    // Passive coordinate tracking only (no work per event) — feeds the
+    // Shift-spawn gate's elementFromPoint hit-test above.
+    window.addEventListener("pointermove", onWindowPointerMove, { passive: true });
 
     return () => {
       canvas.removeEventListener("pointerdown", onPointerDown);
@@ -277,6 +305,7 @@ export function ViewportSlot({ bridge }: Props) {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pointermove", onWindowPointerMove);
       cancelPendingMouseMoveFrame();
       pendingMouseMove = null;
       unsubModalOpen();
@@ -300,6 +329,14 @@ export function ViewportSlot({ bridge }: Props) {
         data-testid="viewport-canvas"
         className="absolute inset-0 w-full h-full"
       />
+      {/* Post-deletion empty-state hint (design follow-ups, F3). A fresh
+          Untitled always has one host-created default emitter, so this shows
+          only after the user deletes everything — the biggest region of the
+          screen otherwise goes silently blank. Presence-faded; pointer-
+          events-none (never steals viewport input); hidden under --record
+          via useRecording (the CSS kill-switch only stops the fade, it
+          doesn't hide). */}
+      <ViewportEmptyHint />
       {/* In-drag readout pill. Floats up-right of the projected
           gizmo origin while a reference-object gizmo is being dragged.
           `pointer-events-none` (set on the pill itself) so it never steals
@@ -310,6 +347,28 @@ export function ViewportSlot({ bridge }: Props) {
           bottom-left. `pointer-events-auto` (on .vp-overlay) so its buttons are
           clickable over the canvas; it's diagonally opposite the readout pill. */}
       <ViewportToggleOverlay bridge={bridge} />
+    </div>
+  );
+}
+
+// See the mount-site comment (F3). Split out so the 4Hz-adjacent stores it
+// subscribes to never re-render the input-forwarding parent.
+function ViewportEmptyHint() {
+  const tree = useEmitterTreeStore((s) => s.tree);
+  const recording = useRecording();
+  const empty = tree !== null && tree.root.children.length === 0;
+  const presence = usePresence(empty && !recording, 150);
+  if (!presence.mounted) return null;
+  return (
+    <div
+      role="status"
+      data-testid="viewport-empty-hint"
+      data-state={presence.state}
+      onAnimationEnd={presence.onAnimationEnd}
+      className="fade-animate pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 text-center"
+    >
+      <span className="text-sm text-text-2">No emitters</span>
+      <span className="text-xs text-text-3">Press + to add one, or Ctrl+Z to undo</span>
     </div>
   );
 }

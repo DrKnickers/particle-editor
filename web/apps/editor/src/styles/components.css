@@ -81,6 +81,15 @@
    imperatively on mousemove; only opacity transitions, position snaps). */
 .atlas-hover-fade { transition: opacity var(--motion-fast-in) var(--ease-entrance); }
 
+/* Static skeletons (design follow-ups, F5). Shape-matched loading stand-ins
+   for panel content — deliberately NO shimmer/pulse (calm register; also
+   means zero new motion to gate for reduced-motion/--record). */
+.skeleton-row {
+  height: var(--row-h);
+  border-radius: var(--radius-xs);
+  background: var(--panel-2);
+}
+
 /* Invalid-input language (design pass, C4). The app's first shared error
    vocabulary for fields: anything flagged aria-invalid paints the danger
    border (foreground variant — AA on both themes). !important so it wins

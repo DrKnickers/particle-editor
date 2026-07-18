@@ -85,6 +85,7 @@ import { rectFromPoints, emittersInMarquee, mergeMarqueeSelection, type Rect } f
 import { computeAutoscrollDelta } from "@/lib/drag-autoscroll";
 import { computeFlipDeltas, pickFlipDuration, type FlipPositions } from "@/lib/flip";
 import { useRecording } from "@/lib/record-mode";
+import { announceWhenOk } from "@/lib/status-feedback";
 import {
   computeRootGapIndex,
   isDescendant,
@@ -555,7 +556,10 @@ function EmitterRow({
   const handleDuplicate = () => {
     // Duplicate the resolved target set (whole selection if the clicked row
     // is in it, else just that row); the selection moves to the new copies.
-    void duplicateEmitters(bridge, resolveTargetIds());
+    {
+      const ids = resolveTargetIds();
+      announceWhenOk(duplicateEmitters(bridge, ids) as Promise<unknown>, `Duplicated ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
+    }
   };
   const handleDelete = () => {
     // Delete the resolved target set — the whole selection when the
@@ -577,7 +581,7 @@ function EmitterRow({
   // Context-menu clipboard + New Root — reuse the same
   // bridge calls as the tree's Ctrl+C/X/V so behaviour stays identical.
   const handleNewRoot = () => {
-    void bridge.request({ kind: "emitters/add-root", params: {} });
+    announceWhenOk(bridge.request({ kind: "emitters/add-root", params: {} }), "Added emitter — Ctrl+Z to undo");
   };
   const handleContextCopy = () => {
     const ids = resolveTargetIds();
@@ -586,11 +590,11 @@ function EmitterRow({
   };
   const handleContextCut = () => {
     const ids = resolveTargetIds();
-    void bridge.request({ kind: "emitters/cut", params: { ids } });
+    announceWhenOk(bridge.request({ kind: "emitters/cut", params: { ids } }), `Cut ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
     markEmittersCopied();
   };
   const handleContextPaste = () => {
-    void bridge.request({ kind: "emitters/paste", params: {} });
+    announceWhenOk(bridge.request({ kind: "emitters/paste", params: {} }), "Pasted — Ctrl+Z to undo");
   };
   // Paste As ▸ Lifetime/Death Child — paste the clipboard into this
   // emitter's child slot (legacy ID_PASTEAS_LIFETIME / ID_PASTEAS_DEATH).
@@ -1192,27 +1196,27 @@ function EmitterTreeToolbar({ bridge, tree, primaryId }: ToolbarProps) {
   const canMoveDown = canMoveSelection(selIds, rootIds, "down");
 
   const addRoot = () =>
-    void bridge.request({ kind: "emitters/add-root", params: {} });
+    announceWhenOk(bridge.request({ kind: "emitters/add-root", params: {} }), "Added emitter — Ctrl+Z to undo");
   const addLifetime = () => {
     if (primaryId === null) return;
-    void bridge.request({
+    announceWhenOk(bridge.request({
       kind: "emitters/add-lifetime-child",
       params: { parentId: primaryId },
-    });
+    }), "Added lifetime child — Ctrl+Z to undo");
   };
   const addDeath = () => {
     if (primaryId === null) return;
-    void bridge.request({
+    announceWhenOk(bridge.request({
       kind: "emitters/add-death-child",
       params: { parentId: primaryId },
-    });
+    }), "Added death child — Ctrl+Z to undo");
   };
   const duplicatePrimary = () => {
     // Toolbar Duplicate is selection-aware (like the trash button); the new
     // copies become the selection.
     const ids = useEmitterSelectionStore.getState().ids;
     if (ids.length === 0) return;
-    void duplicateEmitters(bridge, ids);
+    announceWhenOk(duplicateEmitters(bridge, ids) as Promise<unknown>, `Duplicated ${ids.length === 1 ? "emitter" : `${ids.length} emitters`} — Ctrl+Z to undo`);
   };
   const del = () => {
     // Selection-aware: the trash button deletes the WHOLE multi-selection
@@ -1657,6 +1661,27 @@ export function EmitterTree({ bridge }: Props) {
     seenStableIdsRef.current = new Set(flatRows.map((r) => r.node.stableId));
   }, [flatRows]);
 
+  // [design follow-ups, F7] Exit ghosts: a DELETED row fades out at its last
+  // position (absolute overlay in scroll-content space) while its siblings
+  // FLIP-glide to close the gap — the removal used to pop. Metadata for
+  // vanished rows comes from the PREVIOUS render's flatRows (the FLIP
+  // position map only holds offsets — plan-review finding); coordinates
+  // from the position snapshot taken in the same layout effect. Skipped
+  // while a drag/indicator is active (the gap spacer corrupts tops), under
+  // reduced-motion and --record, and on bulk rebuilds (undo/redo mints
+  // fresh ids for every row — no ghost storms).
+  type ExitGhost = { stableId: number; top: number; name: string; depth: number };
+  const [exitGhosts, setExitGhosts] = useState<readonly ExitGhost[]>([]);
+  const prevRowMetaRef = useRef<Map<number, { name: string; depth: number }>>(new Map());
+  const EXIT_GHOST_MS = 200; // popover-pop-out (110ms, `both`) + removal slack
+  // Removal timers, cleared on unmount so a late timeout can't setState on a
+  // dead component (pre-PR review).
+  const ghostTimersRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    const timers = ghostTimersRef.current;
+    return () => { for (const t of timers) window.clearTimeout(t); };
+  }, []);
+
   const flipPositionsRef = useRef<FlipPositions>(new Map());
   useLayoutEffect(() => {
     const sc = treeScrollRef.current;
@@ -1671,6 +1696,42 @@ export function EmitterTree({ bridge }: Props) {
       });
     }
     flipPositionsRef.current = next;
+
+    // [F7] Detect removals against the snapshot we just replaced.
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!recording && !reduceMotion && draggingId === null && indicator === null) {
+      let surviving = 0;
+      for (const id of next.keys()) if (prev.has(id)) surviving += 1;
+      // A REBUILD replaces rows with fresh ids (undo/redo) — skip. An EMPTY
+      // next is a mass DELETE, not a rebuild: those rows should ghost (the
+      // ≤8 cap below still bounds a storm).
+      const fullRebuild = next.size > 0 && prev.size > 0 && surviving === 0;
+      if (!fullRebuild) {
+        const removed: ExitGhost[] = [];
+        for (const [id, top] of prev) {
+          if (next.has(id)) continue;
+          const meta = prevRowMetaRef.current.get(id);
+          if (meta !== undefined) removed.push({ stableId: id, top, name: meta.name, depth: meta.depth });
+        }
+        if (removed.length > 0 && removed.length <= 8) {
+          const ids = removed.map((g) => g.stableId);
+          setExitGhosts((gs) => [
+            ...gs.filter((g) => !ids.includes(g.stableId)),
+            ...removed,
+          ]);
+          ghostTimersRef.current.add(
+            window.setTimeout(() => {
+              setExitGhosts((gs) => gs.filter((g) => !ids.includes(g.stableId)));
+            }, EXIT_GHOST_MS),
+          );
+        }
+      }
+    }
+    prevRowMetaRef.current = new Map(
+      flatRows.map((r) => [r.node.stableId, { name: r.node.name, depth: r.depth }]),
+    );
     // prefers-reduced-motion skips the glide — EXCEPT under --record, where the
     // glide must render into the captured clip regardless of the host's setting.
     if (
@@ -2344,18 +2405,42 @@ export function EmitterTree({ bridge }: Props) {
         const cur = useEmitterSelectionStore.getState().ids;
         if (cur.length === 0) return;
         e.preventDefault();
-        void bridge.request({ kind: "emitters/cut", params: { ids: cur } });
+        announceWhenOk(bridge.request({ kind: "emitters/cut", params: { ids: cur } }), `Cut ${cur.length === 1 ? "emitter" : `${cur.length} emitters`} — Ctrl+Z to undo`);
         markEmittersCopied();
         return;
       }
       if (mod && (e.key === "v" || e.key === "V")) {
         e.preventDefault();
-        void bridge.request({ kind: "emitters/paste", params: {} });
+        announceWhenOk(bridge.request({ kind: "emitters/paste", params: {} }), "Pasted — Ctrl+Z to undo");
         return;
       }
     },
     [bridge, beginEdit, flatRows, focusRowById, orderedIds, primaryId],
   );
+
+  // [F7] Ghost nodes, rendered by whichever branch owns the tree area right
+  // now: the relative scroll container (normal case) or the emptied-tree
+  // state (a mass delete removes the container in the same commit — the
+  // ghosts must not vanish with it; pre-PR review). Tops are scroll-content
+  // coordinates; the empty branch occupies the same slot, close enough for
+  // a 200ms decorative fade.
+  const exitGhostNodes = exitGhosts.map((g) => (
+    <div
+      key={`exit-ghost-${g.stableId}`}
+      aria-hidden
+      data-testid="emitter-exit-ghost"
+      data-state="closed"
+      className="fade-animate-fast pointer-events-none absolute inset-x-0"
+      style={{ top: `${g.top}px` }}
+    >
+      <div
+        className="truncate py-0.5 pr-2 text-left text-sm text-text-3"
+        style={{ paddingLeft: `${8 + 18 + g.depth * 12}px` }}
+      >
+        {g.name}
+      </div>
+    </div>
+  ));
 
   return (
     <div
@@ -2384,10 +2469,15 @@ export function EmitterTree({ bridge }: Props) {
     >
       {tree !== null && <SystemLoadChip bridge={bridge} systemLoad={systemLoad} />}
       {tree === null ? (
-        // role="status": announce the loading→loaded transition to AT (the
-        // tree used to swap silently).
-        <div role="status" className="flex-1 min-h-0 text-text-3 text-sm">
-          Loading emitters…
+        // Shape-matched static skeleton (design follow-ups, F5) with an
+        // sr-only status so AT still hears the loading→loaded transition.
+        <div role="status" className="flex-1 min-h-0 px-1 pt-1">
+          <span className="sr-only">Loading emitters…</span>
+          <div aria-hidden className="flex flex-col gap-1">
+            <div className="skeleton-row" />
+            <div className="skeleton-row w-4/5" />
+            <div className="skeleton-row w-3/5" />
+          </div>
         </div>
       ) : rootChildren.length === 0 ? (
         // Teaching empty state (design pass, D1): say what belongs here and
@@ -2395,13 +2485,14 @@ export function EmitterTree({ bridge }: Props) {
         <div
           role="status"
           data-testid="emitter-tree-empty"
-          className="flex flex-1 min-h-0 flex-col items-center justify-center gap-1 px-4 text-center"
+          className="relative flex flex-1 min-h-0 flex-col items-center justify-center gap-1 px-4 text-center"
         >
           <span className="text-sm text-text-2">No emitters yet</span>
           <span className="text-xs text-text-3">
             Add one with the + button below, or right-click a row later to
             duplicate, link, and reorder.
           </span>
+          {exitGhostNodes}
         </div>
       ) : (
         // Wrap the <ul> in a relative-positioned container so the
@@ -2488,6 +2579,9 @@ export function EmitterTree({ bridge }: Props) {
             />
           )}
           </ul>
+          {/* [F7] Exit ghosts (shared nodes — also rendered by the emptied-
+              tree branch below, whose deletes have no scroll container). */}
+          {exitGhostNodes}
           {/* Marquee (rubber-band) selection rectangle. */}
           {marqueeBox !== null && (
             <div
