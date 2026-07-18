@@ -314,6 +314,17 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     if (kind == "preview/move")   return true;
     if (kind == "preview/place")  return true;
     if (kind == "preview/kill")   return true;
+    // textures/palette/touch-recent — seed the per-mod frequently-used texture
+    // palette so a build clip can click a specific texture tile: the record
+    // cursor is pointer-only (can't type a filename into the Color field) and
+    // the Browse button opens a native OS file dialog it can't drive, so the
+    // palette popover is the ONLY cursor-reachable texture-swap path — and a
+    // tile only exists once the texture is in this mod's recents. The handler
+    // (BridgeDispatch_Assets.cpp) writes only the app's own bounded recents
+    // ring in %APPDATA%\AloParticleEditor\texture-palettes.ini (fixed path, no
+    // modal, no arbitrary-path write), so it's record-safe. Record/seed-only;
+    // never on the --drive allowlist (IsAllowedBridgeKind).
+    if (kind == "textures/palette/touch-recent") return true;
     if (!drive::IsAllowedBridgeKind(kind)) return false;
     if (kind == "engine/set/paused") return false;
     return true;

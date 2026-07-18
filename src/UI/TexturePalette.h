@@ -66,6 +66,13 @@ public:
     // the new one.
     void              SetActiveMod(const std::wstring& modPath);
     void              ClearActiveMod();   // wipes the current mod's INI section (Reset View Settings)
+    // Automation isolation: in --record / --drive the dispatcher is ephemeral
+    // (HostWindow m_automationMode) so persistent user state must not be mutated.
+    // When ephemeral, in-memory recents/pins still update (so a build clip that
+    // seeds a palette tile via textures/palette/touch-recent can click it) but
+    // FlushMod skips the %APPDATA% INI write — an unattended run must not reorder
+    // or evict the user's real per-mod recents. Mirrors the skydome/registry gate.
+    void              SetEphemeral(bool ephemeral) { m_ephemeral = ephemeral; }
     const std::wstring& ActiveMod() const { return m_activeMod; }
     bool              HasActiveMod() const { return !m_activeMod.empty(); }
 
@@ -114,6 +121,7 @@ private:
 
     std::wstring                                       m_activeMod;
     std::unordered_map<std::wstring, ModPalette>       m_byMod;        // keyed by lowercased mod path
+    bool                                               m_ephemeral = false;  // automation: skip INI writes
     mutable bool                                       m_iniPathChecked;
     mutable std::wstring                               m_iniPathCache;
 };

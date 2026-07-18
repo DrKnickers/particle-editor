@@ -350,6 +350,7 @@ function RadioRow({
   tabIndex,
   onSelect,
   onArrowNav,
+  testId,
 }: {
   checked: boolean;
   label: string;
@@ -357,6 +358,8 @@ function RadioRow({
   onSelect: () => void;
   /** Called with -1 for ArrowUp (previous), +1 for ArrowDown (next). */
   onArrowNav: (direction: -1 | 1) => void;
+  /** Optional data-testid on the radio row (record-cursor / a11y drivers). */
+  testId?: string;
 }) {
   return (
     <div
@@ -364,6 +367,7 @@ function RadioRow({
       aria-checked={checked}
       tabIndex={tabIndex}
       className="radio-row"
+      data-testid={testId}
       onClick={onSelect}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -484,6 +488,7 @@ export function BasicTab({
             tabIndex={tabIndexFor("bursts")}
             onSelect={() => setMode("bursts")}
             onArrowNav={(d) => setMode(navigate("bursts", d))}
+            testId="radio-bursts"
           />
           <FieldSpinner
             label="Bursts:"
@@ -492,6 +497,7 @@ export function BasicTab({
             step={1}
             decimals={0}
             disabled={!burstsEnabled}
+            testId="spinner-n-bursts"
             onCommit={(v) => onCommit({ nBursts: Math.round(v) })}
           />
           <FieldSpinner
@@ -502,6 +508,7 @@ export function BasicTab({
             decimals={2}
             unit="s"
             disabled={!burstsEnabled}
+            testId="spinner-burst-delay"
             onCommit={(v) => onCommit({ burstDelay: v })}
           />
           <FieldSpinner
@@ -511,6 +518,7 @@ export function BasicTab({
             step={1}
             decimals={0}
             disabled={!burstsEnabled}
+            testId="spinner-particles-per-burst"
             onCommit={(v) => onCommit({ nParticlesPerBurst: Math.round(v) })}
           />
 
@@ -583,6 +591,7 @@ export function BasicTab({
           step={0.1}
           decimals={2}
           unit="s"
+          testId="spinner-max-lifetime"
           onCommit={(v) => onCommit({ lifetime: v })}
         />
         <FieldSpinner
@@ -782,6 +791,7 @@ export function TexturePickerField({
             type="button"
             className="btn-texture-browse"
             aria-label={`Open texture palette for ${label}`}
+            data-testid={`texture-palette-trigger-${slot}`}
           >
             <LayoutGrid size={14} aria-hidden="true" />
           </button>
@@ -833,9 +843,11 @@ export function FieldSpinner({
    *  "x2" = doubled (~116 px). */
   widthBoost?: "mid" | "wide" | "x2";
   /** Optional data-testid for a11y surface drivers. Applied to the
-   *  outermost .form-row div so the surface selector targets the spinner
-   *  row as a unit. Use sparingly — only at callsites that need UIA
-   *  capture anchoring. */
+   *  outermost .form-row div (targets the spinner row as a unit) AND
+   *  forwarded to the inner Spinner, which stamps `${testId}-inc` /
+   *  `${testId}-dec` on the step buttons so a --record cursor can drive
+   *  the value. Use sparingly — only at callsites that need UIA capture
+   *  or record-cursor anchoring. */
   testId?: string;
   onCommit: (value: number) => void;
 }) {
@@ -880,6 +892,7 @@ export function FieldSpinner({
         decimals={effectiveDecimals}
         disabled={disabled}
         aria-label={label}
+        testId={testId}
       />
       <span className="unit">{unit ?? ""}</span>
     </div>
@@ -1120,6 +1133,7 @@ export function AppearanceTab({
           min={1}
           step={1}
           decimals={0}
+          testId="spinner-texture-elements"
           onCommit={(v) => onCommit({ textureSize: Math.max(1, Math.round(v)) })}
         />
         {/* Minimum scale: adopts displayInvertedPercent —
@@ -1131,6 +1145,7 @@ export function AppearanceTab({
           value={properties.randomScalePerc}
           displayInvertedPercent
           unit="%"
+          testId="spinner-min-scale"
           onCommit={(v) => onCommit({ randomScalePerc: v })}
         />
       </Section>
@@ -1237,11 +1252,13 @@ export function AppearanceTab({
           label="Random rotation direction"
           checked={properties.randomRotationDirection}
           onCheckedChange={(v) => onCommit({ randomRotationDirection: v })}
+          testId="appearance-random-rotation-dir"
         />
         <FieldCheckbox
           label="Fixed random rotation:"
           checked={properties.randomRotation}
           onCheckedChange={(v) => onCommit({ randomRotation: v })}
+          testId="appearance-random-rotation"
         />
         {/* The engine stores these as a normalised ratio; the
             legacy panel displayed average as ×360 (integer −180..180°) and
@@ -1270,6 +1287,7 @@ export function AppearanceTab({
           decimals={0}
           unit="± °"
           disabled={!rotationEnabled}
+          testId="spinner-rotation-variance"
           onCommit={(v) => onCommit({ randomRotationVariance: v })}
         />
       </Section>

@@ -59,11 +59,16 @@ uint8_t DecodeSlotMask(const wstring& s)
 // — defensive sanity-check at TouchRecent / TogglePin boundaries.
 bool FilenameOk(const wstring& f)
 {
-    if (f.empty()) return false;
+    // A texture filename is a basename; nothing legitimate needs > 260 chars, and
+    // an unbounded value would attempt an oversized WritePrivateProfileStringW.
+    if (f.empty() || f.size() > 260) return false;
     for (wchar_t c : f)
     {
         if (c < 0x20) return false;
-        if (c == L'=' || c == L'\r' || c == L'\n') return false;
+        // '=' is the INI key/value separator; '|' is this store's own recent-entry
+        // field delimiter (filename|mask|timestamp) — either would corrupt the
+        // round-trip, so reject both alongside CR/LF.
+        if (c == L'=' || c == L'|' || c == L'\r' || c == L'\n') return false;
     }
     return true;
 }
@@ -490,6 +495,11 @@ vector<Entry> Store::Recents(SlotMask filter) const
 
 void Store::FlushMod(const wstring& modPath, const ModPalette& mp) const
 {
+    // Automation isolation: in --record / --drive, in-memory recents/pins are
+    // already updated by the caller, but the persistent INI must not be touched —
+    // FlushMod erases + rewrites the whole real mod section (evicting user recents),
+    // which an unattended tutorial/CI run must never do. Skip the disk write.
+    if (m_ephemeral) return;
     const wstring iniPath = IniPath();
     if (iniPath.empty()) return;
 

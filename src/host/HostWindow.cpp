@@ -85,6 +85,7 @@
 #include "../managers.h"
 #include "../ModManager.h"
 #include "../MouseCursor.h"
+#include "../UI/TexturePalette.h"   // Store::SetEphemeral (automation palette isolation)
 #include "../ParticleSystem.h"
 #include "../ParticleSystemIO.h"
 #include "../ParticleSystemInstance.h"
@@ -1111,6 +1112,10 @@ void HostWindowImpl::OpenLog()
     // (truncate) never wipes a concurrently-running daily driver's host.log.
     if (m_automationMode)
     {
+        // Automation is ephemeral: the texture palette must not persist to the
+        // user's %APPDATA% INI (a --record clip may seed a recent to click a
+        // tile; that stays in-memory only). Mirrors the skydome/registry gate.
+        TexturePalette::Store::Instance().SetEphemeral(true);
         const std::wstring suffix = (m_recordMode ? L"-record-" : L"-drive-") + std::to_wstring(GetCurrentProcessId());
         if (!perfArtifactDir.empty())
         {

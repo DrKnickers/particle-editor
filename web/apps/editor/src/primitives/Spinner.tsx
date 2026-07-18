@@ -107,6 +107,11 @@ export function Spinner({
   const inputRef = useRef<HTMLInputElement>(null);
   const dragStartY = useRef(0);
   const dragStartValue = useRef(0);
+  // The pointerId that started the current gesture, so a SECOND pointer (a
+  // second touch/pen moving or releasing elsewhere in the document) can't hijack
+  // or terminate this scrub. null = the gesture began from a plain mouse/jsdom
+  // mousedown (no pointerId) — those are single-pointer, so no filtering needed.
+  const activePointerId = useRef<number | null>(null);
   // Hold-to-repeat timers + a "currently held/scrubbing" guard so the
   // external-value resync effect doesn't clobber an in-flight ramp.
   const holdDelayTimer = useRef<number | undefined>(undefined);
@@ -277,6 +282,14 @@ export function Spinner({
   // (auto-repeat after a delay), or a vertical scrub (drag past threshold).
   const handleArrowsMouseDown = (e: React.MouseEvent) => {
     if (disabled || e.button !== 0) return;
+    // Run ONCE per gesture. The column binds both onPointerDown and onMouseDown:
+    // a real mouse (and the --record cursor's activate press) fires pointerdown
+    // THEN mousedown, so the pointerdown arms and the mousedown no-ops here. The
+    // dual binding exists because the --record value-scrub arrives as a
+    // NON-activate drag — pointerdown→pointermove→pointerup only, no mousedown
+    // (record-cursor-drag) — so a mousedown-only handler could never be scrubbed;
+    // and jsdom's fireEvent.mouseDown (no pointer event) still arms via mousedown.
+    if (holdingRef.current) return;
     // Keep the input's focus/caret (don't blur on arrow mousedown) and
     // suppress text selection while scrubbing.
     e.preventDefault();
@@ -297,6 +310,10 @@ export function Spinner({
     scrubbedRef.current = false;
     repeatedRef.current = false;
     holdingRef.current = true;
+    // Remember which pointer owns this gesture (pointerdown carries a pointerId;
+    // a plain mousedown does not → null = unfiltered single-pointer path).
+    const nat = e.nativeEvent as Event;
+    activePointerId.current = nat instanceof PointerEvent ? nat.pointerId : null;
 
     // Arm hold-to-repeat. The interval ramps from a local accumulator so it
     // keeps stepping even before the controlled value prop echoes back.
@@ -329,7 +346,19 @@ export function Spinner({
       onChangeRef.current(v); // latest handler — see onChangeRef (#614)
     };
 
+    // A pointer event from a DIFFERENT pointer than the one that started this
+    // gesture must be ignored, else a second touch/pen moving or lifting anywhere
+    // in the document would hijack or end this scrub. Mouse events carry no
+    // pointerId (a single pointer); a jsdom/mouse-started gesture has a null id
+    // and skips filtering entirely.
+    const foreignPointer = (ev: Event): boolean =>
+      activePointerId.current !== null &&
+      typeof PointerEvent !== "undefined" &&
+      ev instanceof PointerEvent &&
+      ev.pointerId !== activePointerId.current;
+
     const onMove = (me: MouseEvent) => {
+      if (foreignPointer(me)) return;
       const dy = dragStartY.current - me.clientY; // up = positive = increase
       if (!scrubbedRef.current) {
         if (Math.abs(dy) < DRAG_THRESHOLD_PX) return;
@@ -358,11 +387,23 @@ export function Spinner({
       }
     };
 
-    const onUp = () => {
+    // Release AND cancel share one teardown. A real mouse fires BOTH mouseup and
+    // pointerup (and the --record cursor's synthetic release dispatches both too);
+    // holdingRef is cleared here so the second event no-ops. `cancelled` (from
+    // pointercancel — the OS/browser reclaimed the pointer for a permitted pan,
+    // palm rejection, or capture loss) skips the trailing click step; a normal
+    // release still applies it.
+    const finish = (ev: Event | null, cancelled: boolean) => {
+      if (!holdingRef.current) return;
+      if (ev && foreignPointer(ev)) return; // a different pointer's up/cancel
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("pointermove", onMove as EventListener);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onCancel);
       clearHoldTimers();
       holdingRef.current = false;
+      activePointerId.current = null;
       // Flush the tail scrub value BEFORE clearing drag state so the final
       // position always lands exactly once (the queued frame is cancelled).
       if (scrubRafId !== null && typeof cancelAnimationFrame === "function") {
@@ -370,14 +411,30 @@ export function Spinner({
       }
       flushScrub();
       setDragging(false);
-      // Quick click: neither a scrub nor a hold-repeat fired → one step.
-      if (!scrubbedRef.current && !repeatedRef.current) {
+      // Quick click: neither a scrub nor a hold-repeat fired → one step. A cancel
+      // never steps (the gesture was reclaimed, not completed).
+      if (!cancelled && !scrubbedRef.current && !repeatedRef.current) {
         adjustBy(dir * step);
       }
     };
+    const onUp = (ev?: Event) => finish(ev ?? null, false);
+    const onCancel = (ev?: Event) => finish(ev ?? null, true);
 
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
+    // ALSO listen on pointer events: the --record cursor's value-scrub drives
+    // the arrows via pointermove/pointerup ONLY (record-cursor-drag dispatches
+    // pointermove on document, never mousemove), so a pointer-blind scrub can't
+    // be recorded. onMove computes the value from the ABSOLUTE pointer position
+    // (dragStartValue + dy*step), so a real mouse firing both mousemove and
+    // pointermove for the same coordinate is idempotent (and emissions coalesce
+    // to one onChange per frame regardless). pointercancel is REQUIRED: a
+    // touch/pen stream can be cancelled instead of released, and without cleanup
+    // the gesture would stay stuck (holdingRef true, listeners + hold-repeat
+    // leaked, every later arrow press rejected by the holdingRef guard).
+    document.addEventListener("pointermove", onMove as EventListener);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onCancel);
   };
 
   // Clear any pending hold timers on unmount.
@@ -458,6 +515,7 @@ export function Spinner({
           the value-scrub affordance — mousedown here starts a drag-scrub
           (ns-resize cursor); a plain click on a button steps by ±step. */}
       <div
+        onPointerDown={handleArrowsMouseDown}
         onMouseDown={handleArrowsMouseDown}
         // Inset 1px on top/right/bottom and clip with rounded-right
         // corners so the buttons' hover/active background stays INSIDE
@@ -467,7 +525,7 @@ export function Spinner({
         // `rounded` corner, exactly 1px inside — the border sits in the
         // gap. overflow-hidden clips the square-cornered button fills to
         // the rounded column.
-        className={`absolute flex flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 ${disabled ? "opacity-40" : "cursor-ns-resize"}`}
+        className={`absolute flex touch-none flex-col overflow-hidden rounded-r-[3px] border-l border-border-2 ${disabled ? "opacity-40" : "cursor-ns-resize"}`}
         style={{ top: 1, right: 1, bottom: 1, width: `${ARROW_W - 1}px` }}
         aria-hidden={disabled}
       >

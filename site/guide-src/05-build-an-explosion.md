@@ -279,6 +279,8 @@ Two supporting details from the example are worth copying:
   `average × (1 ± variance)`. Note the mechanic: the variance multiplies the average, so it needs
   a non-zero average to act on.
 
+<!-- Media: tutorial-05-fireball-build -->
+
 <!-- Media: tutorial-05-fireball-index -->
 
 ### Option B — Layered additive (the plain example)
