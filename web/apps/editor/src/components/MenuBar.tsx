@@ -67,7 +67,9 @@ type Props = {
 // Style constants — shared across triggers and items so the Tailwind
 // class strings don't drift between menus.
 const TRIGGER =
-  "px-2 py-1 text-xs font-medium text-text-2 transition-colors motion-reduce:transition-none hover:bg-bg-2 rounded data-[state=open]:bg-bg-2 data-[state=open]:text-text outline-none select-none cursor-default";
+  // focus-ring: keyboard focus on a CLOSED trigger was invisible (outline-none
+  // with no replacement) — a 2.4.7 gap the PRODUCT.md conformance check caught.
+  "px-2 py-1 text-xs font-medium text-text-2 transition-colors motion-reduce:transition-none hover:bg-bg-2 rounded data-[state=open]:bg-bg-2 data-[state=open]:text-text outline-none focus-ring select-none cursor-default";
 const CONTENT =
   "min-w-[200px] bg-bg-2 border border-border rounded-md shadow-[var(--shadow-soft)] p-1 z-50 popover-animate";
 const ITEM =

@@ -279,14 +279,14 @@ export function EmitterPropertyTabs({ bridge }: Props) {
           padding to avoid doubling. */}
       <Tabs.Content
         value="basic"
-        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable fade-in-fast"
+        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none focus-ring-inset scrollbar-stable fade-in-fast"
         data-testid="tab-basic-content"
       >
         {renderBody((p) => <BasicTab properties={p} onCommit={commit} />)}
       </Tabs.Content>
       <Tabs.Content
         value="appearance"
-        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable fade-in-fast"
+        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none focus-ring-inset scrollbar-stable fade-in-fast"
         data-testid="tab-appearance-content"
       >
         {renderBody((p) => (
@@ -300,7 +300,7 @@ export function EmitterPropertyTabs({ bridge }: Props) {
       </Tabs.Content>
       <Tabs.Content
         value="physics"
-        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none scrollbar-stable fade-in-fast"
+        className="inspector-tab-scroll flex-1 min-h-0 overflow-y-auto outline-none focus-ring-inset scrollbar-stable fade-in-fast"
         data-testid="tab-physics-content"
       >
         {renderBody((p) => <PhysicsTab properties={p} onCommit={commit} />)}
