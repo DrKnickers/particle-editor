@@ -14,7 +14,8 @@ same references the game uses — correct scale, the right background, and your 
 with a live viewport right beside the controls.
 
 Start with [Setup](setup), then follow the pages in order. Returning users can jump straight to the
-quick references.
+quick references. Coming from the old GlyphX particle editor? [What's New](../whats-new.html) covers
+what changed and what behaves differently.
 
 ## Tutorial Path
 

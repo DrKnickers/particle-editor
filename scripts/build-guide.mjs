@@ -484,6 +484,7 @@ function pageHtml({ title, guideHref, sidebar, kicker, content, pager, toc }) {
         <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
       </a>
       <a class="nav-source" href="${guideHref}">Guide</a>
+      <a class="nav-source" href="../whats-new.html">What's New</a>
       <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
       <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
            geometry identical across pages so buttons don't shift during the cross-page

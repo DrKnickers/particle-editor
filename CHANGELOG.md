@@ -27,6 +27,7 @@ may live at the end of the file.
 
 ### Added
 
+- A "What's New" page — reached from the landing topbar and pointed to from the guide home page — walks returning modders through what this editor does that Mike.NL's GlyphX Particle Editor v1.5 couldn't (scene context, mod-stack editing, the spawner, emitter draw-order, the Atlas Frame Picker), plus a table of deliberate behavioral departures from the legacy editor ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), PR pending — see [`docs/superpowers/plans/2026-07-20-whats-new-page.md`](docs/superpowers/plans/2026-07-20-whats-new-page.md))
 - Help → Keyboard Shortcuts… opens a dialog listing every keyboard shortcut in the editor, grouped into 8 sections ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), PR pending — see [`tasks/todo.md`](tasks/todo.md))
 - Deleting every emitter now leaves a hint in the viewport — "No emitters — press + to add one, or Ctrl+Z to undo" — instead of an empty canvas with no explanation ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), PR pending — see [`tasks/todo.md`](tasks/todo.md))
 - The status bar now confirms add, duplicate, paste, cut, and delete actions with a brief message (e.g. "Deleted 3 emitters — Ctrl+Z to undo"), announced to screen readers ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), PR pending — see [`tasks/todo.md`](tasks/todo.md))
