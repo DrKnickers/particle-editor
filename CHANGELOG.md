@@ -90,6 +90,7 @@ may live at the end of the file.
 - EmitterTree panel toolbar and a live 3D cursor position readout in the status bar
 
 ### Changed
+- The What's New page is now a slim reference for returning modders — the five capability sections duplicated the landing page's feature tour clip-for-clip and were cut; the page keeps the lineage claim and the verified departures table, and links to the landing for the tour ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), PR pending)
 
 - Tutorials 2 and 4 in the site guide no longer embed walkthrough clips — their sidebar entries now show a "Videos pending" badge but stay ordinary clickable links, and each page keeps its opening still
 - Hover/press feedback, opening a menu or a context menu or a dropdown, switching an inspector tab, swapping the right-dock panel, adding an emitter row, the PAUSED indicator, and the light/dark theme switch all animate now instead of cutting instantly (still inert with reduce-motion on, or while a clip is recording); the empty emitter tree, the atlas picker's missing-texture message, and the curve panel's empty state now tell you what to do next instead of just naming the gap, and an invalid hex color entry is now visibly flagged instead of silently reverting ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), PR pending — see [`tasks/design-audit-2026-07-18.md`](tasks/design-audit-2026-07-18.md))

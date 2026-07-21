@@ -1,11 +1,10 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-// What's New page (site/whats-new.html) — the returning-modder surface. Structure per
-// docs/superpowers/specs/2026-07-20-whats-new-tab-design.md: pitch half (five capability
-// wins, each reusing a landing clip) + "Coming back from the GlyphX editor?" departures
-// table. No new media: stems below are the landing set minus hero.
-const STEMS = ["faith", "f04", "spawner", "f02-reorder", "f02"];
+// What's New page (site/whats-new.html) — the returning-modder surface. Deliberately SLIM:
+// the capability tour lives on the landing page (the two pages used to duplicate the same five
+// clip sections, so the pitch half was cut); this page is the lineage claim + the departures
+// table only, and carries NO media and NO main.js.
 
 // The departures table's full row content (all 3 cells: "In the old editor" / "Here" / "Why"),
 // in order — every row is proven against fork point 1222c13 (Mike.NL's GlyphX Particle Editor
@@ -46,13 +45,15 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => { (window as any).__MEDIA_BASE__ = "/media-local/"; });
 });
 
-test("whats-new structure: h1, five features, departures table; no uncaught JS errors", async ({ page }) => {
+test("whats-new structure: h1, no feature sections, departures table; no uncaught JS errors", async ({ page }) => {
   const jsErrors: string[] = [];
   page.on("pageerror", (e) => jsErrors.push(String(e)));
   await page.goto("/whats-new.html");
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(page.locator("h1")).toContainText("GlyphX");
-  await expect(page.locator("section.feature")).toHaveCount(5);
+  // ZERO feature sections — the capability tour is the landing page's job; duplicating it here
+  // is what got the pitch half cut. A reintroduced feature section fails this.
+  await expect(page.locator("section.feature")).toHaveCount(0);
   // Departures table: real table semantics, EXACTLY 5 rows (not "at least"), each pinned to all
   // 3 cells (not just the first) so a rewritten/reordered/added row — or a row missing a cell —
   // fails instead of silently passing.
@@ -70,21 +71,14 @@ test("whats-new structure: h1, five features, departures table; no uncaught JS e
   expect(jsErrors, jsErrors.join("\n")).toHaveLength(0);
 });
 
-test("whats-new clips: exact stems in order, standard contract, posters resolve", async ({ page }) => {
+test("whats-new is media-free and points at the landing for the tour", async ({ page }) => {
   await page.goto("/whats-new.html");
-  const vids = page.locator("video.clip-video");
-  const clips = await vids.evaluateAll((els) => els.map((el) => el.getAttribute("data-clip")));
-  expect(clips).toEqual(STEMS.map((s) => `${s}.mp4`));
-  const n = await vids.count();
-  for (let i = 0; i < n; i++) {
-    const v = vids.nth(i);
-    await expect(v).toHaveJSProperty("loop", true);
-    await expect(v).toHaveJSProperty("muted", true);
-    await expect(v).toHaveJSProperty("playsInline", true);
-    await expect(v).toHaveAttribute("width", "1280");
-    await expect(v).toHaveAttribute("height", "960");
-    await expect.poll(() => v.evaluate((el: HTMLVideoElement) => el.poster)).not.toBe("");
-  }
+  // No clips, no stills, no resolver script: the page's media budget is deliberately zero.
+  await expect(page.locator("video.clip-video")).toHaveCount(0);
+  await expect(page.locator("img.clip-img")).toHaveCount(0);
+  await expect(page.locator('script[src="main.js"]')).toHaveCount(0);
+  // The pitch's replacement is a single in-copy link to the landing's feature tour.
+  await expect(page.locator('.wn-hero a[href="index.html"]')).toHaveCount(1);
 });
 
 test("topbar: both top-level pages carry Download / Guide / What's New / Source", async ({ page }) => {
@@ -95,8 +89,13 @@ test("topbar: both top-level pages carry Download / Guide / What's New / Source"
     await expect(nav.locator('a[href="guide/home.html"]'), path + " guide").toHaveCount(1);
     await expect(nav.locator('a[href="whats-new.html"]'), path + " whats-new").toHaveCount(1);
     await expect(nav.locator('a[href="https://github.com/DrKnickers/particle-editor"]'), path + " source").toHaveCount(1);
-    await expect(nav.locator("#motion-toggle"), path + " motion toggle").toHaveCount(1);
+    // Geometry invariant for the cross-page topbar view transition: every page carries exactly
+    // one .motion-toggle element. Only the landing's is the LIVE control (it has clips to
+    // pause); whats-new and the guide carry the invisible placeholder instead.
+    await expect(nav.locator(".motion-toggle"), path + " motion-toggle slot").toHaveCount(1);
   }
+  await page.goto("/");
+  await expect(page.locator("nav.topnav #motion-toggle"), "landing keeps the live toggle").toHaveCount(1);
 });
 
 test("topbar: guide pages carry the same 4-item nav, hrefs relative to /guide/", async ({ page }) => {
@@ -113,11 +112,26 @@ test("topbar: guide pages carry the same 4-item nav, hrefs relative to /guide/",
   await expect(nav.locator('a[href="https://github.com/DrKnickers/particle-editor"]'), "guide source").toHaveCount(1);
 });
 
+test("motion-toggle slots: landing is live, whats-new and guide are inert placeholders", async ({ page }) => {
+  // The slot exists everywhere for topbar view-transition geometry, but only the landing has
+  // clips to pause. On the other pages it must be COMPLETELY inert — invisible, unfocusable,
+  // unannounced, and without the live control's id — or a dead Pause button ships.
+  for (const path of ["/whats-new.html", "/guide/home.html"]) {
+    await page.goto(path);
+    const slot = page.locator("nav.topnav .motion-toggle");
+    await expect(slot, path + " has the slot").toHaveCount(1);
+    await expect(slot, path + " hidden").toHaveCSS("visibility", "hidden");
+    await expect(slot, path + " unfocusable").toHaveAttribute("tabindex", "-1");
+    await expect(slot, path + " unannounced").toHaveAttribute("aria-hidden", "true");
+    expect(await slot.getAttribute("id"), path + " must not carry the live control's id").toBeNull();
+  }
+});
+
 test("a11y: no critical/serious axe violations on the What's New page (only page with a <table> outside the guide)", async ({ page }) => {
   await page.goto("/whats-new.html");
   // wait for the CSS entrance stagger to finish so axe sees the settled page
   await page.waitForFunction(() =>
-    [...document.querySelectorAll(".wn-hero > *, .feature > *, .wn-departures > *")]
+    [...document.querySelectorAll(".wn-hero > *, .wn-departures > *")]
       .every((el) => getComputedStyle(el).opacity === "1"),
     null, { timeout: 5000 });
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();

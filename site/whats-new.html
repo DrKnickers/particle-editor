@@ -20,10 +20,10 @@
   </style>
   <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
   <link rel="expect" href="#top" blocking="render">
-  <meta name="description" content="What changed from Mike.NL's GlyphX Particle Editor: scene context, mod-stack editing, a spawner, emitter draw-order, atlas picking — and what behaves differently.">
+  <meta name="description" content="For modders returning from Mike.NL's GlyphX Particle Editor: what deliberately behaves differently here, and why. Same .alo files — they open unchanged.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <meta property="og:title" content="What's New — Particle Editor">
-  <meta property="og:description" content="What changed from Mike.NL's GlyphX Particle Editor — and what behaves differently for returning modders.">
+  <meta property="og:description" content="What deliberately behaves differently for modders returning from Mike.NL's GlyphX Particle Editor.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://github.com/DrKnickers/particle-editor/releases/download/site-media/og.jpg">
   <meta name="twitter:card" content="summary_large_image">
@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Top bar (mirrors index.html; Task 3 adds the same What's New link there) -->
+  <!-- Top bar (mirrors index.html) -->
   <header class="topbar">
     <a class="wordmark" href="index.html"><img class="wordmark-icon" src="favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
     <nav class="topnav" aria-label="Primary">
@@ -42,7 +42,11 @@
       <a class="nav-source" href="guide/home.html">Guide</a>
       <a class="nav-source" href="whats-new.html" aria-current="page">What's New</a>
       <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
-      <button type="button" id="motion-toggle" class="motion-toggle" aria-label="Pause motion" title="Pause motion">Pause</button>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition (same pattern as the guide pages). This page has no clips, so there
+           is nothing to pause and main.js is not loaded. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
     </nav>
   </header>
 
@@ -52,82 +56,14 @@
       <p class="kicker">For returning modders</p>
       <h1 id="wn-h">Coming from the GlyphX Particle Editor?</h1>
       <p class="lede">This editor is a fork of Mike.NL's GlyphX Particle Editor v1.5 — same
-        <code>.alo</code> files, same engine-accurate rendering, same job. Here is what it does
-        that the original couldn't, and further down, what behaves differently once you're inside.</p>
-    </section>
-
-    <!-- 1 · Scene context -->
-    <section class="feature" aria-labelledby="wn1-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">1</span> Scene context</p>
-      <h2 id="wn1-h">Preview in a scene, not a void.</h2>
-      <p class="feature-copy">The original previewed particles against a flat backdrop. Here you drop in a
-        game unit for scale, load a skydome and a ground map, and light the scene — so you judge the
-        effect the way the game will show it.</p>
-      <figure class="clip" aria-label="An explosion effect looping beside a game unit on a ground map.">
-        <video class="clip-video" loop muted playsinline preload="none"
-               width="1280" height="960"
-               data-clip="faith.mp4" data-poster="faith-poster.jpg"></video>
-      </figure>
-    </section>
-
-    <!-- 2 · Mod stack -->
-    <section class="feature" aria-labelledby="wn2-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">2</span> Mod stack</p>
-      <h2 id="wn2-h">It knows about your mod.</h2>
-      <p class="feature-copy">Point the editor at your mod and submods, in order. It resolves textures,
-        models, and shaders through the same override chain the game uses — no more copying assets
-        around to make the preview honest.</p>
-      <figure class="clip" aria-label="A cursor dragging mod layers into a new load order.">
-        <video class="clip-video" loop muted playsinline preload="none"
-               width="1280" height="960"
-               data-clip="f04.mp4" data-poster="f04-poster.jpg"></video>
-      </figure>
-    </section>
-
-    <!-- 3 · Spawner -->
-    <section class="feature" aria-labelledby="wn3-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">3</span> Spawner</p>
-      <h2 id="wn3-h">See effects in flight.</h2>
-      <p class="feature-copy">Projectile and impact effects never made sense idling at the origin. The
-        spawner throws instances along a direction at speed, so tails, inherited velocity, and impact
-        orientation read the way they will in game.</p>
-      <figure class="clip" aria-label="Particle instances launched across the viewport by the spawner.">
-        <video class="clip-video" loop muted playsinline preload="none"
-               width="1280" height="960"
-               data-clip="spawner.mp4" data-poster="spawner-poster.jpg"></video>
-      </figure>
-    </section>
-
-    <!-- 4 · Emitter order -->
-    <section class="feature" aria-labelledby="wn4-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">4</span> Emitter order</p>
-      <h2 id="wn4-h">Draw order you can drag.</h2>
-      <p class="feature-copy">Emitters render in the order you author them, and you reorder them by
-        dragging in the tree — smoke behind fire is a drag, not a delete-and-recreate.</p>
-      <figure class="clip" aria-label="Emitters being reordered by dragging in the tree.">
-        <video class="clip-video" loop muted playsinline preload="none"
-               width="1280" height="960"
-               data-clip="f02-reorder.mp4" data-poster="f02-reorder-poster.jpg"></video>
-      </figure>
-    </section>
-
-    <!-- 5 · Atlas picker -->
-    <section class="feature" aria-labelledby="wn5-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">5</span> Atlas picker</p>
-      <h2 id="wn5-h">Pick frames as images.</h2>
-      <p class="feature-copy">Atlas indices were always a guessing game. The frame picker shows the
-        texture cut into its grid — click the frame you mean.</p>
-      <figure class="clip" aria-label="An atlas texture shown as a grid of selectable frames.">
-        <video class="clip-video" loop muted playsinline preload="none"
-               width="1280" height="960"
-               data-clip="f02.mp4" data-poster="f02-poster.jpg"></video>
-      </figure>
+        <code>.alo</code> files, same engine-accurate rendering, same job. The
+        <a href="index.html">front page</a> tours what this editor can do;
+        this page covers what behaves differently once you're inside.</p>
     </section>
 
     <!-- Departures -->
     <section class="wn-departures" aria-labelledby="wn-dep-h">
       <hr class="wn-rule">
-      <p class="section-label">Coming back?</p>
       <h2 id="wn-dep-h">What behaves differently</h2>
       <p class="feature-copy">Deliberate changes, not omissions — the habits from the original that
         work differently here.</p>
@@ -162,6 +98,5 @@
     <p class="footer-meta">MIT-licensed · forked from GlyphXTools/particle-editor · Windows x64 · uses your game install for full scene context</p>
   </footer>
 
-  <script type="module" src="main.js"></script>
 </body>
 </html>
