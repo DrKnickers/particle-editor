@@ -91,7 +91,13 @@ function headingIdsFor(md) {
 // behaviour differs: the landing has a global motion toggle, the guide does not); each joins
 // the value to the media release at runtime, so the HTML stays binary-free. An unknown id — or
 // a filename that isn't a flat release basename — fails the build.
-function renderMedia(id, { media, sourcePage }) {
+// `stillOnly` (anchor syntax `<!-- Media: id | still -->`) renders a CLIP item as its poster
+// frame instead of the video. This is a per-page PRESENTATION choice and deliberately does not
+// touch the manifest: the manifest stays the pipeline's record of what it actually produces, so
+// the clip remains renderable and re-embeddable by deleting the ` | still` modifier. Encoding
+// this as `kind: "image"` in the manifest instead would break `runImageExport`, which requires
+// a .png output (scripts/wiki-media/build.mjs) while a clip's poster is a .jpg.
+function renderMedia(id, { media, sourcePage }, stillOnly = false) {
   const item = media.get(id);
   if (!item) {
     throw new Error(`Unknown media id "${id}" in ${sourcePage} — add it to tasks/wiki-media/manifest.json`);
@@ -110,6 +116,11 @@ function renderMedia(id, { media, sourcePage }) {
   if (item.kind === "image") {
     // A still is its own image; the resolver sets img.src from data-poster (= its output file).
     return `<figure class="guide-media"><img class="clip-img" data-poster="${flat(item.output, "output")}" alt="${label}"></figure>`;
+  }
+  if (stillOnly) {
+    // A withdrawn clip, shown as its already-published poster frame. Same <img> markup as a real
+    // still, so the runtime resolver and the media specs treat it identically.
+    return `<figure class="guide-media"><img class="clip-img" data-poster="${flat(item.poster, "poster")}" alt="${label}"></figure>`;
   }
   // Default: a clip. `controls` gives the pause/replay mechanism a looping tutorial clip needs
   // (WCAG 2.2.2) — apt for teaching, unlike the landing's ambient clips. The 4:3 dims reserve
@@ -332,9 +343,9 @@ function renderMarkdown(md, context) {
 
     // A media anchor is a comment, so it would otherwise fall into the raw-HTML passthrough
     // below and emit inertly — intercept it FIRST and expand to the manifest-driven embed.
-    const mediaComment = line.match(/^\s*<!--\s*Media:\s*([\w-]+)\s*-->\s*$/);
+    const mediaComment = line.match(/^\s*<!--\s*Media:\s*([\w-]+)(?:\s*\|\s*(still))?\s*-->\s*$/);
     if (mediaComment) {
-      out.push(renderMedia(mediaComment[1], context));
+      out.push(renderMedia(mediaComment[1], context, mediaComment[2] === "still"));
       i++;
       continue;
     }
@@ -376,7 +387,17 @@ function sidebarHtml(nav, activeSlug) {
       const items = sec.pages
         .map((p) => {
           const active = p.slug === activeSlug;
-          return `      <li><a href="./${encodeURIComponent(p.slug)}.html"${active ? ' class="active" aria-current="page"' : ""}>${escapeHtml(p.title)}</a></li>`;
+          // A page whose clips are withdrawn pending re-record stays a normal link — the prose is
+          // complete and other pages treat it as prerequisite curriculum, so hiding or disabling
+          // it would make the guide contradict itself. The badge sets expectations instead.
+          const pending = p.status === "videos-pending";
+          // ONE merged class attribute: both states can apply at once (the reader can BE on a
+          // pending page), and emitting a second class= would drop whichever came first.
+          const classes = [active ? "active" : "", pending ? "is-pending" : ""].filter(Boolean).join(" ");
+          // The badge is deliberately inside the anchor and NOT aria-hidden: "…Videos pending"
+          // in the accessible name is the same useful warning sighted readers get.
+          const badge = pending ? ` <span class="side-pending">Videos pending</span>` : "";
+          return `      <li><a href="./${encodeURIComponent(p.slug)}.html"${classes ? ` class="${classes}"` : ""}${active ? ' aria-current="page"' : ""}>${escapeHtml(p.title)}${badge}</a></li>`;
         })
         .join("\n");
       return `    <div class="side-group">\n      <p class="side-label">${escapeHtml(sec.label)}</p>\n      <ul>\n${items}\n      </ul>\n    </div>`;

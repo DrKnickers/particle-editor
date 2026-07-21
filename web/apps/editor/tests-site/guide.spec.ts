@@ -18,8 +18,11 @@ const SECTION_COUNT = NAV.sections.length;
 // After Phase 2 each `<!-- Media: id -->` anchor is expanded (by build-guide.mjs, from the
 // wiki-media manifest) into a <video>/<img> embed — except the one manual in-game-proof shot,
 // which stays an inert comment. The EXACT ordered filenames below (not just counts) are the
-// contract: they sum to the 31 manifest items (26 clips + 4 stills + 1 manual) and lock each
-// page's ids AND their order, so a duplicated/swapped/renamed anchor can't pass on count alone.
+// contract: they lock each page's ids AND their order, so a duplicated/swapped/renamed anchor
+// can't pass on count alone. NOTE: this map covers what each page RENDERS, which is now a
+// deliberate SUBSET of the manifest — tutorials 2 and 4 have had their clips withdrawn (see
+// their entries below), so the manifest still describes clips that no page embeds. That is
+// intended; nothing fails on an unreferenced manifest item.
 const RELEASE_BASE = "https://github.com/DrKnickers/particle-editor/releases/download/site-media/";
 const TUTORIAL_MEDIA = new Map([
   ["01-make-a-hardpoint-damage-effect-obvious", {
@@ -27,8 +30,13 @@ const TUTORIAL_MEDIA = new Map([
     stills: ["tutorial-01-opening-result.png"],
     manualComment: 1,
   }],
+  // Tutorials 2 and 4 ship NO clips pre-release: the recordings were withdrawn pending
+  // re-record, leaving each page its opening still only. Their nav.json entries carry
+  // `status: "videos-pending"`, which the sidebar renders as a badge. Empty `clips` here is
+  // therefore the intended state, not a drop to be "fixed" — restoring a clip means
+  // re-adding its `<!-- Media: id -->` anchor AND its filename to the array below.
   ["02-polish-hardpoint-damage-smoke", {
-    clips: ["tutorial-02-color-warm-tint.mp4", "tutorial-02-alpha-fade.mp4", "tutorial-02-scale-growth.mp4", "tutorial-02-final-preview.mp4"],
+    clips: [],
     stills: ["tutorial-02-opening-result.png"],
     manualComment: 0,
   }],
@@ -38,10 +46,12 @@ const TUTORIAL_MEDIA = new Map([
     stills: ["tutorial-03-glow-layers.png", "tutorial-03-muzzle-glow-props.png"],
     manualComment: 0,
   }],
+  // Its opening media is now a STILL: the manifest item was converted clip → image and points
+  // at the poster frame the clip already published, so the page keeps a visual definition of
+  // "a clear purple hit effect" for the subjective checks at §0 and §6.
   ["04-recolor-and-orient-a-shield-impact", {
-    clips: ["tutorial-04-opening-result.mp4", "tutorial-04-open-override.mp4", "tutorial-04-identify-emitters.mp4",
-      "tutorial-04-recolor-purple.mp4", "tutorial-04-orient-preview.mp4", "tutorial-04-final-preview.mp4"],
-    stills: [],
+    clips: [],
+    stills: ["tutorial-04-opening-result-poster.jpg"],
     manualComment: 0,
   }],
   ["05-build-an-explosion", {
@@ -154,6 +164,41 @@ test("guide pager: first, middle, and final pages expose expected directions", a
     .toHaveAttribute("href", "./particle-authoring-primer.html");
 });
 
+// Pages flagged `status: "videos-pending"` in nav.json render a muted badge but MUST stay
+// ordinary links: four other pages (setup, home, concepts-before-you-build, tutorial 1) treat
+// them as existing — in setup's case prerequisite — curriculum, so a dead or hidden entry would
+// make the guide contradict itself. Derived from nav.json so adding/clearing a flag updates the
+// expectation with the manifest, not by hand.
+const PENDING_SLUGS = (NAV as { sections: { pages: { slug: string; status?: string }[] }[] })
+  .sections.flatMap((s) => s.pages)
+  .filter((p) => p.status === "videos-pending")
+  .map((p) => p.slug);
+
+test("guide videos-pending: flagged pages badge but stay clickable links", async ({ page }) => {
+  expect(PENDING_SLUGS.length, "nav.json should flag at least one videos-pending page").toBeGreaterThan(0);
+
+  await page.goto(guidePath("home"));
+  for (const slug of PENDING_SLUGS) {
+    const link = page.locator(`.guide-sidebar a[href="./${slug}.html"]`);
+    await expect(link, slug + " keeps a real sidebar link").toHaveCount(1);
+    await expect(link, slug + " is flagged pending").toHaveClass(/is-pending/);
+    await expect(link.locator(".side-pending"), slug + " badge text").toHaveText("Videos pending");
+  }
+  // Unflagged pages must NOT sprout a badge.
+  const badges = await page.locator(".guide-sidebar .side-pending").count();
+  expect(badges, "exactly one badge per flagged page").toBe(PENDING_SLUGS.length);
+
+  // On a flagged page itself both states apply at once — a single class attribute must carry
+  // BOTH, or the active highlight silently disappears on exactly these pages.
+  await page.goto(guidePath(PENDING_SLUGS[0]));
+  const self = page.locator('.guide-sidebar a[aria-current="page"]');
+  await expect(self, "flagged page keeps its own active highlight").toHaveClass(/active/);
+  await expect(self, "flagged page keeps its pending class").toHaveClass(/is-pending/);
+  // The badge is intentionally inside the accessible name — screen-reader users get the same
+  // warning sighted users do.
+  await expect(self).toContainText("Videos pending");
+});
+
 test("guide home tables: structured tables with body links", async ({ page }) => {
   await page.goto("/guide/home.html");
   const tables = page.locator("table");
@@ -178,7 +223,7 @@ test("guide tutorial media: anchors expand to the exact manifest clips/stills, i
       .evaluateAll((els) => els.map((el) => el.getAttribute("data-clip")));
     expect(clips, slug + " ordered clip filenames").toEqual(want.clips);
 
-    // Exact ordered still data-poster filenames (same reasoning; empty on pages 03/04).
+    // Exact ordered still data-poster filenames (same reasoning; empty on page 03).
     const stills = await page.locator("img.clip-img")
       .evaluateAll((els) => els.map((el) => el.getAttribute("data-poster")));
     expect(stills, slug + " ordered still filenames").toEqual(want.stills);

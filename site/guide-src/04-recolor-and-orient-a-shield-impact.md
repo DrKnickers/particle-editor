@@ -6,7 +6,7 @@ and uses the editor preview to study impact orientation.
 Shield impacts are directional effects. They need to read as something striking a surface, with
 shape and facing that support the color change.
 
-<!-- Media: tutorial-04-opening-result -->
+<!-- Media: tutorial-04-opening-result | still -->
 
 ## Outcome
 
@@ -54,8 +54,6 @@ ParticleTutorial\Data\Art\Models\P_SHIELD_BLAST_LARGE00.ALO
 Use the Preview Viewport to watch the impact play a few times before changing anything. Look for the
 main flash, any ring or splash shape, and any fading glow after the hit.
 
-<!-- Media: tutorial-04-open-override -->
-
 ## 2. Identify the Impact Emitters
 
 This particle has two emitters: `ripple` and `splash`. Select them one at a time in the Emitter
@@ -91,8 +89,6 @@ The useful habit is to connect each selected emitter to one visible part of the 
 particles with many emitters, toggling an emitter's visibility in the tree is another quick way
 to isolate its contribution.
 
-<!-- Media: tutorial-04-identify-emitters -->
-
 ## 3. Recolor the Impact Purple
 
 With `ripple` and `splash` selected one at a time, use the Curve Editor's color tracks to shift
@@ -119,8 +115,6 @@ Because these emitters are additive, only the color tracks matter — the Alpha 
 and brightness *is* the color. Keep the `ripple` ring a touch brighter (try Red `~0.7`) so the
 core of the impact reads as energy, and let `splash` sit slightly dimmer (Red `~0.5`) as the softer
 outer kick. If everything becomes the same flat purple, widen that brightness gap between the two.
-
-<!-- Media: tutorial-04-recolor-purple -->
 
 ## 4. Preserve the Impact Shape
 
@@ -163,8 +157,6 @@ the effect's "outward" is authored as +Z. Author your own directional effects al
 the stock ones. The preview can't show how the game aligns that axis onto a struck surface, so
 test each new directional effect in game before relying on it.
 
-<!-- Media: tutorial-04-orient-preview -->
-
 ## 6. Final Preview Check
 
 Watch the finished particle at a normal preview distance. The goal is a clear purple shield hit, not
@@ -177,8 +169,6 @@ Use this final check:
 - The outer glow supports the strike.
 - The effect has a readable facing direction.
 - The impact disappears without a distracting pop.
-
-<!-- Media: tutorial-04-final-preview -->
 
 ## Takeaways
 

@@ -61,8 +61,6 @@ smoke has no color of its own.
 Watch the Preview Viewport while you adjust. If the smoke disappears, it is probably too dark, too
 transparent, or both.
 
-<!-- Media: tutorial-02-color-warm-tint -->
-
 ## 2. Add a Warm Tint Near the Source
 
 Hardpoint damage usually implies heat, sparks, or fire somewhere inside the damaged part. Fake that
@@ -95,8 +93,6 @@ the quick ramp over the first tenth of the life is what makes each puff appear s
 slow out is the standard envelope for almost anything soft, and you will meet it again on the
 explosion's smoke in [Tutorial 5](05-build-an-explosion).
 
-<!-- Media: tutorial-02-alpha-fade -->
-
 ## 4. Let the Smoke Grow as It Fades
 
 Use the Scale track to make the smoke larger over its lifetime. This helps sell the idea that hot
@@ -114,8 +110,6 @@ whole eight-second life, a gentle 60% swell:
 Preview the color, alpha, and scale together. These controls work as a group: darker smoke may need
 more alpha, larger smoke may need a softer fade, and a warmer start color may need a shorter visible
 duration.
-
-<!-- Media: tutorial-02-scale-growth -->
 
 ## 5. Break the Uniformity
 
@@ -160,8 +154,6 @@ Use these questions as a quick check:
 - Does the smoke fade instead of popping away?
 - Do the puffs differ in size, angle, and life span — or do they look like copies?
 - Does the effect stay readable without covering too much of the ship?
-
-<!-- Media: tutorial-02-final-preview -->
 
 ## Takeaways
 

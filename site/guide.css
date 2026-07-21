@@ -38,6 +38,13 @@ body.guide {
 }
 .guide-sidebar a:hover { color: var(--paper); }
 .guide-sidebar a.active { color: var(--accent); border-left-color: var(--accent); }
+/* Pages whose clips are withdrawn pending re-record: the link stays fully usable, so only the
+   badge is muted — the title keeps normal body contrast rather than dimming a working link. */
+.side-pending {
+  display: block; font-family: var(--mono); font-size: .64rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--faint); margin-top: .15rem;
+}
+.guide-sidebar a.active .side-pending { color: var(--accent); opacity: .8; }
 
 /* ---- Article ---- */
 /* max-width:100% clamps the grid item to its track: without it Chromium lets a wide-min-

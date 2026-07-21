@@ -73,10 +73,10 @@
       <p class="side-label">Tutorials</p>
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
-      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="active" aria-current="page">2. Polish Hardpoint Damage Smoke</a></li>
+      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="active is-pending" aria-current="page">2. Polish Hardpoint Damage Smoke <span class="side-pending">Videos pending</span></a></li>
       <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
       <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
-      <li><a href="./04-recolor-and-orient-a-shield-impact.html">4. Recolor and Orient a Shield Impact</a></li>
+      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">Videos pending</span></a></li>
       <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
       <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
@@ -136,7 +136,6 @@
 <p>(These are dark-gray targets — well below the stock's bright <code>0.5–1.0</code> start. The exact numbers are not sacred; keep them low and close together.)</p>
 <p>The convergence matters as much as the darkness: early in the life the channels can differ (that is the next section's warm tint), but by death they should meet at the same value, because aged smoke has no color of its own.</p>
 <p>Watch the Preview Viewport while you adjust. If the smoke disappears, it is probably too dark, too transparent, or both.</p>
-<figure class="guide-media" aria-label="Show adjusting color over lifetime from proof green toward dark smoke with warm source tint."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-color-warm-tint.mp4" data-poster="tutorial-02-color-warm-tint-poster.jpg"></video></figure>
 <h2 id="2-add-a-warm-tint-near-the-source">2. Add a Warm Tint Near the Source</h2>
 <p>Hardpoint damage usually implies heat, sparks, or fire somewhere inside the damaged part. Fake that lighting by making the early smoke slightly warmer, then letting it cool as it ages.</p>
 <p>In the Curve Editor, adjust the color near the start of the smoke lifetime so it has a small red or orange bias — at the <code>0%</code> key push Red up to about <code>0.35</code> while keeping Green and Blue near <code>0.22</code>. Keep the later part of the lifetime closer to neutral gray, letting all three channels meet around <code>0.25</code> by the midpoint.</p>
@@ -154,7 +153,6 @@
 </tbody>
 </table>
 <p>Both ends matter, for different reasons. Smoke that fades out feels like it disperses; smoke that simply stops feels switched off. And smoke that starts at full opacity <em>pops</em> into existence — the quick ramp over the first tenth of the life is what makes each puff appear softly. Fast in, slow out is the standard envelope for almost anything soft, and you will meet it again on the explosion's smoke in <a href="./05-build-an-explosion.html">Tutorial 5</a>.</p>
-<figure class="guide-media" aria-label="Show shaping alpha so the smoke fades out instead of popping."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-alpha-fade.mp4" data-poster="tutorial-02-alpha-fade-poster.jpg"></video></figure>
 <h2 id="4-let-the-smoke-grow-as-it-fades">4. Let the Smoke Grow as It Fades</h2>
 <p>Use the Scale track to make the smoke larger over its lifetime. This helps sell the idea that hot smoke is spreading away from the damage source.</p>
 <p>The shape does not need to be dramatic — the stock emitter grows from <code>25</code> to <code>40</code> across its whole eight-second life, a gentle 60% swell:</p>
@@ -169,7 +167,6 @@
 </tbody>
 </table>
 <p>Preview the color, alpha, and scale together. These controls work as a group: darker smoke may need more alpha, larger smoke may need a softer fade, and a warmer start color may need a shorter visible duration.</p>
-<figure class="guide-media" aria-label="Show scale growth so smoke expands naturally over lifetime."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-scale-growth.mp4" data-poster="tutorial-02-scale-growth-poster.jpg"></video></figure>
 <h2 id="5-break-the-uniformity">5. Break the Uniformity</h2>
 <p>Play the effect and look closely: if every puff of smoke is the same size, lives the same length, and holds the same angle, the effect reads as <em>copies of one particle</em> — and real smoke never does. The fix is not more emitters. The stock file already demonstrates it — check its spinners and you will find every one of these in use:</p>
 <ul>
@@ -189,7 +186,6 @@
 <li>Do the puffs differ in size, angle, and life span — or do they look like copies?</li>
 <li>Does the effect stay readable without covering too much of the ship?</li>
 </ul>
-<figure class="guide-media" aria-label="Show the polished smoke playing in the editor preview at a normal camera distance."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-02-final-preview.mp4" data-poster="tutorial-02-final-preview-poster.jpg"></video></figure>
 <h2 id="takeaways">Takeaways</h2>
 <p>The exact values of a particle matter less than the result they create: color, alpha, and scale should work together to communicate heat, smoke, and fading motion. Change one idea at a time and preview the result in motion.</p>
       </article>

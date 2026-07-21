@@ -37,7 +37,15 @@ written as bare lowercase page slugs (`[Setup](setup)`) — the build resolves t
 `nav.json` and **fails on an unknown slug or a leftover wiki-style page ref** (external
 `http(s)`/`mailto`, `#anchors`, and explicit `./`/`../` paths pass through unchanged), so
 broken cross-references can't ship. Hidden `<!-- Media: … -->` comments in tutorial pages
-are anchors for the clip workstream — preserve them.
+are anchors for the clip workstream — preserve them while editing prose. They are removed only
+to deliberately **withdraw** media (as tutorials 2 and 4 did pre-release, pending re-record);
+withdrawing also means updating that page's entry in `tests-site/guide.spec.ts`, whose
+`TUTORIAL_MEDIA` map pins the exact ordered filenames each page renders. Leaving the manifest
+item in place is fine — an unreferenced item breaks nothing, and it keeps the restore recipe.
+The `<!-- Media: id | still -->` modifier renders a **clip** item as its poster frame instead of
+the video, for a page that should keep a visual without shipping the recording. Prefer it over
+retyping the item as `kind: "image"` in the manifest: the manifest describes what the pipeline
+produces, and `runImageExport` requires a `.png` output while a clip's poster is a `.jpg`.
 
 ## Local preview
 

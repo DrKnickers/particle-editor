@@ -25,10 +25,10 @@ quick references.
 | [Particle Authoring Primer](particle-authoring-primer) | Learn the basic ideas behind emitters, tracks, blend modes, and particle lifetime. | ~10 min |
 | [Curve Editor Basics](curve-editor-basics) | Tracks, keys, the value spinners, and interpolation — the mechanics every tutorial uses. | ~5 min |
 | [Tutorial 1: Make a Hardpoint Damage Effect Obvious](01-make-a-hardpoint-damage-effect-obvious) | Override a shipped Star Destroyer damage particle and make it bright green so the edit is easy to prove. | ~20 min |
-| [Tutorial 2: Polish Hardpoint Damage Smoke](02-polish-hardpoint-damage-smoke) | Turn the proof edit into believable dark smoke with a subtle warm tint. | ~20 min |
+| [Tutorial 2: Polish Hardpoint Damage Smoke](02-polish-hardpoint-damage-smoke) | Turn the proof edit into believable dark smoke with a subtle warm tint. *(Videos pending.)* | ~20 min |
 | [Concepts Before You Build](concepts-before-you-build) | The handful of decisions every new emitter needs, before the from-scratch tutorials. | ~5 min |
 | [Tutorial 3: Build a Laser Shot and Muzzle Flash](03-build-a-laser-shot-and-muzzle-flash) | Build a blank particle into a green laser shot with separate projectile and muzzle-flash emitters. | ~30 min |
-| [Tutorial 4: Recolor and Orient a Shield Impact](04-recolor-and-orient-a-shield-impact) | Override a shield impact particle, recolor it purple, and study impact orientation in the editor preview. | ~20 min |
+| [Tutorial 4: Recolor and Orient a Shield Impact](04-recolor-and-orient-a-shield-impact) | Override a shield impact particle, recolor it purple, and study impact orientation in the editor preview. *(Videos pending.)* | ~20 min |
 | [Tutorial 5: Build an Explosion](05-build-an-explosion) | Build a full explosion from scratch: flash, animated fireball, smoke, and flying sparks. | ~40 min |
 | [Build Your Own Effect](build-your-own-effect) | A capstone brief with no recipe — plan and build a new effect from a description alone. | ~30 min |
 
