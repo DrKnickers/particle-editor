@@ -20,6 +20,12 @@
 web/apps/editor/tests/a11y-goldens/*.golden.json   text eol=lf
 web/apps/editor/tests/a11y-goldens/*.golden.yaml   text eol=lf
 
+# Prerendered guide HTML. Same footgun, different lane: `build-guide.mjs --check`
+# compares each committed file's raw bytes against the freshly generated string
+# (`current !== html`), so a CRLF-smudged working copy reports all 22 pages stale
+# on a fresh clone even though the committed content is byte-identical.
+site/guide/*.html   text eol=lf
+
 # Forward-looking patterns. Match common snapshot/golden naming
 # conventions across the repo so future additions inherit the LF
 # rule without re-discovering this footgun. Currently matches zero

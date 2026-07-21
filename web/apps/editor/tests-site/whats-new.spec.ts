@@ -134,3 +134,33 @@ test("guide home points returning modders at whats-new", async ({ page }) => {
   const resp = await page.request.get("/whats-new.html");
   expect(resp.status()).toBe(200);
 });
+
+// The topbar is `flex-wrap:nowrap` with every child `white-space:nowrap`, and the <=520px block
+// pins .topnav to `flex:0 0 auto` — so the bar has a fixed intrinsic width that cannot shrink.
+// Before `flex-wrap:wrap` at <=400px, a fourth nav item overflowed the body at 390px (a very
+// common device width) and any FUTURE nav item would silently do it again at some width. The
+// departures table has the same shape: three prose columns cannot fit 320px, so it scrolls
+// inside .table-scroll rather than pushing the body. Assert the invariant, not the thresholds.
+const NARROW_WIDTHS = [320, 360, 390];
+
+test("responsive: the body never scrolls horizontally; the table absorbs its own overflow", async ({ page }) => {
+  for (const path of ["/", "/whats-new.html", "/guide/home.html"]) {
+    for (const width of NARROW_WIDTHS) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(path);
+      const overflows = await page.evaluate(() =>
+        document.documentElement.scrollWidth > document.documentElement.clientWidth);
+      expect(overflows, `${path} must not scroll horizontally at ${width}px`).toBe(false);
+      const bar = page.locator("header.topbar");
+      const barOverflows = await bar.evaluate((el) => el.scrollWidth > el.clientWidth);
+      expect(barOverflows, `${path} topbar must not overflow at ${width}px`).toBe(false);
+    }
+  }
+  // At the narrowest width the scroll container — not the page — takes the overflow.
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto("/whats-new.html");
+  const scroller = page.locator(".table-scroll");
+  await expect(scroller).toHaveCount(1);
+  const tableScrolls = await scroller.evaluate((el) => el.scrollWidth > el.clientWidth);
+  expect(tableScrolls, "the table, not the body, must absorb the overflow at 320px").toBe(true);
+});

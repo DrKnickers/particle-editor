@@ -131,6 +131,10 @@
       <h2 id="wn-dep-h">What behaves differently</h2>
       <p class="feature-copy">Deliberate changes, not omissions — the habits from the original that
         work differently here.</p>
+      <!-- Scroll container: three prose columns cannot fit a 320px viewport, and the page body
+           must never scroll horizontally. tabindex + role/label keep the scroller keyboard
+           reachable and announced (axe flags an unlabelled scrollable region). -->
+      <div class="table-scroll" tabindex="0" role="region" aria-labelledby="wn-dep-h">
       <table class="compare-table">
         <thead>
           <tr><th scope="col">In the old editor</th><th scope="col">Here</th><th scope="col">Why</th></tr>
@@ -143,6 +147,7 @@
           <tr><td>A colour swatch set the background, full stop</td><td>The colour is the fallback; a selected game skydome takes over, and choosing a colour clears the dome</td><td>Backgrounds can now be a real in-game dome, so the two settings are mutually exclusive.</td></tr>
         </tbody>
       </table>
+      </div>
       <p class="feature-copy">Everything else — file format, parameter meanings, engine-accurate
         rendering — carries over. Your <code>.alo</code> files open unchanged.</p>
     </section>
