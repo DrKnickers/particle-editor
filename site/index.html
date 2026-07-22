@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Particle Editor — Effects, previewed in context.</title>
+  <title>Particle Editor for Empire at War Effects</title>
   <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
        inline rules cover the frames before styles.css arrives — kills the white flash on
        navigation / view transitions. The @view-transition opt-in and the dark backstop across
@@ -31,12 +31,12 @@
   <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
        main content is parsed, so the transition never captures a partially-rendered frame. -->
   <link rel="expect" href="#top" blocking="render">
-  <meta name="description" content="A modern editor for .alo particle systems, with scene references, mod-stack awareness, atlas picking, and a live preview for Empire at War effects.">
+  <meta name="description" content="Windows editor for Empire at War .alo particle systems, with ordered mod asset loading, scene references, atlas-frame selection, and a live preview.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
   <!-- Open Graph / Twitter (image URL filled at rollout — site-media release) -->
-  <meta property="og:title" content="Particle Editor — Effects, previewed in context.">
-  <meta property="og:description" content="A modern editor for .alo particle systems, with scene references, mod-stack awareness, atlas picking, and a live preview for Empire at War effects.">
+  <meta property="og:title" content="Particle Editor for Empire at War Effects">
+  <meta property="og:description" content="Windows editor for Empire at War .alo particle systems, with ordered mod asset loading, scene references, atlas-frame selection, and a live preview.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://github.com/DrKnickers/particle-editor/releases/download/site-media/og.jpg">
   <meta name="twitter:card" content="summary_large_image">
@@ -67,14 +67,14 @@
     <!-- Hero -->
     <section class="hero" aria-labelledby="hero-h">
       <p class="kicker">Particle effects editor · Empire at War</p>
-      <h1 id="hero-h">Effects, previewed in game context.</h1>
-      <p class="lede">An updated <code>.alo</code> particle editor that previews effects with game context:
-        a game unit for scale, a skydome and ground for backdrop, your mod stack for assets, and more.</p>
+      <h1 id="hero-h">Edit and preview Empire at War particle effects.</h1>
+      <p class="lede">Open <code>.alo</code> files, load models, textures, and shaders through an ordered mod
+        stack, and preview the result with a skydome, ground, lighting, and a movable reference object.</p>
       <p class="actions">
         <a class="btn-primary" href="https://github.com/DrKnickers/particle-editor/releases/latest">↓ Download for Windows</a>
         <a class="btn-quiet" href="https://github.com/DrKnickers/particle-editor">View the source</a>
       </p>
-      <p class="hero-note">Windows x64 · uses your game install for full context</p>
+      <p class="hero-note">Windows x64 · uses data from your Empire at War installation</p>
       <figure class="clip clip-hero" aria-label="A particle effect playing in the editor viewport.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -82,12 +82,12 @@
       </figure>
     </section>
 
-    <!-- 1 · Scene context -->
+    <!-- 1 · Viewport -->
     <section class="feature" aria-labelledby="s1-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">1</span> Scene context</p>
-      <h2 id="s1-h">Reference the scene.</h2>
-      <p class="feature-copy">Drop in a game unit for scale, load a skydome and ground, and tune the particle
-        against that scene.</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">1</span> Viewport</p>
+      <h2 id="s1-h">Scene references</h2>
+      <p class="feature-copy">Load a game unit or structure for scale, then choose a skydome, ground, and
+        lighting for the preview.</p>
       <figure class="clip" aria-label="An explosion effect looping beside a game unit on a ground map.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -95,12 +95,12 @@
       </figure>
     </section>
 
-    <!-- 2 · Mod stack -->
+    <!-- 2 · Assets -->
     <section class="feature" aria-labelledby="s2-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">2</span> Mod stack</p>
-      <h2 id="s2-h">Edit against your mod and submods.</h2>
-      <p class="feature-copy">Set the active mod stack and its order. The editor resolves the same asset
-        overrides as your Empire at War install — models, textures, and shaders.</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">2</span> Assets</p>
+      <h2 id="s2-h">Ordered mod loading</h2>
+      <p class="feature-copy">Add mod and submod folders to the active stack and drag them into order. The
+        editor checks the top layer first when loading models, textures, and shaders.</p>
       <figure class="clip" aria-label="A cursor dragging mod layers into a new load order.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -108,12 +108,12 @@
       </figure>
     </section>
 
-    <!-- 3 · Spawner -->
+    <!-- 3 · Preview -->
     <section class="feature" aria-labelledby="s3-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">3</span> Spawner</p>
-      <h2 id="s3-h">Preview effects in flight.</h2>
-      <p class="feature-copy">Fire the effect as a repeating burst, or launch it along an arc to see how
-        your effect reads in motion.</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">3</span> Preview</p>
+      <h2 id="s3-h">Spawner controls</h2>
+      <p class="feature-copy">Launch the effect once or at a fixed interval. Set its direction and speed to
+        inspect it in motion.</p>
       <figure class="clip" aria-label="A hypervelocity gun slug streaking left to right across a starfield.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -121,11 +121,12 @@
       </figure>
     </section>
 
-    <!-- 4 · Emitter order -->
+    <!-- 4 · Emitter tree -->
     <section class="feature" aria-labelledby="s4-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">4</span> Emitter order</p>
-      <h2 id="s4-h">Reorder emitters with ease.</h2>
-      <p class="feature-copy">Drag and drop emitters and preview the new draw order in the live viewport.</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">4</span> Emitter tree</p>
+      <h2 id="s4-h">Emitter reordering</h2>
+      <p class="feature-copy">Drag root emitters to a new position. The viewport updates immediately so you
+        can check the resulting draw order.</p>
       <figure class="clip" aria-label="A cursor dragging a smoke emitter to the front of a fireball.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -133,11 +134,12 @@
       </figure>
     </section>
 
-    <!-- 5 · Atlas picker -->
+    <!-- 5 · Textures -->
     <section class="feature" aria-labelledby="s5-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">5</span> Atlas picker</p>
-      <h2 id="s5-h">Pick atlas frames as images.</h2>
-      <p class="feature-copy">Browse an atlas as a grid of frames and click the one you want.</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">5</span> Textures</p>
+      <h2 id="s5-h">Atlas frame picker</h2>
+      <p class="feature-copy">Open the texture as a frame grid and click a cell to assign that frame to the
+        selected Index keys.</p>
       <figure class="clip" aria-label="A cursor clicking texture frames in the atlas grid.">
         <video class="clip-video" loop muted playsinline preload="none"
                width="1280" height="960"
@@ -145,11 +147,11 @@
       </figure>
     </section>
 
-    <!-- 6 · Toolset -->
+    <!-- 6 · Other tools -->
     <section class="feature" aria-labelledby="s6-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">6</span> Toolset</p>
-      <h2 id="s6-h">The rest of the toolset.</h2>
-      <p class="feature-copy">Smaller tools and safeguards, grouped by what they're for.</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">6</span> Other tools</p>
+      <h2 id="s6-h">Other editing and recovery tools</h2>
+      <p class="feature-copy">Controls that do not need a full walkthrough.</p>
       <div class="toolset-body">
         <div class="cluster">
           <p class="cluster-label">Authoring</p>
@@ -157,22 +159,22 @@
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="12" r="2.4"/><path d="M6 8.4v7.2M8.4 6H14a2 2 0 0 1 2 2v2M8.4 18H14a2 2 0 0 0 2-2v-2"/></svg></div>
               <h3>Link groups</h3>
-              <p>Edit one emitter; linked members get the same change.</p>
+              <p>Share selected parameters across a group of emitters; changing one updates the others.</p>
             </article>
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M4 15c3 0 4-8 7-8s3 5 9 5"/></svg></div>
-              <h3>Stacked curves</h3>
-              <p>See every channel at once — read green while editing red.</p>
+              <h3>Curve visibility</h3>
+              <p>Compare multiple channels on one canvas; checkboxes control which curves are visible.</p>
             </article>
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h9l5 5v11H5zM14 4v5h5M12 12v6m0 0 2.5-2.5M12 18l-2.5-2.5"/></svg></div>
               <h3>Import emitters</h3>
-              <p>Bring in some or all of the emitters in from another <code>.alo</code>.</p>
+              <p>Select and import individual emitters or whole branches from another <code>.alo</code>.</p>
             </article>
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></div>
-              <h3>Texture picker</h3>
-              <p>Browse colour and bump-map textures from a recent and pinned palette.</p>
+              <h3>Frequently used textures</h3>
+              <p>Choose colour and bump maps from per-mod Pinned and Recent thumbnail lists.</p>
             </article>
           </div>
         </div>
@@ -182,17 +184,17 @@
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 4 10.5c-.7.6-1 1-1 2H9c0-1-.3-1.4-1-2A6 6 0 0 1 12 3z"/></svg></div>
               <h3>Lighting</h3>
-              <p>Adjust sun, fill, and ambient; preview shaders that respond to light.</p>
+              <p>Adjust the sun, fill lights, ambient light, shadows, and bloom in the preview.</p>
             </article>
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></div>
-              <h3>Pause + frame-step</h3>
-              <p>Freeze and step the simulation to inspect fine movement.</p>
+              <h3>Pause and frame-step</h3>
+              <p>Pause the simulation, then advance one or ten frames at a time.</p>
             </article>
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-.9 4M20 5v6h-6"/></svg></div>
-              <h3>Reload live</h3>
-              <p>Reload textures and shaders without restarting — iterate on custom shaders and textures live.</p>
+              <h3>Reload assets</h3>
+              <p>Reload textures and shaders without restarting the editor.</p>
             </article>
           </div>
         </div>
@@ -207,12 +209,12 @@
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a8 8 0 1 1 .9 4M4 5v6h6M12 8v4l3 2"/></svg></div>
               <h3>Crash recovery</h3>
-              <p>Autosave restores your session after a crash.</p>
+              <p>After an interrupted session, choose a recent or stable autosave when the editor opens.</p>
             </article>
             <article class="qcard">
               <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10h-3"/></svg></div>
-              <h3>Undo everything</h3>
-              <p>Edits, gizmo drags, and reorders share one undo history.</p>
+              <h3>Undo and redo</h3>
+              <p>Editor changes, gizmo moves, and emitter reorders share one undo history.</p>
             </article>
           </div>
           <p class="essentials-label">Also included</p>
@@ -231,7 +233,7 @@
     <p class="actions">
       <a class="btn-primary" href="https://github.com/DrKnickers/particle-editor/releases/latest">↓ Latest release (.zip)</a>
     </p>
-    <p class="footer-meta">MIT-licensed · forked from GlyphXTools/particle-editor · Windows x64 · uses your game install for full scene context</p>
+    <p class="footer-meta">MIT-licensed · forked from GlyphXTools/particle-editor · Windows x64 · uses data from your Empire at War installation</p>
   </footer>
 
   <script type="module" src="main.js"></script>

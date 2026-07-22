@@ -24,7 +24,7 @@ test("structure: hero, 6 features, footer; no uncaught JS errors", async ({ page
   page.on("pageerror", (e) => jsErrors.push(String(e))); // uncaught JS only — resource
                                                           // errors don't count
   await page.goto("/");
-  await expect(page.locator("h1")).toHaveText("Effects, previewed in game context.");
+  await expect(page.locator("h1")).toHaveText("Edit and preview Empire at War particle effects.");
   await expect(page.locator("section.feature")).toHaveCount(6);
   await expect(page.locator("header.topbar")).toBeVisible();
   await expect(page.locator("footer.site-footer")).toBeVisible();
