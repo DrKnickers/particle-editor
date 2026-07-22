@@ -41,11 +41,16 @@
 //   --skip-build          skip web-build/msbuild lanes + native unit rebuilds
 //                         (UNSAFE: asserts current artifacts are fresh)
 //   --list                print lanes and exit
+//   --help, -h            print usage and exit
+//
+// An unknown flag is an ERROR (usage + exit 1), never a silent fall-through to
+// the full unscoped gate — which, run by accident, kicks off the multi-minute
+// MSBuild/game-install lanes.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, statSync, writeFileSync, readFileSync, unlinkSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const editorDir = join(repoRoot, "web", "apps", "editor");
@@ -56,21 +61,57 @@ const distIndex = join(editorDir, "dist", "index.html");
 const smokeFixture = join(editorDir, "tests", "fixtures", "a11y-base-state.alo");
 const lockPath = join(repoRoot, ".gate.lock");
 
-const argv = process.argv.slice(2);
-function argList(name) {
-  // Collect EVERY occurrence (--lane a --lane b) plus comma lists (--lane a,b).
-  const out = [];
+// ---------------------------------------------------------------------------
+// Argument parsing. Kept as a pure function (no process.* reads, no side
+// effects) so a unit test can assert the grammar — in particular that an
+// unrecognized flag or a bare --help lands in `unknown`/`help` rather than
+// being silently ignored, which is what let `--help` fall through to the full
+// unscoped gate.
+const splitList = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
+
+export function parseArgs(argv) {
+  const lane = [];
+  const allowMissing = [];
+  const unknown = [];
+  let skipBuild = false, list = false, help = false;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === name && argv[i + 1]) {
-      out.push(...argv[i + 1].split(",").map((s) => s.trim()).filter(Boolean));
-    }
+    const a = argv[i];
+    // --lane / --allow-missing each consume the next token (a value or comma
+    // list) and are repeatable; consuming it here also keeps that value out of
+    // `unknown`.
+    if (a === "--lane") { if (argv[i + 1] !== undefined) lane.push(...splitList(argv[++i])); continue; }
+    if (a === "--allow-missing") { if (argv[i + 1] !== undefined) allowMissing.push(...splitList(argv[++i])); continue; }
+    if (a === "--skip-build") { skipBuild = true; continue; }
+    if (a === "--list") { list = true; continue; }
+    if (a === "--help" || a === "-h") { help = true; continue; }
+    unknown.push(a);
   }
-  return out;
+  return { lane, allowMissing, skipBuild, list, help, unknown };
 }
-const ONLY = argList("--lane");
-const ALLOW_MISSING = new Set(argList("--allow-missing"));
-const SKIP_BUILD = argv.includes("--skip-build");
-const LIST = argv.includes("--list");
+
+export function usage() {
+  return [
+    "Unified test gate — runs the automated test lanes; exits nonzero on any failure.",
+    "",
+    "Usage: node scripts/run-all-tests.mjs [flags]",
+    "",
+    "Flags:",
+    "  --lane <a,b,…>         run only these lanes (repeatable; deps NOT auto-added)",
+    "  --allow-missing <a,b>  downgrade a lane's missing-prereq FAIL to a visible SKIP",
+    "  --skip-build           skip build lanes + native rebuilds (UNSAFE: assumes fresh artifacts)",
+    "  --list                 print the lane names and exit",
+    "  --help, -h             print this help and exit",
+    "",
+    "With no flags, runs the full gate. Use --list to see every lane name.",
+  ].join("\n");
+}
+
+const argv = process.argv.slice(2);
+const ARGS = parseArgs(argv);
+const ONLY = ARGS.lane;
+const ALLOW_MISSING = new Set(ARGS.allowMissing);
+const SKIP_BUILD = ARGS.skipBuild;
+const LIST = ARGS.list;
 
 function log(msg) {
   console.log(`[gate] ${msg}`);
@@ -388,6 +429,17 @@ function acquireLock() {
 }
 
 function main() {
+  if (ARGS.help) {
+    console.log(usage());
+    return 0;
+  }
+  if (ARGS.unknown.length > 0) {
+    // Reject rather than ignore: an unrecognized flag with no --lane would
+    // otherwise silently run the entire gate.
+    log(`unknown argument(s): ${ARGS.unknown.join(", ")}`);
+    console.log(usage());
+    return 1;
+  }
   const lanes = ONLY.length > 0 ? LANES.filter((l) => ONLY.includes(l.name)) : LANES;
   if (LIST) {
     for (const l of lanes) console.log(l.name);
@@ -440,4 +492,8 @@ function main() {
   return failed.length > 0 ? 1 : 0;
 }
 
-process.exit(main());
+// Only run the gate when invoked as a script — importing the module (e.g. from
+// run-all-tests.test.mjs to exercise parseArgs/usage) must not start a gate.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exit(main());
+}
