@@ -394,9 +394,11 @@ function sidebarHtml(nav, activeSlug) {
           // ONE merged class attribute: both states can apply at once (the reader can BE on a
           // pending page), and emitting a second class= would drop whichever came first.
           const classes = [active ? "active" : "", pending ? "is-pending" : ""].filter(Boolean).join(" ");
-          // The badge is deliberately inside the anchor and NOT aria-hidden: "…Videos pending"
-          // in the accessible name is the same useful warning sighted readers get.
-          const badge = pending ? ` <span class="side-pending">Videos pending</span>` : "";
+          // The badge is deliberately inside the anchor and NOT aria-hidden: "…(Videos pending)"
+          // in the accessible name is the same useful warning sighted readers get. The brackets
+          // separate the badge from the title it sits flush against — without them it reads as
+          // part of the tutorial's name and is easy to miss.
+          const badge = pending ? ` <span class="side-pending">(Videos pending)</span>` : "";
           return `      <li><a href="./${encodeURIComponent(p.slug)}.html"${classes ? ` class="${classes}"` : ""}${active ? ' aria-current="page"' : ""}>${escapeHtml(p.title)}${badge}</a></li>`;
         })
         .join("\n");
@@ -484,7 +486,6 @@ function pageHtml({ title, guideHref, sidebar, kicker, content, pager, toc }) {
         <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
       </a>
       <a class="nav-source" href="${guideHref}">Guide</a>
-      <a class="nav-source" href="../whats-new.html">What's New</a>
       <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
       <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
            geometry identical across pages so buttons don't shift during the cross-page

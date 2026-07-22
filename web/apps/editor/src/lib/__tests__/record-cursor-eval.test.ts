@@ -189,6 +189,43 @@ describe("record-cursor-eval — element target resolution", () => {
     });
   });
 
+  it("rejects an element whose center is clipped outside a scroll container", () => {
+    const scroller = addEl(
+      { "data-testid": "curve-channel-list" },
+      { left: 20, top: 20, width: 100, height: 80 },
+    );
+    scroller.style.overflowY = "auto";
+    const clippedRow = addEl(
+      { "data-testid": "curve-channel-row-scale" },
+      { left: 20, top: 120, width: 80, height: 20 },
+    );
+    scroller.appendChild(clippedRow);
+
+    const resolved = resolveTargetCenter({ kind: "element", ref: "channel-row:scale" });
+    expect(resolved.ok).toBe(false);
+    expect(resolved.x).toBeNaN();
+    expect(resolved.y).toBeNaN();
+  });
+
+  it("targets the visible slice of a partially clipped element", () => {
+    const scroller = addEl(
+      { "data-testid": "curve-channel-list" },
+      { left: 20, top: 20, width: 100, height: 80 },
+    );
+    scroller.style.overflowY = "auto";
+    const partialRow = addEl(
+      { "data-testid": "curve-channel-row-scale" },
+      { left: 20, top: 90, width: 80, height: 20 },
+    );
+    scroller.appendChild(partialRow);
+
+    expect(resolveTargetCenter({ kind: "element", ref: "channel-row:scale" })).toEqual({
+      x: 60,
+      y: 95,
+      ok: true,
+    });
+  });
+
   it("returns unresolved for malformed refs and for elements missing from the DOM", () => {
     for (const ref of ["bogus:thing", "curve-key:only-channel", "testid:", "no-colon-at-all"]) {
       const r = resolveTargetCenter({ kind: "element", ref: ref as CursorElementRef });

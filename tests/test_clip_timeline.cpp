@@ -422,11 +422,14 @@ int main()
         CHECK(IsAllowedRecordKind("engine/set/skydome-environment"));
         CHECK(IsAllowedRecordKind("ui/show-panel"));
         CHECK(IsAllowedRecordKind("ui/open-picker"));
+        CHECK(IsAllowedRecordKind("ui/set-theme"));
+        CHECK(IsAllowedRecordKind("ui/reveal-curve-channel"));
         CHECK(IsAllowedRecordKind("ui/select-key"));
         CHECK(!IsAllowedRecordKind("ui/atlas-alpha"));   // removed with the Alpha toggle — no longer a valid record-kind
         CHECK(IsAllowedRecordKind("ui/pose-drag"));
         CHECK(IsAllowedRecordKind("ui/set-picker-search"));
         CHECK(IsAllowedRecordKind("ui/picker-collapse"));
+        CHECK(IsAllowedRecordKind("textures/palette/toggle-pin"));
         CHECK(IsAllowedRecordKind("engine/set/reference-object-lock"));   // the actual clip-dispatch gate
         CHECK(drive::IsAllowedBridgeKind("engine/set/reference-object-lock"));
         CHECK(IsAllowedRecordKind("engine/set/reference-object-transform"));   // clip pins swapped units to a common centroid
@@ -434,6 +437,8 @@ int main()
         CHECK(!drive::IsAllowedBridgeKind("emitters/delete"));
         CHECK(!drive::IsAllowedBridgeKind("ui/show-panel"));
         CHECK(!drive::IsAllowedBridgeKind("ui/open-picker"));
+        CHECK(!drive::IsAllowedBridgeKind("ui/set-theme"));
+        CHECK(!drive::IsAllowedBridgeKind("textures/palette/toggle-pin"));
         CHECK(!drive::IsAllowedBridgeKind("ui/select-key"));
         CHECK(!drive::IsAllowedBridgeKind("ui/pose-drag"));
         // ...but record-only: NOT in the shared --drive allowlist

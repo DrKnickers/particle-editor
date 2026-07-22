@@ -375,6 +375,11 @@ test("a clip timeline without the reference-object clears fails the no-reference
   ] };
   // Setting a real name fails on BOTH counts: no clear present AND a non-empty name set.
   assert.equal(validateTimelineNoReferenceObject(wrongName, "x").length, 2, "setting a real reference object must not count as a clear");
+  assert.deepEqual(
+    validateTimelineNoReferenceObject(wrongName, "x", true),
+    [],
+    "an explicit manifest opt-in permits media whose subject is the reference-object feature",
+  );
   // Clears present but a LATER event re-sets/re-shows the reference object → still fails.
   const clearedThenReadded = { tracks: [
     { at: 0, kind: "engine/set/reference-object", params: { name: "" } },
@@ -383,6 +388,21 @@ test("a clip timeline without the reference-object clears fails the no-reference
     { at: 5030, kind: "engine/set/reference-object-visible", params: { visible: true } },
   ] };
   assert.equal(validateTimelineNoReferenceObject(clearedThenReadded, "x").length, 2, "re-adding after clearing must fail");
+});
+
+test("the returning-user scene-context clip explicitly permits its reference object", async () => {
+  const { validateTimelineNoReferenceObject } = await import("../build.mjs");
+  const manifest = JSON.parse(readFileSync(join(repoRoot, "tasks", "wiki-media", "manifest.json"), "utf8"));
+  const item = manifest.items.find(({ id }) => id === "ref-returning-scene-context");
+  assert.ok(item, "ref-returning-scene-context must remain in the media manifest");
+  assert.equal(item.allowReferenceObject, true, "the manifest must opt this feature clip into reference-object rendering");
+
+  const timeline = JSON.parse(readFileSync(join(repoRoot, item.timeline), "utf8"));
+  assert.ok(
+    validateTimelineNoReferenceObject(timeline, item.id).length > 0,
+    "the reused timeline must exercise a real reference object",
+  );
+  assert.deepEqual(validateTimelineNoReferenceObject(timeline, item.id, item.allowReferenceObject), []);
 });
 
 test("a failing verify gate records gate=fail, does not abort the batch, and yields a non-zero exit", async (t) => {
@@ -427,4 +447,40 @@ test("validateManifest exempts planned items without a timeline — and nothing 
   assert.ok(withTl.some((e) => e.includes("missing required")), withTl.join("; "));
   // a fully-specified rendered item still validates clean
   assert.deepEqual(validateManifest({ items: [{ id: "d", status: "rendered", timeline: "t.json", ...base }] }), []);
+});
+
+test("the returning-user curve clip keeps its live particle payoff visible", () => {
+  const manifest = JSON.parse(readFileSync(join(repoRoot, "tasks", "wiki-media", "manifest.json"), "utf8"));
+  const item = manifest.items.find(({ id }) => id === "ref-curve-visibility");
+  assert.ok(item, "ref-curve-visibility must remain in the media manifest");
+
+  const timeline = JSON.parse(readFileSync(join(repoRoot, item.timeline), "utf8"));
+  assert.ok(
+    timeline.tracks.some(({ kind }) => kind === "spawner/start"),
+    "the clip must create a live preview instance",
+  );
+  assert.ok(
+    timeline.tracks.some(({ kind }) => kind === "spawner/trigger"),
+    "the clip must trigger the particle system",
+  );
+  assert.equal(item.framing, "full-app");
+  assert.equal(item.encode?.zoom, undefined, "a curve-only zoom would crop the viewport payoff away");
+  assert.ok(
+    item.acceptance.some((line) => /particle system.*visible/i.test(line)),
+    "acceptance must require the particle system to remain visible",
+  );
+
+  const cursor = timeline.tracks.find(({ cursor }) => Array.isArray(cursor))?.cursor ?? [];
+  const scalePress = cursor.find(
+    (key) => key.press === true && key.target?.ref === "testid:curve-channel-row-scale",
+  );
+  const revealScale = timeline.tracks.find(
+    ({ kind, params }) => kind === "ui/reveal-curve-channel" && params?.channel === "scale",
+  );
+  assert.ok(scalePress, "the clip must visibly click the Scale channel row");
+  assert.ok(revealScale, "the clip must reveal the clipped Scale row before targeting it");
+  assert.ok(
+    revealScale.at < scalePress.t,
+    "the Scale row must be revealed before the cursor presses it",
+  );
 });

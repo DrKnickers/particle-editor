@@ -275,7 +275,9 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     // through to the runner; they never reach IsAllowedBridgeKind.
     if (kind == "ui/show-panel")    return true;
     if (kind == "ui/open-picker")   return true;
+    if (kind == "ui/set-theme")     return true;  // pin dark/light in an isolated capture profile
     if (kind == "ui/focus-channel") return true;  // focus a curve channel mid-clip
+    if (kind == "ui/reveal-curve-channel") return true;  // scroll a channel row into view without selecting it
     if (kind == "ui/select-key")    return true;  // select a curve key (lights the atlas preview/highlight)
     if (kind == "ui/pose-drag")     return true;  // pose a frozen reorder drag (chip+gap) for a clip still
     if (kind == "ui/set-picker-search") return true;  // drive a picker's search box (the cursor can't type)
@@ -314,17 +316,18 @@ inline bool IsAllowedRecordKind(const std::string& kind) {
     if (kind == "preview/move")   return true;
     if (kind == "preview/place")  return true;
     if (kind == "preview/kill")   return true;
-    // textures/palette/touch-recent — seed the per-mod frequently-used texture
-    // palette so a build clip can click a specific texture tile: the record
+    // textures/palette/touch-recent + toggle-pin — seed the per-mod frequently-
+    // used texture palette so a build clip can show/click real tiles: the record
     // cursor is pointer-only (can't type a filename into the Color field) and
     // the Browse button opens a native OS file dialog it can't drive, so the
     // palette popover is the ONLY cursor-reachable texture-swap path — and a
     // tile only exists once the texture is in this mod's recents. The handler
-    // (BridgeDispatch_Assets.cpp) writes only the app's own bounded recents
-    // ring in %APPDATA%\AloParticleEditor\texture-palettes.ini (fixed path, no
-    // modal, no arbitrary-path write), so it's record-safe. Record/seed-only;
-    // never on the --drive allowlist (IsAllowedBridgeKind).
+    // (BridgeDispatch_Assets.cpp) mutates only the automation-isolated in-memory
+    // palette; Store::SetEphemeral prevents both reads and writes of the user's
+    // %APPDATA% palette. Record/seed-only; never on the --drive allowlist
+    // (IsAllowedBridgeKind).
     if (kind == "textures/palette/touch-recent") return true;
+    if (kind == "textures/palette/toggle-pin")   return true;
     if (!drive::IsAllowedBridgeKind(kind)) return false;
     if (kind == "engine/set/paused") return false;
     return true;

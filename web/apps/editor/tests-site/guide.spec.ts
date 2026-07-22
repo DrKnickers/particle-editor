@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -24,7 +25,25 @@ const SECTION_COUNT = NAV.sections.length;
 // their entries below), so the manifest still describes clips that no page embeds. That is
 // intended; nothing fails on an unreferenced manifest item.
 const RELEASE_BASE = "https://github.com/DrKnickers/particle-editor/releases/download/site-media/";
-const TUTORIAL_MEDIA = new Map([
+const GUIDE_MEDIA = new Map([
+  ["coming-from-the-old-glyphx-editor", {
+    clips: [
+      "ref-curve-visibility.mp4",
+      "ref-render-order.mp4",
+      "tutorial-05-sparks-children.mp4",
+      "f04.mp4",
+      "faith.mp4",
+      "tutorial-03-spawner-direction.mp4",
+    ],
+    stills: [
+      "ref-returning-import-emitters.png",
+      "ref-returning-texture-palette.png",
+      "ref-returning-atlas-frame-picker.png",
+      "ref-returning-skydome-picker.png",
+      "ref-returning-reference-gizmo.png",
+    ],
+    manualComment: 0,
+  }],
   ["01-make-a-hardpoint-damage-effect-obvious", {
     clips: ["tutorial-01-open-override.mp4", "tutorial-01-green-color-edit.mp4", "tutorial-01-save-override.mp4"],
     stills: ["tutorial-01-opening-result.png"],
@@ -133,7 +152,16 @@ test("guide links: same-origin links resolve and fragment anchors exist", async 
 test("guide pager: first, middle, and final pages expose expected directions", async ({ page }) => {
   await page.goto("/guide/home.html");
   await expect(page.locator(".guide-pager .pager-prev")).toHaveCount(0);
-  await expect(page.locator(".guide-pager .pager-next")).toHaveCount(1);
+  await expect(page.locator(".guide-pager .pager-next"))
+    .toHaveAttribute("href", "./coming-from-the-old-glyphx-editor.html");
+
+  // Returning GlyphX users get their own Start Here route immediately after Guide Home,
+  // before the course setup and beginner material.
+  await page.goto("/guide/coming-from-the-old-glyphx-editor.html");
+  await expect(page.locator(".guide-pager .pager-prev"))
+    .toHaveAttribute("href", "./home.html");
+  await expect(page.locator(".guide-pager .pager-next"))
+    .toHaveAttribute("href", "./setup.html");
 
   // game-concepts-glossary is the last page in reading order (final entry of Reference),
   // so it exposes a prev but no next.
@@ -182,7 +210,9 @@ test("guide videos-pending: flagged pages badge but stay clickable links", async
     const link = page.locator(`.guide-sidebar a[href="./${slug}.html"]`);
     await expect(link, slug + " keeps a real sidebar link").toHaveCount(1);
     await expect(link, slug + " is flagged pending").toHaveClass(/is-pending/);
-    await expect(link.locator(".side-pending"), slug + " badge text").toHaveText("Videos pending");
+    // Bracketed so the badge reads as an aside, not as part of the tutorial's title it sits
+    // flush against — the unbracketed form was easy to miss.
+    await expect(link.locator(".side-pending"), slug + " badge text").toHaveText("(Videos pending)");
   }
   // Unflagged pages must NOT sprout a badge.
   const badges = await page.locator(".guide-sidebar .side-pending").count();
@@ -194,9 +224,10 @@ test("guide videos-pending: flagged pages badge but stay clickable links", async
   const self = page.locator('.guide-sidebar a[aria-current="page"]');
   await expect(self, "flagged page keeps its own active highlight").toHaveClass(/active/);
   await expect(self, "flagged page keeps its pending class").toHaveClass(/is-pending/);
-  // The badge is intentionally inside the accessible name — screen-reader users get the same
-  // warning sighted users do.
-  await expect(self).toContainText("Videos pending");
+  // The badge is intentionally inside the accessible NAME — screen-reader users get the same
+  // warning sighted users do. toHaveAccessibleName (not toContainText) so an aria-hidden badge
+  // — visually present but silently dropped from the name — fails here.
+  await expect(self).toHaveAccessibleName(/\(Videos pending\)/);
 });
 
 test("guide home tables: structured tables with body links", async ({ page }) => {
@@ -213,8 +244,8 @@ test("guide home tables: structured tables with body links", async ({ page }) =>
   }
 });
 
-test("guide tutorial media: anchors expand to the exact manifest clips/stills, in order", async ({ page }) => {
-  for (const [slug, want] of TUTORIAL_MEDIA) {
+test("guide media: anchors expand to the exact manifest clips/stills, in order", async ({ page }) => {
+  for (const [slug, want] of GUIDE_MEDIA) {
     await page.goto(guidePath(slug));
 
     // Exact ordered data-clip filenames — locks id, order, AND count in one assertion, so a
@@ -310,4 +341,201 @@ test("guide setup responsive layout: desktop rails collapse on narrow screens", 
   expect(mobile.scrollWidth).toBeLessThanOrEqual(mobile.clientWidth + 1);
   expect(gridTrackCount(mobile.columns) === 1 || mobile.tocDisplay === "none", mobile.columns)
     .toBe(true);
+});
+
+// The "Quick Comparison" section on the returning-users guide page carries the verified remains
+// of the retired What's New page. Every row is proven against fork point
+// 1222c13 (Mike.NL's GlyphX Particle Editor v1.5) on both sides. The What's New page once
+// shipped three FALSE claims about the legacy editor, and in every case the falsehood was in
+// the middle/right cells — so all 3 cells are pinned, not just the first: a silent content
+// swap back to unverified rows, in ANY column, fails here.
+const DEPARTURE_ROWS = [
+  [
+    "Seven curve tabs — you saw one channel at a time",
+    "One canvas: tick the channels you want and they draw together, with the focused one editable",
+    "Compare alpha against scale without flipping tabs. The Y axis is shared, so turning on a large-range channel rescales the view.",
+  ],
+  [
+    "Typing in a numeric field changed the effect on every keystroke",
+    "The value applies when you press Enter or leave the field",
+    "Each change is a round-trip to the render host, and committing per keystroke floods it. Arrows, wheel, and drag still apply instantly.",
+  ],
+  [
+    "Delete removed the emitter and everything under it, immediately",
+    "A leaf still goes straight away; deleting a parent or a multi-selection asks first",
+    "Deleting a parent takes its whole subtree with it, which the row you selected does not show.",
+  ],
+  [
+    "Copy put the emitter on the Windows clipboard, so it survived into a second editor window",
+    "Copy and paste work within the running editor only",
+    "The clipboard now lives in the app rather than the OS. Cross-track and cross-emitter paste in one session are unaffected.",
+  ],
+  [
+    "A colour swatch set the background, full stop",
+    "The colour is the fallback; a selected game skydome takes over, and choosing a colour clears the dome",
+    "Backgrounds can now be a real in-game dome, so the two settings are mutually exclusive.",
+  ],
+];
+
+const SMALLER_CHANGE_ROWS = [
+  [
+    "Reload assets without reopening",
+    "Use View → Reload Shaders or View → Reload Textures after changing files on disk.",
+  ],
+  [
+    "Resize and keep your layout",
+    "Drag the panel dividers; panel sizes and view settings are restored the next time you open the editor.",
+  ],
+  [
+    "Switch theme and work from the keyboard",
+    "Light and dark themes, keyboard focus, and the Keyboard Shortcuts dialog are part of the current UI.",
+  ],
+  [
+    "Keep the previous file if saving fails",
+    "Saves replace the existing .alo atomically, so a failed save leaves the previous file intact.",
+  ],
+  [
+    "Get clearer failure and deletion prompts",
+    "Load and save failures stay visible, and deleting a subtree asks before its descendants are removed.",
+  ],
+];
+
+test("guide returning GlyphX users: old-to-new workflows and verified departures", async ({ page }) => {
+  const response = await page.goto("/guide/coming-from-the-old-glyphx-editor.html");
+  expect(response?.status()).toBe(200);
+  await expect(page.locator("h1")).toHaveText("Coming from the Old GlyphX Editor?");
+  await expect(page.locator(".guide-article")).toContainText("Mike.NL's GlyphX Particle Editor v1.5");
+
+  const h2Ids = await page.locator(".guide-article h2").evaluateAll((headings) =>
+    headings.map((heading) => heading.id));
+  expect(h2Ids).toEqual([
+    "quick-comparison",
+    "authoring",
+    "assets-and-mods",
+    "scene-context",
+    "testing-and-safety",
+    "smaller-changes-worth-knowing",
+  ]);
+
+  const h3Ids = await page.locator(".guide-article h3").evaluateAll((headings) =>
+    headings.map((heading) => heading.id));
+  expect(h3Ids).toEqual([
+    "curves-one-canvas-visibility-checkboxes",
+    "organize-emitters-in-the-tree",
+    "duplicate-and-link-repeated-variants",
+    "import-emitters-from-another-particle",
+    "load-assets-from-your-mod-stack",
+    "reuse-frequently-used-textures",
+    "pick-atlas-frames-visually",
+    "choose-a-skydome-ground-and-lighting",
+    "place-and-move-a-reference-object",
+    "launch-effects-with-the-spawner",
+    "pause-and-step-the-preview",
+    "undo-recover-and-catch-overloads",
+  ]);
+
+  // The rejected orientation page and the marketing-shaped capability list stay retired.
+  await expect(page.locator("#take-the-short-route")).toHaveCount(0);
+  await expect(page.locator("#where-to-find-the-newer-tools")).toHaveCount(0);
+  await expect(page.locator("#what-it-adds")).toHaveCount(0);
+  await expect(page.locator("#what-behaves-differently")).toHaveCount(0);
+
+  const comparison = page.locator("#quick-comparison");
+  const departureTable = comparison.locator("xpath=following-sibling::table[1]");
+  await expect(departureTable).toHaveCount(1);
+  const rows = departureTable.locator("tbody tr");
+  await expect(rows).toHaveCount(DEPARTURE_ROWS.length);
+  const cells = await rows.evaluateAll((trs) =>
+    trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent!.trim())));
+  expect(cells).toEqual(DEPARTURE_ROWS);
+
+  const workflows = [
+    ["curves-one-canvas-visibility-checkboxes", ["Curve channels", "Snap to grid", "Scale"], ["ref-curve-visibility.mp4"]],
+    ["organize-emitters-in-the-tree", ["multi-select", "reparent", "subtree"], ["ref-render-order.mp4"]],
+    ["duplicate-and-link-repeated-variants", ["Increment Index", "Set Link Group", "shared"], ["tutorial-05-sparks-children.mp4"]],
+    ["import-emitters-from-another-particle", ["Import Emitters", "Windows clipboard"], ["ref-returning-import-emitters.png"]],
+    ["load-assets-from-your-mod-stack", ["Active load order", "top layer", "MODPATH"], ["f04.mp4"]],
+    ["reuse-frequently-used-textures", ["Frequently-used textures", "Pinned", "Recent"], ["ref-returning-texture-palette.png"]],
+    ["pick-atlas-frames-visually", ["Atlas Frames", "Index"], ["ref-returning-atlas-frame-picker.png"]],
+    ["choose-a-skydome-ground-and-lighting", ["Game dome", "Ground", "Lighting"], ["ref-returning-skydome-picker.png"]],
+    ["place-and-move-a-reference-object", ["gizmo", "Lock object", "Snap to grid"], ["faith.mp4", "ref-returning-reference-gizmo.png"]],
+    ["launch-effects-with-the-spawner", ["Spawner", "Manual", "Auto"], ["tutorial-03-spawner-direction.mp4"]],
+    ["pause-and-step-the-preview", ["Pause", "Step", "Step 10"], []],
+    ["undo-recover-and-catch-overloads", ["Undo", "autosave", "overload"], []],
+  ] as const;
+  for (const [id, expectedTerms, expectedMedia] of workflows) {
+    const heading = page.locator(`#${id}`);
+    const section = await heading.evaluate((h) => {
+      const elements: Element[] = [];
+      let next = h.nextElementSibling;
+      while (next && next.tagName !== "H2" && next.tagName !== "H3") {
+        elements.push(next);
+        next = next.nextElementSibling;
+      }
+      return {
+        text: elements.map((el) => el.textContent?.trim() ?? "").join(" "),
+        firstTags: elements.slice(0, 3).map((el) => el.tagName),
+        firstTexts: elements.slice(0, 3).map((el) => el.textContent?.trim() ?? ""),
+        figureCount: elements.filter((el) => el.tagName === "FIGURE").length,
+        figureMedia: elements
+          .filter((el) => el.tagName === "FIGURE")
+          .map((figure) => {
+            const media = figure.querySelector("video[data-clip], img[data-poster]");
+            return media?.getAttribute("data-clip") ?? media?.getAttribute("data-poster");
+          }),
+      };
+    });
+    expect(section.firstTags, `${id} starts with three migration paragraphs`).toEqual(["P", "P", "P"]);
+    expect(section.firstTexts[0], `${id} starts with the old workflow`).toMatch(/^Old editor:/);
+    expect(section.firstTexts[1], `${id} follows with the current workflow`).toMatch(/^This editor:/);
+    expect(section.firstTexts[2], `${id} gives the exact current location`).toMatch(/^Where to find it:/);
+    for (const term of expectedTerms)
+      expect(section.text, `${id} covers ${term}`).toContain(term);
+    expect(section.figureCount, `${id} has the intended visual count`).toBe(expectedMedia.length);
+    expect(section.figureMedia, `${id} uses its intended visual`).toEqual(expectedMedia);
+  }
+
+  const smaller = page.locator("#smaller-changes-worth-knowing")
+    .locator("xpath=following-sibling::table[1]");
+  await expect(smaller).toHaveCount(1);
+  const smallerCells = await smaller.locator("tbody tr").evaluateAll((trs) =>
+    trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent!.trim())));
+  expect(smallerCells).toEqual(SMALLER_CHANGE_ROWS);
+  await expect(page.locator(".guide-article table")).toHaveCount(2);
+
+  // App UI Quick Reference stays a control lookup instead of carrying a second audience's
+  // orientation section at the bottom.
+  await page.goto("/guide/app-ui-quick-reference.html");
+  await expect(page.locator("#changed-from-the-old-glyphx-editor")).toHaveCount(0);
+});
+
+test("guide home points returning modders at their Start Here page", async ({ page }) => {
+  await page.goto("/guide/home.html");
+  const pointer = page.locator(
+    '.guide-article a[href="./coming-from-the-old-glyphx-editor.html"]');
+  await expect(pointer).toHaveCount(1);
+  await expect(pointer.locator("xpath=parent::p")).toContainText(
+    "compares v1.5 workflows across authoring, mod assets, scene context, preview tools, and safer editing",
+  );
+});
+
+test("a11y: no critical/serious axe violations in the returning-users article", async ({ page }) => {
+  // The retired What's New page carried the site's only axe scan of a comparison table; the
+  // table moved into this page, so its accessibility coverage follows it rather than
+  // disappearing. Scoped to .guide-article — the article is the transferred coverage; the
+  // sidebar/topbar chrome is shared furniture. The settle wait below is load-bearing: mid-fade,
+  // axe measures opacity-blended colours and reports phantom contrast failures (settled, the
+  // whole page is clean — verified). Guide-article links carry a rest-state underline
+  // (guide.css) so they pass link-in-text-block without relying on colour.
+  await page.goto("/guide/coming-from-the-old-glyphx-editor.html");
+  // Wait out the guide-up entrance fade (guide.css animates .guide-layout > * from opacity 0)
+  // or axe measures opacity-blended colors and reports phantom contrast failures.
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll(".guide-layout > *")]
+      .every((el) => getComputedStyle(el).opacity === "1"),
+    null, { timeout: 5000 });
+  const results = await new AxeBuilder({ page }).include(".guide-article")
+    .withTags(["wcag2a", "wcag2aa"]).analyze();
+  const bad = results.violations.filter((v) => ["critical", "serious"].includes(v.impact ?? ""));
+  expect(bad, JSON.stringify(bad.map((v) => v.id))).toHaveLength(0);
 });

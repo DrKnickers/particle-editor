@@ -54,6 +54,29 @@ function coerceMessage(data: unknown): Record<string, unknown> | null {
   return data && typeof data === "object" ? (data as Record<string, unknown>) : null;
 }
 
+/**
+ * Parse a record-only request to scroll a curve-channel row into the visible
+ * portion of its list without selecting it. This lets an interaction-honest
+ * clip reveal a below-the-fold row before the cursor travels there; the later
+ * activation click still owns the actual focus/visibility change.
+ */
+export function parseRevealCurveChannelMessage(data: unknown): string | null {
+  const m = coerceMessage(data);
+  if (!m || m.type !== "ui/reveal-curve-channel") return null;
+  return typeof m.channel === "string" && m.channel.length > 0 ? m.channel : null;
+}
+
+/**
+ * Parse a host->web ui/set-theme push used by deterministic --record timelines.
+ * Capture profiles are isolated, so they cannot inherit the editor user's saved
+ * theme; the timeline must choose the concrete palette it intends to show.
+ */
+export function parseSetThemeMessage(data: unknown): "dark" | "light" | null {
+  const m = coerceMessage(data);
+  if (!m || m.type !== "ui/set-theme") return null;
+  return m.theme === "dark" || m.theme === "light" ? m.theme : null;
+}
+
 const SHOW_PANELS = ["spawner", "lighting", "atlas"] as const;
 
 /**

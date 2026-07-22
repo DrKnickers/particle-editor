@@ -33,7 +33,9 @@ const ALIASED_CHANNELS = new Set(["green", "blue", "alpha"]);
 export const KNOWN_UI_KINDS = new Set([
   "ui/show-panel",
   "ui/open-picker",
+  "ui/set-theme",
   "ui/focus-channel",
+  "ui/reveal-curve-channel",
   "ui/select-key",
   "ui/pose-drag",
   "ui/set-picker-search",

@@ -149,9 +149,11 @@ export function validateManifest(manifest) {
 // Tutorial media must never show a reference object (the editor's default
 // AT_ST_Walker would float in every shot otherwise). Every clip/image timeline
 // is required to clear it: an `engine/set/reference-object {name:""}` event AND
-// an `engine/set/reference-object-visible {visible:false}` event. Enforced per
-// item before render so a missing clear fails loudly, not in review.
-export function validateTimelineNoReferenceObject(timeline, label) {
+// an `engine/set/reference-object-visible {visible:false}` event. A manifest item
+// may opt in only when the reference object itself is the documented subject.
+// Enforced per item before render so a missing clear fails loudly, not in review.
+export function validateTimelineNoReferenceObject(timeline, label, allowReferenceObject = false) {
+  if (allowReferenceObject) return [];
   var tracks = Array.isArray(timeline.tracks) ? timeline.tracks : [];
   var cleared = false;
   var hidden = false;
@@ -631,7 +633,11 @@ function processItem(options) {
   try {
     var timelinePath = resolveTimelinePath(repoRoot, item);
     var timeline = readJson(timelinePath);
-    var refErrors = validateTimelineNoReferenceObject(timeline, item.id);
+    var refErrors = validateTimelineNoReferenceObject(
+      timeline,
+      item.id,
+      item.allowReferenceObject === true,
+    );
     if (refErrors.length > 0) {
       entry.exit.render = 1;
       entry.gates["no-reference-object"] = "fail";

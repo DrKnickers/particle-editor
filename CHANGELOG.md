@@ -90,6 +90,9 @@ may live at the end of the file.
 - EmitterTree panel toolbar and a live 3D cursor position readout in the status bar
 
 ### Changed
+- The What's New page is retired — even slimmed it stayed redundant with the landing page. Returning v1.5 users now get a dedicated Start Here guide that compares old and current workflows across authoring, mod assets, scene context, preview tools, and safer editing; the frozen five-row departures table moves with it, the guide home points there, and the topbar on every page drops the What's New item ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), #657)
+- The guide sidebar's "Videos pending" badge on tutorials 2 and 4 is now bracketed — "(Videos pending)" — so it reads as an aside instead of blending into the tutorial title ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), PR pending)
+- Guide article links now carry a rest-state underline instead of being distinguished by colour alone, fixing a WCAG 1.4.1 (link-in-text-block) failure across every guide page
 - The What's New page is now a slim reference for returning modders — the five capability sections duplicated the landing page's feature tour clip-for-clip and were cut; the page keeps the lineage claim and the verified departures table, and links to the landing for the tour
 
 - Tutorials 2 and 4 in the site guide no longer embed walkthrough clips — their sidebar entries now show a "Videos pending" badge but stay ordinary clickable links, and each page keeps its opening still

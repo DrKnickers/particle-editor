@@ -381,6 +381,37 @@ static void test_seam_ini_lands_in_temp_dir()
     ASSERT_TRUE(GetFileAttributesW(ini.c_str()) != INVALID_FILE_ATTRIBUTES);
 }
 
+static void test_ephemeral_mode_starts_from_an_empty_in_memory_palette()
+{
+    std::printf("test_ephemeral_mode_starts_from_an_empty_in_memory_palette\n");
+    ResetState();
+    const wchar_t* mod = L"C:\\Test\\CaptureMod";
+
+    // Establish persisted user state first. A deterministic --record run must
+    // neither inherit this state nor erase it.
+    Store::Instance().SetEphemeral(false);
+    Store::Instance().SetActiveMod(mod);
+    Store::Instance().TouchRecent(L"user-recent.tga", SLOT_COLOR);
+    Store::Instance().TouchRecent(L"user-pin.tga", SLOT_COLOR);
+    ASSERT_TRUE(Store::Instance().TogglePin(L"user-pin.tga"));
+
+    Store::Instance().SetEphemeral(true);
+    Store::Instance().SetActiveMod(mod);
+    ASSERT_TRUE(Store::Instance().Pins(SLOT_COLOR).empty());
+    ASSERT_TRUE(Store::Instance().Recents(SLOT_COLOR).empty());
+
+    // Capture-local seeding remains available, but must stay in memory.
+    Store::Instance().TouchRecent(L"capture-pin.tga", SLOT_COLOR);
+    ASSERT_TRUE(Store::Instance().TogglePin(L"capture-pin.tga"));
+    ASSERT_EQ(Store::Instance().Pins(SLOT_COLOR).size(), (size_t)1);
+
+    Store::Instance().SetEphemeral(false);
+    Store::Instance().SetActiveMod(mod);
+    ASSERT_TRUE(ContainsFilename(Store::Instance().Pins(SLOT_COLOR), L"user-pin.tga"));
+    ASSERT_TRUE(ContainsFilename(Store::Instance().Recents(SLOT_COLOR), L"user-recent.tga"));
+    ASSERT_TRUE(!ContainsFilename(Store::Instance().Pins(SLOT_COLOR), L"capture-pin.tga"));
+}
+
 // ---- Driver -------------------------------------------------------------
 
 int main()
@@ -415,6 +446,7 @@ int main()
     test_malformed_filenames_rejected();
     test_empty_mod_path_is_noop();
     test_seam_ini_lands_in_temp_dir();
+    test_ephemeral_mode_starts_from_an_empty_in_memory_palette();
 
     CleanupTempPaletteDir();
 

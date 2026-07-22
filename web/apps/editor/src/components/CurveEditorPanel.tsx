@@ -56,7 +56,11 @@ import { clampGroupTimeShift } from "@/screens/curve-group-shift";
 import type { SuppressedMove } from "@/lib/use-curve-morph";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
-import { parseFocusChannelMessage, parseSelectKeyMessage } from "@/lib/record-focus-bridge";
+import {
+  parseFocusChannelMessage,
+  parseRevealCurveChannelMessage,
+  parseSelectKeyMessage,
+} from "@/lib/record-focus-bridge";
 import {
   getCurveKeysClipboard,
   setCurveKeysClipboard,
@@ -853,6 +857,18 @@ export function CurveEditorPanel({ bridge }: Props) {
     setOptimisticSelected(null);
   }, [visible, focusChannel]);
 
+  // Keep programmatic focus changes (keyboard navigation and --record
+  // ui/focus-channel pushes) on-screen. A semantic record cursor resolves the
+  // row's live DOM center; without this, an off-screen Scale/Index row can have
+  // a valid rect whose center is clipped by .curve-list, making the cursor look
+  // as though it clicked the status bar instead of the channel.
+  useEffect(() => {
+    const row = document.querySelector<HTMLElement>(
+      `[data-testid="curve-channel-row-${focusChannel}"]`,
+    );
+    row?.scrollIntoView?.({ block: "nearest" });
+  }, [focusChannel]);
+
   // --record focus push: the host posts ui/focus-channel so a scripted
   // curve scrub shows the channel it edits. Routes through handleRowClick
   // (the same path as a user click) so visibility/solo + focus stay
@@ -867,6 +883,16 @@ export function CurveEditorPanel({ bridge }: Props) {
       | undefined;
     if (!wv?.addEventListener) return;
     const onMsg = (e: { data: unknown }) => {
+      const reveal = parseRevealCurveChannelMessage(e.data);
+      if (reveal) {
+        const def = CHANNELS.find((c) => c.id === reveal || c.trackName === reveal);
+        if (def) {
+          document
+            .querySelector<HTMLElement>(`[data-testid="curve-channel-row-${def.id}"]`)
+            ?.scrollIntoView?.({ block: "nearest" });
+        }
+        return;
+      }
       const ch = parseFocusChannelMessage(e.data);
       if (!ch) return;
       const def = CHANNELS.find((c) => c.id === ch || c.trackName === ch);

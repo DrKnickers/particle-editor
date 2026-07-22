@@ -65,6 +65,36 @@ function atlasSettled(): boolean {
   return atlasGridMounted && !animating;
 }
 
+const CLIPPING_OVERFLOW = new Set(["auto", "scroll", "hidden", "clip"]);
+
+function resolveVisibleElementCenter(el: HTMLElement): ResolvedCursorCenter {
+  const elementRect = computeSceneRect(el);
+  let left = elementRect.x;
+  let right = elementRect.x + elementRect.w;
+  let top = elementRect.y;
+  let bottom = elementRect.y + elementRect.h;
+
+  for (let ancestor = el.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    const style = window.getComputedStyle(ancestor);
+    const clipsX = CLIPPING_OVERFLOW.has(style.overflowX);
+    const clipsY = CLIPPING_OVERFLOW.has(style.overflowY);
+    if (!clipsX && !clipsY) continue;
+
+    const rect = computeSceneRect(ancestor);
+    if (clipsX) {
+      left = Math.max(left, rect.x);
+      right = Math.min(right, rect.x + rect.w);
+    }
+    if (clipsY) {
+      top = Math.max(top, rect.y);
+      bottom = Math.min(bottom, rect.y + rect.h);
+    }
+    if (right <= left || bottom <= top) return { ...UNRESOLVED };
+  }
+
+  return { x: left + (right - left) / 2, y: top + (bottom - top) / 2, ok: true };
+}
+
 // Frame N's center on the atlas <canvas>, in the same device-pixel scene space
 // computeSceneRect uses. There is no per-cell element anymore, so we derive the
 // cell rect from the canvas's client box + the grid geometry it publishes
@@ -111,8 +141,7 @@ export function resolveTargetCenter(target: CursorTarget): ResolvedCursorCenter 
 
   const el = document.querySelector<HTMLElement>(mapped.selector);
   if (!el) return { ...UNRESOLVED };
-  const rect = computeSceneRect(el);
-  return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2, ok: true };
+  return resolveVisibleElementCenter(el);
 }
 
 function resolvedElementFor(key: RecordCursorKey, resolved: ResolvedCursorCenter): ResolvedCursorElement[] {

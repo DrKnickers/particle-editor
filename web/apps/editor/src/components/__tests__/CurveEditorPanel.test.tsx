@@ -454,6 +454,88 @@ describe("CurveEditorPanel", () => {
       expect(greenCb.checked).toBe(true);
     });
 
+    it("keeps the focused channel row inside the channel scroller", async () => {
+      const previous = HTMLElement.prototype.scrollIntoView;
+      const scrollIntoView = vi.fn();
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+        configurable: true,
+        value: scrollIntoView,
+      });
+
+      try {
+        const { bridge } = makeStubBridge(null);
+        render(<CurveEditorPanel bridge={bridge} />);
+        scrollIntoView.mockClear();
+
+        fireEvent.click(screen.getByTestId("curve-channel-row-scale"));
+
+        await waitFor(() => {
+          expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+        });
+      } finally {
+        if (previous) {
+          Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+            configurable: true,
+            value: previous,
+          });
+        } else {
+          Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+        }
+      }
+    });
+
+    it("reveals a record-target channel without changing the focused channel", async () => {
+      const listeners: Record<string, Array<(e: { data: unknown }) => void>> = {};
+      const windowWithChrome = window as unknown as { chrome?: unknown };
+      const previousChrome = windowWithChrome.chrome;
+      windowWithChrome.chrome = {
+        webview: {
+          addEventListener: (name: string, handler: (e: { data: unknown }) => void) => {
+            (listeners[name] ||= []).push(handler);
+          },
+          removeEventListener: (name: string, handler: (e: { data: unknown }) => void) => {
+            listeners[name] = (listeners[name] ?? []).filter((candidate) => candidate !== handler);
+          },
+        },
+      };
+
+      const previousScrollIntoView = HTMLElement.prototype.scrollIntoView;
+      const scrollIntoView = vi.fn();
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+        configurable: true,
+        value: scrollIntoView,
+      });
+
+      try {
+        const { bridge } = makeStubBridge(null);
+        render(<CurveEditorPanel bridge={bridge} />);
+        scrollIntoView.mockClear();
+
+        act(() => {
+          const event = {
+            data: JSON.stringify({ type: "ui/reveal-curve-channel", channel: "scale" }),
+          };
+          (listeners.message ?? []).forEach((handler) => handler(event));
+        });
+
+        await waitFor(() => {
+          expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+        });
+        expect(screen.getByTestId("curve-editor-panel").dataset.focusChannel).toBe("red");
+      } finally {
+        if (previousChrome === undefined) delete windowWithChrome.chrome;
+        else windowWithChrome.chrome = previousChrome;
+        if (previousScrollIntoView) {
+          Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+            configurable: true,
+            value: previousScrollIntoView,
+          });
+        } else {
+          Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+        }
+      }
+    });
+
     it("clicking a HIDDEN channel row turns it ON and sets focus", () => {
       const { bridge } = makeStubBridge(null);
       render(<CurveEditorPanel bridge={bridge} />);

@@ -13,9 +13,10 @@ This guide teaches you to build and tune those effects in Particle Editor, judgi
 same references the game uses — correct scale, the right background, and your mod's own assets —
 with a live viewport right beside the controls.
 
-Start with [Setup](setup), then follow the pages in order. Returning users can jump straight to the
-quick references. Coming from the old GlyphX particle editor? [What's New](../whats-new.html) covers
-what changed and what behaves differently.
+Start with [Setup](setup), then follow the pages in order. If you already know Mike.NL's GlyphX
+editor, start with [Coming from the Old GlyphX Editor?](coming-from-the-old-glyphx-editor) instead.
+It compares v1.5 workflows across authoring, mod assets, scene context, preview tools, and safer
+editing.
 
 ## Tutorial Path
 

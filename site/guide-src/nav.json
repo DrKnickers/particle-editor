@@ -5,6 +5,7 @@
       "label": "Start Here",
       "pages": [
         { "slug": "home", "title": "Guide Home" },
+        { "slug": "coming-from-the-old-glyphx-editor", "title": "Coming from the Old GlyphX Editor?" },
         { "slug": "setup", "title": "Setup" },
         { "slug": "basic-controls", "title": "Basic Editor Controls" },
         { "slug": "particle-authoring-primer", "title": "Particle Authoring Primer" },

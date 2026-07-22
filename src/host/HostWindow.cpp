@@ -1042,6 +1042,11 @@ struct HostWindowImpl
         // [world-lit] capture lighting colours (arrays can't init in list).
         m_captureAmbient[0] = ambR; m_captureAmbient[1] = ambG; m_captureAmbient[2] = ambB;
         m_captureSun[0] = sunR; m_captureSun[1] = sunG; m_captureSun[2] = sunB;
+        // Automation must isolate the palette BEFORE the saved mod stack is
+        // restored: RestoreLastLayerStack activates a mod, which otherwise
+        // loads the user's persisted pins/recents before OpenLog/Run begins.
+        if (m_automationMode)
+            TexturePalette::Store::Instance().SetEphemeral(true);
         // discover installed mods and restore the
         // previously-active one from the registry before any UI shows.
         // Both calls are quick; they don't touch GPU / WebView2 state.
@@ -1112,10 +1117,6 @@ void HostWindowImpl::OpenLog()
     // (truncate) never wipes a concurrently-running daily driver's host.log.
     if (m_automationMode)
     {
-        // Automation is ephemeral: the texture palette must not persist to the
-        // user's %APPDATA% INI (a --record clip may seed a recent to click a
-        // tile; that stays in-memory only). Mirrors the skydome/registry gate.
-        TexturePalette::Store::Instance().SetEphemeral(true);
         const std::wstring suffix = (m_recordMode ? L"-record-" : L"-drive-") + std::to_wstring(GetCurrentProcessId());
         if (!perfArtifactDir.empty())
         {

@@ -5,7 +5,11 @@
 // relative to it.
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = 5175;
+// SITE_PORT override: with a fixed port and reuseExistingServer, two worktrees running this
+// suite concurrently silently attach to whichever server started first — and test the OTHER
+// worktree's site/. (Observed live: a parallel session's server made this suite report its
+// checkout's content.) Concurrent sessions should set distinct SITE_PORTs.
+const PORT = Number(process.env.SITE_PORT ?? 5175);
 
 export default defineConfig({
   testDir: "./tests-site",

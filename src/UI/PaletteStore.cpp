@@ -175,6 +175,18 @@ Store& Store::Instance()
     return s_instance;
 }
 
+void Store::SetEphemeral(bool ephemeral)
+{
+    if (m_ephemeral == ephemeral) return;
+
+    // The cache can contain either real user state or capture-local seeded
+    // state. Never carry either across the automation boundary: record/drive
+    // must start empty, and interactive mode must reload the persisted palette.
+    m_ephemeral = ephemeral;
+    m_activeMod.clear();
+    m_byMod.clear();
+}
+
 wstring Store::IniPath() const
 {
     if (m_iniPathChecked) return m_iniPathCache;
@@ -236,7 +248,7 @@ void Store::ClearActiveMod()
     if (m_activeMod.empty()) return;
 
     const wstring section = SectionFor(m_activeMod);
-    const wstring iniPath = IniPath();
+    const wstring iniPath = m_ephemeral ? wstring() : IniPath();
     if (!iniPath.empty()) IniEraseSection(iniPath, section);
 
     const wstring key = LowercaseCopy(m_activeMod);
@@ -253,7 +265,7 @@ Store::ModPalette& Store::LoadOrInit(const wstring& modPath)
     ModPalette mp;
     mp.filter = SLOT_COLOR;
 
-    const wstring iniPath = IniPath();
+    const wstring iniPath = m_ephemeral ? wstring() : IniPath();
     if (!iniPath.empty())
     {
         const wstring section = SectionFor(modPath);

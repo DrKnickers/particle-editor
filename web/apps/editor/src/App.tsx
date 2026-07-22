@@ -40,6 +40,7 @@ import { evalRecordCursor } from "@/lib/record-cursor-eval";
 import { applyRecordDrag, createRecordDragState, resetRecordDrag } from "@/lib/record-cursor-drag";
 import { applyRecordActivation, createRecordActivateState, resetRecordActivation } from "@/lib/record-cursor-activate";
 import { parseCursorTickMessage, parseCursorTrackMessage, type RecordCursorKey } from "@/lib/record-cursor-track";
+import { parseSetThemeMessage } from "@/lib/record-focus-bridge";
 
 // ?demo=primitives → render the primitives gallery instead of the app shell.
 // Evaluated once at module load; a page navigation to ?demo=primitives
@@ -265,6 +266,16 @@ function AppShell() {
       if (isRecordHeadlessMessage(e.data)) {
         recordHeadlessRef.current = true;
         markHeadless(); // reactive latch → TitleBar hides its window controls
+        return;
+      }
+
+      // Isolated --record profiles have no saved alo:theme. Let a timeline pin
+      // its concrete palette instead of inheriting the capture machine's OS
+      // preference. The cursor track arrives before frame 0 and latches record
+      // mode, so applyMode skips its interactive cross-fade.
+      const recordTheme = parseSetThemeMessage(e.data);
+      if (recordTheme) {
+        applyMode(recordTheme);
         return;
       }
 

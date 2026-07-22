@@ -120,7 +120,9 @@ test("cross-page view transition never paints a light frame", async ({ page, con
       page.locator('header.topbar a[href="guide/home.html"]').click(),
     ]));
     const toHome = await sampleDuring(page, () => Promise.all([
-      page.waitForURL("http://localhost:5175/"),
+      // Glob, not a hardcoded port — the suite's port is SITE_PORT-overridable (see
+      // playwright.site.config.ts) so concurrent worktrees don't share a server.
+      page.waitForURL(/\/(index\.html)?$/),
       page.goBack({ waitUntil: "load" }),
     ]));
     worst = Math.max(worst, toGuide.worst, toHome.worst);

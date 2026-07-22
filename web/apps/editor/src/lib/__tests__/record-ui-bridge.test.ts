@@ -1,7 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { parseOpenPickerMessage, parsePoseDragMessage, parseSelectKeyMessage, parseShowPanelMessage } from "../record-focus-bridge";
+import {
+  parseOpenPickerMessage,
+  parsePoseDragMessage,
+  parseSelectKeyMessage,
+  parseSetThemeMessage,
+  parseShowPanelMessage,
+} from "../record-focus-bridge";
 
 describe("record-ui-bridge", () => {
+  it("parses a record-only theme message and rejects invalid values", () => {
+    expect(parseSetThemeMessage({ type: "ui/set-theme", theme: "dark" })).toBe("dark");
+    expect(parseSetThemeMessage(JSON.stringify({ type: "ui/set-theme", theme: "light" }))).toBe("light");
+    expect(parseSetThemeMessage({ type: "ui/set-theme", theme: "system" })).toBeNull();
+    expect(parseSetThemeMessage({ type: "ui/set-theme" })).toBeNull();
+    expect(parseSetThemeMessage({ type: "ui/show-panel", theme: "dark" })).toBeNull();
+  });
+
   it("parses ui/show-panel messages", () => {
     expect(parseShowPanelMessage({ type: "ui/show-panel", panel: "spawner" })).toEqual({
       panel: "spawner",

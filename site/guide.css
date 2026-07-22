@@ -70,8 +70,18 @@ body.guide {
 }
 .guide-article h3 { font-size: 1.2rem; font-weight: 600; color: var(--paper); margin: 2rem 0 .6rem; }
 .guide-article p { margin: 0 0 1.1rem; }
-.guide-article a { color: var(--accent); text-decoration: none; }
-.guide-article a:hover { text-decoration: underline; text-underline-offset: .2em; }
+/* Links carry a rest-state underline — not colour alone — so they're distinguishable
+   without relying on the azure/body contrast (WCAG 1.4.1, link-in-text-block). The
+   underline is a muted tint of the accent at rest and solidifies on hover. */
+.guide-article a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: .2em;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  transition: text-decoration-color .15s ease;
+}
+.guide-article a:hover { text-decoration-color: var(--accent); }
 .guide-article strong { color: var(--paper); font-weight: 600; }
 .guide-article ul, .guide-article ol { margin: 0 0 1.1rem; padding-left: 1.4rem; }
 .guide-article li { margin: .35rem 0; }
