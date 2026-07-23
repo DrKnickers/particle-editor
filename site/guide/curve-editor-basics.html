@@ -57,46 +57,6 @@
     </nav>
   </header>
   <div class="guide-layout">
-    <aside class="guide-sidebar" aria-label="Guide navigation">
-      <p class="side-title">Guide</p>
-    <div class="side-group">
-      <p class="side-label">Start Here</p>
-      <ul>
-      <li><a href="./home.html">Guide Home</a></li>
-      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
-      <li><a href="./setup.html">Setup</a></li>
-      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
-      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
-      <li><a href="./curve-editor-basics.html" class="active" aria-current="page">Curve Editor Basics</a></li>
-      </ul>
-    </div>
-    <div class="side-group">
-      <p class="side-label">Tutorials</p>
-      <ul>
-      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
-      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
-      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
-      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
-      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
-      </ul>
-    </div>
-    <div class="side-group">
-      <p class="side-label">Reference</p>
-      <ul>
-      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
-      <li><a href="./generation-types.html">Particle Generation Types</a></li>
-      <li><a href="./blend-modes.html">Blend Modes</a></li>
-      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
-      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
-      <li><a href="./file-structure.html">File Structure</a></li>
-      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
-      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
-      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
-      </ul>
-    </div>
-    </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
 <p class="guide-kicker">Start Here <span class="kicker-count">· 6 of 6</span></p>
@@ -108,7 +68,7 @@
 <p>Each emitter has seven tracks: <strong>Red</strong>, <strong>Green</strong>, <strong>Blue</strong>, <strong>Alpha</strong>, <strong>Scale</strong>, <strong>Index</strong>, and <strong>Rotation</strong>. The color and alpha tracks run from 0 to 1. Scale is the particle size, Index picks the texture atlas frame, and Rotation controls spin.</p>
 <p>The curve is made of <strong>keys</strong> — points that pin a value at a time. Between keys, the editor fills in the value using the key's interpolation (see below). A track with a single key is simply a constant value.</p>
 <h2 id="the-channel-list">The Channel List</h2>
-<p>The channel list on the side of the Curve Editor shows the seven tracks with a toggle for each. Red, Green, and Blue display together so you can see a color as one picture. Alpha can be toggled in alongside them. <strong>Scale, Index, and Rotation display alone</strong> — turning one of them on hides the other channels, because their value ranges are so different from 0-to-1 color values that sharing an axis would make both unreadable.</p>
+<p>The channel list on the side of the Curve Editor shows the seven tracks with a toggle for each. Red, Green, and Blue display together so you can see a color as one picture. Alpha can be toggled in alongside them. Turning on <strong>Scale</strong>, <strong>Index</strong>, or <strong>Rotation</strong> initially hides the other channels because its value range differs from the 0-to-1 color tracks. After that initial solo view, use the toggles to bring color channels back for a direct comparison on the shared axis.</p>
 <p>Clicking a channel row focuses that channel: its keys become the ones you select and edit.</p>
 <h2 id="selecting-and-editing-keys">Selecting and Editing Keys</h2>
 <p>With the <strong>Select tool</strong> active (the default):</p>
@@ -163,6 +123,46 @@
         <a class="pager-next" href="./01-make-a-hardpoint-damage-effect-obvious.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">1. Make a Hardpoint Damage Effect Obvious</span></a>
       </nav>
     </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html" class="active" aria-current="page">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>

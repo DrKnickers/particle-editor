@@ -57,6 +57,134 @@
     </nav>
   </header>
   <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 4 of 7</span></p>
+<h1 id="tutorial-3-build-a-laser-shot-and-muzzle-flash">Tutorial 3: Build a Laser Shot and Muzzle Flash</h1>
+<p>This tutorial starts from a blank particle and builds a bright green laser shot with a projectile core, projectile glow, and short muzzle flash in the same particle system.</p>
+<p>The goal is to practice a common projectile layout: a small stack of emitters forms the moving shot and its glow, and a muzzle-flash group bursts briefly at the launch point.</p>
+<figure class="guide-media" aria-label="Show the finished green laser shot firing left-to-right with its layered muzzle flash, before the build steps."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-opening-result.mp4" data-poster="tutorial-03-opening-result-poster.jpg"></video></figure>
+<h2 id="outcome">Outcome</h2>
+<p>By the end of this page, the particle will contain two readable parts:</p>
+<ul>
+<li>a bright green laser core and softer projectile glow, both using built-in tails;</li>
+<li>a quick muzzle flash with a white-hot core and a softer green outer glow.</li>
+</ul>
+<p>This tutorial stays in the editor preview. At the end, there is a short note about how this kind of particle would normally be used by a game projectile.</p>
+<h2 id="what-this-teaches">What this teaches</h2>
+<ul>
+<li>Starting from a blank particle.</li>
+<li>Building a projectile core with the built-in tail controls.</li>
+<li>Adding a projectile glow that also uses the built-in tail controls.</li>
+<li>Building a muzzle flash from a core and an outer glow.</li>
+<li>Using <code>Bursts</code> generation so the muzzle flash fires once instead of streaming continuously.</li>
+<li>Using additive color for a readable energy shot.</li>
+<li>Using <code>Parent speed inherit</code> to separate a moving projectile from a stationary muzzle flash.</li>
+<li>Using the Spawner panel to launch particle instances in a chosen direction at a chosen speed.</li>
+<li>Judging projectile effects by motion, timing, and silhouette.</li>
+</ul>
+<h2 id="before-you-start">Before You Start</h2>
+<p>Create a blank particle with <strong>File → New</strong>, then use <strong>Save As</strong> to save it in the tutorial mod folder with a new tutorial name, for example:</p>
+<pre><code class="language-text">ParticleTutorial\Data\Art\Models\P_TUTORIAL_GREEN_LASER.ALO
+</code></pre>
+<p>This is a new tutorial particle, not an override of a shipped particle. Keep it in the editor for this lesson.</p>
+<h2 id="1-create-the-projectile-core">1. Create the Projectile Core</h2>
+<p>A new particle starts with one default emitter — that becomes the moving laser body. Select it in the Emitter Tree and rename it in the <strong>Name</strong> field at the top of the <strong>Basic</strong> tab. A clear name such as <code>Projectile_Core</code> makes it easy to separate from the muzzle flash emitters later.</p>
+<p>For the visual target, think narrow, bright, and short-lived. These are starter values — tune them in the preview, they are not a fixed recipe:</p>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td data-label="Parameter">Color</td><td data-label="Value">bright green — R 0.15 / G 1.0 / B 0.25</td></tr>
+<tr><td data-label="Parameter">Blend mode</td><td data-label="Value">Additive</td></tr>
+<tr><td data-label="Parameter">Lifetime</td><td data-label="Value">~0.3s (Maximum lifetime)</td></tr>
+<tr><td data-label="Parameter">Scale</td><td data-label="Value">narrow — around 3 (a tight bolt, not a cloud)</td></tr>
+<tr><td data-label="Parameter">Generation</td><td data-label="Value">Continuous stream, ~10 particles/second (a steady bolt)</td></tr>
+<tr><td data-label="Parameter">Texture</td><td data-label="Value">the default master atlas (a soft round dot)</td></tr>
+</tbody>
+</table>
+<p>Keep the rate low: because these are additive, overlapping particles <em>sum</em>, so a dense stream of full-green cores clips to a shapeless white line. If the bolt whites out, lower the rate or bring the green value down until the green reads again.</p>
+<p>The blend mode lives in the <strong>Appearance</strong> tab's Rendering section — Additive is the right choice for anything that glows (see <a href="./blend-modes.html">Blend Modes</a>). Lifetime is set with the Minimum/Maximum lifetime fields in the <strong>Basic</strong> tab's Generation section.</p>
+<p>Use the Preview Viewport while you adjust. The projectile core should read immediately as the center of the shot.</p>
+<figure class="guide-media" aria-label="Show building the projectile core the way a user actually would: rename the default emitter by typing, step the spinner, pick the atlas frame, click the color pulse keys onto the curve, and set tail + parent speed."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-projectile-core.mp4" data-poster="tutorial-03-projectile-core-poster.jpg"></video></figure>
+<h2 id="2-use-the-built-in-tail-on-the-core">2. Use the Built-In Tail on the Core</h2>
+<p>With <code>Projectile_Core</code> still selected, use the Tail section in the Property Panel. Enable <code>Has tail</code> and adjust <code>Tail length</code> (start around <code>5</code> and raise it) until the shot has a clear streak behind it — long enough to read as motion, short enough that the bolt still has a defined head.</p>
+<p>The tail should support the core rather than overpower it. If the whole effect becomes a glowing block, shorten the tail, reduce the scale, or dim the color. (The core is additive, so lowering alpha would do nothing — see <a href="./blend-modes.html">Blend Modes</a>.) The goal is a readable laser shot, not a solid rectangle.</p>
+<h2 id="3-add-the-projectile-glow">3. Add the Projectile Glow</h2>
+<p>Add a second projectile emitter — a <strong>root emitter</strong>, one that plays on its own from the effect's origin (as opposed to a <em>child</em> emitter, which hangs off another emitter's particles; see <a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a>). Add it from the <strong>Emitters</strong> menu → <strong>New Emitter → Root Emitter</strong> (right-clicking in the Emitter Tree offers the same choice). Name it something like <code>Projectile_Glow</code>. This emitter should be slightly wider, softer, and less intense than the core. It gives the shot presence without replacing the crisp center.</p>
+<p>Use the Tail section on this emitter too. Enable <code>Has tail</code> and give the glow its own <code>Tail length</code>. The glow tail can be a little broader or softer than the core tail, but it should still point in the same direction and support the same motion.</p>
+<p>If the shot still feels thin, a third, even softer layer works well: duplicate the glow idea as <code>Projectile_Glow_Soft</code>, make it noticeably wider and much fainter, and let it act as a halo around the other two. Very low intensity at a large scale adds presence without blowing out the shot.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="tutorial-03-glow-layers.png" alt="Show the three projectile layers (core, glow, soft halo) in the Emitter Tree with the layered green core streaming."></figure>
+<h2 id="4-let-the-projectile-emitters-ride-the-shot">4. Let the Projectile Emitters Ride the Shot</h2>
+<p>Set <code>Parent speed inherit</code> near full inheritance on both the projectile core and the projectile glow — it lives in the <strong>Physics</strong> tab's Initial speed section (see <a href="./motion-and-physics.html">Motion and Physics</a>) — one emitter at a time, so the projectile rides with the parent motion.</p>
+<p>This makes the projectile part behave like it belongs to the moving projectile object. The core and glow tails should travel together instead of being left behind at the spawn point.</p>
+<figure class="guide-media" aria-label="Show the Parent speed inherit control in the Physics tab: full inheritance rides the shot, zero leaves the particles at the launch point."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-inherit-parent-speed.mp4" data-poster="tutorial-03-inherit-parent-speed-poster.jpg"></video></figure>
+<h2 id="5-launch-test-instances-with-the-spawner">5. Launch Test Instances with the Spawner</h2>
+<p>Open the Spawner panel (<strong>Emitters</strong> menu → <strong>Spawner</strong>, or <strong>F7</strong> — see the <a href="./app-ui-quick-reference.html">App UI Quick Reference</a>) and use it to preview the projectile as a launched particle instance rather than a static loop. Start with <code>Manual</code> mode so each test spawn is deliberate.</p>
+<p>Set the Velocity fields to launch the particle in a clear direction. For example, set <code>Velocity X</code> to about <code>50</code> (units per second) and leave <code>Velocity Y</code> and <code>Velocity Z</code> at <code>0</code>, so the shot travels straight along one axis. Higher X values make the shot move faster; lower values (try <code>20</code>) make it easier to inspect the tail.</p>
+<p>Use <code>Spawn now</code> to fire a test instance. If the shot is hard to read in motion, adjust the core, glow, tail length, or velocity and spawn another instance.</p>
+<figure class="guide-media" aria-label="Show launching test instances with the Spawner: dial Velocity X to a positive value, then click Spawn now to fire the shot in that direction."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-spawner-direction.mp4" data-poster="tutorial-03-spawner-direction-poster.jpg"></video></figure>
+<h2 id="6-add-the-muzzle-flash">6. Add the Muzzle Flash</h2>
+<p>Add a new emitter for the bright center of the muzzle flash. Keep the name direct, such as <code>Muzzle_Core</code>, so the Emitter Tree shows the two ideas clearly:</p>
+<table>
+<thead>
+<tr><th>Emitter</th><th>Role</th></tr>
+</thead>
+<tbody>
+<tr><td data-label="Emitter">Projectile_Core</td><td data-label="Role">moving shot core and tail</td></tr>
+<tr><td data-label="Emitter">Projectile_Glow</td><td data-label="Role">softer projectile glow and tail</td></tr>
+<tr><td data-label="Emitter">Projectile_Glow_Soft</td><td data-label="Role">faint wide halo around the shot</td></tr>
+<tr><td data-label="Emitter">Muzzle_Core</td><td data-label="Role">white-hot launch flash</td></tr>
+</tbody>
+</table>
+<p>Make this emitter very short-lived, bright, and compact. A white or nearly white core works well because it reads as the hottest part of the flash. Starter values:</p>
+<table>
+<thead>
+<tr><th>Parameter</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td data-label="Parameter">Lifetime</td><td data-label="Value">~0.1s</td></tr>
+<tr><td data-label="Parameter">Scale</td><td data-label="Value">compact — around 10</td></tr>
+<tr><td data-label="Parameter">Blend mode</td><td data-label="Value">Additive</td></tr>
+<tr><td data-label="Parameter">Generation</td><td data-label="Value">Bursts — 1 burst, 1–2 particles</td></tr>
+<tr><td data-label="Parameter">Color</td><td data-label="Value">near-white with a green tint — R 0.6 / G 1.0 / B 0.6, peaking within the first 10% then decaying to black</td></tr>
+</tbody>
+</table>
+<p>Keep the particle count tiny here (one or two). These muzzle layers are additive and will overlap the projectile and each other at the launch point; more particles just sum toward the shapeless white square the section below warns about.</p>
+<p>Shape the brightness with the color tracks rather than a constant: start the channels at zero, peak them early — within the first tenth of the life — and let them decay to black. This fast-in, slow-out envelope is a reliable way to make a flash read well, and you will see it in shipped flash effects (the explosion example in <a href="./05-build-an-explosion.html">Tutorial 5</a> peaks its flash at 10% too): the pop reads as an <em>event</em> with attack and decay rather than a sprite switching on and off. And since several additive layers will overlap at the launch point, keep each layer's peak modest — additive layers sum, and stacked layers at full brightness clip to a shapeless white square.</p>
+<p>A muzzle flash fires once at the moment of launch, so it should generate as a burst, not a continuous stream. In the <strong>Basic</strong> tab, open the <strong>Generation</strong> section and set the Generation mode to <code>Bursts</code> (rather than <code>Continuous stream</code>). A single burst — <code>Bursts: 1</code> with a small <code>Particles/burst</code> — gives one clean flash instead of an emitter that keeps re-emitting for the whole life of the shot. This burst-versus-stream choice, together with the short lifetime, is what makes a launch flash read as a flash and not a steady jet. (The full rundown of the three generation modes is in <a href="./generation-types.html">Particle Generation Types</a>.)</p>
+<figure class="guide-media" aria-label="Show building the muzzle-flash core the way a user actually would: add a new emitter, rename it by typing, switch to Bursts, and step every setting to the finished values."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-muzzle-flash.mp4" data-poster="tutorial-03-muzzle-flash-poster.jpg"></video></figure>
+<h2 id="7-add-the-outer-glow-and-keep-it-at-the-launch-point">7. Add the Outer Glow and Keep It at the Launch Point</h2>
+<p>Add a second muzzle-flash emitter named something like <code>Muzzle_Glow</code>. Make it wider, softer, and greener than the white core. Give it the same <code>Bursts</code> Generation mode as the core, so the outer glow fires with the flash instead of streaming on its own. The same halo idea from the projectile applies here too: a third <code>Muzzle_Glow_Soft</code> emitter, wider and much fainter again, rounds the flash off without making it bigger in feel.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="tutorial-03-muzzle-glow-props.png" alt="Show the finished muzzle group: Muzzle_Glow's Bursts settings with the full three-layer flash frozen at peak."></figure>
+<p>Set <code>Parent speed inherit</code> near zero on both muzzle flash emitters, one at a time in the Property Panel, so the flash stays close to the launch point.</p>
+<blockquote><strong>The one idea to remember here.</strong> <code>Parent speed inherit</code> is what separates a <em>moving</em> layer from a <em>staying</em> one. The projectile core and glow ride the shot (near-full inheritance); the muzzle flash stays at the launch point (near-zero). Same control, opposite settings.</blockquote>
+<p>If the flash stretches into a long streak, shorten its lifetime, reduce its scale, or lower its parent-speed inheritance.</p>
+<figure class="guide-media" aria-label="Show adjusting Parent speed inherit to 0 on the muzzle emitters in the Physics tab, so the flash stays at the launch point instead of streaking with the shot."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-no-parent-speed.mp4" data-poster="tutorial-03-no-parent-speed-poster.jpg"></video></figure>
+<h2 id="8-check-the-two-groups-together">8. Check the Two Groups Together</h2>
+<p>Use the Preview Viewport to watch the full particle in motion. The shot should have a clear leading core, a softer projectile glow, built-in tails, a white-hot muzzle core, and a softer outer flash.</p>
+<p>Use these questions as a quick check:</p>
+<ul>
+<li>Can you tell which part is the moving projectile?</li>
+<li>Do the built-in tails make the projectile motion easier to read?</li>
+<li>Does the projectile glow support the core without blurring the shot into a blob?</li>
+<li>Does the muzzle flash fire as a single burst rather than a continuous stream?</li>
+<li>Does the muzzle flash disappear quickly?</li>
+<li>Does the outer glow support the white core without becoming a second projectile?</li>
+<li>Do the emitter names still make the two groups easy to understand?</li>
+</ul>
+<figure class="guide-media" aria-label="Show the finished user-authored laser shot and muzzle flash together in the full editor."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-final-preview.mp4" data-poster="tutorial-03-final-preview-poster.jpg"></video></figure>
+<h2 id="game-use-note">Game Use Note</h2>
+<p>In a full mod, this kind of particle could be used as the visual model for a projectile. The projectile XML would still control the game behavior, while the particle controls how the shot and launch flash read on screen.</p>
+<h2 id="takeaways">Takeaways</h2>
+<p>Projectile particles are easier to reason about when the moving shot and launch flash have separate jobs. Use built-in tails for the projectile core and glow, use the Spawner panel to test direction and speed, then use <code>Parent speed inherit</code> to decide which emitters ride with the projectile and which ones stay near the firing point.</p>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./concepts-before-you-build.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Concepts Before You Build</span></a>
+        <a class="pager-next" href="./04-recolor-and-orient-a-shield-impact.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">4. Recolor and Orient a Shield Impact</span></a>
+      </nav>
+    </main>
     <aside class="guide-sidebar" aria-label="Guide navigation">
       <p class="side-title">Guide</p>
     <div class="side-group">
@@ -97,134 +225,6 @@
       </ul>
     </div>
     </aside>
-    <main class="guide-main" id="guide-main">
-      <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 4 of 7</span></p>
-<h1 id="tutorial-3-build-a-laser-shot-and-muzzle-flash">Tutorial 3: Build a Laser Shot and Muzzle Flash</h1>
-<p>This tutorial starts from a blank particle and builds a bright green laser shot with a projectile core, projectile glow, and short muzzle flash in the same particle system.</p>
-<p>The goal is to practice a common projectile layout: a small stack of emitters forms the moving shot and its glow, and a muzzle-flash group bursts briefly at the launch point.</p>
-<figure class="guide-media" aria-label="Show the finished green laser shot firing left-to-right with its layered muzzle flash, before the build steps."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-opening-result.mp4" data-poster="tutorial-03-opening-result-poster.jpg"></video></figure>
-<h2 id="outcome">Outcome</h2>
-<p>By the end of this page, the particle will contain two readable parts:</p>
-<ul>
-<li>a bright green laser core and softer projectile glow, both using built-in tails;</li>
-<li>a quick muzzle flash with a white-hot core and a softer green outer glow.</li>
-</ul>
-<p>This tutorial stays in the editor preview. At the end, there is a short note about how this kind of particle would normally be used by a game projectile.</p>
-<h2 id="what-this-teaches">What this teaches</h2>
-<ul>
-<li>Starting from a blank particle.</li>
-<li>Building a projectile core with the built-in tail controls.</li>
-<li>Adding a projectile glow that also uses the built-in tail controls.</li>
-<li>Building a muzzle flash from a core and an outer glow.</li>
-<li>Using <code>Bursts</code> generation so the muzzle flash fires once instead of streaming continuously.</li>
-<li>Using additive color for a readable energy shot.</li>
-<li>Using <code>Parent speed inherit</code> to separate a moving projectile from a stationary muzzle flash.</li>
-<li>Using the Spawner panel to launch particle instances in a chosen direction at a chosen speed.</li>
-<li>Judging projectile effects by motion, timing, and silhouette.</li>
-</ul>
-<h2 id="before-you-start">Before You Start</h2>
-<p>Create a blank particle with <strong>File → New</strong>, then use <strong>Save As</strong> to save it in the tutorial mod folder with a new tutorial name, for example:</p>
-<pre><code class="language-text">ParticleTutorial\Data\Art\Models\P_TUTORIAL_GREEN_LASER.ALO
-</code></pre>
-<p>This is a new tutorial particle, not an override of a shipped particle. Keep it in the editor for this lesson.</p>
-<h2 id="1-create-the-projectile-core">1. Create the Projectile Core</h2>
-<p>A new particle starts with one default emitter — that becomes the moving laser body. Select it in the Emitter Tree and rename it in the <strong>Name</strong> field at the top of the <strong>Basic</strong> tab. A clear name such as <code>Projectile_Core</code> makes it easy to separate from the muzzle flash emitters later.</p>
-<p>For the visual target, think narrow, bright, and short-lived. These are starter values — tune them in the preview, they are not a fixed recipe:</p>
-<table>
-<thead>
-<tr><th>Parameter</th><th>Value</th></tr>
-</thead>
-<tbody>
-<tr><td>Color</td><td>bright green — R 0.15 / G 1.0 / B 0.25</td></tr>
-<tr><td>Blend mode</td><td>Additive</td></tr>
-<tr><td>Lifetime</td><td>~0.3s (Maximum lifetime)</td></tr>
-<tr><td>Scale</td><td>narrow — around 3 (a tight bolt, not a cloud)</td></tr>
-<tr><td>Generation</td><td>Continuous stream, ~10 particles/second (a steady bolt)</td></tr>
-<tr><td>Texture</td><td>the default master atlas (a soft round dot)</td></tr>
-</tbody>
-</table>
-<p>Keep the rate low: because these are additive, overlapping particles <em>sum</em>, so a dense stream of full-green cores clips to a shapeless white line. If the bolt whites out, lower the rate or bring the green value down until the green reads again.</p>
-<p>The blend mode lives in the <strong>Appearance</strong> tab's Rendering section — Additive is the right choice for anything that glows (see <a href="./blend-modes.html">Blend Modes</a>). Lifetime is set with the Minimum/Maximum lifetime fields in the <strong>Basic</strong> tab's Generation section.</p>
-<p>Use the Preview Viewport while you adjust. The projectile core should read immediately as the center of the shot.</p>
-<figure class="guide-media" aria-label="Show building the projectile core the way a user actually would: rename the default emitter by typing, step the spinner, pick the atlas frame, click the color pulse keys onto the curve, and set tail + parent speed."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-projectile-core.mp4" data-poster="tutorial-03-projectile-core-poster.jpg"></video></figure>
-<h2 id="2-use-the-built-in-tail-on-the-core">2. Use the Built-In Tail on the Core</h2>
-<p>With <code>Projectile_Core</code> still selected, use the Tail section in the Property Panel. Enable <code>Has tail</code> and adjust <code>Tail length</code> (start around <code>5</code> and raise it) until the shot has a clear streak behind it — long enough to read as motion, short enough that the bolt still has a defined head.</p>
-<p>The tail should support the core rather than overpower it. If the whole effect becomes a glowing block, shorten the tail, reduce the scale, or dim the color. (The core is additive, so lowering alpha would do nothing — see <a href="./blend-modes.html">Blend Modes</a>.) The goal is a readable laser shot, not a solid rectangle.</p>
-<h2 id="3-add-the-projectile-glow">3. Add the Projectile Glow</h2>
-<p>Add a second projectile emitter — a <strong>root emitter</strong>, one that plays on its own from the effect's origin (as opposed to a <em>child</em> emitter, which hangs off another emitter's particles; see <a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a>). Add it from the <strong>Emitters</strong> menu → <strong>New Emitter → Root Emitter</strong> (right-clicking in the Emitter Tree offers the same choice). Name it something like <code>Projectile_Glow</code>. This emitter should be slightly wider, softer, and less intense than the core. It gives the shot presence without replacing the crisp center.</p>
-<p>Use the Tail section on this emitter too. Enable <code>Has tail</code> and give the glow its own <code>Tail length</code>. The glow tail can be a little broader or softer than the core tail, but it should still point in the same direction and support the same motion.</p>
-<p>If the shot still feels thin, a third, even softer layer works well: duplicate the glow idea as <code>Projectile_Glow_Soft</code>, make it noticeably wider and much fainter, and let it act as a halo around the other two. Very low intensity at a large scale adds presence without blowing out the shot.</p>
-<figure class="guide-media"><img class="clip-img" data-poster="tutorial-03-glow-layers.png" alt="Show the three projectile layers (core, glow, soft halo) in the Emitter Tree with the layered green core streaming."></figure>
-<h2 id="4-let-the-projectile-emitters-ride-the-shot">4. Let the Projectile Emitters Ride the Shot</h2>
-<p>Set <code>Parent speed inherit</code> near full inheritance on both the projectile core and the projectile glow — it lives in the <strong>Physics</strong> tab's Initial speed section (see <a href="./motion-and-physics.html">Motion and Physics</a>) — one emitter at a time, so the projectile rides with the parent motion.</p>
-<p>This makes the projectile part behave like it belongs to the moving projectile object. The core and glow tails should travel together instead of being left behind at the spawn point.</p>
-<figure class="guide-media" aria-label="Show the Parent speed inherit control in the Physics tab: full inheritance rides the shot, zero leaves the particles at the launch point."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-inherit-parent-speed.mp4" data-poster="tutorial-03-inherit-parent-speed-poster.jpg"></video></figure>
-<h2 id="5-launch-test-instances-with-the-spawner">5. Launch Test Instances with the Spawner</h2>
-<p>Open the Spawner panel (<strong>Emitters</strong> menu → <strong>Spawner</strong>, or <strong>F7</strong> — see the <a href="./app-ui-quick-reference.html">App UI Quick Reference</a>) and use it to preview the projectile as a launched particle instance rather than a static loop. Start with <code>Manual</code> mode so each test spawn is deliberate.</p>
-<p>Set the Velocity fields to launch the particle in a clear direction. For example, set <code>Velocity X</code> to about <code>50</code> (units per second) and leave <code>Velocity Y</code> and <code>Velocity Z</code> at <code>0</code>, so the shot travels straight along one axis. Higher X values make the shot move faster; lower values (try <code>20</code>) make it easier to inspect the tail.</p>
-<p>Use <code>Spawn now</code> to fire a test instance. If the shot is hard to read in motion, adjust the core, glow, tail length, or velocity and spawn another instance.</p>
-<figure class="guide-media" aria-label="Show launching test instances with the Spawner: dial Velocity X to a positive value, then click Spawn now to fire the shot in that direction."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-spawner-direction.mp4" data-poster="tutorial-03-spawner-direction-poster.jpg"></video></figure>
-<h2 id="6-add-the-muzzle-flash">6. Add the Muzzle Flash</h2>
-<p>Add a new emitter for the bright center of the muzzle flash. Keep the name direct, such as <code>Muzzle_Core</code>, so the Emitter Tree shows the two ideas clearly:</p>
-<table>
-<thead>
-<tr><th>Emitter</th><th>Role</th></tr>
-</thead>
-<tbody>
-<tr><td>Projectile_Core</td><td>moving shot core and tail</td></tr>
-<tr><td>Projectile_Glow</td><td>softer projectile glow and tail</td></tr>
-<tr><td>Projectile_Glow_Soft</td><td>faint wide halo around the shot</td></tr>
-<tr><td>Muzzle_Core</td><td>white-hot launch flash</td></tr>
-</tbody>
-</table>
-<p>Make this emitter very short-lived, bright, and compact. A white or nearly white core works well because it reads as the hottest part of the flash. Starter values:</p>
-<table>
-<thead>
-<tr><th>Parameter</th><th>Value</th></tr>
-</thead>
-<tbody>
-<tr><td>Lifetime</td><td>~0.1s</td></tr>
-<tr><td>Scale</td><td>compact — around 10</td></tr>
-<tr><td>Blend mode</td><td>Additive</td></tr>
-<tr><td>Generation</td><td>Bursts — 1 burst, 1–2 particles</td></tr>
-<tr><td>Color</td><td>near-white with a green tint — R 0.6 / G 1.0 / B 0.6, peaking within the first 10% then decaying to black</td></tr>
-</tbody>
-</table>
-<p>Keep the particle count tiny here (one or two). These muzzle layers are additive and will overlap the projectile and each other at the launch point; more particles just sum toward the shapeless white square the section below warns about.</p>
-<p>Shape the brightness with the color tracks rather than a constant: start the channels at zero, peak them early — within the first tenth of the life — and let them decay to black. This fast-in, slow-out envelope is a reliable way to make a flash read well, and you will see it in shipped flash effects (the explosion example in <a href="./05-build-an-explosion.html">Tutorial 5</a> peaks its flash at 10% too): the pop reads as an <em>event</em> with attack and decay rather than a sprite switching on and off. And since several additive layers will overlap at the launch point, keep each layer's peak modest — additive layers sum, and stacked layers at full brightness clip to a shapeless white square.</p>
-<p>A muzzle flash fires once at the moment of launch, so it should generate as a burst, not a continuous stream. In the <strong>Basic</strong> tab, open the <strong>Generation</strong> section and set the Generation mode to <code>Bursts</code> (rather than <code>Continuous stream</code>). A single burst — <code>Bursts: 1</code> with a small <code>Particles/burst</code> — gives one clean flash instead of an emitter that keeps re-emitting for the whole life of the shot. This burst-versus-stream choice, together with the short lifetime, is what makes a launch flash read as a flash and not a steady jet. (The full rundown of the three generation modes is in <a href="./generation-types.html">Particle Generation Types</a>.)</p>
-<figure class="guide-media" aria-label="Show building the muzzle-flash core the way a user actually would: add a new emitter, rename it by typing, switch to Bursts, and step every setting to the finished values."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-muzzle-flash.mp4" data-poster="tutorial-03-muzzle-flash-poster.jpg"></video></figure>
-<h2 id="7-add-the-outer-glow-and-keep-it-at-the-launch-point">7. Add the Outer Glow and Keep It at the Launch Point</h2>
-<p>Add a second muzzle-flash emitter named something like <code>Muzzle_Glow</code>. Make it wider, softer, and greener than the white core. Give it the same <code>Bursts</code> Generation mode as the core, so the outer glow fires with the flash instead of streaming on its own. The same halo idea from the projectile applies here too: a third <code>Muzzle_Glow_Soft</code> emitter, wider and much fainter again, rounds the flash off without making it bigger in feel.</p>
-<figure class="guide-media"><img class="clip-img" data-poster="tutorial-03-muzzle-glow-props.png" alt="Show the finished muzzle group: Muzzle_Glow's Bursts settings with the full three-layer flash frozen at peak."></figure>
-<p>Set <code>Parent speed inherit</code> near zero on both muzzle flash emitters, one at a time in the Property Panel, so the flash stays close to the launch point.</p>
-<blockquote><strong>The one idea to remember here.</strong> <code>Parent speed inherit</code> is what separates a <em>moving</em> layer from a <em>staying</em> one. The projectile core and glow ride the shot (near-full inheritance); the muzzle flash stays at the launch point (near-zero). Same control, opposite settings.</blockquote>
-<p>If the flash stretches into a long streak, shorten its lifetime, reduce its scale, or lower its parent-speed inheritance.</p>
-<figure class="guide-media" aria-label="Show adjusting Parent speed inherit to 0 on the muzzle emitters in the Physics tab, so the flash stays at the launch point instead of streaking with the shot."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-no-parent-speed.mp4" data-poster="tutorial-03-no-parent-speed-poster.jpg"></video></figure>
-<h2 id="8-check-the-two-groups-together">8. Check the Two Groups Together</h2>
-<p>Use the Preview Viewport to watch the full particle in motion. The shot should have a clear leading core, a softer projectile glow, built-in tails, a white-hot muzzle core, and a softer outer flash.</p>
-<p>Use these questions as a quick check:</p>
-<ul>
-<li>Can you tell which part is the moving projectile?</li>
-<li>Do the built-in tails make the projectile motion easier to read?</li>
-<li>Does the projectile glow support the core without blurring the shot into a blob?</li>
-<li>Does the muzzle flash fire as a single burst rather than a continuous stream?</li>
-<li>Does the muzzle flash disappear quickly?</li>
-<li>Does the outer glow support the white core without becoming a second projectile?</li>
-<li>Do the emitter names still make the two groups easy to understand?</li>
-</ul>
-<figure class="guide-media" aria-label="Show the finished user-authored laser shot and muzzle flash together in the full editor."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-final-preview.mp4" data-poster="tutorial-03-final-preview-poster.jpg"></video></figure>
-<h2 id="game-use-note">Game Use Note</h2>
-<p>In a full mod, this kind of particle could be used as the visual model for a projectile. The projectile XML would still control the game behavior, while the particle controls how the shot and launch flash read on screen.</p>
-<h2 id="takeaways">Takeaways</h2>
-<p>Projectile particles are easier to reason about when the moving shot and launch flash have separate jobs. Use built-in tails for the projectile core and glow, use the Spawner panel to test direction and speed, then use <code>Parent speed inherit</code> to decide which emitters ride with the projectile and which ones stay near the firing point.</p>
-      </article>
-      <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./concepts-before-you-build.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Concepts Before You Build</span></a>
-        <a class="pager-next" href="./04-recolor-and-orient-a-shield-impact.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">4. Recolor and Orient a Shield Impact</span></a>
-      </nav>
-    </main>
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>

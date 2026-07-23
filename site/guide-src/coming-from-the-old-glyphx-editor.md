@@ -5,18 +5,36 @@ files still open unchanged, and the file format, parameter meanings, and engine-
 carry over. The parts you need to relearn are how you load assets, organize emitters, inspect the
 preview, and recover your work.
 
-Each section starts with the old workflow, then gives the current control path. Use the quick table
-when something familiar behaves differently; use the grouped sections when you want to find a tool
-that did not exist in v1.5.
+Each workflow starts with what you did in v1.5, then gives the current control path. If the editor
+already opens your files, read the key workflow changes below first. If you have not configured the
+editor or your mod yet, do [Setup](setup) first and return here afterward.
+
+## Key Workflow Changes
+
+Read these four changes before editing an old effect; skim the rest when you need a particular
+tool.
+
+1. **[Set the editor's asset order](#load-assets-from-your-mod-stack).** Add your mod to
+   **Active load order**. This controls what the editor resolves; it does not launch the game with
+   the same `MODPATH`.
+2. **[Learn the shared curve canvas](#curves-one-canvas-visibility-checkboxes).** Visibility and
+   focus are separate. Scale, Index, and Rotation open alone, but you can turn color channels back
+   on for comparison.
+3. **[Import instead of opening two editor windows](#import-emitters-from-another-particle).** The
+   app clipboard stays inside one running editor; **File → Import Emitters…** is the cross-file
+   path.
+4. **[Know the safety controls](#pause-and-step-the-preview).** Pause before stepping, and read
+   [Undo, Recover, and Catch Overloads](#undo-recover-and-catch-overloads) before relying on an
+   autosave after a crash.
 
 ## Quick Comparison
 
 Check these differences when a familiar action appears to be missing or behaves differently.
 
-| In the old editor | Here | Why |
+| In the old editor | Here | What changes in practice |
 | --- | --- | --- |
 | Seven curve tabs — you saw one channel at a time | One canvas: tick the channels you want and they draw together, with the focused one editable | Compare alpha against scale without flipping tabs. The Y axis is shared, so turning on a large-range channel rescales the view. |
-| Typing in a numeric field changed the effect on every keystroke | The value applies when you press Enter or leave the field | Each change is a round-trip to the render host, and committing per keystroke floods it. Arrows, wheel, and drag still apply instantly. |
+| Typing in a numeric field changed the effect on every keystroke | The value applies when you press Enter or leave the field | Finish typing before the preview updates. Arrows, wheel, and drag still apply instantly. |
 | Delete removed the emitter and everything under it, immediately | A leaf still goes straight away; deleting a parent or a multi-selection asks first | Deleting a parent takes its whole subtree with it, which the row you selected does not show. |
 | Copy put the emitter on the Windows clipboard, so it survived into a second editor window | Copy and paste work within the running editor only | The clipboard now lives in the app rather than the OS. Cross-track and cross-emitter paste in one session are unaffected. |
 | A colour swatch set the background, full stop | The colour is the fallback; a selected game skydome takes over, and choosing a colour clears the dome | Backgrounds can now be a real in-game dome, so the two settings are mutually exclusive. |
@@ -42,6 +60,8 @@ and interpolation.
 
 <!-- Media: ref-curve-visibility -->
 
+<p class="guide-media-caption">What to watch: Red returns to a solo view after Green, Blue, and Alpha are compared.</p>
+
 ### Organize Emitters in the Tree
 
 **Old editor:** The emitter tree disabled drag and drop. Reordering usually meant copying an
@@ -49,7 +69,7 @@ emitter, pasting it in the new position, then deleting the original.
 
 **This editor:** In the **Emitter Tree**, drag roots to insertion gaps to reorder them. Drag an
 emitter onto another row to reparent it into an available Lifetime or Death child slot. You can
-Ctrl/Cmd-click, Shift-click, or marquee-select roots and move the multi-selection as one block.
+Ctrl-click, Shift-click, or marquee-select roots and move the multi-selection as one block.
 Each selected root carries its whole subtree.
 
 **Where to find it:** Work directly in the **Emitter Tree**. Its footer and context menu also
@@ -58,6 +78,8 @@ provide **Duplicate**, **Move emitter up**, and **Move emitter down**. See
 additive layers overlap.
 
 <!-- Media: ref-render-order -->
+
+<p class="guide-media-caption">What to watch: the selected emitter moves in the tree, then its layer draws in a different order in the preview.</p>
 
 ### Duplicate and Link Repeated Variants
 
@@ -75,6 +97,8 @@ the preview before accepting. See [Link Groups](stacking-emitters-and-children#l
 
 <!-- Media: tutorial-05-sparks-children -->
 
+<p class="guide-media-caption">What to watch: the clip uses Increment Index and Repeat before the copies are selected and assigned to a link group.</p>
+
 ### Import Emitters from Another Particle
 
 **Old editor:** Cross-file transfer used the Windows clipboard, commonly with the source and
@@ -89,6 +113,8 @@ rows you want, then click **Import N selected**. A parent checkbox selects its b
 children you do not want before importing.
 
 <!-- Media: ref-returning-import-emitters -->
+
+<p class="guide-media-caption">What to watch: branch checkboxes narrow the import before all selected emitters enter the active particle together.</p>
 
 ## Assets and Mods
 
@@ -111,6 +137,8 @@ base-game assets. This stack controls the editor; it does not launch the game wi
 
 <!-- Media: ref-returning-mod-stack -->
 
+<p class="guide-media-caption">What to watch: the list says Top wins while a mod is dragged above another layer.</p>
+
 ### Reuse Frequently-used Textures
 
 **Old editor:** Color and bump textures were text fields with `…` browse buttons. You needed to
@@ -126,6 +154,8 @@ you choose an active mod.
 
 <!-- Media: ref-returning-texture-palette -->
 
+<p class="guide-media-caption">What to watch: Color and Bump choices are grouped into Pinned and Recent thumbnail lists.</p>
+
 ### Pick Atlas Frames Visually
 
 **Old editor:** You changed Index keys numerically and watched the particle preview to work out
@@ -137,10 +167,12 @@ commit the change.
 
 **Where to find it:** Focus the Index channel, select its key or keys, then choose
 **View → Atlas Frame Picker…** or use the toolbar toggle. The picker needs a color texture with
-multiple **Texture elements**. Use **Step** interpolation when the frames should change cleanly
+more than one atlas frame. Use **Step** interpolation when the frames should change cleanly
 rather than blend.
 
 <!-- Media: ref-returning-atlas-frame-picker -->
+
+<p class="guide-media-caption">What to watch: the selected numbered tile matches both the particle preview and the stepped Index curve.</p>
 
 ## Scene Context
 
@@ -163,6 +195,8 @@ one clears the other. See [Game Context](particle-authoring-primer#game-context)
 
 <!-- Media: ref-returning-skydome-picker -->
 
+<p class="guide-media-caption">What to watch: the still shows the game-dome and ground controls; Lighting opens separately from the View menu.</p>
+
 ### Place and Move a Reference Object
 
 **Old editor:** There was no model preview beside the particle, so scale and contact usually had to
@@ -179,7 +213,11 @@ or nudged; if the gizmo is missing, unlock the object and click the model. See
 
 <!-- Media: ref-returning-scene-context -->
 
+<p class="guide-media-caption">What to watch: the picker places a game-scale reference model beside the effect.</p>
+
 <!-- Media: ref-returning-reference-gizmo -->
+
+<p class="guide-media-caption">What to watch: after Lock object is cleared, the selected model exposes its move and rotate gizmo.</p>
 
 ## Testing and Safety
 
@@ -201,6 +239,8 @@ the faster check when you only need to place one copy.
 
 <!-- Media: tutorial-03-spawner-direction -->
 
+<p class="guide-media-caption">What to watch: the clip demonstrates Manual mode by setting a direction and using Spawn now; Auto mode is not shown.</p>
+
 ### Pause and Step the Preview
 
 **Old editor:** The preview ran continuously. You could not hold one frame or advance the simulation
@@ -219,23 +259,35 @@ commands are ignored while the preview is playing.
 much could make the preview unusable without an editor-side overload guard.
 
 **This editor:** **Undo** and **Redo** cover ordinary editor changes, including tree moves and
-reference transforms. Autosave snapshots can restore work after an interrupted session, and the
-preview overload guard warns before continued spawning overwhelms the editor.
+reference transforms. Dirty documents write a recent autosave about every 30 seconds and an older
+stable fallback about every five minutes. The preview overload guard warns before continued
+spawning overwhelms the editor.
 
-**Where to find it:** Use **Edit → Undo/Redo** or the toolbar buttons. After an orphaned autosave,
-**Recover unsaved changes?** offers **Restore recent**, **Restore stable**, and **Discard**. A
-restored particle opens as unsaved work under its original filename, so save it after checking the
-result.
+**Where to find it:** Use **Edit → Undo/Redo** or the toolbar buttons. After a crash or abrupt exit,
+the next clean launch can show **Recover unsaved changes?** when it finds autosaves owned by an
+editor that is no longer running. **Restore recent** loads the 30-second tier; **Restore stable**
+loads the older five-minute fallback; **Discard** deletes that recovery set. A successful restore
+opens unsaved work under the original filename, so inspect it and save it normally.
 
-## Smaller Changes Worth Knowing
+Saves write a sibling temporary file before replacing the destination, so a failed save leaves the
+previous `.alo` intact. Load and save failures stay visible, and deleting a parent or a
+multi-selection asks before its descendants are removed.
 
-These do not need a separate workflow, but they replace limitations you may still work around from
-habit.
+## Everyday Conveniences
 
-| Change | What you use now |
-| --- | --- |
-| Reload assets without reopening | Use View → Reload Shaders or View → Reload Textures after changing files on disk. |
-| Resize and keep your layout | Drag the panel dividers; panel sizes and view settings are restored the next time you open the editor. |
-| Switch theme and work from the keyboard | Light and dark themes, keyboard focus, and the Keyboard Shortcuts dialog are part of the current UI. |
-| Keep the previous file if saving fails | Saves replace the existing `.alo` atomically, so a failed save leaves the previous file intact. |
-| Get clearer failure and deletion prompts | Load and save failures stay visible, and deleting a subtree asks before its descendants are removed. |
+These are useful, but none should block your first edit:
+
+- **Reload changed assets:** use **View → Reload Shaders** or **View → Reload Textures** instead of
+  reopening the editor.
+- **Keep your panel layout:** drag the panel dividers; their sizes return the next time you open the
+  editor. Use **View → Reset panel layout** to start over.
+- **Change theme or review shortcuts:** choose **Edit → Preferences…** for Light, Dark, or System
+  theme; open **Help → Keyboard Shortcuts…** for the current key map.
+
+## Where to Go Next
+
+- If the editor or your mod stack is not configured, continue to [Setup](setup).
+- If the editor is ready but the controls are unfamiliar, keep the
+  [App UI Quick Reference](app-ui-quick-reference) open beside it.
+- If you are ready to author, review [Curve Editor Basics](curve-editor-basics) and then use the
+  tutorial path from the [Guide Home](home#tutorial-path).

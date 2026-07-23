@@ -57,6 +57,40 @@
     </nav>
   </header>
   <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Reference <span class="kicker-count">· 6 of 9</span></p>
+<h1 id="file-structure">File Structure</h1>
+<p>Particle tutorial files live in a mod folder that mirrors the game's <code>DATA</code> paths. The matching path inside the game archives is the internal path.</p>
+<p>For example, this loose file:</p>
+<pre><code class="language-text">Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>maps to this internal game path:</p>
+<pre><code class="language-text">DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>Because the loose file uses the same internal path as the stock particle, the game can load it as an override.</p>
+<h2 id="where-particle-files-live">Where Particle Files Live</h2>
+<p>Shipped particle <code>.alo</code> files normally live under:</p>
+<pre><code class="language-text">DATA\ART\MODELS\
+</code></pre>
+<p>They are packed in <code>Models.meg</code> in a stock install. Tutorial overrides use the matching loose path inside the mod:</p>
+<pre><code class="language-text">corruption\Mods\&lt;ModName&gt;\Data\Art\Models\
+</code></pre>
+<h2 id="loose-overrides">Loose Overrides</h2>
+<p>A loose override is a file placed directly in a mod's <code>Data</code> folder instead of packed into a <code>.meg</code>. For tutorial work, loose files are useful because you can see, replace, and remove them directly.</p>
+<p>The important habit is path matching:</p>
+<pre><code class="language-text">Stock internal path: DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO
+Mod loose path:      Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<h2 id="xml-organization">XML Organization</h2>
+<p>Particles can also be referenced from XML. Some mods place all object references in the stock-style XML files, while others use file lists such as <a href="./game-concepts-glossary.html"><code>GameObjectFiles.xml</code></a> — a list that tells the game which object XML files to load — to reference additional XML files for better organization.</p>
+<p>When you override an existing particle file at the same path, you usually do not need to touch XML. When you create a new separate particle, something in the game or a model proxy still needs to point at it.</p>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./stacking-emitters-and-children.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Stacking Emitters and Using Children</span></a>
+        <a class="pager-next" href="./where-particles-are-used-in-game.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Where Particles Are Used In-Game</span></a>
+      </nav>
+    </main>
     <aside class="guide-sidebar" aria-label="Guide navigation">
       <p class="side-title">Guide</p>
     <div class="side-group">
@@ -97,40 +131,6 @@
       </ul>
     </div>
     </aside>
-    <main class="guide-main" id="guide-main">
-      <article class="guide-article">
-<p class="guide-kicker">Reference <span class="kicker-count">· 6 of 9</span></p>
-<h1 id="file-structure">File Structure</h1>
-<p>Particle tutorial files live in a mod folder that mirrors the game's <code>DATA</code> paths. The matching path inside the game archives is the internal path.</p>
-<p>For example, this loose file:</p>
-<pre><code class="language-text">Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
-</code></pre>
-<p>maps to this internal game path:</p>
-<pre><code class="language-text">DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO
-</code></pre>
-<p>Because the loose file uses the same internal path as the stock particle, the game can load it as an override.</p>
-<h2 id="where-particle-files-live">Where Particle Files Live</h2>
-<p>Shipped particle <code>.alo</code> files normally live under:</p>
-<pre><code class="language-text">DATA\ART\MODELS\
-</code></pre>
-<p>They are packed in <code>Models.meg</code> in a stock install. Tutorial overrides use the matching loose path inside the mod:</p>
-<pre><code class="language-text">corruption\Mods\&lt;ModName&gt;\Data\Art\Models\
-</code></pre>
-<h2 id="loose-overrides">Loose Overrides</h2>
-<p>A loose override is a file placed directly in a mod's <code>Data</code> folder instead of packed into a <code>.meg</code>. For tutorial work, loose files are useful because you can see, replace, and remove them directly.</p>
-<p>The important habit is path matching:</p>
-<pre><code class="language-text">Stock internal path: DATA\ART\MODELS\P_HP_IMPERIAL_DAMAGE.ALO
-Mod loose path:      Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
-</code></pre>
-<h2 id="xml-organization">XML Organization</h2>
-<p>Particles can also be referenced from XML. Some mods place all object references in the stock-style XML files, while others use file lists such as <a href="./game-concepts-glossary.html"><code>GameObjectFiles.xml</code></a> — a list that tells the game which object XML files to load — to reference additional XML files for better organization.</p>
-<p>When you override an existing particle file at the same path, you usually do not need to touch XML. When you create a new separate particle, something in the game or a model proxy still needs to point at it.</p>
-      </article>
-      <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./stacking-emitters-and-children.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Stacking Emitters and Using Children</span></a>
-        <a class="pager-next" href="./where-particles-are-used-in-game.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Where Particles Are Used In-Game</span></a>
-      </nav>
-    </main>
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>

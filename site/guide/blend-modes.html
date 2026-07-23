@@ -57,6 +57,46 @@
     </nav>
   </header>
   <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Reference <span class="kicker-count">· 3 of 9</span></p>
+<h1 id="blend-modes">Blend Modes</h1>
+<p>The blend mode decides how a particle mixes with whatever is behind it. It is one of the biggest levers on how an effect reads, so it is worth knowing what each option does. Set it in the Property Panel under Appearance, in the Rendering section, with the Blend mode field.</p>
+<p>The two you will use most are Additive and Transparent. Additive brightens whatever is behind the particle and is right for anything glowing. Transparent is ordinary see-through blending and is right for anything solid-looking that fades, such as smoke.</p>
+<blockquote><strong>Additive ignores alpha.</strong> An additive particle's Alpha track does nothing — brightness comes entirely from its color. Fade an additive glow by dropping its <strong>color</strong> toward black (or shrinking its Scale), never with the Alpha track. This one fact trips up almost every newcomer.</blockquote>
+<figure class="guide-media"><img class="clip-img" data-poster="ref-blend-mode-grid.png" alt="A grid still of the same particle rendered in each of the ten UI blend modes over a lit background."></figure>
+<h2 id="the-modes">The Modes</h2>
+<table>
+<thead>
+<tr><th>Mode</th><th>What it does</th><th>Reach for it when</th></tr>
+</thead>
+<tbody>
+<tr><td data-label="Mode">None</td><td data-label="What it does">No blending. The particle is drawn opaque and simply covers what is behind it; its alpha is ignored.</td><td data-label="Reach for it when">You genuinely want a solid, fully opaque sprite. Rare for particles.</td></tr>
+<tr><td data-label="Mode">Additive</td><td data-label="What it does">Adds the particle's color to the scene, so it only ever brightens. Dark parts of the texture become invisible, and the <strong>alpha channel is ignored</strong> — brightness comes entirely from color, so fade an additive effect with its color or scale, never with alpha.</td><td data-label="Reach for it when">Glows, fire, plasma, energy, sparks — anything that gives off light.</td></tr>
+<tr><td data-label="Mode">Transparent</td><td data-label="What it does">Ordinary alpha blending: the particle's alpha controls how much you see it over the background.</td><td data-label="Reach for it when">Smoke, dust, debris, and most soft opaque effects that fade in and out.</td></tr>
+<tr><td data-label="Mode">Inverse</td><td data-label="What it does">Multiplies the scene by the particle's color and texture, so it darkens instead of brightening. White leaves the scene unchanged; black drives it toward black.</td><td data-label="Reach for it when">Scorch marks, dark smoke, shadowy or draining effects.</td></tr>
+<tr><td data-label="Mode">Depth additive</td><td data-label="What it does">Additive, but depth-aware (see below).</td><td data-label="Reach for it when">An additive effect that overlaps scene geometry and should intersect it correctly instead of popping in front of it.</td></tr>
+<tr><td data-label="Mode">Depth transparent</td><td data-label="What it does">Transparent, but depth-aware.</td><td data-label="Reach for it when">Alpha-blended smoke or dust that overlaps terrain or a model and should meet it per-pixel rather than at the flat quad's edge.</td></tr>
+<tr><td data-label="Mode">Depth inverse</td><td data-label="What it does">Inverse, but depth-aware.</td><td data-label="Reach for it when">A darkening effect that meets solid geometry and should depth-test against it correctly, per pixel.</td></tr>
+<tr><td data-label="Mode">Diffuse transparent</td><td data-label="What it does">Alpha-blended like Transparent, but scene lighting adds shade and highlights to the particle instead of letting it look flat or self-lit.</td><td data-label="Reach for it when">A soft effect that should sit in the scene's light rather than glowing on its own.</td></tr>
+<tr><td data-label="Mode">Bump map</td><td data-label="What it does">A lit particle: it uses the normal texture to catch scene lighting, alpha-blended over the background.</td><td data-label="Reach for it when">Effects that should look shaded and three-dimensional rather than flat and self-lit.</td></tr>
+<tr><td data-label="Mode">Decal bump map</td><td data-label="What it does">A decal-style blend that can lighten or darken the surface behind it, so the mark looks lit rather than like a flat stain.</td><td data-label="Reach for it when">Marks laid onto a surface — burns, stains, and impact decals.</td></tr>
+</tbody>
+</table>
+<h2 id="about-the-depth-modes">About the &quot;Depth&quot; Modes</h2>
+<p>The Depth additive, Depth transparent, and Depth inverse modes read a depth texture so that different parts of one particle can pass correctly in front of or behind solid surfaces, instead of the whole flat sprite popping wholly in front of or behind them. Use a depth mode when an effect sits against or passes through scene geometry; use the plain mode when it floats in open space, since the plain mode is cheaper.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="ref-depth-mode-compare.png" alt="Side-by-side of a particle intersecting a reference model: plain mode's flat quad pop vs a depth mode meeting the surface per-pixel."></figure>
+<h2 id="the-bump-modes-and-their-textures">The Bump Modes and Their Textures</h2>
+<p>Bump map gets its lighting shape from the emitter's <strong>normal</strong> texture — the image that controls how light falls across the particle. Decal bump map gets that shape from the <strong>color</strong> texture instead. If the texture a mode relies on is missing or has no useful variation, the expected shading simply will not appear.</p>
+<p>Selecting Bump map also shows the editor's &quot;Always face camera&quot; checkbox as checked and disabled. Treat that as a hint, not a setting change: the emitter keeps whatever orientation you assigned it, and the box only signals that bump-mapped particles are usually meant to be viewed head-on.</p>
+<h2 id="modes-the-editor-does-not-expose">Modes the Editor Does Not Expose</h2>
+<p>The underlying engine defines a few more blend modes — stencil-based darkening, a heat-shimmer mode, and a scanline mode — that this editor intentionally does not list, matching the original tool. The ten modes above are the full set you can choose from in the UI.</p>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./generation-types.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Particle Generation Types</span></a>
+        <a class="pager-next" href="./motion-and-physics.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Motion and Physics</span></a>
+      </nav>
+    </main>
     <aside class="guide-sidebar" aria-label="Guide navigation">
       <p class="side-title">Guide</p>
     <div class="side-group">
@@ -97,46 +137,6 @@
       </ul>
     </div>
     </aside>
-    <main class="guide-main" id="guide-main">
-      <article class="guide-article">
-<p class="guide-kicker">Reference <span class="kicker-count">· 3 of 9</span></p>
-<h1 id="blend-modes">Blend Modes</h1>
-<p>The blend mode decides how a particle mixes with whatever is behind it. It is one of the biggest levers on how an effect reads, so it is worth knowing what each option does. Set it in the Property Panel under Appearance, in the Rendering section, with the Blend mode field.</p>
-<p>The two you will use most are Additive and Transparent. Additive brightens whatever is behind the particle and is right for anything glowing. Transparent is ordinary see-through blending and is right for anything solid-looking that fades, such as smoke.</p>
-<blockquote><strong>Additive ignores alpha.</strong> An additive particle's Alpha track does nothing — brightness comes entirely from its color. Fade an additive glow by dropping its <strong>color</strong> toward black (or shrinking its Scale), never with the Alpha track. This one fact trips up almost every newcomer.</blockquote>
-<figure class="guide-media"><img class="clip-img" data-poster="ref-blend-mode-grid.png" alt="A grid still of the same particle rendered in each of the ten UI blend modes over a lit background."></figure>
-<h2 id="the-modes">The Modes</h2>
-<table>
-<thead>
-<tr><th>Mode</th><th>What it does</th><th>Reach for it when</th></tr>
-</thead>
-<tbody>
-<tr><td>None</td><td>No blending. The particle is drawn opaque and simply covers what is behind it; its alpha is ignored.</td><td>You genuinely want a solid, fully opaque sprite. Rare for particles.</td></tr>
-<tr><td>Additive</td><td>Adds the particle's color to the scene, so it only ever brightens. Dark parts of the texture become invisible, and the <strong>alpha channel is ignored</strong> — brightness comes entirely from color, so fade an additive effect with its color or scale, never with alpha.</td><td>Glows, fire, plasma, energy, sparks — anything that gives off light.</td></tr>
-<tr><td>Transparent</td><td>Ordinary alpha blending: the particle's alpha controls how much you see it over the background.</td><td>Smoke, dust, debris, and most soft opaque effects that fade in and out.</td></tr>
-<tr><td>Inverse</td><td>Multiplies the scene by the particle's color and texture, so it darkens instead of brightening. White leaves the scene unchanged; black drives it toward black.</td><td>Scorch marks, dark smoke, shadowy or draining effects.</td></tr>
-<tr><td>Depth additive</td><td>Additive, but depth-aware (see below).</td><td>An additive effect that overlaps scene geometry and should intersect it correctly instead of popping in front of it.</td></tr>
-<tr><td>Depth transparent</td><td>Transparent, but depth-aware.</td><td>Alpha-blended smoke or dust that overlaps terrain or a model and should meet it per-pixel rather than at the flat quad's edge.</td></tr>
-<tr><td>Depth inverse</td><td>Inverse, but depth-aware.</td><td>A darkening effect that meets solid geometry and should depth-test against it correctly, per pixel.</td></tr>
-<tr><td>Diffuse transparent</td><td>Alpha-blended like Transparent, but scene lighting adds shade and highlights to the particle instead of letting it look flat or self-lit.</td><td>A soft effect that should sit in the scene's light rather than glowing on its own.</td></tr>
-<tr><td>Bump map</td><td>A lit particle: it uses the normal texture to catch scene lighting, alpha-blended over the background.</td><td>Effects that should look shaded and three-dimensional rather than flat and self-lit.</td></tr>
-<tr><td>Decal bump map</td><td>A decal-style blend that can lighten or darken the surface behind it, so the mark looks lit rather than like a flat stain.</td><td>Marks laid onto a surface — burns, stains, and impact decals.</td></tr>
-</tbody>
-</table>
-<h2 id="about-the-depth-modes">About the &quot;Depth&quot; Modes</h2>
-<p>The Depth additive, Depth transparent, and Depth inverse modes read a depth texture so that different parts of one particle can pass correctly in front of or behind solid surfaces, instead of the whole flat sprite popping wholly in front of or behind them. Use a depth mode when an effect sits against or passes through scene geometry; use the plain mode when it floats in open space, since the plain mode is cheaper.</p>
-<figure class="guide-media"><img class="clip-img" data-poster="ref-depth-mode-compare.png" alt="Side-by-side of a particle intersecting a reference model: plain mode's flat quad pop vs a depth mode meeting the surface per-pixel."></figure>
-<h2 id="the-bump-modes-and-their-textures">The Bump Modes and Their Textures</h2>
-<p>Bump map gets its lighting shape from the emitter's <strong>normal</strong> texture — the image that controls how light falls across the particle. Decal bump map gets that shape from the <strong>color</strong> texture instead. If the texture a mode relies on is missing or has no useful variation, the expected shading simply will not appear.</p>
-<p>Selecting Bump map also shows the editor's &quot;Always face camera&quot; checkbox as checked and disabled. Treat that as a hint, not a setting change: the emitter keeps whatever orientation you assigned it, and the box only signals that bump-mapped particles are usually meant to be viewed head-on.</p>
-<h2 id="modes-the-editor-does-not-expose">Modes the Editor Does Not Expose</h2>
-<p>The underlying engine defines a few more blend modes — stencil-based darkening, a heat-shimmer mode, and a scanline mode — that this editor intentionally does not list, matching the original tool. The ten modes above are the full set you can choose from in the UI.</p>
-      </article>
-      <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./generation-types.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Particle Generation Types</span></a>
-        <a class="pager-next" href="./motion-and-physics.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Motion and Physics</span></a>
-      </nav>
-    </main>
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>

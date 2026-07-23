@@ -278,7 +278,8 @@ function parsePipeTable(lines, start, context) {
 
   const head = headers.map((cell) => `<th>${renderInline(cell, context)}</th>`).join("");
   const body = rows
-    .map((row) => `<tr>${row.map((cell) => `<td>${renderInline(cell, context)}</td>`).join("")}</tr>`)
+    .map((row) => `<tr>${row.map((cell, index) =>
+      `<td data-label="${escapeHtml(headers[index] ?? "")}">${renderInline(cell, context)}</td>`).join("")}</tr>`)
     .join("\n");
   return {
     html: `<table>\n<thead>\n<tr>${head}</tr>\n</thead>\n<tbody>\n${body ? `${body}\n` : ""}</tbody>\n</table>`,
@@ -495,10 +496,6 @@ function pageHtml({ title, guideHref, sidebar, kicker, content, pager, toc }) {
     </nav>
   </header>
   <div class="guide-layout">
-    <aside class="guide-sidebar" aria-label="Guide navigation">
-      <p class="side-title">Guide</p>
-${sidebar}
-    </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
 ${kicker}
@@ -506,6 +503,10 @@ ${content}
       </article>
 ${pager}
     </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+${sidebar}
+    </aside>
 ${toc}
   </div>
   <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →

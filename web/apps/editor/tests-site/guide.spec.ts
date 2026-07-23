@@ -326,9 +326,12 @@ test("guide setup responsive layout: desktop rails collapse on narrow screens", 
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
     columns: getComputedStyle(document.querySelector(".guide-layout")!).gridTemplateColumns,
+    sidebarLeft: document.querySelector(".guide-sidebar")!.getBoundingClientRect().left,
+    mainLeft: document.querySelector(".guide-main")!.getBoundingClientRect().left,
   }));
   expect(desktop.scrollWidth).toBeLessThanOrEqual(desktop.clientWidth + 1);
   expect(gridTrackCount(desktop.columns), desktop.columns).toBe(3);
+  expect(desktop.sidebarLeft, "desktop sidebar stays left of the article").toBeLessThan(desktop.mainLeft);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/guide/setup.html");
@@ -337,10 +340,15 @@ test("guide setup responsive layout: desktop rails collapse on narrow screens", 
     scrollWidth: document.documentElement.scrollWidth,
     columns: getComputedStyle(document.querySelector(".guide-layout")!).gridTemplateColumns,
     tocDisplay: getComputedStyle(document.querySelector(".toc")!).display,
+    mainTop: document.querySelector(".guide-main")!.getBoundingClientRect().top,
+    sidebarTop: document.querySelector(".guide-sidebar")!.getBoundingClientRect().top,
+    firstChildClass: document.querySelector(".guide-layout")!.firstElementChild?.className,
   }));
   expect(mobile.scrollWidth).toBeLessThanOrEqual(mobile.clientWidth + 1);
   expect(gridTrackCount(mobile.columns) === 1 || mobile.tocDisplay === "none", mobile.columns)
     .toBe(true);
+  expect(mobile.firstChildClass, "article is first in DOM and reading order").toContain("guide-main");
+  expect(mobile.mainTop, "article appears before the full guide index").toBeLessThan(mobile.sidebarTop);
 });
 
 // The "Quick Comparison" section on the returning-users guide page carries the verified remains
@@ -358,7 +366,7 @@ const DEPARTURE_ROWS = [
   [
     "Typing in a numeric field changed the effect on every keystroke",
     "The value applies when you press Enter or leave the field",
-    "Each change is a round-trip to the render host, and committing per keystroke floods it. Arrows, wheel, and drag still apply instantly.",
+    "Finish typing before the preview updates. Arrows, wheel, and drag still apply instantly.",
   ],
   [
     "Delete removed the emitter and everything under it, immediately",
@@ -377,44 +385,28 @@ const DEPARTURE_ROWS = [
   ],
 ];
 
-const SMALLER_CHANGE_ROWS = [
-  [
-    "Reload assets without reopening",
-    "Use View → Reload Shaders or View → Reload Textures after changing files on disk.",
-  ],
-  [
-    "Resize and keep your layout",
-    "Drag the panel dividers; panel sizes and view settings are restored the next time you open the editor.",
-  ],
-  [
-    "Switch theme and work from the keyboard",
-    "Light and dark themes, keyboard focus, and the Keyboard Shortcuts dialog are part of the current UI.",
-  ],
-  [
-    "Keep the previous file if saving fails",
-    "Saves replace the existing .alo atomically, so a failed save leaves the previous file intact.",
-  ],
-  [
-    "Get clearer failure and deletion prompts",
-    "Load and save failures stay visible, and deleting a subtree asks before its descendants are removed.",
-  ],
-];
-
 test("guide returning GlyphX users: old-to-new workflows and verified departures", async ({ page }) => {
   const response = await page.goto("/guide/coming-from-the-old-glyphx-editor.html");
   expect(response?.status()).toBe(200);
   await expect(page.locator("h1")).toHaveText("Coming from the Old GlyphX Editor?");
   await expect(page.locator(".guide-article")).toContainText("Mike.NL's GlyphX Particle Editor v1.5");
+  const opening = page.locator(".guide-article > p").filter({ hasText: "Each workflow starts" });
+  await expect(opening.getByRole("link", { name: "Setup", exact: true })).toHaveAttribute(
+    "href",
+    "./setup.html",
+  );
 
   const h2Ids = await page.locator(".guide-article h2").evaluateAll((headings) =>
     headings.map((heading) => heading.id));
   expect(h2Ids).toEqual([
+    "key-workflow-changes",
     "quick-comparison",
     "authoring",
     "assets-and-mods",
     "scene-context",
     "testing-and-safety",
-    "smaller-changes-worth-knowing",
+    "everyday-conveniences",
+    "where-to-go-next",
   ]);
 
   const h3Ids = await page.locator(".guide-article h3").evaluateAll((headings) =>
@@ -440,14 +432,42 @@ test("guide returning GlyphX users: old-to-new workflows and verified departures
   await expect(page.locator("#what-it-adds")).toHaveCount(0);
   await expect(page.locator("#what-behaves-differently")).toHaveCount(0);
 
+  const keyWorkflowChanges = await page.locator("#key-workflow-changes").evaluate((heading) => {
+    const parts: string[] = [];
+    const hrefs: string[] = [];
+    let next = heading.nextElementSibling;
+    while (next && next.tagName !== "H2") {
+      parts.push(next.textContent?.trim() ?? "");
+      hrefs.push(...[...next.querySelectorAll("a")].map((link) => link.getAttribute("href") ?? ""));
+      next = next.nextElementSibling;
+    }
+    return { text: parts.join(" "), hrefs };
+  });
+  expect(keyWorkflowChanges.text).toContain("Set the editor's asset order");
+  expect(keyWorkflowChanges.text).toContain("Learn the shared curve canvas");
+  expect(keyWorkflowChanges.text).toContain("Import instead of opening two editor windows");
+  expect(keyWorkflowChanges.text).toContain("Know the safety controls");
+  expect(keyWorkflowChanges.hrefs).toEqual([
+    "#load-assets-from-your-mod-stack",
+    "#curves-one-canvas-visibility-checkboxes",
+    "#import-emitters-from-another-particle",
+    "#pause-and-step-the-preview",
+    "#undo-recover-and-catch-overloads",
+  ]);
+
   const comparison = page.locator("#quick-comparison");
   const departureTable = comparison.locator("xpath=following-sibling::table[1]");
   await expect(departureTable).toHaveCount(1);
+  const departureHeaders = ["In the old editor", "Here", "What changes in practice"];
+  await expect(departureTable.locator("thead th")).toHaveText(departureHeaders);
   const rows = departureTable.locator("tbody tr");
   await expect(rows).toHaveCount(DEPARTURE_ROWS.length);
   const cells = await rows.evaluateAll((trs) =>
     trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent!.trim())));
   expect(cells).toEqual(DEPARTURE_ROWS);
+  const labels = await rows.first().locator("td").evaluateAll((tds) =>
+    tds.map((td) => td.getAttribute("data-label")));
+  expect(labels).toEqual(departureHeaders);
 
   const workflows = [
     ["curves-one-canvas-visibility-checkboxes", ["Curve channels", "Snap to grid", "Scale"], ["ref-curve-visibility.mp4"]],
@@ -495,13 +515,47 @@ test("guide returning GlyphX users: old-to-new workflows and verified departures
     expect(section.figureMedia, `${id} uses its intended visual`).toEqual(expectedMedia);
   }
 
-  const smaller = page.locator("#smaller-changes-worth-knowing")
-    .locator("xpath=following-sibling::table[1]");
-  await expect(smaller).toHaveCount(1);
-  const smallerCells = await smaller.locator("tbody tr").evaluateAll((trs) =>
-    trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent!.trim())));
-  expect(smallerCells).toEqual(SMALLER_CHANGE_ROWS);
-  await expect(page.locator(".guide-article table")).toHaveCount(2);
+  const media = page.locator(".guide-article .guide-media");
+  await expect(media).toHaveCount(11);
+  const mediaCaptions = page.locator(".guide-article .guide-media-caption");
+  await expect(mediaCaptions).toHaveCount(11);
+  for (let i = 0; i < 11; i++)
+    await expect(media.nth(i).locator("xpath=following-sibling::*[1]")).toHaveClass("guide-media-caption");
+
+  const safetyText = await page.locator("#undo-recover-and-catch-overloads").evaluate((heading) => {
+    const parts: string[] = [];
+    let next = heading.nextElementSibling;
+    while (next && next.tagName !== "H2") {
+      parts.push(next.textContent?.trim() ?? "");
+      next = next.nextElementSibling;
+    }
+    return parts.join(" ");
+  });
+  expect(safetyText).toContain("failed save leaves the previous .alo intact");
+  expect(safetyText).toContain("Restore recent");
+  expect(safetyText).toContain("Restore stable");
+
+  const conveniences = page.locator("#everyday-conveniences")
+    .locator("xpath=following-sibling::ul[1]");
+  await expect(conveniences.locator(":scope > li")).toHaveCount(3);
+  await expect(conveniences).toContainText("Help → Keyboard Shortcuts…");
+  await expect(page.locator(".guide-article table")).toHaveCount(1);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  const mobileComparison = await departureTable.evaluate((table) => {
+    const row = table.querySelector("tbody tr")!;
+    const cell = row.querySelector("td")!;
+    return {
+      rowDisplay: getComputedStyle(row).display,
+      cellDisplay: getComputedStyle(cell).display,
+      tableWidth: table.getBoundingClientRect().width,
+      articleWidth: document.querySelector(".guide-article")!.getBoundingClientRect().width,
+    };
+  });
+  expect(mobileComparison.rowDisplay).toBe("block");
+  expect(mobileComparison.cellDisplay).toBe("grid");
+  expect(mobileComparison.tableWidth).toBeLessThanOrEqual(mobileComparison.articleWidth + 1);
 
   // App UI Quick Reference stays a control lookup instead of carrying a second audience's
   // orientation section at the bottom.
@@ -515,7 +569,7 @@ test("guide home points returning modders at their Start Here page", async ({ pa
     '.guide-article a[href="./coming-from-the-old-glyphx-editor.html"]');
   await expect(pointer).toHaveCount(1);
   await expect(pointer.locator("xpath=parent::p")).toContainText(
-    "compares v1.5 workflows across authoring, mod assets, scene context, preview tools, and safer editing",
+    "If the editor and your mod stack already work, use Coming from the Old GlyphX Editor? as your migration map",
   );
 });
 

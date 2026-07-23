@@ -24,7 +24,8 @@
 //       blur it first (a real pointerdown moves focus away — FieldText commits on
 //       blur, so a typed rename "commits" when the cursor clicks elsewhere);
 //     - focus() the nearest focusable at the hit (input/textarea/select/button/
-//       [tabindex]) — real focus happens on mousedown's default action;
+//       [tabindex]) without a keyboard-visible ring — real pointer focus happens
+//       on mousedown's default action but does not advertise keyboard modality;
 //     - arm the hit element for the click.
 //   press true→false: dispatch MouseEvent("click") on the ARMED element when the
 //     release lands back on it (or its subtree/ancestor — closest common activation
@@ -39,6 +40,13 @@
 
 const FOCUSABLE_SELECTOR = "input, textarea, select, button, [tabindex]";
 const TEXT_ENTRY_SELECTOR = "input, textarea";
+// The current TypeScript lib.dom predates FocusOptions.focusVisible, but the WebView2
+// Chromium runtime supports it. Synthetic events are untrusted and therefore do
+// not update the browser's input-modality heuristic; passing false makes the
+// programmatic focus match a real pointer press instead of painting :focus-visible.
+const POINTER_FOCUS_OPTIONS: FocusOptions & { focusVisible: boolean } = {
+  focusVisible: false,
+};
 
 export interface RecordActivateState {
   prevPress: boolean;
@@ -176,7 +184,7 @@ export function applyRecordActivation(
       (active as HTMLElement).blur?.();
     }
     const focusable = hit.closest?.(FOCUSABLE_SELECTOR);
-    if (focusable) (focusable as HTMLElement).focus?.();
+    if (focusable) (focusable as HTMLElement).focus?.(POINTER_FOCUS_OPTIONS);
     state.armed = hit;
     state.armedMods = mods;
     state.armedButton = button;

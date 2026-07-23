@@ -57,6 +57,55 @@
     </nav>
   </header>
   <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Start Here <span class="kicker-count">· 1 of 6</span></p>
+<h1 id="particle-editor-guide">Particle Editor Guide</h1>
+<h2 id="what-you-are-building">What You Are Building</h2>
+<p>A particle effect in Empire at War is not a model — it is a small system that throws out many tiny, short-lived images and animates them. A laser bolt, a plume of engine smoke, an explosion, a shield flash: all of them are particle effects. You author them as <code>.alo</code> particle files, and each file holds one or more <em>emitters</em> — the little engines that spawn particles. Each emitter decides how its particles are born, how they move, what image they draw, and how they change as they age; stack a few emitters together and you get a finished effect.</p>
+<p>This guide teaches you to build and tune those effects in Particle Editor, judging them against the same references the game uses — correct scale, the right background, and your mod's own assets — with a live viewport right beside the controls.</p>
+<p>Start with <a href="./setup.html">Setup</a> if you still need to connect the editor to the game or your mod. If the editor and your mod stack already work, use <a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a> as your migration map, then follow only the guide pages you need. It flags the workflow changes that can make a familiar action look missing or behave differently.</p>
+<h2 id="tutorial-path">Tutorial Path</h2>
+<table>
+<thead>
+<tr><th>Page</th><th>What It Teaches</th><th>Time</th></tr>
+</thead>
+<tbody>
+<tr><td data-label="Page"><a href="./setup.html">Setup</a></td><td data-label="What It Teaches">Create a small tutorial mod folder, extract shipped particles, and launch the game with the mod.</td><td data-label="Time">~15 min</td></tr>
+<tr><td data-label="Page"><a href="./basic-controls.html">Basic Editor Controls</a></td><td data-label="What It Teaches">The viewport controls that nothing on screen announces: Shift to preview, camera movement, selection.</td><td data-label="Time">~5 min</td></tr>
+<tr><td data-label="Page"><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></td><td data-label="What It Teaches">Learn the basic ideas behind emitters, tracks, blend modes, and particle lifetime.</td><td data-label="Time">~10 min</td></tr>
+<tr><td data-label="Page"><a href="./curve-editor-basics.html">Curve Editor Basics</a></td><td data-label="What It Teaches">Tracks, keys, the value spinners, and interpolation — the mechanics every tutorial uses.</td><td data-label="Time">~5 min</td></tr>
+<tr><td data-label="Page"><a href="./01-make-a-hardpoint-damage-effect-obvious.html">Tutorial 1: Make a Hardpoint Damage Effect Obvious</a></td><td data-label="What It Teaches">Override a shipped Star Destroyer damage particle and make it bright green so the edit is easy to prove.</td><td data-label="Time">~20 min</td></tr>
+<tr><td data-label="Page"><a href="./02-polish-hardpoint-damage-smoke.html">Tutorial 2: Polish Hardpoint Damage Smoke</a></td><td data-label="What It Teaches">Turn the proof edit into believable dark smoke with a subtle warm tint. <em>(Videos pending.)</em></td><td data-label="Time">~20 min</td></tr>
+<tr><td data-label="Page"><a href="./concepts-before-you-build.html">Concepts Before You Build</a></td><td data-label="What It Teaches">The handful of decisions every new emitter needs, before the from-scratch tutorials.</td><td data-label="Time">~5 min</td></tr>
+<tr><td data-label="Page"><a href="./03-build-a-laser-shot-and-muzzle-flash.html">Tutorial 3: Build a Laser Shot and Muzzle Flash</a></td><td data-label="What It Teaches">Build a blank particle into a green laser shot with separate projectile and muzzle-flash emitters.</td><td data-label="Time">~30 min</td></tr>
+<tr><td data-label="Page"><a href="./04-recolor-and-orient-a-shield-impact.html">Tutorial 4: Recolor and Orient a Shield Impact</a></td><td data-label="What It Teaches">Override a shield impact particle, recolor it purple, and study impact orientation in the editor preview. <em>(Videos pending.)</em></td><td data-label="Time">~20 min</td></tr>
+<tr><td data-label="Page"><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a></td><td data-label="What It Teaches">Build a full explosion from scratch: flash, animated fireball, smoke, and flying sparks.</td><td data-label="Time">~40 min</td></tr>
+<tr><td data-label="Page"><a href="./build-your-own-effect.html">Build Your Own Effect</a></td><td data-label="What It Teaches">A capstone brief with no recipe — plan and build a new effect from a description alone.</td><td data-label="Time">~30 min</td></tr>
+</tbody>
+</table>
+<h2 id="quick-references">Quick References</h2>
+<table>
+<thead>
+<tr><th>Page</th><th>Use It For</th></tr>
+</thead>
+<tbody>
+<tr><td data-label="Page"><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></td><td data-label="Use It For">Finding the main editor panels and controls by their visible labels.</td></tr>
+<tr><td data-label="Page"><a href="./generation-types.html">Particle Generation Types</a></td><td data-label="Use It For">Choosing between bursts, continuous streams, and weather particles.</td></tr>
+<tr><td data-label="Page"><a href="./blend-modes.html">Blend Modes</a></td><td data-label="Use It For">Choosing how a particle mixes with the scene behind it.</td></tr>
+<tr><td data-label="Page"><a href="./motion-and-physics.html">Motion and Physics</a></td><td data-label="Use It For">Initial position and speed shapes, acceleration, gravity, and ground behavior.</td></tr>
+<tr><td data-label="Page"><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></td><td data-label="Use It For">Combining emitters: siblings, lifetime children, and death children.</td></tr>
+<tr><td data-label="Page"><a href="./file-structure.html">File Structure</a></td><td data-label="Use It For">Understanding loose overrides, internal paths, and where particle files live.</td></tr>
+<tr><td data-label="Page"><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></td><td data-label="Use It For">Seeing the common places particles are referenced by the game.</td></tr>
+<tr><td data-label="Page"><a href="./troubleshooting.html">Troubleshooting</a></td><td data-label="Use It For">Working out why an effect is not visible — in the editor or in the game.</td></tr>
+<tr><td data-label="Page"><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></td><td data-label="Use It For">Looking up the terms used throughout the tutorials.</td></tr>
+</tbody>
+</table>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-next" href="./coming-from-the-old-glyphx-editor.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Coming from the Old GlyphX Editor?</span></a>
+      </nav>
+    </main>
     <aside class="guide-sidebar" aria-label="Guide navigation">
       <p class="side-title">Guide</p>
     <div class="side-group">
@@ -97,55 +146,6 @@
       </ul>
     </div>
     </aside>
-    <main class="guide-main" id="guide-main">
-      <article class="guide-article">
-<p class="guide-kicker">Start Here <span class="kicker-count">· 1 of 6</span></p>
-<h1 id="particle-editor-guide">Particle Editor Guide</h1>
-<h2 id="what-you-are-building">What You Are Building</h2>
-<p>A particle effect in Empire at War is not a model — it is a small system that throws out many tiny, short-lived images and animates them. A laser bolt, a plume of engine smoke, an explosion, a shield flash: all of them are particle effects. You author them as <code>.alo</code> particle files, and each file holds one or more <em>emitters</em> — the little engines that spawn particles. Each emitter decides how its particles are born, how they move, what image they draw, and how they change as they age; stack a few emitters together and you get a finished effect.</p>
-<p>This guide teaches you to build and tune those effects in Particle Editor, judging them against the same references the game uses — correct scale, the right background, and your mod's own assets — with a live viewport right beside the controls.</p>
-<p>Start with <a href="./setup.html">Setup</a>, then follow the pages in order. If you already know Mike.NL's GlyphX editor, start with <a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a> instead. It compares v1.5 workflows across authoring, mod assets, scene context, preview tools, and safer editing.</p>
-<h2 id="tutorial-path">Tutorial Path</h2>
-<table>
-<thead>
-<tr><th>Page</th><th>What It Teaches</th><th>Time</th></tr>
-</thead>
-<tbody>
-<tr><td><a href="./setup.html">Setup</a></td><td>Create a small tutorial mod folder, extract shipped particles, and launch the game with the mod.</td><td>~15 min</td></tr>
-<tr><td><a href="./basic-controls.html">Basic Editor Controls</a></td><td>The viewport controls that nothing on screen announces: Shift to preview, camera movement, selection.</td><td>~5 min</td></tr>
-<tr><td><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></td><td>Learn the basic ideas behind emitters, tracks, blend modes, and particle lifetime.</td><td>~10 min</td></tr>
-<tr><td><a href="./curve-editor-basics.html">Curve Editor Basics</a></td><td>Tracks, keys, the value spinners, and interpolation — the mechanics every tutorial uses.</td><td>~5 min</td></tr>
-<tr><td><a href="./01-make-a-hardpoint-damage-effect-obvious.html">Tutorial 1: Make a Hardpoint Damage Effect Obvious</a></td><td>Override a shipped Star Destroyer damage particle and make it bright green so the edit is easy to prove.</td><td>~20 min</td></tr>
-<tr><td><a href="./02-polish-hardpoint-damage-smoke.html">Tutorial 2: Polish Hardpoint Damage Smoke</a></td><td>Turn the proof edit into believable dark smoke with a subtle warm tint. <em>(Videos pending.)</em></td><td>~20 min</td></tr>
-<tr><td><a href="./concepts-before-you-build.html">Concepts Before You Build</a></td><td>The handful of decisions every new emitter needs, before the from-scratch tutorials.</td><td>~5 min</td></tr>
-<tr><td><a href="./03-build-a-laser-shot-and-muzzle-flash.html">Tutorial 3: Build a Laser Shot and Muzzle Flash</a></td><td>Build a blank particle into a green laser shot with separate projectile and muzzle-flash emitters.</td><td>~30 min</td></tr>
-<tr><td><a href="./04-recolor-and-orient-a-shield-impact.html">Tutorial 4: Recolor and Orient a Shield Impact</a></td><td>Override a shield impact particle, recolor it purple, and study impact orientation in the editor preview. <em>(Videos pending.)</em></td><td>~20 min</td></tr>
-<tr><td><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a></td><td>Build a full explosion from scratch: flash, animated fireball, smoke, and flying sparks.</td><td>~40 min</td></tr>
-<tr><td><a href="./build-your-own-effect.html">Build Your Own Effect</a></td><td>A capstone brief with no recipe — plan and build a new effect from a description alone.</td><td>~30 min</td></tr>
-</tbody>
-</table>
-<h2 id="quick-references">Quick References</h2>
-<table>
-<thead>
-<tr><th>Page</th><th>Use It For</th></tr>
-</thead>
-<tbody>
-<tr><td><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></td><td>Finding the main editor panels and controls by their visible labels.</td></tr>
-<tr><td><a href="./generation-types.html">Particle Generation Types</a></td><td>Choosing between bursts, continuous streams, and weather particles.</td></tr>
-<tr><td><a href="./blend-modes.html">Blend Modes</a></td><td>Choosing how a particle mixes with the scene behind it.</td></tr>
-<tr><td><a href="./motion-and-physics.html">Motion and Physics</a></td><td>Initial position and speed shapes, acceleration, gravity, and ground behavior.</td></tr>
-<tr><td><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></td><td>Combining emitters: siblings, lifetime children, and death children.</td></tr>
-<tr><td><a href="./file-structure.html">File Structure</a></td><td>Understanding loose overrides, internal paths, and where particle files live.</td></tr>
-<tr><td><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></td><td>Seeing the common places particles are referenced by the game.</td></tr>
-<tr><td><a href="./troubleshooting.html">Troubleshooting</a></td><td>Working out why an effect is not visible — in the editor or in the game.</td></tr>
-<tr><td><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></td><td>Looking up the terms used throughout the tutorials.</td></tr>
-</tbody>
-</table>
-      </article>
-      <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-next" href="./coming-from-the-old-glyphx-editor.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Coming from the Old GlyphX Editor?</span></a>
-      </nav>
-    </main>
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>

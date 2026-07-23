@@ -463,6 +463,22 @@ test("the returning-user curve clip keeps its live particle payoff visible", () 
     timeline.tracks.some(({ kind }) => kind === "spawner/trigger"),
     "the clip must trigger the particle system",
   );
+  assert.ok(
+    timeline.tracks.some(({ kind, params }) => kind === "engine/set/ground" && params?.enabled === false),
+    "the clip must disable the persisted ground plane for a neutral viewport",
+  );
+  assert.ok(
+    timeline.tracks.some(({ kind, params }) => kind === "engine/set/grid-visible" && params?.visible === false),
+    "the clip must disable the persisted viewport grid",
+  );
+  assert.ok(
+    timeline.tracks.some(
+      ({ kind, params }) => kind === "engine/set/skydome-environment"
+        && params?.primaryName === ""
+        && params?.secondaryName === "",
+    ),
+    "the clip must clear any persisted skydome environment",
+  );
   assert.equal(item.framing, "full-app");
   assert.equal(item.encode?.zoom, undefined, "a curve-only zoom would crop the viewport payoff away");
   assert.ok(
@@ -470,17 +486,90 @@ test("the returning-user curve clip keeps its live particle payoff visible", () 
     "acceptance must require the particle system to remain visible",
   );
 
+});
+
+test("the returning-user curve clip authors its checkbox return instead of reversing the video", () => {
+  const manifest = JSON.parse(readFileSync(join(repoRoot, "tasks", "wiki-media", "manifest.json"), "utf8"));
+  const item = manifest.items.find(({ id }) => id === "ref-curve-visibility");
+  assert.ok(item, "ref-curve-visibility must remain in the media manifest");
+
+  const timeline = JSON.parse(readFileSync(join(repoRoot, item.timeline), "utf8"));
   const cursor = timeline.tracks.find(({ cursor }) => Array.isArray(cursor))?.cursor ?? [];
-  const scalePress = cursor.find(
-    (key) => key.press === true && key.target?.ref === "testid:curve-channel-row-scale",
+  const clicks = cursor
+    .filter(({ press, activate }) => press === true && activate === true)
+    .map(({ t, target, vis }) => ({ t, ref: target?.ref, vis }));
+  const keptStartMs = (item.encode?.start / timeline.fps) * 1000;
+  const setupClicks = clicks.filter(({ t }) => t < keptStartMs);
+  const keptClicks = clicks.filter(({ t }) => t >= keptStartMs);
+
+  assert.equal(item.loop, "none", "the encode must preserve the authored direction of travel");
+  assert.deepEqual(
+    setupClicks.map(({ ref }) => ref),
+    [
+      "testid:curve-channel-checkbox-green",
+      "testid:curve-channel-checkbox-blue",
+    ],
+    "the trimmed warm-up must hide Green and Blue so the clip opens Red-only",
   );
-  const revealScale = timeline.tracks.find(
-    ({ kind, params }) => kind === "ui/reveal-curve-channel" && params?.channel === "scale",
-  );
-  assert.ok(scalePress, "the clip must visibly click the Scale channel row");
-  assert.ok(revealScale, "the clip must reveal the clipped Scale row before targeting it");
   assert.ok(
-    revealScale.at < scalePress.t,
-    "the Scale row must be revealed before the cursor presses it",
+    setupClicks.every(({ vis }) => vis === false),
+    "warm-up setup clicks must keep the cursor hidden",
+  );
+  assert.deepEqual(
+    keptClicks.map(({ ref }) => ref),
+    [
+      "testid:curve-channel-checkbox-green",
+      "testid:curve-channel-checkbox-blue",
+      "testid:curve-channel-checkbox-alpha",
+      "testid:curve-channel-checkbox-alpha",
+      "testid:curve-channel-checkbox-blue",
+      "testid:curve-channel-checkbox-green",
+    ],
+    "the visible clip must add Green, Blue, and Alpha, then remove them in reverse order",
+  );
+  assert.equal(
+    timeline.tracks.some(({ kind }) => kind === "ui/reveal-curve-channel"),
+    false,
+    "the short visibility demonstration should not jump or scroll the channel list",
+  );
+
+  const visible = new Set(["red", "green", "blue"]);
+  const toggle = (ref) => {
+    const channel = ref?.match(/^testid:curve-channel-checkbox-(.+)$/)?.[1];
+    assert.ok(channel, `unexpected activation target in curve checkbox cycle: ${ref}`);
+    if (visible.has(channel)) visible.delete(channel);
+    else visible.add(channel);
+  };
+  for (const { ref } of setupClicks) toggle(ref);
+  assert.deepEqual([...visible], ["red"], "the encoded opening state must show only Red");
+  for (const { ref } of keptClicks.slice(0, 3)) toggle(ref);
+  assert.deepEqual(
+    [...visible].sort(),
+    ["alpha", "blue", "green", "red"],
+    "the demonstration must build from Red to all four color curves",
+  );
+  for (const { ref } of keptClicks.slice(3)) toggle(ref);
+  assert.deepEqual([...visible], ["red"], "the final visible set must return to the opening Red-only state");
+
+  const first = cursor[0];
+  const last = cursor.at(-1);
+  assert.deepEqual(last?.target, first?.target, "the cursor must return to its opening park");
+  assert.equal(last?.vis, false, "the cursor must be hidden before the loop seam");
+  assert.ok(
+    timeline.durationMs - last.t >= 2000,
+    "the restored UI must hold for at least two seconds before the loop seam",
+  );
+  assert.ok(
+    item.encode?.start >= timeline.fps * 8,
+    "the encode must trim at least the particle system's eight-second warm-up",
+  );
+  const freeze = timeline.tracks.find(
+    ({ kind, params }) => kind === "emitters/set-properties" && params?.patch?.freezeTime === 8,
+  );
+  const startSpawner = timeline.tracks.find(({ kind }) => kind === "spawner/start");
+  assert.ok(freeze, "the UI-only loop must freeze the smoke at its settled eight-second state");
+  assert.ok(
+    freeze.at < startSpawner.at,
+    "the freeze time must be configured before the preview instance starts",
   );
 });

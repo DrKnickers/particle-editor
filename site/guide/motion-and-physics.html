@@ -57,46 +57,6 @@
     </nav>
   </header>
   <div class="guide-layout">
-    <aside class="guide-sidebar" aria-label="Guide navigation">
-      <p class="side-title">Guide</p>
-    <div class="side-group">
-      <p class="side-label">Start Here</p>
-      <ul>
-      <li><a href="./home.html">Guide Home</a></li>
-      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
-      <li><a href="./setup.html">Setup</a></li>
-      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
-      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
-      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
-      </ul>
-    </div>
-    <div class="side-group">
-      <p class="side-label">Tutorials</p>
-      <ul>
-      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
-      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
-      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
-      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
-      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
-      </ul>
-    </div>
-    <div class="side-group">
-      <p class="side-label">Reference</p>
-      <ul>
-      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
-      <li><a href="./generation-types.html">Particle Generation Types</a></li>
-      <li><a href="./blend-modes.html">Blend Modes</a></li>
-      <li><a href="./motion-and-physics.html" class="active" aria-current="page">Motion and Physics</a></li>
-      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
-      <li><a href="./file-structure.html">File Structure</a></li>
-      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
-      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
-      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
-      </ul>
-    </div>
-    </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
 <p class="guide-kicker">Reference <span class="kicker-count">· 4 of 9</span></p>
@@ -116,11 +76,11 @@
 <tr><th>Type</th><th>Fields</th><th>What each particle gets</th></tr>
 </thead>
 <tbody>
-<tr><td>Exact</td><td><code>Value</code></td><td>The same fixed X/Y/Z every time. No randomness.</td></tr>
-<tr><td>Box</td><td><code>Min</code> / <code>Max</code></td><td>A random point inside a box between the two corners.</td></tr>
-<tr><td>Cube</td><td><code>Side length</code></td><td>A random point inside a cube of that size, centered on the emitter.</td></tr>
-<tr><td>Sphere</td><td><code>Radius</code></td><td>A random point inside a sphere. Check <code>Constrain to surface</code> to pick points <strong>on</strong> the sphere's shell instead.</td></tr>
-<tr><td>Cylinder</td><td>radius and height</td><td>A random point inside a cylinder, with its own <code>Constrain to surface</code> option.</td></tr>
+<tr><td data-label="Type">Exact</td><td data-label="Fields"><code>Value</code></td><td data-label="What each particle gets">The same fixed X/Y/Z every time. No randomness.</td></tr>
+<tr><td data-label="Type">Box</td><td data-label="Fields"><code>Min</code> / <code>Max</code></td><td data-label="What each particle gets">A random point inside a box between the two corners.</td></tr>
+<tr><td data-label="Type">Cube</td><td data-label="Fields"><code>Side length</code></td><td data-label="What each particle gets">A random point inside a cube of that size, centered on the emitter.</td></tr>
+<tr><td data-label="Type">Sphere</td><td data-label="Fields"><code>Radius</code></td><td data-label="What each particle gets">A random point inside a sphere. Check <code>Constrain to surface</code> to pick points <strong>on</strong> the sphere's shell instead.</td></tr>
+<tr><td data-label="Type">Cylinder</td><td data-label="Fields">radius and height</td><td data-label="What each particle gets">A random point inside a cylinder, with its own <code>Constrain to surface</code> option.</td></tr>
 </tbody>
 </table>
 <p>The trick to reading this table: for <strong>Initial position</strong> the shape scatters <em>where particles spawn</em>; for <strong>Initial speed</strong> the same shape scatters <em>which direction and how fast they fly</em>. A speed vector is just a point in the shape — its direction from the center is the flight direction, and its distance is the speed.</p>
@@ -168,6 +128,46 @@
         <a class="pager-next" href="./stacking-emitters-and-children.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Stacking Emitters and Using Children</span></a>
       </nav>
     </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
+      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html" class="active" aria-current="page">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>

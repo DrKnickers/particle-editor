@@ -25,9 +25,10 @@ simply a constant value.
 
 The channel list on the side of the Curve Editor shows the seven tracks with a toggle for each.
 Red, Green, and Blue display together so you can see a color as one picture. Alpha can be
-toggled in alongside them. **Scale, Index, and Rotation display alone** — turning one of them on
-hides the other channels, because their value ranges are so different from 0-to-1 color values
-that sharing an axis would make both unreadable.
+toggled in alongside them. Turning on **Scale**, **Index**, or **Rotation** initially hides the
+other channels because its value range differs from the 0-to-1 color tracks. After that initial
+solo view, use the toggles to bring color channels back for a direct comparison on the shared
+axis.
 
 Clicking a channel row focuses that channel: its keys become the ones you select and edit.
 

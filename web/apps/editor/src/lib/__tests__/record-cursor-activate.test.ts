@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyRecordActivation,
   createRecordActivateState,
@@ -242,13 +242,15 @@ describe("record-cursor-activate", () => {
     expect(clicks[0].button).toBe(0);
   });
 
-  it("focuses the nearest focusable on the activating press (mousedown default action)", () => {
+  it("focuses the nearest focusable without a keyboard-visible ring on the activating press", () => {
     document.elementFromPoint = (() => input) as typeof document.elementFromPoint;
+    const focus = vi.spyOn(input, "focus");
     const state = createRecordActivateState();
 
     applyRecordActivation({ x: 10, y: 10, press: true, ok: true, activate: true }, state, { dpr: 1 });
 
     expect(document.activeElement).toBe(input);
+    expect(focus).toHaveBeenCalledWith({ focusVisible: false });
   });
 
   it("blurs a focused text input when an activating press lands elsewhere (FieldText commit)", () => {

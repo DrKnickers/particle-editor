@@ -57,46 +57,6 @@
     </nav>
   </header>
   <div class="guide-layout">
-    <aside class="guide-sidebar" aria-label="Guide navigation">
-      <p class="side-title">Guide</p>
-    <div class="side-group">
-      <p class="side-label">Start Here</p>
-      <ul>
-      <li><a href="./home.html">Guide Home</a></li>
-      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
-      <li><a href="./setup.html">Setup</a></li>
-      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
-      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
-      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
-      </ul>
-    </div>
-    <div class="side-group">
-      <p class="side-label">Tutorials</p>
-      <ul>
-      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
-      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
-      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
-      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./05-build-an-explosion.html" class="active" aria-current="page">5. Build an Explosion</a></li>
-      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
-      </ul>
-    </div>
-    <div class="side-group">
-      <p class="side-label">Reference</p>
-      <ul>
-      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
-      <li><a href="./generation-types.html">Particle Generation Types</a></li>
-      <li><a href="./blend-modes.html">Blend Modes</a></li>
-      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
-      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
-      <li><a href="./file-structure.html">File Structure</a></li>
-      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
-      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
-      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
-      </ul>
-    </div>
-    </aside>
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
 <p class="guide-kicker">Tutorials <span class="kicker-count">· 6 of 7</span></p>
@@ -151,12 +111,12 @@
 <tr><th>Layer</th><th>Initial position</th><th>Initial speed</th><th>Acceleration</th></tr>
 </thead>
 <tbody>
-<tr><td>Flash</td><td>exactly at center</td><td>not at all (Exact 0,0,0)</td><td>no</td></tr>
-<tr><td>Shockwave</td><td>exactly at center</td><td>not at all — only its Scale grows</td><td>no</td></tr>
-<tr><td>Fire</td><td>inside a ball (r≈7.5)</td><td>tiny drift + gentle outward push</td><td>rises (gravity −0.9)</td></tr>
-<tr><td>Smoke</td><td>inside a ball (r≈10)</td><td>tiny drift + gentle outward push</td><td>rises (gravity −0.9)</td></tr>
-<tr><td>Sparks</td><td>inside a ball (r≈10)</td><td>random direction + outward push</td><td>no (vacuum)</td></tr>
-<tr><td>Debris</td><td>ON a shell (r≈4)</td><td>hard outward push (Inward −103)</td><td>no (vacuum)</td></tr>
+<tr><td data-label="Layer">Flash</td><td data-label="Initial position">exactly at center</td><td data-label="Initial speed">not at all (Exact 0,0,0)</td><td data-label="Acceleration">no</td></tr>
+<tr><td data-label="Layer">Shockwave</td><td data-label="Initial position">exactly at center</td><td data-label="Initial speed">not at all — only its Scale grows</td><td data-label="Acceleration">no</td></tr>
+<tr><td data-label="Layer">Fire</td><td data-label="Initial position">inside a ball (r≈7.5)</td><td data-label="Initial speed">tiny drift + gentle outward push</td><td data-label="Acceleration">rises (gravity −0.9)</td></tr>
+<tr><td data-label="Layer">Smoke</td><td data-label="Initial position">inside a ball (r≈10)</td><td data-label="Initial speed">tiny drift + gentle outward push</td><td data-label="Acceleration">rises (gravity −0.9)</td></tr>
+<tr><td data-label="Layer">Sparks</td><td data-label="Initial position">inside a ball (r≈10)</td><td data-label="Initial speed">random direction + outward push</td><td data-label="Acceleration">no (vacuum)</td></tr>
+<tr><td data-label="Layer">Debris</td><td data-label="Initial position">ON a shell (r≈4)</td><td data-label="Initial speed">hard outward push (Inward −103)</td><td data-label="Acceleration">no (vacuum)</td></tr>
 </tbody>
 </table>
 <p>Two principles fall out of this table:</p>
@@ -171,13 +131,13 @@
 <tr><th>Parameter</th><th>Flash Small</th><th>Flash Large</th></tr>
 </thead>
 <tbody>
-<tr><td>Generation</td><td>Bursts — 2 bursts, 1 particle each, Burst delay 0.08s</td><td>same</td></tr>
-<tr><td>Lifetime</td><td>0.12s (Maximum lifetime, in the Basic tab's Generation section)</td><td>same</td></tr>
-<tr><td>Blend mode</td><td>Additive</td><td>same</td></tr>
-<tr><td>Texture</td><td>the default master atlas; hold Index frame 2 (a soft round glow)</td><td>same</td></tr>
-<tr><td>Physics</td><td>nothing — both position and speed stay Exact 0,0,0</td><td>same</td></tr>
-<tr><td>Scale — grows across the life (the growth IS the flash)</td><td>46 → 84</td><td>81 → 119 (the wider, dimmer halo behind the hot core)</td></tr>
-<tr><td>Color — a warm orange-white (R&gt;G&gt;B) that peaks early, then fades to black</td><td>R 0.20 / G 0.10 / B 0.05 (key at ~10%)</td><td>R 0.10 / G 0.05 / B 0.02 (same shape, dimmer)</td></tr>
+<tr><td data-label="Parameter">Generation</td><td data-label="Flash Small">Bursts — 2 bursts, 1 particle each, Burst delay 0.08s</td><td data-label="Flash Large">same</td></tr>
+<tr><td data-label="Parameter">Lifetime</td><td data-label="Flash Small">0.12s (Maximum lifetime, in the Basic tab's Generation section)</td><td data-label="Flash Large">same</td></tr>
+<tr><td data-label="Parameter">Blend mode</td><td data-label="Flash Small">Additive</td><td data-label="Flash Large">same</td></tr>
+<tr><td data-label="Parameter">Texture</td><td data-label="Flash Small">the default master atlas; hold Index frame 2 (a soft round glow)</td><td data-label="Flash Large">same</td></tr>
+<tr><td data-label="Parameter">Physics</td><td data-label="Flash Small">nothing — both position and speed stay Exact 0,0,0</td><td data-label="Flash Large">same</td></tr>
+<tr><td data-label="Parameter">Scale — grows across the life (the growth IS the flash)</td><td data-label="Flash Small">46 → 84</td><td data-label="Flash Large">81 → 119 (the wider, dimmer halo behind the hot core)</td></tr>
+<tr><td data-label="Parameter">Color — a warm orange-white (R&gt;G&gt;B) that peaks early, then fades to black</td><td data-label="Flash Small">R 0.20 / G 0.10 / B 0.05 (key at ~10%)</td><td data-label="Flash Large">R 0.10 / G 0.05 / B 0.02 (same shape, dimmer)</td></tr>
 </tbody>
 </table>
 <p>(These are additive, so the <strong>Alpha track does nothing</strong> — the fade comes entirely from the color dropping to black, and from the 0.12-second lifetime.)</p>
@@ -193,13 +153,13 @@
 <tr><th>Parameter</th><th>Value</th></tr>
 </thead>
 <tbody>
-<tr><td>Blend mode</td><td>Additive</td></tr>
-<tr><td>Lifetime</td><td>0.375s</td></tr>
-<tr><td>Generation</td><td>1 burst × 1 particle, Initial spawn delay ~0.05s</td></tr>
-<tr><td>Appearance</td><td>world-oriented ON; default master atlas, hold Index frame 3 (a ring)</td></tr>
-<tr><td>Physics</td><td>Exact 0,0,0 — it never travels</td></tr>
-<tr><td>Scale</td><td>~0.9 → 187.5 (the whole effect IS the expansion)</td></tr>
-<tr><td>Color</td><td>dim orange — R 0.12 / G 0.06 / B 0.04, peaking ~5% then fading to black</td></tr>
+<tr><td data-label="Parameter">Blend mode</td><td data-label="Value">Additive</td></tr>
+<tr><td data-label="Parameter">Lifetime</td><td data-label="Value">0.375s</td></tr>
+<tr><td data-label="Parameter">Generation</td><td data-label="Value">1 burst × 1 particle, Initial spawn delay ~0.05s</td></tr>
+<tr><td data-label="Parameter">Appearance</td><td data-label="Value">world-oriented ON; default master atlas, hold Index frame 3 (a ring)</td></tr>
+<tr><td data-label="Parameter">Physics</td><td data-label="Value">Exact 0,0,0 — it never travels</td></tr>
+<tr><td data-label="Parameter">Scale</td><td data-label="Value">~0.9 → 187.5 (the whole effect IS the expansion)</td></tr>
+<tr><td data-label="Parameter">Color</td><td data-label="Value">dim orange — R 0.12 / G 0.06 / B 0.04, peaking ~5% then fading to black</td></tr>
 </tbody>
 </table>
 <p>The small <strong>Initial spawn delay</strong> makes it read as a <em>consequence</em> of the flash rather than simultaneous with it. Tutorial 4's shield ripple uses this same world-oriented trick to lie flat on the shield surface.</p>
@@ -212,18 +172,18 @@
 <tr><th>Parameter</th><th>Smoke</th><th>Smoke Slow</th></tr>
 </thead>
 <tbody>
-<tr><td>Generation</td><td>3 bursts × 10, 0.05s apart</td><td>3 bursts × 5, 0.05s apart</td></tr>
-<tr><td>Lifetime</td><td>1.3s max, Minimum 25%</td><td>2.0s max, Minimum 75%</td></tr>
-<tr><td>Blend mode</td><td>Transparent</td><td>Transparent</td></tr>
-<tr><td>Texture</td><td>the default master atlas (a soft round puff)</td><td>same</td></tr>
-<tr><td>Color</td><td>warm gray → dark gray: R 0.70 / G 0.49 / B 0.29 → 0.10 / 0.10 / 0.10</td><td>same</td></tr>
-<tr><td>Alpha</td><td>0 → ~0.80 by 10% → fade to 0</td><td>0 → ~0.50 by 10% → fade to 0</td></tr>
-<tr><td>Scale</td><td>14 → ~19</td><td>18 → ~22</td></tr>
-<tr><td>Position</td><td>Sphere, radius ≈ 10</td><td>same</td></tr>
-<tr><td>Speed</td><td>a small random drift</td><td>same</td></tr>
-<tr><td>Inward speed</td><td>≈ −3 (gentle outward)</td><td>same</td></tr>
-<tr><td>Gravity</td><td>−0.9 (rises)</td><td>same</td></tr>
-<tr><td>Rotation</td><td>Rotation track ~0.3 falling to ~0, Random rotation direction ON</td><td>same</td></tr>
+<tr><td data-label="Parameter">Generation</td><td data-label="Smoke">3 bursts × 10, 0.05s apart</td><td data-label="Smoke Slow">3 bursts × 5, 0.05s apart</td></tr>
+<tr><td data-label="Parameter">Lifetime</td><td data-label="Smoke">1.3s max, Minimum 25%</td><td data-label="Smoke Slow">2.0s max, Minimum 75%</td></tr>
+<tr><td data-label="Parameter">Blend mode</td><td data-label="Smoke">Transparent</td><td data-label="Smoke Slow">Transparent</td></tr>
+<tr><td data-label="Parameter">Texture</td><td data-label="Smoke">the default master atlas (a soft round puff)</td><td data-label="Smoke Slow">same</td></tr>
+<tr><td data-label="Parameter">Color</td><td data-label="Smoke">warm gray → dark gray: R 0.70 / G 0.49 / B 0.29 → 0.10 / 0.10 / 0.10</td><td data-label="Smoke Slow">same</td></tr>
+<tr><td data-label="Parameter">Alpha</td><td data-label="Smoke">0 → ~0.80 by 10% → fade to 0</td><td data-label="Smoke Slow">0 → ~0.50 by 10% → fade to 0</td></tr>
+<tr><td data-label="Parameter">Scale</td><td data-label="Smoke">14 → ~19</td><td data-label="Smoke Slow">18 → ~22</td></tr>
+<tr><td data-label="Parameter">Position</td><td data-label="Smoke">Sphere, radius ≈ 10</td><td data-label="Smoke Slow">same</td></tr>
+<tr><td data-label="Parameter">Speed</td><td data-label="Smoke">a small random drift</td><td data-label="Smoke Slow">same</td></tr>
+<tr><td data-label="Parameter">Inward speed</td><td data-label="Smoke">≈ −3 (gentle outward)</td><td data-label="Smoke Slow">same</td></tr>
+<tr><td data-label="Parameter">Gravity</td><td data-label="Smoke">−0.9 (rises)</td><td data-label="Smoke Slow">same</td></tr>
+<tr><td data-label="Parameter">Rotation</td><td data-label="Smoke">Rotation track ~0.3 falling to ~0, Random rotation direction ON</td><td data-label="Smoke Slow">same</td></tr>
 </tbody>
 </table>
 <p>Read the physics choices against section 1's model. The <strong>Sphere position</strong> gives the cloud <em>volume</em> — thirty flat sprites born at one point look like one flickering card; born inside a ball they look like a cloud. The gentle <strong>negative Inward speed</strong> inflates the cloud outward from the center. The <strong>negative gravity</strong> makes it rise like hot gas. None of these numbers is sacred — what matters is that each one answers one of the three questions deliberately.</p>
@@ -246,9 +206,9 @@
 <tr><th>Parameter</th><th>Value</th></tr>
 </thead>
 <tbody>
-<tr><td>Generation</td><td>Bursts — 2 bursts × 2 particles</td></tr>
-<tr><td>Lifetime</td><td>0.7s — long enough to play the frames</td></tr>
-<tr><td>Blend mode</td><td>Additive</td></tr>
+<tr><td data-label="Parameter">Generation</td><td data-label="Value">Bursts — 2 bursts × 2 particles</td></tr>
+<tr><td data-label="Parameter">Lifetime</td><td data-label="Value">0.7s — long enough to play the frames</td></tr>
+<tr><td data-label="Parameter">Blend mode</td><td data-label="Value">Additive</td></tr>
 </tbody>
 </table>
 <p>Animate the frames with the <strong>Index</strong> track in the Curve Editor. The example steps through all sixteen frames — a key per frame, <code>0</code> at 0% through <code>15</code> at 100% — with <strong>step</strong> interpolation (the Index default), so each frame holds and then flips, playing the sheet like a flipbook across the particle's 0.7s life (see <a href="./curve-editor-basics.html">Curve Editor Basics</a>). One particle now carries a whole pre-animated explosion, which is why this version needs so few particles.</p>
@@ -266,13 +226,13 @@
 <tr><th>Parameter</th><th>Fire</th><th>Fire Details</th></tr>
 </thead>
 <tbody>
-<tr><td>Generation</td><td>2 bursts × 11</td><td>3 bursts × 23</td></tr>
-<tr><td>Lifetime</td><td>0.4s max, Minimum 76%</td><td>0.35s max, Minimum 14%</td></tr>
-<tr><td>Position</td><td>Sphere r ≈ 7.5</td><td>Sphere r ≈ 5</td></tr>
-<tr><td>Inward speed</td><td>≈ −7 (outward)</td><td>≈ −13 (faster outward)</td></tr>
-<tr><td>Gravity</td><td>−0.9 (rises)</td><td>−0.9</td></tr>
-<tr><td>Color</td><td>bright orange → red</td><td>same, smaller and busier</td></tr>
-<tr><td>Delay</td><td>none</td><td>Initial spawn delay ≈ 0.09s</td></tr>
+<tr><td data-label="Parameter">Generation</td><td data-label="Fire">2 bursts × 11</td><td data-label="Fire Details">3 bursts × 23</td></tr>
+<tr><td data-label="Parameter">Lifetime</td><td data-label="Fire">0.4s max, Minimum 76%</td><td data-label="Fire Details">0.35s max, Minimum 14%</td></tr>
+<tr><td data-label="Parameter">Position</td><td data-label="Fire">Sphere r ≈ 7.5</td><td data-label="Fire Details">Sphere r ≈ 5</td></tr>
+<tr><td data-label="Parameter">Inward speed</td><td data-label="Fire">≈ −7 (outward)</td><td data-label="Fire Details">≈ −13 (faster outward)</td></tr>
+<tr><td data-label="Parameter">Gravity</td><td data-label="Fire">−0.9 (rises)</td><td data-label="Fire Details">−0.9</td></tr>
+<tr><td data-label="Parameter">Color</td><td data-label="Fire">bright orange → red</td><td data-label="Fire Details">same, smaller and busier</td></tr>
+<tr><td data-label="Parameter">Delay</td><td data-label="Fire">none</td><td data-label="Fire Details">Initial spawn delay ≈ 0.09s</td></tr>
 </tbody>
 </table>
 <p><code>Fire</code> is the body of the fireball; <code>Fire Details</code> is the same idea smaller, faster, more numerous, and — look at that spinner — with <strong>Minimum lifetime 14%</strong>: its particles live anywhere from 14% to 100% of 0.35s, so the detail layer flickers and churns instead of pulsing in lockstep. The tiny spawn delay makes the detail <em>follow</em> the body by a frame or two. That is what sells &quot;burning&quot; without a single animation frame.</p>
@@ -285,16 +245,16 @@
 <tr><th>Parameter</th><th>Value</th></tr>
 </thead>
 <tbody>
-<tr><td>Generation</td><td>Bursts — 2 bursts × 20, 0.1s apart</td></tr>
-<tr><td>Lifetime</td><td>2.0s max, Minimum 22% — embers die at very different times</td></tr>
-<tr><td>Blend mode</td><td>Additive</td></tr>
-<tr><td>Texture</td><td>default master atlas, hold Index frame 1 (a small spark)</td></tr>
-<tr><td>Color</td><td>bright orange — R 1.0 / G 0.50 / B 0.25, peaking almost immediately, fading to black</td></tr>
-<tr><td>Scale</td><td>≈ 0.7 (small); Minimum scale 50% (Appearance tab, Textures section)</td></tr>
-<tr><td>Position</td><td>Sphere, radius ≈ 10 (inside the ball, not the shell)</td></tr>
-<tr><td>Speed</td><td>Sphere, radius ≈ 10 — a random launch direction for every spark</td></tr>
-<tr><td>Inward speed</td><td>≈ −10 (outward bias)</td></tr>
-<tr><td>Gravity</td><td>0 — this is space; embers coast</td></tr>
+<tr><td data-label="Parameter">Generation</td><td data-label="Value">Bursts — 2 bursts × 20, 0.1s apart</td></tr>
+<tr><td data-label="Parameter">Lifetime</td><td data-label="Value">2.0s max, Minimum 22% — embers die at very different times</td></tr>
+<tr><td data-label="Parameter">Blend mode</td><td data-label="Value">Additive</td></tr>
+<tr><td data-label="Parameter">Texture</td><td data-label="Value">default master atlas, hold Index frame 1 (a small spark)</td></tr>
+<tr><td data-label="Parameter">Color</td><td data-label="Value">bright orange — R 1.0 / G 0.50 / B 0.25, peaking almost immediately, fading to black</td></tr>
+<tr><td data-label="Parameter">Scale</td><td data-label="Value">≈ 0.7 (small); Minimum scale 50% (Appearance tab, Textures section)</td></tr>
+<tr><td data-label="Parameter">Position</td><td data-label="Value">Sphere, radius ≈ 10 (inside the ball, not the shell)</td></tr>
+<tr><td data-label="Parameter">Speed</td><td data-label="Value">Sphere, radius ≈ 10 — a random launch direction for every spark</td></tr>
+<tr><td data-label="Parameter">Inward speed</td><td data-label="Value">≈ −10 (outward bias)</td></tr>
+<tr><td data-label="Parameter">Gravity</td><td data-label="Value">0 — this is space; embers coast</td></tr>
 </tbody>
 </table>
 <p>The speed <strong>Sphere</strong> is what makes this a spray: every spark rolls its own direction. The negative Inward speed then biases all of them away from the center so the spray reads as <em>from the blast</em> rather than aimless. And the two randomization spinners — Minimum lifetime 22%, Minimum scale 50% — mean twenty sparks from one emitter arrive in twenty sizes and die across two seconds instead of blinking out together.</p>
@@ -306,16 +266,16 @@
 <tr><th>Parameter</th><th>Value</th></tr>
 </thead>
 <tbody>
-<tr><td>Generation</td><td>Bursts — 3 bursts × 1 particle, 0.1s apart, Initial spawn delay 0.1s</td></tr>
-<tr><td>Lifetime</td><td>1.5s max, Minimum 75%</td></tr>
-<tr><td>Blend mode</td><td>Transparent (dark chunks against the bright fire)</td></tr>
-<tr><td>Scale</td><td>Minimum scale 1% — chunks roll ANY size from tiny to full</td></tr>
-<tr><td>Position</td><td>Sphere r ≈ 4, Constrain to surface ON</td></tr>
-<tr><td>Speed</td><td>Sphere r ≈ 5 (a little scatter so paths aren't perfectly radial)</td></tr>
-<tr><td>Inward speed</td><td>≈ −103</td></tr>
-<tr><td>Rotation</td><td>Random rotation direction ON — each chunk tumbles its own way</td></tr>
-<tr><td>Texture</td><td>Index track holds ONE atlas frame — this emitter's chunk sprite</td></tr>
-<tr><td>Gravity</td><td>0</td></tr>
+<tr><td data-label="Parameter">Generation</td><td data-label="Value">Bursts — 3 bursts × 1 particle, 0.1s apart, Initial spawn delay 0.1s</td></tr>
+<tr><td data-label="Parameter">Lifetime</td><td data-label="Value">1.5s max, Minimum 75%</td></tr>
+<tr><td data-label="Parameter">Blend mode</td><td data-label="Value">Transparent (dark chunks against the bright fire)</td></tr>
+<tr><td data-label="Parameter">Scale</td><td data-label="Value">Minimum scale 1% — chunks roll ANY size from tiny to full</td></tr>
+<tr><td data-label="Parameter">Position</td><td data-label="Value">Sphere r ≈ 4, Constrain to surface ON</td></tr>
+<tr><td data-label="Parameter">Speed</td><td data-label="Value">Sphere r ≈ 5 (a little scatter so paths aren't perfectly radial)</td></tr>
+<tr><td data-label="Parameter">Inward speed</td><td data-label="Value">≈ −103</td></tr>
+<tr><td data-label="Parameter">Rotation</td><td data-label="Value">Random rotation direction ON — each chunk tumbles its own way</td></tr>
+<tr><td data-label="Parameter">Texture</td><td data-label="Value">Index track holds ONE atlas frame — this emitter's chunk sprite</td></tr>
+<tr><td data-label="Parameter">Gravity</td><td data-label="Value">0</td></tr>
 </tbody>
 </table>
 <p>Three details deserve a pause:</p>
@@ -361,14 +321,14 @@
 <tr><th>Time</th><th>What happens</th></tr>
 </thead>
 <tbody>
-<tr><td>t = 0.00s</td><td>Flash bursts (and again at 0.08s). Fireball ignites.</td></tr>
-<tr><td>t ≈ 0.05s</td><td>Shockwave launches (its Initial spawn delay).</td></tr>
-<tr><td>t ≈ 0.09s</td><td>Fire Details join the fireball.</td></tr>
-<tr><td>t ≈ 0.10s</td><td>First debris chunks launch (more at 0.20s, 0.30s).</td></tr>
-<tr><td>t ≈ 0.12s</td><td>Flash already dead.</td></tr>
-<tr><td>t ≈ 0.40s</td><td>Fireball burnt out. Sparks still flying.</td></tr>
-<tr><td>t ≈ 1.5s+</td><td>Debris gone; slow smoke still rising and fading.</td></tr>
-<tr><td>t ≈ 2.0s</td><td>Last embers and smoke fade — the effect ends.</td></tr>
+<tr><td data-label="Time">t = 0.00s</td><td data-label="What happens">Flash bursts (and again at 0.08s). Fireball ignites.</td></tr>
+<tr><td data-label="Time">t ≈ 0.05s</td><td data-label="What happens">Shockwave launches (its Initial spawn delay).</td></tr>
+<tr><td data-label="Time">t ≈ 0.09s</td><td data-label="What happens">Fire Details join the fireball.</td></tr>
+<tr><td data-label="Time">t ≈ 0.10s</td><td data-label="What happens">First debris chunks launch (more at 0.20s, 0.30s).</td></tr>
+<tr><td data-label="Time">t ≈ 0.12s</td><td data-label="What happens">Flash already dead.</td></tr>
+<tr><td data-label="Time">t ≈ 0.40s</td><td data-label="What happens">Fireball burnt out. Sparks still flying.</td></tr>
+<tr><td data-label="Time">t ≈ 1.5s+</td><td data-label="What happens">Debris gone; slow smoke still rising and fading.</td></tr>
+<tr><td data-label="Time">t ≈ 2.0s</td><td data-label="What happens">Last embers and smoke fade — the effect ends.</td></tr>
 </tbody>
 </table>
 <p>The two tools that build this schedule are <strong>Initial spawn delay</strong> (Basic tab, Emitter Timing — holds a whole emitter back) and <strong>Burst delay</strong> (Generation — spaces an emitter's own bursts). Notice that no layer starts later than a tenth of a second: an explosion is front-loaded, and the <em>perceived</em> length comes from how things die, not when they start.</p>
@@ -397,6 +357,46 @@
         <a class="pager-next" href="./build-your-own-effect.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Build Your Own Effect</span></a>
       </nav>
     </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
+      <li><a href="./05-build-an-explosion.html" class="active" aria-current="page">5. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
     <nav class="toc" aria-label="On this page">
       <p class="toc-label">On this page</p>
       <ul>
