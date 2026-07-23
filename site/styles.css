@@ -31,7 +31,7 @@
   --bg:#0b0d12;  --paper:#eef1f6;  --body:#9aa1ad;  --faint:#79818e;
   --accent:#4a8bff;  --rule:rgba(238,241,246,.12);
   --frame-1:#161c26;  --frame-2:#090b10;
-  --maxw:1080px;
+  --maxw:1200px;
   --sans:"Schibsted Grotesk", system-ui, sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, monospace;
 }

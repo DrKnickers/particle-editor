@@ -319,22 +319,41 @@ test("guide media figures never overflow the article column", async ({ page }) =
   }
 });
 
-test("guide setup responsive layout: desktop rails collapse on narrow screens", async ({ page }) => {
+test("guide setup responsive layout: rails step down before they crush the article", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto("/guide/setup.html");
+  const desktopResponse = await page.goto("/guide/setup.html");
+  expect(desktopResponse?.ok()).toBe(true);
   const desktop = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
     columns: getComputedStyle(document.querySelector(".guide-layout")!).gridTemplateColumns,
+    layoutWidth: document.querySelector(".guide-layout")!.getBoundingClientRect().width,
     sidebarLeft: document.querySelector(".guide-sidebar")!.getBoundingClientRect().left,
     mainLeft: document.querySelector(".guide-main")!.getBoundingClientRect().left,
+    mainPaddingLeft: getComputedStyle(document.querySelector(".guide-main")!).paddingLeft,
+    mainPaddingRight: getComputedStyle(document.querySelector(".guide-main")!).paddingRight,
   }));
   expect(desktop.scrollWidth).toBeLessThanOrEqual(desktop.clientWidth + 1);
   expect(gridTrackCount(desktop.columns), desktop.columns).toBe(3);
+  expect(desktop.layoutWidth, "guide uses the wider shared site frame").toBeGreaterThan(1100);
   expect(desktop.sidebarLeft, "desktop sidebar stays left of the article").toBeLessThan(desktop.mainLeft);
+  expect(desktop.mainPaddingLeft, "guide main does not inherit the landing page gutter").toBe("0px");
+  expect(desktop.mainPaddingRight, "guide main does not inherit the landing page gutter").toBe("0px");
+
+  await page.setViewportSize({ width: 1024, height: 800 });
+  const tablet = await page.evaluate(() => ({
+    columns: getComputedStyle(document.querySelector(".guide-layout")!).gridTemplateColumns,
+    tocDisplay: getComputedStyle(document.querySelector(".toc")!).display,
+    sidebarLeft: document.querySelector(".guide-sidebar")!.getBoundingClientRect().left,
+    mainLeft: document.querySelector(".guide-main")!.getBoundingClientRect().left,
+    articleWidth: document.querySelector(".guide-article")!.getBoundingClientRect().width,
+  }));
+  expect(gridTrackCount(tablet.columns), tablet.columns).toBe(2);
+  expect(tablet.tocDisplay).toBe("none");
+  expect(tablet.sidebarLeft, "tablet keeps the guide index beside the article").toBeLessThan(tablet.mainLeft);
+  expect(tablet.articleWidth, "tablet article keeps a useful reading width").toBeGreaterThan(600);
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/guide/setup.html");
   const mobile = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
