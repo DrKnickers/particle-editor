@@ -42,7 +42,7 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 - **[DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md)** — per-PR engineering detail. Every non-trivial PR adds an entry with *What ships* / *How we tackled it* / *Issues encountered* — see existing entries for the shape. After adding the entry, run `scripts/build-devlog-index.ps1` to refresh the generated `## Index` at the top (don't hand-edit the index). It's a big file — to find past work, read the `## Index`, not the whole file.
 - **[ROADMAP.md](ROADMAP.md)** — planned work, grouped by horizon. Items are named descriptively; the section is the tier, and a GitHub issue (`#NN`) gives a stable handle when one is needed.
 
-Project conventions live in [`CLAUDE.md`](CLAUDE.md) at the repo root (the always-on rules and gates) plus the process playbooks it points to under [`docs/process/`](docs/process/) — planning, verification, and shipping. Worth a read before non-trivial work.
+Project conventions live in [`AGENTS.md`](AGENTS.md) at the repo root (the always-on rules and gates, shared by every coding agent) plus the process playbooks it points to under [`docs/process/`](docs/process/) — planning, verification, and shipping. [`CLAUDE.md`](CLAUDE.md) imports `AGENTS.md` and adds only Claude Code-specific notes. Worth a read before non-trivial work.
 
 ## Build — it takes TWO builds
 
