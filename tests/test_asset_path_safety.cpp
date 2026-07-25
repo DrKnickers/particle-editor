@@ -63,6 +63,15 @@ int main()
     expectUnsafe(". .\\x",                "x",        ". .\\x  (dot-space-dot)");
     expectUnsafe("..  ",                  "..  ",     "..  (trailing spaces, no separator)");
 
+    // --- SAFE: a lone "." is the CURRENT directory, not traversal ---
+    // Rejecting these would not just refuse the name, it would push it through
+    // SanitizeAssetName's basename reduction and silently load a DIFFERENT file
+    // (FX\.\FIRE.TGA -> FIRE.TGA). A silent misresolution for existing mods is
+    // worse than the traversal the guard exists to stop.
+    expectSafe("FX\\.\\FIRE.TGA",   "FX\\.\\FIRE.TGA  (current-dir segment is legitimate)");
+    expectSafe(".\\FIRE.TGA",       ".\\FIRE.TGA  (leading current-dir segment)");
+    expectSafe("FX\\. \\FIRE.TGA",  "FX\\. \\FIRE.TGA  (dot-space normalizes to current dir)");
+
     // --- SAFE: unchanged ---
     expectSafe("FX\\FOO.TGA",  "FX\\FOO.TGA  (legit relative with interior backslash)");
     expectSafe("BAR.DDS",      "BAR.DDS  (plain relative filename)");

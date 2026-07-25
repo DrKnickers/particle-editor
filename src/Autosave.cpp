@@ -200,14 +200,24 @@ bool Write(const ParticleSystem& sys,
     // crash mid-write leaves the .tmp behind but the destination
     // .alo is either the previous good version or absent (never
     // partial).
+    PhysicalFile* f = NULL;
     try
     {
-        PhysicalFile* f = new PhysicalFile(tmp, PhysicalFile::WRITE);
+        f = new PhysicalFile(tmp, PhysicalFile::WRITE);
         const_cast<ParticleSystem&>(sys).write(f);
         f->Release();
+        f = NULL;
     }
     catch (...)
     {
+        // Release BEFORE deleting. PhysicalFile opens without FILE_SHARE_DELETE,
+        // so DeleteFileW fails while the handle is live and the .tmp survives —
+        // and the next autosave targets that same path, cannot reopen it for
+        // writing, and throws again. One failed write would otherwise disable
+        // autosave silently for the rest of the session. Previously unreachable
+        // in practice because write() only threw when WriteFile itself failed;
+        // making a short write throw widened the path enough to matter.
+        if (f) { f->Release(); f = NULL; }
         DeleteFileW(tmp.c_str());
         AUTOSAVE_LOG("[Autosave] tier=%s write FAILED %ls (PhysicalFile threw)\n",
                      tier == Tier::Recent ? "recent" : "stable", tmp.c_str());

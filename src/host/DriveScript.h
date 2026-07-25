@@ -110,14 +110,21 @@ inline bool IsSafeArtifactRelativePath(const std::string& path)
     if (path.size() >= 2 && std::isalpha(static_cast<unsigned char>(path[0])) && path[1] == ':')
         return false;
     if (path[0] == '/' || path[0] == '\\') return false;
-    // A segment made ONLY of dots and spaces is rejected, not just an exact
-    // "..". Win32 strips trailing dots and spaces from a path component, so
-    // ".. \out.png" traverses upward exactly like "../out.png" while comparing
-    // unequal to "..". No legitimate artifact path has such a component.
+    // Reject a segment of only dots and spaces that holds TWO OR MORE dots, not
+    // just an exact "..". Win32 strips trailing dots and spaces from a path
+    // component, so ".. \out.png" traverses upward exactly like "../out.png"
+    // while comparing unequal to "..". The two-dot floor keeps a lone "." — the
+    // current directory — legal, so "captures/./frame.png" still parses; it
+    // stays inside the artifact root, and rejecting it would fail scripts that
+    // are perfectly safe.
     auto dotsOnly = [](const std::string& s) {
         if (s.empty()) return false;
-        for (char c : s) if (c != '.' && c != ' ') return false;
-        return true;
+        int dots = 0;
+        for (char c : s) {
+            if (c == '.') ++dots;
+            else if (c != ' ') return false;
+        }
+        return dots >= 2;
     };
     std::string segment;
     for (char ch : path) {

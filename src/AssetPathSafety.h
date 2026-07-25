@@ -21,22 +21,31 @@ inline bool IsSafeRelativeAssetName(const std::string& n)
     // against C:'s CWD), and NTFS alternate-data-streams (x.tga:bad). Legit
     // game asset names never contain a colon.
     if (n.find(':') != std::string::npos) return false;
-    // Reject any segment made ONLY of dots and spaces. The obvious rule —
-    // "is this segment exactly `..`" — is not enough on Win32, which strips
-    // trailing dots and spaces from a path component: ".. \x" resolves to the
-    // parent directory exactly like "../x", and so do "..  ", ". .", "...".
-    // Enumerating the normalized forms is a losing game, and no legitimate
-    // asset name has a component without at least one ordinary character, so
-    // reject the whole class and fail closed.
+    // Reject a segment made only of dots and spaces that contains TWO OR MORE
+    // dots. The obvious rule — "is this segment exactly `..`" — is not enough
+    // on Win32, which strips trailing dots and spaces from a path component, so
+    // ".. \x" reaches the parent directory exactly like "../x". Enumerating the
+    // normalized spellings is a losing game, so the whole two-dot class goes.
+    //
+    // The two-dot floor matters: a lone "." (or ". ") is the CURRENT directory
+    // and is a legitimate spelling — "FX\.\FIRE.TGA" is a real relative name.
+    // Rejecting it would not merely refuse the name, it would send it through
+    // SanitizeAssetName's basename reduction and quietly load "FIRE.TGA" from
+    // somewhere else, i.e. a silent wrong-texture regression for existing mods.
+    // A silent misresolution is worse than the traversal this guards against.
     size_t segStart = 0;
     for (size_t i = 0; i <= n.size(); ++i)
     {
         const bool atEnd = (i == n.size());
         if (!atEnd && n[i] != '\\' && n[i] != '/') continue;
         bool dotsOnly = (i > segStart);               // non-empty segment
+        size_t dots = 0;
         for (size_t j = segStart; j < i && dotsOnly; ++j)
-            if (n[j] != '.' && n[j] != ' ') dotsOnly = false;
-        if (dotsOnly) return false;
+        {
+            if (n[j] == '.') ++dots;
+            else if (n[j] != ' ') dotsOnly = false;
+        }
+        if (dotsOnly && dots >= 2) return false;
         segStart = i + 1;
     }
     return true;

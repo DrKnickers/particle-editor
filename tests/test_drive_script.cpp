@@ -124,6 +124,10 @@ int main()
         CHECK(!ParseScript(R"({"steps":[{"capture":"nested\\.. "}]})", s, err));
         // ...while an ordinary name containing dots stays acceptable.
         CHECK(ParseScript(R"({"steps":[{"capture":"shots/frame..1.png"}]})", s, err));
+        // A lone "." stays inside the artifact root -- rejecting it would break
+        // safe scripts for no security gain.
+        CHECK(ParseScript(R"({"steps":[{"capture":"captures/./frame.png"}]})", s, err));
+        CHECK(ParseScript(R"({"steps":[{"capture":"./frame.png"}]})", s, err));
         // select-emitter requires name OR stableId
         CHECK(!ParseScript(R"({"steps":[{"select-emitter":{}}]})", s, err));
         // select-emitter rejects BOTH name AND stableId (exactly-one invariant)

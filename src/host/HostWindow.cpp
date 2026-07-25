@@ -276,6 +276,75 @@ static bool WebView2RuntimeInstalled()
     return installed;
 }
 
+// Absolute path of the release zip's bundled Evergreen bootstrapper, or empty
+// if it is not beside the exe (a dev-tree run, or a hand-assembled copy).
+//
+// GetModuleFileNameW is called in a grow-until-it-fits loop rather than with a
+// fixed MAX_PATH buffer: on a long extraction path the fixed form TRUNCATES and
+// — on older Windows — does not null-terminate, so building a path from it
+// would silently point somewhere else. It reports the truncation as
+// ERROR_INSUFFICIENT_BUFFER with the return value equal to the buffer size.
+static std::wstring BundledWebView2SetupPath()
+{
+    std::vector<wchar_t> buf(MAX_PATH);
+    for (;;)
+    {
+        SetLastError(ERROR_SUCCESS);
+        const DWORD n = GetModuleFileNameW(nullptr, buf.data(), (DWORD)buf.size());
+        if (n == 0) return std::wstring();                       // genuinely failed
+        if (n < buf.size() && GetLastError() != ERROR_INSUFFICIENT_BUFFER) break;
+        if (buf.size() >= 32768) return std::wstring();          // past the Win32 ceiling
+        buf.resize(buf.size() * 2);
+    }
+    std::filesystem::path p =
+        std::filesystem::path(buf.data()).parent_path() / L"MicrosoftEdgeWebview2Setup.exe";
+    return (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) ? p.wstring()
+                                                                     : std::wstring();
+}
+
+// The runtime is missing (or unusable). Offer to fix it, in plain language.
+//
+// Release zips bundle Microsoft's bootstrapper precisely so this is a one-click
+// recovery rather than "go install something else and come back" — the same
+// reason d3dx9_43.dll is vendored. When it is not present (dev tree) fall back
+// to opening the download page.
+//
+// Callers MUST gate on IsFullyInteractive(): a headless capture/record/drive run
+// has nobody to answer a modal and would hang on it.
+static void OfferWebView2Install(HWND owner, const wchar_t* detail)
+{
+    const std::wstring setup = BundledWebView2SetupPath();
+
+    std::wstring msg =
+        L"The Particle Editor needs the Microsoft Edge WebView2 runtime, "
+        L"which this PC does not have yet.\n\n";
+    msg += setup.empty()
+        ? L"Install it from https://aka.ms/webview2, then start the editor again.\n\n"
+          L"Click OK to open that page, or Cancel to exit."
+        : L"Install it now? The installer is included beside the editor; it needs "
+          L"an internet connection and takes about a minute. Start the editor "
+          L"again once it finishes.";
+    if (detail && *detail) { msg += L"\n\n"; msg += detail; }
+
+    if (setup.empty())
+    {
+        if (MessageBoxW(owner, msg.c_str(), L"WebView2 Runtime Required",
+                        MB_OKCANCEL | MB_ICONERROR) == IDOK)
+            ShellExecuteW(owner, L"open", L"https://aka.ms/webview2",
+                          nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
+    if (MessageBoxW(owner, msg.c_str(), L"WebView2 Runtime Required",
+                    MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON1) == IDYES)
+    {
+        // Fire-and-forget: the bootstrapper elevates and runs its own UI, and
+        // the editor cannot continue in this process either way — the runtime
+        // is picked up on the next launch.
+        ShellExecuteW(owner, L"open", setup.c_str(), L"/silent /install",
+                      nullptr, SW_SHOWNORMAL);
+    }
+}
+
 // Probe the Vite dev server at http://localhost:5174/. Used when
 // --dev-ui is active to verify the server is listening before
 // navigating. Returns true only if a 2xx response is received.
@@ -4594,19 +4663,12 @@ int HostWindowImpl::Run(int nCmdShow)
         // prompt and would hang on it — it just logs + exits(1) below.
         if (IsFullyInteractive())
         {
+            // THIS is the missing-runtime case, not the InitWebView2 failure
+            // further down: the pre-flight probe above returns before any
+            // WebView2 environment is created, so an offer wired only into that
+            // later path would never be reached by the users who need it.
             Log("[host] showing WebView2 install dialog\n");
-            int r = MessageBoxW(nullptr,
-                L"Particle Editor requires the Microsoft Edge WebView2 Runtime.\n\n"
-                L"Install it from https://aka.ms/webview2 and relaunch.\n\n"
-                L"Click OK to open the download page in your browser.\n"
-                L"Click Cancel to exit.",
-                L"WebView2 Runtime Required",
-                MB_OKCANCEL | MB_ICONERROR);
-            if (r == IDOK)
-            {
-                ShellExecuteW(nullptr, L"open", L"https://aka.ms/webview2",
-                              nullptr, nullptr, SW_SHOWNORMAL);
-            }
+            OfferWebView2Install(nullptr, nullptr);
         }
         CoUninitialize();
         CloseLog();
@@ -4790,59 +4852,13 @@ int HostWindowImpl::Run(int nCmdShow)
     HRESULT hr = InitWebView2();
     if (FAILED(hr))
     {
-        // The WebView2 *Loader* ships beside the exe, but the Evergreen
-        // *Runtime* is a machine component. It is present on Windows 11 and on
-        // any Windows 10 with Edge, so this is a minority case — but "download
-        // the editor, double-click it, get told to go install something else"
-        // is exactly the dead end the vendored d3dx9_43.dll exists to avoid.
-        // The release zip therefore also carries Microsoft's bootstrapper, and
-        // we offer to run it rather than leaving the user to find it.
-        wchar_t exeSelf[MAX_PATH];
-        GetModuleFileNameW(nullptr, exeSelf, MAX_PATH);
-        const std::wstring setup =
-            (std::filesystem::path(exeSelf).parent_path() / L"MicrosoftEdgeWebview2Setup.exe").wstring();
-        const bool haveSetup = (GetFileAttributesW(setup.c_str()) != INVALID_FILE_ATTRIBUTES);
-
-        wchar_t msg[512];
-        if (haveSetup)
-            swprintf(msg, 512,
-                     L"The Particle Editor needs the Microsoft Edge WebView2 runtime, "
-                     L"which this PC does not have yet.\n\n"
-                     L"Install it now? The installer is included beside the editor; "
-                     L"it needs an internet connection and takes about a minute. "
-                     L"Start the editor again once it finishes.\n\n"
-                     L"(WebView2 initialisation failed, 0x%08lx.)", hr);
-        else
-            swprintf(msg, 512,
-                     L"The Particle Editor needs the Microsoft Edge WebView2 runtime, "
-                     L"which this PC does not have yet.\n\n"
-                     L"Install it from:\n"
-                     L"https://developer.microsoft.com/microsoft-edge/webview2/\n\n"
-                     L"(WebView2 initialisation failed, 0x%08lx.)", hr);
-
-        // A headless run must never pop a modal (no user to dismiss it, and it
-        // tells them nothing) — log + bail instead. The isolated capture profile
-        // above should prevent this failure, but guard the dialog regardless.
-        // (Covers --drive/--record/--test-host too, not just --capture.)
+        // Runtime present but initialisation still failed (locked user-data
+        // folder, corrupt install, policy). Reuse the same offer: when the
+        // bundled bootstrapper is there, reinstalling is the likely fix.
+        wchar_t detail[128];
+        swprintf(detail, 128, L"(WebView2 initialisation failed, 0x%08lx.)", hr);
         if (IsFullyInteractive())
-        {
-            if (haveSetup)
-            {
-                if (MessageBoxW(hMain, msg, L"Particle Editor",
-                                MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON1) == IDYES)
-                {
-                    // Fire-and-forget: the bootstrapper elevates itself and runs
-                    // its own UI, and the editor cannot continue in this process
-                    // either way — the runtime is picked up on the next launch.
-                    ShellExecuteW(hMain, L"open", setup.c_str(), L"/silent /install",
-                                  NULL, SW_SHOWNORMAL);
-                }
-            }
-            else
-            {
-                MessageBoxW(hMain, msg, L"Particle Editor", MB_ICONERROR);
-            }
-        }
+            OfferWebView2Install(hMain, detail);
         else
             Log("[host] WebView2 init failed (0x%08lx) — bailing headlessly\n", hr);
         DestroyWindow(hMain);
