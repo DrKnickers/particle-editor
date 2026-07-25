@@ -1,5 +1,28 @@
 # Vendored redistributables
 
+## `MicrosoftEdgeWebview2Setup.exe`
+
+- **What it is:** Microsoft's *Evergreen Bootstrapper* (~2 MB) for the WebView2 runtime.
+  It is a downloader, not the runtime itself — it fetches and installs the current
+  runtime, so it never goes stale and does not need re-vendoring.
+- **Why vendored:** the `WebView2Loader.dll` we ship beside the exe is the **loader**, not
+  the **runtime**. The runtime is a machine component — present on Windows 11 and on any
+  Windows 10 with Edge, but absent on stripped or LTSC images. Without it the editor
+  launches and immediately tells the user to go install something else, which is exactly
+  the dead end `d3dx9_43.dll` is vendored to avoid. With it present, the WebView2 failure
+  path in [`src/host/HostWindow.cpp`](../../src/host/HostWindow.cpp) offers to run the
+  installer instead of just reporting the problem.
+- **How to obtain it:** download `MicrosoftEdgeWebview2Setup.exe` from
+  <https://developer.microsoft.com/microsoft-edge/webview2/> ("Evergreen Bootstrapper")
+  and commit it here. This is a **one-time manual step** — it is deliberately not
+  scripted, because a build script that downloads and then ships an executable is a
+  supply-chain hazard.
+- **Enforcement:** [`scripts/package-release.ps1`](../../scripts/package-release.ps1)
+  treats it as a REQUIRED source and fails the packaging run if it is missing, so a
+  release cannot quietly ship without it.
+- **License:** redistributable under the Microsoft Edge WebView2 distribution terms, which
+  permit shipping the bootstrapper alongside an application.
+
 ## `d3dx9_43.dll`
 
 - **Architecture:** x64 (PE machine `0x8664`). The editor is x64-only; the 32-bit copy

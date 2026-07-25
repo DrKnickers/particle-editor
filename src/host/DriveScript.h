@@ -110,16 +110,25 @@ inline bool IsSafeArtifactRelativePath(const std::string& path)
     if (path.size() >= 2 && std::isalpha(static_cast<unsigned char>(path[0])) && path[1] == ':')
         return false;
     if (path[0] == '/' || path[0] == '\\') return false;
+    // A segment made ONLY of dots and spaces is rejected, not just an exact
+    // "..". Win32 strips trailing dots and spaces from a path component, so
+    // ".. \out.png" traverses upward exactly like "../out.png" while comparing
+    // unequal to "..". No legitimate artifact path has such a component.
+    auto dotsOnly = [](const std::string& s) {
+        if (s.empty()) return false;
+        for (char c : s) if (c != '.' && c != ' ') return false;
+        return true;
+    };
     std::string segment;
     for (char ch : path) {
         if (ch == '/' || ch == '\\') {
-            if (segment == "..") return false;
+            if (dotsOnly(segment)) return false;
             segment.clear();
         } else {
             segment.push_back(ch);
         }
     }
-    return segment != "..";
+    return !dotsOnly(segment);
 }
 
 // --- request envelope + response classification ----------------------------

@@ -43,7 +43,20 @@ unsigned long PhysicalFile::read(void* buffer, unsigned long size)
 unsigned long PhysicalFile::write(const void* buffer, unsigned long size)
 {
 	SetFilePointer(hFile, m_position, NULL, FILE_BEGIN);
+	const unsigned long requested = size;
 	if (!WriteFile(hFile, buffer, size, &size, NULL))
+	{
+		throw WriteException();
+	}
+	// A SHORT write is a failed write. WriteFile can succeed while writing
+	// fewer bytes than asked (a full disk or quota being the realistic case),
+	// and callers that discard the returned count would silently produce a
+	// truncated file: ChunkWriter checks the count on payload writes but not
+	// on the four chunk-header backpatches, and the last of those is the final
+	// write in a save. The atomic-save path then sees no exception, treats the
+	// save as successful, and renames the malformed temp over the user's
+	// document. Throwing here makes every call site safe at once.
+	if (size != requested)
 	{
 		throw WriteException();
 	}

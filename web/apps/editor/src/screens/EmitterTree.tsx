@@ -696,8 +696,12 @@ function EmitterRow({
 
   return (
     <li
-      role="treeitem"
-      aria-selected={isSelected}
+      // Presentational: `treeitem` and `aria-selected` live on the focusable
+      // row DIV below, NOT here. Keyboard focus and the roving tabindex target
+      // that div, so putting the role on this non-focusable <li> meant the
+      // element a screen-reader user actually lands on had no role and no
+      // selected state (WCAG 4.1.2). Role and focus must be the same element.
+      role="none"
       // [glide] the FLIP pass measures + animates rows via this attribute;
       // stableId survives reorders (unlike the positional node.id).
       data-stable-id={node.stableId}
@@ -720,6 +724,10 @@ function EmitterRow({
       <ContextMenu.Root>
         <ContextMenu.Trigger asChild>
           <div
+            // Role + selected state live HERE, on the element that actually
+            // takes focus and carries the roving tabindex — see the <li>.
+            role="treeitem"
+            aria-selected={isSelected}
             tabIndex={isPrimary ? 0 : -1}
             onPointerDown={(e) => startDrag(node, e)}
             // Hovering a linked row lights up its whole group.

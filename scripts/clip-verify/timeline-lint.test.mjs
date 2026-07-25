@@ -1,9 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 import { lintTimeline, collectTestids, KNOWN_UI_KINDS } from "./timeline-lint.mjs";
+
+// Some fixtures live under tasks/ and .claude/, which the public manifest does
+// NOT publish. This same test file DOES get published and is run by the public
+// mirror's CI, where those paths are absent -- an unconditional readFileSync
+// there throws ENOENT and the advertised sync gate can never go green. Skip the
+// fixture-bound cases when the fixture is not present rather than weakening
+// them: on the private repo they run exactly as before.
+const needsFixture = (p) =>
+  existsSync(p) ? false : `fixture not published to the public mirror: ${p}`;
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -269,7 +278,10 @@ test("a same-timestamp ui/select-key does not satisfy the atlas select-before-cl
   assert.ok(r.warnings.some((w) => w.rule === "atlas-select"));
 });
 
-test("the tutorial-3 pilot's testid refs all resolve against the real web source", () => {
+const PILOT_TIMELINE = join(repoRoot, "tasks", "wiki-media", "tutorials", "03-laser-shot", "projectile-core.timeline.json");
+const SKILL_TEMPLATE = join(repoRoot, ".claude", "skills", "clip-author", "template.timeline.json");
+
+test("the tutorial-3 pilot's testid refs all resolve against the real web source", { skip: needsFixture(PILOT_TIMELINE) }, () => {
   const t = JSON.parse(readFileSync(
     join(repoRoot, "tasks", "wiki-media", "tutorials", "03-laser-shot", "projectile-core.timeline.json"), "utf8"));
   const known = collectTestids(join(repoRoot, "web", "apps", "editor", "src"));
@@ -280,14 +292,14 @@ test("the tutorial-3 pilot's testid refs all resolve against the real web source
 
 // Regression anchors: the committed interaction-honest pilot and the skill's
 // starter template must lint with ZERO errors (warnings allowed but asserted).
-test("the tutorial-3 projectile-core pilot lints clean", () => {
+test("the tutorial-3 projectile-core pilot lints clean", { skip: needsFixture(PILOT_TIMELINE) }, () => {
   const t = JSON.parse(readFileSync(
     join(repoRoot, "tasks", "wiki-media", "tutorials", "03-laser-shot", "projectile-core.timeline.json"), "utf8"));
   const r = lintTimeline(t);
   assert.deepEqual(r.errors, []);
 });
 
-test("the clip-author skill template lints clean", () => {
+test("the clip-author skill template lints clean", { skip: needsFixture(SKILL_TEMPLATE) }, () => {
   const t = JSON.parse(readFileSync(
     join(repoRoot, ".claude", "skills", "clip-author", "template.timeline.json"), "utf8"));
   const r = lintTimeline(t);

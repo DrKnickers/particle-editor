@@ -125,6 +125,7 @@ Write-Host ""
 $exeSource    = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release', 'ParticleEditor.exe')
 $loaderSource = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release', 'WebView2Loader.dll')
 $d3dxSource   = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist', 'd3dx9_43.dll')
+$wv2Source    = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist', 'MicrosoftEdgeWebview2Setup.exe')
 $distSource   = [System.IO.Path]::Combine($RepoRoot, 'web', 'apps', 'editor', 'dist')
 $distIndex    = [System.IO.Path]::Combine($distSource, 'index.html')
 $distAssets   = [System.IO.Path]::Combine($distSource, 'assets')
@@ -143,6 +144,14 @@ foreach ($sourceRoot in $sourceRoots) {
 Test-RequiredSource 'ParticleEditor.exe'      $exeSource    'Leaf'
 Test-RequiredSource 'WebView2Loader.dll'      $loaderSource 'Leaf'
 Test-RequiredSource 'd3dx9_43.dll (vendored)' $d3dxSource   'Leaf'
+# The WebView2 LOADER beside the exe is not the RUNTIME. The runtime is a machine
+# component: present on Windows 11 and on Windows 10 with Edge, absent on stripped
+# or LTSC images. Without it the editor starts and immediately tells the user to go
+# install something else -- the same dead end the vendored d3dx9_43.dll exists to
+# avoid. Ship Microsoft's ~2 MB bootstrapper so the editor can offer to install it
+# (see the WebView2 failure path in src/host/HostWindow.cpp), and treat it as
+# REQUIRED so a release can never quietly ship without it.
+Test-RequiredSource 'MicrosoftEdgeWebview2Setup.exe (vendored)' $wv2Source 'Leaf'
 Test-RequiredSource 'web bundle (dist)'       $distSource   'Container'
 Test-RequiredSource 'web bundle index.html'   $distIndex    'Leaf'
 Test-RequiredSource 'web bundle assets/'      $distAssets   'Container'
@@ -158,6 +167,7 @@ New-Item -ItemType Directory -Force -Path $stageDistDir | Out-Null
 Copy-Item -LiteralPath $exeSource    -Destination $stageExeDir -Force
 Copy-Item -LiteralPath $loaderSource -Destination $stageExeDir -Force
 Copy-Item -LiteralPath $d3dxSource   -Destination $stageExeDir -Force
+Copy-Item -LiteralPath $wv2Source    -Destination $stageExeDir -Force
 Write-Host "  [ok] ParticleEditor.exe, WebView2Loader.dll, d3dx9_43.dll -> $stageExeDir"
 
 # --- Copy the web bundle CONTENTS (index.html, assets/, fonts/) ---------------

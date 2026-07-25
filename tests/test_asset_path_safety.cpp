@@ -52,6 +52,17 @@ int main()
     expectUnsafe("C:FOO",                 "FOO",      "C:FOO  (drive-RELATIVE, no slash -> opens vs C: CWD)");
     expectUnsafe("FOO.TGA:BAD",           "BAD",      "FOO.TGA:BAD  (NTFS alternate data stream)");
 
+    // --- UNSAFE: Win32 strips trailing dots/spaces, so these normalize to ".." ---
+    // An exact-".." comparison misses every one of these; a third-party .alo's
+    // texture name reaches a real file-open sink, so the whole dots-and-spaces
+    // class is rejected rather than enumerated.
+    expectUnsafe(".. \\x",                "x",        ".. \\x  (dot-dot-SPACE -> Win32 strips the space)");
+    expectUnsafe("x\\.. \\y",             "y",        "x\\.. \\y  (interior dot-dot-space)");
+    expectUnsafe("..\\x",                 "x",        "..\\x  (plain parent, still rejected)");
+    expectUnsafe("...\\x",                "x",        "...\\x  (three dots)");
+    expectUnsafe(". .\\x",                "x",        ". .\\x  (dot-space-dot)");
+    expectUnsafe("..  ",                  "..  ",     "..  (trailing spaces, no separator)");
+
     // --- SAFE: unchanged ---
     expectSafe("FX\\FOO.TGA",  "FX\\FOO.TGA  (legit relative with interior backslash)");
     expectSafe("BAR.DDS",      "BAR.DDS  (plain relative filename)");

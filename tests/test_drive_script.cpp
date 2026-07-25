@@ -114,6 +114,16 @@ int main()
         CHECK(!ParseScript(R"({"steps":[{"capture":"..\\shot.png"}]})", s, err));
         CHECK(!ParseScript(R"({"steps":[{"capture":"nested/../shot.png"}]})", s, err));
         CHECK(!ParseScript(R"({"steps":[{"capture":"\\\\server\\share\\shot.png"}]})", s, err));
+        // Win32 strips trailing dots/spaces from a path component, so a segment
+        // that merely LOOKS unequal to ".." still resolves to the parent. An
+        // exact-".." comparison lets these through; the whole dots-and-spaces
+        // class is rejected instead.
+        CHECK(!ParseScript(R"({"steps":[{"capture":".. \\shot.png"}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"capture":"nested/.. /shot.png"}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"capture":"...\\shot.png"}]})", s, err));
+        CHECK(!ParseScript(R"({"steps":[{"capture":"nested\\.. "}]})", s, err));
+        // ...while an ordinary name containing dots stays acceptable.
+        CHECK(ParseScript(R"({"steps":[{"capture":"shots/frame..1.png"}]})", s, err));
         // select-emitter requires name OR stableId
         CHECK(!ParseScript(R"({"steps":[{"select-emitter":{}}]})", s, err));
         // select-emitter rejects BOTH name AND stableId (exactly-one invariant)

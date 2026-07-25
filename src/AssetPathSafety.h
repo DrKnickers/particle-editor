@@ -21,12 +21,23 @@ inline bool IsSafeRelativeAssetName(const std::string& n)
     // against C:'s CWD), and NTFS alternate-data-streams (x.tga:bad). Legit
     // game asset names never contain a colon.
     if (n.find(':') != std::string::npos) return false;
-    for (size_t i = 0; i + 1 < n.size(); ++i)         // any ".." path segment
+    // Reject any segment made ONLY of dots and spaces. The obvious rule —
+    // "is this segment exactly `..`" — is not enough on Win32, which strips
+    // trailing dots and spaces from a path component: ".. \x" resolves to the
+    // parent directory exactly like "../x", and so do "..  ", ". .", "...".
+    // Enumerating the normalized forms is a losing game, and no legitimate
+    // asset name has a component without at least one ordinary character, so
+    // reject the whole class and fail closed.
+    size_t segStart = 0;
+    for (size_t i = 0; i <= n.size(); ++i)
     {
-        if (n[i] == '.' && n[i + 1] == '.'
-            && (i == 0 || n[i - 1] == '\\' || n[i - 1] == '/')
-            && (i + 2 == n.size() || n[i + 2] == '\\' || n[i + 2] == '/'))
-            return false;
+        const bool atEnd = (i == n.size());
+        if (!atEnd && n[i] != '\\' && n[i] != '/') continue;
+        bool dotsOnly = (i > segStart);               // non-empty segment
+        for (size_t j = segStart; j < i && dotsOnly; ++j)
+            if (n[j] != '.' && n[j] != ' ') dotsOnly = false;
+        if (dotsOnly) return false;
+        segStart = i + 1;
     }
     return true;
 }

@@ -4790,16 +4790,59 @@ int HostWindowImpl::Run(int nCmdShow)
     HRESULT hr = InitWebView2();
     if (FAILED(hr))
     {
-        wchar_t msg[256];
-        swprintf(msg, 256,
-                 L"WebView2 initialisation failed (0x%08lx).\n"
-                 L"Is the Evergreen runtime installed?", hr);
+        // The WebView2 *Loader* ships beside the exe, but the Evergreen
+        // *Runtime* is a machine component. It is present on Windows 11 and on
+        // any Windows 10 with Edge, so this is a minority case — but "download
+        // the editor, double-click it, get told to go install something else"
+        // is exactly the dead end the vendored d3dx9_43.dll exists to avoid.
+        // The release zip therefore also carries Microsoft's bootstrapper, and
+        // we offer to run it rather than leaving the user to find it.
+        wchar_t exeSelf[MAX_PATH];
+        GetModuleFileNameW(nullptr, exeSelf, MAX_PATH);
+        const std::wstring setup =
+            (std::filesystem::path(exeSelf).parent_path() / L"MicrosoftEdgeWebview2Setup.exe").wstring();
+        const bool haveSetup = (GetFileAttributesW(setup.c_str()) != INVALID_FILE_ATTRIBUTES);
+
+        wchar_t msg[512];
+        if (haveSetup)
+            swprintf(msg, 512,
+                     L"The Particle Editor needs the Microsoft Edge WebView2 runtime, "
+                     L"which this PC does not have yet.\n\n"
+                     L"Install it now? The installer is included beside the editor; "
+                     L"it needs an internet connection and takes about a minute. "
+                     L"Start the editor again once it finishes.\n\n"
+                     L"(WebView2 initialisation failed, 0x%08lx.)", hr);
+        else
+            swprintf(msg, 512,
+                     L"The Particle Editor needs the Microsoft Edge WebView2 runtime, "
+                     L"which this PC does not have yet.\n\n"
+                     L"Install it from:\n"
+                     L"https://developer.microsoft.com/microsoft-edge/webview2/\n\n"
+                     L"(WebView2 initialisation failed, 0x%08lx.)", hr);
+
         // A headless run must never pop a modal (no user to dismiss it, and it
         // tells them nothing) — log + bail instead. The isolated capture profile
         // above should prevent this failure, but guard the dialog regardless.
         // (Covers --drive/--record/--test-host too, not just --capture.)
         if (IsFullyInteractive())
-            MessageBoxW(hMain, msg, L"Particle Editor", MB_ICONERROR);
+        {
+            if (haveSetup)
+            {
+                if (MessageBoxW(hMain, msg, L"Particle Editor",
+                                MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON1) == IDYES)
+                {
+                    // Fire-and-forget: the bootstrapper elevates itself and runs
+                    // its own UI, and the editor cannot continue in this process
+                    // either way — the runtime is picked up on the next launch.
+                    ShellExecuteW(hMain, L"open", setup.c_str(), L"/silent /install",
+                                  NULL, SW_SHOWNORMAL);
+                }
+            }
+            else
+            {
+                MessageBoxW(hMain, msg, L"Particle Editor", MB_ICONERROR);
+            }
+        }
         else
             Log("[host] WebView2 init failed (0x%08lx) — bailing headlessly\n", hr);
         DestroyWindow(hMain);

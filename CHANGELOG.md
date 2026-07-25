@@ -27,6 +27,7 @@ may live at the end of the file.
 
 ### Added
 
+- The release download now includes Microsoft's WebView2 installer. On the few PCs that lack that component, the editor offers to install it for you instead of showing an error and closing
 - A "What's New" page — reached from the landing topbar and pointed to from the guide home page — walks returning modders through what this editor does that Mike.NL's GlyphX Particle Editor v1.5 couldn't (scene context, mod-stack editing, the spawner, emitter draw-order, the Atlas Frame Picker), plus a table of deliberate behavioral departures from the legacy editor
 - Help → Keyboard Shortcuts… opens a dialog listing every keyboard shortcut in the editor, grouped into 8 sections
 - Deleting every emitter now leaves a hint in the viewport — "No emitters — press + to add one, or Ctrl+Z to undo" — instead of an empty canvas with no explanation
@@ -193,6 +194,8 @@ may live at the end of the file.
 
 ### Fixed
 
+- Saving now fails loudly instead of silently writing a truncated file. If the disk fills mid-save the editor reports the failure and leaves your original file untouched, where before it could report success and replace your work with a corrupt copy
+- Screen readers now correctly announce emitter tree rows as tree items, including which one is selected, when moving through the tree with the keyboard
 - Pausing the preview now pauses the spawner too — an Auto spawner on an interval no longer banks up its countdown while the scene is stopped and releases a burst of instances all at once when you unpause; frame-stepping a paused scene advances the spawner by exactly the frames you stepped
 - Shift no longer spawns a particle instance when your pointer is over a panel, dialog, or menu — only Shift over the 3D viewport spawns (Shift+click inside the viewport is unchanged)
 - Dragging a multi-key selection in the curve editor no longer lets a key slide on top of an unselected key (which left a stuck duplicate) — the group now stops just short of any key it would collide with
@@ -300,6 +303,7 @@ may live at the end of the file.
 
 ### Security
 
+- A mod-supplied texture name inside an `.alo` can no longer reach files outside the mod folder. The traversal guard rejected `..` but not `.. ` (with a trailing space), which Windows resolves to the same parent directory — the whole dots-and-spaces family is now rejected, in both the asset-name and capture-path guards
 - Close the last mod-asset allocation gap from the #413 audit: whole-file reads of textures, models, and shaders now reject an oversized file before allocating its buffer, so a safe-named but very large mod asset can no longer force a huge memory allocation
 - Extend the malformed/malicious mod-file hardening to every place the editor reads mod assets — skydome and ground textures, reference models, palette previews, and the game-object catalog — so a path in any of them stays inside the mod folder, with hard size limits that reject oversized or malformed data
 - Harden the editor against malformed or maliciously crafted mod files: untrusted `.alo`, `.meg`, and `.xml` files are now rejected cleanly instead of risking a crash, and a texture/shader name embedded in an `.alo` can no longer reach outside the mod folder or trigger an outbound network request when the file is opened
