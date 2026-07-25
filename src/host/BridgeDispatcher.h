@@ -75,8 +75,9 @@ public:
     // gate the HostWindow registry-restore block uses.
     // `ephemeral` (true in --drive mode): suppress ALL registry writes the same
     // way `useTestHost` does, WITHOUT enabling the test-host-only behaviors
-    // (CDP port, a11y determinism). It ORs into every persist gate + guards the
-    // three otherwise-ungated WriteRecentFile (MRU) sites.
+    // (CDP port, a11y determinism). It ORs into every persist gate; the three
+    // WriteRecentFile (MRU) sites gate on PersistsUserState(), which folds this
+    // flag together with the test-host settings gate.
     BridgeDispatcher(Engine* engine, LayoutBroker& layout, AcceleratorBridge& accel,
                      EmitFn emit, bool useTestHost = false, bool ephemeral = false);
 
@@ -404,6 +405,15 @@ private:
     // writes so a --drive run performs NO registry writes (without enabling the
     // test-host-only CDP/a11y behaviors). Set once at construction.
     bool               m_ephemeral = false;
+
+    // True when this run may write user-visible persistent state (the
+    // recent-files MRU): not drive/record-ephemeral, and not a --test-host run
+    // unless ALO_SETTINGS_LIVE lifted the gate — the SAME predicate every
+    // settings/* write uses (cf. BridgeDispatch_Assets.cpp mods/set-layers).
+    // Before this existed the MRU sites checked only m_ephemeral, so every
+    // playwright-native (--test-host) file open/save wrote its test path into
+    // the daily driver's real Recent Files menu (2026-07 audit follow-up).
+    bool PersistsUserState() const { return !m_ephemeral && !(m_testHost && !m_settingsLive); }
 
     // --record throttle (issue #510): during a clip record the driver scrubs
     // curves host-side, firing emitters/tree/changed + engine/state/changed far

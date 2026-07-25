@@ -370,7 +370,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
             m_engine->ReloadTextures();
         }
         m_currentFilePath = path;
-        m_recentFiles = m_ephemeral ? ReadRecentFiles() : WriteRecentFile(path);
+        m_recentFiles = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
         ctx.SendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
         SetDirty(false);
         EmitRecentChanged();
@@ -440,7 +440,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
             return true;
         }
         m_currentFilePath = path;
-        m_recentFiles = m_ephemeral ? ReadRecentFiles() : WriteRecentFile(path);
+        m_recentFiles = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
         // Refresh the "saved" reference snapshot — what we just wrote
         // to disk IS the new saved state. ApplyUndoSnapshot uses this
         // to clear the title-bar asterisk when the user undoes back
@@ -512,7 +512,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
             return true;
         }
         m_currentFilePath = path;
-        m_recentFiles = m_ephemeral ? ReadRecentFiles() : WriteRecentFile(path);
+        m_recentFiles = PersistsUserState() ? WriteRecentFile(path) : ReadRecentFiles();
         // Refresh the "saved" reference snapshot — see file/save above.
         m_savedSnapshot = UndoStack::Serialize(**m_pParticleSystem);
         ctx.SendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});

@@ -1106,7 +1106,16 @@ struct HostWindowImpl
         , m_perfWebViewProfile(perfWebViewProfile)
         , layout(nullptr)
         , accelerator()
-        , modManager(std::make_unique<ModManager>(&fil, gameRoots_, !driveScriptPath.empty() || !recordScriptPath.empty()))
+        // Ephemeral = every headless mode — the same set IsFullyInteractive()
+        // excludes (capture / drive-or-record / test-host). None of them may
+        // rewrite the daily driver's persisted mod stack, and that includes the
+        // startup write-back via RestoreLastLayerStack -> SetLayerStack: with a
+        // mod folder temporarily unavailable (unmounted drive), a capture run
+        // would otherwise ghost-drop those layers and PERSIST the reduced stack
+        // (2026-07 audit follow-up). Previously only drive/record were covered.
+        , modManager(std::make_unique<ModManager>(&fil, gameRoots_,
+              !driveScriptPath.empty() || !recordScriptPath.empty() ||
+              !captureAlo.empty() || !captureRef.empty() || testHost))
     {
         // [world-lit] capture lighting colours (arrays can't init in list).
         m_captureAmbient[0] = ambR; m_captureAmbient[1] = ambG; m_captureAmbient[2] = ambB;
