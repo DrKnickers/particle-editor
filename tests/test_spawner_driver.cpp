@@ -286,8 +286,38 @@ int main()
         CHECK(g_spawnCalls == before + 1, "a fresh Trigger after the cap clears spawns again");
     }
 
-    // ---- J: dt sanitization (SpawnerDriver.cpp:156) --------------------------
-    // dt <= 0 or dt > 1 is coerced to 1/60, so 30 huge ticks advance only 0.5s.
+    // ---- J: zero elapsed time preserves the pending spawn schedule ----------
+    {
+        g_activeCount = 0;
+        SpawnerDriver d;
+        SpawnerConfig c;
+        c.mode = SpawnerConfig::Mode::Auto; c.enabled = true; c.intervalSec = 1.0f;
+        d.SetConfig(c);
+        int before = g_spawnCalls;
+        d.Tick(0.75f, FakeSystem(), FakeEngine());
+        for (int i = 0; i < 120; ++i) d.Tick(0.0f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before, "paused zero-dt ticks do not consume the remaining interval");
+        d.Tick(0.24f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before, "countdown resumes with the same 0.25s remaining");
+        d.Tick(0.02f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before + 1, "burst fires only after positive elapsed time crosses the interval");
+    }
+    {
+        g_activeCount = 0;
+        SpawnerDriver d;
+        SpawnerConfig c;
+        c.mode = SpawnerConfig::Mode::Manual;
+        d.SetConfig(c);
+        int before = g_spawnCalls;
+        d.Trigger(FakeSystem(), FakeEngine());
+        d.Tick(0.0f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before, "zero-dt tick does not begin an armed manual burst");
+        d.Tick(1.0f / 60.0f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before + 1, "armed manual burst begins on the next positive tick");
+    }
+
+    // ---- K: invalid-dt sanitization (SpawnerDriver.cpp:181) -----------------
+    // Negative or >1s deltas are coerced to 1/60, so 30 such ticks advance 0.5s.
     {
         g_activeCount = 0;
         SpawnerDriver d;
@@ -298,11 +328,11 @@ int main()
         for (int i = 0; i < 15; ++i) d.Tick(1000.0f, FakeSystem(), FakeEngine());
         for (int i = 0; i < 15; ++i) d.Tick(-5.0f,   FakeSystem(), FakeEngine());
         CHECK(g_spawnCalls == before, "30 insane-dt ticks == 0.5s simulated: no burst");
-        for (int i = 0; i < 40; ++i) d.Tick(0.0f, FakeSystem(), FakeEngine());
-        CHECK(g_spawnCalls == before + 1, "70 sanitized ticks (~1.17s) fire exactly one burst");
+        for (int i = 0; i < 40; ++i) d.Tick(1000.0f, FakeSystem(), FakeEngine());
+        CHECK(g_spawnCalls == before + 1, "70 invalid-dt ticks (~1.17s) fire exactly one burst");
     }
 
-    // ---- K: jitter keeps spawns inside cfg.position +/- jitter --------------
+    // ---- L: jitter keeps spawns inside cfg.position +/- jitter --------------
     // JitterAxis/Jitter (SpawnerDriver.cpp:21-31) are file-static; their
     // contract is observable through the stamped anchor position.
     {

@@ -1327,9 +1327,8 @@ void HostWindowImpl::RenderD3D9()
     const LONGLONG perfFrameStart = PerfQpcNow();
 
     // In --record mode the spawner is driven EXACTLY ONCE per emitted frame by
-    // the ClipRunner step hook (at the fixed virtual dt), so skip the wall-clock
-    // tick here — otherwise the frozen-clock renders during the ack/barrier waits
-    // would each advance spawning (SpawnerDriver::Tick rewrites dt<=0 to 1/60).
+    // the ClipRunner step hook (at the fixed virtual dt), so keep incidental
+    // renders out of that deterministic schedule.
     if (spawnerDriver && particleSystem && !m_recordMode)
         spawnerDriver->Tick(dt, particleSystem.get(), engine.get());
 

@@ -87,8 +87,9 @@ public:
     void SetConfig(const SpawnerConfig& cfg);
     const SpawnerConfig& GetConfig() const { return m_cfg; }
 
-    // Drive emission. Called once per frame from main.cpp's Render
-    // before engine->Update().
+    // Drive emission from the host render loop before engine->Update().
+    // Zero elapsed time is a no-op so a frozen preview clock preserves
+    // the pending spawn schedule.
     void Tick(float dtSeconds, const ParticleSystem* sys, Engine* engine);
 
     // Manual fire. In Manual mode: kicks off one burst. If a burst is

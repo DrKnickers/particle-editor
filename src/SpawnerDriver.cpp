@@ -181,7 +181,11 @@ void SpawnerDriver::CancelPending()
 void SpawnerDriver::Tick(float dtSeconds, const ParticleSystem* sys, Engine* engine)
 {
     if (sys == NULL || engine == NULL) return;
-    if (dtSeconds <= 0.0f || dtSeconds > 1.0f) dtSeconds = 1.0f / 60.0f;
+    // A frozen preview clock reports zero elapsed time on every repaint.
+    // Treat that as a true pause; inventing a frame here consumes auto-spawn
+    // intervals and begins armed bursts while the scene is stopped.
+    if (dtSeconds == 0.0f) return;
+    if (dtSeconds < 0.0f || dtSeconds > 1.0f) dtSeconds = 1.0f / 60.0f;
 
     // Auto mode: countdown to next burst when between bursts.
     if (m_phase == Phase::Waiting

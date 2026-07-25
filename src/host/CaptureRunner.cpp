@@ -221,12 +221,13 @@ void CaptureRunner::Init()
                 //      frame counter for a machine-load-dependent while — so
                 //      the sim time in the captured frame varied run-to-run
                 //      for any time-evolving fixture (bit-identical was only
-                //      ever true for time-stable scenes). The spawner burst
-                //      fires on the first Tick at the frozen anchor
-                //      (SpawnerDriver::Tick rewrites dt<=0 to 1/60).
+                //      ever true for time-stable scenes). Begin the spawner
+                //      explicitly at the frozen anchor; zero-delta render ticks
+                //      are true no-ops so paused interactive scenes stay paused.
                 srand(0x5EEDu);
                 FreezePreviewClockAt(0.0f);   // fixed anchor: m_time-consuming shaders render identical every run
                 spawnerDriver->Trigger(particleSystem.get(), engine.get());
+                spawnerDriver->Tick(1.0f / 60.0f, particleSystem.get(), engine.get());
             }
             // Apply the requested skydome slot so a --capture run can render
             // (and verify) particles over a background skydome. Slot 0
