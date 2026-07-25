@@ -12,11 +12,23 @@
   the dead end `d3dx9_43.dll` is vendored to avoid. With it present, the WebView2 failure
   path in [`src/host/HostWindow.cpp`](../../src/host/HostWindow.cpp) offers to run the
   installer instead of just reporting the problem.
-- **How to obtain it:** download `MicrosoftEdgeWebview2Setup.exe` from
-  <https://developer.microsoft.com/microsoft-edge/webview2/> ("Evergreen Bootstrapper")
-  and commit it here. This is a **one-time manual step** — it is deliberately not
-  scripted, because a build script that downloads and then ships an executable is a
-  supply-chain hazard.
+- **How it was obtained:** downloaded 2026-07-25 from Microsoft's permalink
+  <https://go.microsoft.com/fwlink/p/?LinkId=2124703> (the "Evergreen Bootstrapper"
+  download on <https://developer.microsoft.com/microsoft-edge/webview2/>), then verified
+  before committing:
+
+  | Check | Result |
+  |---|---|
+  | Size | 1,691,856 bytes (1.61 MB) |
+  | PE header | `MZ` — valid Windows executable |
+  | Authenticode | **Valid** |
+  | Signer | `CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US` |
+  | SHA-256 | `0223FA1E8D5BD5E4344FB8734E60D088E79F262C0A24444D01F240BC996F04E5` |
+
+  Re-vendoring is a **one-time manual step** and deliberately not scripted: a build script
+  that downloads and then ships an executable is a supply-chain hazard. If you ever replace
+  this file, verify the Authenticode signature again and update the table above — a vendored
+  binary that ships to users should never be taken on trust.
 - **Enforcement:** [`scripts/package-release.ps1`](../../scripts/package-release.ps1)
   treats it as a REQUIRED source and fails the packaging run if it is missing, so a
   release cannot quietly ship without it.
