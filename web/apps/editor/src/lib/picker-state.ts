@@ -67,8 +67,8 @@ export function savePickerState(patch: Partial<PickerState>): void {
 /**
  * Resolve a saved faction against the factions the CURRENT content actually has:
  * keep it only if present, otherwise fall back to "All" (null). This stops a
- * saved faction (e.g. Mod's "Empire") from filtering a different mod's list to
- * empty after a mod switch.
+ * saved faction (e.g. one mod's "Empire") from filtering a different mod's list
+ * to empty after a mod switch.
  */
 export function resolveFaction(saved: string | null, available: readonly string[]): string | null {
   return saved !== null && available.includes(saved) ? saved : null;

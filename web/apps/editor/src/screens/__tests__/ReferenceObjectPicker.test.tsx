@@ -157,7 +157,7 @@ describe("ReferenceObjectPicker — selection + status", () => {
     }
   });
 
-  it("lists an unrecognised-tag unit under Ground ▸ Other (the Mod-units-missing fix)", async () => {
+  it("lists an unrecognised-tag unit under Ground ▸ Other (the missing-units fix)", async () => {
     const bridge = new MockBridge();
     render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
     await screen.findByRole("tree", { name: "Reference object" });

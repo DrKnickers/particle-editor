@@ -44,11 +44,12 @@ class Engine;
 class IFileManager;
 
 // A single discovered mod entry + its nested layers (immediate child folders
-// that carry a Data\Art tree, e.g. Mod's Mod/GCW/Rev/TR/Core).
+// that carry a Data\Art tree -- a submod-based mod ships several, plus a
+// shared core folder; see ModLayers.h).
 struct ModEntry
 {
-    std::wstring path;        // full path, e.g. D:\...\corruption\Mods\Mod
-    std::wstring folderName;  // "Mod"
+    std::wstring path;        // full path, e.g. D:\...\corruption\Mods\MyMod
+    std::wstring folderName;  // "MyMod"
     std::wstring nickname;    // user-set, may be empty (read from registry)
     bool         isFoC;       // true if under corruption\Mods, false if under GameData\Mods
     bool         rootHasArt;  // the mod root itself carries a Data\Art tree
@@ -59,7 +60,7 @@ class ModManager
 {
 public:
     // ephemeral (true in --drive mode): suppress ALL registry writes
-    // (LastLayers/LastMod/CoreMigrated) so a --drive run never rewrites the
+    // (LastLayers/LastMod) so a --drive run never rewrites the
     // daily driver's persisted mod stack — notably the startup write-back via
     // RestoreLastLayerStack -> SetLayerStack. Same concept as HostWindow's and
     // BridgeDispatcher's m_ephemeral (one name across all three modules).

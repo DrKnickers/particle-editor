@@ -137,33 +137,6 @@ static vector<wstring> ReadLastSubmodsLegacy()
     return out;
 }
 
-// One-time migration marker. Core used to be auto-loaded; it is now a normal
-// selectable/orderable submod layer. On the FIRST restore after this change we append
-// Core to a legacy NON-EMPTY selection so an existing Mod/IR/TR stack keeps it. The
-// flag then stops us re-adding it after the user deliberately removes it (e.g. for Rev).
-static bool ReadCoreMigrated()
-{
-    HKEY hKey; DWORD val = 0, size = sizeof(val), type = 0;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
-    {
-        RegQueryValueEx(hKey, L"CoreLayerMigrated", NULL, &type, (LPBYTE)&val, &size);
-        RegCloseKey(hKey);
-    }
-    return val != 0;
-}
-
-static void WriteCoreMigrated()
-{
-    HKEY hKey;
-    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
-                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
-    {
-        DWORD val = 1;
-        RegSetValueEx(hKey, L"CoreLayerMigrated", 0, REG_DWORD, (const BYTE*)&val, sizeof(val));
-        RegCloseKey(hKey);
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Discovery (file-scope helper + ModManager::DiscoverMods).
 // ---------------------------------------------------------------------------
@@ -272,9 +245,7 @@ void ModManager::RestoreLastLayerStack()
         if (!lastMod.empty())
         {
             const std::vector<wstring> lastSubmods = ReadLastSubmodsLegacy();
-            stack = modlayers::MigrateLegacySelection(lastMod, lastSubmods, ReadCoreMigrated());
-            if (!m_ephemeral)
-                WriteCoreMigrated();   // the Core decision is now baked into LastLayers
+            stack = modlayers::MigrateLegacySelection(lastMod, lastSubmods);
         }
     }
 
@@ -298,7 +269,7 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
     // FileManager::SetLayers already does for content roots and what
     // RestoreLastLayerStack's own pre-filter did (now redundant but harmless).
     // A migration-appended candidate (e.g. MigrateLegacySelection's
-    // mod\Core) is dropped here too when that folder is absent.
+    // mod<Core>) is dropped here too when that folder is absent.
     m_layerStack.clear();
     for (const wstring& raw : absoluteLayers)
     {

@@ -310,7 +310,7 @@ namespace
             entries.clear();           // partial list from a mid-loop throw -> file contributes nothing
 #ifndef NDEBUG
             // Surface the otherwise-SILENT drop -- this is what hid the encoding='ASCII'
-            // bug (1/3 of Core files threw -> their units + Variant_Of parents vanished with
+            // bug (1/3 of one mod's core files threw -> their units + Variant_Of parents vanished with
             // no signal). Debug-only; a brief stderr interleave from parallel workers is harmless.
             fprintf(stderr, "[Catalog] object file dropped (XML parse failed): %s\n", fileName.c_str());
 #endif
@@ -395,7 +395,7 @@ namespace
     }
 
     // Split a list on commas / whitespace / '|' and LOWER-case each token (object
-    // Names are matched case-INSENSITIVELY -- Mod references `Tie_*` against `TIE_*`).
+    // Names are matched case-INSENSITIVELY -- mods reference e.g. `Tie_*` against `TIE_*`).
     std::vector<std::string> tokenizeCommaLower(const std::string& s)
     {
         std::vector<std::string> out;
@@ -417,9 +417,9 @@ namespace
         return true;
     }
 
-    // Read a mod's GameObjectList.lua roster allow-list (Mod submods ship one,
-    // e.g. Mod 382 / TR 887 entries) -- `["NAME"] = true,` lines. Lower-cased names into
-    // `out`. Missing file -> empty (base FoC / Mod have none; the fieldable union then
+    // Read a mod's GameObjectList.lua roster allow-list (some submods ship one, with
+    // a few hundred to ~900 entries) -- `["NAME"] = true,` lines. Lower-cased names into
+    // `out`. Missing file -> empty (base FoC and many mods have none; the fieldable union then
     // falls back to the XML graph). Not lua-evaluated: a literal `["` ... `"]` scan.
     void readRosterLua(IFileManager& fm, std::set<std::string>& out)
     {
@@ -820,9 +820,10 @@ ModelProbeResult ProbeModelSkinned(IFileManager& fm, const std::string& modelPat
 // Pure cascade over an ObjectProfile: EXCLUDE (renderable non-units) -> DOMAIN (from the
 // model field-name, corroborated by CategoryMask) -> ROLE + BUCKET. No I/O, so it is
 // unit-tested directly (tests/test_game_object_catalog.cpp [classify]). The signal
-// vocabulary was established by a 5-mod first-party sweep (base FoC + Mod + Mod);
-// CategoryMask is a REFINEMENT only (absent on every unit in base FoC + Mod), never a
-// gate -- domain/keep come from the model field + tag + behavior, which exist everywhere.
+// vocabulary was established by a 5-mod first-party sweep (base FoC + two major mods);
+// CategoryMask is a REFINEMENT only (absent on every unit in base FoC and in one of those
+// mods), never a gate -- domain/keep come from the model field + tag + behavior, which
+// exist everywhere.
 namespace
 {
     // A renderable object that is NOT a selectable unit/structure -> Excluded. Tag-DENY

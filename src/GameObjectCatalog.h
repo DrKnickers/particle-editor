@@ -36,7 +36,7 @@ class IFileManager;
 // multi-signal ObjectProfile via the pure, unit-tested ClassifyObject():
 //   domain  -- ground vs space, from the resolved MODEL FIELD-NAME (Land vs Space),
 //              the one signal present across every mod (CategoryMask is absent in base
-//              FoC + Mod). Corroborated by CategoryMask/behavior; disagreement or a
+//              FoC and in some mods). Corroborated by CategoryMask/behavior; disagreement or a
 //              dual-env (Land+Space) object sets `conflict`.
 //   role    -- Excluded / Unit / Structure / Hero. Excluded = a renderable object that
 //              is NOT a unit/structure (skydome/planet backdrop, prop, marker, particle,
@@ -134,9 +134,9 @@ struct GameObjectRef
 };
 
 // Picker keep-gate. Units/structures must be fieldable (a player can build/spawn
-// them) -- the hard gate that trims the roster. HEROES are EXEMPT: Mod grants many heroes
+// them) -- the hard gate that trims the roster. HEROES are EXEMPT: some mods grant many heroes
 // via galactic/lua scripts invisible to the static fieldable graph (a hard gate hid 197 of
-// Mod's 320 heroes -- Ahsoka, Anakin, ...), so the bounded, curated hero set is shown in
+// one submod's 320 heroes), so the bounded, curated hero set is shown in
 // full once the name/tag junk (death-clones etc.) is excluded.
 inline bool IsPickerListed(const GameObjectRef& r)
 {

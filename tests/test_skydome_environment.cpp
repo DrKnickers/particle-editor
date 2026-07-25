@@ -90,12 +90,12 @@ static const char* kLandPrimary =
     "</LandPrimarySkydomes>\n";
 
 // --- GameObjectFiles-driven locator fixtures (mod domes under non-canonical
-//     filenames; Mod registers e.g. Props\Skydomes_Space_Secondary.xml) -------
+//     filenames; a mod registers e.g. Props\Skydomes_Space_Secondary.xml) -------
 static const char* kGameObjectFiles =
     "<?xml version=\"1.0\" ?>\n"
     "<Game_Object_Files>\n"
     "  <File>GroundUnits.xml</File>\n"                       // non-skydome -> ignored
-    "  <File>Props\\Skydomes_Space_Secondary.xml</File>\n"   // Mod renamed/relocated
+    "  <File>Props\\Skydomes_Space_Secondary.xml</File>\n"   // mod renamed/relocated
     "  <File>Extra_Space_Secondary.xml</File>\n"             // second listed file (dedup)
     "</Game_Object_Files>\n";
 
@@ -109,7 +109,7 @@ static const char* kModSecondary =
     "<?xml version=\"1.0\" ?>\n"
     "<SpaceSecondarySkydomes>\n"
     "  <SpaceSecondarySkydome Name=\"Mod_Nebula\">\n"
-    "    <Space_Model_Name>Mod_nebula.alo</Space_Model_Name>\n"
+    "    <Space_Model_Name>mod_nebula.alo</Space_Model_Name>\n"
     "    <Scale_Factor>25.0</Scale_Factor>\n"
     "  </SpaceSecondarySkydome>\n"
     "  <SpaceSecondarySkydome Name=\"Dup_Dome\">\n"
@@ -349,7 +349,7 @@ int main(int argc, char** argv)
             "<?xml version=\"1.0\" ?>\n<Game_Object_Files>\n"
             "  <File>GroundUnits.xml</File>\n"                       // non-skydome -> ignored
             "  <File>SpacePrimarySkydomes.xml</File>\n"
-            "  <File>Props\\Skydomes_Space_Secondary.xml</File>\n"   // Mod renamed secondary
+            "  <File>Props\\Skydomes_Space_Secondary.xml</File>\n"   // mod renamed secondary
             "  <File>LandPrimarySkydomes.xml</File>\n"
             "</Game_Object_Files>\n";
         all_fm.files["Data\\XML\\GroundUnits.xml"]                     = kGroundUnits;
@@ -372,7 +372,7 @@ int main(int argc, char** argv)
                 if (per[i].name != all[a][i].name || per[i].modelPath != all[a][i].modelPath) { allEqual = false; break; }
         }
         CHECK(allEqual, "LoadAllSkydomeLists matches LoadSkydomeList for every axis");
-        CHECK(find(all[(int)SkydomeAxis::SpaceSecondary], "Mod_Nebula") != nullptr, "all: Mod renamed secondary -> SpaceSecondary bucket");
+        CHECK(find(all[(int)SkydomeAxis::SpaceSecondary], "Mod_Nebula") != nullptr, "all: mod renamed secondary -> SpaceSecondary bucket");
         CHECK(find(all[(int)SkydomeAxis::SpacePrimary], "Stars_Low") != nullptr, "all: SpacePrimary bucketed");
         CHECK(find(all[(int)SkydomeAxis::LandPrimary], "Day_Blue_Sky") != nullptr, "all: LandPrimary bucketed");
         CHECK(find(all[(int)SkydomeAxis::SpacePrimary], "X_Wing") == nullptr, "all: non-skydome (GroundUnits) not bucketed anywhere");
@@ -390,7 +390,7 @@ int main(int argc, char** argv)
         MapEnvironment env;
         ResolveMapEnvironment(all, SkydomeContext::Space, "Stars_Low", "Mod_Nebula", env);
         CHECK(env.hasPrimary && env.primary.name == "Stars_Low", "resolve-from-lists: primary resolved");
-        CHECK(env.hasSecondary && env.secondary.modelPath == "Mod_nebula.alo", "resolve-from-lists: renamed secondary resolved");
+        CHECK(env.hasSecondary && env.secondary.modelPath == "mod_nebula.alo", "resolve-from-lists: renamed secondary resolved");
         MapEnvironment env2;
         ResolveMapEnvironment(all, SkydomeContext::Space, "Stars_Low", "DoesNotExist", env2);
         CHECK(env2.hasPrimary && !env2.hasSecondary, "resolve-from-lists: missing secondary unset");

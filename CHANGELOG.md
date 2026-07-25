@@ -62,7 +62,7 @@ may live at the end of the file.
 - Undo and Redo buttons in the toolbar
 - Reference-object moves, gizmo drags, Reset, and position spinners are now undoable on the same Ctrl+Z timeline as particle edits
 - Reference units now mount their hardpoint weapons and turrets, and hide damaged-state and collision geometry
-- Stack multiple Mod submods in explicit precedence order via Mods > Submods
+- Stack multiple submods in explicit precedence order via Mods > Submods
 - Reference-object gizmo gains world-axis rotation rings alongside the translate arrows
 - Drop a real game or mod object into the preview as a scale reference, with a unit grid and draggable axis handles
 - Groundwork to render the game's real skydome behind the preview
@@ -141,7 +141,7 @@ may live at the end of the file.
 - Gizmo drag guide lines are now dimmed during a translate or plane drag, for less visual noise
 - About dialog now shows the editor's own version (0.3.0) instead of the upstream 1.5, which is kept as a fork credit line
 - Gizmo gains screen-uniform handles, Shift-for-precision drags, grid/angle snapping, and in-drag guide lines
-- Core is now a selectable, orderable submod layer instead of being silently auto-loaded
+- A mod's shared core folder is now a selectable, orderable submod layer instead of being silently auto-loaded
 - Object catalog now prefetches eagerly and parses in parallel, so the picker rarely waits on loading
 - Object picker now lists only units and structures with a search box, and builds off the UI thread to avoid freezes
 - Picker now distinguishes a missing model file from one that fails to decode
@@ -205,15 +205,15 @@ may live at the end of the file.
 - Adjusting a curve key with the Value or Time spinner now updates the curve immediately and stays locked to the number, instead of lagging behind while you scrub
 - Child emitters now render behind the parent emitter they were spawned from, matching the game — a spawned child no longer draws on top of its parent
 - Dragging a key in the curve editor now keeps the curve line locked to the cursor instead of lagging behind it on busy effects
-- Heavy particle systems (e.g. Mod's) that repeatedly refused to render in the preview — even after raising the overload cap to its maximum — now render correctly; the preview's overload estimate no longer wildly over-projects particle counts for chains where a child emitter spawns on its parent's death
+- Heavy particle systems that repeatedly refused to render in the preview — even after raising the overload cap to its maximum — now render correctly; the preview's overload estimate no longer wildly over-projects particle counts for chains where a child emitter spawns on its parent's death
 - The Atlas Frame Picker now correctly highlights the wrapped frame when an index-curve value runs past the last atlas cell (e.g. index 4 on a 4-frame atlas now shows frame 0, matching the game), instead of losing the selection highlight
 - Child emitters (spawned during a parent's life or on its death) now preview drawn behind or in front of their siblings according to their authored rank, instead of always drawing on top regardless of rank
-- The Atlas Frame Picker no longer freezes the editor for several seconds when opened on a large atlas texture (e.g. a 256-frame Mod particle atlas) — the frame grid now draws in a single canvas paint instead of one DOM element per frame, so opening, scrolling, and closing the picker stay smooth regardless of atlas size
+- The Atlas Frame Picker no longer freezes the editor for several seconds when opened on a large atlas texture (e.g. a 256-frame particle atlas) — the frame grid now draws in a single canvas paint instead of one DOM element per frame, so opening, scrolling, and closing the picker stay smooth regardless of atlas size
 - Face-camera (screen-oriented) particles no longer freeze their orientation while the preview is paused — they keep re-orienting to the camera as you orbit the view
 - The Blend Mode dropdown no longer wraps or overflows for long labels (e.g. "Diffuse transparent") — it now truncates to one line
 - A failing Ctrl+S (and a parked Ctrl+O/Ctrl+N behind the unsaved-changes prompt) no longer trips an unhandled internal error — the failure is now caught and handled the same way other save/open failures are
 - A corrupted or malformed `.alo` file with an invalid chunk header now fails to load with a clear error instead of risking a crash on load
-- Mode-11 bump particles no longer preview at ~50% opacity under Mod/Mod's modified bump shader — the editor now sets the shader's distance-fade parameter to a full-alpha value instead of leaving it unset
+- Mode-11 bump particles no longer preview at ~50% opacity under a mod's modified bump shader — the editor now sets the shader's distance-fade parameter to a full-alpha value instead of leaving it unset
 - Bump-mapped particles (normal/depth-textured emitters — e.g. explosion debris rocks) no longer render as dark squares at small sizes; they keep their alpha-cutout rock shapes, matching the in-game look
 - A particle effect with custom link-group "exempt" settings now saves and reloads correctly instead of producing a file the editor couldn't reopen; malformed or oversized `.alo` files also no longer hang or exhaust memory when loading
 - Reference objects no longer show their muzzle flashes stuck on — the editor now hides muzzle-flash geometry to match the in-game look, where a unit's muzzle flash appears only while it fires
@@ -247,10 +247,10 @@ may live at the end of the file.
 - Curve-editor keys now glide into place when you switch the selected emitter, instead of popping/blinking in (the curve lines already animated; the keys now match)
 - Switching mods or submods is snappier — the editor no longer re-scans the skydome list multiple times per switch
 - A scrollbar no longer flashes when dragging a reference object to the right edge of the viewport
-- Mod skydomes now appear in the background picker — domes a mod registers under non-standard filenames (e.g. Mod) are listed and selectable, not just the base-game ones
+- Mod skydomes now appear in the background picker — domes a mod registers under non-standard filenames are listed and selectable, not just the base-game ones
 - Object picker no longer leaks planet and skydome backdrops (e.g. low-orbit planet models) into the unit list
 - Lighting panel changes now persist to the registry and survive reopen and restart
-- Skinned reference units render in bind pose, mod Core content loads, gizmo gains Reset, and unit-grid toggle moves to the Ground popup
+- Skinned reference units render in bind pose, nested submod content loads, gizmo gains Reset, and unit-grid toggle moves to the Ground popup
 - Imported game objects render correctly: hidden meshes stay hidden, collision and transparency are faithful, normals fixed, with an amber selection box
 - Space skydomes now render the secondary nebula over the starfield (was invisible)
 - Game and mod skydomes now render correctly on packed installs (were empty or black)

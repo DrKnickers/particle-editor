@@ -19,7 +19,7 @@ labels: bug
 
 - **Editor version:** <!-- Help → About. Should read something like "Particle Editor v0.2.0" -->
 - **OS:** <!-- e.g. Windows 11 26H1 -->
-- **Mod loaded at the time** (if any): <!-- e.g. Mod, Mod's Revenge, or "none / base game" -->
+- **Mod loaded at the time** (if any): <!-- name and version, or "none / base game" -->
 - **Game install path** (if relevant to the bug): <!-- e.g. C:\Games\Star Wars Empire at War -->
 
 ## `.alo` file (if applicable)

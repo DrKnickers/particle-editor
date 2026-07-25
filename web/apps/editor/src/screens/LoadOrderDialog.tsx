@@ -65,8 +65,8 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
       setCatalog(Array.isArray(r?.layers) ? r.layers : []);
       // Initialise the working order to the FULL incoming stack as-is — the host
       // already validated/ghost-dropped it on restore. Do NOT filter to only the
-      // catalog: the catalog excludes mod roots without Data\Art (a migrated Mod
-      // root, a MEG-packed mod), so dropping them here would silently erase those
+      // catalog: the catalog excludes mod roots without Data\Art (a migrated
+      // submod root, a MEG-packed mod), so dropping them here would silently erase those
       // layers on Apply (the data-loss bug this guards against).
       setOrder(Array.isArray(r?.stack) ? r.stack : []);
     }).catch((err) => console.warn("[LoadOrderDialog] mods/list failed:", err));

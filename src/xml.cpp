@@ -124,7 +124,7 @@ static void onCharacterData(void *userData, const XML_Char *s, int len)
 }
 
 // Expat recognizes "US-ASCII" but NOT the bare "ASCII" that many mod XML files
-// declare (Mod Core ships 11 of 33 files as <?xml ... encoding='ASCII'?>). Left
+// declare (one mod's core folder ships 11 of 33 files as <?xml ... encoding='ASCII'?>). Left
 // unhandled, XML_Parse aborts with "unknown encoding" and XMLTree::parse throws --
 // and the catalog's parseObjectFile / parseHardpointFile swallow that throw, silently
 // dropping EVERY game object in the file (and any Variant_Of parent defined there).

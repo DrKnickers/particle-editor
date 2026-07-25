@@ -235,7 +235,7 @@ const MOCK_MISSING_MODELS = new Set<string>(["Sensor_Array_NoModel"]);
 // BaseGameMod has nested layers) + nested layers under FoCMod.
 const MOCK_LAYERS: readonly { path: string; label: string; parentLabel?: string; parentPath?: string; isFoC: boolean; kind: "mod" | "nested" }[] = [
   { path: "C:/mock/corruption/Mods/FoCMod",          label: "FoCMod",   isFoC: true,  kind: "mod" },
-  { path: "C:/mock/corruption/Mods/FoCMod/Mod",     label: "Mod",     parentLabel: "FoCMod", parentPath: "C:/mock/corruption/Mods/FoCMod", isFoC: true, kind: "nested" },
+  { path: "C:/mock/corruption/Mods/FoCMod/Bravo",     label: "Bravo",     parentLabel: "FoCMod", parentPath: "C:/mock/corruption/Mods/FoCMod", isFoC: true, kind: "nested" },
   { path: "C:/mock/corruption/Mods/FoCMod/Core", label: "Core", parentLabel: "FoCMod", parentPath: "C:/mock/corruption/Mods/FoCMod", isFoC: true, kind: "nested" },
   { path: "C:/mock/GameData/Mods/BaseGameMod",       label: "Demo Mod", isFoC: false, kind: "mod" },
 ];

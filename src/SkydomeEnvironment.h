@@ -56,7 +56,7 @@ constexpr int kNumSkydomeAxes = 4;   // == enum SkydomeAxis size
 //
 // Discovers the list files via `Data\\XML\\GameObjectFiles.xml`
 // (mod-resolved), classifying each referenced file by its ROOT element -- so a
-// mod's domes registered under non-canonical names/paths (e.g. Mod's
+// mod's domes registered under non-canonical names/paths (e.g.
 // `Props\\Skydomes_Space_Secondary.xml`) are found, not just the canonical
 // vanilla filenames. Falls back to the canonical filename when there is no
 // GameObjectFiles.xml.

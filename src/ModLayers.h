@@ -65,34 +65,25 @@ inline std::vector<std::wstring> BuildContentRoots(
 
 // Convert a legacy LastMod + ordered LastSubmods selection into a canonical
 // (slash-free) layer stack mirroring BuildModContentRoots precedence: submods
-// FRONT (highest), mod root LAST, root emitted UNCONDITIONALLY. When Core was
-// never migrated AND at least one real submod was emitted AND none already names
-// Core, append a Core candidate (existence-filtered downstream by
-// BuildContentRoots) so an un-relaunched S50 user keeps it. Pure — no disk access.
+// FRONT (highest), mod root LAST, root emitted UNCONDITIONALLY. Pure — no disk
+// access.
+//
+// A mod's shared core folder is an ordinary entry in the selection now, so it
+// migrates like any other submod name. Nothing here special-cases a folder name.
 inline std::vector<std::wstring> MigrateLegacySelection(
     const std::wstring& lastMod,
-    const std::vector<std::wstring>& lastSubmods,
-    bool CoreAlreadyMigrated)
+    const std::vector<std::wstring>& lastSubmods)
 {
     std::vector<std::wstring> out;
     const std::wstring mod = CanonicalizeLayerPath(lastMod);
     if (mod.empty()) return out;  // Unmodded
 
-    bool namesCore = false;
-    bool emittedSubmod = false;
     for (const std::wstring& s : lastSubmods)
     {
         if (s.empty()) continue;
         out.push_back(mod + L"\\" + s);
-        emittedSubmod = true;
-        if (_wcsicmp(s.c_str(), L"Core") == 0) namesCore = true;
     }
-    // Gate on whether a REAL submod was emitted (not the raw input being non-empty),
-    // mirroring the legacy migration which checks the FILTERED selection — so a stack
-    // of only empty-string names doesn't spuriously force Core on.
-    if (!CoreAlreadyMigrated && emittedSubmod && !namesCore)
-        out.push_back(mod + L"\\Core");   // existence-filtered later
-    out.push_back(mod);                        // mod root LAST
+    out.push_back(mod);           // mod root LAST
     return out;
 }
 

@@ -402,8 +402,8 @@ static int dumpXmlTest(const char* path)
     return 0;
 }
 
-// Build the catalog over one or more content roots (submod, Core, Mod-base,
-// base FoC -- in precedence order) and emit a TSV of every object's profile classification
+// Build the catalog over one or more content roots (submod, shared core folder,
+// mod base, base FoC -- in precedence order) and emit a TSV of every object's profile classification
 // + fieldable attribute, plus the verification summary: the leak check (zero picker-listed
 // 'loworbit' backdrops) and the SAFETY AUDIT (kept-but-non-fieldable -- exactly what the
 // hard gate would HIDE, so a real unit can't silently vanish). This is the headline proof
@@ -867,7 +867,7 @@ int main(int argc, char** argv)
         CHECK(tie && IsPickerListed(*tie),   "fieldable unit is picker-listed");
         CHECK(orph && !IsPickerListed(*orph), "non-fieldable unit is NOT picker-listed (hard gate)");
 
-        // HEROES are exempt from the fieldable gate (Mod grants many via lua) -- but a hero
+        // HEROES are exempt from the fieldable gate (some mods grant many via lua) -- but a hero
         // death-clone is still excluded by name, so the exemption never surfaces junk.
         const GameObjectRef* hero = find(fc, "Lua_Hero");
         CHECK(hero && hero->role == ObjRole::Hero && !hero->fieldable, "lua-only hero: role Hero, NOT fieldable");

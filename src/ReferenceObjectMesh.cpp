@@ -420,7 +420,7 @@ bool ReferenceObjectMesh::Resolve(IShaderManager& sm, IDirect3DDevice9* dev)
         // getShader (a missing/uncompilable .fxo) and GetOrCreateDecl can
         // throw a wexception; the env hook + the picker path (SetReferenceObject)
         // call Resolve with NO try/catch, so an unresolvable sub-mesh would
-        // std::terminate the whole editor (a Mod capital ship whose shader
+        // std::terminate the whole editor (a modded capital ship whose shader
         // the editor can't load is enough). Degrade THIS sub-mesh to unresolved
         // (skipped at draw) and keep going, matching the nullptr-skip below.
         try

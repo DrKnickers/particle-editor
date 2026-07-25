@@ -238,7 +238,7 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
   ];
   const fixtureLayers = [
     { path: "C:/test/corruption/Mods/Alpha",          label: "Alpha",    isFoC: true,  kind: "mod" as const },
-    { path: "C:/test/corruption/Mods/Alpha/Mod",     label: "Mod",     parentLabel: "Alpha", parentPath: "C:/test/corruption/Mods/Alpha", isFoC: true, kind: "nested" as const },
+    { path: "C:/test/corruption/Mods/Alpha/Bravo",     label: "Bravo",     parentLabel: "Alpha", parentPath: "C:/test/corruption/Mods/Alpha", isFoC: true, kind: "nested" as const },
     { path: "C:/test/corruption/Mods/Alpha/Core", label: "Core", parentLabel: "Alpha", parentPath: "C:/test/corruption/Mods/Alpha", isFoC: true, kind: "nested" as const },
     { path: "C:/test/GameData/Mods/Beta",             label: "Beta Mod", isFoC: false, kind: "mod" as const },
   ];
@@ -324,12 +324,12 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
     renderMenuBar(bridge);
     await openModsMenu();
     await openAddMod();
-    await waitFor(() => { expect(screen.getByRole("menuitem", { name: "Mod" })).toBeTruthy(); });
+    await waitFor(() => { expect(screen.getByRole("menuitem", { name: "Bravo" })).toBeTruthy(); });
     expect(screen.getByRole("menuitem", { name: "Core" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "Alpha" })).toBeTruthy(); // root-art layer (rootHasArt:true)
-    fireEvent.click(screen.getByRole("menuitem", { name: "Mod" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Bravo" }));
     await waitFor(() => {
-      expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/test/corruption/Mods/Alpha/Mod"] } });
+      expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/test/corruption/Mods/Alpha/Bravo"] } });
     });
   });
 
@@ -354,19 +354,19 @@ describe("MenuBar — Mods menu (layer stacking)", () => {
 
   // The active-stack block (role=list "Active load order") shows the ordered layers.
   it("renders the active load-order list with each layer", async () => {
-    renderMenuBar(makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha/Mod", "C:/test/corruption/Mods/Alpha"] }));
+    renderMenuBar(makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha/Bravo", "C:/test/corruption/Mods/Alpha"] }));
     await openModsMenu();
     const list = screen.getByRole("list", { name: "Active load order" });
-    expect(list.textContent).toContain("Mod");
+    expect(list.textContent).toContain("Bravo");
     expect(list.textContent).toContain("Alpha");
   });
 
   // Each active-stack row has a × that removes that layer (dispatches without it).
   it("removing a layer from the active stack dispatches set-layers without it", async () => {
-    const bridge = makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha/Mod", "C:/test/corruption/Mods/Alpha"] });
+    const bridge = makeModsStubBridge({ stack: ["C:/test/corruption/Mods/Alpha/Bravo", "C:/test/corruption/Mods/Alpha"] });
     renderMenuBar(bridge);
     await openModsMenu();
-    fireEvent.click(screen.getByRole("button", { name: /Remove Mod from stack/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Remove Bravo from stack/ }));
     await waitFor(() => {
       expect(bridge.request).toHaveBeenCalledWith({ kind: "mods/set-layers", params: { paths: ["C:/test/corruption/Mods/Alpha"] } });
     });

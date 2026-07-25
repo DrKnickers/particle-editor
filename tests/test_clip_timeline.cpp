@@ -459,14 +459,14 @@ int main()
         Timeline tl;
         tl.openPath = "${GAME}/x.alo";
         tl.ats.push_back({0.0, "mods/set-layers",
-                          nlohmann::json{{"paths", {"${GAME}/Mods/Mod"}}}});
+                          nlohmann::json{{"paths", {"${GAME}/Mods/ModA"}}}});
         tl.ats.push_back({0.0, "ui/set-picker-search",
                           nlohmann::json{{"text", "${GAME}"}}});   // literal user text, NOT a path
         std::string err;
         CHECK(ExpandTimelineTokens(tl, tok, err));
         CHECK(err.empty());
         CHECK(tl.openPath == "D:/g/corruption/x.alo");
-        CHECK(tl.ats[0].params["paths"][0].get<std::string>() == "D:/g/corruption/Mods/Mod");
+        CHECK(tl.ats[0].params["paths"][0].get<std::string>() == "D:/g/corruption/Mods/ModA");
         CHECK(tl.ats[1].params["text"].get<std::string>() == "${GAME}");   // scoped: unchanged
 
         // unknown token in a path field -> fail loud, no partial mutation contract

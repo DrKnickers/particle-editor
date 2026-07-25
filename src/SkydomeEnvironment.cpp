@@ -211,7 +211,7 @@ bool LoadSkydomeList(IFileManager& fm, SkydomeAxis axis, std::vector<SkydomeRef>
     if (cfg.file[0] == '\0') return false;
 
     // Discover the list file(s) via GameObjectFiles.xml (mod-resolved) so a mod's
-    // domes are found regardless of the file's name/path -- e.g. Mod registers
+    // domes are found regardless of the file's name/path -- e.g. a mod registers
     // Data\XML\Props\Skydomes_Space_Secondary.xml. Fall back to the canonical
     // vanilla filename when there is no GameObjectFiles.xml (bare install / unit
     // test / odd mod), which preserves the original out-of-the-box behavior.

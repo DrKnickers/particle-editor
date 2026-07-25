@@ -20,8 +20,8 @@ public:
 	// it; FileManager overrides with the real basepath swap.
 	virtual void SetModPath(const std::wstring& /*path*/) {}
 
-	// Select an ORDERED stack of submod folders under the active mod (e.g.
-	// Mod's Mod/GCW/Rev/TR) whose Data\Art layers on top of the shared Core.
+	// Select an ORDERED stack of submod folders under the active mod, whose
+	// Data\Art layers on top of the mod's shared core folder.
 	// Order is precedence, highest first (front of the vector wins a shared name).
 	// Empty clears the stack. Default no-op for simple mocks; FileManager rebuilds
 	// its content roots.
@@ -81,18 +81,18 @@ class FileManager : public IFileManager
 	std::vector<MegaFile*>    megafiles;
 	std::wstring              modpath;     // the active mod root (or empty = Unmodded)
 	// Ordered stack of selected submod folder names under `modpath` (e.g.
-	// {"GCW","Mod"}), highest precedence first. Core is just one of these
+	// {"Alpha","Bravo"}), highest precedence first. A shared core folder is just one of these
 	// names now (placed where the user ordered it), not a separate layer. Empty = none.
 	std::vector<std::wstring> submods;
 	// Loose-file search roots for the active mod, in PRECEDENCE order (front
-	// wins): the selected submod stack (Core among them where chosen)
+	// wins): the selected submod stack (the core folder among them where chosen)
 	// first, then the mod root LAST -- the game ranks the mod root lowest; see
 	// BuildModContentRoots. Rebuilt by SetModPath/SetSubmods; searched before the base
 	// paths. First match wins (the engine replaces a file by precedence, never merges).
 	std::vector<std::wstring> modContentRoots;
 
 	// Populate modContentRoots from `modpath`: the root + each selected submod
-	// (in order, those with a Data\Art tree) + a `Core` core sub-folder if present.
+	// (in order, those with a Data\Art tree) - the core folder is one of them when selected.
 	void BuildModContentRoots();
 
 public:

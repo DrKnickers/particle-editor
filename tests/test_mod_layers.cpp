@@ -16,21 +16,21 @@ int main()
     using namespace modlayers;
 
     // --- CanonicalizeLayerPath ---
-    CHECK(CanonicalizeLayerPath(L"C:\\Mods\\Mod\\") == L"C:\\Mods\\Mod");
-    CHECK(CanonicalizeLayerPath(L"C:\\Mods\\Mod//") == L"C:\\Mods\\Mod");
-    CHECK(CanonicalizeLayerPath(L"C:\\Mods\\Mod  ") == L"C:\\Mods\\Mod");
-    CHECK(CanonicalizeLayerPath(L"C:\\Mods\\Mod") == L"C:\\Mods\\Mod");
+    CHECK(CanonicalizeLayerPath(L"C:\\Mods\\ModA\\") == L"C:\\Mods\\ModA");
+    CHECK(CanonicalizeLayerPath(L"C:\\Mods\\ModA//") == L"C:\\Mods\\ModA");
+    CHECK(CanonicalizeLayerPath(L"C:\\Mods\\ModA  ") == L"C:\\Mods\\ModA");
+    CHECK(CanonicalizeLayerPath(L"C:\\Mods\\ModA") == L"C:\\Mods\\ModA");
 
     // --- LayerPathsEqual (case- and slash-insensitive) ---
-    CHECK(LayerPathsEqual(L"C:\\Mods\\Mod\\", L"c:\\mods\\Mod"));
-    CHECK(!LayerPathsEqual(L"C:\\Mods\\Mod", L"C:\\Mods\\Mod"));
+    CHECK(LayerPathsEqual(L"C:\\Mods\\ModA\\", L"c:\\mods\\moda"));
+    CHECK(!LayerPathsEqual(L"C:\\Mods\\ModA", L"C:\\Mods\\ModB"));
 
     // --- BuildContentRoots: existence filter + dedup + order + trailing slash ---
     auto existsAll = [](const std::wstring&) { return true; };
     {
         std::vector<std::wstring> got = BuildContentRoots(
-            { L"C:\\m\\Mod", L"C:\\m\\Core", L"C:\\m" }, existsAll);
-        CHECK(veq(got, { L"C:\\m\\Mod\\", L"C:\\m\\Core\\", L"C:\\m\\" }));
+            { L"C:\\m\\Bravo", L"C:\\m\\Core", L"C:\\m" }, existsAll);
+        CHECK(veq(got, { L"C:\\m\\Bravo\\", L"C:\\m\\Core\\", L"C:\\m\\" }));
     }
     {
         // dedup case-insensitively, keep first occurrence/order; drop empties
@@ -47,24 +47,21 @@ int main()
     }
 
     // --- MigrateLegacySelection ---
-    CHECK(veq(MigrateLegacySelection(L"", {}, false), {}));          // Unmodded
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", {}, true),
+    // No folder name is special-cased: every selected submod migrates verbatim,
+    // front = highest, mod root emitted LAST and unconditionally.
+    CHECK(veq(MigrateLegacySelection(L"", {}), {}));                 // Unmodded
+    CHECK(veq(MigrateLegacySelection(L"C:\\m", {}),
               { L"C:\\m" }));                                        // mod only
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Mod", L"GCW" }, true),
-              { L"C:\\m\\Mod", L"C:\\m\\GCW", L"C:\\m" }));          // submods front, root last
-    // Core appended once for an un-migrated, non-empty, Core-less stack:
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Mod" }, false),
-              { L"C:\\m\\Mod", L"C:\\m\\Core", L"C:\\m" }));
-    // ...NOT appended when already migrated:
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Mod" }, true),
-              { L"C:\\m\\Mod", L"C:\\m" }));
-    // ...NOT appended when already named (any casing):
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Mod", L"Core" }, false),
-              { L"C:\\m\\Mod", L"C:\\m\\Core", L"C:\\m" }));
-    // ...NOT appended when the stack is empty:
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", {}, false), { L"C:\\m" }));
-    // ...NOT appended when the stack has only empty-string names (no real submod emitted):
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"" }, false), { L"C:\\m" }));
+    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Bravo", L"GCW" }),
+              { L"C:\\m\\Bravo", L"C:\\m\\GCW", L"C:\\m" }));          // submods front, root last
+    // A shared core folder is an ordinary entry -- carried through, never injected:
+    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Bravo", L"Core" }),
+              { L"C:\\m\\Bravo", L"C:\\m\\Core", L"C:\\m" }));
+    // Nothing is appended to a single-submod stack:
+    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Bravo" }),
+              { L"C:\\m\\Bravo", L"C:\\m" }));
+    // Empty-string names are skipped, and the root still lands:
+    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"" }), { L"C:\\m" }));
 
     // --- SerializeMultiSz / ParseMultiSz round-trip ---
     {
