@@ -193,7 +193,7 @@ may live at the end of the file.
 
 ### Fixed
 
-- Pausing the preview now pauses the spawner too — an Auto spawner on an interval no longer banks up its countdown while the scene is stopped and releases a burst of instances all at once when you unpause; frame-stepping a paused scene advances the spawner by exactly the frames you stepped ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), PR pending)
+- Pausing the preview now pauses the spawner too — an Auto spawner on an interval no longer banks up its countdown while the scene is stopped and releases a burst of instances all at once when you unpause; frame-stepping a paused scene advances the spawner by exactly the frames you stepped
 - Shift no longer spawns a particle instance when your pointer is over a panel, dialog, or menu — only Shift over the 3D viewport spawns (Shift+click inside the viewport is unchanged) ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), PR pending — see [`tasks/todo.md`](tasks/todo.md))
 - Dragging a multi-key selection in the curve editor no longer lets a key slide on top of an unselected key (which left a stuck duplicate) — the group now stops just short of any key it would collide with
 - Dragging a multi-key selection up in the curve editor no longer jumps on release for auto-ranging channels (Scale, Index) — the keys commit exactly where the curve showed them mid-drag
