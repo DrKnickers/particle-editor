@@ -17,8 +17,7 @@
 //   2. `DiscoverMods()` scans the gameRoots' Mods\ subdirectories.
 //      Idempotent — safe to call again on a Refresh.
 //   3. `RestoreLastLayerStack()` reads HKCU\Software\AloParticleEditor\
-//      LastLayers (with a one-time migration from the legacy LastMod +
-//      LastSubmods) and applies the persisted ordered content-layer
+//      LastLayers and applies the persisted ordered content-layer
 //      stack so startup behaviour matches the prior session.
 //   4. `SetEngine(Engine*)` after the Engine is built. Required for
 //      the shader/texture reload inside SetLayerStack. The Engine doesn't
@@ -80,9 +79,8 @@ public:
     void DiscoverMods();
 
     // Reads HKCU\Software\AloParticleEditor\LastLayers and applies the
-    // persisted ordered content-layer stack (one-time migration from the legacy
-    // LastMod + LastSubmods when LastLayers is absent). Layers whose folder no
-    // longer exists are dropped. Idempotent.
+    // persisted ordered content-layer stack; absent or unreadable means
+    // Unmodded. Layers whose folder no longer exists are dropped. Idempotent.
     void RestoreLastLayerStack();
 
     // Quick-switch shorthand: replace the whole stack with a single layer
@@ -92,9 +90,10 @@ public:
 
     // Set the ordered content-layer stack (absolute paths, front = highest
     // precedence; [] = Unmodded). Canonicalised + de-duplicated; drives
-    // FileManager::SetLayers, persists LastLayers (+ a best-effort LastMod = primary
-    // kept in sync for the one-time legacy-selection migration), swaps the texture palette to the primary
-    // layer, clears the thumbnail cache, and reloads engine assets (if bound).
+    // FileManager::SetLayers, persists LastLayers (+ a best-effort LastMod =
+    // primary, a write-only record nothing reads anymore), swaps the texture
+    // palette to the primary layer, clears the thumbnail cache, and reloads
+    // engine assets (if bound).
     // Returns false if the engine shader reload failed (state still rolls forward).
     // allowPersist=false suppresses the registry write on top of the ephemeral
     // gate (the dispatcher passes the test-host settings gate through here so a

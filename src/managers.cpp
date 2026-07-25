@@ -14,7 +14,7 @@ using namespace std;
 IFile* FileManager::getFile(const string& path)
 {
 	// If a mod is selected, try its content roots first (in precedence order --
-	// submods, then the shared core folder, then the mod root; see BuildModContentRoots) so mod
+	// the selected submod layers, then the mod root; see BuildModContentRoots) so mod
 	// loose files shadow the base game's. First match wins: the engine REPLACES a
 	// file by precedence, never merges, so this single resolved copy is faithful.
 	for (vector<wstring>::const_iterator root = modContentRoots.begin(); root != modContentRoots.end(); ++root)
@@ -96,7 +96,23 @@ FileManager::FileManager(const vector<wstring>& basepaths)
 				wstring filename = *path + child->getData();
 				try
 				{
-					megafiles.push_back(new MegaFile(new PhysicalFile(filename)));
+					// Hold the creation reference in a local and drop it after
+					// handing the file to MegaFile (which takes its own AddRef).
+					// The old new-inside-new form leaked that reference on every
+					// path — permanently pinning the Win32 HANDLE when a
+					// malformed MEG made the MegaFile constructor throw
+					// (2026-07 audit).
+					PhysicalFile* file = new PhysicalFile(filename);   // rc=1
+					try
+					{
+						megafiles.push_back(new MegaFile(file));       // rc=2
+					}
+					catch (...)
+					{
+						file->Release();
+						throw;
+					}
+					file->Release();   // rc=1, now owned by the MegaFile
 				}
 				catch (IOException)
 				{
@@ -143,8 +159,8 @@ void FileManager::SetModPath(const wstring& path)
 }
 
 // Select the ordered submod stack under the active mod (empty to clear) and
-// rebuild the content roots. Each submod's Data\Art layers on top of the shared
-// core folder, in precedence order (front wins).
+// rebuild the content roots. Selected layers stack in precedence order (front
+// wins); only what the user selected is searched — nothing is added implicitly.
 void FileManager::SetSubmods(const vector<wstring>& names)
 {
 	submods = names;

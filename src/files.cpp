@@ -15,7 +15,19 @@ vector<unsigned char> ReadAndReleaseCapped(IFile* file, unsigned long maxBytes)
 	// Reject empty OR oversized before allocating (maxBytes == 0 disables the cap).
 	if (size == 0 || (maxBytes != 0 && size > maxBytes)) { file->Release(); throw ReadException(); }
 	vector<unsigned char> bytes(size);
-	const unsigned long got = file->read(bytes.data(), size);
+	unsigned long got;
+	try
+	{
+		got = file->read(bytes.data(), size);
+	}
+	catch (...)
+	{
+		// PhysicalFile::read throws on a ReadFile failure (I/O error, vanished
+		// volume). Without this, the throw skipped the Release below and leaked
+		// the file's HANDLE on every failed load attempt (2026-07 audit).
+		file->Release();
+		throw;
+	}
 	file->Release();
 	if (got != size) throw ReadException();
 	return bytes;

@@ -20,8 +20,9 @@ public:
 	// it; FileManager overrides with the real basepath swap.
 	virtual void SetModPath(const std::wstring& /*path*/) {}
 
-	// Select an ORDERED stack of submod folders under the active mod, whose
-	// Data\Art layers on top of the mod's shared core folder.
+	// Select an ORDERED stack of submod folders under the active mod. Only the
+	// selected folders are searched — a mod's shared core folder is an ordinary
+	// selectable entry, never added implicitly.
 	// Order is precedence, highest first (front of the vector wins a shared name).
 	// Empty clears the stack. Default no-op for simple mocks; FileManager rebuilds
 	// its content roots.

@@ -63,30 +63,6 @@ inline std::vector<std::wstring> BuildContentRoots(
     return roots;
 }
 
-// Convert a legacy LastMod + ordered LastSubmods selection into a canonical
-// (slash-free) layer stack mirroring BuildModContentRoots precedence: submods
-// FRONT (highest), mod root LAST, root emitted UNCONDITIONALLY. Pure — no disk
-// access.
-//
-// A mod's shared core folder is an ordinary entry in the selection now, so it
-// migrates like any other submod name. Nothing here special-cases a folder name.
-inline std::vector<std::wstring> MigrateLegacySelection(
-    const std::wstring& lastMod,
-    const std::vector<std::wstring>& lastSubmods)
-{
-    std::vector<std::wstring> out;
-    const std::wstring mod = CanonicalizeLayerPath(lastMod);
-    if (mod.empty()) return out;  // Unmodded
-
-    for (const std::wstring& s : lastSubmods)
-    {
-        if (s.empty()) continue;
-        out.push_back(mod + L"\\" + s);
-    }
-    out.push_back(mod);           // mod root LAST
-    return out;
-}
-
 // Serialize an ordered list to a REG_MULTI_SZ blob (each string null-terminated,
 // then a final extra null). An empty list is a single null.
 inline std::wstring SerializeMultiSz(const std::vector<std::wstring>& items)

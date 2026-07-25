@@ -1,13 +1,22 @@
-// Regression test for the XML entity-expansion DoS guard (src/xml.cpp, audit F-XML).
+// Regression test for the XML DoS guards (src/xml.cpp, audit F-XML + the
+// 2026-07 pre-release audit).
 //
-// The bundled Expat predates the 2.4.0 billion-laughs amplification cap and has
-// no entity-expansion limit. Legit game/mod XML declares NO custom entities, so
-// the fix registers an entity-decl handler that XML_StopParser's on the first
-// <!ENTITY> declaration -- the aborted parse surfaces as the normal
-// XML_Parse==0 ParseException. This test feeds a classic billion-laughs payload
-// (nested internal entities) through XMLTree::parse via a MemoryFile and asserts
-// it THROWS promptly (does not hang / expand), while a normal small document
-// parses WITHOUT throwing. See tests/build_test_xml_billion_laughs.bat.
+// Guard 1 (entity expansion): the bundled Expat predates the 2.4.0
+// billion-laughs amplification cap and has no entity-expansion limit. Legit
+// game/mod XML declares NO custom entities, so the fix registers an entity-decl
+// handler that XML_StopParser's on the first <!ENTITY> declaration -- the
+// aborted parse surfaces as the normal XML_Parse==0 ParseException.
+//
+// Guard 2 (nesting depth): a crafted file nesting elements tens of thousands
+// deep would otherwise build an arbitrarily tall XMLNode chain whose teardown
+// once recursed one stack frame per level (stack overflow = hard crash during
+// the startup catalog prefetch). onStartElement stops the parser past
+// kMaxXmlDepth, and ~XMLNode tears down iteratively as a belt.
+//
+// This test feeds both payloads through XMLTree::parse via a MemoryFile and
+// asserts they THROW promptly, while normal documents (including one nested
+// deeper than any real game file but under the cap) parse WITHOUT throwing.
+// See tests/build_test_xml_billion_laughs.bat.
 
 #include "xml.h"
 #include "files.h"
@@ -96,6 +105,56 @@ int main()
         if (!threw && tree.getRoot() != NULL)
             rootOk = (tree.getRoot()->getName() == L"root");
         CHECK(rootOk, "normal document yields a <root> element");
+        f->Release();                     // rc=0
+    }
+
+    // --- C: nesting past kMaxXmlDepth (512) is REJECTED, promptly and without
+    // a stack overflow. 50,000 levels: without the cap this built a 50k-node
+    // chain whose recursive teardown overflowed the thread stack.
+    {
+        const int kDeep = 50000;
+        std::string deep;
+        deep.reserve((size_t)kDeep * 7 + 16);
+        for (int i = 0; i < kDeep; ++i) deep += "<a>";
+        for (int i = 0; i < kDeep; ++i) deep += "</a>";
+
+        MemoryFile* f = makeFile(deep);   // rc=1
+        XMLTree tree;
+        bool threw = false;
+        try
+        {
+            tree.parse(f);                // must stop at the depth cap
+        }
+        catch (...)
+        {
+            threw = true;
+        }
+        f->Release();                     // rc=0
+        CHECK(threw, "50k-deep nesting is rejected (parse throws, no stack overflow)");
+    }   // tree destructor runs here: also exercises iterative teardown of the partial tree
+
+    // --- D: nesting deeper than any real game file but UNDER the cap parses
+    // fine, and its teardown (400 levels) does not rely on recursion depth.
+    {
+        const int kOk = 400;
+        std::string nested;
+        nested.reserve((size_t)kOk * 7 + 16);
+        for (int i = 0; i < kOk; ++i) nested += "<a>";
+        for (int i = 0; i < kOk; ++i) nested += "</a>";
+
+        MemoryFile* f = makeFile(nested); // rc=1
+        XMLTree tree;
+        bool threw = false;
+        try
+        {
+            tree.parse(f);
+        }
+        catch (...)
+        {
+            threw = true;
+        }
+        CHECK(!threw, "400-deep nesting (under the cap) parses without throwing");
+        CHECK(!threw && tree.getRoot() != NULL, "400-deep document yields a root");
         f->Release();                     // rc=0
     }
 

@@ -308,12 +308,12 @@ namespace
         {
             if (mem) mem->Release();   // throw before the explicit Release -> no leak
             entries.clear();           // partial list from a mid-loop throw -> file contributes nothing
-#ifndef NDEBUG
             // Surface the otherwise-SILENT drop -- this is what hid the encoding='ASCII'
             // bug (1/3 of one mod's core files threw -> their units + Variant_Of parents vanished with
-            // no signal). Debug-only; a brief stderr interleave from parallel workers is harmless.
+            // no signal). Unconditional: a Release user's incomplete picker was
+            // undiagnosable with this behind NDEBUG (2026-07 audit). A brief stderr
+            // interleave from parallel workers is harmless.
             fprintf(stderr, "[Catalog] object file dropped (XML parse failed): %s\n", fileName.c_str());
-#endif
         }
     }
 

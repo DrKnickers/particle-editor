@@ -46,22 +46,9 @@ int main()
         CHECK(veq(got, { L"C:\\m\\A\\", L"C:\\m\\C\\" }));
     }
 
-    // --- MigrateLegacySelection ---
-    // No folder name is special-cased: every selected submod migrates verbatim,
-    // front = highest, mod root emitted LAST and unconditionally.
-    CHECK(veq(MigrateLegacySelection(L"", {}), {}));                 // Unmodded
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", {}),
-              { L"C:\\m" }));                                        // mod only
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Bravo", L"GCW" }),
-              { L"C:\\m\\Bravo", L"C:\\m\\GCW", L"C:\\m" }));          // submods front, root last
-    // A shared core folder is an ordinary entry -- carried through, never injected:
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Bravo", L"Core" }),
-              { L"C:\\m\\Bravo", L"C:\\m\\Core", L"C:\\m" }));
-    // Nothing is appended to a single-submod stack:
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"Bravo" }),
-              { L"C:\\m\\Bravo", L"C:\\m" }));
-    // Empty-string names are skipped, and the root still lands:
-    CHECK(veq(MigrateLegacySelection(L"C:\\m", { L"" }), { L"C:\\m" }));
+    // (MigrateLegacySelection was deleted with the legacy LastMod/LastSubmods
+    // migration: no released build ever wrote those values, so the fallback had
+    // no reachable population. Absent LastLayers now restores Unmodded.)
 
     // --- SerializeMultiSz / ParseMultiSz round-trip ---
     {

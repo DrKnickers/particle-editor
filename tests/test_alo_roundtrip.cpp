@@ -158,6 +158,66 @@ static void buildOne(ParticleSystem& ps)
         e->tracks[t] = &e->trackContents[t];
 }
 
+// ---- hardening: absolute normal-chunk size cap (2026-07 audit) --------------
+// A crafted .alo whose top-level chunk claims a payload within its parent bound
+// (the whole file) but over kMaxAloChunkBytes must be rejected by
+// ChunkReader::next(). The cap previously guarded only mini-chunks, so a
+// multi-hundred-MiB file could authorize an equally huge single chunk. The stub
+// REPORTS a huge size() while serving only the 8-byte header, so the test
+// exercises the exact bound arithmetic without allocating a >256 MiB buffer.
+namespace
+{
+class HugeHeaderFile : public IFile
+{
+    unsigned char m_hdr[8];
+    unsigned long m_claimedSize;
+    unsigned long m_pos = 0;
+public:
+    HugeHeaderFile(uint32_t type, uint32_t chunkSize, unsigned long claimedFileSize)
+        : m_claimedSize(claimedFileSize)
+    {
+        m_hdr[0] = (unsigned char)(type & 0xFF);
+        m_hdr[1] = (unsigned char)((type >> 8) & 0xFF);
+        m_hdr[2] = (unsigned char)((type >> 16) & 0xFF);
+        m_hdr[3] = (unsigned char)((type >> 24) & 0xFF);
+        m_hdr[4] = (unsigned char)(chunkSize & 0xFF);
+        m_hdr[5] = (unsigned char)((chunkSize >> 8) & 0xFF);
+        m_hdr[6] = (unsigned char)((chunkSize >> 16) & 0xFF);
+        m_hdr[7] = (unsigned char)((chunkSize >> 24) & 0xFF);
+    }
+    bool          eof() override               { return m_pos >= m_claimedSize; }
+    unsigned long size() override              { return m_claimedSize; }
+    void          seek(unsigned long o) override { m_pos = o; }
+    unsigned long tell() override              { return m_pos; }
+    unsigned long read(void* buffer, unsigned long n) override
+    {
+        for (unsigned long i = 0; i < n; ++i)
+            ((unsigned char*)buffer)[i] = (m_pos + i < 8) ? m_hdr[m_pos + i] : 0;
+        m_pos += n;
+        return n;
+    }
+    unsigned long write(const void*, unsigned long) override { return 0; }
+};
+} // namespace
+
+static void testNormalChunkSizeCap()
+{
+    // 0x12000000 (288 MiB) payload: inside the claimed file, over the 256 MiB cap.
+    const uint32_t huge = 0x12000000u;
+    HugeHeaderFile* f = new HugeHeaderFile(0x0900, huge, huge + 8u);   // rc=1
+    bool rejected = false, other = false;
+    try
+    {
+        ChunkReader reader(f);
+        reader.next();              // must throw: cap, not the parent bound
+    }
+    catch (BadFileException&) { rejected = true; }
+    catch (...)               { other = true; }
+    f->Release();
+    CHECK(rejected && !other,
+          "normal chunk over kMaxAloChunkBytes rejected as BadFile (parent bound alone would accept)");
+}
+
 int main()
 {
     std::printf("test_alo_roundtrip\n");
@@ -363,6 +423,8 @@ int main()
             expectBadFile(img, "A3: Group.type=0xDEADBEEF (>= NUM_GROUP_TYPES) -> BadFileException");
         }
     }
+
+    testNormalChunkSizeCap();
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");

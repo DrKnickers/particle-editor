@@ -8,6 +8,7 @@
 #include "ParticleSystemInstance.h"
 #include "LinkGroup.h"
 #include "exceptions.h"
+#include "ResourceLimits.h"
 using namespace std;
 
 static const int NUM_BLEND_MODES = 14;
@@ -1095,10 +1096,13 @@ ParticleSystem::ParticleSystem(IFile* file)
 	    // Ignore 0001 chunk
 	    Verify(reader.next() == 0x0001 && reader.size() == sizeof(uint32_t));
 
-	    // Read emitters
+	    // Read emitters. Cap the count: the loop is otherwise bounded only by the
+	    // file size, so a crafted .alo packed with tiny 0x0700 headers amplifies
+	    // each ~8-byte chunk into a full Emitter allocation (2026-07 audit).
 	    Verify(reader.next() == 0x0800);
 	    while ((type = reader.next()) == 0x0700)
 	    {
+            Verify(m_emitters.size() < kMaxAloEmitters);
             Emitter* emitter = new Emitter(reader);
             emitter->index = m_emitters.size();
 		    m_emitters.push_back(emitter);

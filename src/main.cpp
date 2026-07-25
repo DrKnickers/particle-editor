@@ -594,8 +594,8 @@ static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
 }
 
 //
-// Mods support — registry helpers (ReadModNickname / ReadLastMod /
-// WriteLastMod) and disk scanning (ScanModsDir / DiscoverMods) moved to
+// Mods support — registry helpers (ReadModNickname / WriteLastMod)
+// and disk scanning (ScanModsDir / DiscoverMods) moved to
 // ModManager (src/ModManager.{h,cpp}). ReadModNickname is
 // exposed via ModManager.h for direct use by the host bridge.
 //

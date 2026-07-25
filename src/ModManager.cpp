@@ -49,24 +49,6 @@ wstring ReadModNickname(const wstring& modPath)
     return nickname;
 }
 
-static wstring ReadLastMod()
-{
-    wstring path;
-    HKEY hKey;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
-    {
-        TCHAR  buf[MAX_PATH] = {0};
-        DWORD  type;
-        DWORD  size = sizeof(buf);
-        if (RegQueryValueEx(hKey, L"LastMod", NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ)
-        {
-            path = buf;
-        }
-        RegCloseKey(hKey);
-    }
-    return path;
-}
-
 static void WriteLastMod(const wstring& modPath)
 {
     HKEY hKey;
@@ -114,27 +96,6 @@ static void WriteLastLayers(const vector<wstring>& layers)
                       (const BYTE*)blob.data(), (DWORD)(blob.size() * sizeof(wchar_t)));
         RegCloseKey(hKey);
     }
-}
-
-// Migration-only reader of the legacy LastSubmods (ordered folder NAMES).
-// Dynamic buffer + ParseMultiSz (never the old fixed wchar[1024]).
-static vector<wstring> ReadLastSubmodsLegacy()
-{
-    vector<wstring> out;
-    HKEY hKey;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
-    {
-        DWORD type = 0, bytes = 0;
-        if (RegQueryValueEx(hKey, L"LastSubmods", NULL, &type, NULL, &bytes) == ERROR_SUCCESS
-            && type == REG_MULTI_SZ && bytes >= sizeof(wchar_t))
-        {
-            std::vector<wchar_t> buf(bytes / sizeof(wchar_t));
-            if (RegQueryValueEx(hKey, L"LastSubmods", NULL, &type, (LPBYTE)buf.data(), &bytes) == ERROR_SUCCESS)
-                out = modlayers::ParseMultiSz(buf.data(), buf.size());
-        }
-        RegCloseKey(hKey);
-    }
-    return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -236,18 +197,12 @@ void ModManager::DiscoverMods()
 
 void ModManager::RestoreLastLayerStack()
 {
+    // LastLayers is the only persisted stack. The one-time migration from the
+    // legacy LastMod/LastSubmods pair was removed before the v0.3.0 release: no
+    // released build ever wrote those values without also writing LastLayers, so
+    // the only profiles it could act on were mid-development ones. Absent or
+    // unreadable LastLayers now simply restores Unmodded.
     std::vector<wstring> stack = ReadLastLayers();
-
-    // One-time migration: no LastLayers yet but a legacy LastMod/LastSubmods exists.
-    if (stack.empty())
-    {
-        const wstring lastMod = ReadLastMod();
-        if (!lastMod.empty())
-        {
-            const std::vector<wstring> lastSubmods = ReadLastSubmodsLegacy();
-            stack = modlayers::MigrateLegacySelection(lastMod, lastSubmods);
-        }
-    }
 
     // Drop layers whose folder no longer exists (the existing ghost-drop behaviour);
     // SetLayerStack persists the validated stack + applies it (no engine reload yet —
@@ -268,8 +223,6 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
     // / the persisted LastLayers free of ghost paths — matching what
     // FileManager::SetLayers already does for content roots and what
     // RestoreLastLayerStack's own pre-filter did (now redundant but harmless).
-    // A migration-appended candidate (e.g. MigrateLegacySelection's
-    // mod<Core>) is dropped here too when that folder is absent.
     m_layerStack.clear();
     for (const wstring& raw : absoluteLayers)
     {
@@ -310,9 +263,8 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
     }
 
     // 5. Persist the stack to the registry ONLY if the reload succeeded
-    //    (release-audit #5): LastLayers is authoritative; LastMod = primary is kept
-    //    in sync so the one-time legacy-selection migration (ReadLastMod feeds
-    //    MigrateLegacySelection) has a sane value if LastLayers is ever cleared.
+    //    (release-audit #5): LastLayers is authoritative; LastMod = primary is a
+    //    write-only best-effort record (nothing in the editor reads it anymore).
     //    On a failed reload we leave the registry untouched so the next launch boots
     //    the last-known-good stack, not one whose shaders failed to load.
     //    (--drive / m_ephemeral never rewrites the daily driver's mod stack.)

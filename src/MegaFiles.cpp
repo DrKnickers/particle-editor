@@ -97,7 +97,16 @@ MegaFile::MegaFile(IFile* file)
 	}
 	catch (IOException&)
 	{
+		// Constructor failure: the destructor will never run, so drop the AddRef
+		// taken above or the file (and its Win32 HANDLE) leaks for the process
+		// lifetime (2026-07 audit). The caller still owns its own reference.
+		this->file->Release();
 		throw BadFileException();
+	}
+	catch (...)
+	{
+		this->file->Release();
+		throw;
 	}
 }
 

@@ -30,11 +30,22 @@ XMLNode::XMLNode(XMLNode* parent, const XML_Char* s, int len) : data(s, len)
 	this->parent = parent;
 }
 
+// Iterative teardown: a recursive delete (each child's destructor deleting its
+// own children) consumes one stack frame per nesting level, so a deeply nested
+// tree — even one under kMaxXmlDepth on a small worker-pool stack — risks
+// overflow. Flatten the subtree into an explicit worklist instead; each child's
+// own destructor then runs with an empty children vector and never recurses.
 XMLNode::~XMLNode()
 {
-	for (vector<XMLNode*>::iterator i = children.begin(); i != children.end(); i++)
+	vector<XMLNode*> stack(children.begin(), children.end());
+	children.clear();
+	while (!stack.empty())
 	{
-		delete *i;
+		XMLNode* n = stack.back();
+		stack.pop_back();
+		stack.insert(stack.end(), n->children.begin(), n->children.end());
+		n->children.clear();
+		delete n;
 	}
 }
 
@@ -67,8 +78,28 @@ static void checkEmpty(XMLNode* node)
 	}
 }
 
+// Audit F-XML (untrusted mod XML): the bundled Expat is 2.1.0, with no
+// entity-expansion limit and no nesting limit. Both handlers below stop the
+// parser rather than throw — C++ exceptions must not unwind through Expat's C
+// frames. thread_local: XMLTree::parse runs concurrently on the
+// GameObjectCatalog worker pool, so this MUST be per-thread — a shared static
+// would let one thread's handler stop another thread's parser (DoS bypass) or
+// read a freed parser. Each parse() sets + clears both within one call stack.
+static thread_local XML_Parser    g_xmlParser = NULL;
+static thread_local unsigned long g_xmlDepth  = 0;
+
 static void onStartElement(void* userData, const XML_Char *name, const XML_Char **atts)
 {
+	// Depth cap for untrusted mod XML: a crafted file nesting tens of thousands
+	// of elements deep would otherwise build an arbitrarily tall node chain (and
+	// the game's own XML never nests remotely this deep). Stop the parser BEFORE
+	// allocating the node; the aborted parse surfaces as the normal
+	// XML_Parse==0 ParseException in XMLTree::parse.
+	if (++g_xmlDepth > kMaxXmlDepth)
+	{
+		if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+		return;
+	}
 	XMLTree* tree = (XMLTree*)userData;
 	XMLNode* node = new XMLNode(tree->current, name, atts);
 	if (tree->current == NULL)
@@ -89,6 +120,7 @@ static void onStartElement(void* userData, const XML_Char *name, const XML_Char 
 
 static void onEndElement(void* userData, const XML_Char *name)
 {
+	if (g_xmlDepth > 0) --g_xmlDepth;
 	XMLTree* tree = (XMLTree*)userData;
 	if (tree->current != NULL)
 	{
@@ -152,16 +184,10 @@ static int onUnknownEncoding(void* /*data*/, const XML_Char* name, XML_Encoding*
 	return XML_STATUS_OK;
 }
 
-// Audit F-XML (untrusted mod XML): the bundled Expat is 2.1.0 (predating the
-// 2.4.0 billion-laughs amplification cap), with no entity-expansion limit. Legit
-// game/mod XML declares NO custom entities, so abort parsing on the first
-// <!ENTITY> declaration — closing the entity-expansion DoS. The aborted parse
-// surfaces as the normal XML_Parse==0 ParseException below.
-// thread_local: XMLTree::parse runs concurrently on the GameObjectCatalog
-// worker pool, so this MUST be per-thread — a shared static would let one
-// thread's entity handler stop another thread's parser (DoS bypass) or read a
-// freed parser. Each parse() sets + clears it within one thread's call stack.
-static thread_local XML_Parser g_xmlParser = NULL;
+// Legit game/mod XML declares NO custom entities (the bundled Expat 2.1.0
+// predates the 2.4.0 billion-laughs amplification cap), so abort parsing on the
+// first <!ENTITY> declaration — closing the entity-expansion DoS. The aborted
+// parse surfaces as the normal XML_Parse==0 ParseException below.
 static void onEntityDecl(void* /*userData*/, const XML_Char* /*entityName*/,
     int /*isParameterEntity*/, const XML_Char* /*value*/, int /*valueLength*/,
     const XML_Char* /*base*/, const XML_Char* /*systemId*/,
@@ -187,7 +213,8 @@ void XMLTree::parse(IFile* file)
 	XML_SetElementHandler(parser, onStartElement, onEndElement);
 	XML_SetCharacterDataHandler(parser, onCharacterData);
 	XML_SetUnknownEncodingHandler(parser, onUnknownEncoding, NULL);   // tolerate encoding='ASCII'
-	g_xmlParser = parser;                                  // F-XML: for onEntityDecl's XML_StopParser
+	g_xmlParser = parser;   // F-XML: for onEntityDecl's / onStartElement's XML_StopParser
+	g_xmlDepth  = 0;        // fresh depth per parse (thread_local survives across calls)
 	XML_SetEntityDeclHandler(parser, onEntityDecl);        // F-XML: reject custom entity declarations
 
 	try
