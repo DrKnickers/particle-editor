@@ -17,6 +17,29 @@ async function dismissModals(page: Page) {
   // through follow-ups if it bites.
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
+  await awaitExitAnimations(page);
+}
+
+// Radix keeps dismissed content — INCLUDING its dismissable layer, which
+// swallows pointer events — mounted while data-state="closed", and the
+// 2026-07-18 design pass put .popover-animate (110ms exit) on the menubar
+// dropdowns. Returning from teardown before that finishes leaves the dying
+// layer eating the NEXT surface's setup click, which surfaced as 30s
+// actionability timeouts on menubar-edit-open / menubar-view-open — flaky by
+// nature, since a retry starts from a clean page. captureDomA11y already waits
+// on exactly this predicate before snapshotting; teardown has to as well.
+async function awaitExitAnimations(page: Page) {
+  await page
+    .waitForFunction(
+      () =>
+        !document.querySelector('.popover-animate[data-state="closed"]') &&
+        !document.querySelector('.tip-animate[data-state="closed"]'),
+      null,
+      { timeout: 2_000 },
+    )
+    .catch(() => {
+      /* backstop: proceed; a stuck exit shows up as the next test's failure */
+    });
 }
 
 /**
