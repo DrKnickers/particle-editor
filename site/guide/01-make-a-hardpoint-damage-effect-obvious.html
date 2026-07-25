@@ -59,7 +59,7 @@
   <div class="guide-layout">
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 1 of 7</span></p>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 1 of 5</span></p>
 <h1 id="tutorial-1-make-a-hardpoint-damage-effect-obvious">Tutorial 1: Make a Hardpoint Damage Effect Obvious</h1>
 <p>This first tutorial makes one intentionally loud edit: it overrides the Star Destroyer hardpoint damage smoke particle and turns the smoke bright green.</p>
 <p>The goal is not to make a pretty effect yet. The goal is to prove that the editor can open a shipped particle, save a loose override into a tutorial mod, and produce a change that is obvious in game.</p>
@@ -93,7 +93,7 @@
 <figure class="guide-media" aria-label="Show opening the loose override copy of P_HP_IMPERIAL_DAMAGE.ALO."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-open-override.mp4" data-poster="tutorial-01-open-override-poster.jpg"></video></figure>
 <h2 id="2-find-the-smoke-emitter">2. Find the Smoke Emitter</h2>
 <p>This particle is a friendly first case: it contains a single emitter, named <code>smoke</code>, and that one emitter is the whole effect. Select it in the Emitter Tree — its properties fill the Property Panel and its lifetime curves fill the Curve Editor, making it the edit target.</p>
-<p>Most shipped particles have several emitters, and then the useful habit is: select one emitter, observe what it contributes in the Preview Viewport, then move to the next. Tutorial 4 opens a two-emitter particle and leans on exactly that habit. Particles become much easier to author when you can connect an emitter row to a visible part of the effect.</p>
+<p>Most shipped particles have several emitters, and then the useful habit is: select one emitter, observe what it contributes in the Preview Viewport, then move to the next. Particles become much easier to author when you can connect an emitter row to a visible part of the effect.</p>
 <h2 id="3-make-the-smoke-bright-green">3. Make the Smoke Bright Green</h2>
 <p>Color lives on the emitter's Red, Green, and Blue tracks in the Curve Editor (new to the Curve Editor? <a href="./curve-editor-basics.html">Curve Editor Basics</a> covers the mechanics). Understand what these tracks actually are before editing them: each one is a <em>tint multiplier</em> applied to the particle's texture over its life. <code>1.0</code> on all three channels shows the texture's own colors; lowering a channel removes that color component from the result. A colored particle is usually a grayscale texture times whatever the R/G/B tracks say.</p>
 <p>Before changing anything, <em>read</em> the stock values: click each channel row in turn and look at the key values the file actually uses. In this particle you will find the smoke starts at Red <code>0.5</code>, Green <code>1.0</code>, Blue <code>1.0</code> — a pale blue-green — and all three channels converge to a dark neutral <code>0.255</code> by the end of the life, with a stop near 50% shaping the transition. That is the whole color story of the stock effect: a tinted birth cooling into gray ash. Getting into the habit of reading a shipped particle's numbers before touching them is how the rest of this guide's &quot;open something stock and study it&quot; advice works in practice.</p>
@@ -138,7 +138,7 @@
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./curve-editor-basics.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Curve Editor Basics</span></a>
-        <a class="pager-next" href="./02-polish-hardpoint-damage-smoke.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">2. Polish Hardpoint Damage Smoke</span></a>
+        <a class="pager-next" href="./concepts-before-you-build.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Concepts Before You Build</span></a>
       </nav>
     </main>
     <aside class="guide-sidebar" aria-label="Guide navigation">
@@ -158,11 +158,9 @@
       <p class="side-label">Tutorials</p>
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html" class="active" aria-current="page">1. Make a Hardpoint Damage Effect Obvious</a></li>
-      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
       <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
-      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
-      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html">3. Build an Explosion</a></li>
       <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>

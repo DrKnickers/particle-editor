@@ -1,4 +1,4 @@
-# Tutorial 3: Build a Laser Shot and Muzzle Flash
+# Tutorial 2: Build a Laser Shot and Muzzle Flash
 
 This tutorial starts from a blank particle and builds a bright green laser shot with a projectile
 core, projectile glow, and short muzzle flash in the same particle system.
@@ -163,7 +163,7 @@ white square the section below warns about.
 Shape the brightness with the color tracks rather than a constant: start the channels at zero,
 peak them early — within the first tenth of the life — and let them decay to black. This
 fast-in, slow-out envelope is a reliable way to make a flash read well, and you will see it in
-shipped flash effects (the explosion example in [Tutorial 5](05-build-an-explosion) peaks its
+shipped flash effects (the explosion example in [Tutorial 3](05-build-an-explosion) peaks its
 flash at 10% too): the pop reads as an *event* with attack and decay rather than a sprite
 switching on and off. And since
 several additive layers will overlap at the launch point, keep each layer's peak modest — additive

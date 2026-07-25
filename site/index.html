@@ -82,9 +82,52 @@
       </figure>
     </section>
 
-    <!-- 1 · Viewport -->
+    <!-- 1 · Interface -->
+    <section class="feature" aria-labelledby="interface-h">
+      <p class="section-label"><span class="section-number" aria-hidden="true">1</span> Interface</p>
+      <h2 id="interface-h">A rebuilt interface</h2>
+      <p class="feature-copy">The editor now uses resizable panels, docked tools, and light and dark
+        themes. The emitter tree, properties, curves, and live preview remain visible as the
+        workspace changes around the task.</p>
+      <figure class="clip theme-compare"
+              data-theme-compare
+              style="--theme-split:50%"
+              aria-label="The same Particle Editor workspace in dark and light themes.">
+        <div class="theme-compare-stage">
+          <img class="theme-compare-image theme-compare-dark"
+               data-theme-layer="dark"
+               data-poster="interface-theme-dark.jpg"
+               loading="lazy" decoding="async" alt="">
+          <img class="theme-compare-image theme-compare-light"
+               data-theme-layer="light"
+               data-poster="interface-theme-light.jpg"
+               loading="lazy" decoding="async" alt="">
+          <span class="theme-compare-label theme-compare-label-dark">Dark</span>
+          <span class="theme-compare-label theme-compare-label-light">Light</span>
+          <span class="theme-compare-divider" aria-hidden="true">
+            <span class="theme-compare-grip"></span>
+          </span>
+          <input class="theme-compare-range"
+                 type="range" min="0" max="100" step="1" value="50"
+                 aria-label="Compare dark and light interface">
+        </div>
+        <noscript>
+          <div class="theme-compare-stage theme-compare-static">
+            <img class="theme-compare-image theme-compare-dark"
+                 src="/media-local/interface-theme-dark.jpg" alt="">
+            <img class="theme-compare-image theme-compare-light"
+                 src="/media-local/interface-theme-light.jpg" alt="">
+            <span class="theme-compare-label theme-compare-label-dark">Dark</span>
+            <span class="theme-compare-label theme-compare-label-light">Light</span>
+            <span class="theme-compare-divider" aria-hidden="true"></span>
+          </div>
+        </noscript>
+      </figure>
+    </section>
+
+    <!-- 2 · Viewport -->
     <section class="feature" aria-labelledby="s1-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">1</span> Viewport</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">2</span> Viewport</p>
       <h2 id="s1-h">Scene references</h2>
       <p class="feature-copy">Load a game unit or structure for scale, then choose a skydome, ground, and
         lighting for the preview.</p>
@@ -95,9 +138,9 @@
       </figure>
     </section>
 
-    <!-- 2 · Assets -->
+    <!-- 3 · Assets -->
     <section class="feature" aria-labelledby="s2-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">2</span> Assets</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">3</span> Assets</p>
       <h2 id="s2-h">Ordered mod loading</h2>
       <p class="feature-copy">Add mod and submod folders to the active stack and drag them into order. The
         editor checks the top layer first when loading models, textures, and shaders.</p>
@@ -108,9 +151,9 @@
       </figure>
     </section>
 
-    <!-- 3 · Preview -->
+    <!-- 4 · Preview -->
     <section class="feature" aria-labelledby="s3-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">3</span> Preview</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">4</span> Preview</p>
       <h2 id="s3-h">Spawner controls</h2>
       <p class="feature-copy">Launch the effect once or at a fixed interval. Set its direction and speed to
         inspect it in motion.</p>
@@ -121,9 +164,9 @@
       </figure>
     </section>
 
-    <!-- 4 · Emitter tree -->
+    <!-- 5 · Emitter tree -->
     <section class="feature" aria-labelledby="s4-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">4</span> Emitter tree</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">5</span> Emitter tree</p>
       <h2 id="s4-h">Emitter reordering</h2>
       <p class="feature-copy">Drag root emitters to a new position. The viewport updates immediately so you
         can check the resulting draw order.</p>
@@ -134,9 +177,9 @@
       </figure>
     </section>
 
-    <!-- 5 · Textures -->
+    <!-- 6 · Textures -->
     <section class="feature" aria-labelledby="s5-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">5</span> Textures</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">6</span> Textures</p>
       <h2 id="s5-h">Atlas frame picker</h2>
       <p class="feature-copy">Open the texture as a frame grid and click a cell to assign that frame to the
         selected Index keys.</p>
@@ -147,9 +190,9 @@
       </figure>
     </section>
 
-    <!-- 6 · Other tools -->
+    <!-- 7 · Other tools -->
     <section class="feature" aria-labelledby="s6-h">
-      <p class="section-label"><span class="section-number" aria-hidden="true">6</span> Other tools</p>
+      <p class="section-label"><span class="section-number" aria-hidden="true">7</span> Other tools</p>
       <h2 id="s6-h">Other editing and recovery tools</h2>
       <p class="feature-copy">Controls that do not need a full walkthrough.</p>
       <div class="toolset-body">
@@ -236,6 +279,6 @@
     <p class="footer-meta">MIT-licensed · forked from GlyphXTools/particle-editor · Windows x64 · uses data from your Empire at War installation</p>
   </footer>
 
-  <script type="module" src="main.js"></script>
+  <script type="module" src="main.js?v=20260724-interface-overhaul"></script>
 </body>
 </html>

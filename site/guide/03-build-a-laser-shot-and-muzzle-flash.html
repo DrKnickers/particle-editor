@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>3. Build a Laser Shot and Muzzle Flash — Particle Editor guide</title>
+  <title>2. Build a Laser Shot and Muzzle Flash — Particle Editor guide</title>
   <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
        inline rules cover the frames before styles.css arrives — kills the white flash on
        navigation / view transitions. The @view-transition opt-in and the dark backstop across
@@ -59,8 +59,8 @@
   <div class="guide-layout">
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 4 of 7</span></p>
-<h1 id="tutorial-3-build-a-laser-shot-and-muzzle-flash">Tutorial 3: Build a Laser Shot and Muzzle Flash</h1>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 3 of 5</span></p>
+<h1 id="tutorial-2-build-a-laser-shot-and-muzzle-flash">Tutorial 2: Build a Laser Shot and Muzzle Flash</h1>
 <p>This tutorial starts from a blank particle and builds a bright green laser shot with a projectile core, projectile glow, and short muzzle flash in the same particle system.</p>
 <p>The goal is to practice a common projectile layout: a small stack of emitters forms the moving shot and its glow, and a muzzle-flash group bursts briefly at the launch point.</p>
 <figure class="guide-media" aria-label="Show the finished green laser shot firing left-to-right with its layered muzzle flash, before the build steps."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-opening-result.mp4" data-poster="tutorial-03-opening-result-poster.jpg"></video></figure>
@@ -152,7 +152,7 @@
 </tbody>
 </table>
 <p>Keep the particle count tiny here (one or two). These muzzle layers are additive and will overlap the projectile and each other at the launch point; more particles just sum toward the shapeless white square the section below warns about.</p>
-<p>Shape the brightness with the color tracks rather than a constant: start the channels at zero, peak them early — within the first tenth of the life — and let them decay to black. This fast-in, slow-out envelope is a reliable way to make a flash read well, and you will see it in shipped flash effects (the explosion example in <a href="./05-build-an-explosion.html">Tutorial 5</a> peaks its flash at 10% too): the pop reads as an <em>event</em> with attack and decay rather than a sprite switching on and off. And since several additive layers will overlap at the launch point, keep each layer's peak modest — additive layers sum, and stacked layers at full brightness clip to a shapeless white square.</p>
+<p>Shape the brightness with the color tracks rather than a constant: start the channels at zero, peak them early — within the first tenth of the life — and let them decay to black. This fast-in, slow-out envelope is a reliable way to make a flash read well, and you will see it in shipped flash effects (the explosion example in <a href="./05-build-an-explosion.html">Tutorial 3</a> peaks its flash at 10% too): the pop reads as an <em>event</em> with attack and decay rather than a sprite switching on and off. And since several additive layers will overlap at the launch point, keep each layer's peak modest — additive layers sum, and stacked layers at full brightness clip to a shapeless white square.</p>
 <p>A muzzle flash fires once at the moment of launch, so it should generate as a burst, not a continuous stream. In the <strong>Basic</strong> tab, open the <strong>Generation</strong> section and set the Generation mode to <code>Bursts</code> (rather than <code>Continuous stream</code>). A single burst — <code>Bursts: 1</code> with a small <code>Particles/burst</code> — gives one clean flash instead of an emitter that keeps re-emitting for the whole life of the shot. This burst-versus-stream choice, together with the short lifetime, is what makes a launch flash read as a flash and not a steady jet. (The full rundown of the three generation modes is in <a href="./generation-types.html">Particle Generation Types</a>.)</p>
 <figure class="guide-media" aria-label="Show building the muzzle-flash core the way a user actually would: add a new emitter, rename it by typing, switch to Bursts, and step every setting to the finished values."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-muzzle-flash.mp4" data-poster="tutorial-03-muzzle-flash-poster.jpg"></video></figure>
 <h2 id="7-add-the-outer-glow-and-keep-it-at-the-launch-point">7. Add the Outer Glow and Keep It at the Launch Point</h2>
@@ -182,7 +182,7 @@
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
         <a class="pager-prev" href="./concepts-before-you-build.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Concepts Before You Build</span></a>
-        <a class="pager-next" href="./04-recolor-and-orient-a-shield-impact.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">4. Recolor and Orient a Shield Impact</span></a>
+        <a class="pager-next" href="./05-build-an-explosion.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">3. Build an Explosion</span></a>
       </nav>
     </main>
     <aside class="guide-sidebar" aria-label="Guide navigation">
@@ -202,11 +202,9 @@
       <p class="side-label">Tutorials</p>
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
-      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
       <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
-      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html" class="active" aria-current="page">3. Build a Laser Shot and Muzzle Flash</a></li>
-      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html" class="active" aria-current="page">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html">3. Build an Explosion</a></li>
       <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>

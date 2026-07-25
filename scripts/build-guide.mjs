@@ -388,19 +388,7 @@ function sidebarHtml(nav, activeSlug) {
       const items = sec.pages
         .map((p) => {
           const active = p.slug === activeSlug;
-          // A page whose clips are withdrawn pending re-record stays a normal link — the prose is
-          // complete and other pages treat it as prerequisite curriculum, so hiding or disabling
-          // it would make the guide contradict itself. The badge sets expectations instead.
-          const pending = p.status === "videos-pending";
-          // ONE merged class attribute: both states can apply at once (the reader can BE on a
-          // pending page), and emitting a second class= would drop whichever came first.
-          const classes = [active ? "active" : "", pending ? "is-pending" : ""].filter(Boolean).join(" ");
-          // The badge is deliberately inside the anchor and NOT aria-hidden: "…(Videos pending)"
-          // in the accessible name is the same useful warning sighted readers get. The brackets
-          // separate the badge from the title it sits flush against — without them it reads as
-          // part of the tutorial's name and is easy to miss.
-          const badge = pending ? ` <span class="side-pending">(Videos pending)</span>` : "";
-          return `      <li><a href="./${encodeURIComponent(p.slug)}.html"${classes ? ` class="${classes}"` : ""}${active ? ' aria-current="page"' : ""}>${escapeHtml(p.title)}${badge}</a></li>`;
+          return `      <li><a href="./${encodeURIComponent(p.slug)}.html"${active ? ' class="active" aria-current="page"' : ""}>${escapeHtml(p.title)}</a></li>`;
         })
         .join("\n");
       return `    <div class="side-group">\n      <p class="side-label">${escapeHtml(sec.label)}</p>\n      <ul>\n${items}\n      </ul>\n    </div>`;
@@ -538,7 +526,7 @@ function redirectHtml(firstSlug) {
 
 // ---- Build ----------------------------------------------------------------------------------
 
-function build() {
+function build({ previewDrafts = false } = {}) {
   const nav = JSON.parse(fs.readFileSync(join(SRC, "nav.json"), "utf8"));
   // Index the wiki-media manifest so `<!-- Media: id -->` anchors resolve to the right
   // embed kind (and fail loudly on an id the manifest doesn't know).
@@ -549,12 +537,26 @@ function build() {
       output: it.output, poster: it.poster,
     }]),
   );
-  // Flatten with section metadata so each page knows its kicker (section · N of M)
-  // and its prev/next neighbours in reading order.
-  const pages = nav.sections.flatMap((s) =>
+  const allPages = nav.sections.flatMap((s) => s.pages);
+  for (const p of allPages) {
+    if (p.publish !== undefined && typeof p.publish !== "boolean")
+      throw new Error(`nav.json page ${p.slug} has non-boolean publish`);
+  }
+  // `publish:false` keeps a validated Markdown draft in the authoring curriculum without
+  // exposing a sidebar entry, pager destination, generated HTML route, or public link target.
+  const publishedNav = {
+    ...nav,
+    sections: nav.sections
+      .map((s) => ({ ...s, pages: s.pages.filter((p) => p.publish !== false) }))
+      .filter((s) => s.pages.length),
+  };
+  // Flatten the published set with section metadata so each page knows its kicker
+  // (section · N of M) and its prev/next neighbours in reading order.
+  const pages = publishedNav.sections.flatMap((s) =>
     s.pages.map((p, i) => ({ ...p, section: s.label, sectionIndex: i + 1, sectionCount: s.pages.length })));
-  if (!pages.length) throw new Error("nav.json lists no pages");
+  if (!pages.length) throw new Error("nav.json lists no published pages");
   const knownSlugs = new Set(pages.map((p) => p.slug));
+  const allKnownSlugs = new Set(allPages.map((p) => p.slug));
 
   const guideHref = `./${pages[0].slug}.html`; // the "Guide" nav link targets the first page
 
@@ -562,12 +564,23 @@ function build() {
   // anchors during the render pass below.
   const sources = new Map(); // slug -> markdown
   const pageAnchors = new Map(); // slug -> Set<heading id>
-  for (const p of pages) {
+  for (const p of allPages) {
     const mdPath = join(SRC, `${p.slug}.md`);
     if (!fs.existsSync(mdPath)) throw new Error(`nav.json references ${p.slug} but ${mdPath} is missing`);
     const md = fs.readFileSync(mdPath, "utf8");
     sources.set(p.slug, md);
     pageAnchors.set(p.slug, headingIdsFor(md));
+  }
+  // Drafts still pass the Markdown/media/link validator. They may link to other drafts while
+  // being developed, but published pages are rendered against `knownSlugs` below and therefore
+  // fail loudly if they point into the unpublished set.
+  for (const p of allPages.filter((page) => page.publish === false)) {
+    renderMarkdown(sources.get(p.slug), {
+      knownSlugs: allKnownSlugs,
+      pageAnchors,
+      sourcePage: p.slug,
+      media,
+    });
   }
 
   const outputs = new Map(); // relative path under site/guide -> html
@@ -577,12 +590,31 @@ function build() {
     outputs.set(`${p.slug}.html`, pageHtml({
       title: p.title,
       guideHref,
-      sidebar: sidebarHtml(nav, p.slug),
+      sidebar: sidebarHtml(publishedNav, p.slug),
       kicker: kickerHtml(p),
       content: html,
       pager: pagerHtml(pages[idx - 1], pages[idx + 1]),
       toc: tocHtml(toc),
     }));
+  }
+  if (previewDrafts) {
+    for (const p of allPages.filter((page) => page.publish === false)) {
+      const { html, toc } = renderMarkdown(sources.get(p.slug), {
+        knownSlugs: allKnownSlugs,
+        pageAnchors,
+        sourcePage: p.slug,
+        media,
+      });
+      outputs.set(`${p.slug}.html`, pageHtml({
+        title: p.title,
+        guideHref,
+        sidebar: sidebarHtml(publishedNav, ""),
+        kicker: `<p class="guide-kicker">Draft · Not published</p>`,
+        content: html,
+        pager: "",
+        toc: tocHtml(toc),
+      }));
+    }
   }
   outputs.set("index.html", redirectHtml(pages[0].slug));
   return outputs;
@@ -614,7 +646,14 @@ function runCli() {
   } else {
     fs.mkdirSync(OUT, { recursive: true });
     for (const [rel, html] of outputs) fs.writeFileSync(join(OUT, rel), html);
-    console.log(`wrote ${outputs.size} files to site/guide/`);
+    let removed = 0;
+    for (const f of fs.readdirSync(OUT)) {
+      if (f.endsWith(".html") && !outputs.has(f)) {
+        fs.unlinkSync(join(OUT, f));
+        removed++;
+      }
+    }
+    console.log(`wrote ${outputs.size} files to site/guide${removed ? `; removed ${removed} unpublished/orphaned page(s)` : ""}`);
   }
 }
 

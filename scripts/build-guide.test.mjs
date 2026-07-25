@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { renderMedia } from "./build-guide.mjs";
+import { build, renderMedia } from "./build-guide.mjs";
 
 // renderMedia takes (id, context) where context = { media: Map<id, item>, sourcePage }.
 function ctx(entries) {
@@ -56,4 +56,14 @@ test("attribute-bearing purpose text is HTML-escaped in alt/aria-label", () => {
   }));
   assert.match(html, /aria-label="a &quot;quoted&quot; &lt;tag&gt; &amp; amp"/);
   assert.ok(!html.includes('aria-label="a "quoted"'), "raw quote must not break out of the attribute");
+});
+
+test("unpublished pages are omitted by default but available to the local draft preview", () => {
+  const publicOutputs = build();
+  assert.equal(publicOutputs.has("02-polish-hardpoint-damage-smoke.html"), false);
+  assert.equal(publicOutputs.has("04-recolor-and-orient-a-shield-impact.html"), false);
+
+  const previewOutputs = build({ previewDrafts: true });
+  assert.match(previewOutputs.get("02-polish-hardpoint-damage-smoke.html"), /Draft · Not published/);
+  assert.match(previewOutputs.get("04-recolor-and-orient-a-shield-impact.html"), /Draft · Not published/);
 });

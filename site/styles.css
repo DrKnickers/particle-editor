@@ -183,6 +183,85 @@ main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
 /* hover-accent ring on playable clips */
 .clip:has(.clip-video):hover { border-color:rgba(74,139,255,.5); }
 
+.theme-compare-stage {
+  position:relative;
+  aspect-ratio:4 / 3;
+  overflow:hidden;
+  background:var(--frame-2);
+}
+.theme-compare > .theme-compare-stage { display:none; }
+.theme-compare.is-enhanced > .theme-compare-stage { display:block; }
+.theme-compare-image {
+  position:absolute;
+  inset:0;
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.theme-compare-light { clip-path:inset(0 0 0 var(--theme-split)); }
+.theme-compare-label {
+  position:absolute;
+  inset-block-start:.75rem;
+  z-index:1;
+  padding:.3rem .45rem;
+  border:1px solid color-mix(in srgb, var(--paper) 24%, transparent);
+  border-radius:2px;
+  background:color-mix(in srgb, var(--frame-2) 84%, transparent);
+  color:var(--paper);
+  font-family:var(--mono);
+  font-size:.72rem;
+  line-height:1;
+  letter-spacing:.04em;
+}
+.theme-compare-label-dark { inset-inline-start:.75rem; }
+.theme-compare-label-light { inset-inline-end:.75rem; }
+.theme-compare-divider {
+  position:absolute;
+  inset-block:0;
+  left:var(--theme-split);
+  z-index:1;
+  width:1px;
+  transform:translateX(-50%);
+  background:color-mix(in srgb, var(--paper) 82%, transparent);
+  pointer-events:none;
+}
+.theme-compare-grip {
+  position:absolute;
+  top:50%;
+  left:50%;
+  width:3px;
+  height:28px;
+  border-radius:2px;
+  transform:translate(-50%, -50%);
+  background:var(--paper);
+}
+.theme-compare-range {
+  position:absolute;
+  inset:0;
+  z-index:2;
+  width:100%;
+  height:100%;
+  margin:0;
+  opacity:0;
+  cursor:ew-resize;
+  touch-action:pan-y;
+}
+.theme-compare-stage:has(.theme-compare-range:focus-visible) {
+  outline:3px solid var(--accent);
+  outline-offset:-4px;
+}
+.theme-compare.has-dark-error .theme-compare-dark,
+.theme-compare.has-light-error .theme-compare-light,
+.theme-compare.has-dark-error .theme-compare-label-dark,
+.theme-compare.has-light-error .theme-compare-label-light {
+  display:none;
+}
+.theme-compare.has-dark-error .theme-compare-light { clip-path:none; }
+.theme-compare:is(.has-dark-error, .has-light-error) :is(.theme-compare-range, .theme-compare-divider) {
+  display:none;
+}
+
 /* ---- Toolset grid (section 6) ---- */
 .toolset-body { margin-top:2.5rem; }
 .cluster { margin:0 0 2.3rem; }

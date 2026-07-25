@@ -1,4 +1,4 @@
-# Tutorial 5: Build an Explosion
+# Tutorial 3: Build an Explosion
 
 This tutorial builds a complete small explosion — the kind that plays when a fighter or a small
 structure dies. It is modelled on two example particles, `P_EXPLOSION_EXAMPLE.ALO` and
@@ -179,8 +179,7 @@ Build one additive root emitter named `Shockwave`:
 | Color | dim orange — R 0.12 / G 0.06 / B 0.04, peaking ~5% then fading to black |
 
 The small **Initial spawn delay** makes it read as a *consequence* of the flash rather than
-simultaneous with it. Tutorial 4's shield ripple uses this same world-oriented trick to lie flat
-on the shield surface.
+simultaneous with it.
 
 Preview with the Spawner. At this stage the whole effect is one bright pop with a ring pushing out
 of it — correct so far.

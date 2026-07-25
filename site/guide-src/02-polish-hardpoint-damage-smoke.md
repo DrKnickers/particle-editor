@@ -1,4 +1,4 @@
-# Tutorial 2: Polish Hardpoint Damage Smoke
+# Draft Tutorial: Polish Hardpoint Damage Smoke
 
 This tutorial starts from the obvious green proof edit and turns it into believable dark hardpoint
 damage smoke with a subtle warm tint near the source.
@@ -91,7 +91,7 @@ Both ends matter, for different reasons. Smoke that fades out feels like it disp
 simply stops feels switched off. And smoke that starts at full opacity *pops* into existence —
 the quick ramp over the first tenth of the life is what makes each puff appear softly. Fast in,
 slow out is the standard envelope for almost anything soft, and you will meet it again on the
-explosion's smoke in [Tutorial 5](05-build-an-explosion).
+explosion's smoke in [Tutorial 3](05-build-an-explosion).
 
 ## 4. Let the Smoke Grow as It Fades
 
@@ -132,14 +132,14 @@ and you will find every one of these in use:
   clockwise, so the cloud churns instead of holding one frozen orientation. (The **Rotation
   average/variance** spinners next to it serve a different purpose — a random *starting angle*,
   rolled as the average scaled by ± the variance, used when **Fixed random rotation** is checked;
-  Tutorial 5's flipbook fireball shows that one in action.)
+  Tutorial 3's flipbook fireball shows that one in action.)
 - **Affected by wind** (Physics tab) — the stock smoke also checks this, letting the scene's wind
   push the plume so it does not rise in a perfectly straight column.
 
 The principle behind all of them: **variety should come from randomization inside the emitter,
 not from duplicating emitters.** A duplicate costs performance and future maintenance; these
 spinners cost nothing. This idea returns at full scale in
-[Tutorial 5](05-build-an-explosion), where it carries most of the explosion's texture.
+[Tutorial 3](05-build-an-explosion), where it carries most of the explosion's texture.
 
 ## 6. Check the Effect at Gameplay Readability
 

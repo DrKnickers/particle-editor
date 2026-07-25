@@ -15,6 +15,7 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, resolve, relative, isAbsolute, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { build as buildGuide } from "./build-guide.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLIENT_JS = join(HERE, "guide-edit-client.js");
@@ -148,7 +149,28 @@ function serveStatic(req, res) {
   if (!file) { res.writeHead(403); res.end("forbidden"); return; }
   if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = join(file, "index.html");
   fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404); res.end("not found: " + req.url); return; }
+    if (err) {
+      const guideRel = relative(join(SITE, "guide"), file);
+      if (!guideRel.startsWith("..") && !isAbsolute(guideRel) && extname(guideRel) === ".html") {
+        let draftHtml;
+        try {
+          draftHtml = buildGuide({ previewDrafts: true }).get(guideRel);
+        } catch (draftError) {
+          res.writeHead(503, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+          res.end("draft preview unavailable: " + (draftError?.message || draftError));
+          return;
+        }
+        if (draftHtml) {
+          const html = draftHtml.includes("</body>")
+            ? draftHtml.replace("</body>", LIVERELOAD + "\n</body>")
+            : draftHtml + LIVERELOAD;
+          res.writeHead(200, { "content-type": MIME[".html"], "cache-control": "no-store" });
+          res.end(html);
+          return;
+        }
+      }
+      res.writeHead(404); res.end("not found: " + req.url); return;
+    }
     const ext = extname(file).toLowerCase();
     const type = MIME[ext] || "application/octet-stream";
     if (ext === ".html") {

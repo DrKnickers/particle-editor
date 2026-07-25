@@ -54,6 +54,23 @@ const CLIPS = [
     partialScan: { start: 0 },                  // default viewport crop
   },
   {
+    name: "interface-overhaul",
+    timeline: "tasks/clips/interface-overhaul.timeline.json",
+    frames: "clips/interface-overhaul",
+    encode: ["--frames", "clips/interface-overhaul", "--fps", "60",
+             "--loop", "crossfade", "--crossfade", "1.0",
+             "--crop", "1264:952:8:0", "--crf", "16",
+             "--out", "site/media-local/interface-overhaul.mp4",
+             "--poster", "site/media-local/interface-overhaul-poster.jpg", "--poster-frame", "60"],
+    gates: [
+      // The toolbar/panel chrome must round-trip exactly. The live particle lifecycle is
+      // crossfade-owned and requires the README's full-frame visual seam oracle.
+      ["scripts/clip-verify/seam-match.mjs", "--frames", "clips/interface-overhaul",
+       "--start", "0", "--crop", "1264:150:8:0"],
+    ],
+    partialScan: { start: 0 },
+  },
+  {
     name: "faith",                              // README.md:88-125
     timeline: "tasks/clips/faith.timeline.json",
     frames: "clips/faith",

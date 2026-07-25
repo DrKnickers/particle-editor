@@ -8,9 +8,9 @@ emitter makes:
 3. **How does its path bend over time?** — the *Acceleration* section.
 
 Every motion effect you will ever build is some combination of answers to those three questions,
-so it is worth reading each section below with its question in mind. Tutorial 3 uses exactly one
+so it is worth reading each section below with its question in mind. Tutorial 2 uses exactly one
 of these controls (`Parent speed inherit`); this page covers the rest, and it is the reference to
-have open when you build the explosion in [Tutorial 5](05-build-an-explosion).
+have open when you build the explosion in [Tutorial 3](05-build-an-explosion).
 
 <!-- Media: ref-radial-burst -->
 
@@ -44,13 +44,13 @@ differently on screen:
 
 - **Random-direction spray** — put the Sphere on **Initial speed**. Each particle rolls its own
   direction, unrelated to where it was born. The result is chaotic and lively: embers, sparks,
-  splinters. This is how Tutorial 5's sparks work.
+  splinters. This is how Tutorial 3's sparks work.
 - **Radial launch** — put the Sphere on **Initial position** with `Constrain to surface` checked,
   then drive the speed with a large *negative* **Inward speed** (see below). Each particle is
   born on a shell and pushed straight along the line from the center through its own birth
   point — and as long as nothing else bends it (leave **Initial speed** at its default and add no
   acceleration or gravity), every path is dead-straight and radial, like shrapnel. This is how
-  Tutorial 5's debris works — though it adds a little Initial-speed scatter so the chunks aren't
+  Tutorial 3's debris works — though it adds a little Initial-speed scatter so the chunks aren't
   *perfectly* radial.
 
 The spray randomizes *direction*; the radial launch locks direction to *birth position*. Choose
@@ -63,7 +63,7 @@ by what the layer represents: burning fragments scatter, thrown wreckage flies s
   value pushes them outward, on top of whatever the speed shape rolled.
 - **Parent speed inherit:** sets how much of the parent's motion continues to affect each
   particle, from 0 to 100%. It keeps affecting the particle after launch — it is not just an
-  initial speed. Tutorial 3 covers the classic use: projectile layers at full inheritance ride
+  initial speed. Tutorial 2 covers the classic use: projectile layers at full inheritance ride
   the shot; muzzle-flash layers at zero stay at the launch point.
 - **Affected by wind:** adds the scene's wind to each particle's launch speed — a one-time nudge
   at birth, not a force that keeps pushing over the particle's life.
@@ -76,7 +76,7 @@ Where Initial speed sets motion once at start, the Acceleration section bends it
   make smoke rise.
 - **Gravity acceleration:** a single number that scales a built-in straight-down push. `1` is a
   standard downward pull; `0` is weightless; and a **negative value pushes up** — the idiomatic
-  way to make hot smoke and fire rise (Tutorial 5's smoke uses `-0.9`) without configuring an
+  way to make hot smoke and fire rise (Tutorial 3's smoke uses `-0.9`) without configuring an
   acceleration vector by hand. Give debris a little positive gravity and its straight radial
   flight becomes an arc.
 - **Inward acceleration:** like Inward speed, but applied continuously — it keeps bending a
@@ -110,7 +110,7 @@ apply. If Physics fields are unexpectedly grayed out, check the Generation secti
 
 ## Related Pages
 
-- [Tutorial 5: Build an Explosion](05-build-an-explosion) — puts the Sphere speed shape,
+- [Tutorial 3: Build an Explosion](05-build-an-explosion) — puts the Sphere speed shape,
   lifetime variation, and gravity to work.
 - [Particle Generation Types](generation-types) — bursts vs. streams vs. weather.
 - [Curve Editor Basics](curve-editor-basics) — the lifetime curves these motions pair with.

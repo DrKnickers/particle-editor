@@ -1,4 +1,4 @@
-# Tutorial 4: Recolor and Orient a Shield Impact
+# Draft Tutorial: Recolor and Orient a Shield Impact
 
 This tutorial overrides `P_SHIELD_BLAST_LARGE00.ALO`, recolors it into an obvious purple variant,
 and uses the editor preview to study impact orientation.
@@ -145,7 +145,7 @@ flat, too thick, or misaligned for the context you imagine.
 For impact-style particles, you can check `Link particles to instance` in the Basic tab's
 Connection section on emitters that should ride with the impact instance as it moves. This
 checkbox makes already-spawned particles move with the effect instance's position; it does not
-rotate them, and it is separate from the `Parent speed inherit` control used in Tutorial 3. The
+rotate them, and it is separate from the `Parent speed inherit` control used in Tutorial 2. The
 effect's *orientation* comes from how it is authored and placed, covered next — not from this
 checkbox.
 

@@ -1,9 +1,9 @@
 # Concepts Before You Build
 
-Tutorials 1 and 2 changed an effect that already existed — you adjusted colors and curves on a
-particle that was handed to you. From Tutorial 3 on, you build effects **from a blank file**. That
-is a bigger jump than it sounds: with nothing on screen, you have to decide what every emitter is
-and does before anything appears.
+Tutorial 1 changed an effect that already existed — you adjusted colors and curves on a particle
+that was handed to you. From Tutorial 2 on, you build effects **from a blank file**. That is a
+bigger jump than it sounds: with nothing on screen, you have to decide what every emitter is and
+does before anything appears.
 
 This short page is the bridge. It is not new reference material — it is the handful of decisions
 you now have to make yourself, each pointing at the fuller page that covers it. Read it once, then

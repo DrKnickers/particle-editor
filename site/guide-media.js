@@ -15,9 +15,48 @@ const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
 const videos = Array.from(document.querySelectorAll(".clip-video"));
 const images = Array.from(document.querySelectorAll(".clip-img"));
 
+// The returning-user comparison is meaningful before this script runs: its two labeled
+// figures are an ordinary responsive grid. Enhancement overlays the matched images and keeps
+// one native range as the only split state, so pointer, touch, and keyboard stay in sync.
+for (const comparison of document.querySelectorAll("[data-ui-compare]")) {
+  const range = comparison.querySelector(".ui-compare-range");
+  if (!(range instanceof HTMLInputElement)) continue;
+
+  const applySplit = () => {
+    const split = Math.min(100, Math.max(0, Number(range.value)));
+    comparison.style.setProperty("--compare-split", `${split}%`);
+    range.setAttribute(
+      "aria-valuetext",
+      `${split}% GlyphX Particle Editor v1.5, ${100 - split}% current interface`,
+    );
+  };
+
+  range.addEventListener("input", applySplit);
+  for (const button of comparison.querySelectorAll("[data-compare-value]")) {
+    button.addEventListener("click", () => {
+      range.value = button.dataset.compareValue;
+      applySplit();
+      range.focus();
+    });
+  }
+  for (const image of comparison.querySelectorAll("[data-compare-layer]")) {
+    const errorClass = `has-${image.dataset.compareLayer}-error`;
+    const markError = () => comparison.classList.add(errorClass);
+    image.addEventListener("error", markError);
+    image.addEventListener("load", () => comparison.classList.remove(errorClass));
+    if (image.dataset.poster) image.src = MEDIA_BASE + image.dataset.poster;
+    if (image.complete && image.naturalWidth === 0) markError();
+  }
+
+  applySplit();
+  comparison.classList.add("is-enhanced");
+}
+
 // Posters first (cheap, avoids a blank frame); stills get their src the same way.
 for (const v of videos) if (v.dataset.poster) v.poster = MEDIA_BASE + v.dataset.poster;
-for (const img of images) if (img.dataset.poster) img.src = MEDIA_BASE + img.dataset.poster;
+for (const img of images)
+  if (img.dataset.poster && !img.matches("[data-compare-layer]"))
+    img.src = MEDIA_BASE + img.dataset.poster;
 
 // Start/resume one clip when it's in view and motion is allowed. Loads src lazily on first
 // start so below-fold clips never fetch until needed (preload="none" + this gate).

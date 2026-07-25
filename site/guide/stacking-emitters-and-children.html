@@ -75,7 +75,7 @@
 </ul>
 <p>Because the child is bound to each parent particle, one parent emitting many particles produces many little child effects — one trailing or triggering per particle. That multiplication is the whole point, but it also means a busy parent with a heavy child can add up quickly, so keep child effects light.</p>
 <h2 id="link-groups-copies-that-stay-in-sync">Link Groups: Copies That Stay in Sync</h2>
-<p>Sometimes the right design is <em>several copies of the same emitter</em>. Tutorial 5's debris is the canonical case: each debris emitter throws one chunk per burst, so four identical copies give four independent chunks — but four separate copies would be a maintenance trap, because every future tweak would have to be repeated on all of them by hand.</p>
+<p>Sometimes the right design is <em>several copies of the same emitter</em>. Tutorial 3's debris is the canonical case: each debris emitter throws one chunk per burst, so four identical copies give four independent chunks — but four separate copies would be a maintenance trap, because every future tweak would have to be repeated on all of them by hand.</p>
 <p>A <strong>Link Group</strong> solves this. Linked emitters share their design: edit any one member and the edit propagates to every other member. To create one, select the emitters (click, then <strong>Ctrl+click</strong> the others, or <strong>Shift+click</strong> a range), right-click → <strong>Set Link Group…</strong>, and choose <strong>Create new group</strong>. Members show a colored link dot in the Emitter Tree.</p>
 <p>Two related commands complete the tool:</p>
 <ul>
@@ -93,7 +93,7 @@
 <li>Several identical instances of one design → duplicate it and make the copies a <strong>Link Group</strong>.</li>
 </ul>
 <p>When in doubt, stack siblings. Children are the specialized tool for the cases where a part of the effect must ride on another emitter's particles.</p>
-<p><a href="./05-build-an-explosion.html">Tutorial 5: Build an Explosion</a> puts the patterns to work — stacked root emitters for the layers, and a four-member Link Group for the debris.</p>
+<p><a href="./05-build-an-explosion.html">Tutorial 3: Build an Explosion</a> puts the patterns to work — stacked root emitters for the layers, and a four-member Link Group for the debris.</p>
 <figure class="guide-media" aria-label="Show a parent emitting moving particles, then Add Lifetime Child giving each one its own trail."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-lifetime-child-trail.mp4" data-poster="ref-lifetime-child-trail-poster.jpg"></video></figure>
 <figure class="guide-media" aria-label="Show Add Death Child making a small flash fire where each parent particle dies."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-death-child-pop.mp4" data-poster="ref-death-child-pop-poster.jpg"></video></figure>
       </article>
@@ -119,11 +119,9 @@
       <p class="side-label">Tutorials</p>
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
-      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
       <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
-      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
-      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./05-build-an-explosion.html">5. Build an Explosion</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html">3. Build an Explosion</a></li>
       <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>

@@ -17,9 +17,10 @@ const MEDIA = resolve(SITE, "media-local");
 const STEMS = ["hero", "faith", "f04", "spawner", "f02-reorder", "f02"];
 const CLIPS = STEMS.map((s) => `${s}.mp4`);
 const POSTERS = STEMS.map((s) => `${s}-poster.jpg`);
+const STILLS = ["interface-theme-dark.jpg", "interface-theme-light.jpg"];
 
 export default function () {
-  const missing = [...CLIPS, ...POSTERS].filter((f) => !existsSync(resolve(MEDIA, f)));
+  const missing = [...CLIPS, ...POSTERS, ...STILLS].filter((f) => !existsSync(resolve(MEDIA, f)));
   if (!missing.length) return;
   mkdirSync(MEDIA, { recursive: true });
   const tmpClip = resolve(MEDIA, ".placeholder-clip.tmp.mp4");

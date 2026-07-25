@@ -11,7 +11,11 @@ import { resolve } from "node:path";
 const SITE = fileURLToPath(new URL("../../../../site", import.meta.url));
 const MEDIA = resolve(SITE, "media-local");
 const STEMS = ["hero", "faith", "f04", "spawner", "f02-reorder", "f02"];
-const REQUIRED = STEMS.flatMap((s) => [`${s}.mp4`, `${s}-poster.jpg`]).map((f) => resolve(MEDIA, f));
+const STILLS = ["interface-theme-dark.jpg", "interface-theme-light.jpg"];
+const REQUIRED = [
+  ...STEMS.flatMap((s) => [`${s}.mp4`, `${s}-poster.jpg`]),
+  ...STILLS,
+].map((f) => resolve(MEDIA, f));
 const HAS_MEDIA = REQUIRED.every((p) => existsSync(p));
 
 // Point MEDIA_BASE at the locally-served placeholder media, before any page script runs.
@@ -19,13 +23,25 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => { (window as any).__MEDIA_BASE__ = "/media-local/"; });
 });
 
-test("structure: hero, 6 features, footer; no uncaught JS errors", async ({ page }) => {
+test("structure: hero, 7 ordered features, footer; no uncaught JS errors", async ({ page }) => {
   const jsErrors: string[] = [];
   page.on("pageerror", (e) => jsErrors.push(String(e))); // uncaught JS only — resource
                                                           // errors don't count
   await page.goto("/");
   await expect(page.locator("h1")).toHaveText("Edit and preview Empire at War particle effects.");
-  await expect(page.locator("section.feature")).toHaveCount(6);
+  await expect(page.locator("section.feature")).toHaveCount(7);
+  await expect(page.locator("section.feature h2")).toHaveText([
+    "A rebuilt interface",
+    "Scene references",
+    "Ordered mod loading",
+    "Spawner controls",
+    "Emitter reordering",
+    "Atlas frame picker",
+    "Other editing and recovery tools",
+  ]);
+  await expect(page.locator("section.feature .section-number")).toHaveText([
+    "1", "2", "3", "4", "5", "6", "7",
+  ]);
   await expect(page.locator("header.topbar")).toBeVisible();
   await expect(page.locator("footer.site-footer")).toBeVisible();
   expect(jsErrors, jsErrors.join("\n")).toHaveLength(0);
@@ -34,7 +50,7 @@ test("structure: hero, 6 features, footer; no uncaught JS errors", async ({ page
 test("clip slots: loop/muted/playsinline + reserved 4:3 dims + poster set", async ({ page }) => {
   await page.goto("/");
   const vids = page.locator("video.clip-video");
-  await expect(vids).toHaveCount(STEMS.length); // hero + 5 feature clips (s6 is a link grid, no clip)
+  await expect(vids).toHaveCount(STEMS.length); // hero + 5 feature clips (interface is a still comparison)
   const n = await vids.count();
   for (let i = 0; i < n; i++) {
     const v = vids.nth(i);
@@ -45,6 +61,134 @@ test("clip slots: loop/muted/playsinline + reserved 4:3 dims + poster set", asyn
     await expect(v).toHaveAttribute("height", "960");
     // poster is set from data-poster by main.js (reserves a real frame)
     await expect.poll(() => v.evaluate((el: HTMLVideoElement) => el.poster)).not.toBe("");
+  }
+});
+
+test("interface section provides an accessible dark and light comparison", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  await page.goto("/");
+  const section = page.locator("section.feature").first();
+  await expect(section.locator(".section-label")).toContainText("Interface");
+  await expect(section).toContainText(
+    "The emitter tree, properties, curves, and live preview remain visible",
+  );
+  const comparison = section.locator("[data-theme-compare]");
+  await expect(comparison).toHaveCount(1);
+  await expect(comparison).toHaveClass(/is-enhanced/);
+  await expect(comparison.locator('[data-theme-layer="dark"]'))
+    .toHaveAttribute("data-poster", "interface-theme-dark.jpg");
+  await expect(comparison.locator('[data-theme-layer="light"]'))
+    .toHaveAttribute("data-poster", "interface-theme-light.jpg");
+  await expect(comparison).toHaveAttribute(
+    "aria-label",
+    "The same Particle Editor workspace in dark and light themes.",
+  );
+  const range = comparison.getByRole("slider", {
+    name: "Compare dark and light interface",
+  });
+  const lightLayer = comparison.locator('[data-theme-layer="light"]');
+  await expect(range).toHaveValue("50");
+  await expect(comparison).toHaveCSS("--theme-split", "50%");
+
+  await range.focus();
+  await range.press("End");
+  await expect(range).toHaveValue("100");
+  await expect(comparison).toHaveCSS("--theme-split", "100%");
+  await expect(lightLayer).toHaveCSS("clip-path", "inset(0px 0px 0px 100%)");
+  await expect(range).toHaveAttribute(
+    "aria-valuetext",
+    "100% dark interface, 0% light interface",
+  );
+  await range.press("Home");
+  await expect(range).toHaveValue("0");
+  await expect(comparison).toHaveCSS("--theme-split", "0%");
+  await expect(lightLayer).toHaveCSS("clip-path", "inset(0px 0px 0px 0%)");
+  await expect(range).toHaveAttribute(
+    "aria-valuetext",
+    "0% dark interface, 100% light interface",
+  );
+  await range.press("ArrowRight");
+  await expect(range).toHaveValue("1");
+  await expect(comparison).toHaveCSS("--theme-split", "1%");
+  await expect(lightLayer).toHaveCSS("clip-path", "inset(0px 0px 0px 1%)");
+  await expect(range).toHaveAttribute(
+    "aria-valuetext",
+    "1% dark interface, 99% light interface",
+  );
+
+  const box = await range.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  await range.click({ position: { x: box!.width * 0.75, y: box!.height / 2 } });
+  const pointerValue = Number(await range.inputValue());
+  expect(pointerValue).toBeGreaterThan(70);
+  await expect(comparison).toHaveCSS("--theme-split", `${pointerValue}%`);
+  await expect(lightLayer).toHaveCSS(
+    "clip-path",
+    `inset(0px 0px 0px ${pointerValue}%)`,
+  );
+  await expect(range).toHaveAttribute(
+    "aria-valuetext",
+    `${pointerValue}% dark interface, ${100 - pointerValue}% light interface`,
+  );
+  await expect(range).toHaveCSS("touch-action", "pan-y");
+
+  await comparison.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  expect(requests.some((url) => url.includes("interface-overhaul.mp4"))).toBe(false);
+  await expect(section.locator(".media-draft-note")).toHaveCount(0);
+});
+
+test("media version query cache-busts interface stills", async ({ page }) => {
+  await page.goto("/?v=interface-overhaul-final");
+  const comparison = page.locator("[data-theme-compare]");
+  await comparison.scrollIntoViewIfNeeded();
+  await expect.poll(() => comparison.locator('[data-theme-layer="dark"]').evaluate(
+    (el: HTMLImageElement) => el.currentSrc,
+  )).toMatch(/interface-theme-dark\.jpg\?v=interface-overhaul-final$/);
+  await expect.poll(() => comparison.locator('[data-theme-layer="light"]').evaluate(
+    (el: HTMLImageElement) => el.currentSrc,
+  )).toMatch(/interface-theme-light\.jpg\?v=interface-overhaul-final$/);
+});
+
+test("interface comparison remains useful without JavaScript", async ({ browser }) => {
+  const context = await browser.newContext({
+    baseURL: test.info().project.use.baseURL as string,
+    javaScriptEnabled: false,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto("/");
+    const comparison = page.locator("[data-theme-compare]");
+    const stage = comparison.locator("noscript .theme-compare-stage");
+    await expect(stage).toBeVisible();
+    const images = stage.locator("img");
+    await expect(images).toHaveCount(2);
+    const stageBox = await stage.boundingBox();
+    const imageBoxes = await images.evaluateAll((elements) => elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height };
+    }));
+    expect(stageBox).not.toBeNull();
+    expect(stageBox!.width / stageBox!.height).toBeCloseTo(4 / 3, 1);
+    expect(imageBoxes).toEqual([
+      { x: stageBox!.x, y: stageBox!.y, width: stageBox!.width, height: stageBox!.height },
+      { x: stageBox!.x, y: stageBox!.y, width: stageBox!.width, height: stageBox!.height },
+    ]);
+    const lightLayer = stage.locator(".theme-compare-light");
+    await expect(lightLayer).toHaveCSS("clip-path", "inset(0px 0px 0px 50%)");
+    const dividerOffset = await stage.locator(".theme-compare-divider").evaluate(
+      (element) => Number.parseFloat(getComputedStyle(element).left),
+    );
+    expect(dividerOffset).toBeCloseTo(stageBox!.width / 2, 1);
+    await expect(stage.getByText("Dark", { exact: true })).toBeVisible();
+    await expect(stage.getByText("Light", { exact: true })).toBeVisible();
+    await expect(page.getByRole("slider", {
+      name: "Compare dark and light interface",
+    })).toHaveCount(0);
+  } finally {
+    await context.close();
   }
 });
 

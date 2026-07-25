@@ -67,9 +67,8 @@ emitter is the whole effect. Select it in the Emitter Tree — its properties fi
 Panel and its lifetime curves fill the Curve Editor, making it the edit target.
 
 Most shipped particles have several emitters, and then the useful habit is: select one emitter,
-observe what it contributes in the Preview Viewport, then move to the next. Tutorial 4 opens a
-two-emitter particle and leans on exactly that habit. Particles become much easier to author when
-you can connect an emitter row to a visible part of the effect.
+observe what it contributes in the Preview Viewport, then move to the next. Particles become much
+easier to author when you can connect an emitter row to a visible part of the effect.
 
 ## 3. Make the Smoke Bright Green
 

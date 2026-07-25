@@ -16,11 +16,11 @@
       "label": "Tutorials",
       "pages": [
         { "slug": "01-make-a-hardpoint-damage-effect-obvious", "title": "1. Make a Hardpoint Damage Effect Obvious" },
-        { "slug": "02-polish-hardpoint-damage-smoke", "title": "2. Polish Hardpoint Damage Smoke", "status": "videos-pending" },
+        { "slug": "02-polish-hardpoint-damage-smoke", "title": "Draft: Polish Hardpoint Damage Smoke", "publish": false },
         { "slug": "concepts-before-you-build", "title": "Concepts Before You Build" },
-        { "slug": "03-build-a-laser-shot-and-muzzle-flash", "title": "3. Build a Laser Shot and Muzzle Flash" },
-        { "slug": "04-recolor-and-orient-a-shield-impact", "title": "4. Recolor and Orient a Shield Impact", "status": "videos-pending" },
-        { "slug": "05-build-an-explosion", "title": "5. Build an Explosion" },
+        { "slug": "03-build-a-laser-shot-and-muzzle-flash", "title": "2. Build a Laser Shot and Muzzle Flash" },
+        { "slug": "04-recolor-and-orient-a-shield-impact", "title": "Draft: Recolor and Orient a Shield Impact", "publish": false },
+        { "slug": "05-build-an-explosion", "title": "3. Build an Explosion" },
         { "slug": "build-your-own-effect", "title": "Build Your Own Effect" }
       ]
     },

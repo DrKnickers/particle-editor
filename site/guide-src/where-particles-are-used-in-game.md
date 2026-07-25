@@ -25,15 +25,14 @@ smoke, debris-like motion, and sound. Large set-piece effects, such as an ion ca
 use the same authoring concerns at a bigger scale: the player should understand the source,
 direction, and result quickly.
 
-[Tutorial 5](05-build-an-explosion) builds exactly this kind of effect — flash, fireball, smoke,
+[Tutorial 3](05-build-an-explosion) builds exactly this kind of effect — flash, fireball, smoke,
 and sparks — from a blank particle.
 
 ## Weapon Fire, Impacts, and Ion Effects
 
 Weapon particles can appear at muzzle flashes, projectile visuals, trails, shield hits, armor hits,
 ground impacts, and ion-style disruption effects. These can use similar authoring ideas, but
-orientation and surface context matter. Tutorial 4 uses a shield impact because it gives a clear
-reason to think about direction.
+orientation and surface context matter.
 
 ## Ability and State Effects
 
@@ -47,7 +46,7 @@ Projectile visuals may be meshes, particles, or a mix of both. Some modders use 
 projectile model itself. A common layout uses one group of emitters for the projectile core and trail,
 and another group for a muzzle flash that does not inherit the projectile's travel speed.
 
-Tutorial 3 builds both ideas in one particle so you can practice the authoring pattern without
+Tutorial 2 builds both ideas in one particle so you can practice the authoring pattern without
 opening a modeling tool.
 
 ## Model-Attached Particles and Proxies

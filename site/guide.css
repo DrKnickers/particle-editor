@@ -39,13 +39,6 @@ body.guide {
 }
 .guide-sidebar a:hover { color: var(--paper); }
 .guide-sidebar a.active { color: var(--accent); border-left-color: var(--accent); }
-/* Pages whose clips are withdrawn pending re-record: the link stays fully usable, so only the
-   badge is muted — the title keeps normal body contrast rather than dimming a working link. */
-.side-pending {
-  display: block; font-family: var(--mono); font-size: .64rem; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--faint); margin-top: .15rem;
-}
-.guide-sidebar a.active .side-pending { color: var(--accent); opacity: .8; }
 
 /* ---- Article ---- */
 /* max-width:100% clamps the grid item to its track: without it Chromium lets a wide-min-
@@ -145,6 +138,199 @@ body.guide {
   color: var(--faint);
   font-size: .86rem;
   line-height: 1.5;
+}
+
+/* ---- Returning-user interface reveal ----
+   The base state is deliberately plain: two complete labeled figures. JavaScript adds
+   `.is-enhanced` only after it wires the native range, then those figures become aligned
+   layers. The comparison therefore survives script or image failure. */
+.ui-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+  margin: 1.6rem 0 2.5rem;
+  max-width: 100%;
+}
+.guide-article .ui-compare-status {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: .6rem .75rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: .7rem;
+  line-height: 1.45;
+}
+.ui-compare-head,
+.ui-compare-controls,
+.ui-compare-divider,
+.ui-compare-range { display: none; }
+.ui-compare-figure {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--frame-2);
+}
+.ui-compare-figure figcaption {
+  min-height: 3.2rem;
+  padding: .65rem .75rem;
+  border-bottom: 1px solid var(--rule);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: .72rem;
+  line-height: 1.35;
+}
+.ui-compare.is-enhanced { display: block; }
+.guide-article .ui-compare.is-enhanced .ui-compare-status { margin-bottom: .75rem; }
+.ui-compare.is-enhanced .ui-compare-head { display: block; margin-bottom: .6rem; }
+.ui-compare-instruction {
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: .75rem;
+}
+.guide-article .ui-compare-instruction { margin: 0 0 .45rem; }
+.ui-compare-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: .68rem;
+  line-height: 1.4;
+}
+.ui-compare-labels span:last-child { text-align: right; }
+.ui-compare-stage {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+  min-width: 0;
+}
+.ui-compare.is-enhanced .ui-compare-stage {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: radial-gradient(120% 120% at 50% 35%, var(--frame-1), var(--frame-2));
+}
+.ui-compare.is-enhanced .ui-compare-figure {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.ui-compare.is-enhanced .ui-compare-figure figcaption { display: none; }
+.ui-compare.is-enhanced .ui-compare-legacy { position: relative; z-index: 0; }
+.ui-compare.is-enhanced .ui-compare-current {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  clip-path: inset(0 0 0 var(--compare-split));
+}
+.ui-compare.is-enhanced .clip-img { aspect-ratio: 4 / 3; object-fit: contain; }
+.ui-compare-divider {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: var(--compare-split);
+  width: 1px;
+  transform: translateX(-.5px);
+  background: rgba(238, 241, 246, .92);
+  box-shadow: 0 0 0 1px rgba(11, 13, 18, .55);
+  pointer-events: none;
+}
+.ui-compare.is-enhanced .ui-compare-divider { display: block; }
+.ui-compare-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(238, 241, 246, .72);
+  border-radius: 50%;
+  background: rgba(11, 13, 18, .9);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 1rem;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+}
+.ui-compare.is-enhanced .ui-compare-range {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: .001;
+  cursor: ew-resize;
+  touch-action: pan-y;
+}
+.ui-compare-stage:has(.ui-compare-range:focus-visible) .ui-compare-handle {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+.ui-compare.is-enhanced .ui-compare-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  margin-top: .75rem;
+}
+.ui-compare-controls button {
+  min-height: 2.5rem;
+  padding: .5rem .8rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--body);
+  font: 400 .74rem/1.2 var(--mono);
+  cursor: pointer;
+}
+.ui-compare-controls button:hover,
+.ui-compare-controls button:focus-visible {
+  border-color: var(--accent);
+  color: var(--paper);
+}
+.ui-compare.has-current-error .ui-compare-current { display: none; }
+.ui-compare.has-legacy-error .ui-compare-legacy { display: none; }
+.ui-compare.has-legacy-error .ui-compare-current {
+  position: relative;
+  display: block;
+  clip-path: none;
+}
+.ui-compare.has-current-error .ui-compare-divider,
+.ui-compare.has-current-error .ui-compare-range,
+.ui-compare.has-current-error .ui-compare-controls,
+.ui-compare.has-legacy-error .ui-compare-divider,
+.ui-compare.has-legacy-error .ui-compare-range,
+.ui-compare.has-legacy-error .ui-compare-controls { display: none; }
+.ui-compare.has-current-error .ui-compare-head,
+.ui-compare.has-legacy-error .ui-compare-head { display: none; }
+.ui-compare.is-enhanced.has-current-error .ui-compare-stage,
+.ui-compare.is-enhanced.has-legacy-error .ui-compare-stage {
+  overflow: visible;
+  aspect-ratio: auto;
+  border: 0;
+  background: none;
+}
+.ui-compare.has-current-error .ui-compare-legacy,
+.ui-compare.has-legacy-error .ui-compare-current {
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+.ui-compare.has-current-error .ui-compare-legacy figcaption,
+.ui-compare.has-legacy-error .ui-compare-current figcaption {
+  display: block;
+  border-bottom: 1px solid var(--rule);
 }
 
 /* ---- Prev / Next pager — the reading path continues without a trip back to the sidebar.
@@ -259,4 +445,10 @@ body.guide {
     text-transform: uppercase;
     color: var(--faint);
   }
+}
+
+@media (max-width: 620px) {
+  .ui-compare:not(.is-enhanced) .ui-compare-stage { grid-template-columns: 1fr; }
+  .ui-compare-labels { font-size: .64rem; }
+  .ui-compare-controls button { flex: 1 1 auto; min-height: 2.75rem; }
 }

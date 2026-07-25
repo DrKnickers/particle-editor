@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>5. Build an Explosion — Particle Editor guide</title>
+  <title>3. Build an Explosion — Particle Editor guide</title>
   <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
        inline rules cover the frames before styles.css arrives — kills the white flash on
        navigation / view transitions. The @view-transition opt-in and the dark backstop across
@@ -59,8 +59,8 @@
   <div class="guide-layout">
     <main class="guide-main" id="guide-main">
       <article class="guide-article">
-<p class="guide-kicker">Tutorials <span class="kicker-count">· 6 of 7</span></p>
-<h1 id="tutorial-5-build-an-explosion">Tutorial 5: Build an Explosion</h1>
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 4 of 5</span></p>
+<h1 id="tutorial-3-build-an-explosion">Tutorial 3: Build an Explosion</h1>
 <p>This tutorial builds a complete small explosion — the kind that plays when a fighter or a small structure dies. It is modelled on two example particles, <code>P_EXPLOSION_EXAMPLE.ALO</code> and <code>P_EXPLOSION_EXAMPLE_FLIPBOOK.ALO</code>. They are the <em>same</em> explosion built two different ways, and the only thing that differs between them is how the fireball is made.</p>
 <p>An explosion is the classic stacked effect: a flash, a shockwave, a fireball, rising smoke, flying sparks, and tumbling debris — each simple on its own, all agreeing about timing. It is also where three bigger ideas come together: how the Physics tab actually moves particles, how the randomization parameters create variety inside a single emitter, and how a <strong>Link Group</strong> lets several emitters act as one.</p>
 <figure class="guide-media" aria-label="Show the finished example explosion — flash, shockwave, flipbook fireball, smoke, debris and sparks — before the build steps."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-opening-result.mp4" data-poster="tutorial-05-opening-result-poster.jpg"></video></figure>
@@ -162,7 +162,7 @@
 <tr><td data-label="Parameter">Color</td><td data-label="Value">dim orange — R 0.12 / G 0.06 / B 0.04, peaking ~5% then fading to black</td></tr>
 </tbody>
 </table>
-<p>The small <strong>Initial spawn delay</strong> makes it read as a <em>consequence</em> of the flash rather than simultaneous with it. Tutorial 4's shield ripple uses this same world-oriented trick to lie flat on the shield surface.</p>
+<p>The small <strong>Initial spawn delay</strong> makes it read as a <em>consequence</em> of the flash rather than simultaneous with it.</p>
 <p>Preview with the Spawner. At this stage the whole effect is one bright pop with a ring pushing out of it — correct so far.</p>
 <figure class="guide-media" aria-label="Show the example's Flash Small/Large and Shockwave on their own, so the first layer of the explosion reads in isolation."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-flash-burst.mp4" data-poster="tutorial-05-flash-burst-poster.jpg"></video></figure>
 <h2 id="3-the-smoke-volume-rise-and-render-order">3. The Smoke — Volume, Rise, and Render Order</h2>
@@ -353,7 +353,7 @@
 <p>An explosion is layers agreeing about timing — but the deeper lessons travel to every effect you will build. Answer the three motion questions — <em>initial position, initial speed, acceleration</em> — deliberately for every emitter. Fake motion with Scale when you can; simulate it when you must. Know the two outward recipes: random-direction spray for embers, shell-plus-outward-push for shrapnel. Exhaust the randomization spinners — Minimum lifetime, Minimum scale, Rotation variance — before adding emitters. And when you do need several copies of one design, make it a Link Group so it stays editable as one.</p>
       </article>
       <nav class="guide-pager" aria-label="Guide pages">
-        <a class="pager-prev" href="./04-recolor-and-orient-a-shield-impact.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">4. Recolor and Orient a Shield Impact</span></a>
+        <a class="pager-prev" href="./03-build-a-laser-shot-and-muzzle-flash.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">2. Build a Laser Shot and Muzzle Flash</span></a>
         <a class="pager-next" href="./build-your-own-effect.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Build Your Own Effect</span></a>
       </nav>
     </main>
@@ -374,11 +374,9 @@
       <p class="side-label">Tutorials</p>
       <ul>
       <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
-      <li><a href="./02-polish-hardpoint-damage-smoke.html" class="is-pending">2. Polish Hardpoint Damage Smoke <span class="side-pending">(Videos pending)</span></a></li>
       <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
-      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">3. Build a Laser Shot and Muzzle Flash</a></li>
-      <li><a href="./04-recolor-and-orient-a-shield-impact.html" class="is-pending">4. Recolor and Orient a Shield Impact <span class="side-pending">(Videos pending)</span></a></li>
-      <li><a href="./05-build-an-explosion.html" class="active" aria-current="page">5. Build an Explosion</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html" class="active" aria-current="page">3. Build an Explosion</a></li>
       <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
       </ul>
     </div>

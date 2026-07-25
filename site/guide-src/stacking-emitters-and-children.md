@@ -45,7 +45,7 @@ light.
 
 ## Link Groups: Copies That Stay in Sync
 
-Sometimes the right design is *several copies of the same emitter*. Tutorial 5's debris is the
+Sometimes the right design is *several copies of the same emitter*. Tutorial 3's debris is the
 canonical case: each debris emitter throws one chunk per burst, so four identical copies give four
 independent chunks — but four separate copies would be a maintenance trap, because every future
 tweak would have to be repeated on all of them by hand.
@@ -84,7 +84,7 @@ Ask where the sub-effect should come from:
 When in doubt, stack siblings. Children are the specialized tool for the cases where a part of the
 effect must ride on another emitter's particles.
 
-[Tutorial 5: Build an Explosion](05-build-an-explosion) puts the patterns to work — stacked root
+[Tutorial 3: Build an Explosion](05-build-an-explosion) puts the patterns to work — stacked root
 emitters for the layers, and a four-member Link Group for the debris.
 
 <!-- Media: ref-lifetime-child-trail -->

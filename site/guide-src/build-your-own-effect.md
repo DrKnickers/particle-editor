@@ -10,7 +10,7 @@ few times. Nobody authors a good effect in one pass.
 ## The Brief
 
 **Make an "ion hit" — the effect of an ion weapon striking a ship's hull.** You have seen the
-building blocks in Tutorials 1–5; none of the exact values below are given to you on purpose.
+building blocks in the three tutorials; none of the exact values below are given to you on purpose.
 
 What it should communicate, at a glance:
 

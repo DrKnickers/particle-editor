@@ -1,13 +1,49 @@
 # Coming from the Old GlyphX Editor?
 
 This page assumes you already know Mike.NL's GlyphX Particle Editor v1.5. Your existing `.alo`
-files still open unchanged, and the file format, parameter meanings, and engine-accurate rendering
-carry over. The parts you need to relearn are how you load assets, organize emitters, inspect the
+files still open unchanged, and the file format, parameter meanings, and 1:1 particle-shader
+rendering carry over. The parts you need to relearn are how you load assets, organize emitters, inspect the
 preview, and recover your work.
 
 Each workflow starts with what you did in v1.5, then gives the current control path. If the editor
 already opens your files, read the key workflow changes below first. If you have not configured the
 editor or your mod yet, do [Setup](setup) first and return here afterward.
+
+## Same Particle, Rebuilt Workspace
+
+The comparison uses the stock `P_FIRE_BIG01` with `smoke` selected in both editors. Both
+captures show one continuously spawning, developed fire-and-smoke plume at nearly the same
+on-screen position and scale. Each frame preserves the complete application interface. The file
+format and parameter meanings carry over; the controls now live in resizable panels with docked
+tools, a shared curve canvas, and light and dark themes.
+
+<div class="ui-compare" data-ui-compare style="--compare-split: 40%;">
+  <p class="ui-compare-status">Matched capture: stock <code>P_FIRE_BIG01</code>, <code>smoke</code> selected, ground visible, one continuously spawning instance, and the developed plume aligned in both complete application frames.</p>
+  <div class="ui-compare-head">
+    <p class="ui-compare-instruction">Drag to compare</p>
+    <div class="ui-compare-labels" aria-hidden="true">
+      <span>GlyphX Particle Editor v1.5</span>
+      <span>Particle Editor — current interface</span>
+    </div>
+  </div>
+  <div class="ui-compare-stage">
+    <figure class="ui-compare-figure ui-compare-legacy">
+      <figcaption>GlyphX Particle Editor v1.5</figcaption>
+      <img class="clip-img" src="https://github.com/DrKnickers/particle-editor/releases/download/site-media/returning-ui-legacy.png" data-poster="returning-ui-legacy.png" data-compare-layer="legacy" alt="Cursor-free full-window capture of a developed stock P_FIRE_BIG01 fire-and-smoke plume in GlyphX Particle Editor v1.5, showing smoke selected, the emitter tree, property tabs, particle viewport, and graph editor.">
+    </figure>
+    <figure class="ui-compare-figure ui-compare-current">
+      <figcaption>Particle Editor — current interface</figcaption>
+      <img class="clip-img" src="https://github.com/DrKnickers/particle-editor/releases/download/site-media/returning-ui-current.png" data-poster="returning-ui-current.png" data-compare-layer="current" alt="Cursor-free full-window capture of the matched developed stock P_FIRE_BIG01 fire-and-smoke plume in the current Particle Editor, showing smoke selected, the emitter tree, properties, particle viewport, and shared curve canvas.">
+    </figure>
+    <div class="ui-compare-divider" aria-hidden="true"><span class="ui-compare-handle">↔</span></div>
+    <input class="ui-compare-range" type="range" min="0" max="100" step="1" value="40" aria-label="Reveal amount of GlyphX Particle Editor v1.5">
+  </div>
+  <div class="ui-compare-controls" aria-label="Comparison views">
+    <button type="button" data-compare-value="100" aria-label="Show GlyphX Particle Editor v1.5">GlyphX v1.5</button>
+    <button type="button" data-compare-value="40" aria-label="Restore default comparison split">Default split</button>
+    <button type="button" data-compare-value="0" aria-label="Show current interface">Current</button>
+  </div>
+</div>
 
 ## Key Workflow Changes
 
