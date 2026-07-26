@@ -667,11 +667,20 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         }
         ctx.SendOk(json{{"applied", appliedArr}, {"skipped", skippedArr}});
         ctx.MarkDirty();
-        // [D2] Property edits change particle appearance via fields read in
-        // UpdateParticle (tailSize, linkToSystem, isHeatParticle, ...) but
-        // don't flow through OnParticleSystemChanged — a paused preview
-        // must still repaint this edit (review finding 1).
-        if (m_engine) m_engine->InvalidatePausedIdleSkip();
+        // Broadcast the definition change to every LIVE instance. Composite
+        // values (m_spawnDelay from nParticlesPerSecond, burst counts,
+        // acceleration/gravity, texture bindings) are cached per instance and
+        // only recomputed in onParticleSystemChanged(track==-1) — without this
+        // call an already-placed instance (Shift+click spawn) kept its
+        // creation-time spawn rate forever while the auto-respawning main
+        // preview read fresh values, masking the gap (v0.3.0 cold-launch
+        // finding). Subsumes the previous InvalidatePausedIdleSkip() call:
+        // OnParticleSystemChanged also busts the paused-idle skip [D2], so a
+        // paused preview still repaints the edit (review finding 1).
+        // m_spawnDelay is a PERIOD (next round schedules time+delay), so a
+        // mid-flight recompute is safe; it also deliberately resets the
+        // overload-guard backoff, which is correct after an intentional edit.
+        if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
         return true;
