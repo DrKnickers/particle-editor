@@ -30,6 +30,7 @@ import type {
   EmitterTreeNode,
   LightDto,
   LightingSettingsDto,
+  PaletteEntry,
   ReferenceObjectStatus,
   SkydomeSlotStatus,
   SpawnParamsDto,
@@ -244,6 +245,18 @@ const MOCK_LAYERS: readonly { path: string; label: string; parentLabel?: string;
 // for "chosen but the .alo wouldn't load" — selecting one drives the picker's
 // load-failed status path + the solid-colour fallback indicator.
 const MOCK_MISSING_DOMES = new Set<string>(["Broken_Sky"]);
+
+// Layout-lane seed for the texture palette (#683). Browser mode's palette is
+// deliberately inert (no per-mod Store), so the tests-web geometry spec seeds
+// entries through the dev-only window.__paletteTest seam, which calls
+// seedMockPalette. null = unseeded = the inert default.
+let mockPaletteSeed: PaletteEntry[] | null = null;
+export function seedMockPalette(entries: PaletteEntry[] | null): void {
+  mockPaletteSeed = entries;
+}
+function getSeededMockPalette(): PaletteEntry[] | null {
+  return mockPaletteSeed;
+}
 
 // Representative average colour per built-in ground slot — the mock has no real
 // textures, so it stands in for the host's GetGroundColor() (which averages the
@@ -913,12 +926,24 @@ export class MockBridge implements Bridge {
       // ---------------- texture palette ----------------
       //
       // Browser mode has no per-mod Store and no texture decode, so the
-      // palette is inert: empty pins/recents, null thumbnails, no-op
-      // mutations. The TexturePickerField stays fully usable via Browse
+      // palette is inert by default: empty pins/recents, null thumbnails,
+      // no-op mutations. The TexturePickerField stays fully usable via Browse
       // and manual entry. The native host backs these with
-      // TexturePalette::Store + EncodeThumbnailPng.
-      case "textures/palette/list":
+      // TexturePalette::Store + EncodeThumbnailPng. The layout lane seeds
+      // entries via seedMockPalette (dev seam window.__paletteTest) so
+      // tests-web can measure a POPULATED popover's geometry (#683).
+      case "textures/palette/list": {
+        const seeded = getSeededMockPalette();
+        if (seeded) {
+          return {
+            hasMod: true,
+            filter: req.params.slot,
+            pins: seeded.filter((e) => e.pinned),
+            recents: seeded.filter((e) => !e.pinned),
+          };
+        }
         return { hasMod: false, filter: req.params.slot, pins: [], recents: [] };
+      }
 
       case "textures/palette/thumbnail":
         return { dataUri: null, status: "missing" as const };

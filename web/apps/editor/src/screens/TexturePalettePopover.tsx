@@ -45,11 +45,17 @@ export function TexturePalettePopover({ bridge, slot, onApply, tip, children }: 
         trigger
       )}
       <Popover.Portal>
+        {/* #683: at small window sizes the palette grew past the window and
+            the lower tiles were unreachable — Radix flips/shifts on collision
+            but never shrinks content. Cap the CONTAINER to Radix's measured
+            available space (the #228 skydome-picker lesson) and scroll inside;
+            collisionPadding keeps a visible gutter at the window edge. */}
         <AnimatedPopover
           align="end"
           sideOffset={6}
+          collisionPadding={12}
           aria-label="Texture palette"
-          className="z-50 w-[560px] rounded-token border border-border-2 bg-panel p-3 shadow-[var(--shadow-soft)]"
+          className="z-50 w-[560px] max-w-[var(--radix-popover-content-available-width)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-token border border-border-2 bg-panel p-3 shadow-[var(--shadow-soft)]"
         >
           <PaletteBody bridge={bridge} initialSlot={slot} onApply={onApply} />
         </AnimatedPopover>

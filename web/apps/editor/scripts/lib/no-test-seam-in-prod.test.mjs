@@ -17,7 +17,11 @@ const distMissing = !existsSync(distAssets);
 // `__atlasTest` / `__profilerAudit` are window-property string literals (survive
 // minification); `atlas-test-seam` / `profiler-audit` would be the dynamic-import
 // chunk names if either DEV seam were ever emitted into the shipped bundle.
-const FORBIDDEN = ["__atlasTest", "atlas-test-seam", "__profilerAudit", "profiler-audit"];
+const FORBIDDEN = [
+  "__atlasTest", "atlas-test-seam",
+  "__profilerAudit", "profiler-audit",
+  "__paletteTest", "palette-test-seam",
+];
 
 test(
   "the DEV test seam is absent from the production bundle",
