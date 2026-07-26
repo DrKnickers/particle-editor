@@ -154,9 +154,8 @@ void CaptureRunner::Init()
     }
     else
     {
-        // Select the mod that owns this .alo BEFORE loading, so its
-        // texture overrides (Mod etc.) resolve instead
-        // of base-game art. The editor does this on mod-select; a
+        // Select the mod that owns this .alo BEFORE loading, so the mod's
+        // texture overrides resolve instead of base-game art. The editor does this on mod-select; a
         // direct --capture load must do it explicitly or particles
         // render with the wrong textures. Match the .alo path against
         // discovered mods by case-insensitive path prefix; SelectMod

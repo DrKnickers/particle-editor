@@ -100,11 +100,11 @@ BEGIN
     BEGIN
         BLOCK "000004b0"
         BEGIN
-            VALUE "CompanyName", "Mike Lankamp"
+            VALUE "CompanyName", "DrKnickers"
             VALUE "FileDescription", "Particle Editor"
             VALUE "FileVersion", PE_VERSION_STR
             VALUE "InternalName", "Particle Editor"
-            VALUE "LegalCopyright", "Copyright (C) 2009 Mike Lankamp"
+            VALUE "LegalCopyright", "Copyright (C) 2026 DrKnickers. Based on Mike Lankamp's Particle Editor (C) 2009."
             VALUE "OriginalFilename", "ParticleEditor.exe"
             VALUE "ProductName", "Particle Editor"
             VALUE "ProductVersion", PE_VERSION_STR

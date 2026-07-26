@@ -88,6 +88,11 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>comctl32.lib;d3d9.lib;d3dx9.lib;shlwapi.lib;ole32.lib;oleaut32.lib;uuid.lib;runtimeobject.lib;version.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(DXSDK_DIR)Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <!-- Strip the absolute build-tree path from the PDB reference embedded in
+           the shipped exe (the default embeds the full local worktree path).
+           The bare filename keeps debuggers working when the .pdb sits beside
+           the exe; nothing about the build machine leaks (2026-07 sweep). -->
+      <AdditionalOptions>/PDBALTPATH:%_PDB% %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

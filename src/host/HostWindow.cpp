@@ -5145,7 +5145,7 @@ int HostWindowImpl::Run(int nCmdShow)
                 auto r = std::make_unique<host::ClipRunner>();
                 // ${GAME} -> the resolved game install root (argv-or-registry, the
                 // same root mods are discovered under), so a timeline's mod path
-                // (e.g. "${GAME}/Mods/Mod") survives a reinstall
+                // (e.g. "${GAME}/Mods/MyMod") survives a reinstall
                 // elsewhere. Trailing separator stripped so the token joins cleanly
                 // with "/Mods/...". Only defined when a root is known — a timeline
                 // using ${GAME} without one fails loud in Init (exit 2).

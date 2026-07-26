@@ -7,7 +7,7 @@
 // an absolute machine path. The host supplies the token table — GAME resolves to
 // the editor's configured game root (HKCU\Software\AloParticleEditor\GameDataPath,
 // the same key the editor itself resolves mods against), so a timeline that says
-//   "paths": ["${GAME}/Mods/Mod"]
+//   "paths": ["${GAME}/Mods/MyMod"]
 // keeps working after the game is reinstalled elsewhere.
 //
 // Pure + header-only (no Windows/registry/json deps) so tests/test_clip_path_tokens.cpp

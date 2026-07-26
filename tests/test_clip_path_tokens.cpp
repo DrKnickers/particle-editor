@@ -41,29 +41,29 @@ static void fails(const char* what, const std::string& in,
 int main()
 {
     const std::map<std::string, std::string> T = {
-        {"GAME", "<path> Wars Empire at War/corruption"},
-        {"ASSETS", "<path>"},
+        {"GAME", "C:/Games/Steam/steamapps/common/Star Wars Empire at War/corruption"},
+        {"ASSETS", "C:/EaWModding/DATA"},
     };
 
     // happy path — the real use case
-    ok("mod-path", "${GAME}/Mods/Mod", T,
-       "<path> Wars Empire at War/corruption/Mods/Mod");
+    ok("mod-path", "${GAME}/Mods/ExampleMod", T,
+       "C:/Games/Steam/steamapps/common/Star Wars Empire at War/corruption/Mods/ExampleMod");
     ok("open-path", "${ASSETS}/ART/MODELS/P_PLANET_EXPLODE_GALACTIC.ALO", T,
-       "<path>");
+       "C:/EaWModding/DATA/ART/MODELS/P_PLANET_EXPLODE_GALACTIC.ALO");
     // no tokens -> untouched (with a populated AND an empty table)
-    ok("literal",       "<path>", T, "<path>");
-    ok("literal-empty", "<path>", {}, "<path>");
+    ok("literal",       "C:/EaWModding/DATA/x.alo", T, "C:/EaWModding/DATA/x.alo");
+    ok("literal-empty", "C:/EaWModding/DATA/x.alo", {}, "C:/EaWModding/DATA/x.alo");
     // multiple + adjacent + positional
     ok("two-tokens", "${GAME}::${ASSETS}", T,
-       "<path> Wars Empire at War/corruption::<path>");
+       "C:/Games/Steam/steamapps/common/Star Wars Empire at War/corruption::C:/EaWModding/DATA");
     ok("token-tail", "prefix/${GAME}", T,
-       "prefix/<path> Wars Empire at War/corruption");
+       "prefix/C:/Games/Steam/steamapps/common/Star Wars Empire at War/corruption");
     // a bare '$' is literal
-    ok("bare-dollar", "cost is $5 for ${ASSETS}", T, "cost is $5 for <path>");
+    ok("bare-dollar", "cost is $5 for ${ASSETS}", T, "cost is $5 for C:/EaWModding/DATA");
     ok("dollar-eol",  "trailing $", T, "trailing $");
     // a lone '}' with no opening ${ is an ordinary char
     ok("stray-brace", "a}b/${GAME}", T,
-       "a}b/<path> Wars Empire at War/corruption");
+       "a}b/C:/Games/Steam/steamapps/common/Star Wars Empire at War/corruption");
     // substituted text is NOT re-scanned: a token whose VALUE contains ${...}
     // expands once and the ${B} in the value is left literal (no recursion/loop)
     ok("no-rescan", "${SELF}", {{"SELF", "${B}"}}, "${B}");

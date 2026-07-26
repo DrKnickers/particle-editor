@@ -479,10 +479,10 @@ int main()
 
         // no ${...} anywhere -> succeeds even with an empty token table
         Timeline plain;
-        plain.openPath = "<path>";
+        plain.openPath = "C:/EaWModding/DATA/x.alo";
         std::string perr;
         CHECK(ExpandTimelineTokens(plain, {}, perr));
-        CHECK(perr.empty() && plain.openPath == "<path>");
+        CHECK(perr.empty() && plain.openPath == "C:/EaWModding/DATA/x.alo");
     }
 
     if (g_fail) { std::printf("\n%d CHECK(s) FAILED\n", g_fail); return 1; }
