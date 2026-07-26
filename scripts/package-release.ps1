@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Stage (and optionally zip) the Particle Editor release layout, self-asserting completeness.
 

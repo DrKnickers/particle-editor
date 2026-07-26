@@ -1,4 +1,4 @@
-# stage-assets.ps1 - build the wiki-media tutorial fixture tree (pipeline spec section 6).
+﻿# stage-assets.ps1 - build the wiki-media tutorial fixture tree (pipeline spec section 6).
 #
 # Creates <focMods>\ParticleTutorial\Data\Art\Models, copies the two vanilla source
 # effects in as loose overrides, then runs the builder timelines (record runs whose

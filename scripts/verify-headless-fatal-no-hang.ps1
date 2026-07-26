@@ -1,4 +1,4 @@
-# verify-headless-fatal-no-hang.ps1 -- regression guard for the headless-modal
+﻿# verify-headless-fatal-no-hang.ps1 -- regression guard for the headless-modal
 # sweep (tasks/2026-07-08-rerender-modal-followups-plan.md,).
 # ASCII only (PS 5.1 mojibakes non-ASCII).
 #
