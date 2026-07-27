@@ -57,7 +57,69 @@ test.afterAll(async () => {
   await browser?.close();
 });
 
-test("first viewport/capture-snapshot after boot returns valid PNG (cache-flag-off path)", async () => {
+// Decode a base64 JPEG in the page and report how much it actually VARIES.
+//
+// Length + magic-number + dimension assertions (which is all this file used to
+// do) are satisfied by a correctly-sized solid-black frame — exactly what a
+// broken readback produces (2026-07 audit, an-audit-finding). Counting distinct luminance
+// buckets separates "the compositor read back real pixels" from "the encoder
+// produced a valid image of nothing".
+// Count DISTINCT colours in a base64 JPEG, decoded in the page.
+//
+// Length + magic-number + dimension assertions (all this file used to do) are
+// satisfied by a correctly-sized solid-black frame — exactly what a broken
+// readback produces (2026-07 audit, an-audit-finding).
+//
+// Distinct colours rather than luminance SPREAD, deliberately. The first
+// attempt bucketed by brightness and failed on a healthy snapshot: the boot
+// scene is a dark purple gradient spanning luminance 0-18, so coarse
+// brightness buckets collapsed real content into two. Colour count makes no
+// assumption about how bright the scene happens to be.
+async function distinctColors(page: Page, base64: string): Promise<number> {
+  return page.evaluate(async (b64) => {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("snapshot did not decode as an image"));
+      img.src = `data:image/jpeg;base64,${b64}`;
+    });
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const ctx = c.getContext("2d");
+    if (!ctx) throw new Error("no 2d context");
+    ctx.drawImage(img, 0, 0);
+    const { data } = ctx.getImageData(0, 0, c.width, c.height);
+    const seen = new Set<number>();
+    for (let i = 0; i < data.length; i += 4) {
+      seen.add((data[i]! << 16) | (data[i + 1]! << 8) | data[i + 2]!);
+    }
+    return seen.size;
+  }, base64);
+}
+
+// A solid fill, JPEG-encoded at the same size, run through the SAME oracle.
+// This is the negative control, and it runs every time: it proves the check
+// above can still tell a rendered scene from a blank one, rather than us
+// trusting a threshold that was tuned once and never re-checked.
+async function solidFillColors(page: Page, w: number, h: number): Promise<number> {
+  const b64 = await page.evaluate(({ w, h }) => {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, w, h);
+    return c.toDataURL("image/jpeg").split(",")[1]!;
+  }, { w, h });
+  return distinctColors(page, b64);
+}
+
+
+// NOTE: the payload is a JPEG, not a PNG — the backdrop is shown blurred behind
+// a dialog, so lossy is invisible and far cheaper. The test NAME said PNG while
+// the assertion below required a JPEG magic number (audit an-audit-finding); renamed to match
+// what it actually checks.
+test("first viewport/capture-snapshot after boot returns a valid, non-blank JPEG (cache-flag-off path)", async () => {
   // Seed a known viewport size so the snapshot crop has deterministic
   // dimensions to assert against. The layout broker dispatches this
   // through the host, which calls AlphaCompositor::Resize → renders →
@@ -93,6 +155,17 @@ test("first viewport/capture-snapshot after boot returns valid PNG (cache-flag-o
   // "empty string" (false path) and "garbage bytes" (encoder failure).
   expect(result.imageBase64.length).toBeGreaterThan(100);
   expect(result.imageBase64.startsWith("/9j/")).toBe(true);
+  // ...and it must contain an actual rendered scene. A solid-black frame of the
+  // right size satisfies every assertion above (audit an-audit-finding); a real viewport
+  // (ground, skydome, particles) spans many luminance levels.
+  // Measured on a healthy boot snapshot: 26 distinct colours. A solid fill
+  // decodes to a handful, so 8 leaves margin in both directions — and the
+  // control below keeps that claim honest instead of assumed.
+  const colors = await distinctColors(page, result.imageBase64);
+  const blank = await solidFillColors(page, result.w, result.h);
+  expect(blank).toBeLessThan(8);          // the oracle can still detect a blank frame
+  expect(colors).toBeGreaterThanOrEqual(8);
+  expect(colors).toBeGreaterThan(blank);  // ...and the real snapshot clears it
   // The backdrop snapshot is downscaled before encoding (min 2x, capped at a
   // 1024 long edge — it's blurred behind the dialog; see
   // AlphaCompositor::CaptureSnapshotPng). 1024x768 is under the cap, so it

@@ -91,19 +91,23 @@ test("spawner/active-count event fires from real engine state when a burst is tr
 
     await b.request({ kind: "spawner/trigger", params: {} });
 
-    // Poll up to 2s for an event with count >= 1.
+    // Poll up to 2s for the count to reach the CONFIGURED burst size.
+    //
+    // This used to accept `count >= 1` (2026-07 audit, an-audit-finding), which the spawner
+    // satisfies by emitting a single instance — or by one unrelated instance
+    // already existing. The whole point of the test is that a burst of three
+    // produces three, so assert the number we asked for.
     const deadline = Date.now() + 2000;
-    let observed = false;
+    let peak = 0;
     while (Date.now() < deadline) {
-      if (log.some((e) => e.count >= 1)) {
-        observed = true;
-        break;
-      }
+      for (const e of log) if (e.count > peak) peak = e.count;
+      if (peak >= 3) break;
       await new Promise((r) => setTimeout(r, 50));
     }
     off();
-    return { observed, events: log };
+    return { peak, events: log };
   });
 
-  expect(result.observed).toBe(true);
+  // burstSize was 3 with spacing 0, so all three land on the same tick.
+  expect(result.peak).toBe(3);
 });

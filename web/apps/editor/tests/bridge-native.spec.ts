@@ -174,15 +174,34 @@ test("engine/set/background round-trips a COLORREF", async () => {
     const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
       .bridge;
     if (!b) throw new Error("window.bridge not attached");
+    // Capture and RESTORE. Native specs share one host process and one page, so
+    // a test that mutates engine state and walks away leaves every later test
+    // running against it — this one left the background gray for the rest of
+    // the run, and nothing downstream asserted the default, so a regression in
+    // background restoration would have gone unnoticed (2026-07 audit, an-audit-finding).
+    const before = (await b.request({
+      kind: "engine/state/snapshot",
+      params: {},
+    })) as { background: number };
+
     const rgb = 0x00808080;
     await b.request({ kind: "engine/set/background", params: { rgb } });
     const snap = (await b.request({
       kind: "engine/state/snapshot",
       params: {},
     })) as { background: number };
-    return snap.background;
+
+    await b.request({ kind: "engine/set/background", params: { rgb: before.background } });
+    const after = (await b.request({
+      kind: "engine/state/snapshot",
+      params: {},
+    })) as { background: number };
+
+    return { roundTripped: snap.background, restored: after.background, original: before.background };
   });
-  expect(result).toBe(0x00808080);
+  expect(result.roundTripped).toBe(0x00808080);
+  // The restore has to actually work, or this test just moved the leak.
+  expect(result.restored).toBe(result.original);
 });
 
 test("engine/query/ground-slot-empty returns boolean", async () => {
