@@ -93,12 +93,24 @@ export async function moveEmitters(
   applyNewSelection(bridge, ids, primary, r?.newIds ?? []);
 }
 
-/** Duplicate `ids`; the selection moves to the new copies. */
-export async function duplicateEmitters(bridge: Bridge, ids: number[]): Promise<void> {
-  if (ids.length === 0) return;
+/** Duplicate `ids`; the selection moves to the new copies.
+ *
+ *  Returns the native `{ ok }` rather than void. announceWhenOk inspects its
+ *  resolved value for `ok: false` to decide whether to announce success — and
+ *  this used to resolve `void`, so a refusal by native (e.g. a stale positional
+ *  id after the document changed under the selection) still announced
+ *  "Duplicated emitter — Ctrl+Z to undo" while nothing had been duplicated
+ *  (2026-07 audit, an-audit-finding). Swallowing the flag here defeated a guard the
+ *  caller was already applying correctly. */
+export async function duplicateEmitters(
+  bridge: Bridge,
+  ids: number[],
+): Promise<{ ok: boolean }> {
+  if (ids.length === 0) return { ok: false };
   const primary = useEmitterSelectionStore.getState().primary;
   const r = await bridge.request({ kind: "emitters/duplicate-many", params: { ids } });
   if (r.ok) applyNewSelection(bridge, ids, primary, r.newIds);
+  return { ok: r.ok };
 }
 
 /** Drag-reorder `ids` (the selected roots, in tree order) to land contiguous

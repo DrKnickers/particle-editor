@@ -1162,6 +1162,13 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         propagateLinkGroup(target); // F4: sync link-group siblings
         ctx.SendOk(json::object());
         ctx.MarkDirty();
+        // Interpolation is read during particle update, and a PAUSED preview
+        // skips its idle update unless something invalidates it — so choosing
+        // Smooth / Step / Linear updated the curve panel while the placed
+        // preview kept drawing the OLD interpolation until you unpaused or
+        // stepped a frame (2026-07 audit, an-audit-finding). Same broadcast every other
+        // track mutation already sends.
+        if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEmittersTreeChanged();
         EmitEngineStateChanged();
         return true;
