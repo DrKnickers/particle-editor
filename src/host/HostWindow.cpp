@@ -705,6 +705,24 @@ struct HostWindowImpl
     int         m_readoutN = 0;                // 1 or 2
     int         m_readoutDecimals = 1;         // 1 for units, 0 for degrees
 
+    // Re-validate the cursor-bound Shift-preview borrow before ANY use. See the
+    // m_attachedParticleSystem note below: Engine::Clear() frees the pointee
+    // behind our back on three paths that never null this slot. Returns nullptr
+    // and self-heals the slot when the borrow has gone stale, so a caller can
+    // neither act on a freed instance nor be blocked forever by a non-null
+    // pointer that will never clear on its own. Factored out for the same
+    // reason as ResetManipDragState below -- so a new use site can't forget it.
+    ParticleSystemInstance* LiveAttachedSystem()
+    {
+        if (m_attachedParticleSystem == nullptr || !engine) return nullptr;
+        if (!engine->HasInstance(m_attachedParticleSystem))
+        {
+            m_attachedParticleSystem = nullptr;   // stale borrow: drop it
+            return nullptr;
+        }
+        return m_attachedParticleSystem;
+    }
+
     // The invariant tail every MANIPULATE drag-end shares: drop the grabbed handle, zero the
     // accumulators, and clear the engine's active-drag (guide/sweep/dim) state. Per-site Commit /
     // ReleaseCapture / m_dragMode handling stays at the call site -- only this shared tail is factored
@@ -736,6 +754,16 @@ struct HostWindowImpl
     // m_attachedParticleSystem: non-null between Shift-press (spawn) and
     // Shift-release (kill). Engine returns a pointer we keep until we
     // KillParticleSystem it.
+    //
+    // It is a RAW BORROW of an Engine::m_instances entry, and Engine::Clear()
+    // frees every instance without telling us. file/new + file/open + recover
+    // + undo-apply null this slot themselves (BridgeDispatch_File.cpp,
+    // BridgeDispatcher.cpp), but three paths reach Clear() without doing so:
+    // engine/action/clear, the SetEstimatedLoad overload hard-guard, and a
+    // gate-refused SpawnParticleSystem. Read it through LiveAttachedSystem()
+    // rather than directly — a stale pointer otherwise blocks every future
+    // Shift-spawn (the non-null precondition never clears) and puts LMB-down
+    // into a placement drag for an instance that no longer exists.
     //
     // m_lastCursorX/Y: cache of the most recent (x,y) seen by
     // WM_MOUSEMOVE. Used as the spawn coords on WM_KEYDOWN VK_SHIFT
@@ -3855,7 +3883,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             (wp & MK_CONTROL) ? 1 : 0,
             particleSystem ? 1 : 0,
             particleSystem ? particleSystem->getEmitters().size() : 0,
-            m_attachedParticleSystem ? 1 : 0);
+            LiveAttachedSystem() ? 1 : 0);
         // The viewport popup is hidden and WebView2 owns
         // keyboard routing; we forward keystrokes through the bridge. We do
         // NOT SetFocus the hidden popup — that briefly succeeds (visibility
@@ -3881,7 +3909,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // Matches the legacy main.cpp. Do NOT enter a camera drag
         // — placement is the entire intent of this click while a preview
         // is alive.
-        if (m_attachedParticleSystem != nullptr)
+        if (ParticleSystemInstance* attached = LiveAttachedSystem())
         {
             m_dragMode     = DragMode::OBJECT_Z;
             m_dragStartCam = engine->GetCamera();
@@ -3889,7 +3917,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             m_dragStartY   = (short)HIWORD(lp);
             SetCapture(hwnd);
             Log("[ArchC-engine] LMB-down OBJECT_Z drag (placing attached=%p)\n",
-                static_cast<void*>(m_attachedParticleSystem));
+                static_cast<void*>(attached));
             return 0;
         }
         // Reference-object manipulator: if a handle (translate
@@ -4055,11 +4083,11 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // then click again (while still holding Shift) to spawn a
         // fresh preview, repeating the click-to-place gesture.
         // Matches the legacy main.cpp.
-        if (m_attachedParticleSystem && engine)
+        if (ParticleSystemInstance* attached = LiveAttachedSystem())
         {
             Log("[ArchC-engine] LMB-up placing attached=%p (Detach, system stays alive)\n",
-                static_cast<void*>(m_attachedParticleSystem));
-            engine->DetachParticleSystem(m_attachedParticleSystem);
+                static_cast<void*>(attached));
+            engine->DetachParticleSystem(attached);
             m_attachedParticleSystem = nullptr;
         }
         m_dragMode = DragMode::NONE;
@@ -4437,7 +4465,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // legacy's `particleSystem != NULL` to also require >= 1
         // root emitter — SpawnParticleSystem on an emitter-less system
         // misbehaves.
-        if (m_attachedParticleSystem != nullptr) return 0;
+        if (LiveAttachedSystem() != nullptr) return 0;
         if (!particleSystem || particleSystem->getEmitters().empty()) return 0;
 
         // Resolve cursor coords. Prefer the cached MOUSEMOVE position;
@@ -4480,11 +4508,11 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     case WM_KEYUP:
     {
         if (wp != VK_SHIFT) break;
-        if (m_attachedParticleSystem && engine)
+        if (ParticleSystemInstance* attached = LiveAttachedSystem())
         {
             Log("[ArchC-kill] WM_KEYUP VK_SHIFT killing attached=%p\n",
-                static_cast<void*>(m_attachedParticleSystem));
-            engine->KillParticleSystem(m_attachedParticleSystem);
+                static_cast<void*>(attached));
+            engine->KillParticleSystem(attached);
             m_attachedParticleSystem = nullptr;
         }
         return 0;
@@ -4512,10 +4540,10 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // suppress the OS-driven kill here. (The legitimate blur case is handled
         // renderer-side: window.blur → viewport/input { type:"blur" } → the
         // private WM_APP_VIEWPORT_BLUR message below, which DOES end the spawn.)
-        if (m_attachedParticleSystem)
+        if (ParticleSystemInstance* attached = LiveAttachedSystem())
         {
             Log("[ArchC-kill] WM_KILLFOCUS suppressed (attached=%p preserved)\n",
-                static_cast<void*>(m_attachedParticleSystem));
+                static_cast<void*>(attached));
         }
         return 0;
     }
@@ -4544,11 +4572,11 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             m_dragMode = DragMode::NONE;
             ReleaseCapture();
         }
-        if (m_attachedParticleSystem && engine)
+        if (ParticleSystemInstance* attached = LiveAttachedSystem())
         {
             Log("[ArchC-kill] WM_APP_VIEWPORT_BLUR killing attached=%p\n",
-                static_cast<void*>(m_attachedParticleSystem));
-            engine->KillParticleSystem(m_attachedParticleSystem);
+                static_cast<void*>(attached));
+            engine->KillParticleSystem(attached);
             m_attachedParticleSystem = nullptr;
         }
         return 0;
@@ -4558,11 +4586,11 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // Viewport HWND is going away. Defensively drop any attached
         // instance before the Engine tears down (Engine reset happens
         // on the main window's WM_DESTROY which fires after this).
-        if (m_attachedParticleSystem && engine)
+        if (ParticleSystemInstance* attached = LiveAttachedSystem())
         {
             Log("[ArchC-kill] WM_DESTROY killing attached=%p\n",
-                static_cast<void*>(m_attachedParticleSystem));
-            engine->KillParticleSystem(m_attachedParticleSystem);
+                static_cast<void*>(attached));
+            engine->KillParticleSystem(attached);
             m_attachedParticleSystem = nullptr;
         }
         return 0;
