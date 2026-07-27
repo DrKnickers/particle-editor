@@ -574,13 +574,15 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         return true;
     }
     // Rescale the active particle system by a duration / size percentage.
-    // host-state plumbing: real implementation. Iterates over every
-    // emitter in the live ParticleSystem and applies the helper from
-    // src/Rescale.cpp. UndoStack capture is best-effort — emitter
-    // work hasn't seeded the stack baseline yet (see undo/perform notes
-    // below), so a Capture here lands in an empty stack with no
-    // pre-existing redo to clear; that's correct, it just means undo
-    // remains a no-op until the broader capture wiring lands.
+    // Iterates over every emitter in the live ParticleSystem and applies the
+    // helper from src/Rescale.cpp.
+    //
+    // This handler used to carry a comment excusing the missing captureUndo()
+    // as "a no-op until the broader capture wiring lands". That wiring HAS
+    // landed — rescale-emitter twenty lines below has called captureUndo()
+    // since — but the stale comment read as a deliberate accepted limitation,
+    // so every reader skipped past it and one Ctrl+Z after a whole-system
+    // rescale silently restored nothing (2026-07 audit, an-audit-finding).
     if (kind == "engine/action/rescale-system")
     {
         float durPct  = params.value("durationScalePercent", 100.0f);
@@ -593,6 +595,9 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         ParticleSystem* sys = m_pParticleSystem->get();
         const float timeScale = durPct  / 100.0f;
         const float sizeScale = sizePct / 100.0f;
+        // Snapshot BEFORE the mutation, and after the not-bound check so an
+        // error path never lands an entry. Mirrors rescale-emitter below.
+        captureUndo();
         // Walk every emitter, not just roots — DoRescaleEmitter only
         // touches per-emitter scalar fields and doesn't recurse, so we
         // need to iterate the flat list. Mirrors the loop at
@@ -605,6 +610,12 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         }
         ctx.SendOk(json::object());
         ctx.MarkDirty();
+        // Rescaling rewrites per-emitter scalars AND clears/rebuilds the Scale
+        // key container (src/Rescale.cpp:69-75), which live EmitterInstances
+        // hold cached track cursors into. Without this an already-placed
+        // instance keeps its creation-time composite values, exactly as it did
+        // for set-properties before #682 (2026-07 audit, an-audit-finding).
+        if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         // Emitter parameters changed → notify the React tree so the
         // sidebar re-fetches via emitters/list.
@@ -702,6 +713,9 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
 
         ctx.SendOk(json::object());
         ctx.MarkDirty();
+        // Same live-instance invalidation as rescale-system above — the single
+        // emitter path rebuilds the same Scale key container.
+        if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
         return true;

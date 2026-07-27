@@ -340,3 +340,49 @@ test("two same-track edits MORE than the window apart are SEPARATE undo steps", 
   await undo();
   expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(s0, 3);
 });
+
+// ── engine/action/rescale-system undo boundary ──────────────────────────────
+//
+// 2026-07 audit an-audit-finding. `rescale-system` mutated every emitter in the system
+// without a pre-mutation captureUndo(), while its sibling `rescale-emitter`
+// forty lines below has always called one. The handler carried a comment
+// excusing the omission as "a no-op until the broader capture wiring lands" —
+// wiring that HAD landed, so the comment read as an accepted limitation and
+// every reader skipped past it.
+//
+// The failure is not "undo does nothing", which is why it stayed invisible:
+// `undo/perform`'s head-of-history auto-cap still fires, so a single Ctrl+Z
+// after a rescale DOES change something — it reverts straight past the rescale
+// to whatever the last genuinely-captured entry was, silently discarding the
+// user's previous edit as well. Hence the seeded edit below: it is what
+// separates "the rescale reverted" from "the rescale AND everything before it
+// reverted".
+test("a whole-system rescale is its own undo step and does not swallow the prior edit", async () => {
+  const id = await firstEmitterId();
+  await req("emitters/select", { id });
+  const p0 = await getLifetime(id);
+
+  // Seed a distinct, separately-captured undo entry.
+  const seeded = Number((p0 + 5).toFixed(3));
+  await setLifetime(id, seeded);
+  expect(await getLifetime(id)).toBeCloseTo(seeded, 4);
+  await page.waitForTimeout(1600);   // exceed COALESCE_WINDOW_MS so the rescale can't fold in
+
+  // DoRescaleEmitter does `emitter->lifetime *= timeScale` (src/Rescale.cpp:23),
+  // so a 200% duration scale doubles it. sizeScale stays 1.0 to keep the
+  // assertion on a single axis.
+  await req("engine/action/rescale-system", {
+    durationScalePercent: 200,
+    sizeScalePercent: 100,
+  });
+  expect(await getLifetime(id)).toBeCloseTo(seeded * 2, 3);
+
+  // THE REGRESSION: without captureUndo() in rescale-system this lands on p0,
+  // having thrown away the seeded edit along with the rescale.
+  await undo();
+  expect(await getLifetime(id)).toBeCloseTo(seeded, 3);
+
+  // Restore, so the shared native host isn't left rescaled for later specs.
+  await undo();
+  expect(await getLifetime(id)).toBeCloseTo(p0, 4);
+});
