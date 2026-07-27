@@ -2,26 +2,9 @@
 
 All notable user-facing changes to the Particle Editor are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Changes are grouped by **SemVer release
-version** (newest first) and each entry links its PR. The versioning policy lives in
-[`VERSIONING.md`](VERSIONING.md); see the
-[tags](https://github.com/DrKnickers/particle-editor/tags) ·
+version** (newest first).
+See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 [Releases](https://github.com/DrKnickers/particle-editor/releases).
-
-For the per-PR engineering diary (design decisions, implementation detail, and issues-and-resolutions),
-see [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md). For planned and in-progress work, see [`ROADMAP.md`](ROADMAP.md).
-
-**Conventions** (authoritative — `CLAUDE.md` points here). Only `## [Unreleased]` is edited
-day to day: add one concise bullet per user-facing change under the right category.
-Categories appear in this fixed order, only the ones that apply: **Added · Changed · Fixed ·
-Removed · Security**. Bullets are present tense, **no trailing period**, ending with the PR
-link `([#NN](…/pull/NN))` (commit link for the few pre-PR entries) — no commit hash, no file
-names, no engineering diary (that's [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md)). **User
-perspective only** — *what the user can now do*. **Omit non-user-facing changes entirely**:
-docs, changelog/handoff backfills, CI/build config, and pure internal refactors get no bullet
-here (dev log only). Cutting a release renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
-and adds a fresh empty `## [Unreleased]` above it (a user-gated step — see
-[`VERSIONING.md`](VERSIONING.md)); an optional `[X.Y.Z]: …/compare/…` reference-link footer
-may live at the end of the file.
 
 ## [Unreleased]
 
@@ -91,7 +74,7 @@ may live at the end of the file.
 - EmitterTree panel toolbar and a live 3D cursor position readout in the status bar
 
 ### Changed
-- The What's New page is retired — even slimmed it stayed redundant with the landing page. Returning v1.5 users now get a dedicated Start Here guide that compares old and current workflows across authoring, mod assets, scene context, preview tools, and safer editing; the frozen five-row departures table moves with it, the guide home points there, and the topbar on every page drops the What's New item ([`a-session-branch`](https://github.com/DrKnickers/particle-editor/tree/a-session-branch), #657)
+- The What's New page is retired — even slimmed it stayed redundant with the landing page. Returning v1.5 users now get a dedicated Start Here guide that compares old and current workflows across authoring, mod assets, scene context, preview tools, and safer editing; the frozen five-row departures table moves with it, the guide home points there, and the topbar on every page drops the What's New item
 - The guide sidebar's "Videos pending" badge on tutorials 2 and 4 is now bracketed — "(Videos pending)" — so it reads as an aside instead of blending into the tutorial title
 - Guide article links now carry a rest-state underline instead of being distinguished by colour alone, fixing a WCAG 1.4.1 (link-in-text-block) failure across every guide page
 - The What's New page is now a slim reference for returning modders — the five capability sections duplicated the landing page's feature tour clip-for-clip and were cut; the page keeps the lineage claim and the verified departures table, and links to the landing for the tour

@@ -859,7 +859,7 @@ LUID Engine::GetAdapterLuid() const
 // far=1000, then the engine's _33 / _43 overrides that flip Z. The
 // only thing that varies is the aspect: (w / h) here instead of
 // (BackBufferWidth / BackBufferHeight) there. Duplicated inline
-// (~5 lines) per CLAUDE.md "surgical changes" guidance rather than
+// (~5 lines) per the repo's "surgical changes" guidance rather than
 // factoring a RebuildProjection helper that nothing else needs.
 //
 // Passing w <= 0 or h <= 0 clears the active flag and restores the

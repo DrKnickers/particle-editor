@@ -39,10 +39,6 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 ### What goes where in docs
 
 - **[CHANGELOG.md](CHANGELOG.md)** — public-facing release history. A feature PR adds one user-facing bullet under `## [Unreleased]` when it lands (no bullet for non-user-facing changes — docs, CI, internal refactors); cutting a release rolls that section up. Format rules live in the file's preamble.
-- **[DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md)** — per-PR engineering detail. Every non-trivial PR adds an entry with *What ships* / *How we tackled it* / *Issues encountered* — see existing entries for the shape. After adding the entry, run `scripts/build-devlog-index.ps1` to refresh the generated `## Index` at the top (don't hand-edit the index). It's a big file — to find past work, read the `## Index`, not the whole file.
-- **[ROADMAP.md](ROADMAP.md)** — planned work, grouped by horizon. Items are named descriptively; the section is the tier, and a GitHub issue (`#NN`) gives a stable handle when one is needed.
-
-Project conventions live in [`AGENTS.md`](AGENTS.md) at the repo root (the always-on rules and gates, shared by every coding agent) plus the process playbooks it points to under [`docs/process/`](docs/process/) — planning, verification, and shipping. [`CLAUDE.md`](CLAUDE.md) imports `AGENTS.md` and adds only Claude Code-specific notes. Worth a read before non-trivial work.
 
 ## Build — it takes TWO builds
 
@@ -53,9 +49,9 @@ The editor is a C++ host **plus** a React/WebView2 UI. Building the C++ `.sln` a
 
 **Symptom of skipping step 2:** the editor launches but the WebView shows **`ERR_NAME_NOT_RESOLVED` for `app.local`** — the virtual-host mapping has no `dist` to point at. Build the web bundle and **restart the exe** (the mapping is registered once at startup, so an in-window Refresh isn't enough). Drive the UI with the **Release** x64 build — Debug's attached console freezes the GUI.
 
-To check/refresh the a11y goldens, run `pnpm --filter ./apps/editor a11y:drift` (exit 0 = clean, 2 = drift with goldens refreshed in the tree). A weekly scheduled task `a11y-goldens-drift-check` also runs it on a fresh `master` and opens a review PR on drift — inspect/reschedule/stop it with the `list_scheduled_tasks` / `update_scheduled_task` tools. Its prompt is [`docs/automation/a11y-drift-weekly-routine.md`](docs/automation/a11y-drift-weekly-routine.md); if you edit that doc, **re-register** the task (they don't auto-sync).
+To check/refresh the a11y goldens, run `pnpm --filter ./apps/editor a11y:drift` (exit 0 = clean, 2 = drift with goldens refreshed in the tree).
 
-See [`README.md`](README.md) for runtime details and [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md) → *Reference* → *Build Environment Requirements* for the canonical build matrix.
+See [`README.md`](README.md) for runtime details.
 
 ## Running the tests — one command
 
@@ -66,8 +62,6 @@ node scripts/run-all-tests.mjs
 That is the whole verification recipe: it runs every automated layer in dependency order — web typecheck, Vitest (~1,230 tests), the web bundle build, script tests, mock-browser Playwright, all standalone C++ unit tests (`tests/test_*.cpp`, built via their `build_*.bat`s), both MSBuild configs, the native Playwright suite against the real `ParticleEditor.exe`, render-golden image comparisons (`scripts/render-goldens.mjs`; bless intentional rendering changes with `--update`), and the `--drive` pixel smoke with its assertion scenarios — and exits nonzero if anything fails, with a per-lane summary. Expect the full run to take minutes (it rebuilds everything on purpose; a green gate on stale binaries is worse than a slow one).
 
 Useful flags: `--list` (lane names), `--lane vitest,cpp-unit` (subset), `--allow-missing drive-smoke` (downgrade a missing prereq to a visible SKIP on machines without the game install), `--skip-build` (unsafe, for iterating). Individual lanes remain available directly: `pnpm --filter ./apps/editor test` / `test:web` / `test:native`, and `node scripts/run-native-unit-tests.mjs --filter <name>` for a single C++ test.
-
-A scheduled task `full-gate-nightly` also runs the whole gate on a fresh `master` every night (04:30 local, dev box) and files/refreshes a **`nightly gate failure`** GitHub issue when anything breaks — so a regression that slips past a PR gets surfaced within a day. Its prompt is [`docs/automation/full-gate-nightly-routine.md`](docs/automation/full-gate-nightly-routine.md); if you edit that doc, **re-register** the task (they don't auto-sync), same as the weekly a11y task above.
 
 ## Static analysis
 

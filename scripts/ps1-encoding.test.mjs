@@ -8,7 +8,7 @@
 // which reads UTF-8 regardless, is not installed here.
 //
 // Rule: a .ps1 is safe if it is pure ASCII, OR it carries a UTF-8 BOM.
-// (This is the .rc convention in AGENTS.md applied to the script surface.)
+// (This is the repo's .rc encoding convention applied to the script surface.)
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
