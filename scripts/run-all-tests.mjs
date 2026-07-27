@@ -134,6 +134,33 @@ function runExe(cmd, args, cwd = repoRoot) {
   const r = spawnSync(cmd, args, { cwd, stdio: "inherit", shell: false });
   return r.error ? 1 : (r.status ?? 1);
 }
+
+// Like runCmdLine, but TEES: the child's output still reaches the console while
+// also being returned for inspection. Used by lanes whose runners can report
+// skipped TESTS inside an exit-0 run — the gate used to be blind to those (a
+// lane could pass while silently executing nothing), which the 2026-07 audit
+// demonstrated with a stub reporting "0 passed, 1 skipped".
+function runCmdLineTee(commandLine, cwd) {
+  const r = spawnSync("cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
+    cwd,
+    encoding: "utf8",
+    shell: false,
+    windowsVerbatimArguments: true,
+  });
+  const out = `${r.stdout || ""}${r.stderr || ""}`;
+  if (out) process.stdout.write(out);
+  return { code: r.error ? 1 : (r.status ?? 1), out };
+}
+
+// Largest "N skipped" (and Playwright's "N did not run") reported by a runner.
+// Returns 0 when the output makes no such claim.
+export function parseSkippedCount(out) {
+  let n = 0;
+  for (const m of out.matchAll(/(\d+)\s+(?:skipped|did not run)\b/gi)) {
+    n = Math.max(n, Number(m[1]));
+  }
+  return n;
+}
 function psCapture(command) {
   const r = spawnSync(
     "powershell.exe",
@@ -155,6 +182,47 @@ function findMsbuild() {
   });
   const path = (r.stdout || "").split(/\r?\n/).find((l) => l.trim().endsWith("MSBuild.exe"));
   return path ? path.trim() : null;
+}
+
+// Newest mtime among the inputs a native build consumes. Used to prove a build
+// lane actually produced current output: an incremental no-op build legitimately
+// leaves the exe untouched, but the exe must still be NEWER than every source it
+// is built from. A stubbed/no-op'd MSBuild that exits 0 without linking leaves a
+// stale exe older than the sources, which is exactly the false green the 2026-07
+// audit demonstrated (it exited 0 with an unchanged hash and timestamp).
+function newestSourceMtime() {
+  let newest = 0;
+  const walk = (dir) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === "packages" || e.name === "third_party") continue;
+        walk(full);
+      } else if (/\.(cpp|h|hpp|rc|vcxproj|fx)$/i.test(e.name)) {
+        try { newest = Math.max(newest, statSync(full).mtimeMs); } catch { /* raced */ }
+      }
+    }
+  };
+  walk(join(repoRoot, "src"));
+  for (const f of [sln]) {
+    try { newest = Math.max(newest, statSync(f).mtimeMs); } catch { /* absent */ }
+  }
+  return newest;
+}
+
+// Assert a build lane's binary exists and is not stale relative to its sources.
+// Returns null when fresh, or a failure note.
+export function staleBinaryNote(exePath, label, newestSrcMs = newestSourceMtime()) {
+  if (!existsSync(exePath)) return `${label} produced no ${exePath}`;
+  const exeM = statSync(exePath).mtimeMs;
+  const srcM = newestSrcMs;
+  if (srcM > 0 && exeM < srcM) {
+    return `${label} exited 0 but ${exePath} is OLDER than the newest source ` +
+           `(exe ${new Date(exeM).toISOString()} < src ${new Date(srcM).toISOString()}) — stale binary`;
+  }
+  return null;
 }
 
 let msbuildPath = null;
@@ -270,7 +338,12 @@ const LANES = [
   },
   {
     name: "msbuild-debug",
-    run: () => (SKIP_BUILD ? skip("--skip-build") : msbuild("Debug") === 0 ? pass : fail("x64 Debug build")),
+    run: () => {
+      if (SKIP_BUILD) return skip("--skip-build");
+      if (msbuild("Debug") !== 0) return fail("x64 Debug build");
+      const stale = staleBinaryNote(debugExe, "msbuild-debug");
+      return stale ? fail(stale) : pass;
+    },
   },
   {
     name: "cpp-unit-exe",
@@ -312,12 +385,21 @@ const LANES = [
         // genuinely busy port still fails loudly inside the lane itself.
         log(`playwright-native: port preflight inconclusive (probe exit ${probe.code}); proceeding.`);
       }
-      return runCmdLine("pnpm run test:native", editorDir) === 0 ? pass : fail("native Playwright");
+      const r = runCmdLineTee("pnpm run test:native", editorDir);
+      if (r.code !== 0) return fail("native Playwright");
+      // Surface skipped TESTS inside this passing lane (see parseSkippedCount).
+      const innerSkipped = parseSkippedCount(r.out);
+      return innerSkipped > 0 ? { ...pass, innerSkipped } : pass;
     },
   },
   {
     name: "msbuild-release",
-    run: () => (SKIP_BUILD ? skip("--skip-build") : msbuild("Release") === 0 ? pass : fail("x64 Release build")),
+    run: () => {
+      if (SKIP_BUILD) return skip("--skip-build");
+      if (msbuild("Release") !== 0) return fail("x64 Release build");
+      const stale = staleBinaryNote(releaseExe, "msbuild-release");
+      return stale ? fail(stale) : pass;
+    },
   },
   {
     name: "render-goldens",
@@ -484,11 +566,23 @@ function main() {
   }
   const failed = results.filter((r) => r.status === "FAIL");
   const blocked = results.filter((r) => r.status === "SKIP" && (r.note || "").startsWith("blocked"));
+  // "lanes" is explicit on purpose: these counts have ALWAYS been lane counts,
+  // but a bare "0 skipped" next to a lane that internally reported "190 passed,
+  // 4 skipped" reads as a claim about TESTS. The 2026-07 audit was misled by
+  // exactly that, and separately showed a stubbed sub-runner reporting
+  // "0 passed, 1 skipped" while the aggregate printed PASS / 0 skipped.
   console.log(
-    `[gate] ${results.filter((r) => r.status === "PASS").length} passed, ` +
+    `[gate] ${results.filter((r) => r.status === "PASS").length} lanes passed, ` +
       `${failed.length} failed, ${blocked.length} blocked, ` +
       `${results.filter((r) => r.status === "SKIP").length - blocked.length} skipped`,
   );
+  const internallySkipped = results.filter((r) => r.innerSkipped > 0);
+  if (internallySkipped.length > 0) {
+    console.log(
+      "[gate] NOTE: lanes reporting SKIPPED TESTS inside a passing lane — " +
+        internallySkipped.map((r) => `${r.name}: ${r.innerSkipped}`).join(", "),
+    );
+  }
   return failed.length > 0 ? 1 : 0;
 }
 

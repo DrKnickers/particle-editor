@@ -180,6 +180,7 @@ Write-Host "  [ok] web bundle -> $stageDistDir"
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'ParticleEditor.exe'))
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'WebView2Loader.dll'))
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'd3dx9_43.dll'))
+Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'MicrosoftEdgeWebview2Setup.exe'))
 Assert-Staged ([System.IO.Path]::Combine('web', 'apps', 'editor', 'dist', 'index.html'))
 $stagedAssets = [System.IO.Path]::Combine($stageDistDir, 'assets')
 if (-not (Test-Path -LiteralPath $stagedAssets -PathType Container) -or
@@ -191,7 +192,32 @@ if (-not (Test-Path -LiteralPath $stagedFonts -PathType Container) -or
     -not (Get-ChildItem -LiteralPath $stagedFonts -Recurse -File)) {
     throw "[package-release] Staged web bundle has no fonts: $stagedFonts"
 }
-Write-Host "  [ok] staged tree verified"
+# SHAPE ALLOWLIST. The assertions above prove the required files are PRESENT;
+# this proves nothing ELSE is. Without it an unexpected artifact riding along in
+# web/apps/editor/dist (a stray canary, a sourcemap, a leftover fixture) is
+# copied into the stage and shipped, and every present-only check still passes
+# -- verified by negative control during the 2026-07 audit follow-up. Staging is
+# a faithful copy of dist, so dist pollution is the only way in, and this is
+# where it has to be caught.
+$allowedPatterns = @(
+    '^x64/Release/(ParticleEditor\.exe|WebView2Loader\.dll|d3dx9_43\.dll|MicrosoftEdgeWebview2Setup\.exe)$'
+    '^web/apps/editor/dist/index\.html$'
+    '^web/apps/editor/dist/assets/[^/]+\.(js|css)$'
+    '^web/apps/editor/dist/fonts/.+$'
+)
+$stagedForShape = @(
+    Get-ChildItem -LiteralPath $Stage -Recurse -File |
+        ForEach-Object { $_.FullName.Substring($Stage.Length).TrimStart([char]'\', [char]'/') -replace '\\', '/' }
+)
+$unexpected = @($stagedForShape | Where-Object {
+    $rel = $_
+    -not ($allowedPatterns | Where-Object { $rel -match $_ })
+})
+if ($unexpected.Count -gt 0) {
+    throw "[package-release] Unexpected file(s) in the staged tree (not in the release shape allowlist): $($unexpected -join ', ')"
+}
+
+Write-Host "  [ok] staged tree verified (shape allowlist: $($stagedForShape.Count) files)"
 
 # --- Optional: create + verify the release zip -------------------------------
 if ($OutZip) {
@@ -212,20 +238,53 @@ if ($OutZip) {
     # Only FILE entries count — a bare directory entry (ends in '/') must not satisfy a check.
     $fileEntries = @($entries | Where-Object { -not $_.EndsWith('/') })
 
+    # EXACT-SET contract, not a subset check. The old assertions verified only
+    # that four named entries were PRESENT, so a zip could carry an extra file
+    # (a stray canary, a leftover .pdb, an unrelated dll) or be missing a
+    # required web asset and still pass -- both demonstrated by the 2026-07
+    # audit's negative controls, which packaged an extra canary and a
+    # CSS-less bundle and got exit 0 twice.
+    #
+    # The zip must equal the staged tree exactly: nothing added between staging
+    # and compression, nothing dropped. The staged tree is itself asserted above.
+    $stagedRel = @(
+        Get-ChildItem -LiteralPath $Stage -Recurse -File |
+            ForEach-Object { $_.FullName.Substring($Stage.Length).TrimStart([char]'\', [char]'/') -replace '\\', '/' }
+    )
+    $zipOnly   = @($fileEntries | Where-Object { $stagedRel -notcontains $_ })
+    $stageOnly = @($stagedRel   | Where-Object { $fileEntries -notcontains $_ })
+    if ($zipOnly.Count -gt 0) {
+        throw "[package-release] Zip contains entries absent from the staged tree: $($zipOnly -join ', ')"
+    }
+    if ($stageOnly.Count -gt 0) {
+        throw "[package-release] Zip is MISSING staged files: $($stageOnly -join ', ')"
+    }
+
+    # Every shipped artifact named explicitly, including the WebView2
+    # bootstrapper -- it was previously staged and copied but never asserted in
+    # either the staged tree or the zip, so the one file whose absence #672/#673
+    # exist to prevent was the one file nothing checked.
     $requiredEntries = @(
         'x64/Release/ParticleEditor.exe'
         'x64/Release/WebView2Loader.dll'
         'x64/Release/d3dx9_43.dll'
+        'x64/Release/MicrosoftEdgeWebview2Setup.exe'
         'web/apps/editor/dist/index.html'
     )
     foreach ($r in $requiredEntries) {
         if ($fileEntries -notcontains $r) { throw "[package-release] Missing zip entry: $r" }
     }
-    if (-not ($fileEntries | Where-Object { $_ -like 'web/apps/editor/dist/assets/*' })) {
-        throw "[package-release] Missing zip entry (file under): web/apps/editor/dist/assets/"
+    foreach ($kind in @('assets', 'fonts')) {
+        if (-not ($fileEntries | Where-Object { $_ -like "web/apps/editor/dist/$kind/*" })) {
+            throw "[package-release] Missing zip entry (file under): web/apps/editor/dist/$kind/"
+        }
     }
-    if (-not ($fileEntries | Where-Object { $_ -like 'web/apps/editor/dist/fonts/*' })) {
-        throw "[package-release] Missing zip entry (file under): web/apps/editor/dist/fonts/"
+    # The bundle must carry BOTH a JS and a CSS asset -- the audit's negative
+    # control removed the only CSS while JS remained and packaging still passed.
+    foreach ($ext in @('js', 'css')) {
+        if (-not ($fileEntries | Where-Object { $_ -like "web/apps/editor/dist/assets/*.$ext" })) {
+            throw "[package-release] Missing zip entry: no .$ext under web/apps/editor/dist/assets/"
+        }
     }
     Write-Host "  [ok] zip verified -> $OutZip" -ForegroundColor Cyan
 }

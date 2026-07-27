@@ -39,9 +39,18 @@ function buildFixture(root, omit = []) {
   if (!omit.includes("dist")) {
     if (!omit.includes("index")) file("web/apps/editor/dist/index.html", "<html></html>");
     if (omit.includes("emptyassets")) mkdirSync(path.join(root, "web/apps/editor/dist/assets"), { recursive: true });
-    else file("web/apps/editor/dist/assets/index-stub.js");
+    else {
+      file("web/apps/editor/dist/assets/index-stub.js");
+      // A real Vite bundle always emits CSS alongside the JS. The fixture used
+      // to ship JS only, which is exactly the shape the 2026-07 audit's
+      // negative control produced by DELETING the CSS — and packaging passed.
+      // Model the honest bundle here so `omit: ["css"]` can assert the guard.
+      if (!omit.includes("css")) file("web/apps/editor/dist/assets/index-stub.css");
+    }
     if (omit.includes("emptyfonts")) mkdirSync(path.join(root, "web/apps/editor/dist/fonts"), { recursive: true });
     else file("web/apps/editor/dist/fonts/stub.woff2");
+    // An artifact riding along in dist/ that is not part of the release shape.
+    if (omit.includes("stray")) file("web/apps/editor/dist/assets/index-stub.js.map");
   }
 }
 
@@ -137,6 +146,18 @@ for (const c of [
   { name: "case 6: dist present but assets empty", omit: ["emptyassets"], rx: /no assets/ },
   { name: "case 7: dist present but index.html missing", omit: ["index"], rx: /Missing required source.*index\.html/s },
   { name: "case 8: dist present but fonts empty", omit: ["emptyfonts"], rx: /no fonts/ },
+  // The two 2026-07 audit negative controls, now permanent. Both previously
+  // packaged successfully (exit 0) and shipped a wrong artifact.
+  {
+    name: "case 9: only CSS asset missing (JS still present) is rejected",
+    omit: ["css"],
+    rx: /no \.css under web\/apps\/editor\/dist\/assets/,
+  },
+  {
+    name: "case 10: an unexpected file in dist is rejected by the shape allowlist",
+    omit: ["stray"],
+    rx: /Unexpected file\(s\) in the staged tree.*index-stub\.js\.map/s,
+  },
 ]) {
   test(c.name, skipOpt, (t) => {
     const { res } = runCase(t, c.omit);
