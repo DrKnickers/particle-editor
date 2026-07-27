@@ -107,6 +107,9 @@ function main() {
   }
 
   const results = [];
+  // Cases a binary self-skipped because a capability probe failed. Reported at
+  // the end so a green run states plainly what it did NOT exercise (audit an-audit-finding).
+  const skippedCases = [];
   for (const name of tests) {
     const started = Date.now();
     const exe = join(testsDir, `${name}.exe`);
@@ -153,15 +156,32 @@ function main() {
     }
 
     console.log(`[gate] run   ${name}`);
+    // Capture-and-echo rather than "inherit": a test binary can print
+    // `SKIP: <case> (<reason>)` for a case whose CAPABILITY probe failed —
+    // test_clip_save_confinement does exactly that when `mklink /J` or 8.3
+    // short-name lookup is unavailable — and then still exit 0. Reading only the
+    // exit code made a self-skipped junction/short-path confinement case
+    // indistinguishable from a passing one (2026-07 audit, an-audit-finding).
+    //
+    // We do NOT fail on a skip: the capability genuinely is absent on some
+    // machines, and failing there would punish a legitimate environment. We
+    // surface it, so "PASS" never silently means "did not run".
     const r = spawnSync(exe, NEEDS_EXE.has(name) ? [APP_EXE] : [], {
       cwd: repoRoot,
-      stdio: "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
       shell: false,
       timeout: TIMEOUT_MS,
     });
+    if (r.stdout) process.stdout.write(r.stdout);
+    if (r.stderr) process.stderr.write(r.stderr);
+    const skipped = [...String(r.stdout || "").matchAll(/^SKIP:\s*(.+)$/gm)].map((m) => m[1].trim());
+    if (skipped.length) skippedCases.push({ test: name, cases: skipped });
+
+    const skipNote = skipped.length ? `${skipped.length} case(s) SKIPPED` : "";
     if (r.error || r.signal) record("FAIL", r.signal ? `timeout/killed (${r.signal})` : String(r.error));
     else if (r.status !== 0) record("FAIL", `exit ${r.status}`);
-    else record("PASS");
+    else record("PASS", skipNote);
   }
 
   const width = Math.max(...results.map((r) => r.name.length));
@@ -175,6 +195,14 @@ function main() {
   console.log(
     `[gate] ${results.length - fails.length - skips.length} passed, ${fails.length} failed, ${skips.length} skipped`,
   );
+  // A green line above can still hide un-run coverage. Name it.
+  if (skippedCases.length) {
+    const total = skippedCases.reduce((n, s) => n + s.cases.length, 0);
+    console.log(`[gate] NOTE: ${total} case(s) self-SKIPPED inside PASSING binaries — coverage NOT exercised:`);
+    for (const s of skippedCases) {
+      for (const c of s.cases) console.log(`         ${s.test}: ${c}`);
+    }
+  }
   return fails.length > 0 ? 1 : 0;
 }
 

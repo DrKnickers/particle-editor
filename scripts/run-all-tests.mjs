@@ -152,6 +152,38 @@ function runCmdLineTee(commandLine, cwd) {
   return { code: r.error ? 1 : (r.status ?? 1), out };
 }
 
+// The 8-byte PNG signature every real frame starts with.
+export const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// Oracle for the record-smoke lane. Returns a failure string, or null when the
+// run genuinely produced renderable frames.
+//
+// Extracted and exported so scripts/gate-integrity.test.mjs can exercise it
+// directly: we read this lane as PROOF that headless recording works, and it
+// could not previously fail. It captured the spawn result and then used
+// `status` only inside failure message STRINGS — never as a condition — while
+// discarding `error`, `signal` and stderr entirely (stdio was "ignore"). A
+// recorder that wrote frames and then crashed, or hit the timeout, passed.
+// Its whole oracle was "≥1 file named frame_N.png" plus "largest ≥ 20 KB",
+// so equally-large garbage under the right filename passed too
+// (2026-07 audit, an-audit-finding).
+export function recordSmokeVerdict({ error, signal, status, stderr, frames, maxBytes, biggest, header }) {
+  const tail = (s) => String(s || "").split(/\r?\n/).filter(Boolean).slice(-4).join(" | ");
+  if (error)  return `headless --record could not run: ${error}`;
+  if (signal) return `headless --record was killed (${signal}; the 90s timeout is the usual cause) — stderr: ${tail(stderr)}`;
+  if (status !== 0) return `headless --record exited ${status} — stderr: ${tail(stderr)}`;
+  if (!frames || frames.length === 0) return "headless --record produced 0 frames";
+  // A real 1280x960 UI render PNG is tens-to-hundreds of KB; a blank/black
+  // frame compresses to a few KB. 20KB cleanly separates them.
+  if (maxBytes < 20000) return `headless --record frames look blank (max ${maxBytes} bytes across ${frames.length})`;
+  // Size alone cannot tell a PNG from equally-large garbage wearing the right
+  // filename. Check the signature.
+  if (!header || !Buffer.from(header).subarray(0, 8).equals(PNG_SIGNATURE)) {
+    return `headless --record wrote ${biggest ?? "a frame"} (${maxBytes} bytes) but it is not a PNG`;
+  }
+  return null;
+}
+
 // Largest "N skipped" (and Playwright's "N did not run") reported by a runner.
 // Returns 0 when the output makes no such claim.
 export function parseSkippedCount(out) {
@@ -434,21 +466,36 @@ const LANES = [
       const outDir = join(repoRoot, "tests", ".tmp", "record-smoke-frames");
       const clean = () => { rmSync(outDir, { recursive: true, force: true }); rmSync(outDir + ".tmp", { recursive: true, force: true }); };
       clean();
+      // stderr is PIPED, not ignored: it is the only explanation we get when the
+      // recorder dies, and this lane used to discard it. stdout stays ignored —
+      // a headless record is chatty enough to risk the default maxBuffer.
       const r = spawnSync(releaseExe,
         ["--record", join(repoRoot, "tests", "record-smoke.timeline.json"), "--record-minimized"],
-        { cwd: repoRoot, encoding: "utf8", timeout: 90000, stdio: "ignore",
+        { cwd: repoRoot, encoding: "utf8", timeout: 90000, stdio: ["ignore", "ignore", "pipe"],
           env: { ...process.env, PE_RECORD_HEADLESS: "1" } });
       let frames = [];
       try { frames = readdirSync(outDir).filter((f) => /^frame_\d+\.png$/.test(f)); }
       catch { /* out dir missing → 0 frames (record aborted before the tmp→out rename) */ }
       let maxBytes = 0;
-      for (const f of frames) { try { maxBytes = Math.max(maxBytes, statSync(join(outDir, f)).size); } catch { /* raced */ } }
+      let biggest = null;
+      for (const f of frames) {
+        try {
+          const n = statSync(join(outDir, f)).size;
+          if (n > maxBytes) { maxBytes = n; biggest = f; }
+        } catch { /* raced */ }
+      }
+      // Read the header BEFORE clean() removes the directory.
+      let header = null;
+      if (biggest) {
+        try { header = readFileSync(join(outDir, biggest)).subarray(0, 8); } catch { /* raced */ }
+      }
       clean();
-      if (frames.length === 0) return fail(`headless --record produced 0 frames; exe exit ${r.status}`);
-      // A real 1280x960 UI render PNG is tens-to-hundreds of KB; a blank/black
-      // frame compresses to a few KB. 20KB cleanly separates them.
-      if (maxBytes < 20000) return fail(`headless --record frames look blank (max ${maxBytes} bytes across ${frames.length}); exe exit ${r.status}`);
-      return pass;
+
+      const verdict = recordSmokeVerdict({
+        error: r.error, signal: r.signal, status: r.status, stderr: r.stderr,
+        frames, maxBytes, biggest, header,
+      });
+      return verdict ? fail(verdict) : pass;
     },
   },
   {

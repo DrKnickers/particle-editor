@@ -8,7 +8,7 @@ import { mkdtempSync, writeFileSync, utimesSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { staleBinaryNote, parseSkippedCount } from "./run-all-tests.mjs";
+import { staleBinaryNote, parseSkippedCount, recordSmokeVerdict, PNG_SIGNATURE } from "./run-all-tests.mjs";
 
 test("staleBinaryNote flags an exe older than its sources (the stubbed-MSBuild false green)", () => {
   const dir = mkdtempSync(join(tmpdir(), "gate-stale-"));
@@ -60,4 +60,60 @@ test("parseSkippedCount sees skipped tests inside an otherwise-green runner", ()
   // Clean runs make no such claim.
   assert.equal(parseSkippedCount("15 passed (13.5s)"), 0);
   assert.equal(parseSkippedCount("51 passed, 0 failed, 0 skipped"), 0);
+});
+
+// ── record-smoke oracle (audit an-audit-finding) ──────────────────────────────────────
+//
+// This lane is how we claim headless recording works, and it could not fail:
+// it captured the child's spawn result and then used `status` ONLY inside
+// failure message strings, never as a condition, while discarding `error`,
+// `signal` and stderr. Its entire oracle was 'a file named frame_N.png exists'
+// plus 'the largest is over 20 KB'.
+
+const OK_FRAME = { frames: ["frame_00000.png"], maxBytes: 120_000, biggest: "frame_00000.png", header: PNG_SIGNATURE };
+
+test("recordSmokeVerdict passes a genuine run", () => {
+  assert.equal(recordSmokeVerdict({ status: 0, ...OK_FRAME }), null);
+});
+
+test("recordSmokeVerdict FAILS a recorder that wrote frames and then crashed (the an-audit-finding false green)", () => {
+  // Exactly the green-preserving mutation from the audit: good-looking frames,
+  // nonzero exit. The old lane passed this.
+  const v = recordSmokeVerdict({ status: 1, stderr: "D3D9 device lost; aborting", ...OK_FRAME });
+  assert.ok(v, "expected a failure verdict");
+  assert.match(v, /exited 1/);
+  assert.match(v, /D3D9 device lost/, "stderr must reach the message — it used to be discarded");
+});
+
+test("recordSmokeVerdict FAILS a timed-out recorder even with frames on disk", () => {
+  const v = recordSmokeVerdict({ status: null, signal: "SIGTERM", ...OK_FRAME });
+  assert.ok(v);
+  assert.match(v, /SIGTERM/);
+});
+
+test("recordSmokeVerdict FAILS when the process could not be spawned at all", () => {
+  const v = recordSmokeVerdict({ error: new Error("ENOENT"), status: null, ...OK_FRAME });
+  assert.ok(v);
+  assert.match(v, /could not run/);
+});
+
+test("recordSmokeVerdict FAILS oversized garbage wearing a frame filename", () => {
+  // Right name, right size, not a PNG — the size-only oracle accepted this.
+  const v = recordSmokeVerdict({
+    status: 0,
+    frames: ["frame_00000.png"],
+    maxBytes: 900_000,
+    biggest: "frame_00000.png",
+    header: Buffer.from("NOTAPNG!", "ascii"),
+  });
+  assert.ok(v);
+  assert.match(v, /not a PNG/);
+});
+
+test("recordSmokeVerdict still catches the blank-frame and no-frame cases it always did", () => {
+  assert.match(recordSmokeVerdict({ status: 0, frames: [], maxBytes: 0 }), /0 frames/);
+  assert.match(
+    recordSmokeVerdict({ status: 0, frames: ["frame_00000.png"], maxBytes: 900, header: PNG_SIGNATURE }),
+    /look blank/,
+  );
 });
