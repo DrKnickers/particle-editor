@@ -1021,7 +1021,7 @@ describe("EmitterTree delete gating (helper-level)", () => {
   });
   it("deleting a parent opens the confirm", () => {
     const calls: number[] = [];
-    const bridge = { request: (r: { kind: string; params: { id?: number } }) => { if (r.kind === "emitters/delete") calls.push(r.params.id!); return Promise.resolve({}); }, on: () => () => {} } as unknown as Bridge;
+    const bridge = { request: (r: { kind: string; params: { ids?: number[] } }) => { if (r.kind === "emitters/delete-many") calls.push(...r.params.ids!); return Promise.resolve({}); }, on: () => () => {} } as unknown as Bridge;
     requestDeleteEmitters(bridge, [0]);
     expect(calls).toEqual([]);
     expect(useDeleteConfirmStore.getState().pending?.ids).toEqual([0]);

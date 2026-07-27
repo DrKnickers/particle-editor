@@ -1622,31 +1622,37 @@ export function CurveEditorPanel({ bridge }: Props) {
     handleDelete();
   }, [handleCopyKeys, handleDelete]);
 
-  // Paste re-adds each clipboard key on the FOCUS track via add-track-key
-  // (host dedupes by epsilon + returns the real inserted time). We select
-  // the returned times so the pasted keys highlight — same auto-select-
-  // the-returned-time path handleCanvasAdd uses (and the same reason it
-  // survives float32 drift natively). Blocked on a locked focus.
+  // Paste re-adds the whole clipboard on the FOCUS track via ONE
+  // add-track-keys (host dedupes each by epsilon + returns the real inserted
+  // times). We select the returned times so the pasted keys highlight — same
+  // auto-select-the-returned-time path handleCanvasAdd uses (and the same
+  // reason it survives float32 drift natively). Blocked on a locked focus.
+  //
+  // One request, not one per key: the host wraps the batch in a single
+  // captureUndo(), so one Ctrl+Z reverses the whole paste. The per-key
+  // fan-out this replaced captured an undo entry per key, so a single Ctrl+Z
+  // removed one key of a multi-key paste (2026-07 audit an-audit-finding).
   const handlePasteKeys = useCallback(() => {
     if (selectedId === null || focusLocked) return;
     const clip = getCurveKeysClipboard();
     if (clip.length === 0) return;
     const track = focusedChannel.trackName;
     setOptimisticSelected(null);
-    void Promise.all(
-      clip.map((k) =>
-        bridge
-          .request({
-            kind: "emitters/add-track-key",
-            params: { id: selectedId, track, time: k.time, value: k.value },
-          })
-          .then((res) => (res as { time?: number }).time ?? k.time)
-          .catch(() => null),
-      ),
-    ).then((times) => {
-      const valid = times.filter((t): t is number => t !== null);
-      if (valid.length > 0) setSelectedKeyTimes(new Set(valid));
-    });
+    void bridge
+      .request({
+        kind: "emitters/add-track-keys",
+        params: { id: selectedId, track, keys: clip.map((k) => ({ time: k.time, value: k.value })) },
+      })
+      .then((res) => {
+        // Fall back to the requested times when the response carries none,
+        // mirroring the singular handler's `res.time ?? k.time`.
+        const echoed = (res as { keys?: { time: number }[] }).keys;
+        const times = echoed && echoed.length > 0
+          ? echoed.map((k) => k.time)
+          : clip.map((k) => k.time);
+        setSelectedKeyTimes(new Set(times));
+      })
+      .catch(() => { /* refused paste leaves the selection cleared */ });
   }, [bridge, selectedId, focusLocked, focusedChannel.trackName]);
 
   // Window-scoped Ctrl/Cmd + C / X / V. Window-scoped (not panel-focus-

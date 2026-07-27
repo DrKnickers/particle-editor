@@ -122,6 +122,7 @@ function isMutating(kind: Request["kind"]): boolean {
   if (kind === "emitters/duplicate") return true;
   if (kind === "emitters/duplicate-many") return true;
   if (kind === "emitters/delete") return true;
+  if (kind === "emitters/delete-many") return true;
   if (kind === "emitters/rename") return true;
   if (kind === "emitters/duplicate-with-index-increment") return true;
   if (kind === "emitters/duplicate-with-index-increment-many") return true;
@@ -156,6 +157,7 @@ function isMutating(kind: Request["kind"]): boolean {
   // Track state.
   if (kind === "emitters/set-track-key") return true;
   if (kind === "emitters/add-track-key") return true;
+  if (kind === "emitters/add-track-keys") return true;
   // Per-emitter property patch.
   if (kind === "emitters/set-properties") return true;
   return false;
@@ -1228,6 +1230,34 @@ export class MockBridge implements Bridge {
         return { time, value };
       }
 
+      // ---------------- emitters/add-track-keys --
+      //
+      // Multi-key paste. Loops the single insert so each key gets the
+      // same dedupe-by-epsilon bump the native host applies, and returns
+      // the ACTUAL inserted keys aligned to the input order. The undo
+      // batching this exists for is native-only (the mock has no undo
+      // stack), so what the mock pins is the wire shape: one request,
+      // one tree/changed, N keys back.
+      case "emitters/add-track-keys": {
+        const { id, track, keys } = req.params;
+        const inserted: { time: number; value: number }[] = [];
+        for (const k of keys) {
+          const r = addTrackKeyInOverlay(id, track, k.time, k.value);
+          inserted.push(r ?? { time: k.time, value: k.value });
+        }
+        if (keys.length > 0) {
+          this.emit({
+            kind: "emitters/tree/changed",
+            payload: useMockEmitterTree.getState().tree,
+          });
+          this.emit({
+            kind: "engine/state/changed",
+            payload: snapshotEngineState(),
+          });
+        }
+        return { keys: inserted };
+      }
+
       // ---------------- emitters/list + emitters/select
       //
       // The fixture tree lives in `mock-state.useMockEmitterTree`. The
@@ -1314,6 +1344,42 @@ export class MockBridge implements Bridge {
           this.emit({ kind: "emitters/selected", payload: { id: null } });
         }
         this.emit({ kind: "emitters/tree/changed", payload: next });
+        this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
+        return {};
+      }
+
+      // ---------------- emitters/delete-many --
+      //
+      // The multi-root delete gesture. Loops the single delete and emits
+      // ONE tree/changed for the whole batch. Unlike the native host the
+      // mock stores ids ON the nodes and never reindexes, so the incoming
+      // descending order is irrelevant here — it matters on the real host,
+      // where an id is a position. The single undo entry this batching
+      // exists for is likewise native-only; the mock pins the wire shape.
+      case "emitters/delete-many": {
+        let tree = useMockEmitterTree.getState().tree;
+        const snap = snapshotEngineState();
+        let removed = 0;
+        let clearedSelection = false;
+        for (const id of req.params.ids) {
+          const next = deleteEmitter(tree, id);
+          if (next === null) continue;
+          tree = next;
+          removed++;
+          if (snap.selectedEmitterId === id) clearedSelection = true;
+        }
+        if (removed === 0) {
+          // Nothing matched — still emit so subscribers know we tried,
+          // matching the single-delete handler above.
+          this.emit({ kind: "emitters/tree/changed", payload: tree });
+          return {};
+        }
+        useMockEmitterTree.getState().setTree(tree);
+        if (clearedSelection) {
+          useMockEngineState.getState().applyPatch({ selectedEmitterId: null });
+          this.emit({ kind: "emitters/selected", payload: { id: null } });
+        }
+        this.emit({ kind: "emitters/tree/changed", payload: tree });
         this.emit({ kind: "engine/state/changed", payload: snapshotEngineState() });
         return {};
       }

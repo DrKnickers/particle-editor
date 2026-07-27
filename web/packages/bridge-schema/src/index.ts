@@ -846,11 +846,19 @@ export type Request =
       params: { id: number; track: TrackName; oldTime: number; newTime: number; newValue: number } }
   | { kind: "emitters/add-track-key";
       params: { id: number; track: TrackName; time: number; value: number } }
+  // batch: insert every key under ONE undo entry, so a multi-key curve paste
+  // is a single Ctrl+Z (2026-07 audit an-audit-finding). Each key is dedupe-bumped
+  // independently, so response.keys are the ACTUAL inserted (time, value)
+  // pairs, aligned to the input order.
+  | { kind: "emitters/add-track-keys";
+      params: { id: number; track: TrackName; keys: TrackKey[] } }
 
   // Emitter mutations
   | { kind: "emitters/duplicate";                       params: { id: number } }
   | { kind: "emitters/duplicate-many";                  params: { ids: number[] } }   // batch: duplicate each; response.newIds are the copies, aligned to input order
   | { kind: "emitters/delete";                          params: { id: number } }
+  | { kind: "emitters/delete-many";                     params: { ids: number[] } }   // batch: delete each subtree under ONE undo entry, so a multi-root delete is a single Ctrl+Z (2026-07 audit an-audit-finding). Ids are POSITIONS, so the host re-resolves each one inside the loop
+
   | { kind: "emitters/rename";                          params: { id: number; name: string } }
   | { kind: "emitters/duplicate-with-index-increment";  params: { id: number; delta: number } }
   | { kind: "emitters/duplicate-with-index-increment-many"; params: { id: number; delta: number; count: number } } // batch: `count` chained duplicates, each made from the previous copy so its index track climbs by `delta` per step; ONE undo step. response.newIds are the copies in creation order
@@ -1230,6 +1238,7 @@ type ResponseForB<R extends Request> =
   // when a same-time collision triggered a dedupe-bump.
   R extends { kind: "emitters/set-track-key" } ? Record<string, never> :
   R extends { kind: "emitters/add-track-key" } ? { time: number; value: number } :
+  R extends { kind: "emitters/add-track-keys" } ? { keys: TrackKey[] } :
 
   // Emitter mutations
   R extends { kind: "emitters/duplicate" } ?
@@ -1239,6 +1248,7 @@ type ResponseForB<R extends Request> =
     | { ok: true; newIds: number[] }
     | { ok: false; error: string } :
   R extends { kind: "emitters/delete" }                         ? Record<string, never> :
+  R extends { kind: "emitters/delete-many" }                    ? Record<string, never> :
   R extends { kind: "emitters/rename" }                         ? Record<string, never> :
   R extends { kind: "emitters/duplicate-with-index-increment" } ? { newId: number } :
   R extends { kind: "emitters/duplicate-with-index-increment-many" } ? { newIds: number[] } :

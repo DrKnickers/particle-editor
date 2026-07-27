@@ -5,11 +5,16 @@ import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
 import { useDeleteConfirmStore } from "@/lib/delete-emitters";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
+// A confirmed delete rides ONE batched emitters/delete-many, so the ids it
+// carries are flattened here to keep these assertions about WHICH emitters the
+// modal deleted; the batching itself is pinned in delete-emitters.test.ts.
 function recordingBridge() {
   const calls: number[] = [];
   const bridge = {
-    request: (req: { kind: string; params: { id?: number } }) => {
-      if (req.kind === "emitters/delete" && typeof req.params.id === "number") calls.push(req.params.id);
+    request: (req: { kind: string; params: { ids?: number[] } }) => {
+      if (req.kind === "emitters/delete-many" && Array.isArray(req.params.ids)) {
+        calls.push(...req.params.ids);
+      }
       return Promise.resolve({});
     },
     on: () => () => {},

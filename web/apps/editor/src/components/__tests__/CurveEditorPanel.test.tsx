@@ -1851,10 +1851,16 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     fireEvent.click(el, additive ? { ctrlKey: true } : {});
   }
 
-  function addTrackKeyCalls(bridge: { request: ReturnType<typeof vi.fn> }) {
+  // One Ctrl+V rides ONE emitters/add-track-keys carrying every clipboard key
+  // (2026-07 audit an-audit-finding). The per-key fan-out it replaced captured a separate
+  // undo entry per key host-side, so a single Ctrl+Z undid one key of a paste.
+  function addTrackKeysCalls(bridge: { request: ReturnType<typeof vi.fn> }) {
     return bridge.request.mock.calls
-      .map((c) => c[0] as { kind: string; params: { track: string; time: number; value: number } })
-      .filter((c) => c.kind === "emitters/add-track-key");
+      .map((c) => c[0] as {
+        kind: string;
+        params: { track: string; keys: { time: number; value: number }[] };
+      })
+      .filter((c) => c.kind === "emitters/add-track-keys");
   }
 
   async function focusScale(bridge: Bridge) {
@@ -1876,7 +1882,7 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     expect(byTime.get(50)).toBe(40);
   });
 
-  it("Ctrl+V adds one key per clipboard entry on the focus track + selects the results", async () => {
+  it("Ctrl+V sends every clipboard key on the focus track + selects the results", async () => {
     const { bridge } = makeStubBridgeWithFocusInteriorKey(0);
     await focusScale(bridge);
     clickKeyByTime(50);
@@ -1884,12 +1890,39 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     await waitFor(() => expect(getCurveKeysClipboard()).toHaveLength(1));
     fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
     await waitFor(() => {
-      const adds = addTrackKeyCalls(bridge);
+      const adds = addTrackKeysCalls(bridge);
       expect(adds).toHaveLength(1);
-      expect(adds[0]!.params).toMatchObject({ track: "scale", time: 50, value: 50 });
+      expect(adds[0]!.params.track).toBe("scale");
+      expect(adds[0]!.params.keys).toEqual([{ time: 50, value: 50 }]);
     });
     const panel = screen.getByTestId("curve-editor-panel");
     await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
+  });
+
+  // 2026-07 audit an-audit-finding. The discriminating case: with the old per-key fan-out
+  // a two-key paste produced TWO emitters/add-track-key requests, and each
+  // handler captured its own undo entry — so one Ctrl+Z removed one key of a
+  // two-key paste. A single-key paste passes either way, which is why the
+  // assertion below is on the request COUNT with a multi-key clipboard.
+  it("Ctrl+V of a multi-key clipboard issues exactly ONE batched request (an-audit-finding)", async () => {
+    const { bridge } = makeStubBridgeMultiInterior(0);
+    await focusScale(bridge);
+    clickKeyByTime(25);
+    clickKeyByTime(50, true);
+    fireEvent.keyDown(document.body, { key: "c", ctrlKey: true });
+    await waitFor(() => expect(getCurveKeysClipboard()).toHaveLength(2));
+
+    fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
+    await waitFor(() => {
+      const adds = addTrackKeysCalls(bridge);
+      expect(adds).toHaveLength(1);                 // not 2 — one gesture, one request
+      expect(adds[0]!.params.keys).toEqual([
+        { time: 25, value: 20 },
+        { time: 50, value: 40 },
+      ]);
+    });
+    const panel = screen.getByTestId("curve-editor-panel");
+    await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("2"));
   });
 
   it("Ctrl+X copies the selection then deletes the non-border keys", async () => {
@@ -1915,11 +1948,11 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     expect(getCurveKeysClipboard()).toHaveLength(0);
   });
 
-  it("Ctrl+V with an empty clipboard fires no add-track-key", async () => {
+  it("Ctrl+V with an empty clipboard fires no add-track-keys", async () => {
     const { bridge } = makeStubBridgeWithFocusInteriorKey(0);
     await focusScale(bridge);
     fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
-    expect(addTrackKeyCalls(bridge)).toHaveLength(0);
+    expect(addTrackKeysCalls(bridge)).toHaveLength(0);
   });
 
   it("Ctrl+C fired inside a text input does not write the clipboard (TYPING_TAGS guard)", async () => {
@@ -1961,7 +1994,7 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
     fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
     await waitFor(() => {
-      const adds = addTrackKeyCalls(bridge);
+      const adds = addTrackKeysCalls(bridge);
       expect(adds).toHaveLength(1);
       expect(adds[0]!.params.track).toBe("red");
     });

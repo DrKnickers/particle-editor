@@ -92,20 +92,30 @@ export function collapseToRoots(ids: number[], tree: EmitterTreeDto | null): num
   return ids.filter((id) => !hasSelectedAncestor(id));
 }
 
-// The single delete loop (collapses the prior two inline copies in EmitterTree +
-// MenuBar). `id` is a position index host-side, which shifts as siblings vanish.
-// We first collapse the selection to roots (so a parent + its descendant never
-// both issue a delete), then sort descending so the remaining sibling indices
-// stay valid as earlier-deleted ones vanish.
+// The single delete entry point (collapses the prior two inline copies in
+// EmitterTree + MenuBar). `id` is a position index host-side, which shifts as
+// siblings vanish. We first collapse the selection to roots (so a parent + its
+// descendant never both issue a delete), then sort descending so the remaining
+// sibling indices stay valid as earlier-deleted ones vanish.
+//
+// ONE batched emitters/delete-many, not one emitters/delete per root: the host
+// captures a single undo entry around its whole loop, so one Ctrl+Z reverses
+// the whole gesture. The per-root fan-out this replaced captured N undo
+// entries, and a single Ctrl+Z restored one emitter out of N (2026-07 audit
+// an-audit-finding). Batching for a single id is harmless — delete-many with one id is
+// the same capture, sweep and events as delete — and matches duplicateEmitters,
+// which sends duplicate-many unconditionally.
 export function performDelete(bridge: Bridge, ids: number[], tree: EmitterTreeDto | null): void {
   const roots = collapseToRoots(ids, tree);
-  const requests = [...roots]
-    .sort((a, b) => b - a)
-    .map((id) => bridge.request({ kind: "emitters/delete", params: { id } }));
-  // StatusBar feedback once EVERY delete resolves (F4) — a multi-root delete
+  if (roots.length === 0) return;
+  const request = bridge.request({
+    kind: "emitters/delete-many",
+    params: { ids: [...roots].sort((a, b) => b - a) },
+  });
+  // StatusBar feedback once the delete resolves (F4) — a multi-root delete
   // is one gesture, so it announces once.
   announceWhenOk(
-    Promise.all(requests),
+    request,
     `Deleted ${roots.length === 1 ? "emitter" : `${roots.length} emitters`} — Ctrl+Z to undo`,
   );
 }

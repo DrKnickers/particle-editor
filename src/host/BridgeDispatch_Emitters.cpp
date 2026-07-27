@@ -980,6 +980,88 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
     }
 
 
+    // -------- emitters/delete-many ----------------------------------
+    //
+    // The multi-root delete gesture. Structurally the delete half of the
+    // cut handler below: ONE captureUndo() around the whole loop, so a
+    // single Ctrl+Z reverses the whole gesture. React used to issue N
+    // separate emitters/delete requests, each capturing its own undo
+    // entry, so one Ctrl+Z restored one emitter out of N (2026-07 audit
+    // an-audit-finding).
+    //
+    // An emitter id is a POSITION that shifts down as earlier siblings
+    // vanish, so — exactly as in cut — sort descending and re-resolve
+    // each id via getEmitterById INSIDE the loop rather than caching raw
+    // pointers across deleteEmitter calls.
+    if (kind == "emitters/delete-many")
+    {
+        if (m_pParticleSystem == nullptr || !*m_pParticleSystem)
+        {
+            ctx.SendOk(json::object());
+            return true;
+        }
+        std::vector<int> ids;
+        if (params.contains("ids") && params["ids"].is_array())
+        {
+            for (const auto& v : params["ids"])
+            {
+                if (v.is_number_integer()) ids.push_back(v.get<int>());
+            }
+        }
+        if (ids.empty())
+        {
+            // Nothing asked for — no undo, no dirty, no events.
+            ctx.SendOk(json::object());
+            return true;
+        }
+
+        // Capture BEFORE any erase. Capturing late cannot restore a
+        // half-deleted tree if the loop aborts; the wasted snapshot when
+        // no id resolves is the same trade delete-track-keys makes.
+        captureUndo();
+
+        std::sort(ids.begin(), ids.end(), std::greater<int>());
+        ParticleSystem* sys = m_pParticleSystem->get();
+        bool clearedSelection = false;
+        int deleted = 0;
+        for (int id : ids)
+        {
+            ParticleSystem::Emitter* target = getEmitterById(id);
+            if (target == nullptr) continue;
+            if (m_selectedEmitterId == id) clearedSelection = true;
+            sys->deleteEmitter(target);
+            deleted++;
+        }
+
+        if (clearedSelection)
+        {
+            m_selectedEmitterId = -1;
+            if (m_emit)
+            {
+                json env = {
+                    {"type",    "evt"},
+                    {"kind",    "emitters/selected"},
+                    {"payload", json{{"id", json(nullptr)}}},
+                };
+                m_emit(env.dump());
+            }
+        }
+
+        ctx.SendOk(json::object());
+        if (deleted > 0)
+        {
+            // The same post-delete sweep the single-delete handler runs;
+            // the captureUndo() above covers the deletions AND the sweep
+            // as one atomic step.
+            EnforceSingleMemberLinkGroups();
+            ctx.MarkDirty();
+            EmitEngineStateChanged();
+            EmitEmittersTreeChanged();
+        }
+        return true;
+    }
+
+
     // -------- emitters/rename ---------------------------------------
     //
     // Legacy uses an inline tree-view edit (EmitterList_RenameEmitter
@@ -1446,6 +1528,115 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         // reload — so re-seat here too, matching the legacy per-edit call.
         if (m_engine != nullptr) m_engine->OnParticleSystemChanged(trackIdx);
         ctx.SendOk(json{{"time", time}, {"value", value}});
+        ctx.MarkDirty();
+        EmitEmittersTreeChanged();
+        EmitEngineStateChanged();
+        return true;
+    }
+
+
+    // -------- emitters/add-track-keys --------------------------------
+    //
+    // The multi-key curve-paste gesture: every key inserted under ONE
+    // captureUndo(), so a single Ctrl+Z reverses the whole paste. React
+    // used to issue one add-track-key per clipboard key, each capturing
+    // its own undo entry, so one Ctrl+Z removed one key of a paste
+    // (2026-07 audit an-audit-finding).
+    //
+    // Per-key validation, the dedupe-by-epsilon bump and the returned
+    // ACTUAL (time, value) are identical to the singular handler above;
+    // only the undo + event boundary is shared across the batch.
+    if (kind == "emitters/add-track-keys")
+    {
+        int id = params.value("id", -1);
+        std::string trackName = params.value("track", std::string{});
+        if (!params.contains("keys") || !params["keys"].is_array())
+        {
+            ctx.SendErr("add-track-keys requires a 'keys' array");
+            return true;
+        }
+
+        // Validate the WHOLE batch before mutating anything. Rejecting
+        // mid-loop would leave half a paste in the document behind an
+        // error envelope — a state the caller never asked for and has no
+        // single Ctrl+Z for.
+        struct PendingKey { float time; float value; };
+        std::vector<PendingKey> pending;
+        for (const auto& k : params["keys"])
+        {
+            if (!k.is_object()
+                || !k.contains("time")  || !k["time"].is_number()
+                || !k.contains("value") || !k["value"].is_number())
+            {
+                ctx.SendErr("add-track-keys requires numeric 'time' and 'value' on every key");
+                return true;
+            }
+            const float t = k["time"].get<float>();
+            const float v = k["value"].get<float>();
+            if (!std::isfinite(t) || !std::isfinite(v))
+            {
+                ctx.SendErr("add-track-keys 'time'/'value' must be finite");
+                return true;
+            }
+            pending.push_back(PendingKey{t, v});
+        }
+
+        ParticleSystem::Emitter* target = getEmitterById(id);
+        if (target == nullptr)
+        {
+            ctx.SendErr("emitter not found");
+            return true;
+        }
+
+        int trackIdx = trackNameToIndex(trackName);
+        if (trackIdx < 0)
+        {
+            ctx.SendErr("unknown track");
+            return true;
+        }
+
+        ParticleSystem::Emitter::Track* track = target->tracks[trackIdx];
+        if (track == nullptr)
+        {
+            // Fail loud, matching the singular handler — a silent ok here
+            // lets a record clip "succeed" with no key inserted.
+            ctx.SendErr("no track slot bound for this channel");
+            return true;
+        }
+
+        if (pending.empty())
+        {
+            // Empty paste — no undo, no dirty, no events.
+            ctx.SendOk(json{{"keys", json::array()}});
+            return true;
+        }
+
+        captureUndo();
+
+        json inserted = json::array();
+        for (const PendingKey& pk : pending)
+        {
+            float time = pk.time;
+            // Dedupe-by-epsilon per key, bounded by 1000 iterations as the
+            // singular handler is. Earlier keys of this same batch are
+            // already in the multiset, so a paste onto its own source
+            // times bumps rather than aliasing.
+            ParticleSystem::Emitter::Track::Key probe(time, 0.0f);
+            int safety = 1000;
+            while (track->keys.find(probe) != track->keys.end() && safety-- > 0)
+            {
+                time += 0.001f;
+                probe = ParticleSystem::Emitter::Track::Key(time, 0.0f);
+            }
+            track->keys.insert(ParticleSystem::Emitter::Track::Key(time, pk.value));
+            inserted.push_back(json{{"time", time}, {"value", pk.value}});
+        }
+
+        propagateLinkGroup(target); // F4: sync link-group siblings
+        // Re-seat live particle track cursors ONCE for the whole batch —
+        // same rationale as the singular handler's per-insert re-seat.
+        if (m_engine != nullptr) m_engine->OnParticleSystemChanged(trackIdx);
+        ctx.SendOk(json{{"keys", inserted}});
         ctx.MarkDirty();
         EmitEmittersTreeChanged();
         EmitEngineStateChanged();

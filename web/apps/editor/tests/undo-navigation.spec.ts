@@ -386,3 +386,93 @@ test("a whole-system rescale is its own undo step and does not swallow the prior
   await undo();
   expect(await getLifetime(id)).toBeCloseTo(p0, 4);
 });
+
+// ── batched-gesture undo boundaries ─────────────────────────────────────────
+//
+// 2026-07 audit an-audit-finding + an-audit-finding. Both were the same shape: the React layer fanned
+// ONE user gesture out into N bridge requests, and each native handler captured
+// its own undo entry, so a single Ctrl+Z undid a fraction of one gesture.
+// `emitters/cut` has always been the correct pattern — one captureUndo() around
+// its whole delete loop — and these two specs pin the same property onto the
+// two handlers that now batch: `emitters/delete-many` and
+// `emitters/add-track-keys`.
+//
+// Both assert the SPECIFIC surviving state, not merely "something changed":
+// with a per-item capture the undo still does something (the head-of-history
+// auto-cap fires), it just does the wrong amount, so a "state differs" oracle
+// passes with and without the fix.
+
+async function rootIds(): Promise<number[]> {
+  const list = await req<{ root: { children: { id: number }[] } }>("emitters/list");
+  return list.root.children.map((c) => c.id);
+}
+
+test("a multi-root delete is ONE undo step (every deleted root returns together)", async () => {
+  const before = await rootIds();
+
+  // Three fresh roots. Each add-root is its OWN undo entry — which is the
+  // point: the delete gesture must not inherit that per-item granularity.
+  const added: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const r = await req<{ newId: number }>("emitters/add-root", {});
+    added.push(r.newId);
+  }
+  expect(await rootIds()).toHaveLength(before.length + 3);
+  await page.waitForTimeout(1600); // clear the coalesce window
+
+  // The multi-select delete gesture. performDelete sorts descending before
+  // sending, because an emitter id is a POSITION that shifts as siblings vanish.
+  await req("emitters/delete-many", { ids: [...added].sort((a, b) => b - a) });
+  expect(await rootIds()).toEqual(before);
+
+  // THE REGRESSION: with a captureUndo() per deleted root, ONE undo brings back
+  // exactly ONE root (before.length + 1), leaving the user to press Ctrl+Z
+  // three times to reverse a single gesture.
+  await undo();
+  expect(await rootIds()).toHaveLength(before.length + 3);
+
+  // Restore the shared host for later specs: re-delete in one step.
+  await req("emitters/delete-many", { ids: [...added].sort((a, b) => b - a) });
+  expect(await rootIds()).toEqual(before);
+});
+
+test("a multi-key curve paste is ONE undo step and does not swallow the prior edit", async () => {
+  const id = await firstEmitterId();
+  await req("emitters/select", { id });
+  const s0 = await getTrackKeyValue(id, "scale", 0);
+
+  // Seed a distinct, separately-captured entry. Without it the assertion could
+  // not tell "the paste reverted" from "the paste AND the edit before it
+  // reverted" — the same discriminator the rescale spec above needs.
+  const seeded = s0 + 5;
+  await setTrackKeyValue(id, "scale", 0, seeded);
+  expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(seeded, 3);
+  await page.waitForTimeout(1600); // exceed COALESCE_WINDOW_MS
+
+  // Ctrl+V of a three-key clipboard onto the focus track. Interior times only
+  // (0 and 100 are the border keys).
+  const pasted = [
+    { time: 20, value: 11 },
+    { time: 40, value: 22 },
+    { time: 60, value: 33 },
+  ];
+  await req("emitters/add-track-keys", { id, track: "scale", keys: pasted });
+  for (const k of pasted) {
+    expect(await getTrackKeyValue(id, "scale", k.time)).toBeCloseTo(k.value, 3);
+  }
+
+  // THE REGRESSION: one captureUndo() per key leaves the first two pasted keys
+  // behind after a single undo.
+  await undo();
+  const times = (await getTrackKeys(id, "scale")).map((k) => k.time);
+  for (const k of pasted) {
+    expect(times.find((t) => Math.abs(t - k.time) < 1e-3)).toBeUndefined();
+  }
+  // ...and the seeded edit must SURVIVE — the undo reverses the paste, not the
+  // paste plus whatever came before it.
+  expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(seeded, 3);
+
+  // Restore baseline for later specs.
+  await undo();
+  expect(await getTrackKeyValue(id, "scale", 0)).toBeCloseTo(s0, 3);
+});

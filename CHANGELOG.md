@@ -177,6 +177,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Fixed
 
+- One Ctrl+Z now undoes a whole multi-emitter delete. Deleting three emitters at once used to take three presses of Ctrl+Z to reverse, restoring them one at a time
+- One Ctrl+Z now undoes a whole multi-key curve paste. Pasting several curve keys used to take one press per key to reverse, removing them one at a time
 - Saving now fails loudly instead of silently writing a truncated file. If the disk fills mid-save the editor reports the failure and leaves your original file untouched, where before it could report success and replace your work with a corrupt copy
 - Screen readers now correctly announce emitter tree rows as tree items, including which one is selected, when moving through the tree with the keyboard
 - Pausing the preview now pauses the spawner too — an Auto spawner on an interval no longer banks up its countdown while the scene is stopped and releases a burst of instances all at once when you unpause; frame-stepping a paused scene advances the spawner by exactly the frames you stepped
