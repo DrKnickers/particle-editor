@@ -27,7 +27,11 @@ export default defineConfig({
     command: `node tests-site/serve.mjs`,
     env: { PORT: String(PORT) },
     url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    // See the WEB_PORT note in playwright.web.config.ts: reuse is a developer
+    // convenience, never acceptable for a gate run. The SITE_PORT advice above
+    // only helps someone who remembers to follow it; PE_GATE_NO_REUSE makes the
+    // gate correct by default (audit an-audit-finding).
+    reuseExistingServer: !process.env.CI && !process.env.PE_GATE_NO_REUSE,
     timeout: 60_000,
   },
 });

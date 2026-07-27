@@ -113,6 +113,18 @@ const ALLOW_MISSING = new Set(ARGS.allowMissing);
 const SKIP_BUILD = ARGS.skipBuild;
 const LIST = ARGS.list;
 
+// A gate run must never reuse a Playwright webServer someone else started. Both
+// Playwright configs default `reuseExistingServer` to !CI, and this gate
+// deliberately never sets CI — so on a box running two worktrees at once (the
+// normal workflow here) the second run silently attached to the FIRST
+// checkout's Vite/site server and tested the wrong tree. Breaking App.tsx in
+// this checkout could leave the lane green (2026-07 audit, an-audit-finding).
+//
+// Set for the whole process rather than per-lane: only those two configs read
+// it, and a lane that spawns no server is unaffected. Devs running
+// `pnpm test:web` by hand keep server reuse.
+process.env.PE_GATE_NO_REUSE = "1";
+
 function log(msg) {
   console.log(`[gate] ${msg}`);
 }
