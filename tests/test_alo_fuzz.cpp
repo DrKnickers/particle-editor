@@ -39,6 +39,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>   // getenv / strtol for ALO_FUZZ_ROUNDS
 #include <cstring>
 #include <string>
 #include <vector>
@@ -162,25 +163,36 @@ enum Outcome
     BAD_EXCEPTION,      // any other exception type escaped
 };
 
+// Records WHICH invariant a BAD_INVARIANT mutant violated, so a deep-round
+// failure is diagnosable without a second instrumented build.
+static std::string g_invariantReason;
+
 static bool modelInvariantsHold(const AloModel& m)
 {
-    if (m.meshes.empty()) return false;                     // ctor would have thrown
-    if (m.bones.size() > 4096 || m.connections.size() > 4096) return false;
+    g_invariantReason.clear();
+    auto fail = [](const char* why) { g_invariantReason = why; return false; };
+
+    if (m.meshes.empty()) return fail("meshes empty (ctor would have thrown)");
+    if (m.bones.size() > 4096)       return fail("bones > 4096");
+    if (m.connections.size() > 4096) return fail("connections > 4096");
     for (const AloMesh& me : m.meshes)
     {
         for (const AloSubMesh& sm : me.subMeshes)
         {
             if (!sm.rawVertexBytes.empty())
             {
-                if (sm.vertexCount < 1 || sm.vertexCount > 0xFFFFu) return false;
+                if (sm.vertexCount < 1)         return fail("vertexCount < 1 with non-empty vertex blob");
+                if (sm.vertexCount > 0xFFFFu)   return fail("vertexCount > 0xFFFF");
                 if (sm.rawVertexBytes.size()
-                        != (unsigned long long)sm.vertexCount * kAloVertexStride) return false;
+                        != (unsigned long long)sm.vertexCount * kAloVertexStride)
+                    return fail("vertex blob size != vertexCount * stride");
             }
             if (!sm.indexBytes.empty())
             {
-                if (sm.primitiveCount > 0x100000u) return false;
+                if (sm.primitiveCount > 0x100000u) return fail("primitiveCount > 1M");
                 if (sm.indexBytes.size()
-                        != (unsigned long long)sm.primitiveCount * 6u) return false;
+                        != (unsigned long long)sm.primitiveCount * 6u)
+                    return fail("index blob size != primitiveCount * 6");
             }
         }
     }
@@ -247,12 +259,26 @@ int main()
     }
 
     // ---- seeded mutation rounds -------------------------------------------------
-    // 2000 rounds; each mutates a fresh copy with byte flips, a truncation, or
-    // a u32 (length/count/type field) overwrite at a random offset.
+    // Each round mutates a fresh copy with byte flips, a truncation, or a u32
+    // (length/count/type field) overwrite at a random offset.
+    //
+    // 2000 by default keeps the cpp-unit gate lane fast. ALO_FUZZ_ROUNDS raises
+    // it for a deep audit pass (the 2026-07 release audit asked for >= 10,000
+    // per parser family) without making every gate run pay for it. The xorshift
+    // seed is fixed either way, so round N is identical across runs and a
+    // failure at round N reproduces exactly.
     {
-        const int kRounds = 2000;
+        int kRounds = 2000;
+        if (const char* env = std::getenv("ALO_FUZZ_ROUNDS"))
+        {
+            const long v = std::strtol(env, nullptr, 10);
+            if (v > 0 && v <= 10000000L) kRounds = (int)v;
+        }
+        std::printf("  (mutation rounds: %d%s)\n", kRounds,
+                    std::getenv("ALO_FUZZ_ROUNDS") ? " [ALO_FUZZ_ROUNDS]" : " [default]");
         size_t badExc = 0, badInv = 0, rejected = 0, loaded = 0;
         int firstBadRound = -1;
+        std::string g_firstBadReason;
         for (int round = 0; round < kRounds; ++round)
         {
             Bytes img = base;
@@ -292,14 +318,18 @@ int main()
             {
                 case LOADED_OK:     ++loaded;   break;
                 case REJECTED:      ++rejected; break;
-                case BAD_INVARIANT: ++badInv;   if (firstBadRound < 0) firstBadRound = round; break;
+                case BAD_INVARIANT: ++badInv;
+                if (firstBadRound < 0) { firstBadRound = round; g_firstBadReason = g_invariantReason; }
+                break;
                 case BAD_EXCEPTION: ++badExc;   if (firstBadRound < 0) firstBadRound = round; break;
             }
         }
         std::printf("  mutation rounds: %d total, %zu rejected, %zu loaded\n",
                     kRounds, rejected, loaded);
         if (firstBadRound >= 0)
-            std::printf("  first bad round: %d (re-run with g_rng traced)\n", firstBadRound);
+            std::printf("  first bad round: %d  reason: %s\n", firstBadRound,
+                        g_firstBadReason.empty() ? "(exception, not invariant)"
+                                                 : g_firstBadReason.c_str());
         CHECK(badExc == 0, "mutations: only documented exception types escape");
         CHECK(badInv == 0, "mutations: no clean load ever violates invariants");
         CHECK(rejected + loaded == (size_t)kRounds,

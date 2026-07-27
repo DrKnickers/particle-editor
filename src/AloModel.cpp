@@ -242,6 +242,29 @@ namespace
                     break;
             }
         }
+        // FINAL consistency re-check (2026-07 audit, deep fuzz round 16752).
+        //
+        // CHUNK_VERTEX_NEW and CHUNK_INDICES each validate their blob size
+        // against sm.vertexCount / sm.primitiveCount AT THE MOMENT THEY ARE
+        // READ. Those counts come from CHUNK_SIZES -- and nothing stopped a
+        // SECOND CHUNK_SIZES later in the same sub-mesh from overwriting them
+        // after the blobs had already been validated. The result loaded
+        // "cleanly" while carrying an index blob sized for the OLD count and a
+        // primitiveCount reporting the NEW one; a draw would then read
+        // primitiveCount*3 indices out of a shorter buffer. Chunk ORDER, not
+        // chunk content, defeated the per-chunk checks.
+        //
+        // Re-assert both invariants against the FINAL counts, so any ordering
+        // or duplication permutation is caught regardless of how it arose.
+        if (!sm.rawVertexBytes.empty()
+            && (unsigned long long)sm.rawVertexBytes.size()
+                   != (unsigned long long)sm.vertexCount * kAloVertexStride)
+            throw BadFileException();
+        if (!sm.indexBytes.empty()
+            && (unsigned long long)sm.indexBytes.size()
+                   != (unsigned long long)sm.primitiveCount * 3 * kIndexSize)
+            throw BadFileException();
+
         // A modern sub-mesh must have produced a vertex blob; the only
         // legitimate empty case is the legacy 0x10005 path.
         if (sm.rawVertexBytes.empty() && !sawOldVertex)
