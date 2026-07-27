@@ -367,10 +367,28 @@ const LANES = [
     name: "site",
     // Landing + guide static-site Playwright. Self-contained: serve.mjs hosts the
     // committed repo-root site/ (no dist/, no exe). global-setup renders placeholder
-    // landing media via FFmpeg; outside CI (this gate never sets CI) it degrades to a
-    // warning, so a missing FFmpeg skips only the landing playback specs, never the
-    // guide suite. In-gate so guide.spec can't silently go stale again (#599).
-    run: () => (runCmdLine("pnpm run test:site", editorDir) === 0 ? pass : fail("landing + guide Playwright")),
+    // landing media via FFmpeg. In-gate so guide.spec can't silently go stale
+    // again (#599).
+    run: () => {
+      // an-audit-finding: the landing playback specs `test.skip()` themselves when that
+      // placeholder media is absent, and the media only exists if global-setup
+      // could run FFmpeg. Outside CI that degraded to a warning, so a box with
+      // no FFmpeg reported a GREEN site lane having never exercised playback at
+      // all — break video playback and the gate still passes. Treat FFmpeg as
+      // the real prereq it is: FAIL by default, `--allow-missing site` for a
+      // VISIBLE skip. Same shape as drive-smoke's registry/fixture checks.
+      const ff = spawnSync("ffmpeg", ["-version"], { encoding: "utf8", shell: false });
+      const p = prereq(
+        "site",
+        ff.status === 0,
+        "ffmpeg not on PATH (the landing playback specs silently skip without it)",
+        "install ffmpeg so global-setup can render the placeholder media",
+      );
+      if (p) return p;
+      return runCmdLine("pnpm run test:site", editorDir) === 0
+        ? pass
+        : fail("landing + guide Playwright");
+    },
   },
   {
     name: "cpp-unit",
