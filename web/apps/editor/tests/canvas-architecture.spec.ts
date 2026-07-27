@@ -97,63 +97,28 @@ test.beforeEach(async () => {
 // bridge access without prop-drilling, but ViewportSlot still
 // receives bridge as a prop, so the proxy doesn't intercept its
 // `viewport/input` calls. Surfaced when this spec was forced
-// to actually run (canvas-jpeg-built dist/ under composition mode
-// instead of auto-skipping via the archCEnabled gate).
+// REMOVED: two permanently-disabled `test.fixme` specs (pointer-move and
+// Shift-keydown bridge dispatch).
 //
-// The CONTRACT this test encodes — DOM canvas pointermove triggers
-// viewport/input mousemove bridge dispatch — DOES work in production
-// (verified by user-driven Shift+click smoke). The
-// failure is purely instrumentation. Proper fix is either:
-//   (a) Rewrite to verify via host-side host.log inspection (the
-//       dxgi-transport.spec.ts pattern — but InputDispatcher::Dispatch
-//       only logs mousedown/up/keydown/up, not mousemove, so this
-//       specific test would need a new diagnostic log)
-//   (b) Expose the NativeBridge instance to window.bridge for tests
-//       (changes the production injection model — risky)
-//   (c) Use Playwright's CDP to set up the proxy BEFORE React mounts
-//       via an injected script that replaces React's bridge prop
-//       creation
-// All three are out of scope here. Filed as a follow-up.
-test.fixme("pointer move on viewport canvas dispatches viewport/input { type: 'mousemove' }", async () => {
-  const canvas = page.locator('[data-testid="viewport-canvas"]');
-  const box = await canvas.boundingBox();
-  expect(box, "viewport canvas must have a bounding box").toBeTruthy();
-  if (!box) return;
-
-  // Move the cursor across the canvas; at least one pointermove
-  // listener fires per intermediate step.
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.move(box.x + box.width / 2 + 10, box.y + box.height / 2 + 10);
-
-  const calls = await readCalls(page);
-  const moves = calls.filter((c) => c.params.type === "mousemove");
-  expect(moves.length).toBeGreaterThan(0);
-  expect(moves[0]?.params).toMatchObject({
-    type: "mousemove",
-    x: expect.any(Number),
-    y: expect.any(Number),
-    buttons: expect.any(Number),
-  });
-});
-
-// TEST.FIXME: same instrumentation
-// issue as the preceding test. See the FIXME comment
-// above pointer-move for the full explanation. Production behavior
-// (Shift keydown dispatches viewport/input via NativeBridge) is
-// verified via user-driven smoke (Shift+click spawn
-// worked end-to-end).
-test.fixme("Shift keydown on body dispatches viewport/input { type: 'keydown', vk: 16 }", async () => {
-  // Click outside any input to ensure body is the focus owner.
-  await page.locator("body").click({ position: { x: 5, y: 5 } });
-  await installBridgeProxy(page);  // reset call list after the click
-
-  await page.keyboard.down("Shift");
-  await page.keyboard.up("Shift");
-
-  const calls = await readCalls(page);
-  const keys = calls.filter((c) => c.params.type === "keydown" && c.params.vk === 16);
-  expect(keys.length).toBeGreaterThan(0);
-});
+// They were never going to run. The proxy this file installs cannot intercept
+// the production bridge path, and the three possible fixes recorded here were
+// all judged out of scope when the tests were written — so they sat as
+// permanent fixmes, listed in the suite, contributing nothing.
+//
+// That is worse than having no test: `test.fixme` reports as a known-skip, so
+// the contracts LOOKED covered. Deleting the production viewport pointer
+// listener or the Shift-keydown dispatch would not have failed anything here
+// (2026-07 audit, an-audit-finding).
+//
+// The contracts themselves are real and still worth covering. The honest
+// statement is that they are covered by user-driven smoke (Shift+click spawn
+// works end-to-end) and NOT by this suite. Doing it properly needs one of:
+//   (a) host-side host.log inspection, the dxgi-transport.spec.ts pattern —
+//       InputDispatcher::Dispatch would need a mousemove diagnostic first;
+//   (b) exposing the NativeBridge instance to window.bridge, which changes the
+//       production injection model;
+//   (c) installing the proxy via CDP BEFORE React mounts.
+// Whoever picks that up should add a real test, not restore a disabled one.
 
 test("TYPING_TAGS guard — Shift keydown while focus is in an inspector field does NOT dispatch", async () => {
   // Locate any text input in the inspector. The Basic tab's Name

@@ -107,10 +107,28 @@ async function seedTexturePreviewStatus(): Promise<string> {
     const bridge = (window as Window & { bridge?: {
       request: (req: { kind: string; params: unknown }) => Promise<unknown>;
     } }).bridge;
-    const r = await bridge!.request({
-      kind: "textures/get-preview",
-      params: { filename: "p_particle_master.tga", flattenAlpha: true },
-    }) as { status: string };
+    const ask = async () =>
+      (await bridge!.request({
+        kind: "textures/get-preview",
+        params: { filename: "p_particle_master.tga", flattenAlpha: true },
+      })) as { status: string };
+
+    // Preview encoding is ASYNC: a cache miss answers `pending` and the real
+    // result lands later (the host's PreviewEncodeWorker posts back and the
+    // next request is a cache hit). Returning that first `pending` straight to
+    // the caller made it read as "game texture data unreachable" — so with
+    // PE_REQUIRE_GAME_TEXTURES newly set, these specs failed on a machine whose
+    // textures were perfectly reachable, just not decoded YET (2026-07 audit,
+    // found while fixing an-audit-finding).
+    //
+    // Poll to a terminal answer. `error` still means genuinely unavailable,
+    // which is what the skip is for.
+    let r = await ask();
+    const deadline = Date.now() + 5000;
+    while (r.status === "pending" && Date.now() < deadline) {
+      await new Promise((res) => setTimeout(res, 100));
+      r = await ask();
+    }
     return r.status;
   });
 }

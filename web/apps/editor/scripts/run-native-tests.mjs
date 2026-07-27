@@ -10,7 +10,7 @@
 // Cleanup runs on success, failure, AND uncaught throws — the binary
 // is single-instance so leaving it around blocks the next run.
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const editorDir = resolve(__dirname, "..");
 const repoRoot = resolve(__dirname, "../../../..");
 const exe = join(repoRoot, "x64", "Debug", "ParticleEditor.exe");
+
+// True when this machine has a resolved game data path, i.e. the specs that
+// need real textures CAN run here. Mirrors the same registry probe the gate's
+// drive-smoke prereq uses.
+function gameDataPathPresent() {
+  const r = spawnSync("reg.exe",
+    ["query", String.raw`HKCU\Software\AloParticleEditor`, "/v", "GameDataPath"],
+    { encoding: "utf8", shell: false });
+  return r.status === 0;
+}
 
 async function probeCdp() {
   try {
@@ -289,6 +299,22 @@ async function main() {
       cwd: editorDir,
       stdio: "inherit",
       shell: false,
+      // Demand real game textures WHEN THIS MACHINE HAS THEM.
+      //
+      // Several native specs (atlas assignment, seed-dependent reparent /
+      // paste-as-child) call test.skip() when game data can't be reached, and
+      // nothing ever set PE_REQUIRE_GAME_TEXTURES — so on a box with the game
+      // installed they still silently self-skipped, and breaking atlas
+      // assignment or ParticleSystem::reparentEmitter left the lane green
+      // (2026-07 audit, an-audit-finding).
+      //
+      // Gated on the registry game path rather than forced: a machine with no
+      // install genuinely cannot run them, and failing there would punish a
+      // legitimate environment. Where the data IS present, a skip now means a
+      // real problem and fails loudly.
+      env: gameDataPathPresent()
+        ? { ...process.env, PE_REQUIRE_GAME_TEXTURES: "1" }
+        : process.env,
     });
     pwChild = pw;
     pw.on("exit", (code) => {

@@ -341,7 +341,22 @@ const LANES = [
       // The no-test-seam-in-prod guard self-skips without dist/; require it.
       const p = prereq("scripts", existsSync(distIndex), "web dist/ missing", "run the web-build lane first");
       if (p) return p;
-      return runCmdLine("pnpm run test:scripts", editorDir) === 0 ? pass : fail("node --test");
+      // ...and require it to be FRESH. `existsSync` alone let the seam guard
+      // scan a bundle built before the change under test, so reintroducing a
+      // dev-only test seam could pass against yesterday's dist. The lane
+      // declares deps on web-build, but `--lane scripts` on its own bypasses
+      // that (2026-07 audit, an-audit-finding).
+      const staleDist = staleBinaryNote(distIndex, "scripts", newestSourceMtime());
+      if (staleDist) return fail(staleDist);
+
+      // Tee + count: several script tests self-skip when FFmpeg is absent, and
+      // the lane reported a bare PASS while their coverage never ran
+      // (audit an-audit-finding). Not a failure — FFmpeg is genuinely optional here — but
+      // it must be visible, exactly like the native-runner skip note.
+      const r = runCmdLineTee("pnpm run test:scripts", editorDir);
+      if (r.code !== 0) return fail("node --test");
+      const innerSkipped = parseSkippedCount(r.out);
+      return innerSkipped > 0 ? { ...pass, innerSkipped } : pass;
     },
   },
   {

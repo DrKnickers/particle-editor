@@ -84,6 +84,21 @@ expect.extend({
       : JSON.stringify(received, null, 2) + "\n";
 
     if (UPDATE) {
+      // A gate run must NEVER take this branch. Update mode overwrites the
+      // golden and returns pass unconditionally, so any regression reachable
+      // while it is active gets blessed into the baseline and the suite goes
+      // green on the broken output (2026-07 audit, an-audit-finding). Refusing here means
+      // the blessing stays a deliberate, human-initiated act — which is what
+      // it was always meant to be.
+      if (process.env.PE_GATE_NO_REUSE) {
+        return {
+          pass: false,
+          message: () =>
+            `golden UPDATE mode is refused during a gate run (${goldenPath}). ` +
+            `Update mode rewrites the baseline and always passes, so a gate ` +
+            `that allowed it could not fail. Run the a11y update by hand.`,
+        };
+      }
       fs.mkdirSync(path.dirname(absPath), { recursive: true });
       // Write the normalized form so the committed golden stores the
       // `<DATE>` placeholder explicitly — self-documenting, rather than a
