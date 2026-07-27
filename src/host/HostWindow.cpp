@@ -94,6 +94,7 @@
 #include "../Autosave.h"  // two-tier autosave timers + clean-exit cleanup
 #include "DriveRunner.h"   // --drive: scripted non-CDP composite capture
 #include "ClipRunner.h"    // --record: deterministic clip recording (PNG sequence)
+#include "RecordOutputSafety.h"  // --record: refuse to remove_all a non-output dir (an-audit-finding)
 #include "CaptureRunner.h" // --capture/--capture-ref: one-shot render + PNG (Phase C split)
 #include "HostRunUtil.h"   // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling (shared with the runners)
 #include "AsyncFrameEncoder.h"   // --record Branch B: background PNG encode (tasks/todo.md §3)
@@ -4524,7 +4525,7 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         // any cursor-bound Shift spawn. Distinct from the OS WM_KILLFOCUS above
         // (suppressed for Win32 focus churn) so a real blur can't leak the
         // attached preview (release-audit #7). Tear down an in-flight OBJECT_Z
-        // placement drag first: m_dragMode = NONE BEFORE ReleaseCapture (
+        // placement drag first: m_dragMode = NONE BEFORE ReleaseCapture (the gizmo
         // teardown order). No-op when nothing is attached / no drag.
         //
         // Preserve the WM_KILLFOCUS MANIPULATE behavior the renderer blur used to
@@ -5599,6 +5600,32 @@ int HostWindowImpl::Run(int nCmdShow)
                     // Move the completed sequence into place on success only.
                     if (recordExitCode == 0)
                     {
+                        // an-audit-finding: `out` is validated as relative + traversal-free,
+                        // which stops an ESCAPE but not the destruction of an existing
+                        // directory under the launch dir — the publish below is an
+                        // unconditional remove_all. Refuse unless the target is absent,
+                        // empty, or holds nothing but a previous record's own output.
+                        // Re-shooting into the same directory (the normal workflow)
+                        // still works; deleting a stranger's files does not.
+                        std::error_code ecScan;
+                        const bool outExists = std::filesystem::exists(recordOutDir, ecScan);
+                        std::vector<std::wstring> outEntries;
+                        if (outExists)
+                        {
+                            for (const auto& de : std::filesystem::directory_iterator(recordOutDir, ecScan))
+                                outEntries.push_back(de.path().filename().wstring());
+                        }
+                        std::wstring refuseReason;
+                        if (!recordsafety::MayReplaceOutputDir(outExists, outEntries, refuseReason))
+                        {
+                            Log("[record] REFUSING to replace output dir %ls: %ls\n",
+                                recordOutDir.c_str(), refuseReason.c_str());
+                            Log("[record] the frames are intact in %ls — move them yourself, "
+                                "or point 'out' at a new directory\n", recordTmpDir.c_str());
+                            recordExitCode = 4;   // publish refused -> non-zero exit
+                        }
+                        else
+                        {
                         std::error_code ec;
                         std::filesystem::remove_all(recordOutDir, ec);
                         std::error_code ec2;
@@ -5638,6 +5665,7 @@ int HostWindowImpl::Run(int nCmdShow)
                                 recordExitCode = 4;
                             }
                         }
+                        }   // end: output dir was safe to replace
                     }
                     // [R3] Snapshot queue stats before the summary reads them.
                     if (recordEncoder) m_recordEncoderStats = recordEncoder->GetQueueStats();

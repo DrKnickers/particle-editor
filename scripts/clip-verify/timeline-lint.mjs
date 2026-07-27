@@ -6,7 +6,7 @@ import { join, dirname } from "node:path";
 const USAGE = "usage: node timeline-lint.mjs [--no-ref-check] <timeline.json> [more.json ...]";
 
 // Static preflight for --record timelines: turns the durable authoring traps
-// (clip-author skill reference.md §4/§4c/§4d, tasks/handoff.md hard rules) into
+// (the clip-author skill's reference notes and its hard rules) into
 // mechanical checks so a mis-authored timeline fails HERE, not after a render.
 // Errors = the render would wedge/misbehave; warnings = probably wrong, but a
 // legitimate timeline could trip them. This complements (never replaces) the

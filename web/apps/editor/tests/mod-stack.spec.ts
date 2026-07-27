@@ -1,7 +1,8 @@
 // Mod-stack layering against the REAL native host (--test-host): set two
 // fixture layers, reorder them, clear — asserting the mods/set-layers response
 // and the follow-up mods/list state after every step. Closes the "mod-stack
-// switching has no automated coverage" gap (shipped without it).
+// switching has no automated coverage" gap (mod-layer stacking shipped
+// without it).
 //
 // Test isolation: mods/set-layers persistence is registry-gated under
 // --test-host (ModManager::SetLayerStack allowPersist=false via the standard

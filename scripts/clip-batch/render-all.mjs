@@ -210,7 +210,7 @@ function newestMtime(dir, exts) {
 function preflight(clips, allowStale) {
   const fail = (msg) => { console.error(`[clip-batch] PREFLIGHT FAIL: ${msg}`); process.exit(2); };
 
-  // 1. Exe + web bundle exist and are fresh (README stale-exe trap,:
+  // 1. Exe + web bundle exist and are fresh (the README stale-exe trap:
   //    an exe older than the `scale` feature silently renders f04 at 1x).
   if (!existsSync(exePath)) fail(`missing ${exePath} — build x64 Release first`);
   if (!existsSync(distIndex)) fail(`missing ${distIndex} — build the web bundle first`);
