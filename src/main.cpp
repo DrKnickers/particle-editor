@@ -141,6 +141,26 @@ public:
 		transform(filename.begin(), filename.end(), filename.begin(), toupper);
 		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
 		if (ShaderDiagEnabled()) ShaderLog("[tex-gate] getTexture(%s)\n", filename.c_str());
+
+		// Cache lookup FIRST. The cache is consulted inside load() below, but
+		// the direct "file exists as specified" path never reaches load() when
+		// it succeeds — so a repeat call for a texture that resolves at its
+		// literal path re-read it from disk AND leaked the result: the tail's
+		// textures.insert() silently no-ops on the existing key (std::map does
+		// not overwrite), leaving the map holding the OLD texture while the
+		// unconditional AddRef stranded the NEW one at refcount 1, referenced by
+		// nothing (2026-07 audit, an-audit-finding).
+		//
+		// +1 to the caller matches what every other return path hands back.
+		{
+			TextureMap::iterator cached = textures.find(filename);
+			if (cached != textures.end())
+			{
+				cached->second->AddRef();
+				return cached->second;
+			}
+		}
+
 		IDirect3DTexture9* pTexture = NULL;
 
 		// See if the file exists as specified
@@ -315,6 +335,21 @@ public:
 		transform(filename.begin(), filename.end(), filename.begin(), toupper);
 		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
 		if (ShaderDiagEnabled()) ShaderLog("[shader-gate] getShader(%s)\n", filename.c_str());
+
+		// Cache lookup FIRST — identical shape to getTexture above, and the same
+		// defect: the direct "file exists as specified" path below short-circuits
+		// before load() (which owns the lookup) is ever reached, so a repeat call
+		// recompiled the effect from disk and then stranded it at refcount 1 when
+		// shaders.insert() no-oped on the existing key (audit an-audit-finding).
+		{
+			ShaderMap::iterator cached = shaders.find(filename);
+			if (cached != shaders.end())
+			{
+				cached->second->AddRef();
+				return cached->second;
+			}
+		}
+
 		Effect* pShader = NULL;
 
 		// See if the file exists as specified

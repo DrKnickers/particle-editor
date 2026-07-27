@@ -39,9 +39,16 @@ wstring ReadModNickname(const wstring& modPath)
     {
         TCHAR  buf[256] = {0};
         DWORD  type;
-        DWORD  size = sizeof(buf);
+        // A REG_SZ value is NOT required to be NUL-terminated. One that exactly
+        // filled this buffer left `nickname = buf` scanning past its end
+        // (2026-07 audit, an-audit-finding). Reserve the last element for a terminator we
+        // write ourselves, and place it at the length the API actually returned.
+        DWORD  size = sizeof(buf) - sizeof(TCHAR);
         if (RegQueryValueEx(hKey, modPath.c_str(), NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ)
         {
+            const size_t maxIdx = (sizeof(buf) / sizeof(TCHAR)) - 1;
+            const size_t chars  = size / sizeof(TCHAR);
+            buf[chars < maxIdx ? chars : maxIdx] = 0;
             nickname = buf;
         }
         RegCloseKey(hKey);
@@ -85,17 +92,23 @@ static vector<wstring> ReadLastLayers()
     return out;
 }
 
-static void WriteLastLayers(const vector<wstring>& layers)
+// Returns false when the stack could NOT be persisted. Both failure modes used
+// to be discarded — RegCreateKeyEx's result gated the block and RegSetValueEx's
+// was never even read — so a locked or policy-blocked registry looked exactly
+// like a successful save, and the bridge answered {ok:true} (2026-07 audit,
+// an-audit-finding). LastLayers is authoritative, so its failure is the caller's business.
+static bool WriteLastLayers(const vector<wstring>& layers)
 {
     HKEY hKey;
     if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL,
-                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
-    {
-        const std::wstring blob = modlayers::SerializeMultiSz(layers);
-        RegSetValueEx(hKey, L"LastLayers", 0, REG_MULTI_SZ,
-                      (const BYTE*)blob.data(), (DWORD)(blob.size() * sizeof(wchar_t)));
-        RegCloseKey(hKey);
-    }
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS)
+        return false;
+
+    const std::wstring blob = modlayers::SerializeMultiSz(layers);
+    const LONG rc = RegSetValueEx(hKey, L"LastLayers", 0, REG_MULTI_SZ,
+                                  (const BYTE*)blob.data(), (DWORD)(blob.size() * sizeof(wchar_t)));
+    RegCloseKey(hKey);
+    return rc == ERROR_SUCCESS;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,11 +225,20 @@ void ModManager::RestoreLastLayerStack()
         if (PathIsDirectory(modlayers::CanonicalizeLayerPath(p).c_str()))
             present.push_back(p);
 
-    SetLayerStack(present);
+    // allowPersist=false: a RESTORE is not a user edit, so it must never write
+    // back. It used to. If a submod's drive was merely offline at launch, the
+    // filter above dropped it and SetLayerStack persisted the REDUCED stack —
+    // silently and permanently discarding the user's saved load order, with no
+    // recovery when the drive returned (2026-07 audit, an-audit-finding). The step-5
+    // comment in SetLayerStack already guards the adjacent case (don't persist
+    // a stack whose shaders failed to load); this is the same principle applied
+    // to a stack we couldn't fully resolve.
+    SetLayerStack(present, /*allowPersist=*/false);
     printf("[Mods] Restored %zu layer(s)\n", present.size()); fflush(stdout);
 }
 
-bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allowPersist)
+bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allowPersist,
+                               std::string* outError)
 {
     // Canonicalise, drop non-existent folders, and dedup (case-insensitive),
     // preserving order. The existence filter keeps m_layerStack / GetLayerStack()
@@ -270,7 +292,17 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
     //    (--drive / m_ephemeral never rewrites the daily driver's mod stack.)
     if (allowPersist && !m_ephemeral && modlayers::ShouldPersistLayers(ok))
     {
-        WriteLastLayers(m_layerStack);
+        if (!WriteLastLayers(m_layerStack))
+        {
+            // Reported, not swallowed: the in-memory switch succeeded but the
+            // choice will not survive a restart, and only the user can act on
+            // that. LastMod stays best-effort — nothing reads it any more.
+            ok = false;
+            if (outError != nullptr)
+                *outError = "the load order was applied but could not be saved "
+                            "to the registry, so it will not survive a restart";
+            printf("[Mods] WARNING: LastLayers persist FAILED\n"); fflush(stdout);
+        }
         WriteLastMod(primary);
     }
     return ok;

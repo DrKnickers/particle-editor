@@ -128,7 +128,12 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx, const std::s
                 if (e.is_string()) paths.push_back(Utf8ToWide(e.get<std::string>()));
         // Same persistence gate every settings write uses: a --test-host run
         // must never rewrite the daily driver's LastLayers/LastMod.
-        bool ok = m_modManager->SetLayerStack(paths, !(m_testHost && !m_settingsLive));
+        // `err` distinguishes the two ways ok can be false. Both React call
+        // sites render a supplied `error` verbatim and otherwise fall back to
+        // "the mod shaders failed to reload" — which is an actively misleading
+        // diagnosis when the real problem was the registry write (audit an-audit-finding).
+        std::string err;
+        bool ok = m_modManager->SetLayerStack(paths, !(m_testHost && !m_settingsLive), &err);
         TexturePalette::ClearBridgeThumbCache();
         // [C3] Same lifecycle for the preview LRU: a same-named texture from
         // the new stack must not serve the old stack's pixels. The epoch bump
@@ -137,7 +142,9 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx, const std::s
         EmitEngineStateChanged();
         json stackArr = json::array();
         for (const auto& p : m_modManager->GetLayerStack()) stackArr.push_back(WideToUtf8(p));
-        ctx.SendOk(json{{"ok", ok}, {"stack", stackArr}});
+        json resp{{"ok", ok}, {"stack", stackArr}};
+        if (!err.empty()) resp["error"] = err;
+        ctx.SendOk(resp);
         return true;
     }
 

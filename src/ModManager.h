@@ -94,11 +94,17 @@ public:
     // primary, a write-only record nothing reads anymore), swaps the texture
     // palette to the primary layer, clears the thumbnail cache, and reloads
     // engine assets (if bound).
-    // Returns false if the engine shader reload failed (state still rolls forward).
+    // Returns false if the engine shader reload failed OR the stack could not be
+    // persisted (state still rolls forward in memory either way).
     // allowPersist=false suppresses the registry write on top of the ephemeral
     // gate (the dispatcher passes the test-host settings gate through here so a
-    // --test-host run never rewrites the daily driver's LastLayers/LastMod).
-    bool SetLayerStack(const std::vector<std::wstring>& absoluteLayers, bool allowPersist = true);
+    // --test-host run never rewrites the daily driver's LastLayers/LastMod), and
+    // RestoreLastLayerStack passes it because a restore is not a user edit.
+    // outError, when supplied, receives a human-readable reason on failure so
+    // the caller can say WHICH failure occurred — the UI's fallback text blames
+    // the shader reload, which is the wrong diagnosis for a registry problem.
+    bool SetLayerStack(const std::vector<std::wstring>& absoluteLayers, bool allowPersist = true,
+                       std::string* outError = nullptr);
 
     // Read-only accessors.
     const std::vector<ModEntry>& GetMods() const { return m_mods; }

@@ -709,3 +709,54 @@ test("adding a root emitter reaches an already-placed instance", async () => {
   // creation-time emitter list and this stays equal to `before`.
   expect(result.after.emitters).toBe(result.before.emitters + 1);
 });
+
+// ── file/open must not carry the previous document's selection ───────
+//
+// 2026-07 audit an-audit-finding. m_selectedEmitterId is a POSITIONAL index, and only
+// file/new ever reset it. file/open and autosave-recover swapped the bound
+// ParticleSystem and emitted tree/state events but left the selection alone,
+// so an id selected in the old document survived into the new one. When that
+// index also exists in the new file — the common case, since most .alo files
+// have several emitters — the Inspector and curve panel silently operate on
+// the WRONG emitter, with nothing on screen indicating it.
+//
+// The fixture has 2 emitters, so selecting index 1 and then opening gives a
+// surviving-but-wrong id rather than an out-of-range one that might get
+// clamped by accident.
+test("file/open resets the selection instead of inheriting the previous document's", async () => {
+  await page.keyboard.press("Escape").catch(() => {});
+  const fixturePath = resolve(__dirname, "fixtures/nt-5-singleton.alo");
+
+  const result = await page.evaluate(async (path) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+
+    // Start from a known document and select a NON-root emitter.
+    await b.request({ kind: "file/open", params: { path } });
+    const list = await b.request({ kind: "emitters/list", params: {} });
+    const second = list.root?.children?.[1]?.id;
+    if (second === undefined) throw new Error("fixture needs >= 2 emitters");
+    await b.request({ kind: "emitters/select", params: { id: second } });
+    const before = await b.request({ kind: "engine/state/snapshot", params: {} });
+
+    // Re-open the same document. The selection must be re-established by the
+    // open itself, not inherited from the session that preceded it.
+    let announced: number | null | undefined;
+    const off = b.on("emitters/selected", (e: { payload: { id: number | null } }) => {
+      announced = e.payload.id;
+    });
+    await b.request({ kind: "file/open", params: { path } });
+    await new Promise((r) => setTimeout(r, 150));
+    off();
+
+    const after = await b.request({ kind: "engine/state/snapshot", params: {} });
+    return { beforeSel: before.selectedEmitterId, afterSel: after.selectedEmitterId, announced };
+  }, fixturePath);
+
+  expect(result.beforeSel).toBeGreaterThan(0);   // we really did select a non-root
+  // THE REGRESSION: without the reset this stays on the stale positional id.
+  expect(result.afterSel).toBe(0);
+  // And React must be told, or its selection atom keeps the old row highlighted
+  // even though native has moved on.
+  expect(result.announced).toBe(0);
+});

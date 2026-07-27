@@ -1332,6 +1332,24 @@ void BridgeDispatcher::EmitEmittersTreeChanged()
     EmitEmittersTreeChangedNow();
 }
 
+void BridgeDispatcher::ResetAndEmitSelection()
+{
+    // Root (index 0) when the new document has emitters, matching file/new's
+    // legacy-parity behaviour of opening with the first emitter selected;
+    // otherwise nothing is selected.
+    const bool hasEmitters = (m_pParticleSystem != nullptr && *m_pParticleSystem
+                              && !(*m_pParticleSystem)->getEmitters().empty());
+    m_selectedEmitterId = hasEmitters ? 0 : -1;
+    if (!m_emit) return;
+    json env = {
+        {"type",    "evt"},
+        {"kind",    "emitters/selected"},
+        {"payload", json{{"id", m_selectedEmitterId < 0 ? json(nullptr)
+                                                        : json(m_selectedEmitterId)}}},
+    };
+    m_emit(env.dump());
+}
+
 void BridgeDispatcher::EmitEmittersTreeChangedNow()
 {
     // Build the synthetic root + per-actual-root children, matching the

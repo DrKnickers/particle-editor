@@ -2252,8 +2252,21 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 // NavigationStarting cancel — if a frame ever loaded an
                 // off-origin document, its postMessage must not reach the
                 // native bridge.
+                // FAIL CLOSED. This check used to sit entirely inside the
+                // success branch, so a failing/empty get_Source skipped it and
+                // fell straight through to OnWebMessage — the comment above
+                // promised the message "must not reach the native bridge", but
+                // the control flow granted exactly that on a COM error
+                // (2026-07 audit, an-audit-finding). No confirmed origin, no dispatch.
                 LPWSTR src = nullptr;
-                if (SUCCEEDED(args->get_Source(&src)) && src)
+                const HRESULT srcHr = args->get_Source(&src);
+                if (FAILED(srcHr) || !src)
+                {
+                    Log("[host] G11: dropped WebMessage — source unavailable "
+                        "(hr=0x%08lx)\n", (unsigned long)srcHr);
+                    if (src) CoTaskMemFree(src);
+                    return S_OK;
+                }
                 {
                     const bool approved = IsApprovedWebViewOrigin(src, useDevUi);
                     if (!approved)
@@ -2308,16 +2321,28 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
             [this](ICoreWebView2*,
                    ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT
             {
+                // FAIL CLOSED, same as the WebMessage source check above: a
+                // failing/empty get_Uri used to skip the whole block WITHOUT
+                // put_Cancel, so a navigation we could not identify was allowed
+                // to proceed (2026-07 audit, an-audit-finding). An unidentifiable target
+                // is exactly the one to refuse — the app's own load reports its
+                // URI fine, so cancelling here costs nothing legitimate.
                 LPWSTR uri = nullptr;
-                if (SUCCEEDED(args->get_Uri(&uri)) && uri)
+                const HRESULT uriHr = args->get_Uri(&uri);
+                if (FAILED(uriHr) || !uri)
                 {
-                    if (!IsApprovedWebViewOrigin(uri, useDevUi))
-                    {
-                        Log("[host] G11: cancelled navigation to %ls\n", uri);
-                        args->put_Cancel(TRUE);
-                    }
-                    CoTaskMemFree(uri);
+                    Log("[host] G11: cancelled navigation — URI unavailable "
+                        "(hr=0x%08lx)\n", (unsigned long)uriHr);
+                    args->put_Cancel(TRUE);
+                    if (uri) CoTaskMemFree(uri);
+                    return S_OK;
                 }
+                if (!IsApprovedWebViewOrigin(uri, useDevUi))
+                {
+                    Log("[host] G11: cancelled navigation to %ls\n", uri);
+                    args->put_Cancel(TRUE);
+                }
+                CoTaskMemFree(uri);
                 return S_OK;
             }).Get(), &navStartingTok);
 

@@ -241,6 +241,17 @@ public:
     // via `emitters/list`.
     void EmitEmittersTreeChanged();
 
+    // Reset the selection to the new document's root (or none, if it has no
+    // emitters) and announce it, so React's selection atom — and thus the
+    // Inspector and curve panel — follow the swap.
+    //
+    // Every path that REPLACES the bound ParticleSystem must call this.
+    // file/new always did; file/open and autosave-recover did not, so a
+    // positional emitter id selected in the previous document survived into the
+    // new one. If that index happened to exist there, edits silently targeted
+    // the WRONG emitter (2026-07 audit, an-audit-finding).
+    void ResetAndEmitSelection();
+
     // render loop: real spawner/active-count source. Called from
     // HostWindow::RenderD3D9 once per frame when Engine::GetNumInstances()
     // changes. Replaces the MockBridge-driven mock-only timer source —

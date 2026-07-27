@@ -1123,7 +1123,11 @@ type ResponseForA<R extends Request> =
   // Mods
   R extends { kind: "mods/list" }    ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
   R extends { kind: "mods/refresh" } ? { mods: ModDescriptor[]; layers: LayerRef[]; stack: string[]; activePath: string | null } :
-  R extends { kind: "mods/set-layers" } ? { ok: boolean; stack: string[] } | { ok: false; error: string } :
+  // `error` rides along on the ok:false success-shape too: the stack still
+  // applied in memory, so `stack` is meaningful, but the caller needs to know
+  // WHICH failure occurred (shader reload vs. registry persist) to say anything
+  // accurate to the user.
+  R extends { kind: "mods/set-layers" } ? { ok: boolean; stack: string[]; error?: string } | { ok: false; error: string } :
 
   // Autosave crash-recovery
   R extends { kind: "autosave/check-recovery" }   ? { orphan: AutosaveOrphan | null } :

@@ -380,6 +380,10 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
         // the previous file's emitters even though the engine now
         // holds the new file's ParticleSystem.
         EmitEmittersTreeChanged();
+        // The tree changed, but the SELECTION didn't — a positional id from the
+        // previous document survived, and if that index exists here too, edits
+        // would land on the wrong emitter (audit an-audit-finding).
+        ResetAndEmitSelection();
         return true;
     }
 
@@ -662,6 +666,9 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
                 SetDirty(true);
                 EmitEngineStateChanged();
                 EmitEmittersTreeChanged();
+                // Recovery replaces the bound system exactly like file/open, so
+                // it inherits the same stale-selection hazard (audit an-audit-finding).
+                ResetAndEmitSelection();
                 outcome = Autosave::RecoverOutcome::Recovered;
             }
             else
