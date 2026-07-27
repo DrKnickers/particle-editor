@@ -490,6 +490,10 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 			reader.read(&key.time, sizeof(float));
 			key.time *= 100.0f;	// Transform to percentage
 			Verify(key.value >= 0.0f && key.value <= 1.0f && key.time <= 100.0f && key.time >= trackContents[i].keys.rbegin()->time);
+			// Aggregate cap (2026-07 audit, an-audit-finding). Every key above is individually
+			// validated; the TOTAL never was, and KeyMap is a multiset, so each
+			// 8-byte on-disk key becomes a tree node many times that size.
+			Verify(trackContents[i].keys.size() < kMaxAloTrackKeys);
 			trackContents[i].keys.insert(key);
 		}
 		Verify(type == -1);
@@ -1127,6 +1131,12 @@ ParticleSystem::ParticleSystem(IFile* file)
 	            // Per-group link-exempt flags.
 	            long remaining = reader.size();
 	            uint32_t count = (uint32_t)readPackedInteger(reader, remaining);
+	            // Aggregate cap (2026-07 audit, an-audit-finding). `remaining` bounds the BYTES,
+	            // not the entries — at ~3 bytes apiece that still admits tens of
+	            // millions of map inserts from one chunk. Reject up front rather
+	            // than part-way through, so a refused file leaves no half-built
+	            // exempt table behind.
+	            Verify(count <= kMaxAloLinkExempts);
 	            for (uint32_t i = 0; i < count; ++i)
 	            {
 	                uint32_t groupId      = (uint32_t)readPackedInteger(reader, remaining);

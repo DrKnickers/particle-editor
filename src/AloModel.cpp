@@ -424,6 +424,11 @@ AloModel LoadAloModel(IFile* file)
     {
         if (t == CHUNK_MESH)
         {
+            // Aggregate cap (2026-07 audit, an-audit-finding). Every 0x0400 container costs a
+            // Mesh whether or not it carries a payload, and this loop was bounded
+            // only by the file size — unlike the bone and connection loops below,
+            // which have had their caps all along.
+            Verify(model.meshes.size() < kMaxAloMeshes);
             model.meshes.emplace_back();
             ReadMesh(r, model.meshes.back());
         }

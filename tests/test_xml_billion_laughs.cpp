@@ -21,6 +21,7 @@
 #include "xml.h"
 #include "files.h"
 #include "exceptions.h"
+#include "ResourceLimits.h"   // kMaxXmlNodes (breadth cap)
 
 #include <cstdio>
 #include <cstring>
@@ -156,6 +157,48 @@ int main()
         CHECK(!threw, "400-deep nesting (under the cap) parses without throwing");
         CHECK(!threw && tree.getRoot() != NULL, "400-deep document yields a root");
         f->Release();                     // rc=0
+    }
+
+    // --- D: BREADTH. A shallow document with millions of siblings must be
+    // rejected (2026-07 audit, an-audit-finding). The depth guard above does nothing here —
+    // this document is two levels deep — and kMaxXmlFileBytes is no stand-in,
+    // because every element becomes an XMLNode carrying a child vector and an
+    // attribute map. The heap cost is a large multiple of the bytes on disk,
+    // which is exactly the amplification the cap exists to stop.
+    {
+        std::string wide;
+        wide.reserve((size_t)kMaxXmlNodes * 4 + 64);
+        wide += "<root>";
+        // <root> itself counts, so kMaxXmlNodes children guarantees we cross it.
+        for (unsigned long i = 0; i < kMaxXmlNodes; ++i) wide += "<e/>";
+        wide += "</root>";
+
+        MemoryFile* f = makeFile(wide);
+        XMLTree tree;
+        bool threw = false;
+        try { tree.parse(f); }
+        catch (...) { threw = true; }
+        f->Release();
+        CHECK(threw, "millions of sibling elements are rejected (breadth cap)");
+    }
+
+    // --- E: a WIDE-but-legal document still parses. The cap has to sit above
+    // anything real: the largest stock catalogs run to tens of thousands of
+    // elements, so one an order of magnitude past that must be accepted.
+    {
+        std::string ok;
+        ok += "<root>";
+        for (int i = 0; i < 100000; ++i) ok += "<e/>";
+        ok += "</root>";
+
+        MemoryFile* f = makeFile(ok);
+        XMLTree tree;
+        bool threw = false;
+        try { tree.parse(f); }
+        catch (...) { threw = true; }
+        CHECK(!threw, "100k sibling elements still parse (cap is above anything real)");
+        CHECK(!threw && tree.getRoot() != NULL, "wide-but-legal document yields a root");
+        f->Release();
     }
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");

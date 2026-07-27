@@ -87,6 +87,12 @@ static void checkEmpty(XMLNode* node)
 // read a freed parser. Each parse() sets + clears both within one call stack.
 static thread_local XML_Parser    g_xmlParser = NULL;
 static thread_local unsigned long g_xmlDepth  = 0;
+// Total elements seen in THIS parse — the breadth companion to g_xmlDepth.
+// Depth alone left a shallow-but-enormous document unbounded, and the 64 MiB
+// input cap is not a substitute: each element becomes an XMLNode with a child
+// vector and an attribute map, so the heap cost is a large multiple of the
+// bytes on disk (2026-07 audit, an-audit-finding).
+static thread_local unsigned long g_xmlNodes  = 0;
 
 static void onStartElement(void* userData, const XML_Char *name, const XML_Char **atts)
 {
@@ -96,6 +102,12 @@ static void onStartElement(void* userData, const XML_Char *name, const XML_Char 
 	// allocating the node; the aborted parse surfaces as the normal
 	// XML_Parse==0 ParseException in XMLTree::parse.
 	if (++g_xmlDepth > kMaxXmlDepth)
+	{
+		if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+		return;
+	}
+	// Same stop-before-allocating discipline as the depth cap above.
+	if (++g_xmlNodes > kMaxXmlNodes)
 	{
 		if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
 		return;
@@ -215,6 +227,7 @@ void XMLTree::parse(IFile* file)
 	XML_SetUnknownEncodingHandler(parser, onUnknownEncoding, NULL);   // tolerate encoding='ASCII'
 	g_xmlParser = parser;   // F-XML: for onEntityDecl's / onStartElement's XML_StopParser
 	g_xmlDepth  = 0;        // fresh depth per parse (thread_local survives across calls)
+	g_xmlNodes  = 0;        // ...and a fresh element count
 	XML_SetEntityDeclHandler(parser, onEntityDecl);        // F-XML: reject custom entity declarations
 
 	try
