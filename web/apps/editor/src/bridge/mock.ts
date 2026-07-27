@@ -1723,6 +1723,11 @@ export class MockBridge implements Bridge {
       // ---------------- emitters / undo: not yet implemented ----------------
       case "emitters/update":
       case "emitters/import-from-file":
+      // Live-simulation counters read the real Engine's instance/emitter/
+      // particle totals. Browser mode runs no simulation, so a plausible-looking
+      // zero would be worse than a throw — it would let a test assert against a
+      // number that means nothing (see contract-drift DEFERRED list).
+      case "engine/query/live-instances":
       // Frameless title-bar controls act on the native HWND; browser mode has no
       // window to drive, so they fail loudly (see contract-drift DEFERRED list).
       case "window/minimize":

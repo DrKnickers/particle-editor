@@ -655,3 +655,57 @@ test("deleting one member of a 2-member link group demotes the survivor", async 
 
   expect(result.firstLinkGroup).toBe(0);
 });
+
+// ── 5. A structural mutation reaches an already-PLACED instance ──────
+//
+// 2026-07 audit an-audit-finding. A ParticleSystemInstance spawns its root emitters ONCE,
+// in its constructor, and Engine::OnParticleSystemChanged only visited the
+// emitters that already existed — it never created or removed any. So an
+// emitter added by Add Root / Paste / Import / Duplicate / reparent-to-root
+// never appeared on an instance placed earlier. Deletion propagated (an
+// Emitter's destructor tears its live instances down), addition did not, and
+// that asymmetry is what made it look like "the tree updated, so it worked".
+//
+// Same user-visible shape as the set-properties gap fixed in #682: the tree
+// row appears, the placed effect ignores it.
+//
+// This is the first test of live-instance state at all — engine/query/
+// live-instances was added alongside the fix because the bridge could describe
+// the authored system in detail and expose nothing about what was actually
+// rendering.
+test("adding a root emitter reaches an already-placed instance", async () => {
+  const result = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+
+    // A previous spec may have left a cursor-bound preview attached;
+    // preview/attach refuses when one exists. Best-effort clear.
+    try { await b.request({ kind: "preview/kill", params: {} }); } catch { /* none attached */ }
+
+    // file/new gives a clean system with one root emitter AND clears the
+    // engine's instance list, so the counts below start from a known floor.
+    await b.request({ kind: "file/new", params: {} });
+
+    // Place a PERSISTENT instance: attach spawns it cursor-bound, place
+    // detaches it so it stays in the scene (the Shift-click gesture's
+    // bridge-reachable equivalent).
+    await b.request({ kind: "preview/attach", params: { x: 200, y: 200 } });
+    await b.request({ kind: "preview/place", params: {} });
+
+    const before = await b.request({ kind: "engine/query/live-instances", params: {} });
+    // Structural mutation of the AUTHORED system, with the instance already live.
+    const added = await b.request({ kind: "emitters/add-root", params: {} });
+    const after = await b.request({ kind: "engine/query/live-instances", params: {} });
+
+    return { before, after, newId: added.newId };
+  });
+
+  expect(result.newId).toBeGreaterThanOrEqual(0);     // the authored add succeeded
+  expect(result.before.instances).toBeGreaterThanOrEqual(1);  // something was placed
+  // The instance itself must NOT be recreated — this is a topology sync, not a
+  // respawn (a respawn would restart the placed effect from zero).
+  expect(result.after.instances).toBe(result.before.instances);
+  // THE REGRESSION: without the sync the placed instance keeps its
+  // creation-time emitter list and this stays equal to `before`.
+  expect(result.after.emitters).toBe(result.before.emitters + 1);
+});

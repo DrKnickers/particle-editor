@@ -673,6 +673,27 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         ctx.SendOk(json(m_engine->IsSkydomeSlotEmpty(params.value("slot", -1))));
         return true;
     }
+    // Read-only live-simulation counters, straight off the Engine getters.
+    //
+    // Added by the 2026-07 audit: the bridge could describe the AUTHORED
+    // ParticleSystem in detail (emitters/list) but exposed NOTHING about the
+    // live instances rendered from it, so a whole class of defects — a placed
+    // instance not seeing a structural edit (an-audit-finding), not seeing a rescale (an-audit-finding),
+    // not repainting a paused interpolation change (an-audit-finding) — had no observable
+    // and could not be regression-tested at all.
+    //
+    // `emitters` counts live EmitterInstances across ALL instances, which is
+    // what makes "did the placed instance pick up the new root?" answerable.
+    if (kind == "engine/query/live-instances")
+    {
+        if (!ctx.RequireEngine(kind.c_str())) return true;
+        ctx.SendOk(json{
+            {"instances", m_engine->GetNumInstances()},
+            {"emitters",  m_engine->GetNumEmitters()},
+            {"particles", m_engine->GetNumParticles()},
+        });
+        return true;
+    }
     if (kind == "engine/query/bloom-available")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;

@@ -292,9 +292,22 @@ IDirect3DTexture9* Engine::GetTexture(const string& name) const
 
 void Engine::OnParticleSystemChanged(int track)
 {
+	// track < 0 is the "everything changed" broadcast, which is what the
+	// structural emitter handlers send. Re-sync placed instances against the
+	// authored root list there: an instance only spawns roots in its
+	// constructor, so Add Root / Paste / Import / Duplicate / reparent-to-root
+	// never reached one placed earlier (2026-07 audit, an-audit-finding). Gated on track < 0
+	// so a per-track curve edit doesn't pay for the scan.
+	//
+	// Safe on the system-REPLACEMENT paths (file/new, file/open, recover,
+	// undo-apply): all four call Clear() first, so m_instances is empty here
+	// and this is a no-op — they must, since each instance holds the
+	// ParticleSystem by reference.
+	const TimeF now = (track < 0) ? GetTimeF() : 0.0f;
 	for (auto& instance : m_instances)
     {
 		instance->onParticleSystemChanged(*this, track);
+		if (track < 0) instance->SyncRootEmitters(now);
 	}
 	// [D2] Bust the paused-idle skip: while paused, on-screen particles
 	// only reflect an edit when the Update loop re-evaluates their curves

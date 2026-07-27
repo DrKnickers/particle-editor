@@ -251,7 +251,25 @@ ParticleSystemInstance::ParticleSystemInstance(Engine& engine, const ParticleSys
 		if (emitters[i]->parent == NULL)
 		{
             SpawnEmitter(now, i, this);
+            // Record on ATTEMPT, not on success: a spawn refused by the
+            // overload guard must stay refused, or a later SyncRootEmitters
+            // would make an unrelated property edit silently materialise it.
+            m_spawnedRootIds.insert(emitters[i]->stableId);
 		}
+	}
+}
+
+void ParticleSystemInstance::SyncRootEmitters(TimeF currentTime)
+{
+	const vector<ParticleSystem::Emitter*>& emitters = m_system.getEmitters();
+	for (size_t i = 0; i < emitters.size(); i++)
+	{
+		if (emitters[i] == NULL || emitters[i]->parent != NULL) continue;
+		// insert() tells us whether this root is new to the instance in one
+		// step — no separate find(). Roots seen at construction, and roots
+		// added by an earlier sync, are both already present.
+		if (!m_spawnedRootIds.insert(emitters[i]->stableId).second) continue;
+		SpawnEmitter(currentTime, i, this);
 	}
 }
 

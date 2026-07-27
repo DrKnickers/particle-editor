@@ -765,6 +765,10 @@ export type Request =
   | { kind: "engine/query/reference-object-list"; params: Record<string, never> }
   | { kind: "engine/query/bloom-available";    params: Record<string, never> }
   | { kind: "engine/query/msaa-levels";        params: Record<string, never> }
+  // Live-simulation counters (read-only). Distinct from emitters/list, which
+  // describes the AUTHORED system: these count what is actually instantiated
+  // and rendering right now. Native-only — browser mode has no engine.
+  | { kind: "engine/query/live-instances";     params: Record<string, never> }
 
   // Settings (cross-mode registry persistence). Legacy persists lighting
   // under HKCU\Software\AloParticleEditor; the new UI reads it back so
@@ -1178,6 +1182,7 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/query/reference-object-list" } ? { objects: ReferenceObjectEntry[]; building?: boolean } :
   R extends { kind: "engine/query/bloom-available" }     ? boolean :
   R extends { kind: "engine/query/msaa-levels" }         ? { levels: number[]; current: number } :
+  R extends { kind: "engine/query/live-instances" }      ? { instances: number; emitters: number; particles: number } :
 
   // Settings (cross-mode registry persistence)
   R extends { kind: "settings/lighting" }                 ? LightingSettingsDto :

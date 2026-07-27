@@ -69,6 +69,9 @@ const DEFERRED: readonly string[] = [
   // Real .alo import requires FileManager + ParticleSystem the browser-mode
   // host doesn't own (the preview path, emitters/preview-from-file, IS mocked).
   "emitters/import-from-file",
+  // Live-simulation counters come from the real Engine; browser mode runs no
+  // simulation, so the mock throws rather than returning meaningless zeros.
+  "engine/query/live-instances",
   // Frameless title-bar window controls act on the native HWND — the native
   // host owns them; browser mode has no window to minimize/maximize/close.
   "window/minimize",
@@ -103,14 +106,25 @@ describe("bridge contract drift (schema Request kinds vs MockBridge)", () => {
   it("no DEFERRED kind has quietly gained a real mock handler", () => {
     // A deferred kind reaching a `throw` arm is fine; but if it gains a real
     // handler it should graduate off the allowlist. The mock routes both via
-    // `case`, so we distinguish by the throw text: a deferred case must sit in
-    // the "not implemented" throw block.
+    // `case`, so we distinguish by what the label actually falls through to.
+    //
+    // This used to scan a fixed 400-character window after the label for the
+    // text "not implemented". That made the guard depend on how verbose the
+    // surrounding comments happened to be — adding a comment inside the throw
+    // cluster pushed the throw out of range and failed the sibling labels —
+    // and it would equally have PASSED on a real handler that merely mentioned
+    // "not implemented" in a nearby comment. Match the intent instead: after
+    // the label, skipping sibling `case` labels and comments, the next
+    // STATEMENT must be the shared not-implemented throw.
     const graduated = DEFERRED.filter((k) => {
-      // Find the case label and check it's in the not-implemented throw cluster.
-      const idx = mockSrc.indexOf(`case "${k}":`);
+      const label = `case "${k}":`;
+      const idx = mockSrc.indexOf(label);
       if (idx < 0) return false; // not handled at all → fine (still deferred)
-      const after = mockSrc.slice(idx, idx + 400);
-      return !/not implemented/.test(after);
+      const rest = mockSrc.slice(idx + label.length);
+      // Consume any run of whitespace / line + block comments / sibling labels.
+      const skip = /^(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/|case\s*"[^"]+":)*/;
+      const next = rest.replace(skip, "");
+      return !/^throw new Error\(\s*`MockBridge: '\$\{req\.kind\}' not implemented`/.test(next);
     });
     expect(graduated).toEqual([]);
   });

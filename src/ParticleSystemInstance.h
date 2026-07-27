@@ -4,12 +4,29 @@
 #include "Engine.h"
 #include <list>
 #include <memory>
+#include <set>
 
 class ParticleSystemInstance : public Object3D
 {
 	Engine&				     m_engine;
 	const ParticleSystem&    m_system;
 	std::list<std::unique_ptr<EmitterInstance>> m_emitters;
+
+    // Root emitters this instance has already accounted for, keyed by
+    // Emitter::stableId. Seeded in the constructor with every root present at
+    // placement; SyncRootEmitters() then spawns ONLY roots whose id isn't here
+    // yet (2026-07 audit, an-audit-finding).
+    //
+    // Keyed by stableId rather than Emitter* on purpose: the counter is
+    // process-monotonic and never reused (ParticleSystem.cpp:145), so a stale
+    // entry for a deleted emitter can never false-match a later one. A raw
+    // pointer would ABA if the allocator recycled the address.
+    //
+    // "Already accounted for" is deliberately NOT "currently live":
+    // ParticleSystemInstance::Update erases an emitter once it is dead and
+    // detached, so a liveness test would re-fire finished one-shot bursts on
+    // every subsequent edit — which is most explosion effects.
+    std::set<unsigned int>   m_spawnedRootIds;
     float                    m_zDistance;
     bool                     m_spawnerOwned   = false;
 
@@ -102,6 +119,16 @@ public:
 	bool HasLiveHeat() const;
 	void StopSpawning();
 	EmitterInstance* SpawnEmitter(TimeF currentTime, size_t idxEmitter, Object3D* parent);
+
+	// Spawn any authored ROOT emitter added since this instance was placed.
+	// A ParticleSystemInstance otherwise only ever spawns roots in its
+	// constructor, so an emitter added by Add Root / Paste / Import /
+	// Duplicate / a reparent-to-root never appeared on an already-placed
+	// instance — deletion propagated (via ~Emitter -> RemoveEmitter) but
+	// addition did not. Same user-visible shape as the set-properties gap
+	// fixed in #682. Idempotent; children are NOT handled here because they
+	// are spawned dynamically by their parent's lifetime/death events.
+	void SyncRootEmitters(TimeF currentTime);
 
 	// Remove a specific emitter instance, deleting it via the owning unique_ptr.
 	// Used by ParticleSystem::Emitter::~Emitter so an Emitter being deleted
