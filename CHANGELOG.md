@@ -177,6 +177,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Fixed
 
+- Switching emitters while a curve edit is still saving no longer carries the old emitter's key selection onto the new one. Previously the spinner could show the previous emitter's value against a key that held a different one, so the next nudge silently wrote that wrong value
 - One Ctrl+Z now undoes a whole multi-emitter delete. Deleting three emitters at once used to take three presses of Ctrl+Z to reverse, restoring them one at a time
 - One Ctrl+Z now undoes a whole multi-key curve paste. Pasting several curve keys used to take one press per key to reverse, removing them one at a time
 - Saving now fails loudly instead of silently writing a truncated file. If the disk fills mid-save the editor reports the failure and leaves your original file untouched, where before it could report success and replace your work with a corrupt copy

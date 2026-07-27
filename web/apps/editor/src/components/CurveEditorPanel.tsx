@@ -570,6 +570,15 @@ export function CurveEditorPanel({ bridge }: Props) {
   // of in-flight stale snapshots from stomping the optimistic curve.
   const editEpochRef = useRef(0);
 
+  // Live mirrors of the curve a request belongs to, for the SCOPE GUARD below
+  // (2026-07 audit an-audit-finding). Refs, not state: a completion handler closes over
+  // the values that were live when it was ISSUED, so it needs a way to read
+  // what is live NOW.
+  const liveScopeRef = useRef<{ id: number | null; track: TrackName }>({
+    id: null,
+    track: "red",
+  });
+
   // Snapshot seed + live selection subscription.
   useEffect(() => {
     let cancelled = false;
@@ -647,6 +656,33 @@ export function CurveEditorPanel({ bridge }: Props) {
     if (tracks === null) return null;
     return tracks.find((t) => t.name === focusedChannel.trackName) ?? null;
   }, [tracks, focusedChannel]);
+
+  // ── Mutation-completion scope guard (2026-07 audit an-audit-finding) ────────
+  //
+  // A track mutation's REQUEST is safe on its own: `id` and `track` are
+  // captured in the handler's closure, so the write always lands on the
+  // emitter and channel the user acted on. What is not safe is the
+  // COMPLETION — the four handlers that write selection state
+  // (`selectedKeyTimes` / `optimisticSelected`) on resolve. Switch emitter or
+  // focus channel mid-flight and the late response applies the old curve's
+  // selection to the new one.
+  //
+  // That is not merely a cosmetic highlight. Selection is NOT cleared on an
+  // emitter switch, and the float32 snap effect below actively pulls a stale
+  // time onto the nearest real key. `singleSelected` then prefers
+  // `optimisticSelected` over the fetched track, so the spinner DISPLAYS the
+  // old emitter's value against the new emitter's key — and the next nudge
+  // commits that value onto it. A silent wrong-value write, on a key the user
+  // never selected.
+  //
+  // The fetch path has guarded exactly this since #613 (`inFlightFor` + the
+  // edit epoch); this is the mutation-path equivalent.
+  useEffect(() => {
+    liveScopeRef.current = { id: selectedId, track: focusedChannel.trackName };
+  }, [selectedId, focusedChannel.trackName]);
+  const stillScoped = useCallback((id: number, track: TrackName) => (
+    liveScopeRef.current.id === id && liveScopeRef.current.track === track
+  ), []);
 
   // Atlas eligibility: the picker only auto-opens when the emitter's
   // texture is an atlas (gridSide ≥ 2). CurveEditorPanel doesn't otherwise
@@ -1071,6 +1107,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         kind: "emitters/add-track-key",
         params: { id: selectedId, track: focusedChannel.trackName, time, value },
       }).then((res) => {
+        if (!stillScoped(selectedId, focusedChannel.trackName)) return; // an-audit-finding
         const insertedTime = res.time ?? time;
         const insertedValue = res.value ?? value;
         setSelectedKeyTimes(new Set([insertedTime]));
@@ -1092,6 +1129,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       kind: "emitters/delete-track-keys",
       params: { id: selectedId, track: focusedChannel.trackName, times: candidates },
     }).then(() => {
+      if (!stillScoped(selectedId, focusedChannel.trackName)) return; // an-audit-finding
       setSelectedKeyTimes(new Set());
       setOptimisticSelected(null);
     }).catch(() => { /* silent */ });
@@ -1644,6 +1682,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         params: { id: selectedId, track, keys: clip.map((k) => ({ time: k.time, value: k.value })) },
       })
       .then((res) => {
+        if (!stillScoped(selectedId, track)) return; // an-audit-finding
         // Fall back to the requested times when the response carries none,
         // mirroring the singular handler's `res.time ?? k.time`.
         const echoed = (res as { keys?: { time: number }[] }).keys;
@@ -2144,6 +2183,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                 times: [t],
               },
             }).then(() => {
+              if (!stillScoped(selectedId, focusedChannel.trackName)) return; // an-audit-finding
               setOptimisticSelected((prev) =>
                 prev !== null && prev.time === t ? null : prev,
               );

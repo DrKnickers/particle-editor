@@ -2711,3 +2711,122 @@ describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)",
     }
   });
 });
+
+// 2026-07 audit an-audit-finding. Four mutation completions write SELECTION state
+// (selectedKeyTimes / optimisticSelected) with no check that the emitter and
+// focus channel they were issued for are still the live ones. The fetch path
+// has guarded this since #613 via `inFlightFor` + the edit epoch; the mutation
+// path did not.
+//
+// The filed one-liner ("a key applied to emitter A lands on B") describes the
+// wrong mechanism: every mutation carries `id` in its closure, so the WRITE
+// always targets the right emitter. What leaks is the state the NEXT write
+// reads — `singleSelected` prefers `optimisticSelected` over the fetched track,
+// so a late completion makes the spinner display emitter A's value against
+// emitter B's key, and one nudge commits it onto B.
+describe("CurveEditorPanel — late mutation completions are emitter-scoped (an-audit-finding)", () => {
+  // Both emitters carry a scale key at t=50 with DIFFERENT values. That shared
+  // time is what lets a stale selection survive the switch; the differing
+  // values are what make a wrong spinner reading detectable.
+  const VALUE_ON_0 = 80;
+  const VALUE_ON_1 = 10;
+
+  function makeSwitchableBridge() {
+    const listeners: SelectionListener[] = [];
+    let resolveAdd: ((v: { time: number; value: number }) => void) | null = null;
+    const tracksFor = (id: number): TrackDto[] =>
+      TRACK_NAMES.map((name) => ({
+        name,
+        keys: name === "scale"
+          ? [
+              { time: 0, value: 0 },
+              { time: 50, value: id === 0 ? VALUE_ON_0 : VALUE_ON_1 },
+              { time: 100, value: 100 },
+            ]
+          : [{ time: 0, value: 0 }, { time: 100, value: 1 }],
+        interpolation: "linear",
+        lockedTo: null,
+      }));
+    const bridge = {
+      request: vi.fn().mockImplementation((req: { kind: string; params: { id?: number } }) => {
+        if (req.kind === "engine/state/snapshot") {
+          return Promise.resolve({ ...makeDefaultEngineState(), selectedEmitterId: 0 });
+        }
+        if (req.kind === "emitters/get-tracks") {
+          return Promise.resolve({ tracks: tracksFor(req.params.id ?? 0) });
+        }
+        if (req.kind === "emitters/get-properties") {
+          return Promise.resolve({ properties: { textureSize: 1 } });
+        }
+        if (req.kind === "emitters/add-track-key") {
+          // Held open so the test controls exactly when the completion lands.
+          return new Promise<{ time: number; value: number }>((res) => { resolveAdd = res; });
+        }
+        return Promise.resolve({});
+      }),
+      on: vi.fn().mockImplementation((kind: string, h: SelectionListener) => {
+        if (kind === "emitters/selected") listeners.push(h);
+        return () => {
+          const idx = listeners.indexOf(h);
+          if (idx >= 0) listeners.splice(idx, 1);
+        };
+      }),
+    } as unknown as Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> };
+    return {
+      bridge,
+      selectEmitter: (id: number) => { for (const h of [...listeners]) h({ payload: { id } }); },
+      landStaleAdd: (v: { time: number; value: number }) => { resolveAdd?.(v); },
+    };
+  }
+
+  it("a late add-track-key completion does not select or price a key on the emitter switched to", async () => {
+    const h = makeSwitchableBridge();
+    render(<CurveEditorPanel bridge={h.bridge} />);
+    await waitFor(() => expect(screen.getByTestId("curve-layer-red")).toBeInTheDocument());
+    selectChannel("scale");
+    await waitFor(() => expect(screen.getByTestId("curve-layer-scale")).toBeInTheDocument());
+
+    // Insert-click on emitter 0. jsdom returns a zero rect, so the SVG
+    // geometry is stubbed the same way the insert-mode spec above does it.
+    fireEvent.click(screen.getByTestId("ce-tool-insert"));
+    const backdrop = screen.getByTestId("curve-canvas-backdrop");
+    Object.defineProperty(backdrop, "ownerSVGElement", {
+      value: backdrop.parentElement,
+      configurable: true,
+    });
+    screen.getByTestId("curve-editor-svg").getBoundingClientRect = () => ({
+      x: 0, y: 0, top: 0, left: 0, right: 600, bottom: 300,
+      width: 600, height: 300, toJSON: () => ({}),
+    } as DOMRect);
+    fireEvent.pointerDown(backdrop, { button: 0, clientX: 300, clientY: 150, pointerId: 1 });
+    await waitFor(() => {
+      const adds = h.bridge.request.mock.calls
+        .filter((c) => (c[0] as { kind: string }).kind === "emitters/add-track-key");
+      expect(adds).toHaveLength(1);
+    });
+
+    // The user clicks a different emitter while that request is still open.
+    await act(async () => { h.selectEmitter(1); });
+    await waitFor(() => {
+      const gets = h.bridge.request.mock.calls
+        .filter((c) => (c[0] as { kind: string; params: { id?: number } }).kind === "emitters/get-tracks")
+        .map((c) => (c[0] as { params: { id?: number } }).params.id);
+      expect(gets).toContain(1);
+    });
+
+    // Only NOW does emitter 0's completion arrive, echoing t=50 / value=80.
+    await act(async () => { h.landStaleAdd({ time: 50, value: VALUE_ON_0 }); });
+
+    const panel = screen.getByTestId("curve-editor-panel");
+    // THE REGRESSION: unguarded, this selects t=50 on emitter 1 — a key the
+    // user never touched, on an emitter they never ran Insert on.
+    expect(panel.getAttribute("data-selected-key-count")).toBe("0");
+    // ...and because singleSelected prefers optimisticSelected over the fetched
+    // track, the Value spinner would read 80 for a key that holds 10. Asserting
+    // the specific wrong number, not merely "something differs".
+    const valueInput = screen
+      .getByTestId("ce-spinner-value-wrapper")
+      .querySelector("input") as HTMLInputElement;
+    expect(valueInput.value).not.toBe(String(VALUE_ON_0));
+  });
+});
