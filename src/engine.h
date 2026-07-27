@@ -14,6 +14,7 @@
 #include "ReferenceObjectMesh.h"  // imported game-object render core
 #include "ReferenceTransformMemory.h"  // per-object reference-transform memory (pure)
 #include "GameObjectCatalog.h"    // enumerate game objects by Name
+#include "DeviceState.h"          // D3D9Ex CheckDeviceState classification (pure)
 #include "RefLock.h"
 #include <memory>
 #include <atomic>    // off-UI-thread catalog build
@@ -246,6 +247,12 @@ public:
 	// belt-and-suspenders no-op because Render() runs the same dance
 	// every frame.
 	bool RecoverDeviceIfNeeded();
+
+	// Latch + log an unrecoverable device state (DEVICEHUNG / DEVICEREMOVED)
+	// exactly once. Both recovery sites — RecoverDeviceIfNeeded and the render
+	// loop — route through here so the message can't be emitted twice or, worse,
+	// once per frame forever.
+	void ReportFatalDeviceState(HRESULT hr);
 
 	// install/clear the shared-RT compositor. When non-null, Render()
 	// redirects slot-0 RT to the compositor's off-screen ARGB surface (the
@@ -944,6 +951,16 @@ private:
     int  m_maxPreviewParticles  = kDefaultMaxPreviewParticles;
     int  m_maxPreviewInstances  = kDefaultMaxPreviewParticles / kInstancesDivisor;
     int  m_spawnBudget       = kDefaultMaxPreviewParticles;
+    // D3D9Ex device-state tracking (audit an-audit-finding).
+    // m_presentSuspect: raised when a Present reports anything but D3D_OK, and
+    // read at the top of Render(). Microsoft recommends querying
+    // CheckDeviceState only after a present fails rather than every frame, so
+    // this latch is what keeps that guidance and still notices a real loss.
+    // m_fatalDeviceState: DEVICEHUNG / DEVICEREMOVED — no Reset() can clear
+    // those, so rendering stops rather than spinning on a doomed recovery.
+    bool m_presentSuspect    = false;
+    bool m_fatalDeviceState  = false;
+
     bool m_overloadActive    = false;
     bool m_overloadThisFrame = false;
     // Time of the most recent refused spawn — drives the

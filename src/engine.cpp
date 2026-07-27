@@ -259,16 +259,51 @@ int Engine::ActiveSpawnerInstanceCount() const
 bool Engine::RecoverDeviceIfNeeded()
 {
 	if (m_pDevice == NULL) return false;
-	HRESULT hr = m_pDevice->TestCooperativeLevel();
-	if (hr == D3D_OK) return true;
-	if (hr == D3DERR_DEVICELOST) return false;
-	if (hr == D3DERR_DEVICENOTRESET)
+	// CheckDeviceState, not TestCooperativeLevel: this is a D3D9Ex device, and
+	// TestCooperativeLevel always returns S_OK on one, so this whole guard was
+	// an unconditional `return true` (2026-07 audit, an-audit-finding). NULL window =
+	// "report occlusion only when another device owns fullscreen", which is what
+	// a windowed caller wants.
+	const HRESULT hr = m_pDevice->CheckDeviceState(NULL);
+	switch (devicestate::ClassifyDeviceState(hr))
 	{
-		try { Reset(); }
-		catch (...) { return false; }
-		return m_pDevice->TestCooperativeLevel() == D3D_OK;
+		case devicestate::Action::Render:
+			return true;
+
+		case devicestate::Action::Reset:
+			// Reset() throws on failure. It is called here from OFF the render
+			// thread (see the header note), so letting that escape would take
+			// down an unrelated caller — report false and let it retry.
+			try { Reset(); }
+			catch (...) { return false; }
+			return devicestate::ClassifyDeviceState(m_pDevice->CheckDeviceState(NULL))
+			       == devicestate::Action::Render;
+
+		case devicestate::Action::Fatal:
+			ReportFatalDeviceState(hr);
+			return false;
+
+		case devicestate::Action::SkipFrame:
+		default:
+			return false;
 	}
-	return false;
+}
+
+// A hung or removed adapter cannot be reset — only a fresh device would help,
+// which is beyond what this engine can do mid-session. Latch it and say so once,
+// so the condition is diagnosable in host.log instead of presenting as a
+// silently frozen viewport that never recovers.
+void Engine::ReportFatalDeviceState(HRESULT hr)
+{
+	if (m_fatalDeviceState) return;
+	m_fatalDeviceState = true;
+	fprintf(stderr,
+	        "[engine] FATAL device state 0x%08lx (%s) — not recoverable by Reset; "
+	        "rendering stops until the app is restarted\n",
+	        (unsigned long)hr,
+	        hr == D3DERR_DEVICEREMOVED ? "DEVICEREMOVED" :
+	        hr == D3DERR_DEVICEHUNG    ? "DEVICEHUNG"    : "unknown");
+	fflush(stderr);
 }
 
 // [PERF] round-2 sub-profiling helpers — QPC microsecond deltas for the

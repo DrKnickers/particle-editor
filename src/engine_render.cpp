@@ -613,17 +613,53 @@ bool Engine::Render()
 	static const D3DXMATRIX Identity(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
 
 	// See if we can render. Mirrors RecoverDeviceIfNeeded but keeps the
-	// switch here so DEVICELOST early-returns false (no point doing the
+	// decision here so a transient loss early-returns false (no point doing the
 	// rest of Render if we can't yet); RecoverDeviceIfNeeded is the
 	// "fix the latch, don't render" variant for non-render-thread callers.
-	switch (m_pDevice->TestCooperativeLevel())
+	//
+	// This used to switch on TestCooperativeLevel, which always returns S_OK on
+	// a D3D9Ex device — so neither branch could ever be taken (2026-07 audit,
+	// an-audit-finding). CheckDeviceState is the Ex replacement, but Microsoft
+	// recommends against calling it every frame; m_presentSuspect is raised only
+	// when a Present actually failed, which is the condition they name.
+	if (m_fatalDeviceState) return false;
+	if (m_presentSuspect)
 	{
-		case D3DERR_DEVICELOST:
-			return false;
+		const HRESULT state = m_pDevice->CheckDeviceState(NULL);
+		const devicestate::Action action = devicestate::ClassifyDeviceState(state);
+		if (action != devicestate::Action::SkipFrame) m_presentSuspect = false;
+		switch (action)
+		{
+			case devicestate::Action::SkipFrame:
+				return false;
 
-		case D3DERR_DEVICENOTRESET:
-			Reset();
-			break;
+			case devicestate::Action::Fatal:
+				ReportFatalDeviceState(state);
+				return false;
+
+			case devicestate::Action::Reset:
+				// NEW-RESET-THROW: Reset() throws on failure, and this is the
+				// render loop — an escaping exception would unwind through
+				// RenderD3D9 instead of leaving a recoverable lost device. That
+				// hazard was previously LATENT only because this branch was
+				// unreachable; making detection work above makes it live, so the
+				// two must be fixed together. A failed reset costs a frame and
+				// is retried, with the suspect latch left raised.
+				try
+				{
+					Reset();
+				}
+				catch (...)
+				{
+					m_presentSuspect = true;
+					return false;
+				}
+				break;
+
+			case devicestate::Action::Render:
+			default:
+				break;
+		}
 	}
 
 	// [runtime-MSAA] Apply a pending MSAA level change on the render thread.
@@ -1154,7 +1190,17 @@ bool Engine::Render()
 	// headless / poc) we present the swap chain directly.
 	if (!m_pAlphaCompositor)
 	{
-		m_pDevice->Present(NULL, NULL, NULL, NULL);
+		// The present result WAS discarded. It is the only cheap signal that the
+		// device has gone bad — Microsoft's guidance is to call CheckDeviceState
+		// when a present fails rather than polling it per frame — so a failure
+		// here raises the latch the top of Render() reads next frame
+		// (2026-07 audit, an-audit-finding).
+		const HRESULT presentHr = m_pDevice->Present(NULL, NULL, NULL, NULL);
+		if (FAILED(presentHr) || presentHr == S_PRESENT_OCCLUDED
+		    || presentHr == S_PRESENT_MODE_CHANGED)
+		{
+			m_presentSuspect = true;
+		}
 	}
 
 	// [PERF] round-2 — store per-pass us for the host to fold into [PERF2].
