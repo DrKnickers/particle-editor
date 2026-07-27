@@ -4,6 +4,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <string>
+#include <cwchar>   // wcslen / _wcsicmp / _wcsnicmp (ClassifyAutosaveName)
 
 class ParticleSystem;
 
@@ -66,6 +67,69 @@ namespace Autosave
         Discarded,   // user explicitly discarded the recovery
         Failed,      // load failed, or no path resolved — keep the files
     };
+
+    // ---- autosave filename classification (pure) --------------------------
+    //
+    // Shared with Autosave.cpp so tests/test_autosave_recover.cpp can cover it
+    // header-only, like the two predicates below.
+    //
+    // The `.tmp` case is why this is here at all. An interrupted write leaves
+    // e.g. `autosave-1234-recent.alo.tmp`, and the classifier used to compare
+    // the whole tail EXACTLY against the three tier suffixes — so that name
+    // matched nothing, the scan skipped it, and a crashed session's temp was
+    // neither offered for recovery nor swept. They accumulated forever across
+    // crashes (2026-07 audit, an-audit-finding).
+    static const wchar_t kNamePrefix[]    = L"autosave-";
+    static const wchar_t kNameRecent[]    = L"-recent.alo";
+    static const wchar_t kNameStable[]    = L"-stable.alo";
+    static const wchar_t kNameMeta[]      = L".meta";
+    static const wchar_t kNameTmpExt[]    = L".tmp";
+
+    struct AutosaveName
+    {
+        unsigned long pid   = 0;      // 0 = not one of ours
+        bool isRecent       = false;
+        bool isStable       = false;
+        bool isMeta         = false;
+        bool isTmp          = false;  // interrupted write; NEVER recovery material
+    };
+
+    inline AutosaveName ClassifyAutosaveName(const wchar_t* filename)
+    {
+        AutosaveName out;
+        if (filename == nullptr) return out;
+
+        const size_t prefLen = wcslen(kNamePrefix);
+        if (_wcsnicmp(filename, kNamePrefix, prefLen) != 0) return out;
+        const wchar_t* p = filename + prefLen;
+
+        unsigned long pid = 0;
+        while (*p >= L'0' && *p <= L'9')
+        {
+            pid = pid * 10 + (unsigned long)(*p - L'0');
+            ++p;
+        }
+        if (pid == 0) return out;
+
+        // Strip ONE trailing ".tmp" before classifying, so the tier comparison
+        // below stays an exact match on the remainder.
+        std::wstring tail = p;
+        const size_t tmpLen = wcslen(kNameTmpExt);
+        if (tail.size() > tmpLen
+            && _wcsicmp(tail.c_str() + tail.size() - tmpLen, kNameTmpExt) == 0)
+        {
+            out.isTmp = true;
+            tail.resize(tail.size() - tmpLen);
+        }
+
+        if      (_wcsicmp(tail.c_str(), kNameRecent) == 0) out.isRecent = true;
+        else if (_wcsicmp(tail.c_str(), kNameStable) == 0) out.isStable = true;
+        else if (_wcsicmp(tail.c_str(), kNameMeta)   == 0) out.isMeta   = true;
+        else return AutosaveName();   // not ours after all
+
+        out.pid = pid;
+        return out;
+    }
 
     // Orphan files are deleted ONLY on a successful recover or an explicit
     // discard, NEVER on a failed load — so the other tier (or the next launch)

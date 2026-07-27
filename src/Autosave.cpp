@@ -281,32 +281,23 @@ static FILETIME FtSubtractDays(int days)
 
 // Parse `<prefix>123<suffix>` style filenames. Returns the PID on
 // success or 0 on failure (and *outIsRecent flagged appropriately).
+// Thin adapter over Autosave::ClassifyAutosaveName in the header — the logic
+// lives there so tests/test_autosave_recover.cpp can cover it without linking
+// this TU (the same arrangement as ShouldDeleteOrphan). Keeping ONE
+// implementation matters here: the defect it fixes was a classification gap,
+// and a duplicate would let the two drift back apart (2026-07 audit, an-audit-finding).
 static DWORD ParsePidFromAutosaveName(const wchar_t* filename,
                                       bool* outIsRecent,
                                       bool* outIsStable,
-                                      bool* outIsMeta)
+                                      bool* outIsMeta,
+                                      bool* outIsTmp)
 {
-    *outIsRecent = false;
-    *outIsStable = false;
-    *outIsMeta   = false;
-    const size_t prefLen = wcslen(kFilePrefix);
-    if (_wcsnicmp(filename, kFilePrefix, prefLen) != 0) return 0;
-    const wchar_t* p = filename + prefLen;
-
-    // Parse PID digits.
-    DWORD pid = 0;
-    while (*p >= L'0' && *p <= L'9')
-    {
-        pid = pid * 10 + (DWORD)(*p - L'0');
-        p++;
-    }
-    if (pid == 0) return 0;
-
-    if      (_wcsicmp(p, kRecentSuffix) == 0) *outIsRecent = true;
-    else if (_wcsicmp(p, kStableSuffix) == 0) *outIsStable = true;
-    else if (_wcsicmp(p, kMetaSuffix)   == 0) *outIsMeta   = true;
-    else return 0;
-    return pid;
+    const AutosaveName n = ClassifyAutosaveName(filename);
+    *outIsRecent = n.isRecent;
+    *outIsStable = n.isStable;
+    *outIsMeta   = n.isMeta;
+    *outIsTmp    = n.isTmp;
+    return (DWORD)n.pid;
 }
 
 bool ScanForOrphan(OrphanSession* out)
@@ -339,11 +330,31 @@ bool ScanForOrphan(OrphanSession* out)
     do
     {
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) continue;
-        bool isRecent = false, isStable = false, isMeta = false;
-        DWORD pid = ParsePidFromAutosaveName(fd.cFileName, &isRecent, &isStable, &isMeta);
+        bool isRecent = false, isStable = false, isMeta = false, isTmp = false;
+        DWORD pid = ParsePidFromAutosaveName(fd.cFileName, &isRecent, &isStable, &isMeta, &isTmp);
         if (pid == 0) continue;
 
         std::wstring full = dir + L"\\" + fd.cFileName;
+
+        // A .tmp is an INTERRUPTED write. It is never recovery material — it may
+        // be truncated, and handing the user a half-written .alo is worse than
+        // telling them there is nothing to recover — but it must not be left to
+        // pile up either. Delete it as soon as its owning session is gone, with
+        // no age threshold: unlike a real autosave it has no value to preserve.
+        //
+        // The live-PID check comes FIRST here, unlike the tiers below: a running
+        // editor's temp is mid-write, and the age sweep would otherwise be free
+        // to delete it out from under an active save.
+        if (isTmp)
+        {
+            if (!IsLiveEditorPid(pid))
+            {
+                sweepList.push_back(full);
+                AUTOSAVE_LOG("[Autosave] orphaned temp from dead pid %lu: %ls\n",
+                             (unsigned long)pid, fd.cFileName);
+            }
+            continue;
+        }
 
         // Old-file sweep — drop anything past the threshold.
         if (FtNewer(sweepThreshold, fd.ftLastWriteTime))

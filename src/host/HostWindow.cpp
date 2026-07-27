@@ -2012,6 +2012,19 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 settings->put_AreDevToolsEnabled(TRUE);
                 Log("[host] test-host: DevTools enabled (F12)\n");
             }
+            else
+            {
+                // Production must set this EXPLICITLY. The property was
+                // previously only ever touched in the test-host branch, so a
+                // shipped build inherited the WebView2 default — which
+                // Microsoft documents as TRUE on ICoreWebView2Settings
+                // (get_AreDevToolsEnabled: "The default value is TRUE").
+                // F12 therefore opened DevTools on the privileged editor page,
+                // where the native bridge is reachable from the console
+                // (2026-07 audit, an-audit-finding).
+                settings->put_AreDevToolsEnabled(FALSE);
+                Log("[host] production: DevTools disabled\n");
+            }
             // Frameless custom title bar: enable non-client region support so the
             // web title bar's `app-region: drag` region is reported as the window
             // caption (queried in WM_NCHITTEST via the composition controller).
