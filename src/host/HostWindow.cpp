@@ -66,6 +66,8 @@
 #include "PerfTrace.h"
 #include "WebViewModalPolicy.h"
 #include "WebMessageIngressPolicy.h"   // ShouldAcceptWebMessage (bridge ingress cap)
+#include "ModulePath.h"               // host::ModuleDirectory (grow-until-it-fits module path)
+#include "StartupCallbackGuard.h"     // liveness token for the one-shot WebView2 creation callbacks
 
 #include "AcceleratorBridge.h"
 #include "AlphaCompositor.h"
@@ -282,25 +284,16 @@ static bool WebView2RuntimeInstalled()
 // Absolute path of the release zip's bundled Evergreen bootstrapper, or empty
 // if it is not beside the exe (a dev-tree run, or a hand-assembled copy).
 //
-// GetModuleFileNameW is called in a grow-until-it-fits loop rather than with a
-// fixed MAX_PATH buffer: on a long extraction path the fixed form TRUNCATES and
-// — on older Windows — does not null-terminate, so building a path from it
-// would silently point somewhere else. It reports the truncation as
-// ERROR_INSUFFICIENT_BUFFER with the return value equal to the buffer size.
+// The grow-until-it-fits GetModuleFileNameW loop that used to live inline here
+// now lives in host::ModuleDirectory (ModulePath.h), because the sibling
+// ComputeEditorDistPath below had the fixed-MAX_PATH form and truncated
+// silently (2026-07 audit, an-audit-finding). One correct implementation, two callers.
 static std::wstring BundledWebView2SetupPath()
 {
-    std::vector<wchar_t> buf(MAX_PATH);
-    for (;;)
-    {
-        SetLastError(ERROR_SUCCESS);
-        const DWORD n = GetModuleFileNameW(nullptr, buf.data(), (DWORD)buf.size());
-        if (n == 0) return std::wstring();                       // genuinely failed
-        if (n < buf.size() && GetLastError() != ERROR_INSUFFICIENT_BUFFER) break;
-        if (buf.size() >= 32768) return std::wstring();          // past the Win32 ceiling
-        buf.resize(buf.size() * 2);
-    }
+    const std::wstring dir = host::ModuleDirectory();
+    if (dir.empty()) return std::wstring();
     std::filesystem::path p =
-        std::filesystem::path(buf.data()).parent_path() / L"MicrosoftEdgeWebview2Setup.exe";
+        std::filesystem::path(dir) / L"MicrosoftEdgeWebview2Setup.exe";
     return (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) ? p.wstring()
                                                                      : std::wstring();
 }
@@ -398,12 +391,23 @@ bool ProbeDevServer()
 // Walk up from x64/<Config>/ParticleEditor.exe to the repo root, then
 // descend to web/apps/editor/dist (Vite's build output). Same pattern as
 // viewport_poc, just a different sub-path.
+//
+// The three-hop walk is load-bearing in RELEASE too, not just the dev tree:
+// scripts/package-release.ps1 stages the exe at <STAGE>/x64/Release/ so the
+// hops land back on <STAGE>, where the bundle lives. That is why the module
+// path has to be read correctly — this used to be a fixed MAX_PATH buffer with
+// an unchecked return, so extracting the zip under a long path TRUNCATED the
+// read, walked three parents from a wrong path, and mapped app.local at a
+// directory that does not exist. The user saw ERR_NAME_NOT_RESOLVED, a blank
+// window, and exit code 0 (2026-07 audit, an-audit-finding).
+//
+// Returns EMPTY when the module path cannot be read; the caller must treat that
+// as a startup failure rather than mapping a relative path off the CWD.
 std::wstring ComputeEditorDistPath()
 {
-    wchar_t exePath[MAX_PATH];
-    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-    std::filesystem::path p(exePath);
-    auto root = p.parent_path().parent_path().parent_path();
+    const std::wstring dir = host::ModuleDirectory();
+    if (dir.empty()) return std::wstring();
+    auto root = std::filesystem::path(dir).parent_path().parent_path();
     return (root / L"web" / L"apps" / L"editor" / L"dist").wstring();
 }
 
@@ -551,6 +555,12 @@ struct HostWindowImpl
     // "loaded but never signaled". Registered in FinishWebView2ControllerSetup,
     // removed in WM_DESTROY (same lifecycle as the tokens above).
     EventRegistrationToken          navCompletedTok = {};
+    // Every token above exists so WM_DESTROY can UNSUBSCRIBE a handler that
+    // captures `this`. The two WebView2 CREATION callbacks have no token to
+    // unsubscribe — they are one-shot completions the runtime owns — so they
+    // get the liveness guard instead, retired at the top of WM_DESTROY and
+    // checked before either callback touches `this` (2026-07 audit, an-audit-finding).
+    host::StartupCallbackGuard      m_startupGuard;
     // TME_LEAVE arming state. WebView2 needs a
     // COREWEBVIEW2_MOUSE_EVENT_KIND_MOUSE_LEAVE input when the pointer
     // exits the host HWND so CSS :hover / cursor state clears. Re-arm
@@ -1933,15 +1943,32 @@ HRESULT HostWindowImpl::InitWebView2()
         }
     }
 
+    // Liveness token for the one-shot completion callbacks below. Captured BY
+    // VALUE so it shares the flag, not `this`.
+    auto startupToken = m_startupGuard.Issue();
+
     HRESULT envCreateHr = CreateCoreWebView2EnvironmentWithOptions(
         nullptr, userDataFolder.c_str(), envOptions.Get(),
         Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
-            [this](HRESULT envHr, ICoreWebView2Environment* env) -> HRESULT
+            [this, startupToken](HRESULT envHr, ICoreWebView2Environment* env) -> HRESULT
             {
+                // The window may already be gone: WM_DESTROY does not stop the
+                // pump, so a completion queued before it still dispatches after
+                // teardown. Decline silently — even Log() would go through the
+                // freed `this` (2026-07 audit, an-audit-finding).
+                if (!startupToken.OwnerAlive()) return S_OK;
+
                 if (FAILED(envHr) || !env)
                 {
                     Log("[host] WebView2 env failed 0x%08lx\n", envHr);
-                    return E_FAIL;
+                    // Returning E_FAIL here reported the failure to nobody: the
+                    // runtime discards this HRESULT, and Run() already took the
+                    // SYNCHRONOUS success from
+                    // CreateCoreWebView2EnvironmentWithOptions. The result was a
+                    // live window with no UI, no bridge, and exit code 0
+                    // (2026-07 audit, an-audit-finding). Terminal failure instead, the
+                    // same treatment the Compositor::Init failure below gets.
+                    FailFatalComposition(FAILED(envHr) ? envHr : E_FAIL);   // [[noreturn]]
                 }
                 // Stash for WebResourceRequested.
                 webEnv = env;
@@ -1979,8 +2006,12 @@ HRESULT HostWindowImpl::InitWebView2()
                 return env3->CreateCoreWebView2CompositionController(
                     hMain,
                     Callback<ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler>(
-                        [this](HRESULT cHr, ICoreWebView2CompositionController* ctl) -> HRESULT
+                        [this, startupToken](HRESULT cHr, ICoreWebView2CompositionController* ctl) -> HRESULT
                         {
+                            // Same one-shot hazard as the environment callback,
+                            // and a wider window: this one is dispatched later
+                            // still (an-audit-finding).
+                            if (!startupToken.OwnerAlive()) return S_OK;
                             return OnCompositionControllerReady(cHr, ctl);
                         }).Get());
             }).Get());
@@ -2218,16 +2249,39 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     std::wstring prodNavUrl = L"https://app.local/index.html";
     if (!useDevUi)
     {
+        // Every failure below used to be swallowed — the QI was tested but a
+        // null wv3 just SKIPPED the mapping, and the mapping's own HRESULT was
+        // dropped. Either way the app.local origin was never registered and
+        // the WebView showed ERR_NAME_NOT_RESOLVED against a live window with a
+        // zero exit code (2026-07 audit, an-audit-finding). Returning the failing
+        // HRESULT is all that is needed: OnCompositionControllerReady already
+        // routes a failed setup to WM_APP_COMPOSITION_FALLBACK, which is
+        // terminal.
         std::wstring distPath = ComputeEditorDistPath();
+        if (distPath.empty())
+        {
+            Log("[host] editor dist: module path unreadable — cannot map %ls\n",
+                kVirtualHostName);
+            return E_FAIL;
+        }
         Log("[host] editor dist: %ls\n", distPath.c_str());
 
         ComPtr<ICoreWebView2_3> wv3;
-        webView.As(&wv3);
-        if (wv3)
+        const HRESULT wv3Hr = webView.As(&wv3);
+        if (FAILED(wv3Hr) || !wv3)
         {
-            wv3->SetVirtualHostNameToFolderMapping(
-                kVirtualHostName, distPath.c_str(),
-                COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
+            Log("[host] QI ICoreWebView2_3 failed hr=0x%08lx — no app.local mapping\n", wv3Hr);
+            return FAILED(wv3Hr) ? wv3Hr : E_NOINTERFACE;
+        }
+
+        const HRESULT mapHr = wv3->SetVirtualHostNameToFolderMapping(
+            kVirtualHostName, distPath.c_str(),
+            COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
+        if (FAILED(mapHr))
+        {
+            Log("[host] SetVirtualHostNameToFolderMapping(%ls) failed hr=0x%08lx\n",
+                kVirtualHostName, mapHr);
+            return mapHr;
         }
 
         // Cache-bust the (unhashed) entry document so a rebuilt dist is
@@ -2444,18 +2498,27 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 return S_OK;
             }).Get(), &navCompletedTok);
 
-    // Navigate to the React app.
+    // Navigate to the React app. Navigate returns SYNCHRONOUSLY on whether the
+    // request was accepted at all, and that HRESULT was dropped — a rejected
+    // URL left the window blank with nothing in the log and a zero exit code
+    // (2026-07 audit, an-audit-finding).
+    HRESULT navHr = S_OK;
     if (useDevUi)
     {
         Log("[host] dev-ui: Navigate to Vite dev server\n");
         const std::wstring devUrl = host::perf::Enabled()
             ? L"http://localhost:5174/?perfTrace=1"
             : L"http://localhost:5174/";
-        webView->Navigate(devUrl.c_str());
+        navHr = webView->Navigate(devUrl.c_str());
     }
     else
     {
-        webView->Navigate(prodNavUrl.c_str());
+        navHr = webView->Navigate(prodNavUrl.c_str());
+    }
+    if (FAILED(navHr))
+    {
+        Log("[host] Navigate REJECTED hr=0x%08lx\n", navHr);
+        return navHr;
     }
     Log("[host] Navigate dispatched\n");
     return S_OK;
@@ -3791,6 +3854,12 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 
     case WM_DESTROY:
+        // FIRST, before anything is torn down. PostQuitMessage below only POSTS
+        // WM_QUIT — the pump keeps dispatching whatever is already queued — so a
+        // WebView2 creation completion can still arrive after this point and
+        // would otherwise build a Compositor on a destroyed HWND. The token the
+        // creation callbacks hold reads dead from here on (an-audit-finding).
+        m_startupGuard.Retire();
         KillTimer(hwnd, kStatsTimerId);
         // Stop autosave + delete THIS session's autosave files on a
         // clean exit so no orphan prompts on the next launch. A crash skips
