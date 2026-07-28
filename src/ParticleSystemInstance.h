@@ -108,6 +108,10 @@ public:
 
     int Kill();
     void onParticleSystemChanged(const Engine& engine, int track);
+    // Post-device-Reset texture refresh for every emitter in this instance
+    // (an-audit-finding). m_emitters is FLAT — roots, lifetime children and death
+    // children all live in it — so this needs no recursion.
+    void ReacquireDeviceTextures(const Engine& engine);
 	int  Update(TimeF currentTime);
 	void RenderNormal(IDirect3DDevice9* pDevice);
 	void RenderHeat(IDirect3DDevice9* pDevice);

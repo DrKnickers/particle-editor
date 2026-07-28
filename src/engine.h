@@ -179,6 +179,8 @@ public:
 	IDirect3DTexture9* GetTexture(const std::string& name) const;
 
 	void OnParticleSystemChanged(int track);
+	// Post-Reset re-fetch of every live emitter's textures (an-audit-finding).
+	void ReacquireInstanceTextures();
 	// [D2] Force the next Update to run a full instance pass even with a
 	// frozen clock — for mutations that change particle APPEARANCE without
 	// flowing through OnParticleSystemChanged (emitters/set-properties) or

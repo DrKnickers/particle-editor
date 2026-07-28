@@ -325,6 +325,17 @@ IDirect3DTexture9* Engine::GetTexture(const string& name) const
 	return m_textureManager.getTexture(m_pDevice, name);
 }
 
+// Called from Reset() only. Deliberately NOT OnParticleSystemChanged(-1): that
+// also recomputes composites and calls SyncRootEmitters, which can SPAWN
+// emitters — a device reset must restore resources, not change the simulation.
+void Engine::ReacquireInstanceTextures()
+{
+	for (auto& instance : m_instances)
+	{
+		instance->ReacquireDeviceTextures(*this);
+	}
+}
+
 void Engine::OnParticleSystemChanged(int track)
 {
 	// track < 0 is the "everything changed" broadcast, which is what the
@@ -664,6 +675,14 @@ void Engine::Reset()
 	m_skydomeSecondaryMesh.CreateBuffers(m_pDevice, m_fileManager);
 	m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);   // phase 2
 	for (auto& a : m_referenceAttachments) if (a) a->mesh.CreateBuffers(m_pDevice, m_fileManager);   // attachments, phase 2
+	// The live emitters' textures are the one DEFAULT-pool holder this dance
+	// missed. m_textureManager.OnLostDevice() above dropped the CACHE's
+	// references, but each EmitterInstance holds its own OWNING reference
+	// (getTexture returns +1) — so nothing released them and nothing re-fetched
+	// them, and every placed emitter kept binding a handle Reset had
+	// invalidated. Must run AFTER the device Reset above, so the re-fetch
+	// builds against the new device (2026-07 audit, an-audit-finding).
+	ReacquireInstanceTextures();
 
 	ResetParameters();
 

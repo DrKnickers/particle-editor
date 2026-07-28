@@ -15,6 +15,14 @@ void ParticleSystemInstance::onParticleSystemChanged(const Engine& engine, int t
 	}
 }
 
+void ParticleSystemInstance::ReacquireDeviceTextures(const Engine& engine)
+{
+    for (auto& emitter : m_emitters)
+	{
+        emitter->ReacquireDeviceTextures(engine);
+	}
+}
+
 int ParticleSystemInstance::Update(TimeF currentTime)
 {
     // Spawner-owned: drive the shaped path (arc + squiggle) and enforce

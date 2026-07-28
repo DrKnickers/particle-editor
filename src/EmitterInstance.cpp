@@ -688,6 +688,20 @@ int EmitterInstance::KillParticle(TimeF currentTime, Particle& particle)
     return numParticles;
 }
 
+// Device Reset invalidates every D3DPOOL_DEFAULT resource, and under D3D9Ex the
+// D3DX texture helpers silently use DEFAULT (see TextureManager::OnLostDevice).
+// The cache drops its own references there, but THESE two are separate, owning
+// references — so nothing freed them and nothing re-fetched them, and the
+// emitter went on binding a handle the device had invalidated
+// (2026-07 audit, an-audit-finding).
+void EmitterInstance::ReacquireDeviceTextures(const Engine& engine)
+{
+	SAFE_RELEASE(m_pColorTexture);
+	SAFE_RELEASE(m_pNormalTexture);
+	m_pColorTexture  = engine.GetTexture(m_emitter.colorTexture);
+	m_pNormalTexture = engine.GetTexture(m_emitter.normalTexture);
+}
+
 void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 {
 	if (track == -1)
