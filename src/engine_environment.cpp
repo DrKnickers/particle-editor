@@ -11,6 +11,7 @@
 #include "utils.h"
 #include "resource.h"
 #include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read caps)
+#include "AssetPathSafety.h"   // IsLocalCustomAssetPath (an-audit-finding remote-path refusal)
 #include "AloModel.h"          // AloShaderParam members (ApplyAloMaterialParams)
 
 using namespace std;
@@ -405,6 +406,12 @@ bool Engine::SetGroundTexture(int index)
 bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
 {
     if (slot < 0 || slot >= kGroundTextureCount) return false;
+    // Refuse a path that points at another machine. Enforced HERE rather than in
+    // the bridge handler because the registry restore at startup calls this
+    // setter too — guarding only the handler would leave a stored UNC path
+    // replaying on every launch, which is the durable half of the finding
+    // (2026-07 audit, an-audit-finding).
+    if (!IsLocalCustomAssetPath(path)) return false;
     m_groundSlotCustomPaths[slot] = path;
     // If the mutated slot is currently selected, reload the engine's
     // ground texture so the preview reflects the change immediately.
@@ -1358,6 +1365,11 @@ bool Engine::SetSkydomeSlot(int newIndex)
 bool Engine::SetSkydomeCustomPath(int slot, const std::wstring& path)
 {
     if (slot < kSkydomeFirstCustomSlot || slot >= kSkydomeSlotCount) return false;
+    // Same guard as the ground slot above. The audit filed an-audit-finding against the
+    // ground handler only; this sibling took its path exactly as unvalidated,
+    // and unlike the ground slot the bridge PERSISTS it — so this is the one
+    // that survives a restart. Capping one of a pair is not capping the pair.
+    if (!IsLocalCustomAssetPath(path)) return false;
     m_skydomeCustomSlotPaths[slot - kSkydomeFirstCustomSlot] = path;
     if (m_skydomeIndex == slot)
     {

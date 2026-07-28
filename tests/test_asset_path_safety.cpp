@@ -96,6 +96,48 @@ int main()
     CHECK(SafeTextureCandidates("x.dds:ads").empty(),   "SafeTextureCandidates rejects ADS colon");
     CHECK(SafeTextureCandidates("ok/..\\x.tga").empty(), "SafeTextureCandidates rejects mixed-slash traversal");
 
+    // --- Operator-supplied custom slot paths (an-audit-finding) ---
+    //
+    // A DIFFERENT rule from everything above: here an absolute local path is
+    // the legitimate case, so the tests below are mostly about NOT rejecting.
+    // Only a path pointing at another machine is refused.
+    {
+        // REJECT: the leak. A UNC path makes CreateFile authenticate outbound
+        // over SMB and hand the user's NetNTLM hash to whoever runs that host.
+        CHECK(!IsLocalCustomAssetPath(L"\\\\attacker\\share\\x.dds"),
+              "custom path: UNC \\\\attacker\\share rejected (the NetNTLM leak)");
+        CHECK(!IsLocalCustomAssetPath(L"//attacker/share/x.dds"),
+              "custom path: forward-slash UNC rejected (same path, other spelling)");
+        CHECK(!IsLocalCustomAssetPath(L"\\/attacker\\share"),
+              "custom path: mixed-separator UNC rejected");
+        CHECK(!IsLocalCustomAssetPath(L"\\\\?\\UNC\\attacker\\share\\x.dds"),
+              "custom path: extended-length UNC rejected");
+        CHECK(!IsLocalCustomAssetPath(L"\\\\.\\PhysicalDrive0"),
+              "custom path: device namespace rejected");
+
+        // ACCEPT: the overreach guards. Each of these is a path a user really
+        // supplies; rejecting any of them breaks the feature outright, which is
+        // worse than the defect. An "always false" predicate fails here and
+        // ONLY here.
+        CHECK(IsLocalCustomAssetPath(L"C:\\textures\\grass.dds"),
+              "custom path: ordinary drive-absolute accepted (overreach guard)");
+        CHECK(IsLocalCustomAssetPath(L"D:/mods/mymod/ground.tga"),
+              "custom path: forward-slash drive-absolute accepted");
+        CHECK(IsLocalCustomAssetPath(L"C:\\Users\\me\\My Textures\\a b.dds"),
+              "custom path: spaces in path accepted");
+        CHECK(IsLocalCustomAssetPath(L"\\textures\\grass.dds"),
+              "custom path: SINGLE leading separator is drive-relative, still local -> accepted");
+        CHECK(IsLocalCustomAssetPath(L"textures\\grass.dds"),
+              "custom path: plain relative accepted");
+        CHECK(IsLocalCustomAssetPath(L""),
+              "custom path: empty accepted (this is how a slot is CLEARED)");
+
+        // Boundary: a lone separator must not be read as the start of a UNC
+        // pair by an over-eager two-character check on a one-character string.
+        CHECK(IsLocalCustomAssetPath(L"\\"),
+              "custom path: lone separator accepted (no out-of-range read)");
+    }
+
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");
     return g_failed ? 1 : 0;

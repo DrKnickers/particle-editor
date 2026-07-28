@@ -66,6 +66,47 @@ inline std::string SanitizeAssetName(std::string n)
     return (p == std::string::npos) ? n : n.substr(p + 1);
 }
 
+// ---------------------------------------------------------------------------
+// Operator-supplied ABSOLUTE paths: the ground / skydome custom texture slots.
+//
+// A different case from the .alo asset names above, and IsSafeRelativeAssetName
+// is the WRONG test for it — here an absolute local path like
+// "C:\textures\grass.dds" is the normal, legitimate input, because the operator
+// picked the file. Running it through the relative-name rule would reject every
+// real use.
+//
+// What must still be refused is a path that sends the OS to another MACHINE.
+// "\\host\share\x.dds" makes CreateFile authenticate outbound over SMB, which
+// discloses the user's NetNTLM hash to whoever runs that host — the same
+// primitive F-PATH closed for .alo names, reached instead through a string the
+// operator can be talked into pasting. It is worse than a one-shot here: both
+// slots persist their path and REPLAY it at every startup (HostWindow.cpp's
+// registry restore), so one pasted string keeps leaking on every launch
+// (2026-07 audit, an-audit-finding).
+//
+// The rule is deliberately syntactic and blunt: refuse any path beginning with
+// two separators. That covers UNC ("\\host\share"), the device namespace
+// ("\\.\PhysicalDrive0"), and the UNC spelling of the extended-length prefix
+// ("\\?\UNC\host\share"). It also refuses the LOCAL extended-length form
+// ("\\?\C:\..."); that is collateral and accepted — a file picker does not
+// produce it, and a rule that can be read at a glance is worth more here than
+// an exhaustive one.
+//
+// NOT covered, deliberately: a mapped network drive ("Z:\x.dds") is still
+// remote, but telling it apart needs GetDriveTypeW — a filesystem call this
+// predicate stays free of — and it requires the user to have configured the
+// mapping themselves, a far higher bar than pasting a string.
+//
+// Empty is permitted: it is how a slot's custom path is CLEARED, and the
+// startup restore passes it for every unset slot.
+inline bool IsLocalCustomAssetPath(const std::wstring& p)
+{
+    if (p.empty()) return true;
+    const bool sep0 = (p[0] == L'\\' || p[0] == L'/');
+    const bool sep1 = (p.size() >= 2) && (p[1] == L'\\' || p[1] == L'/');
+    return !(sep0 && sep1);
+}
+
 inline std::vector<std::string> SafeTextureCandidates(const std::string& bareName)
 {
     if (bareName.empty() || !IsSafeRelativeAssetName(bareName)) return {};

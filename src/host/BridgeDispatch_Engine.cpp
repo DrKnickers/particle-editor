@@ -97,7 +97,14 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         if (!ctx.RequireEngine(kind.c_str())) return true;
         int slot = params.value("slot", -1);
         std::string p = params.value("path", std::string{});
-        m_engine->SetGroundSlotCustomPath(slot, Utf8ToWide(p));
+        // The setter's bool was dropped here, so a refused path still answered
+        // {ok:true} — the an-audit-finding shape, telling the user it took when it did not
+        // (2026-07 audit, an-audit-finding).
+        if (!m_engine->SetGroundSlotCustomPath(slot, Utf8ToWide(p)))
+        {
+            ctx.SendErr("ground slot path rejected: bad slot, or a network/device path");
+            return true;
+        }
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
@@ -123,7 +130,14 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         int slot = params.value("slot", -1);
         std::string p = params.value("path", std::string{});
         std::wstring wpath = Utf8ToWide(p);
-        m_engine->SetSkydomeCustomPath(slot, wpath);
+        // Check BEFORE persisting: writing a refused path to the registry is
+        // what made this the durable half of an-audit-finding — the startup restore would
+        // replay it on every launch.
+        if (!m_engine->SetSkydomeCustomPath(slot, wpath))
+        {
+            ctx.SendErr("skydome slot path rejected: bad slot, or a network/device path");
+            return true;
+        }
         // Persist the custom slot path (round-trips with legacy).
         if (!m_ephemeral && !(m_testHost && !m_settingsLive))
             PersistSkydomeCustomPath(slot, wpath);
