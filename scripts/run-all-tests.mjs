@@ -30,6 +30,9 @@
 // prereq to a visible SKIP. A lane failure SKIPs lanes that depend on it (visible,
 // counted as blocked, overall run still fails).
 //
+// Skipped TESTS *inside* an exit-0 lane are held to the declared SKIP_BUDGET
+// below — same principle one level down, and the same --allow-missing hatch.
+//
 // Deliberately NOT in the default gate: a11y:drift (mutates goldens; test:native
 // already runs a11y specs). test:site now runs as the `site` lane (#599) — its
 // FFmpeg-dependent placeholder render degrades to a warning outside CI, so the guide
@@ -97,7 +100,8 @@ export function usage() {
     "",
     "Flags:",
     "  --lane <a,b,…>         run only these lanes (repeatable; deps NOT auto-added)",
-    "  --allow-missing <a,b>  downgrade a lane's missing-prereq FAIL to a visible SKIP",
+    "  --allow-missing <a,b>  downgrade a lane's missing-prereq FAIL — or an",
+    "                         over-budget internal-skip FAIL — to a visible SKIP",
     "  --skip-build           skip build lanes + native rebuilds (UNSAFE: assumes fresh artifacts)",
     "  --list                 print the lane names and exit",
     "  --help, -h             print this help and exit",
@@ -196,15 +200,79 @@ export function recordSmokeVerdict({ error, signal, status, stderr, frames, maxB
   return null;
 }
 
-// Largest "N skipped" (and Playwright's "N did not run") reported by a runner.
-// Returns 0 when the output makes no such claim.
+// Largest skipped-test count a runner reports. Returns 0 when it makes no such
+// claim.
+//
+// TWO word orders, because the two runners disagree and only one was handled.
+// Playwright says "4 skipped" / "3 did not run"; `node --test` says
+// "ℹ skipped 1" — noun FIRST. Only the Playwright form was matched, so the
+// `scripts` lane (node --test) always parsed 0 and its FFmpeg-dependent skips
+// stayed invisible even after they were supposedly surfaced (2026-07 audit,
+// an-audit-finding — the visibility half of that finding never actually worked).
+// Both patterns are newline-anchored ([ \t], not \s) because every runner puts
+// its count and its noun on ONE line, while \s crosses lines and Playwright's
+// tail happens to read "  1 skipped\n  196 passed (114.5s)" — which a \s form
+// reads as "skipped 196". The gate caught exactly that.
 export function parseSkippedCount(out) {
   let n = 0;
-  for (const m of out.matchAll(/(\d+)\s+(?:skipped|did not run)\b/gi)) {
+  for (const m of out.matchAll(/(\d+)[ \t]+(?:skipped|did not run)\b/gi)) {
+    n = Math.max(n, Number(m[1]));
+  }
+  for (const m of out.matchAll(/\bskipped[ \t]+(\d+)\b/gi)) {
     n = Math.max(n, Number(m[1]));
   }
   return n;
 }
+// Declared budget of skipped TESTS a lane may report while still exiting 0.
+//
+// #687 made internal skips visible; visibility alone is not a gate. "NOTE:
+// playwright-native: 1" reads identically whether the 1 is the known skip or a
+// freshly-broken test that quietly stopped running — the number carried no
+// claim about WHICH test, so any new skip hid behind the old one. Declaring the
+// budget turns that NOTE into an assertion, and forces the reason to be written
+// down (which is how the entry below got found).
+//
+// A lane with no entry budgets ZERO. That is the point: the default for a new
+// lane is "runs everything it claims to".
+export const SKIP_BUDGET = {
+  "playwright-native": {
+    max: 1,
+    why:
+      "composition-hosting.spec.ts:130 (curve-editor wheel under composition) self-skips: it " +
+      "requests the non-existent bridge kind `emitters/add` and never SELECTS an emitter, so " +
+      "[data-testid='curve-editor-svg'] never mounts and the guard returns early. NOT a " +
+      "capability skip — a broken precondition. Tracked separately; budgeted, not blessed.",
+  },
+};
+
+// Verdict for a lane that exited 0 while reporting `innerSkipped` skipped tests.
+// Over budget FAILS (the false-green an-audit-finding describes for the FFmpeg-dependent
+// script tests); under budget passes but says the budget is now loose, because a
+// budget nobody tightens is how the number drifts upward. Exceeding it is
+// overridable with the same --allow-missing <lane> hatch #706 established, for
+// the machine that genuinely lacks the capability.
+export function skipBudgetVerdict(lane, innerSkipped, allowMissing = ALLOW_MISSING, budget = SKIP_BUDGET) {
+  const allowed = budget[lane]?.max ?? 0;
+  if (innerSkipped > allowed) {
+    const over = `${innerSkipped} skipped test(s), budget ${allowed}`;
+    return allowMissing.has(lane)
+      ? { ok: true, note: `${over} — allowed via --allow-missing ${lane}` }
+      : { ok: false, note: `${over} — un-run coverage (fix, re-budget, or --allow-missing ${lane})` };
+  }
+  if (innerSkipped < allowed) {
+    return { ok: true, note: `only ${innerSkipped} of ${allowed} budgeted skip(s) — tighten SKIP_BUDGET.${lane}` };
+  }
+  return { ok: true, note: null };
+}
+
+// Apply the budget to a lane that already exited 0.
+function withSkipBudget(lane, innerSkipped) {
+  const v = skipBudgetVerdict(lane, innerSkipped);
+  if (!v.ok) return fail(v.note);
+  if (innerSkipped === 0 && !v.note) return pass;
+  return { ...pass, innerSkipped, ...(v.note ? { note: v.note } : {}) };
+}
+
 function psCapture(command) {
   const r = spawnSync(
     "powershell.exe",
@@ -351,12 +419,13 @@ const LANES = [
 
       // Tee + count: several script tests self-skip when FFmpeg is absent, and
       // the lane reported a bare PASS while their coverage never ran
-      // (audit an-audit-finding). Not a failure — FFmpeg is genuinely optional here — but
-      // it must be visible, exactly like the native-runner skip note.
+      // (audit an-audit-finding). Visibility was the first half; the budget below is the
+      // second — this lane declares no skips, so on a box with FFmpeg (where
+      // these tests CAN run) a skip is a real problem and fails. A box without
+      // it says so with --allow-missing scripts.
       const r = runCmdLineTee("pnpm run test:scripts", editorDir);
       if (r.code !== 0) return fail("node --test");
-      const innerSkipped = parseSkippedCount(r.out);
-      return innerSkipped > 0 ? { ...pass, innerSkipped } : pass;
+      return withSkipBudget("scripts", parseSkippedCount(r.out));
     },
   },
   {
@@ -464,9 +533,9 @@ const LANES = [
       }
       const r = runCmdLineTee("pnpm run test:native", editorDir);
       if (r.code !== 0) return fail("native Playwright");
-      // Surface skipped TESTS inside this passing lane (see parseSkippedCount).
-      const innerSkipped = parseSkippedCount(r.out);
-      return innerSkipped > 0 ? { ...pass, innerSkipped } : pass;
+      // Skipped TESTS inside this passing lane are held to SKIP_BUDGET, so a
+      // SECOND test going quiet can no longer hide behind the known one.
+      return withSkipBudget("playwright-native", parseSkippedCount(r.out));
     },
   },
   {

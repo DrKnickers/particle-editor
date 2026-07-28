@@ -7,7 +7,9 @@
 // exe, and prints a PASS/FAIL/SKIP summary. Exits nonzero on any FAIL. A needs-exe
 // test whose ParticleEditor.exe is absent is a FAIL by default (a gate must not go
 // green around missing coverage); pass --allow-missing-exe to downgrade it to a
-// VISIBLE SKIP when iterating without an app build. Hard-errors up front if any
+// VISIBLE SKIP when iterating without an app build. A binary that exits 0 after
+// printing `SKIP:` for a case whose capability probe failed is likewise a FAIL by
+// default (--allow-missing-capabilities to accept). Hard-errors up front if any
 // test_*.cpp has no matching builder (orphan guard — a test that exists but can't
 // be built is a silent coverage hole).
 //
@@ -24,13 +26,15 @@
 //                          (default x64\Debug\ParticleEditor.exe — bare
 //                          test_resource_strings would prefer a stale Release exe)
 //   --allow-missing-exe    downgrade a missing app exe from FAIL to a visible SKIP
+//   --allow-missing-capabilities
+//                          accept a binary that self-SKIPPED cases (see below)
 //   --timeout <secs>       per-test run timeout (default 120; hung test = FAIL)
 //   --list                 print the resolved test list and exit
 
 import { spawnSync } from "node:child_process";
 import { readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const testsDir = join(repoRoot, "tests");
@@ -49,8 +53,32 @@ const ONLY_NEEDS_EXE = argv.includes("--only-needs-exe");
 const EXCLUDE_NEEDS_EXE = argv.includes("--exclude-needs-exe");
 const LIST = argv.includes("--list");
 const ALLOW_MISSING_EXE = argv.includes("--allow-missing-exe");
+const ALLOW_MISSING_CAPABILITIES = argv.includes("--allow-missing-capabilities");
 const TIMEOUT_MS = Number(argValue("--timeout", "120")) * 1000;
 const APP_EXE = resolve(repoRoot, argValue("--exe", join("x64", "Debug", "ParticleEditor.exe")));
+
+// Verdict for a test binary that exited 0 but printed `SKIP: <case> (<reason>)`
+// for one or more of its cases.
+//
+// Exported so scripts/gate-integrity.test.mjs can exercise it directly: this is
+// the decision the 2026-07 audit filed as an-audit-finding. #687 made these skips VISIBLE,
+// and stopped there on the reasoning that "the capability genuinely is absent on
+// some machines, and failing there would punish a legitimate environment". That
+// is true of the machine that never had the capability and false of the machine
+// that HAD it and quietly lost it — and the second machine is the dangerous one,
+// because `test_clip_save_confinement`'s junction case going quiet is
+// indistinguishable, in the exit code, from junction rejection still working.
+//
+// So: FAIL by default, and let an environment that genuinely cannot run the case
+// say so out loud with --allow-missing-capabilities. Same shape as
+// --allow-missing-exe above and as the gate's own --allow-missing <lane> (#706):
+// a missing capability is a decision someone makes explicitly, not a silence.
+export function selfSkipVerdict(skippedCount, allowMissingCapabilities) {
+  if (skippedCount === 0) return { ok: true, note: "" };
+  const what = `${skippedCount} case(s) SKIPPED`;
+  if (allowMissingCapabilities) return { ok: true, note: `${what} (allowed)` };
+  return { ok: false, note: `${what} — coverage did NOT run (or pass --allow-missing-capabilities)` };
+}
 
 if (ONLY_NEEDS_EXE && EXCLUDE_NEEDS_EXE) {
   console.error("[gate] --only-needs-exe and --exclude-needs-exe are mutually exclusive.");
@@ -161,11 +189,8 @@ function main() {
     // test_clip_save_confinement does exactly that when `mklink /J` or 8.3
     // short-name lookup is unavailable — and then still exit 0. Reading only the
     // exit code made a self-skipped junction/short-path confinement case
-    // indistinguishable from a passing one (2026-07 audit, an-audit-finding).
-    //
-    // We do NOT fail on a skip: the capability genuinely is absent on some
-    // machines, and failing there would punish a legitimate environment. We
-    // surface it, so "PASS" never silently means "did not run".
+    // indistinguishable from a passing one (2026-07 audit, an-audit-finding). A self-skipped
+    // case now FAILS the lane unless explicitly allowed — see selfSkipVerdict.
     const r = spawnSync(exe, NEEDS_EXE.has(name) ? [APP_EXE] : [], {
       cwd: repoRoot,
       stdio: ["ignore", "pipe", "pipe"],
@@ -178,10 +203,10 @@ function main() {
     const skipped = [...String(r.stdout || "").matchAll(/^SKIP:\s*(.+)$/gm)].map((m) => m[1].trim());
     if (skipped.length) skippedCases.push({ test: name, cases: skipped });
 
-    const skipNote = skipped.length ? `${skipped.length} case(s) SKIPPED` : "";
+    const verdict = selfSkipVerdict(skipped.length, ALLOW_MISSING_CAPABILITIES);
     if (r.error || r.signal) record("FAIL", r.signal ? `timeout/killed (${r.signal})` : String(r.error));
     else if (r.status !== 0) record("FAIL", `exit ${r.status}`);
-    else record("PASS", skipNote);
+    else record(verdict.ok ? "PASS" : "FAIL", verdict.note);
   }
 
   const width = Math.max(...results.map((r) => r.name.length));
@@ -195,10 +220,11 @@ function main() {
   console.log(
     `[gate] ${results.length - fails.length - skips.length} passed, ${fails.length} failed, ${skips.length} skipped`,
   );
-  // A green line above can still hide un-run coverage. Name it.
+  // Always name the un-run coverage, whether it failed the lane or was allowed.
   if (skippedCases.length) {
     const total = skippedCases.reduce((n, s) => n + s.cases.length, 0);
-    console.log(`[gate] NOTE: ${total} case(s) self-SKIPPED inside PASSING binaries — coverage NOT exercised:`);
+    const verb = ALLOW_MISSING_CAPABILITIES ? "ALLOWED but NOT exercised" : "NOT exercised (lane FAILED)";
+    console.log(`[gate] NOTE: ${total} case(s) self-SKIPPED — coverage ${verb}:`);
     for (const s of skippedCases) {
       for (const c of s.cases) console.log(`         ${s.test}: ${c}`);
     }
@@ -206,4 +232,9 @@ function main() {
   return fails.length > 0 ? 1 : 0;
 }
 
-process.exit(main());
+// Only run when invoked as a script — gate-integrity.test.mjs imports
+// selfSkipVerdict, and an unguarded process.exit(main()) would launch a full
+// native build the moment the module was imported.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exit(main());
+}
