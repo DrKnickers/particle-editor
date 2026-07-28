@@ -446,6 +446,14 @@ namespace
         size_t i = 0;
         while ((i = text.find("[\"", i)) != std::string::npos)
         {
+            // Count cap, not just the byte cap above (2026-07 audit, an-audit-finding). The
+            // file-size check bounds the INPUT; it does not bound how many names
+            // that input can produce, and at ~6 bytes per `["x"]` a legal-sized
+            // file still yields millions of set inserts. Stop scanning rather
+            // than merely stop inserting — past the cap the remaining bytes
+            // cannot change the answer, and the scan itself is the other half of
+            // the cost.
+            if (out.size() >= kMaxRosterEntries) break;
             const size_t s = i + 2;
             const size_t e = text.find("\"]", s);
             if (e == std::string::npos) break;

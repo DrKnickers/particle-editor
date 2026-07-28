@@ -15,6 +15,7 @@
 #include "GameObjectCatalog.h"
 #include "managers.h"
 #include "files.h"
+#include "ResourceLimits.h"   // kMaxRosterEntries / kMaxXmlFileBytes (an-audit-finding roster cap)
 #include "AloModel.h"   // --dumpalo: decode bones/connections/meshes
 #include "xml.h"        // --xmltest: does a raw XML file parse?
 
@@ -887,6 +888,89 @@ int main(int argc, char** argv)
         // Company_Units member expansion (ground twin of Squadron_Units).
         const GameObjectRef* im = find(fc, "Inf_Member");
         CHECK(im && im->fieldable && IsPickerListed(*im), "Company_Units member of a buildable company -> fieldable + listed");
+    }
+
+    // ---- an-audit-finding: GameObjectList.lua roster fan-out is COUNT-capped, not just
+    // byte-capped ----
+    //
+    // readRosterLua refuses a file over kMaxXmlFileBytes, but a byte cap is not a
+    // count cap: at ~6 bytes per `["x"]` entry a legal-sized file still yields
+    // millions of std::set<std::string> inserts.
+    //
+    // The oracle is deliberately NOT "how many names were parsed" — that is
+    // invisible from outside, and counting distinct names would be the an-audit-finding
+    // tautology all over again (a std::set collapses duplicates whether or not
+    // the cap does). Instead: name two real catalog objects, place one EARLY in
+    // an oversized roster and one PAST the cap, and ask whether each came back
+    // marked FS_Roster. That is a property the cap alone decides.
+    {
+        MockFM rfm;
+        rfm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<?xml version=\"1.0\"?><Game_Object_Files><File>Rst.xml</File></Game_Object_Files>";
+        rfm.files["Data\\XML\\Rst.xml"] =
+            "<?xml version=\"1.0\"?><Objects>"
+            "  <GroundInfantry Name=\"Early_Trooper\"><Land_Model_Name>EI_E.ALO</Land_Model_Name></GroundInfantry>"
+            "  <GroundInfantry Name=\"Late_Trooper\"><Land_Model_Name>EI_L.ALO</Land_Model_Name></GroundInfantry>"
+            "</Objects>";
+
+        // Early_Trooper first, then kMaxRosterEntries filler names, then
+        // Late_Trooper — so Late_Trooper sits strictly beyond the cap.
+        std::string lua = "return {\n[\"EARLY_TROOPER\"] = true,\n";
+        for (unsigned long i = 0; i < kMaxRosterEntries; ++i)
+        {
+            char buf[48];
+            _snprintf_s(buf, sizeof(buf), _TRUNCATE, "[\"FILLER_%lu\"] = true,\n", i);
+            lua += buf;
+        }
+        lua += "[\"LATE_TROOPER\"] = true,\n}\n";
+        // Guard the premise: the fixture must be a legal-SIZED file, or this
+        // would be testing the byte cap instead of the count cap.
+        CHECK(lua.size() < kMaxXmlFileBytes,
+              "an-audit-finding fixture is under the byte cap (so the COUNT cap is what's under test)");
+        rfm.files["Data\\Scripts\\Library\\GameObjectList.lua"] = lua;
+
+        GameObjectCatalog rc;
+        CHECK(BuildGameObjectCatalog(rfm, rc), "an-audit-finding: oversized-roster catalog builds");
+
+        const GameObjectRef* early = find(rc, "Early_Trooper");
+        const GameObjectRef* late  = find(rc, "Late_Trooper");
+
+        // THE REVERT ASSERTION. Uncapped, the scan reaches LATE_TROOPER and marks
+        // it. Capped, it never gets there.
+        CHECK(late && (late->fieldSource & FS_Roster) == 0,
+              "an-audit-finding: roster name PAST the cap is not applied (cap holds)");
+        // THE OVERREACH GUARD. A cap that fired early — or at zero — would also
+        // drop the FIRST name, silently un-fielding legitimate units. That is a
+        // worse bug than the fan-out, so it gets its own assertion.
+        CHECK(early && (early->fieldSource & FS_Roster) != 0,
+              "an-audit-finding: roster name BEFORE the cap is still applied (overreach guard)");
+    }
+
+    // A normal-sized roster must be entirely unaffected — the cap is ~70x the
+    // largest observed real roster, so nothing legitimate may come near it.
+    {
+        MockFM nfm;
+        nfm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<?xml version=\"1.0\"?><Game_Object_Files><File>Nrm.xml</File></Game_Object_Files>";
+        nfm.files["Data\\XML\\Nrm.xml"] =
+            "<?xml version=\"1.0\"?><Objects>"
+            "  <GroundInfantry Name=\"Last_Trooper\"><Land_Model_Name>EI_LT.ALO</Land_Model_Name></GroundInfantry>"
+            "</Objects>";
+        std::string lua = "return {\n";
+        for (int i = 0; i < 900; ++i)   // the largest roster size readRosterLua documents
+        {
+            char buf[48];
+            _snprintf_s(buf, sizeof(buf), _TRUNCATE, "[\"REAL_%d\"] = true,\n", i);
+            lua += buf;
+        }
+        lua += "[\"LAST_TROOPER\"] = true,\n}\n";
+        nfm.files["Data\\Scripts\\Library\\GameObjectList.lua"] = lua;
+
+        GameObjectCatalog nc;
+        CHECK(BuildGameObjectCatalog(nfm, nc), "an-audit-finding: normal-roster catalog builds");
+        const GameObjectRef* last = find(nc, "Last_Trooper");
+        CHECK(last && (last->fieldSource & FS_Roster) != 0,
+              "an-audit-finding: a ~900-entry roster's LAST name still applies (real content untouched)");
     }
 
     // ---- ResolveReferenceName: existence gate for the reference selection -----

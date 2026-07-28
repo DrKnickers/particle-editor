@@ -4,6 +4,7 @@
 #include <windows.h>
 #include "EmitterInstance.h"
 #include "ParticleCompaction.h"
+#include "SpawnSchedule.h"   // ReconcileNextSpawnTime (an-audit-finding rate-edit clamp)
 #include "ParticleSystemInstance.h"
 using namespace std;
 
@@ -711,6 +712,13 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 		m_spawnDelay         = (!m_emitter.useBursts) ? 1.0f / m_emitter.nParticlesPerSecond : max(0.01f, m_emitter.burstDelay);   // Ensure burst delay isn't 0
 		m_acceleration       = D3DXVECTOR3(m_emitter.acceleration) + m_emitter.gravity * engine.GetGravity();
 		m_textureSizeSqrt    = (int)floor(sqrtf((float)max(1, m_emitter.textureSize)));
+
+		// The next spawn was scheduled against the OLD delay, and recomputing
+		// m_spawnDelay above does not move it — so raising the rate on a slow
+		// emitter changed nothing until the old delay elapsed, and the slider
+		// looked dead for up to a full second (2026-07 audit, an-audit-finding).
+		// Clamp only: never defer a spawn, never drag an overdue one forward.
+		m_nextSpawnTime = ReconcileNextSpawnTime(m_nextSpawnTime, GetTimeF(), m_spawnDelay);
 
 		// Reload resources
 		SAFE_RELEASE(m_pColorTexture);

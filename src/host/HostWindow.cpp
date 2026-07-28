@@ -422,8 +422,10 @@ std::wstring ComputeEditorDistPath()
 // runs a throwaway, per-process profile so they never contend with the editor.
 std::wstring ComputeUserDataFolder(bool isolated = false)
 {
+    // "-iso-", not "-capture-": --test-host now takes this path too (an-audit-finding),
+    // and a folder named for capture would misreport which run owns it.
     wchar_t pidSuffix[32] = {};
-    if (isolated) swprintf(pidSuffix, 32, L"-capture-%lu", GetCurrentProcessId());
+    if (isolated) swprintf(pidSuffix, 32, L"-iso-%lu", GetCurrentProcessId());
 
     PWSTR localAppData = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData))
@@ -1904,7 +1906,21 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
 
 HRESULT HostWindowImpl::InitWebView2()
 {
-    const bool captureIsolation = !m_captureAlo.empty() || !m_captureRef.empty() || m_automationMode;
+    // Any session with no human at the keyboard gets a throwaway per-PID
+    // profile. This used to list capture and automation but NOT --test-host,
+    // which therefore shared the daily driver's stable profile (2026-07 audit,
+    // an-audit-finding) — and the comment on ComputeUserDataFolder already explains why
+    // that hurts: the runtime LOCKS the user-data folder, so a --test-host run
+    // launched beside the live editor fails env-creation outright. That makes it
+    // a flake source for the playwright-native GATE lane, not just a nuisance.
+    //
+    // Expressed via IsFullyInteractiveSession rather than a fourth hand-rolled
+    // disjunction: "isolate the profile" and "suppress blocking modals" are the
+    // same question — is anyone there? — and they must not drift apart.
+    const bool captureIsolation =
+        !IsFullyInteractiveSession(!m_captureAlo.empty() || !m_captureRef.empty(),
+                                   m_automationMode,
+                                   useTestHost);
     std::wstring userDataFolder = m_perfWebViewProfile.empty()
         ? ComputeUserDataFolder(captureIsolation)
         : m_perfWebViewProfile;

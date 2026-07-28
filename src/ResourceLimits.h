@@ -66,6 +66,16 @@ static const unsigned long kMaxAloTrackKeys      = 65536u;
 // only by the bytes remaining in the chunk — at ~3 bytes per entry that is still
 // tens of millions of map inserts. Groups are per-particle-system and few.
 static const unsigned long kMaxAloLinkExempts    = 65536u;
+// Roster names taken from one GameObjectList.lua (audit an-audit-finding). The reader already
+// refuses a file over kMaxXmlFileBytes, but a byte cap is not a count cap: the
+// `["NAME"]` scan is ~6 bytes per entry, so 64 MiB of `["a"]["b"]...` is ~10M
+// std::set<std::string> inserts — each a red-black node plus a heap allocation.
+// Same shape as an-audit-finding…an-audit-finding and an-audit-finding: every ITEM is checked, the TOTAL never is.
+// Real rosters run a few hundred to ~900 entries (see readRosterLua), so 65536
+// is ~70x the largest observed and can only ever bite content that is already
+// pathological. Duplicates cannot inflate the set, so the cap is on distinct
+// names — which is exactly the memory being bounded.
+static const unsigned long kMaxRosterEntries     = 65536u;
 // Inbound WebMessage cap, in UTF-16 CHARACTERS (2026-07 audit, an-audit-finding). Bridge
 // ingress had no size limit: every message was handed to OnWebMessage and parsed
 // whole, so one postMessage could drive an arbitrarily large allocation on the UI
