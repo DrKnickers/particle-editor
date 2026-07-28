@@ -168,20 +168,34 @@ test("skipBudgetVerdict budgets ZERO for a lane with no declared entry", () => {
 
 // ---- overreach guards: the budget must not fail what it was told to allow ----
 
+// Budget fixture, deliberately NOT the live SKIP_BUDGET: these cases pin the
+// verdict logic, and must keep doing so whether or not any lane currently
+// declares a skip. The live table gets its own invariant test below.
+const BUDGET_FIXTURE = { "demo-lane": { max: 1, why: "a genuinely absent capability" } };
+
 test("skipBudgetVerdict PASSES a lane sitting exactly on its declared budget", () => {
-  // playwright-native's single known skip is budgeted. A fix that failed here
-  // would break a green baseline — this is the case that separates "policing
-  // drift" from "banning skips".
-  assert.equal(SKIP_BUDGET["playwright-native"].max, 1);
-  const v = skipBudgetVerdict("playwright-native", 1, new Set());
+  // The case that separates "policing drift" from "banning skips" — a fix that
+  // failed here would turn a legitimately-budgeted lane red.
+  const v = skipBudgetVerdict("demo-lane", 1, new Set(), BUDGET_FIXTURE);
   assert.equal(v.ok, true);
   assert.equal(v.note, null, "at-budget must be quiet, not merely non-fatal");
 });
 
 test("skipBudgetVerdict PASSES under budget but flags the budget as loose", () => {
-  const v = skipBudgetVerdict("playwright-native", 0, new Set());
+  const v = skipBudgetVerdict("demo-lane", 0, new Set(), BUDGET_FIXTURE);
   assert.equal(v.ok, true);
-  assert.match(v.note, /tighten SKIP_BUDGET\.playwright-native/);
+  assert.match(v.note, /tighten SKIP_BUDGET\.demo-lane/);
+});
+
+test("every live SKIP_BUDGET entry carries a reason", () => {
+  // The reason is the load-bearing half. The table's first and only entry was a
+  // skip everyone had recorded as a legitimate capability skip; having to write
+  // the reason down is what exposed it as a spec with an impossible
+  // precondition, and the entry came back out. A bare number is unfalsifiable.
+  for (const [lane, entry] of Object.entries(SKIP_BUDGET)) {
+    assert.equal(typeof entry.max, "number", `${lane}: max must be a number`);
+    assert.ok(entry.why && entry.why.trim().length > 20, `${lane}: needs a real reason, not a placeholder`);
+  }
 });
 
 test("skipBudgetVerdict honours --allow-missing for the machine that genuinely can't run it", () => {

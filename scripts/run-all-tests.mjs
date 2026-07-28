@@ -234,16 +234,14 @@ export function parseSkippedCount(out) {
 //
 // A lane with no entry budgets ZERO. That is the point: the default for a new
 // lane is "runs everything it claims to".
-export const SKIP_BUDGET = {
-  "playwright-native": {
-    max: 1,
-    why:
-      "composition-hosting.spec.ts:130 (curve-editor wheel under composition) self-skips: it " +
-      "requests the non-existent bridge kind `emitters/add` and never SELECTS an emitter, so " +
-      "[data-testid='curve-editor-svg'] never mounts and the guard returns early. NOT a " +
-      "capability skip — a broken precondition. Tracked separately; budgeted, not blessed.",
-  },
-};
+// Currently EMPTY, and that is the goal state: every lane runs everything it
+// claims to. The one entry this started with — playwright-native's single skip —
+// turned out not to be a capability skip at all but a spec whose precondition
+// could never hold, and it was rewritten rather than budgeted (see
+// composition-hosting.spec.ts). Add an entry only for a skip that is genuinely
+// impossible on some machine, and write the reason: the reason is the part that
+// gets checked.
+export const SKIP_BUDGET = {};
 
 // Verdict for a lane that exited 0 while reporting `innerSkipped` skipped tests.
 // Over budget FAILS (the false-green an-audit-finding describes for the FFmpeg-dependent

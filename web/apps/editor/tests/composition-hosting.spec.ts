@@ -127,46 +127,98 @@ test("click coords land at the expected DOM element under composition", async ()
   await page.keyboard.press("Escape");
 });
 
-test("wheel event on the curve editor canvas dispatches without parent scroll under composition", async () => {
-  // Regression guard. The curve editor uses a native
-  // addEventListener("wheel", ..., { passive: false }) to allow
-  // preventDefault. Under composition mode the wheel event still
-  // arrives at the renderer via CDP synthesis; the React handler
-  // must run + call preventDefault for the parent panel not to
-  // scroll. Asserting "no scroll happened" needs a stable parent
-  // scroll position which is harder than asserting the wheel
-  // handler at least ran — so we assert the latter via a bridge
-  // observation.
+// CameraDto's Vec3 is a TUPLE on the wire ([x, y, z]), not {x,y,z}.
+type Vec3Tuple = readonly [number, number, number];
+type CameraSnapshot = { position: Vec3Tuple; target: Vec3Tuple };
+
+// Distance from the camera eye to its target — the scalar a zoom moves.
+function camDistance(cam: CameraSnapshot): number {
+  const dx = cam.position[0] - cam.target[0];
+  const dy = cam.position[1] - cam.target[1];
+  const dz = cam.position[2] - cam.target[2];
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+test("wheel over the viewport canvas zooms the engine camera under composition", async () => {
+  // What this guards, exactly: ViewportSlot.tsx registers
+  //   canvas.addEventListener("wheel", onWheel, { passive: false })
+  // and onWheel does two independent things — forwards a `viewport/input`
+  // wheel event so the engine zooms, and calls preventDefault() so the
+  // surrounding scroll container stays put. This test covers the FORWARDING
+  // half; the sibling below covers preventDefault. Split deliberately: a
+  // handler that does one and not the other is a real regression, and a single
+  // "something happened" assertion passes both broken shapes.
   //
-  // First select an emitter so the curve editor SVG is interactive.
-  await page.evaluate(async () => {
+  // Uses page.mouse.wheel — CDP dispatches at the renderer's real input path,
+  // so this exercises listener registration and hit-testing on the canvas, not
+  // just the callback body.
+  //
+  // Supersedes a test that named the CURVE editor's wheel handler (there is no
+  // wheel listener in CurveEditorPanel), asserted curve-layer counts rather
+  // than wheel behaviour, and self-skipped on every machine because it looked
+  // for an SVG that only mounts when an emitter is SELECTED while its setup
+  // only tried to ADD one — via `emitters/add`, which is not a bridge kind
+  // (2026-07 audit, an-audit-finding adjudication).
+
+  const readCamera = () =>
+    page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const b = (window as any).bridge;
+      const s = await b.request({ kind: "engine/state/snapshot", params: {} });
+      return s.camera as CameraSnapshot;
+    });
+
+  const before = await readCamera();
+
+  const canvas = page.locator("[data-testid='viewport-canvas']");
+  await expect(canvas).toBeVisible();
+  const box = await canvas.boundingBox();
+  expect(box, "viewport canvas must have a layout box to aim the wheel at").not.toBeNull();
+
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  // DOM deltaY is opposite-sign from WHEEL_DELTA: negative here is one notch
+  // AWAY from the user, which the renderer normalises to +120 = zoom IN.
+  await page.mouse.wheel(0, -120);
+  await page.waitForTimeout(150);
+
+  const after = await readCamera();
+
+  // Direction, not just change. A handler wired to the wrong sign still moves
+  // the camera, and "distance !== before" would bless it.
+  expect(camDistance(after)).toBeLessThan(camDistance(before));
+
+  // Restore, so later cases in this file inherit the camera they expected
+  // (audit an-audit-finding — shared engine state must not leak between cases).
+  await page.evaluate(async (cam) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const b = (window as any).bridge;
-    const snap = await b.request({ kind: "engine/state/snapshot", params: {} });
-    if (!snap || snap.emitters?.length === 0) {
-      // Add a default emitter if none exist.
-      await b.request({ kind: "emitters/add", params: {} });
-    }
+    await b.request({ kind: "engine/set/camera", params: cam });
+  }, before as unknown as Record<string, unknown>);
+});
+
+test("wheel over the viewport canvas is preventDefault'd so the parent does not scroll", async () => {
+  // The "without parent scroll" half of the contract. Asserting a parent's
+  // scrollTop is unreliable (it needs an overflowing container that actually
+  // could scroll), so this asserts the mechanism that prevents it:
+  // defaultPrevented on a cancelable wheel event delivered to the canvas.
+  //
+  // A listener registered { passive: true } — the plausible regression, since
+  // passive is the browser default for wheel on many targets — silently drops
+  // preventDefault and fails here while leaving the zoom test above green.
+  const prevented = await page.evaluate(() => {
+    const canvas = document.querySelector("[data-testid='viewport-canvas']");
+    if (!canvas) return null;
+    const ev = new WheelEvent("wheel", {
+      deltaY: -120,
+      bubbles: true,
+      cancelable: true,
+    });
+    canvas.dispatchEvent(ev);
+    return ev.defaultPrevented;
   });
 
-  // Wait for the focus-channel SVG to mount.
-  const svg = page
-    .locator("[data-testid='curve-editor-svg']")
-    .first();
-  const count = await svg.count();
-  // SVG may not be present if no emitter is selected — that's OK,
-  // the regression guard still validates rendering correctness.
-  if (count === 0) {
-    test.skip(true, "Curve editor SVG not mounted (no emitter selected)");
-    return;
-  }
-
-  // Just verify the SVG is rendered + has the expected channel-group
-  // structure (multi-channel overlay still draws under composition).
-  const layers = await page
-    .locator("[data-testid^='curve-layer-']")
-    .count();
-  expect(layers).toBeGreaterThan(0);
+  expect(prevented, "viewport canvas not found in the DOM").not.toBeNull();
+  expect(prevented).toBe(true);
 });
 
 test("modifier keys round-trip via React event system under composition", async () => {
