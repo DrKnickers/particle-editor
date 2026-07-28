@@ -888,6 +888,15 @@ json BuildEngineStateSnapshot(Engine* engine,
         // unloadable dome instead of silently showing the solid background.
         {"skydomePrimaryStatus",   SkyStatusToString(engine->GetSkydomePrimaryStatus())},
         {"skydomeSecondaryStatus", SkyStatusToString(engine->GetSkydomeSecondaryStatus())},
+        // GPU-resource truth, not bookkeeping (2026-07 audit, an-audit-finding). Every field
+        // above reports what was SELECTED or what the reader THOUGHT resolved, so
+        // deleting the mesh-creation call left them all correct and the viewport
+        // black. These two are read straight off the live VB/IB handles, so they
+        // cannot be true unless the device really holds the dome — which is what
+        // makes that deletion observable to drive-smoke's assert-state.
+        {"skydomeMeshGpuReady",      engine->SkydomeMeshHasGpuBuffers()},
+        {"skydomePrimaryGpuReady",   engine->SkydomePrimaryHasGpuBuffers()},
+        {"skydomeSecondaryGpuReady", engine->SkydomeSecondaryHasGpuBuffers()},
 
         // imported reference object + unit grid
         {"referenceObjectName",     engine->GetReferenceObjectName()},

@@ -597,6 +597,25 @@ public:
 	const std::string& GetSkydomeSecondaryName() const { return m_skydomeSecondaryName; }
 	// Load outcome of each selected dome (set in RebuildSkydomeMeshes); the
 	// picker surfaces LoadFailed instead of silently falling back to solid colour.
+	// Live GPU-resource truth for the two dome slots (2026-07 audit, an-audit-finding). The
+	// status accessors below report BOOKKEEPING — what was selected, what the
+	// reader thought resolved — which is exactly why removing mesh creation left
+	// every skydome assertion green and the viewport black. These two answer
+	// "does the device actually hold this dome right now?" and are surfaced in
+	// the state snapshot so a drive step can assert them.
+	// The PROCEDURAL dome — always built in the default scene, so this is the one
+	// a gate lane can assert unconditionally. It is also the exact target of
+	// an-audit-finding's own mutation ("remove skydome mesh creation"): comment out
+	// CreateSkydomeMeshBuffers and this goes false while every status field stays
+	// "ok".
+	bool               SkydomeMeshHasGpuBuffers() const
+	{ return m_pSkydomeVB != NULL && m_pSkydomeIB != NULL && m_skydomeIndexCount > 0; }
+	// The GAME domes (.alo meshes from the install). Meaningful only when a game
+	// dome is actually selected — an unselected slot reports status "ok" (no
+	// error) with no buffers, which is correct, so these must NOT be asserted
+	// unconditionally by a lane whose default scene has no game dome.
+	bool               SkydomePrimaryHasGpuBuffers()   const { return m_skydomePrimaryMesh.HasGpuBuffers(); }
+	bool               SkydomeSecondaryHasGpuBuffers() const { return m_skydomeSecondaryMesh.HasGpuBuffers(); }
 	SkydomeSlotStatus  GetSkydomePrimaryStatus()   const { return m_skydomePrimaryStatus; }
 	SkydomeSlotStatus  GetSkydomeSecondaryStatus() const { return m_skydomeSecondaryStatus; }
 	// Enumerate selectable dome Names for a battle context (primary + secondary).

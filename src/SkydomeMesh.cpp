@@ -161,6 +161,26 @@ bool SkydomeMesh::HasResolved() const
     return false;
 }
 
+// Are there LIVE GPU buffers behind this mesh right now? (2026-07 audit, an-audit-finding.)
+//
+// HasResolved above answers a different question — "did a shader bind?" — and
+// every existing skydome assertion is of that bookkeeping kind: which slot is
+// selected, what the DTO says the status is. None of them looks at whether the
+// device actually holds anything, so deleting CreateBuffers left the whole suite
+// green and the viewport black. This is the predicate that cannot be true
+// without real resources: the DEFAULT-pool VB and IB must both exist AND the
+// sub-mesh must have indices to draw.
+//
+// Deliberately ANY rather than ALL: a sub-mesh whose effect never resolved is
+// skipped at draw by design (per-sub-mesh degrade), so requiring every sub-mesh
+// to have buffers would report false for a dome that renders perfectly well.
+bool SkydomeMesh::HasGpuBuffers() const
+{
+    for (const SubMeshGpu& s : m_subMeshes)
+        if (s.vb != nullptr && s.ib != nullptr && s.primitiveCount > 0) return true;
+    return false;
+}
+
 void SkydomeMesh::Clear()
 {
     ReleaseGpuBuffers();
