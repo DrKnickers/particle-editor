@@ -3,7 +3,7 @@
 #include "managers.h"     // IFileManager
 #include "xml.h"          // XMLTree / XMLNode
 #include "files.h"        // IFile, ReadAndReleaseCapped
-#include "ResourceLimits.h" // kMaxAloModelBytes
+#include "ResourceLimits.h" // kMaxAloModelBytes, kMaxCatalogXmlFileCount
 #include "utils.h"        // WideToAnsi
 #include "AssetPathSafety.h"
 
@@ -147,6 +147,13 @@ namespace
         const XMLNode* root = xml.getRoot();
         if (root == nullptr) return false;   // broken GOF -> treat as unreadable, fall back
 
+        // Manifest file-count cap + dedup, matching GameObjectCatalog's reader of
+        // this same file (2026-07 audit, an-audit-finding). This is the SECOND uncapped reader
+        // in this translation unit — LoadAllSkydomeLists below was the other, and
+        // both had to be fixed: a cap on one reader of a shared manifest is not a
+        // cap on the manifest.
+        std::set<std::string> seenRel;
+        unsigned long kept = 0;
         for (unsigned i = 0; i < root->getNumChildren(); ++i)
         {
             const XMLNode* c = root->getChild(i);
@@ -154,6 +161,9 @@ namespace
             const std::string rel = trim(WideToAnsi(c->getData()));
             if (rel.empty()) continue;
             if (!IsSafeRelativeAssetName(rel)) continue;
+            if (!seenRel.insert(rel).second) continue;
+            if (kept >= kMaxCatalogXmlFileCount) break;
+            ++kept;
             const std::string full = std::string("Data\\XML\\") + rel;
             // Fast path: sniff the root from the first bytes. Only when the sniff is
             // inconclusive (empty) do we pay a full parse -- a sniff that returns a
@@ -313,13 +323,25 @@ void LoadAllSkydomeLists(IFileManager& fm, std::array<std::vector<SkydomeRef>, k
             if (root != nullptr)   // readable + has a root -> drive enumeration from it
             {
                 gofPresent = true;
+                // Same file-count cap the catalog's reader applies to this very
+                // manifest (GameObjectCatalog.cpp readFileList). GameObjectFiles.xml
+                // has TWO readers and only one of them was bounded, so a crafted
+                // manifest was capped for the catalog and unbounded here — each
+                // entry costing a root sniff and, when that is inconclusive, a full
+                // parse (2026-07 audit, an-audit-finding). De-dup as we collect so the cap bounds
+                // DISTINCT names: a flood of repeats must not push a later
+                // legitimate entry past it.
+                std::set<std::string> seenRel;
                 for (unsigned i = 0; i < root->getNumChildren(); ++i)
                 {
                     const XMLNode* c = root->getChild(i);
                     if (c->getName() != L"File") continue;
                     const std::string rel = trim(WideToAnsi(c->getData()));
                     if (!IsSafeRelativeAssetName(rel)) continue;
-                    if (!rel.empty()) files.push_back(std::string("Data\\XML\\") + rel);
+                    if (rel.empty()) continue;
+                    if (!seenRel.insert(rel).second) continue;
+                    if (files.size() >= kMaxCatalogXmlFileCount) break;
+                    files.push_back(std::string("Data\\XML\\") + rel);
                 }
             }
         }

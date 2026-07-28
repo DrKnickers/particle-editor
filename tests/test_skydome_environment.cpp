@@ -10,12 +10,14 @@
 #include "SkydomeEnvironment.h"
 #include "managers.h"
 #include "files.h"
+#include "ResourceLimits.h"   // kMaxCatalogXmlFileCount (manifest cap case)
 
 #include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -29,8 +31,13 @@ static int g_failed = 0;
 struct MockFM : IFileManager
 {
     std::map<std::string, std::string> files;
+    // Every path the reader asked for. The manifest-cap case below has no other
+    // oracle: the listed files don't exist, so the only observable is how many
+    // the enumeration TRIED to open.
+    std::vector<std::string> requested;
     IFile* getFile(const std::string& path) override
     {
+        requested.push_back(path);
         auto it = files.find(path);
         if (it == files.end()) return nullptr;
         MemoryFile* mf = new MemoryFile();
@@ -394,6 +401,103 @@ int main(int argc, char** argv)
         MapEnvironment env2;
         ResolveMapEnvironment(all, SkydomeContext::Space, "Stars_Low", "DoesNotExist", env2);
         CHECK(env2.hasPrimary && !env2.hasSecondary, "resolve-from-lists: missing secondary unset");
+    }
+
+    // ---- manifest file-count cap (2026-07 audit, an-audit-finding) -----------------------
+    //
+    // GameObjectFiles.xml has TWO readers. GameObjectCatalog's readFileList caps
+    // the list at kMaxCatalogXmlFileCount; LoadAllSkydomeLists did not, so a
+    // crafted manifest was bounded for one consumer and unbounded for the other,
+    // with every extra entry costing a getFile + root sniff here.
+    //
+    // Oracle: the listed files do not exist, so `requested` counts exactly what
+    // the enumeration tried to open.
+    std::printf("[manifest cap]\n");
+    {
+        // DISTINCT paths, not raw probes: a listed file is opened twice (cheap
+        // root sniff, then the real parse when the sniff is inconclusive — which
+        // it always is for a file that doesn't exist).
+        auto countProbes = [](const MockFM& m) {
+            std::set<std::string> distinct;
+            for (const std::string& p : m.requested)
+                if (p.rfind("Data\\XML\\flood", 0) == 0) distinct.insert(p);
+            return distinct.size();
+        };
+        auto buildManifest = [](unsigned n) {
+            std::string x = "<?xml version=\"1.0\" ?>\n<GameObjectFiles>\n";
+            char buf[64];
+            for (unsigned i = 0; i < n; ++i)
+            {
+                std::snprintf(buf, sizeof(buf), "  <File>flood%06u.xml</File>\n", i);
+                x += buf;
+            }
+            return x + "</GameObjectFiles>\n";
+        };
+
+        // Over the cap: clamped, and clamped to EXACTLY the cap.
+        {
+            MockFM big;
+            big.files["Data\\XML\\GameObjectFiles.xml"] = buildManifest(kMaxCatalogXmlFileCount + 904u);
+            std::array<std::vector<SkydomeRef>, kNumSkydomeAxes> lists;
+            LoadAllSkydomeLists(big, lists);
+            const size_t probed = countProbes(big);
+            CHECK(probed == (size_t)kMaxCatalogXmlFileCount,
+                  "5000-entry manifest probes exactly kMaxCatalogXmlFileCount files");
+        }
+
+        // Exactly AT the cap: every entry still consulted. Without this, a guard
+        // that fired one entry early would pass the assertion above while
+        // silently dropping a legitimate file (handoff: pin a boundary from BOTH
+        // sides — asserting the clamp alone cannot tell safety from data loss).
+        {
+            MockFM legal;
+            legal.files["Data\\XML\\GameObjectFiles.xml"] = buildManifest(kMaxCatalogXmlFileCount);
+            std::array<std::vector<SkydomeRef>, kNumSkydomeAxes> lists;
+            LoadAllSkydomeLists(legal, lists);
+            CHECK(countProbes(legal) == (size_t)kMaxCatalogXmlFileCount,
+                  "a manifest exactly AT the cap loses nothing");
+        }
+
+        // Duplicates must not consume the budget: a flood of repeats must not
+        // push a later legitimate entry past the cap (same rule readFileList
+        // already applies).
+        {
+            MockFM dup;
+            std::string x = "<?xml version=\"1.0\" ?>\n<GameObjectFiles>\n";
+            for (unsigned i = 0; i < kMaxCatalogXmlFileCount + 500u; ++i)
+                x += "  <File>flood000000.xml</File>\n";
+            x += "  <File>flood999999.xml</File>\n</GameObjectFiles>\n";
+            dup.files["Data\\XML\\GameObjectFiles.xml"] = x;
+            std::array<std::vector<SkydomeRef>, kNumSkydomeAxes> lists;
+            LoadAllSkydomeLists(dup, lists);
+            bool sawLate = false;
+            size_t rawRepeat = 0;
+            for (const std::string& p : dup.requested)
+            {
+                if (p == "Data\\XML\\flood999999.xml") sawLate = true;
+                if (p == "Data\\XML\\flood000000.xml") ++rawRepeat;
+            }
+            // Without dedup, 4596 repeats fill the 4096 budget and the late
+            // distinct entry never gets read.
+            CHECK(sawLate, "duplicates don't consume the budget (late distinct entry still read)");
+            // RAW probes, not distinct: a distinct-count assertion here is a
+            // tautology (the oracle collapses duplicates whether or not the code
+            // does). Each kept file is opened twice — sniff, then full parse when
+            // the sniff is inconclusive.
+            CHECK(rawRepeat == 2, "a repeated entry is opened once (2 raw probes), not 4596 times");
+        }
+
+        // The SECOND reader of the same manifest: LoadSkydomeList goes through
+        // gatherSkydomeFiles, a separate loop that was independently uncapped.
+        // Capping one reader of a shared manifest is not capping the manifest.
+        {
+            MockFM big2;
+            big2.files["Data\\XML\\GameObjectFiles.xml"] = buildManifest(kMaxCatalogXmlFileCount + 904u);
+            std::vector<SkydomeRef> list;
+            LoadSkydomeList(big2, SkydomeAxis::SpacePrimary, list);
+            CHECK(countProbes(big2) == (size_t)kMaxCatalogXmlFileCount,
+                  "LoadSkydomeList (gatherSkydomeFiles) applies the same manifest cap");
+        }
     }
 
     std::printf("\n=== SkydomeEnvironment: %s ===\n", g_failed == 0 ? "ALL PASS" : "FAILURES");
