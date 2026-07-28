@@ -30,12 +30,14 @@
 #include "ParticleSystemIO.h"   // compile contract: the header must stand alone
 #include "ParticleSystem.h"
 #include "ParticleSystemInstance.h"
+#include "ResourceLimits.h"     // kMaxEmitterTreeDepth (section G)
 #include "files.h"
 #include "exceptions.h"
 
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Link stub -- see test_alo_roundtrip.cpp:36-39. ~Emitter calls
@@ -139,6 +141,65 @@ static void writeRawBytes(const std::wstring& path, const void* data, unsigned l
     PhysicalFile* f = new PhysicalFile(path, PhysicalFile::WRITE);
     if (n) f->write(data, n);
     f->Release();
+}
+
+// ---- section-G helpers: spawn-graph shape ---------------------------------
+// Both walk ITERATIVELY on purpose. The whole point of kMaxEmitterTreeDepth is
+// that a recursive walk over an unclamped graph is unsafe, so the oracle that
+// measures the clamp must not share the defect it is measuring -- with the cap
+// reverted these run over the full un-clamped chain and must still return.
+
+// Length (in nodes) of the longest spawn chain. Roots count as depth 1.
+static size_t maxChainDepth(const ParticleSystem& ps)
+{
+    const std::vector<Emitter*>& es = ps.getEmitters();
+    size_t best = 0;
+    for (size_t r = 0; r < es.size(); ++r)
+    {
+        if (es[r]->parent != NULL) continue;              // start at roots only
+        std::vector<std::pair<size_t, size_t> > stack;    // (index, depth)
+        stack.push_back(std::make_pair(r, (size_t)1));
+        while (!stack.empty())
+        {
+            const size_t u = stack.back().first;
+            const size_t d = stack.back().second;
+            stack.pop_back();
+            if (d > best) best = d;
+            // A chain longer than the emitter count means a cycle survived
+            // validation; bail loudly rather than spin forever.
+            if (d > es.size()) return (size_t)-1;
+            const Emitter* e = es[u];
+            if (e->spawnDuringLife != (size_t)-1)
+                stack.push_back(std::make_pair(e->spawnDuringLife, d + 1));
+            if (e->spawnOnDeath != (size_t)-1)
+                stack.push_back(std::make_pair(e->spawnOnDeath, d + 1));
+        }
+    }
+    return best;
+}
+
+static size_t rootCount(const ParticleSystem& ps)
+{
+    size_t n = 0;
+    const std::vector<Emitter*>& es = ps.getEmitters();
+    for (size_t i = 0; i < es.size(); ++i) if (es[i]->parent == NULL) ++n;
+    return n;
+}
+
+// Author a single lifetime-spawn chain `nodes` long. Returns what it built.
+static size_t buildChain(ParticleSystem& ps, size_t nodes)
+{
+    Emitter* cur = ps.addRootEmitter();
+    if (cur == NULL) return 0;
+    size_t built = 1;
+    while (built < nodes)
+    {
+        Emitter* next = ps.addLifetimeEmitter(cur);
+        if (next == NULL) break;
+        cur = next;
+        ++built;
+    }
+    return built;
 }
 
 int main()
@@ -277,6 +338,79 @@ int main()
             std::unique_ptr<ParticleSystem> rp = loadFrom(half, other);
             CHECK(rp == nullptr && !other,
                   "half-truncated .alo -> null via the documented error path");
+        }
+    }
+
+    // ---- G: spawn-chain depth is capped on load (2026-07 audit, an-audit-finding) ------
+    //
+    // kMaxAloEmitters (65536) bounds how MANY emitters a file may carry and
+    // says nothing about their ARRANGEMENT, so a single chain of tens of
+    // thousands passes every pre-existing check. ValidateEmitterGraph enforces
+    // single-parent and breaks cycles but did not bound depth -- and the graph
+    // is walked RECURSIVELY downstream (BuildEmitterTreeNode on every open,
+    // deleteEmitter on every delete), so an over-deep-but-valid file overflowed
+    // the stack. The cap clears the offending link, which re-roots the tail
+    // rather than discarding it.
+    //
+    // The save path writes the in-memory graph verbatim (ParticleSystem::write
+    // is a flat emitter loop, no validation), so authoring over-deep in memory
+    // and reloading is the honest way to produce the adversarial file.
+    {
+        const size_t cap  = static_cast<size_t>(kMaxEmitterTreeDepth);
+        const size_t over = cap + 40;
+
+        ParticleSystem ps;
+        ps.setName("DeepChain");
+        CHECK(buildChain(ps, over) == over, "deep-chain setup: authored cap+40 emitters");
+        // The editing path is deliberately uncapped -- ValidateEmitterGraph
+        // runs on load and import only. If this ever fails, the cap moved to
+        // the wrong layer and the rest of this section proves nothing.
+        CHECK(maxChainDepth(ps) == over,
+              "deep-chain setup: in-memory chain is cap+40 deep (editing path is uncapped)");
+
+        const std::wstring path = tempPath(L"deepchain.alo");
+        bool other = false;
+        CHECK(saveTo(ps, path, other) && !other, "deep-chain: over-deep system saves");
+
+        std::unique_ptr<ParticleSystem> rp = loadFrom(path, other);
+        CHECK(rp != nullptr && !other, "deep-chain: over-deep file LOADS (clamped, not rejected)");
+        if (rp)
+        {
+            CHECK(rp->getEmitters().size() == over,
+                  "deep-chain: every emitter survives the clamp (nothing dropped)");
+            // The discriminating assertions. Without the cap these read
+            // `over` and `1` -- the specific wrong values, not merely "changed".
+            CHECK(maxChainDepth(*rp) == cap,
+                  "deep-chain: reloaded chain is clamped to exactly kMaxEmitterTreeDepth");
+            CHECK(rootCount(*rp) == 2,
+                  "deep-chain: the over-deep tail is re-rooted (cap+40 -> 2 roots)");
+        }
+    }
+
+    // ---- G2: a chain exactly AT the cap is untouched ------------------------
+    // The boundary control for G. A cap that clamps legal depth is a data-loss
+    // bug of its own, so G alone is not enough: G would still pass if the guard
+    // fired one node early. These two together pin the off-by-one from both
+    // sides.
+    {
+        const size_t cap = static_cast<size_t>(kMaxEmitterTreeDepth);
+
+        ParticleSystem ps;
+        ps.setName("AtCapChain");
+        CHECK(buildChain(ps, cap) == cap, "at-cap setup: authored exactly cap emitters");
+
+        const std::wstring path = tempPath(L"atcapchain.alo");
+        bool other = false;
+        CHECK(saveTo(ps, path, other) && !other, "at-cap: save succeeds");
+
+        std::unique_ptr<ParticleSystem> rp = loadFrom(path, other);
+        CHECK(rp != nullptr && !other, "at-cap: load succeeds");
+        if (rp)
+        {
+            CHECK(maxChainDepth(*rp) == cap,
+                  "at-cap: a chain exactly at the cap survives at full depth");
+            CHECK(rootCount(*rp) == 1,
+                  "at-cap: no spurious re-rooting at the boundary");
         }
     }
 

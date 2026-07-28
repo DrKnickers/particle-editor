@@ -8,8 +8,13 @@
 // that reason).
 //
 // Threading model (mirrors AsyncFrameEncoder):
-//   UI thread:  Enqueue(job with raw BGRA) — never blocks (no byte cap:
-//               preview jobs are user-driven and sparse, not per-frame).
+//   UI thread:  Enqueue(job with raw BGRA) — never blocks. No byte cap, unlike
+//               AsyncFrameEncoder: preview jobs are user-driven and sparse, and
+//               this Enqueue runs on the UI thread, where AsyncFrameEncoder's
+//               block-while-full would freeze the window. The queue is bounded
+//               instead by the dispatcher's in-flight dedupe set plus
+//               DropStaleQueued below — see that comment for why the dedupe set
+//               alone was not enough (2026-07 audit, an-audit-finding).
 //   worker:     EncodePackedBgraToPngBytes + Base64Encode, pushes the result
 //               to the done queue, PostMessage(hwnd, doneMsg) so the UI
 //               thread drains promptly even when idle-paced.
@@ -94,6 +99,42 @@ public:
             m_queue.push_back(std::move(j));
         }
         m_work.notify_one();
+    }
+
+    // Discard every QUEUED job that predates `currentEpoch`; returns how many
+    // went. Returns 0 when nothing is stale -- an epoch bump with an idle queue
+    // costs one lock.
+    //
+    // Why this is needed (2026-07 audit, an-audit-finding). In steady state the queue is
+    // bounded not by a byte cap but by the dispatcher's in-flight dedupe set:
+    // a texture already queued is never queued twice. PreviewCacheClear() drops
+    // that set -- and did NOT drop the queue -- so the bound disappeared exactly
+    // when the queue was about to grow: after a mod switch the whole palette
+    // re-requests, every key misses both the LRU and the in-flight gate, and the
+    // previous epoch's jobs sit behind them still holding up to 4 MB of raw BGRA
+    // apiece. The worker also encoded them in full, because only the RESULT is
+    // epoch-checked, at drain.
+    //
+    // Dropping is always safe: DrainPreviewResults discards a stale-epoch result
+    // on arrival, so these jobs cannot produce anything a caller will see. Note
+    // the deliberate divergence from AsyncFrameEncoder, whose byte cap BLOCKS in
+    // Enqueue -- that runs on the record thread; this Enqueue runs on the UI
+    // thread, where blocking would freeze the window.
+    size_t DropStaleQueued(unsigned currentEpoch)
+    {
+        std::lock_guard<std::mutex> lk(m_mu);
+        const size_t before = m_queue.size();
+        for (std::deque<Job>::iterator it = m_queue.begin(); it != m_queue.end(); )
+            it = (it->epoch != currentEpoch) ? m_queue.erase(it) : it + 1;
+        return before - m_queue.size();
+    }
+
+    // Queue depth, for tests and for the same observability AsyncFrameEncoder
+    // exposes via Stats(). Advisory: the worker pops concurrently.
+    size_t QueuedCount()
+    {
+        std::lock_guard<std::mutex> lk(m_mu);
+        return m_queue.size();
     }
 
     // Drain finished results (UI thread, under the doneMsg handler).

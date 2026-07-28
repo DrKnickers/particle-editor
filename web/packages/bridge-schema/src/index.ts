@@ -1342,6 +1342,16 @@ export type Event =
   // so the TitleBar swaps the maximize↔restore glyph + applies the maximized
   // overhang padding. MockBridge never emits it (browser mode has no window).
   | { kind: "window/state";           payload: { maximized: boolean } }
+  // Autosave health (2026-07 audit, an-audit-finding). `healthy:false` means the last
+  // autosave write FAILED, so the crash-recovery net is stale — the newest
+  // recoverable state is older than what is on screen. Emitted only on a
+  // CHANGE, and replayed on app/ready like window/state.
+  //
+  // This is a persistent CONDITION, not a transient event: it stays true until
+  // a write succeeds. The UI must therefore surface it as durable state (a
+  // status-bar indicator), not a toast that expires while autosave is still
+  // broken — a warning that disappears on its own would understate it.
+  | { kind: "autosave/health";        payload: { healthy: boolean } }
   | { kind: "undo/changed";           payload: { canUndo: boolean; canRedo: boolean; label?: string } }
   | { kind: "accelerator/pressed";    payload: { combo: string } }
   | { kind: "spawner/active-count";   payload: { count: number } }

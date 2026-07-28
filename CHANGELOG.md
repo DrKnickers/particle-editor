@@ -177,6 +177,10 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Fixed
 
+- The status bar now warns you when an autosave fails to write. Previously a failing autosave was silent, so you could keep working for an hour believing a crash would cost you nothing while the newest recoverable copy fell further and further behind
+- Opening a particle file whose emitters are chained thousands deep no longer closes the editor without warning. Such a file now loads with the over-deep part of the chain reattached at the top level, and nothing in it is discarded
+- Switching mod layers repeatedly while browsing textures no longer piles up memory. Preview work for the old mod stack is now dropped when you switch, rather than being finished and thrown away
+- The undo history now has a memory ceiling as well as a 100-step limit, so an unusually large effect can no longer grow it without bound
 - Switching emitters while a curve edit is still saving no longer carries the old emitter's key selection onto the new one. Previously the spinner could show the previous emitter's value against a key that held a different one, so the next nudge silently wrote that wrong value
 - One Ctrl+Z now undoes a whole multi-emitter delete. Deleting three emitters at once used to take three presses of Ctrl+Z to reverse, restoring them one at a time
 - One Ctrl+Z now undoes a whole multi-key curve paste. Pasting several curve keys used to take one press per key to reverse, removing them one at a time

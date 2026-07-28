@@ -1231,10 +1231,14 @@ void ParticleSystem::ValidateEmitterGraph()
         }
     }
 
-    // Pass 2: break cycles. After pass 1 every node has in-degree <= 1, so any
-    // remaining cycle is a simple loop; an iterative DFS clears the back-edge
-    // that closes it. color: 0 = unvisited, 1 = on the current path, 2 = done.
-    // Iterative (not recursive) so a deep chain can't overflow the stack.
+    // Pass 2: break cycles AND cap depth. After pass 1 every node has in-degree
+    // <= 1, so any remaining cycle is a simple loop; an iterative DFS clears the
+    // back-edge that closes it. color: 0 = unvisited, 1 = on the current path,
+    // 2 = done. Iterative (not recursive) so a deep chain can't overflow the
+    // stack HERE -- but the same graph is walked recursively downstream by
+    // BuildEmitterTreeNode and deleteEmitter, which is why depth needs bounding
+    // and not merely surviving (2026-07 audit, an-audit-finding). The DFS stack size IS the
+    // current depth, so the cap rides along for free.
     std::vector<int> color(n, 0);
     for (size_t root = 0; root < n; root++)
     {
@@ -1261,6 +1265,20 @@ void ParticleSystem::ValidateEmitterGraph()
                 // Back-edge into the active path: this link closes a cycle.
                 printf("[Load] emitter %zu '%s' closes a spawn cycle back to %zu; clearing\n",
                        u, e->name.c_str(), v); fflush(stdout);
+                if (slotIdx == 0) e->spawnOnDeath    = (size_t)-1;
+                else              e->spawnDuringLife = (size_t)-1;
+            }
+            else if (stack.size() >= kMaxEmitterTreeDepth)
+            {
+                // Depth cap: descending would put v at depth
+                // kMaxEmitterTreeDepth+1. Clear the link rather than drop the
+                // emitter -- v keeps all its own children and simply becomes a
+                // root (pass 3 rebuilds parent from the surviving links, and the
+                // enclosing root loop picks v up as its own DFS start, so the
+                // rest of the chain is re-rooted the same way). Nothing is lost;
+                // an over-deep chain arrives as a series of capped chains.
+                printf("[Load] emitter %zu '%s' exceeds the spawn depth cap %lu at %zu; clearing\n",
+                       u, e->name.c_str(), kMaxEmitterTreeDepth, v); fflush(stdout);
                 if (slotIdx == 0) e->spawnOnDeath    = (size_t)-1;
                 else              e->spawnDuringLife = (size_t)-1;
             }

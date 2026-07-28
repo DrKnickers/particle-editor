@@ -128,4 +128,59 @@ describe("StatusBar", () => {
     // The cursor cell specifically shows the em-dash placeholder.
     expect(screen.getByText("Cursor").nextElementSibling).toHaveTextContent("—");
   });
+
+  // Autosave health (2026-07 audit, an-audit-finding). Before this the `wrote` bool fed
+  // nothing but a debug-log format string, so a failing autosave was invisible:
+  // the user kept editing believing the crash-recovery net was live.
+  describe("autosave health", () => {
+    it("shows nothing before the host reports on autosave", () => {
+      const { bridge } = makeBridge();
+      render(<StatusBar bridge={bridge} />);
+      // A launch that has not autosaved yet has nothing to warn about; a
+      // default-unhealthy state would cry wolf on every start.
+      expect(screen.queryByTestId("status-autosave-failed")).not.toBeInTheDocument();
+    });
+
+    it("shows nothing while autosave is healthy", () => {
+      const { bridge, emit } = makeBridge();
+      render(<StatusBar bridge={bridge} />);
+      emit("autosave/health", { healthy: true });
+      expect(screen.queryByTestId("status-autosave-failed")).not.toBeInTheDocument();
+    });
+
+    it("warns when the host reports a failed autosave write", () => {
+      const { bridge, emit } = makeBridge();
+      render(<StatusBar bridge={bridge} />);
+      emit("autosave/health", { healthy: false });
+      const el = screen.getByTestId("status-autosave-failed");
+      expect(el).toBeInTheDocument();
+      // Assertive, not polite: losing the recovery net is not a status update,
+      // and the user may be minutes from needing it.
+      expect(el).toHaveAttribute("role", "alert");
+      expect(el).toHaveAccessibleDescription(/not recoverable after a crash/i);
+    });
+
+    // The discriminating case for "persistent condition, not a toast". A
+    // timer-expiring banner would pass every assertion above and still tell the
+    // user the recovery net recovered when nothing of the sort happened.
+    it("keeps the warning up indefinitely until a write succeeds", () => {
+      vi.useFakeTimers();
+      try {
+        const { bridge, emit } = makeBridge();
+        render(<StatusBar bridge={bridge} />);
+        emit("autosave/health", { healthy: false });
+        expect(screen.getByTestId("status-autosave-failed")).toBeInTheDocument();
+
+        // Far longer than any transient-banner window in this app.
+        act(() => { vi.advanceTimersByTime(120_000); });
+        expect(screen.getByTestId("status-autosave-failed")).toBeInTheDocument();
+
+        // Only a successful write clears it.
+        emit("autosave/health", { healthy: true });
+        expect(screen.queryByTestId("status-autosave-failed")).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

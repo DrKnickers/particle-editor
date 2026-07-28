@@ -261,6 +261,10 @@ public:
     // glyph. Returns false if the web isn't wired yet (m_emit null) so the host
     // can replay the state once React is ready (see HostWindowImpl).
     bool EmitWindowState(bool maximized);
+    // Autosave health (2026-07 audit, an-audit-finding). Returns false when the web isn't
+    // wired yet, so the caller can replay on app/ready — same contract as
+    // EmitWindowState above.
+    bool EmitAutosaveHealth(bool healthy);
 
     // Editor-level file state.
     //

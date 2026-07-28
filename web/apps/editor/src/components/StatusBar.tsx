@@ -97,6 +97,11 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
     return () => window.clearTimeout(t);
   }, [feedbackMessage, feedbackEpoch]);
 
+  // `true` until the host says otherwise: an editor that has not yet run an
+  // autosave has nothing to warn about, and a default of `false` would cry wolf
+  // on every launch.
+  const [autosaveHealthy, setAutosaveHealthy] = useState(true);
+
   useEffect(() => {
     const offStats = bridge.on("stats/tick", (e) => {
       setStats(e.payload);
@@ -117,10 +122,19 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
         setCursor(null);
       }
     });
+    // Autosave health (2026-07 audit, an-audit-finding). Durable state, deliberately NOT a
+    // toast: a failed autosave stays failed until a write succeeds, so a
+    // warning that expired on a timer would tell the user the recovery net
+    // recovered when nothing of the sort happened. The host emits only on a
+    // change and replays a known-bad state on app/ready.
+    const offAutosave = bridge.on("autosave/health", (e) => {
+      setAutosaveHealthy(e.payload.healthy);
+    });
     return () => {
       offStats();
       offCursor();
       offFreeze();
+      offAutosave();
     };
   }, [bridge]);
 
@@ -164,6 +178,22 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
             </span>
           )}
         </span>
+        {/* Autosave failure. Persistent by design — it stays until a write
+            succeeds — so no presence/fade wrapper: nothing here animates in or
+            out, which also keeps it out of the a11y-snapshot settle list.
+            role="alert" (assertive) rather than the polite regions above:
+            losing the crash-recovery net is not a status update, and the user
+            may be minutes from needing it. */}
+        {!autosaveHealthy && (
+          <span
+            role="alert"
+            data-testid="status-autosave-failed"
+            title="The last autosave write failed. Your most recent changes are not recoverable after a crash — save the file manually."
+            className="shrink-0 font-semibold text-warning-fg"
+          >
+            ⚠ Autosave failing
+          </span>
+        )}
         <span className="shrink-0 text-text-3">⇧ Shift: spawn instance</span>
       </div>
     </footer>

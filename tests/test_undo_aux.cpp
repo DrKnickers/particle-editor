@@ -169,6 +169,61 @@ static void test_default_aux_is_zero(ParticleSystem& ps)
     CHECK(auxEq(got, mkAux(0,0,0,0,0,0)), "defaulted aux is {0,0,0}");
 }
 
+// 6. Aggregate byte budget (2026-07 audit, an-audit-finding).
+//
+// MAX_ENTRIES caps HOW MANY snapshots are resident and says nothing about how
+// large they are. Snapshot size scales with emitter and track-key count, both
+// of which run to five figures under the .alo caps, so 100 entries had no
+// memory ceiling at all.
+//
+// The budget is injected rather than reached: building 256 MB of genuine
+// snapshots costs ~400 MB resident, which is a bad trade for a cap designed
+// never to fire in normal use. The eviction path exercised here is the same
+// code the production default runs.
+static void test_byte_budget_evicts_oldest()
+{
+    ParticleSystem big;
+    for (int i = 0; i < 40; ++i) big.addRootEmitter();
+    const size_t one = UndoStack::Serialize(big).size();
+    CHECK(one > 0, "byte budget: the fixture serializes to something");
+
+    // Room for ~3 snapshots, so pushing 12 must evict.
+    UndoStack u(one * 3 + one / 2);
+    for (int i = 0; i < 12; ++i) u.Capture(big, SIZE_MAX, 0);
+
+    // The discriminating pair. Without the budget these read ~12*one and 12 --
+    // MAX_ENTRIES (100) never fires at this depth, so the entry cap alone
+    // leaves every snapshot resident.
+    CHECK(u.TotalBytes() <= one * 3 + one / 2,
+          "byte budget: total snapshot bytes stay within the budget");
+    CHECK(u.Depth() < 12, "byte budget: oldest entries were evicted");
+    CHECK(u.Depth() >= 3, "byte budget: eviction is not over-eager");
+
+    // Cursor accounting must survive eviction: the entries still present have
+    // to be reachable, or the stack silently loses the user's undo.
+    CHECK(u.Cursor() == u.Depth(), "byte budget: cursor tracks the surviving tip");
+    const std::vector<char>* buf = nullptr; size_t sel = 0;
+    CHECK(u.Undo(&buf, &sel), "byte budget: undo still works after eviction");
+    CHECK(buf != nullptr && buf->size() == one,
+          "byte budget: the restored snapshot is a whole entry, not a truncated one");
+}
+
+// 7. A single snapshot larger than the entire budget must still be kept -- a
+// stack that evicted its only entry could not undo the edit that just
+// happened, which is worse than being over budget.
+static void test_byte_budget_keeps_last_entry()
+{
+    ParticleSystem big;
+    for (int i = 0; i < 40; ++i) big.addRootEmitter();
+
+    UndoStack u(1);   // one byte: smaller than any real snapshot
+    for (int i = 0; i < 3; ++i) u.Capture(big, SIZE_MAX, 0);
+
+    CHECK(u.Depth() == 1, "over-budget single entry: exactly one entry is kept");
+    CHECK(u.TotalBytes() > 1,
+          "over-budget single entry: kept even though it exceeds the budget");
+}
+
 int main()
 {
     // A minimal but real ParticleSystem so Serialize/Deserialize exercise the
@@ -182,6 +237,8 @@ int main()
     test_different_keys_dont_fold(ps);
     test_default_aux_is_zero(ps);
     test_ref_transform_key();
+    test_byte_budget_evicts_oldest();
+    test_byte_budget_keeps_last_entry();
 
     std::printf("\nResults: %d passed, %d failed\n", g_passed, g_failed);
     if (g_failed == 0) { std::printf("=== undo aux: ALL PASS ===\n"); return 0; }

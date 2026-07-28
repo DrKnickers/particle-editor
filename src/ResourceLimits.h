@@ -34,6 +34,19 @@ static const unsigned long kMaxAloConnections    = 4096u;
 // emitter chunks amplifies each ~8-byte header into a full Emitter allocation.
 // Real systems have dozens of emitters; heavy modded ones a few hundred.
 static const unsigned long kMaxAloEmitters       = 65536u;
+// Spawn-chain DEPTH cap — the arrangement companion to the count cap above
+// (2026-07 audit, an-audit-finding). kMaxAloEmitters bounds how MANY emitters a file may
+// carry and says nothing about how they are wired: 65,536 emitters are harmless
+// as a forest and fatal as a single chain, because ValidateEmitterGraph enforces
+// single-parent and breaks cycles but never bounded depth. The graph is walked
+// RECURSIVELY by BuildEmitterTreeNode (the bridge tree serializer, run on every
+// open) and by deleteEmitter, so a deep-but-valid chain overflows the stack on a
+// file the loader accepts. Real systems nest in the single digits — the in-game
+// chain investigation used depth 3, and the engine dies of particle
+// multiplication long before anything approaching this cap — so 256 is generous
+// by two orders of magnitude while keeping the worst-case recursion far inside a
+// 1 MiB thread stack.
+static const unsigned long kMaxEmitterTreeDepth  = 256u;
 // The rest of the aggregate caps the 2026-07 audit found missing. Each of these
 // loops validated every ITEM it read and never the TOTAL, so a file of millions
 // of individually-valid records passed every existing check while allocating
@@ -53,6 +66,15 @@ static const unsigned long kMaxAloTrackKeys      = 65536u;
 // only by the bytes remaining in the chunk — at ~3 bytes per entry that is still
 // tens of millions of map inserts. Groups are per-particle-system and few.
 static const unsigned long kMaxAloLinkExempts    = 65536u;
+// Inbound WebMessage cap, in UTF-16 CHARACTERS (2026-07 audit, an-audit-finding). Bridge
+// ingress had no size limit: every message was handed to OnWebMessage and parsed
+// whole, so one postMessage could drive an arbitrarily large allocation on the UI
+// thread. Defence-in-depth rather than a live hole -- the origin check upstream
+// means the only speaker is our own bundle -- but an unbounded parse behind a
+// trust boundary should not be the thing keeping the window alive. Real bridge
+// requests are a few KB; the largest (a multi-key curve paste) is far under a
+// megabyte, so 16 Mi characters is generous by four orders of magnitude.
+static const size_t        kMaxWebMessageChars  = 16u * 1024u * 1024u;
 // Absolute caps for whole-file asset reads off a safe-but-adversarial name (#415):
 // the #4 fail-closed gates block unsafe *names*, but a safe relative name can still
 // resolve to a very large loose or MEG-backed asset, and the whole-file read then

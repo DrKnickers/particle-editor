@@ -65,6 +65,7 @@
 #include "CacheBust.h"   // app.local index.html cache-bust query (workaround)
 #include "PerfTrace.h"
 #include "WebViewModalPolicy.h"
+#include "WebMessageIngressPolicy.h"   // ShouldAcceptWebMessage (bridge ingress cap)
 
 #include "AcceleratorBridge.h"
 #include "AlphaCompositor.h"
@@ -85,6 +86,7 @@
 #include "../managers.h"
 #include "../ModManager.h"
 #include "../MouseCursor.h"
+#include "../ResourceLimits.h"   // kMaxWebMessageChars (bridge ingress cap)
 #include "../UI/TexturePalette.h"   // Store::SetEphemeral (automation palette isolation)
 #include "../ParticleSystem.h"
 #include "../ParticleSystemIO.h"
@@ -1078,6 +1080,24 @@ struct HostWindowImpl
             tier == Autosave::Tier::Recent ? "recent" : "stable",
             PerfUsSince(t0) / 1000.0,
             force ? " (busy-override)" : "");
+        // Tell the UI (2026-07 audit, an-audit-finding). `wrote` previously fed nothing but
+        // the format string above, so a failing autosave was invisible outside a
+        // debug log: the user kept editing believing the recovery net was live
+        // when the newest recoverable state was silently falling behind.
+        EmitAutosaveHealthIfChanged(wrote);
+    }
+
+    // Autosave health is a persistent CONDITION, not an event — it stays broken
+    // until a write succeeds — so emit only on a CHANGE and let the web hold it
+    // as durable state. Mirrors EmitWindowStateIfChanged, including the
+    // not-yet-wired case that app/ready replays. -1 = not yet sent.
+    int m_lastAutosaveHealthySent = -1;
+    void EmitAutosaveHealthIfChanged(bool healthy)
+    {
+        if (!dispatcher) return;
+        const int cur = healthy ? 1 : 0;
+        if (cur == m_lastAutosaveHealthySent) return;
+        if (dispatcher->EmitAutosaveHealth(healthy)) m_lastAutosaveHealthySent = cur;
     }
 
     // --drive bridge-selftest handshake: RunDriveSelftest arms the token +
@@ -1705,6 +1725,17 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         // reports success), permanently short-circuiting this replay. (pre-PR review.)
         m_lastMaximizedSent = -1;
         EmitWindowStateIfChanged();
+        // Same replay for autosave health (2026-07 audit, an-audit-finding), and for the
+        // same reason: it is emitted only on a CHANGE, so a web reload would
+        // otherwise drop a live "recovery net is stale" warning and not restore
+        // it until the health flipped again — which, once broken, it may never
+        // do. Only replay a KNOWN-BAD state: -1 means no autosave has run yet,
+        // and asserting health we haven't observed would be a false all-clear.
+        if (m_lastAutosaveHealthySent == 0)
+        {
+            m_lastAutosaveHealthySent = -1;
+            EmitAutosaveHealthIfChanged(false);
+        }
         return;
     }
     // --drive bridge-selftest result: the page posts {"kind":"drive/selftest-result",
@@ -2278,11 +2309,26 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                     }
                     CoTaskMemFree(src);
                 }
+                // Size cap on both ingress paths (2026-07 audit, an-audit-finding).
+                // OnWebMessage parses the whole string, so without this one
+                // postMessage drives an unbounded UI-thread allocation. Checked
+                // AFTER the origin gate so an untrusted sender never gets even
+                // this far, and applied to the JSON fallback below too -- a cap
+                // on one of two doors is not a cap.
+                const auto oversized = [this](const wchar_t* s, const char* which)
+                {
+                    const size_t n = wcslen(s);
+                    if (ShouldAcceptWebMessage(n, kMaxWebMessageChars)) return false;
+                    Log("[host] dropped %s WebMessage — %zu chars exceeds the "
+                        "%zu-char cap\n", which, n, kMaxWebMessageChars);
+                    return true;
+                };
+
                 LPWSTR raw = nullptr;
                 HRESULT hr1 = args->TryGetWebMessageAsString(&raw);
                 if (SUCCEEDED(hr1) && raw)
                 {
-                    OnWebMessage(raw);
+                    if (!oversized(raw, "string")) OnWebMessage(raw);
                     CoTaskMemFree(raw);
                 }
                 else
@@ -2298,7 +2344,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                     {
                         Log("[host] WMR JSON-only (%zu chars), hr1=0x%08lx\n",
                             wcslen(json), hr1);
-                        OnWebMessage(json);
+                        if (!oversized(json, "json")) OnWebMessage(json);
                         CoTaskMemFree(json);
                     }
                     else

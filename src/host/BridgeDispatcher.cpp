@@ -21,6 +21,7 @@
 #include "../ParticleSystemIO.h"
 #include "../Rescale.h"
 #include "../RefTransformUndoKey.h"
+#include "../ResourceLimits.h"   // kMaxEmitterTreeDepth (BuildEmitterTreeNode backstop)
 #include "../SpawnerDriver.h"
 #include "../UndoStack.h"
 
@@ -727,15 +728,28 @@ LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
 // spawn slot (lifetime vs death); top-level emitters return "root".
 // The sentinel for "no spawn child" is `(size_t)-1` — matches the
 // legacy EmitterList.cpp usage at e.g. [src/UI/EmitterList.cpp:1349].
-json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx)
+json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx, size_t depth)
 {
     if (sys == nullptr || idx >= sys->getEmitters().size()) return json::object();
     const ParticleSystem::Emitter& emit = sys->getEmitter(idx);
     json children = json::array();
-    if (emit.spawnDuringLife != static_cast<size_t>(-1))
-        children.push_back(BuildEmitterTreeNode(sys, emit.spawnDuringLife));
-    if (emit.spawnOnDeath != static_cast<size_t>(-1))
-        children.push_back(BuildEmitterTreeNode(sys, emit.spawnOnDeath));
+    // Recursion backstop (2026-07 audit, an-audit-finding). ValidateEmitterGraph caps chain
+    // depth on load and import, but it is NOT called from any bridge mutation
+    // path, so this walk cannot assume the cap holds. Emit the node without its
+    // children rather than descending -- a truncated subtree is a visible,
+    // recoverable UI defect; a blown stack takes the process with it.
+    if (depth >= kMaxEmitterTreeDepth)
+    {
+        printf("[Bridge] emitter tree exceeds depth cap %lu at emitter %zu; "
+               "truncating subtree\n", kMaxEmitterTreeDepth, idx); fflush(stdout);
+    }
+    else
+    {
+        if (emit.spawnDuringLife != static_cast<size_t>(-1))
+            children.push_back(BuildEmitterTreeNode(sys, emit.spawnDuringLife, depth + 1));
+        if (emit.spawnOnDeath != static_cast<size_t>(-1))
+            children.push_back(BuildEmitterTreeNode(sys, emit.spawnOnDeath, depth + 1));
+    }
 
     // Role: walk to parent's spawn slots. If parent is null we're a
     // top-level root. Otherwise check whether parent's lifetime slot
@@ -1498,6 +1512,15 @@ void BridgeDispatcher::PreviewCacheClear()
     m_previewLruIdx.clear();
     m_previewInFlight.clear();
     ++m_previewEpoch;
+    // m_previewInFlight is what BOUNDS the encode queue -- a texture already
+    // queued is never queued twice. Clearing it above without also clearing the
+    // queue removed that bound at the one moment the queue was about to grow:
+    // the palette re-requests everything, each key now misses both the LRU and
+    // the dedupe gate, and the previous epoch's jobs stay queued at up to 4 MB
+    // of raw BGRA each (2026-07 audit, an-audit-finding). Their results would be discarded
+    // on arrival anyway, so dropping them here costs nothing and is the only
+    // thing keeping the two structures in step.
+    if (m_previewWorker) m_previewWorker->DropStaleQueued(m_previewEpoch);
 }
 
 // [C3] UI thread, under the WM_APP_PREVIEW_READY handler: cache each
@@ -1866,6 +1889,18 @@ bool BridgeDispatcher::EmitWindowState(bool maximized)
         {"type",    "evt"},
         {"kind",    "window/state"},
         {"payload", {{"maximized", maximized}}},
+    };
+    m_emit(env.dump());
+    return true;
+}
+
+bool BridgeDispatcher::EmitAutosaveHealth(bool healthy)
+{
+    if (!m_emit) return false;   // web not wired yet — caller replays on app/ready
+    json env = {
+        {"type",    "evt"},
+        {"kind",    "autosave/health"},
+        {"payload", {{"healthy", healthy}}},
     };
     m_emit(env.dump());
     return true;

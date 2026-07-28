@@ -64,8 +64,22 @@ public:
     // field to a spinner exceeded it.
     static const DWORD COALESCE_WINDOW_MS = 1500;
     static const size_t MAX_ENTRIES = 100;
+    // Aggregate byte budget, the companion to the entry cap above (2026-07
+    // audit, an-audit-finding). MAX_ENTRIES bounds HOW MANY snapshots are resident and
+    // says nothing about their size: a typical snapshot is well under 100 KB
+    // (~10 MB for a full stack), but snapshot size scales with emitter and
+    // track-key count, both of which run to five figures under the .alo caps —
+    // so a pathological system has no ceiling at all. 256 MB is far above any
+    // realistic stack, so normal editing never reaches it and behaviour there
+    // is unchanged; it only truncates history that would otherwise be unbounded.
+    static const size_t MAX_TOTAL_BYTES = 256u * 1024u * 1024u;
 
-    UndoStack();
+    // maxTotalBytes defaults to MAX_TOTAL_BYTES; production never passes it.
+    // It is a parameter so the eviction path can be exercised at a threshold a
+    // test can actually reach -- constructing 256 MB of real snapshots costs
+    // ~400 MB resident, which is a poor trade for a cap whose whole design
+    // intent is never to fire in normal use.
+    explicit UndoStack(size_t maxTotalBytes = MAX_TOTAL_BYTES);
     ~UndoStack();
 
     // Snapshot the current state. selectedIndex is the index into
@@ -177,6 +191,22 @@ private:
     bool              m_applying;
     // See IsLiveAhead(): tracks whether live is skewed ahead of the tip.
     bool              m_liveAhead;
+    // Aggregate snapshot budget for this stack; MAX_TOTAL_BYTES unless a
+    // caller overrode it. Const after construction.
+    size_t            m_maxTotalBytes;
+
+    // Evict from the front until BOTH caps hold. Called from the two push
+    // paths (Capture and CapturePreCoalesced) so they can't drift apart --
+    // the entry cap was previously duplicated inline in both.
+    //
+    // Always keeps at least one entry: an undo stack holding nothing cannot
+    // restore anything, and a single snapshot over budget is still the only
+    // thing standing between the user and a lost edit.
+    void EvictToBudget();
+
+public:
+    // Resident snapshot bytes, for tests and diagnostics.
+    size_t TotalBytes() const;
 };
 
 #endif

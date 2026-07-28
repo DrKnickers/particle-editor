@@ -3,10 +3,11 @@
 #include "ParticleSystem.h"
 #include "files.h"
 
-UndoStack::UndoStack()
+UndoStack::UndoStack(size_t maxTotalBytes)
     : m_cursor(0)
     , m_applying(false)
     , m_liveAhead(false)
+    , m_maxTotalBytes(maxTotalBytes)
 {
 }
 
@@ -60,6 +61,38 @@ DWORD UndoStack::MakeCoalesceKey(WORD notifyCode, WORD discriminator)
     // real notification code (lowest WM_APP-derived codes are >= 1).
     DWORD key = ((DWORD)notifyCode << 16) | (DWORD)discriminator;
     return (key == 0) ? 1 : key;
+}
+
+size_t UndoStack::TotalBytes() const
+{
+    size_t n = 0;
+    for (std::deque<Entry>::const_iterator it = m_entries.begin();
+         it != m_entries.end(); ++it)
+    {
+        n += it->snapshot.size();
+    }
+    return n;
+}
+
+void UndoStack::EvictToBudget()
+{
+    // Entry cap first (cheap), then the byte budget. Both evict the OLDEST
+    // entry, which is the one the user is least likely to reach for.
+    while (m_entries.size() > MAX_ENTRIES)
+    {
+        m_entries.pop_front();
+        if (m_cursor > 0) m_cursor--;
+    }
+    // > 1 so the newest entry always survives, however large it is: a stack
+    // that evicted its only snapshot could not undo the edit that just
+    // happened, which is strictly worse than being over budget.
+    size_t total = TotalBytes();
+    while (total > m_maxTotalBytes && m_entries.size() > 1)
+    {
+        total -= m_entries.front().snapshot.size();
+        m_entries.pop_front();
+        if (m_cursor > 0) m_cursor--;
+    }
 }
 
 bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
@@ -118,12 +151,7 @@ bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
     m_entries.push_back(std::move(e));
     m_cursor = m_entries.size();
 
-    // Cap stack depth.
-    while (m_entries.size() > MAX_ENTRIES)
-    {
-        m_entries.pop_front();
-        if (m_cursor > 0) m_cursor--;
-    }
+    EvictToBudget();
     return true;
 }
 
@@ -178,11 +206,7 @@ bool UndoStack::CapturePreCoalesced(const ParticleSystem& sys,
     m_entries.push_back(std::move(e));
     m_cursor = m_entries.size();
 
-    while (m_entries.size() > MAX_ENTRIES)
-    {
-        m_entries.pop_front();
-        if (m_cursor > 0) m_cursor--;
-    }
+    EvictToBudget();
     return true;
 }
 
