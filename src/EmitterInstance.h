@@ -33,7 +33,8 @@ private:
 	IDirect3DTexture9*		 m_pColorTexture;
 	IDirect3DTexture9*		 m_pNormalTexture;
 	bool					 m_doneSpawning;
-    TimeF                    m_nextSpawnTime;
+    TimeF                    m_nextSpawnTime = 0.0f;
+    bool                     m_nextSpawnUsesInitialDelay = true;
 	ParticleSystem::Emitter& m_emitter;
 	Engine&					 m_engine;
 	ParticleSystemInstance&	 m_system;

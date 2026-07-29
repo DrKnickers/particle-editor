@@ -717,8 +717,10 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 		// m_spawnDelay above does not move it — so raising the rate on a slow
 		// emitter changed nothing until the old delay elapsed, and the slider
 		// looked dead for up to a full second (2026-07 audit, an-audit-finding).
-		// Clamp only: never defer a spawn, never drag an overdue one forward.
-		m_nextSpawnTime = ReconcileNextSpawnTime(m_nextSpawnTime, GetTimeF(), m_spawnDelay);
+		// Clamp only after the authored initialDelay has elapsed: never collapse
+		// that first wait, defer a spawn, or drag an overdue one forward.
+		m_nextSpawnTime = ReconcileNextSpawnTime(m_nextSpawnTime, GetTimeF(),
+                                                 m_spawnDelay, m_nextSpawnUsesInitialDelay);
 
 		// Reload resources
 		SAFE_RELEASE(m_pColorTexture);
@@ -862,6 +864,7 @@ int EmitterInstance::Update(TimeF currentTime)
             if (m_engine.SpawnBudgetExhausted())
             {
                 m_engine.NoteSpawnSuppressed();
+                m_nextSpawnUsesInitialDelay = false;
                 m_nextSpawnTime = currentTime + GetSpawnDelay();
                 break;
             }
@@ -1099,6 +1102,7 @@ int EmitterInstance::SpawnParticles(TimeF spawnTime)
         numParticles++;
 	}
 
+    m_nextSpawnUsesInitialDelay = false;
     m_nextSpawnTime = spawnTime + GetSpawnDelay();
 
     // If the spawn delay beyond the FP addition accuracy,

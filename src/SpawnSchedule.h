@@ -17,18 +17,26 @@
 //   - Never drag an OVERDUE spawn forward. A scheduled time in the past means
 //     the emitter is behind and Update's catch-up loop owns it — rewriting it to
 //     now + delay silently swallows that round.
+//   - Never rewrite the first spawn scheduled from initialDelay. Property edits
+//     share this call path, and the steady-state delay says nothing about when
+//     that authored initial wait should end.
 //   - Only pull IN a spawn the new, shorter delay says is too far out.
 //
-// min() expresses all three. `scheduled = now + newDelay`, the obvious-looking
-// version, breaks the first two — which is exactly what the tests pin.
+// After excluding the initial-delay case, min() expresses the remaining three.
+// `scheduled = now + newDelay`, the obvious-looking version, breaks the first
+// two — which is exactly what the tests pin.
 
 typedef float SpawnTimeF;   // mirrors engine.h's TimeF; kept local so this
                             // header stays free of the engine's includes
 
 inline SpawnTimeF ReconcileNextSpawnTime(SpawnTimeF scheduled,
                                          SpawnTimeF now,
-                                         SpawnTimeF newDelay)
+                                         SpawnTimeF newDelay,
+                                         bool scheduledFromInitialDelay)
 {
+    if (scheduledFromInitialDelay)
+        return scheduled;
+
     const SpawnTimeF latest = now + newDelay;
     return (scheduled > latest) ? latest : scheduled;
 }
