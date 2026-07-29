@@ -21,9 +21,13 @@
 // Header-only; see tests/build_test_startup_callback_guard.bat.
 
 #include "host/StartupCallbackGuard.h"
+#include "host/CompositionStartupPolicy.h"
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <memory>
+#include <string>
 
 static int g_failed = 0;
 
@@ -31,6 +35,13 @@ static int g_failed = 0;
     if (cond) { std::printf("  ok: %s\n", msg); }          \
     else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
 } while (0)
+
+static std::string ReadSource(const std::filesystem::path& path)
+{
+    std::ifstream input(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(input),
+                       std::istreambuf_iterator<char>());
+}
 
 int main()
 {
@@ -114,6 +125,58 @@ int main()
         guard.Retire();
         CHECK(!envToken.OwnerAlive(), "env-creation token declines after retire");
         CHECK(!ctlToken.OwnerAlive(), "controller token declines after retire");
+    }
+
+    // --- 8. The second WebView2 create has its OWN synchronous HRESULT. A
+    // failed dispatch never calls the composition-controller completion, so it
+    // must enter the fatal path directly. S_FALSE is the overreach value: it is
+    // successful even though it is not bitwise-equal to S_OK.
+    CHECK(host::ShouldFailCompositionControllerDispatch(E_ACCESSDENIED),
+          "controller dispatch E_ACCESSDENIED is fatal");
+    CHECK(host::ShouldFailCompositionControllerDispatch(E_FAIL),
+          "controller dispatch E_FAIL is fatal");
+    CHECK(!host::ShouldFailCompositionControllerDispatch(S_OK),
+          "controller dispatch S_OK is not fatal");
+    CHECK(!host::ShouldFailCompositionControllerDispatch(S_FALSE),
+          "controller dispatch S_FALSE success is not fatal (overreach guard)");
+
+    // --- 9. PRODUCTION BINDING. The pure predicate alone cannot prove the
+    // environment callback observes the second create call. This source check
+    // pins that exact call site, the existing fatal message, and the original
+    // failure value. Without it, a header+test pair would stay green while the
+    // production callback silently returned the HRESULT to a runtime that
+    // discards it (an-audit-finding).
+    {
+        const std::string source = ReadSource(
+            std::filesystem::current_path() / "src" / "host" / "HostWindow.cpp");
+        CHECK(!source.empty(), "HostWindow production source is readable");
+
+        const size_t dispatch = source.find(
+            "const HRESULT controllerCreateHr =");
+        const size_t createCall = source.find(
+            "env3->CreateCoreWebView2CompositionController(", dispatch);
+        const size_t failureCheck = source.find(
+            "ShouldFailCompositionControllerDispatch(controllerCreateHr)",
+            createCall);
+        const size_t fatalPost = source.find(
+            "PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK",
+            failureCheck);
+        const size_t fatalValue = source.find(
+            "static_cast<WPARAM>(controllerCreateHr)", fatalPost);
+        const size_t callbackReturn = source.find(
+            "return controllerCreateHr;", fatalValue);
+
+        CHECK(dispatch != std::string::npos &&
+              createCall != std::string::npos && createCall > dispatch,
+              "production stores the second create call's own HRESULT");
+        CHECK(failureCheck != std::string::npos && failureCheck > createCall,
+              "production checks the synchronous controller-dispatch result");
+        CHECK(fatalPost != std::string::npos &&
+              fatalValue != std::string::npos &&
+              fatalPost > failureCheck && fatalValue > fatalPost,
+              "synchronous controller failure posts the fatal-composition message");
+        CHECK(callbackReturn != std::string::npos && callbackReturn > fatalValue,
+              "environment callback returns only after surfacing the second failure");
     }
 
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");

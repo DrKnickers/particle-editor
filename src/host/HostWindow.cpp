@@ -68,6 +68,7 @@
 #include "WebMessageIngressPolicy.h"   // ShouldAcceptWebMessage (bridge ingress cap)
 #include "ModulePath.h"               // host::ModuleDirectory (grow-until-it-fits module path)
 #include "StartupCallbackGuard.h"     // liveness token for the one-shot WebView2 creation callbacks
+#include "CompositionStartupPolicy.h" // second WebView2 create's synchronous failure channel
 
 #include "AcceleratorBridge.h"
 #include "AlphaCompositor.h"
@@ -2026,7 +2027,8 @@ HRESULT HostWindowImpl::InitWebView2()
                 }
 
                 Log("[host] composition: CreateCoreWebView2CompositionController dispatching\n");
-                return env3->CreateCoreWebView2CompositionController(
+                const HRESULT controllerCreateHr =
+                    env3->CreateCoreWebView2CompositionController(
                     hMain,
                     Callback<ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler>(
                         [this, startupToken](HRESULT cHr, ICoreWebView2CompositionController* ctl) -> HRESULT
@@ -2037,6 +2039,19 @@ HRESULT HostWindowImpl::InitWebView2()
                             if (!startupToken.OwnerAlive()) return S_OK;
                             return OnCompositionControllerReady(cHr, ctl);
                         }).Get());
+                if (ShouldFailCompositionControllerDispatch(controllerCreateHr))
+                {
+                    // The environment completion handler's return value is
+                    // discarded, so merely returning this HRESULT recreates
+                    // an-audit-finding one call deeper: a live window, no UI, exit 0.
+                    // Promote the synchronous dispatch failure to the same
+                    // terminal message used by async controller failures.
+                    Log("[host] composition: controller create dispatch FAILED hr=0x%08lx\n",
+                        controllerCreateHr);
+                    PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK,
+                                 static_cast<WPARAM>(controllerCreateHr), 0);
+                }
+                return controllerCreateHr;
             }).Get());
     Log("[host] CreateCoreWebView2EnvironmentWithOptions returned 0x%08lx (testHost=%d)\n",
         envCreateHr, useTestHost ? 1 : 0);
