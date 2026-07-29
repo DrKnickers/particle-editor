@@ -1540,7 +1540,14 @@ void HostWindowImpl::RenderD3D9()
         // in the steady state; full re-open + swapchain ResizeBuffers
         // only on actual handle change.
         const LONGLONG perfT3 = PerfQpcNow();
-        m_compositor->CompositeEngineFrame(engine->GetSharedTextureHandle());
+        const HRESULT compositeHr =
+            m_compositor->CompositeEngineFrame(engine->GetSharedTextureHandle());
+        // Production always attaches AlphaCompositor, so Engine::Render skips
+        // its own D3D9 Present. Forward the composed path's actual result or
+        // the D3D9Ex CheckDeviceState latch can never be raised (re-audit an-audit-finding).
+        // S_FALSE is the compositor's expected "no visual/texture this frame"
+        // result and NotifyPresentResult deliberately ignores it.
+        engine->NotifyPresentResult(compositeHr);
         const double perfCompositeUs = PerfUsSince(perfT3);
 
         perfWait.add(perfWaitUs);

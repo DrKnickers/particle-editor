@@ -306,6 +306,14 @@ void Engine::ReportFatalDeviceState(HRESULT hr)
 	fflush(stderr);
 }
 
+void Engine::NotifyPresentResult(HRESULT hr)
+{
+	if (devicestate::ShouldCheckDeviceAfterPresent(hr))
+	{
+		m_presentSuspect = true;
+	}
+}
+
 // [PERF] round-2 sub-profiling helpers — QPC microsecond deltas for the
 // per-pass timing in Render(). Frequency is fixed for the process; cache it.
 // Non-static: declared in engine_internal.h (render + reference TUs use it too).
@@ -328,6 +336,14 @@ IDirect3DTexture9* Engine::GetTexture(const string& name) const
 // Called from Reset() only. Deliberately NOT OnParticleSystemChanged(-1): that
 // also recomputes composites and calls SyncRootEmitters, which can SPAWN
 // emitters — a device reset must restore resources, not change the simulation.
+void Engine::ReleaseInstanceTextures()
+{
+	for (auto& instance : m_instances)
+	{
+		instance->ReleaseDeviceTextures();
+	}
+}
+
 void Engine::ReacquireInstanceTextures()
 {
 	for (auto& instance : m_instances)
@@ -622,6 +638,11 @@ void Engine::Reset()
 	// never reset). The Resize() call at the end of this function
 	// recreates the RT against the new back-buffer size.
 	if (m_pAlphaCompositor) m_pAlphaCompositor->ReleaseGpuResources();
+	// Each EmitterInstance owns separate +1 references to its color and normal
+	// textures. Drop those before the texture manager drops its cache refs;
+	// otherwise DEFAULT-pool textures remain live across Reset and Reset fails
+	// with D3DERR_INVALIDCALL (2026-07 re-audit an-audit-finding).
+	ReleaseInstanceTextures();
 	// D3DX texture helpers (D3DXCreateTextureFromFileInMemory,
 	// D3DXCreateTextureFromResource) silently substitute D3DPOOL_DEFAULT
 	// for D3DPOOL_MANAGED under D3D9Ex — the documented MANAGED default
@@ -675,13 +696,9 @@ void Engine::Reset()
 	m_skydomeSecondaryMesh.CreateBuffers(m_pDevice, m_fileManager);
 	m_referenceObjectMesh.CreateBuffers(m_pDevice, m_fileManager);   // phase 2
 	for (auto& a : m_referenceAttachments) if (a) a->mesh.CreateBuffers(m_pDevice, m_fileManager);   // attachments, phase 2
-	// The live emitters' textures are the one DEFAULT-pool holder this dance
-	// missed. m_textureManager.OnLostDevice() above dropped the CACHE's
-	// references, but each EmitterInstance holds its own OWNING reference
-	// (getTexture returns +1) — so nothing released them and nothing re-fetched
-	// them, and every placed emitter kept binding a handle Reset had
-	// invalidated. Must run AFTER the device Reset above, so the re-fetch
-	// builds against the new device (2026-07 audit, an-audit-finding).
+	// Phase two of the live-emitter texture dance. The owning references were
+	// released before TextureManager::OnLostDevice + Reset; re-fetch only now,
+	// against the successfully reset device.
 	ReacquireInstanceTextures();
 
 	ResetParameters();

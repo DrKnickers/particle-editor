@@ -88,6 +88,7 @@ public:
 	// onParticleSystemChanged(-1) ON PURPOSE: that also recomputes composites and
 	// re-syncs root emitters, and spawning emitters mid-device-reset is not what
 	// a Reset should do (2026-07 audit, an-audit-finding).
+	void  ReleaseDeviceTextures();
 	void  ReacquireDeviceTextures(const Engine& engine);
 	int   Update(TimeF currentTime);
 	void  Render(IDirect3DDevice9* pDevice);

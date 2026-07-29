@@ -15,6 +15,14 @@ void ParticleSystemInstance::onParticleSystemChanged(const Engine& engine, int t
 	}
 }
 
+void ParticleSystemInstance::ReleaseDeviceTextures()
+{
+    for (auto& emitter : m_emitters)
+	{
+        emitter->ReleaseDeviceTextures();
+	}
+}
+
 void ParticleSystemInstance::ReacquireDeviceTextures(const Engine& engine)
 {
     for (auto& emitter : m_emitters)

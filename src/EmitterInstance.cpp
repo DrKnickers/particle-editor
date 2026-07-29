@@ -695,10 +695,15 @@ int EmitterInstance::KillParticle(TimeF currentTime, Particle& particle)
 // references — so nothing freed them and nothing re-fetched them, and the
 // emitter went on binding a handle the device had invalidated
 // (2026-07 audit, an-audit-finding).
-void EmitterInstance::ReacquireDeviceTextures(const Engine& engine)
+void EmitterInstance::ReleaseDeviceTextures()
 {
 	SAFE_RELEASE(m_pColorTexture);
 	SAFE_RELEASE(m_pNormalTexture);
+}
+
+void EmitterInstance::ReacquireDeviceTextures(const Engine& engine)
+{
+	ReleaseDeviceTextures();
 	m_pColorTexture  = engine.GetTexture(m_emitter.colorTexture);
 	m_pNormalTexture = engine.GetTexture(m_emitter.normalTexture);
 }

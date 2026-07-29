@@ -179,7 +179,10 @@ public:
 	IDirect3DTexture9* GetTexture(const std::string& name) const;
 
 	void OnParticleSystemChanged(int track);
-	// Post-Reset re-fetch of every live emitter's textures (an-audit-finding).
+	// Two-phase device-Reset texture lifecycle for every live emitter.
+	// Release must run before TextureManager::OnLostDevice + Reset; reacquire
+	// must run only after Reset succeeds (2026-07 re-audit an-audit-finding).
+	void ReleaseInstanceTextures();
 	void ReacquireInstanceTextures();
 	// [D2] Force the next Update to run a full instance pass even with a
 	// frozen clock — for mutations that change particle APPEARANCE without
@@ -249,6 +252,11 @@ public:
 	// belt-and-suspenders no-op because Render() runs the same dance
 	// every frame.
 	bool RecoverDeviceIfNeeded();
+
+	// Feed both presentation paths into the same D3D9Ex suspect latch. The
+	// engine-side Present calls this directly; HostWindow forwards the HRESULT
+	// from Compositor::CompositeEngineFrame when composition owns Present1.
+	void NotifyPresentResult(HRESULT hr);
 
 	// Latch + log an unrecoverable device state (DEVICEHUNG / DEVICEREMOVED)
 	// exactly once. Both recovery sites — RecoverDeviceIfNeeded and the render

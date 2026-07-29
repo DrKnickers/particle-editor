@@ -84,6 +84,20 @@ inline Action ClassifyDeviceState(HRESULT hr)
     }
 }
 
+// True when a presentation result warrants a D3D9Ex CheckDeviceState probe on
+// the next frame. This is shared by the engine's direct D3D9 Present path and
+// the host's composed DXGI Present1 path so production cannot silently lose the
+// signal when an AlphaCompositor is attached.
+//
+// S_FALSE is deliberately healthy here: Compositor::CompositeEngineFrame uses
+// it for "no engine visual/current shared texture this frame." Treating that
+// expected no-op as device loss would poll CheckDeviceState every frame while
+// the visual is detached.
+inline bool ShouldCheckDeviceAfterPresent(HRESULT hr)
+{
+    return FAILED(hr) || hr == S_PRESENT_OCCLUDED || hr == S_PRESENT_MODE_CHANGED;
+}
+
 // True when the state is one no amount of Reset() will clear.
 inline bool IsFatalDeviceState(HRESULT hr)
 {

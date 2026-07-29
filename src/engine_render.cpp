@@ -1196,11 +1196,7 @@ bool Engine::Render()
 		// here raises the latch the top of Render() reads next frame
 		// (2026-07 audit, an-audit-finding).
 		const HRESULT presentHr = m_pDevice->Present(NULL, NULL, NULL, NULL);
-		if (FAILED(presentHr) || presentHr == S_PRESENT_OCCLUDED
-		    || presentHr == S_PRESENT_MODE_CHANGED)
-		{
-			m_presentSuspect = true;
-		}
+		NotifyPresentResult(presentHr);
 	}
 
 	// [PERF] round-2 — store per-pass us for the host to fold into [PERF2].
