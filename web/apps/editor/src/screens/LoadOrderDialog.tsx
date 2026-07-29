@@ -63,11 +63,11 @@ export function LoadOrderDialog({ bridge, open, onOpenChange, onApplied }: Props
     bridge.request({ kind: "mods/list", params: {} }).then((r) => {
       if (cancelled) return;
       setCatalog(Array.isArray(r?.layers) ? r.layers : []);
-      // Initialise the working order to the FULL incoming stack as-is — the host
-      // already validated/ghost-dropped it on restore. Do NOT filter to only the
-      // catalog: the catalog excludes mod roots without Data\Art (a migrated
-      // submod root, a MEG-packed mod), so dropping them here would silently erase those
-      // layers on Apply (the data-loss bug this guards against).
+      // Initialise the working order to the FULL incoming configured stack as-is.
+      // Do NOT filter to only the catalog: it excludes temporarily unavailable
+      // paths as well as mod roots without Data\Art (a migrated submod root or a
+      // MEG-packed mod), so dropping either kind here would silently erase those
+      // layers on Apply.
       setOrder(Array.isArray(r?.stack) ? r.stack : []);
     }).catch((err) => console.warn("[LoadOrderDialog] mods/list failed:", err));
     return () => { cancelled = true; };

@@ -37,6 +37,37 @@ inline bool LayerPathsEqual(const std::wstring& a, const std::wstring& b)
                     CanonicalizeLayerPath(b).c_str()) == 0;
 }
 
+// The user's configured order and the subset currently usable by the runtime
+// are deliberately different facts. A removable drive can be offline for one
+// launch; that must not turn temporary unavailability into a persisted deletion.
+struct ResolvedLayerStack
+{
+    std::vector<std::wstring> configured;  // canonical, deduplicated, may be unavailable
+    std::wstring              primary;     // first configured path that currently exists
+};
+
+inline ResolvedLayerStack ResolveLayerStack(
+    const std::vector<std::wstring>& layers,
+    const std::function<bool(const std::wstring&)>& dirExists)
+{
+    ResolvedLayerStack out;
+    for (const std::wstring& raw : layers)
+    {
+        const std::wstring c = CanonicalizeLayerPath(raw);
+        if (c.empty()) continue;
+
+        bool dup = false;
+        for (const std::wstring& configured : out.configured)
+            if (LayerPathsEqual(configured, c)) { dup = true; break; }
+        if (dup) continue;
+
+        out.configured.push_back(c);
+        if (out.primary.empty() && dirExists(c))
+            out.primary = c;
+    }
+    return out;
+}
+
 // Build FileManager content roots from an ordered layer stack (front = highest
 // precedence). Each layer is canonicalized, kept only if dirExists() AND not a
 // case-insensitive duplicate of an earlier kept layer, then emitted with a

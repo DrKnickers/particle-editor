@@ -217,49 +217,32 @@ void ModManager::RestoreLastLayerStack()
     // unreadable LastLayers now simply restores Unmodded.
     std::vector<wstring> stack = ReadLastLayers();
 
-    // Drop layers whose folder no longer exists (the existing ghost-drop behaviour);
-    // SetLayerStack persists the validated stack + applies it (no engine reload yet —
-    // the engine isn't bound at restore; SetLayerStack tolerates m_engine == null).
-    std::vector<wstring> present;
-    for (const wstring& p : stack)
-        if (PathIsDirectory(modlayers::CanonicalizeLayerPath(p).c_str()))
-            present.push_back(p);
-
-    // allowPersist=false: a RESTORE is not a user edit, so it must never write
-    // back. It used to. If a submod's drive was merely offline at launch, the
-    // filter above dropped it and SetLayerStack persisted the REDUCED stack —
-    // silently and permanently discarding the user's saved load order, with no
-    // recovery when the drive returned (2026-07 audit, an-audit-finding). The step-5
-    // comment in SetLayerStack already guards the adjacent case (don't persist
-    // a stack whose shaders failed to load); this is the same principle applied
-    // to a stack we couldn't fully resolve.
-    SetLayerStack(present, /*allowPersist=*/false);
-    printf("[Mods] Restored %zu layer(s)\n", present.size()); fflush(stdout);
+    // A RESTORE is not a user edit, so it must never write back. Preserve the
+    // full configured value in memory as well: a path on an offline removable
+    // drive is inactive for this session, not deleted from the user's order.
+    // SetLayerStack tolerates m_engine == null during startup.
+    SetLayerStack(stack, /*allowPersist=*/false);
+    printf("[Mods] Restored %zu configured layer(s)\n", m_layerStack.size()); fflush(stdout);
 }
 
 bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allowPersist,
                                std::string* outError)
 {
-    // Canonicalise, drop non-existent folders, and dedup (case-insensitive),
-    // preserving order. The existence filter keeps m_layerStack / GetLayerStack()
-    // / the persisted LastLayers free of ghost paths — matching what
-    // FileManager::SetLayers already does for content roots and what
-    // RestoreLastLayerStack's own pre-filter did (now redundant but harmless).
-    m_layerStack.clear();
-    for (const wstring& raw : absoluteLayers)
-    {
-        const wstring c = modlayers::CanonicalizeLayerPath(raw);
-        if (c.empty()) continue;
-        if (!PathIsDirectory(c.c_str())) continue;
-        bool dup = false;
-        for (const wstring& s : m_layerStack)
-            if (modlayers::LayerPathsEqual(s, c)) { dup = true; break; }
-        if (!dup) m_layerStack.push_back(c);
-    }
+    // Preserve the configured value even when a layer is temporarily
+    // unavailable. Runtime activation is separate: primary is the first path
+    // that exists now, and FileManager::SetLayers applies its own existence
+    // filter before building content roots.
+    const modlayers::ResolvedLayerStack resolved =
+        modlayers::ResolveLayerStack(absoluteLayers, [](const wstring& path) {
+            return PathIsDirectory(path.c_str()) != FALSE;
+        });
+    m_layerStack = resolved.configured;
+    m_primaryLayerPath = resolved.primary;
 
     const wstring primary = GetPrimaryLayerPath();
 
-    // 1. FileManager content roots (slash re-added by BuildContentRoots).
+    // 1. FileManager content roots (unavailable paths are filtered there;
+    //    slashes are re-added by BuildContentRoots).
     if (m_fileManager) m_fileManager->SetLayers(m_layerStack);
 
     // 2. Registry persistence is DEFERRED to after the engine reload below, so a
@@ -272,7 +255,7 @@ bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allow
     //    cache-clear / refresh was removed with the old UI.)
     TexturePalette::Store::Instance().SetActiveMod(primary);
 
-    printf("[Mods] Layer stack: %zu layer(s), primary=%S\n",
+    printf("[Mods] Layer stack: %zu configured layer(s), primary=%S\n",
            m_layerStack.size(), primary.empty() ? L"(unmodded)" : primary.c_str());
     fflush(stdout);
 

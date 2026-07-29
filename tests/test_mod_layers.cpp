@@ -46,6 +46,25 @@ int main()
         CHECK(veq(got, { L"C:\\m\\A\\", L"C:\\m\\C\\" }));
     }
 
+    // --- ResolveLayerStack: preserve the configured value independently of
+    //     which paths are available for this session. ---
+    {
+        auto existsOnlyA = [](const std::wstring& p) { return p == L"C:\\m\\A"; };
+        const ResolvedLayerStack got = ResolveLayerStack(
+            { L"C:\\m\\OfflineB\\", L"C:\\m\\A" }, existsOnlyA);
+        // Specific regression value: an offline B remains configured in front of
+        // A, while A is the first currently usable layer.
+        CHECK(veq(got.configured, { L"C:\\m\\OfflineB", L"C:\\m\\A" }));
+        CHECK(got.primary == L"C:\\m\\A");
+
+        // Overreach guard: preservation is not undeletability. If the caller
+        // explicitly removes B, only A remains configured and persisted.
+        const ResolvedLayerStack removed = ResolveLayerStack(
+            { L"C:\\m\\A" }, existsOnlyA);
+        CHECK(veq(removed.configured, { L"C:\\m\\A" }));
+        CHECK(removed.primary == L"C:\\m\\A");
+    }
+
     // (MigrateLegacySelection was deleted with the legacy LastMod/LastSubmods
     // migration: no released build ever wrote those values, so the fallback had
     // no reachable population. Absent LastLayers now restores Unmodded.)

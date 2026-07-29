@@ -10,9 +10,9 @@
 // driver's LastLayers/LastMod. The afterAll [] reset is in-session hygiene for
 // subsequent specs, not persistence cleanup.
 //
-// Fixture layers are empty-but-present dirs (tests/fixtures/mods/mod-*) —
-// SetLayerStack keeps any path that passes PathIsDirectory; no Data content
-// is required for stack mechanics.
+// Fixture layers are empty-but-present dirs (tests/fixtures/mods/mod-*).
+// Configured stacks may also retain an unavailable path, but only a present
+// path can become active; no Data content is required for stack mechanics.
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -102,12 +102,24 @@ test("reorder → front layer (primary) swaps", async () => {
   expect(endsWithDir(list.activePath ?? "", "mod-beta")).toBe(true);
 });
 
-test("nonexistent layer paths are dropped, not errored", async () => {
+test("an unavailable layer stays configured but inactive until explicitly removed", async () => {
   const ghost = resolve(fixturesDir, "mod-does-not-exist");
-  const r = await setLayers([modAlpha, ghost]);
+  const r = await setLayers([ghost, modAlpha]);
   expect(r.ok).toBe(true);
-  expect(r.stack).toHaveLength(1); // ghost silently filtered by SetLayerStack
-  expect(endsWithDir(r.stack[0], "mod-alpha")).toBe(true);
+  expect(r.stack).toHaveLength(2);
+  expect(endsWithDir(r.stack[0], "mod-does-not-exist")).toBe(true);
+  expect(endsWithDir(r.stack[1], "mod-alpha")).toBe(true);
+
+  const preserved = await modsList();
+  expect(preserved.stack).toHaveLength(2);
+  // Overreach guard: the unavailable front entry is configured, not active.
+  expect(endsWithDir(preserved.activePath ?? "", "mod-alpha")).toBe(true);
+
+  const removed = await setLayers([modAlpha]);
+  expect(removed.ok).toBe(true);
+  expect(removed.stack).toHaveLength(1);
+  expect(endsWithDir(removed.stack[0], "mod-alpha")).toBe(true);
+  expect((await modsList()).stack).toHaveLength(1);
 });
 
 test("clear → unmodded", async () => {

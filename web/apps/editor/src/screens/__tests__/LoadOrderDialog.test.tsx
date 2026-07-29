@@ -101,6 +101,22 @@ describe("LoadOrderDialog", () => {
     expect(onApplied).toHaveBeenCalled();
   });
 
+  it("persists an explicit removal of an unavailable in-stack path", async () => {
+    const bridge = makeBridge(["C:/m/OfflineB", "C:/m/Alpha/Bravo"]);
+    render(<LoadOrderDialog bridge={bridge} open onOpenChange={() => {}} onApplied={() => {}} />);
+    await waitFor(() => screen.getByRole("button", { name: "Remove OfflineB" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove OfflineB" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => {
+      expect(bridge.request).toHaveBeenCalledWith({
+        kind: "mods/set-layers",
+        params: { paths: ["C:/m/Alpha/Bravo"] },
+      });
+    });
+  });
+
   it("Search mods filters the available list (case-insensitive) with an empty state", async () => {
     render(<LoadOrderDialog bridge={makeBridge([])} open onOpenChange={() => {}} onApplied={() => {}} />);
     await waitFor(() => screen.getByRole("button", { name: "Add Bravo" }));

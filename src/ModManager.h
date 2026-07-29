@@ -80,7 +80,9 @@ public:
 
     // Reads HKCU\Software\AloParticleEditor\LastLayers and applies the
     // persisted ordered content-layer stack; absent or unreadable means
-    // Unmodded. Layers whose folder no longer exists are dropped. Idempotent.
+    // Unmodded. Temporarily unavailable paths remain configured but inactive
+    // so a removable drive being offline cannot erase the saved order.
+    // Idempotent.
     void RestoreLastLayerStack();
 
     // Quick-switch shorthand: replace the whole stack with a single layer
@@ -88,11 +90,12 @@ public:
     // the full side-effect chain and the partial-success (false) semantics.
     bool SelectMod(const std::wstring& modPath);
 
-    // Set the ordered content-layer stack (absolute paths, front = highest
-    // precedence; [] = Unmodded). Canonicalised + de-duplicated; drives
-    // FileManager::SetLayers, persists LastLayers (+ a best-effort LastMod =
-    // primary, a write-only record nothing reads anymore), swaps the texture
-    // palette to the primary layer, clears the thumbnail cache, and reloads
+    // Set the ordered configured content-layer stack (absolute paths, front =
+    // highest precedence; [] = Unmodded). Canonicalised + de-duplicated without
+    // dropping temporarily unavailable paths. FileManager activates only paths
+    // that currently exist; LastLayers retains the full configured value.
+    // LastMod remains a best-effort write-only record of the first active layer.
+    // Also swaps the texture palette, clears the thumbnail cache, and reloads
     // engine assets (if bound).
     // Returns false if the engine shader reload failed OR the stack could not be
     // persisted (state still rolls forward in memory either way).
@@ -108,16 +111,17 @@ public:
 
     // Read-only accessors.
     const std::vector<ModEntry>& GetMods() const { return m_mods; }
+    // Full configured order, including paths unavailable in this session.
     const std::vector<std::wstring>& GetLayerStack() const { return m_layerStack; }
     // Resolved game install root(s) (argv-or-registry, primary first) — the same
     // roots mods are discovered under. The --record path resolves a ${GAME} token
     // against GameRoots().front() so a clip's mod path survives a reinstall.
     const std::vector<std::wstring>& GameRoots() const { return m_gameRoots; }
-    // Primary layer = top of the stack (highest precedence), or empty when Unmodded.
-    // The single-path "active mod" view for the texture palette, file dialogs, and
-    // the snapshot's activeModPath (the quick-switch checkmark).
-    std::wstring GetPrimaryLayerPath() const
-    { return m_layerStack.empty() ? std::wstring() : m_layerStack.front(); }
+    // Primary layer = first currently available configured path (highest active
+    // precedence), or empty when no configured path is available. The single-path
+    // "active mod" view for the texture palette, file dialogs, and the snapshot's
+    // activeModPath (the quick-switch checkmark).
+    std::wstring GetPrimaryLayerPath() const { return m_primaryLayerPath; }
 
 private:
     bool                      m_ephemeral = false;  // --drive: suppress registry writes
@@ -125,7 +129,8 @@ private:
     Engine*                   m_engine = nullptr;
     std::vector<std::wstring> m_gameRoots;
     std::vector<ModEntry>     m_mods;
-    std::vector<std::wstring> m_layerStack;   // absolute slash-free, [0]=highest
+    std::vector<std::wstring> m_layerStack;       // configured, absolute slash-free
+    std::wstring              m_primaryLayerPath; // first configured path that exists
 };
 
 // Registry helper for mod nicknames, exposed for direct use by the host
