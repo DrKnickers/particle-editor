@@ -1373,7 +1373,10 @@ bool Engine::SetSkydomeCustomPath(int slot, const std::wstring& path)
     m_skydomeCustomSlotPaths[slot - kSkydomeFirstCustomSlot] = path;
     if (m_skydomeIndex == slot)
     {
-        return ReloadSkydomeTexture(slot);
+        const bool reloaded = ReloadSkydomeTexture(slot);
+        // Empty is a successful clear, even though there is intentionally no
+        // texture to reload. Preserve real load failures for non-empty paths.
+        return path.empty() || reloaded;
     }
     return true;
 }

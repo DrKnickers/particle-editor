@@ -78,6 +78,7 @@ function basename(path: string): string {
  */
 export function GroundTexturePanelBody({ bridge }: BodyProps) {
   const [snapshot, setSnapshot] = useState<EngineStateDto | null>(null);
+  const [customPathError, setCustomPathError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,10 +156,11 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
     void bridge.request({ kind: "engine/set/ground-z", params: { z } });
   };
   const handleCustomClick = (slot: number, isEmpty: boolean) => {
+    setCustomPathError(null);
     if (isEmpty) {
       // Chain: native picker (DDS/TGA filter) → write the chosen path
-      // into the slot → activate the slot. Aborts silently on cancel
-      // or failure. Mirrors BackgroundPicker's custom-skydome flow.
+      // into the slot → activate the slot. Cancel remains silent; a rejected
+      // setter is reported below and never advances to slot activation.
       void (async () => {
         const r = await bridge.request({
           kind: "file/pick-open",
@@ -173,7 +175,12 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
           kind: "engine/set/ground-texture",
           params: { slot },
         });
-      })();
+      })().catch((err) => {
+        console.warn("[GroundTexturePanel] custom texture failed:", err);
+        setCustomPathError(
+          "Couldn't use that ground texture. Choose a local DDS or TGA file.",
+        );
+      });
       return;
     }
     handleSelectSlot(slot);
@@ -291,6 +298,15 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
           );
         })}
       </div>
+
+      {customPathError && (
+        <p
+          role="alert"
+          className="mb-3 rounded border border-red-500/40 bg-red-500/10 px-2 py-1.5 text-xs text-red-200"
+        >
+          {customPathError}
+        </p>
+      )}
 
       {/* Custom slots 5..7 — 3-column grid, browse placeholders. */}
       <div className="grid grid-cols-3 gap-2">

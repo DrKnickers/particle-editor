@@ -84,13 +84,12 @@ inline std::string SanitizeAssetName(std::string n)
 // registry restore), so one pasted string keeps leaking on every launch
 // (2026-07 audit, an-audit-finding).
 //
-// The rule is deliberately syntactic and blunt: refuse any path beginning with
-// two separators. That covers UNC ("\\host\share"), the device namespace
-// ("\\.\PhysicalDrive0"), and the UNC spelling of the extended-length prefix
-// ("\\?\UNC\host\share"). It also refuses the LOCAL extended-length form
-// ("\\?\C:\..."); that is collateral and accepted — a file picker does not
-// produce it, and a rule that can be read at a glance is worth more here than
-// an exhaustive one.
+// The rule is deliberately syntactic: a two-separator path is accepted only
+// when its server component is an exact, case-insensitive match for a local
+// endpoint ("localhost", "127.0.0.1", or Windows' "wsl.localhost" pseudo-share).
+// Every other UNC host, the device namespace ("\\.\PhysicalDrive0"), and the
+// extended-length prefix ("\\?\...") remain refused. Matching the complete
+// server component matters: "\\localhost.attacker\share" is remote.
 //
 // NOT covered, deliberately: a mapped network drive ("Z:\x.dds") is still
 // remote, but telling it apart needs GetDriveTypeW — a filesystem call this
@@ -104,7 +103,27 @@ inline bool IsLocalCustomAssetPath(const std::wstring& p)
     if (p.empty()) return true;
     const bool sep0 = (p[0] == L'\\' || p[0] == L'/');
     const bool sep1 = (p.size() >= 2) && (p[1] == L'\\' || p[1] == L'/');
-    return !(sep0 && sep1);
+    if (!(sep0 && sep1)) return true;
+
+    const size_t hostStart = 2;
+    const size_t hostEnd = p.find_first_of(L"\\/", hostStart);
+    const size_t hostLength =
+        (hostEnd == std::wstring::npos ? p.size() : hostEnd) - hostStart;
+    auto hostEquals = [&](const wchar_t* expected) {
+        size_t expectedLength = 0;
+        while (expected[expectedLength] != L'\0') ++expectedLength;
+        if (hostLength != expectedLength) return false;
+        for (size_t i = 0; i < hostLength; ++i)
+        {
+            wchar_t actual = p[hostStart + i];
+            if (actual >= L'A' && actual <= L'Z') actual += L'a' - L'A';
+            if (actual != expected[i]) return false;
+        }
+        return true;
+    };
+    return hostEquals(L"localhost") ||
+           hostEquals(L"127.0.0.1") ||
+           hostEquals(L"wsl.localhost");
 }
 
 inline std::vector<std::string> SafeTextureCandidates(const std::string& bareName)

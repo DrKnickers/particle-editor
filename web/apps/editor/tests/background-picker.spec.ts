@@ -18,6 +18,7 @@
 // would otherwise wait on `engine/state/changed` instead poll a fresh
 // `engine/state/snapshot` after the mutation lands.
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 
@@ -121,6 +122,138 @@ test("engine/set/skydome-custom-path persists across snapshots (slot 9)", async 
     return snap.skydomeCustomPaths[0];
   });
   expect(after).toBe("C:/fake/test.dds");
+});
+
+test("custom slot paths accept local UNC hosts but still reject remote hosts", async () => {
+  const localPath = "\\\\wsl.localhost\\Ubuntu\\textures\\ground.dds";
+  const remotePath = "\\\\attacker\\share\\ground.dds";
+  const result = await page.evaluate(async ({ localPath, remotePath }) => {
+    const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
+      .bridge;
+    if (!b) throw new Error("window.bridge not attached");
+
+    let localResolved = true;
+    try {
+      await b.request({
+        kind: "engine/set/skydome-custom-path",
+        params: { slot: 10, path: localPath },
+      });
+    } catch {
+      localResolved = false;
+    }
+    const afterLocal = (await b.request({
+      kind: "engine/state/snapshot",
+      params: {},
+    })) as { skydomeCustomPaths: string[] };
+
+    let remoteRejected = false;
+    try {
+      await b.request({
+        kind: "engine/set/skydome-custom-path",
+        params: { slot: 10, path: remotePath },
+      });
+    } catch {
+      remoteRejected = true;
+    }
+    const afterRemote = (await b.request({
+      kind: "engine/state/snapshot",
+      params: {},
+    })) as { skydomeCustomPaths: string[] };
+    await b.request({
+      kind: "engine/set/skydome-custom-path",
+      params: { slot: 10, path: "" },
+    });
+    return {
+      localResolved,
+      localStored: afterLocal.skydomeCustomPaths[1],
+      remoteRejected,
+      afterRemote: afterRemote.skydomeCustomPaths[1],
+    };
+  }, { localPath, remotePath });
+
+  expect(result.localResolved).toBe(true);
+  expect(result.localStored).toBe(localPath);
+  expect(result.remoteRejected).toBe(true);
+  expect(result.afterRemote).toBe(localPath);
+});
+
+test("clearing an active custom skydome path succeeds without hiding real load failures", async ({}, testInfo) => {
+  await mkdir(testInfo.outputDir, { recursive: true });
+  const texturePath = testInfo.outputPath("active-skydome.bmp");
+  const missingPath = testInfo.outputPath("missing-skydome.bmp");
+  const onePixelBmp = Buffer.from(
+    "Qk06AAAAAAAAADYAAAAoAAAAAQAAAAEAAAABABgAAAAAAAQAAAATCwAAEwsAAAAAAAAAAAAAAAD/AA==",
+    "base64",
+  );
+  await writeFile(texturePath, onePixelBmp);
+
+  try {
+    const result = await page.evaluate(async ({ texturePath, missingPath }) => {
+      const b = (window as { bridge?: { request(r: { kind: string; params: object }): Promise<unknown> } })
+        .bridge;
+      if (!b) throw new Error("window.bridge not attached");
+
+      try {
+        await b.request({
+          kind: "engine/set/skydome-custom-path",
+          params: { slot: 9, path: texturePath },
+        });
+        await b.request({ kind: "engine/set/skydome-slot", params: { slot: 9 } });
+        const active = (await b.request({
+          kind: "engine/state/snapshot",
+          params: {},
+        })) as { skydomeSlot: number };
+
+        let missingRejected = false;
+        try {
+          await b.request({
+            kind: "engine/set/skydome-custom-path",
+            params: { slot: 9, path: missingPath },
+          });
+        } catch {
+          missingRejected = true;
+        }
+
+        // Recover the active texture before exercising the clear operation.
+        await b.request({
+          kind: "engine/set/skydome-custom-path",
+          params: { slot: 9, path: texturePath },
+        });
+        let clearResolved = true;
+        try {
+          await b.request({
+            kind: "engine/set/skydome-custom-path",
+            params: { slot: 9, path: "" },
+          });
+        } catch {
+          clearResolved = false;
+        }
+        const cleared = (await b.request({
+          kind: "engine/state/snapshot",
+          params: {},
+        })) as { skydomeCustomPaths: string[] };
+        return {
+          activeSlot: active.skydomeSlot,
+          missingRejected,
+          clearResolved,
+          clearedPath: cleared.skydomeCustomPaths[0],
+        };
+      } finally {
+        await b.request({ kind: "engine/set/skydome-slot", params: { slot: 0 } });
+        await b.request({
+          kind: "engine/set/skydome-custom-path",
+          params: { slot: 9, path: "" },
+        });
+      }
+    }, { texturePath, missingPath });
+
+    expect(result.activeSlot).toBe(9);
+    expect(result.missingRejected).toBe(true);
+    expect(result.clearResolved).toBe(true);
+    expect(result.clearedPath).toBe("");
+  } finally {
+    await unlink(texturePath).catch(() => {});
+  }
 });
 
 test("undo/perform dispatches end-to-end and resolves with a boolean `applied`", async () => {

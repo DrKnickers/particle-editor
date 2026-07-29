@@ -114,6 +114,12 @@ int main()
               "custom path: extended-length UNC rejected");
         CHECK(!IsLocalCustomAssetPath(L"\\\\.\\PhysicalDrive0"),
               "custom path: device namespace rejected");
+        CHECK(!IsLocalCustomAssetPath(L"\\\\localhost.attacker\\share\\x.dds"),
+              "custom path: localhost prefix spoof remains remote");
+        CHECK(!IsLocalCustomAssetPath(L"\\\\127.0.0.1.attacker\\share\\x.dds"),
+              "custom path: loopback prefix spoof remains remote");
+        CHECK(!IsLocalCustomAssetPath(L"\\\\wsl.localhost.attacker\\share\\x.dds"),
+              "custom path: WSL prefix spoof remains remote");
 
         // ACCEPT: the overreach guards. Each of these is a path a user really
         // supplies; rejecting any of them breaks the feature outright, which is
@@ -131,6 +137,14 @@ int main()
               "custom path: plain relative accepted");
         CHECK(IsLocalCustomAssetPath(L""),
               "custom path: empty accepted (this is how a slot is CLEARED)");
+        CHECK(IsLocalCustomAssetPath(L"\\\\localhost\\share\\x.dds"),
+              "custom path: localhost UNC accepted");
+        CHECK(IsLocalCustomAssetPath(L"//LOCALHOST/share/x.dds"),
+              "custom path: localhost UNC is case-insensitive and separator-agnostic");
+        CHECK(IsLocalCustomAssetPath(L"\\\\127.0.0.1\\share\\x.dds"),
+              "custom path: IPv4 loopback UNC accepted");
+        CHECK(IsLocalCustomAssetPath(L"\\\\wsl.localhost\\Ubuntu\\x.dds"),
+              "custom path: WSL pseudo-UNC accepted");
 
         // Boundary: a lone separator must not be read as the start of a UNC
         // pair by an over-eager two-character check on a one-character string.

@@ -4,8 +4,9 @@
 //      pops the DDS/TGA picker, not the .alo one).
 //   3. On a resolved path, the chain dispatches set-ground-slot-custom-path
 //      then set-ground-texture in order.
-//   4. Height spinner → engine/set/ground-z.
-//   5. Solid-colour tile → selects slot 4; native colour input →
+//   4. A rejected custom path is reported and never activated.
+//   5. Height spinner → engine/set/ground-z.
+//   6. Solid-colour tile → selects slot 4; native colour input →
 //      engine/set/ground-solid-color.
 
 import { describe, it, expect, vi } from "vitest";
@@ -19,6 +20,7 @@ type RequestFn = (req: { kind: string; params?: Record<string, unknown> }) => Pr
 function makeStubBridge(
   opts: {
     fileOpen?: { ok: true; path: string } | { ok: false; error: string };
+    groundSlotPathError?: Error;
     groundSlotAvailable?: boolean[];
   } = {},
 ): Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> } {
@@ -61,6 +63,9 @@ function makeStubBridge(
     if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
     if (req.kind === "file/pick-open") {
       return Promise.resolve(opts.fileOpen ?? { ok: false, error: "browser-mode" });
+    }
+    if (req.kind === "engine/set/ground-slot-custom-path" && opts.groundSlotPathError) {
+      return Promise.reject(opts.groundSlotPathError);
     }
     return Promise.resolve({});
   });
@@ -136,6 +141,10 @@ describe("GroundTexturePanel", () => {
       expect(open).toBeDefined();
       expect(open.params).toEqual({ filter: "ground" });
     });
+    const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].kind);
+    expect(calls).not.toContain("engine/set/ground-slot-custom-path");
+    expect(calls).not.toContain("engine/set/ground-texture");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("on a resolved path the chain dispatches set-ground-slot-custom-path then set-ground-texture", async () => {
@@ -161,6 +170,31 @@ describe("GroundTexturePanel", () => {
     const activateCalls = calls.filter((c) => c.kind === "engine/set/ground-texture");
     const lastActivate = activateCalls[activateCalls.length - 1];
     expect(lastActivate.params).toEqual({ slot: 5 });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("reports a rejected custom path and does not activate that slot", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const bridge = makeStubBridge({
+      fileOpen: { ok: true, path: "\\\\attacker\\share\\ground.dds" },
+      groundSlotPathError: new Error("ground slot path rejected"),
+    });
+    render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Custom slot 1 \(empty\)/ }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't use that ground texture. Choose a local DDS or TGA file.",
+    );
+    const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].kind);
+    expect(calls).toContain("engine/set/ground-slot-custom-path");
+    expect(calls).not.toContain("engine/set/ground-texture");
+    expect(warn).toHaveBeenCalledWith(
+      "[GroundTexturePanel] custom texture failed:",
+      expect.any(Error),
+    );
+    warn.mockRestore();
   });
 
   it("changing the Height spinner dispatches engine/set/ground-z", () => {
