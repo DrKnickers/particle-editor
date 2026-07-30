@@ -394,20 +394,45 @@ namespace
         return std::string();
     }
 
-    // Split a list on commas / whitespace / '|' and LOWER-case each token (object
-    // Names are matched case-INSENSITIVELY -- mods reference e.g. `Tie_*` against `TIE_*`).
-    std::vector<std::string> tokenizeCommaLower(const std::string& s)
+    // Consume one fieldable-token work operation BEFORE its lookup/push/map
+    // side effect. The comparison precedes the increment, so the exact boundary
+    // is accepted and the counter itself can never overflow.
+    bool consumeFieldableTokenWork(unsigned long& used)
     {
-        std::vector<std::string> out;
+        if (used >= kMaxCatalogFieldableTokenWork) return false;
+        ++used;
+        return true;
+    }
+
+    // Split a list on commas / whitespace / '|' and LOWER-case each token (object
+    // Names are matched case-INSENSITIVELY -- mods reference e.g. `Tie_*` against
+    // `TIE_*`). Every emitted token is temporary allocation/work even if a later
+    // map operation deduplicates it, so charge before pushing it into `out`.
+    bool tokenizeCommaLower(const std::string& s,
+                            unsigned long& fieldableTokenWork,
+                            std::vector<std::string>& out)
+    {
+        out.clear();
         std::string cur;
         for (char ch : s)
         {
             if (ch == ',' || ch == '|' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n')
-            { if (!cur.empty()) { out.push_back(cur); cur.clear(); } }
+            {
+                if (!cur.empty())
+                {
+                    if (!consumeFieldableTokenWork(fieldableTokenWork)) return false;
+                    out.push_back(cur);
+                    cur.clear();
+                }
+            }
             else cur += (char)std::tolower((unsigned char)ch);
         }
-        if (!cur.empty()) out.push_back(cur);
-        return out;
+        if (!cur.empty())
+        {
+            if (!consumeFieldableTokenWork(fieldableTokenWork)) return false;
+            out.push_back(cur);
+        }
+        return true;
     }
     // A spawn-list token like "...Squadron, 1" -- the count is numeric, the name is not.
     bool isNumericToken(const std::string& t)
@@ -470,25 +495,46 @@ namespace
     // throughout (the catalog keys are already folded). A HARD picker keep-gate
     // (IsPickerListed); the --dump-catalog audit lists kept-but-non-fieldable so a real
     // unit can never silently vanish.
-    void markFieldable(IFileManager& fm,
+    bool markFieldable(IFileManager& fm,
                        const std::map<std::string, RawEntry>& byName,
                        std::vector<GameObjectRef>& objects)
     {
+        unsigned long fieldableTokenWork = 0;
         std::map<std::string, unsigned> bits;   // folded name -> FieldSource bits
 
         std::set<std::string> roster;
         readRosterLua(fm, roster);
-        for (const std::string& n : roster) bits[n] |= FS_Roster;
+        for (const std::string& n : roster)
+        {
+            if (!consumeFieldableTokenWork(fieldableTokenWork)) return false;
+            bits[n] |= FS_Roster;
+        }
 
+        std::vector<std::string> tokens;
         for (const auto& kv : byName)
         {
             const std::string& key = kv.first;   // already folded
             if (!resolveRaw(key, byName, &RawEntry::costRaw).empty())
                 bits[key] |= FS_Buildable;
-            for (const std::string& t : tokenizeCommaLower(resolveRaw(key, byName, &RawEntry::buildMenuRaw)))
+
+            if (!tokenizeCommaLower(resolveRaw(key, byName, &RawEntry::buildMenuRaw),
+                                    fieldableTokenWork, tokens))
+                return false;
+            for (const std::string& t : tokens)
+            {
+                if (!consumeFieldableTokenWork(fieldableTokenWork)) return false;
                 bits[t] |= FS_StructureBuilt;
-            for (const std::string& t : tokenizeCommaLower(resolveRaw(key, byName, &RawEntry::spawnRaw)))
-                if (!isNumericToken(t)) bits[t] |= FS_Spawned;
+            }
+
+            if (!tokenizeCommaLower(resolveRaw(key, byName, &RawEntry::spawnRaw),
+                                    fieldableTokenWork, tokens))
+                return false;
+            for (const std::string& t : tokens)
+            {
+                if (isNumericToken(t)) continue;
+                if (!consumeFieldableTokenWork(fieldableTokenWork)) return false;
+                bits[t] |= FS_Spawned;
+            }
         }
 
         // Expand wrappers: a fieldable Squadron/Company's members become fieldable too
@@ -498,16 +544,27 @@ namespace
         {
             auto it = bits.find(kv.first);
             if (it == bits.end()) continue;
-            for (const std::string& m : tokenizeCommaLower(resolveRaw(kv.first, byName, &RawEntry::squadronUnitsRaw)))
+            if (!tokenizeCommaLower(resolveRaw(kv.first, byName, &RawEntry::squadronUnitsRaw),
+                                    fieldableTokenWork, tokens))
+                return false;
+            for (const std::string& m : tokens)
+            {
+                if (!consumeFieldableTokenWork(fieldableTokenWork)) return false;
                 expand.emplace_back(m, it->second);
+            }
         }
-        for (const auto& e : expand) bits[e.first] |= e.second;
+        for (const auto& e : expand)
+        {
+            if (!consumeFieldableTokenWork(fieldableTokenWork)) return false;
+            bits[e.first] |= e.second;
+        }
 
         for (GameObjectRef& r : objects)
         {
             auto it = bits.find(asciiLower(r.name));
             if (it != bits.end()) { r.fieldable = true; r.fieldSource = it->second; }
         }
+        return true;
     }
 
     // Phase 2 for HardPoints: an object's own <HardPoints> list wins; otherwise
@@ -773,7 +830,14 @@ bool BuildGameObjectCatalog(IFileManager& fm, GameObjectCatalog& out)
 
     // Fieldable reference-graph + lua roster pass (after objects exist; reads `fm`
     // for GameObjectList.lua). Marks the player-fieldable units/structures for the picker.
-    markFieldable(fm, byName, out.objects);
+    if (!markFieldable(fm, byName, out.objects))
+    {
+        // The cap is a refusal contract, not a truncation contract: no partially
+        // classified objects or hardpoint table may escape as a usable catalog.
+        out.objects.clear();
+        out.hardpoints.clear();
+        return false;
+    }
 
     if (timing)
     {

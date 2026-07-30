@@ -26,6 +26,14 @@ static const unsigned long kMaxXmlNodes          = 2u * 1000u * 1000u;  // 2M el
 static const unsigned long kMaxXmlAttributes     = 131072u;
 static const unsigned long kMaxCatalogXmlFileCount = 4096u;
 static const unsigned long kMaxCatalogXmlTotalBytes = kMaxXmlFileBytes;
+// Total fieldable-token PROCESSING work for one game-object catalog build
+// (2026-07 audit, an-audit-finding). This counts temporary token-vector pushes, roster /
+// build / spawn map applications, member-expansion pushes, and expansion replay.
+// Repeated or inherited lists consume work again even when their final names
+// deduplicate in the field-source map. The approved ceiling is aggregate across
+// the build; a local seven-profile sample observed a maximum of 58,750
+// operations. Exceeding the approved ceiling rejects rather than truncates.
+static const unsigned long kMaxCatalogFieldableTokenWork = 131072u;
 static const unsigned long kMaxMegNameTableBytes = 16u * 1024u * 1024u; // 16 MiB
 static const unsigned long kMaxMegEntryCount     = 1u  * 1024u * 1024u; // 1M entries
 static const uint16_t      kMaxFilenameLength    = 32768;               // 32 KiB

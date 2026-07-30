@@ -114,6 +114,59 @@ static const GameObjectRef* find(const GameObjectCatalog& cat, const std::string
     return nullptr;
 }
 
+// Literal an-audit-finding accounting fixture, deliberately independent of the production
+// constant:
+//   32,766 inherited menu tokens * 2 entries
+//       * (temporary-token push + field-source map application) = 131,064
+//   1 roster field-source map application =                                  1
+//   2 numeric spawn tokens (temporary-token pushes; discarded before map)
+//       + 1 nonnumeric spawn token (temporary-token push + map application) = 4
+//   1 Company_Units member
+//       * (temporary-token push + expand push + map replay) =                 3
+//                                                                    ----------
+//                                                                      131,072
+// `oneOver` adds one more discarded numeric spawn-token push: literal 131,073.
+// The repeated inherited menu leaves the final map at only 32,766 menu names,
+// proving the budget measures aggregate processing rather than unique results.
+static const char* kFieldableBudgetRoster =
+    "return {\n[\"BUDGET_ROSTER\"] = true,\n}\n";
+
+static std::string makeFieldableWorkDocument(bool oneOver)
+{
+    std::string menu;
+    menu.reserve(32766u * 8u);
+    for (unsigned long i = 0; i < 32766u; ++i)
+    {
+        if (!menu.empty()) menu += ' ';
+        menu += "F";
+        menu += std::to_string(i);
+    }
+
+    std::string xml =
+        "<Objects>"
+        "  <GroundStructure Name=\"Budget_Base\">"
+        "    <Tactical_Buildable_Objects_Campaign>";
+    xml += menu;
+    xml +=
+        "</Tactical_Buildable_Objects_Campaign></GroundStructure>"
+        "  <GroundStructure Name=\"Budget_Variant\">"
+        "    <Variant_Of_Existing_Type>Budget_Base</Variant_Of_Existing_Type>"
+        "  </GroundStructure>"
+        "  <GroundCompany Name=\"Budget_Wrapper\">"
+        "    <Build_Cost_Credits>1</Build_Cost_Credits>"
+        "    <Reserve_Spawned_Units_Tech_0>1 2 Budget_Spawn";
+    if (oneOver) xml += " 3";
+    xml +=
+        "</Reserve_Spawned_Units_Tech_0>"
+        "    <Company_Units>Budget_Member</Company_Units>"
+        "  </GroundCompany>"
+        "  <GroundInfantry Name=\"Budget_Member\">"
+        "    <Land_Model_Name>EI_Budget_Member.ALO</Land_Model_Name>"
+        "  </GroundInfantry>"
+        "</Objects>";
+    return xml;
+}
+
 // --- dump mode -------------------------------------------------------------
 
 // A FileManager backed by a real directory: "Data\XML\<f>" -> <xmlDir>\<f>;
@@ -888,6 +941,64 @@ int main(int argc, char** argv)
         // Company_Units member expansion (ground twin of Squadron_Units).
         const GameObjectRef* im = find(fc, "Inf_Member");
         CHECK(im && im->fieldable && IsPickerListed(*im), "Company_Units member of a buildable company -> fieldable + listed");
+    }
+
+    // ---- an-audit-finding: aggregate fieldable-token processing budget --------------
+    //
+    // The exact-work fixture combines a roster-map application, a list resolved
+    // twice through inheritance, two discarded numeric spawn tokens, a
+    // nonnumeric spawn token's push plus map application, and all three
+    // member-expansion steps. The one-over fixture adds one more discarded
+    // numeric token, so omitting any individual charge wrongly accepts it.
+    {
+        MockFM exactFm;
+        exactFm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<Game_Object_Files><File>FieldableBudget.xml</File></Game_Object_Files>";
+        exactFm.files["Data\\Scripts\\Library\\GameObjectList.lua"] =
+            kFieldableBudgetRoster;
+        const std::string exactXml = makeFieldableWorkDocument(false);
+        CHECK(exactXml.size() < kMaxXmlFileBytes,
+              "an-audit-finding: literal 131072 fixture is below the XML byte cap");
+        exactFm.files["Data\\XML\\FieldableBudget.xml"] = exactXml;
+
+        GameObjectCatalog exactCatalog;
+        const bool exactOk = BuildGameObjectCatalog(exactFm, exactCatalog);
+        CHECK(exactOk == true,
+              "an-audit-finding: exactly 131072 fieldable-token work operations build");
+        CHECK(exactCatalog.objects.size() == 1u,
+              "an-audit-finding: exact boundary publishes the one expected model object");
+        const GameObjectRef* exactMember = find(exactCatalog, "Budget_Member");
+        CHECK(exactMember && exactMember->fieldable
+              && exactMember->fieldSource == FS_Buildable,
+              "an-audit-finding: exact-boundary member expansion publishes the exact field-source value");
+    }
+
+    {
+        MockFM overFm;
+        overFm.files["Data\\XML\\GameObjectFiles.xml"] =
+            "<Game_Object_Files><File>FieldableBudget.xml</File></Game_Object_Files>";
+        overFm.files["Data\\Scripts\\Library\\GameObjectList.lua"] =
+            kFieldableBudgetRoster;
+        const std::string overXml = makeFieldableWorkDocument(true);
+        CHECK(overXml.size() < kMaxXmlFileBytes,
+              "an-audit-finding: literal 131073 fixture is below the XML byte cap");
+        overFm.files["Data\\XML\\FieldableBudget.xml"] = overXml;
+        // Ensure the hardpoint collection is populated before the fieldable pass,
+        // so the empty-output assertion kills a one-collection-only cleanup.
+        overFm.files["Data\\XML\\HardPointDataFiles.xml"] =
+            "<Hard_Point_Files><File>BudgetHardPoints.xml</File></Hard_Point_Files>";
+        overFm.files["Data\\XML\\BudgetHardPoints.xml"] =
+            "<HardPoints><HardPoint Name=\"Budget_HP\">"
+            "<Type>HARD_POINT_WEAPON_LASER</Type></HardPoint></HardPoints>";
+
+        GameObjectCatalog overCatalog;
+        const bool overOk = BuildGameObjectCatalog(overFm, overCatalog);
+        CHECK(overOk == false,
+              "an-audit-finding: literal 131073 returns false (specific refusal value)");
+        CHECK(overCatalog.objects.empty(),
+              "an-audit-finding: rejected 131073 build publishes no partial objects");
+        CHECK(overCatalog.hardpoints.empty(),
+              "an-audit-finding: rejected 131073 build publishes no partial hardpoints");
     }
 
     // ---- an-audit-finding: GameObjectList.lua roster fan-out is COUNT-capped, not just
