@@ -24,6 +24,50 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
     const json&        params = ctx.params;
     const std::string& id     = ctx.id;
 
+    // -------- test-host document-replacement seams ------------------
+    //
+    // Successful orphan discovery is intentionally suppressed under
+    // --test-host, so native tests need a narrow way to seed the real recovery
+    // handler. The paired emit seam primes both coalescing clocks immediately
+    // before calling the production notification chokepoint. Both are rejected
+    // outside --test-host.
+    if (kind == "debug/seed-autosave-recovery")
+    {
+        if (!m_testHost)
+        {
+            ctx.SendErr("debug/seed-autosave-recovery requires --test-host");
+            return true;
+        }
+        const std::string path8 = params.value("path", std::string{});
+        if (path8.empty())
+        {
+            ctx.SendErr("debug/seed-autosave-recovery requires a path");
+            return true;
+        }
+        m_pendingOrphan = Autosave::OrphanSession{};
+        m_pendingOrphan.pid = GetCurrentProcessId();
+        m_pendingOrphan.recentPath = Utf8ToWide(path8);
+        m_pendingOrphan.originalFilename =
+            Utf8ToWide(params.value("originalFilename", std::string{}));
+        m_hasPendingOrphan = true;
+        ctx.SendOk(json::object());
+        return true;
+    }
+    if (kind == "debug/emit-document-replaced")
+    {
+        if (!m_testHost)
+        {
+            ctx.SendErr("debug/emit-document-replaced requires --test-host");
+            return true;
+        }
+        const unsigned long long now = GetTickCount64();
+        m_lastStateEmitTick = now;
+        m_lastTreeEmitTick  = now;
+        ResetSelectionAndEmitDocumentChanged();
+        ctx.SendOk(json::object());
+        return true;
+    }
+
     // -------- undo/perform --------
     //
     // New-UI mutation handlers call captureUndo() PRE-mutation, so the
@@ -374,16 +418,10 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
         ctx.SendOk(json{{"ok", true}, {"path", WideToUtf8(path)}});
         SetDirty(false);
         EmitRecentChanged();
-        EmitEngineStateChanged();
-        // Polish round 3: React's EmitterTree subscribes to
-        // emitters/tree/changed; without this emit the tree stays on
-        // the previous file's emitters even though the engine now
-        // holds the new file's ParticleSystem.
-        EmitEmittersTreeChanged();
-        // The tree changed, but the SELECTION didn't — a positional id from the
-        // previous document survived, and if that index exists here too, edits
-        // would land on the wrong emitter (audit an-audit-finding).
-        ResetAndEmitSelection();
+        // Reset before the state snapshot, then preserve the established
+        // state -> tree -> selection event order. Otherwise the immediate
+        // state path publishes the previous document's positional id.
+        ResetSelectionAndEmitDocumentChanged();
         return true;
     }
 
@@ -664,11 +702,10 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
                 m_currentFilePath = s.originalFilename;  // "" → untitled
                 m_savedSnapshot.clear();                 // stays dirty until saved
                 SetDirty(true);
-                EmitEngineStateChanged();
-                EmitEmittersTreeChanged();
-                // Recovery replaces the bound system exactly like file/open, so
-                // it inherits the same stale-selection hazard (audit an-audit-finding).
-                ResetAndEmitSelection();
+                // Same replacement notification chokepoint as file/open. The
+                // actual recovery path is suppressed under --test-host, so
+                // sharing this call prevents its ordering from drifting.
+                ResetSelectionAndEmitDocumentChanged();
                 outcome = Autosave::RecoverOutcome::Recovered;
             }
             else

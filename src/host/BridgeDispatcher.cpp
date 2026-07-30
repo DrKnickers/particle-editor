@@ -1211,6 +1211,45 @@ ParticleSystem::Emitter* BridgeDispatcher::getEmitterById(int id)
     return emitters[id];
 }
 
+unsigned int BridgeDispatcher::selectedEmitterStableId() const
+{
+    if (m_selectedEmitterId < 0) return 0;
+    if (m_pParticleSystem == nullptr || !*m_pParticleSystem) return 0;
+    const auto& emitters = (*m_pParticleSystem)->getEmitters();
+    if (static_cast<size_t>(m_selectedEmitterId) >= emitters.size()) return 0;
+    const ParticleSystem::Emitter* selected = emitters[m_selectedEmitterId];
+    return selected != nullptr ? selected->stableId : 0;
+}
+
+void BridgeDispatcher::reconcileSelectionAfterDeletion(unsigned int stableId)
+{
+    int nextId = -1;
+    if (stableId != 0 && m_pParticleSystem != nullptr && *m_pParticleSystem)
+    {
+        const auto& emitters = (*m_pParticleSystem)->getEmitters();
+        for (size_t i = 0; i < emitters.size(); ++i)
+        {
+            if (emitters[i] != nullptr && emitters[i]->stableId == stableId)
+            {
+                nextId = static_cast<int>(i);
+                break;
+            }
+        }
+    }
+    if (nextId == m_selectedEmitterId) return;
+
+    m_selectedEmitterId = nextId;
+    if (!m_emit) return;
+    json env = {
+        {"type",    "evt"},
+        {"kind",    "emitters/selected"},
+        {"payload", json{{"id", m_selectedEmitterId < 0
+                                   ? json(nullptr)
+                                   : json(m_selectedEmitterId)}}},
+    };
+    m_emit(env.dump());
+}
+
 // Capture-undo helper. Wraps the dispatcher's m_undo with the
 // current selection index so a future undo restores the
 // pre-mutation state. coalesceKey defaults to 0 = never coalesce
@@ -1355,7 +1394,7 @@ void BridgeDispatcher::EmitEmittersTreeChanged()
     EmitEmittersTreeChangedNow();
 }
 
-void BridgeDispatcher::ResetAndEmitSelection()
+void BridgeDispatcher::ResetSelectionAndEmitDocumentChanged()
 {
     // Root (index 0) when the new document has emitters, matching file/new's
     // legacy-parity behaviour of opening with the first emitter selected;
@@ -1363,6 +1402,24 @@ void BridgeDispatcher::ResetAndEmitSelection()
     const bool hasEmitters = (m_pParticleSystem != nullptr && *m_pParticleSystem
                               && !(*m_pParticleSystem)->getEmitters().empty());
     m_selectedEmitterId = hasEmitters ? 0 : -1;
+
+    // A document swap is one atomic notification, not a high-frequency edit.
+    // Drop any pending old-document broadcasts and bypass live coalescing so
+    // the observable order cannot become selection -> tree -> state.
+    const unsigned long long now = GetTickCount64();
+    m_stateEmitPending = false;
+    m_treeEmitPending  = false;
+    if (m_emit && m_engine)
+    {
+        m_lastStateEmitTick = now;
+        EmitEngineStateChangedNow();
+    }
+    if (m_emit)
+    {
+        m_lastTreeEmitTick = now;
+        EmitEmittersTreeChangedNow();
+    }
+
     if (!m_emit) return;
     json env = {
         {"type",    "evt"},

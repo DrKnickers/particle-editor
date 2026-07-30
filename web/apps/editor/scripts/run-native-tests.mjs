@@ -209,6 +209,7 @@ async function main() {
       "tests/emitter-tree.spec.ts",
       "tests/emitter-mutations.spec.ts",
       "tests/emitter-multi-mutations.spec.ts",
+      "tests/selection-identity.spec.ts",
       "tests/undo-navigation.spec.ts",
       "tests/emitter-import.spec.ts",
       "tests/emitter-drag.spec.ts",

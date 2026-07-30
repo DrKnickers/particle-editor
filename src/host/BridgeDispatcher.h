@@ -244,13 +244,14 @@ public:
     // Reset the selection to the new document's root (or none, if it has no
     // emitters) and announce it, so React's selection atom — and thus the
     // Inspector and curve panel — follow the swap.
+    // The scalar is set before an atomic state -> tree -> selection stream;
+    // document replacement bypasses edit coalescing and drops pending
+    // old-document broadcasts.
     //
-    // Every path that REPLACES the bound ParticleSystem must call this.
-    // file/new always did; file/open and autosave-recover did not, so a
-    // positional emitter id selected in the previous document survived into the
-    // new one. If that index happened to exist there, edits silently targeted
-    // the WRONG emitter (2026-07 audit, an-audit-finding).
-    void ResetAndEmitSelection();
+    // file/new establishes the same order inline. file/open and
+    // autosave-recover share this helper so their replacement choreography
+    // cannot drift and expose the previous document's positional id.
+    void ResetSelectionAndEmitDocumentChanged();
 
     // render loop: real spawner/active-count source. Called from
     // HostWindow::RenderD3D9 once per frame when Engine::GetNumInstances()
@@ -376,6 +377,11 @@ private:
     // Lookup helper: emitter pointer by integer index. Returns nullptr on
     // out-of-range / no-system / null-slot.
     ParticleSystem::Emitter* getEmitterById(int id);
+    // Capture the selected emitter's process-stable identity before a
+    // structural deletion, then resolve the new positional wire id afterward.
+    // A missing survivor clears selection; an unchanged position emits nothing.
+    unsigned int selectedEmitterStableId() const;
+    void reconcileSelectionAfterDeletion(unsigned int stableId);
     // PRE-mutation undo capture; forwards to CaptureUndoPoint (which folds in
     // the engine's ref-transform aux). coalesceKey 0 = never coalesce
     // (structural ops must never fold across an add/delete/move).

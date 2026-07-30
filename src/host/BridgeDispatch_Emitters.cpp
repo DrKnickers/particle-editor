@@ -931,8 +931,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
     //
     // Mirrors legacy `EmitterList_DeleteEmitter` at
     // [src/UI/EmitterList.cpp:4651]. ParticleSystem::deleteEmitter
-    // recursively deletes a subtree. If the deleted id matches the
-    // selection scalar, clear it and emit emitters/selected { id: null }.
+    // recursively deletes a subtree. Preserve a surviving selection by stable
+    // identity because every positional id above the deletion can shift.
     if (kind == "emitters/delete")
     {
         int id = params.value("id", -1);
@@ -948,22 +948,9 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         captureUndo();
 
         ParticleSystem* sys = m_pParticleSystem->get();
-        const bool wasSelected = (m_selectedEmitterId == id);
+        const unsigned int selectedStableId = selectedEmitterStableId();
         sys->deleteEmitter(target);
-
-        if (wasSelected)
-        {
-            m_selectedEmitterId = -1;
-            if (m_emit)
-            {
-                json env = {
-                    {"type",    "evt"},
-                    {"kind",    "emitters/selected"},
-                    {"payload", json{{"id", json(nullptr)}}},
-                };
-                m_emit(env.dump());
-            }
-        }
+        reconcileSelectionAfterDeletion(selectedStableId);
 
         // Demote any singleton groups left over from the
         // recursive subtree deletion (member of a 2-member group
@@ -1022,31 +1009,18 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
 
         std::sort(ids.begin(), ids.end(), std::greater<int>());
         ParticleSystem* sys = m_pParticleSystem->get();
-        bool clearedSelection = false;
+        const unsigned int selectedStableId = selectedEmitterStableId();
         int deleted = 0;
         for (int id : ids)
         {
             ParticleSystem::Emitter* target = getEmitterById(id);
             if (target == nullptr) continue;
-            if (m_selectedEmitterId == id) clearedSelection = true;
             sys->deleteEmitter(target);
             deleted++;
         }
 
-        if (clearedSelection)
-        {
-            m_selectedEmitterId = -1;
-            if (m_emit)
-            {
-                json env = {
-                    {"type",    "evt"},
-                    {"kind",    "emitters/selected"},
-                    {"payload", json{{"id", json(nullptr)}}},
-                };
-                m_emit(env.dump());
-            }
-        }
-
+        if (deleted > 0)
+            reconcileSelectionAfterDeletion(selectedStableId);
         ctx.SendOk(json::object());
         if (deleted > 0)
         {
@@ -2679,27 +2653,17 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         // raw pointers across calls.
         std::sort(ids.begin(), ids.end(), std::greater<int>());
         ParticleSystem* sys = m_pParticleSystem->get();
-        bool clearedSelection = false;
+        const unsigned int selectedStableId = selectedEmitterStableId();
+        int deleted = 0;
         for (int id : ids)
         {
             ParticleSystem::Emitter* target = getEmitterById(id);
             if (target == nullptr) continue;
-            if (m_selectedEmitterId == id) clearedSelection = true;
             sys->deleteEmitter(target);
+            deleted++;
         }
-        if (clearedSelection)
-        {
-            m_selectedEmitterId = -1;
-            if (m_emit)
-            {
-                json env = {
-                    {"type",    "evt"},
-                    {"kind",    "emitters/selected"},
-                    {"payload", json{{"id", json(nullptr)}}},
-                };
-                m_emit(env.dump());
-            }
-        }
+        if (deleted > 0)
+            reconcileSelectionAfterDeletion(selectedStableId);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
         EmitEngineStateChanged();
