@@ -26,6 +26,7 @@
 #include "files.h"
 #include "exceptions.h"
 #include "LinkGroup.h"
+#include "ResourceLimits.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -47,6 +48,61 @@ static int g_failed = 0;
 using Emitter = ParticleSystem::Emitter;
 using Track   = ParticleSystem::Emitter::Track;
 typedef std::vector<unsigned char> Bytes;
+
+static const size_t kExpectedTrackKeyCap = 65536u;
+static const uint32_t kExpectedLinkExemptRecordsTotalCap = 65536u;
+
+// Test-only IFile that records reads overlapping a caller-selected byte range.
+// The production constructor still sees the real byte image through IFile; this
+// merely makes "rejected before processing the next record body" observable.
+class ReadProbeFile : public IFile
+{
+    const Bytes&   m_data;
+    unsigned long  m_position;
+    unsigned long  m_forbiddenStart;
+    unsigned long  m_forbiddenBytesRead;
+
+public:
+    ReadProbeFile(const Bytes& data, size_t forbiddenStart)
+        : m_data(data),
+          m_position(0),
+          m_forbiddenStart((unsigned long)forbiddenStart),
+          m_forbiddenBytesRead(0)
+    {
+    }
+
+    bool eof() { return m_position == m_data.size(); }
+    unsigned long size() { return (unsigned long)m_data.size(); }
+    void seek(unsigned long offset)
+    {
+        m_position = min(offset, (unsigned long)m_data.size());
+    }
+    unsigned long tell() { return m_position; }
+    unsigned long read(void* buffer, unsigned long bytes)
+    {
+        const unsigned long remaining =
+            m_position < m_data.size()
+                ? (unsigned long)m_data.size() - m_position
+                : 0;
+        if (bytes > remaining) bytes = remaining;
+        const unsigned long readStart = m_position;
+        const unsigned long readEnd = readStart + bytes;
+        if (readEnd > m_forbiddenStart)
+        {
+            const unsigned long overlapStart =
+                readStart > m_forbiddenStart ? readStart : m_forbiddenStart;
+            m_forbiddenBytesRead += readEnd - overlapStart;
+        }
+        if (bytes != 0)
+        {
+            std::memcpy(buffer, &m_data[m_position], bytes);
+            m_position = readEnd;
+        }
+        return bytes;
+    }
+    unsigned long write(const void*, unsigned long) { return 0; }
+    unsigned long forbiddenBytesRead() const { return m_forbiddenBytesRead; }
+};
 
 // Serialize a ParticleSystem to a byte image via ParticleSystem::write(IFile*).
 static Bytes serialize(ParticleSystem& ps)
@@ -85,6 +141,24 @@ static void expectBadFile(const Bytes& image, const char* label)
     bool other = false;
     bool ok = loads(image, NULL, other);
     CHECK(!ok && !other, label);
+}
+
+static bool rejectsWithoutReading(const Bytes& image, size_t forbiddenStart,
+                                  unsigned long& forbiddenBytesRead, bool& other)
+{
+    other = false;
+    bool rejected = false;
+    ReadProbeFile* f = new ReadProbeFile(image, forbiddenStart);
+    try
+    {
+        ParticleSystem* ps = new ParticleSystem(f);
+        delete ps;
+    }
+    catch (BadFileException&) { rejected = true; }
+    catch (...)               { other = true; }
+    forbiddenBytesRead = f->forbiddenBytesRead();
+    f->Release();
+    return rejected;
 }
 
 static bool chunkWalkThrowsBadFile(const Bytes& image, bool& other)
@@ -129,6 +203,21 @@ static void putU32(Bytes& b, size_t at, uint32_t v)
     b[at + 3] = (unsigned char)((v >> 24) & 0xFF);
 }
 
+static uint32_t getU32(const Bytes& b, size_t at)
+{
+    return (uint32_t)b[at + 0]
+         | ((uint32_t)b[at + 1] << 8)
+         | ((uint32_t)b[at + 2] << 16)
+         | ((uint32_t)b[at + 3] << 24);
+}
+
+static void appendU32(Bytes& b, uint32_t v)
+{
+    const size_t at = b.size();
+    b.resize(at + sizeof(v));
+    putU32(b, at, v);
+}
+
 // Build a one-emitter system whose distinctive field values give us unique
 // sentinels to locate-and-patch in the serialized image.
 static void buildOne(ParticleSystem& ps)
@@ -156,6 +245,55 @@ static void buildOne(ParticleSystem& ps)
     e->trackContents[ParticleSystem::TRACK_SCALE].interpolation = Track::IT_SMOOTH; // 1
     for (int t = 0; t < ParticleSystem::NUM_TRACKS; ++t)
         e->tracks[t] = &e->trackContents[t];
+}
+
+static Bytes serializeWithScaleIntermediates(size_t intermediateCount)
+{
+    ParticleSystem ps;
+    buildOne(ps);
+    Track& scale = ps.getEmitters()[0]->trackContents[ParticleSystem::TRACK_SCALE];
+    scale.keys.clear();
+    scale.keys.insert(Track::Key(0.0f, 1.0f));
+    for (size_t i = 0; i < intermediateCount; ++i)
+    {
+        const float time = 100.0f * (float)(i + 1) / (float)(intermediateCount + 1);
+        scale.keys.insert(Track::Key(time, 1.0f));
+    }
+    scale.keys.insert(Track::Key(100.0f, 1.0f));
+    return serialize(ps);
+}
+
+static Bytes makeLinkExemptChunk(uint32_t count, uint32_t groupId,
+                                 const LinkExemptFlags* flags = NULL)
+{
+    const uint32_t flagsBytes = flags ? (uint32_t)sizeof(*flags) : 0u;
+    const size_t payloadSize = sizeof(uint32_t)
+                             + (size_t)count * (2u * sizeof(uint32_t) + flagsBytes);
+    Bytes chunk;
+    chunk.reserve(2u * sizeof(uint32_t) + payloadSize);
+    appendU32(chunk, 0x0003u);
+    appendU32(chunk, (uint32_t)payloadSize);
+    appendU32(chunk, count);
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        appendU32(chunk, groupId);
+        appendU32(chunk, flagsBytes);
+        if (flags)
+        {
+            const unsigned char* raw = reinterpret_cast<const unsigned char*>(flags);
+            chunk.insert(chunk.end(), raw, raw + flagsBytes);
+        }
+    }
+    return chunk;
+}
+
+static void appendRootSibling(Bytes& image, const Bytes& sibling)
+{
+    const uint32_t rootHeader = getU32(image, sizeof(uint32_t));
+    const uint32_t rootPayload = rootHeader & 0x7FFFFFFFu;
+    image.insert(image.end(), sibling.begin(), sibling.end());
+    putU32(image, sizeof(uint32_t),
+           (rootHeader & 0x80000000u) + rootPayload + (uint32_t)sibling.size());
 }
 
 // ---- hardening: absolute normal-chunk size cap (2026-07 audit) --------------
@@ -272,6 +410,88 @@ int main()
             CHECK(loaded.colorTexture, "round-trip: default exempt flags are preserved with custom entry");
             delete rp;
         }
+    }
+
+    // --- scalar-track aggregate boundary (an-audit-finding). Load through the production
+    // constructor: the first endpoint plus cap-1 intermediates is accepted, the
+    // final endpoint is appended, and the cap-th intermediate is rejected.
+    {
+        CHECK(kMaxAloTrackKeys == kExpectedTrackKeyCap,
+              "an-audit-finding: scalar-track cap remains exactly 65,536");
+        const size_t acceptedIntermediates = kExpectedTrackKeyCap - 1u;
+        const Bytes atCap = serializeWithScaleIntermediates(acceptedIntermediates);
+        bool other = false;
+        ParticleSystem* rp = NULL;
+        bool ok = loads(atCap, &rp, other);
+        CHECK(ok && !other && rp,
+              "an-audit-finding: scalar track accepts cap-1 intermediates");
+        if (rp && rp->getEmitters().size() == 1)
+        {
+            const Track& scale =
+                rp->getEmitters()[0]->trackContents[ParticleSystem::TRACK_SCALE];
+            CHECK(scale.keys.size() == kExpectedTrackKeyCap + 1u,
+                  "an-audit-finding: accepted scalar track appends both endpoints");
+        }
+        delete rp;
+
+        const Bytes overCap =
+            serializeWithScaleIntermediates(kExpectedTrackKeyCap);
+        expectBadFile(overCap,
+                      "an-audit-finding: scalar track rejects cap-th intermediate");
+    }
+
+    // --- repeated link-exempt aggregate boundary (an-audit-finding). Every raw record
+    // counts even if it is group 0, decodes to defaults, duplicates an ID, or
+    // overwrites an earlier sibling's stored value.
+    {
+        ParticleSystem ps;
+        buildOne(ps);
+        Bytes atCap = serialize(ps);
+
+        CHECK(kMaxAloLinkExemptRecordsTotal == kExpectedLinkExemptRecordsTotalCap,
+              "an-audit-finding: aggregate link-exempt cap remains exactly 65,536");
+        const uint32_t half = kExpectedLinkExemptRecordsTotalCap / 2u;
+        appendRootSibling(atCap, makeLinkExemptChunk(half, 0u));
+        appendRootSibling(atCap, makeLinkExemptChunk(
+            kExpectedLinkExemptRecordsTotalCap - half - 2u, 42u));
+
+        LinkExemptFlags first = GetDefaultLinkExemptFlags();
+        first.lifetime = true;
+        LinkExemptFlags last = first;
+        last.colorTexture = false;
+        appendRootSibling(atCap, makeLinkExemptChunk(1u, 99u, &first));
+        appendRootSibling(atCap, makeLinkExemptChunk(1u, 99u, &last));
+
+        bool other = false;
+        ParticleSystem* rp = NULL;
+        bool ok = loads(atCap, &rp, other);
+        CHECK(ok && !other && rp,
+              "an-audit-finding: repeated raw link-exempt records totaling cap are accepted");
+        if (rp)
+        {
+            const LinkExemptFlags& loaded = rp->getLinkExemptFlags(99u);
+            CHECK(loaded.lifetime && !loaded.colorTexture,
+                  "an-audit-finding: later duplicate record still overwrites at the boundary");
+            delete rp;
+        }
+
+        Bytes overCap = atCap;
+        const uint32_t forbiddenGroupId = 0xBADC0DEDu;
+        const size_t forbiddenRecordBody =
+            overCap.size() + 3u * sizeof(uint32_t); // header + count
+        appendRootSibling(overCap,
+                          makeLinkExemptChunk(1u, forbiddenGroupId));
+        unsigned long forbiddenBytesRead = 0;
+        other = false;
+        const bool rejected = rejectsWithoutReading(
+            overCap, forbiddenRecordBody, forbiddenBytesRead, other);
+        std::printf("  probe: an-audit-finding forbidden record-body bytes read = %lu "
+                    "(sentinel group = 0x%08lX)\n",
+                    forbiddenBytesRead, (unsigned long)forbiddenGroupId);
+        CHECK(rejected && !other,
+              "an-audit-finding: next raw record across a sibling is rejected");
+        CHECK(forbiddenBytesRead == 0,
+              "an-audit-finding: rejection reads zero bytes of the over-budget record body");
     }
 
     // --- link-exempt (0x0003) hardening: a corrupt packed size/count must be

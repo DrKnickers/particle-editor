@@ -544,6 +544,10 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 			reader.read(&key, sizeof(Track::Key));
 			key.time *= 100.0f; // Transform to percentage
 			Verify(key.time <= 100.0f && trackContents[i].keys.rbegin()->time <= key.time);
+			// Mirror the channel-track rule exactly: the first endpoint already
+			// occupies one slot, intermediates stop before the cap, and the final
+			// endpoint is appended after this loop.
+			Verify(trackContents[i].keys.size() < kMaxAloTrackKeys);
 			trackContents[i].keys.insert(key);
 		}
 		Verify(type == -1);
@@ -1118,6 +1122,7 @@ ParticleSystem::ParticleSystem(IFile* file)
 	    // 0x0003 (per-group link-exempt flags). The loop tolerantly
 	    // skips any unrecognized chunk so future additions don't
 	    // require touching this code path.
+	    uint32_t linkExemptRecordsTotal = 0;
 	    type = reader.next();
 	    while (type != -1)
 	    {
@@ -1137,6 +1142,11 @@ ParticleSystem::ParticleSystem(IFile* file)
 	            // than part-way through, so a refused file leaves no half-built
 	            // exempt table behind.
 	            Verify(count <= kMaxAloLinkExempts);
+	            // Count raw records across every sibling before filtering zero
+	            // IDs/default flags or overwriting duplicate group IDs. The
+	            // maintained total<=cap invariant makes the subtraction safe.
+	            Verify(count <= kMaxAloLinkExemptRecordsTotal - linkExemptRecordsTotal);
+	            linkExemptRecordsTotal += count;
 	            for (uint32_t i = 0; i < count; ++i)
 	            {
 	                uint32_t groupId      = (uint32_t)readPackedInteger(reader, remaining);
