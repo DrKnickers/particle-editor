@@ -121,6 +121,25 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx, const std::s
         // ctx.SendOk({ok,stack}) where ok may itself be false; caller reads
         // nested ok as the discriminator, so failure stays the same shape.
         if (!m_modManager) { ctx.SendOk(json{{"ok", false}, {"error", "ModManager not bound"}}); return true; }
+        auto currentStackJson = [this]() {
+            json stack = json::array();
+            for (const auto& p : m_modManager->GetLayerStack())
+                stack.push_back(WideToUtf8(p));
+            return stack;
+        };
+        // A layer change mutates FileManager roots and the active texture
+        // palette before it reloads shaders. Refuse at the bridge boundary
+        // while D3D work is blocked so a suspect/reset window cannot leave new
+        // roots paired with the previous shader set.
+        if (m_engine && m_engine->DeviceCallsBlocked())
+        {
+            ctx.SendOk(json{
+                {"ok", false},
+                {"stack", currentStackJson()},
+                {"error", "the rendering device is unavailable; the load order was not changed"},
+            });
+            return true;
+        }
         std::vector<std::wstring> paths;
         auto pit = params.find("paths");
         if (pit != params.end() && pit->is_array())
@@ -140,9 +159,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx, const std::s
         // (inside PreviewCacheClear) also invalidates in-flight encodes.
         PreviewCacheClear();
         EmitEngineStateChanged();
-        json stackArr = json::array();
-        for (const auto& p : m_modManager->GetLayerStack()) stackArr.push_back(WideToUtf8(p));
-        json resp{{"ok", ok}, {"stack", stackArr}};
+        json resp{{"ok", ok}, {"stack", currentStackJson()}};
         if (!err.empty()) resp["error"] = err;
         ctx.SendOk(resp);
         return true;

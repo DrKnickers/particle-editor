@@ -228,6 +228,19 @@ void ModManager::RestoreLastLayerStack()
 bool ModManager::SetLayerStack(const vector<wstring>& absoluteLayers, bool allowPersist,
                                std::string* outError)
 {
+    // Every call site, including capture/quick-switch paths outside the bridge,
+    // must reject before changing configured roots while D3D work is blocked.
+    // ReloadShaders cannot legally validate the candidate stack in this state,
+    // and deferred texture work would otherwise produce a mixed old-shader /
+    // new-root session.
+    if (m_engine != NULL && m_engine->DeviceCallsBlocked())
+    {
+        if (outError != nullptr)
+            *outError =
+                "the rendering device is unavailable; the load order was not changed";
+        return false;
+    }
+
     // Preserve the configured value even when a layer is temporarily
     // unavailable. Runtime activation is separate: primary is the first path
     // that exists now, and FileManager::SetLayers applies its own existence

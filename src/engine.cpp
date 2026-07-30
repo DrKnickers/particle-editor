@@ -17,6 +17,7 @@
 #include "SphericalHarmonics.h"
 #include "utils.h"     // WideToAnsi for custom-slot path bridging
 #include "host/AlphaCompositor.h"
+#include "host/Compositor.h"
 using namespace std;
 
 
@@ -121,6 +122,8 @@ void StepPreviewFrames(int frames)
 
 ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem& system, Object3D* parent)
 {
+    if (DeviceCallsBlocked()) return nullptr;
+
     // [hard-guard spawn-time check] Refuse the placement (and clear the
     // rest of the preview) when the estimated TOTAL — already-placed
     // instances plus this one — exceeds the guard cap. Estimate 0 = no
@@ -187,6 +190,8 @@ void Engine::KillParticleSystem(ParticleSystemInstance* instance)
 
 void Engine::Clear()
 {
+	++m_particleSystemDocumentEpoch;
+	m_deferredParticleSystemChange.Reset();
 	m_instances.clear();
     m_numParticles = 0;
     m_numEmitters  = 0;
@@ -256,53 +261,182 @@ int Engine::ActiveSpawnerInstanceCount() const
     return n;
 }
 
+devicerecovery::Result Engine::ProbeDeviceRecovery()
+{
+	++m_deviceStateProbeCount;
+	devicerecovery::D3D9ExRecoveryPort<IDirect3DDevice9Ex, Engine>
+	    port(m_pDevice, *this);
+	return devicerecovery::RunDeviceRecoveryStep(m_deviceRecovery, port);
+}
+
+bool Engine::IsDeviceRecoveryThread() const
+{
+	return m_deviceThreadId != 0 && GetCurrentThreadId() == m_deviceThreadId;
+}
+
+bool Engine::IsTerminalDeviceState() const
+{
+	return m_fatalDeviceState ||
+	       m_deviceRecovery.phase == devicerecovery::Phase::Terminal;
+}
+
+bool Engine::TextureReloadCanContinue() const
+{
+	return !IsTerminalDeviceState() &&
+	       !DeviceCallsBlocked() &&
+	       !m_presentSuspect;
+}
+
+bool Engine::SetDeviceRecoveryWorkHoldForTesting(bool hold)
+{
+	if (!hold)
+	{
+		m_deviceRecoveryWorkTestHold = false;
+		return true;
+	}
+	if (m_deviceRecoveryWorkTestHold) return true;
+	if (DeviceCallsBlocked() || m_presentSuspect) return false;
+	m_deviceRecoveryWorkTestHold = true;
+	return true;
+}
+
+bool Engine::PrepareDeviceForFrame()
+{
+	return PrepareDeviceForFrame(false);
+}
+
+bool Engine::PrepareComposedFrame()
+{
+	++m_composedFramePrepareCount;
+	return PrepareDeviceForFrame(true);
+}
+
+bool Engine::PrepareDeviceForFrame(bool probeHealthyDevice)
+{
+	if (m_fatalDeviceState ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::Terminal ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::Recovering ||
+	    m_deviceResetInProgress)
+		return false;
+	if (probeHealthyDevice ||
+	    m_presentSuspect ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::ResetExFailed ||
+	    m_fullResetPending)
+	{
+		if (!RecoverDeviceIfNeeded()) return false;
+	}
+	if (DeviceCallsBlocked()) return false;
+	if (!ReplayPendingTextureReload()) return false;
+	return ReplayPendingParticleSystemChange();
+}
+
 bool Engine::RecoverDeviceIfNeeded()
 {
-	if (m_pDevice == NULL) return false;
-	// CheckDeviceState, not TestCooperativeLevel: this is a D3D9Ex device, and
-	// TestCooperativeLevel always returns S_OK on one, so this whole guard was
-	// an unconditional `return true` (2026-07 audit, an-audit-finding). NULL window =
-	// "report occlusion only when another device owns fullscreen", which is what
-	// a windowed caller wants.
-	const HRESULT hr = m_pDevice->CheckDeviceState(NULL);
-	switch (devicestate::ClassifyDeviceState(hr))
+	if (m_pDevice == NULL || m_fatalDeviceState ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::Terminal ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::Recovering ||
+	    m_deviceResetInProgress)
+		return false;
+
+	devicerecovery::Result result = ProbeDeviceRecovery();
+	switch (result.outcome)
 	{
-		case devicestate::Action::Render:
+		case devicerecovery::Outcome::Render:
+			if (m_fullResetPending)
+			{
+				if (!IsDeviceRecoveryThread()) return false;
+				try { Reset(); }
+				catch (...)
+				{
+					m_presentSuspect = true;
+					return false;
+				}
+			}
+			m_presentSuspect = false;
 			return true;
 
-		case devicestate::Action::Reset:
-			// Reset() throws on failure. It is called here from OFF the render
-			// thread (see the header note), so letting that escape would take
-			// down an unrelated caller — report false and let it retry.
+		case devicerecovery::Outcome::ResetRequired:
+			// D3D reset calls have the same creation-thread requirement as
+			// ResetEx. The current LayoutBroker caller is on that UI/render
+			// thread; retain a safe defer if a future caller is not.
+			if (!IsDeviceRecoveryThread())
+			{
+				m_presentSuspect = true;
+				return false;
+			}
 			try { Reset(); }
-			catch (...) { return false; }
-			return devicestate::ClassifyDeviceState(m_pDevice->CheckDeviceState(NULL))
-			       == devicestate::Action::Render;
-
-		case devicestate::Action::Fatal:
-			ReportFatalDeviceState(hr);
+			catch (...)
+			{
+				m_presentSuspect = true;
+				return false;
+			}
+			result = ProbeDeviceRecovery();
+			if (result.outcome == devicerecovery::Outcome::Render)
+			{
+				m_presentSuspect = false;
+				return true;
+			}
+			if (result.outcome == devicerecovery::Outcome::Fatal)
+			{
+				ReportFatalDeviceState(result.observedState,
+				                       result.recoveryResult);
+			}
 			return false;
 
-		case devicestate::Action::SkipFrame:
+		case devicerecovery::Outcome::RetryResetEx:
+			if (!IsDeviceRecoveryThread()) return false;
+			try
+			{
+				if (!ResetForResize()) return false;
+			}
+			catch (...)
+			{
+				// ResetEx succeeded but its size-keyed rebuild failed. The
+				// resize method restored the pending phase, so a later frame
+				// can retry without admitting ordinary D3D work.
+				m_presentSuspect = true;
+				return false;
+			}
+			m_presentSuspect = false;
+			return true;
+
+		case devicerecovery::Outcome::Fatal:
+			ReportFatalDeviceState(result.observedState,
+			                       result.recoveryResult);
+			return false;
+
+		case devicerecovery::Outcome::SkipFrame:
 		default:
+			// A HUNG seen off the device thread remains retryable; the next
+			// render frame performs the one permitted attempt.
+			if (result.observedState == D3DERR_DEVICEHUNG)
+				m_presentSuspect = true;
 			return false;
 	}
 }
 
-// A hung or removed adapter cannot be reset — only a fresh device would help,
-// which is beyond what this engine can do mid-session. Latch it and say so once,
-// so the condition is diagnosable in host.log instead of presenting as a
-// silently frozen viewport that never recovers.
-void Engine::ReportFatalDeviceState(HRESULT hr)
+void Engine::ReportFatalDeviceState(HRESULT hr, HRESULT recoveryHr)
 {
 	if (m_fatalDeviceState) return;
+	m_deferredParticleSystemChange.Reset();
+	m_textureReloadAppliedGeneration = m_textureReloadRequestGeneration;
 	m_fatalDeviceState = true;
-	fprintf(stderr,
-	        "[engine] FATAL device state 0x%08lx (%s) — not recoverable by Reset; "
-	        "rendering stops until the app is restarted\n",
-	        (unsigned long)hr,
-	        hr == D3DERR_DEVICEREMOVED ? "DEVICEREMOVED" :
-	        hr == D3DERR_DEVICEHUNG    ? "DEVICEHUNG"    : "unknown");
+	if (hr == D3DERR_DEVICEHUNG)
+	{
+		fprintf(stderr,
+		        "[engine] FATAL DEVICEHUNG 0x%08lx — bounded ResetEx recovery "
+		        "failed or was already consumed (recovery hr=0x%08lx); "
+		        "rendering stops until restart\n",
+		        (unsigned long)hr, (unsigned long)recoveryHr);
+	}
+	else
+	{
+		fprintf(stderr,
+		        "[engine] FATAL device state 0x%08lx (%s) — device recreation "
+		        "is required; rendering stops until restart\n",
+		        (unsigned long)hr,
+		        hr == D3DERR_DEVICEREMOVED ? "DEVICEREMOVED" : "unknown");
+	}
 	fflush(stderr);
 }
 
@@ -330,6 +464,12 @@ double EngQpcUs(LONGLONG a, LONGLONG b)
 
 IDirect3DTexture9* Engine::GetTexture(const string& name) const
 {
+	if (DeviceCallsBlocked()) return NULL;
+	return GetTextureForDeviceReset(name);
+}
+
+IDirect3DTexture9* Engine::GetTextureForDeviceReset(const string& name) const
+{
 	return m_textureManager.getTexture(m_pDevice, name);
 }
 
@@ -354,6 +494,19 @@ void Engine::ReacquireInstanceTextures()
 
 void Engine::OnParticleSystemChanged(int track)
 {
+	if (m_fatalDeviceState ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::Terminal)
+		return;
+	if (m_deferredParticleSystemChange.DeferIfBlocked(
+	        DeviceCallsBlocked() || m_presentSuspect ||
+	        m_textureReloadApplying, track))
+		return;
+	ApplyParticleSystemChanged(track);
+}
+
+void Engine::ApplyParticleSystemChanged(int track)
+{
+	++m_particleSystemChangeApplyCount;
 	// track < 0 is the "everything changed" broadcast, which is what the
 	// structural emitter handlers send. Re-sync placed instances against the
 	// authored root list there: an instance only spawns roots in its
@@ -378,8 +531,73 @@ void Engine::OnParticleSystemChanged(int track)
 	m_lastUpdatedSimTime = -1.0f;
 }
 
+bool Engine::ReplayPendingTextureReload()
+{
+	if (!TextureReloadPendingForTesting()) return true;
+	if (IsTerminalDeviceState())
+	{
+		m_textureReloadAppliedGeneration = m_textureReloadRequestGeneration;
+		return false;
+	}
+	if (m_textureReloadApplying ||
+	    DeviceCallsBlocked() ||
+	    m_presentSuspect)
+		return false;
+
+	const uint64_t targetGeneration = m_textureReloadRequestGeneration;
+	const uint64_t documentEpoch = m_particleSystemDocumentEpoch;
+	int deferredTrack = -1;
+	const bool hadDeferredChange =
+	    m_deferredParticleSystemChange.Take(deferredTrack);
+
+	m_textureReloadApplying = true;
+	bool completed = false;
+	try
+	{
+		completed = PerformTextureReload();
+	}
+	catch (...)
+	{
+		completed = false;
+	}
+	m_textureReloadApplying = false;
+
+	if (!completed || !TextureReloadCanContinue())
+	{
+		if (IsTerminalDeviceState())
+		{
+			m_textureReloadAppliedGeneration =
+			    m_textureReloadRequestGeneration;
+			return false;
+		}
+		if (hadDeferredChange &&
+		    documentEpoch == m_particleSystemDocumentEpoch)
+			m_deferredParticleSystemChange.Queue(deferredTrack);
+		return false;
+	}
+
+	m_textureReloadAppliedGeneration = targetGeneration;
+	++m_textureReloadApplyCount;
+	if (TextureReloadPendingForTesting()) return false;
+	if (m_deferredParticleSystemChange.Pending()) return false;
+	return true;
+}
+
+bool Engine::ReplayPendingParticleSystemChange()
+{
+	return m_deferredParticleSystemChange.Replay(
+	    [this](int track) { ApplyParticleSystemChanged(track); },
+	    [this]() { return DeviceCallsBlocked() || m_presentSuspect; });
+}
+
 void Engine::GetViewPort(D3DVIEWPORT9* viewport) const
 {
+	if (viewport == NULL) return;
+	if (DeviceCallsBlocked())
+	{
+		ZeroMemory(viewport, sizeof(*viewport));
+		return;
+	}
 	m_pDevice->GetViewport(viewport);
 }
 
@@ -390,6 +608,8 @@ const Engine::Camera& Engine::GetCamera() const
 
 void Engine::SetCamera( const Camera& camera )
 {
+	if (DeviceCallsBlocked()) return;
+
 	// A camera move changes GetBillboardMatrix(), and screen-oriented
 	// (!isWorldOriented) particles bake that matrix into their vertices on the
 	// CPU in EmitterInstance::UpdateParticle. While the preview is paused the
@@ -451,7 +671,7 @@ std::vector<int> Engine::GetSupportedMsaaLevels() const
 {
     std::vector<int> result;
     result.push_back(0);  // Off is always available
-    if (!m_pDirect3D) return result;
+    if (!m_pDirect3D || DeviceCallsBlocked()) return result;
     const D3DFORMAT depthFmt = m_presentationParameters.AutoDepthStencilFormat;
     const BOOL      windowed = m_presentationParameters.Windowed;
     for (int n : {2, 4, 8})
@@ -571,11 +791,10 @@ const Engine::Light& Engine::GetLight(LightType which) const
 	return m_lights[index];
 }
 
-void Engine::Reset()
+void Engine::ReleaseDeviceResourcesForReset()
 {
-	// [resize-perf] sub-stage QPC brackets filled into
-	// m_resetPerf at the end; the host logs them at 1 Hz. See engine.h.
-	const LONGLONG _rpT0 = EngQpcNow();
+	if (m_deviceResourcesReleased) return;
+	m_deviceResourcesReleased = true;
 
 	ReleaseBloomTargets();
 	ReleaseShadowMaskTargets();   // [soft-shadows] DEFAULT-pool mask RTs
@@ -587,19 +806,11 @@ void Engine::Reset()
 	SAFE_RELEASE(m_pMsaaDepth);
 	m_msaaActive = false;
 
-	// Reset device
-	m_presentationParameters.BackBufferWidth  = 0;
-    m_presentationParameters.BackBufferHeight = 0;
-	m_presentationParameters.BackBufferCount  = 1;
-    m_presentationParameters.Windowed         = true;
-
-	m_pDistortShader->OnLostDevice();
-    for (int i = 0; i < NUM_SHADERS; i++)
-    {
-        m_pShaders[i]->OnLostDevice();
-    }
-	if (m_pBloomEffect != NULL) m_pBloomEffect->OnLostDevice();
-	if (m_pShadowBlurEffect != NULL) m_pShadowBlurEffect->OnLostDevice();   // [soft-shadows] distinct ID3DXEffect
+	// ShaderManager retains historically loaded effects after their active
+	// Engine/mesh refs change. Fan out once across every unique cached Effect so
+	// no inactive D3DX state block remains live across ResetEx.
+	m_pDistortShader->OnLostDevice();   // direct Engine-owned effect
+	m_shaderManager.OnLostDevice();     // all manager-owned effects, deduplicated
 	// The skydome effect needs the same OnLost/OnReset dance — without it,
 	// the effect's internal D3DPOOL_DEFAULT state-cache references survive
 	// past Reset and cause D3DERR_INVALIDCALL on any later size change.
@@ -624,13 +835,18 @@ void Engine::Reset()
 	// stale-resource D3DERR on the next Reset.
 	ReleaseSkydomeMeshBuffers();
 	SAFE_RELEASE(m_pSkydomeTexture);
-	// release the game-dome DEFAULT-pool VB/IB + material textures and
-	// OnLostDevice their effects (decls survive). Both slots.
-	m_skydomePrimaryMesh.OnLostDevice();
-	m_skydomeSecondaryMesh.OnLostDevice();
-	m_referenceObjectMesh.OnLostDevice();   // same DEFAULT-pool dance
-	for (auto& a : m_referenceAttachments) if (a) a->mesh.OnLostDevice();   // hardpoint attach models
+	// Release mesh DEFAULT-pool resources only. Their manager-owned effects
+	// were included in the deduplicated fanout above.
+	m_skydomePrimaryMesh.ReleaseGpuResources();
+	m_skydomeSecondaryMesh.ReleaseGpuResources();
+	m_referenceObjectMesh.ReleaseGpuResources();
+	for (auto& a : m_referenceAttachments) if (a) a->mesh.ReleaseGpuResources();
 	SAFE_RELEASE(m_pGroundTexture);
+	// The D3D11 compositor owns an alias of AlphaCompositor's shared D3D9
+	// texture. Drop that alias first so the underlying video-memory object has
+	// no cross-device owner when the D3D9 side is released below.
+	if (m_pCompositionCompositor)
+		m_pCompositionCompositor->ReleaseEngineSharedHandle();
 	// The compositor's off-screen RT is D3DPOOL_DEFAULT, so
 	// it must be released before m_pDevice->Reset — otherwise Reset
 	// fails with D3DERR_INVALIDCALL and the engine is left in a
@@ -658,27 +874,50 @@ void Engine::Reset()
 	// resources. Lazy-recreated by the next IssueEndFrameQuery call
 	// against the post-Reset device.
 	SAFE_RELEASE(m_pEndFrameQuery);
-	const LONGLONG _rpT1 = EngQpcNow();   // [resize-perf] lost ends / device Reset begins
-	if (FAILED(m_pDevice->Reset(&m_presentationParameters)))
-	{
-		throw wruntime_error(LoadString(IDS_ERROR_RENDERER_RESET));
-	}
-	const LONGLONG _rpT2 = EngQpcNow();   // [resize-perf] device Reset ends / reload begins
+}
+
+void Engine::ResetDeviceEffectsAfterReset()
+{
+	// D3DX requires every effect's OnResetDevice before any other post-reset
+	// resource work. ShaderManager covers current and inactive cached effects
+	// once by identity; the three direct Engine effects remain explicit.
 	m_pDistortShader->OnResetDevice();
-    for (int i = 0; i < NUM_SHADERS; i++)
-    {
-        m_pShaders[i]->OnResetDevice();
-    }
-	if (m_pBloomEffect != NULL) m_pBloomEffect->OnResetDevice();
-	if (m_pShadowBlurEffect != NULL) m_pShadowBlurEffect->OnResetDevice();   // [soft-shadows]
+	m_shaderManager.OnResetDevice();
 	if (m_pSkydomeEffect != NULL) m_pSkydomeEffect->OnResetDevice();
 	if (m_pGroundEffect  != NULL) m_pGroundEffect->OnResetDevice();
-	// two-phase like the rest of the dance: all effects OnReset here,
-	// then the DEFAULT-pool VB/IB + textures refill below.
-	m_skydomePrimaryMesh.OnResetEffects();
-	m_skydomeSecondaryMesh.OnResetEffects();
-	m_referenceObjectMesh.OnResetEffects();   // phase 1
-	for (auto& a : m_referenceAttachments) if (a) a->mesh.OnResetEffects();   // attachments, phase 1
+}
+
+HRESULT Engine::RefreshPresentationParametersAfterReset()
+{
+	IDirect3DSurface9* backBuffer = NULL;
+	HRESULT hr = m_pDevice->GetBackBuffer(
+	    0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer);
+	if (FAILED(hr)) return hr;
+
+	D3DSURFACE_DESC desc = {};
+	hr = backBuffer->GetDesc(&desc);
+	SAFE_RELEASE(backBuffer);
+	if (FAILED(hr)) return hr;
+	if (desc.Width == 0 || desc.Height == 0) return E_FAIL;
+
+	// Reset/ResetEx zero these in/out fields before returning. Rehydrate them
+	// from the actual swap-chain surface before any size-keyed allocation.
+	m_presentationParameters.BackBufferWidth  = desc.Width;
+	m_presentationParameters.BackBufferHeight = desc.Height;
+	m_presentationParameters.BackBufferCount  = 1;
+	m_presentationParameters.Windowed         = TRUE;
+	return D3D_OK;
+}
+
+void Engine::ReacquireDeviceResourcesAfterReset()
+{
+
+	// BindShaderTextures stores TextureManager handles inside D3DX effect
+	// parameters. The cache was destroyed before reset, so refill those active
+	// annotations now rather than leaving effects pointing at released textures.
+	for (int i = 0; i < NUM_SHADERS; ++i)
+		BindShaderTextures(m_pShaders[i]);
+
 	// recreate the D3DPOOL_DEFAULT ground normal textures post-Reset.
 	CreateGroundFlatNormal();
 	// rebuild the previously-managed-pool
@@ -703,13 +942,12 @@ void Engine::Reset()
 
 	ResetParameters();
 
-	const LONGLONG _rpT3 = EngQpcNow();   // [resize-perf] reload ends / alpha resize begins
-
 	// The alpha compositor owns D3D9 resources (RT + sysmem
 	// surface) sized to the popup client area. Refresh them so the
 	// off-screen RT keeps pace with the swap-chain's back-buffer
 	// size, which the engine's render chain (m_pSceneTexture etc.)
 	// is already keyed off via BackBufferWidth/Height.
+	const LONGLONG _rpAlpha0 = EngQpcNow();
 	if (m_pAlphaCompositor && m_presentationParameters.BackBufferWidth > 0
 	    && m_presentationParameters.BackBufferHeight > 0)
 	{
@@ -717,8 +955,8 @@ void Engine::Reset()
 		    static_cast<int>(m_presentationParameters.BackBufferWidth),
 		    static_cast<int>(m_presentationParameters.BackBufferHeight));
 	}
-
-	const LONGLONG _rpT4 = EngQpcNow();   // [resize-perf] alpha resize ends
+	m_resetPerf.lastAlphaResizeMs =
+	    EngQpcUs(_rpAlpha0, EngQpcNow()) / 1000.0;
 
 	// re-apply the cached scene
 	// viewport so its projection aspect ratio survives Reset.
@@ -744,17 +982,77 @@ void Engine::Reset()
 		int sw = m_sceneViewportW;
 		int sh = m_sceneViewportH;
 		m_sceneViewportActive = false;
-		SetSceneViewport(sx, sy, sw, sh);
+		SetSceneViewportUnchecked(sx, sy, sw, sh);
 	}
 
-	// [resize-perf] publish this Reset's sub-stage costs. count increments
-	// only on a COMPLETED reset (the device-Reset throw above skips this),
-	// so the host's delta-per-second reads as successful resets.
+	m_deviceResourcesReleased = false;
+	m_fullResetPending = false;
+}
+
+void Engine::Reset()
+{
+	if (m_pDevice == NULL || m_fatalDeviceState ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::Terminal ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::ResetExFailed ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::Recovering ||
+	    m_deviceResetInProgress)
+	{
+		throw wruntime_error(LoadString(IDS_ERROR_RENDERER_RESET));
+	}
+
+	// [resize-perf] sub-stage QPC brackets filled into m_resetPerf at
+	// the end; the host logs them at 1 Hz. HUNG recovery uses the same
+	// release/reacquire halves but ResetEx is driven by DeviceRecovery.h.
+	const LONGLONG _rpT0 = EngQpcNow();
+	LONGLONG _rpT1 = _rpT0;
+	LONGLONG _rpT2 = _rpT0;
+	LONGLONG _rpT3 = _rpT0;
+	bool deviceResetSucceeded = false;
+	m_fullResetPending = true;
+	m_deviceResetInProgress = true;
+	try
+	{
+		ReleaseDeviceResourcesForReset();
+		_rpT1 = EngQpcNow();
+
+		D3DPRESENT_PARAMETERS parameters =
+		    GetDeviceRecoveryPresentationParameters();
+		if (FAILED(m_pDevice->Reset(&parameters)))
+		{
+			throw wruntime_error(LoadString(IDS_ERROR_RENDERER_RESET));
+		}
+		deviceResetSucceeded = true;
+		_rpT2 = EngQpcNow();
+
+		ResetDeviceEffectsAfterReset();
+		if (FAILED(RefreshPresentationParametersAfterReset()))
+		{
+			throw wruntime_error(LoadString(IDS_ERROR_RENDERER_RESET));
+		}
+		ReacquireDeviceResourcesAfterReset();
+		_rpT3 = EngQpcNow();
+	}
+	catch (...)
+	{
+		// A successful device reset followed by a partial rebuild must release
+		// that partial graph again on the next full attempt. The separate
+		// m_fullResetPending gate keeps external D3D callers blocked meanwhile.
+		if (deviceResetSucceeded) m_deviceResourcesReleased = false;
+		m_presentSuspect = true;
+		m_deviceResetInProgress = false;
+		throw;
+	}
+	m_deviceResetInProgress = false;
+
+	// count increments only on a completed reset (the device-Reset throw above
+	// skips this), so the host's delta-per-second reads as successful resets.
 	m_resetPerf.lastLostMs        = EngQpcUs(_rpT0, _rpT1) / 1000.0;
 	m_resetPerf.lastDeviceResetMs = EngQpcUs(_rpT1, _rpT2) / 1000.0;
-	m_resetPerf.lastReloadMs      = EngQpcUs(_rpT2, _rpT3) / 1000.0;
-	m_resetPerf.lastAlphaResizeMs = EngQpcUs(_rpT3, _rpT4) / 1000.0;
-	m_resetPerf.lastTotalMs       = EngQpcUs(_rpT0, EngQpcNow()) / 1000.0;
+	const double reloadAndAlphaMs = EngQpcUs(_rpT2, _rpT3) / 1000.0;
+	const double reloadOnlyMs =
+	    reloadAndAlphaMs - m_resetPerf.lastAlphaResizeMs;
+	m_resetPerf.lastReloadMs = reloadOnlyMs > 0.0 ? reloadOnlyMs : 0.0;
+	m_resetPerf.lastTotalMs       = EngQpcUs(_rpT0, _rpT3) / 1000.0;
 	++m_resetPerf.count;
 }
 
@@ -768,37 +1066,29 @@ void Engine::Reset()
 // Reset and a query re-create costs nothing next frame.
 bool Engine::ResetForResize()
 {
-	if (m_pDevice == NULL) return false;
+	if (m_pDevice == NULL || m_fatalDeviceState || m_fullResetPending ||
+	    m_deviceResourcesReleased || m_deviceResetInProgress ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::Terminal ||
+	    m_deviceRecovery.phase == devicerecovery::Phase::Recovering)
+		return false;
 
 	const LONGLONG _rpT0 = EngQpcNow();
+	const bool retryingFailedResetEx =
+	    m_deviceRecovery.phase == devicerecovery::Phase::ResetExFailed;
+	m_deviceResetInProgress = true;
 
-	// Release the size-keyed render targets so ResetParameters below can
-	// recreate them at the new backbuffer size (it CreateTexture-s into
-	// the member pointers without releasing first). NOT required by
-	// ResetEx itself — DEFAULT-pool resources persist — purely lifetime
-	// hygiene for the recreate.
-	ReleaseBloomTargets();
-	ReleaseShadowMaskTargets();   // [soft-shadows] DEFAULT-pool mask RTs
-	SAFE_RELEASE(m_pDistortTexture);
-	SAFE_RELEASE(m_pSceneTexture);
-	SAFE_RELEASE(m_pDepthStencilSurface);
-	// MSAA surfaces are D3DPOOL_DEFAULT — must be released before ResetEx.
-	SAFE_RELEASE(m_pMsaaColor);
-	SAFE_RELEASE(m_pMsaaDepth);
-	m_msaaActive = false;
-	SAFE_RELEASE(m_pEndFrameQuery);
-
-	m_presentationParameters.BackBufferWidth  = 0;   // size to the HWND client
-	m_presentationParameters.BackBufferHeight = 0;
-	m_presentationParameters.BackBufferCount  = 1;
-	m_presentationParameters.Windowed         = true;
-
+	D3DPRESENT_PARAMETERS parameters =
+	    GetDeviceRecoveryPresentationParameters();
 	const LONGLONG _rpT1 = EngQpcNow();
-	HRESULT hr = m_pDevice->ResetEx(&m_presentationParameters, NULL);
+	HRESULT hr = m_pDevice->ResetEx(&parameters, NULL);
 	if (FAILED(hr))
 	{
-		// Device is now in the lost state (ResetEx docs). Caller falls
-		// back to the full Reset() / RecoverDeviceIfNeeded path.
+		// After a failed ResetEx only CheckDeviceState, ResetEx, and Release are
+		// legal. Record a distinct pending state so LayoutBroker cannot fall
+		// through to ordinary Reset and no external D3D door can reopen.
+		devicerecovery::RecordResetExFailure(m_deviceRecovery, hr);
+		m_presentSuspect = true;
+		m_deviceResetInProgress = false;
 		char buf[96];
 		sprintf(buf, "[Engine] ResetForResize: ResetEx failed hr=0x%08lx\n", static_cast<unsigned long>(hr));
 		OutputDebugStringA(buf);
@@ -806,33 +1096,63 @@ bool Engine::ResetForResize()
 	}
 	const LONGLONG _rpT2 = EngQpcNow();
 
-	// Rebuild the size-keyed targets + re-apply pipeline state and the
-	// full-RT projection (same routine the full Reset uses). Throws on
-	// allocation failure — propagate; the caller's fallback handles it.
-	ResetParameters();
-	const LONGLONG _rpT3 = EngQpcNow();
-
-	// Same tail as Reset(): the AlphaCompositor's shared RT + readback
-	// surfaces track the backbuffer size, and the cached scene viewport
-	// must be re-applied so the projection survives at scene-rect aspect.
-	if (m_pAlphaCompositor && m_presentationParameters.BackBufferWidth > 0
-	    && m_presentationParameters.BackBufferHeight > 0)
+	LONGLONG _rpT3 = _rpT2;
+	LONGLONG _rpT4 = _rpT2;
+	try
 	{
-		m_pAlphaCompositor->Resize(
-		    static_cast<int>(m_presentationParameters.BackBufferWidth),
-		    static_cast<int>(m_presentationParameters.BackBufferHeight));
-	}
-	const LONGLONG _rpT4 = EngQpcNow();
+		if (FAILED(RefreshPresentationParametersAfterReset()))
+			throw wruntime_error(LoadString(IDS_ERROR_RENDERER_RESET));
 
-	if (m_sceneViewportActive)
-	{
-		int sx = m_sceneViewportX;
-		int sy = m_sceneViewportY;
-		int sw = m_sceneViewportW;
-		int sh = m_sceneViewportH;
-		m_sceneViewportActive = false;
-		SetSceneViewport(sx, sy, sw, sh);
+		// ResetEx preserves these objects, so release them only after a
+		// successful reset. A failed ResetEx therefore leaves the old render
+		// graph intact while the pending coordinator waits to retry.
+		ReleaseBloomTargets();
+		ReleaseShadowMaskTargets();
+		SAFE_RELEASE(m_pDistortTexture);
+		SAFE_RELEASE(m_pSceneTexture);
+		SAFE_RELEASE(m_pDepthStencilSurface);
+		SAFE_RELEASE(m_pMsaaColor);
+		SAFE_RELEASE(m_pMsaaDepth);
+		m_msaaActive = false;
+		SAFE_RELEASE(m_pEndFrameQuery);
+
+		ResetParameters();
+		_rpT3 = EngQpcNow();
+
+		if (m_pAlphaCompositor &&
+		    m_presentationParameters.BackBufferWidth > 0 &&
+		    m_presentationParameters.BackBufferHeight > 0)
+		{
+			m_pAlphaCompositor->Resize(
+			    static_cast<int>(m_presentationParameters.BackBufferWidth),
+			    static_cast<int>(m_presentationParameters.BackBufferHeight));
+		}
+		_rpT4 = EngQpcNow();
+
+		if (m_sceneViewportActive)
+		{
+			int sx = m_sceneViewportX;
+			int sy = m_sceneViewportY;
+			int sw = m_sceneViewportW;
+			int sh = m_sceneViewportH;
+			m_sceneViewportActive = false;
+			SetSceneViewportUnchecked(sx, sy, sw, sh);
+		}
 	}
+	catch (...)
+	{
+		// The ResetEx itself succeeded. A normal resize may safely fall back to
+		// full Reset; a pending retry stays pending so ordinary Reset remains
+		// forbidden and the coordinator can retry ResetEx later.
+		m_deviceResetInProgress = false;
+		if (!retryingFailedResetEx)
+			devicerecovery::CompleteResetExRetry(m_deviceRecovery);
+		throw;
+	}
+	if (retryingFailedResetEx)
+		devicerecovery::CompleteResetExRetry(m_deviceRecovery);
+	m_presentSuspect = false;
+	m_deviceResetInProgress = false;
 
 	m_resetPerf.lastLostMs        = EngQpcUs(_rpT0, _rpT1) / 1000.0;
 	m_resetPerf.lastDeviceResetMs = EngQpcUs(_rpT1, _rpT2) / 1000.0;
@@ -852,6 +1172,7 @@ bool Engine::ResetForResize()
 // shared_texture_test exe verifies the handle is openable.
 HANDLE Engine::GetSharedTextureHandle() const
 {
+	if (DeviceCallsBlocked()) return nullptr;
 	return m_pAlphaCompositor ? m_pAlphaCompositor->GetSharedHandle() : nullptr;
 }
 
@@ -870,6 +1191,7 @@ HANDLE Engine::GetSharedTextureHandle() const
 // commands have completed.
 void Engine::IssueEndFrameQuery()
 {
+	if (DeviceCallsBlocked()) return;
 	if (m_pDevice == NULL) return;
 	if (m_pEndFrameQuery == NULL)
 	{
@@ -903,6 +1225,7 @@ void Engine::IssueEndFrameQuery()
 // now that late polls yield — irrelevant next to a hung GPU).
 int Engine::WaitEndFrameQuery()
 {
+	if (DeviceCallsBlocked()) return 0;
 	if (m_pEndFrameQuery == NULL) return 0;
 	BOOL done = FALSE;
 	int spins = 0;
@@ -930,7 +1253,8 @@ int Engine::WaitEndFrameQuery()
 LUID Engine::GetAdapterLuid() const
 {
 	LUID luid = {};
-	if (m_pDirect3D == NULL || m_pDevice == NULL) return luid;
+	if (m_pDirect3D == NULL || m_pDevice == NULL || DeviceCallsBlocked())
+		return luid;
 
 	D3DDEVICE_CREATION_PARAMETERS params = {};
 	if (FAILED(m_pDevice->GetCreationParameters(&params))) return luid;
@@ -972,6 +1296,12 @@ LUID Engine::GetAdapterLuid() const
 // [COMP-engine-transform] line, which fires through host.log on the
 // same LayoutBroker gate that fired this call.
 void Engine::SetSceneViewport(int x, int y, int w, int h)
+{
+	if (DeviceCallsBlocked()) return;
+	SetSceneViewportUnchecked(x, y, w, h);
+}
+
+void Engine::SetSceneViewportUnchecked(int x, int y, int w, int h)
 {
 	const bool clearing = (w <= 0 || h <= 0);
 	if (clearing)
@@ -1437,6 +1767,9 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 			SAFE_RELEASE(m_pDirect3D);
 			throw runtime_error("Unable to create render device");
 		}
+		// Reset/ResetEx must run on the thread that created the device even
+		// though D3DCREATE_MULTITHREADED permits ordinary cross-thread calls.
+		m_deviceThreadId = GetCurrentThreadId();
 
 		// Adapter info for multi-GPU LUID match debugging.
 		D3DADAPTER_IDENTIFIER9 adapterIdent = {};

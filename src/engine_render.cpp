@@ -380,6 +380,7 @@ void Engine::InitShadowBlurEffect()
 // a busted mod shader can't brick a running session.
 bool Engine::ReloadShaders()
 {
+	if (DeviceCallsBlocked()) return false;
 	printf("[Shaders] Reload begin\n"); fflush(stdout);
 
 	// Flush the shader manager's cache so getShader() re-resolves from disk
@@ -429,15 +430,30 @@ bool Engine::ReloadShaders()
 	return true;
 }
 
-// Hot-reload textures: flush the texture manager's cache so the next lookup
-// re-resolves from disk, then notify every active emitter instance to drop
-// its current texture handles and re-fetch. Cheap & safe — texture loads
-// can't really fail (missing files fall through to the placeholder).
+// Queue a full texture reload before consulting the device gate. Requests made
+// during reset/recovery coalesce and replay through PrepareDeviceForFrame().
 void Engine::ReloadTextures()
 {
+	if (IsTerminalDeviceState())
+	{
+		m_textureReloadAppliedGeneration = m_textureReloadRequestGeneration;
+		return;
+	}
+	++m_textureReloadRequestGeneration;
+	if (DeviceCallsBlocked() || m_presentSuspect) return;
+	ReplayPendingTextureReload();
+}
+
+// Execute the idempotent cache/emitter/environment transaction. The replay
+// wrapper retains the request if a phase throws or the device blocks again.
+bool Engine::PerformTextureReload()
+{
+	if (!TextureReloadCanContinue()) return false;
 	m_textureManager.Clear();
+	if (!TextureReloadCanContinue()) return false;
 	int n = (int)m_instances.size();
-	OnParticleSystemChanged(-1);
+	ApplyParticleSystemChanged(-1);
+	if (!TextureReloadCanContinue()) return false;
 	// Re-resolve the active skydome texture too, so a mod
 	// override of (say) DATA\ART\TEXTURES\W_SKYBLUE01.DDS takes effect on
 	// the next render. No-op when the slot is Off.
@@ -445,6 +461,7 @@ void Engine::ReloadTextures()
 	{
 		ReloadSkydomeTexture(m_skydomeIndex);
 	}
+	if (!TextureReloadCanContinue()) return false;
 	// re-resolve the game domes so a changed .alo / texture (and, on the
 	// mod-switch path where ReloadShaders->ShaderManager::Clear ran first, a
 	// changed .fxo) is picked up. On a standalone Reload-Textures the cached
@@ -453,6 +470,7 @@ void Engine::ReloadTextures()
 	{
 		RebuildSkydomeMeshes();
 	}
+	if (!TextureReloadCanContinue()) return false;
 	// A mod/submod switch changes the object catalog -> invalidate it so the
 	// next Update() rebuilds it OFF the UI thread (++generation discards any in-flight
 	// build started under the OLD context). But ReloadTextures ALSO runs on texture-only
@@ -469,6 +487,7 @@ void Engine::ReloadTextures()
 		m_referenceCatalogBuilt = false;
 		++m_catalogGeneration;
 	}
+	if (!TextureReloadCanContinue()) return false;
 	// Reference object: on a real mod-context change, clear the SHOWN selection to None
 	// NOW (no stale id during the async rebuild) and let the catalog-ready retry restore
 	// it iff it still exists -- ResolveDesiredReference takes its not-built branch
@@ -483,11 +502,14 @@ void Engine::ReloadTextures()
 	{
 		RebuildReferenceObjectMesh();
 	}
+	if (!TextureReloadCanContinue()) return false;
 	printf("[Textures] Reload: cache cleared, %d instance(s) notified\n", n); fflush(stdout);
+	return true;
 }
 
 void Engine::Update()
 {
+	if (!PrepareDeviceForFrame()) return;
 	TimeF currentTime = GetTimeF();
 
 	EaseReferenceDisplay();   // ease the render-only display transform (smooth gizmo/object motion)
@@ -612,55 +634,11 @@ bool Engine::Render()
 {
 	static const D3DXMATRIX Identity(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
 
-	// See if we can render. Mirrors RecoverDeviceIfNeeded but keeps the
-	// decision here so a transient loss early-returns false (no point doing the
-	// rest of Render if we can't yet); RecoverDeviceIfNeeded is the
-	// "fix the latch, don't render" variant for non-render-thread callers.
-	//
-	// This used to switch on TestCooperativeLevel, which always returns S_OK on
-	// a D3D9Ex device — so neither branch could ever be taken (2026-07 audit,
-	// an-audit-finding). CheckDeviceState is the Ex replacement, but Microsoft
-	// recommends against calling it every frame; m_presentSuspect is raised only
-	// when a Present actually failed, which is the condition they name.
-	if (m_fatalDeviceState) return false;
-	if (m_presentSuspect)
-	{
-		const HRESULT state = m_pDevice->CheckDeviceState(NULL);
-		const devicestate::Action action = devicestate::ClassifyDeviceState(state);
-		if (action != devicestate::Action::SkipFrame) m_presentSuspect = false;
-		switch (action)
-		{
-			case devicestate::Action::SkipFrame:
-				return false;
-
-			case devicestate::Action::Fatal:
-				ReportFatalDeviceState(state);
-				return false;
-
-			case devicestate::Action::Reset:
-				// NEW-RESET-THROW: Reset() throws on failure, and this is the
-				// render loop — an escaping exception would unwind through
-				// RenderD3D9 instead of leaving a recoverable lost device. That
-				// hazard was previously LATENT only because this branch was
-				// unreachable; making detection work above makes it live, so the
-				// two must be fixed together. A failed reset costs a frame and
-				// is retried, with the suspect latch left raised.
-				try
-				{
-					Reset();
-				}
-				catch (...)
-				{
-					m_presentSuspect = true;
-					return false;
-				}
-				break;
-
-			case devicestate::Action::Render:
-			default:
-				break;
-		}
-	}
+	// This is also the recovery front door for non-composed callers. In the
+	// production host PrepareDeviceForFrame already ran before Update; the
+	// second healthy call is a no-op. During Reset/ResetEx reentrancy it blocks
+	// before any render-state or resource call.
+	if (!PrepareDeviceForFrame()) return false;
 
 	// [runtime-MSAA] Apply a pending MSAA level change on the render thread.
 	// The setter (SetMsaaLevel) stores the preference and raises this flag;
@@ -1220,6 +1198,7 @@ void Engine::DumpParticleDrawStateIfRequested(unsigned long blendMode,
                                               IDirect3DTexture9* colorTex,
                                               IDirect3DTexture9* normalTex)
 {
+    if (DeviceCallsBlocked()) return;
     char path[512];
     if (GetEnvironmentVariableA("ALO_DUMP_RSTATE", path, sizeof(path)) == 0)
         return;

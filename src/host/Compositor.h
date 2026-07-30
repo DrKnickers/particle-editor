@@ -67,6 +67,69 @@ struct ICoreWebView2CompositionController;
 
 namespace host {
 
+// Preserve which composed-frame operation produced an HRESULT. A failure while
+// re-opening the D3D9 shared handle is retryable: the next resize/frame may
+// provide a valid handle. A device-removed result from Present1 belongs to the
+// D3D11 composition device instead and requires an application restart; it must
+// never be forwarded into the separate D3D9Ex recovery state machine.
+enum class ComposedFrameStage
+{
+    NoFrame,
+    SharedHandle,
+    Present1,
+};
+
+struct ComposedFrameResult
+{
+    ComposedFrameStage stage;
+    HRESULT hr;
+
+    static ComposedFrameResult NoFrame() noexcept
+    {
+        return { ComposedFrameStage::NoFrame, S_FALSE };
+    }
+
+    static ComposedFrameResult SharedHandleFailure(HRESULT failure) noexcept
+    {
+        return { ComposedFrameStage::SharedHandle, failure };
+    }
+
+    static ComposedFrameResult PresentResult(HRESULT result) noexcept
+    {
+        return { ComposedFrameStage::Present1, result };
+    }
+};
+
+enum class ComposedFrameAction
+{
+    Continue,
+    Retry,
+    RestartRequired,
+};
+
+// Pure policy seam used by HostWindow's production frame coordinator and the
+// device-state unit. The stage check is load-bearing: even an exact
+// DXGI_ERROR_DEVICE_REMOVED from the shared-handle path remains retryable.
+inline ComposedFrameAction ClassifyComposedFrameResult(
+    const ComposedFrameResult& result) noexcept
+{
+    if (result.stage == ComposedFrameStage::NoFrame)
+        return ComposedFrameAction::Continue;
+    if (result.stage == ComposedFrameStage::SharedHandle)
+        return ComposedFrameAction::Retry;
+
+    if (result.hr == DXGI_ERROR_DEVICE_REMOVED ||
+        result.hr == DXGI_ERROR_DEVICE_HUNG ||
+        result.hr == DXGI_ERROR_DEVICE_RESET)
+    {
+        return ComposedFrameAction::RestartRequired;
+    }
+
+    return FAILED(result.hr)
+        ? ComposedFrameAction::Retry
+        : ComposedFrameAction::Continue;
+}
+
 class Compositor
 {
 public:
@@ -168,10 +231,17 @@ public:
     // costs one re-open and proceeds normally; the steady state is
     // a pointer-compare per frame with no extra work.
     //
-    // Returns S_OK on success; S_FALSE when no engine visual is
-    // attached (webview-only baseline state, or AttachEngineVisual-failed
-    // state — chrome works, viewport empty).
-    HRESULT CompositeEngineFrame(HANDLE currentSharedHandle) noexcept;
+    // The typed result retains the operation that produced the HRESULT:
+    // expected no-frame, retryable shared-handle work, or Present1. The host
+    // uses that provenance to keep D3D11 failures out of D3D9Ex recovery.
+    ComposedFrameResult CompositeEngineFrame(
+        HANDLE currentSharedHandle) noexcept;
+
+    // Drop the D3D11 alias of the engine-owned D3D9 shared texture before a
+    // full device-loss reset. The engine visual and swapchain stay attached;
+    // the first successfully rendered post-reset frame lazily re-opens the new
+    // handle through RefreshEngineSharedHandle.
+    void ReleaseEngineSharedHandle() noexcept;
 
     // Drop the D3D11 alias and re-open against a fresh shared handle.
     // Called implicitly by CompositeEngineFrame's lazy handle-mismatch

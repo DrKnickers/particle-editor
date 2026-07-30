@@ -387,6 +387,7 @@ bool Engine::ReloadGroundTexture()
 
 bool Engine::SetGroundTexture(int index)
 {
+    if (DeviceCallsBlocked()) return false;
     if (index < 0 || index >= kGroundTextureCount) return false;
     // Refuse selection of an unavailable slot — empty user slot, OR a
     // game-sourced slot (grass/sand/snow) the install can't resolve. UI
@@ -405,6 +406,7 @@ bool Engine::SetGroundTexture(int index)
 
 bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
 {
+    if (DeviceCallsBlocked()) return false;
     if (slot < 0 || slot >= kGroundTextureCount) return false;
     // Refuse a path that points at another machine. Enforced HERE rather than in
     // the bridge handler because the registry restore at startup calls this
@@ -507,6 +509,7 @@ void Engine::EnsureGroundSlotResolvable() const
 
 bool Engine::SetGroundSolidColor(COLORREF color)
 {
+    if (DeviceCallsBlocked()) return false;
     m_groundSolidColor = color;
     // If the solid-colour slot is currently selected, regenerate the
     // texture so the colour change shows immediately.
@@ -1121,6 +1124,7 @@ void Engine::SetSkydomeEnvironment(SkydomeContext context,
                                    const std::string& primaryName,
                                    const std::string& secondaryName)
 {
+    if (DeviceCallsBlocked()) return;
     m_skydomeContext       = context;
     m_skydomePrimaryName   = primaryName;
     m_skydomeSecondaryName = secondaryName;
@@ -1346,6 +1350,7 @@ void Engine::RenderGroundLit()
 
 bool Engine::SetSkydomeSlot(int newIndex)
 {
+    if (DeviceCallsBlocked()) return false;
     if (newIndex < 0 || newIndex >= kSkydomeSlotCount) return false;
     if (newIndex == m_skydomeIndex) return true;
     if (!ReloadSkydomeTexture(newIndex))
@@ -1364,6 +1369,7 @@ bool Engine::SetSkydomeSlot(int newIndex)
 
 bool Engine::SetSkydomeCustomPath(int slot, const std::wstring& path)
 {
+    if (DeviceCallsBlocked()) return false;
     if (slot < kSkydomeFirstCustomSlot || slot >= kSkydomeSlotCount) return false;
     // Same guard as the ground slot above. The audit filed an-audit-finding against the
     // ground handler only; this sibling took its path exactly as unvalidated,

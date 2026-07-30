@@ -71,6 +71,11 @@ class IShaderManager
 public:
 	virtual Effect* getShader(IDirect3DDevice9* pDevice, std::string name) = 0;
 	virtual void Clear() = 0;
+	// Fan out D3DX effect lifecycle calls to every unique cached Effect.
+	// A fallback Effect can occupy several cache keys, so implementations must
+	// deduplicate by object identity before invoking either callback.
+	virtual void OnLostDevice() = 0;
+	virtual void OnResetDevice() = 0;
 };
 
 //

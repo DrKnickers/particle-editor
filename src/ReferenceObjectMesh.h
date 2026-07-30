@@ -114,6 +114,10 @@ public:
     void OnLostDevice();      // release VB/IB + textures + effect->OnLostDevice
     void OnResetEffects();    // effect->OnResetDevice (phase 1 of the two-phase reset)
 
+    // Release only the DEFAULT-pool buffers/textures. ShaderManager owns the
+    // deduplicated effect lifecycle during a full device reset.
+    void ReleaseGpuResources() { ReleaseGpuBuffers(); }
+
     bool IsEmpty()      const { return m_subMeshes.empty(); }
     bool HasResolved()  const;                  // >=1 sub-mesh with a non-NULL effect
     bool SkippedSkinned() const { return m_skippedSkinned; }   // dropped >=1 skinned sub-mesh

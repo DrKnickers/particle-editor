@@ -116,6 +116,11 @@ public:
     // refill is CreateBuffers (phase 2).
     void OnResetEffects();
 
+    // Release only the DEFAULT-pool buffers/textures. Engine uses this when the
+    // ShaderManager performs one deduplicated lifecycle fanout for every cached
+    // Effect, avoiding duplicate OnLostDevice calls through active mesh refs.
+    void ReleaseGpuResources() { ReleaseGpuBuffers(); }
+
     bool   IsEmpty()      const { return m_subMeshes.empty(); }
     bool   HasResolved()  const;                 // >=1 sub-mesh with a non-NULL effect
     // >=1 sub-mesh with LIVE DEFAULT-pool buffers and something to draw. Distinct

@@ -56,6 +56,15 @@ type EngineStateDto = {
   background: { r: number; g: number; b: number };
 };
 
+type DeviceRecoveryWorkState = {
+  pending: boolean;
+  reloadCount: number;
+  authoredApplyCount: number;
+  deviceProbeCount: number;
+  composedFramePrepareCount: number;
+  frameReady: boolean;
+};
+
 let browser: Browser;
 let page: Page;
 
@@ -250,4 +259,211 @@ test("polluter pair + ground set ⇒ engine accepts mutation after spawner+modal
     return dto.groundTexture;
   });
   expect(result).toBe(3);
+});
+
+test("blocked full texture reload replays once without duplicating authored work", async () => {
+  const result = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    const debug = async (action: "arm" | "release" | "query") =>
+      (await b.request({
+        kind: "debug/device-recovery-work",
+        params: { action },
+      })) as DeviceRecoveryWorkState;
+    const authoredChange = async (track: number) => {
+      await b.request({
+        kind: "engine/action/on-particle-system-changed",
+        params: { track },
+      });
+    };
+    const reloadTextures = async () => {
+      await b.request({
+        kind: "engine/action/reload-textures",
+        params: {},
+      });
+    };
+
+    try {
+      // Idempotent cleanup gives the shared native host a known baseline even
+      // if a previous failed run exited while the synthetic hold was armed.
+      await debug("release");
+      const controlBase = await debug("query");
+
+      await debug("arm");
+      await authoredChange(17);
+      const controlHeld = await debug("query");
+      const controlAfter = await debug("release");
+
+      const reloadBase = await debug("query");
+      await debug("arm");
+      await authoredChange(29);
+      await reloadTextures();
+      await reloadTextures();
+      const reloadHeld = await debug("query");
+      const reloadAfter = await debug("release");
+      const reloadSettled = await debug("release");
+
+      return {
+        controlBase,
+        controlHeld,
+        controlAfter,
+        reloadBase,
+        reloadHeld,
+        reloadAfter,
+        reloadSettled,
+      };
+    } finally {
+      // Never poison later specs in the one shared native process.
+      await debug("release").catch(() => undefined);
+    }
+  });
+
+  expect(result.controlHeld.pending).toBe(false);
+  expect(result.controlHeld.reloadCount - result.controlBase.reloadCount).toBe(0);
+  expect(
+    result.controlHeld.authoredApplyCount -
+      result.controlBase.authoredApplyCount,
+  ).toBe(0);
+  expect(result.controlAfter.pending).toBe(false);
+  expect(result.controlAfter.reloadCount - result.controlBase.reloadCount).toBe(0);
+  expect(
+    result.controlAfter.authoredApplyCount -
+      result.controlBase.authoredApplyCount,
+  ).toBe(1);
+  expect(result.controlAfter.frameReady).toBe(true);
+
+  expect(result.reloadHeld.pending).toBe(true);
+  expect(result.reloadHeld.reloadCount - result.reloadBase.reloadCount).toBe(0);
+  expect(
+    result.reloadHeld.authoredApplyCount -
+      result.reloadBase.authoredApplyCount,
+  ).toBe(0);
+  expect(result.reloadAfter.pending).toBe(false);
+  expect(result.reloadAfter.reloadCount - result.reloadBase.reloadCount).toBe(1);
+  expect(
+    result.reloadAfter.authoredApplyCount -
+      result.reloadBase.authoredApplyCount,
+  ).toBe(1);
+  expect(
+    result.reloadSettled.authoredApplyCount -
+      result.reloadBase.authoredApplyCount,
+  ).toBe(1);
+  expect(
+    result.reloadSettled.reloadCount - result.reloadBase.reloadCount,
+  ).toBe(1);
+  expect(result.reloadSettled.pending).toBe(false);
+  expect(result.reloadAfter.frameReady).toBe(true);
+  expect(result.reloadSettled.frameReady).toBe(true);
+});
+
+test("composed coordinator probes the real D3D9Ex device once per healthy frame", async () => {
+  const result = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    const debug = async (action: "release" | "query") =>
+      (await b.request({
+        kind: "debug/device-recovery-work",
+        params: { action },
+      })) as DeviceRecoveryWorkState;
+
+    await debug("release");
+    const before = await debug("query");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const after = await debug("query");
+    return {
+      frameDelta:
+        after.composedFramePrepareCount - before.composedFramePrepareCount,
+      probeDelta: after.deviceProbeCount - before.deviceProbeCount,
+      frameReady: after.frameReady,
+    };
+  });
+
+  expect(result.frameReady).toBe(true);
+  expect(result.frameDelta).toBeGreaterThan(0);
+  expect(result.probeDelta).toBe(result.frameDelta);
+});
+
+test("blocked shader and layer actions fail without moving roots; healthy reload succeeds", async () => {
+  const result = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    const debug = async (action: "arm" | "release") =>
+      (await b.request({
+        kind: "debug/device-recovery-work",
+        params: { action },
+      })) as DeviceRecoveryWorkState;
+    const list = async () =>
+      (await b.request({
+        kind: "mods/list",
+        params: {},
+      })) as { stack: string[] };
+
+    await debug("release");
+    const originalStack = [...(await list()).stack];
+    const refusedPath = "C:\\__particle_editor_blocked_layer_probe__";
+    let blockedLayer:
+      | { ok: boolean; stack: string[]; error?: string }
+      | undefined;
+    let blockedShaderRejected = false;
+    let healthyShaderReloaded = false;
+    let healthyLayerReloaded = false;
+
+    try {
+      await debug("arm");
+      blockedLayer = (await b.request({
+        kind: "mods/set-layers",
+        params: { paths: [refusedPath] },
+      })) as { ok: boolean; stack: string[]; error?: string };
+      try {
+        await b.request({
+          kind: "engine/action/reload-shaders",
+          params: {},
+        });
+      } catch {
+        blockedShaderRejected = true;
+      }
+      const heldStack = [...(await list()).stack];
+
+      await debug("release");
+      await b.request({
+        kind: "engine/action/reload-shaders",
+        params: {},
+      });
+      healthyShaderReloaded = true;
+      const healthyLayer = (await b.request({
+        kind: "mods/set-layers",
+        params: { paths: originalStack },
+      })) as { ok: boolean };
+      healthyLayerReloaded = healthyLayer.ok;
+
+      return {
+        originalStack,
+        refusedPath,
+        blockedLayer,
+        blockedShaderRejected,
+        heldStack,
+        healthyShaderReloaded,
+        healthyLayerReloaded,
+      };
+    } finally {
+      await debug("release").catch(() => undefined);
+      // If the regression reappears, put the shared native host back on the
+      // exact starting stack so a failed assertion cannot poison later specs.
+      await b
+        .request({
+          kind: "mods/set-layers",
+          params: { paths: originalStack },
+        })
+        .catch(() => undefined);
+    }
+  });
+
+  expect(result.blockedLayer?.ok).toBe(false);
+  expect(result.blockedLayer?.error).toContain("load order was not changed");
+  expect(result.blockedLayer?.stack).toEqual(result.originalStack);
+  expect(result.heldStack).toEqual(result.originalStack);
+  expect(result.heldStack).not.toContain(result.refusedPath);
+  expect(result.blockedShaderRejected).toBe(true);
+  expect(result.healthyShaderReloaded).toBe(true);
+  expect(result.healthyLayerReloaded).toBe(true);
 });

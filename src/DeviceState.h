@@ -14,8 +14,10 @@
 // recovery could not have been exercising it.
 //
 // CheckDeviceState is the Ex replacement. Microsoft further recommends calling
-// it only when a present FAILS, not every frame — hence the suspect latch in
-// engine_render.cpp rather than a per-frame query.
+// it only when a present FAILS. The direct-D3D9 path therefore uses the suspect
+// latch. The production editor renders through a separate D3D11 compositor and
+// has no D3D9 Present result, so its host coordinator performs one measured
+// CheckDeviceState probe per composed frame instead.
 //
 // Pure and header-only (an HRESULT in, an enum out, no device calls) so
 // tests/test_device_state.cpp can cover every documented code without a D3D9
@@ -25,19 +27,19 @@ namespace devicestate {
 
 enum class Action
 {
-    Render,     // healthy — draw this frame
-    SkipFrame,  // transient: don't draw, retry on a later frame
-    Reset,      // reset the device first, then draw
-    Fatal,      // NOT recoverable by Reset — the device must be recreated
+    Render,       // healthy — draw this frame
+    SkipFrame,    // transient: don't draw, retry on a later frame
+    Reset,        // normal swap-chain/device reset, then draw
+    RecoverHung,  // one full release -> ResetEx -> reacquire attempt
+    Fatal,        // reset cannot repair it; the device must be recreated
 };
 
 // Classify a CheckDeviceState (or Present/PresentEx) result.
 //
-// The Fatal split is the load-bearing part. D3DERR_DEVICEHUNG and
-// D3DERR_DEVICEREMOVED are NOT resettable: a hung or physically removed adapter
-// needs a brand-new device, so looping on Reset() would spin forever while
-// looking like recovery. They are separated here so the caller can fail loudly
-// instead of quietly never rendering again.
+// The HUNG / REMOVED split is the load-bearing part. Microsoft permits an
+// application that must continue after D3DERR_DEVICEHUNG to destroy every
+// video-memory object and reset the device. D3DERR_DEVICEREMOVED instead
+// requires device destruction, adapter enumeration, and recreation.
 inline Action ClassifyDeviceState(HRESULT hr)
 {
     switch (hr)
@@ -68,6 +70,8 @@ inline Action ClassifyDeviceState(HRESULT hr)
             return Action::Reset;
 
         case D3DERR_DEVICEHUNG:
+            return Action::RecoverHung;
+
         case D3DERR_DEVICEREMOVED:
             return Action::Fatal;
 
@@ -84,10 +88,9 @@ inline Action ClassifyDeviceState(HRESULT hr)
     }
 }
 
-// True when a presentation result warrants a D3D9Ex CheckDeviceState probe on
-// the next frame. This is shared by the engine's direct D3D9 Present path and
-// the host's composed DXGI Present1 path so production cannot silently lose the
-// signal when an AlphaCompositor is attached.
+// True when a direct D3D9 presentation result warrants a D3D9Ex
+// CheckDeviceState probe on the next frame. DXGI Present1 belongs to the
+// separate D3D11 composition device and is classified by Compositor.h instead.
 //
 // S_FALSE is deliberately healthy here: Compositor::CompositeEngineFrame uses
 // it for "no engine visual/current shared texture this frame." Treating that

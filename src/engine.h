@@ -14,7 +14,8 @@
 #include "ReferenceObjectMesh.h"  // imported game-object render core
 #include "ReferenceTransformMemory.h"  // per-object reference-transform memory (pure)
 #include "GameObjectCatalog.h"    // enumerate game objects by Name
-#include "DeviceState.h"          // D3D9Ex CheckDeviceState classification (pure)
+#include "DeviceRecovery.h"       // D3D9Ex CheckDeviceState + bounded HUNG recovery
+#include "DeferredParticleSystemChange.h"
 #include "RefLock.h"
 #include <memory>
 #include <atomic>    // off-UI-thread catalog build
@@ -45,7 +46,7 @@ struct ReferenceAttachment
     ReferenceAttachment() { D3DXMatrixIdentity(&boneMatrix); }
 };
 
-namespace host { class AlphaCompositor; }
+namespace host { class AlphaCompositor; class Compositor; }
 
 class Object3D
 {
@@ -236,33 +237,72 @@ public:
 	// main.cpp's thumbnail generator needs the D3D9 device to
 	// create scratch textures via D3DXCreateTextureFromFile*Ex with
 	// width/height clamped to 64×64. Exposed read-only.
-	IDirect3DDevice9* GetDevice() const { return m_pDevice; }
+	// A Reset/ResetEx call may synchronously dispatch window messages; never
+	// expose the raw device while that call is active or after recovery becomes
+	// pending/terminal.
+	bool DeviceCallsBlocked() const
+	{
+		return m_presentSuspect ||
+		       m_deviceResetInProgress || m_fullResetPending ||
+		       m_deviceResourcesReleased || m_fatalDeviceState ||
+		       m_deviceRecoveryWorkTestHold ||
+		       m_deviceRecovery.phase == devicerecovery::Phase::ResetExFailed ||
+		       m_deviceRecovery.phase == devicerecovery::Phase::Recovering ||
+		       m_deviceRecovery.phase == devicerecovery::Phase::Terminal;
+	}
+	IDirect3DDevice9* GetDevice() const
+	{
+		return DeviceCallsBlocked() ? nullptr : m_pDevice;
+	}
 
-	// Idempotent device-state guard. Mirrors the recovery dance the
-	// Render() loop runs at the top of every frame:
-	//   - TestCooperativeLevel == D3D_OK              → returns true (no-op).
-	//   - TestCooperativeLevel == D3DERR_DEVICELOST   → returns false (caller
-	//                                                   should retry later).
-	//   - TestCooperativeLevel == D3DERR_DEVICENOTRESET → calls Reset() and
-	//                                                     returns the result.
-	// Call before any code path that creates D3D9 / D3DX9 resources off
-	// the render thread. In --test-host mode the render loop isn't pumped
-	// (hidden viewport HWND, no WM_PAINT), so resources allocated outside
-	// of Render() must guard themselves. In interactive mode this is a
-	// belt-and-suspenders no-op because Render() runs the same dance
-	// every frame.
+	// Idempotent device-state guard shared with the render loop. It probes
+	// CheckDeviceState, retries transient loss later, performs normal reset
+	// requests, and gives DEVICEHUNG one full release/ResetEx/reacquire attempt
+	// on the device-creation thread. DEVICEHUNG recovery is bounded to one
+	// attempt per device lifetime; DEVICEREMOVED remains restart-required.
 	bool RecoverDeviceIfNeeded();
+	// Ordinary engine callers probe only after a direct D3D9 Present raises the
+	// suspect latch. The composed host has no D3D9 Present result, so its frame
+	// coordinator uses PrepareComposedFrame to issue one real D3D9Ex
+	// CheckDeviceState probe before any spawner/update/render work.
+	bool PrepareDeviceForFrame();
+	bool PrepareComposedFrame();
 
-	// Feed both presentation paths into the same D3D9Ex suspect latch. The
-	// engine-side Present calls this directly; HostWindow forwards the HRESULT
-	// from Compositor::CompositeEngineFrame when composition owns Present1.
+	// Feed the direct D3D9 presentation path into the D3D9Ex suspect latch.
+	// D3D11/DXGI composition results have their own typed host policy and must
+	// never enter this state machine.
 	void NotifyPresentResult(HRESULT hr);
 
-	// Latch + log an unrecoverable device state (DEVICEHUNG / DEVICEREMOVED)
-	// exactly once. Both recovery sites — RecoverDeviceIfNeeded and the render
-	// loop — route through here so the message can't be emitted twice or, worse,
-	// once per frame forever.
-	void ReportFatalDeviceState(HRESULT hr);
+	// Latch + log an unrecoverable device state exactly once. recoveryHr is the
+	// failed ResetEx/reacquire result for a HUNG attempt, or D3D_OK when no
+	// recovery was permitted (for example DEVICEREMOVED).
+	void ReportFatalDeviceState(HRESULT hr, HRESULT recoveryHr = D3D_OK);
+
+	// Test-host seam for proving that work queued behind the device gate reaches
+	// the real frame-preparation replay path. The bridge guards access with
+	// --test-host; counters are monotonic diagnostics, not production control.
+	bool SetDeviceRecoveryWorkHoldForTesting(bool hold);
+	bool TextureReloadPendingForTesting() const
+	{
+		return m_textureReloadRequestGeneration !=
+		       m_textureReloadAppliedGeneration;
+	}
+	uint64_t TextureReloadApplyCountForTesting() const
+	{
+		return m_textureReloadApplyCount;
+	}
+	uint64_t ParticleSystemChangeApplyCountForTesting() const
+	{
+		return m_particleSystemChangeApplyCount;
+	}
+	uint64_t DeviceStateProbeCountForTesting() const
+	{
+		return m_deviceStateProbeCount;
+	}
+	uint64_t ComposedFramePrepareCountForTesting() const
+	{
+		return m_composedFramePrepareCount;
+	}
 
 	// install/clear the shared-RT compositor. When non-null, Render()
 	// redirects slot-0 RT to the compositor's off-screen ARGB surface (the
@@ -271,6 +311,9 @@ public:
 	// Present path (used by viewport_poc / --capture and any host without a
 	// compositor).
 	void SetAlphaCompositor(host::AlphaCompositor* c) { m_pAlphaCompositor = c; }
+	// Non-owning D3D11 composition bridge. A full device reset must drop its
+	// alias of AlphaCompositor's shared D3D9 texture before ResetEx.
+	void SetCompositionCompositor(host::Compositor* c) { m_pCompositionCompositor = c; }
 
 	// Arm the eager game-object-catalog prefetch. The host calls this
 	// once at startup so the reference-object picker's catalog builds in the
@@ -812,14 +855,44 @@ public:
 	// on EVERY sizemove tick so the scene always renders at the correct
 	// size (no settle snap). Returns false on ResetEx failure — the device
 	// is then in the lost state and the caller falls back to the full
-	// Reset() / RecoverDeviceIfNeeded path. NOT for device-loss recovery;
-	// Reset() remains the recovery primitive.
+	// RecoverDeviceIfNeeded path. NOT itself a device-loss recovery path;
+	// the shared coordinator chooses normal Reset or bounded HUNG ResetEx.
 	bool				ResetForResize();
 
 	Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShaderManager& shaderManager, IFileManager& fileManager);
 	~Engine();
 
 private:
+	template <typename TDevice, typename TOwner>
+	friend class devicerecovery::D3D9ExRecoveryPort;
+	friend class EmitterInstance;
+
+	devicerecovery::Result ProbeDeviceRecovery();
+	bool PrepareDeviceForFrame(bool probeHealthyDevice);
+	bool IsDeviceRecoveryThread() const;
+	bool IsTerminalDeviceState() const;
+	bool TextureReloadCanContinue() const;
+	void ApplyParticleSystemChanged(int track);
+	bool PerformTextureReload();
+	bool ReplayPendingTextureReload();
+	bool ReplayPendingParticleSystemChange();
+	IDirect3DTexture9* GetTextureForDeviceReset(const std::string& name) const;
+	D3DPRESENT_PARAMETERS GetDeviceRecoveryPresentationParameters() const
+	{
+		D3DPRESENT_PARAMETERS parameters = m_presentationParameters;
+		parameters.BackBufferWidth  = 0;
+		parameters.BackBufferHeight = 0;
+		parameters.BackBufferCount  = 1;
+		parameters.Windowed         = TRUE;
+		return parameters;
+	}
+	// Full-reset phases shared by normal Reset() and bounded HUNG ResetEx.
+	void ReleaseDeviceResourcesForReset();
+	void ResetDeviceEffectsAfterReset();
+	HRESULT RefreshPresentationParametersAfterReset();
+	void ReacquireDeviceResourcesAfterReset();
+	void SetSceneViewportUnchecked(int x, int y, int w, int h);
+
 	D3DMULTISAMPLE_TYPE GetMultiSampleType(DWORD* MultiSampleQuality, D3DFORMAT DisplayFormat, D3DFORMAT DepthStencilFormat, BOOL Windowed);
 	D3DFORMAT           GetDepthStencilFormat(D3DFORMAT AdapterFormat, bool withStencilBuffer);
 	void				ResetParameters();
@@ -985,10 +1058,35 @@ private:
     // read at the top of Render(). Microsoft recommends querying
     // CheckDeviceState only after a present fails rather than every frame, so
     // this latch is what keeps that guidance and still notices a real loss.
-    // m_fatalDeviceState: DEVICEHUNG / DEVICEREMOVED — no Reset() can clear
-    // those, so rendering stops rather than spinning on a doomed recovery.
+    // m_deviceRecovery: one-attempt HUNG state machine. m_fatalDeviceState
+    // latches a failed attempt, repeat HUNG, or DEVICEREMOVED so no forbidden
+    // post-failure device calls can occur.
     bool m_presentSuspect    = false;
     bool m_fatalDeviceState  = false;
+    devicerecovery::State m_deviceRecovery;
+    particlesystemchange::DeferredReplay m_deferredParticleSystemChange;
+    uint64_t m_textureReloadRequestGeneration = 0;
+    uint64_t m_textureReloadAppliedGeneration = 0;
+    uint64_t m_textureReloadApplyCount = 0;
+    uint64_t m_particleSystemChangeApplyCount = 0;
+    uint64_t m_deviceStateProbeCount = 0;
+    uint64_t m_composedFramePrepareCount = 0;
+    uint64_t m_particleSystemDocumentEpoch = 0;
+    bool m_textureReloadApplying = false;
+    bool m_deviceRecoveryWorkTestHold = false;
+    DWORD m_deviceThreadId = 0;
+    // Covers ordinary Reset and resize-only ResetEx. HUNG recovery uses the
+    // coordinator's Recovering phase; both participate in DeviceCallsBlocked
+    // so reset-generated window-message reentrancy cannot issue D3D calls.
+    bool m_deviceResetInProgress = false;
+    // A failed ordinary Reset, or a failed post-Reset rebuild, leaves the full
+    // release/rebuild transaction incomplete. Keep every external D3D door
+    // closed until RecoverDeviceIfNeeded completes a later full attempt.
+    bool m_fullResetPending = false;
+    // True after the full OnLost/release half and until a complete post-reset
+    // reacquire. Makes a Reset failure followed by HUNG recovery reuse the
+    // already-released state instead of nesting D3DX OnLostDevice calls.
+    bool m_deviceResourcesReleased = false;
 
     bool m_overloadActive    = false;
     bool m_overloadThisFrame = false;
@@ -1340,6 +1438,9 @@ private:
 	// SetAlphaCompositor(nullptr) on WM_DESTROY before the compositor
 	// is destroyed.
 	host::AlphaCompositor*			m_pAlphaCompositor = nullptr;
+	// D3D11 alias owner for AlphaCompositor's shared texture. Non-owning and
+	// detached by HostWindow before Compositor destruction.
+	host::Compositor*				m_pCompositionCompositor = nullptr;
 
 	static D3DVERTEXELEMENT9 ParticleElements[];
     

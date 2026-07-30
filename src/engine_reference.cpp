@@ -1784,6 +1784,8 @@ void Engine::EnumerateReferenceObjects(std::vector<GameObjectRef>& out)
 // object doesn't make a newly-picked one silently invisible.
 void Engine::SetReferenceObject(const std::string& name)
 {
+    if (DeviceCallsBlocked()) return;
+
     // Per-object transform memory. The reference transform (m_referencePosition /
     // m_referenceRotation) is otherwise ONE global state that leaks across object
     // swaps: a Z set while framing object A (e.g. lifting a space unit) stays put and

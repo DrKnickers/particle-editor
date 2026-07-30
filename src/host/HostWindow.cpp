@@ -496,12 +496,11 @@ std::wstring AppendQueryParam(const std::wstring& url, const wchar_t* param)
 LRESULT CALLBACK HostMainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 LRESULT CALLBACK HostViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
-// Custom message posted when composition setup fails AFTER the async
-// CreateCoreWebView2CompositionController dispatch (OnCompositionController-
-// Ready). wParam carries the failure HRESULT. Composition is a hard
-// requirement — there is no HWND fallback — so the handler surfaces a clear
-// fatal error and exits (FailFatalComposition). PostMessage'd rather than
-// acting inline so the WebView2 callback stack unwinds first.
+// Custom message posted when composition setup fails after the async
+// CreateCoreWebView2CompositionController dispatch, or when a live Present1
+// reports a restart-required DXGI device state. wParam carries the failure
+// HRESULT. Composition is a hard requirement, so the handler surfaces a clear
+// fatal error and exits (FailFatalComposition).
 static const UINT WM_APP_COMPOSITION_FALLBACK = WM_APP + 1;
 
 } // namespace
@@ -816,6 +815,9 @@ struct HostWindowImpl
     // releasing the base controller (the teardown ordering matters per the
     // spike's Shutdown sequence in dxgi_spike.cpp:783).
     std::unique_ptr<host::Compositor>          m_compositor;
+    // Latches a posted runtime composition fatal so no later render tick can
+    // submit more D3D11 work before the message-loop handler exits.
+    bool                                      m_compositionFatalPending = false;
     ComPtr<ICoreWebView2CompositionController> m_compositionController;
     // Frameless title bar: QI of the composition controller for
     // GetNonClientRegionAtPoint (WM_NCHITTEST caption drag). Null on an older
@@ -1408,11 +1410,10 @@ void HostWindowImpl::Log(const char* fmt, ...)
 
 // Composition is the editor's only render transport — there is no HWND
 // fallback (hosting-mode removal). When DirectComposition
-// or the WebView2 composition controller can't be brought up, the viewport
-// would be a permanent black window, so we surface a clear modal error and
-// exit cleanly instead. Reached from the synchronous env-setup failures
-// (Compositor::Init / Environment3 QI) and the async
-// WM_APP_COMPOSITION_FALLBACK handler. host.log is flushed first so the
+// or the WebView2 composition controller can't be brought up or kept alive,
+// the viewport would be a permanent black window, so we surface a clear modal
+// error and exit cleanly instead. Reached from synchronous setup failures and
+// the WM_APP_COMPOSITION_FALLBACK handler. host.log is flushed first so the
 // failure HRESULT survives the hard exit.
 [[noreturn]] void HostWindowImpl::FailFatalComposition(HRESULT hr)
 {
@@ -1425,11 +1426,12 @@ void HostWindowImpl::Log(const char* fmt, ...)
     {
         wchar_t msg[640];
         _snwprintf_s(msg, _TRUNCATE,
-            L"Particle Editor could not initialize its DirectComposition "
-            L"rendering surface (error 0x%08lX).\n\n"
+            L"Particle Editor could not initialize or continue using its "
+            L"DirectComposition rendering surface (error 0x%08lX).\n\n"
             L"This build renders the viewport through DirectComposition + WebView2 "
             L"composition hosting and cannot run without it. Make sure your GPU "
-            L"drivers are up to date and that the WebView2 runtime is installed.\n\n"
+            L"drivers are up to date and that the WebView2 runtime is installed. "
+            L"Restart the editor to recreate the rendering device.\n\n"
             L"The editor will now close.",
             static_cast<unsigned long>(hr));
         MessageBoxW(nullptr, msg, L"Particle Editor — composition unavailable",
@@ -1456,7 +1458,12 @@ void HostWindowImpl::Log(const char* fmt, ...)
 // changes. The SpawnerPanel badge subscribes to that event unchanged.
 void HostWindowImpl::RenderD3D9()
 {
-    if (!engine) return;
+    if (!engine || m_compositionFatalPending) return;
+    // The composed editor has no D3D9 Present result. Probe the real D3D9Ex
+    // device exactly once at this frame coordinator before SpawnerDriver,
+    // Update, or Render can touch D3D resources. Their nested preparation doors
+    // are non-probing, so a healthy frame does not double-check.
+    if (!engine->PrepareComposedFrame()) return;
 
     float now = GetTimeF();
     float dt  = (m_lastRenderTime > 0.0f) ? (now - m_lastRenderTime) : 0.0f;
@@ -1497,7 +1504,7 @@ void HostWindowImpl::RenderD3D9()
     layout.AdvanceSceneAnim(PerfQpcNow());
 
     const LONGLONG perfT1 = PerfQpcNow();
-    engine->Render();
+    const bool rendered = engine->Render();
     const double perfRenderUs = PerfUsSince(perfT1);
 
     // [PERF2] fold the engine's per-pass sub-timing of this Render() call.
@@ -1524,7 +1531,7 @@ void HostWindowImpl::RenderD3D9()
     // AttachEngineVisual failed (LUID mismatch, D3D11 device, etc.),
     // CompositeEngineFrame returns S_FALSE and this block is a per-frame
     // no-op with the viewport area empty.
-    if (m_compositor && m_compositor->IsReady())
+    if (rendered && m_compositor && m_compositor->IsReady())
     {
         engine->IssueEndFrameQuery();
         // [PERF] WaitEndFrameQuery is the suspected hot stage — time the
@@ -1541,14 +1548,25 @@ void HostWindowImpl::RenderD3D9()
         // in the steady state; full re-open + swapchain ResizeBuffers
         // only on actual handle change.
         const LONGLONG perfT3 = PerfQpcNow();
-        const HRESULT compositeHr =
+        const ComposedFrameResult compositeResult =
             m_compositor->CompositeEngineFrame(engine->GetSharedTextureHandle());
-        // Production always attaches AlphaCompositor, so Engine::Render skips
-        // its own D3D9 Present. Forward the composed path's actual result or
-        // the D3D9Ex CheckDeviceState latch can never be raised (re-audit an-audit-finding).
-        // S_FALSE is the compositor's expected "no visual/texture this frame"
-        // result and NotifyPresentResult deliberately ignores it.
-        engine->NotifyPresentResult(compositeHr);
+        // Present1 belongs to the D3D11 composition device, not the engine's
+        // D3D9Ex device. Exact DXGI device-removal states therefore enter the
+        // composition fatal/restart path with zero D3D9 recovery attempts.
+        // Shared-handle failures remain retryable even if they carry the same
+        // numeric HRESULT; CompositeEngineFrame clears its cached handle.
+        if (ClassifyComposedFrameResult(compositeResult) ==
+            ComposedFrameAction::RestartRequired)
+        {
+            m_compositionFatalPending = true;
+            Log("[host] composition: Present1 requires restart hr=0x%08lx\n",
+                static_cast<unsigned long>(compositeResult.hr));
+            if (!PostMessageW(hMain, WM_APP_COMPOSITION_FALLBACK,
+                              static_cast<WPARAM>(compositeResult.hr), 0))
+            {
+                FailFatalComposition(compositeResult.hr);
+            }
+        }
         const double perfCompositeUs = PerfUsSince(perfT3);
 
         perfWait.add(perfWaitUs);
@@ -2014,6 +2032,8 @@ HRESULT HostWindowImpl::InitWebView2()
                     Log("[host] composition: Compositor::Init failed hr=0x%08lx\n", chr);
                     FailFatalComposition(chr);
                 }
+                if (engine)
+                    engine->SetCompositionCompositor(m_compositor.get());
 
                 // QI for Environment3 — exposes
                 // CreateCoreWebView2CompositionController. Confirmed
@@ -3354,6 +3374,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 GetClientRect(hViewport, &vrc);
                 alphaCompositor->Resize(vrc.right - vrc.left, vrc.bottom - vrc.top);
                 engine->SetAlphaCompositor(alphaCompositor.get());
+                engine->SetCompositionCompositor(m_compositor.get());
                 // Arm the eager reference-object catalog prefetch now
                 // that the new-UI render path is up.
                 engine->ArmCatalogPrefetch();
@@ -4000,6 +4021,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // past the WM_DESTROY barrier in the message-pump shutdown
         // sequence) doesn't dereference a freed Compositor.
         layout.SetCompositor(nullptr);
+        if (engine) engine->SetCompositionCompositor(nullptr);
         m_compositor.reset();
         // Detach the compositor from Engine BEFORE either is
         // destroyed so Render() (if scheduled before WM_QUIT drains

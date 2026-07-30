@@ -1087,16 +1087,18 @@ HRESULT Compositor::AttachEngineVisual(HANDLE sharedTexture,
     return S_OK;
 }
 
-HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
+ComposedFrameResult Compositor::CompositeEngineFrame(
+    HANDLE currentSharedHandle) noexcept
 {
-    // No engine visual attached → S_FALSE per the documented
-    // contract. Host's per-frame loop treats S_FALSE as "skip the
+    // No engine visual attached -> expected no-frame per the documented
+    // contract. Host's per-frame loop treats it as "skip the
     // composite step this frame." Triggered by:
     //   - the webview-only baseline (no AttachEngineVisual ever called).
     //   - AttachEngineVisual failed (LUID mismatch, D3D11 device,
     //     OpenSharedResource, swapchain) — composition mode stays
     //     intact, viewport stays empty.
-    if (!m_impl->engineVisualAttached) return S_FALSE;
+    if (!m_impl->engineVisualAttached)
+        return ComposedFrameResult::NoFrame();
 
     // Defensive — engineVisualAttached implies all resources exist,
     // but cover the edge case where teardown is mid-flight on a
@@ -1104,7 +1106,7 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
     // message pump, but cheap insurance).
     if (!m_impl->d3d11Context || !m_impl->engineSwapChain)
     {
-        return E_NOT_VALID_STATE;
+        return ComposedFrameResult::SharedHandleFailure(E_NOT_VALID_STATE);
     }
 
     // Lazy resize-handle re-open. Every
@@ -1121,7 +1123,7 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
     // texture right now" (e.g. AlphaCompositor not yet Resized) —
     // we skip the composite that frame; previous frame remains on
     // screen.
-    if (!currentSharedHandle) return S_FALSE;
+    if (!currentSharedHandle) return ComposedFrameResult::NoFrame();
     if (currentSharedHandle != m_impl->engineHandleCached)
     {
         // Re-open against the new handle. RefreshEngineSharedHandle
@@ -1136,7 +1138,7 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
             // failure). Return the failure HRESULT so the host can
             // observe; the visible symptom is "viewport stays at the
             // last successful composite" until re-open succeeds.
-            return rhr;
+            return ComposedFrameResult::SharedHandleFailure(rhr);
         }
     }
 
@@ -1144,7 +1146,7 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
     {
         // Defensive — RefreshEngineSharedHandle should have populated
         // both. Cover an interim state where teardown raced.
-        return E_NOT_VALID_STATE;
+        return ComposedFrameResult::SharedHandleFailure(E_NOT_VALID_STATE);
     }
 
     // D3D11 CopyResource — source and dest sizes match (the
@@ -1165,7 +1167,7 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
     if (FAILED(hr))
     {
         m_impl->LogLine("[COMP-engine-fail] Present1 hr=" + FormatHresult(hr));
-        return hr;
+        return ComposedFrameResult::PresentResult(hr);
     }
 
     // Apply any pending scene-
@@ -1238,7 +1240,7 @@ HRESULT Compositor::CompositeEngineFrame(HANDLE currentSharedHandle) noexcept
         m_impl->LogLine(buf);
     }
 
-    return S_OK;
+    return ComposedFrameResult::PresentResult(hr);
 }
 
 HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
@@ -1328,6 +1330,21 @@ HRESULT Compositor::RefreshEngineSharedHandle(HANDLE sharedTexture,
     m_impl->engineWidthCached  = newW;
     m_impl->engineHeightCached = newH;
     return S_OK;
+}
+
+void Compositor::ReleaseEngineSharedHandle() noexcept
+{
+    // Clear any driver-held bindings before dropping our owning alias. The
+    // composition copy path uses CopyResource only, so no pipeline state needs
+    // to survive this reset boundary.
+    if (m_impl->d3d11Context)
+    {
+        m_impl->d3d11Context->ClearState();
+        m_impl->d3d11Context->Flush();
+    }
+    m_impl->sharedTexD3D11.Reset();
+    m_impl->engineHandleCached = nullptr;
+    m_impl->LogLine("[COMP-engine-reset] released D3D11 shared-texture alias");
 }
 
 // ---------- scene-rect transform ----------

@@ -11,6 +11,7 @@
 #include <cfloat>
 #include <sstream>
 #include <queue>
+#include <set>
 #include <cstdlib>     // _set_abort_behavior (headless --capture: no abort dialog)
 #include <crtdbg.h>    // _CrtSetReportMode/File (route Debug asserts to stderr)
 #include <exception>   // std::set_terminate (log unhandled exceptions headlessly)
@@ -426,6 +427,28 @@ public:
 			SAFE_RELEASE(p->second);
 		}
 		shaders.clear();
+	}
+
+	void OnLostDevice() override
+	{
+		std::set<Effect*> unique;
+		if (pDefaultShader != NULL) unique.insert(pDefaultShader);
+		for (const auto& entry : shaders)
+		{
+			if (entry.second != NULL) unique.insert(entry.second);
+		}
+		for (Effect* effect : unique) effect->OnLostDevice();
+	}
+
+	void OnResetDevice() override
+	{
+		std::set<Effect*> unique;
+		if (pDefaultShader != NULL) unique.insert(pDefaultShader);
+		for (const auto& entry : shaders)
+		{
+			if (entry.second != NULL) unique.insert(entry.second);
+		}
+		for (Effect* effect : unique) effect->OnResetDevice();
 	}
 
 	ShaderManager(IFileManager* fileManager, const std::string& basePath)

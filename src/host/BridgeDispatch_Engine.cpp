@@ -22,6 +22,56 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
     const json&        params = ctx.params;
     const std::string& id     = ctx.id;
 
+    // Internal native-test seam: hold the real Engine device-work gate while
+    // production actions queue work, then release through the normal frame
+    // preparation door. It intentionally exposes no direct replay/counter
+    // mutation.
+    if (kind == "debug/device-recovery-work")
+    {
+        if (!m_testHost)
+        {
+            ctx.SendErr("debug/device-recovery-work requires --test-host");
+            return true;
+        }
+        if (!ctx.RequireEngine(kind.c_str())) return true;
+
+        const std::string action =
+            params.value("action", std::string("query"));
+        bool frameReady = !m_engine->DeviceCallsBlocked();
+        if (action == "arm")
+        {
+            if (!m_engine->SetDeviceRecoveryWorkHoldForTesting(true))
+            {
+                ctx.SendErr("device recovery work hold requires a healthy engine");
+                return true;
+            }
+            frameReady = false;
+        }
+        else if (action == "release")
+        {
+            m_engine->SetDeviceRecoveryWorkHoldForTesting(false);
+            frameReady = m_engine->PrepareDeviceForFrame();
+        }
+        else if (action != "query")
+        {
+            ctx.SendErr("unknown device recovery work action");
+            return true;
+        }
+
+        ctx.SendOk({
+            {"pending", m_engine->TextureReloadPendingForTesting()},
+            {"reloadCount", m_engine->TextureReloadApplyCountForTesting()},
+            {"authoredApplyCount",
+             m_engine->ParticleSystemChangeApplyCountForTesting()},
+            {"deviceProbeCount",
+             m_engine->DeviceStateProbeCountForTesting()},
+            {"composedFramePrepareCount",
+             m_engine->ComposedFramePrepareCountForTesting()},
+            {"frameReady", frameReady},
+        });
+        return true;
+    }
+
     // -------- engine/state/snapshot --------
     if (kind == "engine/state/snapshot")
     {
@@ -555,8 +605,15 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
     if (kind == "engine/action/reload-shaders")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
-        m_engine->InvalidateSkydomeListCache();   // explicit disk re-read -> refresh skydome XML too
-        m_engine->ReloadShaders();
+        if (!m_engine->ReloadShaders())
+        {
+            ctx.SendErr("shader reload was refused or failed");
+            return true;
+        }
+        // Only invalidate dependent discovery state after the requested reload
+        // actually ran. A blocked device must not acknowledge the action or
+        // clear caches for work it dropped.
+        m_engine->InvalidateSkydomeListCache();
         ctx.SendOk(json::object());
         // No dirty: reload-shaders re-reads disk; user state is unchanged.
         EmitEngineStateChanged();

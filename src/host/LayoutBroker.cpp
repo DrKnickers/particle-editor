@@ -241,18 +241,18 @@ void LayoutBroker::ResetEngineForResize(int w, int h)
     if (!m_engine) return;
 
     bool resetOk = false;
+    bool rebuildFailedAfterReset = false;
     try
     {
         resetOk = m_engine->ResetForResize();
     }
     catch (...)
     {
-        // ResetParameters can throw on RT allocation failure after a
-        // successful ResetEx — treat like a ResetEx failure and fall
-        // through to the full path.
-        resetOk = false;
+        // ResetForResize throws only after ResetEx succeeded (extent query or
+        // size-keyed allocation). Ordinary full Reset is legal in that case.
+        rebuildFailedAfterReset = true;
     }
-    if (!resetOk)
+    if (rebuildFailedAfterReset)
     {
         try
         {
@@ -271,12 +271,23 @@ void LayoutBroker::ResetEngineForResize(int w, int h)
             resetOk = false;
         }
     }
-    if (!resetOk)
+    else if (!resetOk)
+    {
+        // A false result means ResetEx itself failed. Microsoft permits only
+        // CheckDeviceState, ResetEx, and Release from here; never fall through
+        // to ordinary Reset. The Engine's pending coordinator decides when a
+        // ResetEx retry is legal and keeps every external D3D door closed.
+        resetOk = m_engine->RecoverDeviceIfNeeded();
+    }
+    if (!resetOk && rebuildFailedAfterReset)
     {
         m_engine->RecoverDeviceIfNeeded();
     }
-    m_resetW = w;
-    m_resetH = h;
+    if (resetOk)
+    {
+        m_resetW = w;
+        m_resetH = h;
+    }
 }
 
 void LayoutBroker::SettleDeferredReset()
@@ -501,13 +512,15 @@ bool LayoutBroker::AdvanceSceneAnim(long long qpcNow)
 
 bool LayoutBroker::CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH)
 {
-    if (!m_alphaCompositor) return false;
+    if (!m_alphaCompositor || !m_engine || m_engine->DeviceCallsBlocked())
+        return false;
     return m_alphaCompositor->CaptureSnapshotPng(outBase64, outW, outH);
 }
 
 bool LayoutBroker::CaptureSnapshotToFile(const std::wstring& path)
 {
-    if (!m_alphaCompositor) return false;
+    if (!m_alphaCompositor || !m_engine || m_engine->DeviceCallsBlocked())
+        return false;
     return m_alphaCompositor->CaptureSnapshotToFile(path);
 }
 

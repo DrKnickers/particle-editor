@@ -704,8 +704,8 @@ void EmitterInstance::ReleaseDeviceTextures()
 void EmitterInstance::ReacquireDeviceTextures(const Engine& engine)
 {
 	ReleaseDeviceTextures();
-	m_pColorTexture  = engine.GetTexture(m_emitter.colorTexture);
-	m_pNormalTexture = engine.GetTexture(m_emitter.normalTexture);
+	m_pColorTexture  = engine.GetTextureForDeviceReset(m_emitter.colorTexture);
+	m_pNormalTexture = engine.GetTextureForDeviceReset(m_emitter.normalTexture);
 }
 
 void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
