@@ -15,8 +15,9 @@ class ParticleSystem;
 //                 bad edit they made in the last few minutes
 //
 // Files live under `%TEMP%\AloParticleEditor\` named
-// `autosave-<pid>-<tier>.alo` so concurrent editor instances don't
-// clobber each other's autosave. A companion `autosave-<pid>.meta`
+// `autosave-<pid>-<process-creation-time>-<tier>.alo`. PID alone is
+// reusable, so the process creation FILETIME is part of the durable
+// session identity. A matching `.meta`
 // records the original filename so the recovery prompt can show
 // "Restore unsaved changes to fire.alo?" rather than just an
 // anonymous TEMP path.
@@ -50,13 +51,15 @@ namespace Autosave
     // stable write and the next recent tick), but at least one is set.
     struct OrphanSession
     {
-        DWORD              pid;
+        DWORD              pid = 0;
+        unsigned long long creationTime100ns = 0; // legacy PID-only names
+        bool               hasCreationTime = false;
         std::wstring       recentPath;        // empty if no recent file
         std::wstring       stablePath;        // empty if no stable file
         std::wstring       metaPath;          // for cleanup
         std::wstring       originalFilename;  // from .meta, may be empty
-        FILETIME           recentMtime;
-        FILETIME           stableMtime;
+        FILETIME           recentMtime = {};
+        FILETIME           stableMtime = {};
     };
 
     // Outcome of an autosave recovery attempt. Decides whether the orphan
@@ -87,11 +90,13 @@ namespace Autosave
 
     struct AutosaveName
     {
-        unsigned long pid   = 0;      // 0 = not one of ours
-        bool isRecent       = false;
-        bool isStable       = false;
-        bool isMeta         = false;
-        bool isTmp          = false;  // interrupted write; NEVER recovery material
+        unsigned long      pid                 = 0; // 0 = not one of ours
+        unsigned long long creationTime100ns   = 0;
+        bool               hasCreationTime     = false;
+        bool               isRecent            = false;
+        bool               isStable            = false;
+        bool               isMeta              = false;
+        bool               isTmp               = false; // interrupted write; NEVER recovery material
     };
 
     inline AutosaveName ClassifyAutosaveName(const wchar_t* filename)
@@ -104,12 +109,17 @@ namespace Autosave
         const wchar_t* p = filename + prefLen;
 
         unsigned long pid = 0;
+        bool sawPidDigit = false;
         while (*p >= L'0' && *p <= L'9')
         {
-            pid = pid * 10 + (unsigned long)(*p - L'0');
+            const unsigned long digit = (unsigned long)(*p - L'0');
+            if (pid > (0xFFFFFFFFUL - digit) / 10UL)
+                return AutosaveName(); // DWORD overflow
+            pid = pid * 10UL + digit;
+            sawPidDigit = true;
             ++p;
         }
-        if (pid == 0) return out;
+        if (!sawPidDigit || pid == 0) return out;
 
         // Strip ONE trailing ".tmp" before classifying, so the tier comparison
         // below stays an exact match on the remainder.
@@ -122,9 +132,33 @@ namespace Autosave
             tail.resize(tail.size() - tmpLen);
         }
 
-        if      (_wcsicmp(tail.c_str(), kNameRecent) == 0) out.isRecent = true;
-        else if (_wcsicmp(tail.c_str(), kNameStable) == 0) out.isStable = true;
-        else if (_wcsicmp(tail.c_str(), kNameMeta)   == 0) out.isMeta   = true;
+        const wchar_t* classifiedTail = tail.c_str();
+
+        // New grammar: `-<exactly 16 hex digits><tier/meta suffix>`.
+        // Legacy PID-only tails remain readable so pre-upgrade recovery files
+        // are not stranded.
+        if (tail.size() > 17 && tail[0] == L'-')
+        {
+            unsigned long long creation = 0;
+            for (size_t i = 1; i <= 16; ++i)
+            {
+                const wchar_t c = tail[i];
+                unsigned int digit = 0;
+                if      (c >= L'0' && c <= L'9') digit = (unsigned int)(c - L'0');
+                else if (c >= L'a' && c <= L'f') digit = 10U + (unsigned int)(c - L'a');
+                else if (c >= L'A' && c <= L'F') digit = 10U + (unsigned int)(c - L'A');
+                else return AutosaveName();
+                creation = (creation << 4) | digit;
+            }
+            if (creation == 0) return AutosaveName();
+            out.creationTime100ns = creation;
+            out.hasCreationTime = true;
+            classifiedTail = tail.c_str() + 17;
+        }
+
+        if      (_wcsicmp(classifiedTail, kNameRecent) == 0) out.isRecent = true;
+        else if (_wcsicmp(classifiedTail, kNameStable) == 0) out.isStable = true;
+        else if (_wcsicmp(classifiedTail, kNameMeta)   == 0) out.isMeta   = true;
         else return AutosaveName();   // not ours after all
 
         out.pid = pid;
@@ -160,14 +194,21 @@ namespace Autosave
     }
 
     // Write the system to the chosen tier's autosave path for the
-    // current PID. originalFilename is recorded in the .meta sidecar
+    // current process session. originalFilename is recorded in the .meta sidecar
     // for the recovery prompt to display. No-op + return false on
     // any IO failure.
     bool Write(const ParticleSystem& sys,
                const std::wstring&   originalFilename,
                Tier                  tier);
 
-    // Delete this PID's autosave files (both tiers + meta).
+    // One-time crash-recovery handoff. Serializes to the current session's
+    // Recent `.tmp`, reloads that uncommitted candidate through the production
+    // ParticleSystem parser, and only then atomically installs it. A false
+    // return leaves any prior destination and the old orphan untouched.
+    bool WriteRecoveryHandoff(const ParticleSystem& sys,
+                              const std::wstring&   originalFilename);
+
+    // Delete this process session's autosave files (both tiers + meta).
     // Best-effort; missing files are not an error.
     void DeleteOurSession();
 
@@ -183,6 +224,14 @@ namespace Autosave
     // explicit discard. On a failed load, leave the files on disk so the other
     // tier or the next launch can still recover them.
     void DeleteOrphan(const OrphanSession& session);
+
+#ifdef AUTOSAVE_TESTING
+    // Test-only hook invoked after the handoff candidate is closed but before
+    // it is parsed. Lets the production-linked filesystem test prove that
+    // verification happens before replacement without shipping a runtime seam.
+    typedef void (*RecoveryCandidateHook)(const std::wstring& candidatePath);
+    void SetRecoveryCandidateHookForTest(RecoveryCandidateHook hook);
+#endif
 }
 
 #endif

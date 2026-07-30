@@ -11,14 +11,32 @@
 // is single-instance so leaving it around blocks the next run.
 
 import { spawn, spawnSync } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
-import { join, resolve, dirname } from "node:path";
+import { basename, join, resolve, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const editorDir = resolve(__dirname, "..");
 const repoRoot = resolve(__dirname, "../../../..");
 const exe = join(repoRoot, "x64", "Debug", "ParticleEditor.exe");
+let autosaveTempRoot = null;
+
+async function cleanupAutosaveTempRoot() {
+  if (!autosaveTempRoot) return;
+  const target = resolve(autosaveTempRoot);
+  const tempBase = resolve(tmpdir());
+  const underTemp =
+    target.toLowerCase().startsWith(`${tempBase}${sep}`.toLowerCase());
+  if (!underTemp || !basename(target).startsWith("pe-native-autosave-")) {
+    throw new Error(
+      `[run-native-tests] refused autosave test cleanup outside its exact temp root: ${target}`,
+    );
+  }
+  await rm(target, { recursive: true, force: true });
+  autosaveTempRoot = null;
+}
 
 // True when this machine has a resolved game data path, i.e. the specs that
 // need real textures CAN run here. Mirrors the same registry probe the gate's
@@ -90,6 +108,18 @@ async function main() {
   // Give Windows a moment to release file locks.
   await sleep(300);
 
+  // The composed autosave oracle must never enumerate or mutate the developer's
+  // real recovery directory. Override TEMP/TMP only for the spawned host, and
+  // tell the Playwright process the exact resulting autosave directory.
+  autosaveTempRoot = await mkdtemp(join(tmpdir(), "pe-native-autosave-"));
+  const autosaveTestDir = join(autosaveTempRoot, "AloParticleEditor");
+  const hostEnv = {
+    ...process.env,
+    TEMP: autosaveTempRoot,
+    TMP: autosaveTempRoot,
+    ALO_AUTOSAVE_RECOVERY_TEST: "1",
+  };
+
   console.log(`[run-native-tests] Launching ${exe} --test-host ...`);
   // Stdio hardening — DON'T inherit stdio. The
   // previous `stdio: "inherit"` caused a real footgun: ParticleEditor.exe
@@ -122,6 +152,7 @@ async function main() {
     cwd: repoRoot,
     stdio: ["ignore", "ignore", "ignore"],
     detached: false,
+    env: hostEnv,
   });
 
   let childExited = false;
@@ -179,9 +210,18 @@ async function main() {
       /* ignore */
     }
     await killAny();
+    await cleanupAutosaveTempRoot();
     process.exit(1);
   }
   console.log("[run-native-tests] CDP ready, running Playwright spec ...");
+
+  const playwrightEnv = {
+    ...process.env,
+    PE_AUTOSAVE_TEST_DIR: autosaveTestDir,
+  };
+  if (gameDataPathPresent()) {
+    playwrightEnv.PE_REQUIRE_GAME_TEXTURES = "1";
+  }
 
   // On Windows the playwright .bin entry is a .CMD shim; node's spawn
   // refuses to launch .CMD without shell:true, so use the JS cli entry
@@ -313,9 +353,7 @@ async function main() {
       // install genuinely cannot run them, and failing there would punish a
       // legitimate environment. Where the data IS present, a skip now means a
       // real problem and fails loudly.
-      env: gameDataPathPresent()
-        ? { ...process.env, PE_REQUIRE_GAME_TEXTURES: "1" }
-        : process.env,
+      env: playwrightEnv,
     });
     pwChild = pw;
     pw.on("exit", (code) => {
@@ -336,6 +374,7 @@ async function main() {
   }
   await sleep(500);
   await killAny();
+  await cleanupAutosaveTempRoot();
 
   // A mid-run host death (detected in child.on("exit") above) makes the
   // Playwright exit code meaningless — exit 2 to distinguish it from ordinary
@@ -354,5 +393,10 @@ async function main() {
 main().catch(async (err) => {
   console.error("[run-native-tests]", err);
   await killAny();
+  try {
+    await cleanupAutosaveTempRoot();
+  } catch (cleanupErr) {
+    console.error("[run-native-tests] autosave temp cleanup failed:", cleanupErr);
+  }
   process.exit(1);
 });

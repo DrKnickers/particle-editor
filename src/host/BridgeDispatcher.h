@@ -590,7 +590,8 @@ private:
     std::vector<char>         m_savedSnapshot;
 
     // autosave crash-recovery. `autosave/check-recovery` scans
-    // %TEMP%\AloParticleEditor\ for an orphan from a crashed prior session
+    // %TEMP%\AloParticleEditor\ for an orphan from a crashed prior process
+    // session (PID + process-creation FILETIME)
     // and stashes it here so `autosave/recover` can consume its temp paths
     // without a re-scan. recover consumes the stash (clear + DeleteOrphan the
     // files) ONLY on a successful recover or an explicit discard; a FAILED load

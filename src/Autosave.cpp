@@ -8,7 +8,8 @@
 #include <psapi.h>
 #include <string>
 #include <vector>
-#include <unordered_map>
+#include <map>
+#include <memory>
 #include <ctime>
 #include <cstdio>
 
@@ -61,20 +62,73 @@ static bool EnsureAutosaveDir()
          || rc == ERROR_FILE_EXISTS);
 }
 
-static std::wstring PathForPid(DWORD pid, const wchar_t* suffix)
+struct SessionKey
 {
+    DWORD     pid;
+    ULONGLONG creationTime100ns;
+    bool      hasCreationTime;
+
+    bool operator<(const SessionKey& other) const
+    {
+        if (pid != other.pid) return pid < other.pid;
+        if (hasCreationTime != other.hasCreationTime)
+            return hasCreationTime < other.hasCreationTime;
+        return creationTime100ns < other.creationTime100ns;
+    }
+};
+
+static ULONGLONG FileTimeValue(const FILETIME& ft)
+{
+    ULARGE_INTEGER value;
+    value.LowPart = ft.dwLowDateTime;
+    value.HighPart = ft.dwHighDateTime;
+    return value.QuadPart;
+}
+
+// The PID is not a durable launch identity: Windows may reuse it after a
+// process exits. Pair it with the kernel-recorded process creation FILETIME and
+// cache the pair once so every tier/meta write in this launch shares one key.
+// If this first-party identity cannot be read, autosave fails closed instead of
+// falling back to collision-prone PID-only names.
+static const SessionKey& OurSessionKey()
+{
+    static const SessionKey key = []() {
+        SessionKey out = {};
+        out.pid = GetCurrentProcessId();
+        FILETIME creation = {}, exit = {}, kernel = {}, user = {};
+        if (out.pid != 0
+            && GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user))
+        {
+            out.creationTime100ns = FileTimeValue(creation);
+            out.hasCreationTime = out.creationTime100ns != 0;
+        }
+        return out;
+    }();
+    return key;
+}
+
+static std::wstring PathForSession(const SessionKey& session, const wchar_t* suffix)
+{
+    if (session.pid == 0 || !session.hasCreationTime
+        || session.creationTime100ns == 0)
+        return L"";
+
     std::wstring dir = GetAutosaveDir();
     if (dir.empty()) return L"";
-    wchar_t buf[64];
-    swprintf_s(buf, 64, L"\\%ls%lu%ls", kFilePrefix, (unsigned long)pid, suffix);
+    wchar_t buf[96];
+    swprintf_s(buf, 96, L"\\%ls%lu-%016llx%ls",
+               kFilePrefix,
+               (unsigned long)session.pid,
+               (unsigned long long)session.creationTime100ns,
+               suffix);
     return dir + buf;
 }
 
-static std::wstring OurRecentPath() { return PathForPid(GetCurrentProcessId(), kRecentSuffix); }
-static std::wstring OurStablePath() { return PathForPid(GetCurrentProcessId(), kStableSuffix); }
-static std::wstring OurMetaPath()   { return PathForPid(GetCurrentProcessId(), kMetaSuffix);   }
+static std::wstring OurRecentPath() { return PathForSession(OurSessionKey(), kRecentSuffix); }
+static std::wstring OurStablePath() { return PathForSession(OurSessionKey(), kStableSuffix); }
+static std::wstring OurMetaPath()   { return PathForSession(OurSessionKey(), kMetaSuffix);   }
 
-// ----- PID liveness ----------------------------------------------
+// ----- Process-session liveness ---------------------------------
 
 static std::wstring OurExeBaseName()
 {
@@ -92,7 +146,7 @@ static std::wstring OurExeBaseName()
 // ERROR_INVALID_PARAMETER), conservatively returns TRUE. We'd rather
 // skip recovery for one cycle than delete a sibling editor's
 // in-progress autosave.
-static bool IsLiveEditorPid(DWORD pid)
+static bool IsLiveLegacyEditorPid(DWORD pid)
 {
     if (pid == GetCurrentProcessId()) return true;
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
@@ -121,6 +175,30 @@ static bool IsLiveEditorPid(DWORD pid)
     }
     CloseHandle(h);
     return isEditor;
+}
+
+// New-format files name an exact process lifetime. A reused PID is not live for
+// the old file unless the creation FILETIME also matches. On ambiguous process
+// query errors, remain conservative and treat the session as live.
+static bool IsLiveEditorSession(const AutosaveName& name)
+{
+    if (!name.hasCreationTime)
+        return IsLiveLegacyEditorPid((DWORD)name.pid);
+
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD)name.pid);
+    if (h == NULL)
+    {
+        const DWORD err = GetLastError();
+        if (err == ERROR_INVALID_PARAMETER) return false;
+        return true;
+    }
+
+    FILETIME creation = {}, exit = {}, kernel = {}, user = {};
+    const bool queried =
+        GetProcessTimes(h, &creation, &exit, &kernel, &user) != FALSE;
+    CloseHandle(h);
+    if (!queried) return true;
+    return FileTimeValue(creation) == name.creationTime100ns;
 }
 
 // ----- Meta file read/write --------------------------------------
@@ -186,14 +264,40 @@ static bool ReadMeta(const std::wstring& path, std::wstring* outOriginalFilename
 
 // ----- Public API ------------------------------------------------
 
-bool Write(const ParticleSystem& sys,
-           const std::wstring&   originalFilename,
-           Tier                  tier)
-{
-    if (!EnsureAutosaveDir()) return false;
+#ifdef AUTOSAVE_TESTING
+static RecoveryCandidateHook g_recoveryCandidateHook = NULL;
 
+void SetRecoveryCandidateHookForTest(RecoveryCandidateHook hook)
+{
+    g_recoveryCandidateHook = hook;
+}
+#endif
+
+static bool VerifyParticleSystemFile(const std::wstring& path)
+{
+    PhysicalFile* f = NULL;
+    try
+    {
+        f = new PhysicalFile(path, PhysicalFile::READ);
+        std::unique_ptr<ParticleSystem> verified(new ParticleSystem(f));
+        f->Release();
+        return true;
+    }
+    catch (...)
+    {
+        if (f) f->Release();
+        return false;
+    }
+}
+
+static bool WriteTier(const ParticleSystem& sys,
+                      const std::wstring&   originalFilename,
+                      Tier                  tier,
+                      bool                  verifyBeforeCommit)
+{
     std::wstring dest = (tier == Tier::Recent) ? OurRecentPath() : OurStablePath();
     if (dest.empty()) return false;
+    if (!EnsureAutosaveDir()) return false;
     std::wstring tmp = dest + L".tmp";
 
     // Write to a temp file then atomically rename into place — a
@@ -214,9 +318,7 @@ bool Write(const ParticleSystem& sys,
         // so DeleteFileW fails while the handle is live and the .tmp survives —
         // and the next autosave targets that same path, cannot reopen it for
         // writing, and throws again. One failed write would otherwise disable
-        // autosave silently for the rest of the session. Previously unreachable
-        // in practice because write() only threw when WriteFile itself failed;
-        // making a short write throw widened the path enough to matter.
+        // autosave silently for the rest of the session.
         if (f) { f->Release(); f = NULL; }
         DeleteFileW(tmp.c_str());
         AUTOSAVE_LOG("[Autosave] tier=%s write FAILED %ls (PhysicalFile threw)\n",
@@ -224,7 +326,26 @@ bool Write(const ParticleSystem& sys,
         return false;
     }
 
-    if (!MoveFileExW(tmp.c_str(), dest.c_str(), MOVEFILE_REPLACE_EXISTING))
+    // Recovery handoff has a stronger contract than periodic autosave: prove
+    // that the still-uncommitted candidate can be loaded by the production
+    // ParticleSystem parser before replacing any prior current-session tier.
+    // Periodic writes keep their existing single-serialization cost.
+    if (verifyBeforeCommit)
+    {
+#ifdef AUTOSAVE_TESTING
+        if (g_recoveryCandidateHook) g_recoveryCandidateHook(tmp);
+#endif
+        if (!VerifyParticleSystemFile(tmp))
+        {
+            DeleteFileW(tmp.c_str());
+            AUTOSAVE_LOG("[Autosave] recovery handoff verify FAILED %ls\n", tmp.c_str());
+            return false;
+        }
+    }
+
+    DWORD moveFlags = MOVEFILE_REPLACE_EXISTING;
+    if (verifyBeforeCommit) moveFlags |= MOVEFILE_WRITE_THROUGH;
+    if (!MoveFileExW(tmp.c_str(), dest.c_str(), moveFlags))
     {
         DeleteFileW(tmp.c_str());
         AUTOSAVE_LOG("[Autosave] tier=%s rename FAILED %ls -> %ls err=%lu\n",
@@ -243,16 +364,38 @@ bool Write(const ParticleSystem& sys,
     return true;
 }
 
+bool Write(const ParticleSystem& sys,
+           const std::wstring&   originalFilename,
+           Tier                  tier)
+{
+    return WriteTier(sys, originalFilename, tier, false);
+}
+
+bool WriteRecoveryHandoff(const ParticleSystem& sys,
+                          const std::wstring&   originalFilename)
+{
+    return WriteTier(sys, originalFilename, Tier::Recent, true);
+}
+
 void DeleteOurSession()
 {
-    DeleteFileW(OurRecentPath().c_str());
-    DeleteFileW(OurStablePath().c_str());
-    DeleteFileW(OurMetaPath().c_str());
+    const std::wstring recent = OurRecentPath();
+    const std::wstring stable = OurStablePath();
+    const std::wstring meta = OurMetaPath();
+    if (!recent.empty()) DeleteFileW(recent.c_str());
+    if (!stable.empty()) DeleteFileW(stable.c_str());
+    if (!meta.empty())   DeleteFileW(meta.c_str());
     // The .tmp may exist if a write was interrupted; sweep it too.
-    std::wstring tmpRecent = OurRecentPath() + L".tmp";
-    std::wstring tmpStable = OurStablePath() + L".tmp";
-    DeleteFileW(tmpRecent.c_str());
-    DeleteFileW(tmpStable.c_str());
+    if (!recent.empty())
+    {
+        const std::wstring tmpRecent = recent + L".tmp";
+        DeleteFileW(tmpRecent.c_str());
+    }
+    if (!stable.empty())
+    {
+        const std::wstring tmpStable = stable + L".tmp";
+        DeleteFileW(tmpStable.c_str());
+    }
 }
 
 // Compare two FILETIMEs as 64-bit values; return true if a > b.
@@ -279,27 +422,6 @@ static FILETIME FtSubtractDays(int days)
     return ft;
 }
 
-// Parse `<prefix>123<suffix>` style filenames. Returns the PID on
-// success or 0 on failure (and *outIsRecent flagged appropriately).
-// Thin adapter over Autosave::ClassifyAutosaveName in the header — the logic
-// lives there so tests/test_autosave_recover.cpp can cover it without linking
-// this TU (the same arrangement as ShouldDeleteOrphan). Keeping ONE
-// implementation matters here: the defect it fixes was a classification gap,
-// and a duplicate would let the two drift back apart (2026-07 audit, an-audit-finding).
-static DWORD ParsePidFromAutosaveName(const wchar_t* filename,
-                                      bool* outIsRecent,
-                                      bool* outIsStable,
-                                      bool* outIsMeta,
-                                      bool* outIsTmp)
-{
-    const AutosaveName n = ClassifyAutosaveName(filename);
-    *outIsRecent = n.isRecent;
-    *outIsStable = n.isStable;
-    *outIsMeta   = n.isMeta;
-    *outIsTmp    = n.isTmp;
-    return (DWORD)n.pid;
-}
-
 bool ScanForOrphan(OrphanSession* out)
 {
     if (out == NULL) return false;
@@ -313,7 +435,7 @@ bool ScanForOrphan(OrphanSession* out)
     HANDLE hFind = FindFirstFileW(pattern.c_str(), &fd);
     if (hFind == INVALID_HANDLE_VALUE) return false;
 
-    // Group by PID. Files older than the sweep threshold get
+    // Group by complete process-session identity. Files older than the sweep threshold get
     // collected for deletion as a side effect of the scan.
     struct Group
     {
@@ -323,36 +445,35 @@ bool ScanForOrphan(OrphanSession* out)
         FILETIME     recentMtime;
         FILETIME     stableMtime;
     };
-    std::unordered_map<DWORD, Group> byPid;
+    std::map<SessionKey, Group> bySession;
     std::vector<std::wstring> sweepList;
     FILETIME sweepThreshold = FtSubtractDays(kSweepOlderThanDays);
 
     do
     {
-        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) continue;
-        bool isRecent = false, isStable = false, isMeta = false, isTmp = false;
-        DWORD pid = ParsePidFromAutosaveName(fd.cFileName, &isRecent, &isStable, &isMeta, &isTmp);
-        if (pid == 0) continue;
+        if ((fd.dwFileAttributes
+             & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0)
+            continue;
+        const AutosaveName name = ClassifyAutosaveName(fd.cFileName);
+        if (name.pid == 0) continue;
 
         std::wstring full = dir + L"\\" + fd.cFileName;
+
+        // Liveness precedes EVERY destructive decision. In particular, an
+        // unusually long-running editor's tier may be older than the retention
+        // threshold, and its active write must never be swept from under it.
+        if (IsLiveEditorSession(name)) continue;
 
         // A .tmp is an INTERRUPTED write. It is never recovery material — it may
         // be truncated, and handing the user a half-written .alo is worse than
         // telling them there is nothing to recover — but it must not be left to
         // pile up either. Delete it as soon as its owning session is gone, with
         // no age threshold: unlike a real autosave it has no value to preserve.
-        //
-        // The live-PID check comes FIRST here, unlike the tiers below: a running
-        // editor's temp is mid-write, and the age sweep would otherwise be free
-        // to delete it out from under an active save.
-        if (isTmp)
+        if (name.isTmp)
         {
-            if (!IsLiveEditorPid(pid))
-            {
-                sweepList.push_back(full);
-                AUTOSAVE_LOG("[Autosave] orphaned temp from dead pid %lu: %ls\n",
-                             (unsigned long)pid, fd.cFileName);
-            }
+            sweepList.push_back(full);
+            AUTOSAVE_LOG("[Autosave] orphaned temp from dead session %lu: %ls\n",
+                         name.pid, fd.cFileName);
             continue;
         }
 
@@ -363,13 +484,15 @@ bool ScanForOrphan(OrphanSession* out)
             continue;
         }
 
-        // Skip files belonging to a live editor.
-        if (IsLiveEditorPid(pid)) continue;
-
-        Group& g = byPid[pid];
-        if      (isRecent) { g.recentPath = full; g.recentMtime = fd.ftLastWriteTime; }
-        else if (isStable) { g.stablePath = full; g.stableMtime = fd.ftLastWriteTime; }
-        else if (isMeta)   { g.metaPath   = full; }
+        const SessionKey key = {
+            (DWORD)name.pid,
+            (ULONGLONG)name.creationTime100ns,
+            name.hasCreationTime,
+        };
+        Group& g = bySession[key];
+        if      (name.isRecent) { g.recentPath = full; g.recentMtime = fd.ftLastWriteTime; }
+        else if (name.isStable) { g.stablePath = full; g.stableMtime = fd.ftLastWriteTime; }
+        else if (name.isMeta)   { g.metaPath   = full; }
     }
     while (FindNextFileW(hFind, &fd));
     FindClose(hFind);
@@ -380,40 +503,46 @@ bool ScanForOrphan(OrphanSession* out)
         AUTOSAVE_LOG("[Autosave] swept stale %ls\n", victim.c_str());
     }
 
-    if (byPid.empty()) return false;
+    if (bySession.empty()) return false;
 
     // Pick the orphan session with the newest file across either
-    // tier. Ties break toward whichever PID iterates first; the
+    // tier. Ties break toward whichever complete key iterates first; the
     // user gets at least one recoverable session either way.
-    DWORD bestPid = 0;
+    SessionKey bestKey = {};
+    bool haveBest = false;
     FILETIME bestMtime = { 0, 0 };
-    for (const auto& kv : byPid)
+    for (const auto& kv : bySession)
     {
         const Group& g = kv.second;
+        if (g.recentPath.empty() && g.stablePath.empty()) continue;
         FILETIME m = g.recentMtime;
         if (FtNewer(g.stableMtime, m)) m = g.stableMtime;
-        if (bestPid == 0 || FtNewer(m, bestMtime))
+        if (!haveBest || FtNewer(m, bestMtime))
         {
-            bestPid = kv.first;
+            bestKey = kv.first;
             bestMtime = m;
+            haveBest = true;
         }
     }
-    if (bestPid == 0) return false;
+    if (!haveBest) return false;
 
-    const Group& g = byPid[bestPid];
-    out->pid          = bestPid;
-    out->recentPath   = g.recentPath;
-    out->stablePath   = g.stablePath;
-    out->metaPath     = g.metaPath;
-    out->recentMtime  = g.recentMtime;
-    out->stableMtime  = g.stableMtime;
+    const Group& g = bySession.find(bestKey)->second;
+    out->pid                 = bestKey.pid;
+    out->creationTime100ns   = bestKey.creationTime100ns;
+    out->hasCreationTime     = bestKey.hasCreationTime;
+    out->recentPath          = g.recentPath;
+    out->stablePath          = g.stablePath;
+    out->metaPath            = g.metaPath;
+    out->recentMtime         = g.recentMtime;
+    out->stableMtime         = g.stableMtime;
     if (!g.metaPath.empty())
     {
         ReadMeta(g.metaPath, &out->originalFilename);
     }
 
-    AUTOSAVE_LOG("[Autosave] orphan PID=%lu recent=%s stable=%s origfile='%ls'\n",
+    AUTOSAVE_LOG("[Autosave] orphan PID=%lu creation=%016llx recent=%s stable=%s origfile='%ls'\n",
                  (unsigned long)out->pid,
+                 (unsigned long long)out->creationTime100ns,
                  g.recentPath.empty() ? "no"  : "yes",
                  g.stablePath.empty() ? "no"  : "yes",
                  out->originalFilename.c_str());
@@ -422,9 +551,23 @@ bool ScanForOrphan(OrphanSession* out)
 
 void DeleteOrphan(const OrphanSession& session)
 {
-    if (!session.recentPath.empty()) DeleteFileW(session.recentPath.c_str());
-    if (!session.stablePath.empty()) DeleteFileW(session.stablePath.c_str());
-    if (!session.metaPath.empty())   DeleteFileW(session.metaPath.c_str());
+    const std::wstring currentRecent = OurRecentPath();
+    const std::wstring currentStable = OurStablePath();
+    const std::wstring currentMeta = OurMetaPath();
+    const auto deleteOldPath = [&](const std::wstring& path) {
+        if (path.empty()) return;
+        if ((!currentRecent.empty() && _wcsicmp(path.c_str(), currentRecent.c_str()) == 0)
+            || (!currentStable.empty() && _wcsicmp(path.c_str(), currentStable.c_str()) == 0)
+            || (!currentMeta.empty() && _wcsicmp(path.c_str(), currentMeta.c_str()) == 0))
+        {
+            AUTOSAVE_LOG("[Autosave] refused orphan delete of current path %ls\n", path.c_str());
+            return;
+        }
+        DeleteFileW(path.c_str());
+    };
+    deleteOldPath(session.recentPath);
+    deleteOldPath(session.stablePath);
+    deleteOldPath(session.metaPath);
     AUTOSAVE_LOG("[Autosave] discard PID=%lu\n", (unsigned long)session.pid);
 }
 

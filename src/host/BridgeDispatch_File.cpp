@@ -18,6 +18,56 @@ using nlohmann::json;
 
 namespace host {
 
+// The composed-host recovery oracle needs the real check/recover call site, but
+// ordinary --test-host runs must remain isolated from a developer's real
+// autosaves. The native harness supplies both an isolated child-only TEMP root
+// and this sentinel; the request must opt in as well. Release builds never lift
+// the suppression through this seam.
+static bool AllowTestHostAutosaveRecovery(bool testHost, const json& params)
+{
+#ifndef NDEBUG
+    if (!testHost || !params.value("__testAllowRecovery", false)) return false;
+    wchar_t value[8] = {};
+    const DWORD n =
+        GetEnvironmentVariableW(L"ALO_AUTOSAVE_RECOVERY_TEST", value, 8);
+    return n == 1 && value[0] == L'1';
+#else
+    (void)testHost;
+    (void)params;
+    return false;
+#endif
+}
+
+// Mutation-test seam for the composed recovery oracle. An out-of-range group
+// type is emitted by ParticleSystem::write but rejected by the production
+// ParticleSystem parser. Therefore WriteRecoveryHandoff must fail before
+// replacement, while an accidental wiring change to ordinary Autosave::Write
+// would succeed and be caught by the native bridge spec.
+//
+// Keep the same test-host + request + environment boundary as the real scanner
+// opt-in above. The loaded object is attempt-local, so a rejected handoff leaves
+// both the live document and the on-disk orphan untouched for a clean retry.
+static void CorruptRecoveryCandidateForTest(bool testHost,
+                                            const json& params,
+                                            ParticleSystem& loaded)
+{
+#ifndef NDEBUG
+    if (!params.value("__testCorruptHandoffCandidate", false)
+        || !AllowTestHostAutosaveRecovery(testHost, params))
+        return;
+
+    ParticleSystem::Emitter* emitter = loaded.getEmitters().empty()
+        ? loaded.addRootEmitter()
+        : loaded.getEmitters()[0];
+    emitter->groups[ParticleSystem::GROUP_SPEED].type =
+        ParticleSystem::NUM_GROUP_TYPES;
+#else
+    (void)testHost;
+    (void)params;
+    (void)loaded;
+#endif
+}
+
 bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::string& kind)
 {
     // DispatchInternal-local aliases so the moved ladder blocks below stay
@@ -645,7 +695,11 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
     if (kind == "autosave/check-recovery")
     {
         m_hasPendingOrphan = false;
-        if (Autosave::ShouldSuppressRecoveryPrompt(m_testHost, m_ephemeral, !m_currentFilePath.empty()))
+        const bool allowTestRecovery =
+            AllowTestHostAutosaveRecovery(m_testHost, params);
+        const bool suppressForTestHost = m_testHost && !allowTestRecovery;
+        if (Autosave::ShouldSuppressRecoveryPrompt(
+                suppressForTestHost, m_ephemeral, !m_currentFilePath.empty()))
         {
             ctx.SendOk(json{{"orphan", nullptr}});
             return true;
@@ -733,31 +787,45 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
             std::unique_ptr<ParticleSystem> loaded = LoadParticleSystem(restorePath, &err);
             if (loaded)
             {
-                if (m_pAttachedParticleSystem && *m_pAttachedParticleSystem && m_engine)
+                CorruptRecoveryCandidateForTest(m_testHost, params, *loaded);
+                // Establish and parse-verify a current-session recovery point
+                // BEFORE touching the boot document or consuming the old
+                // orphan. A crash at every later point still leaves at least
+                // this copy; a handoff failure leaves both old tiers and the
+                // boot document untouched for retry.
+                if (!Autosave::WriteRecoveryHandoff(*loaded, s.originalFilename))
                 {
-                    m_engine->KillParticleSystem(*m_pAttachedParticleSystem);
-                    m_pAttachedParticleSystem->Reset();
+                    outcome = Autosave::RecoverOutcome::Failed;
+                    reason = "handoff_write_failed";
                 }
-                // Record preview borrow: same document-teardown null (see the
-                // preview/* UAF guard in BridgeDispatch_Spawner.cpp).
-                m_recordPreviewAttached.Reset();
-                if (m_pParticleSystem) *m_pParticleSystem = std::move(loaded);
-                EnforceSingleMemberLinkGroups();
-                if (m_undo) m_undo->Clear();
-                if (m_engine)
+                else
                 {
-                    m_engine->Clear();
-                    m_engine->OnParticleSystemChanged(-1);
-                    m_engine->ReloadTextures();
+                    if (m_pAttachedParticleSystem && *m_pAttachedParticleSystem && m_engine)
+                    {
+                        m_engine->KillParticleSystem(*m_pAttachedParticleSystem);
+                        m_pAttachedParticleSystem->Reset();
+                    }
+                    // Record preview borrow: same document-teardown null (see the
+                    // preview/* UAF guard in BridgeDispatch_Spawner.cpp).
+                    m_recordPreviewAttached.Reset();
+                    if (m_pParticleSystem) *m_pParticleSystem = std::move(loaded);
+                    EnforceSingleMemberLinkGroups();
+                    if (m_undo) m_undo->Clear();
+                    if (m_engine)
+                    {
+                        m_engine->Clear();
+                        m_engine->OnParticleSystemChanged(-1);
+                        m_engine->ReloadTextures();
+                    }
+                    m_currentFilePath = s.originalFilename;  // "" → untitled
+                    m_savedSnapshot.clear();                 // stays dirty until saved
+                    SetDirty(true);
+                    // Same replacement notification chokepoint as file/open. The
+                    // actual recovery path is suppressed under --test-host, so
+                    // sharing this call prevents its ordering from drifting.
+                    ResetSelectionAndEmitDocumentChanged();
+                    outcome = Autosave::RecoverOutcome::Recovered;
                 }
-                m_currentFilePath = s.originalFilename;  // "" → untitled
-                m_savedSnapshot.clear();                 // stays dirty until saved
-                SetDirty(true);
-                // Same replacement notification chokepoint as file/open. The
-                // actual recovery path is suppressed under --test-host, so
-                // sharing this call prevents its ordering from drifting.
-                ResetSelectionAndEmitDocumentChanged();
-                outcome = Autosave::RecoverOutcome::Recovered;
             }
             else
             {
