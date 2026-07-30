@@ -6,6 +6,28 @@
 
 #include <string.h>   // _stricmp / _strnicmp (case-insensitive shader-name match)
 
+#ifdef ALO_MODEL_TEST_PROBES
+namespace
+{
+    size_t g_aloSubMeshConstructionCount = 0;
+}
+
+AloSubMesh::AloSubMesh()
+{
+    ++g_aloSubMeshConstructionCount;
+}
+
+void AloResetSubMeshConstructionCountForTesting()
+{
+    g_aloSubMeshConstructionCount = 0;
+}
+
+size_t AloSubMeshConstructionCountForTesting()
+{
+    return g_aloSubMeshConstructionCount;
+}
+#endif
+
 // Static-mesh subset of the Alamo `.alo` chunk vocabulary. See AloModel.h for
 // provenance (max2alamo-2026 writer + alo-viewer reader, both MIT). The chunk
 // nesting that matters here:
@@ -160,8 +182,19 @@ namespace
         return p;
     }
 
+    void ReadAndAppendParam(ChunkReader& r, AloSubMesh& sm,
+                            AloShaderParam::Kind kind, size_t& shaderParamsTotal)
+    {
+        // Count every recognized leaf before parsing/pushing it. Duplicate
+        // names still consume parser work and independent vector entries.
+        Verify(shaderParamsTotal < kMaxAloShaderParamsTotal);
+        ++shaderParamsTotal;
+        sm.params.push_back(ReadParam(r, kind));
+    }
+
     // r is positioned inside a 0x10100 submesh-material container.
-    void ReadSubMeshMaterial(ChunkReader& r, AloSubMesh& sm)
+    void ReadSubMeshMaterial(ChunkReader& r, AloSubMesh& sm,
+                             size_t& shaderParamsTotal)
     {
         VerifyContainer(r);   // #487
         ChunkType t;
@@ -170,11 +203,11 @@ namespace
             switch (t)
             {
                 case CHUNK_SHADER_NAME:   sm.shaderName = r.readString(); break;
-                case CHUNK_PARAM_INT:     sm.params.push_back(ReadParam(r, AloShaderParam::INT));     break;
-                case CHUNK_PARAM_FLOAT:   sm.params.push_back(ReadParam(r, AloShaderParam::FLOAT));   break;
-                case CHUNK_PARAM_FLOAT3:  sm.params.push_back(ReadParam(r, AloShaderParam::FLOAT3));  break;
-                case CHUNK_PARAM_TEXTURE: sm.params.push_back(ReadParam(r, AloShaderParam::TEXTURE)); break;
-                case CHUNK_PARAM_FLOAT4:  sm.params.push_back(ReadParam(r, AloShaderParam::FLOAT4));  break;
+                case CHUNK_PARAM_INT:     ReadAndAppendParam(r, sm, AloShaderParam::INT,     shaderParamsTotal); break;
+                case CHUNK_PARAM_FLOAT:   ReadAndAppendParam(r, sm, AloShaderParam::FLOAT,   shaderParamsTotal); break;
+                case CHUNK_PARAM_FLOAT3:  ReadAndAppendParam(r, sm, AloShaderParam::FLOAT3,  shaderParamsTotal); break;
+                case CHUNK_PARAM_TEXTURE: ReadAndAppendParam(r, sm, AloShaderParam::TEXTURE, shaderParamsTotal); break;
+                case CHUNK_PARAM_FLOAT4:  ReadAndAppendParam(r, sm, AloShaderParam::FLOAT4,  shaderParamsTotal); break;
                 default:
                     // Unknown CONTAINER must be skipped explicitly (next() would
                     // descend into it); unknown DATA chunks are auto-skipped by
@@ -274,7 +307,8 @@ namespace
     // r is positioned inside a 0x0400 mesh container. Per the format, each
     // sub-mesh's 0x10100 material is immediately followed by its 0x10000
     // geometry as a sibling, so geometry attaches to the most recent sub-mesh.
-    void ReadMesh(ChunkReader& r, AloMesh& mesh)
+    void ReadMesh(ChunkReader& r, AloMesh& mesh, size_t& subMeshesTotal,
+                  size_t& shaderParamsTotal)
     {
         VerifyContainer(r);   // #487
         ChunkType t;
@@ -302,8 +336,12 @@ namespace
                     break;
                 }
                 case CHUNK_SUBMESH_MAT:
+                    // Count material containers across the whole model before
+                    // allocating their owning AloSubMesh.
+                    Verify(subMeshesTotal < kMaxAloSubMeshesTotal);
+                    ++subMeshesTotal;
                     mesh.subMeshes.emplace_back();
-                    ReadSubMeshMaterial(r, mesh.subMeshes.back());
+                    ReadSubMeshMaterial(r, mesh.subMeshes.back(), shaderParamsTotal);
                     break;
                 case CHUNK_GEOMETRY:
                     Verify(!mesh.subMeshes.empty());   // geometry without a material is malformed
@@ -418,6 +456,8 @@ AloModel LoadAloModel(IFile* file)
 {
     ChunkReader r(file);
     AloModel model;
+    size_t subMeshesTotal = 0;
+    size_t shaderParamsTotal = 0;
 
     ChunkType t;
     while ((t = r.next()) != -1)
@@ -430,7 +470,7 @@ AloModel LoadAloModel(IFile* file)
             // which have had their caps all along.
             Verify(model.meshes.size() < kMaxAloMeshes);
             model.meshes.emplace_back();
-            ReadMesh(r, model.meshes.back());
+            ReadMesh(r, model.meshes.back(), subMeshesTotal, shaderParamsTotal);
         }
         else if (t == CHUNK_SKELETON)
         {

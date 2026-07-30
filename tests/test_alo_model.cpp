@@ -12,7 +12,9 @@
 #include "managers.h"              // IFileManager (StubFileManager below)
 #include "files.h"
 #include "exceptions.h"
+#include "ResourceLimits.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstring>
@@ -27,6 +29,9 @@ static int g_failed = 0;
 } while (0)
 
 typedef std::vector<unsigned char> Bytes;
+
+static const size_t kExpectedAloSubMeshesTotalCap = 4096u;
+static const size_t kExpectedAloShaderParamsTotalCap = 32768u;
 
 // ---- little-endian byte writers ------------------------------------------
 static void u32le(Bytes& b, uint32_t v) {
@@ -69,6 +74,15 @@ static Bytes floatParam(const std::string& name, float v) {
     Bytes p, nm, val; cstr(nm, name); mini(p, 1, nm); f32le(val, v); mini(p, 2, val);
     return leaf(0x10103, p);
 }
+static Bytes intParam(const std::string& name, uint32_t v) {
+    Bytes p, nm, val; cstr(nm, name); mini(p, 1, nm); u32le(val, v); mini(p, 2, val);
+    return leaf(0x10102, p);
+}
+static Bytes float3Param(const std::string& name, float a, float b, float c) {
+    Bytes p, nm, val; cstr(nm, name); mini(p, 1, nm);
+    f32le(val, a); f32le(val, b); f32le(val, c); mini(p, 2, val);
+    return leaf(0x10104, p);
+}
 static Bytes float4Param(const std::string& name, float a, float b, float c, float d) {
     Bytes p, nm, val; cstr(nm, name); mini(p, 1, nm);
     f32le(val, a); f32le(val, b); f32le(val, c); f32le(val, d); mini(p, 2, val);
@@ -77,6 +91,15 @@ static Bytes float4Param(const std::string& name, float a, float b, float c, flo
 static Bytes texParam(const std::string& name, const std::string& fn) {
     Bytes p, nm, val; cstr(nm, name); mini(p, 1, nm); cstr(val, fn); mini(p, 2, val);
     return leaf(0x10105, p);
+}
+static Bytes recognizedParam(size_t sequence) {
+    switch (sequence % 5u) {
+        case 0: return intParam("P", 1u);
+        case 1: return floatParam("P", 1.0f);
+        case 2: return float3Param("P", 1.0f, 2.0f, 3.0f);
+        case 3: return texParam("P", "x");
+        default: return float4Param("P", 1.0f, 2.0f, 3.0f, 4.0f);
+    }
 }
 
 static Bytes countsChunk(uint32_t verts, uint32_t prims) {
@@ -99,6 +122,13 @@ static Bytes material(const std::string& shader, const std::vector<Bytes>& param
     std::vector<Bytes> kids; Bytes nm; cstr(nm, shader); kids.push_back(leaf(0x10101, nm));
     for (const auto& pr : params) kids.push_back(pr);
     return container(0x10100, kids);
+}
+static Bytes materialWithRecognizedParams(size_t start, size_t count) {
+    std::vector<Bytes> params;
+    params.reserve(count);
+    for (size_t i = 0; i < count; ++i)
+        params.push_back(recognizedParam(start + i));
+    return material("MeshGloss.fx", params);
 }
 static Bytes geometry(uint32_t n, uint32_t prims, const std::string& fmt) {
     std::vector<Bytes> kids;
@@ -134,6 +164,21 @@ static Bytes mesh(const std::string& name, const std::vector<std::pair<Bytes, By
     Bytes info; info.resize(128, 0); kids.push_back(leaf(0x0402, info));
     for (const auto& s : subs) { kids.push_back(s.first); kids.push_back(s.second); }
     return container(0x0400, kids);
+}
+static Bytes meshWithMaterials(const std::string& name,
+                               const std::vector<Bytes>& materials) {
+    std::vector<Bytes> kids;
+    Bytes nm; cstr(nm, name); kids.push_back(leaf(0x0401, nm));
+    Bytes info; info.resize(128, 0); kids.push_back(leaf(0x0402, info));
+    for (const auto& mat : materials) kids.push_back(mat);
+    return container(0x0400, kids);
+}
+static Bytes meshWithEmptyMaterials(const std::string& name, size_t count) {
+    std::vector<Bytes> materials;
+    materials.reserve(count);
+    const Bytes empty = material("MeshGloss.fx", {});
+    for (size_t i = 0; i < count; ++i) materials.push_back(empty);
+    return meshWithMaterials(name, materials);
 }
 // 0x402 MESH-INFO with the hidden/collision flags set: subMeshCount(4) +
 // bbox_min[3](12) + bbox_max[3](12) + unused(4) + isHidden(4)@32 + isCollision(4)@36,
@@ -216,6 +261,53 @@ static AloModel parseBytes(const Bytes& b) {
         mf->Release();
         throw;
     }
+}
+
+class ForbiddenReadFile : public IFile {
+public:
+    ForbiddenReadFile(Bytes bytes, size_t forbiddenBegin, size_t forbiddenEnd)
+        : m_bytes(std::move(bytes)),
+          m_forbiddenBegin(forbiddenBegin),
+          m_forbiddenEnd(forbiddenEnd) {}
+
+    bool eof() override { return m_position == m_bytes.size(); }
+    unsigned long size() override { return (unsigned long)m_bytes.size(); }
+    void seek(unsigned long offset) override {
+        m_position = (offset < m_bytes.size()) ? offset : m_bytes.size();
+    }
+    unsigned long tell() override { return (unsigned long)m_position; }
+    unsigned long read(void* buffer, unsigned long requested) override {
+        const size_t available = m_bytes.size() - m_position;
+        const size_t count = (requested < available) ? requested : available;
+        const size_t readEnd = m_position + count;
+        const size_t overlapBegin =
+            (m_position > m_forbiddenBegin) ? m_position : m_forbiddenBegin;
+        const size_t overlapEnd =
+            (readEnd < m_forbiddenEnd) ? readEnd : m_forbiddenEnd;
+        if (overlapBegin < overlapEnd)
+            m_forbiddenBytesRead += overlapEnd - overlapBegin;
+        if (count > 0)
+            std::memcpy(buffer, m_bytes.data() + m_position, count);
+        m_position = readEnd;
+        return (unsigned long)count;
+    }
+    unsigned long write(const void*, unsigned long) override { return 0; }
+
+    size_t forbiddenBytesRead() const { return m_forbiddenBytesRead; }
+
+private:
+    Bytes m_bytes;
+    size_t m_position = 0;
+    size_t m_forbiddenBegin;
+    size_t m_forbiddenEnd;
+    size_t m_forbiddenBytesRead = 0;
+};
+
+static bool rejectsAsBadFile(const Bytes& b) {
+    try { parseBytes(b); }
+    catch (BadFileException&) { return true; }
+    catch (...) {}
+    return false;
 }
 
 static const AloShaderParam* findParam(const AloSubMesh& sm, const std::string& name) {
@@ -357,6 +449,112 @@ int main(int argc, char** argv) {
         AloModel m = parseBytes(assemble({ skeletonStub(), m0, m1 }));
         CHECK(m.meshes.size() == 2, "2 meshes");
         CHECK(m.meshes[0].name == "a" && m.meshes[1].name == "b", "mesh names");
+    }
+
+    // ---- Model-wide nested fan-out caps (an-audit-finding / an-audit-finding) ----------------
+    std::printf("[nested-fanout-caps]\n");
+    {
+        CHECK(kMaxAloSubMeshesTotal == kExpectedAloSubMeshesTotalCap,
+              "an-audit-finding: model-wide submesh cap remains exactly 4,096");
+        const size_t half = kExpectedAloSubMeshesTotalCap / 2u;
+        Bytes atCap = assemble({
+            meshWithEmptyMaterials("sub_a", half),
+            meshWithEmptyMaterials("sub_b", kExpectedAloSubMeshesTotalCap - half),
+        });
+
+        bool accepted = true;
+        AloModel m;
+        try { m = parseBytes(atCap); } catch (...) { accepted = false; }
+        size_t total = 0;
+        for (const auto& me : m.meshes) total += me.subMeshes.size();
+        CHECK(accepted && total == kExpectedAloSubMeshesTotalCap,
+              "an-audit-finding: exactly 4,096 materials across meshes load as submeshes");
+
+        Bytes overCap = atCap;
+        const Bytes extra = meshWithEmptyMaterials("sub_over", 1u);
+        overCap.insert(overCap.end(), extra.begin(), extra.end());
+        AloResetSubMeshConstructionCountForTesting();
+        const bool rejected = rejectsAsBadFile(overCap);
+        const size_t constructed = AloSubMeshConstructionCountForTesting();
+        CHECK(rejected && constructed == kExpectedAloSubMeshesTotalCap,
+              "an-audit-finding: 4,097th material rejected before AloSubMesh construction");
+        if (constructed != kExpectedAloSubMeshesTotalCap)
+            std::printf("    observed AloSubMesh constructions: %zu (expected 4096)\n",
+                        constructed);
+    }
+    {
+        CHECK(kMaxAloShaderParamsTotal == kExpectedAloShaderParamsTotalCap,
+              "an-audit-finding: model-wide shader-param cap remains exactly 32,768");
+        const size_t half = kExpectedAloShaderParamsTotalCap / 2u;
+        Bytes atCap = assemble({
+            meshWithMaterials("param_a", {
+                materialWithRecognizedParams(0u, half),
+            }),
+            meshWithMaterials("param_b", {
+                materialWithRecognizedParams(half,
+                    kExpectedAloShaderParamsTotalCap - half),
+            }),
+        });
+
+        bool accepted = true;
+        AloModel m;
+        try { m = parseBytes(atCap); } catch (...) { accepted = false; }
+        size_t total = 0;
+        for (const auto& me : m.meshes)
+            for (const auto& sm : me.subMeshes)
+                total += sm.params.size();
+        CHECK(accepted && total == kExpectedAloShaderParamsTotalCap,
+              "an-audit-finding: exactly 32,768 raw params across materials load");
+        if (accepted && !m.meshes.empty() && !m.meshes[0].subMeshes.empty())
+        {
+            const std::vector<AloShaderParam>& params =
+                m.meshes[0].subMeshes[0].params;
+            CHECK(params.size() >= 6u
+                  && params[0].kind == AloShaderParam::INT
+                  && params[1].kind == AloShaderParam::FLOAT
+                  && params[2].kind == AloShaderParam::FLOAT3
+                  && params[3].kind == AloShaderParam::TEXTURE
+                  && params[4].kind == AloShaderParam::FLOAT4
+                  && params[0].name == "P" && params[5].name == "P",
+                  "an-audit-finding: all five recognized IDs and duplicate names count");
+        }
+
+        const Bytes forbiddenParam = intParam("FORBIDDEN_32769_BODY", 0xDEC0ADDEu);
+        Bytes overCap = atCap;
+        const size_t extraRootBegin = overCap.size();
+        const Bytes extra = meshWithMaterials("param_over", {
+            material("MeshGloss.fx", { forbiddenParam }),
+        });
+        overCap.insert(overCap.end(), extra.begin(), extra.end());
+        const auto forbiddenChunk = std::search(
+            overCap.begin() + extraRootBegin, overCap.end(),
+            forbiddenParam.begin(), forbiddenParam.end());
+        const auto duplicateForbiddenChunk =
+            (forbiddenChunk == overCap.end()) ? overCap.end() :
+            std::search(forbiddenChunk + 1, overCap.end(),
+                        forbiddenParam.begin(), forbiddenParam.end());
+        CHECK(forbiddenChunk != overCap.end() && duplicateForbiddenChunk == overCap.end(),
+              "an-audit-finding: forbidden parameter sentinel is present exactly once in appended mesh");
+        if (forbiddenChunk != overCap.end() && duplicateForbiddenChunk == overCap.end())
+        {
+            const size_t forbiddenBodyBegin =
+                (size_t)(forbiddenChunk - overCap.begin()) + 8u;
+            const size_t forbiddenBodyEnd =
+                forbiddenBodyBegin + forbiddenParam.size() - 8u;
+            ForbiddenReadFile* file = new ForbiddenReadFile(
+                overCap, forbiddenBodyBegin, forbiddenBodyEnd);
+            bool rejected = false;
+            try { LoadAloModel(file); }
+            catch (BadFileException&) { rejected = true; }
+            catch (...) {}
+            const size_t forbiddenBytesRead = file->forbiddenBytesRead();
+            file->Release();
+            CHECK(rejected && forbiddenBytesRead == 0u,
+                  "an-audit-finding: 32,769th param rejected before its body is read");
+            if (forbiddenBytesRead != 0u)
+                std::printf("    observed forbidden parameter-body bytes read: %zu (expected 0)\n",
+                            forbiddenBytesRead);
+        }
     }
 
     // ---- 0x402 mesh-info: hidden + collision flags --------------------------

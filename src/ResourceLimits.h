@@ -64,6 +64,13 @@ static const unsigned long kMaxEmitterTreeDepth  = 256u;
 // emplace_back into model.meshes regardless of payload, so empty containers cost
 // a full Mesh apiece. Real models have a handful; heavily-composed ones dozens.
 static const unsigned long kMaxAloMeshes         = 4096u;
+// Material containers across ALL meshes in one model (audit an-audit-finding). Each
+// 0x10100 owns an AloSubMesh even if no geometry follows, so the top-level mesh
+// cap does not bound this nested fan-out.
+static const unsigned long kMaxAloSubMeshesTotal = 4096u;
+// Recognized shader-parameter leaves across ALL materials in one model (audit
+// an-audit-finding). Count raw 0x10102..0x10106 leaves, including duplicate names.
+static const unsigned long kMaxAloShaderParamsTotal = 32768u;
 // Keys in ONE emitter track (audit an-audit-finding). Track::KeyMap is a std::multiset, so
 // every key is a separate red-black-tree node — far more than the 8 bytes it
 // occupies on disk. Bounded previously only by the enclosing chunk, i.e. up to

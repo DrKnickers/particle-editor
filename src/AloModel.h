@@ -47,6 +47,9 @@ struct AloShaderParam
 // with empty rawVertexBytes (out-of-scope convert path; consumer skips it).
 struct AloSubMesh
 {
+#ifdef ALO_MODEL_TEST_PROBES
+    AloSubMesh();
+#endif
     std::string                 shaderName;        // 0x10101, e.g. "Skydome.fx"
     std::string                 vertexFormatName;  // 0x10002, e.g. "alD3dVertNU2C"
     std::vector<AloShaderParam> params;
@@ -55,6 +58,14 @@ struct AloSubMesh
     std::vector<unsigned char>  rawVertexBytes;    // vertexCount * kAloVertexStride
     std::vector<unsigned char>  indexBytes;        // primitiveCount * 3 * sizeof(uint16)
 };
+
+#ifdef ALO_MODEL_TEST_PROBES
+// Test-build-only construction probe for the nested material fan-out guard.
+// Keeping the counter in the real AloSubMesh constructor makes a late-check
+// mutant observable without changing normal production builds or parser calls.
+void AloResetSubMeshConstructionCountForTesting();
+size_t AloSubMeshConstructionCountForTesting();
+#endif
 
 struct AloMesh
 {

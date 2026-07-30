@@ -11,7 +11,7 @@ pushd "%ROOT%"
 if not exist tests\obj mkdir tests\obj
 
 cl /nologo /EHsc /std:c++17 /MDd /Zi ^
-   /DUNICODE /D_UNICODE /D_DEBUG /D_WINDOWS /D_CRT_SECURE_NO_WARNINGS ^
+   /DUNICODE /D_UNICODE /D_DEBUG /D_WINDOWS /D_CRT_SECURE_NO_WARNINGS /DALO_MODEL_TEST_PROBES ^
    /I "%DXSDK_DIR%Include" /I "src" ^
    /Fe:tests\test_alo_model.exe /Fo:tests\obj\ ^
    tests\test_alo_model.cpp ^
