@@ -62,6 +62,11 @@ type DeviceRecoveryWorkState = {
   authoredApplyCount: number;
   deviceProbeCount: number;
   composedFramePrepareCount: number;
+  endFrameQueryCreateCount: number;
+  endFrameQueryFailureCount: number;
+  endFrameQueryTimeoutCount: number;
+  endFrameQueryOverrideConsumedCount: number;
+  endFrameQueryOverrideRemaining: number;
   frameReady: boolean;
 };
 
@@ -356,7 +361,7 @@ test("blocked full texture reload replays once without duplicating authored work
   expect(result.reloadSettled.frameReady).toBe(true);
 });
 
-test("composed coordinator probes the real D3D9Ex device once per healthy frame", async () => {
+test("healthy composed frames use the production admission door without probing", async () => {
   const result = await page.evaluate(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const b = (window as any).bridge;
@@ -380,7 +385,208 @@ test("composed coordinator probes the real D3D9Ex device once per healthy frame"
 
   expect(result.frameReady).toBe(true);
   expect(result.frameDelta).toBeGreaterThan(0);
-  expect(result.probeDelta).toBe(result.frameDelta);
+  expect(result.probeDelta).toBe(0);
+});
+
+test("failed production event query schedules one probe and recreates once", async () => {
+  const result = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    const debug = async (params: Record<string, unknown>) =>
+      (await b.request({
+        kind: "debug/device-recovery-work",
+        params,
+      })) as DeviceRecoveryWorkState;
+    const waitFor = async (
+      predicate: (state: DeviceRecoveryWorkState) => boolean,
+    ) => {
+      const deadline = Date.now() + 15_000;
+      let state = await debug({ action: "query" });
+      while (!predicate(state) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        state = await debug({ action: "query" });
+      }
+      return state;
+    };
+
+    await debug({ action: "release" });
+    await debug({ action: "clear-query-result" });
+    const before = await debug({ action: "query" });
+    try {
+      await debug({
+        action: "inject-query-result",
+        result: "device-lost",
+        repeatCount: 1,
+      });
+      const after = await waitFor(
+        (state) =>
+          state.endFrameQueryOverrideConsumedCount >=
+            before.endFrameQueryOverrideConsumedCount + 1 &&
+          state.endFrameQueryFailureCount >=
+            before.endFrameQueryFailureCount + 1 &&
+          state.deviceProbeCount >= before.deviceProbeCount + 1 &&
+          state.endFrameQueryCreateCount >=
+            before.endFrameQueryCreateCount + 1 &&
+          state.frameReady,
+      );
+      return {
+        consumedDelta:
+          after.endFrameQueryOverrideConsumedCount -
+          before.endFrameQueryOverrideConsumedCount,
+        failureDelta:
+          after.endFrameQueryFailureCount -
+          before.endFrameQueryFailureCount,
+        timeoutDelta:
+          after.endFrameQueryTimeoutCount -
+          before.endFrameQueryTimeoutCount,
+        probeDelta: after.deviceProbeCount - before.deviceProbeCount,
+        createDelta:
+          after.endFrameQueryCreateCount -
+          before.endFrameQueryCreateCount,
+        overrideRemaining: after.endFrameQueryOverrideRemaining,
+        frameReady: after.frameReady,
+      };
+    } finally {
+      await debug({ action: "clear-query-result" });
+    }
+  });
+
+  expect(result.consumedDelta).toBe(1);
+  expect(result.failureDelta).toBe(1);
+  expect(result.timeoutDelta).toBe(0);
+  expect(result.probeDelta).toBe(1);
+  expect(result.createDelta).toBe(1);
+  expect(result.overrideRemaining).toBe(0);
+  expect(result.frameReady).toBe(true);
+});
+
+test("S_OK and one pending S_FALSE do not schedule recovery", async () => {
+  const result = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    const debug = async (params: Record<string, unknown>) =>
+      (await b.request({
+        kind: "debug/device-recovery-work",
+        params,
+      })) as DeviceRecoveryWorkState;
+    const exercise = async (queryResult: "s-ok" | "s-false") => {
+      const before = await debug({ action: "query" });
+      await debug({
+        action: "inject-query-result",
+        result: queryResult,
+        repeatCount: 1,
+      });
+      const deadline = Date.now() + 15_000;
+      let after = await debug({ action: "query" });
+      while (
+        after.endFrameQueryOverrideConsumedCount <
+          before.endFrameQueryOverrideConsumedCount + 1 &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        after = await debug({ action: "query" });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      after = await debug({ action: "query" });
+      return {
+        consumedDelta:
+          after.endFrameQueryOverrideConsumedCount -
+          before.endFrameQueryOverrideConsumedCount,
+        failureDelta:
+          after.endFrameQueryFailureCount -
+          before.endFrameQueryFailureCount,
+        timeoutDelta:
+          after.endFrameQueryTimeoutCount -
+          before.endFrameQueryTimeoutCount,
+        probeDelta: after.deviceProbeCount - before.deviceProbeCount,
+        createDelta:
+          after.endFrameQueryCreateCount -
+          before.endFrameQueryCreateCount,
+      };
+    };
+
+    await debug({ action: "release" });
+    await debug({ action: "clear-query-result" });
+    try {
+      return {
+        ok: await exercise("s-ok"),
+        pending: await exercise("s-false"),
+      };
+    } finally {
+      await debug({ action: "clear-query-result" });
+    }
+  });
+
+  for (const sample of [result.ok, result.pending]) {
+    expect(sample.consumedDelta).toBe(1);
+    expect(sample.failureDelta).toBe(0);
+    expect(sample.timeoutDelta).toBe(0);
+    expect(sample.probeDelta).toBe(0);
+    expect(sample.createDelta).toBe(0);
+  }
+});
+
+test("the exact 100001-poll S_FALSE timeout stays degraded, not lost", async () => {
+  test.setTimeout(120_000);
+  const result = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    const debug = async (params: Record<string, unknown>) =>
+      (await b.request({
+        kind: "debug/device-recovery-work",
+        params,
+      })) as DeviceRecoveryWorkState;
+
+    await debug({ action: "release" });
+    await debug({ action: "clear-query-result" });
+    const before = await debug({ action: "query" });
+    try {
+      await debug({
+        action: "inject-query-result",
+        result: "s-false",
+        repeatCount: 100001,
+      });
+      const deadline = Date.now() + 90_000;
+      let after = await debug({ action: "query" });
+      while (
+        (after.endFrameQueryOverrideConsumedCount <
+          before.endFrameQueryOverrideConsumedCount + 100001 ||
+          after.endFrameQueryTimeoutCount <
+            before.endFrameQueryTimeoutCount + 1) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        after = await debug({ action: "query" });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      after = await debug({ action: "query" });
+      return {
+        consumedDelta:
+          after.endFrameQueryOverrideConsumedCount -
+          before.endFrameQueryOverrideConsumedCount,
+        failureDelta:
+          after.endFrameQueryFailureCount -
+          before.endFrameQueryFailureCount,
+        timeoutDelta:
+          after.endFrameQueryTimeoutCount -
+          before.endFrameQueryTimeoutCount,
+        probeDelta: after.deviceProbeCount - before.deviceProbeCount,
+        createDelta:
+          after.endFrameQueryCreateCount -
+          before.endFrameQueryCreateCount,
+        overrideRemaining: after.endFrameQueryOverrideRemaining,
+      };
+    } finally {
+      await debug({ action: "clear-query-result" });
+    }
+  });
+
+  expect(result.consumedDelta).toBe(100001);
+  expect(result.failureDelta).toBe(0);
+  expect(result.timeoutDelta).toBe(1);
+  expect(result.probeDelta).toBe(0);
+  expect(result.createDelta).toBe(0);
+  expect(result.overrideRemaining).toBe(0);
 });
 
 test("blocked shader and layer actions fail without moving roots; healthy reload succeeds", async () => {

@@ -201,11 +201,13 @@ struct FakeRecoveryOwner
 static devicerecovery::Result RunRecovery(
     devicerecovery::State& state,
     FakeRecoveryDevice& device,
-    FakeRecoveryOwner& owner)
+    FakeRecoveryOwner& owner,
+    bool renderWhenOccluded = false)
 {
     devicerecovery::D3D9ExRecoveryPort<FakeRecoveryDevice, FakeRecoveryOwner>
         port(&device, owner);
-    return devicerecovery::RunDeviceRecoveryStep(state, port);
+    return devicerecovery::RunDeviceRecoveryStep(
+        state, port, renderWhenOccluded);
 }
 
 static std::string ReadSource(const std::filesystem::path& path)
@@ -340,6 +342,33 @@ int main()
                true);
 
     std::printf("=== executable production recovery door ===\n");
+    {
+        FakeRecoveryDevice directDevice;
+        FakeRecoveryOwner directOwner;
+        devicerecovery::State directRecovery;
+        directDevice.checkResult = S_PRESENT_OCCLUDED;
+        const devicerecovery::Result direct =
+            RunRecovery(directRecovery, directDevice, directOwner);
+
+        FakeRecoveryDevice composedDevice;
+        FakeRecoveryOwner composedOwner;
+        devicerecovery::State composedRecovery;
+        composedDevice.checkResult = S_PRESENT_OCCLUDED;
+        const devicerecovery::Result composed =
+            RunRecovery(
+                composedRecovery, composedDevice, composedOwner, true);
+
+        ExpectBool("direct recovery skips the exact occluded state",
+                   direct.outcome == devicerecovery::Outcome::SkipFrame,
+                   true);
+        ExpectBool("composed recovery renders the exact occluded state",
+                   composed.outcome == devicerecovery::Outcome::Render,
+                   true);
+        ExpectInt("direct occlusion probes exactly once",
+                  directDevice.checks, 1);
+        ExpectInt("composed occlusion probes exactly once",
+                  composedDevice.checks, 1);
+    }
     {
         std::vector<std::string> trace;
         FakeRecoveryDevice device;
@@ -812,7 +841,12 @@ int main()
                    Contains(engineSource,
                             "D3D9ExRecoveryPort<IDirect3DDevice9Ex, Engine>") &&
                    Contains(engineSource,
-                            "RunDeviceRecoveryStep(m_deviceRecovery, port)"),
+                            "m_pAlphaCompositor != nullptr") &&
+                   Contains(recoveryHeader,
+                            "bool renderWhenOccluded = false") &&
+                   Contains(recoveryHeader,
+                            "renderWhenOccluded && "
+                            "state == S_PRESENT_OCCLUDED"),
                    true);
         ExpectBool("recovery port binds CheckDeviceState, never the legacy probe",
                    Contains(recoveryHeader,
@@ -835,7 +869,7 @@ int main()
         const size_t prepareFatalReturn =
             prepareBody.find("return false;");
         const size_t prepareRecoveryCondition =
-            prepareBody.find("if (probeHealthyDevice ||");
+            prepareBody.find("if (m_presentSuspect ||");
         const size_t prepareRecoveryCall =
             prepareBody.find("if (!RecoverDeviceIfNeeded()) return false;");
         const size_t prepareBlockedCheck =
@@ -926,23 +960,146 @@ int main()
                    prepareFramePos < spawnerTickPos &&
                    spawnerTickPos < engineRenderPos,
                    true);
-        ExpectBool("composed coordinator requests one healthy probe",
+        const size_t renderD3D9Begin =
+            hostSource.find("void HostWindowImpl::RenderD3D9()");
+        const size_t renderD3D9End =
+            hostSource.find(
+                "\nvoid HostWindowImpl::",
+                renderD3D9Begin == std::string::npos
+                    ? 0
+                    : renderD3D9Begin + 1);
+        const std::string renderD3D9Body =
+            renderD3D9Begin != std::string::npos &&
+                    renderD3D9End > renderD3D9Begin
+                ? hostSource.substr(
+                      renderD3D9Begin,
+                      renderD3D9End - renderD3D9Begin)
+                : std::string();
+        const size_t issueFrameQueryPos =
+            renderD3D9Body.find("engine->IssueEndFrameQuery();");
+        const size_t waitFrameQueryPos =
+            renderD3D9Body.find("engine->WaitEndFrameQuery();",
+                               issueFrameQueryPos);
+        const size_t compositeFramePos =
+            renderD3D9Body.find(
+                "m_compositor->CompositeEngineFrame(",
+                waitFrameQueryPos);
+        const size_t sharedHandlePos =
+            renderD3D9Body.find(
+                "engine->GetSharedTextureHandle()",
+                compositeFramePos);
+        ExpectBool("host waits before acquiring the shared handle for composite",
+                   !renderD3D9Body.empty() &&
+                   issueFrameQueryPos != std::string::npos &&
+                   waitFrameQueryPos != std::string::npos &&
+                   sharedHandlePos != std::string::npos &&
+                   compositeFramePos != std::string::npos &&
+                   CountOccurrences(
+                       renderD3D9Body,
+                       "engine->GetSharedTextureHandle()") == 1 &&
+                   Contains(
+                       renderD3D9Body,
+                       "m_compositor->CompositeEngineFrame("
+                       "engine->GetSharedTextureHandle())") &&
+                   issueFrameQueryPos < waitFrameQueryPos &&
+                   waitFrameQueryPos < compositeFramePos &&
+                   compositeFramePos < sharedHandlePos,
+                   true);
+        ExpectBool("composed coordinator uses conditional frame admission",
                    Contains(engineHeader, "bool PrepareComposedFrame();") &&
                    Contains(engineSource,
                             "bool Engine::PrepareComposedFrame()\n"
                             "{\n"
                             "\t++m_composedFramePrepareCount;\n"
-                            "\treturn PrepareDeviceForFrame(true);\n"
+                            "\treturn PrepareDeviceForFrame();\n"
                             "}") &&
-                   Contains(engineSource,
-                            "bool Engine::PrepareDeviceForFrame()\n"
-                            "{\n"
-                            "\treturn PrepareDeviceForFrame(false);\n"
-                            "}") &&
+                   !Contains(engineSource,
+                             "PrepareDeviceForFrame(bool probeHealthyDevice)") &&
                    Contains(engineSource,
                             "++m_deviceStateProbeCount;") &&
                    CountOccurrences(hostSource,
                                     "engine->PrepareComposedFrame()") == 1,
+                   true);
+
+        const size_t issueQueryBegin =
+            engineSource.find("void Engine::IssueEndFrameQuery()");
+        const size_t waitQueryBegin =
+            engineSource.find("int Engine::WaitEndFrameQuery()",
+                              issueQueryBegin);
+        const size_t waitQueryEnd =
+            engineSource.find("// adapter LUID accessor", waitQueryBegin);
+        const std::string issueQueryBody =
+            issueQueryBegin != std::string::npos &&
+                    waitQueryBegin > issueQueryBegin
+                ? engineSource.substr(
+                      issueQueryBegin, waitQueryBegin - issueQueryBegin)
+                : std::string();
+        const std::string waitQueryBody =
+            waitQueryBegin != std::string::npos &&
+                    waitQueryEnd > waitQueryBegin
+                ? engineSource.substr(
+                      waitQueryBegin, waitQueryEnd - waitQueryBegin)
+                : std::string();
+        const size_t queryGetData =
+            waitQueryBody.find(
+                "queryResult =\n"
+                "\t\t    m_pEndFrameQuery->GetData(");
+        const size_t queryOverride =
+            waitQueryBody.find(
+                "m_endFrameQueryResultOverrideRemaining > 0",
+                queryGetData);
+        const size_t queryPending =
+            waitQueryBody.find(
+                "if (queryResult != S_FALSE) break;", queryOverride);
+        const size_t queryTimeout =
+            waitQueryBody.find(
+                "++m_endFrameQueryTimeoutCount", queryPending);
+        const size_t queryFailed =
+            waitQueryBody.find("if (FAILED(queryResult))", queryTimeout);
+        const size_t queryLatch =
+            waitQueryBody.find("m_presentSuspect = true;", queryFailed);
+        const size_t queryRelease =
+            waitQueryBody.find(
+                "SAFE_RELEASE(m_pEndFrameQuery);", queryLatch);
+        ExpectBool("real query HRESULT latches next-frame recovery and releases",
+                   Contains(issueQueryBody,
+                            "++m_endFrameQueryCreateCount;") &&
+                   queryGetData != std::string::npos &&
+                   queryOverride != std::string::npos &&
+                   queryPending != std::string::npos &&
+                   queryTimeout != std::string::npos &&
+                   queryFailed != std::string::npos &&
+                   queryLatch != std::string::npos &&
+                   queryRelease != std::string::npos &&
+                   queryGetData < queryOverride &&
+                   queryOverride < queryPending &&
+                   queryPending < queryTimeout &&
+                   queryTimeout < queryFailed &&
+                   queryFailed < queryLatch &&
+                   queryLatch < queryRelease,
+                   true);
+        ExpectBool("failed query suppresses the current shared-handle copy",
+                   Contains(engineSource,
+                            "HANDLE Engine::GetSharedTextureHandle() const\n"
+                            "{\n"
+                            "\tif (DeviceCallsBlocked()) return nullptr;") &&
+                   Contains(engineHeader,
+                            "return m_presentSuspect ||"),
+                   true);
+        ExpectBool("test host injects at the production query-result door",
+                   Contains(engineHeader,
+                            "InjectEndFrameQueryResultForTesting(") &&
+                   Contains(bridgeEngineSource,
+                            "action == \"inject-query-result\"") &&
+                   Contains(bridgeEngineSource,
+                            "m_engine->"
+                            "InjectEndFrameQueryResultForTesting(") &&
+                   Contains(bridgeEngineSource,
+                            "result == \"s-false\"") &&
+                   Contains(bridgeEngineSource,
+                            "result == \"device-lost\"") &&
+                   !Contains(bridgeEngineSource,
+                             "m_engine->m_presentSuspect"),
                    true);
 
         ExpectBool("Engine exposes the direct D3D9 present observer",
@@ -1611,23 +1768,32 @@ int main()
         const size_t frameDoor =
             debugBody.find("m_engine->PrepareDeviceForFrame();",
                            releaseHold);
-        ExpectBool("test-host seam only holds, releases, and queries production state",
+        const size_t queryInjection =
+            debugBody.find(
+                "InjectEndFrameQueryResultForTesting(",
+                requireEngine);
+        ExpectBool("test-host seam reaches only production recovery doors",
                    testHostGuard != std::string::npos &&
                    requireEngine != std::string::npos &&
                    armHold != std::string::npos &&
                    releaseHold != std::string::npos &&
                    frameDoor != std::string::npos &&
+                   queryInjection != std::string::npos &&
                    Contains(debugBody, "action == \"arm\"") &&
                    Contains(debugBody, "action == \"release\"") &&
+                   Contains(debugBody,
+                            "action == \"inject-query-result\"") &&
                    Contains(debugBody, "action != \"query\"") &&
                    !Contains(debugBody, "ReplayPendingTextureReload") &&
                    !Contains(debugBody, "m_textureReloadApplyCount") &&
                    !Contains(debugBody,
                              "m_particleSystemChangeApplyCount") &&
+                   !Contains(debugBody, "m_presentSuspect") &&
                    testHostGuard < requireEngine &&
                    requireEngine < armHold &&
                    armHold < releaseHold &&
-                   releaseHold < frameDoor,
+                   releaseHold < frameDoor &&
+                   frameDoor < queryInjection,
                    true);
         const size_t productionReloadBegin =
             bridgeEngineSource.find(

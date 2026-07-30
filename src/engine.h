@@ -261,10 +261,10 @@ public:
 	// on the device-creation thread. DEVICEHUNG recovery is bounded to one
 	// attempt per device lifetime; DEVICEREMOVED remains restart-required.
 	bool RecoverDeviceIfNeeded();
-	// Ordinary engine callers probe only after a direct D3D9 Present raises the
-	// suspect latch. The composed host has no D3D9 Present result, so its frame
-	// coordinator uses PrepareComposedFrame to issue one real D3D9Ex
-	// CheckDeviceState probe before any spawner/update/render work.
+	// Ordinary engine callers probe only after a direct D3D9 Present or composed
+	// event-query failure raises the suspect latch. PrepareComposedFrame remains
+	// the composed host's admission door before spawner/update/render work, but
+	// a healthy frame performs no CheckDeviceState call.
 	bool PrepareDeviceForFrame();
 	bool PrepareComposedFrame();
 
@@ -302,6 +302,33 @@ public:
 	uint64_t ComposedFramePrepareCountForTesting() const
 	{
 		return m_composedFramePrepareCount;
+	}
+	void InjectEndFrameQueryResultForTesting(
+		HRESULT result,
+		uint32_t repeatCount)
+	{
+		m_endFrameQueryResultOverride = result;
+		m_endFrameQueryResultOverrideRemaining = repeatCount;
+	}
+	uint64_t EndFrameQueryCreateCountForTesting() const
+	{
+		return m_endFrameQueryCreateCount;
+	}
+	uint64_t EndFrameQueryFailureCountForTesting() const
+	{
+		return m_endFrameQueryFailureCount;
+	}
+	uint64_t EndFrameQueryTimeoutCountForTesting() const
+	{
+		return m_endFrameQueryTimeoutCount;
+	}
+	uint64_t EndFrameQueryOverrideConsumedCountForTesting() const
+	{
+		return m_endFrameQueryOverrideConsumedCount;
+	}
+	uint32_t EndFrameQueryOverrideRemainingForTesting() const
+	{
+		return m_endFrameQueryResultOverrideRemaining;
 	}
 
 	// install/clear the shared-RT compositor. When non-null, Render()
@@ -868,7 +895,6 @@ private:
 	friend class EmitterInstance;
 
 	devicerecovery::Result ProbeDeviceRecovery();
-	bool PrepareDeviceForFrame(bool probeHealthyDevice);
 	bool IsDeviceRecoveryThread() const;
 	bool IsTerminalDeviceState() const;
 	bool TextureReloadCanContinue() const;
@@ -1071,6 +1097,12 @@ private:
     uint64_t m_particleSystemChangeApplyCount = 0;
     uint64_t m_deviceStateProbeCount = 0;
     uint64_t m_composedFramePrepareCount = 0;
+    uint64_t m_endFrameQueryCreateCount = 0;
+    uint64_t m_endFrameQueryFailureCount = 0;
+    uint64_t m_endFrameQueryTimeoutCount = 0;
+    uint64_t m_endFrameQueryOverrideConsumedCount = 0;
+    HRESULT m_endFrameQueryResultOverride = S_OK;
+    uint32_t m_endFrameQueryResultOverrideRemaining = 0;
     uint64_t m_particleSystemDocumentEpoch = 0;
     bool m_textureReloadApplying = false;
     bool m_deviceRecoveryWorkTestHold = false;

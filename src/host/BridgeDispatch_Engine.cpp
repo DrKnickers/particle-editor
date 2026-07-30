@@ -52,6 +52,37 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
             m_engine->SetDeviceRecoveryWorkHoldForTesting(false);
             frameReady = m_engine->PrepareDeviceForFrame();
         }
+        else if (action == "inject-query-result")
+        {
+            const std::string result =
+                params.value("result", std::string());
+            const int repeatCount = params.value("repeatCount", 1);
+            if (repeatCount < 1 || repeatCount > 100001)
+            {
+                ctx.SendErr("query result repeatCount must be 1..100001");
+                return true;
+            }
+
+            HRESULT queryResult = S_OK;
+            if (result == "s-ok")
+                queryResult = S_OK;
+            else if (result == "s-false")
+                queryResult = S_FALSE;
+            else if (result == "device-lost")
+                queryResult = D3DERR_DEVICELOST;
+            else
+            {
+                ctx.SendErr("unknown end-frame query result");
+                return true;
+            }
+            m_engine->InjectEndFrameQueryResultForTesting(
+                queryResult,
+                static_cast<uint32_t>(repeatCount));
+        }
+        else if (action == "clear-query-result")
+        {
+            m_engine->InjectEndFrameQueryResultForTesting(S_OK, 0);
+        }
         else if (action != "query")
         {
             ctx.SendErr("unknown device recovery work action");
@@ -67,6 +98,16 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
              m_engine->DeviceStateProbeCountForTesting()},
             {"composedFramePrepareCount",
              m_engine->ComposedFramePrepareCountForTesting()},
+            {"endFrameQueryCreateCount",
+             m_engine->EndFrameQueryCreateCountForTesting()},
+            {"endFrameQueryFailureCount",
+             m_engine->EndFrameQueryFailureCountForTesting()},
+            {"endFrameQueryTimeoutCount",
+             m_engine->EndFrameQueryTimeoutCountForTesting()},
+            {"endFrameQueryOverrideConsumedCount",
+             m_engine->EndFrameQueryOverrideConsumedCountForTesting()},
+            {"endFrameQueryOverrideRemaining",
+             m_engine->EndFrameQueryOverrideRemainingForTesting()},
             {"frameReady", frameReady},
         });
         return true;

@@ -1459,10 +1459,10 @@ void HostWindowImpl::Log(const char* fmt, ...)
 void HostWindowImpl::RenderD3D9()
 {
     if (!engine || m_compositionFatalPending) return;
-    // The composed editor has no D3D9 Present result. Probe the real D3D9Ex
-    // device exactly once at this frame coordinator before SpawnerDriver,
-    // Update, or Render can touch D3D resources. Their nested preparation doors
-    // are non-probing, so a healthy frame does not double-check.
+    // The composed editor has no D3D9 Present result. This admission door
+    // consumes any suspect state raised by the previous frame's event-query
+    // failure before SpawnerDriver, Update, or Render can touch D3D resources.
+    // A healthy frame performs no CheckDeviceState probe.
     if (!engine->PrepareComposedFrame()) return;
 
     float now = GetTimeF();

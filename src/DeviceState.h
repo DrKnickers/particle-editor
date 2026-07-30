@@ -16,8 +16,8 @@
 // CheckDeviceState is the Ex replacement. Microsoft further recommends calling
 // it only when a present FAILS. The direct-D3D9 path therefore uses the suspect
 // latch. The production editor renders through a separate D3D11 compositor and
-// has no D3D9 Present result, so its host coordinator performs one measured
-// CheckDeviceState probe per composed frame instead.
+// has no D3D9 Present result; a failed cross-device event query raises the same
+// next-frame suspect latch before any further composed rendering.
 //
 // Pure and header-only (an HRESULT in, an enum out, no device calls) so
 // tests/test_device_state.cpp can cover every documented code without a D3D9

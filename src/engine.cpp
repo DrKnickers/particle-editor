@@ -266,7 +266,10 @@ devicerecovery::Result Engine::ProbeDeviceRecovery()
 	++m_deviceStateProbeCount;
 	devicerecovery::D3D9ExRecoveryPort<IDirect3DDevice9Ex, Engine>
 	    port(m_pDevice, *this);
-	return devicerecovery::RunDeviceRecoveryStep(m_deviceRecovery, port);
+	return devicerecovery::RunDeviceRecoveryStep(
+	    m_deviceRecovery,
+	    port,
+	    m_pAlphaCompositor != nullptr);
 }
 
 bool Engine::IsDeviceRecoveryThread() const
@@ -302,24 +305,12 @@ bool Engine::SetDeviceRecoveryWorkHoldForTesting(bool hold)
 
 bool Engine::PrepareDeviceForFrame()
 {
-	return PrepareDeviceForFrame(false);
-}
-
-bool Engine::PrepareComposedFrame()
-{
-	++m_composedFramePrepareCount;
-	return PrepareDeviceForFrame(true);
-}
-
-bool Engine::PrepareDeviceForFrame(bool probeHealthyDevice)
-{
 	if (m_fatalDeviceState ||
 	    m_deviceRecovery.phase == devicerecovery::Phase::Terminal ||
 	    m_deviceRecovery.phase == devicerecovery::Phase::Recovering ||
 	    m_deviceResetInProgress)
 		return false;
-	if (probeHealthyDevice ||
-	    m_presentSuspect ||
+	if (m_presentSuspect ||
 	    m_deviceRecovery.phase == devicerecovery::Phase::ResetExFailed ||
 	    m_fullResetPending)
 	{
@@ -328,6 +319,12 @@ bool Engine::PrepareDeviceForFrame(bool probeHealthyDevice)
 	if (DeviceCallsBlocked()) return false;
 	if (!ReplayPendingTextureReload()) return false;
 	return ReplayPendingParticleSystemChange();
+}
+
+bool Engine::PrepareComposedFrame()
+{
+	++m_composedFramePrepareCount;
+	return PrepareDeviceForFrame();
 }
 
 bool Engine::RecoverDeviceIfNeeded()
@@ -1202,6 +1199,7 @@ void Engine::IssueEndFrameQuery()
 			m_pEndFrameQuery = NULL;
 			return;
 		}
+		++m_endFrameQueryCreateCount;
 	}
 	m_pEndFrameQuery->Issue(D3DISSUE_END);
 }
@@ -1229,14 +1227,38 @@ int Engine::WaitEndFrameQuery()
 	if (m_pEndFrameQuery == NULL) return 0;
 	BOOL done = FALSE;
 	int spins = 0;
-	while (m_pEndFrameQuery->GetData(&done, sizeof(done), D3DGETDATA_FLUSH) == S_FALSE)
+	HRESULT queryResult = S_FALSE;
+	for (;;)
 	{
+		queryResult =
+		    m_pEndFrameQuery->GetData(&done, sizeof(done), D3DGETDATA_FLUSH);
+		if (m_endFrameQueryResultOverrideRemaining > 0)
+		{
+			queryResult = m_endFrameQueryResultOverride;
+			--m_endFrameQueryResultOverrideRemaining;
+			++m_endFrameQueryOverrideConsumedCount;
+		}
+		if (queryResult != S_FALSE) break;
 		if (++spins > 100000)
 		{
+			++m_endFrameQueryTimeoutCount;
 			OutputDebugStringA("[Engine] D3D9 sync query never signalled after 100k spins\n");
 			break;
 		}
 		if (spins > 64) SwitchToThread();
+	}
+	if (FAILED(queryResult))
+	{
+		char message[160] = {};
+		std::snprintf(
+		    message,
+		    sizeof(message),
+		    "[Engine] D3D9 sync query GetData failed hr=0x%08lx; recovery probe scheduled\n",
+		    static_cast<unsigned long>(queryResult));
+		OutputDebugStringA(message);
+		++m_endFrameQueryFailureCount;
+		m_presentSuspect = true;
+		SAFE_RELEASE(m_pEndFrameQuery);
 	}
 	return spins;
 }

@@ -112,7 +112,10 @@ inline void CompleteResetExRetry(State& recovery)
 }
 
 template <typename TPort>
-Result RunDeviceRecoveryStep(State& recovery, TPort& port)
+Result RunDeviceRecoveryStep(
+    State& recovery,
+    TPort& port,
+    bool renderWhenOccluded = false)
 {
     // A failed ResetEx leaves the device in a state where only ResetEx,
     // CheckDeviceState, or Release is legal. The editor deliberately makes no
@@ -132,8 +135,14 @@ Result RunDeviceRecoveryStep(State& recovery, TPort& port)
     }
 
     const HRESULT state = port.CheckDeviceState();
-    const devicestate::Action action =
-        devicestate::ClassifyDeviceState(state);
+    devicestate::Action action = devicestate::ClassifyDeviceState(state);
+    // A composed frame renders into an offscreen shared texture and never
+    // presents through the D3D9 window. CheckDeviceState still reports
+    // S_PRESENT_OCCLUDED for that hidden presentation window, but occlusion
+    // cannot make the shared render target invisible. Direct D3D9 presentation
+    // retains the classifier's SkipFrame result.
+    if (renderWhenOccluded && state == S_PRESENT_OCCLUDED)
+        action = devicestate::Action::Render;
 
     // After any failed ResetEx, ordinary Reset and normal rendering are not
     // legal. Probe until the device is retryable, then ask the Engine to retry
