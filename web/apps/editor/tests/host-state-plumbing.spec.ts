@@ -142,3 +142,78 @@ test("engine/action/rescale-system fires emitters/tree/changed", async () => {
   );
   expect(count).toBeGreaterThanOrEqual(1);
 });
+
+test("held Shift survives clear then file/new without a stale-instance crash", async () => {
+  const viewport = page.locator('[data-testid="viewport-canvas"]');
+  await expect(viewport).toBeVisible();
+  await viewport.hover();
+
+  try {
+    await page.keyboard.down("Shift");
+
+    await expect.poll(async () => page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const b = (window as any).bridge;
+      const live = await b.request({
+        kind: "engine/query/live-instances",
+        params: {},
+      });
+      return live.instances as number;
+    })).toBeGreaterThanOrEqual(1);
+
+    const result = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const b = (window as any).bridge;
+      await b.request({ kind: "engine/action/clear", params: {} });
+      const afterClear = await b.request({
+        kind: "engine/query/live-instances",
+        params: {},
+      });
+      await b.request({ kind: "file/new", params: {} });
+      const afterNew = await b.request({
+        kind: "engine/query/live-instances",
+        params: {},
+      });
+      const emitters = await b.request({ kind: "emitters/list", params: {} });
+      return {
+        afterClear: afterClear.instances as number,
+        afterNew: afterNew.instances as number,
+        rootChildren: emitters.root.children.length as number,
+      };
+    });
+
+    expect(result).toEqual({
+      afterClear: 0,
+      afterNew: 0,
+      rootChildren: 1,
+    });
+  } finally {
+    await page.keyboard.up("Shift").catch(() => {});
+  }
+});
+
+test("record preview valid place and kill consume their handles", async () => {
+  const result = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    await b.request({ kind: "file/new", params: {} });
+
+    await b.request({ kind: "preview/attach", params: { x: 200, y: 200 } });
+    await b.request({ kind: "preview/place", params: {} });
+
+    await b.request({ kind: "preview/attach", params: { x: 220, y: 220 } });
+    await b.request({ kind: "preview/kill", params: {} });
+
+    let secondKillRejected = false;
+    try {
+      await b.request({ kind: "preview/kill", params: {} });
+    } catch {
+      secondKillRejected = true;
+    }
+    return { placeSucceeded: true, killSucceeded: true, secondKillRejected };
+  });
+
+  expect(result.placeSucceeded).toBe(true);
+  expect(result.killSucceeded).toBe(true);
+  expect(result.secondKillRejected).toBe(true);
+});

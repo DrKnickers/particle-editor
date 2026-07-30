@@ -143,9 +143,13 @@ ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem& system
         }
     }
 
-	auto instance = std::make_unique<ParticleSystemInstance>(*this, system, parent);
+    const std::uint64_t instanceToken = m_instanceBorrows.AllocateToken();
+	auto instance = std::make_unique<ParticleSystemInstance>(
+        *this, system, parent, instanceToken);
     m_instances.push_back(std::move(instance));
-	return m_instances.back().get();
+    ParticleSystemInstance* stored = m_instances.back().get();
+    m_instanceBorrows.Register(stored, instanceToken);
+	return stored;
 }
 
 std::vector<LiveParticleSample> Engine::GetLiveParticleSamples() const
@@ -158,28 +162,34 @@ std::vector<LiveParticleSample> Engine::GetLiveParticleSamples() const
     return samples;
 }
 
-// Both entry points take a RAW BORROW of an m_instances entry, and every
-// Clear() frees the lot with no per-holder invalidation hook — see
-// HasInstance() in engine.h. A holder that missed a Clear() therefore hands us
-// freed memory, and both bodies used to deref it immediately (2026-07 audit:
-// engine/action/clear, the SetEstimatedLoad overload hard-guard, and a
-// gate-refused SpawnParticleSystem all reach Clear() without passing through
-// the file/new + file/open teardown that nulls the host's Shift-preview slot).
-//
-// Re-validating here fixes the whole class at the point of deref rather than at
-// each call site: a stale pointer becomes a no-op instead of undefined
-// behavior, for every current AND future borrower. The scan is linear over a
-// list the overload guard already keeps small, and neither entry point runs
-// per-frame — both are user-gesture driven.
-void Engine::DetachParticleSystem(ParticleSystemInstance* instance)
+ParticleSystemInstanceHandle Engine::MakeInstanceHandle(
+    ParticleSystemInstance* instance) const
 {
-    if (!HasInstance(instance)) return;
-    instance->Detach();
+    return m_instanceBorrows.Make(instance);
 }
 
-void Engine::KillParticleSystem(ParticleSystemInstance* instance)
+ParticleSystemInstance* Engine::ResolveInstance(
+    ParticleSystemInstanceHandle handle) const
 {
-	if (!HasInstance(instance)) return;
+    return m_instanceBorrows.Resolve(handle);
+}
+
+// Persistent callers retain a tokenized non-owning identity across gestures.
+// Clear() may free the pointee and a later allocation may reuse its address;
+// ResolveInstance rejects both ordinary staleness and that ABA case before
+// either action dereferences the external pointer.
+bool Engine::DetachParticleSystem(ParticleSystemInstanceHandle handle)
+{
+    ParticleSystemInstance* instance = ResolveInstance(handle);
+    if (!instance) return false;
+    instance->Detach();
+    return true;
+}
+
+bool Engine::KillParticleSystem(ParticleSystemInstanceHandle handle)
+{
+    ParticleSystemInstance* instance = ResolveInstance(handle);
+	if (!instance) return false;
 	if (instance->GetParticleSystem().getLeaveParticles())
 	{
 		// Leave particles to finish; just disable it
@@ -196,12 +206,14 @@ void Engine::KillParticleSystem(ParticleSystemInstance* instance)
 	// inside Update's instance pass — make sure a paused frame runs it
 	// (the kill doesn't change the top-level list size until then).
 	InvalidatePausedIdleSkip();
+    return true;
 }
 
 void Engine::Clear()
 {
 	++m_particleSystemDocumentEpoch;
 	m_deferredParticleSystemChange.Reset();
+    m_instanceBorrows.Clear();
 	m_instances.clear();
     m_numParticles = 0;
     m_numEmitters  = 0;

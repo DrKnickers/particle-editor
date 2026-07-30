@@ -167,15 +167,15 @@ public:
     // No event is emitted (React reads it from the boot snapshot on mount).
     void SetSelectedEmitterId(int id) { m_selectedEmitterId = id; }
 
-    // shift-click-to-spawn: the host owns a single attached
-    // cursor-bound ParticleSystemInstance pointer (nulled when no Shift
-    // is held). file/new + file/open need to kill any in-flight attached
+    // shift-click-to-spawn: the host owns a single attached cursor-bound
+    // ParticleSystemInstance handle (empty when no Shift is held).
+    // file/new + file/open need to kill any in-flight attached
     // instance before swapping `*m_pParticleSystem` — the old instance
     // can't outlive the system it was spawned from. Wired alongside
     // `BindHostState`.
-    void BindAttachedSystem(ParticleSystemInstance** ppAttached)
+    void BindAttachedSystem(ParticleSystemInstanceHandle* pAttached)
     {
-        m_ppAttachedParticleSystem = ppAttached;
+        m_pAttachedParticleSystem = pAttached;
     }
 
     // Capture the currently-bound ParticleSystem as the "saved" baseline
@@ -554,20 +554,19 @@ private:
     SpawnerDriver*                   m_spawnerDriver   = nullptr;
     IFileManager*                    m_fileManager     = nullptr;
 
-    // shift-click-to-spawn: pointer-to-pointer borrow of
+    // shift-click-to-spawn: borrow of
     // HostWindowImpl::m_attachedParticleSystem so file/new + file/open
     // can drop the cursor-bound instance before its parent system goes
     // away. Engine pointer is already cached in m_engine.
-    ParticleSystemInstance**         m_ppAttachedParticleSystem = nullptr;
+    ParticleSystemInstanceHandle*    m_pAttachedParticleSystem = nullptr;
 
     // [record-preview] Cursor-bound preview instance for the preview/*
     // record kinds (BridgeDispatch_Spawner.cpp) — the scripted mirror of
     // the native Shift-hover spawn. The anchor is a dispatcher-lifetime
-    // Object3D (instances parented to it never outlive it); the raw
-    // instance pointer is only valid while attached and is cleared by
-    // preview/place (detach) and preview/kill.
+    // Object3D (instances parented to it never outlive it); the tokenized
+    // handle is cleared by preview/place (detach) and preview/kill.
     MouseCursor                      m_recordPreviewCursor;
-    ParticleSystemInstance*          m_recordPreviewAttached = nullptr;
+    ParticleSystemInstanceHandle     m_recordPreviewAttached;
 
     // Editor-level file state. Owned here
     // rather than on Engine because they're editor concerns (not

@@ -293,22 +293,20 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx, const std::
     // SendErr so an authoring mistake aborts the record run (exit 3)
     // instead of silently rendering an empty viewport.
     //
-    // [UAF guard] m_recordPreviewAttached is a raw borrow into
+    // [UAF/ABA guard] m_recordPreviewAttached is a tokenized borrow into
     // Engine::m_instances, and EVERY Engine::Clear() (file/new, file/open,
     // the overload hard-guard's refusal/edit-time clears) frees all
-    // instances with no per-holder invalidation hook — the pointer goes
-    // non-null-but-dangling, which the null checks alone can't catch
-    // (review finding on the preview/* commit). Re-validate against the
-    // live instance list before every use; a stale borrow self-heals to
+    // instances. Re-resolve both its address and immutable token before every
+    // use; a stale or allocator-reused borrow self-heals to
     // "nothing attached", which then SendErrs loudly on move/place/kill.
     // (The file-op teardowns in BridgeDispatch_File.cpp also null it
     // eagerly, closing the free+realloc aliasing window for that family.)
     if (kind.rfind("preview/", 0) == 0
         && m_recordPreviewAttached
         && m_engine
-        && !m_engine->HasInstance(m_recordPreviewAttached))
+        && !m_engine->ResolveInstance(m_recordPreviewAttached))
     {
-        m_recordPreviewAttached = nullptr;
+        m_recordPreviewAttached.Reset();
     }
     if (kind == "preview/attach")
     {
@@ -328,8 +326,9 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx, const std::
         D3DXVECTOR3 pos;
         GetCursorPos3D(m_engine, (short)x, (short)y, pos);
         m_recordPreviewCursor.SetPosition(pos);
-        m_recordPreviewAttached =
-            m_engine->SpawnParticleSystem(**m_pParticleSystem, &m_recordPreviewCursor);
+        m_recordPreviewAttached = m_engine->MakeInstanceHandle(
+            m_engine->SpawnParticleSystem(
+                **m_pParticleSystem, &m_recordPreviewCursor));
         if (!m_recordPreviewAttached)
         {
             ctx.SendErr("preview/attach: spawn refused");
@@ -360,8 +359,13 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx, const std::
             ctx.SendErr("preview/place: nothing attached");
             return true;
         }
-        m_engine->DetachParticleSystem(m_recordPreviewAttached);
-        m_recordPreviewAttached = nullptr;
+        if (!m_engine->DetachParticleSystem(m_recordPreviewAttached))
+        {
+            m_recordPreviewAttached.Reset();
+            ctx.SendErr("preview/place: attached instance is stale");
+            return true;
+        }
+        m_recordPreviewAttached.Reset();
         ctx.SendOk(json::object());
         return true;
     }
@@ -372,8 +376,13 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx, const std::
             ctx.SendErr("preview/kill: nothing attached");
             return true;
         }
-        m_engine->KillParticleSystem(m_recordPreviewAttached);
-        m_recordPreviewAttached = nullptr;
+        if (!m_engine->KillParticleSystem(m_recordPreviewAttached))
+        {
+            m_recordPreviewAttached.Reset();
+            ctx.SendErr("preview/kill: attached instance is stale");
+            return true;
+        }
+        m_recordPreviewAttached.Reset();
         ctx.SendOk(json::object());
         return true;
     }

@@ -1616,12 +1616,12 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
         return;
     }
 
-    if (m_ppAttachedParticleSystem
-        && *m_ppAttachedParticleSystem
+    if (m_pAttachedParticleSystem
+        && *m_pAttachedParticleSystem
         && m_engine)
     {
-        m_engine->KillParticleSystem(*m_ppAttachedParticleSystem);
-        *m_ppAttachedParticleSystem = nullptr;
+        m_engine->KillParticleSystem(*m_pAttachedParticleSystem);
+        m_pAttachedParticleSystem->Reset();
     }
     if (m_engine) m_engine->Clear();
 

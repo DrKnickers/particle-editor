@@ -96,6 +96,9 @@
     <ClInclude Include="utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="InstanceBorrow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="xml.h">
       <Filter>Header Files</Filter>
     </ClInclude>

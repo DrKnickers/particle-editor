@@ -2,6 +2,7 @@
 #define PARTICLESYSTEMINSTANCE_H
 
 #include "Engine.h"
+#include <cstdint>
 #include <list>
 #include <memory>
 #include <set>
@@ -10,6 +11,7 @@ class ParticleSystemInstance : public Object3D
 {
 	Engine&				     m_engine;
 	const ParticleSystem&    m_system;
+    const std::uint64_t      m_instanceToken;
 	std::list<std::unique_ptr<EmitterInstance>> m_emitters;
 
     // Root emitters this instance has already accounted for, keyed by
@@ -147,7 +149,10 @@ public:
 	// pointer owned elsewhere = use-after-free on next render/update).
 	void RemoveEmitter(EmitterInstance* instance);
 
-	ParticleSystemInstance(Engine& engine, const ParticleSystem& system, Object3D* parent);
+    std::uint64_t GetInstanceToken() const { return m_instanceToken; }
+
+	ParticleSystemInstance(Engine& engine, const ParticleSystem& system,
+                           Object3D* parent, std::uint64_t instanceToken);
 	~ParticleSystemInstance();
 };
 

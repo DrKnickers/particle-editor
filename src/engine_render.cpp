@@ -587,6 +587,8 @@ void Engine::Update()
             // Check if the instance is dead and nobody's referring to it anymore
             if ((*it)->IsDead() && (*it)->Detached())
             {
+                m_instanceBorrows.Unregister(
+                    it->get(), (*it)->GetInstanceToken());
                 it = m_instances.erase(it);
             }
             else

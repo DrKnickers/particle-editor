@@ -721,20 +721,22 @@ struct HostWindowImpl
 
     // Re-validate the cursor-bound Shift-preview borrow before ANY use. See the
     // m_attachedParticleSystem note below: Engine::Clear() frees the pointee
-    // behind our back on three paths that never null this slot. Returns nullptr
+    // behind our back on three paths that never reset this slot. Returns nullptr
     // and self-heals the slot when the borrow has gone stale, so a caller can
-    // neither act on a freed instance nor be blocked forever by a non-null
-    // pointer that will never clear on its own. Factored out for the same
+    // neither act on a freed instance nor be blocked forever by a non-empty
+    // handle that will never clear on its own. Factored out for the same
     // reason as ResetManipDragState below -- so a new use site can't forget it.
     ParticleSystemInstance* LiveAttachedSystem()
     {
-        if (m_attachedParticleSystem == nullptr || !engine) return nullptr;
-        if (!engine->HasInstance(m_attachedParticleSystem))
+        if (!m_attachedParticleSystem || !engine) return nullptr;
+        ParticleSystemInstance* live =
+            engine->ResolveInstance(m_attachedParticleSystem);
+        if (!live)
         {
-            m_attachedParticleSystem = nullptr;   // stale borrow: drop it
+            m_attachedParticleSystem.Reset();   // stale borrow: drop it
             return nullptr;
         }
-        return m_attachedParticleSystem;
+        return live;
     }
 
     // The invariant tail every MANIPULATE drag-end shares: drop the grabbed handle, zero the
@@ -765,11 +767,11 @@ struct HostWindowImpl
     // velocity is derived from QueryPerformanceCounter deltas in
     // UpdateVelocity() (called once per RenderD3D9).
     //
-    // m_attachedParticleSystem: non-null between Shift-press (spawn) and
-    // Shift-release (kill). Engine returns a pointer we keep until we
-    // KillParticleSystem it.
+    // m_attachedParticleSystem: non-empty between Shift-press (spawn) and
+    // Shift-release (kill). Its pointer + immutable token are retained until
+    // KillParticleSystem consumes the live identity.
     //
-    // It is a RAW BORROW of an Engine::m_instances entry, and Engine::Clear()
+    // It is a tokenized BORROW of an Engine::m_instances entry. Engine::Clear()
     // frees every instance without telling us. file/new + file/open + recover
     // + undo-apply null this slot themselves (BridgeDispatch_File.cpp,
     // BridgeDispatcher.cpp), but three paths reach Clear() without doing so:
@@ -785,7 +787,7 @@ struct HostWindowImpl
     // main.cpp bug passed garbage). Fallback if the cache is
     // stale: GetCursorPos + ScreenToClient.
     MouseCursor             m_mouseCursor;
-    ParticleSystemInstance* m_attachedParticleSystem = nullptr;
+    ParticleSystemInstanceHandle m_attachedParticleSystem;
     int                     m_lastCursorX = 0;
     int                     m_lastCursorY = 0;
     // last GetTickCount() at which we pushed a
@@ -4237,11 +4239,11 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             D3DXVECTOR3 pos;
             GetCursorPos3D(engine.get(), (short)cx, (short)cy, pos);
             m_mouseCursor.SetPosition(pos);
-            m_attachedParticleSystem =
-                engine->SpawnParticleSystem(*particleSystem, &m_mouseCursor);
+            m_attachedParticleSystem = engine->MakeInstanceHandle(
+                engine->SpawnParticleSystem(*particleSystem, &m_mouseCursor));
             Log("[ArchC-engine] SHIFT+LMB spawn cx=%d cy=%d pos=(%.3f,%.3f,%.3f) result=%p\n",
                 cx, cy, pos.x, pos.y, pos.z,
-                static_cast<void*>(m_attachedParticleSystem));
+                static_cast<void*>(m_attachedParticleSystem.ptr));
 #ifndef NDEBUG
             // Mirror the cursor-unproject
             // diagnostic at this alternate spawn entry. Consistent
@@ -4334,8 +4336,8 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         {
             Log("[ArchC-engine] LMB-up placing attached=%p (Detach, system stays alive)\n",
                 static_cast<void*>(attached));
-            engine->DetachParticleSystem(attached);
-            m_attachedParticleSystem = nullptr;
+            engine->DetachParticleSystem(m_attachedParticleSystem);
+            m_attachedParticleSystem.Reset();
         }
         m_dragMode = DragMode::NONE;
         ReleaseCapture();
@@ -4735,8 +4737,8 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         D3DXVECTOR3 pos;
         GetCursorPos3D(engine.get(), (short)cx, (short)cy, pos);
         m_mouseCursor.SetPosition(pos);
-        m_attachedParticleSystem =
-            engine->SpawnParticleSystem(*particleSystem, &m_mouseCursor);
+        m_attachedParticleSystem = engine->MakeInstanceHandle(
+            engine->SpawnParticleSystem(*particleSystem, &m_mouseCursor));
 #ifndef NDEBUG
         // One-shot diagnostic at the actual
         // spawn site so a misplaced spawn can be tied to the input
@@ -4759,8 +4761,8 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         {
             Log("[ArchC-kill] WM_KEYUP VK_SHIFT killing attached=%p\n",
                 static_cast<void*>(attached));
-            engine->KillParticleSystem(attached);
-            m_attachedParticleSystem = nullptr;
+            engine->KillParticleSystem(m_attachedParticleSystem);
+            m_attachedParticleSystem.Reset();
         }
         return 0;
     }
@@ -4823,8 +4825,8 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         {
             Log("[ArchC-kill] WM_APP_VIEWPORT_BLUR killing attached=%p\n",
                 static_cast<void*>(attached));
-            engine->KillParticleSystem(attached);
-            m_attachedParticleSystem = nullptr;
+            engine->KillParticleSystem(m_attachedParticleSystem);
+            m_attachedParticleSystem.Reset();
         }
         return 0;
     }
@@ -4837,8 +4839,8 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         {
             Log("[ArchC-kill] WM_DESTROY killing attached=%p\n",
                 static_cast<void*>(attached));
-            engine->KillParticleSystem(attached);
-            m_attachedParticleSystem = nullptr;
+            engine->KillParticleSystem(m_attachedParticleSystem);
+            m_attachedParticleSystem.Reset();
         }
         return 0;
     }

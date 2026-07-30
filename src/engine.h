@@ -17,6 +17,7 @@
 #include "DeviceRecovery.h"       // D3D9Ex CheckDeviceState + bounded HUNG recovery
 #include "DeferredParticleSystemChange.h"
 #include "RefLock.h"
+#include "InstanceBorrow.h"       // tokenized persistent instance identities
 #include <memory>
 #include <atomic>    // off-UI-thread catalog build
 #include <mutex>
@@ -183,9 +184,10 @@ public:
 	bool Render();
 
 	ParticleSystemInstance* SpawnParticleSystem(const ParticleSystem& system, Object3D* parent);
-    
-	void DetachParticleSystem(ParticleSystemInstance* instance);
-	void KillParticleSystem(ParticleSystemInstance* instance);
+    ParticleSystemInstanceHandle MakeInstanceHandle(ParticleSystemInstance* instance) const;
+    ParticleSystemInstance* ResolveInstance(ParticleSystemInstanceHandle handle) const;
+	bool DetachParticleSystem(ParticleSystemInstanceHandle handle);
+	bool KillParticleSystem(ParticleSystemInstanceHandle handle);
 	void Clear();
 	
 	IDirect3DTexture9* GetTexture(const std::string& name) const;
@@ -545,17 +547,6 @@ public:
     int GetNumParticles() const { return m_numParticles; }
     int GetNumInstances() const { return (int)m_instances.size(); }
     std::vector<LiveParticleSample> GetLiveParticleSamples() const;
-    // True while `p` is a live entry of m_instances. Lets a holder of a raw
-    // instance pointer re-validate it before deref — every Engine::Clear()
-    // (file/new, file/open, the overload hard-guard) frees all instances with
-    // no per-holder invalidation hook, so raw borrows dangle silently
-    // otherwise (the record preview/* kinds are the first such holder).
-    bool HasInstance(const ParticleSystemInstance* p) const
-    {
-        for (const auto& inst : m_instances)
-            if (inst.get() == p) return true;
-        return false;
-    }
 
     // Count of currently-alive instances that were emitted by the
     // SpawnerDriver (vs. Shift-click spawns or future sources). Used
@@ -1077,6 +1068,7 @@ private:
 
 	// Particle management
     std::vector<std::unique_ptr<ParticleSystemInstance>> m_instances;
+    ParticleSystemInstanceBorrowTable m_instanceBorrows;
     int m_numParticles;
     int m_numEmitters;
 

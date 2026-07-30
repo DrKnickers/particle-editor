@@ -267,8 +267,11 @@ void ParticleSystemInstance::RemoveEmitter(EmitterInstance* instance)
 	}
 }
 
-ParticleSystemInstance::ParticleSystemInstance(Engine& engine, const ParticleSystem& system, Object3D* parent)
-	: Object3D(parent), m_engine(engine), m_system(system)
+ParticleSystemInstance::ParticleSystemInstance(
+    Engine& engine, const ParticleSystem& system, Object3D* parent,
+    std::uint64_t instanceToken)
+	: Object3D(parent), m_engine(engine), m_system(system),
+      m_instanceToken(instanceToken)
 {		
 	TimeF now  = GetTimeF();
 

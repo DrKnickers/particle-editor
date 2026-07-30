@@ -105,6 +105,7 @@
     <ClInclude Include="engine_internal.h" />
     <ClInclude Include="exceptions.h" />
     <ClInclude Include="files.h" />
+    <ClInclude Include="InstanceBorrow.h" />
     <ClInclude Include="LinkGroup.h" />
     <ClInclude Include="managers.h" />
     <ClInclude Include="MegaFiles.h" />
