@@ -166,9 +166,12 @@ function isMutating(kind: Request["kind"]): boolean {
 /**
  * Whether a mutating request ACTUALLY changed persisted state — gates the
  * dirty bit so refused / no-op drag-commits stay clean, matching the native
- * host (which marks dirty only on each handler's success branch). Most
- * mutating kinds always mutate when they return normally; only the drag
- * commits are conditional:
+ * host's per-handler actual-state rules. Most
+ * mutating kinds always mutate when they return normally; slot setters and
+ * drag commits are conditional:
+ *  - ground/skydome compare the returned actual slot with the pre-call slot,
+ *    so invalid requests and valid no-ops stay clean while a failed load that
+ *    falls back to Dirt/Off still dirties.
  *  - emitters/drop, emitters/reorder-many → `{ ok:false }` on refusal.
  *  - emitters/move-many → no-op when the block is edge-pinned (nothing moved);
  *    detected from the pre-move root order, since the response always returns
@@ -178,8 +181,12 @@ function didMutate(
   req: Request,
   result: unknown,
   preMoveRootOrder: number[] | null,
+  preEngineSlot: number | null,
 ): boolean {
   switch (req.kind) {
+    case "engine/set/ground-texture":
+    case "engine/set/skydome-slot":
+      return (result as { slot: number }).slot !== preEngineSlot;
     case "emitters/drop":
     case "emitters/reorder-many":
       return (result as { ok?: boolean }).ok !== false;
@@ -320,6 +327,12 @@ export class MockBridge implements Bridge {
       req.kind === "emitters/move-many"
         ? useMockEmitterTree.getState().tree.root.children.map((c) => c.id)
         : null;
+    const preEngineSlot =
+      req.kind === "engine/set/ground-texture"
+        ? snapshotEngineState().groundTexture
+        : req.kind === "engine/set/skydome-slot"
+          ? snapshotEngineState().skydomeSlot
+          : null;
     const result = this.handle(req);
     // After the handler completes, mark dirty for any engine mutation —
     // but only on a REAL mutation. A refused drag-commit (ok:false) or a
@@ -329,7 +342,7 @@ export class MockBridge implements Bridge {
     // refused/no-op drag-commit falsely dirtied the doc.
     // (file/* and engine/action/reload-* / clear are deliberately NOT
     // marked dirty — see isMutating below.)
-    if (isMutating(req.kind) && didMutate(req, result, preMoveRootOrder)) {
+    if (isMutating(req.kind) && didMutate(req, result, preMoveRootOrder, preEngineSlot)) {
       this.markDirty();
     }
     return result as ResponseFor<R>;
@@ -411,12 +424,26 @@ export class MockBridge implements Bridge {
         this.patchAndBroadcast({ groundZ: req.params.z });
         return {};
 
-      case "engine/set/ground-texture":
-        this.patchAndBroadcast({
-          groundTexture: req.params.slot,
-          groundColor: mockGroundColor(req.params.slot, snapshotEngineState().groundSolidColor),
-        });
-        return {};
+      case "engine/set/ground-texture": {
+        const requestedSlot = req.params.slot;
+        const before = snapshotEngineState();
+        const inRange = requestedSlot >= 0 && requestedSlot < before.groundSlotCustomPaths.length;
+        // Browser mode treats built-in slots 0..4 as available. Custom slots
+        // mirror the native engine and require a path before selection.
+        const available =
+          inRange &&
+          (requestedSlot <= 4 || (before.groundSlotCustomPaths[requestedSlot] ?? "") !== "");
+        if (available) {
+          this.patchAndBroadcast({
+            groundTexture: requestedSlot,
+            groundColor: mockGroundColor(requestedSlot, before.groundSolidColor),
+          });
+        } else {
+          this.patchAndBroadcast({});
+        }
+        const actualSlot = available ? requestedSlot : before.groundTexture;
+        return { slot: actualSlot, applied: available };
+      }
 
       case "engine/set/ground-solid-color":
         this.patchAndBroadcast(
@@ -439,9 +466,19 @@ export class MockBridge implements Bridge {
       }
 
       // ---------------- engine setters: skydome / background ----------------
-      case "engine/set/skydome-slot":
-        this.patchAndBroadcast({ skydomeSlot: req.params.slot });
-        return {};
+      case "engine/set/skydome-slot": {
+        const requestedSlot = req.params.slot;
+        const before = snapshotEngineState();
+        const inRange = requestedSlot >= 0 && requestedSlot < 12;
+        const customPath =
+          requestedSlot >= 9 ? (before.skydomeCustomPaths[requestedSlot - 9] ?? "") : "";
+        const applied = inRange && (requestedSlot < 9 || customPath !== "");
+        // The native setter falls back to Off when a valid custom slot cannot
+        // load. Invalid indices leave the prior slot untouched.
+        const actualSlot = applied ? requestedSlot : inRange ? 0 : before.skydomeSlot;
+        this.patchAndBroadcast({ skydomeSlot: actualSlot });
+        return { slot: actualSlot, applied };
+      }
 
       case "engine/set/skydome-custom-path": {
         const { slot, path } = req.params;

@@ -5,8 +5,10 @@
 //   3. On a resolved path, the chain dispatches set-ground-slot-custom-path
 //      then set-ground-texture in order.
 //   4. A rejected custom path is reported and never activated.
-//   5. Height spinner → engine/set/ground-z.
-//   6. Solid-colour tile → selects slot 4; native colour input →
+//   5. A resolved activation that reports false/wrong-slot uses the same
+//      visible error; an exact successful response does not.
+//   6. Height spinner → engine/set/ground-z.
+//   7. Solid-colour tile → selects slot 4; native colour input →
 //      engine/set/ground-solid-color.
 
 import { describe, it, expect, vi } from "vitest";
@@ -22,6 +24,7 @@ function makeStubBridge(
     fileOpen?: { ok: true; path: string } | { ok: false; error: string };
     groundSlotPathError?: Error;
     groundSlotAvailable?: boolean[];
+    groundTextureResult?: { slot: number; applied: boolean };
   } = {},
 ): Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> } {
   const snapshot = {
@@ -66,6 +69,11 @@ function makeStubBridge(
     }
     if (req.kind === "engine/set/ground-slot-custom-path" && opts.groundSlotPathError) {
       return Promise.reject(opts.groundSlotPathError);
+    }
+    if (req.kind === "engine/set/ground-texture") {
+      return Promise.resolve(
+        opts.groundTextureResult ?? { slot: req.params?.slot as number, applied: true },
+      );
     }
     return Promise.resolve({});
   });
@@ -196,6 +204,43 @@ describe("GroundTexturePanel", () => {
     );
     warn.mockRestore();
   });
+
+  it.each([
+    {
+      groundTextureResult: { slot: 0, applied: false },
+      failure: "applied false",
+    },
+    {
+      groundTextureResult: { slot: 0, applied: true },
+      failure: "actual slot 0 instead of requested slot 5",
+    },
+  ])(
+    "reports a resolved custom-texture activation with $failure",
+    async ({ groundTextureResult }) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const bridge = makeStubBridge({
+        fileOpen: { ok: true, path: "C:/textures/corrupt.dds" },
+        groundTextureResult,
+      });
+      render(<GroundTexturePanel bridge={bridge} onClose={() => {}} />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: /Custom slot 1 \(empty\)/ }),
+      );
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Couldn't use that ground texture. Choose a local DDS or TGA file.",
+      );
+      expect(warn).toHaveBeenCalledWith(
+        "[GroundTexturePanel] custom texture failed:",
+        expect.objectContaining({
+          message: expect.stringContaining(
+            `actual slot ${groundTextureResult.slot}, applied ${groundTextureResult.applied}`,
+          ),
+        }),
+      );
+      warn.mockRestore();
+    },
+  );
 
   it("changing the Height spinner dispatches engine/set/ground-z", () => {
     const bridge = makeStubBridge();

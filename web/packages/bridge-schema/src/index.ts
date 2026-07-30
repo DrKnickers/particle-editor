@@ -1144,13 +1144,14 @@ type ResponseForA<R extends Request> =
   // Engine snapshot
   R extends { kind: "engine/state/snapshot" }     ? EngineStateDto :
 
-  // Engine setters — all return empty object
+  // Engine setters — most return an empty object. Texture-slot setters report
+  // the state the native engine actually reached.
   R extends { kind: "engine/set/ground" }                  ? Record<string, never> :
   R extends { kind: "engine/set/ground-z" }                ? Record<string, never> :
-  R extends { kind: "engine/set/ground-texture" }          ? Record<string, never> :
+  R extends { kind: "engine/set/ground-texture" }          ? { slot: number; applied: boolean } :
   R extends { kind: "engine/set/ground-solid-color" }      ? Record<string, never> :
   R extends { kind: "engine/set/ground-slot-custom-path" } ? Record<string, never> :
-  R extends { kind: "engine/set/skydome-slot" }            ? Record<string, never> :
+  R extends { kind: "engine/set/skydome-slot" }            ? { slot: number; applied: boolean } :
   R extends { kind: "engine/set/skydome-custom-path" }     ? Record<string, never> :
   R extends { kind: "engine/set/skydome-environment" }     ? Record<string, never> :
   R extends { kind: "engine/set/reference-object" }           ? Record<string, never> :

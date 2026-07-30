@@ -175,21 +175,20 @@ try {
   }
 
   // Force viewport content AFTER any --open, so the skydome/background overrides
-  // whatever the opened scene (or the restored daily-driver state) had. Both
-  // handlers reply sendOk(json::object()), i.e. the OUTER envelope is { ok:true,
-  // data:{} } -- request() resolves to the inner {} and only throws on an outer
-  // { ok:false }. We still inspect the inner result and fail loudly on { ok:false }
-  // (mirrors the --open guard) so a future handler that starts reporting inner
-  // failures cannot pass silently.
+  // whatever the opened scene (or the restored daily-driver state) had. The
+  // skydome setter reports the post-call slot plus whether that exact request
+  // applied; both values are load-bearing for a capture.
   if (skydomeSlot !== undefined) {
     const r = await page.evaluate(
       (slot) =>
         window.bridge.request({ kind: "engine/set/skydome-slot", params: { slot } }),
       skydomeSlot,
     );
-    if (r && r.ok === false) {
+    // Exact-match success is the overreach control: applied:true at the
+    // requested slot falls through; false or a different actual slot aborts.
+    if (!r || r.applied !== true || r.slot !== skydomeSlot) {
       throw new Error(
-        `engine/set/skydome-slot failed: ${r.error ? r.error : "unknown"}`,
+        `engine/set/skydome-slot failed: requested ${skydomeSlot}, actual ${r?.slot ?? "missing"}, applied ${r?.applied ?? "missing"}`,
       );
     }
     console.error(`snap-composed: skydome-slot ${skydomeSlot} -> ${JSON.stringify(r)}`);

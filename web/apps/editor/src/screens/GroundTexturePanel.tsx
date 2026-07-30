@@ -117,11 +117,29 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
   const gridVisible = snapshot?.gridVisible ?? false;
   const gridSpacing = snapshot?.gridSpacing ?? 20;
 
+  const reportGroundTextureError = (err: unknown) => {
+    console.warn("[GroundTexturePanel] custom texture failed:", err);
+    setCustomPathError(
+      "Couldn't use that ground texture. Choose a local DDS or TGA file.",
+    );
+  };
+  const requestGroundSlot = async (slot: number) => {
+    const result = await bridge.request({
+      kind: "engine/set/ground-texture",
+      params: { slot },
+    });
+    if (!result.applied || result.slot !== slot) {
+      throw new Error(
+        `ground texture slot ${slot} was not applied (actual slot ${result.slot}, applied ${result.applied})`,
+      );
+    }
+  };
   const handleToggleGround = (v: boolean) => {
     void bridge.request({ kind: "engine/set/ground", params: { enabled: v } });
   };
   const handleSelectSlot = (slot: number) => {
-    void bridge.request({ kind: "engine/set/ground-texture", params: { slot } });
+    setCustomPathError(null);
+    void requestGroundSlot(slot).catch(reportGroundTextureError);
   };
   const handleSolidColorChange = (hex: string) => {
     void bridge.request({
@@ -131,10 +149,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
     // Selecting a colour switches to the solid-colour slot as well, so
     // the change is immediately visible without an extra click.
     if (selectedSlot !== SOLID_COLOR_SLOT) {
-      void bridge.request({
-        kind: "engine/set/ground-texture",
-        params: { slot: SOLID_COLOR_SLOT },
-      });
+      handleSelectSlot(SOLID_COLOR_SLOT);
     }
   };
   // Clicking the wide solid-colour tile selects the slot AND pops the
@@ -143,10 +158,7 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
   // architecture, and discoverable because the obvious target is the one that opens it).
   const handleSolidColorClick = () => {
     if (selectedSlot !== SOLID_COLOR_SLOT) {
-      void bridge.request({
-        kind: "engine/set/ground-texture",
-        params: { slot: SOLID_COLOR_SLOT },
-      });
+      handleSelectSlot(SOLID_COLOR_SLOT);
     }
     colorInputRef.current?.click();
   };
@@ -171,16 +183,8 @@ export function GroundTexturePanelBody({ bridge }: BodyProps) {
           kind: "engine/set/ground-slot-custom-path",
           params: { slot, path: r.path },
         });
-        await bridge.request({
-          kind: "engine/set/ground-texture",
-          params: { slot },
-        });
-      })().catch((err) => {
-        console.warn("[GroundTexturePanel] custom texture failed:", err);
-        setCustomPathError(
-          "Couldn't use that ground texture. Choose a local DDS or TGA file.",
-        );
-      });
+        await requestGroundSlot(slot);
+      })().catch(reportGroundTextureError);
       return;
     }
     handleSelectSlot(slot);

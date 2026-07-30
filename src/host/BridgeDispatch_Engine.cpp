@@ -164,12 +164,15 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
     if (kind == "engine/set/ground-texture")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
-        // SetGroundTexture refuses an unavailable slot (no game install) and stays put.
-        // Report the truth: echo the slot actually in effect + whether it applied, so a
-        // caller awaiting this reply isn't told "ok" for a selection that bounced to dirt.
-        const bool applied = m_engine->SetGroundTexture(params.value("slot", 0));
-        ctx.SendOk({ {"slot", m_engine->GetGroundTexture()}, {"applied", applied} });
-        if (applied) ctx.MarkDirty();
+        // Invalid/unavailable slots stay put; a decode failure can instead
+        // fall back to dirt. Report and dirty against the state actually
+        // reached, independently of whether the requested slot applied.
+        const int requestedSlot = params.value("slot", 0);
+        const int previousSlot = m_engine->GetGroundTexture();
+        const bool applied = m_engine->SetGroundTexture(requestedSlot);
+        const int actualSlot = m_engine->GetGroundTexture();
+        ctx.SendOk({ {"slot", actualSlot}, {"applied", applied} });
+        if (actualSlot != previousSlot) ctx.MarkDirty();
         EmitEngineStateChanged();
         return true;
     }
@@ -204,14 +207,20 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
     if (kind == "engine/set/skydome-slot")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
-        const int slot = params.value("slot", 0);
-        m_engine->SetSkydomeSlot(slot);
-        // Persist so the selection survives restart in the new UI
-        // (the handler previously only markDirty'd — the daily-driver lost it).
+        const int requestedSlot = params.value("slot", 0);
+        const int previousSlot = m_engine->GetSkydomeSlot();
+        const bool applied = m_engine->SetSkydomeSlot(requestedSlot);
+        const int actualSlot = m_engine->GetSkydomeSlot();
+        // Preserve the handler's registry-sync behavior, but persist only the
+        // state the engine actually reached. A failed custom load reaches Off;
+        // an invalid request keeps (and re-persists) the prior valid slot.
         if (!m_ephemeral && !(m_testHost && !m_settingsLive))
-            PersistSkydomeIndex(slot);
-        ctx.SendOk(json::object());
-        ctx.MarkDirty();
+            PersistSkydomeIndex(actualSlot);
+        ctx.SendOk({ {"slot", actualSlot}, {"applied", applied} });
+        if (actualSlot != previousSlot)
+        {
+            ctx.MarkDirty();
+        }
         EmitEngineStateChanged();
         return true;
     }

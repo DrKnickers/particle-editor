@@ -401,7 +401,11 @@ bool Engine::SetGroundTexture(int index)
     m_groundTextureIndex = index;
     bool ok = ReloadGroundTexture();
     ReloadGroundNormalTexture();   // re-resolve the slot's companion _bc map
-    return ok;
+    // ReloadGroundTexture returns true when the dirt fallback loaded. That is
+    // healthy renderer state, but it is not success for the requested slot.
+    // Preserve both facts: GetGroundTexture() reports the reached slot and this
+    // bool reports whether the request itself applied.
+    return ok && m_groundTextureIndex == index;
 }
 
 bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)

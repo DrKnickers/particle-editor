@@ -189,7 +189,13 @@ try {
       (slot) => window.bridge.request({ kind: "engine/set/skydome-slot", params: { slot } }),
       skydomeSlot,
     );
-    if (r && r.ok === false) throw new Error(`engine/set/skydome-slot failed: ${r.error ?? "unknown"}`);
+    // Exact-match success is the overreach control: applied:true at the
+    // requested slot falls through; false or a different actual slot aborts.
+    if (!r || r.applied !== true || r.slot !== skydomeSlot) {
+      throw new Error(
+        `engine/set/skydome-slot failed: requested ${skydomeSlot}, actual ${r?.slot ?? "missing"}, applied ${r?.applied ?? "missing"}`,
+      );
+    }
     console.error(`probe[${tag}]: skydome-slot ${skydomeSlot} -> ${JSON.stringify(r)}`);
   }
 

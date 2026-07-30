@@ -100,6 +100,82 @@ describe("MockBridge contract", () => {
     off();
   });
 
+  it("background slot setters return exact actual slots without dirtying refused requests or no-ops", async () => {
+    const b = new MockBridge();
+
+    // Ground's valid same-slot no-op is applied, but slot 0 -> 0 must stay
+    // clean. This fails if dirtiness is keyed to `applied` instead of delta.
+    const groundNoop = await b.request({
+      kind: "engine/set/ground-texture",
+      params: { slot: 0 },
+    });
+    expect(groundNoop).toEqual({ slot: 0, applied: true });
+    const afterGroundNoop = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(afterGroundNoop.dirty).toBe(false);
+
+    // Valid no-op: applied is true, but slot 0 -> 0 is not a mutation.
+    const skyNoop = await b.request({
+      kind: "engine/set/skydome-slot",
+      params: { slot: 0 },
+    });
+    expect(skyNoop).toEqual({ slot: 0, applied: true });
+
+    // Exact wrong values: invalid 12 must not echo 12, and empty custom slot
+    // 9 must not report applied:true. Both leave the already-Off mock clean.
+    const skyInvalid = await b.request({
+      kind: "engine/set/skydome-slot",
+      params: { slot: 12 },
+    });
+    expect(skyInvalid).toEqual({ slot: 0, applied: false });
+    const skyEmptyCustom = await b.request({
+      kind: "engine/set/skydome-slot",
+      params: { slot: 9 },
+    });
+    expect(skyEmptyCustom).toEqual({ slot: 0, applied: false });
+
+    const groundInvalid = await b.request({
+      kind: "engine/set/ground-texture",
+      params: { slot: 8 },
+    });
+    expect(groundInvalid).toEqual({ slot: 0, applied: false });
+    const groundEmptyCustom = await b.request({
+      kind: "engine/set/ground-texture",
+      params: { slot: 5 },
+    });
+    expect(groundEmptyCustom).toEqual({ slot: 0, applied: false });
+
+    const clean = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(clean.dirty).toBe(false);
+
+    // Overreach controls: a procedural ground slot and bundled skydome slot
+    // apply exactly, so a guard that rejects every request fails here.
+    const groundBundled = await b.request({
+      kind: "engine/set/ground-texture",
+      params: { slot: 4 },
+    });
+    expect(groundBundled).toEqual({ slot: 4, applied: true });
+    const skyBundled = await b.request({
+      kind: "engine/set/skydome-slot",
+      params: { slot: 5 },
+    });
+    expect(skyBundled).toEqual({ slot: 5, applied: true });
+  });
+
+  it("a failed custom skydome request that falls back from bundled to Off dirties the actual change", async () => {
+    const b = new MockBridge();
+    await b.request({ kind: "engine/set/skydome-slot", params: { slot: 5 } });
+    useMockEngineState.getState().applyPatch({ dirty: false });
+
+    const fallback = await b.request({
+      kind: "engine/set/skydome-slot",
+      params: { slot: 9 },
+    });
+    expect(fallback).toEqual({ slot: 0, applied: false });
+    const after = await b.request({ kind: "engine/state/snapshot", params: {} });
+    expect(after.skydomeSlot).toBe(0);
+    expect(after.dirty).toBe(true);
+  });
+
   // One representative case per scalar setter — proves the kind→field
   // routing for the entire setter ladder. The list intentionally covers
   // every primitive shape (boolean / number / Color / Vec4 / nested
