@@ -200,6 +200,13 @@ namespace
             // file already wins via the dedup `continue` above).
             if (model.empty()) { seen.erase(name); continue; }
 
+            // Bound the accepted prefix across the whole axis/load, not one XML
+            // file at a time. `out` is shared across routed files and grows only
+            // after the existing tag/name/dedup/model filters, so duplicates and
+            // model-less entries consume no slots. Preserve the current
+            // truncation contract: stop harvesting without failing the load.
+            if (out.size() >= kMaxSkydomeEntriesPerAxis) return;
+
             SkydomeRef ref;
             ref.name      = name;
             ref.modelPath = WideToAnsi(model);

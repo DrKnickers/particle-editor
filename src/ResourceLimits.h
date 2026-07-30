@@ -26,6 +26,10 @@ static const unsigned long kMaxXmlNodes          = 2u * 1000u * 1000u;  // 2M el
 static const unsigned long kMaxXmlAttributes     = 131072u;
 static const unsigned long kMaxCatalogXmlFileCount = 4096u;
 static const unsigned long kMaxCatalogXmlTotalBytes = kMaxXmlFileBytes;
+// Accepted unique model-bearing picker entries for ONE skydome axis/load.
+// The shared harvester aggregates across every routed file, so this bounds the
+// published prefix without rejecting an otherwise readable manifest.
+static const unsigned long kMaxSkydomeEntriesPerAxis = 1024u;
 // Total fieldable-token PROCESSING work for one game-object catalog build
 // (2026-07 audit, an-audit-finding). This counts temporary token-vector pushes, roster /
 // build / spawn map applications, member-expansion pushes, and expansion replay.

@@ -26,6 +26,13 @@ static int g_failed = 0;
     if (cond) { std::printf("  ok: %s\n", msg); }          \
     else { ++g_failed; std::printf("  FAIL: %s\n", msg); } \
 } while (0)
+#define CHECK_COUNT(actual, expected, msg) do {                         \
+    const size_t got_ = (actual);                                      \
+    const size_t expected_ = (expected);                               \
+    if (got_ == expected_) { std::printf("  ok: %s\n", msg); }         \
+    else { ++g_failed; std::printf("  FAIL: %s (got %zu, expected %zu)\n", \
+                                   msg, got_, expected_); }             \
+} while (0)
 
 // Mock FileManager: serves registered paths from in-memory strings.
 struct MockFM : IFileManager
@@ -141,8 +148,63 @@ static const SkydomeRef* find(const std::vector<SkydomeRef>& v, const std::strin
     return nullptr;
 }
 
+static std::string numberedDomeName(unsigned index)
+{
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "Dome_%04u", index);
+    return buf;
+}
+
+static void appendNumberedDome(std::string& xml, unsigned index)
+{
+    const std::string name = numberedDomeName(index);
+    xml += "  <SpacePrimarySkydome Name=\"" + name + "\">\n";
+    xml += "    <Space_Model_Name>" + name + ".alo</Space_Model_Name>\n";
+    xml += "  </SpacePrimarySkydome>\n";
+}
+
+// One routed file of a multi-file entry-cap fixture. A model-less entry and a
+// repeated model-bearing Name precede the unique range: neither may consume an
+// accepted slot. Repeated file paths are added separately in the GOF fixture.
+static std::string makeNumberedDomeFile(unsigned first, unsigned count,
+                                        unsigned duplicateIndex,
+                                        const char* modelLessName)
+{
+    std::string xml = "<?xml version=\"1.0\" ?>\n<SpacePrimarySkydomes>\n";
+    xml += "  <SpacePrimarySkydome Name=\"";
+    xml += modelLessName;
+    xml += "\"><Scale_Factor>1</Scale_Factor></SpacePrimarySkydome>\n";
+    appendNumberedDome(xml, duplicateIndex);
+    for (unsigned i = 0; i < count; ++i)
+        appendNumberedDome(xml, first + i);
+    xml += "</SpacePrimarySkydomes>\n";
+    return xml;
+}
+
+static std::string makeEntryCapManifest(bool includeLand)
+{
+    std::string xml =
+        "<?xml version=\"1.0\" ?>\n<Game_Object_Files>\n"
+        "  <File>Cap_A.xml</File>\n"
+        "  <File>Cap_A.xml</File>\n"
+        "  <File>Cap_B.xml</File>\n"
+        "  <File>Cap_B.xml</File>\n";
+    if (includeLand) xml += "  <File>LandPrimarySkydomes.xml</File>\n";
+    xml += "</Game_Object_Files>\n";
+    return xml;
+}
+
+static bool isExactNumberedPrefix(const std::vector<SkydomeRef>& list,
+                                  unsigned count)
+{
+    if (list.size() < count) return false;
+    for (unsigned i = 0; i < count; ++i)
+        if (list[i].name != numberedDomeName(i)) return false;
+    return true;
+}
+
 // Dump mode (argv[1] = axis 0..3, argv[2] = real *Skydomes.xml path): parse +
-// print, no assertions. Validates the reader against real install XML.
+// print for manual inspection, with no assertions.
 static int dumpRealXml(int axisIdx, const char* path)
 {
     static const char* canon[] = {
@@ -401,6 +463,55 @@ int main(int argc, char** argv)
         MapEnvironment env2;
         ResolveMapEnvironment(all, SkydomeContext::Space, "Stars_Low", "DoesNotExist", env2);
         CHECK(env2.hasPrimary && !env2.hasSecondary, "resolve-from-lists: missing secondary unset");
+    }
+
+    // ---- accepted entry cap per axis/load (2026-07 audit, an-audit-finding) -----------
+    std::printf("[accepted entry cap]\n");
+    {
+        // Exact literal boundary through LoadSkydomeList. The two files carry
+        // 600 + 424 unique model-bearing entries; their repeated Names,
+        // model-less entries, and repeated GOF paths must consume no slots.
+        MockFM exact;
+        exact.files["Data\\XML\\GameObjectFiles.xml"] = makeEntryCapManifest(false);
+        exact.files["Data\\XML\\Cap_A.xml"] =
+            makeNumberedDomeFile(0u, 600u, 0u, "NoModel_A");
+        exact.files["Data\\XML\\Cap_B.xml"] =
+            makeNumberedDomeFile(600u, 424u, 599u, "NoModel_B");
+
+        std::vector<SkydomeRef> exactList;
+        const bool exactOk =
+            LoadSkydomeList(exact, SkydomeAxis::SpacePrimary, exactList);
+        CHECK(exactOk, "1024-entry axis load remains successful");
+        CHECK_COUNT(exactList.size(), 1024u,
+                    "exactly 1024 accepted unique model-bearing entries are retained");
+        CHECK(isExactNumberedPrefix(exactList, 1024u),
+              "exact-cap load retains Dome_0000 through Dome_1023 in order");
+
+        // Cap+1 through the production cache loader. The output must be exactly
+        // the original first 1024 -- not an arbitrary 1024-entry subset -- and
+        // a saturated SpacePrimary axis must not suppress a later LandPrimary
+        // file. Values are literal so a wrong production constant cannot move
+        // the oracle with it.
+        MockFM over;
+        over.files["Data\\XML\\GameObjectFiles.xml"] = makeEntryCapManifest(true);
+        over.files["Data\\XML\\Cap_A.xml"] =
+            makeNumberedDomeFile(0u, 600u, 0u, "NoModel_A");
+        over.files["Data\\XML\\Cap_B.xml"] =
+            makeNumberedDomeFile(600u, 425u, 599u, "NoModel_B");
+        over.files["Data\\XML\\LandPrimarySkydomes.xml"] = kLandPrimary;
+
+        std::array<std::vector<SkydomeRef>, kNumSkydomeAxes> capped;
+        LoadAllSkydomeLists(over, capped);
+        const std::vector<SkydomeRef>& space =
+            capped[(int)SkydomeAxis::SpacePrimary];
+        CHECK_COUNT(space.size(), 1024u,
+                    "1025 accepted candidates truncate to exactly 1024");
+        CHECK(isExactNumberedPrefix(space, 1024u),
+              "cap+1 load retains the exact first 1024 names in order");
+        CHECK(find(space, "Dome_1024") == nullptr,
+              "the literal 1025th unique model-bearing entry is omitted");
+        CHECK(find(capped[(int)SkydomeAxis::LandPrimary], "Day_Blue_Sky") != nullptr,
+              "a capped axis does not suppress a later routed axis");
     }
 
     // ---- manifest file-count cap (2026-07 audit, an-audit-finding) -----------------------
