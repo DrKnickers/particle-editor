@@ -1295,11 +1295,11 @@ void HostWindowImpl::CloseLog()
     }
 }
 
-// --drive bridge-selftest: round-trip one allowlisted request through the
-// PRODUCTION page->host channel. ExecuteScript makes the page call
-// window.bridge.request(kind) — in a non-CDP --drive run window.bridge IS the
-// real NativeBridge — and post a tokened result back over the same wire;
-// OnWebMessage completes the wait. A dropped wire fails by timeout.
+// --drive bridge-selftest: round-trip allowlisted requests through BOTH
+// PRODUCTION page->host WebMessage doors. CDP makes WebView2 drop postMessage,
+// so this non-CDP --drive path is the only composed oracle for the string and
+// JSON-fallback callbacks. It proves the shipped inclusive ingress boundary:
+// exactly 16 Mi UTF-16 chars dispatch; one more never reaches OnWebMessage.
 bool HostWindowImpl::RunDriveSelftest(const std::string& kind, int timeoutMs)
 {
     if (useTestHost)
@@ -1323,31 +1323,65 @@ bool HostWindowImpl::RunDriveSelftest(const std::string& kind, int timeoutMs)
     m_selftestOk = false;
 
     // kind is allowlist-validated at parse time; token is host-generated — both
-    // are safe to embed in single-quoted JS.
+    // are safe to embed in single-quoted JS. The literal 16777216 is independent
+    // of ResourceLimits.h so an accidental shipped-default change cannot move
+    // this oracle with the implementation.
+    //
     // A faithful inline mini-client of the production wire protocol: the same
-    // {type:"req",id,kind,params} envelope NativeBridge sends (bridge/native.ts:80)
-    // and the same {type:"res",id,ok} matching it awaits (:133). Deliberately NOT
-    // window.bridge: that diagnostic global is currently a broken TestHostBridge
-    // in every non-test-host launch (hostObjects.<name> is a truthy lazy proxy
-    // even with nothing registered — latent bug, tracked separately). This tests
-    // what matters: page->host postMessage, dispatcher handling, host->page
-    // response delivery. setTimeout(0) defers out of the ExecuteScript
-    // evaluation context, where postMessage throws 0x80070490.
+    // {type:"req",id,kind,params} envelope NativeBridge sends. Posting the
+    // serialized string exercises TryGetWebMessageAsString; posting the object
+    // exercises get_WebMessageAsJson. Exact-cap responses prove each transport
+    // path is alive. Any correlated cap+1 response is the specific forbidden
+    // value; a bounded quiet period is success for that case. setTimeout(0)
+    // defers out of ExecuteScript, where postMessage throws 0x80070490.
     const std::string js =
         "setTimeout(function(){"
-        "var post=function(ok,why){try{window.chrome.webview.postMessage(JSON.stringify("
-        "{kind:'drive/selftest-result',token:'" + token + "',ok:!!ok,why:why||''}));}catch(e){}};"
+        "var token='" + token + "',kind='" + kind + "',cap=16777216;"
         "var wv=window.chrome&&window.chrome.webview;"
+        "var reported=false,index=0,current=null,timer=0,positiveMs={},forbidden={};"
+        "var post=function(ok,why){if(reported)return;reported=true;"
+        "try{wv.postMessage(JSON.stringify({kind:'drive/selftest-result',"
+        "token:token,ok:!!ok,why:why||''}));}catch(e){}};"
         "if(!wv||typeof wv.postMessage!=='function'){post(false,'no-webview');return;}"
-        "var id='selftest-" + token + "';var done=false;"
+        "var cases=["
+        "{door:'string',size:cap,expect:true,label:'string-at-cap'},"
+        "{door:'string',size:cap+1,expect:false,label:'string-one-past'},"
+        "{door:'json',size:cap,expect:true,label:'json-at-cap'},"
+        "{door:'json',size:cap+1,expect:false,label:'json-one-past'}];"
+        "var build=function(c,id){"
+        "var obj={type:'req',id:id,kind:kind,params:{padding:''}};"
+        "var base=JSON.stringify(obj),n=c.size-base.length;"
+        "if(n<0)throw new Error('target-too-small');"
+        "obj.params.padding='x'.repeat(n);"
+        "var raw=JSON.stringify(obj);"
+        "if(raw.length!==c.size)throw new Error('wrong-size:'+raw.length);"
+        "return{obj:obj,raw:raw};};"
+        "var next=function(){"
+        "clearTimeout(timer);"
+        "if(reported)return;"
+        "if(index>=cases.length){post(true,'');return;}"
+        "var c=cases[index++];"
+        "c.id='selftest-'+token+'-'+c.label;current=c;"
+        "var built;try{built=build(c,c.id);}catch(e){post(false,c.label+': '+e.message);return;}"
+        "if(!c.expect)forbidden[c.id]=c.label;"
+        "c.started=Date.now();"
+        "if(c.expect){timer=setTimeout(function(){"
+        "post(false,c.label+': response-timeout');},10000);}"
+        "else{var wait=Math.min(10000,Math.max(4000,(positiveMs[c.door]||0)*4));"
+        "timer=setTimeout(function(){if(current===c)next();},wait);}"
+        "try{wv.postMessage(c.door==='string'?built.raw:built.obj);}"
+        "catch(e){post(false,c.label+': post-threw: '+(e&&e.message||''));}};"
         "var onMsg=function(e){var m=e.data;"
         "if(typeof m==='string'){try{m=JSON.parse(m);}catch(err){return;}}"
-        "if(!m||m.type!=='res'||m.id!==id)return;done=true;"
-        "post(!!m.ok,m.ok?'':'res-error: '+(m.error||''));};"
+        "if(!m||m.type!=='res'||typeof m.id!=='string')return;"
+        "if(forbidden[m.id]){post(false,forbidden[m.id]+': over-cap dispatched');return;}"
+        "if(!current||m.id!==current.id)return;"
+        "clearTimeout(timer);"
+        "positiveMs[current.door]=Date.now()-current.started;"
+        "if(!m.ok){post(false,current.label+': res-error: '+(m.error||''));return;}"
+        "next();};"
         "wv.addEventListener('message',onMsg);"
-        "try{wv.postMessage(JSON.stringify({type:'req',id:id,kind:'" + kind + "',params:{}}));}"
-        "catch(e){post(false,'post-threw: '+(e&&e.message||''));return;}"
-        "setTimeout(function(){if(!done)post(false,'response-timeout');},8000);"
+        "next();"
         "},0);";
     const HRESULT hr = webView->ExecuteScript(
         Utf8ToWide(js).c_str(),

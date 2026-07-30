@@ -186,7 +186,7 @@ bool DriveRunner::DoBridgeSelftest(const drive::Step& s)
         SetAssertFailed("selftest hook unavailable for kind '" + s.bridgeKind + "'");
         return false;
     }
-    if (!m_selftest(s.bridgeKind, 10000)) {
+    if (!m_selftest(s.bridgeKind, 45000)) {
         SetAssertFailed("bridge selftest failed for kind '" + s.bridgeKind + "'");
         return false;
     }

@@ -260,7 +260,7 @@ int main()
             seenKind = kind; seenTimeout = timeoutMs; return true;
         });
         CHECK(RunToDone(r, now) == 0);
-        CHECK(seenKind == "emitters/list" && seenTimeout == 10000);
+        CHECK(seenKind == "emitters/list" && seenTimeout == 45000);
     }
     {
         double now = 0; Bridge b; std::vector<std::string> logs;
