@@ -221,6 +221,9 @@
     <ClCompile Include="host\BridgeDispatcher.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
+    <ClCompile Include="host\RecentFiles.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
     <ClCompile Include="host\BridgeDispatch_Assets.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>

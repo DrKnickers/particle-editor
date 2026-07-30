@@ -188,6 +188,7 @@
     </ClCompile>
     <ClCompile Include="host\BridgeDispatcher.cpp">
     </ClCompile>
+    <ClCompile Include="host\RecentFiles.cpp" />
     <ClCompile Include="host\BridgeDispatch_Assets.cpp" />
     <ClCompile Include="host\BridgeDispatch_Emitters.cpp" />
     <ClCompile Include="host\BridgeDispatch_Engine.cpp" />

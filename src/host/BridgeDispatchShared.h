@@ -4,10 +4,12 @@
 // blocks call, shared between BridgeDispatcher.cpp and the per-domain
 // dispatch TUs (BridgeDispatch_*.cpp). Bridge-side counterpart of the
 // engine_internal.h rule in tasks/2026-07-06-heavyweight-refactor-plan.md:
-// every helper keeps exactly ONE definition (in BridgeDispatcher.cpp) —
-// never a per-TU static copy. Helpers used only by BridgeDispatcher.cpp's
-// own dispatch plumbing (BuildDispatchExceptionEnvelope, JsonStringField,
-// EndDispatchSpan) stay static there and are deliberately absent here.
+// every helper keeps exactly ONE production definition. Most live in
+// BridgeDispatcher.cpp; cohesive extracted helpers may live in a dedicated
+// production TU such as RecentFiles.cpp. Never add a per-TU static copy.
+// Helpers used only by BridgeDispatcher.cpp's own dispatch plumbing
+// (BuildDispatchExceptionEnvelope, JsonStringField, EndDispatchSpan) stay
+// static there and are deliberately absent here.
 
 #include <cstddef>
 #include <string>
