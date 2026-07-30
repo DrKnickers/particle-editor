@@ -232,6 +232,7 @@
     </ClCompile>
     <ClCompile Include="host\HostBridgeProxy.cpp">
     </ClCompile>
+    <ClCompile Include="host\StartupCallbackAdapter.cpp" />
     <ClCompile Include="host\HostWindow.cpp">
     </ClCompile>
     <ClCompile Include="host\WindowCapture.cpp">

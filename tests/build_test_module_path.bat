@@ -1,6 +1,7 @@
 @echo off
 REM Build the module-path grow-until-it-fits regression test as a standalone
-REM x64 console exe. ModulePath.h is header-only (windows.h + std only).
+REM x64 console exe. The test self-relocates this real executable beyond
+REM MAX_PATH so host::ModuleFilePath(), not only its injected helper, is covered.
 setlocal
 call "%~dp0_env.bat" || exit /b 1
 if errorlevel 1 ( echo vcvars failed & exit /b 1 )

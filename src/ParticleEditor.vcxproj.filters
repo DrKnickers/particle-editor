@@ -248,6 +248,9 @@
     <ClCompile Include="host\HostBridgeProxy.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>
+    <ClCompile Include="host\StartupCallbackAdapter.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
     <ClCompile Include="host\HostWindow.cpp">
       <Filter>Source Files\host</Filter>
     </ClCompile>

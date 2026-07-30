@@ -893,6 +893,33 @@ async function liveBridgeRequest<T>(
   ) as Promise<T>;
 }
 
+// ── an-audit-finding. Spawn-schedule production call-site behavior ─────────────────────
+//
+// The pure SpawnSchedule predicate is covered by its C++ unit. These cases
+// deliberately traverse the real bridge and an already-placed EmitterInstance,
+// so leaving a syntactically matching ReconcileNextSpawnTime call in production
+// while ignoring its return cannot pass.
+
+type SpawnLiveState = {
+  instances: number;
+  emitters: number;
+  particles: number;
+};
+
+async function spawnBridgeRequest<T>(
+  kind: string,
+  params: Record<string, unknown> = {},
+): Promise<T> {
+  return page.evaluate(
+    async ({ requestKind, requestParams }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bridge = (window as any).bridge;
+      return bridge.request({ kind: requestKind, params: requestParams });
+    },
+    { requestKind: kind, requestParams: params },
+  ) as Promise<T>;
+}
+
 function normalizeLiveState(state: LiveInstanceState): ExpectedLiveState {
   return {
     instances: state.instances,
@@ -1054,5 +1081,147 @@ test("live invalidation: Linear to Step repaints a paused halfway particle", asy
     await waitForLiveState(expectedLiveState(targetId, 0, controlId, 0.5));
   } finally {
     await resetLiveInvalidationFixture();
+  }
+});
+
+async function spawnLiveState(): Promise<SpawnLiveState> {
+  return spawnBridgeRequest<SpawnLiveState>("engine/query/live-instances");
+}
+
+async function expectSpawnLiveState(
+  expected: Pick<SpawnLiveState, "instances" | "emitters" | "particles">,
+): Promise<SpawnLiveState> {
+  await expect.poll(
+    async () => {
+      const state = await spawnLiveState();
+      return {
+        instances: state.instances,
+        emitters: state.emitters,
+        particles: state.particles,
+      };
+    },
+    {
+      timeout: 5_000,
+      intervals: [16, 32, 64, 100],
+      message: "waiting for the native stepped clock to publish exact live counts",
+    },
+  ).toEqual(expected);
+  return spawnLiveState();
+}
+
+async function resetSpawnScheduleFixture(): Promise<void> {
+  await spawnBridgeRequest("file/new");
+  await spawnBridgeRequest("engine/set/paused", { paused: false });
+}
+
+async function cleanupSpawnScheduleFixture(): Promise<void> {
+  await spawnBridgeRequest("file/new").catch(() => {});
+  await spawnBridgeRequest("engine/set/paused", { paused: false }).catch(() => {});
+}
+
+async function seedSpawnScheduleFixture(
+  initialDelay: number,
+  particlesPerSecond: number,
+): Promise<number> {
+  await resetSpawnScheduleFixture();
+  await spawnBridgeRequest("engine/set/paused", { paused: true });
+
+  const list = await spawnBridgeRequest<{
+    root: { children: Array<{ id: number }> };
+  }>("emitters/list");
+  const emitterId = list.root.children[0]?.id;
+  if (emitterId === undefined) throw new Error("file/new did not create a root emitter");
+
+  await spawnBridgeRequest("emitters/set-properties", {
+    id: emitterId,
+    patch: {
+      lifetime: 10,
+      initialDelay,
+      useBursts: false,
+      nParticlesPerSecond: particlesPerSecond,
+      randomLifetimePerc: 0,
+      freezeTime: 0,
+      skipTime: 0,
+      isWeatherParticle: false,
+      hasTail: false,
+    },
+  });
+  await spawnBridgeRequest("preview/attach", { x: 200, y: 200 });
+  await spawnBridgeRequest("preview/place");
+  return emitterId;
+}
+
+test("spawn schedule: a steady-state rate increase pulls the real next round in", async () => {
+  try {
+    const emitterId = await seedSpawnScheduleFixture(0, 1);
+    const before = await expectSpawnLiveState({
+      instances: 1,
+      emitters: 1,
+      particles: 1,
+    });
+
+    await spawnBridgeRequest("emitters/set-properties", {
+      id: emitterId,
+      patch: { nParticlesPerSecond: 100 },
+    });
+    await spawnBridgeRequest("engine/action/step-frames", { frames: 1 });
+
+    const after = await expectSpawnLiveState({
+      instances: 1,
+      emitters: 1,
+      particles: 2,
+    });
+    const tree = await spawnBridgeRequest<{
+      root: { children: Array<{ id: number }> };
+    }>("emitters/list");
+
+    expect(before.instances).toBe(after.instances);
+    expect(before.emitters).toBe(after.emitters);
+    expect(tree.root.children.map((entry) => entry.id)).toEqual([emitterId]);
+  } finally {
+    await cleanupSpawnScheduleFixture();
+  }
+});
+
+test("spawn schedule: unrelated edits preserve initialDelay before emission begins", async () => {
+  try {
+    const emitterId = await seedSpawnScheduleFixture(5, 10);
+    const before = await expectSpawnLiveState({
+      instances: 1,
+      emitters: 1,
+      particles: 0,
+    });
+
+    // This is deliberately unrelated to rate or timing. The broken
+    // unconditional reconcile scheduled a round at now + 0.1 seconds.
+    await spawnBridgeRequest("emitters/set-properties", {
+      id: emitterId,
+      patch: { gravity: 0.25 },
+    });
+    await spawnBridgeRequest("engine/action/step-frames", { frames: 7 });
+    const wrongWindow = await expectSpawnLiveState({
+      instances: 1,
+      emitters: 1,
+      particles: 0,
+    });
+
+    // Total stepped time is now 301/60 seconds: just beyond the authored five
+    // seconds, but before a second 10/s round. Exactly one particle must exist.
+    await spawnBridgeRequest("engine/action/step-frames", { frames: 294 });
+    const afterDelay = await expectSpawnLiveState({
+      instances: 1,
+      emitters: 1,
+      particles: 1,
+    });
+    const tree = await spawnBridgeRequest<{
+      root: { children: Array<{ id: number }> };
+    }>("emitters/list");
+
+    expect(before.instances).toBe(wrongWindow.instances);
+    expect(wrongWindow.instances).toBe(afterDelay.instances);
+    expect(before.emitters).toBe(afterDelay.emitters);
+    expect(tree.root.children.map((entry) => entry.id)).toEqual([emitterId]);
+  } finally {
+    await cleanupSpawnScheduleFixture();
   }
 });

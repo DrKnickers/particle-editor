@@ -67,7 +67,7 @@
 #include "WebViewModalPolicy.h"
 #include "WebMessageIngressPolicy.h"   // ShouldAcceptWebMessage (bridge ingress cap)
 #include "ModulePath.h"               // host::ModuleDirectory (grow-until-it-fits module path)
-#include "StartupCallbackGuard.h"     // liveness token for the one-shot WebView2 creation callbacks
+#include "StartupCallbackAdapter.h"   // guarded one-shot WebView2 creation callbacks
 #include "CompositionStartupPolicy.h" // second WebView2 create's synchronous failure channel
 
 #include "AcceleratorBridge.h"
@@ -2025,17 +2025,15 @@ HRESULT HostWindowImpl::InitWebView2()
     // VALUE so it shares the flag, not `this`.
     auto startupToken = m_startupGuard.Issue();
 
-    HRESULT envCreateHr = CreateCoreWebView2EnvironmentWithOptions(
-        nullptr, userDataFolder.c_str(), envOptions.Get(),
-        Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
+    // The production factory checks startupToken before this continuation can
+    // touch `this`; the standalone callback test links that exact TU.
+    auto environmentHandler =
+        MakeEnvironmentStartupCallback(
+            startupToken,
             [this, startupToken](HRESULT envHr, ICoreWebView2Environment* env) -> HRESULT
             {
-                // The window may already be gone: WM_DESTROY does not stop the
-                // pump, so a completion queued before it still dispatches after
-                // teardown. Decline silently — even Log() would go through the
-                // freed `this` (2026-07 audit, an-audit-finding).
-                if (!startupToken.OwnerAlive()) return S_OK;
-
+                // The adapter has already proved the owner live before this
+                // continuation can log or dereference `this` (an-audit-finding).
                 if (FAILED(envHr) || !env)
                 {
                     Log("[host] WebView2 env failed 0x%08lx\n", envHr);
@@ -2082,19 +2080,21 @@ HRESULT HostWindowImpl::InitWebView2()
                     FailFatalComposition(qihr);
                 }
 
+                auto compositionControllerHandler =
+                    MakeCompositionControllerStartupCallback(
+                        startupToken,
+                        [this](HRESULT cHr,
+                               ICoreWebView2CompositionController* ctl) -> HRESULT
+                        {
+                            // The controller door uses the same production
+                            // adapter and can dispatch later still.
+                            return OnCompositionControllerReady(cHr, ctl);
+                        });
+
                 Log("[host] composition: CreateCoreWebView2CompositionController dispatching\n");
                 const HRESULT controllerCreateHr =
                     env3->CreateCoreWebView2CompositionController(
-                    hMain,
-                    Callback<ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler>(
-                        [this, startupToken](HRESULT cHr, ICoreWebView2CompositionController* ctl) -> HRESULT
-                        {
-                            // Same one-shot hazard as the environment callback,
-                            // and a wider window: this one is dispatched later
-                            // still (an-audit-finding).
-                            if (!startupToken.OwnerAlive()) return S_OK;
-                            return OnCompositionControllerReady(cHr, ctl);
-                        }).Get());
+                        hMain, compositionControllerHandler.Get());
                 if (ShouldFailCompositionControllerDispatch(controllerCreateHr))
                 {
                     // The environment completion handler's return value is
@@ -2108,7 +2108,11 @@ HRESULT HostWindowImpl::InitWebView2()
                                  static_cast<WPARAM>(controllerCreateHr), 0);
                 }
                 return controllerCreateHr;
-            }).Get());
+            });
+
+    HRESULT envCreateHr = CreateCoreWebView2EnvironmentWithOptions(
+        nullptr, userDataFolder.c_str(), envOptions.Get(),
+        environmentHandler.Get());
     Log("[host] CreateCoreWebView2EnvironmentWithOptions returned 0x%08lx (testHost=%d)\n",
         envCreateHr, useTestHost ? 1 : 0);
     return envCreateHr;
