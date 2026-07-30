@@ -12,12 +12,12 @@
 // of raw BGRA apiece. The worker encoded them in full too, because only the
 // RESULT carries an epoch check, at drain time.
 //
-// SCOPE NOTE. The integration point -- PreviewCacheClear() calling
-// DropStaleQueued() -- lives in BridgeDispatcher.cpp, which this standalone
-// harness cannot link (the same constraint tests/test_particle_system_io.cpp
-// documents for the ParticleSystemIO wrappers). What IS linkable, and what this
-// pins, is the queue primitive that call site depends on: stale jobs go,
-// current-epoch jobs stay.
+// PRODUCTION ORACLE. Section E invokes the actual
+// BridgeDispatcher::PreviewCacheClear member. Its small body is header-visible
+// so this standalone harness does not have to link the monolithic dispatcher
+// translation unit. Always-present private tags let the fixture construct a
+// dispatcher and a worker without registry reads or a racing encode thread;
+// no test macro changes either class layout.
 //
 // TIMING NOTE. The worker thread pops concurrently, so QueuedCount() is
 // advisory. Every assertion below is written to hold regardless of how far the
@@ -32,11 +32,51 @@
 #include <objidl.h>    // IStream -- gdiplus.h needs it, and LEAN_AND_MEAN drops it
 #include <gdiplus.h>
 
-#include "../src/host/PreviewEncodeWorker.h"
+#include "../src/host/AcceleratorBridge.h"
+#include "../src/host/BridgeDispatcher.h"
+#include "../src/host/LayoutBroker.h"
 
 #include <cstdio>
 #include <string>
 #include <vector>
+
+namespace host {
+
+struct PreviewQueueWiringTestAccess
+{
+    static std::unique_ptr<BridgeDispatcher> MakeDispatcher(
+        LayoutBroker& layout, AcceleratorBridge& accel)
+    {
+        return std::unique_ptr<BridgeDispatcher>(
+            new BridgeDispatcher(layout, accel,
+                                 BridgeDispatcher::PreviewQueueTestTag{}));
+    }
+
+    static PreviewEncodeWorker& InstallIdleWorker(BridgeDispatcher& dispatcher)
+    {
+        dispatcher.m_previewWorker.reset(
+            new PreviewEncodeWorker(NULL, 0,
+                                    PreviewEncodeWorker::NoThreadForTest{}));
+        return *dispatcher.m_previewWorker;
+    }
+
+    static void SetEpoch(BridgeDispatcher& dispatcher, unsigned epoch)
+    {
+        dispatcher.m_previewEpoch = epoch;
+    }
+
+    static unsigned Epoch(const BridgeDispatcher& dispatcher)
+    {
+        return dispatcher.m_previewEpoch;
+    }
+
+    static size_t Clear(BridgeDispatcher& dispatcher)
+    {
+        return dispatcher.PreviewCacheClear();
+    }
+};
+
+} // namespace host
 
 static int g_failed = 0;
 #define CHECK(cond, msg) do {                              \
@@ -131,6 +171,46 @@ int main()
         w.Finish();
         // Idempotent after Finish (PreviewCacheClear can run during teardown).
         CHECK(w.DropStaleQueued(2u) == 0, "after Finish: drop is still safe");
+    }
+
+    // ---- E: the production cache-clear call drops only stale work ------------
+    {
+        host::LayoutBroker layout;
+        host::AcceleratorBridge accel;
+        std::unique_ptr<host::BridgeDispatcher> dispatcher =
+            host::PreviewQueueWiringTestAccess::MakeDispatcher(layout, accel);
+        host::PreviewEncodeWorker& worker =
+            host::PreviewQueueWiringTestAccess::InstallIdleWorker(*dispatcher);
+
+        host::PreviewQueueWiringTestAccess::SetEpoch(*dispatcher, 3u);
+        worker.Enqueue(makeJob(1000, 3u));  // stale after the clear
+        worker.Enqueue(makeJob(1001, 4u));  // current after the clear
+
+        const size_t before = worker.QueuedCount();
+        const size_t dropped =
+            host::PreviewQueueWiringTestAccess::Clear(*dispatcher);
+        const unsigned epoch =
+            host::PreviewQueueWiringTestAccess::Epoch(*dispatcher);
+        const size_t queued = worker.QueuedCount();
+
+        // This second cleanup identifies the survivor, not just its count. A
+        // wrong call with epoch 3 also reports dropped=1 and queued=1, but it
+        // leaves the stale epoch-3 job; the correct epoch-4 cleanup exposes it.
+        const size_t cleanupDropped = worker.DropStaleQueued(4u);
+        const size_t cleanupQueued = worker.QueuedCount();
+
+        std::printf(
+            "  production clear observed: before=%zu epoch=%u dropped=%zu "
+            "queued=%zu cleanupDropped=%zu cleanupQueued=%zu\n",
+            before, epoch, dropped, queued, cleanupDropped, cleanupQueued);
+        CHECK(before == 2, "production clear: fixture queues exactly two jobs");
+        CHECK(epoch == 4, "production clear: epoch advances exactly from 3 to 4");
+        CHECK(dropped == 1, "production clear: exactly one stale job is dropped");
+        CHECK(queued == 1, "production clear: exactly one current job survives");
+        CHECK(cleanupDropped == 0,
+              "production clear: survivor already belongs to epoch 4");
+        CHECK(cleanupQueued == 1,
+              "production clear: epoch-4 survivor remains queued");
     }
 
     Gdiplus::GdiplusShutdown(token);

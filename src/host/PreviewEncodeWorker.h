@@ -46,6 +46,8 @@
 
 namespace host {
 
+struct PreviewQueueWiringTestAccess;
+
 class PreviewEncodeWorker {
 public:
     struct Job {
@@ -163,6 +165,17 @@ public:
     }
 
 private:
+    // Deterministic queue-fixture seam for the production-call-site native
+    // test. Always declared (never macro-selected), so test and production
+    // compile the same class layout. The normal constructor above remains the
+    // only production path and still pre-warms GDI+ before starting the worker.
+    struct NoThreadForTest {};
+    PreviewEncodeWorker(HWND hwnd, UINT doneMsg, NoThreadForTest)
+        : m_hwnd(hwnd), m_doneMsg(doneMsg)
+    {
+    }
+    friend struct PreviewQueueWiringTestAccess;
+
     void WorkerLoop()
     {
         for (;;)

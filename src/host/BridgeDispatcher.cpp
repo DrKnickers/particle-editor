@@ -1458,25 +1458,6 @@ void BridgeDispatcher::PreviewCachePut(const std::string& key, PreviewCacheEntry
     }
 }
 
-// [C3] Mod-stack change: drop everything + bump the epoch so in-flight
-// worker results (old stack's pixels) are discarded on arrival.
-void BridgeDispatcher::PreviewCacheClear()
-{
-    m_previewLru.clear();
-    m_previewLruIdx.clear();
-    m_previewInFlight.clear();
-    ++m_previewEpoch;
-    // m_previewInFlight is what BOUNDS the encode queue -- a texture already
-    // queued is never queued twice. Clearing it above without also clearing the
-    // queue removed that bound at the one moment the queue was about to grow:
-    // the palette re-requests everything, each key now misses both the LRU and
-    // the dedupe gate, and the previous epoch's jobs stay queued at up to 4 MB
-    // of raw BGRA each (2026-07 audit, an-audit-finding). Their results would be discarded
-    // on arrival anyway, so dropping them here costs nothing and is the only
-    // thing keeping the two structures in step.
-    if (m_previewWorker) m_previewWorker->DropStaleQueued(m_previewEpoch);
-}
-
 // [C3] UI thread, under the WM_APP_PREVIEW_READY handler: cache each
 // finished encode and tell the web to refetch. Stale-epoch results are
 // dropped (mod switched while the encode was in flight).

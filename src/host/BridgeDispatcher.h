@@ -306,6 +306,18 @@ public:
     void EmitCloseRequested();
 
 private:
+    // Deterministic construction seam for the preview-queue production-call
+    // oracle. Always declared (never macro-selected), so production and test
+    // compile the same class layout. Unlike the normal constructor, this skips
+    // registry/config initialization that is irrelevant to PreviewCacheClear.
+    struct PreviewQueueTestTag {};
+    BridgeDispatcher(LayoutBroker& layout, AcceleratorBridge& accel,
+                     PreviewQueueTestTag)
+        : m_engine(nullptr), m_layout(layout), m_accel(accel), m_emit()
+    {
+    }
+    friend struct PreviewQueueWiringTestAccess;
+
     // Builds the response envelope for one parsed `req` envelope. Single
     // source of truth for the kind-string ladder — both the async
     // `Dispatch` (which emits the response via m_emit) and the sync
@@ -510,7 +522,27 @@ private:
     static constexpr size_t kPreviewLruCap = 64;
     std::unique_ptr<host::PreviewEncodeWorker> m_previewWorker;
     void PreviewCachePut(const std::string& key, PreviewCacheEntry entry);
-    void PreviewCacheClear();
+    // [C3] Mod-stack change: drop everything + bump the epoch so in-flight
+    // worker results (old stack's pixels) are discarded on arrival.
+    size_t PreviewCacheClear()
+    {
+        m_previewLru.clear();
+        m_previewLruIdx.clear();
+        m_previewInFlight.clear();
+        ++m_previewEpoch;
+        // m_previewInFlight is what BOUNDS the encode queue -- a texture
+        // already queued is never queued twice. Clearing it above without also
+        // clearing the queue removed that bound at the one moment the queue was
+        // about to grow: the palette re-requests everything, each key now
+        // misses both the LRU and the dedupe gate, and the previous epoch's jobs
+        // stay queued at up to 4 MB of raw BGRA each (2026-07 audit, an-audit-finding).
+        // Their results would be discarded on arrival anyway, so dropping them
+        // here costs nothing and is the only thing keeping the two structures
+        // in step.
+        return m_previewWorker
+            ? m_previewWorker->DropStaleQueued(m_previewEpoch)
+            : 0;
+    }
 
     // host-state plumbing — pointers borrowed from HostWindow.
     // `m_pParticleSystem` is a pointer-to-unique_ptr so file/new and
