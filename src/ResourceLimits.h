@@ -17,6 +17,13 @@ static const unsigned long kMaxXmlDepth          = 512u;
 // game XML runs to thousands of elements; the largest stock catalogs are well
 // under 100k.
 static const unsigned long kMaxXmlNodes          = 2u * 1000u * 1000u;  // 2M elements
+// Total ATTRIBUTE PAIRS for one document (2026-07 audit, an-audit-finding). A shallow
+// element can carry a large Expat [name,value,...] array while paying for only
+// one XMLNode; XMLNode then copies every pair into a std::map, amplifying each
+// short on-disk attribute into map-node and string allocations. The approved
+// resource budget is document-wide, not per element; a local seven-root corpus
+// snapshot observed a maximum of 61,000 pairs.
+static const unsigned long kMaxXmlAttributes     = 131072u;
 static const unsigned long kMaxCatalogXmlFileCount = 4096u;
 static const unsigned long kMaxCatalogXmlTotalBytes = kMaxXmlFileBytes;
 static const unsigned long kMaxMegNameTableBytes = 16u * 1024u * 1024u; // 16 MiB

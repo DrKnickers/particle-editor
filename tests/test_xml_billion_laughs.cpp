@@ -13,6 +13,12 @@
 // the startup catalog prefetch). onStartElement stops the parser past
 // kMaxXmlDepth, and ~XMLNode tears down iteratively as a belt.
 //
+// Guard 3 (document attributes): XMLNode copies every Expat [name,value] pair
+// into a std::map. A shallow document can therefore amplify many short
+// attributes into map-node/string allocations while paying for only a handful
+// of elements. The approved limit accepts exactly 131,072 pairs and rejects
+// pair 131,073 across the whole document.
+//
 // This test feeds both payloads through XMLTree::parse via a MemoryFile and
 // asserts they THROW promptly, while normal documents (including one nested
 // deeper than any real game file but under the cap) parse WITHOUT throwing.
@@ -21,7 +27,7 @@
 #include "xml.h"
 #include "files.h"
 #include "exceptions.h"
-#include "ResourceLimits.h"   // kMaxXmlNodes (breadth cap)
+#include "ResourceLimits.h"   // existing depth/breadth production constants
 
 #include <cstdio>
 #include <cstring>
@@ -40,6 +46,33 @@ static MemoryFile* makeFile(const std::string& text)
     if (!text.empty()) f->write(text.data(), (unsigned long)text.size());
     f->seek(0);
     return f;
+}
+
+// Build a shallow document whose attributes are split across two siblings.
+// This is deliberately NOT one giant element: a mistaken per-element cap would
+// accept the over-budget document, while the required document-wide counter
+// rejects it. Attribute names are unique within each element as XML requires.
+static std::string makeAttributeDocument(unsigned long attributeCount)
+{
+    const unsigned long leftCount = attributeCount / 2;
+    std::string xml;
+    xml.reserve((size_t)attributeCount * 16u + 64u);
+    xml += "<root><left";
+    for (unsigned long i = 0; i < leftCount; ++i)
+    {
+        xml += " a";
+        xml += std::to_string(i);
+        xml += "=\"v\"";
+    }
+    xml += "/><right";
+    for (unsigned long i = leftCount; i < attributeCount; ++i)
+    {
+        xml += " a";
+        xml += std::to_string(i);
+        xml += "=\"v\"";
+    }
+    xml += "/></root>";
+    return xml;
 }
 
 int main()
@@ -198,6 +231,59 @@ int main()
         catch (...) { threw = true; }
         CHECK(!threw, "100k sibling elements still parse (cap is above anything real)");
         CHECK(!threw && tree.getRoot() != NULL, "wide-but-legal document yields a root");
+        f->Release();
+    }
+
+    // --- F: one below the approved literal attribute limit remains
+    // accepted. Do not derive this fixture from kMaxXmlAttributes: a wrong
+    // production constant must not move the test oracle with it.
+    {
+        const std::string xml = makeAttributeDocument(131071u);
+        MemoryFile* f = makeFile(xml);
+        XMLTree tree;
+        bool threw = false;
+        try { tree.parse(f); }
+        catch (...) { threw = true; }
+        CHECK(!threw, "131071 document-wide attributes parse (under contract)");
+        CHECK(!threw && tree.getRoot() != NULL
+              && tree.getRoot()->getNumChildren() == 2,
+              "131071-attribute document yields both sibling elements");
+        f->Release();
+    }
+
+    // --- G: the exact literal boundary is accepted. This kills an off-by-one
+    // comparison and a cap-1 implementation.
+    {
+        const std::string xml = makeAttributeDocument(131072u);
+        MemoryFile* f = makeFile(xml);
+        XMLTree tree;
+        bool threw = false;
+        try { tree.parse(f); }
+        catch (...) { threw = true; }
+        CHECK(!threw, "131072 document-wide attributes parse (exact contract)");
+        CHECK(!threw && tree.getRoot() != NULL
+              && tree.getRoot()->getNumChildren() == 2,
+              "131072-attribute document yields both sibling elements");
+        f->Release();
+    }
+
+    // --- H: one over the literal boundary aborts the WHOLE document through
+    // XML_StopParser and surfaces specifically as XMLTree's ParseException.
+    // Catching any exception would allow an unrelated allocation/syntax failure
+    // to masquerade as enforcement.
+    {
+        const std::string xml = makeAttributeDocument(131073u);
+        MemoryFile* f = makeFile(xml);
+        XMLTree tree;
+        bool parseFailure = false;
+        bool otherFailure = false;
+        try { tree.parse(f); }
+        catch (ParseException&) { parseFailure = true; }
+        catch (...) { otherFailure = true; }
+        CHECK(parseFailure,
+              "131073 document-wide attributes raise ParseException (over contract)");
+        CHECK(!otherFailure,
+              "131073-attribute rejection is the parser-abort path, not another exception");
         f->Release();
     }
 

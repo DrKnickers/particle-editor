@@ -93,6 +93,10 @@ static thread_local unsigned long g_xmlDepth  = 0;
 // vector and an attribute map, so the heap cost is a large multiple of the
 // bytes on disk (2026-07 audit, an-audit-finding).
 static thread_local unsigned long g_xmlNodes  = 0;
+// Total Expat [name,value] attribute pairs seen in THIS parse. Attribute maps
+// are owned by XMLNode, so this is document-wide for the same reason g_xmlNodes
+// is: a per-element cap would still multiply without bound across siblings.
+static thread_local unsigned long g_xmlAttributes = 0;
 
 static void onStartElement(void* userData, const XML_Char *name, const XML_Char **atts)
 {
@@ -112,6 +116,33 @@ static void onStartElement(void* userData, const XML_Char *name, const XML_Char 
 		if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
 		return;
 	}
+
+	// Count Expat's NULL-terminated [name,value,...] pairs BEFORE constructing
+	// XMLNode (which copies every pair into its std::map). Use a subtraction-
+	// derived remaining budget instead of `total + incoming`: both the local
+	// count and final accumulation are then unable to overflow. The exact
+	// kMaxXmlAttributes boundary is accepted; the next pair stops the whole
+	// document through the same ParseException path as the depth/node guards.
+	if (g_xmlAttributes > kMaxXmlAttributes)
+	{
+		if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+		return;
+	}
+	const unsigned long remaining = kMaxXmlAttributes - g_xmlAttributes;
+	unsigned long attributeCount = 0;
+	const XML_Char **attr = atts;
+	while (attr && attr[0] && attr[1])
+	{
+		if (attributeCount >= remaining)
+		{
+			if (g_xmlParser != NULL) XML_StopParser(g_xmlParser, XML_FALSE);
+			return;
+		}
+		++attributeCount;
+		attr += 2;
+	}
+	g_xmlAttributes += attributeCount;
+
 	XMLTree* tree = (XMLTree*)userData;
 	XMLNode* node = new XMLNode(tree->current, name, atts);
 	if (tree->current == NULL)
@@ -228,6 +259,7 @@ void XMLTree::parse(IFile* file)
 	g_xmlParser = parser;   // F-XML: for onEntityDecl's / onStartElement's XML_StopParser
 	g_xmlDepth  = 0;        // fresh depth per parse (thread_local survives across calls)
 	g_xmlNodes  = 0;        // ...and a fresh element count
+	g_xmlAttributes = 0;    // ...and fresh document-wide attribute accounting
 	XML_SetEntityDeclHandler(parser, onEntityDecl);        // F-XML: reject custom entity declarations
 
 	try
