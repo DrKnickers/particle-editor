@@ -1,9 +1,5 @@
-// leave-particles round-trip spec (Task 2.7). Drives the new
-// `engine/set/leave-particles` bridge surface against the live native
-// host and verifies the next snapshot reflects the mutated value.
-//
-// Restores the original value at the end so the spec is order-
-// independent within the native-tests run.
+// leave-particles document-mutation contract. Drives the production bridge,
+// UndoStack, and snapshot paths against the live native host.
 
 import { test, expect, chromium, type Page, type Browser } from "@playwright/test";
 
@@ -29,33 +25,90 @@ test.afterAll(async () => {
   await browser?.close();
 });
 
-test("engine/set/leave-particles round-trips through snapshot", async () => {
-  const original = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
-    const s = await b.request({ kind: "engine/state/snapshot", params: {} });
-    return s.leaveParticles as boolean;
-  });
+type BridgeReq = { kind: string; params: unknown };
+type State = {
+  leaveParticles: boolean;
+  paused: boolean;
+  dirty: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+};
 
-  const after = await page.evaluate(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
-    await b.request({
-      kind: "engine/set/leave-particles",
-      params: { enabled: false },
-    });
-    const s = await b.request({ kind: "engine/state/snapshot", params: {} });
-    return s.leaveParticles as boolean;
-  });
-  expect(after).toBe(false);
+async function req<T = unknown>(kind: string, params: unknown = {}): Promise<T> {
+  return page.evaluate(
+    ({ kind, params }: BridgeReq) =>
+      (window as unknown as {
+        bridge: { request: (request: BridgeReq) => Promise<unknown> };
+      }).bridge.request({ kind, params }),
+    { kind, params } as BridgeReq,
+  ) as Promise<T>;
+}
 
-  // Restore so the spec doesn't bleed into later runs.
-  await page.evaluate(async (orig) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const b = (window as any).bridge;
-    await b.request({
-      kind: "engine/set/leave-particles",
-      params: { enabled: orig },
-    });
-  }, original);
+const state = () => req<State>("engine/state/snapshot");
+const setLeaveParticles = (enabled: boolean) =>
+  req("engine/set/leave-particles", { enabled });
+const undo = () =>
+  req<{ applied: boolean }>("undo/perform", { direction: "undo" });
+const redo = () =>
+  req<{ applied: boolean }>("undo/perform", { direction: "redo" });
+
+test("leave-particles undo/redo restores exact values while paused stays view-only", async () => {
+  const pausedBefore = (await state()).paused;
+  try {
+    await req("file/new");
+    const initial = await state();
+    expect(initial.dirty).toBe(false);
+    expect(initial.canUndo).toBe(false);
+
+    const changedValue = !initial.leaveParticles;
+    await setLeaveParticles(changedValue);
+    const changed = await state();
+    expect.soft(changed.leaveParticles).toBe(changedValue);
+    expect.soft(changed.dirty).toBe(true);
+    expect.soft(changed.canUndo).toBe(true);
+
+    // Paused is a toolbar/view-only toggle. If undo capture is broadened to
+    // engine/set/* instead of staying on this serialized field, this undo lands
+    // on a duplicate changedValue snapshot instead of the exact initial value.
+    await req("engine/set/paused", { paused: !pausedBefore });
+    expect.soft(await undo()).toEqual({ applied: true });
+    const undone = await state();
+    expect.soft(undone.leaveParticles).toBe(initial.leaveParticles);
+    expect.soft(undone.dirty).toBe(false);
+    expect.soft(undone.paused).toBe(!pausedBefore);
+    expect.soft(undone.canRedo).toBe(true);
+    expect.soft(undone.canUndo).toBe(false);
+
+    // A no-op while sitting on the redo branch must not truncate it.
+    await setLeaveParticles(initial.leaveParticles);
+    const afterUndoNoOp = await state();
+    expect.soft(afterUndoNoOp.canUndo).toBe(false);
+    expect.soft(afterUndoNoOp.canRedo).toBe(true);
+    expect.soft(await redo()).toEqual({ applied: true });
+    const redone = await state();
+    expect.soft(redone.leaveParticles).toBe(changedValue);
+    expect.soft(redone.dirty).toBe(true);
+    expect.soft(redone.paused).toBe(!pausedBefore);
+  } finally {
+    await req("engine/set/paused", { paused: pausedBefore });
+    await req("file/new");
+  }
+});
+
+test("a same-value leave-particles request creates no undo entry or dirty state", async () => {
+  try {
+    // A fresh document is both the saved-state baseline and an empty undo
+    // stack, which makes capture-before-compare overreach observable.
+    await req("file/new");
+    const initial = await state();
+    await setLeaveParticles(initial.leaveParticles);
+
+    const afterNoOp = await state();
+    expect.soft(afterNoOp.leaveParticles).toBe(initial.leaveParticles);
+    expect.soft(afterNoOp.dirty).toBe(false);
+    expect.soft(afterNoOp.canUndo).toBe(false);
+    expect.soft(await undo()).toEqual({ applied: false });
+  } finally {
+    await req("file/new");
+  }
 });

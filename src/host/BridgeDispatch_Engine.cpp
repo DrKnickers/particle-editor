@@ -344,7 +344,18 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         bool enabled = params.value("enabled", true);
         if (m_pParticleSystem != nullptr && *m_pParticleSystem)
         {
-            (*m_pParticleSystem)->setLeaveParticles(enabled);
+            ParticleSystem* sys = m_pParticleSystem->get();
+            if (sys->getLeaveParticles() == enabled)
+            {
+                ctx.SendOk(json::object());
+                return true;
+            }
+
+            // This flag is serialized document state, so snapshot the exact
+            // pre-toggle value. A same-value request is not an edit and must
+            // not manufacture an undo step or dirty the document.
+            captureUndo();
+            sys->setLeaveParticles(enabled);
             ctx.SendOk(json::object());
             ctx.MarkDirty();
             EmitEngineStateChanged();
