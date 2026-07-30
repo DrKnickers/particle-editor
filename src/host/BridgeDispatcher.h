@@ -366,7 +366,9 @@ private:
     // still captures (aux stays {0,0,0}) instead of dereferencing null.
     // Preserves both capture paths: coalesceKey!=0 -> CapturePreCoalesced,
     // else -> Capture, matching the lambda it replaces.
-    void CaptureUndoPoint(DWORD coalesceKey);
+    void CaptureUndoPoint(
+        DWORD coalesceKey,
+        UndoStack::BudgetRetention retention = UndoStack::BudgetRetention::Normal);
 
     // ---- Promoted DispatchInternal helpers ----
     // Formerly lambdas defined mid-ladder inside DispatchInternal; promoted to

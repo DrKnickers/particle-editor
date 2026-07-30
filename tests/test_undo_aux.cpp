@@ -12,6 +12,8 @@
 //      last pre-fold value (the bug the design review caught)
 //   4. different coalesce keys do NOT fold (per-field granularity)
 //   5. a defaulted capture (no aux arg) yields {0,0,0} (legacy back-compat)
+//   6. the shipped byte budget is 256 MiB
+//   7. only the explicit immediate-pair policy retains two over-budget entries
 //
 // Build/run: tests\build_test_undo_aux.bat ; tests\test_undo_aux.exe
 // Expects the final line "=== undo aux: ALL PASS ===" and exit code 0.
@@ -169,7 +171,70 @@ static void test_default_aux_is_zero(ParticleSystem& ps)
     CHECK(auxEq(got, mkAux(0,0,0,0,0,0)), "defaulted aux is {0,0,0}");
 }
 
-// 6. Aggregate byte budget (2026-07 audit, an-audit-finding).
+// 6. The constructor default itself is part of the production memory policy.
+// Compare the actual member against a literal value rather than the class
+// constant, so changing MAX_TOTAL_BYTES cannot make this test pass tautologically.
+static void test_default_byte_budget_and_override_guard(ParticleSystem& ps)
+{
+    UndoStack u;
+    CHECK(u.MaxTotalBytes() == 256u * 1024u * 1024u,
+          "default byte budget: actual stack limit is exactly 256 MiB");
+    CHECK(u.SetMaxTotalBytesForTesting(1),
+          "test byte budget: empty synchronized stack accepts an override");
+
+    u.Capture(ps, SIZE_MAX, 0);
+    CHECK(!u.SetMaxTotalBytesForTesting(2),
+          "test byte budget: non-empty/live-ahead stack refuses reconfiguration");
+
+    u.Clear();
+    CHECK(u.SetMaxTotalBytesForTesting(2),
+          "test byte budget: Clear re-enables safe reconfiguration");
+}
+
+// 7. The auto-capture exception retains exactly the immediate PRE + LIVE pair
+// even when each real snapshot exceeds the entire injected budget. A following
+// ordinary capture must leave the exception and resume one-entry enforcement.
+static void test_byte_budget_preserves_only_immediate_pair(ParticleSystem& ps)
+{
+    UndoStack u(1);
+    const UndoStack::EditorAux pre  = mkAux(1, 2, 3, 4, 5, 6);
+    const UndoStack::EditorAux live = mkAux(7, 8, 9, 10, 11, 12);
+    const UndoStack::EditorAux next = mkAux(13, 14, 15, 16, 17, 18);
+
+    u.Capture(ps, SIZE_MAX, 0, pre);
+    u.Capture(ps, SIZE_MAX, 0, live,
+              UndoStack::BudgetRetention::PreserveImmediatePair);
+
+    CHECK(u.Depth() == 2,
+          "immediate-pair budget: PRE and LIVE both survive byte pressure");
+    CHECK(u.Cursor() == 2,
+          "immediate-pair budget: cursor remains at the two-entry tip");
+    CHECK(u.TotalBytes() > u.MaxTotalBytes(),
+          "immediate-pair budget: exception is soft, not a doubled hard cap");
+    CHECK(u.CanUndo(),
+          "immediate-pair budget: PRE remains reachable");
+
+    const std::vector<char>* buf = nullptr; size_t sel = 0;
+    UndoStack::EditorAux got;
+    CHECK(u.Undo(&buf, &sel, &got),
+          "immediate-pair budget: Undo reaches PRE");
+    CHECK(auxEq(got, pre),
+          "immediate-pair budget: Undo restores PRE aux");
+    CHECK(u.Redo(&buf, &sel, &got),
+          "immediate-pair budget: Redo reaches LIVE");
+    CHECK(auxEq(got, live),
+          "immediate-pair budget: Redo restores LIVE aux");
+
+    u.Capture(ps, SIZE_MAX, 0, next);
+    CHECK(u.Depth() == 1,
+          "immediate-pair budget: following normal capture retains only one");
+    CHECK(u.Cursor() == 1,
+          "immediate-pair budget: normal eviction keeps cursor at surviving tip");
+    CHECK(!u.CanUndo(),
+          "immediate-pair budget: exception does not leak into normal captures");
+}
+
+// 8. Aggregate byte budget (2026-07 audit, an-audit-finding).
 //
 // MAX_ENTRIES caps HOW MANY snapshots are resident and says nothing about how
 // large they are. Snapshot size scales with emitter and track-key count, both
@@ -208,7 +273,7 @@ static void test_byte_budget_evicts_oldest()
           "byte budget: the restored snapshot is a whole entry, not a truncated one");
 }
 
-// 7. A single snapshot larger than the entire budget must still be kept -- a
+// 9. A single snapshot larger than the entire budget must still be kept -- a
 // stack that evicted its only entry could not undo the edit that just
 // happened, which is worse than being over budget.
 static void test_byte_budget_keeps_last_entry()
@@ -237,6 +302,8 @@ int main()
     test_different_keys_dont_fold(ps);
     test_default_aux_is_zero(ps);
     test_ref_transform_key();
+    test_default_byte_budget_and_override_guard(ps);
+    test_byte_budget_preserves_only_immediate_pair(ps);
     test_byte_budget_evicts_oldest();
     test_byte_budget_keeps_last_entry();
 

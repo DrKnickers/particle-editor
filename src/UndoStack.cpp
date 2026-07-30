@@ -74,7 +74,14 @@ size_t UndoStack::TotalBytes() const
     return n;
 }
 
-void UndoStack::EvictToBudget()
+bool UndoStack::SetMaxTotalBytesForTesting(size_t maxTotalBytes)
+{
+    if (!m_entries.empty() || m_liveAhead) return false;
+    m_maxTotalBytes = maxTotalBytes;
+    return true;
+}
+
+void UndoStack::EvictToBudget(size_t minEntriesToKeep)
 {
     // Entry cap first (cheap), then the byte budget. Both evict the OLDEST
     // entry, which is the one the user is least likely to reach for.
@@ -83,11 +90,11 @@ void UndoStack::EvictToBudget()
         m_entries.pop_front();
         if (m_cursor > 0) m_cursor--;
     }
-    // > 1 so the newest entry always survives, however large it is: a stack
-    // that evicted its only snapshot could not undo the edit that just
-    // happened, which is strictly worse than being over budget.
+    // minEntriesToKeep is normally 1 so the newest entry always survives,
+    // however large it is. undo/perform's LIVE auto-capture passes 2: without
+    // the immediately preceding PRE entry, that first Undo has no target.
     size_t total = TotalBytes();
-    while (total > m_maxTotalBytes && m_entries.size() > 1)
+    while (total > m_maxTotalBytes && m_entries.size() > minEntriesToKeep)
     {
         total -= m_entries.front().snapshot.size();
         m_entries.pop_front();
@@ -96,7 +103,8 @@ void UndoStack::EvictToBudget()
 }
 
 bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
-                         DWORD coalesceKey, const EditorAux& aux)
+                         DWORD coalesceKey, const EditorAux& aux,
+                         BudgetRetention retention)
 {
     if (m_applying) return false;
 
@@ -151,7 +159,9 @@ bool UndoStack::Capture(const ParticleSystem& sys, size_t selectedIndex,
     m_entries.push_back(std::move(e));
     m_cursor = m_entries.size();
 
-    EvictToBudget();
+    const size_t minEntriesToKeep =
+        (retention == BudgetRetention::PreserveImmediatePair) ? 2u : 1u;
+    EvictToBudget(minEntriesToKeep);
     return true;
 }
 
@@ -206,7 +216,7 @@ bool UndoStack::CapturePreCoalesced(const ParticleSystem& sys,
     m_entries.push_back(std::move(e));
     m_cursor = m_entries.size();
 
-    EvictToBudget();
+    EvictToBudget(1);
     return true;
 }
 

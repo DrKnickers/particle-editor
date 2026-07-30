@@ -91,6 +91,78 @@ const setProp = (id: number, patch: Record<string, number>) =>
   req("emitters/set-properties", { id, patch });
 const undo = () => req<{ applied: boolean }>("undo/perform", { direction: "undo" });
 const redo = () => req<{ applied: boolean }>("undo/perform", { direction: "redo" });
+type UndoBudgetState = {
+  maxTotalBytes: number;
+  totalBytes: number;
+  depth: number;
+  cursor: number;
+};
+const queryUndoBudget = () => req<UndoBudgetState>("undo/test/budget");
+const setUndoBudget = (maxTotalBytes: number) =>
+  req<UndoBudgetState>("undo/test/budget", { maxTotalBytes });
+
+test("production auto-cap preserves the PRE + LIVE pair at the byte frontier", async () => {
+  // Isolate the host-owned production stack, then query its ACTUAL configured
+  // member before lowering it. This catches both a changed default constant and
+  // HostWindow bypassing that default at construction.
+  await req("file/new");
+  const original = await queryUndoBudget();
+
+  try {
+    expect(original.maxTotalBytes).toBe(256 * 1024 * 1024);
+    expect(original).toMatchObject({ totalBytes: 0, depth: 0, cursor: 0 });
+
+    const limited = await setUndoBudget(1);
+    expect(limited).toMatchObject({
+      maxTotalBytes: 1,
+      totalBytes: 0,
+      depth: 0,
+      cursor: 0,
+    });
+
+    const id = await firstEmitterId();
+    await req("emitters/select", { id });
+    const p0 = await getLifetime(id);
+    const target = Number((p0 + 3).toFixed(3));
+
+    // The normal PRE capture keeps one over-budget entry. Undo then takes the
+    // real production missing-LIVE branch, whose scoped policy must retain PRE
+    // while it captures LIVE.
+    await setLifetime(id, target);
+    expect(await getLifetime(id)).toBeCloseTo(target, 4);
+    let state = await queryUndoBudget();
+    expect(state.depth).toBe(1);
+    expect(state.cursor).toBe(1);
+    expect(state.totalBytes).toBeGreaterThan(state.maxTotalBytes);
+
+    // The test override itself is guarded against altering a live history.
+    await expect(setUndoBudget(2)).rejects.toThrow(
+      "stack must be empty and synchronized",
+    );
+
+    expect(await undo()).toEqual({ applied: true });
+    expect(await getLifetime(id)).toBeCloseTo(p0, 4);
+    state = await queryUndoBudget();
+    expect(state.depth).toBe(2);
+    expect(state.cursor).toBe(1);
+    expect(state.totalBytes).toBeGreaterThan(state.maxTotalBytes);
+
+    expect(await redo()).toEqual({ applied: true });
+    expect(await getLifetime(id)).toBeCloseTo(target, 4);
+    state = await queryUndoBudget();
+    expect(state.depth).toBe(2);
+    expect(state.cursor).toBe(2);
+  } finally {
+    // file/new clears history before both reconfiguration and handoff. The
+    // safe-integer guard keeps cleanup sane under the intentional unbounded-
+    // default mutant, whose precondition assertion fails before configuration.
+    await req("file/new");
+    if (Number.isSafeInteger(original.maxTotalBytes)) {
+      await setUndoBudget(original.maxTotalBytes);
+    }
+    await req("file/new");
+  }
+});
 
 test("a single edit undoes and redoes (auto-cap round-trip)", async () => {
   const id = await firstEmitterId();

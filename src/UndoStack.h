@@ -74,6 +74,20 @@ public:
     // is unchanged; it only truncates history that would otherwise be unbounded.
     static const size_t MAX_TOTAL_BYTES = 256u * 1024u * 1024u;
 
+    // Byte-budget eviction normally retains only the newest snapshot when one
+    // entry alone exceeds the budget. The immediate-pair policy is a narrow
+    // exception for undo/perform's PRE + LIVE pair: retaining both is the only
+    // way the first Undo can still reach the PRE state.
+    //
+    // This is cardinality-based, not a doubled-byte hard cap. Two serialized
+    // snapshots may retain more than 2 * MAX_TOTAL_BYTES when either snapshot
+    // is itself unusually large.
+    enum class BudgetRetention
+    {
+        Normal,
+        PreserveImmediatePair,
+    };
+
     // maxTotalBytes defaults to MAX_TOTAL_BYTES; production never passes it.
     // It is a parameter so the eviction path can be exercised at a threshold a
     // test can actually reach -- constructing 256 MB of real snapshots costs
@@ -88,7 +102,8 @@ public:
     // pushed; false if the call coalesced into an existing entry or
     // was suppressed by the m_applying guard.
     bool Capture(const ParticleSystem& sys, size_t selectedIndex,
-                 DWORD coalesceKey, const EditorAux& aux = {});
+                 DWORD coalesceKey, const EditorAux& aux = {},
+                 BudgetRetention retention = BudgetRetention::Normal);
 
     // PRE-mutation coalescing variant for the bridge. Callers
     // snapshot BEFORE applying the edit, so the FIRST capture of a rapid
@@ -192,21 +207,25 @@ private:
     // See IsLiveAhead(): tracks whether live is skewed ahead of the tip.
     bool              m_liveAhead;
     // Aggregate snapshot budget for this stack; MAX_TOTAL_BYTES unless a
-    // caller overrode it. Const after construction.
+    // test-host override changed it while the stack was empty.
     size_t            m_maxTotalBytes;
 
     // Evict from the front until BOTH caps hold. Called from the two push
     // paths (Capture and CapturePreCoalesced) so they can't drift apart --
     // the entry cap was previously duplicated inline in both.
     //
-    // Always keeps at least one entry: an undo stack holding nothing cannot
-    // restore anything, and a single snapshot over budget is still the only
-    // thing standing between the user and a lost edit.
-    void EvictToBudget();
+    // minEntriesToKeep is normally one. undo/perform's LIVE auto-capture may
+    // request two so the immediately preceding PRE state remains reachable.
+    void EvictToBudget(size_t minEntriesToKeep);
 
 public:
     // Resident snapshot bytes, for tests and diagnostics.
     size_t TotalBytes() const;
+    size_t MaxTotalBytes() const { return m_maxTotalBytes; }
+
+    // Native-test seam. Reconfiguration is safe only before the stack has any
+    // history and while live is synchronized; production never calls this.
+    bool SetMaxTotalBytesForTesting(size_t maxTotalBytes);
 };
 
 #endif

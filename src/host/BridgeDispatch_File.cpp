@@ -12,6 +12,7 @@
 #include "../Autosave.h"       // autosave/check-recovery, autosave/recover
 
 #include <commdlg.h>           // GetOpenFileNameW / GetSaveFileNameW
+#include <limits>
 
 using nlohmann::json;
 
@@ -23,6 +24,55 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
     // verbatim (plan #3A transforms only).
     const json&        params = ctx.params;
     const std::string& id     = ctx.id;
+
+    // Native-only budget seam. It intentionally queries the bound UndoStack
+    // instance rather than echoing UndoStack::MAX_TOTAL_BYTES, so the native
+    // contract test proves HostWindow's shipped construction. Configuration is
+    // allowed only in --test-host and only while the stack is empty/synchronized.
+    if (kind == "undo/test/budget")
+    {
+        if (!m_testHost)
+        {
+            ctx.SendErr("undo/test/budget requires --test-host");
+            return true;
+        }
+        if (!m_undo)
+        {
+            ctx.SendErr("undo/test/budget: undo stack unavailable");
+            return true;
+        }
+        if (params.contains("maxTotalBytes"))
+        {
+            const json& value = params["maxTotalBytes"];
+            if (!value.is_number_unsigned())
+            {
+                ctx.SendErr("undo/test/budget: maxTotalBytes must be a non-negative integer");
+                return true;
+            }
+            const json::number_unsigned_t requested =
+                value.get<json::number_unsigned_t>();
+            if (requested > static_cast<json::number_unsigned_t>(
+                    (std::numeric_limits<size_t>::max)()))
+            {
+                ctx.SendErr("undo/test/budget: maxTotalBytes exceeds size_t");
+                return true;
+            }
+            if (!m_undo->SetMaxTotalBytesForTesting(
+                    static_cast<size_t>(requested)))
+            {
+                ctx.SendErr(
+                    "undo/test/budget: stack must be empty and synchronized");
+                return true;
+            }
+        }
+        ctx.SendOk(json{
+            {"maxTotalBytes", m_undo->MaxTotalBytes()},
+            {"totalBytes", m_undo->TotalBytes()},
+            {"depth", m_undo->Depth()},
+            {"cursor", m_undo->Cursor()},
+        });
+        return true;
+    }
 
     // -------- test-host document-replacement seams ------------------
     //
@@ -102,7 +152,8 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
                 // Route through the chokepoint so the auto-capped
                 // live state carries the CURRENT ref transform (else the first
                 // Ctrl+Z after a gizmo drag would restore an older transform).
-                CaptureUndoPoint(0);
+                CaptureUndoPoint(
+                    0, UndoStack::BudgetRetention::PreserveImmediatePair);
             }
 
             const std::vector<char>* snap = nullptr;

@@ -1480,7 +1480,8 @@ void BridgeDispatcher::CommitReferenceObjectTransform()
 
 // See the header. PRE-mutation capture chokepoint: live PS +
 // selection + (engine-guarded) current reference-object transform as aux.
-void BridgeDispatcher::CaptureUndoPoint(DWORD coalesceKey)
+void BridgeDispatcher::CaptureUndoPoint(
+    DWORD coalesceKey, UndoStack::BudgetRetention retention)
 {
     if (m_undo == nullptr || m_pParticleSystem == nullptr || !*m_pParticleSystem) return;
     const ParticleSystem* sys = m_pParticleSystem->get();
@@ -1504,7 +1505,7 @@ void BridgeDispatcher::CaptureUndoPoint(DWORD coalesceKey)
     if (coalesceKey != 0)
         m_undo->CapturePreCoalesced(*sys, selIdx, coalesceKey, aux);
     else
-        m_undo->Capture(*sys, selIdx, 0, aux);
+        m_undo->Capture(*sys, selIdx, 0, aux, retention);
 }
 
 // Host-facing wrapper for a gizmo gesture — one non-coalescing
