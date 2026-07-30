@@ -277,6 +277,24 @@ ParticleSystemInstance::ParticleSystemInstance(Engine& engine, const ParticleSys
 
 void ParticleSystemInstance::SyncRootEmitters(TimeF currentTime)
 {
+	// A root EmitterInstance is parented directly to this system instance.
+	// Reparenting changes only the authored Emitter::parent, so without this
+	// reconciliation the old root-level instance survives alongside the new
+	// authored child relationship (an-audit-finding).
+	//
+	// Collect first because RemoveEmitter mutates m_emitters and unregisters the
+	// instance from its source Emitter. Child instances are parented to a
+	// particle (or detached after death), so GetParent() == this keeps their
+	// dynamic lifetime intact.
+	vector<EmitterInstance*> staleRoots;
+	for (auto& instance : m_emitters)
+	{
+		if (instance->GetParent() == this && !instance->IsRoot())
+			staleRoots.push_back(instance.get());
+	}
+	for (EmitterInstance* instance : staleRoots)
+		RemoveEmitter(instance);
+
 	const vector<ParticleSystem::Emitter*>& emitters = m_system.getEmitters();
 	for (size_t i = 0; i < emitters.size(); i++)
 	{

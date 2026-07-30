@@ -710,6 +710,96 @@ test("adding a root emitter reaches an already-placed instance", async () => {
   expect(result.after.emitters).toBe(result.before.emitters + 1);
 });
 
+// ── 6. Reparenting a root removes its old root-level live instance ───
+//
+// an-audit-finding. SyncRootEmitters historically only added newly-authored roots.
+// Reparenting a root under another root changed the authored tree in place, so
+// the already-placed ParticleSystemInstance kept the source's old root-level
+// EmitterInstance. The same emitter could later also spawn as the target's
+// child, rendering two live copies from one authored node.
+//
+// The exact value matters in both directions. Three authored roots plus a live
+// lifetime child produce four live emitters before the drop. Afterwards the
+// placed instance, two unrelated roots, and particle-parented child must
+// survive, but the source's stale root-level instance must not.
+test("reparenting a root removes only its stale root instance from an already-placed effect", async () => {
+  const result = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+
+    try { await b.request({ kind: "preview/kill", params: {} }); } catch { /* none attached */ }
+    await b.request({ kind: "file/new", params: {} });
+
+    const initial = await b.request({ kind: "emitters/list", params: {} });
+    const dynamicParentId = initial.root?.children?.[0]?.id;
+    if (typeof dynamicParentId !== "number") throw new Error("seed root missing");
+
+    const dynamicChild = await b.request({
+      kind: "emitters/add-lifetime-child",
+      params: { parentId: dynamicParentId },
+    });
+    if (typeof dynamicChild.newId !== "number" || dynamicChild.newId < 0) {
+      throw new Error("lifetime child missing");
+    }
+
+    const target = await b.request({ kind: "emitters/add-root", params: {} });
+    const source = await b.request({ kind: "emitters/add-root", params: {} });
+    if (typeof target.newId !== "number" || typeof source.newId !== "number") {
+      throw new Error("root setup missing");
+    }
+
+    // Freeze simulation before construction. Each default EmitterInstance
+    // still creates its initial particle, but none can naturally spawn/expire
+    // between the two exact counts.
+    await b.request({ kind: "engine/set/paused", params: { paused: true } });
+    try {
+      await b.request({ kind: "preview/attach", params: { x: 200, y: 200 } });
+      await b.request({ kind: "preview/place", params: {} });
+      const before = await b.request({ kind: "engine/query/live-instances", params: {} });
+
+      const dropped = await b.request({
+        kind: "emitters/drop",
+        params: {
+          mode: "reparent",
+          id: source.newId,
+          targetId: target.newId,
+          slot: "lifetime",
+        },
+      });
+      const after = await b.request({ kind: "engine/query/live-instances", params: {} });
+      const tree = await b.request({ kind: "emitters/list", params: {} });
+      const targetNode = tree.root?.children?.find(
+        (e: { id: number }) => e.id === target.newId,
+      );
+      const child = targetNode?.children?.find(
+        (e: { id: number }) => e.id === source.newId,
+      );
+
+      return {
+        before,
+        after,
+        dropOk: dropped.ok,
+        childRole: child?.role,
+      };
+    } finally {
+      await b.request({ kind: "engine/set/paused", params: { paused: false } });
+    }
+  });
+
+  expect(result.dropOk).toBe(true);
+  expect(result.childRole).toBe("lifetime");
+  expect(result.before.instances).toBe(1);
+  expect(result.before.emitters).toBe(4);
+  expect(result.before.particles).toBe(4);
+  // Specific regression: without removal these remain 4.
+  // Specific overreach: removing every non-root emitter drops both to 2 by
+  // killing the legitimate particle-parented child as well as the stale root.
+  expect(result.after.emitters).toBe(3);
+  expect(result.after.particles).toBe(3);
+  // Reconciliation must not recreate or remove the placed system instance.
+  expect(result.after.instances).toBe(1);
+});
+
 // ── file/open must not carry the previous document's selection ───────
 //
 // 2026-07 audit an-audit-finding. m_selectedEmitterId is a POSITIONAL index, and only

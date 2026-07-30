@@ -125,14 +125,18 @@ public:
 	void StopSpawning();
 	EmitterInstance* SpawnEmitter(TimeF currentTime, size_t idxEmitter, Object3D* parent);
 
-	// Spawn any authored ROOT emitter added since this instance was placed.
+	// Reconcile the root-level live instances with the authored root set:
+	// remove a root instance whose source was reparented, then spawn any
+	// authored ROOT emitter added since this instance was placed.
 	// A ParticleSystemInstance otherwise only ever spawns roots in its
 	// constructor, so an emitter added by Add Root / Paste / Import /
 	// Duplicate / a reparent-to-root never appeared on an already-placed
 	// instance — deletion propagated (via ~Emitter -> RemoveEmitter) but
 	// addition did not. Same user-visible shape as the set-properties gap
-	// fixed in #682. Idempotent; children are NOT handled here because they
-	// are spawned dynamically by their parent's lifetime/death events.
+	// fixed in #682. Idempotent; dynamic children are NOT removed here because
+	// they are parented to particles (or detached after a death event), not to
+	// the ParticleSystemInstance. m_spawnedRootIds remains one-shot history:
+	// removing a stale root must not make it eligible to spawn again.
 	void SyncRootEmitters(TimeF currentTime);
 
 	// Remove a specific emitter instance, deleting it via the owning unique_ptr.
