@@ -52,6 +52,11 @@ private:
 	vector<Primitive>	   m_primitives;
 	vector<Particle*>      m_particleIndex;
 	Particle*			   m_particleList;
+    // Native diagnostic: the first live particle's values from its most recent
+    // real UpdateParticle pass. Never recomputed by a bridge query.
+    bool                  m_liveSampleValid = false;
+    float                 m_liveSampleRelativeTimePercent = 0.0f;
+    float                 m_liveSampleScale = 0.0f;
 
 	// Rendering
 	D3DXMATRIX			m_textureTransform;
@@ -91,6 +96,7 @@ public:
 	void  ReleaseDeviceTextures();
 	void  ReacquireDeviceTextures(const Engine& engine);
 	int   Update(TimeF currentTime);
+    bool  GetFirstLiveParticleSample(LiveParticleSample& sample) const;
 	void  Render(IDirect3DDevice9* pDevice);
 	void  StopSpawning();
 	bool  IsHeatEmitter() const   { return !m_engine.GetHeatDebug() && m_emitter.isHeatParticle; }

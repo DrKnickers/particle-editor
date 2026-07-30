@@ -15,6 +15,18 @@ void ParticleSystemInstance::onParticleSystemChanged(const Engine& engine, int t
 	}
 }
 
+void ParticleSystemInstance::AppendLiveParticleSamples(
+    int instanceIndex, std::vector<LiveParticleSample>& samples) const
+{
+    for (const auto& emitter : m_emitters)
+    {
+        LiveParticleSample sample;
+        if (!emitter->GetFirstLiveParticleSample(sample)) continue;
+        sample.instanceIndex = instanceIndex;
+        samples.push_back(sample);
+    }
+}
+
 void ParticleSystemInstance::ReleaseDeviceTextures()
 {
     for (auto& emitter : m_emitters)

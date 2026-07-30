@@ -850,3 +850,209 @@ test("file/open resets the selection instead of inheriting the previous document
   // even though native has moved on.
   expect(result.announced).toBe(0);
 });
+
+// ── 6. Paused live samples invalidate after rescale/interpolation ───────────
+//
+// These assertions deliberately read the sample cached by the native
+// EmitterInstance::UpdateParticle path. Query-time re-sampling would prove only
+// the authored track mutation and would stay green if the production
+// OnParticleSystemChanged call stopped waking a paused render.
+
+type LiveParticleSample = {
+  instanceIndex: number;
+  emitterId: number;
+  relativeTimePercent: number;
+  scale: number;
+};
+
+type LiveInstanceState = {
+  instances: number;
+  emitters: number;
+  particles: number;
+  samples: LiveParticleSample[];
+};
+
+type ExpectedLiveState = {
+  instances: number;
+  emitters: number;
+  particles: number;
+  samples: LiveParticleSample[];
+};
+
+async function liveBridgeRequest<T>(
+  kind: string,
+  params: Record<string, unknown> = {},
+): Promise<T> {
+  return page.evaluate(
+    async ({ requestKind, requestParams }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bridge = (window as any).bridge;
+      return bridge.request({ kind: requestKind, params: requestParams });
+    },
+    { requestKind: kind, requestParams: params },
+  ) as Promise<T>;
+}
+
+function normalizeLiveState(state: LiveInstanceState): ExpectedLiveState {
+  return {
+    instances: state.instances,
+    emitters: state.emitters,
+    particles: state.particles,
+    samples: [...state.samples]
+      .sort((a, b) => a.instanceIndex - b.instanceIndex || a.emitterId - b.emitterId)
+      .map((sample) => ({
+        instanceIndex: sample.instanceIndex,
+        emitterId: sample.emitterId,
+        relativeTimePercent: Number(sample.relativeTimePercent.toFixed(3)),
+        scale: Number(sample.scale.toFixed(3)),
+      })),
+  };
+}
+
+function expectedLiveState(
+  targetId: number,
+  targetScale: number,
+  controlId: number,
+  controlScale: number,
+): ExpectedLiveState {
+  return {
+    instances: 1,
+    emitters: 2,
+    particles: 2,
+    samples: [
+      {
+        instanceIndex: 0,
+        emitterId: targetId,
+        relativeTimePercent: 50,
+        scale: targetScale,
+      },
+      {
+        instanceIndex: 0,
+        emitterId: controlId,
+        relativeTimePercent: 50,
+        scale: controlScale,
+      },
+    ].sort((a, b) => a.emitterId - b.emitterId),
+  };
+}
+
+async function waitForLiveState(expected: ExpectedLiveState): Promise<void> {
+  await expect.poll(
+    async () => normalizeLiveState(
+      await liveBridgeRequest<LiveInstanceState>("engine/query/live-instances"),
+    ),
+    {
+      message: "waiting for the native render path to publish its cached live samples",
+      timeout: 5_000,
+      intervals: [16, 32, 64, 100],
+    },
+  ).toEqual(expected);
+}
+
+async function resetLiveInvalidationFixture(): Promise<void> {
+  // Clear while still paused first. Under a deliberately broken rescale
+  // invalidation the live cursors point into the rebuilt key map; unpausing
+  // before Clear would turn the intended stale-value assertion into a crash.
+  await liveBridgeRequest("file/new").catch(() => {});
+  await liveBridgeRequest("engine/set/paused", { paused: false }).catch(() => {});
+}
+
+async function seedHalfwayLiveFixture(): Promise<{ targetId: number; controlId: number }> {
+  await resetLiveInvalidationFixture();
+
+  const list = await liveBridgeRequest<{ root: { children: { id: number }[] } }>(
+    "emitters/list",
+  );
+  const targetId = list.root.children[0]?.id;
+  if (targetId === undefined) throw new Error("file/new did not create a root emitter");
+
+  const added = await liveBridgeRequest<{ newId: number }>("emitters/add-root");
+  const controlId = added.newId;
+  if (controlId < 0) throw new Error("emitters/add-root failed");
+
+  for (const id of [targetId, controlId]) {
+    await liveBridgeRequest("emitters/set-properties", {
+      id,
+      patch: {
+        lifetime: 1,
+        initialDelay: 0,
+        useBursts: false,
+        nParticlesPerSecond: 1,
+        randomLifetimePerc: 0,
+        randomScalePerc: 0,
+        hasTail: false,
+      },
+    });
+    await liveBridgeRequest("emitters/set-track-key", {
+      id,
+      track: "scale",
+      oldTime: 0,
+      newTime: 0,
+      newValue: 0,
+    });
+    await liveBridgeRequest("emitters/set-track-key", {
+      id,
+      track: "scale",
+      oldTime: 100,
+      newTime: 100,
+      newValue: 1,
+    });
+    await liveBridgeRequest("emitters/set-track-interpolation", {
+      id,
+      track: "scale",
+      interpolation: "linear",
+    });
+  }
+
+  await liveBridgeRequest("engine/set/paused", { paused: true });
+  await liveBridgeRequest("preview/attach", { x: 200, y: 200 });
+  await liveBridgeRequest("preview/place");
+  await liveBridgeRequest("engine/action/step-frames", { frames: 30 });
+
+  await waitForLiveState(expectedLiveState(targetId, 0.5, controlId, 0.5));
+  return { targetId, controlId };
+}
+
+test("live invalidation: system rescale updates paused samples without respawning", async () => {
+  try {
+    const { targetId, controlId } = await seedHalfwayLiveFixture();
+    await liveBridgeRequest("engine/action/rescale-system", {
+      durationScalePercent: 100,
+      sizeScalePercent: 200,
+    });
+
+    await waitForLiveState(expectedLiveState(targetId, 1, controlId, 1));
+  } finally {
+    await resetLiveInvalidationFixture();
+  }
+});
+
+test("live invalidation: emitter rescale updates only its paused target sample", async () => {
+  try {
+    const { targetId, controlId } = await seedHalfwayLiveFixture();
+    await liveBridgeRequest("engine/action/rescale-emitter", {
+      id: targetId,
+      durationScalePercent: 100,
+      sizeScalePercent: 200,
+    });
+
+    await waitForLiveState(expectedLiveState(targetId, 1, controlId, 0.5));
+  } finally {
+    await resetLiveInvalidationFixture();
+  }
+});
+
+test("live invalidation: Linear to Step repaints a paused halfway particle", async () => {
+  try {
+    const { targetId, controlId } = await seedHalfwayLiveFixture();
+    await liveBridgeRequest("emitters/set-track-interpolation", {
+      id: targetId,
+      track: "scale",
+      interpolation: "step",
+    });
+
+    await waitForLiveState(expectedLiveState(targetId, 0, controlId, 0.5));
+  } finally {
+    await resetLiveInvalidationFixture();
+  }
+});

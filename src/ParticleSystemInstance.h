@@ -114,6 +114,8 @@ public:
     void ReleaseDeviceTextures();
     void ReacquireDeviceTextures(const Engine& engine);
 	int  Update(TimeF currentTime);
+    void AppendLiveParticleSamples(
+        int instanceIndex, std::vector<LiveParticleSample>& samples) const;
 	void RenderNormal(IDirect3DDevice9* pDevice);
 	void RenderHeat(IDirect3DDevice9* pDevice);
 	// Shared rank-ordered draw pass for RenderNormal/RenderHeat (#574).

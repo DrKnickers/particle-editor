@@ -148,6 +148,16 @@ ParticleSystemInstance* Engine::SpawnParticleSystem(const ParticleSystem& system
 	return m_instances.back().get();
 }
 
+std::vector<LiveParticleSample> Engine::GetLiveParticleSamples() const
+{
+    std::vector<LiveParticleSample> samples;
+    for (size_t i = 0; i < m_instances.size(); ++i)
+    {
+        m_instances[i]->AppendLiveParticleSamples(static_cast<int>(i), samples);
+    }
+    return samples;
+}
+
 // Both entry points take a RAW BORROW of an m_instances entry, and every
 // Clear() frees the lot with no per-holder invalidation hook — see
 // HasInstance() in engine.h. A holder that missed a Clear() therefore hands us

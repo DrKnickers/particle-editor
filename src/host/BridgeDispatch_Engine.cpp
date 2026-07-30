@@ -810,10 +810,21 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
     if (kind == "engine/query/live-instances")
     {
         if (!ctx.RequireEngine(kind.c_str())) return true;
+        json samples = json::array();
+        for (const LiveParticleSample& sample : m_engine->GetLiveParticleSamples())
+        {
+            samples.push_back(json{
+                {"instanceIndex",       sample.instanceIndex},
+                {"emitterId",           sample.emitterId},
+                {"relativeTimePercent", sample.relativeTimePercent},
+                {"scale",               sample.scale},
+            });
+        }
         ctx.SendOk(json{
             {"instances", m_engine->GetNumInstances()},
             {"emitters",  m_engine->GetNumEmitters()},
             {"particles", m_engine->GetNumParticles()},
+            {"samples",   samples},
         });
         return true;
     }

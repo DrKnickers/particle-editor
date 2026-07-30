@@ -524,7 +524,18 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
         }
     }
 
-	float offset = particle.m_baseScale * SampleTrack(particle, ParticleSystem::TRACK_SCALE, relTime) / 2;
+    const float scaleSample =
+        SampleTrack(particle, ParticleSystem::TRACK_SCALE, relTime);
+    if (&particle == m_particleList)
+    {
+        // Keep the diagnostic tied to the value that actually drives rendered
+        // geometry. Reading SampleTrack again from the bridge would bypass the
+        // paused-idle invalidation contract this cache exists to observe.
+        m_liveSampleValid               = true;
+        m_liveSampleRelativeTimePercent = relTime;
+        m_liveSampleScale               = scaleSample;
+    }
+	float offset = particle.m_baseScale * scaleSample / 2;
 
     // Calculate position with constant acceleration:
 	// x(t) = x(0) + v(0) * t + 0.5 * a * t * t
@@ -846,6 +857,10 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 int EmitterInstance::Update(TimeF currentTime)
 {
     int numParticles = 0;
+    // A real update pass replaces the cached observation. When Engine skips a
+    // paused-idle pass this method is not entered, so the prior rendered sample
+    // deliberately remains observable.
+    m_liveSampleValid = false;
 
     if (IsFrozen(currentTime))
 	{
@@ -926,6 +941,15 @@ int EmitterInstance::Update(TimeF currentTime)
 		kills.clear();
 	}
     return numParticles;
+}
+
+bool EmitterInstance::GetFirstLiveParticleSample(LiveParticleSample& sample) const
+{
+    if (!m_liveSampleValid || m_particleList == NULL) return false;
+    sample.emitterId           = static_cast<int>(GetSourceRank());
+    sample.relativeTimePercent = m_liveSampleRelativeTimePercent;
+    sample.scale               = m_liveSampleScale;
+    return true;
 }
 
 void EmitterInstance::StopSpawning()

@@ -103,6 +103,17 @@ void  FreezePreviewClockAt(TimeF anchor);  // pause at a FIXED sim time (headles
 class ParticleSystemInstance;
 class EmitterInstance;
 
+// Read-only diagnostic for the first live particle of one EmitterInstance.
+// Values are cached by the real UpdateParticle render-evaluation path; bridge
+// queries copy them without re-sampling authored tracks.
+struct LiveParticleSample
+{
+    int   instanceIndex       = -1;
+    int   emitterId           = -1;
+    float relativeTimePercent = 0.0f;
+    float scale               = 0.0f;
+};
+
 class Engine
 {
 public:
@@ -533,6 +544,7 @@ public:
     int GetNumEmitters()  const { return m_numEmitters;  }
     int GetNumParticles() const { return m_numParticles; }
     int GetNumInstances() const { return (int)m_instances.size(); }
+    std::vector<LiveParticleSample> GetLiveParticleSamples() const;
     // True while `p` is a live entry of m_instances. Lets a holder of a raw
     // instance pointer re-validate it before deref — every Engine::Clear()
     // (file/new, file/open, the overload hard-guard) frees all instances with

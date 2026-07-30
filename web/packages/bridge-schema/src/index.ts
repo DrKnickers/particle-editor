@@ -1194,7 +1194,17 @@ type ResponseForA<R extends Request> =
   R extends { kind: "engine/query/reference-object-list" } ? { objects: ReferenceObjectEntry[]; building?: boolean } :
   R extends { kind: "engine/query/bloom-available" }     ? boolean :
   R extends { kind: "engine/query/msaa-levels" }         ? { levels: number[]; current: number } :
-  R extends { kind: "engine/query/live-instances" }      ? { instances: number; emitters: number; particles: number } :
+  R extends { kind: "engine/query/live-instances" }      ? {
+    instances: number;
+    emitters: number;
+    particles: number;
+    samples: {
+      instanceIndex: number;
+      emitterId: number;
+      relativeTimePercent: number;
+      scale: number;
+    }[];
+  } :
 
   // Settings (cross-mode registry persistence)
   R extends { kind: "settings/lighting" }                 ? LightingSettingsDto :
