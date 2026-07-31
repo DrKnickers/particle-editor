@@ -88,6 +88,27 @@ static IDirect3DTexture9* LoadTextureViaFileManager(IDirect3DDevice9* pDevice,
     return SUCCEEDED(hr) ? pTex : NULL;
 }
 
+// Render-golden captures need one source whose pixels cannot vary with the
+// installed game or active mod. This intentionally loads bundled slot 1
+// straight from the executable's RCDATA, bypassing FileManager.
+static bool LoadEmbeddedSkydomeSlotOne(IDirect3DDevice9* pDevice,
+                                       IDirect3DTexture9** ppTexture)
+{
+    HMODULE hMod = GetModuleHandle(NULL);
+    HRSRC hRes = FindResource(
+        hMod,
+        MAKEINTRESOURCE(kSkydomeBundledResources[1]),
+        RT_RCDATA);
+    if (!hRes) return false;
+    HGLOBAL hData = LoadResource(hMod, hRes);
+    DWORD dwSize = SizeofResource(hMod, hRes);
+    void* pData = hData ? LockResource(hData) : NULL;
+    if (!pData || !dwSize) return false;
+    const HRESULT hr = D3DXCreateTextureFromFileInMemory(
+        pDevice, pData, dwSize, ppTexture);
+    return SUCCEEDED(hr) && *ppTexture != NULL;
+}
+
 
 // Ground-texture bundled-resource lookup table. 0 = "no bundled
 // resource". Kept in this .cpp (rather than the header) so the .rc IDs
@@ -668,6 +689,20 @@ void Engine::InitSkydomeEffect()
 bool Engine::ReloadSkydomeTexture(int slot)
 {
     SAFE_RELEASE(m_pSkydomeTexture);
+    if (m_skydomeUsesEmbeddedResource)
+    {
+        if (slot == 1 &&
+            LoadEmbeddedSkydomeSlotOne(m_pDevice, &m_pSkydomeTexture))
+        {
+            return true;
+        }
+        // A failed oracle reload must not leave source identity claiming that
+        // an embedded texture is live. Full Reset reaches this path too.
+        m_skydomeIndex = kSkydomeOffSlot;
+        m_skydomeUsesEmbeddedResource = false;
+        SAFE_RELEASE(m_pSkydomeTexture);
+        return false;
+    }
     if (slot == kSkydomeOffSlot) return true;
 
     if (slot > kSkydomeOffSlot && slot < kSkydomeBundledCount)
@@ -1356,7 +1391,11 @@ bool Engine::SetSkydomeSlot(int newIndex)
 {
     if (DeviceCallsBlocked()) return false;
     if (newIndex < 0 || newIndex >= kSkydomeSlotCount) return false;
-    if (newIndex == m_skydomeIndex) return true;
+    const bool wasUsingEmbeddedResource = m_skydomeUsesEmbeddedResource;
+    if (newIndex == m_skydomeIndex && !wasUsingEmbeddedResource) return true;
+    // Every ordinary selection returns to the existing FileManager-first
+    // resolution chain, including re-selecting slot 1 after an oracle capture.
+    m_skydomeUsesEmbeddedResource = false;
     if (!ReloadSkydomeTexture(newIndex))
     {
         // Fall back to Off on failure
@@ -1367,6 +1406,29 @@ bool Engine::SetSkydomeSlot(int newIndex)
     m_skydomeIndex = newIndex;
 #ifndef NDEBUG
     fprintf(stdout, "[Skydome] select slot=%d\n", newIndex);
+#endif
+    return true;
+}
+
+bool Engine::SetEmbeddedSkydomeSlotForCapture(int index)
+{
+    if (DeviceCallsBlocked() || index != 1)
+    {
+        m_skydomeIndex = kSkydomeOffSlot;
+        m_skydomeUsesEmbeddedResource = false;
+        SAFE_RELEASE(m_pSkydomeTexture);
+        return false;
+    }
+
+    m_skydomeUsesEmbeddedResource = true;
+    if (!ReloadSkydomeTexture(index))
+    {
+        // ReloadSkydomeTexture owns the shared failure-to-Off transition.
+        return false;
+    }
+    m_skydomeIndex = index;
+#ifndef NDEBUG
+    fprintf(stdout, "[Skydome] capture embedded slot=%d\n", index);
 #endif
     return true;
 }

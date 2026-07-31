@@ -63,6 +63,7 @@
 #include "WindowCapture.h"  // host::CaptureWindowToPng (factored out for --capture/--snap-window)
 #include "StringConv.h"     // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
 #include "CacheBust.h"   // app.local index.html cache-bust query (workaround)
+#include "CaptureGoldenProfile.h"
 #include "PerfTrace.h"
 #include "WebViewModalPolicy.h"
 #include "WebMessageIngressPolicy.h"   // ShouldAcceptWebMessage (bridge ingress cap)
@@ -871,6 +872,9 @@ struct HostWindowImpl
     // --skydome <slot>: apply this skydome slot in --capture mode before
     // rendering (0 = Off / solid colour, the default).
     int          m_captureSkydomeSlot = 0;
+    // Internal render-oracle profile: ignore persisted view/camera state and
+    // require CaptureRunner to establish the canonical capture view.
+    bool         m_captureGoldenProfile = false;
     // [world-lit] --ambient / --sun / --sun-intensity capture lighting drivers.
     bool         m_captureHasAmbient = false; float m_captureAmbient[3] = {0,0,0};
     bool         m_captureHasSun = false;     float m_captureSun[3] = {0,0,0};
@@ -1142,6 +1146,7 @@ struct HostWindowImpl
                    const std::wstring& capturePng = L"",
                    int captureFrames = 60,
                    int captureSkydome = 0,
+                   bool captureGoldenProfile = false,
                    const std::wstring& captureRef = L"",
                    bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,
                    bool hasSun = false, float sunR = 0.0f, float sunG = 0.0f, float sunB = 0.0f,
@@ -1160,6 +1165,7 @@ struct HostWindowImpl
         , m_capturePng(capturePng)
         , m_captureFrames(captureFrames)
         , m_captureSkydomeSlot(captureSkydome)
+        , m_captureGoldenProfile(captureGoldenProfile)
         , m_captureHasAmbient(hasAmbient)
         , m_captureHasSun(hasSun)
         , m_captureHasSunI(hasSunI)
@@ -3085,7 +3091,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             // dialog's strength value, so the harness must see the
             // constructor defaults (0.00) deterministically, not whatever the
             // dev machine has saved in the registry.
-            if (!useTestHost)
+            if (ShouldRestorePersistedViewSettings(useTestHost, m_captureGoldenProfile))
             {
                 HKEY hKey = nullptr;
                 if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
@@ -3381,6 +3387,12 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         engine->GetSkydomeSlot());
                     RegCloseKey(hKey);
                 }
+            }
+            else if (m_captureGoldenProfile)
+            {
+                fputs("[capture-profile] golden persisted-view-restore=skipped\n", stdout);
+                fflush(stdout);
+                Log("[capture-profile] golden persisted-view-restore=skipped\n");
             }
             Log("[host] Engine constructed OK\n");
         }
@@ -5205,7 +5217,7 @@ int HostWindowImpl::Run(int nCmdShow)
     host::CaptureRunner captureRunner(
         host::CaptureRunner::Params{
             m_captureAlo, m_captureRef, m_capturePng, m_captureFrames,
-            m_captureSkydomeSlot,
+            m_captureSkydomeSlot, m_captureGoldenProfile,
             m_captureHasAmbient,
             {m_captureAmbient[0], m_captureAmbient[1], m_captureAmbient[2]},
             m_captureHasSun,
@@ -6077,6 +6089,7 @@ HostWindow::HostWindow(HINSTANCE hInstance,
                        const std::wstring& capturePng,
                        int captureFrames,
                        int captureSkydome,
+                       bool captureGoldenProfile,
                        const std::wstring& captureRef,
                        bool hasAmbient, float ambR, float ambG, float ambB,
                        bool hasSun, float sunR, float sunG, float sunB,
@@ -6087,7 +6100,7 @@ HostWindow::HostWindow(HINSTANCE hInstance,
     : m_impl(new HostWindowImpl(hInstance, textureManager, shaderManager, fileManager,
                                 gameRoots, useDevUi, useTestHost,
                                 captureAlo, capturePng, captureFrames, captureSkydome,
-                                captureRef,
+                                captureGoldenProfile, captureRef,
                                 hasAmbient, ambR, ambG, ambB,
                                 hasSun, sunR, sunG, sunB,
                                 hasSunI, sunIntensity, driveScriptPath, recordScriptPath,
@@ -6122,6 +6135,7 @@ int Run(HINSTANCE hInstance,
         const std::wstring& capturePng,
         int captureFrames,
         int captureSkydome,
+        bool captureGoldenProfile,
         const std::wstring& captureRef,
         bool hasAmbient, float ambR, float ambG, float ambB,
         bool hasSun, float sunR, float sunG, float sunB,
@@ -6182,7 +6196,7 @@ int Run(HINSTANCE hInstance,
     HostWindow host(hInstance, textureManager, shaderManager, fileManager,
                     gameRoots, useDevUi, useTestHost,
                     captureAlo, capturePng, captureFrames, captureSkydome,
-                    captureRef,
+                    captureGoldenProfile, captureRef,
                     hasAmbient, ambR, ambG, ambB,
                     hasSun, sunR, sunG, sunB,
                     hasSunI, sunIntensity, driveScriptPath, recordScriptPath,

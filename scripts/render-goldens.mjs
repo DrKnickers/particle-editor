@@ -31,13 +31,19 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, copyFileSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { SSIM_MIN, ssim } from "./lib/ssim.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const goldenDir = join(repoRoot, "tests", "goldens", "render");
 const fixturesDir = join(repoRoot, "web", "apps", "editor", "tests", "fixtures");
+
+export const GOLDEN_PROFILE_ARGS = Object.freeze(["--golden-profile", "--skydome", "1"]);
+export const GOLDEN_PROFILE_ATTESTATIONS = Object.freeze([
+  "[capture-profile] golden persisted-view-restore=skipped",
+  "[capture-profile] golden capture-registry-overrides=skipped showGround=0 skydome=1 source=embedded gameDomes=0 skydomeMesh=1",
+]);
 
 const argv = process.argv.slice(2);
 const UPDATE = argv.includes("--update");
@@ -47,9 +53,17 @@ const exe = resolve(
   exeArg >= 0 && argv[exeArg + 1] ? argv[exeArg + 1] : join("x64", "Release", "ParticleEditor.exe"),
 );
 
-const SCENES = [
-  { name: "a11y-base-state", fixture: join(fixturesDir, "a11y-base-state.alo") },
-  { name: "nt-5-singleton", fixture: join(fixturesDir, "nt-5-singleton.alo") },
+export const SCENES = [
+  {
+    name: "a11y-base-state",
+    fixture: join(fixturesDir, "a11y-base-state.alo"),
+    requireTexGate: ["P_PARTICLE_MASTER.TGA", "P_PARTICLE_DEPTH_MASTER.TGA"],
+  },
+  {
+    name: "nt-5-singleton",
+    fixture: join(fixturesDir, "nt-5-singleton.alo"),
+    requireTexGate: ["P_PARTICLE_MASTER.TGA", "P_PARTICLE_DEPTH_MASTER.TGA"],
+  },
   // #481 regression guard: bump-mode (blend 11) emitter with hard alpha-cutout
   // sprites at small on-screen size. Guards the particle-bracket MIPFILTER=NONE
   // default end-to-end: a regression to trilinear re-smears the cutouts into
@@ -79,6 +93,24 @@ function texGateResolved(stdout, name) {
     }
   }
   return false;
+}
+
+export function buildGoldenCaptureArgs(fixture, out, sceneArgs = []) {
+  return ["--capture", fixture, out, ...GOLDEN_PROFILE_ARGS, ...sceneArgs];
+}
+
+export function buildGoldenCaptureEnv(inheritedEnv, requireTexGate) {
+  const env = { ...inheritedEnv };
+  for (const key of Object.keys(env)) {
+    if (/^ALO_/i.test(key)) delete env[key];
+  }
+  if (requireTexGate) env.ALO_SHADER_DIAG = "1";
+  return env;
+}
+
+export function missingGoldenProfileAttestations(stdout) {
+  const lines = new Set(String(stdout ?? "").split(/\r?\n/));
+  return GOLDEN_PROFILE_ATTESTATIONS.filter((attestation) => !lines.has(attestation));
 }
 
 function log(msg) {
@@ -118,17 +150,25 @@ function main() {
     // Quiet by default: the engine logs shader diagnostics on stdout; surface
     // them only when the capture actually fails. Scenes with requireTexGate run
     // with ALO_SHADER_DIAG=1 so the [tex-gate] resolution log is available.
-    // ALO_PARTICLE_MIPFILTER is stripped unconditionally: a caller's shell
-    // override would otherwise make every capture exercise the override path —
-    // and `--update` would silently BLESS those pixels as the golden.
-    const env = { ...process.env, ALO_SHADER_DIAG: scene.requireTexGate ? "1" : undefined };
-    delete env.ALO_PARTICLE_MIPFILTER;
-    if (!scene.requireTexGate) delete env.ALO_SHADER_DIAG;
-    const cap = spawnSync(exe, ["--capture", scene.fixture, out, ...(scene.args ?? [])], {
+    // Strip every inherited ALO_* hook: any one of them could otherwise make
+    // `--update` silently bless pixels from a developer-only override path.
+    const env = buildGoldenCaptureEnv(process.env, Boolean(scene.requireTexGate));
+    const cap = spawnSync(exe, buildGoldenCaptureArgs(scene.fixture, out, scene.args), {
       cwd: repoRoot, encoding: "utf8", shell: false, timeout: 120000, env,
     });
     if (cap.error || cap.status !== 0 || !existsSync(out)) {
       log(`${scene.name}: FAIL — capture exit ${cap.error ? "spawn-error" : cap.status}`);
+      if (cap.stdout) process.stdout.write(cap.stdout);
+      if (cap.stderr) process.stderr.write(cap.stderr);
+      failed++;
+      break retry;
+    }
+    const missingAttestations = missingGoldenProfileAttestations(cap.stdout);
+    if (missingAttestations.length > 0) {
+      // Never compare or bless a capture unless both production call sites
+      // confirm that persisted view state and capture-time registry overrides
+      // were bypassed.
+      log(`${scene.name}: FAIL — golden-profile attestation(s) missing: ${missingAttestations.join(", ")}`);
       if (cap.stdout) process.stdout.write(cap.stdout);
       if (cap.stderr) process.stderr.write(cap.stderr);
       failed++;
@@ -183,4 +223,6 @@ function main() {
   return failed > 0 ? 1 : 0;
 }
 
-process.exit(main());
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exit(main());
+}

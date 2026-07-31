@@ -666,6 +666,13 @@ public:
 	// Slot 0 = Off, slots 1-8 = bundled scenes, slots 9-11 = user-supplied paths.
 	int  GetSkydomeSlot() const { return m_skydomeIndex; }
 	bool SetSkydomeSlot(int index);
+	// Capture-oracle-only selector for the canonical bundled slot 1. Unlike
+	// SetSkydomeSlot, this bypasses FileManager and decodes the embedded RCDATA
+	// directly, so a render golden cannot vary with the installed game/mod.
+	// Any unsupported index or load failure falls back to Off.
+	bool SetEmbeddedSkydomeSlotForCapture(int index);
+	bool IsSkydomeUsingEmbeddedResource() const
+	{ return m_skydomeUsesEmbeddedResource; }
 
 	// Select real game/mod skydomes by GameObject Name for the given
 	// battle context. An empty name clears that slot. Loads + resolves both
@@ -976,7 +983,8 @@ private:
 	void				ReleaseSkydomeMeshBuffers();
 	// compile IDR_SHADER_SKYDOME from RCDATA and cache parameter handles.
 	void				InitSkydomeEffect();
-	// release m_pSkydomeTexture and re-load from slot (bundled or custom).
+	// release m_pSkydomeTexture and re-load from the selected source. The
+	// capture-only embedded-source identity survives a full device Reset.
 	bool				ReloadSkydomeTexture(int slot);
 	// draw the skydome sphere, camera-locked, depth off, cull CW.
 	// Called from Render() when slot != Off and effect/texture are ready.
@@ -1242,6 +1250,7 @@ private:
 	D3DXHANDLE               m_hSkydomeTex;
 	IDirect3DTexture9*       m_pSkydomeTexture;
 	int                      m_skydomeIndex;
+	bool                     m_skydomeUsesEmbeddedResource;
 	std::wstring             m_skydomeCustomSlotPaths[kSkydomeSlotCount - kSkydomeFirstCustomSlot];
 
 	// Game-faithful dome meshes (additive to the simple-background state

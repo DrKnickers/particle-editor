@@ -134,6 +134,7 @@
     <ClInclude Include="host\BridgeDispatchShared.h" />
     <ClInclude Include="host\BridgeRequestContext.h" />
     <ClInclude Include="host\DriveScript.h" />
+    <ClInclude Include="host\CaptureGoldenProfile.h" />
     <ClInclude Include="host\CaptureRunner.h" />
     <ClInclude Include="host\DriveRunner.h" />
     <ClInclude Include="host\HostRunUtil.h" />

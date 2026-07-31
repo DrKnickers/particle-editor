@@ -1696,6 +1696,7 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	m_hSkydomeTex       = NULL;
 	m_pSkydomeTexture   = NULL;
 	m_skydomeIndex      = kSkydomeOffSlot;
+	m_skydomeUsesEmbeddedResource = false;
 	// ground-lighting effect + tangent-space decl + normal-map state
 	m_pGroundEffect            = NULL;
 	m_pGroundDecl              = NULL;

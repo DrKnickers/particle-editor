@@ -46,6 +46,7 @@ public:
                const std::wstring& capturePng = L"",
                int captureFrames = 60,
                int captureSkydome = 0,
+               bool captureGoldenProfile = false,
                const std::wstring& captureRef = L"",
                // [world-lit] headless --capture lighting drivers (opt-in).
                bool hasAmbient = false, float ambR = 0.0f, float ambG = 0.0f, float ambB = 0.0f,

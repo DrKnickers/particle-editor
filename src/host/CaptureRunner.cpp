@@ -8,6 +8,7 @@
 #include "CaptureRunner.h"
 
 #include "AlphaCompositor.h"   // CaptureSnapshotToFile
+#include "CaptureGoldenProfile.h"
 #include "HostRunUtil.h"       // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling
 #include "WindowCapture.h"     // host::CaptureWindowToPng
 
@@ -154,6 +155,15 @@ void CaptureRunner::Init()
     }
     else
     {
+        // Clear persisted game-dome selections before any mod/catalog/fixture
+        // load. Those paths may parse XML and perturb the CRT PRNG; the fixed
+        // seed below must remain the final seed before spawning.
+        if (m_captureGoldenProfile)
+        {
+            engine->SetSkydomeEnvironment(
+                engine->GetSkydomeContext(), std::string(), std::string());
+        }
+
         // Select the mod that owns this .alo BEFORE loading, so the mod's
         // texture overrides resolve instead of base-game art. The editor does this on mod-select; a
         // direct --capture load must do it explicitly or particles
@@ -233,80 +243,121 @@ void CaptureRunner::Init()
             // (default) leaves the solid-colour background untouched.
             if (m_captureSkydomeSlot > 0)
             {
-                const bool sok = engine->SetSkydomeSlot(m_captureSkydomeSlot);
+                const bool sok = m_captureGoldenProfile
+                    ? engine->SetEmbeddedSkydomeSlotForCapture(m_captureSkydomeSlot)
+                    : engine->SetSkydomeSlot(m_captureSkydomeSlot);
                 Log("[capture] skydome slot %d -> %s\n",
                     m_captureSkydomeSlot, sok ? "ok" : "FAILED");
+                if (m_captureGoldenProfile && !sok)
+                    captureFailed = true;
             }
-            // Honor the persisted ShowGround setting in headless --capture too.
-            // The host path (unlike main.cpp startup) never read it, so the
-            // ground was always drawn; a clean background (registry ShowGround=0)
-            // lets a capture isolate the sprite — e.g. the spin test, where
-            // terrain-through-transparency otherwise contaminates the read.
+            if (ShouldReadCaptureRegistryOverrides(m_captureGoldenProfile))
             {
-                HKEY hKey; DWORD gval = 1, gsz = sizeof(gval), gtype = 0;
-                if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
-                                  0, KEY_READ, &hKey) == ERROR_SUCCESS)
+                // Honor the persisted ShowGround setting in headless --capture too.
+                // The host path (unlike main.cpp startup) never read it, so the
+                // ground was always drawn; a clean background (registry ShowGround=0)
+                // lets a capture isolate the sprite — e.g. the spin test, where
+                // terrain-through-transparency otherwise contaminates the read.
                 {
-                    if (RegQueryValueExW(hKey, L"ShowGround", NULL, &gtype,
-                                         (LPBYTE)&gval, &gsz) == ERROR_SUCCESS
-                        && gtype == REG_DWORD)
+                    HKEY hKey; DWORD gval = 1, gsz = sizeof(gval), gtype = 0;
+                    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
+                                      0, KEY_READ, &hKey) == ERROR_SUCCESS)
                     {
-                        engine->SetGround(gval != 0);
-                        Log("[capture] ShowGround=%lu (from registry)\n", gval);
-                    }
-                    RegCloseKey(hKey);
-                }
-            }
-            // Harness: orbit the capture camera by CaptureCamYaw (about Up) then
-            // CaptureCamPitch (about camera-right), and optionally scale distance by
-            // CaptureCamDist (x1000). Yaw/pitch are signed centidegrees stored as the
-            // raw uint32 bit pattern (read back via (int)). Absent keys = no change.
-            // Lets a headless sweep render R(theta) for the de-flicker metric.
-            {
-                HKEY hKey; DWORD raw, gsz, gtype;
-                int yawC = 0, pitchC = 0; DWORD distR = 0;
-                bool haveYaw = false, havePitch = false, haveDist = false;
-                if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
-                                  0, KEY_READ, &hKey) == ERROR_SUCCESS)
-                {
-                    gsz = sizeof(raw);
-                    if (RegQueryValueExW(hKey, L"CaptureCamYaw",   NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { yawC   = (int)raw; haveYaw   = true; }
-                    gsz = sizeof(raw);
-                    if (RegQueryValueExW(hKey, L"CaptureCamPitch", NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { pitchC = (int)raw; havePitch = true; }
-                    gsz = sizeof(raw);
-                    if (RegQueryValueExW(hKey, L"CaptureCamDist",  NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { distR  = raw;      haveDist  = true; }
-                    RegCloseKey(hKey);
-                }
-                if (haveYaw || havePitch || haveDist)
-                {
-                    Engine::Camera cam = engine->GetCamera();
-                    D3DXVECTOR3 up = cam.Up; D3DXVec3Normalize(&up, &up);
-                    D3DXVECTOR3 diff = cam.Position - cam.Target;
-                    if (haveDist && distR > 0) diff *= (float)distR / 1000.0f;
-                    if (haveYaw)
-                    {
-                        D3DXMATRIX r; D3DXMatrixRotationAxis(&r, &up, D3DXToRadian((float)yawC / 100.0f));
-                        D3DXVec3TransformCoord(&diff, &diff, &r);
-                    }
-                    if (havePitch)
-                    {
-                        // right = up x diff; degenerate (zero-length) when the view is
-                        // (near-)parallel to Up, i.e. looking straight down/up -- pitch is
-                        // then undefined, so skip it rather than normalize a garbage/NaN axis.
-                        D3DXVECTOR3 right; D3DXVec3Cross(&right, &up, &diff);
-                        if (D3DXVec3Length(&right) > 1e-4f)
+                        if (RegQueryValueExW(hKey, L"ShowGround", NULL, &gtype,
+                                             (LPBYTE)&gval, &gsz) == ERROR_SUCCESS
+                            && gtype == REG_DWORD)
                         {
-                            D3DXVec3Normalize(&right, &right);
-                            D3DXMATRIX r; D3DXMatrixRotationAxis(&r, &right, D3DXToRadian((float)pitchC / 100.0f));
+                            engine->SetGround(gval != 0);
+                            Log("[capture] ShowGround=%lu (from registry)\n", gval);
+                        }
+                        RegCloseKey(hKey);
+                    }
+                }
+                // Harness: orbit the capture camera by CaptureCamYaw (about Up) then
+                // CaptureCamPitch (about camera-right), and optionally scale distance by
+                // CaptureCamDist (x1000). Yaw/pitch are signed centidegrees stored as the
+                // raw uint32 bit pattern (read back via (int)). Absent keys = no change.
+                // Lets a headless sweep render R(theta) for the de-flicker metric.
+                {
+                    HKEY hKey; DWORD raw, gsz, gtype;
+                    int yawC = 0, pitchC = 0; DWORD distR = 0;
+                    bool haveYaw = false, havePitch = false, haveDist = false;
+                    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
+                                      0, KEY_READ, &hKey) == ERROR_SUCCESS)
+                    {
+                        gsz = sizeof(raw);
+                        if (RegQueryValueExW(hKey, L"CaptureCamYaw",   NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { yawC   = (int)raw; haveYaw   = true; }
+                        gsz = sizeof(raw);
+                        if (RegQueryValueExW(hKey, L"CaptureCamPitch", NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { pitchC = (int)raw; havePitch = true; }
+                        gsz = sizeof(raw);
+                        if (RegQueryValueExW(hKey, L"CaptureCamDist",  NULL, &gtype, (LPBYTE)&raw, &gsz) == ERROR_SUCCESS && gtype == REG_DWORD) { distR  = raw;      haveDist  = true; }
+                        RegCloseKey(hKey);
+                    }
+                    if (haveYaw || havePitch || haveDist)
+                    {
+                        Engine::Camera cam = engine->GetCamera();
+                        D3DXVECTOR3 up = cam.Up; D3DXVec3Normalize(&up, &up);
+                        D3DXVECTOR3 diff = cam.Position - cam.Target;
+                        if (haveDist && distR > 0) diff *= (float)distR / 1000.0f;
+                        if (haveYaw)
+                        {
+                            D3DXMATRIX r; D3DXMatrixRotationAxis(&r, &up, D3DXToRadian((float)yawC / 100.0f));
                             D3DXVec3TransformCoord(&diff, &diff, &r);
                         }
-                        else
-                            Log("[capture] pitch skipped: view parallel to Up (gimbal singularity)\n");
+                        if (havePitch)
+                        {
+                            // right = up x diff; degenerate (zero-length) when the view is
+                            // (near-)parallel to Up, i.e. looking straight down/up -- pitch is
+                            // then undefined, so skip it rather than normalize a garbage/NaN axis.
+                            D3DXVECTOR3 right; D3DXVec3Cross(&right, &up, &diff);
+                            if (D3DXVec3Length(&right) > 1e-4f)
+                            {
+                                D3DXVec3Normalize(&right, &right);
+                                D3DXMATRIX r; D3DXMatrixRotationAxis(&r, &right, D3DXToRadian((float)pitchC / 100.0f));
+                                D3DXVec3TransformCoord(&diff, &diff, &r);
+                            }
+                            else
+                                Log("[capture] pitch skipped: view parallel to Up (gimbal singularity)\n");
+                        }
+                        cam.Position = cam.Target + diff;
+                        engine->SetCamera(cam);
+                        Log("[capture] cam yaw=%.2f pitch=%.2f dist=x%.3f\n",
+                            (float)yawC / 100.0f, (float)pitchC / 100.0f, haveDist ? distR / 1000.0f : 1.0f);
                     }
-                    cam.Position = cam.Target + diff;
-                    engine->SetCamera(cam);
-                    Log("[capture] cam yaw=%.2f pitch=%.2f dist=x%.3f\n",
-                        (float)yawC / 100.0f, (float)pitchC / 100.0f, haveDist ? distR / 1000.0f : 1.0f);
+                }
+            }
+            else
+            {
+                engine->SetGround(false);
+                const bool groundOk = !engine->GetGround();
+                const bool skydomeOk = engine->GetSkydomeSlot() == 1;
+                const bool sourceOk = engine->IsSkydomeUsingEmbeddedResource();
+                const bool gameDomesClear =
+                    engine->GetSkydomePrimaryName().empty() &&
+                    engine->GetSkydomeSecondaryName().empty() &&
+                    !engine->SkydomePrimaryHasGpuBuffers() &&
+                    !engine->SkydomeSecondaryHasGpuBuffers();
+                const bool skydomeMeshOk = engine->SkydomeMeshHasGpuBuffers();
+                if (!captureFailed && groundOk && skydomeOk && sourceOk &&
+                    gameDomesClear && skydomeMeshOk)
+                {
+                    fputs("[capture-profile] golden capture-registry-overrides=skipped "
+                          "showGround=0 skydome=1 source=embedded gameDomes=0 skydomeMesh=1\n",
+                          stdout);
+                    fflush(stdout);
+                    Log("[capture-profile] golden capture-registry-overrides=skipped "
+                        "showGround=0 skydome=1 source=embedded gameDomes=0 skydomeMesh=1\n");
+                }
+                else
+                {
+                    Log("[capture-profile] golden canonical-view=FAILED showGround=%d "
+                        "skydome=%d source=%s gameDomes=%d skydomeMesh=%d\n",
+                        engine->GetGround() ? 1 : 0,
+                        engine->GetSkydomeSlot(),
+                        sourceOk ? "embedded" : "other",
+                        gameDomesClear ? 0 : 1,
+                        skydomeMeshOk ? 1 : 0);
+                    captureFailed = true;
                 }
             }
             // [world-lit] Drive scene lighting from the --ambient / --sun /

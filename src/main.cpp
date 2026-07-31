@@ -41,6 +41,7 @@
 // awareness v2, WebView2) and is x64-only (the only platform the build
 // exposes).
 #include "host/Run.h"
+#include "host/CaptureGoldenProfile.h"
 #include "host/WindowCapture.h"
 #include "host/WebViewModalPolicy.h"  // IsFullyInteractiveSession — gate the pre-host data-path picker
 
@@ -907,6 +908,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// --skydome <slot>: render the capture with a background skydome
 		// (0 = Off / solid colour — the default; 1-8 bundled scenes).
 		int          captureSkydome = 0;
+		// --golden-profile: internal render-oracle profile. Valid only for a
+		// particle --capture with the canonical --skydome 1 view.
+		bool         captureGoldenProfile = false;
 		// [world-lit] --ambient r,g,b / --sun r,g,b / --sun-intensity f:
 		// drive scene lighting in a headless --capture run so a lit shader's
 		// response can be verified offline. Each is opt-in; unset leaves the
@@ -1037,6 +1041,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 			{
 				captureSkydome = _wtoi(argv[i + 1].c_str());
 			}
+			if (argv[i] == L"--golden-profile")
+			{
+				captureGoldenProfile = true;
+			}
 			// [world-lit] --ambient r,g,b: scene ambient (0..1 floats).
 			if (argv[i] == L"--ambient" && i + 1 < argv.size())
 			{
@@ -1103,6 +1111,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		// This used to be a silent surprise; make it explicit so operators notice.
 		if (!captureAlo.empty() && !captureRef.empty())
 			fprintf(stderr, "warning: both --capture and --capture-ref supplied; using --capture-ref\n");
+		if (!host::IsGoldenProfileRequestValid(
+		        captureGoldenProfile,
+		        !captureAlo.empty(),
+		        !capturePng.empty(),
+		        !captureRef.empty(),
+		        captureSkydome))
+		{
+			fwprintf(stderr,
+			         L"--golden-profile requires --capture <alo> <png> --skydome 1 "
+			         L"and cannot be used with --capture-ref\n");
+			return 2;
+		}
 		// Clamp a garbage/zero --frames back to the default.
 		if (captureFrames < 1) captureFrames = 180;
 		// A headless --capture must NEVER pop a modal CRT assert/abort dialog
@@ -1481,7 +1501,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 		                           gameRoots,
 		                           devUi, testHost,
 		                           captureAlo, capturePng, captureFrames,
-		                           captureSkydome, captureRef,
+		                           captureSkydome, captureGoldenProfile, captureRef,
 		                           captureHasAmbient, captureAmbient[0], captureAmbient[1], captureAmbient[2],
 		                           captureHasSun, captureSun[0], captureSun[1], captureSun[2],
 		                           captureHasSunI, captureSunIntensity,

@@ -114,6 +114,9 @@
     <ClInclude Include="host\BridgeRequestContext.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>
+    <ClInclude Include="host\CaptureGoldenProfile.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
     <ClInclude Include="host\CaptureRunner.h">
       <Filter>Header Files\host</Filter>
     </ClInclude>

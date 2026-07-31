@@ -40,6 +40,7 @@ struct CaptureRunnerParams {
     std::wstring m_capturePng;
     int          m_captureFrames       = 180;
     int          m_captureSkydomeSlot  = 0;
+    bool         m_captureGoldenProfile = false;
     bool         m_captureHasAmbient   = false;
     float        m_captureAmbient[3]   = {0, 0, 0};
     bool         m_captureHasSun       = false;

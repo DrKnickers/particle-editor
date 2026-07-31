@@ -56,6 +56,9 @@ int Run(HINSTANCE hInstance,
         // render correctly over a background skydome (regression for the
         // RenderSkydome vertex-declaration leak).
         int captureSkydome = 0,
+        // --golden-profile: internal render-oracle profile. Valid only for
+        // --capture with the canonical skydome slot 1 view.
+        bool captureGoldenProfile = false,
         // --capture-ref <objectName>: render a game reference object (with its
         // shadow) headlessly instead of a particle system. When non-empty (with
         // capturePng), the host builds the GameObject catalog synchronously,
