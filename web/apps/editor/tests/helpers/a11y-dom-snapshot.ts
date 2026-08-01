@@ -29,53 +29,78 @@
 
 import type { Page } from "@playwright/test";
 
+// Exit/morph animations must finish before a snapshot, or the capture races
+// them and records a dying layer. Radix exits are 110ms and the curve morph is
+// sub-second, so this timeout is large headroom for the common case (~0ms when
+// nothing is animating); it only bites when an animation is genuinely stuck.
+// The old value was 2s WITH A SILENT BACKSTOP that snapshotted anyway on
+// expiry — under heavy gate load (all lanes building + capturing) 2s
+// occasionally expired mid-exit and the bad snapshot surfaced as an
+// INTERMITTENT golden mismatch (menubar-view-open, 2026-08). Blocking with a
+// LOUD failure replaces that: a genuinely stuck animation now names itself
+// instead of masquerading as a golden content drift that a refresh would
+// wrongly "fix".
+const A11Y_SETTLE_TIMEOUT_MS = 10_000;
+
+async function settleBeforeSnapshot(
+  page: Page,
+  // Serialized into the browser by Playwright — must close over nothing but
+  // the global `document`.
+  predicate: () => boolean,
+  description: string,
+): Promise<void> {
+  try {
+    await page.waitForFunction(predicate, null, {
+      timeout: A11Y_SETTLE_TIMEOUT_MS,
+    });
+  } catch (err) {
+    // ONLY a genuine settle timeout gets the "stuck animation / do not refresh"
+    // framing. A closed page or context, a navigation, a browser crash, or an
+    // in-page evaluation error is a different failure with its own diagnostic —
+    // rethrow it untouched rather than mislabeling it as an animation that
+    // never settled (and wrongly advising against a golden refresh).
+    const isTimeout =
+      err instanceof Error &&
+      (err.name === "TimeoutError" || /Timeout.*exceeded/i.test(err.message));
+    if (!isTimeout) throw err;
+    throw new Error(
+      `a11y snapshot settle timed out after ${A11Y_SETTLE_TIMEOUT_MS}ms: ` +
+        `${description} did not finish before capture. This is a real stuck ` +
+        `animation, not a golden drift — do NOT refresh the golden to silence it.`,
+      { cause: err },
+    );
+  }
+}
+
 export async function captureDomA11y(page: Page): Promise<string> {
-  // Tooltip exit-animation settle. Keyboard-focus surfaces open
-  // a Radix tooltip on the focused control (instant, deterministic) —
-  // but the PREVIOUS tab stop's tooltip plays a 110ms exit animation
-  // (Radix Presence keeps it mounted while data-state="closed"), so a
-  // snapshot taken mid-exit races it: kbd-tab-cycle-stop-2 and
-  // kbd-emitter-rename-mode flaked golden mismatches on exactly this.
-  // Wait until no exiting tooltip remains; the focused control's OPEN
-  // tooltip stays in the snapshot, which is stable and intended. Costs
-  // ~0ms when no tooltip is exiting (the common case for non-keyboard
-  // surfaces); reduced-motion or a dropped animation can't hang it —
-  // Radix unmounts on animation end and the 2s timeout backstops.
-  // Same race for menu/popover exits since the 2026-07-18 design pass put
-  // .popover-animate on the menubar dropdowns: a surface opened VIA a menu
-  // (e.g. View → Lighting…) snapshots while the menu plays its 110ms exit,
-  // nondeterministically including the whole menu subtree (dialog-lighting
-  // flaked on exactly this). Radix keeps content mounted while
-  // data-state="closed"; wait for both families to finish exiting.
-  await page
-    .waitForFunction(
-      () =>
-        !document.querySelector('.tip-animate[data-state="closed"]') &&
-        !document.querySelector('.popover-animate[data-state="closed"]'),
-      null,
-      { timeout: 2_000 },
-    )
-    .catch(() => {
-      /* backstop: snapshot anyway; the golden diff will say what's left */
-    });
-  // Curve morph-animation settle. The WebView2
-  // host is Chromium, so window.matchMedia exists and the curve morph
-  // (sample-and-tween) RUNS live in the harness whenever a track edit
-  // restructures a curve. A snapshot taken mid-morph would capture the
-  // transient overlay <g data-testid="curve-morph-overlay"> + hidden
-  // static layer instead of the settled curve. Wait until no morph
-  // overlay remains; ~0ms when none is animating (the common case).
-  // Same 2s backstop + catch so a stuck/edge case can't hang capture.
-  await page
-    .waitForFunction(
-      () => !document.querySelector('[data-testid="curve-morph-overlay"]'),
-      null,
-      { timeout: 2_000 },
-    )
-    .catch(() => {
-      /* backstop: snapshot anyway */
-    });
-  // ariaSnapshot on body captures the whole document tree. Returns
-  // canonical YAML (newline-terminated, deterministic key order).
+  // Tooltip + menu/popover exit-animation settle. Keyboard-focus surfaces open
+  // a Radix tooltip on the focused control (instant, deterministic); the
+  // PREVIOUS tab stop's tooltip, and any menu a surface was opened via (the
+  // 2026-07-18 design pass put .popover-animate on the menubar dropdowns, e.g.
+  // View → Lighting…), play a 110ms Radix exit while data-state="closed". A
+  // snapshot taken mid-exit nondeterministically includes the dying subtree —
+  // kbd-tab-cycle-stop-2, kbd-emitter-rename-mode, dialog-lighting and
+  // menubar-view-open have all flaked on exactly this. Wait for both the
+  // tooltip (.tip-animate) and menu/popover (.popover-animate) families to
+  // finish; the focused control's OWN open tooltip stays and is stable.
+  await settleBeforeSnapshot(
+    page,
+    () =>
+      !document.querySelector('.tip-animate[data-state="closed"]') &&
+      !document.querySelector('.popover-animate[data-state="closed"]'),
+    "a menubar/tooltip exit animation",
+  );
+  // Curve morph-animation settle. The WebView2 host is Chromium, so the curve
+  // morph (sample-and-tween) runs live whenever a track edit restructures a
+  // curve. A snapshot taken mid-morph would capture the transient overlay
+  // <g data-testid="curve-morph-overlay"> + the hidden static layer instead of
+  // the settled curve. Wait until no morph overlay remains.
+  await settleBeforeSnapshot(
+    page,
+    () => !document.querySelector('[data-testid="curve-morph-overlay"]'),
+    "a curve morph overlay",
+  );
+  // ariaSnapshot on body captures the whole document tree. Returns canonical
+  // YAML (newline-terminated, deterministic key order).
   return page.locator("body").ariaSnapshot();
 }

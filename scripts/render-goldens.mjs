@@ -29,8 +29,8 @@
 // mismatch, SSIM below threshold, or missing golden (hint: --update).
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, copyFileSync, rmSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
+import { existsSync, mkdirSync, copyFileSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve, dirname, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { SSIM_MIN, ssim } from "./lib/ssim.mjs";
@@ -43,6 +43,11 @@ export const GOLDEN_PROFILE_ARGS = Object.freeze(["--golden-profile", "--skydome
 export const GOLDEN_PROFILE_ATTESTATIONS = Object.freeze([
   "[capture-profile] golden persisted-view-restore=skipped",
   "[capture-profile] golden capture-registry-overrides=skipped showGround=0 skydome=1 source=embedded gameDomes=0 skydomeMesh=1",
+  // The persisted mod-layer stack silently redirects content resolution, so a
+  // golden blessed under one stack need not reproduce under another. layers=0
+  // is asserted, not assumed: the host prints the LIVE count, so a regressed
+  // restore gate prints layers=1 and misses this exact-line match.
+  "[capture-profile] golden persisted-mod-layer-restore=skipped layers=0",
 ]);
 
 const argv = process.argv.slice(2);
@@ -111,6 +116,29 @@ export function buildGoldenCaptureEnv(inheritedEnv, requireTexGate) {
 export function missingGoldenProfileAttestations(stdout) {
   const lines = new Set(String(stdout ?? "").split(/\r?\n/));
   return GOLDEN_PROFILE_ATTESTATIONS.filter((attestation) => !lines.has(attestation));
+}
+
+// Adapter provenance, read from the capture's own stdout so the recorded value
+// is what the device reported rather than what the runner assumed. Line-wise
+// (not /m) because a CRLF stdout defeats an anchored multiline match.
+export function parseGoldenProvenance(stdout) {
+  const re = /^\[capture-profile\] golden adapter=(.*) vendor=(0x[0-9A-Fa-f]+) device=(0x[0-9A-Fa-f]+)$/;
+  for (const line of String(stdout ?? "").split(/\r?\n/)) {
+    const m = re.exec(line);
+    if (m) return { adapter: m[1], vendorId: m[2], deviceId: m[3] };
+  }
+  return null;
+}
+
+// Provenance drift is a diagnostic, never a gate. Swapping GPUs is legitimate,
+// and failing the lane for it would just train people to bless past the
+// warning — which is the habit this whole profile exists to prevent.
+export function provenanceDrift(recorded, current) {
+  if (!recorded || !current) return null;
+  const diffs = ["adapter", "vendorId", "deviceId"]
+    .filter((k) => String(recorded[k]) !== String(current[k]))
+    .map((k) => `${k}: golden=${recorded[k]} current=${current[k]}`);
+  return diffs.length > 0 ? diffs.join("; ") : null;
 }
 
 function log(msg) {
@@ -189,13 +217,35 @@ function main() {
       failed++;
       break retry;
     }
+    // Which adapter drew these pixels. Recorded beside the golden on --update
+    // so that a later "same commit, different image" is a comparison instead of
+    // an investigation.
+    const provenance = parseGoldenProvenance(cap.stdout);
+    const sidecar = join(goldenDir, `${scene.name}.provenance.json`);
     if (UPDATE) {
       copyFileSync(out, golden);
+      if (provenance) {
+        // Repo-relative and forward-slashed: an absolute path would bake this
+        // checkout's location into the repository and churn on every machine
+        // that blesses, while saying nothing extra about what drew the pixels.
+        const exeRelative = relative(repoRoot, exe).split(sep).join("/");
+        writeFileSync(sidecar, `${JSON.stringify({ ...provenance, exe: exeRelative }, null, 2)}\n`);
+      }
       log(`${scene.name}: golden updated (${golden})`);
     } else if (!existsSync(golden)) {
       log(`${scene.name}: FAIL — no golden at ${golden} (bless with --update, then diff-review)`);
       failed++;
     } else {
+      if (existsSync(sidecar)) {
+        let recorded = null;
+        try {
+          recorded = JSON.parse(readFileSync(sidecar, "utf8"));
+        } catch {
+          log(`${scene.name}: WARNING provenance sidecar unreadable (${sidecar})`);
+        }
+        const drift = provenanceDrift(recorded, provenance);
+        if (drift) log(`${scene.name}: WARNING provenance drift — ${drift}`);
+      }
       const s = ssim(golden, out);
       if (!s.ok) {
         const kept = join(tmpdir(), `render-golden-${scene.name}-failed-${process.pid}-a${attempt}.png`);

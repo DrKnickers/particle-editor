@@ -671,6 +671,14 @@ public:
 	// directly, so a render golden cannot vary with the installed game/mod.
 	// Any unsupported index or load failure falls back to Off.
 	bool SetEmbeddedSkydomeSlotForCapture(int index);
+
+	// Adapter that actually created the device. D3DADAPTER_DEFAULT is ordinal 0
+	// — the primary display's adapter, not necessarily the discrete GPU — so a
+	// render golden records this alongside its pixels. Without it, "same commit,
+	// different image" is a guess; with it, it is a comparison.
+	const char*   GetAdapterDescription() const { return m_adapterDescription; }
+	unsigned long GetAdapterVendorId()    const { return m_adapterVendorId; }
+	unsigned long GetAdapterDeviceId()    const { return m_adapterDeviceId; }
 	bool IsSkydomeUsingEmbeddedResource() const
 	{ return m_skydomeUsesEmbeddedResource; }
 
@@ -1468,6 +1476,11 @@ private:
 	IDirect3D9Ex*					m_pDirect3D;
 	D3DPRESENT_PARAMETERS			m_presentationParameters;
 	IDirect3DDevice9Ex*				m_pDevice;
+	// Adapter identity, filled at CreateDeviceEx time. Sized to match
+	// D3DADAPTER_IDENTIFIER9::Description (MAX_DEVICE_IDENTIFIER_STRING).
+	char							m_adapterDescription[512];
+	unsigned long					m_adapterVendorId;
+	unsigned long					m_adapterDeviceId;
 	IDirect3DVertexDeclaration9*	m_pDeclaration;
 
 	// D3D9Ex event query for cross-device

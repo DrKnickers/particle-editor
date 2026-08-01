@@ -284,6 +284,81 @@ int main()
               "Engine initializes ordinary source mode and Reset preserves it");
     }
 
+    // --- 7. MOD-LAYER ISOLATION. The persisted layer stack redirects content
+    // resolution, so a golden blessed under one stack need not reproduce under
+    // another. The restore is SKIPPED rather than cleared-and-restored: a
+    // capture that is killed or times out must not strand the user's stack.
+    {
+        CHECK(host::ShouldRestorePersistedModLayers(false),
+              "ordinary captures still restore the persisted mod-layer stack");
+        CHECK(!host::ShouldRestorePersistedModLayers(true),
+              "golden captures do not restore the persisted mod-layer stack");
+
+        const std::string source = ReadSource(
+            std::filesystem::current_path() / "src" / "host" /
+            "HostWindow.cpp");
+        const std::string compact = WithoutWhitespace(source);
+
+        CHECK(CountOccurrences(source, "RestoreLastLayerStack()") == 1,
+              "HostWindow restores the layer stack from exactly one site");
+        CHECK(compact.find(
+                  "if(ShouldRestorePersistedModLayers(m_captureGoldenProfile))"
+                  "modManager->RestoreLastLayerStack();") != std::string::npos,
+              "the mod-layer restore is directly controlled by the predicate");
+        // No clear-and-restore anywhere: suppressing the read is the whole
+        // point, and a write path would reintroduce the stranding window.
+        CHECK(compact.find("SetLayerStack({})") == std::string::npos &&
+              compact.find("ClearLayerStack(") == std::string::npos,
+              "golden isolation never rewrites the persisted stack");
+        // The attestation must report the LIVE count. A hardcoded zero would
+        // still print layers=0 after the gate above regressed.
+        CHECK(compact.find(
+                  "constsize_tlayers=modManager?"
+                  "modManager->GetLayerStack().size():0;") != std::string::npos,
+              "attested layer count is read from the live stack");
+        CHECK(compact.find(
+                  "\"[capture-profile]golden"
+                  "persisted-mod-layer-restore=skippedlayers=%zu\\n\",layers)") !=
+                  std::string::npos,
+              "host emits the mod-layer attestation with the live count");
+    }
+
+    // --- 8. ADAPTER PROVENANCE. D3DADAPTER_DEFAULT is an ordinal, not a fixed
+    // GPU, so a golden records which adapter drew it. Provenance is reported,
+    // never gated — see the runner test for the never-fails-the-lane binding.
+    {
+        const std::filesystem::path root = std::filesystem::current_path();
+        const std::string header = ReadSource(root / "src" / "engine.h");
+        const std::string core = ReadSource(root / "src" / "engine.cpp");
+        const std::string runner = ReadSource(
+            root / "src" / "host" / "CaptureRunner.cpp");
+        const std::string compactHeader = WithoutWhitespace(header);
+        const std::string compactCore = WithoutWhitespace(core);
+        const std::string compactRunner = WithoutWhitespace(runner);
+
+        CHECK(compactHeader.find(
+                  "constchar*GetAdapterDescription()const"
+                  "{returnm_adapterDescription;}") != std::string::npos,
+              "Engine exposes the adapter description it actually created on");
+        CHECK(compactCore.find(
+                  "strncpy_s(m_adapterDescription,sizeof(m_adapterDescription),"
+                  "adapterIdent.Description,_TRUNCATE);") != std::string::npos,
+              "adapter identity is retained at CreateDeviceEx, not just logged");
+        CHECK(compactCore.find(
+                  "m_adapterVendorId=(unsignedlong)adapterIdent.VendorId;") !=
+                  std::string::npos &&
+              compactCore.find(
+                  "m_adapterDeviceId=(unsignedlong)adapterIdent.DeviceId;") !=
+                  std::string::npos,
+              "vendor and device ids are retained alongside the description");
+        CHECK(compactRunner.find(
+                  "\"[capture-profile]goldenadapter=%svendor=0x%lXdevice=0x%lX\\n\","
+                  "engine->GetAdapterDescription(),"
+                  "engine->GetAdapterVendorId(),"
+                  "engine->GetAdapterDeviceId());") != std::string::npos,
+              "capture runner reports provenance from the live device");
+    }
+
     std::printf("%s\n", g_failed ? "=== FAILED ===" : "=== ALL PASS ===");
     std::printf("(%d failure%s)\n", g_failed, g_failed == 1 ? "" : "s");
     return g_failed ? 1 : 0;

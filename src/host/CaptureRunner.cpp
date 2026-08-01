@@ -347,6 +347,19 @@ void CaptureRunner::Init()
                     fflush(stdout);
                     Log("[capture-profile] golden capture-registry-overrides=skipped "
                         "showGround=0 skydome=1 source=embedded gameDomes=0 skydomeMesh=1\n");
+                    // Provenance, deliberately NOT an attestation: the runner
+                    // records it beside the golden and warns when it drifts.
+                    // Gating on it would make a GPU swap fail the lane, which
+                    // is a reason to investigate, not a reason to go red.
+                    printf("[capture-profile] golden adapter=%s vendor=0x%lX device=0x%lX\n",
+                           engine->GetAdapterDescription(),
+                           engine->GetAdapterVendorId(),
+                           engine->GetAdapterDeviceId());
+                    fflush(stdout);
+                    Log("[capture-profile] golden adapter=%s vendor=0x%lX device=0x%lX\n",
+                        engine->GetAdapterDescription(),
+                        engine->GetAdapterVendorId(),
+                        engine->GetAdapterDeviceId());
                 }
                 else
                 {

@@ -1202,7 +1202,12 @@ struct HostWindowImpl
         // Both calls are quick; they don't touch GPU / WebView2 state.
         // Engine pointer is bound later via SetEngine() in WM_CREATE.
         modManager->DiscoverMods();
-        modManager->RestoreLastLayerStack();
+        // A golden capture resolves content unmodded — see
+        // ShouldRestorePersistedModLayers. Skipping the restore (rather than
+        // clearing and re-writing) means the daily driver's stack is never
+        // touched, so a killed or timed-out capture can't strand it.
+        if (ShouldRestorePersistedModLayers(m_captureGoldenProfile))
+            modManager->RestoreLastLayerStack();
     }
 
     void Log(const char* fmt, ...);
@@ -3390,9 +3395,18 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             else if (m_captureGoldenProfile)
             {
+                // Report the LIVE stack size rather than a constant: if the
+                // restore gate above ever regresses, the count moves off zero,
+                // the golden runner's exact-line match misses, and the capture
+                // fails loudly instead of quietly comparing modded pixels.
+                const size_t layers = modManager ? modManager->GetLayerStack().size() : 0;
                 fputs("[capture-profile] golden persisted-view-restore=skipped\n", stdout);
+                printf("[capture-profile] golden persisted-mod-layer-restore=skipped layers=%zu\n",
+                       layers);
                 fflush(stdout);
                 Log("[capture-profile] golden persisted-view-restore=skipped\n");
+                Log("[capture-profile] golden persisted-mod-layer-restore=skipped layers=%zu\n",
+                    layers);
             }
             Log("[host] Engine constructed OK\n");
         }

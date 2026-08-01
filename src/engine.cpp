@@ -1697,6 +1697,11 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 	m_pSkydomeTexture   = NULL;
 	m_skydomeIndex      = kSkydomeOffSlot;
 	m_skydomeUsesEmbeddedResource = false;
+	// adapter identity — filled at CreateDeviceEx; defined before it so a
+	// failed device creation still reports something rather than garbage.
+	m_adapterDescription[0] = '\0';
+	m_adapterVendorId   = 0;
+	m_adapterDeviceId   = 0;
 	// ground-lighting effect + tangent-space decl + normal-map state
 	m_pGroundEffect            = NULL;
 	m_pGroundDecl              = NULL;
@@ -1819,6 +1824,12 @@ Engine::Engine(HWND hFocus, HWND hDevice, ITextureManager& textureManager, IShad
 		// Adapter info for multi-GPU LUID match debugging.
 		D3DADAPTER_IDENTIFIER9 adapterIdent = {};
 		m_pDirect3D->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &adapterIdent);
+		// Retained (not just logged) so a render golden can record which
+		// adapter produced its pixels — see GetAdapterDescription.
+		strncpy_s(m_adapterDescription, sizeof(m_adapterDescription),
+		          adapterIdent.Description, _TRUNCATE);
+		m_adapterVendorId = (unsigned long)adapterIdent.VendorId;
+		m_adapterDeviceId = (unsigned long)adapterIdent.DeviceId;
 		printf("[D3D9Ex] device created (%s multithreaded) adapter=%s "
 		       "VendorId=0x%lX DeviceId=0x%lX\n",
 		       vpModeName, adapterIdent.Description,

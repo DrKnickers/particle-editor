@@ -36,4 +36,14 @@ inline bool ShouldReadCaptureRegistryOverrides(bool goldenProfile)
     return !goldenProfile;
 }
 
+// The persisted mod-layer stack is a machine-local input: whichever layer the
+// interactive editor last had active silently redirects content resolution. A
+// golden capture must resolve against the unmodded install so the same commit
+// yields the same pixels on another box. Ordinary captures keep the restore —
+// the write-back is already suppressed for them (ModManager ephemeral).
+inline bool ShouldRestorePersistedModLayers(bool goldenProfile)
+{
+    return !goldenProfile;
+}
+
 } // namespace host
