@@ -337,16 +337,29 @@ export function staleBinaryNote(exePath, label, newestSrcMs = newestSourceMtime(
 
 let msbuildPath = null;
 let restored = false;
+// NuGet restore, once per process. Broken out of msbuild() so a lane that builds
+// package-dependent code WITHOUT a full msbuild() call can still guarantee the
+// packages exist — the cpp-unit lane's test_startup_callback_guard compiles a TU
+// that includes WebView2.h from the Microsoft.Web.WebView2 package. Returns 0 on
+// success (or if already restored), nonzero if MSBuild is missing or restore fails.
+function ensureRestored() {
+  if (restored) return 0;
+  if (!msbuildPath) msbuildPath = findMsbuild();
+  if (!msbuildPath) {
+    log("MSBuild not found via vswhere — install VS with the C++ workload.");
+    return 1;
+  }
+  if (runExe(msbuildPath, [sln, "/t:Restore", "/p:RestorePackagesConfig=true", "/v:minimal"]) !== 0) return 1;
+  restored = true;
+  return 0;
+}
 function msbuild(config) {
   if (!msbuildPath) msbuildPath = findMsbuild();
   if (!msbuildPath) {
     log("MSBuild not found via vswhere — install VS with the C++ workload.");
     return 1;
   }
-  if (!restored) {
-    if (runExe(msbuildPath, [sln, "/t:Restore", "/p:RestorePackagesConfig=true", "/v:minimal"]) !== 0) return 1;
-    restored = true;
-  }
+  if (ensureRestored() !== 0) return 1;
   return runExe(msbuildPath, [sln, `/p:Configuration=${config}`, "/p:Platform=x64", "/m", "/v:minimal"]);
 }
 
@@ -368,6 +381,36 @@ function msbuildProject(projectPath, config) {
 const pass = { status: "PASS" };
 const fail = (note) => ({ status: "FAIL", note });
 const skip = (note) => ({ status: "SKIP", note });
+
+// Render-capability preflight for the D3D9 desktop lanes. When the workstation
+// is locked or on the secure/logon desktop — e.g. the nightly gate firing at
+// 04:37 on a locked box — DWM stops compositing and a D3D9 present yields a
+// BLACK frame, so render-goldens / drive-smoke / playwright-native fail as a
+// FALSE rendering regression (#745). Detect the clear locked case and SKIP those
+// lanes VISIBLY instead of running them into a black-frame failure. Deliberately
+// conservative: LogonUI.exe running means the secure desktop is up (locked or a
+// credential prompt) — high confidence, near-zero false positives. It does NOT
+// catch every non-render state (e.g. a display asleep while unlocked), so the
+// lanes keep their own black-frame asserts as the backstop; this only converts
+// the common, unambiguous locked-session failure into a visible skip.
+let _renderDesktop = null;
+function renderDesktopUsable() {
+  if (_renderDesktop) return _renderDesktop;
+  if (process.platform !== "win32") return (_renderDesktop = { ok: true });
+  // Scope to THIS gate's session: a LogonUI in a DIFFERENT session (a locked RDP
+  // or Fast-User-Switching session) must not make an otherwise-usable gate
+  // session skip its render lanes. The spawned PowerShell inherits the node
+  // process's session, so its own SessionId is the gate's session.
+  const r = psCapture(
+    "$s = (Get-Process -Id $PID).SessionId; " +
+    "if (Get-Process LogonUI -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $s }) { 'LOCKED' } else { 'OK' }",
+  );
+  // Probe error → don't block: assume usable and let the lane's own checks rule.
+  _renderDesktop = r.out === "LOCKED"
+    ? { ok: false, reason: "workstation locked / secure desktop active (LogonUI running)" }
+    : { ok: true };
+  return _renderDesktop;
+}
 
 // Missing prereq -> FAIL unless the user explicitly allowed it for this lane.
 function prereq(lane, ok, what, hint) {
@@ -468,6 +511,15 @@ const LANES = [
       // this one small static-lib project keeps the lane early and fast; a dev
       // machine with a prior full build simply rebuilds it as a no-op. (#483)
       if (!SKIP_BUILD) {
+        // test_startup_callback_guard compiles StartupCallbackAdapter.cpp, which
+        // includes WebView2.h from the Microsoft.Web.WebView2 NuGet package. That
+        // package is restored by the LATER msbuild lanes, so on a fresh worktree
+        // (e.g. the nightly gate) the header is absent and the test build fails
+        // with C1083 — a false cpp-unit failure. Restore here as a prereq, the
+        // same shape as the expat static-lib prereq below. (#745)
+        if (ensureRestored() !== 0) {
+          return fail("NuGet restore (prereq for the WebView2-dependent unit test)");
+        }
         const expatProj = join(repoRoot, "libs", "expat-2.2.0", "expatw_static.vcxproj");
         for (const cfg of ["Debug", "Release"]) {
           if (msbuildProject(expatProj, cfg) !== 0) {
@@ -507,6 +559,8 @@ const LANES = [
     name: "playwright-native",
     deps: ["web-build", "msbuild-debug"],
     run: () => {
+      const rd = renderDesktopUsable();
+      if (!rd.ok) return skip(`no interactive render desktop — ${rd.reason}`);
       let p = prereq("playwright-native", existsSync(debugExe), "x64/Debug/ParticleEditor.exe missing", "run the msbuild-debug lane first");
       if (!p) p = prereq("playwright-native", existsSync(distIndex), "web dist/ missing", "run the web-build lane first");
       if (p) return p;
@@ -549,6 +603,8 @@ const LANES = [
     name: "render-goldens",
     deps: ["msbuild-release"],
     run: () => {
+      const rd = renderDesktopUsable();
+      if (!rd.ok) return skip(`no interactive render desktop — ${rd.reason}`);
       const p = prereq("render-goldens", existsSync(releaseExe), "x64/Release/ParticleEditor.exe missing", "run the msbuild-release lane first");
       if (p) return p;
       return runExe(process.execPath, [join(repoRoot, "scripts", "render-goldens.mjs")]) === 0
@@ -614,6 +670,8 @@ const LANES = [
     name: "drive-smoke",
     deps: ["msbuild-release", "web-build"],
     run: () => {
+      const rd = renderDesktopUsable();
+      if (!rd.ok) return skip(`no interactive render desktop — ${rd.reason}`);
       // drive-smoke.ps1 only self-checks the exe; the gate owns the full prereq
       // trio + the fixture its A3 scenario silently skips without.
       const reg = spawnSync("reg.exe", ["query", "HKCU\\Software\\AloParticleEditor", "/v", "GameDataPath"], {
