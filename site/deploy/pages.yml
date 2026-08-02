@@ -25,10 +25,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      - name: Stage page files (exclude dev-only deploy/ + README)
+      - name: Stage page files (exclude dev-only deploy/ + README + guide source)
         run: |
           mkdir _site
-          rsync -a --exclude deploy --exclude README.md --exclude .gitignore --exclude media-local site/ _site/
+          # guide-src/ is BUILD-TIME markdown (built into guide/*.html by build-guide.mjs)
+          # and is not referenced at runtime. Excluding it keeps unpublished drafts
+          # (publish:false in nav.json) from being reachable at their raw .md URLs.
+          rsync -a --exclude deploy --exclude README.md --exclude .gitignore --exclude media-local --exclude guide-src site/ _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
