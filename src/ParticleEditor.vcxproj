@@ -16,6 +16,12 @@
     <RootNamespace>ParticleEditor</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <RestorePackagesConfig>true</RestorePackagesConfig>
+    <!-- Statically link the WebView2 loader (WebView2LoaderStatic.lib) so no
+         WebView2Loader.dll needs to ship. The Microsoft.Web.WebView2.targets
+         import below reads this property: Static swaps the loader lib AND
+         suppresses the copy-to-output of WebView2Loader.dll. Must be set before
+         that import (this Globals group is evaluated first). -->
+    <WebView2LoaderPreference>Static</WebView2LoaderPreference>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">

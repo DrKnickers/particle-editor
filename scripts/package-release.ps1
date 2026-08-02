@@ -22,8 +22,9 @@
 
         <STAGE>/
           x64/Release/
-            ParticleEditor.exe
-            WebView2Loader.dll     # WebView2 runtime loader (dynamic dependency)
+            ParticleEditor.exe     # WebView2 loader is statically linked in (no WebView2Loader.dll);
+                                   # the runtime bootstrapper is NOT bundled -- if the WebView2 runtime
+                                   # is absent the app opens https://aka.ms/webview2 (HostWindow.cpp).
             d3dx9_43.dll           # x64 D3DX9 runtime, vendored at libs/redist/
           web/apps/editor/dist/
             index.html
@@ -123,9 +124,7 @@ Write-Host ""
 
 # --- Resolve + validate source artifacts -------------------------------------
 $exeSource    = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release', 'ParticleEditor.exe')
-$loaderSource = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release', 'WebView2Loader.dll')
 $d3dxSource   = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist', 'd3dx9_43.dll')
-$wv2Source    = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist', 'MicrosoftEdgeWebview2Setup.exe')
 $distSource   = [System.IO.Path]::Combine($RepoRoot, 'web', 'apps', 'editor', 'dist')
 $distIndex    = [System.IO.Path]::Combine($distSource, 'index.html')
 $distAssets   = [System.IO.Path]::Combine($distSource, 'assets')
@@ -142,16 +141,13 @@ foreach ($sourceRoot in $sourceRoots) {
 }
 
 Test-RequiredSource 'ParticleEditor.exe'      $exeSource    'Leaf'
-Test-RequiredSource 'WebView2Loader.dll'      $loaderSource 'Leaf'
 Test-RequiredSource 'd3dx9_43.dll (vendored)' $d3dxSource   'Leaf'
-# The WebView2 LOADER beside the exe is not the RUNTIME. The runtime is a machine
-# component: present on Windows 11 and on Windows 10 with Edge, absent on stripped
-# or LTSC images. Without it the editor starts and immediately tells the user to go
-# install something else -- the same dead end the vendored d3dx9_43.dll exists to
-# avoid. Ship Microsoft's ~2 MB bootstrapper so the editor can offer to install it
-# (see the WebView2 failure path in src/host/HostWindow.cpp), and treat it as
-# REQUIRED so a release can never quietly ship without it.
-Test-RequiredSource 'MicrosoftEdgeWebview2Setup.exe (vendored)' $wv2Source 'Leaf'
+# The WebView2 loader is STATICALLY linked into the exe (vcxproj
+# WebView2LoaderPreference=Static), so no WebView2Loader.dll ships. The WebView2
+# RUNTIME is a separate machine component (present on Windows 11, and Windows 10
+# with Edge; absent on stripped/LTSC images). When it is absent the editor opens
+# https://aka.ms/webview2 for the user (OfferWebView2Install in HostWindow.cpp)
+# rather than bundling Microsoft's ~2 MB bootstrapper.
 Test-RequiredSource 'web bundle (dist)'       $distSource   'Container'
 Test-RequiredSource 'web bundle index.html'   $distIndex    'Leaf'
 Test-RequiredSource 'web bundle assets/'      $distAssets   'Container'
@@ -164,11 +160,9 @@ New-Item -ItemType Directory -Force -Path $stageExeDir  | Out-Null
 New-Item -ItemType Directory -Force -Path $stageDistDir | Out-Null
 
 # --- Copy native artifacts ----------------------------------------------------
-Copy-Item -LiteralPath $exeSource    -Destination $stageExeDir -Force
-Copy-Item -LiteralPath $loaderSource -Destination $stageExeDir -Force
-Copy-Item -LiteralPath $d3dxSource   -Destination $stageExeDir -Force
-Copy-Item -LiteralPath $wv2Source    -Destination $stageExeDir -Force
-Write-Host "  [ok] ParticleEditor.exe, WebView2Loader.dll, d3dx9_43.dll -> $stageExeDir"
+Copy-Item -LiteralPath $exeSource  -Destination $stageExeDir -Force
+Copy-Item -LiteralPath $d3dxSource -Destination $stageExeDir -Force
+Write-Host "  [ok] ParticleEditor.exe, d3dx9_43.dll -> $stageExeDir"
 
 # --- Copy the web bundle CONTENTS (index.html, assets/, fonts/) ---------------
 Get-ChildItem -LiteralPath $distSource -Force | ForEach-Object {
@@ -178,9 +172,7 @@ Write-Host "  [ok] web bundle -> $stageDistDir"
 
 # --- Post-stage assertions (fail loud) ---------------------------------------
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'ParticleEditor.exe'))
-Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'WebView2Loader.dll'))
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'd3dx9_43.dll'))
-Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'MicrosoftEdgeWebview2Setup.exe'))
 Assert-Staged ([System.IO.Path]::Combine('web', 'apps', 'editor', 'dist', 'index.html'))
 $stagedAssets = [System.IO.Path]::Combine($stageDistDir, 'assets')
 if (-not (Test-Path -LiteralPath $stagedAssets -PathType Container) -or
@@ -200,7 +192,7 @@ if (-not (Test-Path -LiteralPath $stagedFonts -PathType Container) -or
 # a faithful copy of dist, so dist pollution is the only way in, and this is
 # where it has to be caught.
 $allowedPatterns = @(
-    '^x64/Release/(ParticleEditor\.exe|WebView2Loader\.dll|d3dx9_43\.dll|MicrosoftEdgeWebview2Setup\.exe)$'
+    '^x64/Release/(ParticleEditor\.exe|d3dx9_43\.dll)$'
     '^web/apps/editor/dist/index\.html$'
     '^web/apps/editor/dist/assets/[^/]+\.(js|css)$'
     '^web/apps/editor/dist/fonts/.+$'
@@ -260,15 +252,12 @@ if ($OutZip) {
         throw "[package-release] Zip is MISSING staged files: $($stageOnly -join ', ')"
     }
 
-    # Every shipped artifact named explicitly, including the WebView2
-    # bootstrapper -- it was previously staged and copied but never asserted in
-    # either the staged tree or the zip, so the one file whose absence #672/#673
-    # exist to prevent was the one file nothing checked.
+    # Every shipped artifact named explicitly. The WebView2 loader is statically
+    # linked (no WebView2Loader.dll) and the runtime bootstrapper is no longer
+    # bundled, so the native payload beside the exe is just d3dx9_43.dll.
     $requiredEntries = @(
         'x64/Release/ParticleEditor.exe'
-        'x64/Release/WebView2Loader.dll'
         'x64/Release/d3dx9_43.dll'
-        'x64/Release/MicrosoftEdgeWebview2Setup.exe'
         'web/apps/editor/dist/index.html'
     )
     foreach ($r in $requiredEntries) {

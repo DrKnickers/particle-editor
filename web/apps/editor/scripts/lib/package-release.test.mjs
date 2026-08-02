@@ -33,9 +33,7 @@ function buildFixture(root, omit = []) {
     writeFileSync(p, content);
   };
   if (!omit.includes("exe")) file("x64/Release/ParticleEditor.exe");
-  if (!omit.includes("loader")) file("x64/Release/WebView2Loader.dll");
   if (!omit.includes("d3dx9")) file("libs/redist/d3dx9_43.dll");
-  if (!omit.includes("wv2")) file("libs/redist/MicrosoftEdgeWebview2Setup.exe");
   if (!omit.includes("dist")) {
     if (!omit.includes("index")) file("web/apps/editor/dist/index.html", "<html></html>");
     if (omit.includes("emptyassets")) mkdirSync(path.join(root, "web/apps/editor/dist/assets"), { recursive: true });
@@ -86,15 +84,15 @@ test("case 1: full fixture stages a complete bundle and a verified zip", skipOpt
   const { res, stage, zip } = runCase(t, []);
   assert.equal(res.status, 0, `expected success; stderr:\n${res.stderr}`);
   assert.ok(staged(stage, "x64", "Release", "ParticleEditor.exe"), "exe staged");
-  assert.ok(staged(stage, "x64", "Release", "WebView2Loader.dll"), "WebView2Loader staged");
   assert.ok(staged(stage, "x64", "Release", "d3dx9_43.dll"), "d3dx9 staged");
-  // The WebView2 LOADER is not the RUNTIME; the bootstrapper is what lets the
-  // editor offer to install the runtime on a machine that lacks it.
-  assert.ok(staged(stage, "x64", "Release", "MicrosoftEdgeWebview2Setup.exe"), "WebView2 bootstrapper staged");
+  // The WebView2 loader is statically linked into the exe (no WebView2Loader.dll)
+  // and the runtime bootstrapper is no longer bundled, so NEITHER may be staged.
+  assert.ok(!staged(stage, "x64", "Release", "WebView2Loader.dll"), "WebView2Loader.dll NOT staged (statically linked)");
+  assert.ok(!staged(stage, "x64", "Release", "MicrosoftEdgeWebview2Setup.exe"), "WebView2 bootstrapper NOT staged");
   assert.ok(staged(stage, "web", "apps", "editor", "dist", "index.html"), "index.html staged");
   assert.ok(staged(stage, "web", "apps", "editor", "dist", "assets", "index-stub.js"), "assets staged");
   assert.ok(staged(stage, "web", "apps", "editor", "dist", "fonts", "stub.woff2"), "fonts staged");
-  // Exit 0 with -OutZip means the script's own zip-entry assertions (exe, loader, d3dx9, index,
+  // Exit 0 with -OutZip means the script's own zip-entry assertions (exe, d3dx9, index,
   // assets/*, fonts/*) all passed; confirm the archive exists and is non-empty.
   assert.ok(existsSync(zip) && statSync(zip).size > 0, "release zip created + verified");
 });
@@ -139,9 +137,7 @@ test("case 1d: refuses -Stage paths that overlap required sources before deletin
 // Negative cases: each must exit non-zero with the specific error substring (not just any failure).
 for (const c of [
   { name: "case 2: missing exe", omit: ["exe"], rx: /Missing required source.*ParticleEditor\.exe/s },
-  { name: "case 3: missing WebView2Loader", omit: ["loader"], rx: /Missing required source.*WebView2Loader\.dll/s },
   { name: "case 4: missing vendored d3dx9", omit: ["d3dx9"], rx: /Missing required source.*d3dx9_43\.dll/s },
-  { name: "case 4b: missing vendored WebView2 bootstrapper", omit: ["wv2"], rx: /Missing required source.*MicrosoftEdgeWebview2Setup\.exe/s },
   { name: "case 5: missing entire dist", omit: ["dist"], rx: /Missing required source.*dist/s },
   { name: "case 6: dist present but assets empty", omit: ["emptyassets"], rx: /no assets/ },
   { name: "case 7: dist present but index.html missing", omit: ["index"], rx: /Missing required source.*index\.html/s },
