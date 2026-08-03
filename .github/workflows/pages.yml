@@ -1,0 +1,52 @@
+# GitHub Pages deploy for the landing site. Publishes the repo's site/ dir (Pages
+# can't serve a /site subfolder, so we stage + upload it as the Pages artifact).
+# README.md and dev-only files are excluded from the published artifact. Actions are
+# disabled on the private repo, so this runs only on the public fork, where Pages is
+# enabled with build_type=workflow.
+name: Deploy landing page
+on:
+  push:
+    branches: [master]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Stage page files (exclude dev-only deploy/ + README + guide source)
+        run: |
+          mkdir _site
+          # guide-src/ is BUILD-TIME markdown (built into guide/*.html by build-guide.mjs)
+          # and is not referenced at runtime. Excluding it keeps unpublished drafts
+          # (publish:false in nav.json) from being reachable at their raw .md URLs.
+          rsync -a --exclude deploy --exclude README.md --exclude .gitignore --exclude media-local --exclude guide-src site/ _site/
+      - name: Mirror site media from the release
+        # The site streams clips from its own media/ dir, populated here from the
+        # site-media release. Serving the release download URLs directly does NOT
+        # work: GitHub sends Content-Disposition: attachment on release assets,
+        # and browsers refuse to play attachment responses as <video> sources.
+        # NOTE: uploading new assets to the release does not redeploy Pages —
+        # re-run this workflow (workflow_dispatch) to refresh the mirror.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p _site/media
+          gh release download site-media -R "$GITHUB_REPOSITORY" --dir _site/media
+          ls _site/media | wc -l
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -3,12 +3,16 @@
 //   <video class="clip-video" data-clip="<id>.mp4" data-poster="<id>-poster.jpg">
 //   <img   class="clip-img"   data-poster="<id>.png">
 // placeholders (emitted by scripts/build-guide.mjs from tasks/wiki-media/manifest.json).
-// This joins them to the media release and plays clips as they scroll into view (muted loop),
-// honoring prefers-reduced-motion. The MEDIA_BASE precedence matches main.js exactly:
-// window.__MEDIA_BASE__ (tests) → ?media= query param (local/VPS preview) → the release URL.
+// This joins them to the Pages-served media mirror and plays clips as they scroll into view
+// (muted loop), honoring prefers-reduced-motion. The MEDIA_BASE precedence matches main.js:
+// window.__MEDIA_BASE__ (tests) → ?media= query param (local preview) → the site's media/
+// directory, which the Pages workflow populates from the site-media release at deploy time.
+// NEVER default to the release download URL itself: GitHub serves release assets with
+// Content-Disposition: attachment, which browsers refuse to play as <video> sources
+// (loadstart → stalled, no error — clips simply never start).
 const params = new URLSearchParams(location.search);
 const override = window.__MEDIA_BASE__ || (params.get("media")?.trim() || null);
-let MEDIA_BASE = override ?? "https://github.com/DrKnickers/particle-editor/releases/download/site-media/";
+let MEDIA_BASE = override ?? "../media/";
 if (!MEDIA_BASE.endsWith("/")) MEDIA_BASE += "/";
 
 const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
