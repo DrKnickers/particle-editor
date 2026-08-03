@@ -8,6 +8,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-03
+
 ### Added
 
 - The reference-object picker now surfaces **Props** and **Templates** as their own sections (they were previously hidden), and adds a "Props only" filter chip to narrow the list to props
