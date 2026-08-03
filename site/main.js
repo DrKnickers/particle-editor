@@ -1,7 +1,10 @@
 // Particle Editor landing — page-owned motion. See the spec §5 + the plan's motion model.
 const params = new URLSearchParams(location.search);
+// Default to the site's own media/ directory (populated from the site-media release by the
+// Pages workflow). NEVER the release download URL: those responses carry
+// Content-Disposition: attachment, which browsers refuse to play as <video> sources.
 const override = window.__MEDIA_BASE__ || (params.get("media")?.trim() || null);
-let MEDIA_BASE = override ?? "https://github.com/DrKnickers/particle-editor/releases/download/site-media/";
+let MEDIA_BASE = override ?? "media/";
 if (!MEDIA_BASE.endsWith("/")) MEDIA_BASE += "/";
 const mediaVersion = params.get("v")?.trim() || null;
 const mediaUrl = (filename) => {
