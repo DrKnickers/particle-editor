@@ -15,6 +15,10 @@ import { Modal } from "@/components/Modal";
 const VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "unknown";
 const BUILD_DATE = (import.meta.env.VITE_BUILD_DATE as string | undefined) ?? "unknown";
 
+// The PUBLIC repo — the user-facing project home. Must never point at the
+// private repo: this string ships inside the exe's embedded web bundle, so a
+// private URL here 404s for every user (it leaked exactly that way in the
+// first v0.3.0 zip before the public flip's binary audit caught it).
 const GITHUB_URL = "https://github.com/DrKnickers/particle-editor";
 
 type Props = {
