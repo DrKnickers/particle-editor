@@ -8,6 +8,10 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+### Fixed
+
+- Resizing the main editor panels now persists between sessions even when the right-hand dock (Spawner / Lighting / Atlas) is closed — previously a resize made with the dock closed was discarded on restart
+
 ## [0.3.0] - 2026-08-02
 
 ### Added
