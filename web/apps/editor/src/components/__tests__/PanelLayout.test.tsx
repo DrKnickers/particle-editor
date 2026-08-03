@@ -31,6 +31,7 @@ import {
   saveLayout,
   resetPanelLayoutStorage,
   collapseDockShare,
+  mergeOuterLayout,
   PANEL_LAYOUT_KEYS,
   type Layout,
 } from "../PanelLayout";
@@ -148,6 +149,49 @@ describe("PanelLayout — collapseDockShare (dock-mount fix)", () => {
     // folded into center), so the slot renders with zero share instead of
     // its remembered open width.
     expect(slotPanel.style.flexGrow).toBe("0");
+  });
+});
+
+describe("PanelLayout — mergeOuterLayout (resize-persists fix)", () => {
+  // Regression: the reported "panel size doesn't stick between sessions" bug.
+  // The old writer skipped the outer-layout save whenever the dock was CLOSED
+  // (the default), so a left↔viewport resize was never persisted. mergeOuterLayout
+  // now persists it while protecting the remembered dock-open width.
+
+  it("saves verbatim while the dock is OPEN (real spawner share present)", () => {
+    const next: Layout = { left: 22, center: 55, spawner: 23 };
+    expect(mergeOuterLayout(next, true, 0)).toEqual(next);
+  });
+
+  it("persists a dock-CLOSED left resize while preserving the stored dock share", () => {
+    // Dock collapsed → library reports spawner ≈ 0, centre absorbed it. The
+    // user dragged left from 20 → 30. We keep the remembered 20 dock share.
+    const next: Layout = { left: 30, center: 70, spawner: 0 };
+    expect(mergeOuterLayout(next, false, 20)).toEqual({
+      left: 30,
+      center: 50, // 100 − 30 − 20
+      spawner: 20,
+    });
+  });
+
+  it("keeps the ~100 sum loadLayout validates when merging a closed resize", () => {
+    const out = mergeOuterLayout({ left: 37, center: 63, spawner: 0 }, false, 25);
+    const sum = Object.values(out).reduce((a, v) => a + v, 0);
+    expect(Math.abs(sum - 100)).toBeLessThanOrEqual(0.5);
+  });
+
+  it("saves as-is when there is no remembered dock width to preserve", () => {
+    // First-ever session (never opened the dock) → stored share 0 → nothing to
+    // fold, just persist the left/center split the library reported.
+    const next: Layout = { left: 30, center: 70, spawner: 0 };
+    expect(mergeOuterLayout(next, false, 0)).toEqual(next);
+  });
+
+  it("refuses to corrupt the blob when left+share would leave no centre", () => {
+    // Pathological (share huge) → fall back to verbatim rather than write a
+    // non-positive centre that loadLayout would then reject.
+    const next: Layout = { left: 38, center: 62, spawner: 0 };
+    expect(mergeOuterLayout(next, false, 65)).toEqual(next);
   });
 });
 

@@ -38,14 +38,17 @@ class IFileManager;
 //              the one signal present across every mod (CategoryMask is absent in base
 //              FoC and in some mods). Corroborated by CategoryMask/behavior; disagreement or a
 //              dual-env (Land+Space) object sets `conflict`.
-//   role    -- Excluded / Unit / Structure / Hero. Excluded = a renderable object that
-//              is NOT a unit/structure (skydome/planet backdrop, prop, marker, particle,
-//              projectile, death-clone, dummy, template, formation wrapper). The picker
+//   role    -- Excluded / Unit / Structure / Hero / Prop / Template. Excluded = a
+//              renderable object that is NOT selectable (skydome/planet backdrop, marker,
+//              particle, projectile, death-clone, dummy, formation wrapper). Prop and
+//              Template used to be Excluded too, but are now KEPT as their own picker
+//              sections (by request): model-bearing scenery/base objects that a player
+//              never builds, so they bypass the fieldable gate like heroes do. The picker
 //              keeps role != Excluded.
 //   bucket  -- the fine sub-group for the future collapsible sections.
 enum class ModelFieldKind { None, Land, Space, Galactic, Generic };
 enum class ObjDomain      { Unknown, Ground, Space };
-enum class ObjRole        { Excluded, Unit, Structure, Hero };
+enum class ObjRole        { Excluded, Unit, Structure, Hero, Prop, Template };
 enum class ObjBucket {
     None,
     Infantry, Vehicle, Air,                                   // ground units
@@ -141,7 +144,13 @@ struct GameObjectRef
 inline bool IsPickerListed(const GameObjectRef& r)
 {
     if (r.role == ObjRole::Excluded) return false;
-    if (r.role == ObjRole::Hero)     return true;     // heroes exempt from the fieldable gate
+    // Heroes, props, and templates are exempt from the fieldable gate: heroes are
+    // often granted by script (invisible to the static graph), and props/templates
+    // are scenery/base objects a player never builds -- gating them on fieldable
+    // would hide every one. Their model-field presence (ClassifyObject step 0) plus
+    // the lazy on-select renderable probe keep the "renderable only" contract.
+    if (r.role == ObjRole::Hero || r.role == ObjRole::Prop || r.role == ObjRole::Template)
+        return true;
     return r.fieldable;
 }
 
