@@ -177,6 +177,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Fixed
 
+- The very first launch on a fresh PC no longer opens with a black, unlit viewport. The default scene lighting was only applied when the editor found settings from a previous run, so the one launch every new user starts with rendered the ground plane unlit; the defaults now apply on the first run too
 - The status bar now warns you when an autosave fails to write. Previously a failing autosave was silent, so you could keep working for an hour believing a crash would cost you nothing while the newest recoverable copy fell further and further behind
 - Opening a particle file whose emitters are chained thousands deep no longer closes the editor without warning. Such a file now loads with the over-deep part of the chain reattached at the top level, and nothing in it is discarded
 - Switching mod layers repeatedly while browsing textures no longer piles up memory. Preview work for the old mod stack is now dropped when you switch, rather than being finished and thrown away

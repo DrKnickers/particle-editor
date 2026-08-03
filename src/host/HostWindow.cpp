@@ -3147,9 +3147,20 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             // dev machine has saved in the registry.
             if (ShouldRestorePersistedViewSettings(useTestHost, m_captureGoldenProfile))
             {
+                // Open MAY fail -- on the very first launch ever the key does
+                // not exist yet. That must NOT skip this block: every read
+                // helper below falls back to its default when RegQueryValueExW
+                // fails (a null hKey fails every query), and the block's
+                // UNCONDITIONAL pushes -- the lighting SetLight/SetAmbient(w=1)/
+                // SetShadow -- are load-bearing. Gating the block on a
+                // successful open left a true first run on raw engine ctor
+                // state (ambient w=0 -> the default-on ground mesh rendered
+                // UNLIT, a black viewport) while every later launch looked
+                // fine because closing the app persists the key. Caught by
+                // scripts/cold-launch-check.ps1 on a truly clean profile.
                 HKEY hKey = nullptr;
-                if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
-                                  0, KEY_READ, &hKey) == ERROR_SUCCESS)
+                RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\AloParticleEditor",
+                              0, KEY_READ, &hKey);
                 {
                     DWORD en = 0, type = 0, size = sizeof(en);
                     if (RegQueryValueExW(hKey, L"BloomEnabled", nullptr, &type,
@@ -3439,7 +3450,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                         engine->GetGroundTexture(),
                         static_cast<unsigned>(engine->GetGroundSolidColor()),
                         engine->GetSkydomeSlot());
-                    RegCloseKey(hKey);
+                    if (hKey) RegCloseKey(hKey);
                 }
             }
             else if (m_captureGoldenProfile)
