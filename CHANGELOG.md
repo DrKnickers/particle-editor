@@ -8,6 +8,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-02
+
 ### Added
 
 - A "What's New" page — reached from the landing topbar and pointed to from the guide home page — walks returning modders through what this editor does that Mike.NL's GlyphX Particle Editor v1.5 couldn't (scene context, mod-stack editing, the spawner, emitter draw-order, the Atlas Frame Picker), plus a table of deliberate behavioral departures from the legacy editor

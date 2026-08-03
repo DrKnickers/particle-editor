@@ -30,6 +30,12 @@ opens Microsoft's download page for it.
 - **Safety net** — autosave with crash recovery, atomic saves, real undo/redo, and
   defensive parsing of untrusted `.alo` / `.meg` / `.xml` files.
 
+## Learning it
+
+The [project site](https://drknickers.github.io/particle-editor/) carries a full guide:
+setup, a particle-authoring primer, reference pages for blend modes and generation types,
+and hands-on tutorials with recorded walkthrough clips of the editor.
+
 ## Building from source
 
 The editor is a C++ host plus a React UI, built web-first — see
