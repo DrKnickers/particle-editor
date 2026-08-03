@@ -8,6 +8,10 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+### Added
+
+- The reference-object picker now surfaces **Props** and **Templates** as their own sections (they were previously hidden), and adds a "Props only" filter chip to narrow the list to props
+
 ### Fixed
 
 - Dragging a reference object with the gizmo now tracks the cursor 1:1 instead of drifting behind it

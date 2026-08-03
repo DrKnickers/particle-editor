@@ -772,6 +772,10 @@ export class MockBridge implements Bridge {
             { name: "Imperial_Star_Base", domain: "Space", role: "Structure", bucket: "Structure", affiliation: "Empire" },
             { name: "Darth_Vader", domain: "Ground", role: "Hero", bucket: "Hero", affiliation: "Empire" },
             { name: "Emperor_Palpatine", domain: "Space", role: "Hero", bucket: "Hero", affiliation: "Empire" },
+            // Props + templates: their own flat sections, exempt from the fieldable gate.
+            { name: "Asteroid_Field_Prop", domain: "Space", role: "Prop", bucket: "Other", affiliation: "" },
+            { name: "Rebel_Crate_Prop", domain: "Ground", role: "Prop", bucket: "Other", affiliation: "Rebel" },
+            { name: "Generic_Frigate_Template", domain: "Space", role: "Template", bucket: "Other", affiliation: "" },
           ],
         };
 

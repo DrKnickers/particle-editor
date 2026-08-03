@@ -255,11 +255,11 @@ static int dumpRealCatalog(const char* xmlDir)
     std::printf("build=%s  objects=%zu\n", ok ? "true" : "false", cat.objects.size());
     if (!ok) return 2;
 
-    size_t roleHist[4] = { 0 };   // indexed by ObjRole (Excluded, Unit, Structure, Hero)
+    size_t roleHist[6] = { 0 };   // indexed by ObjRole (Excluded, Unit, Structure, Hero, Prop, Template)
     size_t pickerListed = 0;
     for (const auto& r : cat.objects) { roleHist[(int)r.role]++; if (IsPickerListed(r)) ++pickerListed; }
-    std::printf("role histogram: Excluded=%zu Unit=%zu Structure=%zu Hero=%zu\n",
-                roleHist[0], roleHist[1], roleHist[2], roleHist[3]);
+    std::printf("role histogram: Excluded=%zu Unit=%zu Structure=%zu Hero=%zu Prop=%zu Template=%zu\n",
+                roleHist[0], roleHist[1], roleHist[2], roleHist[3], roleHist[4], roleHist[5]);
     std::printf("picker-listed (fieldable units+structures + all heroes) total: %zu of %zu\n",
                 pickerListed, cat.objects.size());
 
@@ -767,18 +767,30 @@ int main(int argc, char** argv)
               "LowOrbit backdrop tag -> Excluded");
         CHECK(ClassifyObject(P("Planet", ModelFieldKind::Galactic)).role == ObjRole::Excluded,
               "Planet (galactic model) -> Excluded");
-        CHECK(ClassifyObject(P("Props_Buildings_Generic", ModelFieldKind::Land)).role == ObjRole::Excluded,
-              "Props_* -> Excluded");
         CHECK(ClassifyObject(P("Projectile", ModelFieldKind::Generic)).role == ObjRole::Excluded,
               "Projectile -> Excluded");
         CHECK(ClassifyObject(P("Squadron", ModelFieldKind::None)).role == ObjRole::Excluded,
               "no model (Squadron wrapper) -> Excluded");
-        // Backdrops are excluded by TAG (SpaceProp), not by an Is_Dummy / In_Background flag —
-        // EaW puts those flags on real units/structures, so the classifier no longer reads them
-        // (the field was retired); a real Is_Dummy structure staying listed is
-        // covered by the --dumpcat audit on the real mods.
-        CHECK(ClassifyObject(P("SpaceProp", ModelFieldKind::Space)).role == ObjRole::Excluded,
-              "SpaceProp -> Excluded by tag");
+
+        // PROPS + TEMPLATES: previously tag-Excluded, now KEPT as their own picker roles
+        // (by request). Still model-gated (step 0) and exempt from the fieldable gate.
+        {
+            Classification prop = ClassifyObject(P("SpaceProp", ModelFieldKind::Space));
+            CHECK(prop.role == ObjRole::Prop, "SpaceProp tag -> Prop (kept, was Excluded)");
+            CHECK(prop.domain == ObjDomain::Space, "SpaceProp -> Space domain from tag");
+            CHECK(ClassifyObject(P("Props_Buildings_Generic", ModelFieldKind::Land)).role == ObjRole::Prop,
+                  "Props_* tag -> Prop (kept)");
+            CHECK(ClassifyObject(P("Template", ModelFieldKind::Land)).role == ObjRole::Template,
+                  "Template tag -> Template (kept, was Excluded)");
+            // A prop/template with NO renderable model is still dropped by step 0 (renderable-only).
+            CHECK(ClassifyObject(P("SpaceProp", ModelFieldKind::None)).role == ObjRole::Excluded,
+                  "prop with no model field -> Excluded (renderable-only)");
+            // The picker keep-gate exempts both from fieldable (they're never built/spawned).
+            GameObjectRef pr; pr.role = ObjRole::Prop;     pr.fieldable = false;
+            GameObjectRef tr; tr.role = ObjRole::Template; tr.fieldable = false;
+            CHECK(IsPickerListed(pr), "non-fieldable Prop IS picker-listed (exempt like heroes)");
+            CHECK(IsPickerListed(tr), "non-fieldable Template IS picker-listed");
+        }
         {
             ObjectProfile b = P("SpaceUnit", ModelFieldKind::Space); b.behaviorTokens = {"SKY_DOME"};
             CHECK(ClassifyObject(b).role == ObjRole::Excluded, "behavior SKY_DOME -> Excluded");

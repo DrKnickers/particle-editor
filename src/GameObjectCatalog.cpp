@@ -901,13 +901,16 @@ namespace
     // A renderable object that is NOT a selectable unit/structure -> Excluded. Tag-DENY
     // (never tag-allow: an unrecognised real unit must fall through to kept, not vanish)
     // + a few behavior tokens. Substring match on the lower-cased tag.
+    // NOTE: "prop" and "template" were removed from this denylist -- they are now
+    // KEPT as their own picker sections, routed to ObjRole::Prop / ObjRole::Template
+    // in ClassifyObject BEFORE this deny check runs (see step 1 there).
     bool isExcludedTag(const std::string& tl)
     {
         static const char* kDeny[] = {
             "skydome", "loworbit", "planet", "particle", "projectile", "marker",
-            "death_clone", "container", "upgrade", "ability", "template", "defunct",
+            "death_clone", "container", "upgrade", "ability", "defunct",
             "mission_object", "indigenous_passive", "squadron", "company", "formation",
-            "dummy", "prop", "obstacle", "cinematic", "mov_", "cin_"
+            "dummy", "obstacle", "cinematic", "mov_", "cin_"
         };
         for (const char* d : kDeny) if (tl.find(d) != std::string::npos) return true;
         return false;
@@ -1030,22 +1033,50 @@ Classification ClassifyObject(const ObjectProfile& p)
     const std::string tl = asciiLower(p.tag);
     const std::string nl = asciiLower(p.name);
 
-    // 1. EXCLUDE -- no renderable model, or a model-bearing non-unit, recognised by TAG / NAME /
-    //    a narrow behavior set. Deliberately does NOT gate on the model field-kind, Is_Dummy, or
-    //    In_Background: each LOOKS like a non-unit signal but real units carry it in EaW --
-    //    capitals resolve their mesh via Galactic_Model_Name (Star_Destroyer); real buildable
-    //    structures set Is_Dummy=Yes (E_Gravity_Well_Station, mining facilities); a story unit can
-    //    set In_Background=Yes (Eclipse SSD). Backdrops are caught by their Planet/Skydome/Prop TAG
-    //    (fail-toward-showing), and the fieldable gate hides any non-fieldable straggler.
-    //    (isDummy/inBackground stay captured on the profile for diagnostics; they do not gate here.)
+    // 0. HARD DROP -- no renderable model, or junk recognised by NAME / a narrow behavior
+    //    set. These outrank the prop/template surfacing below (a debug/abstract template or a
+    //    hero death-clone stays hidden even though its tag/name reads "template"). Deliberately
+    //    does NOT gate on the model field-kind, Is_Dummy, or In_Background: each LOOKS like a
+    //    non-unit signal but real units carry it in EaW -- capitals resolve their mesh via
+    //    Galactic_Model_Name (Star_Destroyer); real buildable structures set Is_Dummy=Yes
+    //    (E_Gravity_Well_Station); a story unit can set In_Background=Yes (Eclipse SSD).
     if (p.modelField == ModelFieldKind::None ||
-        isExcludedTag(tl) || isExcludedName(nl) || hasExcludeBehavior(p.behaviorTokens))
+        isExcludedName(nl) || hasExcludeBehavior(p.behaviorTokens))
     {
         c.role = ObjRole::Excluded;
         return c;
     }
 
-    // 2. DOMAIN -- model field-name decides for Land/Space; Galactic/Generic fall back to the
+    // 1. PROPS + TEMPLATES -- previously tag-excluded, now KEPT (by request) as their own
+    //    top-level picker sections. Model-bearing scenery / variant-base objects a player never
+    //    builds, so they bypass the fieldable gate (IsPickerListed). "Renderable only" is held
+    //    by step 0's model-field gate + the lazy on-select probe. Prop wins if a tag reads as
+    //    both. Domain is best-effort (for diagnostics; the picker sections them flat by role).
+    const bool propTag     = tl.find("prop")     != std::string::npos;
+    const bool templateTag = tl.find("template") != std::string::npos;
+    if (propTag || templateTag)
+    {
+        c.domain = domainFromTag(tl);
+        if (c.domain == ObjDomain::Unknown)
+        {
+            const ObjDomain md = maskDomain(p.maskTokens);
+            c.domain = (md != ObjDomain::Unknown) ? md : ObjDomain::Ground;
+        }
+        c.role   = propTag ? ObjRole::Prop   : ObjRole::Template;
+        c.bucket = ObjBucket::Other;   // sectioned flat by role; bucket is unused for these
+        return c;
+    }
+
+    // 2. EXCLUDE the remaining model-bearing non-units, recognised by TAG (skydome / planet /
+    //    particle / projectile / marker / squadron / formation / …). The fieldable gate hides
+    //    any non-fieldable straggler that slips past.
+    if (isExcludedTag(tl))
+    {
+        c.role = ObjRole::Excluded;
+        return c;
+    }
+
+    // 3. DOMAIN -- model field-name decides for Land/Space; Galactic/Generic fall back to the
     //    tag then the mask. Mask corroborates / flags conflict.
     switch (p.modelField)
     {
@@ -1058,7 +1089,7 @@ Classification ClassifyObject(const ObjectProfile& p)
     if (md != ObjDomain::Unknown && c.domain != ObjDomain::Unknown && md != c.domain) c.conflict = true;
     if (c.domain == ObjDomain::Unknown) c.domain = (md != ObjDomain::Unknown) ? md : ObjDomain::Ground;
 
-    // 3. ROLE + BUCKET.
+    // 4. ROLE + BUCKET.
     if (maskHasHero(p.maskTokens) || tagIsHero(tl))
     {
         c.role = ObjRole::Hero; c.bucket = ObjBucket::Hero; return c;
@@ -1082,7 +1113,8 @@ const char* ObjDomainName(ObjDomain d)
 const char* ObjRoleName(ObjRole r)
 {
     switch (r) { case ObjRole::Unit: return "Unit"; case ObjRole::Structure: return "Structure";
-                 case ObjRole::Hero: return "Hero"; default: return "Excluded"; }
+                 case ObjRole::Hero: return "Hero"; case ObjRole::Prop: return "Prop";
+                 case ObjRole::Template: return "Template"; default: return "Excluded"; }
 }
 const char* ObjBucketName(ObjBucket b)
 {
