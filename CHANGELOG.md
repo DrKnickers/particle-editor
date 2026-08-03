@@ -10,6 +10,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Fixed
 
+- Dragging a reference object with the gizmo now tracks the cursor 1:1 instead of drifting behind it
+- The coordinate readout shown while dragging a reference object now updates smoothly instead of stuttering
 - Resizing the main editor panels now persists between sessions even when the right-hand dock (Spawner / Lighting / Atlas) is closed — previously a resize made with the dock closed was discarded on restart
 
 ## [0.3.0] - 2026-08-02
