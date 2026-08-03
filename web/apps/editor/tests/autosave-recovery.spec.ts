@@ -26,7 +26,7 @@ const CDP_ENDPOINT = process.env.CDP_ENDPOINT ?? "http://localhost:9222";
 const AUTOSAVE_TEST_DIR = process.env.PE_AUTOSAVE_TEST_DIR;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_A = path.resolve(__dirname, "fixtures/a11y-base-state.alo");
-const FIXTURE_B = path.resolve(__dirname, "fixtures/nt-5-singleton.alo");
+const FIXTURE_B = path.resolve(__dirname, "fixtures/singleton-emitter.alo");
 
 let browser: Browser;
 let page: Page;

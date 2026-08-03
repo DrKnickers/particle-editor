@@ -4,14 +4,23 @@
 // keeping the human doc honest without a generator step.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const wikiMedia = join(__dirname, "..", "..", "..", "tasks", "wiki-media");
 
-test("production-inventory Output cells and release tag match the manifest", () => {
+// This guard mirrors two PRIVATE files (tasks/wiki-media) against each other;
+// the public mirror ships neither. Skip visibly there — budgeted by
+// run-all-tests.mjs SKIP_BUDGET only when the data is absent.
+const needsClipData = {
+  skip: existsSync(join(wikiMedia, "manifest.json"))
+    ? false
+    : "maintainer-only clip-source data (tasks/wiki-media) not in this checkout",
+};
+
+test("production-inventory Output cells and release tag match the manifest", needsClipData, () => {
   const manifest = JSON.parse(readFileSync(join(wikiMedia, "manifest.json"), "utf8"));
   const outputById = new Map(manifest.items.map((it) => [it.id, it.output]));
   const md = readFileSync(join(wikiMedia, "production-inventory.md"), "utf8");

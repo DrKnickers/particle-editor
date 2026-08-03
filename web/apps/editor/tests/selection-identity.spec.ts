@@ -291,7 +291,7 @@ async function captureReplacementEvents(request: {
 }
 
 test("file/open publishes the reset selection in its first ordered state event", async () => {
-  const fixturePath = resolve(__dirname, "fixtures/nt-5-singleton.alo");
+  const fixturePath = resolve(__dirname, "fixtures/singleton-emitter.alo");
   await selectSecondEmitter(fixturePath);
   // Exceed kEmitCoalesceMs so the old implementation deterministically exposed
   // stale selectedEmitterId=1 in its first immediate state event.
@@ -306,7 +306,7 @@ test("file/open publishes the reset selection in its first ordered state event",
 });
 
 test("document replacement keeps state -> tree -> selection when coalescing is primed", async () => {
-  const fixturePath = resolve(__dirname, "fixtures/nt-5-singleton.alo");
+  const fixturePath = resolve(__dirname, "fixtures/singleton-emitter.alo");
   await selectSecondEmitter(fixturePath);
   const result = await captureReplacementEvents({
     kind: "debug/emit-document-replaced",
@@ -318,7 +318,7 @@ test("document replacement keeps state -> tree -> selection when coalescing is p
 });
 
 test("autosave/recover uses the same ordered replacement notification", async () => {
-  const fixturePath = resolve(__dirname, "fixtures/nt-5-singleton.alo");
+  const fixturePath = resolve(__dirname, "fixtures/singleton-emitter.alo");
   const scratchDir = await mkdtemp(join(tmpdir(), "pe-selection-recovery-"));
   const recoveryPath = join(scratchDir, "recent.alo");
   try {

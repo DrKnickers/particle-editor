@@ -522,7 +522,7 @@ test("undo restores the pre-mutation linkGroups (atomicity of capture + sweep)",
 });
 
 test("load-time sweep — opening a legacy .alo with a singleton group auto-demotes it; dirty bit stays clean", async () => {
-  // The fixture `tests/fixtures/nt-5-singleton.alo` was produced by
+  // The fixture `tests/fixtures/singleton-emitter.alo` was produced by
   // `ParticleEditor.exe --gen-nt5-fixture <path>` (see main.cpp's
   // argv branch) and contains a state no sweep-aware codepath can
   // produce: emitter 0 at linkGroup=0, emitter 1 at linkGroup=1
@@ -538,7 +538,7 @@ test("load-time sweep — opening a legacy .alo with a singleton group auto-demo
   // The .alo lives at web/apps/editor/tests/fixtures/ relative to this
   // file. Resolve to absolute so the host's file/open (which doesn't
   // resolve relative paths) gets a clean wide-string.
-  const fixturePath = resolve(__dirname, "fixtures/nt-5-singleton.alo");
+  const fixturePath = resolve(__dirname, "fixtures/singleton-emitter.alo");
 
   const result = await page.evaluate(async (path) => {
     const bridge = (window as Window & {
@@ -815,7 +815,7 @@ test("reparenting a root removes only its stale root instance from an already-pl
 // clamped by accident.
 test("file/open resets the selection instead of inheriting the previous document's", async () => {
   await page.keyboard.press("Escape").catch(() => {});
-  const fixturePath = resolve(__dirname, "fixtures/nt-5-singleton.alo");
+  const fixturePath = resolve(__dirname, "fixtures/singleton-emitter.alo");
 
   const result = await page.evaluate(async (path) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

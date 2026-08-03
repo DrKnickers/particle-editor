@@ -153,7 +153,10 @@ test("recordSmokeVerdict still catches the blank-frame and no-frame cases it alw
 
 test("skipBudgetVerdict FAILS a lane that skipped more tests than it declared (the an-audit-finding false green)", () => {
   // The FFmpeg-dependent script tests self-skipping on a box that HAS FFmpeg.
-  const v = skipBudgetVerdict("scripts", 2, new Set());
+  // Explicit EMPTY budget: this pins the verdict logic, and the LIVE table now
+  // legitimately declares a scripts entry on the public mirror (conditional on
+  // the private clip data being absent), which would mask the case.
+  const v = skipBudgetVerdict("scripts", 2, new Set(), {});
   assert.equal(v.ok, false);
   // The specific numbers, not just "something was skipped": a note that cannot
   // name the count cannot tell a new skip from the old one.
@@ -199,7 +202,8 @@ test("every live SKIP_BUDGET entry carries a reason", () => {
 });
 
 test("skipBudgetVerdict honours --allow-missing for the machine that genuinely can't run it", () => {
-  const v = skipBudgetVerdict("scripts", 3, new Set(["scripts"]));
+  // Explicit empty budget, same reason as the over-budget case above.
+  const v = skipBudgetVerdict("scripts", 3, new Set(["scripts"]), {});
   assert.equal(v.ok, true);
   // Downgraded to a SKIP, never to silence — the count still has to appear.
   assert.match(v.note, /3 skipped test\(s\)/);

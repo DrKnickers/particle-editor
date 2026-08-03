@@ -65,8 +65,8 @@ export const SCENES = [
     requireTexGate: ["P_PARTICLE_MASTER.TGA", "P_PARTICLE_DEPTH_MASTER.TGA"],
   },
   {
-    name: "nt-5-singleton",
-    fixture: join(fixturesDir, "nt-5-singleton.alo"),
+    name: "singleton-emitter",
+    fixture: join(fixturesDir, "singleton-emitter.alo"),
     requireTexGate: ["P_PARTICLE_MASTER.TGA", "P_PARTICLE_DEPTH_MASTER.TGA"],
   },
   // #481 regression guard: bump-mode (blend 11) emitter with hard alpha-cutout

@@ -1,6 +1,6 @@
 {
   "_comment": "Gate smoke for --record (#510): opens a self-contained fixture .alo (no game install, same fixtures the render-goldens lane uses), spawns one burst, and records ~15 frames. No cursor track (cursor-free heartbeat-ack path). The record-smoke gate lane asserts the output directory has >0 PNG frames — the coverage that was missing when #510 (0-frame records) crept in.",
-  "open": "web/apps/editor/tests/fixtures/nt-5-singleton.alo",
+  "open": "web/apps/editor/tests/fixtures/singleton-emitter.alo",
   "fps": 60,
   "width": 1280,
   "height": 960,

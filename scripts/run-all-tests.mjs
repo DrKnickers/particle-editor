@@ -241,7 +241,17 @@ export function parseSkippedCount(out) {
 // composition-hosting.spec.ts). Add an entry only for a skip that is genuinely
 // impossible on some machine, and write the reason: the reason is the part that
 // gets checked.
-export const SKIP_BUDGET = {};
+export const SKIP_BUDGET = {
+  // Eight scripts-lane tests self-skip on the public mirror: five inspect the
+  // PRIVATE clip-source data (tasks/wiki-media manifest + timelines) and three
+  // pre-existing ones lint unpublished timeline fixtures. The entry exists ONLY
+  // when that data is absent — never on the private repo — so the private gate
+  // keeps a zero budget (no permanent "tighten" nag) and the public tree passes
+  // at exactly its budgeted skips; a ninth quiet skip still fails both sides.
+  ...(existsSync(join(repoRoot, "tasks", "wiki-media", "manifest.json"))
+    ? {}
+    : { scripts: { max: 8, why: "maintainer-only clip-source data and timeline fixtures (tasks/wiki-media, .claude/skills) are absent on the public mirror" } }),
+};
 
 // Verdict for a lane that exited 0 while reporting `innerSkipped` skipped tests.
 // Over budget FAILS (the false-green an-audit-finding describes for the FFmpeg-dependent

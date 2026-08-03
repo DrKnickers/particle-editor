@@ -5,7 +5,7 @@
 # zip built by scripts/package-release.ps1, extracted somewhere that is not the
 # repo, on a profile with NO dev state -- starts, serves its embedded UI, and can
 # open and render a real game .alo. This is the release-readiness Phase 2 exit
-# criterion (tasks/2026-07-25-v030-cold-launch-procedure.md), automated.
+# criterion from the release-readiness plan, automated.
 #
 # What it does, in order:
 #   1. (unless -SkipBuild) builds the web bundle then the Release exe -- web
@@ -96,19 +96,19 @@ if (-not $SkipBuild) {
     } finally { Pop-Location }
 
     Write-Host "[build] x64 Release"
+    # vswhere-only, no hardcoded install paths (the publish guard rejects
+    # machine-specific VS paths; this mirrors a11y-drift-check's locator).
+    # -products * covers Build Tools installs, which plain -latest can miss.
     $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
     $msbuild = $null
     if (Test-Path $vswhere) {
-        $msbuild = (& $vswhere -latest -find "MSBuild\**\Bin\MSBuild.exe" |
-            Where-Object { $_.Trim().EndsWith("MSBuild.exe") } | Select-Object -First 1)
+        foreach ($extra in @(@(), @("-products", "*"))) {
+            $msbuild = (& $vswhere -latest @extra -find "MSBuild\**\Bin\MSBuild.exe" |
+                Where-Object { $_.Trim().EndsWith("MSBuild.exe") } | Select-Object -First 1)
+            if ($msbuild) { break }
+        }
     }
-    if (-not $msbuild) {
-        foreach ($c in @(
-            "C:\Program Files (x86)\<path>",
-            "C:\Program Files (x86)\<path>"
-        )) { if (Test-Path $c) { $msbuild = $c; break } }
-    }
-    if (-not $msbuild) { Die "MSBuild not found (vswhere + known paths)" }
+    if (-not $msbuild) { Die "MSBuild not found via vswhere" }
     $out = & $msbuild (Join-Path $root "ParticleEditor.sln") /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo 2>&1
     # The arrow line is the proof the exe actually relinked -- MSBuild under a
     # mangled invocation can no-op and still exit 0 (repo gotcha).

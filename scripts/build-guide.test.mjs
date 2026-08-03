@@ -4,8 +4,22 @@
 // site lane can't reach because it only inspects already-generated pages.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { build, renderMedia } from "./build-guide.mjs";
+
+// The full-build test below runs build(), which reads the PRIVATE media
+// manifest (tasks/wiki-media/manifest.json); the public mirror ships the
+// committed guide OUTPUT but not the build inputs. Skip visibly there —
+// budgeted by run-all-tests.mjs SKIP_BUDGET only when the data is absent.
+const repoRootForData = join(dirname(fileURLToPath(import.meta.url)), "..");
+const needsClipData = {
+  skip: existsSync(join(repoRootForData, "tasks", "wiki-media", "manifest.json"))
+    ? false
+    : "maintainer-only clip-source data (tasks/wiki-media) not in this checkout",
+};
 
 // renderMedia takes (id, context) where context = { media: Map<id, item>, sourcePage }.
 function ctx(entries) {
@@ -58,7 +72,7 @@ test("attribute-bearing purpose text is HTML-escaped in alt/aria-label", () => {
   assert.ok(!html.includes('aria-label="a "quoted"'), "raw quote must not break out of the attribute");
 });
 
-test("unpublished pages are omitted by default but available to the local draft preview", () => {
+test("unpublished pages are omitted by default but available to the local draft preview", needsClipData, () => {
   const publicOutputs = build();
   assert.equal(publicOutputs.has("02-polish-hardpoint-damage-smoke.html"), false);
   assert.equal(publicOutputs.has("04-recolor-and-orient-a-shield-impact.html"), false);

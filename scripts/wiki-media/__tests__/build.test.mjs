@@ -20,6 +20,16 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..", "..", "..");
 const fixtureDir = join(__dirname, "fixtures");
+
+// Three feature-clip guards below inspect the PRIVATE clip-source data
+// (tasks/wiki-media manifest + timelines), which the public mirror does not
+// ship. Skip visibly there — the gate budgets exactly these skips, and only
+// when the data is absent (run-all-tests.mjs SKIP_BUDGET).
+const needsClipData = {
+  skip: existsSync(join(repoRoot, "tasks", "wiki-media", "manifest.json"))
+    ? false
+    : "maintainer-only clip-source data (tasks/wiki-media) not in this checkout",
+};
 const mockTool = join(fixtureDir, "mock-exe.mjs");
 const tmpRoot = join(__dirname, ".tmp");
 
@@ -390,7 +400,7 @@ test("a clip timeline without the reference-object clears fails the no-reference
   assert.equal(validateTimelineNoReferenceObject(clearedThenReadded, "x").length, 2, "re-adding after clearing must fail");
 });
 
-test("the returning-user scene-context clip explicitly permits its reference object", async () => {
+test("the returning-user scene-context clip explicitly permits its reference object", needsClipData, async () => {
   const { validateTimelineNoReferenceObject } = await import("../build.mjs");
   const manifest = JSON.parse(readFileSync(join(repoRoot, "tasks", "wiki-media", "manifest.json"), "utf8"));
   const item = manifest.items.find(({ id }) => id === "ref-returning-scene-context");
@@ -449,7 +459,7 @@ test("validateManifest exempts planned items without a timeline — and nothing 
   assert.deepEqual(validateManifest({ items: [{ id: "d", status: "rendered", timeline: "t.json", ...base }] }), []);
 });
 
-test("the returning-user curve clip keeps its live particle payoff visible", () => {
+test("the returning-user curve clip keeps its live particle payoff visible", needsClipData, () => {
   const manifest = JSON.parse(readFileSync(join(repoRoot, "tasks", "wiki-media", "manifest.json"), "utf8"));
   const item = manifest.items.find(({ id }) => id === "ref-curve-visibility");
   assert.ok(item, "ref-curve-visibility must remain in the media manifest");
@@ -488,7 +498,7 @@ test("the returning-user curve clip keeps its live particle payoff visible", () 
 
 });
 
-test("the returning-user curve clip authors its checkbox return instead of reversing the video", () => {
+test("the returning-user curve clip authors its checkbox return instead of reversing the video", needsClipData, () => {
   const manifest = JSON.parse(readFileSync(join(repoRoot, "tasks", "wiki-media", "manifest.json"), "utf8"));
   const item = manifest.items.find(({ id }) => id === "ref-curve-visibility");
   assert.ok(item, "ref-curve-visibility must remain in the media manifest");

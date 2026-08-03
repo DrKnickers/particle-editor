@@ -15,7 +15,7 @@ const fixturePaths = [
   "tasks/perf-audit-2026-06-28/fixtures/drive/30-layout-scene-rect-storm.json",
   "tasks/perf-audit-2026-06-28/fixtures/drive/40-frame-idle.json",
   "web/apps/editor/tests/fixtures/a11y-base-state.alo",
-  "web/apps/editor/tests/fixtures/nt-5-singleton.alo",
+  "web/apps/editor/tests/fixtures/singleton-emitter.alo",
 ];
 
 function sha256(file) {

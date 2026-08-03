@@ -48,7 +48,7 @@ test("texture-gated capture adds only the controlled shader diagnostic hook", ()
 
 test("every golden scene refuses to bless missing particle textures", () => {
   const a11y = SCENES.find((scene) => scene.name === "a11y-base-state");
-  const singleton = SCENES.find((scene) => scene.name === "nt-5-singleton");
+  const singleton = SCENES.find((scene) => scene.name === "singleton-emitter");
   const bump = SCENES.find((scene) => scene.name === "bump-cutout");
 
   assert.deepEqual(

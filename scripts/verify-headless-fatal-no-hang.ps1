@@ -1,5 +1,5 @@
 ﻿# verify-headless-fatal-no-hang.ps1 -- regression guard for the headless-modal
-# sweep (tasks/2026-07-08-rerender-modal-followups-plan.md,).
+# sweep (headless runs must exit non-zero instead of hanging on a modal).
 # ASCII only (PS 5.1 mojibakes non-ASCII).
 #
 # Proves that a HEADLESS run whose DirectComposition init is FORCED to fail exits

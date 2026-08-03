@@ -3,7 +3,7 @@
 <!-- Scope: the EDITOR APP (web/apps/editor). Captured from the live system
      (styles/tokens.css + components.css are the source of truth — this file
      describes them; when they disagree, the CSS wins and this file is stale).
-     Deep rationale lives in docs/design/ui-design-system.md. -->
+     -->
 
 ## Foundations
 
