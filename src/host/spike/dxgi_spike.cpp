@@ -751,7 +751,8 @@ void RenderFrame() {
         // — = em-dash, escape form so the source survives MSVC's
         // source-charset interpretation regardless of BOM presence.
         // Literal em-dash gets re-encoded as UTF-8 bytes interpreted as
-        // CP-1252 if the compiler doesn't see a BOM — produces "DXGI Spike â€"".
+        // CP-1252 if the compiler doesn't see a BOM — the title then renders
+        // with a-circumflex/Euro-sign garbage where the dash should be.
         swprintf(title, _countof(title),
                  L"DXGI Spike -- %.1f FPS @ %ls  (%dx%d  %.2fms)",
                  g_emaFps, g_cfg.resLabel, g_cfg.width, g_cfg.height, g_emaTotalMs);
