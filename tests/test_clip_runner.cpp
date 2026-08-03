@@ -18,7 +18,7 @@ using host::ClipRunner;
 int main() {
 #ifdef _DEBUG
     // Route CRT assertions (e.g. a bad STL access in a failing test) to stderr
-    // instead of a modal dialog — an unattended/subagent test run otherwise hangs
+    // instead of a modal dialog — an unattended test run otherwise hangs
     // on the Abort/Retry/Ignore box. Fail fast (nonzero exit), never block.
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);

@@ -227,5 +227,5 @@ if (-not $OutZip) {
     Write-Host ""
     Write-Host "Next: re-run with -OutZip to create AND self-verify the release archive, e.g.:" -ForegroundColor Cyan
     Write-Host "  pwsh scripts/package-release.ps1 -OutZip ParticleEditor-vX.Y.Z.zip" -ForegroundColor Cyan
-    Write-Host "Then attach the zip to the GitHub Release (see VERSIONING.md -> Cutting a release)." -ForegroundColor Cyan
+    Write-Host "Then attach the zip to the GitHub Release." -ForegroundColor Cyan
 }

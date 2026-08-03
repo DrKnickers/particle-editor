@@ -2451,7 +2451,7 @@ describe("CurveEditorPanel — group-drag live-updates spinners", () => {
     expect(Number(keyAt25().getAttribute("cy"))).toBeCloseTo(cyAt09, 1);
   });
 
-  // #613 Codex-review regression: the epoch guard must NOT invalidate the
+  // #613 review regression: the epoch guard must NOT invalidate the
   // authoritative SELECTION-change fetch. Editing the still-visible OLD emitter
   // mid-switch bumps the epoch; if the new emitter's fetch were epoch-guarded it
   // would be discarded and — with no tree/changed to re-fetch — the panel would

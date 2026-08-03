@@ -49,7 +49,7 @@ void AddCommonFields(nlohmann::json& event)
 {
     const long long timestampQpc = QueryQpc();
     event["schemaVersion"] = 1;
-    event["source"] = "codex-perf-audit";
+    event["source"] = "perf-audit";
     event["auditId"] = g_config.auditId;
     event["instrumentationVersion"] = g_config.instrumentationVersion;
     event["sessionId"] = g_config.sessionId;

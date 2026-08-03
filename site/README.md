@@ -91,7 +91,7 @@ workflow that stages `site/` (minus the dev-only `deploy/`, `README.md`, `.gitig
 
 At rollout (user-gated, on the fork):
 1. Create the fork and the `site-media` release; upload the clips + posters.
-2. Install `site/deploy/pages.yml` as `.github/workflows/pages.yml` on the fork.
+2. The Pages workflow lives at `.github/workflows/pages.yml` (deploys `site/` on every master push that touches it).
 3. Enable Pages (source: GitHub Actions).
 4. Confirm `MEDIA_BASE` in **both** `main.js` and `guide-media.js` points at the release, and the OG image URL resolves.
 5. Run the rollout-gate URL check (every `site-media` URL returns 200 — landing clips AND the guide's `tutorial-XX-…` media) before the deploy.
@@ -99,11 +99,3 @@ At rollout (user-gated, on the fork):
 
 Default URL: `https://drknickers.github.io/particle-editor/`.
 
-## Temporary VPS demo
-
-The friend-facing WIP demo runs on a standalone VPS vhost. Everything about
-deploying to it — hosts, accounts, key names, per-clip update and backup
-procedures — lives in [`docs/site-vps-demo.md`](../docs/site-vps-demo.md),
-deliberately OUTSIDE `site/`: `docs/` is excluded from the public mirror, so
-`site/` stays safe to mirror or serve wholesale with no dev-only carve-outs
-to remember.

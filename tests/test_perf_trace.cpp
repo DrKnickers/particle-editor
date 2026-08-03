@@ -96,7 +96,7 @@ int main()
         CHECK(lines.size() == 4);
         if (!lines.empty()) {
             auto j = nlohmann::json::parse(lines[0]);
-            CHECK(j["source"] == "codex-perf-audit");
+            CHECK(j["source"] == "perf-audit");
             CHECK(j["schemaVersion"] == 1);
             CHECK(j["auditId"] == "perf-audit-2026-06-28");
             CHECK(j["instrumentationVersion"] == "1");
@@ -108,7 +108,7 @@ int main()
         }
         if (lines.size() >= 2) {
             auto spoof = nlohmann::json::parse(lines[1]);
-            CHECK(spoof["source"] == "codex-perf-audit");
+            CHECK(spoof["source"] == "perf-audit");
             CHECK(spoof["auditId"] == "perf-audit-2026-06-28");
             CHECK(spoof["sessionId"] == "s-file");
             CHECK(spoof["runId"] == "r-file");

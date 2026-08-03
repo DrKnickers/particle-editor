@@ -38,7 +38,7 @@ raw.split(/\r?\n/).forEach((line, index) => {
     if (event.schemaVersion !== 1) errors.push(`line ${index + 1}: schemaVersion != 1`);
     if (!event.eventName) errors.push(`line ${index + 1}: missing eventName`);
     if (!event.eventType) errors.push(`line ${index + 1}: missing eventType`);
-    if (event.source !== "codex-perf-audit") errors.push(`line ${index + 1}: source != codex-perf-audit`);
+    if (event.source !== "perf-audit") errors.push(`line ${index + 1}: source != perf-audit`);
   } catch (err) {
     errors.push(`line ${index + 1}: ${err.message}`);
   }

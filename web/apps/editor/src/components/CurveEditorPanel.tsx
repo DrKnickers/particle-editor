@@ -615,7 +615,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     // is authoritative for the new emitter and must ALWAYS apply — otherwise
     // editing the still-visible OLD emitter's key mid-switch bumps the epoch and
     // would strand the panel on stale tracks with no tree/changed to re-fetch
-    // (Codex #613 review). `inFlightFor` already discards a superseded selection.
+    // (#613 review). `inFlightFor` already discards a superseded selection.
     const fetchTracks = (id: number, guarded: boolean) => {
       inFlightFor.current = id;
       const epochAtIssue = editEpochRef.current;
@@ -1333,7 +1333,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         // canvas onPointerUp recorded for this gesture (a border-only or
         // zero-delta drag still records one); otherwise it lingers and, since
         // movesMatch ignores interpolation, could swallow a later interp-only
-        // morph on this channel (Codex #613 review).
+        // morph on this channel (#613 review).
         morphSuppressRef.current = null;
         return;
       }
@@ -1458,7 +1458,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       // rounded value for the optimistic write AND the suppress keeps them EXACT
       // (movesMatch), and makes it equal to what the refetch returns — so the
       // authoritative refetch is a no-op change, not an unsuppressed morph
-      // (Codex #613 review). The bridge still gets the raw value; the host
+      // (#613 review). The bridge still gets the raw value; the host
       // rounds it identically.
       const engineValue = Math.fround(nextValue);
       morphSuppressRef.current = {

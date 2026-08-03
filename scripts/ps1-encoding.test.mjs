@@ -2,10 +2,10 @@
 //
 // PS 5.1 decodes a BOM-less file as the system ANSI codepage, not UTF-8. A
 // single non-ASCII character (an em dash in a comment or a quoted string) then
-// arrives as mojibake bytes and cascades into parse errors — sync-public.ps1
-// hit exactly this: two U+2014 characters produced 13 errors and made the
-// public-mirror sync unrunnable on the only shell this box has. PowerShell 7,
-// which reads UTF-8 regardless, is not installed here.
+// arrives as mojibake bytes and cascades into parse errors — a repo script
+// hit exactly this: two U+2014 characters produced 13 errors and made it
+// unrunnable on the only shell this box has. PowerShell 7, which reads
+// UTF-8 regardless, is not installed here.
 //
 // Rule: a .ps1 is safe if it is pure ASCII, OR it carries a UTF-8 BOM.
 // (This is the repo's .rc encoding convention applied to the script surface.)

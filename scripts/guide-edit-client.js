@@ -141,7 +141,7 @@ pagesSel.addEventListener("change", async () => { if (dirty) await save(); openP
 (async function init() {
   if (!window.toastui || !window.toastui.Editor) {
     loadbar.style.display = "block";
-    loadbar.textContent = "Could not load the rich editor from the CDN (offline?). Tell Claude and I'll switch to the source editor.";
+    loadbar.textContent = "Could not load the rich editor from the CDN (offline?). Falling back to the source editor.";
     setStatus("editor unavailable", "err");
     return;
   }
