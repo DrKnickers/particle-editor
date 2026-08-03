@@ -1,43 +1,26 @@
 # Vendored redistributables
 
-## `MicrosoftEdgeWebview2Setup.exe`
+## `MicrosoftEdgeWebview2Setup.exe` — removed
 
-- **What it is:** Microsoft's *Evergreen Bootstrapper* (~2 MB) for the WebView2 runtime.
-  It is a downloader, not the runtime itself — it fetches and installs the current
-  runtime, so it never goes stale and does not need re-vendoring.
-- **No longer shipped by default.** The release is now a self-contained
-  `ParticleEditor.exe` + `d3dx9_43.dll` (the WebView2 loader is statically linked, so no
-  `WebView2Loader.dll` ships either). When the WebView2 **runtime** — a machine component,
-  present on Windows 11 and Windows 10 with Edge, absent on stripped/LTSC images — is
-  missing, the WebView2 failure path in
-  [`src/host/HostWindow.cpp`](../../src/host/HostWindow.cpp) opens the download page
-  (`https://aka.ms/webview2`).
-- **Why still vendored:** the bootstrapper is retained here for optional side-by-side use
-  (dropped next to the exe it is still honored for a one-click install) and in case a
-  future release chooses to bundle it again. It is a downloader, not the runtime itself, so
-  it never goes stale.
-- **How it was obtained:** downloaded 2026-07-25 from Microsoft's permalink
-  <https://go.microsoft.com/fwlink/p/?LinkId=2124703> (the "Evergreen Bootstrapper"
-  download on <https://developer.microsoft.com/microsoft-edge/webview2/>), then verified
-  before committing:
+Microsoft's *Evergreen Bootstrapper* (~1.6 MB) for the WebView2 runtime was vendored here
+to be bundled in the release zip. It is **no longer vendored**: the release is now a
+self-contained `ParticleEditor.exe` + `d3dx9_43.dll` (the WebView2 loader is statically
+linked, so no `WebView2Loader.dll` ships either), and the bootstrapper is not bundled.
+When the WebView2 **runtime** — a machine component, present on Windows 11 and Windows 10
+with Edge, absent on stripped/LTSC images — is missing, the WebView2 failure path in
+[`src/host/HostWindow.cpp`](../../src/host/HostWindow.cpp) opens the download page
+(`https://aka.ms/webview2`); a bootstrapper a user manually places beside the exe is still
+honored.
 
-  | Check | Result |
-  |---|---|
-  | Size | 1,691,856 bytes (1.61 MB) |
-  | PE header | `MZ` — valid Windows executable |
-  | Authenticode | **Valid** |
-  | Signer | `CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US` |
-  | SHA-256 | `0223FA1E8D5BD5E4344FB8734E60D088E79F262C0A24444D01F240BC996F04E5` |
-
-  Re-vendoring is a **one-time manual step** and deliberately not scripted: a build script
-  that downloads and then ships an executable is a supply-chain hazard. If you ever replace
-  this file, verify the Authenticode signature again and update the table above — a vendored
-  binary that ships to users should never be taken on trust.
-- **Packaging:** [`scripts/package-release.ps1`](../../scripts/package-release.ps1) does
-  **not** stage this file — the default release omits it. (It formerly treated it as a
-  required source; that changed when the release became a self-contained exe.)
-- **License:** redistributable under the Microsoft Edge WebView2 distribution terms, which
-  permit shipping the bootstrapper alongside an application.
+To re-vendor it (if a future release chooses to bundle the installer again): download the
+"Evergreen Bootstrapper" from Microsoft's permalink
+<https://go.microsoft.com/fwlink/p/?LinkId=2124703>, **verify its Authenticode signature**
+(a build script that downloads and then ships an executable is a supply-chain hazard, so
+re-vendoring is a deliberate one-time manual step — the last vendored copy was
+1,691,856 bytes, SHA-256 `0223FA1E8D5BD5E4344FB8734E60D088E79F262C0A24444D01F240BC996F04E5`,
+signed `CN=Microsoft Corporation`), and re-add the staging in
+[`scripts/package-release.ps1`](../../scripts/package-release.ps1). Redistributable under
+the Microsoft Edge WebView2 distribution terms.
 
 ## `d3dx9_43.dll`
 
