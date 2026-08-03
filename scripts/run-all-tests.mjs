@@ -322,6 +322,42 @@ function newestSourceMtime() {
   return newest;
 }
 
+// Newest mtime under the editor's WEB source. The C++ build now EMBEDS
+// web/apps/editor/dist into the exe, so if web source is newer than dist the
+// embedded bundle is stale — an msbuild lane run in isolation (--lane, which does
+// NOT auto-add web-build) would otherwise rebuild the exe around old UI and pass.
+function newestWebSourceMtime() {
+  let newest = 0;
+  // Every file, ANY extension: an imported image/font under src/ or a static file
+  // under public/ is a bundle input just like a .tsx, so an extension filter would
+  // miss them (reviewer round-4). But SKIP test-only files — editing a test is not a
+  // bundle change and must not block an isolated MSBuild lane (reviewer round-5).
+  const isTestFile = (n) => /\.(test|spec)\.[cm]?[jt]sx?$/i.test(n) || n === "test-setup.ts";
+  const walkAll = (dir) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        if (e.name === "node_modules" || e.name === "dist" || e.name === "__tests__" || e.name === "__mocks__") continue;
+        walkAll(join(dir, e.name));
+      } else if (!isTestFile(e.name)) {
+        try { newest = Math.max(newest, statSync(join(dir, e.name)).mtimeMs); } catch { /* raced */ }
+      }
+    }
+  };
+  walkAll(join(editorDir, "src"));                       // components + imported static assets
+  walkAll(join(editorDir, "public"));                    // files copied verbatim into dist (e.g. the font)
+  walkAll(join(repoRoot, "web", "packages"));            // workspace pkgs the bundle imports (e.g. bridge-schema)
+  for (const f of ["index.html", "vite.config.ts", "package.json", "app-version.ts",
+                   "tsconfig.json", "tsconfig.app.json", "tailwind.config.ts", "postcss.config.js"]) {
+    try { newest = Math.max(newest, statSync(join(editorDir, f)).mtimeMs); } catch { /* absent */ }
+  }
+  // Cross-language input: web/apps/editor/app-version.ts derives PE_VERSION_STR from
+  // the C++ header, so a version bump changes the bundle.
+  try { newest = Math.max(newest, statSync(join(repoRoot, "src", "version.h")).mtimeMs); } catch { /* absent */ }
+  return newest;
+}
+
 // Assert a build lane's binary exists and is not stale relative to its sources.
 // Returns null when fresh, or a failure note.
 export function staleBinaryNote(exePath, label, newestSrcMs = newestSourceMtime()) {
@@ -534,8 +570,18 @@ const LANES = [
   },
   {
     name: "msbuild-debug",
+    // The C++ build now EMBEDS the web bundle (RCDATA via the vcxproj
+    // GenerateEmbeddedWebAssets target reading web/apps/editor/dist), so a
+    // fresh dist/ is a genuine build input — order after web-build and block
+    // if it failed.
+    deps: ["web-build"],
     run: () => {
       if (SKIP_BUILD) return skip("--skip-build");
+      // A dist older than web source means the build just embedded a STALE UI into
+      // the exe. Catch it here so `--lane msbuild-debug` (no auto web-build dep)
+      // can't false-green on old web content.
+      const staleDist = staleBinaryNote(distIndex, "msbuild-debug (embedded web dist)", newestWebSourceMtime());
+      if (staleDist) return fail(staleDist);
       if (msbuild("Debug") !== 0) return fail("x64 Debug build");
       const stale = staleBinaryNote(debugExe, "msbuild-debug");
       return stale ? fail(stale) : pass;
@@ -592,8 +638,13 @@ const LANES = [
   },
   {
     name: "msbuild-release",
+    // Embeds the web bundle at compile time (see msbuild-debug) — depends on a
+    // fresh dist/.
+    deps: ["web-build"],
     run: () => {
       if (SKIP_BUILD) return skip("--skip-build");
+      const staleDist = staleBinaryNote(distIndex, "msbuild-release (embedded web dist)", newestWebSourceMtime());
+      if (staleDist) return fail(staleDist);
       if (msbuild("Release") !== 0) return fail("x64 Release build");
       const stale = staleBinaryNote(releaseExe, "msbuild-release");
       return stale ? fail(stale) : pass;

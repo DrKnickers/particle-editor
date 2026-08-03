@@ -207,6 +207,33 @@ function newestMtime(dir, exts) {
   return { newest, newestFile };
 }
 
+// Newest mtime across everything Vite compiles into the bundle — every extension
+// (imported images/fonts count, not just .ts/.tsx/.css), across src/ + public/ +
+// the workspace packages + the entry/config files + the cross-language version.h,
+// but SKIPPING test-only files. Mirrors run-all-tests.mjs newestWebSourceMtime so
+// the clip preflight sees the same stale-dist conditions the gate does.
+function newestWebSource() {
+  let newest = 0, newestFile = "";
+  const isTest = (n) => /\.(test|spec)\.[cm]?[jt]sx?$/i.test(n) || n === "test-setup.ts";
+  const bump = (p) => { try { const m = statSync(p).mtimeMs; if (m > newest) { newest = m; newestFile = p; } } catch { /* absent */ } };
+  const walk = (d) => {
+    let entries; try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) { if (["node_modules", "dist", "__tests__", "__mocks__"].includes(e.name)) continue; walk(p); }
+      else if (!isTest(e.name)) bump(p);
+    }
+  };
+  const editor = join(repoRoot, "web", "apps", "editor");
+  walk(join(editor, "src"));
+  walk(join(editor, "public"));
+  walk(join(repoRoot, "web", "packages"));
+  for (const f of ["index.html", "vite.config.ts", "package.json", "app-version.ts",
+                   "tsconfig.json", "tsconfig.app.json", "tailwind.config.ts", "postcss.config.js"]) bump(join(editor, f));
+  bump(join(repoRoot, "src", "version.h"));
+  return { newest, newestFile };
+}
+
 function preflight(clips, allowStale) {
   const fail = (msg) => { console.error(`[clip-batch] PREFLIGHT FAIL: ${msg}`); process.exit(2); };
 
@@ -215,12 +242,24 @@ function preflight(clips, allowStale) {
   if (!existsSync(exePath)) fail(`missing ${exePath} — build x64 Release first`);
   if (!existsSync(distIndex)) fail(`missing ${distIndex} — build the web bundle first`);
   const exeM = statSync(exePath).mtimeMs;
-  const distM = statSync(distIndex).mtimeMs;
+  // The NEWEST file across the whole dist bundle, not just index.html: the exe embeds
+  // every dist file, and an asset- or font-only change need not rewrite index.html, so
+  // keying freshness off index.html alone would miss it. Match EVERY file ("" is a
+  // suffix of every name) rather than an extension list — the embed generator already
+  // restricts dist to allowlisted types, so this covers 100% of what ships and cannot
+  // drift out of sync as that allowlist grows.
+  const distDir = join(repoRoot, "web", "apps", "editor", "dist");
+  const distNew = newestMtime(distDir, [""]);
+  const distM = distNew.newest;
   const srcNew = newestMtime(join(repoRoot, "src"), [".cpp", ".h"]);
-  const webNew = newestMtime(join(repoRoot, "web", "apps", "editor", "src"), [".ts", ".tsx", ".css"]);
+  const webNew = newestWebSource();
   const staleness = [];
   if (srcNew.newest > exeM) staleness.push(`exe older than ${srcNew.newestFile}`);
   if (webNew.newest > distM) staleness.push(`web dist older than ${webNew.newestFile}`);
+  // The exe now EMBEDS the web bundle (RCDATA) instead of reading dist/ at runtime, so a
+  // fresh dist alone is not enough — the exe must be rebuilt after any web change or the
+  // recording renders the OLD UI baked into the exe. Require exe >= newest dist file.
+  if (distM > exeM) staleness.push(`exe older than the web dist it embeds (${distNew.newestFile}) — rebuild x64 Release`);
   if (staleness.length) {
     if (allowStale) staleness.forEach((s) => log(`WARN (allow-stale): ${s}`));
     else fail(`${staleness.join("; ")} — rebuild or pass --allow-stale`);

@@ -90,9 +90,15 @@ function newestSrcMtimeMs(dir) {
 function ensureDebugHost(msbuild) {
   let needsBuild = true;
   try {
-    needsBuild = statSync(exe).mtimeMs < newestSrcMtimeMs(srcDir);
+    // The exe EMBEDS web/apps/editor/dist, so it is stale when EITHER native source
+    // OR the dist bundle is newer than it — not native source alone. buildWebDist()
+    // runs just before this and (re)builds dist, so a web-only edit makes dist newer
+    // than the exe and forces a rebuild; without the dist term the goldens would run
+    // against the OLD React bundle baked into an unchanged exe.
+    const distM = statSync(join(editorDir, "dist", "index.html")).mtimeMs;
+    needsBuild = statSync(exe).mtimeMs < Math.max(newestSrcMtimeMs(srcDir), distM);
   } catch {
-    needsBuild = true; // exe missing
+    needsBuild = true; // exe or dist missing
   }
   if (!needsBuild) {
     console.log("[a11y-drift] Debug host up to date.");
@@ -215,8 +221,12 @@ function main() {
   if (!NO_BUILD) {
     const msbuild = findMsbuild();
     if (!msbuild) die("MSBuild not found via vswhere.");
-    ensureDebugHost(msbuild);
+    // WEB FIRST: the C++ host build now embeds web/apps/editor/dist into the exe
+    // (GenerateEmbeddedWebAssets), so building the host before the bundle fails on
+    // a fresh worktree (no dist/index.html) and, on an existing tree, would bake a
+    // stale UI into the exe. Build the bundle, then the host that embeds it.
     buildWebDist();
+    ensureDebugHost(msbuild);
   }
   // Preflight git only (a real .exe). `node` is process.execPath (always
   // present). Do NOT probe pnpm: it's a Windows .CMD shim that shell:false

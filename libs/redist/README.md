@@ -5,13 +5,17 @@
 - **What it is:** Microsoft's *Evergreen Bootstrapper* (~2 MB) for the WebView2 runtime.
   It is a downloader, not the runtime itself — it fetches and installs the current
   runtime, so it never goes stale and does not need re-vendoring.
-- **Why vendored:** the `WebView2Loader.dll` we ship beside the exe is the **loader**, not
-  the **runtime**. The runtime is a machine component — present on Windows 11 and on any
-  Windows 10 with Edge, but absent on stripped or LTSC images. Without it the editor
-  launches and immediately tells the user to go install something else, which is exactly
-  the dead end `d3dx9_43.dll` is vendored to avoid. With it present, the WebView2 failure
-  path in [`src/host/HostWindow.cpp`](../../src/host/HostWindow.cpp) offers to run the
-  installer instead of just reporting the problem.
+- **No longer shipped by default.** The release is now a self-contained
+  `ParticleEditor.exe` + `d3dx9_43.dll` (the WebView2 loader is statically linked, so no
+  `WebView2Loader.dll` ships either). When the WebView2 **runtime** — a machine component,
+  present on Windows 11 and Windows 10 with Edge, absent on stripped/LTSC images — is
+  missing, the WebView2 failure path in
+  [`src/host/HostWindow.cpp`](../../src/host/HostWindow.cpp) opens the download page
+  (`https://aka.ms/webview2`).
+- **Why still vendored:** the bootstrapper is retained here for optional side-by-side use
+  (dropped next to the exe it is still honored for a one-click install) and in case a
+  future release chooses to bundle it again. It is a downloader, not the runtime itself, so
+  it never goes stale.
 - **How it was obtained:** downloaded 2026-07-25 from Microsoft's permalink
   <https://go.microsoft.com/fwlink/p/?LinkId=2124703> (the "Evergreen Bootstrapper"
   download on <https://developer.microsoft.com/microsoft-edge/webview2/>), then verified
@@ -29,9 +33,9 @@
   that downloads and then ships an executable is a supply-chain hazard. If you ever replace
   this file, verify the Authenticode signature again and update the table above — a vendored
   binary that ships to users should never be taken on trust.
-- **Enforcement:** [`scripts/package-release.ps1`](../../scripts/package-release.ps1)
-  treats it as a REQUIRED source and fails the packaging run if it is missing, so a
-  release cannot quietly ship without it.
+- **Packaging:** [`scripts/package-release.ps1`](../../scripts/package-release.ps1) does
+  **not** stage this file — the default release omits it. (It formerly treated it as a
+  required source; that changed when the release became a self-contained exe.)
 - **License:** redistributable under the Microsoft Edge WebView2 distribution terms, which
   permit shipping the bootstrapper alongside an application.
 

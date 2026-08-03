@@ -11,17 +11,15 @@
 // else, so every parent_path() walk built on it silently resolves to the wrong
 // directory.
 //
-// That is load-bearing here. The release layout derives the app.local mapping
-// by walking three parents up from the exe (see scripts/package-release.ps1,
-// which documents the tree as load-bearing for exactly this reason), so a
-// truncated read maps the virtual host at a directory that does not exist and
-// the WebView shows ERR_NAME_NOT_RESOLVED with no other symptom — a blank
-// window and exit code 0 (2026-07 audit, an-audit-finding). A user who extracts the
-// release zip under a long path gets that and nothing to go on.
+// That is load-bearing here. `BundledWebView2SetupPath` locates
+// MicrosoftEdgeWebview2Setup.exe BESIDE the running exe, so a truncated module
+// read would look for the bootstrapper in the wrong directory and silently
+// decide the runtime installer is absent. (The app.local UI is no longer found
+// on disk at all — it is embedded in the exe as RCDATA and served by a
+// WebResourceRequested handler — so the former three-parent `dist` walk that
+// also depended on this read is gone.)
 //
-// The loop below is the shape BundledWebView2SetupPath already used correctly;
-// this header is where it lives now so the sibling caller cannot get it wrong
-// again. `Probe` is the injection seam: production supplies
+// `Probe` is the injection seam: production supplies
 // GetModuleFileNameW, and tests supply a fake that reproduces the truncation
 // and failure contracts without needing a 400-character path on disk.
 

@@ -76,6 +76,20 @@ IDR_SKYDOME_OVERCAST    RCDATA                  "Resources\\skydomes\\overcast.t
 IDR_SKYDOME_STUDIO      RCDATA                  "Resources\\skydomes\\studio.tga"
 IDR_SKYDOME_INDOOR      RCDATA                  "Resources\\skydomes\\indoor.tga"
 
+// Embedded React bundle (web\apps\editor\dist). Auto-generated before every
+// build by scripts\embed-web-dist.mjs (the vcxproj GenerateEmbeddedWebAssets
+// target) — one RCDATA entry per dist file, ids from 3000. HostWindow.cpp's
+// WebResourceRequested handler serves these as https://app.local/<path>, so
+// the exe carries the whole UI and no separate web\ folder ships.
+//
+// The generated file holds ABSOLUTE source paths as BOM-less UTF-8. Read them
+// under code page 65001 (UTF-8) so a checkout path with non-ANSI characters
+// (e.g. an accented user directory) is not mis-decoded by rc.exe under this
+// file's default cp1252; restore cp1252 immediately after for the rest.
+#pragma code_page(65001)
+#include "generated\\EmbeddedWebAssets.rc"
+#pragma code_page(1252)
+
 /////////////////////////////////////////////////////////////////////////////
 //
 // Version

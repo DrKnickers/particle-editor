@@ -10,7 +10,6 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ### Added
 
-- The release download now includes Microsoft's WebView2 installer. On the few PCs that lack that component, the editor offers to install it for you instead of showing an error and closing
 - A "What's New" page — reached from the landing topbar and pointed to from the guide home page — walks returning modders through what this editor does that Mike.NL's GlyphX Particle Editor v1.5 couldn't (scene context, mod-stack editing, the spawner, emitter draw-order, the Atlas Frame Picker), plus a table of deliberate behavioral departures from the legacy editor
 - Help → Keyboard Shortcuts… opens a dialog listing every keyboard shortcut in the editor, grouped into 8 sections
 - Deleting every emitter now leaves a hint in the viewport — "No emitters — press + to add one, or Ctrl+Z to undo" — instead of an empty canvas with no explanation
@@ -74,6 +73,7 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 - EmitterTree panel toolbar and a live 3D cursor position readout in the status bar
 
 ### Changed
+- The Windows download is now a self-contained `ParticleEditor.exe` — the React interface is built into the executable, so there is no separate `web` folder to keep beside it and you can run the `.exe` from anywhere; only `d3dx9_43.dll` still ships alongside. On the few PCs without the Microsoft Edge WebView2 runtime, the editor opens Microsoft's download page for it
 - The What's New page is retired — even slimmed it stayed redundant with the landing page. Returning v1.5 users now get a dedicated Start Here guide that compares old and current workflows across authoring, mod assets, scene context, preview tools, and safer editing; the frozen five-row departures table moves with it, the guide home points there, and the topbar on every page drops the What's New item
 - The guide sidebar's "Videos pending" badge on tutorials 2 and 4 is now bracketed — "(Videos pending)" — so it reads as an aside instead of blending into the tutorial title
 - Guide article links now carry a rest-state underline instead of being distinguished by colour alone, fixing a WCAG 1.4.1 (link-in-text-block) failure across every guide page

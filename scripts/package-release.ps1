@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Stage (and optionally zip) the Particle Editor release layout, self-asserting completeness.
 
@@ -7,29 +7,20 @@
     runtime file is missing -- so a release archive can never be produced with a broken/incomplete
     bundle.
 
-    WHY THIS LAYOUT IS LOAD-BEARING:
-    The host computes the web-bundle path at runtime by walking UP three parent directories from the
-    running .exe, then descending into web/apps/editor/dist (HostWindow.cpp ComputeEditorDistPath):
-
-        auto root = p.parent_path().parent_path().parent_path();
-        return root / "web" / "apps" / "editor" / "dist";
-
-    So from  <STAGE>/x64/Release/ParticleEditor.exe  the three hops land back on <STAGE>, and the
-    bundle must live at  <STAGE>/web/apps/editor/dist . Flatten the exe or move the bundle and the
-    WebView shows ERR_NAME_NOT_RESOLVED for app.local at launch.
-
-    Authoritative staged tree:
+    THE RELEASE IS TWO FILES. The React UI is compiled INTO the exe as RCDATA (the vcxproj
+    GenerateEmbeddedWebAssets target embeds web/apps/editor/dist; HostWindow.cpp serves it on
+    app.local via a WebResourceRequested handler), and the WebView2 loader is statically linked
+    (WebView2LoaderPreference=Static). So there is no separate web/ folder and no WebView2Loader.dll
+    to ship -- just the exe and the vendored D3DX9 runtime beside it:
 
         <STAGE>/
           x64/Release/
-            ParticleEditor.exe     # WebView2 loader is statically linked in (no WebView2Loader.dll);
-                                   # the runtime bootstrapper is NOT bundled -- if the WebView2 runtime
-                                   # is absent the app opens https://aka.ms/webview2 (HostWindow.cpp).
+            ParticleEditor.exe     # self-contained UI (embedded bundle) + static WebView2 loader.
+                                    # The WebView2 RUNTIME is a separate machine component; when it
+                                    # is absent the app opens https://aka.ms/webview2 for the user
+                                    # (OfferWebView2Install in HostWindow.cpp) rather than bundling
+                                    # Microsoft's ~2 MB bootstrapper.
             d3dx9_43.dll           # x64 D3DX9 runtime, vendored at libs/redist/
-          web/apps/editor/dist/
-            index.html
-            assets/                # built JS/CSS (must be non-empty)
-            fonts/
 
     d3dx9_43.dll is vendored at  libs/redist/d3dx9_43.dll  (x64) and copied from there, so packaging
     is deterministic on any machine or CI runner (a per-machine OS copy is absent on a clean install).
@@ -125,13 +116,9 @@ Write-Host ""
 # --- Resolve + validate source artifacts -------------------------------------
 $exeSource    = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release', 'ParticleEditor.exe')
 $d3dxSource   = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist', 'd3dx9_43.dll')
-$distSource   = [System.IO.Path]::Combine($RepoRoot, 'web', 'apps', 'editor', 'dist')
-$distIndex    = [System.IO.Path]::Combine($distSource, 'index.html')
-$distAssets   = [System.IO.Path]::Combine($distSource, 'assets')
 $sourceRoots  = @(
     [pscustomobject]@{ Label = 'native release output'; Path = [System.IO.Path]::Combine($RepoRoot, 'x64', 'Release') }
     [pscustomobject]@{ Label = 'vendored D3DX redist'; Path = [System.IO.Path]::Combine($RepoRoot, 'libs', 'redist') }
-    [pscustomobject]@{ Label = 'web bundle dist'; Path = $distSource }
 )
 
 foreach ($sourceRoot in $sourceRoots) {
@@ -142,74 +129,44 @@ foreach ($sourceRoot in $sourceRoots) {
 
 Test-RequiredSource 'ParticleEditor.exe'      $exeSource    'Leaf'
 Test-RequiredSource 'd3dx9_43.dll (vendored)' $d3dxSource   'Leaf'
-# The WebView2 loader is STATICALLY linked into the exe (vcxproj
-# WebView2LoaderPreference=Static), so no WebView2Loader.dll ships. The WebView2
-# RUNTIME is a separate machine component (present on Windows 11, and Windows 10
-# with Edge; absent on stripped/LTSC images). When it is absent the editor opens
-# https://aka.ms/webview2 for the user (OfferWebView2Install in HostWindow.cpp)
-# rather than bundling Microsoft's ~2 MB bootstrapper.
-Test-RequiredSource 'web bundle (dist)'       $distSource   'Container'
-Test-RequiredSource 'web bundle index.html'   $distIndex    'Leaf'
-Test-RequiredSource 'web bundle assets/'      $distAssets   'Container'
+# The React UI is EMBEDDED in the exe (RCDATA) and the WebView2 loader is STATICALLY linked
+# (vcxproj WebView2LoaderPreference=Static), so neither a web/ folder nor WebView2Loader.dll ships.
+# The WebView2 RUNTIME is a separate machine component (present on Windows 11, and Windows 10 with
+# Edge; absent on stripped/LTSC images); when it is absent the editor opens https://aka.ms/webview2
+# for the user (OfferWebView2Install in HostWindow.cpp) rather than bundling Microsoft's bootstrapper.
 
 # --- Clear + prepare the staged tree -----------------------------------------
 if (Test-Path -LiteralPath $Stage) { Remove-Item -LiteralPath $Stage -Recurse -Force }
 $stageExeDir  = [System.IO.Path]::Combine($Stage, 'x64', 'Release')
-$stageDistDir = [System.IO.Path]::Combine($Stage, 'web', 'apps', 'editor', 'dist')
 New-Item -ItemType Directory -Force -Path $stageExeDir  | Out-Null
-New-Item -ItemType Directory -Force -Path $stageDistDir | Out-Null
 
 # --- Copy native artifacts ----------------------------------------------------
 Copy-Item -LiteralPath $exeSource  -Destination $stageExeDir -Force
 Copy-Item -LiteralPath $d3dxSource -Destination $stageExeDir -Force
 Write-Host "  [ok] ParticleEditor.exe, d3dx9_43.dll -> $stageExeDir"
 
-# --- Copy the web bundle CONTENTS (index.html, assets/, fonts/) ---------------
-Get-ChildItem -LiteralPath $distSource -Force | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination $stageDistDir -Recurse -Force
-}
-Write-Host "  [ok] web bundle -> $stageDistDir"
-
 # --- Post-stage assertions (fail loud) ---------------------------------------
+# The stage is a freshly-cleared dir populated by exactly the two explicit Copy-Item calls above, so
+# "nothing extra shipped" is guaranteed by construction -- there is no directory copy to carry a stray
+# artifact in (the pre-2026-08 shape allowlist guarded a whole-dir copy of web/apps/editor/dist that
+# no longer exists). Present-checks here + the exact zip==stage equality below pin the two-file shape.
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'ParticleEditor.exe'))
 Assert-Staged ([System.IO.Path]::Combine('x64', 'Release', 'd3dx9_43.dll'))
-Assert-Staged ([System.IO.Path]::Combine('web', 'apps', 'editor', 'dist', 'index.html'))
-$stagedAssets = [System.IO.Path]::Combine($stageDistDir, 'assets')
-if (-not (Test-Path -LiteralPath $stagedAssets -PathType Container) -or
-    -not (Get-ChildItem -LiteralPath $stagedAssets -Recurse -File)) {
-    throw "[package-release] Staged web bundle has no assets: $stagedAssets"
-}
-$stagedFonts = [System.IO.Path]::Combine($stageDistDir, 'fonts')
-if (-not (Test-Path -LiteralPath $stagedFonts -PathType Container) -or
-    -not (Get-ChildItem -LiteralPath $stagedFonts -Recurse -File)) {
-    throw "[package-release] Staged web bundle has no fonts: $stagedFonts"
-}
-# SHAPE ALLOWLIST. The assertions above prove the required files are PRESENT;
-# this proves nothing ELSE is. Without it an unexpected artifact riding along in
-# web/apps/editor/dist (a stray canary, a sourcemap, a leftover fixture) is
-# copied into the stage and shipped, and every present-only check still passes
-# -- verified by negative control during the 2026-07 audit follow-up. Staging is
-# a faithful copy of dist, so dist pollution is the only way in, and this is
-# where it has to be caught.
-$allowedPatterns = @(
-    '^x64/Release/(ParticleEditor\.exe|d3dx9_43\.dll)$'
-    '^web/apps/editor/dist/index\.html$'
-    '^web/apps/editor/dist/assets/[^/]+\.(js|css)$'
-    '^web/apps/editor/dist/fonts/.+$'
-)
-$stagedForShape = @(
-    Get-ChildItem -LiteralPath $Stage -Recurse -File |
-        ForEach-Object { $_.FullName.Substring($Stage.Length).TrimStart([char]'\', [char]'/') -replace '\\', '/' }
-)
-$unexpected = @($stagedForShape | Where-Object {
-    $rel = $_
-    -not ($allowedPatterns | Where-Object { $rel -match $_ })
-})
-if ($unexpected.Count -gt 0) {
-    throw "[package-release] Unexpected file(s) in the staged tree (not in the release shape allowlist): $($unexpected -join ', ')"
+
+# The exe must actually EMBED the web bundle -- this release ships no web/ folder, so the
+# UI lives inside the exe as RCDATA. A stale pre-embed (folder-mapping) exe, or one built
+# before the bundle existed, would stage "successfully" here yet show ERR_NAME_NOT_RESOLVED
+# on launch. Confirm the embedded index.html is present via its stable React mount sentinel
+# (id="root"); ASCII.GetString leaves that ASCII substring intact wherever it sits in the
+# binary, and works identically under Windows PowerShell 5.1 and pwsh 7.
+$stagedExe = [System.IO.Path]::Combine($Stage, 'x64', 'Release', 'ParticleEditor.exe')
+$exeText   = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($stagedExe))
+if (-not $exeText.Contains('id="root"')) {
+    throw "[package-release] ParticleEditor.exe does not embed the web bundle (React mount sentinel not found) -- rebuild x64 Release after building web/apps/editor/dist."
 }
 
-Write-Host "  [ok] staged tree verified (shape allowlist: $($stagedForShape.Count) files)"
+$stagedCount = @(Get-ChildItem -LiteralPath $Stage -Recurse -File).Count
+Write-Host "  [ok] staged tree verified ($stagedCount files; exe embeds the web bundle)"
 
 # --- Optional: create + verify the release zip -------------------------------
 if ($OutZip) {
@@ -227,18 +184,14 @@ if ($OutZip) {
     } finally {
         $zip.Dispose()
     }
-    # Only FILE entries count — a bare directory entry (ends in '/') must not satisfy a check.
+    # Only FILE entries count -- a bare directory entry (ends in '/') must not satisfy a check.
     $fileEntries = @($entries | Where-Object { -not $_.EndsWith('/') })
 
-    # EXACT-SET contract, not a subset check. The old assertions verified only
-    # that four named entries were PRESENT, so a zip could carry an extra file
-    # (a stray canary, a leftover .pdb, an unrelated dll) or be missing a
-    # required web asset and still pass -- both demonstrated by the 2026-07
-    # audit's negative controls, which packaged an extra canary and a
-    # CSS-less bundle and got exit 0 twice.
-    #
-    # The zip must equal the staged tree exactly: nothing added between staging
-    # and compression, nothing dropped. The staged tree is itself asserted above.
+    # EXACT-SET contract, not a subset check. A subset check would let a zip carry an extra file
+    # (a stray canary, a leftover .pdb, an unrelated dll) or be missing a required artifact and still
+    # pass -- both demonstrated by the 2026-07 audit's negative controls. The zip must equal the
+    # staged tree exactly: nothing added between staging and compression, nothing dropped. The staged
+    # tree is itself asserted above.
     $stagedRel = @(
         Get-ChildItem -LiteralPath $Stage -Recurse -File |
             ForEach-Object { $_.FullName.Substring($Stage.Length).TrimStart([char]'\', [char]'/') -replace '\\', '/' }
@@ -252,28 +205,14 @@ if ($OutZip) {
         throw "[package-release] Zip is MISSING staged files: $($stageOnly -join ', ')"
     }
 
-    # Every shipped artifact named explicitly. The WebView2 loader is statically
-    # linked (no WebView2Loader.dll) and the runtime bootstrapper is no longer
-    # bundled, so the native payload beside the exe is just d3dx9_43.dll.
+    # Every shipped artifact named explicitly. The UI is embedded and the WebView2 loader is static,
+    # so the release payload is exactly the exe and the vendored d3dx9_43.dll beside it.
     $requiredEntries = @(
         'x64/Release/ParticleEditor.exe'
         'x64/Release/d3dx9_43.dll'
-        'web/apps/editor/dist/index.html'
     )
     foreach ($r in $requiredEntries) {
         if ($fileEntries -notcontains $r) { throw "[package-release] Missing zip entry: $r" }
-    }
-    foreach ($kind in @('assets', 'fonts')) {
-        if (-not ($fileEntries | Where-Object { $_ -like "web/apps/editor/dist/$kind/*" })) {
-            throw "[package-release] Missing zip entry (file under): web/apps/editor/dist/$kind/"
-        }
-    }
-    # The bundle must carry BOTH a JS and a CSS asset -- the audit's negative
-    # control removed the only CSS while JS remained and packaging still passed.
-    foreach ($ext in @('js', 'css')) {
-        if (-not ($fileEntries | Where-Object { $_ -like "web/apps/editor/dist/assets/*.$ext" })) {
-            throw "[package-release] Missing zip entry: no .$ext under web/apps/editor/dist/assets/"
-        }
     }
     Write-Host "  [ok] zip verified -> $OutZip" -ForegroundColor Cyan
 }

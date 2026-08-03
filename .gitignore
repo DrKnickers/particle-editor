@@ -322,5 +322,13 @@ scripts/wiki-media/config.local.json
 .gate.lock
 vid-repro/
 
+# Embedded web-bundle manifest: scripts/embed-web-dist.mjs regenerates
+# EmbeddedWebAssets.{rc,h} from web/apps/editor/dist BEFORE every C++ build
+# (the vcxproj GenerateEmbeddedWebAssets target). The filenames are Vite
+# content hashes that change every web build, so tracking them would churn.
+# Both are #included at compile time, generated before the compile that reads
+# them — a clean checkout never needs them committed.
+src/generated/
+
 # Playwright run artifacts
 test-results/

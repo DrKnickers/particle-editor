@@ -62,7 +62,7 @@
 #include "Run.h"
 #include "WindowCapture.h"  // host::CaptureWindowToPng (factored out for --capture/--snap-window)
 #include "StringConv.h"     // host::Utf8ToWide / WideToUtf8 (consolidated, DRY audit cpp-host-0)
-#include "CacheBust.h"   // app.local index.html cache-bust query (workaround)
+#include "generated/EmbeddedWebAssets.h"  // embedded React bundle manifest (RCDATA) served on app.local
 #include "CaptureGoldenProfile.h"
 #include "PerfTrace.h"
 #include "WebViewModalPolicy.h"
@@ -130,7 +130,6 @@ constexpr wchar_t kHostWindowClassName[]     = L"AloHostMain";
 constexpr wchar_t kHostViewportClassName[]   = L"AloHostViewport";
 constexpr int     kInitialWidth              = 1280;
 constexpr int     kInitialHeight             = 800;
-constexpr wchar_t kVirtualHostName[]         = L"app.local";
 constexpr INTERNET_PORT kDevServerPort       = 5174;
 constexpr UINT_PTR    kStatsTimerId          = 0x100;  // 4 Hz stats broadcast
 // [resize-perf] one-shot safety net: re-armed on every
@@ -144,9 +143,9 @@ constexpr UINT        kResizeSettleDelayMs   = 150;
 // WebView2 origin allow-list. The host must trust only the
 // page it deliberately loads, not "whatever is currently navigated". Three
 // origins are legitimate:
-//   - https://app.local/     prod: the SetVirtualHostNameToFolderMapping
-//                            origin (kVirtualHostName) serving the bundled
-//                            web/apps/editor/dist.
+//   - https://app.local/     prod: the virtual origin whose requests the
+//                            WebResourceRequested handler answers from the exe's
+//                            embedded RCDATA web bundle.
 //   - http://localhost:5174/ dev: the Vite HMR server (kDevServerPort), only
 //                            when --dev-ui is active.
 //   - about:                 WebView2's own about:blank initial navigation.
@@ -283,13 +282,16 @@ static bool WebView2RuntimeInstalled()
     return installed;
 }
 
-// Absolute path of the release zip's bundled Evergreen bootstrapper, or empty
-// if it is not beside the exe (a dev-tree run, or a hand-assembled copy).
+// Absolute path of the Evergreen bootstrapper IF one sits beside the exe, or
+// empty otherwise. The release no longer bundles it (the shipped build is a
+// self-contained exe + d3dx9_43.dll), so in practice this is empty and the
+// caller opens the download page; a bootstrapper a user drops in manually is
+// still honored.
 //
 // The grow-until-it-fits GetModuleFileNameW loop that used to live inline here
-// now lives in host::ModuleDirectory (ModulePath.h), because the sibling
-// ComputeEditorDistPath below had the fixed-MAX_PATH form and truncated
-// silently (2026-07 audit, an-audit-finding). One correct implementation, two callers.
+// now lives in host::ModuleDirectory (ModulePath.h) — the fixed-MAX_PATH form
+// it replaced truncated silently under a long extraction path (2026-07 audit,
+// an-audit-finding).
 static std::wstring BundledWebView2SetupPath()
 {
     const std::wstring dir = host::ModuleDirectory();
@@ -302,10 +304,10 @@ static std::wstring BundledWebView2SetupPath()
 
 // The runtime is missing (or unusable). Offer to fix it, in plain language.
 //
-// Release zips bundle Microsoft's bootstrapper precisely so this is a one-click
-// recovery rather than "go install something else and come back" — the same
-// reason d3dx9_43.dll is vendored. When it is not present (dev tree) fall back
-// to opening the download page.
+// The release no longer bundles Microsoft's bootstrapper, so in a shipped build
+// `setup` is empty and this opens the download page (https://aka.ms/webview2).
+// A bootstrapper manually placed beside the exe is still honored for a one-click
+// install.
 //
 // Callers MUST gate on IsFullyInteractive(): a headless capture/record/drive run
 // has nobody to answer a modal and would hang on it.
@@ -388,29 +390,6 @@ bool ProbeDevServer()
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
     return ok;
-}
-
-// Walk up from x64/<Config>/ParticleEditor.exe to the repo root, then
-// descend to web/apps/editor/dist (Vite's build output). Same pattern as
-// viewport_poc, just a different sub-path.
-//
-// The three-hop walk is load-bearing in RELEASE too, not just the dev tree:
-// scripts/package-release.ps1 stages the exe at <STAGE>/x64/Release/ so the
-// hops land back on <STAGE>, where the bundle lives. That is why the module
-// path has to be read correctly — this used to be a fixed MAX_PATH buffer with
-// an unchecked return, so extracting the zip under a long path TRUNCATED the
-// read, walked three parents from a wrong path, and mapped app.local at a
-// directory that does not exist. The user saw ERR_NAME_NOT_RESOLVED, a blank
-// window, and exit code 0 (2026-07 audit, an-audit-finding).
-//
-// Returns EMPTY when the module path cannot be read; the caller must treat that
-// as a startup failure rather than mapping a relative path off the CWD.
-std::wstring ComputeEditorDistPath()
-{
-    const std::wstring dir = host::ModuleDirectory();
-    if (dir.empty()) return std::wstring();
-    auto root = std::filesystem::path(dir).parent_path().parent_path();
-    return (root / L"web" / L"apps" / L"editor" / L"dist").wstring();
 }
 
 // WebView2 user-data folder under %LOCALAPPDATA%. We use a stable,
@@ -558,6 +537,10 @@ struct HostWindowImpl
     // "loaded but never signaled". Registered in FinishWebView2ControllerSetup,
     // removed in WM_DESTROY (same lifecycle as the tokens above).
     EventRegistrationToken          navCompletedTok = {};
+    // WebResourceRequested handler that serves app.local from the embedded
+    // RCDATA bundle (prod only). Registered in FinishWebView2ControllerSetup,
+    // removed in WM_DESTROY like the tokens above.
+    EventRegistrationToken          webResourceTok = {};
     // Every token above exists so WM_DESTROY can UNSUBSCRIBE a handler that
     // captures `this`. The two WebView2 CREATION callbacks have no token to
     // unsubscribe — they are one-shot completions the runtime owns — so they
@@ -2351,84 +2334,14 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // promotion is needed — owned popups naturally
     // stay above their owner.
 
-    // Production mode: map app.local → web/apps/editor/dist
-    // so the React app loads from a stable virtual origin.
-    // Dev mode (--dev-ui): skip the mapping; Vite's own
-    // dev server serves everything from localhost:5174.
+    // Production mode: the React app loads from the stable virtual origin
+    // https://app.local/, whose requests the WebResourceRequested handler
+    // (registered below, in FinishWebView2ControllerSetup) answers from the
+    // exe's embedded RCDATA web bundle. No SetVirtualHostNameToFolderMapping,
+    // no on-disk web/ folder, and no ?v= cache-bust — the embedded responses
+    // carry a real Cache-Control header. Dev mode (--dev-ui) navigates to
+    // Vite's localhost:5174 instead and never touches app.local.
     std::wstring prodNavUrl = L"https://app.local/index.html";
-    if (!useDevUi)
-    {
-        // Every failure below used to be swallowed — the QI was tested but a
-        // null wv3 just SKIPPED the mapping, and the mapping's own HRESULT was
-        // dropped. Either way the app.local origin was never registered and
-        // the WebView showed ERR_NAME_NOT_RESOLVED against a live window with a
-        // zero exit code (2026-07 audit, an-audit-finding). Returning the failing
-        // HRESULT is all that is needed: OnCompositionControllerReady already
-        // routes a failed setup to WM_APP_COMPOSITION_FALLBACK, which is
-        // terminal.
-        std::wstring distPath = ComputeEditorDistPath();
-        if (distPath.empty())
-        {
-            Log("[host] editor dist: module path unreadable — cannot map %ls\n",
-                kVirtualHostName);
-            return E_FAIL;
-        }
-        Log("[host] editor dist: %ls\n", distPath.c_str());
-
-        ComPtr<ICoreWebView2_3> wv3;
-        const HRESULT wv3Hr = webView.As(&wv3);
-        if (FAILED(wv3Hr) || !wv3)
-        {
-            Log("[host] QI ICoreWebView2_3 failed hr=0x%08lx — no app.local mapping\n", wv3Hr);
-            return FAILED(wv3Hr) ? wv3Hr : E_NOINTERFACE;
-        }
-
-        const HRESULT mapHr = wv3->SetVirtualHostNameToFolderMapping(
-            kVirtualHostName, distPath.c_str(),
-            COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
-        if (FAILED(mapHr))
-        {
-            Log("[host] SetVirtualHostNameToFolderMapping(%ls) failed hr=0x%08lx\n",
-                kVirtualHostName, mapHr);
-            return mapHr;
-        }
-
-        // Cache-bust the (unhashed) entry document so a rebuilt dist is
-        // served fresh — see CacheBust.h for why we can't set a
-        // Cache-Control header on the mapped host. Append the build's
-        // index.html mtime as ?v=…; it changes on every rebuild and is
-        // stable across relaunches of the same build (unchanged hashed
-        // assets stay cache-warm).
-        std::error_code ec;
-        std::filesystem::path indexPath =
-            std::filesystem::path(distPath) / L"index.html";
-        auto wt = std::filesystem::last_write_time(indexPath, ec);
-        if (ec)
-        {
-            Log("[host] cache-bust: index.html mtime unavailable (%s); "
-                "navigating without ?v=\n", ec.message().c_str());
-        }
-        else
-        {
-            long long ticks =
-                static_cast<long long>(wt.time_since_epoch().count());
-            std::wstring token = host::CacheBustToken(ticks);
-            if (!token.empty())
-            {
-                prodNavUrl = host::AppendCacheBustQuery(prodNavUrl, token);
-                Log("[host] cache-bust: %ls\n", prodNavUrl.c_str());
-            }
-            else
-            {
-                // Read succeeded but the tick count was non-positive (only
-                // possible on a non-FILETIME file_clock epoch) — distinct
-                // from the read-failure case above, so log it separately
-                // instead of silently dropping the bust.
-                Log("[host] cache-bust: index.html mtime read OK but ticks "
-                    "non-positive (%lld); navigating without ?v=\n", ticks);
-            }
-        }
-    }
 
     // Subscribe to JS → host messages.
     // Stash the registration token in the member
@@ -2580,11 +2493,146 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 return S_OK;
             }).Get(), &permissionTok);
 
-    // A WebResourceRequested handler will NOT fire for the
-    // mapped app.local host (SetVirtualHostNameToFolderMapping short-circuits
-    // user handlers), so we cannot inject a Cache-Control response header to
-    // keep a rebuilt bundle fresh. The cache-bust above (prodNavUrl's
-    // ?v=<mtime>) is the header-free workaround.
+    // Serve the embedded React bundle. app.local is no longer a
+    // SetVirtualHostNameToFolderMapping folder host — the bundle is compiled
+    // into this exe as RCDATA (src\generated\EmbeddedWebAssets.rc). Intercept
+    // every app.local request and answer it from the matching embedded resource
+    // with the Content-Type / Cache-Control the generator baked into the
+    // manifest. A folder mapping short-circuits WebResourceRequested (old
+    //); with no mapping the handler now fires. Dev mode never requests
+    // app.local, so the filter is gated on !useDevUi.
+    if (!useDevUi)
+    {
+        const HRESULT filtHr = webView->AddWebResourceRequestedFilter(
+            L"https://app.local/*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+        if (FAILED(filtHr))
+        {
+            Log("[host] AddWebResourceRequestedFilter(app.local) failed hr=0x%08lx\n",
+                filtHr);
+            return filtHr;
+        }
+        const HRESULT wrrHr = webView->add_WebResourceRequested(
+            Callback<ICoreWebView2WebResourceRequestedEventHandler>(
+                [this](ICoreWebView2*,
+                       ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT
+                {
+                    // Synthesize a no-body response (used for 404/500). Defined
+                    // FIRST so every early-out can deliver a real HTTP status:
+                    // leaving args->Response null lets the runtime resolve the
+                    // request itself, which for app.local is exactly the failed
+                    // network load this handler exists to replace.
+                    auto makeStatusResponse =
+                        [this, args](int code, PCWSTR reason) -> HRESULT
+                    {
+                        if (!webEnv) return S_OK;
+                        ComPtr<ICoreWebView2WebResourceResponse> resp;
+                        const HRESULT hr = webEnv->CreateWebResourceResponse(
+                            nullptr, code, reason, L"", &resp);
+                        if (SUCCEEDED(hr) && resp)
+                        {
+                            const HRESULT pr = args->put_Response(resp.Get());
+                            if (FAILED(pr))
+                                Log("[host] app.local: put_Response(%d) failed "
+                                    "hr=0x%08lx\n", code, pr);
+                        }
+                        else
+                            // Nothing better to do — the request falls through to the
+                            // runtime's default handling — but log it so a mystery
+                            // network error is attributable.
+                            Log("[host] app.local: could not synthesize %d response "
+                                "hr=0x%08lx\n", code, hr);
+                        return S_OK;
+                    };
+
+                    // Read the request URI. A request we cannot even identify is
+                    // not the entry document, so fail it with a 500 rather than
+                    // silently serving index.html for an unreadable request.
+                    ComPtr<ICoreWebView2WebResourceRequest> req;
+                    if (FAILED(args->get_Request(&req)) || !req)
+                        return makeStatusResponse(500, L"Internal Server Error");
+                    LPWSTR rawUri = nullptr;
+                    const HRESULT uriHr = req->get_Uri(&rawUri);
+                    if (FAILED(uriHr) || !rawUri)
+                    {
+                        if (rawUri) CoTaskMemFree(rawUri);
+                        Log("[host] app.local: get_Uri failed hr=0x%08lx\n", uriHr);
+                        return makeStatusResponse(500, L"Internal Server Error");
+                    }
+                    std::wstring uri = rawUri;
+                    CoTaskMemFree(rawUri);
+
+                    // Reduce the URI to an embedded-asset key: drop the
+                    // scheme+host prefix, drop any ?query / #fragment, and map
+                    // "" or "/" to the entry document.
+                    std::wstring path = uri;
+                    const wchar_t* kOrigin = L"https://app.local";
+                    if (_wcsnicmp(path.c_str(), kOrigin, wcslen(kOrigin)) == 0)
+                        path.erase(0, wcslen(kOrigin));
+                    const size_t q = path.find_first_of(L"?#");
+                    if (q != std::wstring::npos) path.erase(q);
+                    if (path.empty() || path == L"/") path = L"/index.html";
+
+                    const host::EmbeddedAsset* assets = host::EmbeddedWebAssets();
+                    const size_t count = host::EmbeddedWebAssetCount();
+                    const host::EmbeddedAsset* hit = nullptr;
+                    for (size_t i = 0; i < count; ++i)
+                        if (path == assets[i].urlPath) { hit = &assets[i]; break; }
+                    if (!hit)
+                    {
+                        Log("[host] app.local embedded 404: %ls\n", path.c_str());
+                        return makeStatusResponse(404, L"Not Found");
+                    }
+
+                    HMODULE hMod = GetModuleHandle(nullptr);
+                    HRSRC hRes = FindResource(
+                        hMod, MAKEINTRESOURCE(hit->resourceId), RT_RCDATA);
+                    HGLOBAL hData = hRes ? LoadResource(hMod, hRes) : nullptr;
+                    const DWORD size = hRes ? SizeofResource(hMod, hRes) : 0;
+                    void* data = hData ? LockResource(hData) : nullptr;
+                    if (!data || !size)
+                    {
+                        // The manifest named a resource the exe doesn't carry —
+                        // a generator/rc mismatch, not a normal miss.
+                        Log("[host] app.local embedded resource %d unreadable (%ls)\n",
+                            hit->resourceId, path.c_str());
+                        return makeStatusResponse(500, L"Internal Server Error");
+                    }
+
+                    // SHCreateMemStream COPIES the bytes into a ref-counted
+                    // stream; the RCDATA block stays valid for the process
+                    // lifetime, so no lifetime coupling to worry about.
+                    ComPtr<IStream> stream;
+                    stream.Attach(SHCreateMemStream(
+                        static_cast<const BYTE*>(data), size));
+                    if (!stream) return makeStatusResponse(500, L"Internal Server Error");
+
+                    if (!webEnv) return S_OK;
+                    ComPtr<ICoreWebView2WebResourceResponse> resp;
+                    const HRESULT rHr = webEnv->CreateWebResourceResponse(
+                        stream.Get(), 200, L"OK", hit->responseHeaders, &resp);
+                    if (FAILED(rHr) || !resp)
+                    {
+                        Log("[host] CreateWebResourceResponse failed hr=0x%08lx (%ls)\n",
+                            rHr, path.c_str());
+                        return makeStatusResponse(500, L"Internal Server Error");
+                    }
+                    const HRESULT pr = args->put_Response(resp.Get());
+                    if (FAILED(pr))
+                        Log("[host] app.local: put_Response failed hr=0x%08lx (%ls)\n",
+                            pr, path.c_str());
+                    return S_OK;
+                }).Get(), &webResourceTok);
+        // This handler is load-bearing: without it app.local has no responder and
+        // the first navigation reproduces the blank-window / ERR_NAME_NOT_RESOLVED
+        // failure this change eliminates. A failed registration must therefore be
+        // terminal, not swallowed — same fail-closed treatment the removed folder
+        // mapping got (2026-07 audit, an-audit-finding).
+        if (FAILED(wrrHr))
+        {
+            Log("[host] add_WebResourceRequested(app.local) failed hr=0x%08lx\n", wrrHr);
+            return wrrHr;
+        }
+    }
 
     // --capture diagnosability: log when the app document finishes loading, so a
     // ui-ready timeout in the capture loop is attributable ("navigation never
@@ -4040,6 +4088,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 webView->remove_PermissionRequested(permissionTok);
                 permissionTok = {};
             }
+            if (webResourceTok.value != 0)
+            {
+                webView->remove_WebResourceRequested(webResourceTok);
+                webResourceTok = {};
+            }
             if (docTitleTok.value != 0)
             {
                 webView->remove_DocumentTitleChanged(docTitleTok);
@@ -4060,6 +4113,11 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             webController.Reset();
         }
         webView.Reset();
+        // Release the WebView2 environment here too, while COM is still live.
+        // It is a member ComPtr used by the WebResourceRequested handler; if left
+        // to HostWindowImpl's destructor its final Release() would run AFTER the
+        // CoUninitialize() at the end of Run() — a COM call past teardown.
+        webEnv.Reset();
         // Release composition controller +
         // DComp tree. Order matters per dxgi_spike.cpp:783-818:
         // controller is released AFTER webController->Close() (which
@@ -5170,8 +5228,8 @@ int HostWindowImpl::Run(int nCmdShow)
     if (FAILED(hr))
     {
         // Runtime present but initialisation still failed (locked user-data
-        // folder, corrupt install, policy). Reuse the same offer: when the
-        // bundled bootstrapper is there, reinstalling is the likely fix.
+        // folder, corrupt install, policy). Reuse the same offer: it opens the
+        // WebView2 download page (or a side-by-side bootstrapper if present).
         wchar_t detail[128];
         swprintf(detail, 128, L"(WebView2 initialisation failed, 0x%08lx.)", hr);
         if (IsFullyInteractive())
@@ -6076,6 +6134,18 @@ int HostWindowImpl::Run(int nCmdShow)
     // here because the message pump has drained: no dispatcher
     // handlers (CaptureSnapshotPng et al) can run after WM_QUIT.
     if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
+    // Automation exits (--capture/--drive/--record) break the pump via `quit`
+    // WITHOUT destroying hMain, so WM_DESTROY never ran and the three WebView2
+    // objects (controller / view / environment) are still held. Release exactly
+    // those here so their final Release() precedes CoUninitialize on EVERY exit
+    // path, not just the interactive one — a COM Release after CoUninitialize is
+    // undefined. Idempotent with WM_DESTROY: after an interactive teardown they
+    // are already null. (The DComp composition objects have the same pre-existing
+    // post-CoUninitialize release on automation exit; that predates this change
+    // and its release ordering is delicate, so it is left as-is here.)
+    if (webController) { webController->Close(); webController.Reset(); }
+    webView.Reset();
+    webEnv.Reset();
     CoUninitialize();
     CloseLog();
     // In --capture mode we break the loop via

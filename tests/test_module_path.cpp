@@ -3,9 +3,10 @@
 //
 // The defect this pins: GetModuleFileNameW into a fixed MAX_PATH buffer does
 // not fail on a long path, it TRUNCATES — and a truncated module path is a
-// perfectly well-formed string pointing at the wrong directory, so the
-// three-parent walk that derives the app.local mapping silently resolves
-// somewhere that does not exist (2026-07 audit, an-audit-finding).
+// perfectly well-formed string pointing at the wrong directory, so a caller like
+// BundledWebView2SetupPath silently looks for the bootstrapper beside the WRONG
+// directory (2026-07 audit, an-audit-finding). (The app.local UI is now embedded in the
+// exe, so the former three-parent dist walk that also relied on this read is gone.)
 //
 // Every truncation case therefore asserts the SPECIFIC wrong value the old
 // fixed-buffer code produced — not merely "we got something" — because

@@ -283,4 +283,16 @@
     </PropertyGroup>
     <Error Condition="!Exists('$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets'))" />
   </Target>
+  <!-- Regenerate the embedded web-bundle manifest (src\generated\EmbeddedWebAssets.{rc,h})
+       from web\apps\editor\dist before compiling. ParticleEditor.rc #includes the .rc and
+       host\HostWindow.cpp #includes the .h, so both must exist before ResourceCompile and
+       ClCompile; PrepareForBuild precedes both (and does NOT run during /t:Restore, so a
+       fresh worktree restore before the web bundle exists won't trip the check). The exe
+       then embeds the React bundle as RCDATA and serves it from WebResourceRequested — no
+       separate web\ folder ships. The generator writes only when content changed, so a
+       no-op rebuild leaves the .rc mtime untouched and rc.exe stays incremental. -->
+  <Target Name="GenerateEmbeddedWebAssets" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(SolutionDir)web\apps\editor\dist\index.html')" Text="web\apps\editor\dist\index.html not found — build the editor web bundle first: cd web &amp;&amp; pnpm --filter ./apps/editor build" />
+    <Exec Command="node scripts\embed-web-dist.mjs" WorkingDirectory="$(SolutionDir)" />
+  </Target>
 </Project>

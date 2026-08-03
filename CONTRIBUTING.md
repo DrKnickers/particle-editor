@@ -42,12 +42,12 @@ The codebase has been around since 2008 and inherits Mike.NL's GlyphX-era style.
 
 ## Build — it takes TWO builds
 
-The editor is a C++ host **plus** a React/WebView2 UI. Building the C++ `.sln` alone is **not** enough to run it.
+The editor is a C++ host **plus** a React/WebView2 UI, and the C++ build **embeds** the UI — so the two builds run **in order: web first, then C++.**
 
-1. **C++ host** — Visual Studio 2022 (Platform Toolset v143), x64, DirectX SDK June 2010 (for `d3dx9.h` / `d3dx9_43.lib`). Build the **`.sln`** (`msbuild ParticleEditor.sln /p:Configuration=Release /p:Platform=x64`), not the bare `src\ParticleEditor.vcxproj` (which looks for packages under `src\packages`). First time in a fresh worktree, restore NuGet once: `msbuild ParticleEditor.sln /t:Restore /p:RestorePackagesConfig=true`.
-2. **Web UI bundle** — `cd web && pnpm install`, then `pnpm --filter ./apps/editor build` → produces `web/apps/editor/dist`. The host serves the React app from the `app.local` virtual host mapped to that `dist` (`src/host/HostWindow.cpp`).
+1. **Web UI bundle (first)** — `cd web && pnpm install`, then `pnpm --filter ./apps/editor build` → produces `web/apps/editor/dist`.
+2. **C++ host** — Visual Studio 2022 (Platform Toolset v143), x64, DirectX SDK June 2010 (for `d3dx9.h` / `d3dx9_43.lib`). Build the **`.sln`** (`msbuild ParticleEditor.sln /p:Configuration=Release /p:Platform=x64`), not the bare `src\ParticleEditor.vcxproj` (which looks for packages under `src\packages`). First time in a fresh worktree, restore NuGet once: `msbuild ParticleEditor.sln /t:Restore /p:RestorePackagesConfig=true` (the restore is order-independent; only the Build needs `dist`). The build compiles `web/apps/editor/dist` into the exe as RCDATA (`scripts/embed-web-dist.mjs`), so the editor ships as a **single self-contained exe** with no separate `web/` folder; `src/host/HostWindow.cpp` serves it on the `app.local` virtual origin via a `WebResourceRequested` handler.
 
-**Symptom of skipping step 2:** the editor launches but the WebView shows **`ERR_NAME_NOT_RESOLVED` for `app.local`** — the virtual-host mapping has no `dist` to point at. Build the web bundle and **restart the exe** (the mapping is registered once at startup, so an in-window Refresh isn't enough). Drive the UI with the **Release** x64 build — Debug's attached console freezes the GUI.
+**Symptom of skipping step 1:** the C++ Build fails at the `GenerateEmbeddedWebAssets` step with `web\apps\editor\dist\index.html not found — build the editor web bundle first`. (Before the bundle was embedded, this instead surfaced at runtime as `ERR_NAME_NOT_RESOLVED` for `app.local`.) Drive the UI with the **Release** x64 build — Debug's attached console freezes the GUI.
 
 To check/refresh the a11y goldens, run `pnpm --filter ./apps/editor a11y:drift` (exit 0 = clean, 2 = drift with goldens refreshed in the tree).
 

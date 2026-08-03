@@ -1,9 +1,12 @@
 # run-perf-audit.ps1 -- reproducible local performance audit runner.
 # ASCII only: keep PS 5.1 output readable.
 #
-# Requires: x64\Release\ParticleEditor.exe and web/apps/editor/dist.
-# This script does not build or commit. It runs supplied --drive workflows with
-# perf tracing enabled, stores raw artifacts, and summarizes each trace.
+# Requires: x64\Release\ParticleEditor.exe. The exe now EMBEDS web/apps/editor/dist
+# (built into it as RCDATA), so the bundle is not read at runtime -- but the exe must
+# be built AFTER the current dist, or the recorded provenance will not match the UI
+# actually measured (checked below). This script does not build or commit. It runs
+# supplied --drive workflows with perf tracing enabled, stores raw artifacts, and
+# summarizes each trace.
 
 param(
     [string]$Exe = "",
@@ -24,6 +27,18 @@ if (-not $OutDir) {
     $OutDir = Join-Path $root "tasks\perf-audit-2026-06-28\runs\$stamp-$PID"
 }
 if (-not (Test-Path $Exe)) { Write-Error "exe not found: $Exe"; exit 2 }
+# The exe embeds the web bundle at build time, so a dist newer than the exe means the
+# UI measured is NOT the dist recorded as provenance below. Fail rather than mislead.
+$distDirCheck = Join-Path $root "web\apps\editor\dist"
+if (Test-Path -LiteralPath $distDirCheck) {
+    $exeMtimeUtc = (Get-Item -LiteralPath $Exe).LastWriteTimeUtc
+    $newestDist = Get-ChildItem -LiteralPath $distDirCheck -File -Recurse -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($newestDist -and $newestDist.LastWriteTimeUtc -gt $exeMtimeUtc) {
+        Write-Error "exe is OLDER than the web dist it embeds ($($newestDist.Name)); rebuild x64 Release so the measured UI matches recorded provenance."
+        exit 2
+    }
+}
 if ($RepeatCount -lt 1) { Write-Error "-RepeatCount must be >= 1"; exit 2 }
 
 if (Test-Path $OutDir) {
