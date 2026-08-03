@@ -112,17 +112,9 @@ std::vector<std::wstring> WriteRecentFile(const std::wstring& path)
     GetSystemTime(&st);
     SystemTimeToFileTime(&st, &ft);
 
-    HKEY hKey;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_READ | KEY_WRITE,
-                        nullptr, &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        // If the value already exists, this refreshes its FILETIME and moves
-        // the path to the top of the logical MRU ordering.
-        RegSetValueExW(hKey, path.c_str(), 0, REG_BINARY,
-                       reinterpret_cast<const BYTE*>(&ft), sizeof(ft));
-        RegCloseKey(hKey);
-    }
+    // If the value already exists, this refreshes its FILETIME and moves
+    // the path to the top of the logical MRU ordering.
+    WriteRegBinary(path.c_str(), &ft, sizeof(ft));
 
     // Use the complete filtered and timestamp-sorted list. Calling the capped
     // public reader here makes this trim branch unreachable.

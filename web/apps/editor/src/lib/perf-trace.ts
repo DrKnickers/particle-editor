@@ -96,11 +96,3 @@ export function traceBridgeRequestEnd(
     ...(error ? { error } : {}),
   });
 }
-
-export const __perfTraceForTests = {
-  perfEnabled,
-  isPerfTraceEnabled,
-  emitPerfTrace,
-  emitClockCalibration,
-  makePerfSpanId,
-};

@@ -199,37 +199,16 @@ Engine::LightType ParseLightWhich(const std::string& s)
 // dev box registry.
 void PersistSkydomeIndex(int value)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                        &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        DWORD v = static_cast<DWORD>(value);
-        RegSetValueExW(hKey, L"SkydomeIndex", 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
-        RegCloseKey(hKey);
-    }
+    WriteRegDword(L"SkydomeIndex", static_cast<DWORD>(value));
 }
 
 void PersistSkydomeCustomPath(int slot, const std::wstring& path)
 {
     if (slot < Engine::kSkydomeFirstCustomSlot || slot >= Engine::kSkydomeSlotCount)
         return;
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                        &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        wchar_t name[64];
-        swprintf_s(name, L"SkydomeCustomSlot%d", slot);
-        if (path.empty())
-            RegDeleteValueW(hKey, name);   // mirror legacy: clearing a slot deletes the value
-        else
-            RegSetValueExW(hKey, name, 0, REG_SZ,
-                           reinterpret_cast<const BYTE*>(path.c_str()),
-                           static_cast<DWORD>((path.size() + 1) * sizeof(wchar_t)));
-        RegCloseKey(hKey);
-    }
+    wchar_t name[64];
+    swprintf_s(name, L"SkydomeCustomSlot%d", slot);
+    WriteRegSz(name, path);   // empty path deletes the value (mirror legacy)
 }
 
 // Persist the game-dome environment selection (context + the two chosen
@@ -238,28 +217,9 @@ void PersistSkydomeCustomPath(int slot, const std::wstring& path)
 void PersistSkydomeEnvironment(int context, const std::wstring& primaryName,
                                       const std::wstring& secondaryName)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                        &hKey, nullptr) != ERROR_SUCCESS)
-        return;
-    DWORD ctx = static_cast<DWORD>(context);
-    RegSetValueExW(hKey, L"SkydomeContext", 0, REG_DWORD,
-                   reinterpret_cast<const BYTE*>(&ctx), sizeof(ctx));
-    const struct { const wchar_t* name; const std::wstring& val; } kv[] = {
-        { L"SkydomePrimaryName",   primaryName   },
-        { L"SkydomeSecondaryName", secondaryName },
-    };
-    for (const auto& e : kv)
-    {
-        if (e.val.empty())
-            RegDeleteValueW(hKey, e.name);
-        else
-            RegSetValueExW(hKey, e.name, 0, REG_SZ,
-                           reinterpret_cast<const BYTE*>(e.val.c_str()),
-                           static_cast<DWORD>((e.val.size() + 1) * sizeof(wchar_t)));
-    }
-    RegCloseKey(hKey);
+    WriteRegDword(L"SkydomeContext", static_cast<DWORD>(context));
+    WriteRegSz(L"SkydomePrimaryName",   primaryName);    // empty => delete
+    WriteRegSz(L"SkydomeSecondaryName", secondaryName);
 }
 
 // Persist the solid-colour background (same BackgroundColor REG_DWORD as
@@ -267,16 +227,7 @@ void PersistSkydomeEnvironment(int context, const std::wstring& primaryName,
 // in the same Background picker as the skydome and had the identical new-UI gap.
 void PersistBackgroundColor(COLORREF color)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                        &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        DWORD v = static_cast<DWORD>(color);
-        RegSetValueExW(hKey, L"BackgroundColor", 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
-        RegCloseKey(hKey);
-    }
+    WriteRegDword(L"BackgroundColor", static_cast<DWORD>(color));
 }
 
 // Persist the ground-plane visibility (ShowGround REG_DWORD 0/1) under the same
@@ -289,16 +240,7 @@ void PersistBackgroundColor(COLORREF color)
 // mutates the dev-box registry.
 void PersistShowGround(bool enabled)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                        &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        DWORD v = enabled ? 1u : 0u;
-        RegSetValueExW(hKey, L"ShowGround", 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
-        RegCloseKey(hKey);
-    }
+    WriteRegDword(L"ShowGround", enabled ? 1u : 0u);
 }
 
 // Persist the imported reference object (selected Name) + its visibility +
@@ -307,86 +249,36 @@ void PersistShowGround(bool enabled)
 // Transform + grid spacing are REG_BINARY floats (6 and 1 respectively).
 void PersistReferenceObjectName(const std::wstring& name)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) != ERROR_SUCCESS)
-        return;
-    if (name.empty())
-        RegDeleteValueW(hKey, L"ReferenceObjectName");
-    else
-        RegSetValueExW(hKey, L"ReferenceObjectName", 0, REG_SZ,
-                       reinterpret_cast<const BYTE*>(name.c_str()),
-                       static_cast<DWORD>((name.size() + 1) * sizeof(wchar_t)));
-    RegCloseKey(hKey);
+    WriteRegSz(L"ReferenceObjectName", name);   // empty => delete
 }
 
 void PersistReferenceObjectVisible(bool visible)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        DWORD v = visible ? 1u : 0u;
-        RegSetValueExW(hKey, L"ReferenceObjectVisible", 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
-        RegCloseKey(hKey);
-    }
+    WriteRegDword(L"ReferenceObjectVisible", visible ? 1u : 0u);
 }
 
 void PersistReferenceObjectLock(bool locked)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        DWORD v = locked ? 1u : 0u;
-        RegSetValueExW(hKey, L"ReferenceObjectLocked", 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
-        RegCloseKey(hKey);
-    }
+    WriteRegDword(L"ReferenceObjectLocked", locked ? 1u : 0u);
 }
 
 void PersistReferenceObjectTransform(const D3DXVECTOR3& pos, const D3DXVECTOR3& rot)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        const float xform[6] = { pos.x, pos.y, pos.z, rot.x, rot.y, rot.z };
-        RegSetValueExW(hKey, L"ReferenceObjectTransform", 0, REG_BINARY,
-                       reinterpret_cast<const BYTE*>(xform), sizeof(xform));
-        RegCloseKey(hKey);
-    }
+    const float xform[6] = { pos.x, pos.y, pos.z, rot.x, rot.y, rot.z };
+    WriteRegBinary(L"ReferenceObjectTransform", xform, sizeof(xform));
 }
 
 void PersistGrid(bool visible, float spacing)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        DWORD vis = visible ? 1u : 0u;
-        RegSetValueExW(hKey, L"GridVisible", 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&vis), sizeof(vis));
-        RegSetValueExW(hKey, L"GridSpacing", 0, REG_BINARY,
-                       reinterpret_cast<const BYTE*>(&spacing), sizeof(spacing));
-        RegCloseKey(hKey);
-    }
+    WriteRegDword(L"GridVisible", visible ? 1u : 0u);
+    WriteRegBinary(L"GridSpacing", &spacing, sizeof(spacing));
 }
 
 // Persist the gizmo snap toggle (single REG_DWORD, mirrors PersistGrid's
 // GridVisible write). The drag-time apply that reads it is a separate task.
 void PersistSnap(bool enabled)
 {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        DWORD en = enabled ? 1u : 0u;
-        RegSetValueExW(hKey, L"SnapEnabled", 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&en), sizeof(en));
-        RegCloseKey(hKey);
-    }
+    WriteRegDword(L"SnapEnabled", enabled ? 1u : 0u);
 }
 
 // ReferenceObjectStatus -> wire string for the snapshot DTO.

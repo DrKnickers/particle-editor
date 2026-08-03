@@ -35,6 +35,7 @@ import { spawnSync } from "node:child_process";
 import { readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const testsDir = join(repoRoot, "tests");
@@ -42,20 +43,34 @@ const testsDir = join(repoRoot, "tests");
 // Tests that validate a built ParticleEditor.exe rather than standalone logic.
 const NEEDS_EXE = new Set(["test_resource_strings"]);
 
-const argv = process.argv.slice(2);
-function argValue(name, fallback) {
-  const i = argv.indexOf(name);
-  return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : fallback;
-}
-const FILTER = argValue("--filter", null);
-const SKIP_BUILD = argv.includes("--skip-build");
-const ONLY_NEEDS_EXE = argv.includes("--only-needs-exe");
-const EXCLUDE_NEEDS_EXE = argv.includes("--exclude-needs-exe");
-const LIST = argv.includes("--list");
-const ALLOW_MISSING_EXE = argv.includes("--allow-missing-exe");
-const ALLOW_MISSING_CAPABILITIES = argv.includes("--allow-missing-capabilities");
-const TIMEOUT_MS = Number(argValue("--timeout", "120")) * 1000;
-const APP_EXE = resolve(repoRoot, argValue("--exe", join("x64", "Debug", "ParticleEditor.exe")));
+// strict:false mirrors the old hand scanner: unknown flags and positionals are
+// ignored, and — load-bearing — gate-integrity.test.mjs IMPORTS this module, so
+// this runs at module scope under `node --test`'s argv (test-file positionals);
+// strict mode would throw on import.
+const { values: args } = parseArgs({
+  args: process.argv.slice(2),
+  strict: false,
+  options: {
+    "filter":                     { type: "string" },
+    "skip-build":                 { type: "boolean", default: false },
+    "only-needs-exe":             { type: "boolean", default: false },
+    "exclude-needs-exe":          { type: "boolean", default: false },
+    "list":                       { type: "boolean", default: false },
+    "allow-missing-exe":          { type: "boolean", default: false },
+    "allow-missing-capabilities": { type: "boolean", default: false },
+    "timeout":                    { type: "string", default: "120" },
+    "exe":                        { type: "string", default: join("x64", "Debug", "ParticleEditor.exe") },
+  },
+});
+const FILTER = args.filter ?? null;
+const SKIP_BUILD = args["skip-build"];
+const ONLY_NEEDS_EXE = args["only-needs-exe"];
+const EXCLUDE_NEEDS_EXE = args["exclude-needs-exe"];
+const LIST = args.list;
+const ALLOW_MISSING_EXE = args["allow-missing-exe"];
+const ALLOW_MISSING_CAPABILITIES = args["allow-missing-capabilities"];
+const TIMEOUT_MS = Number(args.timeout) * 1000;
+const APP_EXE = resolve(repoRoot, args.exe);
 
 // Verdict for a test binary that exited 0 but printed `SKIP: <case> (<reason>)`
 // for one or more of its cases.

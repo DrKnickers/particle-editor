@@ -55,7 +55,7 @@ test.afterAll(async () => {
 
 // ── 1. Gallery page loads ────────────────────────────────────────────────────
 
-test("?demo=primitives renders the gallery with all four sections", async () => {
+test("?demo=primitives renders the gallery with both sections", async () => {
   const sections = await page.evaluate(() => {
     return Array.from(document.querySelectorAll("h2")).map(
       (h) => h.textContent?.trim()
@@ -63,8 +63,6 @@ test("?demo=primitives renders the gallery with all four sections", async () => 
   });
   expect(sections).toContain("Spinner");
   expect(sections).toContain("ColorButton");
-  expect(sections).toContain("TexturePalette");
-  expect(sections).toContain("RandomParam");
 });
 
 // ── 2. Spinner: scroll-wheel commits a new value ─────────────────────────────
@@ -107,51 +105,6 @@ test("ColorButton: clicking the swatch opens the color picker popover", async ()
   expect(result.popoverVisible).toBe(true);
 });
 
-// ── 4. TexturePalette: right-click opens context menu ───────────────────────
-
-test("TexturePalette: right-click opens context menu with Browse/Clear/Reveal", async () => {
-  // Close any open popover first.
-  await page.evaluate(() => { document.body.click(); });
-  await page.waitForTimeout(100);
-
-  const result = await page.evaluate(async () => {
-    // Find the first texture cell (role=option) in the palette.
-    const cell = document.querySelector<HTMLButtonElement>(
-      '[role="listbox"] [role="option"]'
-    );
-    if (!cell) return { found: false, menuItems: [] as string[] };
-    // Dispatch contextmenu event.
-    cell.dispatchEvent(
-      new MouseEvent("contextmenu", { bubbles: true, cancelable: true })
-    );
-    await new Promise((r) => setTimeout(r, 200));
-    // Radix portals the context menu into the body.
-    const items = Array.from(
-      document.querySelectorAll('[role="menuitem"]')
-    ).map((el) => el.textContent?.trim() ?? "");
-    return { found: true, menuItems: items };
-  });
-  expect(result.found).toBe(true);
-  expect(result.menuItems).toContain("Browse for file…");
-  expect(result.menuItems).toContain("Clear");
-  expect(result.menuItems).toContain("Open texture folder");
-});
-
-// ── 5. RandomParam: mode renders correct spinner count ───────────────────────
-
-test("RandomParam: Normal mode section shows two spinners with µ and σ labels", async () => {
-  const result = await page.evaluate(() => {
-    // The "Starts Normal" section has a RandomParam with mode=Normal.
-    // Look for the µ and σ labels which only appear in Normal mode.
-    const muLabels = Array.from(document.querySelectorAll("span")).filter(
-      (el) => el.textContent?.trim() === "µ"
-    );
-    const sigmaLabels = Array.from(document.querySelectorAll("span")).filter(
-      (el) => el.textContent?.trim() === "σ"
-    );
-    return { mu: muLabels.length, sigma: sigmaLabels.length };
-  });
-  // At least one RandomParam is in Normal mode (the third demo instance).
-  expect(result.mu).toBeGreaterThanOrEqual(1);
-  expect(result.sigma).toBeGreaterThanOrEqual(1);
-});
+// (The former TexturePalette / RandomParam sections were demo scaffolding for
+// primitives that never gained a production consumer; both primitives and
+// their gallery sections were deleted — see the ponytail review.)

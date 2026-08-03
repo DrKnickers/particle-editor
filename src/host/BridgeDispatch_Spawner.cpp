@@ -115,18 +115,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx, const std::
         const bool enabled = params.value("enabled", true);
         const bool gated = m_ephemeral || (m_testHost && !m_settingsLive);
         if (!gated)
-        {
-            HKEY hKey = nullptr;
-            if (RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryKeyPath, 0, nullptr,
-                                REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                                &hKey, nullptr) == ERROR_SUCCESS)
-            {
-                DWORD v = enabled ? 1 : 0;
-                RegSetValueExW(hKey, L"LightingForceFillAlignment", 0, REG_DWORD,
-                               reinterpret_cast<const BYTE*>(&v), sizeof(v));
-                RegCloseKey(hKey);
-            }
-        }
+            WriteRegDword(L"LightingForceFillAlignment", enabled ? 1u : 0u);
         ctx.SendOk(json::object());
         return true;
     }
