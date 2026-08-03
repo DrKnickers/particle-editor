@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build Your Own Effect — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 5 of 5</span></p>
+<h1 id="build-your-own-effect">Build Your Own Effect</h1>
+<p>The tutorials handed you the recipe each time. This page does not — it is where you find out whether the ideas have stuck, by building something new from a description alone. Reproducing a tutorial is not the same as being able to make an effect nobody handed you; this closes that gap.</p>
+<p>Work in the editor, keep the reference pages open, and give yourself permission to get it wrong a few times. Nobody authors a good effect in one pass.</p>
+<h2 id="the-brief">The Brief</h2>
+<p><strong>Make an &quot;ion hit&quot; — the effect of an ion weapon striking a ship's hull.</strong> You have seen the building blocks in the three tutorials; none of the exact values below are given to you on purpose.</p>
+<p>What it should communicate, at a glance:</p>
+<ul>
+<li>A <strong>sharp electric flash</strong> at the moment of impact — bright, blue-white, and over almost instantly.</li>
+<li>A <strong>short burst of crackling sparks</strong> thrown off the hit point, scattering outward and dying quickly.</li>
+<li>A <strong>brief lingering glow</strong> at the hit point that fades over a beat, so the impact leaves a mark rather than vanishing cleanly.</li>
+</ul>
+<p>That is the whole spec. How you build it is the exercise.</p>
+<h2 id="plan-before-you-place-a-single-emitter">Plan Before You Place a Single Emitter</h2>
+<p>Answer these on paper (or in your head) <em>first</em> — deciding after you start placing emitters is how effects turn into a tangle:</p>
+<ul>
+<li>[ ] <strong>How many emitters, and what is each one's job?</strong> Name them. One emitter, one visual role.</li>
+<li>[ ] <strong>For each emitter: does it happen once, or keep going?</strong> That picks its generation type — see <a href="./generation-types.html">Particle Generation Types</a>. An impact is an event; a lingering glow might be a short stream.</li>
+<li>[ ] <strong>For each emitter: what texture and blend mode?</strong> The flash, sparks, and glow all give off light → additive (or transparent for a softer glow). See <a href="./blend-modes.html">Blend Modes</a>. <em>(Optional advanced touch: a scorch that darkens the hull is what the decal blend modes are for.)</em></li>
+<li>[ ] <strong>For each emitter: how do its particles move?</strong> Sparks scatter (a Sphere on Initial speed); the flash barely moves (scale does the work). See <a href="./motion-and-physics.html">Motion and Physics</a>.</li>
+<li>[ ] <strong>What changes over each particle's life?</strong> Sketch the Alpha, Scale, and Color curves before you draw them — start bright and snap out, or ease in and fade? See <a href="./curve-editor-basics.html">Curve Editor Basics</a>.</li>
+<li>[ ] <strong>What draws on top of what?</strong> Order the emitters in the tree so the flash reads over the sparks and glow. See <a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a>.</li>
+</ul>
+<h2 id="build-preview-adjust">Build, Preview, Adjust</h2>
+<p>Build one emitter at a time and preview after each — hold Shift, or use the Spawner to re-trigger the impact while you tune. Add the next layer only once the current one reads the way you meant. Change one thing at a time; if the whole thing turns to mush, hide emitters until you find the one fighting you.</p>
+<h2 id="check-your-work">Check Your Work</h2>
+<p>Score the finished effect against the brief, not against a screenshot:</p>
+<ul>
+<li>[ ] Does a first-time viewer read it as an <strong>electric impact</strong>, not a generic puff or explosion?</li>
+<li>[ ] Is the <strong>flash genuinely brief</strong> — a very short lifetime, well under half a second, so it snaps rather than lingers?</li>
+<li>[ ] Do the <strong>sparks scatter and die</strong>, rather than drifting or hanging around?</li>
+<li>[ ] Does the <strong>glow or scorch leave a mark that fades</strong>, giving the hit some weight?</li>
+<li>[ ] At a normal gameplay camera distance, does it still <strong>read clearly without swallowing the ship</strong>?</li>
+<li>[ ] Could you explain, emitter by emitter, <strong>why</strong> each one is set the way it is? If any answer is &quot;I copied it and it looked okay,&quot; go back and understand that one — that is the muscle this whole guide was building.</li>
+</ul>
+<p>If you can hit those, you are no longer following recipes. You are authoring.</p>
+<h2 id="where-to-go-next">Where to Go Next</h2>
+<ul>
+<li>Re-open any tutorial and change its <em>intent</em> — recolor the laser to an ion bolt, make the explosion a small one, turn the smoke into steam — and see how few settings you actually need to touch.</li>
+<li>Study a shipped effect you like: open it, select each emitter, and reverse-engineer the plan behind it using the same checklist above.</li>
+</ul>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./05-build-an-explosion.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">3. Build an Explosion</span></a>
+        <a class="pager-next" href="./app-ui-quick-reference.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">App UI Quick Reference</span></a>
+      </nav>
+    </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html">3. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html" class="active" aria-current="page">Build Your Own Effect</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#the-brief">The Brief</a></li>
+      <li class="lvl-2"><a href="#plan-before-you-place-a-single-emitter">Plan Before You Place a Single Emitter</a></li>
+      <li class="lvl-2"><a href="#build-preview-adjust">Build, Preview, Adjust</a></li>
+      <li class="lvl-2"><a href="#check-your-work">Check Your Work</a></li>
+      <li class="lvl-2"><a href="#where-to-go-next">Where to Go Next</a></li>
+      </ul>
+    </nav>
+  </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
+  <footer class="guide-footer">
+    <p class="footer-legal">Particle Editor is an independent, unofficial tool — not affiliated with or endorsed by Lucasfilm, Disney, Petroglyph Games, or any third-party mod or its authors. <em>Star Wars: Empire at War</em> and <em>Forces of Corruption</em> are trademarks of their respective owners.</p>
+  </footer>
+</body>
+</html>

@@ -3,21 +3,6 @@
 #include "utils.h"
 using namespace std;
 
-wstring GetWindowStr(HWND hWnd)
-{
-	int len = GetWindowTextLength(hWnd);
-	wchar_t* buf = new wchar_t[len+1]; buf[len] = L'\0';
-	GetWindowText(hWnd, buf, len + 1);
-	wstring value = buf;
-	delete[] buf;
-	return value;
-}
-
-wstring GetDlgItemStr(HWND hWnd, int idItem)
-{
-	return GetWindowStr(GetDlgItem(hWnd, idItem));
-}
-
 // Convert an ANSI string to a wide (UCS-2) string
 wstring AnsiToWide(const char* cstr)
 {
@@ -77,15 +62,6 @@ static wstring FormatString(const wchar_t* format, va_list args)
         delete[] buf;
         throw;
     }
-}
-
-wstring FormatString(const wchar_t* format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    wstring str = FormatString(format, args);
-    va_end(args);
-    return str;
 }
 
 wstring LoadString(UINT id, ...)

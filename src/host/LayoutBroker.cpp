@@ -1,0 +1,578 @@
+#include "LayoutBroker.h"
+
+#include "../SceneOverscan.h"
+#include "../engine.h"
+#include "AlphaCompositor.h"
+#include "Compositor.h"
+
+#include <cmath>
+
+namespace {
+
+// CSS `ease` timing function = cubic-bezier(0.25, 0.1, 0.25, 1.0),
+// evaluated the way browsers do (the WebKit/Chromium UnitBezier): given the
+// animation's LINEAR progress x in [0,1], solve for the curve parameter t with
+// bezierX(t) = x (Newton-Raphson + bisection fallback), then return bezierY(t).
+// P0=(0,0), P3=(1,1); P1=(0.25,0.1), P2=(0.25,1.0). Matching this to the panel's
+// CSS curve is what makes the host viewport edge track the browser panel edge.
+struct UnitBezier
+{
+    double ax, bx, cx, ay, by, cy;
+    UnitBezier(double x1, double y1, double x2, double y2)
+    {
+        cx = 3.0 * x1; bx = 3.0 * (x2 - x1) - cx; ax = 1.0 - cx - bx;
+        cy = 3.0 * y1; by = 3.0 * (y2 - y1) - cy; ay = 1.0 - cy - by;
+    }
+    double sampleX(double t)  const { return ((ax * t + bx) * t + cx) * t; }
+    double sampleY(double t)  const { return ((ay * t + by) * t + cy) * t; }
+    double sampleDX(double t) const { return (3.0 * ax * t + 2.0 * bx) * t + cx; }
+    double solveT(double x) const
+    {
+        double t = x;
+        for (int i = 0; i < 8; ++i)             // Newton-Raphson
+        {
+            const double xe = sampleX(t) - x;
+            if (xe > -1e-6 && xe < 1e-6) return t;
+            const double d = sampleDX(t);
+            if (d > -1e-6 && d < 1e-6) break;    // flat slope → fall to bisection
+            t -= xe / d;
+        }
+        double lo = 0.0, hi = 1.0;              // bisection fallback
+        t = x;
+        if (t < lo) return lo;
+        if (t > hi) return hi;
+        for (int i = 0; i < 24; ++i)
+        {
+            const double xe = sampleX(t);
+            if (xe > x - 1e-6 && xe < x + 1e-6) return t;
+            if (x > xe) lo = t; else hi = t;
+            t = 0.5 * (lo + hi);
+        }
+        return t;
+    }
+};
+
+double CssEaseY(double x)
+{
+    if (x <= 0.0) return 0.0;
+    if (x >= 1.0) return 1.0;
+    static const UnitBezier kEase(0.25, 0.1, 0.25, 1.0);
+    return kEase.sampleY(kEase.solveT(x));
+}
+
+float Lerpf(float a, float b, double t) { return a + static_cast<float>((b - a) * t); }
+
+// QueryPerformanceCounter ticks per millisecond, or 0 if the counter is
+// unavailable. Cached on first use (the frequency is fixed at boot).
+double QpcPerMs()
+{
+    static double cached = []() -> double {
+        LARGE_INTEGER f;
+        if (!QueryPerformanceFrequency(&f) || f.QuadPart <= 0) return 0.0;
+        return static_cast<double>(f.QuadPart) / 1000.0;
+    }();
+    return cached;
+}
+
+} // namespace
+
+namespace host {
+
+void LayoutBroker::SetAlphaCompositor(AlphaCompositor* compositor)
+{
+    m_alphaCompositor = compositor;
+    // Replay the cached scene rect so the snapshot crop is correct on the
+    // first capture after attach.
+    if (m_alphaCompositor) ReemitSceneRect();
+}
+
+void LayoutBroker::SetCompositor(Compositor* compositor)
+{
+    m_dcompCompositor = compositor;
+    // Replay the cached scene-rect onto the newly-attached compositor
+    // so the first frame post-attach is sized correctly — avoids a
+    // 1-3 frame full-client glitch before React's first
+    // layout/scene-rect dispatch arrives.
+    if (m_dcompCompositor) ReemitSceneRect();
+}
+
+void LayoutBroker::SetBackingColor(COLORREF color)
+{
+    // The DComp compositor owns the backing visual; this is a no-op
+    // when no compositor is attached.
+    if (m_dcompCompositor) m_dcompCompositor->SetBackingColor(color);
+}
+
+bool LayoutBroker::GetSceneRect(int& x, int& y, int& w, int& h) const
+{
+    if (m_sceneW <= 0 || m_sceneH <= 0) return false;
+    x = m_sceneX;
+    y = m_sceneY;
+    w = m_sceneW;
+    h = m_sceneH;
+    return true;
+}
+
+void LayoutBroker::Apply(int x, int y, int w, int h)
+{
+    if (!m_viewport) return;
+
+    HWND owner = GetWindow(m_viewport, GW_OWNER);
+    POINT screenPt = { x, y };
+    if (owner) ClientToScreen(owner, &screenPt);
+
+    if (w <= 0 || h <= 0)
+    {
+        // Slot collapsed — move popup off-screen-ish but keep it
+        // valid. Don't reset the swap chain for degenerate sizes.
+        SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, 1, 1,
+                     SWP_NOACTIVATE | SWP_NOZORDER);
+        m_lastX = x;
+        m_lastY = y;
+        m_lastW = 0;
+        m_lastH = 0;
+        ReemitSceneRect();
+        return;
+    }
+
+    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, w, h,
+                 SWP_NOACTIVATE | SWP_NOZORDER);
+    InvalidateRect(m_viewport, nullptr, FALSE);
+
+    // A real viewport resize invalidates the dock-slide anim's captured
+    // absolute-px from/to — cancel it and let the static
+    // scene-rect path resume. (m_lastW/H still hold the OLD size here.)
+    if (w != m_lastW || h != m_lastH) CancelSceneAnim();
+
+    // Reset the D3D9 swap chain so its backbuffer matches the new HWND
+    // client size. [resize-perf] Cheap ResetEx path with
+    // full-Reset fallback, shared via ResetEngineForResize.
+    if (m_engine && (w != m_lastW || h != m_lastH))
+    {
+        m_lastW = w;
+        m_lastH = h;
+        ResetEngineForResize(w, h);
+    }
+
+    m_lastX = x;
+    m_lastY = y;
+    m_lastW = w;
+    m_lastH = h;
+
+    if (owner)
+    {
+        RECT mc{};
+        GetClientRect(owner, &mc);
+        m_lastClientW = mc.right - mc.left;
+        m_lastClientH = mc.bottom - mc.top;
+    }
+
+    ReemitSceneRect();
+}
+
+void LayoutBroker::PredictAndApply()
+{
+    if (!m_viewport) return;
+    if (m_lastClientW <= 0 || m_lastClientH <= 0) return;
+
+    HWND owner = GetWindow(m_viewport, GW_OWNER);
+    if (!owner) return;
+    RECT mc{};
+    GetClientRect(owner, &mc);
+    const int curW = mc.right - mc.left;
+    const int curH = mc.bottom - mc.top;
+    if (curW <= 0 || curH <= 0) return;
+
+    const int leftOff   = m_lastX;
+    const int topOff    = m_lastY;
+    const int rightOff  = m_lastClientW - (m_lastX + m_lastW);
+    const int bottomOff = m_lastClientH - (m_lastY + m_lastH);
+
+    int newX = leftOff;
+    int newY = topOff;
+    int newW = curW - leftOff - rightOff;
+    int newH = curH - topOff - bottomOff;
+    if (newW < 1) newW = 1;
+    if (newH < 1) newH = 1;
+
+    if (newX == m_lastX && newY == m_lastY &&
+        newW == m_lastW && newH == m_lastH &&
+        curW == m_lastClientW && curH == m_lastClientH)
+    {
+        RefreshScreenPosition();
+        return;
+    }
+
+    POINT screenPt = { newX, newY };
+    ClientToScreen(owner, &screenPt);
+
+    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, newW, newH,
+                 SWP_NOACTIVATE | SWP_NOZORDER);
+
+    const bool sizeChanged = (newW != m_lastW || newH != m_lastH);
+
+    // Cancel a dock-slide anim on a real resize; the
+    // move-only branch above already returned via RefreshScreenPosition.
+    if (sizeChanged) CancelSceneAnim();
+
+    m_lastX = newX;
+    m_lastY = newY;
+    m_lastW = newW;
+    m_lastH = newH;
+    m_lastClientW = curW;
+    m_lastClientH = curH;
+
+    // [resize-perf] Per-tick reset stays — but on the
+    // cheap ResetEx path (~3-5 ms vs the ~24 ms full reset, which spent
+    // ~20 ms re-decoding textures ResetEx lets us keep). The scene
+    // therefore renders at the CORRECT size on every sizemove tick: no
+    // deferred-settle snap, no stale-size band. Full Reset() remains the
+    // fallback inside the helper.
+    if (m_engine && sizeChanged)
+    {
+        ResetEngineForResize(newW, newH);
+    }
+
+    ReemitSceneRect();
+}
+
+void LayoutBroker::ResetEngineForResize(int w, int h)
+{
+    if (!m_engine) return;
+
+    bool resetOk = false;
+    bool rebuildFailedAfterReset = false;
+    try
+    {
+        resetOk = m_engine->ResetForResize();
+    }
+    catch (...)
+    {
+        // ResetForResize throws only after ResetEx succeeded (extent query or
+        // size-keyed allocation). Ordinary full Reset is legal in that case.
+        rebuildFailedAfterReset = true;
+    }
+    if (rebuildFailedAfterReset)
+    {
+        try
+        {
+            m_engine->Reset();
+            resetOk = true;
+        }
+        catch (...)
+        {
+            // Swallow — Engine::Reset can throw on device-lost. The
+            // device is now in DEVICENOTRESET. In interactive use
+            // Render()'s next-frame guard recovers; in --test-host mode
+            // the viewport HWND is hidden so Render() isn't pumped,
+            // which would leave the device stuck (a known prior issue).
+            // Recover explicitly so any later bridge
+            // call that touches D3D sees a live device.
+            resetOk = false;
+        }
+    }
+    else if (!resetOk)
+    {
+        // A false result means ResetEx itself failed. Microsoft permits only
+        // CheckDeviceState, ResetEx, and Release from here; never fall through
+        // to ordinary Reset. The Engine's pending coordinator decides when a
+        // ResetEx retry is legal and keeps every external D3D door closed.
+        resetOk = m_engine->RecoverDeviceIfNeeded();
+    }
+    if (!resetOk && rebuildFailedAfterReset)
+    {
+        m_engine->RecoverDeviceIfNeeded();
+    }
+    if (resetOk)
+    {
+        m_resetW = w;
+        m_resetH = h;
+    }
+}
+
+void LayoutBroker::SettleDeferredReset()
+{
+    if (!m_engine || !m_viewport) return;
+    if (m_lastW <= 0 || m_lastH <= 0) return;          // collapsed popup
+    if (m_lastW == m_resetW && m_lastH == m_resetH) return;  // per-tick resets all succeeded
+
+    ResetEngineForResize(m_lastW, m_lastH);
+}
+
+void LayoutBroker::ApplyFullClient()
+{
+    if (!m_viewport) return;
+    HWND owner = GetWindow(m_viewport, GW_OWNER);
+    if (!owner) return;
+    RECT rc{};
+    if (!GetClientRect(owner, &rc)) return;
+    const int w = rc.right - rc.left;
+    const int h = rc.bottom - rc.top;
+    if (w <= 0 || h <= 0) return;
+    Apply(0, 0, w, h);
+}
+
+void LayoutBroker::RefreshScreenPosition()
+{
+    if (!m_viewport || m_lastW <= 0 || m_lastH <= 0) return;
+
+    HWND owner = GetWindow(m_viewport, GW_OWNER);
+    POINT screenPt = { m_lastX, m_lastY };
+    if (owner) ClientToScreen(owner, &screenPt);
+    SetWindowPos(m_viewport, nullptr, screenPt.x, screenPt.y, m_lastW, m_lastH,
+                 SWP_NOACTIVATE | SWP_NOZORDER);
+
+    // Popup origin in main-client coords hasn't changed (m_lastX/Y
+    // unchanged), so the popup-client coords of cached occlusions
+    // are unchanged either. Skip re-emit.
+}
+
+void LayoutBroker::SetSceneRect(int x, int y, int w, int h)
+{
+    // Self-defense: while a dock-slide anim owns the scene rect, drop
+    // external (stray / late) scene-rects so they can't clobber the host's
+    // smooth interpolation. The authoritative settle send arrives AFTER the anim
+    // ends (web schedules it at 260ms > the 200ms tween, by which point
+    // m_sceneAnim.active is false), so it is not dropped; and a re-toggle arrives
+    // as a fresh animate-scene-rect (StartSceneAnim), not via this path.
+    //
+    // [resize-perf, REVERTED 2026-06-10] A chase-lerp variant smoothed the
+    // interactive scene-rect stream here (each rect a short host-clocked glide).
+    // User verdict killed it: a chase's steady-state lag is ONE PACKET INTERVAL
+    // by construction, and under real drag load the stream runs ~12/s →
+    // 80-160 ms of visible edge lag + an end snap; worse, window resizes
+    // starved the chases (PredictAndApply cancels the anim every size tick),
+    // leaving backing colour in newly revealed areas. Smoothing cannot beat the
+    // data rate — instant application tracks the panels' own relayout cadence
+    // as tightly as the architecture allows.
+    if (m_sceneAnim.active) return;
+    ApplySceneRect(x, y, w, h);
+}
+
+void LayoutBroker::ApplySceneRect(int x, int y, int w, int h, bool animFrame)
+{
+    if (w <= 0 || h <= 0)
+    {
+        // Clear → disable compositor mask. Used when React hasn't
+        // dispatched a scene rect yet, or when the centre quadrant
+        // collapses.
+        m_sceneX = m_sceneY = m_sceneW = m_sceneH = 0;
+        if (m_alphaCompositor) m_alphaCompositor->SetSceneRect(0, 0, 0, 0);
+        if (m_dcompCompositor && m_engine)
+        {
+            m_engine->SetSceneViewport(0, 0, 0, 0);
+        }
+        return;
+    }
+    m_sceneX = x;
+    m_sceneY = y;
+    m_sceneW = w;
+    m_sceneH = h;
+
+    if (m_alphaCompositor && m_lastW > 0 && m_lastH > 0)
+    {
+        // Translate main-client coords to popup-client. Same
+        // arithmetic as the scene-rect path above.
+        m_alphaCompositor->SetSceneRect(x - m_lastX, y - m_lastY, w, h);
+    }
+
+    // Composition-mode scene-rect transform.
+    // Compositor's engine visual lives in host-client coords (root-
+    // visual child) — NO translation. Engine RT is sized to full host
+    // client — also host-client coords. Both consumers receive (x, y,
+    // w, h) verbatim. Gating on m_dcompCompositor != nullptr IS the
+    // composition-mode signal (keeps
+    // canvas-jpeg / legacy paths byte-identical to today).
+    if (m_dcompCompositor)
+    {
+        // Engine
+        // viewport scoping restored, with per-pixel-FoV reference =
+        // CURRENT engine RT height (not the boot-time scene-rect
+        // height that an earlier iteration captured). With reference
+        // = RT_H, scene-rect H ≤ RT_H always, so fovY ≤ 45° — engine
+        // renders LESS world per frame at large windows, not more.
+        // Net perf at maximized should be ≥ before this change (less
+        // rasterization in the scene pass, narrower projection).
+        //
+        // Order: engine first so it knows the new viewport before
+        // CompositeEngineFrame runs; Compositor's queued transform
+        // applies at the end of the next CompositeEngineFrame
+        // (deferred-clip mechanism), syncing the DComp clip with
+        // the fresh engine pixels.
+        if (m_engine)
+        {
+            // [black-line fix] Guard band. The engine RT is a
+            // D3D9Ex shared surface; its D3D11 alias (what DComp actually
+            // presents) is INCOHERENT in the rightmost ~3-4px of the rendered
+            // scene-rect region — the D3D9 side renders correct content there,
+            // but the D3D11 alias reads back the engine clear colour, painting
+            // a near-black 1px line at the viewport's right (Spawner-facing)
+            // edge. (Keyed-mutex sync, the textbook cure, isn't available with
+            // a D3D9Ex producer.) Render the engine viewport a few px LARGER
+            // than the DComp clip so the incoherent band falls OUTSIDE the
+            // clip; the clip (set to the true rect below) then shows only
+            // coherent interior pixels. Symmetric overscan + the engine's
+            // per-pixel-FoV projection ⇒ the visible framing is unchanged
+            // (each pixel keeps its angular extent; the band renders a hair
+            // more world that gets clipped off). The engine defensively
+            // clamps to its RT; chrome margin keeps the band in-bounds.
+            //
+            // The incoherent band scales with the rendered width (~0.5% of
+            // w, measured: ~4px at w=666, ~10px at w=1820), so the guard
+            // band is PROPORTIONAL: GBx = w/64 (~1.6%, ~3x margin) with a
+            // 12px floor for small viewports. Overscan is ASPECT-PRESERVING:
+            // GBy = GBx*h/w, so (w+2GBx)/(h+2GBy) == w/h. Under per-pixel-FoV
+            // that keeps BOTH per-pixel angles exactly constant ⇒ the clipped
+            // (visible) framing is pixel-identical to no overscan (an equal-px
+            // band would change the aspect ~1% and shift edge content).
+            const SceneViewport ov = ComputeOverscanViewport(x, y, w, h);
+            m_engine->SetSceneViewport(ov.x, ov.y, ov.w, ov.h);
+        }
+        m_dcompCompositor->SetEngineVisualTransform(x, y, w, h,
+                                                    /*immediate=*/false,
+                                                    /*quiet=*/animFrame);
+    }
+}
+
+void LayoutBroker::StartSceneAnim(int fromX, int fromY, int fromW, int fromH,
+                                  int toX, int toY, int toW, int toH,
+                                  double durationMs, double msElapsedAtSend)
+{
+    // The interpolation drives the DComp engine visual + the per-frame engine
+    // viewport. With no DComp compositor attached (e.g. headless --capture)
+    // there is no such path, so this is a clean no-op.
+    if (!m_dcompCompositor) return;
+
+    const double qpcPerMs = QpcPerMs();
+    LARGE_INTEGER nowLi;
+    if (durationMs <= 0.0 || qpcPerMs <= 0.0 || !QueryPerformanceCounter(&nowLi))
+    {
+        // No usable duration/clock → just apply the final rect (the panel still
+        // tweens in CSS; we forgo host-side interpolation this once). Clear any
+        // PRIOR anim first so this degenerate re-toggle can't leave a stale
+        // interpolation running past the snap.
+        m_sceneAnim.active = false;
+        ApplySceneRect(toX, toY, toW, toH);
+        return;
+    }
+    if (msElapsedAtSend < 0.0) msElapsedAtSend = 0.0;
+
+    m_sceneAnim.active = true;
+    m_sceneAnim.fromX  = static_cast<float>(fromX);
+    m_sceneAnim.fromY  = static_cast<float>(fromY);
+    m_sceneAnim.fromW  = static_cast<float>(fromW);
+    m_sceneAnim.fromH  = static_cast<float>(fromH);
+    m_sceneAnim.toX    = static_cast<float>(toX);
+    m_sceneAnim.toY    = static_cast<float>(toY);
+    m_sceneAnim.toW    = static_cast<float>(toW);
+    m_sceneAnim.toH    = static_cast<float>(toH);
+    m_sceneAnim.durMs  = durationMs;
+    // Back-date the start to the CSS origin: the web measured `msElapsedAtSend`
+    // since the flex actually changed, and host QPC + the browser clock share the
+    // same wall time, so the curve is pinned to the panel across the IPC hop.
+    m_sceneAnim.startQpc = nowLi.QuadPart - static_cast<long long>(msElapsedAtSend * qpcPerMs);
+}
+
+bool LayoutBroker::AdvanceSceneAnim(long long qpcNow)
+{
+    if (!m_sceneAnim.active) return false;
+
+    const double qpcPerMs = QpcPerMs();
+    double t = 1.0;
+    if (qpcPerMs > 0.0 && m_sceneAnim.durMs > 0.0)
+    {
+        const double elapsedMs = static_cast<double>(qpcNow - m_sceneAnim.startQpc) / qpcPerMs;
+        t = elapsedMs / m_sceneAnim.durMs;
+        if (t < 0.0) t = 0.0;
+        if (t > 1.0) t = 1.0;
+    }
+
+    if (t >= 1.0)
+    {
+        // Land exactly on `to` and release the rect; the authoritative settle
+        // send (due ~60ms later) then takes over through SetSceneRect.
+        m_sceneAnim.active = false;
+        ApplySceneRect(static_cast<int>(std::lround(m_sceneAnim.toX)),
+                       static_cast<int>(std::lround(m_sceneAnim.toY)),
+                       static_cast<int>(std::lround(m_sceneAnim.toW)),
+                       static_cast<int>(std::lround(m_sceneAnim.toH)));
+        return true;
+    }
+
+    // animFrame=true: mid-flight applies skip the per-apply transform
+    // log (they run at the render rate; the terminal apply above logs).
+    const double e = CssEaseY(t);  // only the in-flight frames need the curve
+    ApplySceneRect(static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromX, m_sceneAnim.toX, e))),
+                   static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromY, m_sceneAnim.toY, e))),
+                   static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromW, m_sceneAnim.toW, e))),
+                   static_cast<int>(std::lround(Lerpf(m_sceneAnim.fromH, m_sceneAnim.toH, e))),
+                   /*animFrame=*/true);
+    return true;
+}
+
+bool LayoutBroker::CaptureSnapshotPng(std::string& outBase64, int& outW, int& outH)
+{
+    if (!m_alphaCompositor || !m_engine || m_engine->DeviceCallsBlocked())
+        return false;
+    return m_alphaCompositor->CaptureSnapshotPng(outBase64, outW, outH);
+}
+
+bool LayoutBroker::CaptureSnapshotToFile(const std::wstring& path)
+{
+    if (!m_alphaCompositor || !m_engine || m_engine->DeviceCallsBlocked())
+        return false;
+    return m_alphaCompositor->CaptureSnapshotToFile(path);
+}
+
+// Re-emit the cached scene rect onto both consumers whenever the popup
+// origin or attachment changes:
+//   - the AlphaCompositor, which crops its on-demand snapshot (the modal
+//     frosted-glass backdrop) to the scene rect — popup-client coords, so
+//     the popup-origin translation applies here;
+//   - the DComp Compositor + Engine (the live render transform), which
+//     consume main-client coords directly (no translation).
+void LayoutBroker::ReemitSceneRect()
+{
+    if (!m_alphaCompositor && !m_dcompCompositor) return;
+
+    if (m_lastW <= 0 || m_lastH <= 0)
+    {
+        // Viewport collapsed — disable the AlphaCompositor's snapshot crop
+        // so a stale rect doesn't persist into the next non-degenerate
+        // Apply. The DComp engine visual is sized to host-client (unchanged),
+        // so leave it as-is — idempotent on the next SetSceneRect dispatch.
+        if (m_alphaCompositor) m_alphaCompositor->SetSceneRect(0, 0, 0, 0);
+        return;
+    }
+
+    // AlphaCompositor snapshot crop (popup-client coords). Zeros disable the
+    // crop until React dispatches the first scene rect.
+    if (m_alphaCompositor)
+    {
+        if (m_sceneW > 0 && m_sceneH > 0)
+            m_alphaCompositor->SetSceneRect(
+                m_sceneX - m_lastX, m_sceneY - m_lastY, m_sceneW, m_sceneH);
+        else
+            m_alphaCompositor->SetSceneRect(0, 0, 0, 0);
+    }
+
+    // Re-emit the cached scene-rect onto the DComp Compositor + Engine. The DComp
+    // transform takes the TRUE main-client rect; the engine viewport takes the
+    // OVERSCANNED rect via ComputeOverscanViewport -- the SAME guard band the
+    // normal apply path uses, so reemit can't reintroduce edge artifacts
+    // (release-audit #10). SetCompositor replays state onto a newly-attached
+    // compositor; idempotence guards inside SetEngineVisualTransform +
+    // SetSceneViewport make repeated calls from popup-origin changes effectively free.
+    if (m_dcompCompositor && m_sceneW > 0 && m_sceneH > 0)
+    {
+        m_dcompCompositor->SetEngineVisualTransform(
+            m_sceneX, m_sceneY, m_sceneW, m_sceneH);
+        if (m_engine)
+        {
+            const SceneViewport ov = ComputeOverscanViewport(m_sceneX, m_sceneY, m_sceneW, m_sceneH);
+            m_engine->SetSceneViewport(ov.x, ov.y, ov.w, ov.h);
+        }
+    }
+}
+
+} // namespace host

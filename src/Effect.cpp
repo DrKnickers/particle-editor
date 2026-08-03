@@ -1,18 +1,36 @@
 #include "Effect.h"
+#include <windows.h>   // [shader-gate] OutputDebugStringA
+#include <cstdio>      // [shader-gate] vsnprintf/fputs
+#include <cstdarg>     // [shader-gate] va_list
+
+// [shader-gate] Standalone diagnostic logger (stdout-flushed + debugger) so a
+// headless --capture run records which technique the LOD selector chose.
+// Gated behind the ALO_SHADER_DIAG env var (matches the repo's ALO_* test
+// hooks) so normal interactive use stays silent; set it for a capture run.
+static void ShaderEffectLog(const char* fmt, ...)
+{
+	static int s_diag = -1;
+	if (s_diag < 0) { char b[8]; s_diag = (GetEnvironmentVariableA("ALO_SHADER_DIAG", b, sizeof(b)) > 0) ? 1 : 0; }
+	if (!s_diag) return;
+	char buf[1024];
+	va_list ap;
+	va_start(ap, fmt);
+	_vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, ap);
+	va_end(ap);
+	OutputDebugStringA(buf);
+	fputs(buf, stdout);
+	fflush(stdout);
+}
 
 Effect::Effect(ID3DXEffect* pD3DEffect)
 {
 	//
 	// Read effect properties
 	//
-	LPCSTR strPhase = NULL, strProc = NULL, strType = NULL;
-	BOOL   zSort = FALSE, tangentSpace = FALSE, shadowVolume = FALSE;
+	LPCSTR strPhase = NULL;
+	BOOL   shadowVolume = FALSE;
 	pD3DEffect->GetString("_ALAMO_RENDER_PHASE", &strPhase);
-	pD3DEffect->GetString("_ALAMO_VERTEX_PROC",  &strProc);
-	pD3DEffect->GetString("_ALAMO_VERTEX_TYPE",  &strType);
-	pD3DEffect->GetBool  ("_ALAMO_TANGENT_SPACE", &tangentSpace);
 	pD3DEffect->GetBool  ("_ALAMO_SHADOW_VOLUME", &shadowVolume);
-	pD3DEffect->GetBool  ("_ALAMO_Z_SORT",        &zSort);
 
 	int phase = NUM_PHASES;
 	if (strPhase != NULL)
@@ -22,11 +40,7 @@ Effect::Effect(ID3DXEffect* pD3DEffect)
 	}
 
 	m_phase        = (phase < NUM_PHASES) ? phase : 0;
-	m_vertexProc   = (strProc != NULL) ? strProc : "";
-	m_vertexType   = (strType != NULL) ? strType : "";
-	m_zSort        = (zSort        != FALSE);
 	m_shadowVolume = (shadowVolume != FALSE);
-	m_tangentSpace = (tangentSpace != FALSE);
 
 	//
 	// Select technique
@@ -54,6 +68,18 @@ Effect::Effect(ID3DXEffect* pD3DEffect)
 		}
 	}
 
+	// [shader-gate] Report which technique (if any) the LOD selector chose, so a
+	// headless capture log distinguishes "DX9/ps_3_0 technique selected" from
+	// "fell through to a lower LOD" or "none validated".
+	{
+		D3DXHANDLE hSel = pD3DEffect->GetCurrentTechnique();
+		D3DXTECHNIQUE_DESC td;
+		if (hSel != NULL && SUCCEEDED(pD3DEffect->GetTechniqueDesc(hSel, &td)) && td.Name != NULL)
+			ShaderEffectLog("[shader-gate] selected technique: %s\n", td.Name);
+		else
+			ShaderEffectLog("[shader-gate] NO technique selected\n");
+	}
+
 	//
 	// Get the handles
 	//
@@ -68,6 +94,7 @@ Effect::Effect(ID3DXEffect* pD3DEffect)
 	m_handles.hViewInverse         = pD3DEffect->GetParameterBySemantic(NULL, "VIEWINVERSE");
 	m_handles.hViewProjection      = pD3DEffect->GetParameterBySemantic(NULL, "VIEWPROJECTION");
 	m_handles.hProjection          = pD3DEffect->GetParameterBySemantic(NULL, "PROJECTION");
+	m_handles.hSkinMatrixArray     = pD3DEffect->GetParameterBySemantic(NULL, "SKINMATRIXARRAY");
 	m_handles.hEyePosition         = pD3DEffect->GetParameterBySemantic(NULL, "EYE_POSITION");
 	m_handles.hEyeObjPosition      = pD3DEffect->GetParameterBySemantic(NULL, "EYE_OBJ_POSITION");
 	m_handles.hTime                = pD3DEffect->GetParameterBySemantic(NULL, "TIME");

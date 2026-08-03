@@ -1,14 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|Win32">
-      <Configuration>Debug</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|Win32">
-      <Configuration>Release</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
@@ -23,21 +15,15 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>ParticleEditor</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <RestorePackagesConfig>true</RestorePackagesConfig>
+    <!-- Statically link the WebView2 loader (WebView2LoaderStatic.lib) so no
+         WebView2Loader.dll needs to ship. The Microsoft.Web.WebView2.targets
+         import below reads this property: Static swaps the loader lib AND
+         suppresses the copy-to-output of WebView2Loader.dll. Must be set before
+         that import (this Globals group is evaluated first). -->
+    <WebView2LoaderPreference>Static</WebView2LoaderPreference>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
-    <CharacterSet>Unicode</CharacterSet>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>Unicode</CharacterSet>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
@@ -56,12 +42,6 @@
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -69,35 +49,12 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <LinkIncremental>true</LinkIncremental>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClCompile>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;XML_STATIC; _CRT_SECURE_NO_WARNINGS;XML_UNICODE_WCHAR_T;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)\libs\expat-2.2.0\include;$(SolutionDir)libs\dx9\Include;$(SolutionDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <TreatWarningAsError>true</TreatWarningAsError>
-    </ClCompile>
-    <Link>
-      <SubSystem>Windows</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>comctl32.lib;d3d9.lib;d3dx9.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)libs\dx9\Lib\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Link>
-  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PrecompiledHeader>
@@ -105,36 +62,15 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;XML_STATIC; _CRT_SECURE_NO_WARNINGS;XML_UNICODE_WCHAR_T;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)\libs\expat-2.2.0\include;$(SolutionDir)libs\dx9\Include;$(SolutionDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\libs\expat-2.2.0\include;$(DXSDK_DIR)Include;$(SolutionDir)src;$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>comctl32.lib;d3d9.lib;d3dx9.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)libs\dx9\Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Link>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
-      <Optimization>MaxSpeed</Optimization>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;XML_STATIC;XML_UNICODE_WCHAR_T;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)\libs\expat-2.2.0\include;$(SolutionDir)libs\dx9\Include;$(SolutionDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <TreatWarningAsError>true</TreatWarningAsError>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-    </ClCompile>
-    <Link>
-      <SubSystem>Windows</SubSystem>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>comctl32.lib;d3d9.lib;d3dx9.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)libs\dx9\Lib\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>comctl32.lib;d3d9.lib;d3dx9.lib;shlwapi.lib;ole32.lib;oleaut32.lib;uuid.lib;runtimeobject.lib;version.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -145,97 +81,189 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;XML_STATIC;XML_UNICODE_WCHAR_T;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)\libs\expat-2.2.0\include;$(SolutionDir)libs\dx9\Include;$(SolutionDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;XML_STATIC;_CRT_SECURE_NO_WARNINGS;XML_UNICODE_WCHAR_T;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir)\libs\expat-2.2.0\include;$(DXSDK_DIR)Include;$(SolutionDir)src;$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>comctl32.lib;d3d9.lib;d3dx9.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)libs\dx9\Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>comctl32.lib;d3d9.lib;d3dx9.lib;shlwapi.lib;ole32.lib;oleaut32.lib;uuid.lib;runtimeobject.lib;version.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <!-- Strip the absolute build-tree path from the PDB reference embedded in
+           the shipped exe (the default embeds the full local worktree path).
+           The bare filename keeps debuggers working when the .pdb sits beside
+           the exe; nothing about the build machine leaks (2026-07 sweep). -->
+      <AdditionalOptions>/PDBALTPATH:%_PDB% %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AloModel.h" />
     <ClInclude Include="ChunkFile.h" />
     <ClInclude Include="crc32.h" />
     <ClInclude Include="Effect.h" />
     <ClInclude Include="EmitterInstance.h" />
     <ClInclude Include="engine.h" />
+    <ClInclude Include="engine_internal.h" />
     <ClInclude Include="exceptions.h" />
     <ClInclude Include="files.h" />
+    <ClInclude Include="InstanceBorrow.h" />
+    <ClInclude Include="LinkGroup.h" />
     <ClInclude Include="managers.h" />
     <ClInclude Include="MegaFiles.h" />
+    <ClInclude Include="MouseCursor.h" />
     <ClInclude Include="ParticleSystem.h" />
     <ClInclude Include="ParticleSystemInstance.h" />
     <ClInclude Include="Rescale.h" />
+    <ClInclude Include="Autosave.h" />
+    <ClInclude Include="SpawnerDriver.h" />
+    <ClInclude Include="SpawnerPath.h" />
+    <ClInclude Include="UndoStack.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="Resources\resource.de.h" />
-    <ClInclude Include="Resources\resource.en.h" />
+    <ClInclude Include="GameObjectCatalog.h" />
+    <ClInclude Include="ReferenceObjectMesh.h" />
     <ClInclude Include="Resources\resource.h" />
+    <ClInclude Include="SkydomeEnvironment.h" />
+    <ClInclude Include="SkydomeMesh.h" />
     <ClInclude Include="SphericalHarmonics.h" />
     <ClInclude Include="types.h" />
-    <ClInclude Include="UI\UI.h" />
+    <ClInclude Include="UI\TexturePalette.h" />
     <ClInclude Include="utils.h" />
     <ClInclude Include="xml.h" />
+    <ClInclude Include="host\AcceleratorBridge.h" />
+    <ClInclude Include="host\AlphaCompositor.h" />
+    <ClInclude Include="host\BridgeDispatcher.h" />
+    <ClInclude Include="host\BridgeDispatchShared.h" />
+    <ClInclude Include="host\BridgeRequestContext.h" />
+    <ClInclude Include="host\DriveScript.h" />
+    <ClInclude Include="host\CaptureGoldenProfile.h" />
+    <ClInclude Include="host\CaptureRunner.h" />
+    <ClInclude Include="host\DriveRunner.h" />
+    <ClInclude Include="host\HostRunUtil.h" />
+    <ClInclude Include="host\ClipTimeline.h" />
+    <ClInclude Include="host\ClipRunner.h" />
+    <ClInclude Include="host\Compositor.h" />
+    <ClInclude Include="host\InputDispatcher.h" />
+    <ClInclude Include="host\HostBridgeProxy.h" />
+    <ClInclude Include="host\HostWindow.h" />
+    <ClInclude Include="host\WicEncode.h" />
+    <ClInclude Include="host\WindowCapture.h" />
+    <ClInclude Include="host\StringConv.h" />
+    <ClInclude Include="host\GdiplusEncode.h" />
+    <ClInclude Include="host\LayoutBroker.h" />
+    <ClInclude Include="host\Run.h" />
+    <ClInclude Include="host\third_party\nlohmann\json.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AloModel.cpp" />
     <ClCompile Include="ChunkReader.cpp" />
     <ClCompile Include="ChunkWriter.cpp" />
     <ClCompile Include="crc32.cpp" />
     <ClCompile Include="Effect.cpp" />
     <ClCompile Include="EmitterInstance.cpp" />
     <ClCompile Include="engine.cpp" />
+    <ClCompile Include="engine_environment.cpp" />
+    <ClCompile Include="engine_reference.cpp" />
+    <ClCompile Include="engine_render.cpp" />
     <ClCompile Include="files.cpp" />
+    <ClCompile Include="LinkGroup.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="managers.cpp" />
+    <ClCompile Include="ModManager.cpp" />
     <ClCompile Include="MegaFiles.cpp" />
     <ClCompile Include="ParticleSystem.cpp" />
     <ClCompile Include="ParticleSystemInstance.cpp" />
     <ClCompile Include="Rescale.cpp" />
+    <ClCompile Include="Autosave.cpp" />
+    <ClCompile Include="SpawnerDriver.cpp" />
+    <ClCompile Include="UndoStack.cpp" />
+    <ClCompile Include="GameObjectCatalog.cpp" />
+    <ClCompile Include="ReferenceObjectMesh.cpp" />
+    <ClCompile Include="SkydomeEnvironment.cpp" />
+    <ClCompile Include="SkydomeMesh.cpp" />
     <ClCompile Include="SphericalHarmonics.cpp" />
-    <ClCompile Include="UI\ColorButton.cpp" />
-    <ClCompile Include="UI\CurveEditor.cpp" />
-    <ClCompile Include="UI\Emitter.cpp" />
-    <ClCompile Include="UI\EmitterList.cpp" />
-    <ClCompile Include="UI\RandomParam.cpp" />
-    <ClCompile Include="UI\Spinner.cpp" />
-    <ClCompile Include="UI\TrackEditor.cpp" />
+    <ClCompile Include="UI\PaletteStore.cpp" />
+    <ClCompile Include="UI\PaletteThumbs.cpp" />
     <ClCompile Include="utils.cpp" />
     <ClCompile Include="xml.cpp" />
+    <ClCompile Include="host\AcceleratorBridge.cpp">
+    </ClCompile>
+    <ClCompile Include="host\AlphaCompositor.cpp">
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatcher.cpp">
+    </ClCompile>
+    <ClCompile Include="host\RecentFiles.cpp" />
+    <ClCompile Include="host\BridgeDispatch_Assets.cpp" />
+    <ClCompile Include="host\BridgeDispatch_Emitters.cpp" />
+    <ClCompile Include="host\BridgeDispatch_Engine.cpp" />
+    <ClCompile Include="host\BridgeDispatch_File.cpp" />
+    <ClCompile Include="host\BridgeDispatch_Shell.cpp" />
+    <ClCompile Include="host\BridgeDispatch_Spawner.cpp" />
+    <ClCompile Include="host\CaptureRunner.cpp" />
+    <ClCompile Include="host\WicEncode.cpp">
+      <!-- Same include-order override as Compositor.cpp: wincodec.h is a
+           modern Win10-SDK header; the project-level include order puts the
+           June-2010 DXSDK first (engine needs its d3dx9.h), whose stale
+           winerror/dxgitype definitions collide. Win10 SDK first for this
+           TU only; it includes no DXSDK headers. -->
+      <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;$(SolutionDir)src</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="host\DriveRunner.cpp" />
+    <ClCompile Include="host\ClipRunner.cpp" />
+    <ClCompile Include="host\PerfTrace.cpp" />
+    <ClCompile Include="host\Compositor.cpp">
+      <!-- Compositor.cpp pulls in modern dcomp.h / d3d11.h / dxgi1_2.h
+           from the Win10 SDK. The project-level AdditionalIncludeDirectories
+           puts $(DXSDK_DIR)Include FIRST because the engine needs DXSDK's
+           d3dx9.h (a legacy June 2010 header), but DXSDK also has stale
+           DXGI.h / D3D11.h / Dcommon.h that predate Direct2D 1.1 and
+           DirectComposition. When dcomp.h transitively pulls
+           dcommon.h / d2d1_1.h / dxgi.h, MSVC finds the DXSDK versions
+           first and the modern types (D2D_VECTOR_2F, DXGI_COLOR_SPACE_TYPE,
+           etc.) come up undeclared, producing dcomp.h syntax errors.
+           Fix: REPLACE (not append to) the include path for THIS file
+           only — no DXSDK, just Win10 SDK + WebView2 SDK. Compositor.cpp
+           doesn't use d3dx9 or any other DXSDK-only API so isolation is
+           safe. Other files in the project keep DXSDK first as before. -->
+      <!-- F9 (audit): use the SDK macros instead of a hardcoded 10.0.26100.0
+           path so the build is portable to any installed Win10 SDK.
+           $(WindowsSDKVersion) carries a trailing backslash by MSBuild
+           convention. Still REPLACES the path (no DXSDK) for this file. -->
+      <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(WindowsSDKVersion)shared;$(WindowsSdkDir)Include\$(WindowsSDKVersion)um;$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\include;$(SolutionDir)src</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="host\InputDispatcher.cpp">
+    </ClCompile>
+    <ClCompile Include="host\HostBridgeProxy.cpp">
+    </ClCompile>
+    <ClCompile Include="host\StartupCallbackAdapter.cpp" />
+    <ClCompile Include="host\HostWindow.cpp">
+    </ClCompile>
+    <ClCompile Include="host\WindowCapture.cpp">
+    </ClCompile>
+    <ClCompile Include="host\LayoutBroker.cpp">
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="ParticleEditor.de.rc" />
-    <ResourceCompile Include="ParticleEditor.en.rc" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
     <ResourceCompile Include="ParticleEditor.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="Resources\curve_interpolate_linear.ico" />
-    <Image Include="Resources\curve_interpolate_smooth.ico" />
-    <Image Include="Resources\curve_interpolate_step.ico" />
-    <Image Include="Resources\curve_key_delete.ico" />
-    <Image Include="Resources\curve_mode_insert.ico" />
-    <Image Include="Resources\curve_mode_select.ico" />
     <Image Include="Resources\dirt.bmp" />
-    <Image Include="Resources\emitter_list.bmp" />
     <Image Include="Resources\logo.ico" />
     <Image Include="Resources\missing.bmp" />
-    <Image Include="Resources\toolbar1.bmp" />
-    <Image Include="Resources\toolbar2.bmp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Resources\DefaultShader.fx">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </FxCompile>
     <FxCompile Include="Resources\SceneHeat.fx">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </FxCompile>
@@ -247,5 +275,24 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets" Condition="Exists('$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets')" />
   </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them. For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)packages\Microsoft.Web.WebView2.1.0.3967.48\build\native\Microsoft.Web.WebView2.targets'))" />
+  </Target>
+  <!-- Regenerate the embedded web-bundle manifest (src\generated\EmbeddedWebAssets.{rc,h})
+       from web\apps\editor\dist before compiling. ParticleEditor.rc #includes the .rc and
+       host\HostWindow.cpp #includes the .h, so both must exist before ResourceCompile and
+       ClCompile; PrepareForBuild precedes both (and does NOT run during /t:Restore, so a
+       fresh worktree restore before the web bundle exists won't trip the check). The exe
+       then embeds the React bundle as RCDATA and serves it from WebResourceRequested — no
+       separate web\ folder ships. The generator writes only when content changed, so a
+       no-op rebuild leaves the .rc mtime untouched and rc.exe stays incremental. -->
+  <Target Name="GenerateEmbeddedWebAssets" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(SolutionDir)web\apps\editor\dist\index.html')" Text="web\apps\editor\dist\index.html not found — build the editor web bundle first: cd web &amp;&amp; pnpm --filter ./apps/editor build" />
+    <Exec Command="node scripts\embed-web-dist.mjs" WorkingDirectory="$(SolutionDir)" />
+  </Target>
 </Project>

@@ -1,6 +1,8 @@
 #include <cassert>
+#include <vector>
 #include "ChunkFile.h"
 #include "exceptions.h"
+#include "ResourceLimits.h"
 using namespace std;
 
 ChunkType ChunkReader::nextMini()
@@ -29,8 +31,17 @@ ChunkType ChunkReader::nextMini()
 		throw ReadException();
 	}
 
-	m_miniSize   = letohl(hdr.size);
-	m_miniOffset = m_file->tell() + m_miniSize;
+	// Validate the untrusted mini-chunk size against the parent's remaining bytes
+	// AND an absolute cap before trusting it for offset math / later allocations
+	// (release-audit #13: absolute max chunk/string sizes for ALO parsing).
+	const long miniSize = (long)letohl(hdr.size);
+	const long avail    = m_offsets[m_curDepth] - (long)m_file->tell();
+	if (miniSize < 0 || miniSize > avail || (unsigned long)miniSize > kMaxAloChunkBytes)
+	{
+		throw BadFileException();
+	}
+	m_miniSize   = miniSize;
+	m_miniOffset = m_file->tell() + miniSize;
 	m_position   = 0;
 
 	return letohl(hdr.type);
@@ -62,7 +73,28 @@ ChunkType ChunkReader::next()
 	}
 
 	unsigned long size = letohl(hdr.size);
-	m_offsets[ ++m_curDepth ] = m_file->tell() + (size & 0x7FFFFFFF);
+	const long payloadSize = (long)(size & 0x7FFFFFFF);
+	const long parentRemaining = m_offsets[m_curDepth] - (long)m_file->tell();
+	// Parent-relative bound AND the absolute kMaxAloChunkBytes cap (release-audit
+	// #13). The cap previously guarded only mini-chunks (nextMini); a normal
+	// chunk's only bound was its parent, and the top-level parent is the whole
+	// file — so a multi-GiB crafted .alo could still authorize a huge single
+	// chunk. Real chunks sit far below the cap.
+	if (parentRemaining < 0 || payloadSize > parentRemaining ||
+	    (unsigned long)payloadSize > kMaxAloChunkBytes)
+	{
+		throw BadFileException();
+	}
+	// Guard the fixed m_offsets[MAX_CHUNK_DEPTH] array: a crafted .alo with
+	// chunks nested past depth 255 would otherwise write out of bounds via
+	// the pre-increment below (CWE-787 heap corruption during parse).
+	// Reject the file. (nextMini() uses the flat m_miniOffset and is not
+	// affected.)
+	if (m_curDepth + 1 >= MAX_CHUNK_DEPTH)
+	{
+		throw BadFileException();
+	}
+	m_offsets[ ++m_curDepth ] = m_file->tell() + payloadSize;
 	m_size     = (~size & 0x80000000) ? size : -1;
 	m_miniSize = -1;
 	m_position = 0;
@@ -89,20 +121,37 @@ long ChunkReader::size()
 
 string ChunkReader::readString()
 {
-	string str;
-	char* data = new char[ size() ];
-	try
+	// A string chunk stores its bytes plus a trailing NUL (see
+	// ChunkWriter::writeString, which writes length()+1 bytes). The old
+	// body did `str = data;` -- std::string(const char*) walks to the
+	// first NUL, reading past the heap allocation on any malformed or
+	// unterminated string chunk (CWE-125 heap over-read); a zero-length
+	// chunk made `new char[0]` + C-string assign undefined too. Read into
+	// a bounded buffer, require the terminator, and construct the string
+	// length-bounded so neither a missing terminator nor an embedded NUL
+	// can misbehave.
+	const long len = size();
+	if (len <= 0)
 	{
-		read(data, size());
+		throw BadFileException();
 	}
-	catch (...)
+	if ((unsigned long)len > kMaxAloStringBytes) // absolute cap (release-audit #13)
 	{
-		delete[] data;
-		throw;
+		throw BadFileException();
 	}
-	str = data;
-	delete[] data;
-	return str;
+	const long end = (m_miniSize >= 0) ? m_miniOffset : m_offsets[m_curDepth];
+	const long remaining = end - (long)m_file->tell();
+	if (remaining < 0 || len > remaining)
+	{
+		throw BadFileException();
+	}
+	std::vector<char> buf((size_t)len);
+	read(buf.data(), len);
+	if (buf.back() != '\0')
+	{
+		throw BadFileException();
+	}
+	return string(buf.data(), (size_t)len - 1);
 }
 
 long ChunkReader::read(void* buffer, long size, bool check)
@@ -128,6 +177,8 @@ ChunkReader::ChunkReader(IFile* file)
 	m_curDepth   = 0;
 	m_size       = -1;
 	m_miniSize   = -1;
+	m_position   = 0;
+	m_miniOffset = 0;
 }
 
 ChunkReader::~ChunkReader()

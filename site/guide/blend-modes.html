@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blend Modes — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Reference <span class="kicker-count">· 3 of 9</span></p>
+<h1 id="blend-modes">Blend Modes</h1>
+<p>The blend mode decides how a particle mixes with whatever is behind it. It is one of the biggest levers on how an effect reads, so it is worth knowing what each option does. Set it in the Property Panel under Appearance, in the Rendering section, with the Blend mode field.</p>
+<p>The two you will use most are Additive and Transparent. Additive brightens whatever is behind the particle and is right for anything glowing. Transparent is ordinary see-through blending and is right for anything solid-looking that fades, such as smoke.</p>
+<blockquote><strong>Additive ignores alpha.</strong> An additive particle's Alpha track does nothing — brightness comes entirely from its color. Fade an additive glow by dropping its <strong>color</strong> toward black (or shrinking its Scale), never with the Alpha track. This one fact trips up almost every newcomer.</blockquote>
+<figure class="guide-media"><img class="clip-img" data-poster="ref-blend-mode-grid.png" alt="A grid still of the same particle rendered in each of the ten UI blend modes over a lit background."></figure>
+<h2 id="the-modes">The Modes</h2>
+<table>
+<thead>
+<tr><th>Mode</th><th>What it does</th><th>Reach for it when</th></tr>
+</thead>
+<tbody>
+<tr><td data-label="Mode">None</td><td data-label="What it does">No blending. The particle is drawn opaque and simply covers what is behind it; its alpha is ignored.</td><td data-label="Reach for it when">You genuinely want a solid, fully opaque sprite. Rare for particles.</td></tr>
+<tr><td data-label="Mode">Additive</td><td data-label="What it does">Adds the particle's color to the scene, so it only ever brightens. Dark parts of the texture become invisible, and the <strong>alpha channel is ignored</strong> — brightness comes entirely from color, so fade an additive effect with its color or scale, never with alpha.</td><td data-label="Reach for it when">Glows, fire, plasma, energy, sparks — anything that gives off light.</td></tr>
+<tr><td data-label="Mode">Transparent</td><td data-label="What it does">Ordinary alpha blending: the particle's alpha controls how much you see it over the background.</td><td data-label="Reach for it when">Smoke, dust, debris, and most soft opaque effects that fade in and out.</td></tr>
+<tr><td data-label="Mode">Inverse</td><td data-label="What it does">Multiplies the scene by the particle's color and texture, so it darkens instead of brightening. White leaves the scene unchanged; black drives it toward black.</td><td data-label="Reach for it when">Scorch marks, dark smoke, shadowy or draining effects.</td></tr>
+<tr><td data-label="Mode">Depth additive</td><td data-label="What it does">Additive, but depth-aware (see below).</td><td data-label="Reach for it when">An additive effect that overlaps scene geometry and should intersect it correctly instead of popping in front of it.</td></tr>
+<tr><td data-label="Mode">Depth transparent</td><td data-label="What it does">Transparent, but depth-aware.</td><td data-label="Reach for it when">Alpha-blended smoke or dust that overlaps terrain or a model and should meet it per-pixel rather than at the flat quad's edge.</td></tr>
+<tr><td data-label="Mode">Depth inverse</td><td data-label="What it does">Inverse, but depth-aware.</td><td data-label="Reach for it when">A darkening effect that meets solid geometry and should depth-test against it correctly, per pixel.</td></tr>
+<tr><td data-label="Mode">Diffuse transparent</td><td data-label="What it does">Alpha-blended like Transparent, but scene lighting adds shade and highlights to the particle instead of letting it look flat or self-lit.</td><td data-label="Reach for it when">A soft effect that should sit in the scene's light rather than glowing on its own.</td></tr>
+<tr><td data-label="Mode">Bump map</td><td data-label="What it does">A lit particle: it uses the normal texture to catch scene lighting, alpha-blended over the background.</td><td data-label="Reach for it when">Effects that should look shaded and three-dimensional rather than flat and self-lit.</td></tr>
+<tr><td data-label="Mode">Decal bump map</td><td data-label="What it does">A decal-style blend that can lighten or darken the surface behind it, so the mark looks lit rather than like a flat stain.</td><td data-label="Reach for it when">Marks laid onto a surface — burns, stains, and impact decals.</td></tr>
+</tbody>
+</table>
+<h2 id="about-the-depth-modes">About the &quot;Depth&quot; Modes</h2>
+<p>The Depth additive, Depth transparent, and Depth inverse modes read a depth texture so that different parts of one particle can pass correctly in front of or behind solid surfaces, instead of the whole flat sprite popping wholly in front of or behind them. Use a depth mode when an effect sits against or passes through scene geometry; use the plain mode when it floats in open space, since the plain mode is cheaper.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="ref-depth-mode-compare.png" alt="Side-by-side of a particle intersecting a reference model: plain mode's flat quad pop vs a depth mode meeting the surface per-pixel."></figure>
+<h2 id="the-bump-modes-and-their-textures">The Bump Modes and Their Textures</h2>
+<p>Bump map gets its lighting shape from the emitter's <strong>normal</strong> texture — the image that controls how light falls across the particle. Decal bump map gets that shape from the <strong>color</strong> texture instead. If the texture a mode relies on is missing or has no useful variation, the expected shading simply will not appear.</p>
+<p>Selecting Bump map also shows the editor's &quot;Always face camera&quot; checkbox as checked and disabled. Treat that as a hint, not a setting change: the emitter keeps whatever orientation you assigned it, and the box only signals that bump-mapped particles are usually meant to be viewed head-on.</p>
+<h2 id="modes-the-editor-does-not-expose">Modes the Editor Does Not Expose</h2>
+<p>The underlying engine defines a few more blend modes — stencil-based darkening, a heat-shimmer mode, and a scanline mode — that this editor intentionally does not list, matching the original tool. The ten modes above are the full set you can choose from in the UI.</p>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./generation-types.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Particle Generation Types</span></a>
+        <a class="pager-next" href="./motion-and-physics.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Motion and Physics</span></a>
+      </nav>
+    </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html">3. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html" class="active" aria-current="page">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#the-modes">The Modes</a></li>
+      <li class="lvl-2"><a href="#about-the-depth-modes">About the "Depth" Modes</a></li>
+      <li class="lvl-2"><a href="#the-bump-modes-and-their-textures">The Bump Modes and Their Textures</a></li>
+      <li class="lvl-2"><a href="#modes-the-editor-does-not-expose">Modes the Editor Does Not Expose</a></li>
+      </ul>
+    </nav>
+  </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
+  <footer class="guide-footer">
+    <p class="footer-legal">Particle Editor is an independent, unofficial tool — not affiliated with or endorsed by Lucasfilm, Disney, Petroglyph Games, or any third-party mod or its authors. <em>Star Wars: Empire at War</em> and <em>Forces of Corruption</em> are trademarks of their respective owners.</p>
+  </footer>
+</body>
+</html>

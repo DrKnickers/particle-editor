@@ -1,0 +1,1102 @@
+/* Particle Editor 2026 design component classes.
+   Lifted from the design bundle's styles.css. Token references
+   (var(--bg-2), var(--border-2), etc.) resolve via tokens.css. */
+
+#root { height: 100vh; }
+
+/* ---- Popover entrance / exit (Background / Ground / texture picker) ----
+   Self-contained keyframes keyed off Radix's data-state, applied via the
+   shared AnimatedPopover wrapper. The `animate-in`/`zoom-in-95` Tailwind
+   utilities are NOT available in this build (no tailwindcss-animate plugin),
+   so we define the fade+slight-zoom here. Radix keeps Popover.Content mounted
+   through the closing animation (Presence), so the exit actually plays.
+   Zoom emanates from the trigger corner via Radix's transform-origin var. */
+/* Entrance AND exit are pure opacity fades — deliberately NO scale.
+   A scale animation couples the popover's apparent position to its scale
+   state: transform-origin sits at the trigger corner and align="end" pins
+   the right edge, so ANY non-1 scale (mid-animation, or a transform that
+   gets re-resolved when the trigger is pressed) renders the popover offset
+   by a few px and snaps back on interaction — the "shift on press" bug.
+   A fade has no geometric component, so the popover can never shift. */
+@keyframes popover-pop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes popover-pop-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+.popover-animate[data-state="open"]   { animation: popover-pop-in 130ms ease-out; }
+.popover-animate[data-state="closed"] { animation: popover-pop-out 110ms ease-in; }
+@media (prefers-reduced-motion: reduce) {
+  .popover-animate[data-state="open"],
+  .popover-animate[data-state="closed"] { animation: none; }
+}
+
+/* [glide] Drag-chip spawn: a quick pop-in at the pointer when a root drag
+   activates. (Despawn is a per-instance inline transition — it flies toward
+   the landing gap, whose coordinates are computed at release; see
+   EmitterTree's finish().) */
+@keyframes drag-chip-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.drag-chip-enter { animation: drag-chip-in 120ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .drag-chip-enter { animation: none; }
+}
+
+/* ---- Design-pass motion additions (audit 2026-07-18) ----
+   Shared entrance/presence classes for the surfaces that previously
+   hard-cut. All reuse the popover fade keyframes; every class here is
+   covered by the reduced-motion block below AND the [data-recording]
+   kill-switch at the end of this section (clip determinism — frames
+   are captured on the record timeline, wall-clock CSS motion would
+   sample nondeterministically). */
+
+/* Radix Select unmounts its content immediately on close (no Presence
+   wait) — an exit animation can never play, so Select gets ENTRANCE-ONLY.
+   Menubar/ContextMenu keep the full .popover-animate pair. */
+.popover-animate-in[data-state="open"] { animation: popover-pop-in 130ms ease-out; }
+
+/* Entrance fade for remount-on-switch content: inspector tab panes,
+   the right-dock panel swap, RandomParam's mode rows. Opacity only —
+   these swaps replace content in place; any slip would read as layout
+   shift. */
+.fade-in-fast { animation: popover-pop-in var(--motion-fast-in) var(--ease-entrance); }
+
+/* Entrance fade for a newly ADDED emitter-tree row (sibling reflow is
+   the FLIP glide; this covers the row itself, which used to pop in). */
+.row-fade-in { animation: popover-pop-in var(--motion-fast-in) var(--ease-entrance); }
+
+/* Presence fade pair for custom-unmount feedback chips (usePresence):
+   SystemLoadChip (slow tier) and the StatusBar PAUSED tag (fast tier).
+   `both` holds opacity:0 through the post-animation unmount delay. */
+.fade-animate[data-state="open"]        { animation: popover-pop-in var(--motion-slow-in) var(--ease-entrance); }
+.fade-animate[data-state="closed"]      { animation: popover-pop-out var(--motion-slow-out) var(--ease-exit) both; }
+.fade-animate-fast[data-state="open"]   { animation: popover-pop-in var(--motion-fast-in) var(--ease-entrance); }
+.fade-animate-fast[data-state="closed"] { animation: popover-pop-out var(--motion-fast-out) var(--ease-exit) both; }
+
+/* Atlas hover-highlight: opacity fade (the element is positioned
+   imperatively on mousemove; only opacity transitions, position snaps). */
+.atlas-hover-fade { transition: opacity var(--motion-fast-in) var(--ease-entrance); }
+
+/* Static skeletons (design follow-ups, F5). Shape-matched loading stand-ins
+   for panel content — deliberately NO shimmer/pulse (calm register; also
+   means zero new motion to gate for reduced-motion/--record). */
+.skeleton-row {
+  height: var(--row-h);
+  border-radius: var(--radius-xs);
+  background: var(--panel-2);
+}
+
+/* Invalid-input language (design pass, C4). The app's first shared error
+   vocabulary for fields: anything flagged aria-invalid paints the danger
+   border (foreground variant — AA on both themes). !important so it wins
+   over per-site focus border shifts for the duration of the invalid state. */
+.text-input[aria-invalid="true"],
+input[aria-invalid="true"] { border-color: var(--danger-fg) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .popover-animate-in[data-state="open"],
+  .fade-in-fast,
+  .row-fade-in,
+  .fade-animate[data-state="open"], .fade-animate[data-state="closed"],
+  .fade-animate-fast[data-state="open"], .fade-animate-fast[data-state="closed"] { animation: none; }
+  .atlas-hover-fade { transition: none; }
+}
+
+/* Theme-flip cross-fade. lib/theme.ts adds .theme-transition to <html>
+   around the data-theme write (~220ms), skipping it under --record and
+   prefers-reduced-motion. Descendant `*` deliberately EXCLUDES html and
+   body themselves: body must stay transparent at all times for the
+   WebView2/D3D9 sibling-HWND compositing (globals.css). !important wins
+   over per-surface transitions for the flip window only. */
+html.theme-transition body * {
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease,
+    fill 150ms ease,
+    stroke 150ms ease !important;
+}
+
+/* --record kill-switch: the app root carries data-recording once the
+   record latch fires (App.tsx ← lib/record-mode.ts). Every animation
+   class in this section — plus the shared popover pair, now that the
+   menubar/context menus wear it — goes inert so captured frames stay
+   deterministic. (FLIP/JS glides self-gate via isRecording().) */
+[data-recording] .popover-animate[data-state],
+[data-recording] .popover-animate-in[data-state],
+[data-recording] .fade-in-fast,
+[data-recording] .row-fade-in,
+[data-recording] .fade-animate[data-state],
+[data-recording] .fade-animate-fast[data-state] { animation: none !important; }
+[data-recording] .tb-btn,
+[data-recording] .panel-header .icon-btn,
+[data-recording] .panel-section-header,
+[data-recording] .btn-texture-browse,
+[data-recording] .atlas-hover-fade,
+[data-recording] .curve-list .curve-row { transition: none !important; }
+
+/* ---- Tooltip surface + motion family ----
+   The shared Tip primitive (primitives/Tip.tsx). Surface is theme-following
+   (panel-3 + border-2; flips with [data-theme]) and wears --shadow-soft.
+   Motion = fast-tier fade + 4px slip AWAY from the trigger, keyed off
+   Radix data-state/data-side. NOTE: Tooltip's data-state vocabulary is
+   `closed` / `delayed-open` / `instant-open` — NOT Dialog/Popover's plain
+   `open` (verified against the installed package). Radix Presence keeps
+   Content mounted through the closing animation, so the exit plays.
+   Plain-string content gets padding via .tip-body; rich content (the
+   chain-warning band) brings its own padding so headers can run
+   edge-to-edge. */
+.tip-surface {
+  background: var(--panel-3);
+  color: var(--text);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 320px;
+  overflow: hidden; /* rich-tier bands clip to the rounded corner */
+}
+.tip-body { display: block; padding: 5px 9px; }
+.tip-arrow { fill: var(--panel-3); }
+
+/* z-index is on the Content (the portaled, positioned element) — not the inner
+   .tip-surface — so the whole tooltip stacks above the app. */
+.tip-animate { --tip-slip-x: 0px; --tip-slip-y: 0px; z-index: 60; }
+.tip-animate[data-side="top"]    { --tip-slip-y: var(--slip-tooltip); }
+.tip-animate[data-side="bottom"] { --tip-slip-y: calc(-1 * var(--slip-tooltip)); }
+.tip-animate[data-side="left"]   { --tip-slip-x: var(--slip-tooltip); }
+.tip-animate[data-side="right"]  { --tip-slip-x: calc(-1 * var(--slip-tooltip)); }
+@keyframes tip-in {
+  from { opacity: 0; transform: translate(var(--tip-slip-x), var(--tip-slip-y)); }
+  to   { opacity: 1; transform: translate(0, 0); }
+}
+@keyframes tip-out {
+  from { opacity: 1; transform: translate(0, 0); }
+  to   { opacity: 0; transform: translate(var(--tip-slip-x), var(--tip-slip-y)); }
+}
+.tip-animate[data-state="delayed-open"],
+.tip-animate[data-state="instant-open"] {
+  animation: tip-in var(--motion-fast-in) var(--ease-entrance);
+}
+.tip-animate[data-state="closed"] {
+  animation: tip-out var(--motion-fast-out) var(--ease-exit);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tip-animate[data-state="delayed-open"],
+  .tip-animate[data-state="instant-open"],
+  .tip-animate[data-state="closed"] { animation: none; }
+}
+
+/* ---- Modal + overload-banner motion (slow tier) ----
+   Same family as the tooltips: fade + slip toward the resting position.
+   Modal rises 8px into center; banner drops 6px from the viewport's top
+   edge. Radix Dialog's Presence plays the modal exit; the banner's exit
+   needs usePresence (lib/use-presence.ts) because it custom-unmounts.
+
+   CRITICAL (Tailwind v4): both surfaces center via Tailwind's
+   `-translate-x/y-1/2`, which in v4 compiles to the standalone CSS
+   `translate` PROPERTY (`translate: -50% -50%`) — NOT `transform`. The
+   `translate` and `transform` properties COMPOSE (translate applies
+   first, then transform), so the keyframes must do ONLY the slip via
+   `transform` and leave centering to `translate`. An earlier cut
+   repeated `translate(-50%, …)` inside the keyframe `transform`, which
+   stacked on top of the `translate` property → the surface was
+   double-shifted during the animation and snapped to center when the
+   animation ended (transform → none). Keep these keyframes
+   transform-slip-only. */
+@keyframes modal-overlay-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-overlay-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(var(--slip-modal)); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes modal-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(var(--slip-modal)); }
+}
+.modal-overlay-animate[data-state="open"]   { animation: modal-overlay-in var(--motion-slow-in) var(--ease-entrance); }
+.modal-overlay-animate[data-state="closed"] { animation: modal-overlay-out var(--motion-slow-out) var(--ease-exit); }
+.modal-animate[data-state="open"]   { animation: modal-in var(--motion-slow-in) var(--ease-entrance); }
+.modal-animate[data-state="closed"] { animation: modal-out var(--motion-slow-out) var(--ease-exit); }
+
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(calc(-1 * var(--slip-banner))); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes banner-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(calc(-1 * var(--slip-banner))); }
+}
+/* Centering is the Tailwind `translate` property (see CRITICAL above);
+   these keyframes only slip via `transform`, so the two compose. The
+   box-shadow lives here (not a Tailwind arbitrary value) so it stays
+   var()-driven. */
+.banner-animate { box-shadow: var(--shadow-soft); }
+.banner-animate[data-state="open"]   { animation: banner-in var(--motion-slow-in) var(--ease-entrance) both; }
+.banner-animate[data-state="closed"] { animation: banner-out var(--motion-slow-out) var(--ease-exit) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay-animate[data-state="open"], .modal-overlay-animate[data-state="closed"],
+  .modal-animate[data-state="open"], .modal-animate[data-state="closed"],
+  .banner-animate[data-state="open"], .banner-animate[data-state="closed"] { animation: none; }
+}
+
+/* ========== Toolbar ========== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  /* 4px vertical so a pressed/active button (.tb-btn[aria-pressed]) clears
+     the viewport below and the menu bar above instead of sitting flush. */
+  padding: 4px 8px;
+  gap: 4px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.tb-group {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+}
+
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  /* Fast-tier hover/press feedback (design pass). transform included so the
+     :active scale eases instead of snapping; properties enumerated, never
+     `all` (the Radix data-state open/close must not pick up transitions). */
+  transition:
+    background-color var(--motion-fast-in) var(--ease-entrance),
+    color var(--motion-fast-in) var(--ease-entrance),
+    transform var(--motion-fast-out) var(--ease-entrance);
+}
+.tb-btn:hover { background: var(--hover); color: var(--text); }
+/* Disabled toolbar buttons (e.g. Undo/Redo with nothing to undo/redo): dim
+   and inert, no hover affordance. The toolbar's other buttons are always
+   enabled, so this rule is new with the undo/redo group. */
+.tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tb-btn:disabled:hover { background: transparent; color: var(--text-2); }
+/* Pressed/active toggle state. Driven by `aria-pressed="true"` (the
+   single source of truth the toolbar toggles set) as well as the legacy
+   `.active` class. Attribute-selector form is golden-neutral: it changes
+   no className, and aria-pressed is already captured in the a11y goldens.
+   Used by Show ground / Toggle bloom / Leave particles / Spawner, plus
+   Play|Pause (highlights while playback is running). */
+.tb-btn.active,
+.tb-btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.tb-btn.playing { color: var(--success-fg); }
+/* F3: pressed (LMB-down) feedback — lighter bg + slight scale, distinct
+   from the accent-soft toggled state. Wins during the press because it's
+   declared last; skipped while disabled. */
+.tb-btn:active:not(:disabled) { background: var(--panel-3); transform: scale(0.96); }
+/* Keyboard-focus ring — inset, because toolbar buttons sit at 1px group gaps
+   where an outward ring would clip against neighbours. */
+.tb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* When the button is the trigger of an OPEN popover/menu (Radix sets
+   data-state="open"), suppress the press scale — but keep the bg feedback.
+   The scale shrinks the trigger, and Radix's popover anchors to it; on the
+   dismiss-press, floating-ui re-measures the scaled trigger and re-pins the
+   open menu (align="end") to the moved edge, so it visibly shifts a few px
+   until release. Holding the anchor's size steady keeps the menu put. */
+.tb-btn[data-state="open"]:active:not(:disabled) { transform: none; }
+.tb-btn .ic { color: inherit; opacity: 0.9; }
+.tb-btn .ic svg { display: block; }
+
+.tb-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-2);
+  margin: 0 4px;
+}
+
+.tb-spacer { flex: 1; }
+
+.tb-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* ========== Panel ========== */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Square the corners that face the engine viewport so the rounded corner
+   doesn't leave a wedge of (clipped) engine backing showing. The outer
+   corners stay rounded. Applied to the left pane (the only rounded .panel
+   adjacent to the rectangular viewport). */
+.panel-flush-right {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 8px 0 10px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text);
+  flex-shrink: 0;
+  background: var(--panel);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.panel-header > span:not(.ic) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.panel-header .ic { color: var(--text-2); flex-shrink: 0; }
+.panel-header .panel-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.panel-header .icon-btn {
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  border-radius: var(--radius-xs);
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast-in) var(--ease-entrance),
+    color var(--motion-fast-in) var(--ease-entrance),
+    transform var(--motion-fast-out) var(--ease-entrance);
+}
+.panel-header .icon-btn:hover { background: var(--hover); color: var(--text); }
+.panel-header .icon-btn:active { background: var(--panel-3); transform: scale(0.96); } /* F3 */
+.panel-header .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.panel-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.emitter-tree {
+  padding: 0 4px;
+}
+
+.tree-child {
+  padding-left: 18px;
+}
+
+/* Tree-footer action strip (the + / duplicate / delete / reorder row). The
+   BUTTONS inside are Tailwind-styled (TOOLBAR_BTN in EmitterTree.tsx); only
+   this layout container lives here. */
+.tree-actions {
+  display: flex;
+  justify-content: center; /* F2: center the group so it stays balanced on pane resize */
+  gap: 2px;                /* F2: match the main toolbar's compact icon spacing */
+  padding: 4px 8px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+/* ========== Inspector form ========== */
+.inspector {
+  padding: 8px 10px 12px;
+}
+
+/* Collapsible section primitive — shared by Section.tsx (controlled
+ * via useState + data-open attribute) and ToolPanel.Section (native
+ * <details>). The rotation selector targets both state shapes so each
+ * consumer keeps its own state model while sharing the visual. */
+.panel-section {
+  /* Hybrid density (was a bordered+filled card): no container chrome — the
+     tinted header band (below) anchors each group while rows run edge-to-edge
+     for maximum label/input width. Shared with the ToolPanel.Section panels
+     (Lighting / Bloom / Ground / Background) via the same unification, so
+     they get the same treatment for app-wide consistency. */
+  margin-bottom: 9px;
+}
+
+.panel-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  background: var(--bg-2);
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition:
+    background-color var(--motion-fast-in) var(--ease-entrance),
+    color var(--motion-fast-in) var(--ease-entrance);
+  /* Hide the native <details> disclosure marker. `list-style: none`
+   * covers Firefox + Safari's `::marker`; the `-webkit-details-marker`
+   * pseudo handles older Blink. `display: flex` (declared above)
+   * overrides `display: list-item` which `<summary>` carries by
+   * default — without it the chrome reserves an inset for the marker
+   * even when the marker is hidden. */
+  list-style: none;
+}
+.panel-section-header::-webkit-details-marker { display: none; }
+
+.panel-section-header:hover { color: var(--text); }
+/* The header is a role="button" tabIndex=0 control; its resting/hover colour is
+   already --text, so colour alone is no keyboard-focus cue. Draw the canonical
+   accent ring, inset (offset -2px) since the header spans the panel width. */
+.panel-section-header:focus-visible {
+  color: var(--text);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* One canonical focus indicator for interactive *controls* — buttons, icon
+   buttons, swatches, grid tiles, tree/listbox rows, tabs, dropdown triggers.
+   Keyboard-only (:focus-visible) so the mouse stays quiet; outline (not
+   ring/box-shadow) so it is never clipped by an overflow:hidden ancestor.
+   Value FIELDS keep their border-shift; Radix menu items keep their
+   data-[highlighted] background. Apply via className="… focus-ring". */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Inset variant of .focus-ring for controls in tight gaps or overflow:scroll
+   containers, where a +1px outward ring would be clipped by a neighbour or the
+   scroll edge. Same 2px accent ring, drawn just inside the box. */
+.focus-ring-inset:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.panel-section-header .chev {
+  color: var(--text-3);
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+/* Collapsed state: chevron points right. Every collapsible consumer is
+ * now controlled (Section.tsx + ToolPanel.Section + CategorySection all
+ * use a `data-open` attribute), so one selector covers them — the native
+ * `<details>` arm was retired when ToolPanel.Section became controlled to
+ * enable the body collapse animation below. */
+.panel-section[data-open="false"] .chev {
+  transform: rotate(-90deg);
+}
+
+/* Animated expand/collapse body. Self-contained utility (independent of
+ * `.panel-section`) so all three disclosure patterns can share it. The
+ * body lives in a one-row grid whose track tweens 1fr↔0fr; the single
+ * child clips via overflow:hidden + min-height:0. Content stays MOUNTED
+ * so it can animate — but a collapsed body is pulled OUT of the a11y tree
+ * and tab order via `visibility:hidden`, applied only AFTER the collapse
+ * finishes (transition-delay) so the content is still visible while it
+ * slides shut. Expand makes it visible immediately, then the height
+ * animates open. */
+.collapse-anim {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s ease;
+}
+.collapse-anim > * {
+  overflow: hidden;
+  min-height: 0;
+}
+.collapse-anim[data-open="false"] {
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition: grid-template-rows 0.2s ease, visibility 0s linear 0.2s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .collapse-anim,
+  .collapse-anim[data-open="false"] {
+    transition: none;
+  }
+}
+
+.panel-section-body {
+  padding: 6px 2px 2px;
+}
+/* Restore the `space-y-2` vertical rhythm that ToolPanel.Section's
+ * inline Tailwind utilities previously declared on the body's direct
+ * children. The inspector's `.form-row` grid carries its own row
+ * spacing so the sibling margin doesn't apply there visually — but
+ * it does apply between `.form-row` blocks, which is the desired
+ * inspector behavior too. */
+.panel-section-body > * + * { margin-top: 5px; }
+
+/* Generic 1px horizontal hairline. Used by CurveEditorPanel to
+ * separate the colour-channel group from the transform-channel
+ * group; was previously also the section-header bottom rule (now
+ * supplanted by .panel-section's bordered container). Kept as a
+ * standalone primitive for reuse. */
+.section-divider { height: 1px; background: var(--border); margin: 2px 0 6px; }
+
+.form-row {
+  display: grid;
+  /* Spinner cell 73px (unified across ALL tabs so 2-decimal values like
+     "100.00" / "-50.00" never clip — Basic already used 73px) and unit
+     cell 40px so "units/s²" (Acceleration / Gravity / Inward acceleration)
+     fits without truncation. The unit also gets overflow:visible below so
+     it can spill into the gap if a longer suffix ever shows up. */
+  grid-template-columns: 1fr 73px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+  /* Field labels use the primary text token for readability — the dim
+     --text-2 was hard to read at 12px (esp. "Bursts" / "Burst delay" and
+     the rest of the inspector). Values live in bordered inputs, so the
+     label/value distinction survives without dimming the label. */
+  color: var(--text);
+}
+.form-row .lbl { color: var(--text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.form-row .unit { color: var(--text-3); font-size: 11px; overflow: visible; min-width: 0; }
+/* Disabled params dim their label — the dim token now signals "disabled",
+   not "secondary label". Mode-gated rows (e.g. the Continuous-stream and
+   Weather spinners when that mode isn't selected, or any checkbox/select
+   passed disabled) carry a native :disabled control, so :has() catches
+   them without touching the markup (:has() is supported in the WebView2
+   Chromium runtime). Enabled labels stay at the readable --text above. */
+.form-row:has(:disabled) .lbl { color: var(--text-2); }
+
+/* Inspector indent hierarchy (visual nesting of params):
+ *   L0 section header text .......... 8px (the tinted band's padding)
+ *   L1 direct params + radio dots ... 8px (aligned with the header)
+ *   L2 a radio's sub-params ......... ~30px (nested UNDER the radio label)
+ * Inputs stay right-aligned because L2 indents the .lbl text, not the row. */
+.inspector .panel-section-body { padding-left: 8px; }   /* L1 aligns with header */
+.inspector .radio-row { padding-left: 0; }               /* radio dot sits at L1 */
+.basic-tab [role="radiogroup"] .form-row .lbl { padding-left: 22px; }  /* L2 under the radio label */
+
+.form-row.full {
+  grid-template-columns: 1fr;
+}
+.form-row.name-row {
+  grid-template-columns: 60px 1fr;
+  padding-left: 20px;
+}
+.form-row.with-radio {
+  grid-template-columns: 16px 1fr 92px 56px;
+}
+.form-row.with-check {
+  grid-template-columns: 16px 1fr 92px 56px;
+}
+/* Text-input rows have no unit cell, so the input slot expands well
+   beyond the spinner column to keep texture filenames like
+   "p_particle_default.tga" mostly visible instead of truncating at
+   the spinner width. 180px cap (second smoke-test bump from 160)
+   plus 11px font (one notch tighter than the 12px standard) so the
+   long underscore-heavy texture names fit. minmax(0,…) lets the row
+   shrink gracefully if the panel narrows. */
+.form-row.form-row-text {
+  grid-template-columns: 1fr minmax(0, 180px);
+}
+.form-row.form-row-text .text-input {
+  min-width: 0;
+  width: 100%;
+  font-size: 11px;
+}
+
+/* Texture picker row: label + text input + Browse button. The input
+   column is 1fr so it stretches to fill the inspector as the left pane
+   widens (the filename is the useful content); the label is a fixed
+   width so both rows align, and the Browse button sizes to content. The
+   Browse button opens the host-side native file dialog (textures/browse).
+   The label column is sized to the shortened "Color:" / "Bump:" labels
+   (was 96px for the old "Color texture:" labels) so the freed width flows
+   into the filename input. */
+.form-row.form-row-texture {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+}
+.form-row.form-row-texture .text-input {
+  min-width: 0;
+  width: 100%;
+  font-size: 11px;
+}
+.btn-texture-browse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6px;
+  color: var(--text-2);
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.btn-texture-browse {
+  transition:
+    color var(--motion-fast-in) var(--ease-entrance),
+    border-color var(--motion-fast-in) var(--ease-entrance);
+}
+.btn-texture-browse:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.btn-texture-browse:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-texture-browse:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Browse + palette buttons share the single trailing grid column so they
+   sit inline to the right of the input (same size), instead of the palette
+   button wrapping to its own row. */
+.form-row.form-row-texture .texture-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Multi-spinner clusters (Vec3 Value/Min/Max, Acceleration X/Y/Z,
+   RGBA randomColors). Standard .form-row gives the cluster only the
+   spinner+unit columns (98px), which divides to ~33px per spinner —
+   far too narrow for numbers like "100.0". This modifier drops the
+   label column to a fixed 60px (enough for "Value:" / "Min:" / "Max:"
+   / "RGBA:" / "X / Y / Z:") and gives the cluster the remaining 1fr,
+   so each spinner gets ~60px after gap distribution. */
+.form-row.form-row-cluster {
+  grid-template-columns: 60px minmax(0, 1fr);
+}
+
+/* Wider input cell for FieldSelect / FieldSpinner instances whose
+   default 58 px input column truncates long option labels (e.g. the
+   Physics "Type:" dropdown options "Exact" / "Box" / "Sphere…",
+   or "Tail length:" values like "1000.0x"). 87 px = 50% wider;
+   73 px = 25% wider. Unit cell stays at 40 px so "units/s²" still
+   fits. */
+.form-row.form-row-wide-input { grid-template-columns: 1fr 87px 40px; }
+.form-row.form-row-mid-input  { grid-template-columns: 1fr 73px 40px; }
+.form-row.form-row-x2-input   { grid-template-columns: 1fr 116px 40px; }
+
+/* Long-label FieldCheckbox variant for labels that don't fit the
+   default `1fr 58px 40px` label cell without truncation (e.g.
+   "Object space acceleration", "Link particles to instance"). Uses
+   the SAME column template as the default form-row so the checkbox
+   (which spans col 2-3 with `justify-self: end`) lines up
+   right-edge-wise with every other checkbox and every spinner's
+   unit-cell terminus. Only the label cell's wrapping behavior
+   diverges — wrap instead of ellipsis-truncate so the full text
+   shows even on a narrow inspector column. */
+.form-row.form-row-check-inline .lbl {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Checkbox rows: tight 2-column grid (label fills, checkbox hugs the
+   right). The default `.form-row` template reserves the spinner's 58px
+   input + 40px unit columns; for an 18px checkbox that's ~80px of empty
+   space beside it, which squeezed long labels ("Object space
+   acceleration", "Random rotation direction") into column 1 and
+   truncated them. Dropping those columns gives the label the full row
+   width minus the checkbox. The checkbox right-aligns to the inspector's
+   content edge — consistent across every checkbox row. */
+.form-row.form-row-check {
+  /* Reserve the same 40px unit column the spinner/select rows carry, so the
+     checkbox lands in column 2 (like the input box) and its right edge aligns
+     at row_right - 48px — flush with every spinner/dropdown box right edge.
+     Applies to every FieldCheckbox across Basic / Appearance / Physics. */
+  grid-template-columns: 1fr auto 40px;
+}
+
+/* Per-axis micro-label above each spinner in a Vec3 cluster (X / Y /
+   Z labels stacked above their Spinner). Matches legacy IDD_EMITTER_PROPS3
+   (.rc:352-354) which puts individual "X" / "Y" / "Z" LTEXTs above
+   the acceleration spinners; the same convention reads through for
+   Min/Max/Value rows in the RandomParam clusters. */
+.axis-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.axis-cell .axis-lbl {
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1;
+  padding-bottom: 2px;
+  color: var(--text-3);
+  user-select: none;
+}
+
+/* Tri-state Generation radio rows. Hand-rolled radio chrome
+   rather than Radix RadioGroup so the layout sits tightly inside
+   `.panel-section-body` alongside the FieldSpinner form-rows. Active
+   state fills the inner dot via the accent token. */
+.radio-row {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 4px 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.radio-row[aria-checked="true"] .radio-dot {
+  background: var(--accent);
+}
+.radio-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: transparent;
+}
+.radio-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.text-input {
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-xs);
+  height: var(--row-h-sm);
+  padding: 0 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  /* Fade the border to accent on focus — consistent field-activation feel. */
+  transition: border-color var(--motion-fast-in) var(--ease-entrance);
+}
+.text-input:focus { border-color: var(--accent); }
+
+/* ========== Viewport ========== */
+.vp-overlay {
+  position: absolute;
+  pointer-events: none;
+}
+.vp-overlay > * { pointer-events: auto; }
+
+/* ========== Curve editor ========== */
+
+/* Curve key markers — inverted-core treatment.
+   Selected key: canvas-background fill + thick channel-colour stroke
+   (r=6.5, strokeWidth=2.5, fill=var(--curve-marker-core)).
+   Crisp, zero blur, theme-proof — no saturate or drop-shadow.
+   The radius animates 5→6.5 on select; no filter transition needed.
+   Selected fill/stroke are set as SVG presentation attributes in
+   CurveEditor.tsx so they can reference the channel colour at render time. */
+.curve-key-marker {
+  transition: r 150ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .curve-key-marker { transition: none; }
+}
+
+.curve-editor {
+  display: grid;
+  /* `minmax(0, 1fr)` instead of bare `1fr` so the body row can
+     shrink below its content's min-content size. With bare `1fr`,
+     CSS Grid's implicit `minmax(auto, 1fr)` refuses to shrink the
+     row below `.curve-list`'s 7-row min-content (~224px), which
+     pushes `.curve-editor` past its `flex:1` slot, the parent
+     `.panel`'s `overflow:hidden` clips the bottom, and
+     `.curve-list`'s own `overflow-y:auto` never trips because its
+     cell is being *given* its content's size. */
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  /* CurveEditorPanel renders us as a `.panel`-flex-column sibling of
+     a `.panel-header`. Claim only the REMAINING space below the
+     header. */
+  flex: 1;
+}
+
+.ce-toolbar {
+  display: flex;
+  align-items: center;
+  /* Wrap to a second row when the panel is too narrow for the full
+     control set (Select/Insert + Linear/Smooth/Step + Lock-to +
+     Delete + Time/Value). Combined with `.curve-editor`'s `auto`
+     first row, the toolbar grows vertically as needed instead of
+     clipping the right-most control off the panel edge. */
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  min-height: 36px;
+  flex-shrink: 0;
+}
+
+.ce-body {
+  display: grid;
+  /* `minmax(0, 1fr)` for the canvas column (same trick as
+     `.curve-editor`'s row template) so the column can shrink below
+     the SVG's intrinsic 600px viewBox width. Bare `1fr` would inherit
+     `min-content: 600px`, pushing the canvas cell past its available
+     space and clipping the right edge of the curve. */
+  grid-template-columns: 180px minmax(0, 1fr);
+  /* Explicit row template, same `minmax(0, 1fr)` shape. Without this,
+     CSS Grid defaults to an implicit `auto`-sized row that grows to
+     content. The SVG inside `.curve-canvas-wrap` has
+     `preserveAspectRatio="none"` and no explicit height, so when its
+     width grows wide (≥ 2× the panel's available height), the
+     browser falls back to the viewBox's `600×300` aspect ratio and
+     computes a height that overflows the panel — at a 2415px wide
+     SVG that's a 1207px tall canvas, way past the 222px the row is
+     supposed to contain. Locking the row to `minmax(0, 1fr)` makes
+     the cell clamp to its container's height instead. */
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.curve-list {
+  border-right: 1px solid var(--border);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  /* 7 channel rows + padding don't always fit in the bottom 260px
+     strip (Inter line-height + native checkbox + DPI vary by host).
+     Scroll vertically so the Index row is always reachable. */
+  overflow-y: auto;
+  min-height: 0;
+  gap: 2px;
+  overflow: auto;
+}
+.curve-list .curve-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color var(--motion-fast-in) var(--ease-entrance);
+}
+.curve-list .curve-row:hover { background: var(--hover); }
+/* Inset focus ring — rows live in the .curve-list overflow scroller. */
+.curve-list .curve-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.curve-list .swatch {
+  width: 10px; height: 10px;
+  border-radius: var(--radius-2xs);
+}
+
+.curve-canvas-wrap {
+  position: relative;
+  min-width: 0;
+  /* Inset the SVG from the cell edges so curves at extreme values
+     (RGBA=1 at viewBox top, Index=0 near viewBox bottom) don't get
+     clipped by the cell border, and so the canvas's right edge
+     isn't flush against the Spawner panel divider. The 12px gutter
+     on all sides is also the reserved space for the Y-axis tick
+     labels (left), X-axis time labels (bottom), and breathing room
+     (top + right) that the next polish pass will add. */
+  padding: 12px;
+}
+.curve-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ========== Status bar ========== */
+.statusbar {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-2);
+  gap: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.statusbar .sb-item { display: flex; align-items: center; gap: 6px; }
+.statusbar .sb-spacer { flex: 1; }
+.statusbar .sb-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+/* ========== Splitters ========== */
+/* react-resizable-panels 4.x emits `data-separator` on the handle.
+   Active-drag styling piggybacks on the `:active` pseudo-class
+   (4.x dropped the `data-resize-handle-active` attribute that 2.x
+   exposed). 8 px visible band == the hit/cursor zone (the Groups set
+   `resizeTargetMinimumSize.fine = 8`, so the library no longer inflates
+   a thin 4px handle to its 10px default — which used to spill the resize
+   cursor ~3px onto the viewport where no splitter was visible);
+   --accent-soft hover preview is a tactile but quiet signal. */
+[data-separator].ce-splitter {
+  /* Opaque app-shell colour, NOT transparent. In this architecture the engine DComp
+     visual is clipped to the scene rect and shows through any transparent
+     DOM; a transparent splitter gutter sitting next to the viewport (outside
+     the scene rect) revealed the black engine backing — stark in light theme.
+     Painting the gutter --bg matches the panel gaps and hides the seam. */
+  background: var(--bg);
+  position: relative;
+  transition: background 120ms ease;
+}
+[data-separator].ce-splitter:hover,
+[data-separator].ce-splitter:active {
+  background: var(--accent-soft);
+}
+/* Dock open/close slide. PanelLayout adds `.dock-animating` to the outer
+   Group only for the duration of an open/close toggle, so the three outer
+   panels' `flex` (which the library sets when the dock slot collapses/
+   expands) tweens. Scoped to direct children + toggle-only so splitter
+   DRAGS and window RESIZES stay instant (a permanent transition would lag
+   them). */
+.dock-animating [data-panel] {
+  transition: flex-grow 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-animating [data-panel] {
+    transition: none;
+  }
+}
+
+[data-separator].ce-splitter-v {
+  width: 8px;
+  cursor: col-resize;
+}
+[data-separator].ce-splitter-h {
+  height: 8px;
+  cursor: row-resize;
+}
+[data-separator].ce-splitter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Reduced-motion: silence remaining chevron rotates, active-press scales,
+   the splitter background fade, the text-input focus border fade, and the
+   design-pass hover/press transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .panel-section-header .chev { transition: none; }
+  .tb-btn:active:not(:disabled) { transform: none; }
+  .panel-header .icon-btn:active { transform: none; }
+  [data-separator].ce-splitter { transition: none; }
+  .text-input { transition: none; }
+  .tb-btn,
+  .panel-header .icon-btn,
+  .panel-section-header,
+  .btn-texture-browse,
+  .curve-list .curve-row { transition: none; }
+}
+
+/* Viewport display-options overlay: a quiet, in-context cluster of viewport
+   toggles (ground/grid/bloom/reference-lock), bottom-left. The scrim ADAPTS —
+   dark by default, light via data-scrim="light" (set by the component when the
+   backdrop behind the pill — the ground colour when the floor is shown, else the
+   viewport background — falls below the luminance flip threshold) — so it stays
+   legible over its actual backdrop. Light-scrim glyph colours are AA-verified
+   against the composited surface (see contrast.test.ts). Tokenized so both
+   variants live in one place. */
+.vp-overlay {
+  position: absolute;
+  /* The whole chip captures hover (so :hover/:focus-within lifts opacity over
+     the scrim, not just the buttons). Overrides the dead `.vp-overlay` base
+     rule's `pointer-events: none` — an unlayered selector the component's
+     Tailwind `pointer-events-auto` utility loses to. */
+  pointer-events: auto;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 11px;
+  /* Dark scrim now appears over brighter backdrops too (raised flip threshold),
+     so it's a touch more opaque and its dim icon is lighter — both keep the
+     glyphs legible composited over a bright render (AA-verified in contrast.test). */
+  --vp-scrim-bg: rgba(11, 15, 20, 0.85);
+  --vp-scrim-border: rgba(255, 255, 255, 0.13);
+  --vp-scrim-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --vp-icon-off: #9aa7b4;
+  --vp-icon-on: #e7edf3;
+  --vp-icon-on-bg: rgba(255, 255, 255, 0.11);
+  --vp-icon-hover-bg: rgba(255, 255, 255, 0.06);
+  --vp-icon-disabled: #3d4651;
+  --vp-sep: rgba(255, 255, 255, 0.16);
+  --vp-lock-accent: #4ea3ff;  /* theme-independent: clears AA on the dark chip over bright */
+  background-color: var(--vp-scrim-bg);
+  border: 0.5px solid var(--vp-scrim-border);
+  box-shadow: var(--vp-scrim-shadow);
+  backdrop-filter: blur(6px);
+  opacity: 0.4;            /* quiet at idle; adaptive scrim keeps it findable */
+  transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  z-index: 10;
+}
+.vp-overlay[data-scrim="light"] {
+  --vp-scrim-bg: rgba(243, 243, 243, 0.88);
+  --vp-scrim-border: rgba(0, 0, 0, 0.13);
+  --vp-scrim-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  --vp-icon-off: #4b5563;     /* AA: 5.2:1 on the composited light scrim */
+  --vp-icon-on: #10151b;
+  --vp-icon-on-bg: rgba(0, 0, 0, 0.10);
+  --vp-icon-hover-bg: rgba(0, 0, 0, 0.06);
+  --vp-icon-disabled: #aeb6bf;
+  --vp-sep: rgba(0, 0, 0, 0.16);
+  --vp-lock-accent: #0d47a1;  /* AA: 5.9:1; darker than --accent-strong, which fails composited */
+}
+.vp-overlay:hover,
+.vp-overlay:focus-within { opacity: 1; }
+.vp-overlay-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--vp-icon-off);
+  background: transparent;
+  border: 0.5px solid transparent;
+  /* Fade the icon colours too, so a scrim flip animates the WHOLE chip (not just
+     the parent bg) — "a smooth fade, never a hard cut". Also smooths hover. */
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.vp-overlay-btn:hover:not(:disabled) { color: var(--vp-icon-on); background: var(--vp-icon-hover-bg); }
+.vp-overlay-btn--active { color: var(--vp-icon-on); background: var(--vp-icon-on-bg); }
+.vp-overlay-btn--lock {
+  color: var(--vp-lock-accent);
+  background: color-mix(in srgb, var(--vp-lock-accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--vp-lock-accent) 50%, transparent);
+}
+.vp-overlay-btn:disabled { color: var(--vp-icon-disabled); cursor: not-allowed; }
+.vp-overlay-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.vp-overlay-sep { width: 1px; height: 18px; background: var(--vp-sep); margin: 0 1px; }
+
+/* Reduced-motion: AFTER the pill block (later source order) so it overrides the
+   transition above — a copy inside the earlier @media block would not win. */
+@media (prefers-reduced-motion: reduce) {
+  .vp-overlay,
+  .vp-overlay-btn { transition: none; }
+}

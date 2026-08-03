@@ -1,0 +1,12 @@
+- status
+- contentinfo:
+  - status
+  - text: PAUSED
+- dialog "Import Emitters":
+  - heading "Import Emitters" [level=2]
+  - button "Close"
+  - text: Source (no file selected)
+  - button "Browse for source file": Browse…
+  - text: Click Browse… to select a source .alo file.
+  - button "Cancel"
+  - button "Import" [disabled]

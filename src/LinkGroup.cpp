@@ -1,0 +1,335 @@
+#include "LinkGroup.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+
+// LinkExemptFlags constructor: v1 default exempt set. Textures and
+// per-emitter identifiers are exempt; the atlas-index curve (TRACK_INDEX)
+// is exempt by convention; every other field defaults to shared (false).
+// All "unknownXX" fields default to shared too, since the only known
+// use case for them is propagation along with the rest of the data.
+LinkExemptFlags::LinkExemptFlags()
+    : colorTexture(true)
+    , normalTexture(true)
+    , name(true)
+    , trackIndex(true)
+    , trackRed(false)
+    , trackGreen(false)
+    , trackBlue(false)
+    , trackAlpha(false)
+    , trackScale(false)
+    , trackRotationSpeed(false)
+    , lifetime(false)
+    , initialDelay(false)
+    , burstDelay(false)
+    , nBursts(false)
+    , nParticlesPerBurst(false)
+    , nParticlesPerSecond(false)
+    , useBursts(false)
+    , gravity(false)
+    , acceleration(false)
+    , inwardSpeed(false)
+    , inwardAcceleration(false)
+    , bounciness(false)
+    , groundBehavior(false)
+    , objectSpaceAcceleration(false)
+    , affectedByWind(false)
+    , blendMode(false)
+    , textureSize(false)
+    , nTriangles(false)
+    , randomScalePerc(false)
+    , randomLifetimePerc(false)
+    , hasTail(false)
+    , tailSize(false)
+    , noDepthTest(false)
+    , randomColors(false)
+    , isWeatherParticle(false)
+    , weatherCubeSize(false)
+    , weatherCubeDistance(false)
+    , weatherFadeoutDistance(false)
+    , randomRotation(false)
+    , randomRotationDirection(false)
+    , randomRotationAverage(false)
+    , randomRotationVariance(false)
+    , linkToSystem(false)
+    , parentLinkStrength(false)
+    , doColorAddGrayscale(false)
+    , isHeatParticle(false)
+    , isWorldOriented(false)
+    , freezeTime(false)
+    , skipTime(false)
+    , emitFromMesh(false)
+    , emitFromMeshOffset(false)
+    , groupSpeed(false)
+    , groupLifetime(false)
+    , groupPosition(false)
+    , unknown06(false)
+    , unknown11(false)
+    , unknown15(false)
+    , unknown2b(false)
+    , unknown3f(false)
+    , unknown44(false)
+    , unknown49(false)
+{}
+
+bool LinkExemptFlags::operator == (const LinkExemptFlags& o) const
+{
+    // memcmp is safe here because LinkExemptFlags is POD with no
+    // padding between bool members in practice (booleans are sizeof(1)
+    // on every supported toolchain). If a future field of a different
+    // type is added, this needs revisiting — but the debug assertion
+    // in copySharedParamsFrom will catch a forgotten
+    // restore, which is the same signal as a forgotten equality term.
+    return memcmp(this, &o, sizeof(LinkExemptFlags)) == 0;
+}
+
+const LinkExemptFlags& GetDefaultLinkExemptFlags()
+{
+    static const LinkExemptFlags k;
+    return k;
+}
+
+uint32_t AllocateLinkGroupId(const ParticleSystem& system)
+{
+    uint32_t maxId = 0;
+    const std::vector<ParticleSystem::Emitter*>& v = system.getEmitters();
+    for (size_t i = 0; i < v.size(); i++)
+    {
+        if (v[i]->linkGroup > maxId) maxId = v[i]->linkGroup;
+    }
+    return maxId + 1;
+}
+
+std::vector<ParticleSystem::Emitter*> GetLinkGroupMembers(
+    const ParticleSystem& system, uint32_t groupId)
+{
+    std::vector<ParticleSystem::Emitter*> out;
+    if (groupId == 0) return out;
+    const std::vector<ParticleSystem::Emitter*>& v = system.getEmitters();
+    for (size_t i = 0; i < v.size(); i++)
+    {
+        if (v[i]->linkGroup == groupId) out.push_back(v[i]);
+    }
+    return out;
+}
+
+uint32_t CreateLinkGroup(ParticleSystem&                              system,
+                          const std::vector<ParticleSystem::Emitter*>& members)
+{
+    if (members.size() < 2) return 0;
+    for (size_t i = 0; i < members.size(); i++)
+    {
+        if (members[i] == NULL)          return 0;
+        if (members[i]->linkGroup != 0)  return 0;  // already grouped
+    }
+
+    const uint32_t newId = AllocateLinkGroupId(system);
+    // brand-new group uses the v1 default exempt set. There's
+    // no map entry for newId yet (the dialog gets opened only after
+    // the group exists), so getLinkExemptFlags returns the static
+    // defaults. We can short-circuit to GetDefaultLinkExemptFlags
+    // here since we KNOW the group is brand-new.
+    const LinkExemptFlags& exempt = GetDefaultLinkExemptFlags();
+
+    // Members[0] is canonical; everyone else's non-exempt fields are
+    // overwritten to match. We assign linkGroup BEFORE the bulk copy
+    // so the propagation invariant (group members agree on every
+    // non-exempt field) holds the moment the function returns.
+    members[0]->linkGroup = newId;
+    for (size_t i = 1; i < members.size(); i++)
+    {
+        members[i]->copySharedParamsFrom(*members[0], exempt);
+        members[i]->linkGroup = newId;
+    }
+
+#ifndef NDEBUG
+    printf("[Link] create group=%u members=%zu\n", newId, members.size());
+    fflush(stdout);
+#endif
+    return newId;
+}
+
+bool JoinLinkGroup(ParticleSystem&          system,
+                    ParticleSystem::Emitter* joiner,
+                    uint32_t                 groupId)
+{
+    if (joiner == NULL || groupId == 0)      return false;
+    if (joiner->linkGroup != 0)              return false;
+    std::vector<ParticleSystem::Emitter*> members = GetLinkGroupMembers(system, groupId);
+    if (members.empty())                     return false;
+
+    // use the group's current exempt set, not the v1 defaults.
+    // A group with custom exempts (e.g. `lifetime` exempt) joining a
+    // fresh emitter must preserve the joiner's lifetime per the
+    // group's exempt rule — otherwise the join would silently overwrite
+    // the joiner's lifetime with the canonical member's value, which
+    // is what the user explicitly opted OUT of when they set the
+    // exempt flag.
+    joiner->copySharedParamsFrom(*members[0],
+                                  system.getLinkExemptFlags(groupId));
+    joiner->linkGroup = groupId;
+
+#ifndef NDEBUG
+    printf("[Link] join group=%u (now %zu members)\n",
+           groupId, members.size() + 1);
+    fflush(stdout);
+#endif
+    return true;
+}
+
+bool LeaveLinkGroup(ParticleSystem&          system,
+                     ParticleSystem::Emitter* member)
+{
+    if (member == NULL || member->linkGroup == 0) return false;
+
+    const uint32_t groupId  = member->linkGroup;
+    std::vector<ParticleSystem::Emitter*> remaining
+        = GetLinkGroupMembers(system, groupId);
+
+    // Detach the requested member.
+    member->detachFromLinkGroup();
+
+    // Recompute remaining (excludes member now). If exactly one
+    // emitter remains in the group, auto-dissolve to preserve the
+    // "no 1-member groups" invariant.
+    std::vector<ParticleSystem::Emitter*> stillIn;
+    for (size_t i = 0; i < remaining.size(); i++)
+    {
+        if (remaining[i] != member && remaining[i]->linkGroup == groupId)
+        {
+            stillIn.push_back(remaining[i]);
+        }
+    }
+    if (stillIn.size() == 1)
+    {
+#ifndef NDEBUG
+        printf("[Link] auto-dissolve group=%u (removal would leave 1)\n",
+               groupId);
+        fflush(stdout);
+#endif
+        stillIn[0]->detachFromLinkGroup();
+    }
+
+#ifndef NDEBUG
+    printf("[Link] leave group=%u (now %zu members)\n",
+           groupId, stillIn.size() == 1 ? 0u : stillIn.size());
+    fflush(stdout);
+#endif
+    return true;
+}
+
+// Helper: compare a track's keys + interpolation type for equality.
+static bool TracksEqual(const ParticleSystem::Emitter::Track& a,
+                         const ParticleSystem::Emitter::Track& b)
+{
+    if (a.interpolation != b.interpolation) return false;
+    if (a.keys.size()   != b.keys.size())   return false;
+    return std::equal(a.keys.begin(), a.keys.end(), b.keys.begin());
+}
+
+std::vector<std::string> DiffNonExemptParams(
+    const ParticleSystem::Emitter& a,
+    const ParticleSystem::Emitter& b,
+    const LinkExemptFlags&         exempt)
+{
+    std::vector<std::string> diffs;
+
+    // Scalars and bools — only report the diff when the field is NOT
+    // exempt (i.e., the field is supposed to be shared and disagrees).
+    #define CHECK_FIELD(field, label) \
+        do { if (!exempt.field && a.field != b.field) diffs.push_back(label); } while (0)
+
+    CHECK_FIELD(linkToSystem,            "linkToSystem");
+    CHECK_FIELD(objectSpaceAcceleration, "objectSpaceAcceleration");
+    CHECK_FIELD(doColorAddGrayscale,     "doColorAddGrayscale");
+    CHECK_FIELD(affectedByWind,          "affectedByWind");
+    CHECK_FIELD(isHeatParticle,          "isHeatParticle");
+    CHECK_FIELD(isWeatherParticle,       "isWeatherParticle");
+    CHECK_FIELD(hasTail,                 "hasTail");
+    CHECK_FIELD(noDepthTest,             "noDepthTest");
+    CHECK_FIELD(randomRotation,          "randomRotation");
+    CHECK_FIELD(randomRotationDirection, "randomRotationDirection");
+    CHECK_FIELD(isWorldOriented,         "isWorldOriented");
+    CHECK_FIELD(useBursts,               "useBursts");
+    CHECK_FIELD(emitFromMesh,            "emitFromMesh");
+    CHECK_FIELD(gravity,                 "gravity");
+    CHECK_FIELD(lifetime,                "lifetime");
+    CHECK_FIELD(initialDelay,            "initialDelay");
+    CHECK_FIELD(burstDelay,              "burstDelay");
+    CHECK_FIELD(inwardSpeed,             "inwardSpeed");
+    CHECK_FIELD(inwardAcceleration,      "inwardAcceleration");
+    CHECK_FIELD(randomScalePerc,         "randomScalePerc");
+    CHECK_FIELD(randomLifetimePerc,      "randomLifetimePerc");
+    CHECK_FIELD(weatherCubeSize,         "weatherCubeSize");
+    CHECK_FIELD(tailSize,                "tailSize");
+    CHECK_FIELD(parentLinkStrength,      "parentLinkStrength");
+    CHECK_FIELD(weatherCubeDistance,     "weatherCubeDistance");
+    CHECK_FIELD(randomRotationAverage,   "randomRotationAverage");
+    CHECK_FIELD(randomRotationVariance,  "randomRotationVariance");
+    CHECK_FIELD(bounciness,              "bounciness");
+    CHECK_FIELD(freezeTime,              "freezeTime");
+    CHECK_FIELD(skipTime,                "skipTime");
+    CHECK_FIELD(emitFromMeshOffset,      "emitFromMeshOffset");
+    CHECK_FIELD(weatherFadeoutDistance,  "weatherFadeoutDistance");
+    CHECK_FIELD(nBursts,                 "nBursts");
+    CHECK_FIELD(blendMode,               "blendMode");
+    CHECK_FIELD(textureSize,             "textureSize");
+    CHECK_FIELD(nParticlesPerSecond,     "nParticlesPerSecond");
+    CHECK_FIELD(nTriangles,              "nTriangles");
+    CHECK_FIELD(nParticlesPerBurst,      "nParticlesPerBurst");
+    CHECK_FIELD(groundBehavior,          "groundBehavior");
+
+    // Textures + name (per-flag).
+    CHECK_FIELD(colorTexture,            "colorTexture");
+    CHECK_FIELD(normalTexture,           "normalTexture");
+    // name is checked separately — the inspector exposes it through F2
+    // rename rather than the property pane, but for completeness:
+    CHECK_FIELD(name,                    "name");
+
+    #undef CHECK_FIELD
+
+    // Arrays.
+    if (!exempt.acceleration &&
+        memcmp(a.acceleration, b.acceleration, sizeof(a.acceleration)) != 0)
+        diffs.push_back("acceleration");
+    if (!exempt.randomColors &&
+        memcmp(a.randomColors, b.randomColors, sizeof(a.randomColors)) != 0)
+        diffs.push_back("randomColors");
+
+    // Random param groups — three flags, one per group index.
+    const bool groupExempt[ParticleSystem::NUM_GROUPS] =
+        { exempt.groupSpeed, exempt.groupLifetime, exempt.groupPosition };
+    static const char* groupLabels[ParticleSystem::NUM_GROUPS] =
+        { "groups[SPEED]", "groups[LIFETIME]", "groups[POSITION]" };
+    for (int i = 0; i < ParticleSystem::NUM_GROUPS; i++)
+    {
+        if (groupExempt[i]) continue;
+        if (memcmp(&a.groups[i], &b.groups[i],
+                   sizeof(ParticleSystem::Emitter::Group)) != 0)
+            diffs.push_back(groupLabels[i]);
+    }
+
+    // Tracks — one flag per channel.
+    const bool trackExempt[ParticleSystem::NUM_TRACKS] = {
+        exempt.trackRed,
+        exempt.trackGreen,
+        exempt.trackBlue,
+        exempt.trackAlpha,
+        exempt.trackScale,
+        exempt.trackIndex,
+        exempt.trackRotationSpeed,
+    };
+    static const char* trackLabels[ParticleSystem::NUM_TRACKS] = {
+        "red curve", "green curve", "blue curve", "alpha curve",
+        "scale curve", "index curve", "rotation curve"
+    };
+    for (int i = 0; i < ParticleSystem::NUM_TRACKS; i++)
+    {
+        if (trackExempt[i]) continue;
+        if (!TracksEqual(*a.tracks[i], *b.tracks[i]))
+            diffs.push_back(trackLabels[i]);
+    }
+
+    return diffs;
+}

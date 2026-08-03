@@ -1,0 +1,6 @@
+{
+  "exe": "scripts/wiki-media/__tests__/fixtures/mock-exe.mjs",
+  "focMods": "scripts/wiki-media/__tests__/fixtures/Mods",
+  "extraction": "scripts/wiki-media/__tests__/fixtures/DATA",
+  "outDir": "out/wiki-media-test"
+}

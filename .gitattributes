@@ -1,0 +1,37 @@
+# Snapshot / golden files
+#
+# These are compared byte-exact by their matchers — e.g.
+# web/apps/editor/tests/helpers/toMatchJSONGolden.ts does
+# `expected === serialized` against the file's raw contents.
+# Without an explicit eol rule, `core.autocrlf=true` (the default
+# Windows git installation setting) smudges committed-LF files to
+# CRLF on checkout, and every snapshot test then false-fails because
+# the working-tree bytes don't match the in-memory snapshot output.
+#
+# Forcing `text eol=lf` makes the working-tree copy match the
+# stored-LF index regardless of platform or autocrlf setting.
+#
+# This guards the autocrlf snapshot footgun — the diagnostic
+# walkthrough that landed this file. If you add a new byte-exact
+# snapshot pattern under tests/,
+# match it here too.
+
+# Current a11y goldens (HWND lane = .golden.json, composition lane = .composition.golden.yaml)
+web/apps/editor/tests/a11y-goldens/*.golden.json   text eol=lf
+web/apps/editor/tests/a11y-goldens/*.golden.yaml   text eol=lf
+
+# Prerendered guide HTML. Same footgun, different lane: `build-guide.mjs --check`
+# compares each committed file's raw bytes against the freshly generated string
+# (`current !== html`), so a CRLF-smudged working copy reports all 22 pages stale
+# on a fresh clone even though the committed content is byte-identical.
+site/guide/*.html   text eol=lf
+
+# Forward-looking patterns. Match common snapshot/golden naming
+# conventions across the repo so future additions inherit the LF
+# rule without re-discovering this footgun. Currently matches zero
+# files outside the explicit paths above; harmless if it stays that
+# way.
+*.golden.json     text eol=lf
+*.golden.yaml     text eol=lf
+*.golden.txt      text eol=lf
+*.snap            text eol=lf

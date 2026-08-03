@@ -1,0 +1,33 @@
+{
+  "stable": [
+    "Name",
+    "ControlType",
+    "ClassName",
+    "AutomationId",
+    "IsKeyboardFocusable",
+    "IsEnabled",
+    "IsOffscreen",
+    "HasKeyboardFocus",
+    "LocalizedControlType",
+    "LegacyAccessible.Role",
+    "LegacyAccessible.State",
+    "ExpandCollapse.ExpandCollapseState",
+    "SelectionItem.IsSelected",
+    "Toggle.ToggleState"
+  ],
+  "volatile": [
+    "BoundingRectangle",
+    "RuntimeId",
+    "ProcessId",
+    "HelpText",
+    "ItemStatus",
+    "FrameworkId"
+  ],
+  "alwaysStripWrappers": [
+    "Chrome_WidgetWin_1",
+    "Intermediate D3D Window",
+    "BrowserRootView",
+    "NonClientView",
+    "EmbeddedBrowserTabRootView"
+  ]
+}

@@ -1,0 +1,246 @@
+// Toolbar — Particle Editor 2026 layout. Grouped sections with
+// dividers, spacer to the right, theme toggle at the rightmost edge.
+//
+// Group 1 (file actions):       New · Open · Save · Save As
+// Group 2 (edit):               Undo · Redo
+// Group 3 (playback):           Play|Pause · Step · Step 10
+// Group 4 (viewport toggles):   Show ground · Show grid · Toggle bloom · Leave particles
+// Group 5 (panels):             Spawner toggle
+//   spacer
+// Group 6 (environment):        Ground dropdown · Background dropdown
+//
+// Stop and Restart removed per design chat. The three viewport toggles
+// (ground / bloom / leave-particles) live here as lucide icon buttons —
+// they replaced the floating ViewportPill. Undo/Redo also appear in the
+// Edit menu; Reload Shaders/Textures lives in the menubar only.
+//
+// Uses the design's semantic CSS classes from components.css:
+//   .toolbar, .tb-group, .tb-btn, .tb-divider, .tb-spacer
+
+import {
+  FilePlus, FolderOpen, Save, SaveAll,
+  Undo2, Redo2,
+  Play, Pause, ChevronRight, ChevronsRight,
+  Sparkles, CirclePlus, Lightbulb, LayoutGrid,
+} from "lucide-react";
+import type { Bridge } from "@particle-editor/bridge-schema";
+import { BackgroundDropdown } from "@/components/BackgroundDropdown";
+import { ReferenceObjectDropdown } from "@/components/ReferenceObjectDropdown";
+import { GroundDropdown } from "@/components/GroundDropdown";
+import { useRightDock, toggleDock } from "@/lib/right-dock";
+import { Tip } from "@/primitives/Tip";
+import { promptSaveChanges } from "@/lib/file-state";
+import { runFileOp } from "@/lib/file-op";
+import { useEngineField } from "@/lib/use-engine-snapshot";
+
+type Props = { bridge: Bridge };
+
+const ICON = { className: "size-3.5" } as const;
+
+export function Toolbar({ bridge }: Props) {
+  const paused = useEngineField(bridge, (s) => s.paused) ?? false;
+  const canUndo = useEngineField(bridge, (s) => s.canUndo) ?? false;
+  const canRedo = useEngineField(bridge, (s) => s.canRedo) ?? false;
+  // leave-particles is a sim-behaviour toggle (default on); the ground/grid/bloom
+  // visibility toggles moved to the viewport display-options overlay.
+  const leaveParticles = useEngineField(bridge, (s) => s.leaveParticles) ?? true;
+  const dock = useRightDock();
+  const spawnerVisible = dock === "spawner";
+  const lightingVisible = dock === "lighting";
+  const atlasVisible = dock === "atlas";
+  const hasSelectedEmitter = useEngineField(bridge, (s) => s.selectedEmitterId) != null;
+
+  return (
+    <div data-testid="toolbar" className="toolbar">
+      {/* Group 1: file actions. New / Open route through promptSaveChanges
+          so a dirty document gets the Save/Discard/Cancel prompt before
+          being replaced (same gate the MenuBar uses). Save + Save As are
+          themselves the save path so they don't need the gate. */}
+      <div className="tb-group">
+        <Tip content="New">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="New"
+            onClick={() => {
+              promptSaveChanges(async () => {
+                await bridge.request({ kind: "file/new", params: {} });
+              });
+            }}
+          >
+            <FilePlus {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Open">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Open"
+            onClick={() => {
+              promptSaveChanges(async () => {
+                await runFileOp(bridge, { kind: "file/open", params: {} });
+              });
+            }}
+          >
+            <FolderOpen {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Save">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Save"
+            onClick={() => { void runFileOp(bridge, { kind: "file/save", params: {} }); }}
+          >
+            <Save {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Save As">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Save As"
+            onClick={() => { void runFileOp(bridge, { kind: "file/save-as", params: {} }); }}
+          >
+            <SaveAll {...ICON} />
+          </button>
+        </Tip>
+      </div>
+
+      <span className="tb-divider" />
+
+      {/* Group 2: edit (undo / redo). Drives the same `undo/perform` bridge
+          kind + `canUndo`/`canRedo` engine-state the Edit menu uses; each
+          button is disabled when there's nothing to undo / redo. */}
+      <div className="tb-group">
+        <Tip content="Undo">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Undo"
+            disabled={!canUndo}
+            onClick={() => { void bridge.request({ kind: "undo/perform", params: { direction: "undo" } }); }}
+          >
+            <Undo2 {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Redo">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Redo"
+            disabled={!canRedo}
+            onClick={() => { void bridge.request({ kind: "undo/perform", params: { direction: "redo" } }); }}
+          >
+            <Redo2 {...ICON} />
+          </button>
+        </Tip>
+      </div>
+
+      <span className="tb-divider" />
+
+      {/* Group 3: playback */}
+      <div className="tb-group">
+        <Tip content={paused ? "Play" : "Pause"}>
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label={paused ? "Play" : "Pause"}
+            aria-pressed={!paused}
+            onClick={() => { void bridge.request({ kind: "engine/set/paused", params: { paused: !paused } }); }}
+          >
+            {paused ? <Play {...ICON} /> : <Pause {...ICON} />}
+          </button>
+        </Tip>
+        <Tip content="Step one frame">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Step"
+            onClick={() => { void bridge.request({ kind: "engine/action/step-frames", params: { frames: 1 } }); }}
+          >
+            <ChevronRight {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Step 10 frames">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Step 10"
+            onClick={() => { void bridge.request({ kind: "engine/action/step-frames", params: { frames: 10 } }); }}
+          >
+            <ChevronsRight {...ICON} />
+          </button>
+        </Tip>
+      </div>
+
+      <span className="tb-divider" />
+
+      {/* Group 4: viewport toggle. The ground / grid / bloom toggles moved to the
+          bottom-left viewport display-options overlay (ViewportToggleOverlay);
+          leave-particles is a sim-behaviour toggle and stays here. */}
+      <div className="tb-group">
+        <Tip content="Leave particles after instance death">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Leave particles after instance death"
+            aria-pressed={leaveParticles}
+            onClick={() => { void bridge.request({ kind: "engine/set/leave-particles", params: { enabled: !leaveParticles } }); }}
+          >
+            <Sparkles {...ICON} />
+          </button>
+        </Tip>
+      </div>
+
+      <span className="tb-divider" />
+
+      {/* Group 5: right-dock panel toggles. Spawner, Lighting, and Atlas share
+          one exclusive slot (opening one closes the others — see lib/right-dock.ts),
+          so their aria-pressed states are mutually exclusive. */}
+      <div className="tb-group">
+        <Tip content="Toggle Spawner panel">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Toggle Spawner panel"
+            aria-pressed={spawnerVisible}
+            onClick={() => toggleDock("spawner")}
+          >
+            <CirclePlus {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Toggle Lighting panel">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Toggle Lighting panel"
+            aria-pressed={lightingVisible}
+            onClick={() => toggleDock("lighting")}
+          >
+            <Lightbulb {...ICON} />
+          </button>
+        </Tip>
+        <Tip content="Toggle Atlas frame picker">
+          <button
+            type="button"
+            className="tb-btn"
+            aria-label="Toggle Atlas frame picker"
+            aria-pressed={atlasVisible}
+            disabled={!hasSelectedEmitter}
+            onClick={() => toggleDock("atlas")}
+          >
+            <LayoutGrid {...ICON} />
+          </button>
+        </Tip>
+      </div>
+
+      <span className="tb-spacer" />
+
+      {/* Group 6: environment */}
+      <GroundDropdown bridge={bridge} />
+      <BackgroundDropdown bridge={bridge} />
+      <ReferenceObjectDropdown bridge={bridge} />
+    </div>
+  );
+}
