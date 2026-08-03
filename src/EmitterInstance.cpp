@@ -1,7 +1,32 @@
 #include <cassert>
+#include <cstdio>
+#include <cstdarg>
+#include <windows.h>
 #include "EmitterInstance.h"
+#include "ParticleCompaction.h"
+#include "SpawnSchedule.h"   // ReconcileNextSpawnTime (E-LIVE-03 rate-edit clamp)
 #include "ParticleSystemInstance.h"
 using namespace std;
+
+// [norm-dbg] Gated behind the ALO_SHADER_DIAG env var (matches the repo's ALO_*
+// test hooks) so normal interactive use stays silent and skips the diagnostic
+// block's per-draw texture LockRect; set it for a capture run.
+static bool NormDiagEnabled()
+{
+	static int s_diag = -1;
+	if (s_diag < 0) { char b[8]; s_diag = (GetEnvironmentVariableA("ALO_SHADER_DIAG", b, sizeof(b)) > 0) ? 1 : 0; }
+	return s_diag != 0;
+}
+
+// [norm-dbg] one-shot diagnostic logger for the shaded-smoke s1 normal investigation.
+static void NormDbg(const char* fmt, ...)
+{
+	if (!NormDiagEnabled()) return;
+	char buf[1024];
+	va_list ap; va_start(ap, fmt);
+	_vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, ap); va_end(ap);
+	OutputDebugStringA(buf); fputs(buf, stdout); fflush(stdout);
+}
 
 struct EmitterInstance::Particle : public Object3D
 {
@@ -254,10 +279,36 @@ void EmitterInstance::ResetParticle(Particle& particle, TimeF currentTime)
 	}
 }
 
-// Spawn a single particle
-void EmitterInstance::SpawnParticle(TimeF currentTime)
+// Spawn a single particle. Returns false when the per-instance uint16
+// index cap refused the spawn — callers must NOT count a refused spawn
+// (a phantom +1 would permanently inflate Engine::m_numParticles, since
+// only REAL particles ever decrement it on death, which would in turn
+// eat the overload guard's budget headroom forever).
+bool EmitterInstance::SpawnParticle(TimeF currentTime)
 {
 	Particle& particle = AllocateParticle();
+
+	// Hard index cap. Vertex indices are uint16 (the draw call uses
+	// D3DFMT_INDEX16) and m_verticesIndex = m_index * NUM_VERTICES_PER_PARTICLE
+	// feeds the (uint16_t) casts that build the index buffer below. Once
+	// m_index * NUM_VERTICES_PER_PARTICLE exceeds 0xFFFF those casts wrap and
+	// the triangles reference the wrong vertices -- silent render corruption.
+	// nParticlesPerBurst / nParticlesPerSecond are read from file without a
+	// clamp (weather emitters can instantiate a whole second's worth at once),
+	// so refuse to spawn past the ceiling: free the slot and bail. The real
+	// fix is 32-bit indexing; this keeps a pathological emitter from
+	// corrupting the frame in the meantime.
+	const size_t kMaxParticleIndex = 0xFFFF / NUM_VERTICES_PER_PARTICLE;
+	if (particle.m_index > kMaxParticleIndex)
+	{
+#ifndef NDEBUG
+		printf("[Particle] uint16 index cap reached at %zu live particles; refusing spawn\n",
+		       particle.m_index); fflush(stdout);
+#endif
+		FreeParticle(particle);
+		return false;
+	}
+
 	particle.m_verticesIndex = particle.m_index * NUM_VERTICES_PER_PARTICLE;
 
     // Set and generate properties
@@ -346,6 +397,7 @@ void EmitterInstance::SpawnParticle(TimeF currentTime)
 	particle.m_indicesIndex = m_primitives.size();
 	m_primitives.push_back(prim);
 	m_particleIndex.push_back(&particle);
+	return true;
 }
 
 void EmitterInstance::UpdateTrackCursors(Particle& particle, float relTime) const
@@ -472,7 +524,18 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
         }
     }
 
-	float offset = particle.m_baseScale * SampleTrack(particle, ParticleSystem::TRACK_SCALE, relTime) / 2;
+    const float scaleSample =
+        SampleTrack(particle, ParticleSystem::TRACK_SCALE, relTime);
+    if (&particle == m_particleList)
+    {
+        // Keep the diagnostic tied to the value that actually drives rendered
+        // geometry. Reading SampleTrack again from the bridge would bypass the
+        // paused-idle invalidation contract this cache exists to observe.
+        m_liveSampleValid               = true;
+        m_liveSampleRelativeTimePercent = relTime;
+        m_liveSampleScale               = scaleSample;
+    }
+	float offset = particle.m_baseScale * scaleSample / 2;
 
     // Calculate position with constant acceleration:
 	// x(t) = x(0) + v(0) * t + 0.5 * a * t * t
@@ -532,6 +595,13 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
 
 	if (m_emitter.hasTail)
 	{
+		// Match in-game behavior: the EaW tail render path orients the
+		// quad along velocity and ignores the rotation track entirely.
+		// Discovered via P_hp_imperial_damage.alo "Fire Small": rotation
+		// values were set, the editor preview rotated, but the game did
+		// not. Override the previously-computed angle here.
+		angle = 0;
+
 		float length = D3DXVec3Length(&velocity);
 
         if (length > 0)
@@ -543,7 +613,7 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
     		    // Transform world-velocity into screen-velocity
 		        D3DXVec3TransformCoord(&velocity, &velocity, &m_engine.GetViewRotationMatrix());
             }
-		    angle += atan2f(velocity.y, velocity.x) + PI / 4;
+		    angle = atan2f(velocity.y, velocity.x) + PI / 4;
 		    velocity.z = 0.0f;
 		    length = m_emitter.tailSize * mult * D3DXVec3Length(&velocity) / length ;
         }
@@ -587,22 +657,17 @@ void EmitterInstance::UpdateParticle(Particle& particle, float t)
 	verts[1].TexCoord1 = verts[1].TexCoord0 = D3DXVECTOR2(u + d, v + d);
 	verts[0].TexCoord1 = verts[0].TexCoord0 = D3DXVECTOR2(u,     v + d);
 
-	// Color
+	// Color — per-particle tint from curve-editor tracks. Verified against the
+	// game (in-game vertex-color diagnostic, 2026): the engine writes the
+	// curve-editor color into COLOR0 for bump blend modes too, so the previous
+	// editor-only override that wrote a rotation-tangent encoding here was
+	// diverging the editor from in-game appearance. The bump shader derives
+	// its tangent from ddx/ddy of UV in the PS, so it doesn't need vertex
+	// color for that purpose.
     D3DXVECTOR4 color = particle.m_baseColor;
-    if (m_emitter.blendMode == ParticleSystem::BLEND_BUMP || m_emitter.blendMode == ParticleSystem::BLEND_DECAL_BUMP)
-    {
-        // For these blend modes, the RGB components of the vertex color contain
-        // the tangent vector, which rotates along with the particle
-        color.x = 0.5f * cosf(angle) + 0.5f;
-	    color.y = 0.5f * sinf(angle) + 0.5f;
-        color.z = 0;
-    }
-    else
-    {
-    	color.x += SampleTrack(particle, ParticleSystem::TRACK_RED_CHANNEL,   relTime);
-    	color.y += SampleTrack(particle, ParticleSystem::TRACK_GREEN_CHANNEL, relTime);
-    	color.z += SampleTrack(particle, ParticleSystem::TRACK_BLUE_CHANNEL,  relTime);
-    }
+    color.x += SampleTrack(particle, ParticleSystem::TRACK_RED_CHANNEL,   relTime);
+    color.y += SampleTrack(particle, ParticleSystem::TRACK_GREEN_CHANNEL, relTime);
+    color.z += SampleTrack(particle, ParticleSystem::TRACK_BLUE_CHANNEL,  relTime);
 	color.w += SampleTrack(particle, ParticleSystem::TRACK_ALPHA_CHANNEL, relTime);
 	verts[3].Color = verts[2].Color = verts[1].Color = verts[0].Color = D3DCOLOR_COLORVALUE(color.x, color.y, color.z, color.w);
 }
@@ -621,14 +686,37 @@ int EmitterInstance::KillParticle(TimeF currentTime, Particle& particle)
     int numParticles = 0;
     if (m_emitter.spawnOnDeath != -1)
     {
-        // Spawn child emitter
+        // Spawn child emitter. NULL when the instance budget refused it
+        // (overload guard) — the death child is simply dropped.
         EmitterInstance* emitter = m_system.SpawnEmitter(currentTime, m_emitter.spawnOnDeath, &particle);
-        emitter->Detach();
-        emitter->StopSpawning();
+        if (emitter != NULL)
+        {
+            emitter->Detach();
+            emitter->StopSpawning();
+        }
     }
 
 	FreeParticle(particle);
     return numParticles;
+}
+
+// Device Reset invalidates every D3DPOOL_DEFAULT resource, and under D3D9Ex the
+// D3DX texture helpers silently use DEFAULT (see TextureManager::OnLostDevice).
+// The cache drops its own references there, but THESE two are separate, owning
+// references — so nothing freed them and nothing re-fetched them, and the
+// emitter went on binding a handle the device had invalidated
+// (2026-07 audit, E-D3D9-01).
+void EmitterInstance::ReleaseDeviceTextures()
+{
+	SAFE_RELEASE(m_pColorTexture);
+	SAFE_RELEASE(m_pNormalTexture);
+}
+
+void EmitterInstance::ReacquireDeviceTextures(const Engine& engine)
+{
+	ReleaseDeviceTextures();
+	m_pColorTexture  = engine.GetTextureForDeviceReset(m_emitter.colorTexture);
+	m_pNormalTexture = engine.GetTextureForDeviceReset(m_emitter.normalTexture);
 }
 
 void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
@@ -640,6 +728,15 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 		m_spawnDelay         = (!m_emitter.useBursts) ? 1.0f / m_emitter.nParticlesPerSecond : max(0.01f, m_emitter.burstDelay);   // Ensure burst delay isn't 0
 		m_acceleration       = D3DXVECTOR3(m_emitter.acceleration) + m_emitter.gravity * engine.GetGravity();
 		m_textureSizeSqrt    = (int)floor(sqrtf((float)max(1, m_emitter.textureSize)));
+
+		// The next spawn was scheduled against the OLD delay, and recomputing
+		// m_spawnDelay above does not move it — so raising the rate on a slow
+		// emitter changed nothing until the old delay elapsed, and the slider
+		// looked dead for up to a full second (2026-07 audit, E-LIVE-03).
+		// Clamp only after the authored initialDelay has elapsed: never collapse
+		// that first wait, defer a spawn, or drag an overdue one forward.
+		m_nextSpawnTime = ReconcileNextSpawnTime(m_nextSpawnTime, GetTimeF(),
+                                                 m_spawnDelay, m_nextSpawnUsesInitialDelay);
 
 		// Reload resources
 		SAFE_RELEASE(m_pColorTexture);
@@ -704,6 +801,7 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
                 m_colorOp        = D3DTOP_ADD;
 				m_alphaSrcBlend  = D3DBLEND_ZERO;
 				m_alphaDestBlend = D3DBLEND_SRCCOLOR;
+                break;  // was missing — mode 6 fell into 7.
 
             case 7:
                 m_colorOp        = D3DTOP_MODULATE2X;
@@ -712,24 +810,44 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
                 break;
 		}
 	}
-	else
+	// Cursor reseat runs for BOTH the `-1` (reseat-everything) path and a
+	// specific `track`. For `-1` we reseat EVERY track: callers like
+	// BridgeDispatcher::propagateLinkGroup reassign a sibling's track
+	// multisets via copySharedParamsFrom, then call
+	// OnParticleSystemChanged(-1) to fix the orphaned cursors. Previously this
+	// reseat lived only in the `else` branch, so the `-1` path left them
+	// singular → xtree:181 deref on the next Engine::Update.
 	{
 		TimeF currentTime = GetTimeF();
 
-		// Reload track cursors on all particles
+		// Reload track cursors on all particles. We must reseat not only the
+		// edited `track` but EVERY channel whose `tracks[j]` aliases the same
+		// `keys` container — i.e. lock-group members (a channel locked to an
+		// earlier one shares its multiset, ParticleSystem.h slot aliasing).
+		// An erase on the edited track orphans the cursors of all aliasing
+		// channels at once; reseating only `track` would leave the aliased
+		// channels' cursors dangling and crash on the next UpdateTrackCursors.
 		for (Particle* particle = m_particleList; particle != NULL; particle = particle->m_next)
 		{
 			float relTime = (float)(currentTime - particle->m_spawnTime) * 100 / (float)(particle->m_deathTime - particle->m_spawnTime);
-			
-			Particle::TrackCursor& cursor = particle->m_cursors[track];
-			cursor.prev = cursor.next = m_emitter.tracks[track]->keys.begin();
-			while (cursor.next->time < relTime)
+
+			for (int t = 0; t < ParticleSystem::NUM_TRACKS; t++)
 			{
-				cursor.prev = cursor.next;
-				if (++cursor.next == m_emitter.tracks[track]->keys.end())
+				// Process the edited track + any channel aliasing it. For
+				// track == -1 reseat EVERY track; the `track != -1` guard also
+				// short-circuits the otherwise out-of-bounds `tracks[-1]` read.
+				if (track != -1 && t != track && m_emitter.tracks[t] != m_emitter.tracks[track]) continue;
+
+				Particle::TrackCursor& cursor = particle->m_cursors[t];
+				cursor.prev = cursor.next = m_emitter.tracks[t]->keys.begin();
+				while (cursor.next->time < relTime)
 				{
-					cursor.next = cursor.prev;
-					break;
+					cursor.prev = cursor.next;
+					if (++cursor.next == m_emitter.tracks[t]->keys.end())
+					{
+						cursor.next = cursor.prev;
+						break;
+					}
 				}
 			}
 		}
@@ -739,6 +857,10 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 int EmitterInstance::Update(TimeF currentTime)
 {
     int numParticles = 0;
+    // A real update pass replaces the cached observation. When Engine skips a
+    // paused-idle pass this method is not entered, so the prior rendered sample
+    // deliberately remains observable.
+    m_liveSampleValid = false;
 
     if (IsFrozen(currentTime))
 	{
@@ -750,7 +872,41 @@ int EmitterInstance::Update(TimeF currentTime)
         // Spawn new particles
         while (!DoneSpawning() && currentTime > m_nextSpawnTime)
         {
-            numParticles += SpawnParticles(m_nextSpawnTime);
+            // Overload guard: once the engine-wide spawn budget is gone,
+            // snap m_nextSpawnTime PAST currentTime and bail. Two reasons:
+            // (a) missed spawns must be DROPPED, not deferred — otherwise
+            // resume would fire the whole backlog as one burst; (b) at
+            // pathological rates (delay ~1e-9 s) this catch-up loop would
+            // otherwise iterate millions of times per frame doing zero-work
+            // SpawnParticles calls — a CPU spin even though memory is safe.
+            // NoteSpawnSuppressed keeps the overload latch held: bailing
+            // here skips the TryConsume refusal that normally flags it.
+            if (m_engine.SpawnBudgetExhausted())
+            {
+                m_engine.NoteSpawnSuppressed();
+                m_nextSpawnUsesInitialDelay = false;
+                m_nextSpawnTime = currentTime + GetSpawnDelay();
+                break;
+            }
+            int spawned = SpawnParticles(m_nextSpawnTime);
+            numParticles += spawned;
+            // A round that spawned NOTHING (while asked to spawn
+            // something) was refused — by the engine budget mid-round or
+            // by the per-instance uint16 index cap. Same treatment as
+            // the budget bail above: drop the remaining catch-up rounds
+            // (don't churn thousands of refused alloc/free rounds per
+            // frame — that starves the render loop and the 4 Hz stats
+            // timer) and hold the overload latch: spawning IS being
+            // suppressed relative to the authored rate. The
+            // m_nParticlesPerBurst > 0 guard keeps authored zero-burst
+            // emitters on their legacy timing (a 0-particle round is
+            // not a refusal for them).
+            if (spawned == 0 && m_nParticlesPerBurst > 0)
+            {
+                m_engine.NoteSpawnSuppressed();
+                m_nextSpawnTime = currentTime + GetSpawnDelay();
+                break;
+            }
         }
     }
 
@@ -780,25 +936,20 @@ int EmitterInstance::Update(TimeF currentTime)
 
 	if (!kills.empty())
 	{
-        size_t firstKilled = *kills.begin();
-		for (set<size_t>::reverse_iterator i = kills.rbegin(); i != kills.rend(); i++)
-		{
-			m_primitives   .erase(m_primitives   .begin() + *i);
-			m_particleIndex.erase(m_particleIndex.begin() + *i);
-            numParticles--;
-		}
+        const size_t removed = CompactKilledParticleSlots(m_primitives, m_particleIndex, kills);
+        numParticles -= static_cast<int>(removed);
 		kills.clear();
-
-		if (!m_primitives.empty())
-		{
-			// Reassign indices
-			for (size_t i = firstKilled; i < m_primitives.size(); i++)
-			{
-				m_particleIndex[i]->m_indicesIndex = i;
-			}
-		}
 	}
     return numParticles;
+}
+
+bool EmitterInstance::GetFirstLiveParticleSample(LiveParticleSample& sample) const
+{
+    if (!m_liveSampleValid || m_particleList == NULL) return false;
+    sample.emitterId           = static_cast<int>(GetSourceRank());
+    sample.relativeTimePercent = m_liveSampleRelativeTimePercent;
+    sample.scale               = m_liveSampleScale;
+    return true;
 }
 
 void EmitterInstance::StopSpawning()
@@ -812,6 +963,43 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
 	{
 		pDevice->SetTexture(0, m_pColorTexture);
 		pDevice->SetTexture(1, m_pNormalTexture);
+		static int s_normDbg = 0;
+		const bool dbg = NormDiagEnabled() && (s_normDbg < 3);
+		if (dbg)
+		{
+			NormDbg("[norm-dbg] colorTex=%p normalTex=%p blendMode=%lu\n",
+			        (void*)m_pColorTexture, (void*)m_pNormalTexture, m_emitter.blendMode);
+			if (m_pNormalTexture)
+			{
+				D3DSURFACE_DESC d; m_pNormalTexture->GetLevelDesc(0, &d);
+				NormDbg("[norm-dbg]   normalTex %ux%u fmt=%d levels=%lu\n",
+				        d.Width, d.Height, (int)d.Format, (unsigned long)m_pNormalTexture->GetLevelCount());
+				D3DLOCKED_RECT lr;
+				// The texel dump uses 4-byte/pixel (BGRA) indexing, valid only for the
+				// 32-bit uncompressed formats; for a DXT/compressed normal map the locked
+				// data is block-compressed and *4 indexing reads garbage, so dump only when
+				// the format is 32bpp BGRA-style and report otherwise.
+				const bool is32bpp = (d.Format == D3DFMT_A8R8G8B8 || d.Format == D3DFMT_X8R8G8B8 ||
+				                      d.Format == D3DFMT_A8B8G8R8 || d.Format == D3DFMT_X8B8G8R8);
+				if (SUCCEEDED(m_pNormalTexture->LockRect(0, &lr, NULL, D3DLOCK_READONLY)))
+				{
+					if (is32bpp)
+					{
+						unsigned char* b = (unsigned char*)lr.pBits;
+						int cx = d.Width/2, cy = d.Height/2;
+						unsigned char* c = b + cy*lr.Pitch + cx*4;
+						unsigned char* l = b + cy*lr.Pitch + 10*4;
+						unsigned char* r = b + cy*lr.Pitch + (d.Width-10)*4;
+						NormDbg("[norm-dbg]   texels BGRA center=%u,%u,%u left=%u,%u,%u right=%u,%u,%u\n",
+						        c[0],c[1],c[2], l[0],l[1],l[2], r[0],r[1],r[2]);
+					}
+					else
+						NormDbg("[norm-dbg]   texel dump skipped (fmt=%d not 32bpp BGRA)\n", (int)d.Format);
+					m_pNormalTexture->UnlockRect(0);
+				}
+				else NormDbg("[norm-dbg]   LockRect FAILED (texture not in a lockable pool)\n");
+			}
+		}
 		pDevice->SetRenderState(D3DRS_ZENABLE,     !m_emitter.noDepthTest);
 		if (IsHeatEmitter())
 		{
@@ -833,12 +1021,74 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
             const Effect::Handles& handles = pShader->getHandles();
             ID3DXEffect* pEffect = pShader->getD3DEffect();
             pEffect->SetVector(handles.hEyeObjPosition, &eyeObjPosition);
+            if (handles.hDistanceFadeVals)
+            {
+                D3DXVECTOR4 distanceFade(0.0f, 1.0f, 0.0f, 0.0f);   // (0,1)=no fade; editor-only, engine sets real vals in-game
+                pEffect->SetVector(handles.hDistanceFadeVals, &distanceFade);
+            }
+
+            // [shadow-leak hunt] Env-gated (ALO_DUMP_RSTATE) snapshot of the FULL
+            // device state the particle is ABOUT to draw with — captured here, before
+            // the shader's Begin/passes set their own state, so a fresh-clean frame
+            // can be diffed against a shadow-enable-then-disable LEAKED frame. No-op
+            // when the env var is unset; the method self-throttles to ~every 30th frame.
+            m_engine.DumpParticleDrawStateIfRequested(m_emitter.blendMode, m_pColorTexture, m_pNormalTexture);
 
             UINT nPasses;
             pEffect->Begin(&nPasses, 0);
             for (UINT i = 0; i < nPasses; i++)
             {
                 pEffect->BeginPass(i);
+                // [bump-alpha] Once-per-blend-mode dump of the alpha-deciding device
+                // state read INSIDE BeginPass — i.e. exactly what the .fxo pass set
+                // (or failed to set) for this draw. This is the probe that
+                // discriminates "shader pass carries its blend/alpha-test state"
+                // from "the draw inherits stale state" for issue #481. Same
+                // ALO_SHADER_DIAG gate as norm-dbg, so production runs stay silent.
+                if (NormDiagEnabled() && i == 0)
+                {
+                    static unsigned s_blendDumped = 0;
+                    const unsigned bit = 1u << (m_emitter.blendMode & 31);
+                    if (!(s_blendDumped & bit))
+                    {
+                        s_blendDumped |= bit;
+                        DWORD ab=0,sb=0,db=0,ate=0,aref=0,afunc=0,zw=0;
+                        pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE,&ab);
+                        pDevice->GetRenderState(D3DRS_SRCBLEND,        &sb);
+                        pDevice->GetRenderState(D3DRS_DESTBLEND,       &db);
+                        pDevice->GetRenderState(D3DRS_ALPHATESTENABLE, &ate);
+                        pDevice->GetRenderState(D3DRS_ALPHAREF,        &aref);
+                        pDevice->GetRenderState(D3DRS_ALPHAFUNC,       &afunc);
+                        pDevice->GetRenderState(D3DRS_ZWRITEENABLE,    &zw);
+                        // Sampler mip state read INSIDE BeginPass proves the engine's
+                        // particle-bracket setting (engine.cpp, #481) survives the
+                        // effect pass — the Prim* .fxo passes set no sampler state,
+                        // so these must report the bracket's values at the draw.
+                        DWORD mip0=0,mip1=0,bias0=0,bias1=0;
+                        pDevice->GetSamplerState(0, D3DSAMP_MIPFILTER,     &mip0);
+                        pDevice->GetSamplerState(1, D3DSAMP_MIPFILTER,     &mip1);
+                        pDevice->GetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, &bias0);
+                        pDevice->GetSamplerState(1, D3DSAMP_MIPMAPLODBIAS, &bias1);
+                        float fb0, fb1; memcpy(&fb0, &bias0, sizeof(fb0)); memcpy(&fb1, &bias1, sizeof(fb1));
+                        NormDbg("[bump-alpha] blend=%lu passes=%u AB=%lu SRC=%lu DST=%lu AT=%lu AREF=%lu AFUNC=%lu ZW=%lu MIP0=%lu MIP1=%lu BIAS0=%.2f BIAS1=%.2f\n",
+                                m_emitter.blendMode, nPasses, ab, sb, db, ate, aref, afunc, zw,
+                                mip0, mip1, fb0, fb1);
+                    }
+                }
+                if (dbg && i == 0)
+                {
+                    IDirect3DBaseTexture9* bt = NULL; pDevice->GetTexture(1, &bt);
+                    DWORD minf=0,magf=0,mipf=0,maxml=0,lodb=0;
+                    pDevice->GetSamplerState(1, D3DSAMP_MINFILTER,    &minf);
+                    pDevice->GetSamplerState(1, D3DSAMP_MAGFILTER,    &magf);
+                    pDevice->GetSamplerState(1, D3DSAMP_MIPFILTER,    &mipf);
+                    pDevice->GetSamplerState(1, D3DSAMP_MAXMIPLEVEL,  &maxml);
+                    pDevice->GetSamplerState(1, D3DSAMP_MIPMAPLODBIAS,&lodb);
+                    NormDbg("[norm-dbg] @draw stage1 boundTex=%p (want normalTex=%p) MIN=%lu MAG=%lu MIP=%lu MAXMIP=%lu LODbiasRaw=%lu texSqrt=%d (textureSize=%lu)\n",
+                            (void*)bt, (void*)m_pNormalTexture, minf, magf, mipf, maxml, lodb, m_textureSizeSqrt, (unsigned long)m_emitter.textureSize);
+                    if (bt) bt->Release();
+                    s_normDbg++;
+                }
     		    pDevice->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, (UINT)m_vertices.size(), 2 * (UINT)m_primitives.size(), &m_primitives[0], D3DFMT_INDEX16, &m_vertices[0], sizeof(Vertex));
                 pEffect->EndPass();
             }
@@ -851,6 +1101,12 @@ void EmitterInstance::Render(IDirect3DDevice9* pDevice)
 // Spawns another round of particles
 int EmitterInstance::SpawnParticles(TimeF spawnTime)
 {
+    // Overload guard asymmetry, deliberate: a round that gets here but
+    // is then refused (budget runs out mid-burst) still consumes
+    // m_currentBurst — finite-burst emitters can burn out with fewer
+    // particles emitted during overload. "Dropped, not deferred": we
+    // never replay refused work, so the burst is spent either way.
+    // (The pre-round bail in Update never reaches here, preserving it.)
     if (m_emitter.useBursts && m_emitter.nBursts > 0)
 	{
 		if (++m_currentBurst == m_emitter.nBursts)
@@ -862,10 +1118,20 @@ int EmitterInstance::SpawnParticles(TimeF spawnTime)
     int numParticles = 0;
 	for (unsigned long i = 0; i < m_nParticlesPerBurst; i++)
 	{
-        SpawnParticle(spawnTime);
+        // Overload guard: every spawn spends one unit of the engine-wide
+        // per-frame budget (see Engine::kDefaultMaxPreviewParticles). When
+        // it runs out, drop the REST of this burst — never deferred.
+        if (!m_engine.TryConsumeSpawnBudget())
+            break;
+        // Per-instance uint16 index cap refusal: the rest of the burst
+        // would refuse too (same live-count pressure), so stop counting
+        // AND stop iterating.
+        if (!SpawnParticle(spawnTime))
+            break;
         numParticles++;
 	}
 
+    m_nextSpawnUsesInitialDelay = false;
     m_nextSpawnTime = spawnTime + GetSpawnDelay();
 
     // If the spawn delay beyond the FP addition accuracy,
@@ -885,6 +1151,9 @@ bool EmitterInstance::IsFrozen(TimeF currentTime) const
 	return m_freezeTime > 0.0f && currentTime >= m_freezeTime;
 }
 
+// Returns the NEGATIVE count of live particles destroyed, i.e. a delta
+// callers feed straight into the engine's m_numParticles accounting
+// (Engine::KillParticleSystem, ParticleSystemInstance::RemoveEmitter).
 int EmitterInstance::Kill()
 {
 	// Stop spawning
@@ -921,14 +1190,23 @@ EmitterInstance::EmitterInstance(TimeF currentTime, ParticleSystemInstance& syst
 	// Spawn initial particles
     if (m_emitter.isWeatherParticle)
     {
-        // Spawn all particles immediately for weather particles
+        // Spawn all particles immediately for weather particles.
+        // Overload guard: budget-gated like every other spawn path, and
+        // *numParticles must report what was ACTUALLY spawned (it feeds
+        // Engine::OnEmitterCreated's live particle accounting).
+        // Accepted edge: a weather instance fully starved here never
+        // spawns again and never dies (zombie until Clear/restart).
+        *numParticles = 0;
         for (unsigned long i = 0; i < m_emitter.nParticlesPerSecond; i++)
 	    {
-		    SpawnParticle(currentTime);
+            if (!m_engine.TryConsumeSpawnBudget())
+                break;
+		    if (!SpawnParticle(currentTime))
+                break;  // uint16 index cap — don't count refused spawns
+            (*numParticles)++;
         }
-        *numParticles = m_emitter.nParticlesPerSecond;
     }
-    else 
+    else
     {
     	TimeF skipped = m_emitter.initialDelay;
 	    currentTime  -= m_emitter.skipTime;
@@ -936,6 +1214,15 @@ EmitterInstance::EmitterInstance(TimeF currentTime, ParticleSystemInstance& syst
         *numParticles = 0;
 	    while (skipped <= m_emitter.skipTime && !DoneSpawning())
 	    {
+            // Overload guard: stop replaying skip-time history once the
+            // engine-wide budget is gone (dropped, not deferred) — at
+            // pathological rates this loop would otherwise spin for
+            // skipTime/delay iterations doing zero-work spawn rounds.
+            if (m_engine.SpawnBudgetExhausted())
+            {
+                m_engine.NoteSpawnSuppressed();
+                break;
+            }
 		    *numParticles += SpawnParticles(currentTime + skipped);
 		    skipped += GetSpawnDelay();
 	    }

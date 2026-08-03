@@ -1,0 +1,494 @@
+// Vitest tests for ViewportSlot.
+//
+// Two surfaces locked down here:
+//
+// 1. The render surface. The slot mounts a transparent <canvas
+//    data-testid="viewport-canvas"> as the input target; engine pixels
+//    reach the screen via the DComp engine visual UNDER the WebView2,
+//    not the DOM, so the canvas itself is never painted.
+//
+// 2. The bridge contract. ViewportSlot dispatches `layout/scene-rect`
+//    on mount and forwards DOM pointer/keyboard input as
+//    `viewport/input`. Engine pixels arrive via the DComp visual, not
+//    the DOM — there is no DOM-side engine-pixel consumer.
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { fireEvent, render as rtlRender, screen, cleanup, type RenderOptions } from "@testing-library/react";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import { type ReactElement } from "react";
+import type { Bridge } from "@particle-editor/bridge-schema";
+import { ViewportSlot } from "../ViewportSlot";
+import { MK_LBUTTON, MK_SHIFT } from "../../lib/viewport-input";
+import { useDockAnim } from "../../lib/dock-anim";
+import { useModalOpen } from "../../lib/modal-open";
+
+// ViewportSlot renders the display-options pill, whose <Tip> buttons need a
+// Tooltip.Provider (App.tsx supplies one in production). Inject it for all renders.
+const render = (ui: ReactElement, options?: RenderOptions) =>
+  rtlRender(<Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>, options);
+
+function makeStubBridge(): Bridge & {
+  request: ReturnType<typeof vi.fn>;
+  on: ReturnType<typeof vi.fn>;
+} {
+  const request = vi.fn().mockResolvedValue({});
+  const on = vi.fn().mockReturnValue(() => {});
+  return { request, on } as unknown as Bridge & {
+    request: ReturnType<typeof vi.fn>;
+    on: ReturnType<typeof vi.fn>;
+  };
+}
+
+describe("ViewportSlot — render surface", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("mounts a <canvas data-testid='viewport-canvas'> as the input target", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const canvas = screen.getByTestId("viewport-canvas");
+    expect(canvas).toBeInTheDocument();
+    expect(canvas.tagName).toBe("CANVAS");
+  });
+
+  it("dispatches layout/scene-rect on mount with DPR-scaled w/h", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    expect(bridge.request).toHaveBeenCalled();
+    // The viewport overlay (a child) also dispatches engine/state/snapshot on
+    // mount, so find the scene-rect call rather than assume it's first.
+    const sceneRect = bridge.request.mock.calls
+      .map((c) => c?.[0])
+      .find((r) => r?.kind === "layout/scene-rect");
+    expect(sceneRect).toBeTruthy();
+    expect(sceneRect?.params).toMatchObject({
+      x: expect.any(Number),
+      y: expect.any(Number),
+      w: expect.any(Number),
+      h: expect.any(Number),
+    });
+  });
+});
+
+// ─── Phase 2 input forwarding ────────────────────────────────
+//
+// These tests assert the DOM event → bridge.request wiring. The pure-
+// function encoders are exercised in lib/__tests__/viewport-input.test.ts;
+// here we lock down that the listeners get attached on mount, fire the
+// right Request kind + payload shape, and detach on unmount.
+
+function findViewportInputCalls(
+  bridge: { request: ReturnType<typeof vi.fn> },
+): Array<{ kind: string; params: Record<string, unknown> }> {
+  return bridge.request.mock.calls
+    .map((c) => c[0] as { kind: string; params: Record<string, unknown> })
+    .filter((req) => req.kind === "viewport/input");
+}
+
+function findMouseMoveInputs(
+  bridge: { request: ReturnType<typeof vi.fn> },
+): Array<Record<string, unknown>> {
+  return findViewportInputCalls(bridge)
+    .map((req) => req.params)
+    .filter((params) => params.type === "mousemove");
+}
+
+function installFakeRaf() {
+  const callbacks = new Map<number, FrameRequestCallback>();
+  let nextId = 1;
+  const request = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+    const id = nextId++;
+    callbacks.set(id, cb);
+    return id;
+  });
+  const cancel = vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+    callbacks.delete(id);
+  });
+  return {
+    request,
+    flush() {
+      const pending = [...callbacks.values()];
+      callbacks.clear();
+      pending.forEach((cb) => cb(16));
+    },
+    restore() {
+      request.mockRestore();
+      cancel.mockRestore();
+    },
+  };
+}
+
+function setDocumentVisibilityState(value: DocumentVisibilityState): () => void {
+  const ownDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => value,
+  });
+  return () => {
+    if (ownDescriptor) {
+      Object.defineProperty(document, "visibilityState", ownDescriptor);
+    } else {
+      Reflect.deleteProperty(document, "visibilityState");
+    }
+  };
+}
+
+describe("ViewportSlot — input forwarding", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("pointerdown on canvas dispatches viewport/input { type: 'mousedown' }", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const canvas = screen.getByTestId("viewport-canvas");
+    fireEvent.pointerDown(canvas, {
+      clientX: 100,
+      clientY: 200,
+      button: 0,
+      buttons: 1,
+      pointerId: 1,
+    });
+    const inputs = findViewportInputCalls(bridge);
+    expect(inputs.length).toBeGreaterThan(0);
+    expect(inputs[0]?.params).toMatchObject({
+      type: "mousedown",
+      button: "left",
+      x: 100,
+      y: 200,
+      buttons: MK_LBUTTON,
+    });
+  });
+
+  it("pointerdown with shiftKey encodes MK_SHIFT in buttons bitmask", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const canvas = screen.getByTestId("viewport-canvas");
+    fireEvent.pointerDown(canvas, {
+      clientX: 0,
+      clientY: 0,
+      button: 0,
+      buttons: 1,
+      shiftKey: true,
+      pointerId: 1,
+    });
+    const inputs = findViewportInputCalls(bridge);
+    expect(inputs[0]?.params.buttons).toBe(MK_LBUTTON | MK_SHIFT);
+  });
+
+  it("pointermove on canvas dispatches viewport/input { type: 'mousemove' } after animation frame", () => {
+    const raf = installFakeRaf();
+    try {
+      const bridge = makeStubBridge();
+      render(<ViewportSlot bridge={bridge} />);
+      const canvas = screen.getByTestId("viewport-canvas");
+      fireEvent.pointerMove(canvas, { clientX: 50, clientY: 75, buttons: 0 });
+      expect(findMouseMoveInputs(bridge)).toHaveLength(0);
+      raf.flush();
+      expect(findMouseMoveInputs(bridge)).toHaveLength(1);
+    } finally {
+      raf.restore();
+    }
+  });
+
+  it("coalesces pointermove events to the latest coordinates per animation frame", () => {
+    const raf = installFakeRaf();
+    try {
+      const bridge = makeStubBridge();
+      render(<ViewportSlot bridge={bridge} />);
+      const canvas = screen.getByTestId("viewport-canvas");
+
+      fireEvent.pointerMove(canvas, { clientX: 10, clientY: 20, buttons: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 30, clientY: 40, buttons: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 50, clientY: 60, buttons: 1 });
+
+      expect(raf.request).toHaveBeenCalledTimes(1);
+      expect(findMouseMoveInputs(bridge)).toHaveLength(0);
+
+      raf.flush();
+
+      const moves = findMouseMoveInputs(bridge);
+      expect(moves).toHaveLength(1);
+      expect(moves[0]).toMatchObject({ type: "mousemove", x: 50, y: 60 });
+    } finally {
+      raf.restore();
+    }
+  });
+
+  it("flushes a buffered pointermove before pointerup dispatches mouseup", () => {
+    const raf = installFakeRaf();
+    try {
+      const bridge = makeStubBridge();
+      render(<ViewportSlot bridge={bridge} />);
+      const canvas = screen.getByTestId("viewport-canvas");
+
+      fireEvent.pointerMove(canvas, { clientX: 10, clientY: 20, buttons: 1 });
+      expect(findMouseMoveInputs(bridge)).toHaveLength(0);
+
+      fireEvent.pointerUp(canvas, { clientX: 11, clientY: 21, button: 0, buttons: 0, pointerId: 1 });
+
+      const inputTypes = findViewportInputCalls(bridge).map((req) => req.params.type);
+      expect(inputTypes.slice(-2)).toEqual(["mousemove", "mouseup"]);
+    } finally {
+      raf.restore();
+    }
+  });
+
+  it("sends pointermove immediately when document visibility is hidden", () => {
+    const raf = installFakeRaf();
+    const restoreVisibility = setDocumentVisibilityState("hidden");
+    try {
+      const bridge = makeStubBridge();
+      render(<ViewportSlot bridge={bridge} />);
+      const canvas = screen.getByTestId("viewport-canvas");
+
+      fireEvent.pointerMove(canvas, { clientX: 70, clientY: 80, buttons: 1 });
+
+      expect(raf.request).not.toHaveBeenCalled();
+      expect(findMouseMoveInputs(bridge)).toEqual([
+        expect.objectContaining({ type: "mousemove", x: 70, y: 80 }),
+      ]);
+    } finally {
+      restoreVisibility();
+      raf.restore();
+    }
+  });
+
+  it("wheel on canvas dispatches viewport/input { type: 'wheel' } with sign-flipped delta", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const canvas = screen.getByTestId("viewport-canvas");
+    fireEvent.wheel(canvas, { clientX: 10, clientY: 10, deltaY: 100 });
+    const inputs = findViewportInputCalls(bridge);
+    const wheel = inputs.find((r) => r.params.type === "wheel");
+    expect(wheel).toBeTruthy();
+    expect(wheel?.params.deltaY).toBe(-120);  // DOM +100 → Win32 -WHEEL_DELTA
+  });
+
+  // ── Shift-spawn gate (2026-07-18): the Shift KEYDOWN forwards only while
+  // the pointer is over the viewport canvas (elementFromPoint hit-test at
+  // keydown; jsdom has no layout, so the hit-test is spied per case). Keyups
+  // and every other key are ungated.
+
+  it("Shift keydown forwards when the pointer is over the canvas", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const canvas = screen.getByTestId("viewport-canvas");
+    const efp = vi.spyOn(document, "elementFromPoint").mockReturnValue(canvas);
+    try {
+      fireEvent.pointerMove(window, { clientX: 50, clientY: 50 });
+      fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
+      const key = findViewportInputCalls(bridge).find((r) => r.params.type === "keydown");
+      expect(key).toBeTruthy();
+      expect(key?.params).toMatchObject({ type: "keydown", vk: 16, repeat: false });
+    } finally {
+      efp.mockRestore();
+    }
+  });
+
+  it("Shift keydown is SUPPRESSED when the pointer is over UI (not the canvas)", () => {
+    const bridge = makeStubBridge();
+    render(
+      <div>
+        <button data-testid="some-ui" type="button">ui</button>
+        <ViewportSlot bridge={bridge} />
+      </div>,
+    );
+    const ui = screen.getByTestId("some-ui");
+    const efp = vi.spyOn(document, "elementFromPoint").mockReturnValue(ui);
+    try {
+      fireEvent.pointerMove(window, { clientX: 5, clientY: 5 });
+      fireEvent.keyDown(window, { keyCode: 16, key: "Shift" });
+      expect(findViewportInputCalls(bridge).find((r) => r.params.type === "keydown")).toBeUndefined();
+    } finally {
+      efp.mockRestore();
+    }
+  });
+
+  it("Shift KEYUP always forwards (an active spawn must stay endable off-canvas)", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const efp = vi.spyOn(document, "elementFromPoint").mockReturnValue(document.body);
+    try {
+      fireEvent.pointerMove(window, { clientX: 5, clientY: 5 });
+      fireEvent.keyUp(window, { keyCode: 16, key: "Shift" });
+      const key = findViewportInputCalls(bridge).find((r) => r.params.type === "keyup");
+      expect(key).toBeTruthy();
+      expect(key?.params).toMatchObject({ type: "keyup", vk: 16 });
+    } finally {
+      efp.mockRestore();
+    }
+  });
+
+  it("non-Shift keys forward regardless of pointer position", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const efp = vi.spyOn(document, "elementFromPoint").mockReturnValue(document.body);
+    try {
+      fireEvent.pointerMove(window, { clientX: 5, clientY: 5 });
+      fireEvent.keyDown(window, { keyCode: 70, key: "f" });
+      const key = findViewportInputCalls(bridge).find((r) => r.params.type === "keydown");
+      expect(key).toBeTruthy();
+      expect(key?.params).toMatchObject({ type: "keydown", vk: 70 });
+    } finally {
+      efp.mockRestore();
+    }
+  });
+
+  it("TYPING_TAGS guard: keydown with target=INPUT does NOT dispatch", () => {
+    const bridge = makeStubBridge();
+    render(
+      <div>
+        <input data-testid="text-input" />
+        <ViewportSlot bridge={bridge} />
+      </div>,
+    );
+    const input = screen.getByTestId("text-input");
+    fireEvent.keyDown(input, { keyCode: 16, key: "Shift" });
+    const inputs = findViewportInputCalls(bridge);
+    expect(inputs.find((r) => r.params.type === "keydown")).toBeUndefined();
+  });
+
+  it("window.blur dispatches viewport/input { type: 'blur' }", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    fireEvent.blur(window);
+    const inputs = findViewportInputCalls(bridge);
+    expect(inputs.some((r) => r.params.type === "blur")).toBe(true);
+  });
+});
+
+describe("ViewportSlot — dock-slide RO suppression (Item 3)", () => {
+  // Capture the ResizeObserver callback so we can fire it manually — jsdom's
+  // setup stub has a no-op observe(), so the RO never fires on its own. The
+  // real RO mechanics aren't under test; the suppression GATE on the callback
+  // is. scroll/resize stay on real window listeners (RO-only suppression).
+  const RealRO = globalThis.ResizeObserver;
+  let roCallbacks: Array<() => void>;
+
+  beforeEach(() => {
+    roCallbacks = [];
+    globalThis.ResizeObserver = class {
+      constructor(cb: () => void) {
+        roCallbacks.push(cb);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    useDockAnim.setState({ animating: false });
+  });
+  afterEach(() => {
+    cleanup();
+    globalThis.ResizeObserver = RealRO;
+    useDockAnim.setState({ animating: false });
+  });
+
+  function sceneRectCalls(bridge: ReturnType<typeof makeStubBridge>): number {
+    return bridge.request.mock.calls.filter((c) => c[0]?.kind === "layout/scene-rect").length;
+  }
+
+  it("the mount send fires even while a slide is animating (mount is never gated)", () => {
+    useDockAnim.setState({ animating: true });
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    expect(sceneRectCalls(bridge)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("suppresses the ResizeObserver callback while animating", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const before = sceneRectCalls(bridge);
+    expect(roCallbacks.length).toBeGreaterThan(0);
+    useDockAnim.setState({ animating: true }); // a resize lands mid-slide…
+    roCallbacks.forEach((cb) => cb());
+    expect(sceneRectCalls(bridge)).toBe(before); // …and is dropped
+  });
+
+  // [resize-perf C1] `send` dedupes on (rect, DPR) — in jsdom every
+  // getBoundingClientRect is zeros, so the rect never changes and a repeat
+  // fire is (correctly) dropped. Tests that assert a fire RESULTS in a send
+  // must make the send unique; bumping devicePixelRatio (part of the dedupe
+  // key by design — a monitor swap changes the backing size at an identical
+  // CSS rect) is the lever jsdom lets us pull.
+  let dprCounter = 1;
+  function bumpDpr() {
+    Object.defineProperty(window, "devicePixelRatio", {
+      configurable: true,
+      value: ++dprCounter,
+    });
+  }
+
+  it("runs the ResizeObserver callback normally when not animating", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const before = sceneRectCalls(bridge);
+    useDockAnim.setState({ animating: false });
+    roCallbacks.forEach((cb) => {
+      bumpDpr();
+      cb();
+    });
+    expect(sceneRectCalls(bridge)).toBe(before + roCallbacks.length);
+  });
+
+  it("keeps scroll + resize sends live while animating (RO-only suppression)", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    useDockAnim.setState({ animating: true });
+    const before = sceneRectCalls(bridge);
+    bumpDpr();
+    window.dispatchEvent(new Event("scroll"));
+    bumpDpr();
+    window.dispatchEvent(new Event("resize"));
+    expect(sceneRectCalls(bridge)).toBe(before + 2);
+  });
+
+  it("dedupes repeat sends for an unchanged rect+DPR (C1)", () => {
+    // The RO and the window-resize listener BOTH fire per window-resize
+    // tick (a measured 2× send rate); with an unchanged rect the repeats
+    // must be dropped, not re-sent.
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const before = sceneRectCalls(bridge);
+    roCallbacks.forEach((cb) => cb());            // same rect as mount
+    window.dispatchEvent(new Event("resize"));    // same rect again
+    window.dispatchEvent(new Event("scroll"));    // and again
+    expect(sceneRectCalls(bridge)).toBe(before);  // all deduped
+  });
+});
+
+describe("ViewportSlot — modal-open key suppression (#12)", () => {
+  afterEach(() => {
+    cleanup();
+    useModalOpen.setState({ count: 0 });
+  });
+
+  it("suppresses viewport keydown/keyup while a modal is open", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    useModalOpen.setState({ count: 1 });            // a blocking modal is open
+    fireEvent.keyDown(window, { keyCode: 70, key: "f" });
+    fireEvent.keyUp(window, { keyCode: 70, key: "f" });
+    const keys = findViewportInputCalls(bridge).filter(
+      (r) => r.params.type === "keydown" || r.params.type === "keyup",
+    );
+    expect(keys).toHaveLength(0);
+  });
+
+  it("forwards viewport keys when no modal is open", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    fireEvent.keyDown(window, { keyCode: 70, key: "f" });
+    expect(findViewportInputCalls(bridge).some((r) => r.params.type === "keydown")).toBe(true);
+  });
+
+  it("sends a blur (ends a cursor-bound spawn) when a modal opens (0->1)", () => {
+    const bridge = makeStubBridge();
+    render(<ViewportSlot bridge={bridge} />);
+    const blursBefore = findViewportInputCalls(bridge).filter((r) => r.params.type === "blur").length;
+    useModalOpen.getState().open();                 // count 0 -> 1
+    const blursAfter = findViewportInputCalls(bridge).filter((r) => r.params.type === "blur").length;
+    expect(blursAfter).toBe(blursBefore + 1);
+  });
+});

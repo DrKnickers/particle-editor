@@ -1,0 +1,163 @@
+# CI: web stack + x64 C++ build.
+#
+# Scope: changes land on `master` via PR. This workflow gates the web stack
+# (pnpm/Vitest) and the x64 C++ build before changes reach master.
+#
+# What this workflow DOES run for the web stack: tsc, vite build, Vitest
+# (jsdom unit), node --test scripts, and the `test:web` Playwright layout lane
+# (headless Chromium against the MOCK app via the Vite dev server — real-browser
+# DOM-layout checks jsdom can't do; no native host, runs on Linux).
+#
+# What this workflow does NOT do:
+#   * native Playwright (test:native). That harness launches
+#     ParticleEditor.exe + WebView2 CDP and takes ~minutes; it also
+#     needs the DirectX SDK install for the underlying x64 build, and CDP
+#     blackens the D3D9 viewport. Run it manually via workflow_dispatch when
+#     a viewport/host-bridge change warrants it. (The `test:web` lane above is
+#     a different, CI-friendly thing: mock app, no host, DOM-only.)
+#   * x86 builds. The editor is x64-only (new-UI host bridge + WebView2);
+#     the x86 build leg was removed.
+
+name: CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    # PRs targeting master get CI checks; the push trigger re-validates the
+    # merged state. The `if:` guard on the cpp job keeps the heavy C++ legs
+    # from running on forks of this repo.
+    branches: [ "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: web (pnpm + Vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (tsc --noEmit)
+        run: pnpm --filter @particle-editor/editor lint
+
+      - name: Build
+        run: pnpm --filter @particle-editor/editor build
+
+      - name: Upload web bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/apps/editor/dist
+          if-no-files-found: error
+
+      - name: Vitest
+        run: pnpm --filter @particle-editor/editor test
+
+      - name: Script tests (node --test)
+        run: pnpm --filter @particle-editor/editor test:scripts
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @particle-editor/editor exec playwright install --with-deps chromium
+
+      - name: Web layout lane (Playwright, headless Chromium, mock app)
+        run: pnpm --filter @particle-editor/editor test:web
+
+      - name: Install ffmpeg (landing-smoke placeholder media)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Landing page smoke (Playwright, static site/)
+        run: pnpm --filter @particle-editor/editor test:site
+
+  cpp:
+    name: C++ (x64)
+    needs: web
+    # Run the heavy 2x-billed Windows C++ legs ONLY on the public mirror, where
+    # Actions are free and the curated tree is the real gate. The private repo
+    # builds C++ locally instead (free-tier quota).
+    #
+    # Stated POSITIVELY, naming the public slug, and that is load-bearing: the
+    # sync script rewrites every occurrence of the private slug in each published
+    # file. Phrased as `!= '<private-slug>'` this line became `!= '<public-slug>'`
+    # on the mirror — false there — silently skipping both build configurations,
+    # the exact opposite of the gate. Naming the public slug leaves nothing for
+    # the rewrite to touch. Do not reintroduce the private slug here.
+    if: github.repository == 'DrKnickers/particle-editor'
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        build_config: ['Debug', 'Release']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # BOTH configs need the web bundle now: the C++ build embeds
+      # web/apps/editor/dist into the exe (GenerateEmbeddedWebAssets target), so a
+      # Debug build without dist fails at that step just like Release. (Formerly
+      # only Release consumed it, at runtime.)
+      - name: Download web bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/apps/editor/dist
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Install DirectX SDK (June 2010)
+        shell: pwsh
+        run: |
+          $sdk = "C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)"
+          $header = Join-Path $sdk "Include\d3dx9.h"
+          # The choco `directx-sdk` package declares a `dotnet3.5` dependency
+          # whose install intermittently fails on the GitHub runner image
+          # ("Value cannot be null"), aborting the whole step with a non-zero
+          # exit even though the SDK headers/libs the build actually needs
+          # install fine. Skip that dependency, retry the occasionally-flaky
+          # download, and gate success on the SDK ACTUALLY being present
+          # (d3dx9.h) rather than on choco's exit code.
+          for ($i = 1; $i -le 3 -and -not (Test-Path $header); $i++) {
+            Write-Host "DirectX SDK install attempt $i..."
+            choco install directx-sdk -y --no-progress --ignore-dependencies
+            if (-not (Test-Path $header)) { Start-Sleep -Seconds 15 }
+          }
+          if (-not (Test-Path $header)) {
+            Write-Error "DirectX SDK not found at $header after 3 attempts."
+            exit 1
+          }
+          Write-Host "DirectX SDK present: $header"
+          "DXSDK_DIR=$sdk\" >> $env:GITHUB_ENV
+          exit 0
+
+      - name: Restore NuGet packages
+        run: nuget restore .
+
+      - name: Build ${{ matrix.build_config }}|x64
+        run: msbuild /m /p:Configuration=${{ matrix.build_config }} /p:Platform=x64 .
+
+      - name: Package Release artifact smoke
+        if: matrix.build_config == 'Release'
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'particle-editor-release-stage'
+          $zip = Join-Path $env:RUNNER_TEMP 'ParticleEditor-ci.zip'
+          .\scripts\package-release.ps1 -Stage $stage -OutZip $zip

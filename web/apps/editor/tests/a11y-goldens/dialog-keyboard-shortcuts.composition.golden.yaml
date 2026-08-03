@@ -1,0 +1,8 @@
+- status
+- contentinfo:
+  - status
+  - text: PAUSED
+- dialog "Keyboard Shortcuts":
+  - heading "Keyboard Shortcuts" [level=2]
+  - button "Close"
+  - text: File Ctrl+N New document Ctrl+O Open… Ctrl+S Save Alt+F4 Exit Edit Ctrl+Z Undo Ctrl+Y Ctrl+Shift+Z Redo Ctrl+C Ctrl+X Ctrl+V Copy / cut / paste emitters (tree focused) Del Delete selected emitters (tree) or curve keys (curve editor) Ctrl+Del Clear all particles Playback & viewport F8 Pause / resume F9 Step one frame F10 Step ten frames Shift Hold to spawn an instance at the cursor — only while the pointer is over the viewport Ctrl+Space Trigger a spawner burst Ctrl+Home Reset the camera View Ctrl+G Toggle ground Ctrl+H Toggle heat debug Ctrl+L Toggle reference-object lock F5 Reload textures F6 Reload shaders F7 Toggle the Spawner panel Emitter tree ↑ ↓ Move between rows Enter Space Select the focused row F2 Rename the focused emitter Alt+↑ Alt+↓ Move the selected root up / down Curve editor (plot focused) ← → Select the previous / next key on the focused channel ↑ ↓ Switch the focused channel Ctrl+← Ctrl+→ Nudge the selected key's time Ctrl+↑ Ctrl+↓ Nudge the selected key's value Home End Jump to the first / last key Atlas frame picker (grid focused) ← → ↑ ↓ Move the frame cursor Home End First / last frame Enter Space Assign the frame Value fields ↑ ↓ Step the focused spinner Drag ▲▼ Scrub continuously on the stepper column

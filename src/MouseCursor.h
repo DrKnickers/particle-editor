@@ -1,0 +1,90 @@
+#ifndef MOUSECURSOR_H
+#define MOUSECURSOR_H
+
+// Cursor-bound particle anchor used by the shift-click-to-spawn feature.
+// `MouseCursor` is an `Object3D` whose position is driven from screen-space
+// mouse moves (via `GetCursorPos3D` unproject + z=0 plane intersection)
+// and whose velocity is derived from `QueryPerformanceCounter` deltas in
+// `UpdateVelocity()` (called once per frame from the render loop).
+//
+// Factored out of `src/main.cpp` (was a TU-local static class) so the
+// host's `ViewportWndProc` can wire the same object into
+// `Engine::SpawnParticleSystem`.
+// Class is small + entirely inline; no .cpp.
+
+#include "engine.h"
+
+class MouseCursor : public Object3D
+{
+    D3DXVECTOR3   m_oldPosition;
+    LARGE_INTEGER m_updated;
+    LARGE_INTEGER m_frequency;
+
+public:
+    void SetPosition(const D3DXVECTOR3& position)
+    {
+        m_position = position;
+    }
+
+    void UpdateVelocity()
+    {
+        LARGE_INTEGER time;
+        QueryPerformanceCounter(&time);
+
+        D3DXVECTOR3 dx = m_position - m_oldPosition;
+        float       dt = (float)(time.QuadPart - m_updated.QuadPart) / (float)m_frequency.QuadPart;
+        m_velocity = dx / dt;
+
+        m_oldPosition = m_position;
+        m_updated     = time;
+    }
+
+    MouseCursor() : Object3D(NULL, D3DXVECTOR3(0,0,0))
+    {
+        QueryPerformanceFrequency(&m_frequency);
+        // Seed m_updated so the first UpdateVelocity() dt is a real
+        // frame delta, not (now - garbage) → bogus first-frame velocity.
+        QueryPerformanceCounter(&m_updated);
+        m_oldPosition = D3DXVECTOR3(0,0,0);
+    }
+};
+
+// Calculates the 3D position of the intersection of the cursor with Z = 0.
+// Unproject the screen-space (x, y) at two depths (near + far) to get a
+// world-space ray, then intersect with the z=0 plane. Used by:
+//   - the host's ViewportWndProc (WM_MOUSEMOVE / WM_KEYDOWN VK_SHIFT).
+//
+// In this architecture, the engine renders into
+// a SCENE sub-rect of the popup HWND and m_projection is built at
+// scene-rect aspect (per-pixel FoV referenced to scene-H, see
+// src/engine.cpp:1540 SetSceneViewport). But Engine::Render restores the
+// D3D9 device viewport to FULL-RT before returning (src/engine.cpp:687-
+// 699), so reading the device viewport here produces a viewport /
+// projection mismatch — D3DXVec3Unproject normalises (x - 0) / RT_W to
+// NDC and feeds it into a projection that expected (x - sceneX) /
+// sceneW. The world ray lands at the wrong NDC point, off by the
+// scene-rect offset. Symptom: cursor-bound particles spawn visibly
+// offset from the click point.
+//
+// Fix: when the engine reports an active scene viewport, build a
+// D3DVIEWPORT9 from that rect and pass it to D3DXVec3Unproject. The
+// function subtracts viewport.X / viewport.Y internally so the input
+// (x, y) stays in popup-client coords — no caller-side translate.
+// The legacy popup path never activates the scene viewport
+// (LayoutBroker's SetSceneViewport call is composition-only), so
+// GetSceneViewport returns false and the device-viewport fallback runs
+// unchanged.
+inline void GetCursorPos3D(Engine* engine, short x, short y, D3DXVECTOR3& position)
+{
+    // Use the engine's shared screen->world ray (the same one the
+    // manipulator pick uses) so the cursor and the gizmo can never drift apart.
+    // BuildCursorRay carries the scene-viewport aspect fix documented above.
+    D3DXVECTOR3 origin, dir;
+    engine->BuildCursorRay(x, y, origin, dir);
+
+    D3DXVECTOR3 second = origin + dir;
+    D3DXPLANE   plane(0, 0, 1, 0);
+    D3DXPlaneIntersectLine(&position, &plane, &origin, &second);
+}
+
+#endif // MOUSECURSOR_H

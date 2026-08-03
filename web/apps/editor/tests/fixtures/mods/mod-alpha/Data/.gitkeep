@@ -1,0 +1,2 @@
+# Fixture mod layer for tests/mod-stack.spec.ts — an empty-but-present mod dir
+# is a valid layer (SetLayerStack keeps any path passing PathIsDirectory).

@@ -1,0 +1,11 @@
+- dialog "Recover unsaved changes?":
+  - heading "Recover unsaved changes?" [level=2]
+  - button "Close"
+  - paragraph: Unsaved changes from a previous session were found.
+  - paragraph: "Original: fire.alo"
+  - list:
+    - listitem: Most recent autosave — 45 seconds ago
+    - listitem: Stable backup — 8 minutes ago
+  - button "Discard"
+  - button "Restore stable"
+  - button "Restore recent"

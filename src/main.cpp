@@ -1,20 +1,49 @@
 #define _WIN32_WINNT 0x0501
+// Pull comctl32 v6 declarations (TVN_ITEMCHANGED / NMTVITEMCHANGE) — needed
+// for the checkbox-tree cascade.
+#define _WIN32_IE 0x0600
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <memory>
 #include <string>
 #include <algorithm>
 #include <cfloat>
 #include <sstream>
 #include <queue>
+#include <set>
+#include <cstdlib>     // _set_abort_behavior (headless --capture: no abort dialog)
+#include <crtdbg.h>    // _CrtSetReportMode/File (route Debug asserts to stderr)
+#include <exception>   // std::set_terminate (log unhandled exceptions headlessly)
+#include <cstdio>      // [shader-gate] headless diagnostic logging (stdout)
+#include <cstdarg>     // [shader-gate] va_list for ShaderLog
 
 #include "exceptions.h"
-#include "UI/UI.h"
+#include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read size caps, #415)
+#include "UI/TexturePalette.h"
+#include "SpawnerDriver.h"
+#include "UndoStack.h"
+#include "LinkGroup.h"
+#include "Autosave.h"
 #include "utils.h"
+#include "AssetPathSafety.h"
 #include "engine.h"
+#include "ParticleSystem.h"
 #include "ParticleSystemInstance.h"
 #include "Rescale.h"
+#include "ParticleSystemIO.h"
+#include "ModManager.h"
 #include "resource.h"
+
+// the WebView2 + D3D9 host declared here is the ONLY UI — WinMain runs
+// it unconditionally (the `--legacy` / `--legacy-ui` / `--new-ui` flags are
+// gone; an unknown flag is ignored). The host requires Windows 10+ (DPI
+// awareness v2, WebView2) and is x64-only (the only platform the build
+// exposes).
+#include "host/Run.h"
+#include "host/CaptureGoldenProfile.h"
+#include "host/WindowCapture.h"
+#include "host/WebViewModalPolicy.h"  // IsFullyInteractiveSession — gate the pre-host data-path picker
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -22,63 +51,35 @@
 #include <commdlg.h>
 using namespace std;
 
-static const int VERSION_MAJOR = 1;
-static const int VERSION_MINOR = 5;
+// Application version — single source of truth (also drives the binary's
+// VS_VERSION_INFO in ParticleEditor.rc and the React About via vite.config.ts).
+#include "version.h"
 
-// Show up to this amount of files in the File menu
-static const int NUM_HISTORY_ITEMS = 9;
-
-static const int N_TRACKS          = 7;
-static const int MIN_WINDOW_WIDTH  = 860;
-static const int MIN_WINDOW_HEIGHT = 750;
-
-//
-// A class to measure the FPS
-//
-class FPSMeasurer
+// [shader-gate] Headless diagnostic logger (stdout-flushed + debugger). Defined here so both
+// TextureManager and ShaderManager can use it; HostWindowImpl::Log is not reachable from here.
+static void ShaderLog(const char* fmt, ...)
 {
-    static const int MAX_FRAMES = 32;
+	char buf[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	_vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, ap);
+	va_end(ap);
+	OutputDebugStringA(buf);
+	fputs(buf, stdout);
+	fflush(stdout);
+}
 
-    float  m_frames[MAX_FRAMES];
-    size_t m_iFrame;
-    size_t m_nFrames;
-    size_t m_lastFrame;
-    size_t m_firstFrame;
-
-public:
-    float getFPS()
-    {
-        if (m_nFrames > 0)
-        {
-            float diff = (m_frames[m_lastFrame] - m_frames[m_firstFrame]);
-            if (diff > 0.0f)
-            {
-                return m_nFrames / diff;
-            }
-        }
-        return 0.0f;
-    }
-
-    void measure()
-    {
-        m_lastFrame = m_iFrame;
-        m_frames[m_iFrame] = GetTickCount() / 1000.0f;
-        m_nFrames   = min(m_nFrames + 1, MAX_FRAMES);
-        m_iFrame    = (m_iFrame + 1) % MAX_FRAMES;
-        if (m_iFrame == m_firstFrame)
-        {
-            m_firstFrame = (m_firstFrame + 1) % MAX_FRAMES;
-        }
-    }
-
-    FPSMeasurer()
-    {
-        m_firstFrame = 0;
-        m_lastFrame  = 0;
-        m_iFrame     = 0;
-        m_nFrames    = 0;
-    }
-};
+// [shader-gate] Gate for the *verbose* per-asset diagnostics (every getTexture /
+// getShader fetch, successful texture loads). Behind the ALO_SHADER_DIAG env var
+// (matches the repo's ALO_* test hooks) so normal interactive use stays silent.
+// Genuine failures (load/compile FAILED) call ShaderLog unconditionally and keep
+// surfacing regardless of this gate.
+static bool ShaderDiagEnabled()
+{
+	static int s_diag = -1;
+	if (s_diag < 0) { char b[8]; s_diag = (GetEnvironmentVariableA("ALO_SHADER_DIAG", b, sizeof(b)) > 0) ? 1 : 0; }
+	return s_diag != 0;
+}
 
 class TextureManager : public ITextureManager
 {
@@ -89,18 +90,23 @@ class TextureManager : public ITextureManager
 	IFileManager*		fileManager;
 	IDirect3DTexture9*  pDefaultTexture;
 
-	static IDirect3DTexture9* createTexture(IDirect3DDevice9* pDevice, IFile* file)
+	// Takes the decoded bytes by reference rather
+	// than an IFile* — file lifetime + exact-byte reads are handled by
+	// ReadAndRelease at the call sites.
+	static IDirect3DTexture9* createTexture(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
 	{
 		IDirect3DTexture9* pTexture = NULL;
-		unsigned long size = file->size();
-		char* data = new char[ size ];
-		file->read( (void*)data, size );
-		if (D3DXCreateTextureFromFileInMemory( pDevice, (void*)data, size, &pTexture ) != D3D_OK)
+		HRESULT thr = D3DXCreateTextureFromFileInMemory( pDevice, bytes.data(), (unsigned long)bytes.size(), &pTexture );
+		if (thr != D3D_OK)
 		{
-            delete[] data;
+			ShaderLog("[tex-gate] D3DXCreateTextureFromFileInMemory FAILED hr=0x%08lx (%u bytes)\n",
+			          (unsigned long)thr, (unsigned)bytes.size());
 			return NULL;
 		}
-		delete[] data;
+		{
+			D3DSURFACE_DESC d; if (ShaderDiagEnabled() && pTexture && SUCCEEDED(pTexture->GetLevelDesc(0, &d)))
+				ShaderLog("[tex-gate] loaded %ux%u fmt=%d\n", d.Width, d.Height, (int)d.Format);
+		}
 		return pTexture;
 	}
 
@@ -118,7 +124,16 @@ class TextureManager : public ITextureManager
 		{
 			return NULL;
 		}
-		return createTexture(pDevice, file);
+		// ReadAndRelease consumes the IFile* reference
+		// (which the previous code leaked) and enforces exact-byte reads.
+		try
+		{
+			return createTexture(pDevice, ReadAndReleaseCapped(file, kMaxTextureAssetBytes));
+		}
+		catch (ReadException&)
+		{
+			return NULL;
+		}
 	}
 
 public:
@@ -126,15 +141,42 @@ public:
 	{
 		size_t pos;
 		transform(filename.begin(), filename.end(), filename.begin(), toupper);
-		
+		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
+		if (ShaderDiagEnabled()) ShaderLog("[tex-gate] getTexture(%s)\n", filename.c_str());
+
+		// Cache lookup FIRST. The cache is consulted inside load() below, but
+		// the direct "file exists as specified" path never reaches load() when
+		// it succeeds — so a repeat call for a texture that resolves at its
+		// literal path re-read it from disk AND leaked the result: the tail's
+		// textures.insert() silently no-ops on the existing key (std::map does
+		// not overwrite), leaving the map holding the OLD texture while the
+		// unconditional AddRef stranded the NEW one at refcount 1, referenced by
+		// nothing (2026-07 audit, A-OWN-002).
+		//
+		// +1 to the caller matches what every other return path hands back.
+		{
+			TextureMap::iterator cached = textures.find(filename);
+			if (cached != textures.end())
+			{
+				cached->second->AddRef();
+				return cached->second;
+			}
+		}
+
 		IDirect3DTexture9* pTexture = NULL;
 
 		// See if the file exists as specified
 		try
 		{
 			IFile* file = new PhysicalFile(AnsiToWide(filename));
-			pTexture = createTexture(pDevice, file);
-			delete file;
+			// ReadAndRelease handles exact-byte
+			// reads and the IFile Release (was `delete file;` which
+			// violated the refcounted IFile abstraction).
+			try
+			{
+				pTexture = createTexture(pDevice, ReadAndReleaseCapped(file, kMaxTextureAssetBytes));
+			}
+			catch (ReadException&) {}
 		}
 		catch (FileNotFoundException&)
 		{
@@ -185,6 +227,27 @@ public:
 		return pTexture;
 	}
 
+	void Clear()
+	{
+		for (TextureMap::iterator p = textures.begin(); p != textures.end(); p++)
+		{
+			SAFE_RELEASE(p->second);
+		}
+		textures.clear();
+	}
+
+	// Drop every cached resource (including the missing-
+	// texture placeholder) for the device-reset path. Under D3D9Ex,
+	// D3DXCreateTextureFromFileInMemory and D3DXCreateTextureFromResource
+	// silently use D3DPOOL_DEFAULT — those handles are stale after
+	// IDirect3DDevice9::Reset, so all of them must go. getTexture()
+	// lazy-reloads on next call.
+	void OnLostDevice() override
+	{
+		Clear();
+		SAFE_RELEASE(pDefaultTexture);
+	}
+
 	TextureManager(IFileManager* fileManager, const std::string& basePath)
 	{
 		this->basePath		  = basePath;
@@ -195,10 +258,7 @@ public:
 	~TextureManager()
 	{
 		SAFE_RELEASE(pDefaultTexture);
-		for (TextureMap::iterator p = textures.begin(); p != textures.end(); p++)
-		{
-			SAFE_RELEASE(p->second);
-		}
+		Clear();
 	}
 };
 
@@ -211,18 +271,29 @@ class ShaderManager : public IShaderManager
 	IFileManager* fileManager;
 	Effect*       pDefaultShader;
 
-	static Effect* createShader(IDirect3DDevice9* pDevice, IFile* file)
+	// Takes decoded bytes by reference rather than
+	// an IFile* (file lifetime + exact-byte reads handled by
+	// ReadAndRelease at call sites).
+	static Effect* createShader(IDirect3DDevice9* pDevice, const std::vector<unsigned char>& bytes)
 	{
 		ID3DXEffect* pShader = NULL;
-		unsigned long size = file->size();
-		char* data = new char[ size ];
-		file->read( (void*)data, size );
-		if (FAILED(D3DXCreateEffect( pDevice, (void*)data, size, NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pShader, NULL )))
+		ID3DXBuffer* pErrors = NULL;
+		// [shader-gate] capture + surface D3DX compile errors (was swallowed: last arg NULL).
+		if (FAILED(D3DXCreateEffect( pDevice, bytes.data(), (unsigned long)bytes.size(), NULL, NULL, D3DXFX_NOT_CLONEABLE, NULL, &pShader, &pErrors )))
 		{
-            delete[] data;
+			if (pErrors != NULL)
+			{
+				ShaderLog("[shader-gate] D3DXCreateEffect FAILED: %.*s\n",
+				          (int)pErrors->GetBufferSize(), (const char*)pErrors->GetBufferPointer());
+				pErrors->Release();
+			}
+			else
+			{
+				ShaderLog("[shader-gate] D3DXCreateEffect FAILED (no error text)\n");
+			}
 			return NULL;
 		}
-		delete[] data;
+		if (pErrors != NULL) pErrors->Release();
         
         D3DXHANDLE technique;
         pShader->FindNextValidTechnique(NULL, &technique);
@@ -247,7 +318,16 @@ class ShaderManager : public IShaderManager
 		{
 			return NULL;
 		}
-		return createShader(pDevice, file);
+		// ReadAndRelease consumes the IFile* reference
+		// (was leaked) and enforces exact-byte reads.
+		try
+		{
+			return createShader(pDevice, ReadAndReleaseCapped(file, kMaxShaderAssetBytes));
+		}
+		catch (ReadException&)
+		{
+			return NULL;
+		}
 	}
 
 public:
@@ -255,14 +335,37 @@ public:
 	{
 		size_t pos;
 		transform(filename.begin(), filename.end(), filename.begin(), toupper);
+		filename = SanitizeAssetName(filename);   // F-PATH: strip absolute/UNC/.. before any CreateFile
+		if (ShaderDiagEnabled()) ShaderLog("[shader-gate] getShader(%s)\n", filename.c_str());
+
+		// Cache lookup FIRST — identical shape to getTexture above, and the same
+		// defect: the direct "file exists as specified" path below short-circuits
+		// before load() (which owns the lookup) is ever reached, so a repeat call
+		// recompiled the effect from disk and then stranded it at refcount 1 when
+		// shaders.insert() no-oped on the existing key (audit A-OWN-002).
+		{
+			ShaderMap::iterator cached = shaders.find(filename);
+			if (cached != shaders.end())
+			{
+				cached->second->AddRef();
+				return cached->second;
+			}
+		}
+
 		Effect* pShader = NULL;
 
 		// See if the file exists as specified
 		try
 		{
 			IFile* file = new PhysicalFile(AnsiToWide(filename));
-			pShader = createShader(pDevice, file);
-			delete file;
+			// ReadAndRelease handles exact-byte
+			// reads and the IFile Release (was `delete file;` which
+			// violated the refcounted IFile abstraction).
+			try
+			{
+				pShader = createShader(pDevice, ReadAndReleaseCapped(file, kMaxShaderAssetBytes));
+			}
+			catch (ReadException&) {}
 		}
 		catch (FileNotFoundException&)
 		{
@@ -318,6 +421,37 @@ public:
 		return pShader;
 	}
 
+	void Clear()
+	{
+		for (ShaderMap::iterator p = shaders.begin(); p != shaders.end(); p++)
+		{
+			SAFE_RELEASE(p->second);
+		}
+		shaders.clear();
+	}
+
+	void OnLostDevice() override
+	{
+		std::set<Effect*> unique;
+		if (pDefaultShader != NULL) unique.insert(pDefaultShader);
+		for (const auto& entry : shaders)
+		{
+			if (entry.second != NULL) unique.insert(entry.second);
+		}
+		for (Effect* effect : unique) effect->OnLostDevice();
+	}
+
+	void OnResetDevice() override
+	{
+		std::set<Effect*> unique;
+		if (pDefaultShader != NULL) unique.insert(pDefaultShader);
+		for (const auto& entry : shaders)
+		{
+			if (entry.second != NULL) unique.insert(entry.second);
+		}
+		for (Effect* effect : unique) effect->OnResetDevice();
+	}
+
 	ShaderManager(IFileManager* fileManager, const std::string& basePath)
 	{
 		this->basePath		 = basePath;
@@ -328,1255 +462,241 @@ public:
 	~ShaderManager()
 	{
 		SAFE_RELEASE(pDefaultShader);
-		for (ShaderMap::iterator p = shaders.begin(); p != shaders.end(); p++)
-		{
-			SAFE_RELEASE(p->second);
-		}
+		Clear();
 	}
 };
 
-class MouseCursor : public Object3D
+// MouseCursor + GetCursorPos3D were factored out to src/MouseCursor.h so
+// the --new-ui host can reuse them. The header is included alongside
+// ParticleSystemInstance.h above (line 23 brings in engine.h transitively;
+// MouseCursor.h re-includes engine.h with its own guard).
+#include "MouseCursor.h"
+
+
+// Emitter duplicate-name helper (relocated here when the old EmitterList.cpp
+// was removed). Returns "<base>_<n>" where <n> is one more than the
+// highest numeric suffix already in use among emitters in `system` whose name
+// matches `<base>` or `<base>_<digits>`. If `sourceName` itself ends in
+// `_<digits>` that suffix is stripped first, so duplicating "Foo_3" repeatedly
+// yields Foo_4, Foo_5 rather than Foo_3_1, Foo_3_1_1. An emitter named exactly
+// `<base>` counts as n=0 for the purpose of picking the next free slot. Used by
+// the host's BridgeDispatcher (duplicate / import emitter paths).
+std::string GenerateDuplicateName(const ParticleSystem* system, const std::string& sourceName)
 {
-    D3DXVECTOR3   m_oldPosition;
-    LARGE_INTEGER m_updated;
-    LARGE_INTEGER m_frequency;
-
-public:
-	void SetPosition(const D3DXVECTOR3& position)
-	{
-	    m_position = position;
-    }
-
-  	void UpdateVelocity()
-    {
-        LARGE_INTEGER time;
-        QueryPerformanceCounter(&time);
-
-        D3DXVECTOR3 dx = m_position - m_oldPosition;
-        float       dt = (float)(time.QuadPart - m_updated.QuadPart) / (float)m_frequency.QuadPart;
-        m_velocity = dx / dt;
-
-        m_oldPosition = m_position;
-        m_updated     = time;
-    }
-
-    MouseCursor() : Object3D(NULL, D3DXVECTOR3(0,0,0))
-	{
-        QueryPerformanceFrequency(&m_frequency);
-        m_oldPosition = D3DXVECTOR3(0,0,0);
-	}
-};
-
-static INT_PTR CALLBACK AboutProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    switch (uMsg)
-    {
-        case WM_INITDIALOG:
+    auto trailingDigitCount = [](const std::string& s, size_t startAfter) -> size_t {
+        size_t n = 0;
+        for (size_t i = startAfter; i < s.size(); ++i)
         {
-            HWND hVersion = GetDlgItem(hWnd, IDC_VERSION);
-            wstring text = GetWindowStr(hVersion);
-            text = FormatString(text.c_str(), VERSION_MAJOR, VERSION_MINOR);
-            SetWindowText(hVersion, text.c_str());
-            
-            HWND hBuildDate = GetDlgItem(hWnd, IDC_BUILDDATE);
-            text = GetWindowStr(hBuildDate);
-            const char* s = __DATE__;
-            text = FormatString(text.c_str(), s);
-            SetWindowText(hBuildDate, text.c_str());
-
-            wstring copyright = LoadString(IDS_EXPAT_COPYRIGHT);
-            SetWindowText(GetDlgItem(hWnd, IDC_EXPAT_COPYRIGHT), copyright.c_str());
-
-            wstring disclaimer = LoadString(IDS_DISCLAIMER);
-            SetWindowText(GetDlgItem(hWnd, IDC_DISCLAIMER), disclaimer.c_str());
-
-            return TRUE;
+            if (!isdigit((unsigned char)s[i])) return 0;
+            ++n;
         }
+        return n;
+    };
 
-        case WM_COMMAND:
-		{
-			WORD code = HIWORD(wParam);
-			WORD id   = LOWORD(wParam);
-			if (code == BN_CLICKED && id == IDOK || id == IDCANCEL)
-			{
-                EndDialog(hWnd, 0);
-            }
-            break;
-        }
-    }
-    return FALSE;
-}
-
-void ShowAboutDialog(HWND hWndParent)
-{
-    DialogBox(NULL, MAKEINTRESOURCE(IDD_ABOUT), hWndParent, AboutProc);
-}
-
-struct APPLICATION_INFO
-{
-	HINSTANCE hInstance;
-	HWND      hMainWnd;
-	HWND      hRenderWnd;
-	bool	  isMinimized;
-
-	map<ULONGLONG, wstring> history;
-
-    HWND      hLeaveParticles;
-    HWND      hBackgroundLabel;
-    HWND      hBackgroundBtn;
-    HWND      hEmitterList;
-	HWND      hPropertyTabs;
-	HWND      hRebar;
-	HWND	  hToolbar;
-	HWND	  hStatusBar;
-	HWND	  hTrackTabs;
-	HWND      hTrackEditors[N_TRACKS];
-
-	Engine*         engine;
-	MouseCursor		mouseCursor;
-
-	ParticleSystem*			 particleSystem;
-    ParticleSystem::Emitter* selectedEmitter;
-	ParticleSystemInstance*  attachedParticleSystem;
-
-	wstring   filename;
-	bool      changed;
-
-	// Dragging
-	enum { NONE, ROTATE, MOVE, ZOOM, OBJECT_Z } dragmode;
-	long			xstart;
-	long			ystart;
-	Engine::Camera	startCam;
-	bool            dragged;
-    D3DXVECTOR3     dragStartPosition;
-};
-
-static void GetHistory(map<ULONGLONG, wstring>& history)
-{
-	history.clear();
-
-	HKEY hKey;
-	if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ | KEY_WRITE, &hKey) == ERROR_SUCCESS)
-	{
-		LONG error;
-		for (int i = 0;; i++)
-		{
-			TCHAR  name[256] = {'\0'};
-			DWORD length = 255;
-			DWORD type, size;
-			if ((error = RegEnumValue(hKey, i, name, &length, NULL, &type, NULL, &size)) != ERROR_SUCCESS)
-			{
-				break;
-			}
-
-			if (type == REG_BINARY && size == sizeof(FILETIME))
-			{
-				FILETIME filetime;
-				if (RegQueryValueEx(hKey, name, NULL, &type, (BYTE*)&filetime, &size) != ERROR_SUCCESS)
-				{
-					break;
-				}
-				ULARGE_INTEGER largeint;
-				largeint.LowPart  = filetime.dwLowDateTime;
-				largeint.HighPart = filetime.dwHighDateTime;
-				history.insert(make_pair(largeint.QuadPart, name));
-			}
-		}
-
-		if (error == ERROR_NO_MORE_ITEMS)
-		{
-			// Graceful loop end, now delete everything older than the X-th oldest item
-			map<ULONGLONG,wstring>::const_reverse_iterator p = history.rbegin();
-			for (int j = 0; p != history.rend() && j < NUM_HISTORY_ITEMS; p++, j++);
-
-			// Now start deleting
-			for (; p != history.rend(); p++)
-			{
-				RegDeleteValue(hKey, p->second.c_str());
-			}
-		}
-
-		RegCloseKey(hKey);
-	}
-}
-
-// Adds the Alo Viewer history to the file menu
-static bool AppendHistory(APPLICATION_INFO* info, HWND hWnd)
-{
-	// Get the history (timestamp, filename pairs)
-	GetHistory(info->history);
-
-	HMENU hMenu = GetMenu(hWnd);
-	hMenu = GetSubMenu(hMenu, 0);
-
-	MENUITEMINFO mii;
-	mii.cbSize = sizeof(MENUITEMINFO);
-	mii.fMask  = MIIM_TYPE;
-	mii.cch    = 0;
-
-	// Find the first seperator
-	int i = 0;
-	do {
-		if (!GetMenuItemInfo(hMenu, i++, true, &mii))
-		{
-			return false;
-		}
-	} while (mii.fType != MFT_SEPARATOR);
-
-	// Delete everything after it until only Exit's left
-	mii.fMask = MIIM_ID;
-	while (GetMenuItemInfo(hMenu, i, true, &mii) && mii.wID != ID_FILE_EXIT)
-	{
-		DeleteMenu(hMenu, i, MF_BYPOSITION);
-	}
-
-	if (!info->history.empty())
-	{
-		int j = 0;
-		for (map<ULONGLONG,wstring>::const_reverse_iterator p = info->history.rbegin(); p != info->history.rend() && j < NUM_HISTORY_ITEMS; p++, i++, j++)
-		{
-			wstring name = p->second.c_str();
-
-			HDC hDC = GetDC(info->hMainWnd);
-			SelectObject(hDC, GetStockObject(DEFAULT_GUI_FONT));
-			PathCompactPath(hDC, (LPTSTR)name.c_str(), 400);
-			ReleaseDC(info->hMainWnd, hDC);
-
-			if (j < 9)
-			{
-				name = wstring(L"&") + (TCHAR)(L'1' + j) + L" " + name;
-			}
-			InsertMenu(hMenu, i, MF_BYPOSITION | MF_STRING, ID_FILE_HISTORY_0 + j, name.c_str());
-		}
-
-		// Finally, add the seperator
-		InsertMenu(hMenu, i, MF_BYPOSITION | MF_SEPARATOR, 0, 0);
-	}
-	return true;
-}
-
-// Adds this filename to the history
-static void AddToHistory(const wstring& name)
-{
-	// Get the current date & time
-	FILETIME   filetime;
-	SYSTEMTIME systime;
-	GetSystemTime(&systime);
-	SystemTimeToFileTime(&systime, &filetime);
-
-	HKEY hKey;
-	if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_READ | KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
-	{
-		RegSetValueEx(hKey, name.c_str(), 0, REG_BINARY, (BYTE*)&filetime, sizeof(FILETIME));
-		RegCloseKey(hKey);
-	}
-}
-
-static void SetEmitterInfo(APPLICATION_INFO* info)
-{
-	bool show = (info->particleSystem != NULL && info->selectedEmitter != NULL);
-
-    if (show)
+    std::string base = sourceName;
+    size_t underscore = base.rfind('_');
+    if (underscore != std::string::npos && trailingDigitCount(base, underscore + 1) > 0)
     {
-        EmitterProps_SetEmitter(info->hPropertyTabs, info->selectedEmitter);
-	    for (int i = 0; i < ParticleSystem::NUM_TRACKS; i++)
-	    {
-            TrackEditor_SetTrack(info->hTrackEditors[i], info->selectedEmitter->trackContents, info->selectedEmitter->tracks);
-	    }
-
-        TrackEditor_EnableTrack(info->hTrackEditors[ParticleSystem::TRACK_ROTATION_SPEED], !info->selectedEmitter->randomRotation);
+        base.resize(underscore);
     }
 
-	ShowWindow(info->hPropertyTabs, show ? SW_SHOW : SW_HIDE);
-	ShowWindow(info->hTrackTabs,    show ? SW_SHOW : SW_HIDE);
-	for (int i = 0; i < N_TRACKS; i++)
-	{
-		ShowWindow(info->hTrackEditors[i], (show && TabCtrl_GetCurSel(info->hTrackTabs) == i) ? SW_SHOW : SW_HIDE);
-	}
-}
-
-static void SetFileChanged(APPLICATION_INFO* info, bool changed)
-{
-    info->changed = changed;
-
-	// Load the proper name in the title bar
-	wstring name = GetWindowStr(info->hMainWnd);
-	size_t pos = name.find_first_of('-');
-	if (pos != wstring::npos)
-	{
-		name = name.substr(0, pos - 1);
-	}
-
-	if (system != NULL)
-	{
-		name += L" - [" + (info->filename == L"" ? LoadString(IDS_TITLE_NEW_FILE) : info->filename);
-		if (info->changed)
-		{
-			name += L"*";
-		}
-		name += L"]";
-	}
-	SetWindowText(info->hMainWnd, name.c_str());
-}
-
-static void OnFileChange(APPLICATION_INFO* info, ParticleSystem* system)
-{
-    SetFileChanged(info, false);
-    
-    // Update the emitter list
-    EmitterList_SetParticleSystem(info->hEmitterList, system);
-
-    // Set the emitter property panel
-    info->particleSystem = system;
-
-    if (info->particleSystem != NULL)
+    int maxN = 0;
+    const std::vector<ParticleSystem::Emitter*>& emitters = system->getEmitters();
+    for (size_t i = 0; i < emitters.size(); ++i)
     {
-        // Set the global particle system info
-        SendMessage(info->hLeaveParticles, BM_SETCHECK, info->particleSystem->getLeaveParticles() ? BST_CHECKED : BST_UNCHECKED, 0);
-    }
-
-    // Set the selected emitter info
-    SetEmitterInfo(info);
-}
-
-static bool LoadFile(APPLICATION_INFO* info, const wstring& filename)
-{
-	// Delete old particle system
-	if (info->engine != NULL)
-	{
-		info->engine->Clear();
-	}
-	delete info->particleSystem;
-	info->particleSystem = NULL;
-
-	PhysicalFile* file = new PhysicalFile(filename);
-    ParticleSystem* system = NULL;
-	try
-	{
-		system = new ParticleSystem(file);
-		info->filename = filename;
-		file->Release();
-	}
-	catch (wexception& e)
-	{
-        system = NULL;
-		file->Release();
-		MessageBox(info->hMainWnd, LoadString(IDS_ERROR_FILE_OPEN, e.what()).c_str(), NULL, MB_OK | MB_ICONERROR );
-	}
-
-    if (system != NULL)
-    {
-	    // Add it to the history
-        AddToHistory(info->filename);
-        AppendHistory(info, info->hMainWnd);
-    }
-
-    OnFileChange(info, system);
-	return (system != NULL);
-}
-
-static void OpenHistoryFile(APPLICATION_INFO* info, int idx)
-{
-	// Find the correct entry
-	map<ULONGLONG, wstring>::const_reverse_iterator p = info->history.rbegin();
-	for (int j = 0; p != info->history.rend() && idx > 0; idx--, p++);
-	if (p != info->history.rend())
-	{
-		LoadFile(info, p->second);
-	}
-}
-
-static void DoNewFile(APPLICATION_INFO* info)
-{
-	info->particleSystem  = NULL;
-	info->selectedEmitter = NULL;
-    ParticleSystem* system = new ParticleSystem();
-    system->addRootEmitter();
-    OnFileChange(info, system);
-}
-
-static bool DoOpenFile(APPLICATION_INFO* info)
-{
-	// Query for the  file
-	TCHAR filename[MAX_PATH];
-	filename[0] = L'\0';
-
-    wstring filter = LoadString(IDS_FILES_ALO) + wstring(L" (*.alo)\0*.ALO\0", 15)
-                   + LoadString(IDS_FILES_ALL) + wstring(L" (*.*)\0*.*\0", 11);
-
-	OPENFILENAME ofn;
-	memset(&ofn, 0, sizeof(OPENFILENAME));
-	ofn.lStructSize  = sizeof(OPENFILENAME);
-	ofn.hwndOwner    = info->hMainWnd;
-	ofn.hInstance    = info->hInstance;
-    ofn.lpstrFilter  = filter.c_str();
-	ofn.nFilterIndex = 1;
-	ofn.lpstrFile    = filename;
-	ofn.nMaxFile     = MAX_PATH;
-	ofn.Flags        = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
-	if (GetOpenFileName(&ofn) == 0)
-	{
-		return false;
-	}
-
-    return LoadFile(info, filename);
-}
-
-static bool DoSaveFile(APPLICATION_INFO* info, bool saveas = false)
-{
-	if (info->filename == L"")
-	{
-		saveas = true;
-	}
-
-	if (saveas)
-	{
-		// Query for the filename
-		TCHAR filename[MAX_PATH];
-		filename[0] = L'\0';
-
-        wstring filter = LoadString(IDS_FILES_ALO) + wstring(L" (*.alo)\0*.ALO\0", 15)
-                       + LoadString(IDS_FILES_ALL) + wstring(L" (*.*)\0*.*\0", 11);
-
-        OPENFILENAME ofn;
-		memset(&ofn, 0, sizeof(OPENFILENAME));
-		ofn.lStructSize  = sizeof(OPENFILENAME);
-		ofn.hwndOwner    = info->hMainWnd;
-		ofn.hInstance    = info->hInstance;
-        ofn.lpstrFilter  = filter.c_str();
-        ofn.lpstrDefExt  = L"alo";
-		ofn.nFilterIndex = 1;
-		ofn.lpstrFile    = filename;
-		ofn.nMaxFile     = MAX_PATH;
-		ofn.Flags        = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
-		if (GetSaveFileName( &ofn ) == 0)
-		{
-			return false;
-		}
-		info->filename = filename;
-	}
-
-	PhysicalFile* file = new PhysicalFile(info->filename, PhysicalFile::WRITE);
-	try
-	{
-		// Create particleSystem name from filename
-		wstring name = info->filename;
-
-		size_t pos = name.find_last_of('\\');
-		if (pos != wstring::npos) name = name.substr(pos + 1);
-		pos = name.find_last_of('.');
-		if (pos != wstring::npos) name = name.substr(0, pos);
-		transform(name.begin(), name.end(), name.begin(), tolower);
-
-		info->particleSystem->setName(WideToAnsi(name,"_"));
-		info->particleSystem->write(file);
-		file->Release();
-	}
-	catch (wexception& e)
-	{
-		file->Release();
-		MessageBox(info->hMainWnd, LoadString(IDS_ERROR_FILE_SAVE, e.what()).c_str(), NULL, MB_OK | MB_ICONERROR );
-	}
-    SetFileChanged(info, false);
-	return true;
-}
-
-static bool DoCheckChanges(APPLICATION_INFO* info)
-{
-	if (info->particleSystem != NULL)
-	{
-		if (info->changed)
-		{
-			switch (MessageBox(info->hMainWnd, LoadString(IDS_QUERY_SAVE_CHANGES).c_str(), LoadString(IDS_WARNING).c_str(), MB_YESNOCANCEL | MB_ICONQUESTION))
-			{
-				case IDYES:    return DoSaveFile(info);
-				case IDCANCEL: return false;
-			}
-		}
-	}
-	return true;
-}
-
-static bool DoCloseFile(APPLICATION_INFO* info)
-{
-	if (info->particleSystem != NULL)
-	{
-		if (!DoCheckChanges(info))
-		{
-			return false;
-		}
-
-        if (info->engine != NULL)
+        const std::string& name = emitters[i]->name;
+        if (name == base) continue;  // n=0; maxN already starts there
+        if (name.size() > base.size() + 1 &&
+            name.compare(0, base.size(), base) == 0 &&
+            name[base.size()] == '_' &&
+            trailingDigitCount(name, base.size() + 1) > 0)
         {
-		    info->engine->Clear();
+            int n = atoi(name.c_str() + base.size() + 1);
+            if (n > maxN) maxN = n;
         }
-		delete info->particleSystem;
-		info->particleSystem         = NULL;
-		info->attachedParticleSystem = NULL;
-	}
-	info->filename   = L"";
-	info->selectedEmitter = NULL;
-    OnFileChange(info, NULL);
-	return true;
-}
-
-static void DoMenuInit(HMENU hMenu, APPLICATION_INFO* info)
-{
-    EnableMenuItem(hMenu, ID_EDIT_CLEARALLPARTICLES, MF_BYCOMMAND | (info->engine == NULL || info->engine->GetNumInstances() > 0 ? MF_ENABLED : MF_GRAYED ));
-
-    EnableMenuItem(hMenu, ID_NEW_EMITTER_LIFETIME,      MF_BYCOMMAND | (info->selectedEmitter != NULL && info->selectedEmitter->spawnDuringLife == -1 ? MF_ENABLED : MF_GRAYED ));
-    EnableMenuItem(hMenu, ID_NEW_EMITTER_DEATH,         MF_BYCOMMAND | (info->selectedEmitter != NULL && info->selectedEmitter->spawnOnDeath    == -1 ? MF_ENABLED : MF_GRAYED ));
-    EnableMenuItem(hMenu, ID_EMITTER_RENAME,            MF_BYCOMMAND | (info->selectedEmitter != NULL ? MF_ENABLED : MF_GRAYED ));
-    EnableMenuItem(hMenu, ID_EMITTER_RESCALE,           MF_BYCOMMAND | (info->selectedEmitter != NULL ? MF_ENABLED : MF_GRAYED ));
-    EnableMenuItem(hMenu, ID_TOGGLE_EMITTER_VISIBILITY, MF_BYCOMMAND | (info->selectedEmitter != NULL ? MF_ENABLED : MF_GRAYED ));
-
-    CheckMenuItem (hMenu, ID_VIEW_SHOWGROUND, MF_BYCOMMAND | (info->engine != NULL && info->engine->GetGround()     ? MF_CHECKED : MF_UNCHECKED));
-    CheckMenuItem (hMenu, ID_VIEW_DEBUGHEAT,  MF_BYCOMMAND | (info->engine != NULL && info->engine->GetHeatDebug()  ? MF_CHECKED : MF_UNCHECKED));
-}
-
-static bool DoMenuItem(APPLICATION_INFO* info, UINT id)
-{
-	switch (id)
-	{
-		case ID_FILE_NEW:     if (DoCloseFile   (info)) DoNewFile(info); break;
-		case ID_FILE_OPEN:	  if (DoCheckChanges(info)) DoOpenFile(info); break;
-		case ID_FILE_EXIT:    if (DoCheckChanges(info)) DestroyWindow(info->hMainWnd); break;
-		case ID_FILE_SAVE:    DoSaveFile(info); break;
-		case ID_FILE_SAVE_AS: DoSaveFile(info, true); break;
-
-        case ID_EDIT_COPY:    SendMessage(GetFocus(), WM_COPY,  0, 0); break;
-        case ID_EDIT_CUT:     SendMessage(GetFocus(), WM_CUT,   0, 0); break;
-        case ID_EDIT_PASTE:   SendMessage(GetFocus(), WM_PASTE, 0, 0); break;
-        case ID_EDIT_DELETE:  SendMessage(GetFocus(), WM_CLEAR, 0, 0); break;
-        case ID_EDIT_RESCALE:
-            if (RescaleParticleSystem(info->hMainWnd, info->particleSystem))
-            {
-                SetEmitterInfo(info);
-                SetFileChanged(info, true);
-            }
-            break;
-
-        case ID_EDIT_CLEARALLPARTICLES:
-            if (info->engine != NULL)
-            {
-                info->engine->Clear();
-            }
-            break;
-
-        case ID_NEW_EMITTER_ROOT:          EmitterList_AddRootEmitter(info->hEmitterList); break;
-        case ID_NEW_EMITTER_LIFETIME:      EmitterList_AddLifetimeEmitter(info->hEmitterList); break;
-        case ID_NEW_EMITTER_DEATH:         EmitterList_AddDeathEmitter(info->hEmitterList); break;
-        case ID_EMITTER_RENAME:            EmitterList_RenameEmitter(info->hEmitterList); break;
-        case ID_TOGGLE_EMITTER_VISIBILITY: EmitterList_ToggleEmitterVisibility(info->hEmitterList); break;
-        case ID_SHOW_ALL_EMITTERS:         EmitterList_SetAllEmitterVisibility(info->hEmitterList, true);  break;
-        case ID_HIDE_ALL_EMITTERS:         EmitterList_SetAllEmitterVisibility(info->hEmitterList, false); break;
-        case ID_EMITTERS_RESCALE:
-            if (info->selectedEmitter != NULL)
-            {
-                if (RescaleEmitter(info->hMainWnd, info->selectedEmitter))
-                {
-                    SetEmitterInfo(info);
-                    SetFileChanged(info, true);
-                }
-            }
-            break;
-
-		case ID_VIEW_SHOWGROUND:
-            if (info->engine != NULL)
-            {
-			    info->engine->SetGround(!info->engine->GetGround());
-			    SendMessage(info->hToolbar, TB_CHECKBUTTON, id, MAKELONG(info->engine->GetGround(), 0));
-            }
-			break;
-
-		case ID_VIEW_DEBUGHEAT:
-            if (info->engine != NULL)
-            {
-			    info->engine->SetHeatDebug(!info->engine->GetHeatDebug());
-			    SendMessage(info->hToolbar, TB_CHECKBUTTON, id, MAKELONG(info->engine->GetHeatDebug(), 0));
-            }
-			break;
-
-        case ID_VIEW_RESETCAMERA:
-            if (info->engine != NULL)
-            {
-                Engine::Camera camera = 
-                {
-                    D3DXVECTOR3(0,-250,125),
-                    D3DXVECTOR3(0,0,0),
-                    D3DXVECTOR3(0,0,1)
-                };
-                info->engine->SetCamera(camera);
-            }
-            break;
-
-        case ID_HELP_ABOUT:
-            ShowAboutDialog(info->hMainWnd);
-			break;
-    }
-	return true;
-}
-
-static void Render(APPLICATION_INFO* info)
-{
-    static FPSMeasurer measurer;
-
-	// Update and Render!
-	info->engine->Update();
-    info->engine->Render();
-    measurer.measure();
-
-    const D3DXVECTOR3 cursor = info->mouseCursor.GetPosition();
-    info->mouseCursor.UpdateVelocity();
-
-    // Update status bar
-    SendMessage(info->hStatusBar, SB_SETTEXT, 0, (LPARAM)LoadString(IDS_STATUS_INSTANCES, info->engine->GetNumInstances(), info->engine->GetNumEmitters()).c_str());
-    SendMessage(info->hStatusBar, SB_SETTEXT, 1, (LPARAM)LoadString(IDS_STATUS_PARTICLES, info->engine->GetNumParticles()).c_str());
-    SendMessage(info->hStatusBar, SB_SETTEXT, 2, (LPARAM)LoadString(IDS_STATUS_FPS,       (int)measurer.getFPS()).c_str());
-}
-
-static LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    static int SIDEBAR_WIDTH = 310;
-
-	APPLICATION_INFO* info = (APPLICATION_INFO*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-	switch (uMsg)
-	{
-		case WM_CREATE:
-		{
-			CREATESTRUCT* pcs = (CREATESTRUCT*)lParam;
-			info = (APPLICATION_INFO*)pcs->lpCreateParams;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)info);
-
-			HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-
-			//
-			// Create the emitter list
-			//
-            if ((info->hEmitterList = CreateWindow(L"EmitterList", NULL, WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-				4, 4, SIDEBAR_WIDTH, 200, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
-            {
-                return -1;
-            }
-			SendMessage(info->hEmitterList, WM_SETFONT, (WPARAM)hFont, FALSE);
-
-			//
-			// Create the property tab window
-			//
-			if ((info->hPropertyTabs = CreateWindowEx(WS_EX_CONTROLPARENT, L"EmitterProps", NULL, WS_CHILD | WS_CLIPCHILDREN | WS_VISIBLE | TCS_FOCUSNEVER | WS_TABSTOP,
-				4, 4, SIDEBAR_WIDTH, 514, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
-			{
-				return -1;
-			}
-			SendMessage(info->hPropertyTabs, WM_SETFONT, (WPARAM)hFont, FALSE);
-
-			//
-			// Create the tool bar
-			//
-			if ((info->hToolbar = CreateWindow(TOOLBARCLASSNAME, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | CCS_NORESIZE | CCS_NODIVIDER | TBSTYLE_TOOLTIPS,
-				0, 0, 0, 0, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
-			{
-				return -1;
-			}
-
-			HIMAGELIST hImgList = ImageList_LoadImage(pcs->hInstance, MAKEINTRESOURCE(IDR_TOOLBAR1), 16, 0, RGB(0,128,128), IMAGE_BITMAP, 0);
-			SendMessage(info->hToolbar, TB_SETIMAGELIST, 0, (LPARAM)hImgList);
-
-			TBBUTTON buttons[] = {
-				{0, 0, 0, BTNS_SEP},
-				{0, ID_FILE_NEW,  TBSTATE_ENABLED, BTNS_BUTTON},
-				{1, ID_FILE_OPEN, TBSTATE_ENABLED, BTNS_BUTTON},
-				{2, ID_FILE_SAVE, TBSTATE_ENABLED, BTNS_BUTTON},
-				{0, 0, 0, BTNS_SEP},
-				{3, ID_VIEW_SHOWGROUND, TBSTATE_ENABLED | TBSTATE_CHECKED, BTNS_CHECK},
-				{4, ID_VIEW_DEBUGHEAT,  TBSTATE_ENABLED, BTNS_CHECK},
-			};
-			SendMessage(info->hToolbar, TB_ADDBUTTONS, 7, (LPARAM)&buttons);
-			
-			if ((info->hRebar = CreateWindow(REBARCLASSNAME, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN,
-				0, 0, 0, 0, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
-			{
-				return -1;
-			}
-
-			SIZE size;
-			SendMessage(info->hToolbar, TB_GETMAXSIZE, 0, (LPARAM)&size);
-
-			REBARBANDINFO rbbi;
-			rbbi.cbSize     = sizeof(REBARBANDINFO);
-			rbbi.fMask      = RBBIM_STYLE | RBBIM_CHILD | RBBIM_SIZE | RBBIM_CHILDSIZE;
-			rbbi.fStyle     = RBBS_NOGRIPPER;
-			rbbi.hwndChild  = info->hToolbar;
-			rbbi.cxMinChild = size.cx;
-			rbbi.cyMinChild = size.cy + 2;
-			rbbi.cx         = rbbi.cxMinChild;
-			SendMessage(info->hRebar, RB_INSERTBAND, -1, (LPARAM)&rbbi);
-
-			//
-			// Create the status bar
-			//
-			if ((info->hStatusBar = CreateWindow(STATUSCLASSNAME, NULL, WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP,
-				0, 0, 0, 0, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
-			{
-				return -1;
-			}
-
-            INT widths[] = {140, 230, 280, 475, -1};
-            SendMessage(info->hStatusBar, SB_SETPARTS, 5, (LPARAM)widths);
-            SendMessage(info->hStatusBar, SB_SETTEXT, 4, (LPARAM)LoadString(IDS_STATUS_SHIFT_TO_SPAWN).c_str());
-
-			//
-			// Create the track tab window
-			//
-			if ((info->hTrackTabs = CreateWindowEx(WS_EX_CONTROLPARENT, WC_TABCONTROL, NULL, WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | TCS_FOCUSNEVER, 4, 4, 300, 175, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
-			{
-				return -1;
-			}
-			SendMessage(info->hTrackTabs, WM_SETFONT, (WPARAM)hFont, FALSE);
-
-			const UINT trackLabels[N_TRACKS] = {
-                IDS_LABEL_TRACK_RED, IDS_LABEL_TRACK_GREEN, IDS_LABEL_TRACK_BLUE, IDS_LABEL_TRACK_ALPHA,
-                IDS_LABEL_TRACK_SCALE, IDS_LABEL_TRACK_INDEX, IDS_LABEL_TRACK_RPS};
-
-			for (int i = 0; i < N_TRACKS; i++)
-			{
-                wstring label = LoadString(trackLabels[i]);
-
-				TCITEM item;
-				item.mask    = TCIF_TEXT;
-				item.pszText = (LPWSTR)label.c_str();
-				SendMessage(info->hTrackTabs, TCM_INSERTITEM, i, (LPARAM)&item);
-			}
-
-			//
-			// Create the track editors
-			//
-			for (int i = 0; i < N_TRACKS; i++)
-			{
-				if ((info->hTrackEditors[i] = CreateWindowEx(WS_EX_CONTROLPARENT, L"TrackEditor", NULL, WS_CHILD | WS_CLIPCHILDREN | WS_TABSTOP, 0, 0, 100, 100, info->hTrackTabs, NULL, pcs->hInstance, (LPVOID)(LONG_PTR)i)) == NULL)
-				{
-					return -1;
-				}
-			}
-
-            // Create the background control
-			if ((info->hBackgroundLabel = CreateWindowEx(0, L"STATIC", LoadString(IDS_LABEL_BACKGROUND).c_str(), WS_CHILD | WS_VISIBLE,
-				0, 0, 65, 16, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
-			{
-				return -1;
-			}
-			SendMessage(info->hBackgroundLabel, WM_SETFONT, (WPARAM)hFont, FALSE);
-			
-			if ((info->hBackgroundBtn = CreateWindowEx(0, L"ColorButton", NULL, WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_OWNERDRAW,
-				0, 0, 24, 24, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
-			{
-				return -1;
-			}
-
-            // Create the "leave particles" check box
-            if ((info->hLeaveParticles = CreateWindow(L"BUTTON", LoadString(IDS_LABEL_LEAVE_PARTICLES).c_str(), WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-                0, 0, 300, 16, hWnd, NULL, pcs->hInstance, NULL)) == NULL)
-            {
-                return -1;
-            }
-            SendMessage(info->hLeaveParticles, WM_SETFONT, (WPARAM)hFont, FALSE);
-
-			SetEmitterInfo(info);
-            AppendHistory(info, hWnd);
-			ShowWindow(info->hTrackEditors[0], SW_SHOW);
-            SetFocus(info->hEmitterList);
-			break;
-		}
-
-        case WM_CLOSE:
-            if (DoCloseFile(info))
-            {
-                DestroyWindow(hWnd);
-            }
-            return 0;
-
-		case WM_DESTROY:
-            if (info->engine != NULL)
-            {
-			    info->engine->Clear();
-            }
-			delete info->particleSystem;
-			info->particleSystem = NULL;
-			PostQuitMessage(0);
-			break;
-
-		case WM_INITMENU:
-			DoMenuInit((HMENU)wParam, info);
-			break;
-
-		case WM_COMMAND:
-			if (info != NULL)
-			{
-				// Menu and control notifications
-				WORD code     = HIWORD(wParam);
-				WORD id       = LOWORD(wParam);
-				HWND hControl = (HWND)lParam;
-
-                if (hControl == NULL)
-                {
-				    // Menu or accelerator
-                    if (id >= ID_FILE_HISTORY_0 && id < ID_FILE_HISTORY_0 + min(9,NUM_HISTORY_ITEMS))
-		            {
-			            // It's a history item
-                        if (DoCheckChanges(info))
-                        {
-			                OpenHistoryFile(info, id - ID_FILE_HISTORY_0);
-                        }
-		            }
-    		        else DoMenuItem(info, id);
-                }
-				else if (code == CBN_CHANGE)
-				{
-					if (hControl == info->hBackgroundBtn && info->engine != NULL)
-					{
-						// The background color has changed
-						info->engine->SetBackground(ColorButton_GetColor(hControl));
-                        RedrawWindow(info->hRenderWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
-					}
-				}
-                else if (code == BN_CLICKED)
-                {
-                    if (hControl == info->hLeaveParticles && info->particleSystem != NULL)
-                    {
-                        info->particleSystem->setLeaveParticles(SendMessage(hControl, BM_GETCHECK, 0, 0) == BST_CHECKED);
-                    }
-                    else if (hControl == info->hToolbar)
-                    {
-                        DoMenuItem(info, id);
-                    }
-                }
-             }
-			break;
-
-		case WM_NOTIFY:
-		{
-			NMHDR* hdr = (NMHDR*)lParam;
-			switch (hdr->code)
-			{
-				case TTN_GETDISPINFO:
-				{
-					// Toolbar wants tooltips
-					NMTTDISPINFO* nmdi = (NMTTDISPINFO*)hdr;
-					static struct
-                    {
-                        UINT_PTR idFrom;
-                        UINT     idStr;
-                    }
-                    tooltips[] =
-					{
-                        {ID_FILE_NEW,        IDS_TOOLTIP_FILE_NEW},
-                        {ID_FILE_OPEN,       IDS_TOOLTIP_FILE_OPEN},
-                        {ID_FILE_SAVE,       IDS_TOOLTIP_FILE_SAVE},
-                        {ID_VIEW_SHOWGROUND, IDS_TOOLTIP_TOGGLE_GROUND},
-                        {ID_VIEW_DEBUGHEAT,  IDS_TOOLTIP_DEBUG_HEAT},
-                        {0}
-					};
-
-                    for (int i = 0; tooltips[i].idFrom != 0; i++)
-                    {
-                        if (tooltips[i].idFrom == hdr->idFrom)
-                        {
-                            nmdi->hinst    = (HINSTANCE)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_HINSTANCE);
-					        nmdi->lpszText = MAKEINTRESOURCE(tooltips[i].idStr);
-                            break;
-                        }
-                    }
-
-                    break;
-				}
-
-				case TCN_SELCHANGING:
-					ShowWindow(info->hTrackEditors[TabCtrl_GetCurSel(hdr->hwndFrom)], SW_HIDE);
-					break;
-
-				case TCN_SELCHANGE:
-					ShowWindow(info->hTrackEditors[TabCtrl_GetCurSel(hdr->hwndFrom)], SW_SHOW);
-					break;
-
-				case ELN_LISTCHANGED:
-					SetFileChanged(info, true);
-					break;
-
-				case ELN_SELCHANGED:
-                    info->selectedEmitter = EmitterList_GetSelection(info->hEmitterList);
-					SetEmitterInfo(info);
-					break;
-
-				case EP_CHANGE:
-                    TrackEditor_EnableTrack(info->hTrackEditors[ParticleSystem::TRACK_ROTATION_SPEED], !info->selectedEmitter->randomRotation);
-                    EmitterList_SelectionChanged(info->hEmitterList);
-                    SetFileChanged(info, true);
-                    if (info->engine != NULL)
-                    {
-                        info->engine->OnParticleSystemChanged(-1);
-                    }
-					break;
-
-				case TE_CHANGE:
-					// A track has changed; update the affected tracks
-                    if (info->engine != NULL)
-                    {
-                        NMTECHANGE* nmtec = (NMTECHANGE*)lParam;
-					    for (int i = 0; i < ParticleSystem::NUM_TRACKS; i++)
-					    {
-                            if (i == nmtec->track || info->selectedEmitter->tracks[i] == &info->selectedEmitter->trackContents[nmtec->track])
-						    {
-							    info->engine->OnParticleSystemChanged(i);
-						    }
-					    }
-                    }
-                    SetFileChanged(info, true);
-					break;
-			}
-			break;
-		}
-
-        case WM_SIZING:
-		{
-			RECT* size = (RECT*)lParam;
-			if (size->right - size->left < MIN_WINDOW_WIDTH)
-			{
-				if (wParam == WMSZ_BOTTOMLEFT || wParam == WMSZ_LEFT || wParam == WMSZ_TOPLEFT)
-					size->left = size->right - MIN_WINDOW_WIDTH;
-				else
-					size->right = size->left + MIN_WINDOW_WIDTH;
-			}
-			if (size->bottom - size->top < MIN_WINDOW_HEIGHT)
-			{
-				if (wParam == WMSZ_BOTTOM || wParam == WMSZ_BOTTOMLEFT || wParam == WMSZ_BOTTOMRIGHT)
-					size->bottom = size->top + MIN_WINDOW_HEIGHT;
-				else
-					size->top = size->bottom - MIN_WINDOW_HEIGHT;
-			}
-			break;
-		}
-
-		case WM_SIZE:
-		{
-			info->isMinimized = (wParam == SIZE_MINIMIZED);
-			if (!info->isMinimized)
-			{
-				RECT props, tabs, status;
-
-				// Get toolbar height
-				GetWindowRect(info->hRebar, &props);
-				int top = props.bottom - props.top;
-
-				// Move status bar and recalculate height
-				MoveWindow(info->hStatusBar, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
-				GetClientRect(info->hStatusBar, &status);
-				lParam = MAKELONG(LOWORD(lParam), HIWORD(lParam) - status.bottom - top);
-
-				GetClientRect(info->hPropertyTabs, &props);
-				GetClientRect(info->hTrackTabs,    &tabs);
-
-				// Move property
-				MoveWindow(info->hEmitterList,  4, top + 4, props.right, HIWORD(lParam) - props.bottom - 8, TRUE);
-				MoveWindow(info->hPropertyTabs, 4, top + HIWORD(lParam) - props.bottom, props.right, props.bottom, TRUE);
-
-                // Move top bar 
-                RECT checkbox;
-                RECT label;
-                GetClientRect(info->hLeaveParticles, &checkbox);
-                GetClientRect(info->hBackgroundLabel, &label);
-                int height = max(max(24, checkbox.bottom), label.bottom);
-                MoveWindow(info->hLeaveParticles, props.right + 8, top + 4 + (height - checkbox.bottom) / 2, checkbox.right, label.bottom, TRUE);
-				MoveWindow(info->hBackgroundBtn,   LOWORD(lParam) - 28, top + 4 + (height - 24) / 2, 24, 24, TRUE);
-				MoveWindow(info->hBackgroundLabel, LOWORD(lParam) - 32 - label.right, top + 4 + (height - label.bottom) / 2, label.right, label.bottom, TRUE);
-
-				// Move render window
-				MoveWindow(info->hRenderWnd, props.right + 8, top + 32, LOWORD(lParam) - (props.right + 8), HIWORD(lParam) - tabs.bottom - 36, TRUE);
-
-				// Move track tabs
-				tabs.right = LOWORD(lParam) - (props.right + 8);
-				MoveWindow(info->hTrackTabs, props.right + 8, top + HIWORD(lParam) - tabs.bottom, tabs.right, tabs.bottom, TRUE);
-				TabCtrl_AdjustRect(info->hTrackTabs, FALSE, &tabs);
-				for (int i = 0; i < N_TRACKS; i++)
-				{
-					MoveWindow(info->hTrackEditors[i], tabs.left, tabs.top, tabs.right - tabs.left, tabs.bottom - tabs.top, TRUE);
-				}
-			}
-			return 0;
-        }
-	}
-	return DefWindowProc(hWnd, uMsg, wParam, lParam);
-}
-
-// Calculates the 3D position of the intersection of the cursor with Z = 0
-static void GetCursorPos3D(Engine* engine, short x, short y, D3DXVECTOR3& position)
-{
-	D3DXVECTOR3  front, back;
-	D3DVIEWPORT9 viewport;
-	D3DXMATRIX   world;
-	D3DXMatrixIdentity(&world);
-	engine->GetViewPort(&viewport);
-
-	D3DXVec3Unproject(&front, &D3DXVECTOR3(x, y, 0.0f), &viewport, &engine->GetProjectionMatrix(), &engine->GetViewMatrix(), &world);
-	D3DXVec3Unproject(&back,  &D3DXVECTOR3(x, y, 0.9f), &viewport, &engine->GetProjectionMatrix(), &engine->GetViewMatrix(), &world);
-
-	D3DXPLANE plane(0,0,1,0);
-	D3DXPlaneIntersectLine(&position, &plane, &front, &back);
-}
-
-static LRESULT CALLBACK RenderWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-	APPLICATION_INFO* info = (APPLICATION_INFO*)(LONG_PTR)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-	switch (uMsg)
-	{
-		case WM_CREATE:
-		{
-			CREATESTRUCT* pcs = (CREATESTRUCT*)lParam;
-			info = (APPLICATION_INFO*)pcs->lpCreateParams;
-			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG)(LONG_PTR)info);
-			break;
-		}
-
-		case WM_PAINT:
-			Render(info);
-			break;
-
-		case WM_LBUTTONUP:
-			if (info->attachedParticleSystem != NULL)
-			{
-				// We've placed the system here
-				info->engine->DetachParticleSystem(info->attachedParticleSystem);
-				info->attachedParticleSystem = NULL;
-			}
-
-        case WM_RBUTTONUP:
-			// Stop dragging
-			info->dragmode = APPLICATION_INFO::NONE;
-			ReleaseCapture();
-			break;
-
-		case WM_LBUTTONDOWN:
-			if (info->attachedParticleSystem != NULL)
-    		{
-                info->dragmode = APPLICATION_INFO::OBJECT_Z;
-                info->dragStartPosition = info->attachedParticleSystem->GetRelativePosition();
-            }
-            else info->dragmode = (wParam & MK_CONTROL) ? APPLICATION_INFO::ZOOM : APPLICATION_INFO::MOVE;
-
-		case WM_RBUTTONDOWN:
-            if (uMsg == WM_RBUTTONDOWN)
-            {
-    			info->dragmode = (wParam & MK_CONTROL) ? APPLICATION_INFO::ZOOM : APPLICATION_INFO::ROTATE;
-            }
-
-            // Start dragging, remember start settings
-			info->startCam = info->engine->GetCamera();
-			info->xstart   = LOWORD(lParam);
-			info->ystart   = HIWORD(lParam);
-			SetCapture(hWnd);
-			SetFocus(hWnd);
-			break;
-
-		case WM_KEYUP:
-			if (wParam == VK_SHIFT && info->attachedParticleSystem != NULL)
-			{
-				// Shift released. Remove cursor-bound system
-				info->engine->KillParticleSystem(info->attachedParticleSystem);
-				info->attachedParticleSystem = NULL;
-			}
-			break;
-
-		case WM_KEYDOWN:
-			// Only react to Shift being pressed initially
-			if (wParam == VK_SHIFT && (~lParam & 0x40000000) && info->particleSystem != NULL && info->attachedParticleSystem == NULL)
-			{
-				// Spawn cursor-bound particle system
-				D3DXVECTOR3 position;
-				GetCursorPos3D(info->engine, (SHORT)LOWORD(lParam), (SHORT)HIWORD(lParam), position);
-				info->attachedParticleSystem = info->engine->SpawnParticleSystem(*info->particleSystem, &info->mouseCursor);
-
-                // Clear statusbar hint
-                SendMessage(info->hStatusBar, SB_SETTEXT, 4, (LPARAM)L"");
-			}
-			break;
-
-		case WM_MOUSEMOVE:
-        {
-            D3DXVECTOR3 cursor;
-            if (info->dragmode == APPLICATION_INFO::OBJECT_Z)
-			{
-                // Move the attached object up or down
-				long  y   = (short)HIWORD(lParam) - info->ystart;
-                float len = D3DXVec3Length(&(info->startCam.Target - info->startCam.Position));
-                cursor = info->mouseCursor.GetPosition();
-                cursor.z = -y * len / 1000;
-                info->mouseCursor.SetPosition(cursor);
-        	    Render(info);
-            }
-            else
-            {
-				// Move cursor-bound particle system
-				GetCursorPos3D(info->engine, (SHORT)LOWORD(lParam), (SHORT)HIWORD(lParam), cursor);
-				info->mouseCursor.SetPosition(cursor);
-
-                if (info->dragmode != APPLICATION_INFO::NONE)
-			    {
-				    // Yay, math time!
-				    long x = (short)LOWORD(lParam) - info->xstart;
-				    long y = (short)HIWORD(lParam) - info->ystart;
-
-				    Engine::Camera camera = info->startCam;
-				    D3DXVECTOR3    orthVec, diff = info->startCam.Position - info->startCam.Target;
-    				
-				    // Get the orthogonal vector
-				    D3DXVec3Cross( &orthVec, &diff, &camera.Up );
-				    D3DXVec3Normalize( &orthVec, &orthVec );
-
-				    if (info->dragmode == APPLICATION_INFO::ROTATE)
-				    {
-					    // Lets rotate
-					    D3DXMATRIX rotateXY, rotateZ, rotate;
-					    D3DXMatrixRotationZ( &rotateZ, -D3DXToRadian(x / 2.0f) );
-					    D3DXMatrixRotationAxis( &rotateXY, &orthVec, D3DXToRadian(y / 2.0f) );
-					    D3DXMatrixMultiply( &rotate, &rotateXY, &rotateZ );
-					    D3DXVec3TransformCoord( &camera.Position, &diff, &rotate );
-					    camera.Position += camera.Target;
-				    }
-				    else if (info->dragmode == APPLICATION_INFO::MOVE)
-				    {
-					    // Lets translate
-					    D3DXVECTOR3 Up;
-					    D3DXVec3Cross( &Up, &orthVec, &diff );
-					    D3DXVec3Normalize( &Up, &Up );
-    					
-					    // The distance we move depends on the distance from the object
-					    // Large distance: move a lot, small distance: move a little
-					    float multiplier = D3DXVec3Length( &diff ) / 1000;
-
-					    camera.Target  += (float)x * multiplier * orthVec;
-					    camera.Target  += (float)y * multiplier * Up;
-					    camera.Position = diff + camera.Target;
-				    }
-				    else if (info->dragmode == APPLICATION_INFO::ZOOM)
-				    {
-					    // Lets zoom
-					    // The amount we scroll in and out depends on the distance.
-					    float olddist = D3DXVec3Length( &diff );
-					    float newdist = max(1.0f, olddist - sqrt(olddist) * -y);
-					    D3DXVec3Scale( &camera.Position, &diff, newdist / olddist );
-					    camera.Position += camera.Target;
-				    }
-				    info->dragged = true;
-				    info->engine->SetCamera( camera );
-    			    Render(info);
-			    }
-            }
-
-            // Update statusbar
-            SendMessage(info->hStatusBar, SB_SETTEXT, 3, (LPARAM)LoadString(IDS_STATUS_MOUSE, cursor.x, cursor.y, cursor.z).c_str());
-            break;
-        }
-
-		case WM_MOUSEWHEEL:
-			if (info->dragmode == APPLICATION_INFO::NONE)
-			{
-				Engine::Camera camera = info->engine->GetCamera();
-
-				// The amount we scroll in and out depends on the distance.
-				D3DXVECTOR3 diff = camera.Position - camera.Target;
-				float olddist = D3DXVec3Length( &diff );
-				float newdist = max(1.0f, olddist - sqrt(olddist) * (SHORT)HIWORD(wParam) / WHEEL_DELTA);
-				D3DXVec3Scale( &camera.Position, &diff, newdist / olddist );
-				camera.Position += camera.Target;
-
-				info->engine->SetCamera(camera);
-				Render(info);
-			}
-			break;
-
-		case WM_SIZE:
-			if (info->engine != NULL)
-			{
-				info->engine->Reset();
-			}
-			break;
-
-		case WM_SETFOCUS:
-			// Yes, we want focus please
-			return 0;
-
-        case WM_DROPFILES:
-		{
-			// User dropped a filename on the window
-			HDROP hDrop = (HDROP)wParam;
-			UINT nFiles = DragQueryFile(hDrop, -1, NULL, 0);
-			for (UINT i = 0; i < nFiles; i++)
-			{
-				UINT size = DragQueryFile(hDrop, i, NULL, 0);
-				wstring filename(size,L' ');
-				DragQueryFile(hDrop, i, (LPTSTR)filename.c_str(), size + 1);
-				if (LoadFile(info, filename))
-                {
-                    break;
-                }
-			}
-			DragFinish(hDrop);
-			break;
-		}
     }
 
-    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+    char suffix[32];
+    sprintf_s(suffix, sizeof(suffix), "_%d", maxN + 1);
+    return base + suffix;
 }
 
-// Returns the install path by querying the registry, or an empty string when failed.
-static void getGamePath_Reg(vector<wstring>& strings)
+// ── Pure-IO ParticleSystem helpers ─────────
+//
+// These free functions are declared in `src/ParticleSystemIO.h` and
+// implemented here so the host's BridgeDispatcher can read/write .alo
+// files without duplicating the PhysicalFile + ParticleSystem(IFile*)
+// ctor dance.
+
+std::unique_ptr<ParticleSystem> LoadParticleSystem(const std::wstring& path,
+                                                   std::string* errorOut)
 {
-	const TCHAR* paths[] = {
-		L"Software\\LucasArts\\Star Wars Empire at War Forces of Corruption\\1.0",
-		L"Software\\LucasArts\\Star Wars Empire at War Forces of Corruption Demo\\1.0",
-		L"Software\\LucasArts\\Star Wars Empire at War\\1.0",
-		L""
+    if (errorOut) errorOut->clear();
+    PhysicalFile* file = NULL;
+    try
+    {
+        file = new PhysicalFile(path);
+    }
+    catch (wexception& e)
+    {
+        if (errorOut) *errorOut = WideToAnsi(e.what());
+        return nullptr;
+    }
+    catch (...)
+    {
+        if (errorOut) *errorOut = "could not open file";
+        return nullptr;
+    }
+
+    std::unique_ptr<ParticleSystem> system;
+    try
+    {
+        system.reset(new ParticleSystem(file));
+    }
+    catch (wexception& e)
+    {
+        if (errorOut) *errorOut = WideToAnsi(e.what());
+        system.reset();
+    }
+    catch (...)
+    {
+        if (errorOut) *errorOut = "not a valid particle system";
+        system.reset();
+    }
+    file->Release();
+    return system;
+}
+
+bool SaveParticleSystem(ParticleSystem* system, const std::wstring& path,
+                        std::string* errorOut)
+{
+    if (errorOut) errorOut->clear();
+    if (system == NULL)
+    {
+        if (errorOut) *errorOut = "null particle system";
+        return false;
+    }
+    // Data-loss guard: write to a sibling temp then atomically
+    // rename into place, mirroring Autosave::Write (Autosave.cpp:197-221). The
+    // old code opened the destination CREATE_ALWAYS (truncate-to-0) and streamed
+    // chunks in place, so any mid-write failure (disk full, removable drive,
+    // denied, throw) corrupted the user's original .alo. Now a failure leaves
+    // the original untouched; only a fully-written temp replaces it.
+    const std::wstring tmp = path + L".tmp";
+    PhysicalFile* file = NULL;
+    try
+    {
+        file = new PhysicalFile(tmp, PhysicalFile::WRITE);
+    }
+    catch (wexception& e)
+    {
+        if (errorOut) *errorOut = WideToAnsi(e.what());
+        return false;
+    }
+    catch (...)
+    {
+        if (errorOut) *errorOut = "could not open file for writing";
+        return false;
+    }
+
+    bool ok = true;
+    try
+    {
+        system->write(file);
+    }
+    catch (wexception& e)
+    {
+        if (errorOut) *errorOut = WideToAnsi(e.what());
+        ok = false;
+    }
+    catch (...)
+    {
+        if (errorOut) *errorOut = "write failed";
+        ok = false;
+    }
+    file->Release();   // close the temp handle before the rename
+
+    if (ok && !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
+    {
+        if (errorOut) *errorOut = "could not replace destination file";
+        ok = false;
+    }
+    if (!ok)
+        DeleteFileW(tmp.c_str());   // failure: original .alo preserved, no orphan temp
+
+    return ok;
+}
+
+
+// EaW Gold Pack on Steam splits assets across "GameData" (base EaW) and
+// "corruption" (FoC). Pointing the editor at one means missing textures from
+// the other. If we detect either, also include the sibling.
+static void AddSiblingGamePath(vector<wstring>& paths, const wstring& picked)
+{
+	wstring trimmed = picked;
+	while (!trimmed.empty() && (trimmed.back() == L'\\' || trimmed.back() == L'/')) trimmed.pop_back();
+
+	size_t sep = trimmed.find_last_of(L"\\/");
+	if (sep == wstring::npos) return;
+
+	wstring parent = trimmed.substr(0, sep);
+	wstring leaf   = trimmed.substr(sep + 1);
+	wstring sibling;
+	if (_wcsicmp(leaf.c_str(), L"corruption") == 0) sibling = parent + L"\\GameData";
+	else if (_wcsicmp(leaf.c_str(), L"GameData") == 0) sibling = parent + L"\\corruption";
+	else return;
+
+	if (PathIsDirectory(sibling.c_str()))
+	{
+		paths.push_back(sibling);
+	}
+}
+
+//
+// Mods support — registry helpers (ReadModNickname / WriteLastMod)
+// and disk scanning (ScanModsDir / DiscoverMods) moved to
+// ModManager (src/ModManager.{h,cpp}). ReadModNickname is
+// exposed via ModManager.h for direct use by the host bridge.
+//
+
+// View-state persistence. Registry layout under
+// HKCU\Software\AloParticleEditor:
+//   BackgroundColor (REG_DWORD)         — Engine::m_background COLORREF
+//   ShowGround      (REG_DWORD, 0/1)    — Engine::m_showGround
+//   CustomColors    (REG_BINARY, 64 b)  — ChooseColor's 16-slot palette
+//
+// Each helper takes a default that's returned when the value is absent
+// or has the wrong type, so a fresh registry preserves today's behavior.
+// Writes happen on every change; matches LastMod / ModNickname.
+
+
+static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv, vector<wstring>* outGameRoots = NULL, bool interactive = true )
+{
+	auto valueCountForOption = [](const std::wstring& arg) -> size_t
+	{
+		if (arg == L"--drive" ||
+		    arg == L"--perf-trace" ||
+		    arg == L"--perf-trace-mode" ||
+		    arg == L"--perf-artifact-dir" ||
+		    arg == L"--perf-webview-profile" ||
+		    arg == L"--gen-nt5-fixture" ||
+		    arg == L"--gen-a11y-fixture" ||
+		    arg == L"--gen-smoke-test" ||
+		    arg == L"--frames" ||
+		    arg == L"--skydome" ||
+		    arg == L"--ambient" ||
+		    arg == L"--sun" ||
+		    arg == L"--sun-intensity" ||
+		    arg == L"--smoke-color" ||
+		    arg == L"--smoke-spin")
+			return 1;
+		if (arg == L"--capture" || arg == L"--capture-ref")
+			return 2;
+		if (arg == L"--snap-window")
+			return 1;
+		return 0;
 	};
 
-	for (int i = 0; paths[i][0] != '\0'; i++)
-	{
-		HKEY hKey;
-		if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, paths[i], 0, KEY_QUERY_VALUE, &hKey ) == ERROR_SUCCESS)
-		{
-			DWORD type, size = MAX_PATH;
-			TCHAR path[MAX_PATH];
-			if (RegQueryValueEx(hKey, L"ExePath", NULL, &type, (LPBYTE)path, &size) == ERROR_SUCCESS)
-			{
-				wstring str = path;
-				size_t pos = str.find_last_of(L"\\");
-				if (pos != string::npos)
-				{
-					str = str.substr(0, pos);
-				}
-				strings.push_back(str);
-			}
-			RegCloseKey(hKey);
-		}
-	}
-}
-
-// Adds the %PROGRAMFILES%\LucasArts\Star Wars Empire at War\GameData paths to the vector
-static void getGamePath_Shell(vector<wstring>& strings)
-{
-	TCHAR path[MAX_PATH];
-	if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_PROGRAM_FILES, NULL, SHGFP_TYPE_CURRENT, path )))
-	{
-		MessageBox(NULL, path, NULL, MB_OK );
-		wstring str = path;
-		if (*str.rbegin() != L'\\') str += L'\\';
-		
-		strings.push_back(str + L"LucasArts\\Star Wars Empire at War Forces of Corruption");
-		strings.push_back(str + L"LucasArts\\Star Wars Empire at War Forces of Corruption Demo");
-		strings.push_back(str + L"LucasArts\\Star Wars Empire at War\\GameData");
-	}
-}
-
-static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
-{
 	// Search for the Empire at War path
 	vector<wstring> EmpireAtWarPaths;
 	if (argv.size() > 1)
@@ -1584,6 +704,13 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
 		// Override on the command line; use that
 		for (size_t i = 1; i < argv.size(); i++)
 		{
+			const size_t valueCount = valueCountForOption(argv[i]);
+			if (valueCount > 0)
+			{
+				i += (std::min)(valueCount, argv.size() - i - 1);
+				continue;
+			}
+			if (!argv[i].empty() && argv[i][0] == L'-') continue;
 			if (PathIsDirectory(argv[i].c_str()))
 			{
     			EmpireAtWarPaths.push_back(argv[i]);
@@ -1593,22 +720,27 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
 
 	if (EmpireAtWarPaths.empty())
 	{
-		// First try the registry
-        TCHAR buffer[MAX_PATH];
-        GetCurrentDirectory(MAX_PATH, buffer);
-        EmpireAtWarPaths.push_back(buffer);
-
-        #if 0
-        getGamePath_Reg(EmpireAtWarPaths);
-		if (EmpireAtWarPaths.empty())
+		// Try the previously-saved game path
+		HKEY hKey;
+		if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
 		{
-			// Then try the shell
-			getGamePath_Shell(EmpireAtWarPaths);
+			TCHAR savedPath[MAX_PATH] = {0};
+			DWORD type, size = sizeof(savedPath);
+			if (RegQueryValueEx(hKey, L"GameDataPath", NULL, &type, (LPBYTE)savedPath, &size) == ERROR_SUCCESS && type == REG_SZ && savedPath[0] != L'\0')
+			{
+				EmpireAtWarPaths.push_back(savedPath);
+				AddSiblingGamePath(EmpireAtWarPaths, savedPath);
+			}
+			RegCloseKey(hKey);
 		}
-        #endif
-		
+
+		// Fall back to the current directory
+		TCHAR buffer[MAX_PATH];
+		GetCurrentDirectory(MAX_PATH, buffer);
+		EmpireAtWarPaths.push_back(buffer);
 	}
 	FileManager* fileManager = NULL;
+	wstring pickedPath;
 
 	while (fileManager == NULL)
 	{
@@ -1624,6 +756,15 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
 		}
 		catch (FileNotFoundException&)
 		{
+			// Headless/automation launches (--capture/--drive/--record/--test-host)
+			// have no user to answer a folder picker — it would hang the run. Fail
+			// cleanly (main exits -1); the missing data path is on stderr + the log.
+			if (!interactive)
+			{
+				fwprintf(stderr, L"[host] game data path not found and no interactive session to prompt for one — exiting\n");
+				fileManager = NULL;
+				break;
+			}
 			// This path didn't work; ask the user to select a path
             const wstring title = LoadString(IDS_QUERY_DATA_PATH);
 
@@ -1645,151 +786,35 @@ static FileManager* createFileManager( HWND hWnd, const vector<wstring>& argv )
 			if (SHGetPathFromIDList( pidl, path ))
 			{
 				EmpireAtWarPaths.push_back(path);
+				AddSiblingGamePath(EmpireAtWarPaths, path);
+				pickedPath = path;
 			}
 			CoTaskMemFree(pidl);
 		}
 	}
+
+	// If the user picked a path that worked, persist it for next launch.
+	// --drive (ephemeral) must NOT persist — scan argv directly since the
+	// driveScriptPath local is out of scope inside createFileManager.
+	bool driveMode = false, recordMode = false;
+	for (const std::wstring& a : argv) { if (a == L"--drive") driveMode = true; if (a == L"--record") recordMode = true; }
+	const bool automationMode = driveMode || recordMode;  // --drive AND --record suppress persistence
+	if (fileManager != NULL && !pickedPath.empty() && !automationMode)
+	{
+		HKEY hKey;
+		if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\AloParticleEditor", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS)
+		{
+			RegSetValueEx(hKey, L"GameDataPath", 0, REG_SZ, (const BYTE*)pickedPath.c_str(), (DWORD)((pickedPath.size() + 1) * sizeof(TCHAR)));
+			RegCloseKey(hKey);
+		}
+	}
+	if (outGameRoots != NULL && fileManager != NULL)
+	{
+		*outGameRoots = EmpireAtWarPaths;
+	}
 	return fileManager;
 }
 
-void main( APPLICATION_INFO* info, const vector<wstring>& argv )
-{
-	FileManager* fileManager = createFileManager( info->hMainWnd, argv );
-	if (fileManager == NULL)
-	{
-		// No file manager, no play
-		return;
-	}
-
-	try
-	{
-		// Initialize the other managers and engine
-		TextureManager textureManager(fileManager, "Data\\Art\\Textures\\");
-        ShaderManager  shaderManager (fileManager, "Data\\Art\\Shaders\\");
-
-		// Create the rendering engine
-        try
-        {
-		    info->engine = new Engine(info->hMainWnd, info->hRenderWnd, textureManager, shaderManager);
-            ColorButton_SetColor(info->hBackgroundBtn, info->engine->GetBackground());
-        }
-        catch (exception&)
-        {
-            DestroyWindow(info->hRenderWnd);
-        }
-		
-		DoCloseFile(info);
-
-        bool loaded = false;
-        if (info->engine != NULL)
-        {
-			// See if a file was specified
-			for (size_t i = 1; i < argv.size(); i++)
-			{
-				if (PathFileExists(argv[i].c_str()) && !PathIsDirectory(argv[i].c_str()))
-				{
-					loaded = LoadFile(info, argv[i]);
-					break;
-				}
-			}
-        }
-
-        if (!loaded)
-        {
-		    DoNewFile(info);
-        }
-		ShowWindow(info->hMainWnd, SW_SHOWNORMAL);
-
-        HACCEL hAccel = LoadAccelerators( info->hInstance, MAKEINTRESOURCE(IDR_ACCELERATOR1));
-		for (bool quit = false; !quit; )
-		{
-			MSG msg;
-			while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-			{
-				if (!TranslateAccelerator(info->hMainWnd, hAccel, &msg) && !IsDialogMessage(info->hMainWnd, &msg))
-				{
-					TranslateMessage(&msg);
-					DispatchMessage(&msg);
-				}
-
-				if (msg.message == WM_QUIT)
-				{
-					quit = true;
-				}
-			}
-
-            if (!quit && (info->isMinimized || info->engine == NULL))
-			{
-				WaitMessage();
-			}
-			else if (info->engine != NULL)
-			{
-				Render(info);
-			}
-		}
-
-		delete fileManager;
-	}
-	catch (...)
-	{
-		delete fileManager;
-		throw;
-	}
-}
-
-static bool InitializeWindows( APPLICATION_INFO* info )
-{
-	WNDCLASSEX wcx;
-	wcx.cbSize        = sizeof(WNDCLASSEX);
-	wcx.style         = CS_HREDRAW | CS_VREDRAW;
-	wcx.lpfnWndProc   = MainWindowProc;
-	wcx.cbClsExtra    = 0;
-	wcx.cbWndExtra    = 0;
-	wcx.hInstance     = info->hInstance;
-	wcx.hIcon         = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_LOGO));
-	wcx.hCursor       = LoadCursor(NULL, IDC_ARROW);
-	wcx.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
-	wcx.lpszMenuName  = MAKEINTRESOURCE(IDR_MENU1);
-	wcx.lpszClassName = L"ParticleEditor";
-	wcx.hIconSm       = NULL;
-
-	if (!RegisterClassEx(&wcx))
-	{
-		return false;
-	}
-
-	wcx.lpfnWndProc   = RenderWindowProc;
-	wcx.hIcon         = NULL;
-	wcx.hbrBackground = NULL;
-	wcx.lpszMenuName  = NULL;
-	wcx.lpszClassName = L"ParticleEditorRenderer";
-
-	if (!RegisterClassEx(&wcx))
-	{
-		UnregisterClass(L"ParticleEditor", info->hInstance);
-		return false;
-	}
-
-	if ((info->hMainWnd = CreateWindow(L"ParticleEditor", L"Particle Editor", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_GROUP,
-		50, 50, 1150, 850, NULL, NULL, info->hInstance, info)) == NULL)
-	{
-		UnregisterClass(L"ParticleEditorRenderer", info->hInstance);
-		UnregisterClass(L"ParticleEditor", info->hInstance);
-		return false;
-	}
-
-	if ((info->hRenderWnd = CreateWindowEx(WS_EX_CLIENTEDGE | WS_EX_ACCEPTFILES
-        , L"ParticleEditorRenderer", NULL, WS_CHILD | WS_VISIBLE | WS_GROUP,
-		400, 4, 100, 100, info->hMainWnd, NULL, info->hInstance, info)) == NULL)
-	{
-		DestroyWindow(info->hMainWnd);
-		UnregisterClass(L"ParticleEditorRenderer", info->hInstance);
-		UnregisterClass(L"ParticleEditor", info->hInstance);
-		return false;
-	}
-
-	return true;
-}
 
 static vector<wstring> parseCommandLine()
 {
@@ -1818,51 +843,675 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
 {
 #ifndef NDEBUG
 	AllocConsole();
-	freopen("conout$", "wb", stdout);
+	freopen("CONOUT$", "w", stdout);
 #endif
-	int result = -1;
 
-    APPLICATION_INFO info;
-	info.hInstance				= hInstance;
-	info.hMainWnd				= NULL;
-	info.particleSystem			= NULL;
-	info.attachedParticleSystem = NULL;
-	info.engine					= NULL;
-	info.dragmode				= APPLICATION_INFO::NONE;
-	info.isMinimized			= false;
+	// Stable AppUserModelID. Without one, Windows derives a taskbar
+	// identity from the .exe path; if the same path was previously
+	// run with a different (or missing) icon, the taskbar caches a
+	// generic glyph and stubbornly reuses it. Pinning an explicit ID
+	// here gives the editor its own slot keyed off this name, so the
+	// taskbar pulls the current WM_SETICON / WNDCLASS icon instead.
+	// Loaded dynamically because the prototype lives in shell32 from
+	// Windows 7 onwards and the project's _WIN32_WINNT is set to XP.
+	if (HMODULE hShell32 = GetModuleHandleW(L"shell32.dll"))
+	{
+		typedef HRESULT (WINAPI *PFN_SetAppId)(PCWSTR);
+		PFN_SetAppId pSet = (PFN_SetAppId)GetProcAddress(hShell32, "SetCurrentProcessExplicitAppUserModelID");
+		if (pSet) pSet(L"DrKnickers.AloParticleEditor");
+	}
 
-#ifdef NDEBUG
- 	try
-#endif
-    {
-		// Initialize UI classes and create windows
-		if (!UI_Initialize(hInstance) || !InitializeWindows(&info))
+	// The WebView2 + D3D9 host is the ONLY UI. We build the
+	// three managers the (now-dead) legacy main() built (so the host can
+	// construct Engine identically) and run host::Run unconditionally; no
+	// legacy WNDCLASS / windows are registered. The `--legacy` / `--legacy-ui`
+	// / `--new-ui` flags are gone — an unknown flag is simply ignored.
+	{
+		const std::vector<std::wstring> argv = parseCommandLine();
+		bool devUi    = false;
+		bool testHost = false;
+		// --gen-nt5-fixture <path>: one-shot CLI to produce a
+		// .alo file with a known legacy singleton link group. Used
+		// to exercise the load-time enforcement sweep at file/open.
+		// Since the production save path always runs through
+		// post-mutation enforcement (which would have demoted the
+		// singleton already), no other code path can produce such a
+		// file. This flag bypasses BridgeDispatcher entirely and
+		// constructs the singleton state directly via the
+		// ParticleSystem API + SaveParticleSystem.
+		std::wstring genNt5FixturePath;
+		std::wstring genA11yFixturePath;
+		std::wstring genSmokeTestPath;   // [shaded-smoke] all-three test particle
+		// [shaded-smoke] --smoke-color <warm|grey>: color ramp for the gen-smoke-test
+		// plume. warm (default) = white->orange->red (proves vivid tint); grey =
+		// light->dark grey (reads as real CoH-style smoke). Shader is tint-agnostic;
+		// this only sets the demo fixture's per-life RGB tracks.
+		int          smokeColorMode = 0;   // 0 = warm, 1 = grey
+		// [shaded-smoke] --smoke-spin <on|off>: per-sprite rotation for the gen-smoke-test
+		// plume. on (default) keeps randomRotation; off zeroes the spin so a directional
+		// (lit-from-the-right) shader stays anchored across all puffs (option (c) demo).
+		int          smokeSpin = 1;        // 1 = spin (default), 0 = no spin
+		// --capture <alo> <png> [--frames N]:
+		// headless render-fidelity capture. Loads <alo>, renders N frames,
+		// writes the engine's render target to <png>, exits. Implies the
+		// --new-ui host path (it owns the engine). See src/host/Run.h.
+		std::wstring captureAlo;
+		// --capture-ref <objectName> <png>: render a game reference object
+		// (with its shadow) headlessly instead of a particle system.
+		std::wstring captureRef;
+		std::wstring capturePng;
+		std::wstring snapWindowPath;   // --snap-window <png>: screenshot the running editor, then exit
+		bool         snapWindowFlagSeen = false;  // --snap-window present (with or without a path)
+		// Default ~180 frames ≈ 3 s of sim (loop paces ~16 ms/frame) so a
+		// freshly-spawned effect has time to fill before the snapshot.
+		int          captureFrames = 180;
+		// --skydome <slot>: render the capture with a background skydome
+		// (0 = Off / solid colour — the default; 1-8 bundled scenes).
+		int          captureSkydome = 0;
+		// --golden-profile: internal render-oracle profile. Valid only for a
+		// particle --capture with the canonical --skydome 1 view.
+		bool         captureGoldenProfile = false;
+		// [world-lit] --ambient r,g,b / --sun r,g,b / --sun-intensity f:
+		// drive scene lighting in a headless --capture run so a lit shader's
+		// response can be verified offline. Each is opt-in; unset leaves the
+		// engine's ctor-default lighting untouched.
+		bool         captureHasAmbient = false; float captureAmbient[3] = {0,0,0};
+		bool         captureHasSun = false;     float captureSun[3] = {0,0,0};
+		bool         captureHasSunI = false;    float captureSunIntensity = 1.0f;
+		// --drive <script.json>: scripted non-CDP composite capture, then exit.
+		std::wstring driveScriptPath;
+		// --record <timeline.json>: scripted deterministic clip recording (PNG
+		// sequence), then exit. Ephemeral like --drive (no persistence).
+		std::wstring recordScriptPath;
+		std::wstring perfTracePath;
+		std::wstring perfTraceMode;
+		std::wstring perfArtifactDir;
+		std::wstring perfWebViewProfile;
+		for (size_t i = 1; i < argv.size(); ++i)
 		{
-			//throw wruntime_error(LoadString(IDS_ERROR_UI_INITIALIZATION));
+			if (argv[i] == L"--dev-ui")    devUi    = true;
+			if (argv[i] == L"--test-host") testHost = true;
+			if (argv[i] == L"--perf-trace")
+			{
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--perf-trace requires a <path>\n");
+					return 2;
+				}
+				perfTracePath = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--perf-trace-mode")
+			{
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--perf-trace-mode requires off, null, or file\n");
+					return 2;
+				}
+				perfTraceMode = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--perf-artifact-dir")
+			{
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--perf-artifact-dir requires a <path>\n");
+					return 2;
+				}
+				perfArtifactDir = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--perf-webview-profile")
+			{
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--perf-webview-profile requires a <path>\n");
+					return 2;
+				}
+				perfWebViewProfile = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--drive")
+			{
+				// Require an explicit path: a bare --drive must NOT fall through
+				// to a normal (persisting) launch — that would half-arm ephemeral
+				// mode (the GameDataPath scan keys off the bare token) and clobber
+				// the daily driver's settings. Fail loudly instead.
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--drive requires a <script.json> path\n");
+					return 2;
+				}
+				driveScriptPath = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--record")
+			{
+				// Require an explicit <timeline.json> path, same as --drive: a
+				// bare --record half-arms ephemeral mode (the GameDataPath scan
+				// keys off the bare token) and would clobber the daily driver.
+				if (i + 1 >= argv.size())
+				{
+					fwprintf(stderr, L"--record requires a <timeline.json> path\n");
+					return 2;
+				}
+				recordScriptPath = argv[i + 1];
+				++i;
+				continue;
+			}
+			if (argv[i] == L"--gen-nt5-fixture" && i + 1 < argv.size())
+			{
+				genNt5FixturePath = argv[i + 1];
+			}
+			if (argv[i] == L"--gen-a11y-fixture" && i + 1 < argv.size())
+			{
+				genA11yFixturePath = argv[i + 1];
+			}
+			if (argv[i] == L"--gen-smoke-test" && i + 1 < argv.size())
+			{
+				genSmokeTestPath = argv[i + 1];
+			}
+			if (argv[i] == L"--capture" && i + 2 < argv.size())
+			{
+				captureAlo = argv[i + 1];
+				capturePng = argv[i + 2];
+			}
+			if (argv[i] == L"--capture-ref" && i + 2 < argv.size())
+			{
+				captureRef = argv[i + 1];
+				capturePng = argv[i + 2];
+			}
+			if (argv[i] == L"--snap-window")
+			{
+				snapWindowFlagSeen = true;
+				if (i + 1 < argv.size()) snapWindowPath = argv[i + 1];
+			}
+			if (argv[i] == L"--frames" && i + 1 < argv.size())
+			{
+				captureFrames = _wtoi(argv[i + 1].c_str());
+			}
+			// --skydome <slot>: apply a background skydome in --capture mode
+			// (0 = Off / solid colour, 1-8 bundled).
+			if (argv[i] == L"--skydome" && i + 1 < argv.size())
+			{
+				captureSkydome = _wtoi(argv[i + 1].c_str());
+			}
+			if (argv[i] == L"--golden-profile")
+			{
+				captureGoldenProfile = true;
+			}
+			// [world-lit] --ambient r,g,b: scene ambient (0..1 floats).
+			if (argv[i] == L"--ambient" && i + 1 < argv.size())
+			{
+				if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f",
+				              &captureAmbient[0], &captureAmbient[1], &captureAmbient[2]) == 3)
+					captureHasAmbient = true;
+				else
+					fwprintf(stderr, L"--ambient: expected r,g,b floats, got '%s' -- ignored\n", argv[i + 1].c_str());
+			}
+			// [world-lit] --sun r,g,b: sun diffuse colour (0..1 floats).
+			if (argv[i] == L"--sun" && i + 1 < argv.size())
+			{
+				if (swscanf_s(argv[i + 1].c_str(), L"%f,%f,%f",
+				              &captureSun[0], &captureSun[1], &captureSun[2]) == 3)
+					captureHasSun = true;
+				else
+					fwprintf(stderr, L"--sun: expected r,g,b floats, got '%s' -- ignored\n", argv[i + 1].c_str());
+			}
+			// [world-lit] --sun-intensity f: scalar folded into the sun colour.
+			// Validate with swscanf_s (not _wtof, which silently returns 0.0 on
+			// garbage -> a black sun with no warning).
+			if (argv[i] == L"--sun-intensity" && i + 1 < argv.size())
+			{
+				float sunI = 0.0f;
+				if (swscanf_s(argv[i + 1].c_str(), L"%f", &sunI) == 1)
+				{
+					captureSunIntensity = sunI;
+					captureHasSunI = true;
+				}
+				else
+					fwprintf(stderr, L"--sun-intensity: expected a float, got '%s' -- ignored\n", argv[i + 1].c_str());
+			}
 		}
-
-		// Run the program
-		result = main( &info, parseCommandLine() );
-        DestroyWindow(info.hMainWnd);
-        delete info.engine;
-	}
-#ifdef NDEBUG
-	catch (wexception& e)
-	{
-        DestroyWindow(info.hMainWnd);
-        delete info.engine;
-		MessageBox(NULL, e.what(), NULL, MB_OK | MB_ICONHAND);
-	}
-	catch (exception& e)
-	{
-        DestroyWindow(info.hMainWnd);
-        delete info.engine;
-		MessageBoxA(NULL, e.what(), NULL, MB_OK | MB_ICONHAND);
-	}
-#endif
-
+		auto readEnvW = [](const wchar_t* name) -> std::wstring
+		{
+			wchar_t value[32768] = {};
+			const DWORD n = GetEnvironmentVariableW(name, value, static_cast<DWORD>(std::size(value)));
+			if (n == 0 || n >= std::size(value)) return L"";
+			return std::wstring(value, n);
+		};
+		if (perfTracePath.empty())      perfTracePath = readEnvW(L"ALO_PERF_TRACE");
+		if (perfTraceMode.empty())      perfTraceMode = readEnvW(L"ALO_PERF_TRACE_MODE");
+		if (perfArtifactDir.empty())    perfArtifactDir = readEnvW(L"ALO_PERF_ARTIFACT_DIR");
+		if (perfWebViewProfile.empty()) perfWebViewProfile = readEnvW(L"ALO_PERF_WEBVIEW_PROFILE");
+		// --drive and --capture/--capture-ref are mutually-exclusive one-shots
+		// (both arm a captureMode-style branch). Reject the combination loudly
+		// rather than run an ambiguous mix. Checked BEFORE the capture/capture-ref
+		// warning so an already-rejected run doesn't also print that noise.
+		if (!driveScriptPath.empty() &&
+		    (!captureAlo.empty() || !capturePng.empty() || !captureRef.empty()))
+		{
+			fwprintf(stderr, L"--drive cannot be combined with --capture/--capture-ref\n");
+			return 2;
+		}
+		// --record is likewise a mutually-exclusive one-shot.
+		if (!recordScriptPath.empty() &&
+		    (!driveScriptPath.empty() || !captureAlo.empty() || !capturePng.empty() || !captureRef.empty()))
+		{
+			fwprintf(stderr, L"--record cannot be combined with --drive/--capture/--capture-ref\n");
+			return 2;
+		}
+		// Warn when both --capture and --capture-ref are supplied: --capture-ref
+		// wins (last write to capturePng, captureRef takes the branch in HostWindow).
+		// This used to be a silent surprise; make it explicit so operators notice.
+		if (!captureAlo.empty() && !captureRef.empty())
+			fprintf(stderr, "warning: both --capture and --capture-ref supplied; using --capture-ref\n");
+		if (!host::IsGoldenProfileRequestValid(
+		        captureGoldenProfile,
+		        !captureAlo.empty(),
+		        !capturePng.empty(),
+		        !captureRef.empty(),
+		        captureSkydome))
+		{
+			fwprintf(stderr,
+			         L"--golden-profile requires --capture <alo> <png> --skydome 1 "
+			         L"and cannot be used with --capture-ref\n");
+			return 2;
+		}
+		// Clamp a garbage/zero --frames back to the default.
+		if (captureFrames < 1) captureFrames = 180;
+		// A headless --capture must NEVER pop a modal CRT assert/abort dialog
+		// -- it hangs the run AND disrupts the user's screen (and tells us nothing).
+		// Route Debug asserts/errors + unhandled exceptions to stderr (captured to
+		// the redirect file) so a crash is diagnosable headlessly. Interactive Debug
+		// launches keep their dialogs.
 #ifndef NDEBUG
-	FreeConsole();
+		if ((!captureAlo.empty() || !captureRef.empty()) && !capturePng.empty())
+		{
+			setvbuf(stderr, nullptr, _IONBF, 0);   // unbuffered: pre-crash traces survive a terminate
+			_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+			_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+			_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+			_CrtSetReportMode(_CRT_ERROR,  _CRTDBG_MODE_FILE);
+			_CrtSetReportFile(_CRT_ERROR,  _CRTDBG_FILE_STDERR);
+			std::set_terminate([]() {
+				fprintf(stderr, "[capture] FATAL: std::terminate (unhandled exception)\n");
+				try { if (auto e = std::current_exception()) std::rethrow_exception(e); }
+				catch (wexception& we) { fwprintf(stderr, L"  wexception: %ls\n", we.what()); }
+				catch (const std::exception& ex) { fprintf(stderr, "  std::exception: %s\n", ex.what()); }
+				catch (...) { fprintf(stderr, "  (non-std exception)\n"); }
+				fflush(stderr);
+				_exit(3);
+			});
+		}
 #endif
-	return result;
+		if (!genNt5FixturePath.empty())
+		{
+			auto sys = std::make_unique<ParticleSystem>();
+			sys->addRootEmitter();
+			sys->addRootEmitter();
+			auto& emitters = sys->getEmitters();
+			if (emitters.size() < 2 || !emitters[0] || !emitters[1])
+			{
+				fwprintf(stderr, L"gen-nt5-fixture: failed to add 2 root emitters\n");
+				return 2;
+			}
+			// Put both in link group 1 (transient — valid 2-member
+			// state), then manually demote emitter 0 back to 0.
+			// Result on disk: emitter 0 at linkGroup=0, emitter 1
+			// alone at linkGroup=1 — the legacy "singleton group"
+			// state that file/open's enforcement sweep must demote.
+			emitters[0]->linkGroup = 1;
+			emitters[1]->linkGroup = 1;
+			emitters[0]->linkGroup = 0;
+			std::string err;
+			const bool ok = SaveParticleSystem(sys.get(), genNt5FixturePath, &err);
+			if (!ok)
+			{
+				fwprintf(stderr, L"gen-nt5-fixture: SaveParticleSystem failed: %hs\n",
+				         err.c_str());
+				return 2;
+			}
+			fwprintf(stderr, L"gen-nt5-fixture: wrote %s "
+			                 L"(emitter 0 linkGroup=0, emitter 1 linkGroup=1 — singleton)\n",
+			         genNt5FixturePath.c_str());
+			return 0;
+		}
+		// [shaded-smoke] --gen-smoke-test <path>: one root emitter set up to exercise the
+		// all-three shaded-smoke shader -- blendMode 5 (Depth Transparent -> PrimDepthSpriteAlpha.fx),
+		// big scale, several particles spread across a box, randomRotation on (so a single capture
+		// shows varied sprite angles), and a per-life color ramp (young warm -> old red) on UN-aliased
+		// R/G/B/A tracks (so per-particle tint is visible). Textures keep the default names so a mod
+		// can override them (color + dome normal). Bypasses BridgeDispatcher; uses the API directly.
+		if (!genSmokeTestPath.empty())
+		{
+			typedef ParticleSystem PS;
+			typedef PS::Emitter::Track Track;
+			auto sys = std::make_unique<ParticleSystem>();
+			PS::Emitter* e = sys->addRootEmitter();
+			if (e == nullptr) { fwprintf(stderr, L"gen-smoke-test: failed to add root emitter\n"); return 2; }
+			e->blendMode           = PS::BLEND_TRANSPARENT;   // 2 -> PrimAlpha.fx (plain alpha blend, honors
+			                                                   // per-pixel output alpha; depth-transparent
+			                                                   // mode 5 squared the soft overlap)
+			e->lifetime            = 4.0f;
+			e->nParticlesPerSecond = 6;
+			e->useBursts           = false;
+			e->randomRotation      = true;     // varied spin angles -> per-sprite rotation visible
+			e->noDepthTest         = true;     // smoke: no depth test -> overlapping soft orbs composite
+			                                   // cleanly (depth-test in mode 5 hard-intersects quad footprints)
+			// Engine: m_baseRotation = average * (1 + rand(-variance, variance)), in TURNS
+			// (angle = 2*PI*rotation). With average 0 the variance is moot -> every sprite
+			// starts at angle 0. average 0.5 / variance 1.0 => baseRotation in [0,1] turn =
+			// a full 0..360 deg random start-angle spread. (randomRotation=true means the
+			// rotation-SPEED track is ignored, so the start angle is the only spin source.)
+			e->randomRotationAverage  = 0.5f;
+			e->randomRotationVariance = 1.0f;
+			e->textureSize         = 1;       // ATLAS FRAME COUNT (textureSizeSqrt=floor(sqrt)), NOT pixels!
+			                                   // 1 => 1x1 atlas => quad UVs span the FULL 0..1. (256 gave a
+			                                   // 16x16 atlas => each particle sampled a 1/16 UV tile => the
+			                                   // near-constant-UV bug that broke all per-pixel lighting.)
+			// spawn spread across the view (wide in X, tall in Z, thin in depth Y)
+			e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+			e->groups[PS::GROUP_POSITION].minX = -90.0f; e->groups[PS::GROUP_POSITION].maxX = 90.0f;
+			e->groups[PS::GROUP_POSITION].minY = -10.0f; e->groups[PS::GROUP_POSITION].maxY = 10.0f;
+			e->groups[PS::GROUP_POSITION].minZ = -50.0f; e->groups[PS::GROUP_POSITION].maxZ = 50.0f;
+
+			// [shaded-smoke] DENSE RISING PLUME override (later writes win). A compact
+			// source slab at the bottom of frame + upward Z speed + zero gravity makes a
+			// tapering smoke column; high spawn rate + growing scale make it read dense.
+			// Kept within the capture camera's framed band (X ~+/-90, Z ~-50..+50).
+			e->lifetime            = 4.0f;
+			e->nParticlesPerSecond = 40;     // was 6 -> dense overlap into a column
+			e->gravity             = 0.0f;   // rising smoke must not fall back down
+			e->groups[PS::GROUP_POSITION].minX = -16.0f; e->groups[PS::GROUP_POSITION].maxX = 16.0f;
+			e->groups[PS::GROUP_POSITION].minY = -10.0f; e->groups[PS::GROUP_POSITION].maxY = 10.0f;
+			e->groups[PS::GROUP_POSITION].minZ = -46.0f; e->groups[PS::GROUP_POSITION].maxZ = -34.0f;
+			// initial velocity: mostly up (Z), small lateral drift -> natural turbulence.
+			// rise over 4 s life ~= Z*4 = 48..72 units, so from base ~-40 the column tops
+			// out around +10..+30 (in frame) before the particle dies.
+			e->groups[PS::GROUP_SPEED].type = PS::GT_BOX;
+			e->groups[PS::GROUP_SPEED].minX = -4.0f; e->groups[PS::GROUP_SPEED].maxX = 4.0f;
+			e->groups[PS::GROUP_SPEED].minY = -3.0f; e->groups[PS::GROUP_SPEED].maxY = 3.0f;
+			e->groups[PS::GROUP_SPEED].minZ = 12.0f; e->groups[PS::GROUP_SPEED].maxZ = 18.0f;
+			auto setTrack = [&](int id, float v0, float v1, Track::InterpolationType it)
+			{
+				e->trackContents[id].keys.clear();
+				e->trackContents[id].interpolation = it;
+				e->trackContents[id].keys.insert(Track::Key(0.0f, v0));
+				e->trackContents[id].keys.insert(Track::Key(100.0f, v1));
+				e->tracks[id] = &e->trackContents[id];   // un-alias from the Red channel
+			};
+			setTrack(PS::TRACK_SCALE,          35.0f, 50.0f, Track::IT_LINEAR);
+			setTrack(PS::TRACK_RED_CHANNEL,     1.0f, 1.0f,  Track::IT_LINEAR);
+			setTrack(PS::TRACK_GREEN_CHANNEL,   1.0f, 0.15f, Track::IT_LINEAR);
+			setTrack(PS::TRACK_BLUE_CHANNEL,    0.7f, 0.05f, Track::IT_LINEAR);
+			setTrack(PS::TRACK_ALPHA_CHANNEL,   0.9f, 0.9f,  Track::IT_LINEAR);
+			setTrack(PS::TRACK_ROTATION_SPEED,  0.0f, 0.0f,  Track::IT_LINEAR);
+			// [shaded-smoke] plume overrides of the tracks set above (later writes win):
+			setTrack(PS::TRACK_SCALE,         25.0f, 90.0f, Track::IT_LINEAR);  // billow wider as it rises
+			setTrack(PS::TRACK_ALPHA_CHANNEL,  0.85f, 0.0f, Track::IT_LINEAR);  // dissipate at the top
+			// color mode from --smoke-color (parsed here to avoid touching the arg loop):
+			// 0/warm (default, white->orange->red, set above) vs 1/grey (real-smoke look).
+			for (size_t a = 1; a < argv.size(); ++a)
+				if (argv[a] == L"--smoke-color" && a + 1 < argv.size())
+					smokeColorMode = (argv[a + 1] == L"grey" || argv[a + 1] == L"gray") ? 1 : 0;
+			if (smokeColorMode == 1)
+			{
+				setTrack(PS::TRACK_RED_CHANNEL,   0.90f, 0.40f, Track::IT_LINEAR);
+				setTrack(PS::TRACK_GREEN_CHANNEL, 0.90f, 0.40f, Track::IT_LINEAR);
+				setTrack(PS::TRACK_BLUE_CHANNEL,  0.92f, 0.42f, Track::IT_LINEAR);
+			}
+			// spin mode from --smoke-spin (parsed here like --smoke-color): on (default) vs
+			// off. off zeroes per-sprite rotation so a directional shader's lit side stays
+			// anchored across every puff -- the option (c) demo for "light from the right".
+			for (size_t a = 1; a < argv.size(); ++a)
+				if (argv[a] == L"--smoke-spin" && a + 1 < argv.size())
+					smokeSpin = (argv[a + 1] == L"off" || argv[a + 1] == L"0") ? 0 : 1;
+			if (smokeSpin == 0)
+			{
+				e->randomRotation         = false;
+				e->randomRotationVariance = 0.0f;
+			}
+			// [bump-spin test] --bumpspin: reconfigure the generated emitter into a clean
+			// GEOMETRIC-SPIN bump test -- mode 11, textureSize=1, the arrow+dome test textures,
+			// a few large stationary sprites spinning continuously via the rotation-speed track
+			// (randomRotation=false). Proves bump + spin + world-light headlessly (capture two frames:
+			// the arrow turns; whether the dome's lit crescent stays sun-anchored answers the (B) Q).
+			bool bumpSpin = false;
+			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin") bumpSpin = true;
+			if (bumpSpin)
+			{
+				e->blendMode           = 11;                       // Bump -> PrimParticleBumpAlpha.fx
+				e->colorTexture        = "zz_bumptest_base0.tga";  // arrow base (shows spin)
+				e->normalTexture       = "zz_bumptest_nm.tga";     // dome normal (shows bump)
+				e->textureSize         = 1;
+				e->lifetime            = 12.0f;
+				e->nParticlesPerSecond = 2;
+				e->gravity             = 0.0f;
+				e->noDepthTest         = true;
+				e->randomRotation      = false;                    // continuous spin from the speed track
+				e->groups[PS::GROUP_POSITION].type = PS::GT_BOX;
+				e->groups[PS::GROUP_POSITION].minX = -70; e->groups[PS::GROUP_POSITION].maxX = 70;
+				e->groups[PS::GROUP_POSITION].minY =  -5; e->groups[PS::GROUP_POSITION].maxY =  5;
+				e->groups[PS::GROUP_POSITION].minZ = -35; e->groups[PS::GROUP_POSITION].maxZ = 35;
+				e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
+				e->groups[PS::GROUP_SPEED].valX = 0; e->groups[PS::GROUP_SPEED].valY = 0; e->groups[PS::GROUP_SPEED].valZ = 0;
+				setTrack(PS::TRACK_SCALE,         40.0f, 40.0f, Track::IT_LINEAR);
+				setTrack(PS::TRACK_RED_CHANNEL,    1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_GREEN_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_BLUE_CHANNEL,   1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_ALPHA_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_ROTATION_SPEED, 1.0f,  1.0f,  Track::IT_LINEAR);  // continuous spin
+			}
+			// [bump-spin SINGLE] --bumpspin1: like --bumpspin but exactly ONE large, centered,
+			// long-lived sprite (single burst of 1 at the EXACT origin). Two captures at different
+			// --frames then show the SAME sprite at two clean, NON-overlapping spin phases -> the
+			// decisive test (does the lit crescent track the spin or stay sun-anchored?).
+			bool bumpSpin1 = false;
+			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin1") bumpSpin1 = true;
+			if (bumpSpin1)
+			{
+				e->blendMode           = 11;                       // Bump -> PrimParticleBumpAlpha.fx
+				e->colorTexture        = "zz_bumptest_base0.tga";  // arrow base (shows spin phase)
+				e->normalTexture       = "zz_bumptest_nm.tga";     // dome normal (the lit crescent)
+				e->textureSize         = 1;
+				e->lifetime            = 600.0f;                   // persists across the whole capture
+				e->initialDelay        = 0.0f;
+				e->gravity             = 0.0f;
+				e->noDepthTest         = true;
+				e->randomRotation      = false;                    // continuous spin from the speed track
+				e->useBursts           = true;                     // a single burst...
+				e->nBursts             = 1;                        // ...fired once...
+				e->nParticlesPerBurst  = 1;                        // ...of exactly one particle
+				e->burstDelay          = 10000.0f;                 // no second burst during any capture
+				e->groups[PS::GROUP_POSITION].type = PS::GT_EXACT; // single centered point at origin
+				e->groups[PS::GROUP_POSITION].valX = 0; e->groups[PS::GROUP_POSITION].valY = 0; e->groups[PS::GROUP_POSITION].valZ = 0;
+				e->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
+				e->groups[PS::GROUP_SPEED].valX = 0; e->groups[PS::GROUP_SPEED].valY = 0; e->groups[PS::GROUP_SPEED].valZ = 0;
+				setTrack(PS::TRACK_SCALE,         60.0f, 60.0f, Track::IT_LINEAR);  // large, fills the frame
+				setTrack(PS::TRACK_RED_CHANNEL,    1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_GREEN_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_BLUE_CHANNEL,   1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_ALPHA_CHANNEL,  1.0f,  1.0f,  Track::IT_LINEAR);
+				setTrack(PS::TRACK_ROTATION_SPEED, 1.0f,  1.0f,  Track::IT_LINEAR);  // continuous spin
+			}
+			// [bump-spin GRID] --bumpspin-grid: a DETERMINISTIC 4x3 constellation of large,
+			// OFF-CENTER, overlapping, continuously-spinning mode-11 sprites at FIXED positions.
+			// Camera-orbit flicker only manifests on off-center / reprojecting sprites (a centered
+			// billboard at the look-at target is invariant under yaw -- proven empirically), so this
+			// is the harness's PRIMARY flicker scene. Fixed positions + single burst-of-1 per cell =>
+			// identical particle layout at every camera-yaw step (no random spawn churn to pollute
+			// the inter-frame difference metric).
+			bool bumpGrid = false;
+			for (size_t a = 1; a < argv.size(); ++a) if (argv[a] == L"--bumpspin-grid") bumpGrid = true;
+			if (bumpGrid)
+			{
+				const float gx[4] = { -52.0f, -17.0f, 17.0f, 52.0f };
+				const float gz[3] = { -30.0f, 0.0f, 30.0f };
+				auto cfgCell = [](PS::Emitter* em, float x, float z)
+				{
+					em->blendMode          = 11;                       // Bump -> PrimParticleBumpAlpha.fx
+					em->colorTexture       = "zz_bumptest_base0.tga";  // arrow base (spin landmark)
+					em->normalTexture      = "zz_bumptest_nm.tga";     // dome normal (puffy relief)
+					em->textureSize        = 1;
+					em->lifetime           = 600.0f;                   // persists across the whole capture
+					em->initialDelay       = 0.0f;
+					em->gravity            = 0.0f;
+					em->noDepthTest        = true;
+					em->randomRotation     = false;                    // continuous spin from the speed track
+					em->useBursts          = true;
+					em->nBursts            = 1;
+					em->nParticlesPerBurst = 1;
+					em->burstDelay         = 10000.0f;                 // no second burst during any capture
+					em->groups[PS::GROUP_POSITION].type = PS::GT_EXACT;
+					em->groups[PS::GROUP_POSITION].valX = x; em->groups[PS::GROUP_POSITION].valY = 0.0f; em->groups[PS::GROUP_POSITION].valZ = z;
+					em->groups[PS::GROUP_SPEED].type = PS::GT_EXACT;
+					em->groups[PS::GROUP_SPEED].valX = 0.0f; em->groups[PS::GROUP_SPEED].valY = 0.0f; em->groups[PS::GROUP_SPEED].valZ = 0.0f;
+					const int   ids[6] = { PS::TRACK_SCALE, PS::TRACK_RED_CHANNEL, PS::TRACK_GREEN_CHANNEL,
+					                       PS::TRACK_BLUE_CHANNEL, PS::TRACK_ALPHA_CHANNEL, PS::TRACK_ROTATION_SPEED };
+					const float val[6] = { 40.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };  // scale, rgb, alpha, spin
+					for (int t = 0; t < 6; ++t)
+					{
+						int id = ids[t];
+						em->trackContents[id].keys.clear();
+						em->trackContents[id].interpolation = Track::IT_LINEAR;
+						em->trackContents[id].keys.insert(Track::Key(0.0f,   val[t]));
+						em->trackContents[id].keys.insert(Track::Key(100.0f, val[t]));
+						em->tracks[id] = &em->trackContents[id];
+					}
+				};
+				bool first = true;
+				for (int ix = 0; ix < 4; ++ix)
+					for (int iz = 0; iz < 3; ++iz)
+					{
+						PS::Emitter* em = first ? e : sys->addRootEmitter();
+						first = false;
+						if (em == nullptr)
+						{
+							// A short grid silently invalidates the flicker metric (it relies on
+							// the full fixed 4x3 layout) -- fail loudly like the single path above.
+							fwprintf(stderr, L"gen-smoke-test: --bumpspin-grid failed to add root emitter (cell %d,%d)\n", ix, iz);
+							return 2;
+						}
+						cfgCell(em, gx[ix], gz[iz]);
+					}
+			}
+			std::string err;
+			if (!SaveParticleSystem(sys.get(), genSmokeTestPath, &err))
+			{
+				fwprintf(stderr, L"gen-smoke-test: SaveParticleSystem failed: %hs\n", err.c_str());
+				return 2;
+			}
+			// Report the ACTUAL root blendMode (the bump flags override it to 11; the base
+			// smoke is 2 -- the old hardcoded "blendMode 5" was stale) and the emitter count
+			// (the grid produces 12).
+			fwprintf(stderr, L"gen-smoke-test: wrote %s (root blendMode %d, %zu emitter(s))\n",
+			         genSmokeTestPath.c_str(), (int)e->blendMode, sys->getEmitters().size());
+			return 0;
+		}
+		// --gen-a11y-fixture <path>: one-shot CLI to produce a
+		// .alo file with a 3-emitter tree (1 root + 1 lifetime child + 1
+		// death child). Used by the a11y specs so every surface driver's
+		// beforeEach can open a deterministic file with enough tree depth to
+		// exercise ArrowRight expand (kbd-arrow-tree-expanded) as well as the
+		// simpler single-row surfaces. Bypasses BridgeDispatcher; uses the
+		// ParticleSystem API directly (addRootEmitter / addLifetimeEmitter /
+		// addDeathEmitter) and saves via SaveParticleSystem.
+		if (!genA11yFixturePath.empty())
+		{
+			auto sys = std::make_unique<ParticleSystem>();
+			// Root emitter
+			ParticleSystem::Emitter* root = sys->addRootEmitter();
+			if (root == nullptr)
+			{
+				fwprintf(stderr, L"gen-a11y-fixture: failed to add root emitter\n");
+				return 2;
+			}
+			// Lifetime child (spawns during root's life)
+			ParticleSystem::Emitter* lifetimeChild = sys->addLifetimeEmitter(root);
+			if (lifetimeChild == nullptr)
+			{
+				fwprintf(stderr, L"gen-a11y-fixture: failed to add lifetime child emitter\n");
+				return 2;
+			}
+			// Death child (spawns on root's death)
+			ParticleSystem::Emitter* deathChild = sys->addDeathEmitter(root);
+			if (deathChild == nullptr)
+			{
+				fwprintf(stderr, L"gen-a11y-fixture: failed to add death child emitter\n");
+				return 2;
+			}
+			std::string err;
+			const bool ok = SaveParticleSystem(sys.get(), genA11yFixturePath, &err);
+			if (!ok)
+			{
+				fwprintf(stderr, L"gen-a11y-fixture: SaveParticleSystem failed: %hs\n",
+				         err.c_str());
+				return 2;
+			}
+			const auto& emitters = sys->getEmitters();
+			fwprintf(stderr,
+			         L"gen-a11y-fixture: wrote %s "
+			         L"(%zu emitters: root[0], lifetime-child[1], death-child[2])\n",
+			         genA11yFixturePath.c_str(),
+			         emitters.size());
+			return 0;
+		}
+		// --snap-window <png>: capture the already-running editor's composed window
+		// (PrintWindow PW_RENDERFULLCONTENT on the AloHostMain top-level window) to a
+		// PNG, then exit. No engine/WebView2 is created — it only screenshots an
+		// existing window. Class literal kept in lockstep with kHostWindowClassName
+		// (HostWindow.cpp).
+		//
+		// A bare --snap-window (flag present, no <png> path arg) must error out
+		// rather than silently fall through and boot the full interactive editor.
+		if (snapWindowFlagSeen && snapWindowPath.empty())
+		{
+			fwprintf(stderr, L"--snap-window requires a <png> path\n");
+			return 2;
+		}
+		if (!snapWindowPath.empty())
+		{
+			return host::SnapWindowOneShot(L"AloHostMain", snapWindowPath);
+		}
+		// capture gameRoots so the host can build its
+		// ModManager. createFileManager already discovers them
+		// internally; pass &gameRoots to extract.
+		std::vector<std::wstring> gameRoots;
+		const bool interactiveSession = IsFullyInteractiveSession(
+			!captureAlo.empty() || !captureRef.empty(),
+			!driveScriptPath.empty() || !recordScriptPath.empty(),
+			testHost);
+		FileManager* fileManager = createFileManager(NULL, argv, &gameRoots, interactiveSession);
+		if (fileManager == NULL)
+		{
+			// User cancelled the data-path picker. Exit cleanly with the
+			// same -1 sentinel.
+			return -1;
+		}
+		TextureManager textureManager(fileManager, "Data\\Art\\Textures\\");
+		ShaderManager  shaderManager (fileManager, "Data\\Art\\Shaders\\");
+		int hostResult = host::Run(hInstance, SW_SHOWDEFAULT,
+		                           textureManager, shaderManager, *fileManager,
+		                           gameRoots,
+		                           devUi, testHost,
+		                           captureAlo, capturePng, captureFrames,
+		                           captureSkydome, captureGoldenProfile, captureRef,
+		                           captureHasAmbient, captureAmbient[0], captureAmbient[1], captureAmbient[2],
+		                           captureHasSun, captureSun[0], captureSun[1], captureSun[2],
+		                           captureHasSunI, captureSunIntensity,
+		                           driveScriptPath, recordScriptPath,
+		                           perfTracePath, perfTraceMode, perfArtifactDir,
+		                           perfWebViewProfile);
+		delete fileManager;
+#ifndef NDEBUG
+		FreeConsole();
+#endif
+		return hostResult;
+	}
 }

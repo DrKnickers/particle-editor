@@ -5,6 +5,7 @@
 #include "crc32.h"
 #include "xml.h"
 #include "utils.h"
+#include "ModLayers.h"
 using namespace std;
 
 //
@@ -12,6 +13,23 @@ using namespace std;
 //
 IFile* FileManager::getFile(const string& path)
 {
+	// If a mod is selected, try its content roots first (in precedence order --
+	// the selected submod layers, then the mod root; see BuildModContentRoots) so mod
+	// loose files shadow the base game's. First match wins: the engine REPLACES a
+	// file by precedence, never merges, so this single resolved copy is faithful.
+	for (vector<wstring>::const_iterator root = modContentRoots.begin(); root != modContentRoots.end(); ++root)
+	{
+		try
+		{
+			wstring wpath = AnsiToWide(path);
+			wstring filename = (path[1] != ':' && path[0] != '\\') ? *root + wpath : wpath;
+			return new PhysicalFile(filename);
+		}
+		catch (IOException&)
+		{
+		}
+	}
+
 	// First see if we can open it physically
 	for (vector<wstring>::const_iterator base = basepaths.begin(); base != basepaths.end(); base++)
 	{
@@ -69,13 +87,32 @@ FileManager::FileManager(const vector<wstring>& basepaths)
 				const XMLNode* child = root->getChild(i);
 				if (child->getName() != L"File")
 				{
-					throw BadFileException();
+					// Tolerate non-<File> children (e.g. <Info Name=.../> in mod MegaFiles.xml):
+					// skip them instead of throwing (the ctor's catch(...) would rethrow ->
+					// std::terminate, crashing the editor on a standard-format mod).
+					continue;
 				}
 		
 				wstring filename = *path + child->getData();
 				try
 				{
-					megafiles.push_back(new MegaFile(new PhysicalFile(filename)));
+					// Hold the creation reference in a local and drop it after
+					// handing the file to MegaFile (which takes its own AddRef).
+					// The old new-inside-new form leaked that reference on every
+					// path — permanently pinning the Win32 HANDLE when a
+					// malformed MEG made the MegaFile constructor throw
+					// (2026-07 audit).
+					PhysicalFile* file = new PhysicalFile(filename);   // rc=1
+					try
+					{
+						megafiles.push_back(new MegaFile(file));       // rc=2
+					}
+					catch (...)
+					{
+						file->Release();
+						throw;
+					}
+					file->Release();   // rc=1, now owned by the MegaFile
 				}
 				catch (IOException)
 				{
@@ -108,5 +145,85 @@ FileManager::~FileManager()
 	{
 		delete (*i);
 	}
+}
+
+void FileManager::SetModPath(const wstring& path)
+{
+	modpath = path;
+	if (!modpath.empty() && modpath.back() != L'\\' && modpath.back() != L'/')
+	{
+		modpath += L'\\';
+	}
+	submods.clear();   // a new mod has its own submods; reset the stack
+	BuildModContentRoots();
+}
+
+// Select the ordered submod stack under the active mod (empty to clear) and
+// rebuild the content roots. Selected layers stack in precedence order (front
+// wins); only what the user selected is searched — nothing is added implicitly.
+void FileManager::SetSubmods(const vector<wstring>& names)
+{
+	submods = names;
+	BuildModContentRoots();
+}
+
+// A mod can keep a large shared CORE of assets next to its root Data\ that
+// the per-submod content layers on top of -- a folder holding hundreds of loose
+// .alo (e.g. GalloFree_HTT26.alo) shared across that mod's submods. The editor
+// once searched only the mod ROOT, so all of that core was invisible. It is now
+// selected and ordered like any other submod layer, so nothing here special-cases
+// its name. The mod root is the LOWEST-precedence mod layer (see the ordering
+// note below) -- it does NOT shadow a submod copy of the same file.
+//
+// A mod can stack several submods explicitly, in precedence order. The
+// order matches such a mod's own launch parameters (LEFT = highest), where the mod root is
+// the LOWEST mod layer -- a stale file in the root must NOT shadow a submod's copy.
+// Search order (first match wins in getFile; the game replaces per file, never merges):
+//   submods[0..n] (the selected stack, front = highest precedence; each needs a Data\Art tree)
+//   mod root      (lowest mod layer; the game lists it last)
+//   ...base game  (appended later in getFile)
+// A shared core folder is just another entry in `submods` -- the user selects + orders
+// it in the Submods dialog (it was previously auto-appended here, which wrongly forced
+// it on for the submods that exclude it).
+void FileManager::BuildModContentRoots()
+{
+	modContentRoots.clear();
+	if (modpath.empty()) return;
+
+	auto hasArtTree = [](const wstring& root) -> bool {
+		const DWORD attr = GetFileAttributesW((root + L"Data\\Art").c_str());
+		return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY);
+	};
+
+	// FAITHFUL precedence, matching such a mod's launch parameters (a submod ships a
+	// chain like `Modpath=...\<Submod> Modpath=...<Core> Modpath=...`, LEFT = highest):
+	// the selected submod stack first (front = highest, the core folder among them where the
+	// user placed it), then the MOD ROOT LAST. The earlier mod-root-FIRST order was
+	// inverted -- it let a stale file in the mod root (e.g. its old HardPointDataFiles.xml)
+	// shadow the active submod's real one, which the game replaces the other way round.
+	// The game REPLACES per file by precedence (never merges), so getFile's first-match
+	// is faithful once the root order is right.
+	for (const wstring& sub : submods)
+	{
+		if (sub.empty()) continue;
+		const wstring subRoot = modpath + sub + L"\\";
+		if (hasArtTree(subRoot))
+			modContentRoots.push_back(subRoot);
+	}
+
+	// The mod root is the LOWEST-precedence mod layer (the game lists it last).
+	modContentRoots.push_back(modpath);
+}
+
+// Stack-aware content-root setter (see managers.h). Delegates the
+// canonicalize + existence-filter + dedup + slash-terminate logic to the pure
+// modlayers::BuildContentRoots, supplying a real directory-existence predicate.
+void FileManager::SetLayers(const vector<wstring>& absoluteLayers)
+{
+	modContentRoots = modlayers::BuildContentRoots(absoluteLayers,
+		[](const wstring& dir) -> bool {
+			const DWORD a = GetFileAttributesW(dir.c_str());
+			return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
+		});
 }
 

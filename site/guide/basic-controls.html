@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Basic Editor Controls — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Start Here <span class="kicker-count">· 4 of 6</span></p>
+<h1 id="basic-editor-controls">Basic Editor Controls</h1>
+<p>A few core viewport interactions are not obvious from the UI alone. This page covers the ones a new user has no reliable way to discover: previewing a particle in the scene, moving the camera, and selecting things.</p>
+<h2 id="preview-a-particle-hold-shift">Preview a Particle: Hold Shift</h2>
+<blockquote><strong>The single most missed control.</strong> Nothing on screen announces it: to see any effect at all, <strong>hold Shift</strong>. If a particle you just opened looks like an empty viewport, this is almost certainly why.</blockquote>
+<p>Loading a particle does not, by itself, put it in the Preview Viewport. To see the current effect, <strong>hold Shift</strong>. While Shift is held, the particle spawns at the cursor and follows it around the viewport, so you can move the mouse to judge the effect from different positions.</p>
+<p>Release Shift and the preview goes away. This makes Shift a quick, non-destructive way to check an effect: hold to look, release to clear.</p>
+<h2 id="place-a-particle-click-while-holding-shift">Place a Particle: Click While Holding Shift</h2>
+<p>To leave a preview in the scene instead of clearing it, <strong>click the left mouse button while Shift is held</strong>. The effect detaches from the cursor and keeps emitting where you dropped it, which is useful when you want to compare an edit against a copy already running, or inspect an effect from a fixed spot while you work.</p>
+<p>After the click, dragging the mouse up and down adjusts the placed effect's height before you let go. Left and right stay fixed at the point where you clicked.</p>
+<p>This Shift-to-preview, click-to-place pattern is easy to miss — nothing on screen announces it — so reach for it whenever an effect does not appear to be showing.</p>
+<figure class="guide-media" aria-label="Show Shift-hold preview following the cursor, then Shift-click placing a copy that keeps playing."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-shift-preview.mp4" data-poster="ref-shift-preview-poster.jpg"></video></figure>
+<h2 id="move-the-camera">Move the Camera</h2>
+<p>The camera orbits a target point in the scene. Every camera move scales with how far you are zoomed in, so it stays controllable whether you are close to a small effect or pulled back from a large one.</p>
+<table>
+<thead>
+<tr><th>Action</th><th>Input</th></tr>
+</thead>
+<tbody>
+<tr><td data-label="Action">Orbit (rotate around the effect)</td><td data-label="Input">Right mouse button, drag</td></tr>
+<tr><td data-label="Action">Pan (slide the view)</td><td data-label="Input">Left mouse button, drag</td></tr>
+<tr><td data-label="Action">Zoom</td><td data-label="Input">Hold Ctrl and drag either button, or use the scroll wheel</td></tr>
+</tbody>
+</table>
+<p>The scroll wheel zooms in small steps and is usually the easiest way to close in on detail. Ctrl-drag zoom is smoother for large distance changes.</p>
+<figure class="guide-media" aria-label="Show orbit, pan, and zoom around a running effect."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-camera-controls.mp4" data-poster="ref-camera-controls-poster.jpg"></video></figure>
+<h2 id="select-an-emitter">Select an Emitter</h2>
+<p>Select emitters — the engines inside an effect that each produce one kind of particle — in the Emitter Tree, not the viewport. Selecting one makes it the edit target — its properties and lifetime curves fill the panels — so you can work on that emitter's settings without disturbing the others. (Selection changes what you edit, not what is drawn; to hide an emitter in the viewport, toggle its visibility.)</p>
+<ul>
+<li><strong>Click</strong> a row to select a single emitter.</li>
+<li><strong>Shift+click</strong> another row to select every emitter from the first selection to that row.</li>
+<li><strong>Ctrl+click</strong> (or Cmd+click) a row to add or remove it from a multi-selection.</li>
+</ul>
+<h2 id="select-and-move-a-reference-object">Select and Move a Reference Object</h2>
+<p>If the scene has a reference object — a unit or model shown for context — click its body in the viewport to select it, as long as it is not locked. A selected reference object shows drag handles for moving and rotating it.</p>
+<p>While dragging a handle, <strong>hold Shift for finer control</strong>: movement and rotation slow to a fraction of normal speed, which helps when you need to line an effect up precisely against the model.</p>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./setup.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Setup</span></a>
+        <a class="pager-next" href="./particle-authoring-primer.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Particle Authoring Primer</span></a>
+      </nav>
+    </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html" class="active" aria-current="page">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html">3. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#preview-a-particle-hold-shift">Preview a Particle: Hold Shift</a></li>
+      <li class="lvl-2"><a href="#place-a-particle-click-while-holding-shift">Place a Particle: Click While Holding Shift</a></li>
+      <li class="lvl-2"><a href="#move-the-camera">Move the Camera</a></li>
+      <li class="lvl-2"><a href="#select-an-emitter">Select an Emitter</a></li>
+      <li class="lvl-2"><a href="#select-and-move-a-reference-object">Select and Move a Reference Object</a></li>
+      </ul>
+    </nav>
+  </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
+  <footer class="guide-footer">
+    <p class="footer-legal">Particle Editor is an independent, unofficial tool — not affiliated with or endorsed by Lucasfilm, Disney, Petroglyph Games, or any third-party mod or its authors. <em>Star Wars: Empire at War</em> and <em>Forces of Corruption</em> are trademarks of their respective owners.</p>
+  </footer>
+</body>
+</html>

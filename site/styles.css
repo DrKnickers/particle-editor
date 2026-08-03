@@ -1,0 +1,424 @@
+/* Particle Editor landing — refined modern-editorial.
+   Locked aesthetic (spec §4): cool near-black matching the editor's UI, Schibsted Grotesk
+   + IBM Plex Mono, one rationed azure accent (the editor's blue), a faint starfield echoing
+   the viewport, restrained fade-up on load. All text AA-verified (axe). */
+
+/* ---- Self-hosted fonts (latin subsets, pulled from Google Fonts' woff2) ----
+   Same-origin + preloaded in each page's <head>, so text paints in the real faces
+   with no third-party render-blocking request (occasional white flash on navigation)
+   and no fallback-font swap shifting the top-bar buttons (jitter on load).
+   Schibsted Grotesk ships as one variable file covering wght 400–600. */
+@font-face {
+  font-family:"Schibsted Grotesk";
+  font-style:normal; font-weight:400 600; font-display:swap;
+  src:url("fonts/schibsted-grotesk-latin.woff2") format("woff2");
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family:"IBM Plex Mono";
+  font-style:normal; font-weight:400; font-display:swap;
+  src:url("fonts/ibm-plex-mono-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family:"IBM Plex Mono";
+  font-style:normal; font-weight:500; font-display:swap;
+  src:url("fonts/ibm-plex-mono-latin-500.woff2") format("woff2");
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --bg:#0b0d12;  --paper:#eef1f6;  --body:#9aa1ad;  --faint:#79818e;
+  --accent:#4a8bff;  --rule:rgba(238,241,246,.12);
+  --frame-1:#161c26;  --frame-2:#090b10;
+  --maxw:1200px;
+  --sans:"Schibsted Grotesk", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+}
+
+*,*::before,*::after { box-sizing:border-box; }
+/* Background lives on the root element (not just body) so the page canvas is always
+   dark — during a view transition the body→canvas background propagation briefly drops,
+   and without this the browser paints its default white canvas for a frame (the flash). */
+html { scroll-behavior:smooth; background-color:var(--bg); }
+body {
+  margin:0; color:var(--body);
+  font-family:var(--sans); font-weight:400; line-height:1.55;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  background-color:var(--bg);
+}
+/* Faint viewport-style starfield — static CSS, no motion, no perf cost. A position:fixed
+   pseudo-element (NOT background-attachment:fixed): flash-hunt frame evidence showed the
+   cross-document view-transition capturing the OLD page's snapshot as pure white, and
+   fixed-attachment root backgrounds are a known snapshot-hostile feature — this renders
+   identically while keeping the snapshot path ordinary. */
+body::before {
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background-image:
+    radial-gradient(1.3px 1.3px at 9% 14%, rgba(238,241,246,.55), transparent),
+    radial-gradient(1px 1px at 22% 38%, rgba(238,241,246,.32), transparent),
+    radial-gradient(1.2px 1.2px at 34% 11%, rgba(174,200,255,.45), transparent),
+    radial-gradient(1px 1px at 47% 27%, rgba(238,241,246,.3), transparent),
+    radial-gradient(1.5px 1.5px at 58% 8%, rgba(238,241,246,.4), transparent),
+    radial-gradient(1px 1px at 66% 44%, rgba(238,241,246,.26), transparent),
+    radial-gradient(1.3px 1.3px at 79% 19%, rgba(174,200,255,.5), transparent),
+    radial-gradient(1px 1px at 88% 36%, rgba(238,241,246,.28), transparent),
+    radial-gradient(1.1px 1.1px at 94% 9%, rgba(238,241,246,.34), transparent),
+    radial-gradient(1px 1px at 15% 62%, rgba(238,241,246,.28), transparent),
+    radial-gradient(1.2px 1.2px at 31% 78%, rgba(238,241,246,.32), transparent),
+    radial-gradient(1px 1px at 44% 91%, rgba(238,241,246,.24), transparent),
+    radial-gradient(1.4px 1.4px at 61% 71%, rgba(174,200,255,.4), transparent),
+    radial-gradient(1px 1px at 74% 86%, rgba(238,241,246,.26), transparent),
+    radial-gradient(1.2px 1.2px at 86% 64%, rgba(238,241,246,.3), transparent),
+    radial-gradient(1px 1px at 96% 82%, rgba(238,241,246,.22), transparent);
+  background-repeat:no-repeat;
+}
+code { font-family:var(--mono); font-size:.92em; color:var(--paper); }
+a { color:inherit; }
+
+/* ---- Top bar ---- */
+.topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:nowrap;
+  gap:1rem; max-width:var(--maxw); margin:0 auto;
+  padding:1.25rem 1.5rem; border-bottom:1px solid var(--rule);
+}
+.wordmark {
+  display:inline-flex; align-items:center; gap:.5rem;
+  font-weight:600; color:var(--paper); text-decoration:none; letter-spacing:-.01em; white-space:nowrap;
+}
+.wordmark-icon { width:1.45rem; height:1.45rem; flex:0 0 auto; display:block; }
+.topnav { display:flex; align-items:center; flex:0 1 auto; gap:1.25rem; margin-left:auto; min-width:0; }
+.topnav a, .topnav .btn-primary, .motion-toggle { white-space:nowrap; }
+.topnav a:not(.btn-primary) {
+  display:inline-flex; align-items:center;
+  font-family:var(--mono); font-size:.8rem; color:var(--body); text-decoration:none;
+}
+.topnav a:not(.btn-primary):hover { color:var(--paper); }
+/* the nav Download = the footer's release button, sized for the bar */
+.topnav .btn-primary {
+  display:inline-flex; align-items:center; justify-content:center; gap:.42rem;
+  font-size:.82rem; padding:.42rem .85rem;
+}
+.nav-download-icon { line-height:1; }
+.motion-toggle {
+  font-family:var(--mono); font-size:.78rem; color:var(--body);
+  background:transparent; border:1px solid var(--rule); border-radius:2px;
+  min-width:3.625rem; padding:.3rem .6rem; cursor:pointer;
+}
+.motion-toggle:hover, .motion-toggle:focus-visible { color:var(--paper); border-color:var(--accent); }
+
+/* ---- Shared ---- */
+main, .site-footer { max-width:var(--maxw); margin:0 auto; padding:0 1.5rem; }
+.kicker {
+  font-family:var(--mono); font-size:.78rem; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--faint); margin:0 0 1rem;
+}
+.actions { display:flex; flex-wrap:wrap; align-items:center; gap:1.25rem; margin:1.75rem 0 0; }
+.btn-primary {
+  display:inline-block; font-weight:500; text-decoration:none;
+  background:var(--paper); color:var(--bg); padding:.7rem 1.2rem; border-radius:3px;
+  transition:background .18s ease, color .18s ease;
+}
+.btn-primary:hover, .btn-primary:focus-visible { background:var(--accent); color:var(--bg); }
+.btn-quiet { color:var(--body); text-decoration:underline; text-underline-offset:.2em; }
+.btn-quiet:hover { color:var(--paper); }
+
+/* ---- Hero ---- */
+/* Vertical mass above the hero clip is budgeted so the clip's top third crests
+   the fold on a 1080p display — the visitor should see the toolbar AND the effect. */
+.hero { padding:3.5rem 1.5rem 4rem; }
+.hero h1 {
+  font-size:clamp(2.4rem, 6vw, 4rem); font-weight:600; letter-spacing:-.035em;
+  line-height:1.02; color:var(--paper); margin:0 0 1.5rem;
+}
+.lede { font-size:clamp(1.05rem, 1.6vw, 1.3rem); max-width:46ch; color:var(--body); margin:0; }
+.hero-note { font-family:var(--mono); font-size:.8rem; color:var(--faint); margin:1.1rem 0 0; }
+
+/* ---- Feature sections ---- */
+.feature { padding:5rem 1.5rem; border-top:1px solid var(--rule); }
+.section-label {
+  display:flex; align-items:center; gap:.75rem;
+  font-family:var(--mono); font-size:.78rem; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--faint); margin:0 0 .85rem;
+}
+.section-number {
+  display:inline-grid; place-items:center;
+  width:2rem; height:2rem;
+  font-size:1.65rem; line-height:1; letter-spacing:0; text-transform:none;
+  color:transparent; -webkit-text-stroke:1px var(--accent);
+}
+.feature h2 {
+  font-size:clamp(1.8rem, 3.5vw, 2.8rem); font-weight:600; letter-spacing:-.025em;
+  color:var(--paper); margin:0 0 .75rem;
+}
+.feature-copy { font-size:clamp(1rem, 1.4vw, 1.2rem); max-width:50ch; margin:0; }
+
+/* ---- Clip frames (light against the dark) ---- */
+/* Media breaks out of the 1080px text column: text stays narrow (readable measure),
+   clips widen to 1320px so the editor reads as the exhibit, not an illustration.
+   Centered via margins, NOT transform — the entrance `up` animation ends at transform:none
+   and would clobber a translateX(-50%). The 3rem gutter exceeds typical
+   scrollbar widths, so the 100vw-includes-scrollbar quirk doesn't cause
+   horizontal overflow. */
+.clip {
+  --clip-w:min(1320px, calc(100vw - 3rem));
+  width:var(--clip-w);
+  margin:2.5rem 0 0 calc((100% - var(--clip-w)) / 2);
+  border-radius:6px; overflow:hidden;
+  background:radial-gradient(120% 120% at 50% 35%, var(--frame-1), var(--frame-2));
+  border:1px solid var(--rule); position:relative;
+}
+/* The hero clip is the page's exhibit A: pull it up toward the fold and give it
+   gravitational weight — an azure under-glow (the one rationed accent) plus a
+   grounding shadow so it doesn't recede into the starfield. */
+.clip-hero {
+  margin-top:1.75rem;
+  box-shadow:
+    0 40px 90px -30px rgba(74,139,255,.18),
+    0 20px 50px rgba(0,0,0,.55);
+}
+/* Clips are shot 4:3 (1280×960) to reveal more of the curve editor. */
+.clip-video, .clip-img { display:block; width:100%; height:auto; aspect-ratio:4/3; object-fit:cover; }
+/* hover-accent ring on playable clips */
+.clip:has(.clip-video):hover { border-color:rgba(74,139,255,.5); }
+
+.theme-compare-stage {
+  position:relative;
+  aspect-ratio:4 / 3;
+  overflow:hidden;
+  background:var(--frame-2);
+}
+.theme-compare > .theme-compare-stage { display:none; }
+.theme-compare.is-enhanced > .theme-compare-stage { display:block; }
+.theme-compare-image {
+  position:absolute;
+  inset:0;
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.theme-compare-light { clip-path:inset(0 0 0 var(--theme-split)); }
+.theme-compare-label {
+  position:absolute;
+  inset-block-start:.75rem;
+  z-index:1;
+  padding:.3rem .45rem;
+  border:1px solid color-mix(in srgb, var(--paper) 24%, transparent);
+  border-radius:2px;
+  background:color-mix(in srgb, var(--frame-2) 84%, transparent);
+  color:var(--paper);
+  font-family:var(--mono);
+  font-size:.72rem;
+  line-height:1;
+  letter-spacing:.04em;
+}
+.theme-compare-label-dark { inset-inline-start:.75rem; }
+.theme-compare-label-light { inset-inline-end:.75rem; }
+.theme-compare-divider {
+  position:absolute;
+  inset-block:0;
+  left:var(--theme-split);
+  z-index:1;
+  width:1px;
+  transform:translateX(-50%);
+  background:color-mix(in srgb, var(--paper) 82%, transparent);
+  pointer-events:none;
+}
+.theme-compare-grip {
+  position:absolute;
+  top:50%;
+  left:50%;
+  width:3px;
+  height:28px;
+  border-radius:2px;
+  transform:translate(-50%, -50%);
+  background:var(--paper);
+}
+.theme-compare-range {
+  position:absolute;
+  inset:0;
+  z-index:2;
+  width:100%;
+  height:100%;
+  margin:0;
+  opacity:0;
+  cursor:ew-resize;
+  touch-action:pan-y;
+}
+.theme-compare-stage:has(.theme-compare-range:focus-visible) {
+  outline:3px solid var(--accent);
+  outline-offset:-4px;
+}
+.theme-compare.has-dark-error .theme-compare-dark,
+.theme-compare.has-light-error .theme-compare-light,
+.theme-compare.has-dark-error .theme-compare-label-dark,
+.theme-compare.has-light-error .theme-compare-label-light {
+  display:none;
+}
+.theme-compare.has-dark-error .theme-compare-light { clip-path:none; }
+.theme-compare:is(.has-dark-error, .has-light-error) :is(.theme-compare-range, .theme-compare-divider) {
+  display:none;
+}
+
+/* ---- Toolset grid (section 6) ---- */
+.toolset-body { margin-top:2.5rem; }
+.cluster { margin:0 0 2.3rem; }
+.cluster:last-child { margin-bottom:0; }
+.cluster-label {
+  font-family:var(--mono); font-size:.78rem; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--faint); margin:0 0 1rem;
+}
+.qol-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:.75rem; }
+.qcard {
+  border:1px solid var(--rule); border-radius:8px; background:var(--frame-1);
+  padding:1rem 1.05rem; transition:border-color .18s ease, transform .18s ease;
+}
+.qcard:hover { border-color:rgba(74,139,255,.45); transform:translateY(-2px); }
+.qcard-ico {
+  width:34px; height:34px; border-radius:7px; border:1px solid var(--rule);
+  display:flex; align-items:center; justify-content:center; margin-bottom:.7rem;
+}
+.qcard-ico svg { width:18px; height:18px; stroke:var(--accent); fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+.qcard h3 { font-size:1rem; font-weight:600; color:var(--paper); margin:0 0 .3rem; }
+.qcard p { font-size:.86rem; line-height:1.5; margin:0; color:var(--body); }
+.essentials-label {
+  font-family:var(--mono); font-size:.74rem; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--faint); margin:1.5rem 0 .8rem;
+}
+.essentials { display:flex; flex-wrap:wrap; gap:.55rem; margin:0; padding:0; }
+.essentials li { list-style:none; }
+.essentials-chip {
+  font-family:var(--mono); font-size:.78rem; color:var(--body);
+  border:1px solid var(--rule); border-radius:2px; padding:.42rem .7rem;
+  display:inline-flex; align-items:center; gap:.45rem;
+}
+.essentials-chip svg { width:14px; height:14px; stroke:var(--accent); fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+
+/* ---- Footer ---- */
+.site-footer { padding:5rem 1.5rem 6rem; border-top:1px solid var(--rule); text-align:center; }
+.site-footer h2 { font-size:clamp(1.8rem,3.5vw,2.6rem); font-weight:600; color:var(--paper); margin:0 0 1.5rem; }
+.site-footer .actions { justify-content:center; }
+.footer-meta { font-family:var(--mono); font-size:.78rem; color:var(--faint); margin:2rem 0 0; }
+/* Non-endorsement / trademark disclaimer, shared by the landing footer and the
+   guide-page footer (build-guide.mjs). Fine print at the very bottom — small and
+   recessive, but its COLOUR is capped at var(--faint) (~4.8:1 on the dark bg) so
+   it clears the WCAG AA 4.5:1 contrast minimum the landing a11y test enforces
+   (tests-site/landing.spec.ts). A faded color-mix took it to 2.58:1 and failed
+   that gate; --faint is the faintest AA-passing colour here. No `opacity`: on the
+   landing this <p> is a .site-footer child running the shared `up` entrance
+   animation whose to-state is opacity:1 and would override it. */
+.footer-legal { font-family:var(--mono); font-size:.45rem; line-height:1.5; letter-spacing:.01em; color:var(--faint); max-width:72ch; margin:1.5rem auto 0; }
+.guide-footer { padding:1.75rem 1.25rem 2.25rem; text-align:center; }
+
+/* ---- Motion: one orchestrated staggered fade-up on first load ----
+   Pure CSS — no JS gating. The old version had main.js add .reveal{opacity:0} after the
+   module script arrived over the network, which (a) let content paint visible, vanish, then
+   fade back in, and (b) rewrote the whole page's styles MID view-transition, forcing a
+   compositor texture rebuild that could paint a white frame. animation-fill-mode:both keeps
+   children hidden until their delayed start, so no separate opacity:0 pre-state exists to
+   strand content hidden. Suppressed under html[data-vt] (set by the inline pagereveal hook
+   in each page's head) — when a cross-document view transition runs, its new-page fade-in
+   is the entrance. */
+@keyframes up { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > * {
+    animation:up .6s cubic-bezier(.22,.61,.36,1) both;
+  }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(1) { animation-delay:.08s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(2) { animation-delay:.18s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(3) { animation-delay:.28s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(4) { animation-delay:.38s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(5) { animation-delay:.48s; }
+  html:not([data-vt]) :is(.hero, .feature, .site-footer) > :nth-child(6) { animation-delay:.58s; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior:auto; }
+}
+
+/* ---- Cross-page transitions (progressive enhancement) ----
+   Opt the landing and the guide into cross-document view transitions so navigating
+   between them dips through the dark backdrop and fades the incoming page in, instead
+   of a hard cut. Same-origin only; browsers without support (Firefox, older Safari)
+   just navigate normally — no fallback needed. */
+@view-transition { navigation: auto; }
+/* Backstop: paint the transition overlay's pseudo chain dark (also inlined in every page
+   head, so it survives a slow styles.css). */
+::view-transition,
+::view-transition-group(root),
+::view-transition-image-pair(root),
+::view-transition-new(root) { background-color: var(--bg); }
+/* NEVER show the old-page snapshot: flash-hunt frame evidence (two runs, both directions,
+   survived the starfield fix) shows Chromium racily capturing the outgoing page as PURE
+   WHITE, and that image composites ON TOP of every backstop — it cannot be painted over.
+   Hiding it turns the crossfade into a brief dip through the dark backdrop, from which the
+   new page fades in: structurally white-proof. Also inlined in each page head. */
+::view-transition-old(root) { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-new(root) { animation: vt-in .32s cubic-bezier(.22,.61,.36,1) both; }
+}
+@keyframes vt-in  { from { opacity:0; } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(root) { animation:none; }
+}
+/* The top bar is pixel-identical on both pages (incl. the invisible Pause placeholder), so
+   lift it out of the root dip into its own transition group: old snapshot hidden (same
+   untrusted capture as the root's), new bar shown instantly with no animation — it reads as
+   one continuous bar while the page content fades beneath it. Also inlined in each head. */
+.topbar { view-transition-name: topbar; }
+::view-transition-old(topbar) { display: none; }
+::view-transition-new(topbar) { animation: none; }
+/* The Pause toggle is the one element that differs between the two bars (the guide carries
+   an invisible placeholder), so the instant topbar hard-cuts it. Its own group keeps the
+   UA's default cross-fade: fade-out leaving the landing, fade-in arriving — geometry is
+   identical so nothing moves. Old image trusted here: the racy white capture was only ever
+   observed on the root snapshot, and worst case is a button-sized blink. */
+.motion-toggle { view-transition-name: motion-toggle; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(motion-toggle) { display: none; }
+  ::view-transition-new(motion-toggle) { animation: none; }
+}
+
+/* ---- Responsive ---- */
+@media (max-width:720px) {
+  .topbar { padding:1rem; gap:.85rem; }
+  .topnav { gap:.9rem; }
+  .hero { padding:3rem 1rem 2.5rem; }
+  .feature, .site-footer { padding:3.5rem 1rem; }
+  main, .site-footer { padding-left:0; padding-right:0; }
+}
+
+@media (max-width:520px) {
+  .topbar { padding:.85rem 1rem; gap:.7rem; }
+  .topnav { flex:0 0 auto; justify-content:flex-end; gap:.6rem; }
+  .topnav .nav-download {
+    width:2.75rem; min-width:2.75rem; height:2.75rem;
+    padding:0;
+  }
+  .nav-download-label { display:none; }
+  .topnav .nav-source { min-height:2.75rem; font-size:.76rem; }
+  .motion-toggle {
+    display:none;
+  }
+}
+
+/* 400px (not 360px): chosen when the topbar carried a third nav-source link (the since-
+   retired What's New page) that stopped fitting at 390-400px — a common device width. The
+   third link is gone, but the breakpoint stays: it costs nothing while the bar fits, and
+   protects the next nav item from silently overflowing.
+
+   `flex-wrap:wrap` is the load-bearing part, not the tightening. Everything in the bar is
+   `white-space:nowrap` and the 520px block pins `.topnav` to `flex:0 0 auto`, so the bar has
+   a fixed intrinsic width that no amount of shrinking can reduce — without wrapping, ANY
+   future nav item silently reintroduces horizontal overflow at some viewport, and the
+   tightening above only moves the threshold. Wrapping lets the nav drop to its own row
+   instead, which holds for any item count. The nav keeps `justify-content:flex-end`
+   from the 520px block, so the wrapped row stays right-aligned under the wordmark. */
+@media (max-width:400px) {
+  .topbar { padding:.8rem .75rem; gap:.35rem; flex-wrap:wrap; row-gap:.5rem; }
+  .wordmark { font-size:.94rem; }
+  .topnav { gap:.35rem; }
+  .topnav .nav-source { font-size:.72rem; }
+}

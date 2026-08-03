@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>1. Make a Hardpoint Damage Effect Obvious — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Tutorials <span class="kicker-count">· 1 of 5</span></p>
+<h1 id="tutorial-1-make-a-hardpoint-damage-effect-obvious">Tutorial 1: Make a Hardpoint Damage Effect Obvious</h1>
+<p>This first tutorial makes one intentionally loud edit: it overrides the Star Destroyer hardpoint damage smoke particle and turns the smoke bright green.</p>
+<p>The goal is not to make a pretty effect yet. The goal is to prove that the editor can open a shipped particle, save a loose override into a tutorial mod, and produce a change that is obvious in game.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="tutorial-01-opening-result.png" alt="Show the final bright green hardpoint damage smoke result before the user begins."></figure>
+<h2 id="outcome">Outcome</h2>
+<p>By the end of this page, your tutorial mod will contain this loose override:</p>
+<pre><code class="language-text">Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>When a Star Destroyer hardpoint is damaged in a normal battle, its damage smoke should be bright green instead of the stock smoke color.</p>
+<h2 id="what-this-teaches">What this teaches</h2>
+<ul>
+<li>Opening an existing particle from a mod folder.</li>
+<li>Reading the Emitter Tree well enough to find the visible smoke emitter.</li>
+<li>Using the Property Panel and Curve Editor to make an obvious color change.</li>
+<li>Saving a loose override without changing the rest of the game files.</li>
+<li>Checking the result in game with one clear proof point.</li>
+</ul>
+<h2 id="before-you-start">Before You Start</h2>
+<p>Create a small tutorial mod folder using the normal game path layout:</p>
+<pre><code class="language-text">corruption\Mods\ParticleTutorial\Data\Art\Models\
+</code></pre>
+<p>Extract <code>P_HP_IMPERIAL_DAMAGE.ALO</code> from the game's <code>.meg</code> archives, then place a copy at:</p>
+<pre><code class="language-text">corruption\Mods\ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>The editor automatically locates the game install and mod folders. If you need to extract the shipped <code>.alo</code> first, use an external MEG archive tool such as <a href="https://modtools.petrolution.net/tools/MegEditor">MEG Editor</a>.</p>
+<h2 id="1-open-the-override-copy">1. Open the Override Copy</h2>
+<p>Open the copy in your tutorial mod folder:</p>
+<pre><code class="language-text">ParticleTutorial\Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>Use the Preview Viewport to confirm the particle is alive. Loading a file does not, by itself, play the effect — <strong>hold Shift</strong> to preview it at the cursor, or click while holding Shift to drop a copy that keeps playing (see <a href="./basic-controls.html">Basic Editor Controls</a>). If the effect is hard to see, use the Spawner so the effect repeats while you inspect it.</p>
+<figure class="guide-media" aria-label="Show opening the loose override copy of P_HP_IMPERIAL_DAMAGE.ALO."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-open-override.mp4" data-poster="tutorial-01-open-override-poster.jpg"></video></figure>
+<h2 id="2-find-the-smoke-emitter">2. Find the Smoke Emitter</h2>
+<p>This particle is a friendly first case: it contains a single emitter, named <code>smoke</code>, and that one emitter is the whole effect. Select it in the Emitter Tree — its properties fill the Property Panel and its lifetime curves fill the Curve Editor, making it the edit target.</p>
+<p>Most shipped particles have several emitters, and then the useful habit is: select one emitter, observe what it contributes in the Preview Viewport, then move to the next. Particles become much easier to author when you can connect an emitter row to a visible part of the effect.</p>
+<h2 id="3-make-the-smoke-bright-green">3. Make the Smoke Bright Green</h2>
+<p>Color lives on the emitter's Red, Green, and Blue tracks in the Curve Editor (new to the Curve Editor? <a href="./curve-editor-basics.html">Curve Editor Basics</a> covers the mechanics). Understand what these tracks actually are before editing them: each one is a <em>tint multiplier</em> applied to the particle's texture over its life. <code>1.0</code> on all three channels shows the texture's own colors; lowering a channel removes that color component from the result. A colored particle is usually a grayscale texture times whatever the R/G/B tracks say.</p>
+<p>Before changing anything, <em>read</em> the stock values: click each channel row in turn and look at the key values the file actually uses. In this particle you will find the smoke starts at Red <code>0.5</code>, Green <code>1.0</code>, Blue <code>1.0</code> — a pale blue-green — and all three channels converge to a dark neutral <code>0.255</code> by the end of the life, with a stop near 50% shaping the transition. That is the whole color story of the stock effect: a tinted birth cooling into gray ash. Getting into the habit of reading a shipped particle's numbers before touching them is how the rest of this guide's &quot;open something stock and study it&quot; advice works in practice.</p>
+<p>While you are looking, notice two other things about this emitter — both come back in later tutorials:</p>
+<ul>
+<li><strong>It streams; it doesn't burst.</strong> The generation is a Continuous stream at 5 particles/second, because damage smoke should pour out for as long as the hardpoint is damaged. One-off events (explosions, muzzle flashes) use Bursts instead — that contrast is <a href="./generation-types.html">Particle Generation Types</a>.</li>
+<li><strong>The Alpha track starts at <code>0</code></strong>, rises to its peak within the first tenth of the life, and then spends the rest fading back out. Smoke that faded only <em>out</em> would pop into existence at full opacity; the quick ramp-in is what makes each puff appear softly.</li>
+</ul>
+<p>Now make the smoke unmistakably green by removing everything that isn't green, one channel at a time:</p>
+<ol>
+<li>In the Curve Editor's channel list, click the <strong>Blue</strong> row to focus it.</li>
+<li>Click the track's key at the left edge (0% — the particle's start) to select it.</li>
+<li>Step the key's <strong>Value:</strong> spinner down to <code>0.05</code>.</li>
+<li>Repeat for the <strong>Red</strong> channel: focus it, select its key at 0%, set the value to <code>0.05</code>.</li>
+<li>Leave <strong>Green</strong> at <code>1.0</code>, and leave Alpha alone so the smoke stays readable.</li>
+</ol>
+<p>The Red and Blue tracks each carry two more keys — one around 50% and one at the end (both near <code>0.255</code> in the stock file). Select each of those and set it to <code>0.05</code> too, so green dominates from start to death; if you leave them, the smoke drifts back toward blue-white over its life as those later keys pull the color up. Watch the Preview Viewport as you go: the smoke should turn a loud, saturated green.</p>
+<p>This is deliberately exaggerated. Later tutorials will bring the effect back toward a believable game-art style.</p>
+<figure class="guide-media" aria-label="Show changing the smoke color to bright green in the editor UI."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-green-color-edit.mp4" data-poster="tutorial-01-green-color-edit-poster.jpg"></video></figure>
+<h2 id="4-save-the-override">4. Save the Override</h2>
+<p>Save the file back into the tutorial mod folder. The important part is that the file remains a loose override at the same game path:</p>
+<pre><code class="language-text">Data\Art\Models\P_HP_IMPERIAL_DAMAGE.ALO
+</code></pre>
+<p>Because this tutorial edits an existing shipped particle at the same path, the game can use it as an override. No new particle registration is needed for this lesson.</p>
+<figure class="guide-media" aria-label="Show saving the loose override after the proof edit."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-01-save-override.mp4" data-poster="tutorial-01-save-override-poster.jpg"></video></figure>
+<h3 id="note-names-filenames-and-new-particles">Note: Names, Filenames, and New Particles</h3>
+<p>The particle name and the particle filename are related, but they are not the same thing. If you want to make a genuinely separate particle instead of overriding an existing one, use <strong>Save As</strong> in the editor so the file and internal particle identity are saved intentionally.</p>
+<p>A separate particle also needs to be referenced somewhere the game can reach it. Common routes are game XML / <code>Particles.xml</code> entries or an Alamo proxy placed in an <code>.alo</code> model — both defined in the <a href="./game-concepts-glossary.html">Game Concepts Glossary</a>.</p>
+<h2 id="5-verify-the-result-in-game">5. Verify the Result In Game</h2>
+<p>Launch the game with the tutorial mod active — the <code>MODPATH=Mods\ParticleTutorial</code> launch argument from <a href="./setup.html#launch-the-game-with-the-tutorial-mod">Setup</a>. Without it, the game loads only stock files and this check cannot pass.</p>
+<p>Start a normal battle where a Star Destroyer can take hardpoint damage. Once a hardpoint begins using the damage particle, the smoke should be bright green. That obvious color is your proof that the loose override is loading. If it is still stock-colored, the <a href="./troubleshooting.html">Troubleshooting</a> page walks the likely causes in order.</p>
+<!-- Media (manual, added post-launch): tutorial-01-ingame-proof -->
+<h2 id="takeaways">Takeaways</h2>
+<p>You made the smallest useful particle edit: one file, one visible emitter, one obvious change. That workflow is the base loop for the rest of the course:</p>
+<ul>
+<li>open or create a particle;</li>
+<li>identify what each emitter contributes;</li>
+<li>change one visual idea at a time;</li>
+<li>save into a mod path the game can load;</li>
+<li>verify the result in context.</li>
+</ul>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./curve-editor-basics.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Curve Editor Basics</span></a>
+        <a class="pager-next" href="./concepts-before-you-build.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Concepts Before You Build</span></a>
+      </nav>
+    </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./coming-from-the-old-glyphx-editor.html">Coming from the Old GlyphX Editor?</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html" class="active" aria-current="page">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html">3. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#outcome">Outcome</a></li>
+      <li class="lvl-2"><a href="#what-this-teaches">What this teaches</a></li>
+      <li class="lvl-2"><a href="#before-you-start">Before You Start</a></li>
+      <li class="lvl-2"><a href="#1-open-the-override-copy">1. Open the Override Copy</a></li>
+      <li class="lvl-2"><a href="#2-find-the-smoke-emitter">2. Find the Smoke Emitter</a></li>
+      <li class="lvl-2"><a href="#3-make-the-smoke-bright-green">3. Make the Smoke Bright Green</a></li>
+      <li class="lvl-2"><a href="#4-save-the-override">4. Save the Override</a></li>
+      <li class="lvl-3"><a href="#note-names-filenames-and-new-particles">Note: Names, Filenames, and New Particles</a></li>
+      <li class="lvl-2"><a href="#5-verify-the-result-in-game">5. Verify the Result In Game</a></li>
+      <li class="lvl-2"><a href="#takeaways">Takeaways</a></li>
+      </ul>
+    </nav>
+  </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
+  <footer class="guide-footer">
+    <p class="footer-legal">Particle Editor is an independent, unofficial tool — not affiliated with or endorsed by Lucasfilm, Disney, Petroglyph Games, or any third-party mod or its authors. <em>Star Wars: Empire at War</em> and <em>Forces of Corruption</em> are trademarks of their respective owners.</p>
+  </footer>
+</body>
+</html>

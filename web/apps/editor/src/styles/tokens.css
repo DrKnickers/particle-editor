@@ -1,0 +1,258 @@
+/* Particle Editor 2026 design tokens.
+   Single source of truth for colors, radii, row heights, shadow.
+   - :root holds the dark-default values.
+   - [data-theme="light"] overrides the same names for light mode.
+   - The @theme inline block below republishes the variables under
+     --color-*, --radius-* so Tailwind v4 generates utilities like
+     bg-bg-2, text-text-3, border-border-2, accent. `inline` keeps the
+     values as var() references (not literal hex) so dark/light flip
+     correctly at runtime. */
+
+:root {
+  /* Neutral grey ramp — intentionally desaturated (no blue/purple tint).
+     Lightness is preserved from the prior navy-slate ramp, so contrast and
+     panel hierarchy are unchanged; only the hue is removed. Accent and
+     selection deliberately stay blue (below). Don't "fix" these back to
+     tinted values. */
+  /* Tell the UA to render native form controls (checkbox/radio fills +
+     backgrounds, native scrollbars) in DARK — without this they paint
+     light-mode chrome even on the dark theme. `accent-color` (base.css)
+     tints the check; `color-scheme` fixes the box background. Safe with
+     the transparency setup: html/body/#root set explicit transparent
+     backgrounds (globals.css), so this doesn't repaint the canvas. */
+  color-scheme: dark;
+  --bg: #111111;
+  --bg-2: #181818;
+  --bg-3: #1f1f1f;
+  --panel: #1b1b1b;
+  --panel-2: #222222;
+  --panel-3: #2a2a2a;
+  --border: #2b2b2b;
+  --border-2: #353535;
+  --hover: #252525;
+  --text: #dddddd;
+  --text-2: #ababab;
+  --text-3: #8c8c8c; /* WCAG AA verified against --bg ONLY (~5.5:1; was #747474
+     = ~4.05:1, sub-AA). CAUTION: on lighter surfaces the ratio shrinks —
+     ~4.27:1 on --panel-3 (#2a2a2a), below AA for normal text. Safe for
+     large/secondary text everywhere, but don't treat this token as
+     universally AA (design audit 2026-07-18). */
+  --accent: #4ea3ff;
+  --accent-2: #2f7fd4;
+  --accent-soft: rgba(78, 163, 255, 0.16);
+  /* Accent used as a FILL behind light (white) content — primary buttons,
+     selection badges, checkbox fills. --accent itself is too light for white
+     text (~2.6:1); --accent-strong is dark enough for WCAG AA (white ~5.5:1)
+     while staying the same blue hue. Keep --accent for accent TEXT, tints,
+     rings, and indicator dots (those read fine bright). Mirrors the
+     --danger-fg/-success-fg/-warning-fg fill-vs-foreground split above. */
+  --accent-strong: #1a66cc;
+  --accent-strong-hover: #1558bf;
+  --danger: #e06c75;
+  --success: #6fbf7a;
+  --warning: #e0a14b;
+  /* Danger used as a FILL behind white text (the destructive-action button).
+     --danger (#e06c75) is too light for white (~3.2:1); --danger-strong is a
+     deeper red that clears WCAG AA (white ~5.4:1). Translucent tints
+     (bg-danger/10) + text-danger-fg are unaffected. Mirrors --accent-strong. */
+  --danger-strong: #c0392b;
+  --danger-strong-hover: #a93226;
+  /* Foreground variants for semantic colours used as TEXT. The base tokens
+     above are tuned for dark backgrounds and FILLS; on the light theme they
+     fail WCAG AA as foreground text (~2.1:1). The -fg pair stays bright on dark
+     (passes) and darkens on light (>=4.5:1 on --panel). `text-danger/-success/
+     -warning` map to these; `bg-*` fills keep the base tokens. */
+  --danger-fg: #e06c75;
+  --success-fg: #6fbf7a;
+  --warning-fg: #e0a14b;
+  /* Tertiary text FOR PANEL SURFACES (design follow-ups, F6). --text-3 is AA
+     against --bg only; this variant clears AA on the panel ramp too
+     (#999999 on --panel-3 #2a2a2a ≈ 5.0:1). Scope: on-panel fine print
+     (spinner unit suffixes and similar) — not a general text color. */
+  --text-3-on-panel: #999999;
+  --atlas-selected: #ffb000;
+  /* Atlas-cell overlays. --overlay-scrim is a FIXED translucent scrim for the
+     index badge — it sits over arbitrary sprite imagery, so it must NOT
+     theme-flip (a dark scrim + light text reads on both themes). --overlay-hover
+     is the cell's quiet hover tint — the image-cell equivalent of --hover (the
+     sprite covers the background, so the tint rides on top): a subtle lift
+     toward the foreground, theme-aware (lightens on dark, darkens on light). */
+  --overlay-scrim: rgba(0, 0, 0, 0.55);
+  --overlay-scrim-fg: #ececec;
+  --overlay-hover: rgba(255, 255, 255, 0.22);
+  --x-axis: #ef5350;
+  --y-axis: #66bb6a;
+  --z-axis: #42a5f5;
+  /* Motion family. Fast tier = tooltips (matches the shipped
+     popover-pop timings); slow tier = modal/banner (larger elements).
+     Entrances decelerate (ease-out), exits accelerate (ease-in). */
+  --motion-fast-in: 130ms;
+  --motion-fast-out: 110ms;
+  --motion-slow-in: 180ms;
+  --motion-slow-out: 150ms; /* mirrored by EXIT_MS in OverloadBanner.tsx — keep in sync */
+  --ease-entrance: ease-out;
+  --ease-exit: ease-in;
+  --slip-tooltip: 4px;
+  --slip-banner: 6px;
+  --slip-modal: 8px;
+  /* Soft two-layer drop shadow: wide ambient + tight contact.
+     The single elevation shadow for ALL floating surfaces (modals, menus,
+     popovers, dropdowns, tooltips, the overload banner, drag chips). HAS a
+     light-theme override (below) so it reads equally soft on both themes —
+     this replaced the old dark-only --shadow, which was removed. */
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --radius: 8px;
+  --radius-sm: 5px;
+  --radius-xs: 4px;
+  --radius-2xs: 2px;
+  --row-h: 26px;
+  --row-h-sm: 22px;
+  /* Curve-editor grid line colour. Dark theme: ~8% white so the
+     grid recedes under colourful curves rather than competing with
+     them. Light theme uses ~8% black for the same reason. Both
+     themes match at the same alpha so the visual weight is
+     consistent regardless of background. */
+  --curve-grid: rgba(255, 255, 255, 0.08);
+  /* Faint minor sub-grid (#618): ~half the major-grid alpha so the
+     finer lines read as a whisper under the major divisions. */
+  --curve-subgrid: rgba(255, 255, 255, 0.035);
+  --curve-axis: #525252;
+  /* Fill for the selected-key inverted-core marker — MUST match the curve
+     canvas background. Aliased so a canvas bg change can't silently strand it.
+     The canvas area sits inside .panel (background: var(--panel)), with no
+     override on .ce-body or .curve-canvas-wrap. */
+  --curve-marker-core: var(--panel);
+  /* Neutral curve "ink": the unselected key-marker fill AND the curve line
+     stroke share this one value (and the single-track selected marker reuses
+     it — selection is conveyed by radius, not fill). It MUST contrast with
+     the canvas bg (var(--panel)); dark theme is a soft near-white, light
+     theme flips to a dark ink (below) so the dots/lines don't vanish on the
+     near-white light panel. Pairs with --curve-marker-core (the selected
+     inverted-core fill used by the focus editor). */
+  --curve-marker: #e5e5e5;
+  /* Outline ring on view-only / static (non-interactive) markers, whose own
+     fill is the channel colour. A near-black ring defines the dot edge on
+     both panels, so this stays theme-stable (no light override). */
+  --curve-marker-stroke: #0a0a0a;
+  /* Anchor (first/last-in-time) key styling in the single-track editor:
+     slate fill + accent ring. Legible on the dark panel (~6.7:1 / ~6.2:1);
+     lower-contrast but still visible on the light panel (~2.4:1 / ~2.6:1).
+     Left theme-stable (no light override) because these anchor keys render
+     only in the single-track path, which the app never mounts (the live
+     editor always routes to MultiChannelCurves) — so light-panel contrast
+     here is academic. Darken via a light override if that ever changes. */
+  --curve-marker-border: #94a3b8;
+  --curve-marker-border-stroke: #0ea5e9;
+}
+
+[data-theme="light"] {
+  /* Neutral grey ramp — desaturated to match the dark theme (no cool tint).
+     Lightness preserved from the prior values. Accent + selection stay blue. */
+  color-scheme: light;
+  --bg: #ececec;
+  --bg-2: #f2f2f2;
+  --bg-3: #ffffff;
+  --panel: #f7f7f7;
+  --panel-2: #ffffff;
+  --panel-3: #f0f0f0;
+  --border: #dcdcdc;
+  --border-2: #c9c9c9;
+  --hover: #e9e9e9;
+  --text: #1f1f1f;
+  --text-2: #525252;
+  --text-3: #666666; /* WCAG AA verified against --bg ONLY (~4.85:1; was
+     #848484 = ~3.2:1, sub-AA). Same caveat as the dark value: lighter
+     surfaces (e.g. --bg-3 #ffffff is fine, but tinted panels vary) are not
+     individually verified — don't treat as universally AA. */
+  --accent: #2f7fd4;
+  --accent-2: #1f63b0;
+  --accent-soft: rgba(47, 127, 212, 0.14);
+  /* Accent-as-fill behind white text. Light --accent (#2f7fd4) is a dead zone
+     (white ~4.1:1 AND dark text ~4.1:1 — both fail), so the button fill must be
+     deeper. White on #1f63b0 ~6.0:1. */
+  --accent-strong: #1f63b0;
+  --accent-strong-hover: #1a558f;
+  /* Danger fill for white text on the light theme (deeper red ~6.6:1). */
+  --danger-strong: #b3261e;
+  --danger-strong-hover: #99201a;
+  /* Semantic FOREGROUND variants, darkened to clear WCAG AA (>=4.5:1) as text
+     on EVERY light base surface — --bg (#ececec), --bg-2 (#f2f2f2), and
+     --panel (#f7f7f7). --bg is the darkest, so it's the binding case; the
+     contrast guard asserts all three. The base --danger/-success/-warning stay
+     bright for FILLS. (warning-as-text can't be both bright-amber and AA on
+     white, so it necessarily goes brown.) */
+  --danger-fg: #b53224;
+  --success-fg: #2b762f;  /* slightly deeper than #2e7d32 to clear AA on --bg (4.34→4.76) */
+  --warning-fg: #8a5a00;
+  /* Light-theme on-panel tertiary: AA on --panel-3 #f0f0f0 (≈ 5.4:1) and
+     every lighter panel. */
+  --text-3-on-panel: #5c5c5c;
+  --atlas-selected: #c77700;
+  /* Cell hover tint darkens on light (the dark theme lightens). Both bumped
+     for visibility over loud/busy thumbnails; light stays a touch below dark's
+     0.22 because black darkening reads stronger per unit than white lightening.
+     Scrim + scrim-fg stay theme-independent (overlay on imagery). */
+  --overlay-hover: rgba(0, 0, 0, 0.18);
+  /* Light-theme grid: ~8% black to match the dark-theme alpha so
+     the grid is uniformly subtle across themes. */
+  --curve-grid: rgba(0, 0, 0, 0.08);
+  /* Faint minor sub-grid (#618): ~half the major-grid alpha, black to
+     match the light-theme major grid. */
+  --curve-subgrid: rgba(0, 0, 0, 0.035);
+  --curve-axis: rgba(0, 0, 0, 0.45);
+  /* Flip the neutral curve ink dark so unselected markers + curve lines stay
+     legible on the near-white light panel (--panel #f7f7f7). Mirrors the
+     dark theme's bright-ink-on-dark contrast. The -core, -stroke and
+     -border tokens read on both panels, so only this one needs an override. */
+  --curve-marker: #2b2b2b;
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.10);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-panel-3: var(--panel-3);
+  --color-border: var(--border);
+  --color-border-2: var(--border-2);
+  --color-hover: var(--hover);
+  --color-atlas-selected: var(--atlas-selected);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-text-3-on-panel: var(--text-3-on-panel);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-strong-hover: var(--accent-strong-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-strong: var(--danger-strong);
+  --color-danger-strong-hover: var(--danger-strong-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger-fg: var(--danger-fg);
+  --color-success-fg: var(--success-fg);
+  --color-warning-fg: var(--warning-fg);
+  --radius-token: var(--radius);
+}
+
+/* Type scale — rebased to the app's 12px body convention.
+ *
+ * The hand-written CSS (components.css etc.) sizes everything in explicit
+ * px and consistently targets 12px for body text. Tailwind's rem-based
+ * scale, however, is anchored to the 16px <html> root (NOT `body { 12px }`),
+ * so `text-sm` lands at 14px and is the lone outlier across the UI (24 uses,
+ * incl. the emitter list, which read ~17% larger than the 12px panels around
+ * them). Collapsing `--text-sm` to 12px makes Tailwind's small-text utilities
+ * agree with the 12px convention app-wide.
+ *
+ * Intentionally NOT rebasing `--text-xs` (already 12px, 87 uses — the de-facto
+ * body utility) or the larger steps (`text-lg` About heading, `text-2xl` "+"
+ * glyphs stay deliberately bigger). Line-height mirrors text-xs's ratio. */
+@theme {
+  --text-sm: 0.75rem;                    /* 12px (was 0.875rem / 14px) */
+  --text-sm--line-height: calc(1 / 0.75); /* match --text-xs */
+}

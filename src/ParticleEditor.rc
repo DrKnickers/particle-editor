@@ -7,7 +7,7 @@
 //
 // Generated from the TEXTINCLUDE 2 resource.
 //
-#include "afxres.h"
+#include "winres.h"
 
 /////////////////////////////////////////////////////////////////////////////
 #undef APSTUDIO_READONLY_SYMBOLS
@@ -25,51 +25,21 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 //
 // Bitmap
 //
+// IDB_MISSING is the placeholder texture the shared TextureManager
+// (src/main.cpp) hands back when a particle's texture file can't be loaded —
+// live code, not legacy UI, so it stays.
 
 IDB_MISSING             BITMAP                  "resources/missing.bmp"
-IDR_TOOLBAR1            BITMAP                  "resources/toolbar1.bmp"
-IDB_GROUND              BITMAP                  "Resources\\dirt.bmp"
-IDB_EMITTER_LIST        BITMAP                  "Resources\\emitter_list.bmp"
-IDR_EMITTER_TOOLBAR     BITMAP                  "resources/toolbar2.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
 //
 // Icon
 //
 
-// Icon with lowest ID value placed first to ensure application icon
-// remains consistent on all systems.
+// IDI_LOGO is the application icon (loaded by the host window class,
+// src/host/HostWindow.cpp). The legacy curve-editor icons were removed with
+// the native UI.
 IDI_LOGO                ICON                    "resources/logo.ico"
-IDI_EDITOR_SELECT       ICON                    "resources/curve_mode_select.ico"
-IDI_EDITOR_INSERT       ICON                    "resources/curve_mode_insert.ico"
-IDI_EDITOR_LINEAR       ICON                    "resources/curve_interpolate_linear.ico"
-IDI_EDITOR_STEP         ICON                    "resources/curve_interpolate_step.ico"
-IDI_EDITOR_SMOOTH       ICON                    "resources/curve_interpolate_smooth.ico"
-IDI_EDITOR_DELETE       ICON                    "resources/curve_key_delete.ico"
-
-/////////////////////////////////////////////////////////////////////////////
-//
-// Toolbar
-//
-
-IDR_TOOLBAR1 TOOLBAR  16, 16
-BEGIN
-    BUTTON      ID_BUTTON40016
-    BUTTON      ID_BUTTON40017
-    BUTTON      ID_BUTTON40018
-    BUTTON      ID_BUTTON40019
-    BUTTON      ID_BUTTON40022
-END
-
-IDR_EMITTER_TOOLBAR TOOLBAR  16, 15
-BEGIN
-    BUTTON      ID_BUTTON40026
-    BUTTON      ID_BUTTON40027
-    BUTTON      ID_BUTTON40028
-    BUTTON      ID_BUTTON40077
-    BUTTON      ID_BUTTON40081
-END
-
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -78,15 +48,58 @@ END
 
 IDS_SCENEHEAT           RCDATA                  "Resources\\SceneHeat.fx"
 IDR_DEFAULT_SHADER      RCDATA                  "resources\\DefaultShader.fx"
+IDR_SHADER_SKYDOME      RCDATA                  "Resources\\Engine\\Skydome.fx"
+IDR_SHADER_GROUND_LIT   RCDATA                  "Resources\\Engine\\GroundLit.fx"
+
+// Ground texture. Declared RCDATA (not BITMAP) so the source file format
+// isn't restricted to .bmp — D3DXCreateTextureFromFileInMemory in engine.cpp
+// sniffs the actual bytes and handles BMP / DDS / TGA / PNG / JPG / HDR
+// identically.
+//
+// Only dirt is bundled (the editor's own default). The Grass / Sand / Snow
+// slots load the real vanilla EaW textures (W_TEMPGRND00 / W_SAND00 /
+// W_SNOW_RGH) from the user's game install at runtime — see engine.cpp
+// kGroundTextureGameLeaf — so we don't ship proprietary game assets. Slot 4
+// ("Solid Color") is procedurally generated from a user-picked COLORREF.
+IDB_GROUND              RCDATA                  "Resources\\dirt.bmp"
+
+// Skydome textures. Declared RCDATA so D3DXCreateTextureFromFileInMemory
+// can load them. Procedural-gradient TGA placeholders today; a follow-up
+// PR can replace with curated equirectangular DDS (BC1) assets without
+// touching the loader.
+IDR_SKYDOME_SPACE       RCDATA                  "Resources\\skydomes\\space.tga"
+IDR_SKYDOME_ATMOSPHERE  RCDATA                  "Resources\\skydomes\\atmosphere.tga"
+IDR_SKYDOME_SUNSET      RCDATA                  "Resources\\skydomes\\sunset.tga"
+IDR_SKYDOME_DAWN        RCDATA                  "Resources\\skydomes\\dawn.tga"
+IDR_SKYDOME_NIGHT       RCDATA                  "Resources\\skydomes\\night.tga"
+IDR_SKYDOME_OVERCAST    RCDATA                  "Resources\\skydomes\\overcast.tga"
+IDR_SKYDOME_STUDIO      RCDATA                  "Resources\\skydomes\\studio.tga"
+IDR_SKYDOME_INDOOR      RCDATA                  "Resources\\skydomes\\indoor.tga"
+
+// Embedded React bundle (web\apps\editor\dist). Auto-generated before every
+// build by scripts\embed-web-dist.mjs (the vcxproj GenerateEmbeddedWebAssets
+// target) — one RCDATA entry per dist file, ids from 3000. HostWindow.cpp's
+// WebResourceRequested handler serves these as https://app.local/<path>, so
+// the exe carries the whole UI and no separate web\ folder ships.
+//
+// The generated file holds ABSOLUTE source paths as BOM-less UTF-8. Read them
+// under code page 65001 (UTF-8) so a checkout path with non-ANSI characters
+// (e.g. an accented user directory) is not mis-decoded by rc.exe under this
+// file's default cp1252; restore cp1252 immediately after for the rest.
+#pragma code_page(65001)
+#include "generated\\EmbeddedWebAssets.rc"
+#pragma code_page(1252)
 
 /////////////////////////////////////////////////////////////////////////////
 //
 // Version
 //
 
+#include "version.h"
+
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,5,0,0
- PRODUCTVERSION 1,5,0,0
+ FILEVERSION PE_VERSION_MAJOR,PE_VERSION_MINOR,PE_VERSION_PATCH,0
+ PRODUCTVERSION PE_VERSION_MAJOR,PE_VERSION_MINOR,PE_VERSION_PATCH,0
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x5L
@@ -101,20 +114,45 @@ BEGIN
     BEGIN
         BLOCK "000004b0"
         BEGIN
-            VALUE "CompanyName", "Mike Lankamp"
+            VALUE "CompanyName", "DrKnickers"
             VALUE "FileDescription", "Particle Editor"
-            VALUE "FileVersion", "1, 5, 0, 0"
+            VALUE "FileVersion", PE_VERSION_STR
             VALUE "InternalName", "Particle Editor"
-            VALUE "LegalCopyright", "Copyright (C) 2009 Mike Lankamp"
+            VALUE "LegalCopyright", "Copyright (C) 2026 DrKnickers. Based on Mike Lankamp's Particle Editor (C) 2009."
             VALUE "OriginalFilename", "ParticleEditor.exe"
             VALUE "ProductName", "Particle Editor"
-            VALUE "ProductVersion", "1, 5, 0, 0"
+            VALUE "ProductVersion", PE_VERSION_STR
         END
     END
     BLOCK "VarFileInfo"
     BEGIN
         VALUE "Translation", 0x0, 1200
     END
+END
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+// the shared error/query strings the surviving engine/IO/host code
+// LoadString()s, migrated here (LANG_NEUTRAL, so they resolve under any
+// system locale) from the now-deleted ParticleEditor.en.rc when the legacy
+// localized .rc/.h files were removed. Ids are defined in Resources\resource.h.
+//
+
+STRINGTABLE
+BEGIN
+    IDS_ERROR_FILE_READ         "Unable to read file"
+    IDS_ERROR_FILE_FIND         "Unable to find file:\n%ls"
+    IDS_ERROR_FILE_WRITE        "Unable to write file"
+    IDS_ERROR_FILE_CORRUPT      "Bad or corrupted file"
+    IDS_ERROR_FILE_FORMAT       "The file is not a particle file"
+    IDS_ERROR_XML_PARSER_CREATE "Unable to create XML parser"
+    IDS_ERROR_XML               "%ls at line %d"
+    IDS_QUERY_DATA_PATH         "Please select the Star Wars Empire at War or Forces of Corruption folder that contains the Data folder."
+    IDS_ERROR_FILE_OPEN         "Unable to open file:\n%ls"
+    IDS_ERROR_FILE_CREATE       "Unable to create file:\n%ls"
+    IDS_ERROR_RENDERER_RESET    "Unable to reset rendering window"
 END
 
 #endif    // Neutral resources
@@ -138,7 +176,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 1 TEXTINCLUDE 
 BEGIN
-    "Resources\\resource.\0"
+    "Resources\\resource.h\0"
 END
 
 2 TEXTINCLUDE 

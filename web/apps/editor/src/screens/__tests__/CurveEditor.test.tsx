@@ -1,0 +1,2000 @@
+// Vitest tests for CurveEditor (foundation + interaction).
+//
+// Covered:
+//   - Renders a <polyline> + one <circle> per key for an N-key linear track.
+//   - Empty-key track suppresses the polyline.
+//   - Grid + axes render the expected ≥22 lines.
+//   - Clicking a key fires onKeyClick; selected-key styling applies
+//     (fill + radius).
+//   - Ctrl/Cmd+click toggles selection without losing the prior one
+//     (verified by passing in a multi-selection set).
+//   - Smooth interpolation renders a <path> with cubic-Bezier (C)
+//     commands; step interpolation renders the staircase polyline.
+
+import type { InterpolationType, TrackDto } from "@particle-editor/bridge-schema";
+import type * as React from "react";
+import { createRef } from "react";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "../CurveEditor";
+
+function fixtureTrack(
+  keyCount: number,
+  interpolation: InterpolationType = "linear",
+): TrackDto {
+  const keys = Array.from({ length: keyCount }, (_, i) => ({
+    time: (i / Math.max(1, keyCount - 1)) * 100,
+    value: i % 2 === 0 ? 0.1 : 0.9,
+  }));
+  return { name: "red", keys, interpolation, lockedTo: null };
+}
+
+describe("CurveEditor", () => {
+  it("renders a <polyline> and N <circle> elements for an N-key track", () => {
+    const { container } = render(
+      <CurveEditor track={fixtureTrack(5)} valueRange={{ min: 0, max: 1 }} />,
+    );
+    const polyline = container.querySelector("polyline");
+    expect(polyline).not.toBeNull();
+    // polyline points string should have 5 comma-separated pairs.
+    const pts = polyline!.getAttribute("points") ?? "";
+    expect(pts.trim().split(/\s+/)).toHaveLength(5);
+
+    const circles = container.querySelectorAll("circle");
+    expect(circles).toHaveLength(5);
+  });
+
+  it("suppresses the <polyline> when the track has fewer than 2 keys", () => {
+    const { container } = render(
+      <CurveEditor track={fixtureTrack(1)} valueRange={{ min: 0, max: 1 }} />,
+    );
+    expect(container.querySelector("polyline")).toBeNull();
+    // A single-key track still shows its one circle.
+    expect(container.querySelectorAll("circle")).toHaveLength(1);
+  });
+
+  it("renders the grid (≥10 vertical + ≥10 horizontal lines) + axes", () => {
+    const { container } = render(
+      <CurveEditor track={fixtureTrack(3)} valueRange={{ min: 0, max: 1 }} />,
+    );
+    // Grid + axes use <line> elements. 11 vertical + 11 horizontal +
+    // 2 axes = 24.
+    const lines = container.querySelectorAll("line");
+    expect(lines.length).toBeGreaterThanOrEqual(22);
+  });
+
+  // ─── Key click + selection rendering ──────────────────────────────
+
+  it("clicking a key fires onKeyClick + the selected key renders with accent fill + r=5", () => {
+    const track = fixtureTrack(3); // times 0, 50, 100
+    const onKeyClick = vi.fn();
+    const { container, rerender } = render(
+      <CurveEditor
+        track={track}
+        valueRange={{ min: 0, max: 1 }}
+        onKeyClick={onKeyClick}
+      />,
+    );
+    const circles = container.querySelectorAll("[data-testid='curve-key']");
+    expect(circles).toHaveLength(3);
+    // Click the middle key (time=50).
+    fireEvent.click(circles[1]!);
+    expect(onKeyClick).toHaveBeenCalledTimes(1);
+    expect(onKeyClick.mock.calls[0]![0]).toBe(50);
+
+    // Re-render with the click's time in the selected set; the matching
+    // circle enlarges (r 4→6) and is tagged data-selected. Its fill stays
+    // the key's OWN colour (interior grey) — selection styling is the
+    // saturate()+shadow CSS on [data-selected="true"], not a blue fill.
+    rerender(
+      <CurveEditor
+        track={track}
+        valueRange={{ min: 0, max: 1 }}
+        selectedKeyTimes={new Set([50])}
+        onKeyClick={onKeyClick}
+      />,
+    );
+    const middle = container.querySelectorAll("[data-testid='curve-key']")[1]!;
+    expect(middle.getAttribute("data-selected")).toBe("true");
+    expect(middle.getAttribute("r")).toBe("6");
+    expect(middle.getAttribute("fill")).toBe("var(--curve-marker)");
+    // Sanity: the unselected siblings stay at r=4.
+    const first = container.querySelectorAll("[data-testid='curve-key']")[0]!;
+    expect(first.getAttribute("r")).toBe("4");
+    expect(first.getAttribute("data-selected")).toBe("false");
+  });
+
+  it("Ctrl+click on a second key adds it to the selection (multi-selection styling)", () => {
+    const track = fixtureTrack(3);
+    const onKeyClick = vi.fn();
+    // Start with the first key selected (time=0). Render then simulate
+    // the second key being clicked with the ctrlKey modifier.
+    const { container, rerender } = render(
+      <CurveEditor
+        track={track}
+        valueRange={{ min: 0, max: 1 }}
+        selectedKeyTimes={new Set([0])}
+        onKeyClick={onKeyClick}
+      />,
+    );
+    const circles = container.querySelectorAll("[data-testid='curve-key']");
+    fireEvent.click(circles[1]!, { ctrlKey: true });
+    expect(onKeyClick).toHaveBeenCalledTimes(1);
+    // The handler received the click with ctrlKey set on the event.
+    const evt = onKeyClick.mock.calls[0]![1] as { ctrlKey: boolean };
+    expect(evt.ctrlKey).toBe(true);
+
+    // Now render with both keys in the selection set and assert both
+    // circles paint as selected. (The parent owns the actual toggle
+    // logic; CurveEditor is presentational from the selection-set's
+    // point of view.)
+    rerender(
+      <CurveEditor
+        track={track}
+        valueRange={{ min: 0, max: 1 }}
+        selectedKeyTimes={new Set([0, 50])}
+        onKeyClick={onKeyClick}
+      />,
+    );
+    const post = container.querySelectorAll("[data-testid='curve-key']");
+    expect(post[0]!.getAttribute("data-selected")).toBe("true");
+    expect(post[1]!.getAttribute("data-selected")).toBe("true");
+    expect(post[2]!.getAttribute("data-selected")).toBe("false");
+  });
+
+  // ─── Key pointer-drag interactions ────────────────────────────────
+
+  it("pointer-down + move + up on an interior key fires onKeyDragEnd with the new (time, value)", () => {
+    const track = fixtureTrack(3);            // times 0, 50, 100; values 0.1, 0.9, 0.1
+    const onDragEnd = vi.fn();
+    const onKeyClick = vi.fn();
+    const { container } = render(
+      <CurveEditor
+        track={track}
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        onKeyClick={onKeyClick}
+        onKeyDragEnd={onDragEnd}
+      />,
+    );
+    const svg = container.querySelector(
+      "[data-testid='curve-editor-svg']",
+    ) as SVGSVGElement;
+    // jsdom returns 0×0 for getBoundingClientRect; stub it so the
+    // viewBox <-> client-coord mapping has a valid scale.
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    const circles = container.querySelectorAll("[data-testid='curve-key']");
+    const middle = circles[1]! as SVGCircleElement;
+    // Pointer-down on the middle key (time=50, value=0.9).
+    fireEvent.pointerDown(middle, { pointerId: 1, button: 0, clientX: 300, clientY: 30 });
+    // Pointer-move on the SVG itself (the source's pointer is captured
+    // by the SVG-level handler). New target client coords: (270, 60)
+    // → x=270 → time=45; y=60 → height-y=240 → value=0.8.
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 270, clientY: 60 });
+    // Pointer-up commits.
+    fireEvent.pointerUp(svg, { pointerId: 1, clientX: 270, clientY: 60 });
+
+    expect(onDragEnd).toHaveBeenCalledTimes(1);
+    const [oldTime, newTime, newValue] = onDragEnd.mock.calls[0] as [number, number, number];
+    expect(oldTime).toBe(50);
+    // newTime should be clamped within (0, 100) exclusive; 45 falls in
+    // range so it's preserved (or very close — pixel math).
+    expect(newTime).toBeGreaterThan(0);
+    expect(newTime).toBeLessThan(100);
+    expect(newTime).toBeCloseTo(45, 1);
+    // newValue should map to 0.8 (within float epsilon).
+    expect(newValue).toBeCloseTo(0.8, 2);
+    // The plain click handler is NOT invoked when a drag actually
+    // moved.
+    expect(onKeyClick).not.toHaveBeenCalled();
+  });
+
+  it("pointer-down then pointer-up on a key without movement fires onKeyClick (not onKeyDragEnd)", () => {
+    const track = fixtureTrack(3);
+    const onDragEnd = vi.fn();
+    const onKeyClick = vi.fn();
+    const { container } = render(
+      <CurveEditor
+        track={track}
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        onKeyClick={onKeyClick}
+        onKeyDragEnd={onDragEnd}
+      />,
+    );
+    const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    const middle = container.querySelectorAll("[data-testid='curve-key']")[1]!;
+    // Pointer down + up at the same coords (no movement past slop).
+    fireEvent.pointerDown(middle, { pointerId: 3, button: 0, clientX: 300, clientY: 30 });
+    fireEvent.pointerUp(svg, { pointerId: 3, clientX: 300, clientY: 30 });
+    expect(onDragEnd).not.toHaveBeenCalled();
+    expect(onKeyClick).toHaveBeenCalledTimes(1);
+    expect(onKeyClick.mock.calls[0]![0]).toBe(50);
+  });
+
+  it("border keys render with the accent stroke ring + darker fill", () => {
+    const track = fixtureTrack(3);
+    const { container } = render(
+      <CurveEditor track={track} valueRange={{ min: 0, max: 1 }} />,
+    );
+    const circles = container.querySelectorAll("[data-testid='curve-key']");
+    // First + last keys are border.
+    const first = circles[0]!;
+    const last = circles[2]!;
+    const middle = circles[1]!;
+    expect(first.getAttribute("data-border")).toBe("true");
+    expect(last.getAttribute("data-border")).toBe("true");
+    expect(middle.getAttribute("data-border")).toBe("false");
+    // Stroke + stroke-width attributes confirm the visual.
+    expect(first.getAttribute("stroke")).toBe("var(--curve-marker-border-stroke)");
+    expect(first.getAttribute("stroke-width")).toBe("1.5");
+    expect(first.getAttribute("fill")).toBe("var(--curve-marker-border)");
+    expect(last.getAttribute("stroke")).toBe("var(--curve-marker-border-stroke)");
+    expect(last.getAttribute("stroke-width")).toBe("1.5");
+    // Interior key has no outline stroke (drop-shadow via CSS) + lighter fill.
+    expect(middle.getAttribute("stroke")).toBe("none");
+    expect(middle.getAttribute("fill")).toBe("var(--curve-marker)");
+  });
+
+  it("pointer-down on empty canvas in Insert mode fires onCanvasAdd with the projected (time, value)", () => {
+    const track = fixtureTrack(2);
+    const onCanvasAdd = vi.fn();
+    const { container } = render(
+      <CurveEditor
+        track={track}
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        insertMode
+        onCanvasAdd={onCanvasAdd}
+      />,
+    );
+    const svg = container.querySelector(
+      "[data-testid='curve-editor-svg']",
+    ) as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    const backdrop = container.querySelector(
+      "[data-testid='curve-canvas-backdrop']",
+    ) as SVGRectElement;
+    // Click the canvas at (180, 90) → x=180 → time=30; height-y=210 → value=0.7.
+    fireEvent.pointerDown(backdrop, { pointerId: 2, button: 0, clientX: 180, clientY: 90 });
+    expect(onCanvasAdd).toHaveBeenCalledTimes(1);
+    const [time, value] = onCanvasAdd.mock.calls[0] as [number, number];
+    expect(time).toBeCloseTo(30, 1);
+    expect(value).toBeCloseTo(0.7, 2);
+  });
+
+  // ─── marquee select ───────────────────────────────────────────────
+
+  /** Helper — render a CurveEditor with bounding-rect-stubbed SVG so
+   *  the viewBox-coord math has a deterministic scale. Returns the
+   *  container + SVG element + backdrop element. */
+  function renderForMarquee(
+    track: TrackDto,
+    extras: Partial<React.ComponentProps<typeof CurveEditor>> = {},
+  ) {
+    const result = render(
+      <CurveEditor
+        track={track}
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        {...extras}
+      />,
+    );
+    const svg = result.container.querySelector(
+      "[data-testid='curve-editor-svg']",
+    ) as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    const backdrop = result.container.querySelector(
+      "[data-testid='curve-canvas-backdrop']",
+    ) as SVGRectElement;
+    backdrop.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    return { ...result, svg, backdrop };
+  }
+
+  it("Select-mode marquee drag selects every key whose (time, value) falls inside the rect (inclusive)", () => {
+    // 5 keys at times 0, 25, 50, 75, 100; alternating values 0.1 / 0.9.
+    // viewBox 600×300; with valueRange [0, 1]:
+    //   time 0   → x=0    | time 100 → x=600
+    //   value 0.1 → y=270 | value 0.9 → y=30
+    // Drag a marquee from client (120, 0) → (480, 300) covers x∈[120,480]
+    // which corresponds to times 25, 50, 75 (their x = 150, 300, 450)
+    // and y∈[0, 300] which covers ALL values. Expected hits: {25, 50, 75}.
+    const track = fixtureTrack(5);
+    const onMarquee = vi.fn();
+    const { svg, backdrop } = renderForMarquee(track, {
+      onCanvasMarqueeSelect: onMarquee,
+    });
+
+    fireEvent.pointerDown(backdrop, {
+      pointerId: 10, button: 0, clientX: 120, clientY: 0, shiftKey: false,
+    });
+    fireEvent.pointerMove(svg, { pointerId: 10, clientX: 480, clientY: 300 });
+    fireEvent.pointerUp(svg, { pointerId: 10, clientX: 480, clientY: 300 });
+
+    expect(onMarquee).toHaveBeenCalledTimes(1);
+    const [times, shift] = onMarquee.mock.calls[0] as [number[], boolean];
+    expect(shift).toBe(false);
+    // Sort because hit-test order matches points array order, but
+    // assertion clarity wins over implementation detail.
+    expect([...times].sort((a, b) => a - b)).toEqual([25, 50, 75]);
+  });
+
+  it("Shift-held marquee passes shift: true to the callback (parent appends)", () => {
+    const track = fixtureTrack(5);
+    const onMarquee = vi.fn();
+    const { svg, backdrop } = renderForMarquee(track, {
+      onCanvasMarqueeSelect: onMarquee,
+    });
+
+    fireEvent.pointerDown(backdrop, {
+      pointerId: 11, button: 0, clientX: 120, clientY: 0, shiftKey: true,
+    });
+    fireEvent.pointerMove(svg, { pointerId: 11, clientX: 480, clientY: 300 });
+    fireEvent.pointerUp(svg, { pointerId: 11, clientX: 480, clientY: 300 });
+
+    expect(onMarquee).toHaveBeenCalledTimes(1);
+    const [, shift] = onMarquee.mock.calls[0] as [number[], boolean];
+    expect(shift).toBe(true);
+  });
+
+  it("Esc during an active marquee cancels — callback not fired, rect removed", () => {
+    const track = fixtureTrack(5);
+    const onMarquee = vi.fn();
+    const onClick = vi.fn();
+    const { container, backdrop, svg } = renderForMarquee(track, {
+      onCanvasMarqueeSelect: onMarquee,
+      onCanvasClick: onClick,
+    });
+
+    fireEvent.pointerDown(backdrop, {
+      pointerId: 12, button: 0, clientX: 120, clientY: 30, shiftKey: false,
+    });
+    // Drag past slop so the rect renders.
+    fireEvent.pointerMove(svg, { pointerId: 12, clientX: 280, clientY: 200 });
+    expect(container.querySelector("[data-testid='curve-marquee']")).not.toBeNull();
+    // Esc cancels.
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(container.querySelector("[data-testid='curve-marquee']")).toBeNull();
+    // A subsequent pointer-up should NOT fire either callback because
+    // the marquee state was cleared. The pointer-up here lands without
+    // any active marquee, so it's a no-op.
+    fireEvent.pointerUp(svg, { pointerId: 12, clientX: 280, clientY: 200 });
+    expect(onMarquee).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("Marquee is suppressed in Insert mode — pointer-down still routes to onCanvasAdd", () => {
+    const track = fixtureTrack(3);
+    const onMarquee = vi.fn();
+    const onAdd = vi.fn();
+    const { backdrop } = renderForMarquee(track, {
+      insertMode: true,
+      onCanvasAdd: onAdd,
+      onCanvasMarqueeSelect: onMarquee,
+    });
+    fireEvent.pointerDown(backdrop, {
+      pointerId: 13, button: 0, clientX: 180, clientY: 90,
+    });
+    // Insert mode: onCanvasAdd fires immediately; no marquee state
+    // gets set, so a follow-up move/up is irrelevant.
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(onMarquee).not.toHaveBeenCalled();
+  });
+
+  it("Select-mode pointer-down/up without drag past slop fires onCanvasClick (preserves clear-selection)", () => {
+    const track = fixtureTrack(3);
+    const onMarquee = vi.fn();
+    const onClick = vi.fn();
+    const { svg, backdrop } = renderForMarquee(track, {
+      onCanvasMarqueeSelect: onMarquee,
+      onCanvasClick: onClick,
+    });
+    fireEvent.pointerDown(backdrop, {
+      pointerId: 14, button: 0, clientX: 300, clientY: 150,
+    });
+    // Tiny micro-move within DRAG_SLOP (1.5 viewBox units) — still a
+    // "click", not a "drag".
+    fireEvent.pointerMove(svg, { pointerId: 14, clientX: 300.5, clientY: 150.5 });
+    fireEvent.pointerUp(svg, { pointerId: 14, clientX: 300.5, clientY: 150.5 });
+    expect(onMarquee).not.toHaveBeenCalled();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("smooth interpolation renders a <path> with cubic-Bezier (C) commands; step renders a staircase polyline", () => {
+    // Smooth.
+    const { container: smoothContainer } = render(
+      <CurveEditor
+        track={fixtureTrack(3, "smooth")}
+        valueRange={{ min: 0, max: 1 }}
+      />,
+    );
+    const path = smoothContainer.querySelector("[data-testid='curve-path']") as SVGPathElement | null;
+    expect(path).not.toBeNull();
+    const d = path!.getAttribute("d") ?? "";
+    // 2 segments → 2 cubic-Bezier C commands.
+    const cCount = (d.match(/C /g) ?? []).length;
+    expect(cCount).toBe(2);
+    // No straight-line linear polyline in the smooth branch.
+    expect(
+      smoothContainer.querySelector("polyline[data-interpolation='linear']"),
+    ).toBeNull();
+
+    // Step. The staircase polyline expands to 1 + 2*(N-1) points
+    // (start key + 2 per segment).
+    const { container: stepContainer } = render(
+      <CurveEditor
+        track={fixtureTrack(3, "step")}
+        valueRange={{ min: 0, max: 1 }}
+      />,
+    );
+    const stepPoly = stepContainer.querySelector(
+      "polyline[data-interpolation='step']",
+    ) as SVGPolylineElement | null;
+    expect(stepPoly).not.toBeNull();
+    const pts = (stepPoly!.getAttribute("points") ?? "").trim().split(/\s+/);
+    // For N=3 keys → 5 points in the staircase.
+    expect(pts).toHaveLength(5);
+    // Sanity: the linear <path> isn't drawn here.
+    expect(stepContainer.querySelector("[data-testid='curve-path']")).toBeNull();
+  });
+});
+
+// ─── gutter-initiated marquee on the multi-channel editor ────────────
+//
+// The panel renders the MULTI-CHANNEL editor (focusChannel set). Its
+// marquee already tracks everywhere via pointer capture; these tests
+// cover the NEW imperative `startMarquee` entry point that lets a
+// marquee begin from the axis-label gutters, anchored at the plot edge.
+// jsdom rejects the live measurement, so width/height fall back to the
+// 600×300 props (deterministic).
+const GUTTER_CHANNELS: ChannelDef[] = [
+  { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
+];
+
+function gutterTrack(): TrackDto {
+  // 5 keys at times 0/25/50/75/100, all value 0.5 → y=150 on 600×300.
+  return {
+    name: "red",
+    keys: [0, 25, 50, 75, 100].map((time) => ({ time, value: 0.5 })),
+    interpolation: "linear",
+    lockedTo: null,
+  };
+}
+
+function renderGutterMarquee(
+  onMarquee: ReturnType<typeof vi.fn>,
+  extra: Partial<React.ComponentProps<typeof CurveEditor>> = {},
+) {
+  const ref = createRef<CurveMarqueeHandle>();
+  const result = render(
+    <CurveEditor
+      marqueeRef={ref}
+      tracks={[gutterTrack()]}
+      channels={GUTTER_CHANNELS}
+      visibleChannels={{ red: true }}
+      focusChannel="red"
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+      onCanvasMarqueeSelect={onMarquee}
+      {...extra}
+    />,
+  );
+  const svg = result.container.querySelector(
+    "[data-testid='curve-editor-svg']",
+  ) as SVGSVGElement;
+  svg.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  return { ...result, svg, ref };
+}
+
+describe("CurveEditor — gutter-initiated marquee (multi-channel)", () => {
+  it("startMarquee from a left-gutter origin sweeps and selects the covered keys", () => {
+    const onMarquee = vi.fn();
+    const { svg, ref } = renderGutterMarquee(onMarquee);
+    // Begin in the left Y-gutter (clientX negative) at the bottom edge.
+    act(() => ref.current!.startMarquee(-50, 300, false, 20));
+    // Sweep up and right, past slop, covering times 0..75 (x ≤ 480; x=600 out).
+    fireEvent.pointerMove(svg, { pointerId: 20, clientX: 480, clientY: 0 });
+    fireEvent.pointerUp(svg, { pointerId: 20, clientX: 480, clientY: 0 });
+    expect(onMarquee).toHaveBeenCalledTimes(1);
+    expect([...onMarquee.mock.calls[0]![0]].sort((a, b) => a - b)).toEqual([0, 25, 50, 75]);
+    expect(onMarquee.mock.calls[0]![1]).toBe(false);
+  });
+
+  it("begins a gutter-origin marquee AT the press point, not snapped to the plot edge", () => {
+    const onMarquee = vi.fn();
+    const { container, svg, ref } = renderGutterMarquee(onMarquee);
+    // Press in the left Y-gutter (clientX -50 → viewBox x -50 on the 600px stub).
+    act(() => ref.current!.startMarquee(-50, 150, false, 21));
+    // Move past slop so the marquee rectangle renders.
+    fireEvent.pointerMove(svg, { pointerId: 21, clientX: 300, clientY: 150 });
+    const rect = container.querySelector("[data-testid='curve-marquee']");
+    expect(rect).not.toBeNull();
+    // The rectangle starts at the raw gutter x (-50) — it does NOT snap to 0.
+    // The SVG's overflow="visible" renders that into the margin.
+    expect(rect!.getAttribute("x")).toBe("-50");
+  });
+
+  it("a trailing click after a gutter marquee does NOT clear the selection (suppresses onCanvasClick)", () => {
+    const onMarquee = vi.fn();
+    const onCanvasClick = vi.fn();
+    const { svg, ref } = renderGutterMarquee(onMarquee, { onCanvasClick });
+    act(() => ref.current!.startMarquee(-50, 300, false, 22));
+    fireEvent.pointerMove(svg, { pointerId: 22, clientX: 480, clientY: 0 });
+    fireEvent.pointerUp(svg, { pointerId: 22, clientX: 480, clientY: 0 });
+    expect(onMarquee).toHaveBeenCalledTimes(1);
+    // A real browser fires a synthetic click on the captured SVG right after a
+    // drag. Because the gutter marquee captures the SVG (not the backdrop),
+    // that click lands on the SVG element — whose onClick must honour the
+    // marquee's click-suppression flag, or it clears the just-made selection.
+    fireEvent.click(svg);
+    expect(onCanvasClick).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Locked focus channel (read-only mirror) ─────────────────────────────────
+//
+// When the focus channel has lockedTo set, the renderer must:
+//   - mark the focus <g> with data-readonly="true"
+//   - dash the stroke and hollow the markers (visual signal)
+//   - suppress key drag and canvas marquee (gesture-inert)
+//   - still allow backdrop clicks through to onCanvasClick (clear-selection UX)
+
+const LOCK_RED_CHANNEL: ChannelDef = {
+  id: "red", label: "Red", color: "#FF0000", defaultOn: true, trackName: "red",
+};
+const LOCK_GREEN_CHANNEL: ChannelDef = {
+  id: "green", label: "Green", color: "#00FF00", defaultOn: true, trackName: "green",
+};
+
+function makeLockedTrack(name: "red" | "green", lockedTo: "red" | null): TrackDto {
+  return {
+    name,
+    keys: [
+      { time: 0, value: 0 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 1 },
+    ],
+    interpolation: "linear",
+    lockedTo,
+  };
+}
+
+/** Render the multi-channel CurveEditor with red + green tracks, green
+ *  focused and optionally locked. Returns container + svg + backdrop. */
+function renderLockFixture(
+  greenLockedTo: "red" | null,
+  extras: Partial<React.ComponentProps<typeof CurveEditor>> = {},
+) {
+  const result = render(
+    <CurveEditor
+      tracks={[makeLockedTrack("red", null), makeLockedTrack("green", greenLockedTo)]}
+      channels={[LOCK_RED_CHANNEL, LOCK_GREEN_CHANNEL]}
+      visibleChannels={{ red: true, green: true }}
+      focusChannel="green"
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+      {...extras}
+    />,
+  );
+  const svg = result.container.querySelector(
+    "[data-testid='curve-editor-svg']",
+  ) as SVGSVGElement;
+  svg.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  const backdrop = result.container.querySelector(
+    "[data-testid='curve-canvas-backdrop']",
+  ) as SVGRectElement;
+  if (backdrop) {
+    backdrop.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  }
+  return { ...result, svg, backdrop };
+}
+
+describe("locked focus channel (read-only mirror)", () => {
+  it("dashed + hollow + data-readonly when locked", () => {
+    const { container } = renderLockFixture("red");
+    const focusG = container.querySelector(
+      '[data-channel-id="green"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    expect(focusG.getAttribute("data-readonly")).toBe("true");
+
+    const polyline = focusG.querySelector(
+      '[data-testid="curve-polyline"]',
+    ) as SVGPolylineElement;
+    expect(polyline).not.toBeNull();
+    expect(polyline.getAttribute("stroke-dasharray")).toBe("7 5");
+
+    const markers = focusG.querySelectorAll(".curve-key-marker");
+    expect(markers.length).toBeGreaterThan(0);
+    for (const m of markers) {
+      expect(m.getAttribute("fill")).toBe("none");
+      expect(m.getAttribute("stroke")).toBe(LOCK_GREEN_CHANNEL.color);
+    }
+  });
+
+  it("smooth interpolation on a locked focus also carries stroke-dasharray", () => {
+    // Re-render the locked fixture but with smooth interpolation so the
+    // renderer takes the <path data-testid="curve-path"> branch instead
+    // of the linear <polyline data-testid="curve-polyline"> branch.
+    const smoothRed: TrackDto = { ...makeLockedTrack("red", null), interpolation: "smooth" };
+    const smoothGreen: TrackDto = { ...makeLockedTrack("green", "red"), interpolation: "smooth" };
+    const { container } = render(
+      <CurveEditor
+        tracks={[smoothRed, smoothGreen]}
+        channels={[LOCK_RED_CHANNEL, LOCK_GREEN_CHANNEL]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="green"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+      />,
+    );
+    const focusG = container.querySelector(
+      '[data-channel-id="green"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    const path = focusG.querySelector('[data-testid="curve-path"]') as SVGPathElement | null;
+    expect(path).not.toBeNull();
+    expect(path!.getAttribute("stroke-dasharray")).toBe("7 5");
+  });
+
+  it("solid + filled when unlocked", () => {
+    const { container } = renderLockFixture(null);
+    const focusG = container.querySelector(
+      '[data-channel-id="green"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    expect(focusG.getAttribute("data-readonly")).toBe("false");
+
+    const polyline = focusG.querySelector('[data-testid="curve-polyline"]') as SVGPolylineElement;
+    expect(polyline).not.toBeNull();
+    expect(polyline.hasAttribute("stroke-dasharray")).toBe(false);
+
+    const markers = focusG.querySelectorAll(".curve-key-marker");
+    expect(markers.length).toBeGreaterThan(0);
+    for (const m of markers) {
+      expect(m.getAttribute("fill")).toBe(LOCK_GREEN_CHANNEL.color);
+    }
+  });
+
+  it("no drag on a locked focus key", () => {
+    const onKeyDragStart = vi.fn();
+    const onKeyDragEnd = vi.fn();
+    const { container, svg } = renderLockFixture("red", {
+      onKeyDragStart,
+      onKeyDragEnd,
+    });
+    const hitPads = container.querySelectorAll('[data-testid="curve-key"][data-channel-id="green"]');
+    expect(hitPads.length).toBeGreaterThan(0);
+    const pad = container.querySelector('[data-testid="curve-key"][data-key-time="50"]') as SVGCircleElement;
+    expect(pad).not.toBeNull();
+    // Pointer-down on the middle key hit-pad.
+    fireEvent.pointerDown(pad, { pointerId: 50, button: 0, clientX: 300, clientY: 150 });
+    // Pointer-move past slop on the SVG.
+    fireEvent.pointerMove(svg, { pointerId: 50, clientX: 200, clientY: 100 });
+    // Pointer-up.
+    fireEvent.pointerUp(svg, { pointerId: 50, clientX: 200, clientY: 100 });
+    expect(onKeyDragStart).not.toHaveBeenCalled();
+    expect(onKeyDragEnd).not.toHaveBeenCalled();
+  });
+
+  it("no marquee on a locked focus canvas, click still clears", () => {
+    const onCanvasMarqueeSelect = vi.fn();
+    const onCanvasClick = vi.fn();
+    const { container, svg, backdrop } = renderLockFixture("red", {
+      onCanvasMarqueeSelect,
+      onCanvasClick,
+    });
+    // Pointer-down on backdrop then move past slop.
+    fireEvent.pointerDown(backdrop, { pointerId: 51, button: 0, clientX: 100, clientY: 50 });
+    fireEvent.pointerMove(svg, { pointerId: 51, clientX: 400, clientY: 250 });
+    // No marquee rect should have mounted.
+    expect(container.querySelector('[data-testid="curve-marquee"]')).toBeNull();
+    fireEvent.pointerUp(svg, { pointerId: 51, clientX: 400, clientY: 250 });
+    expect(onCanvasMarqueeSelect).not.toHaveBeenCalled();
+    // Plain click on the backdrop should still fire onCanvasClick.
+    fireEvent.click(backdrop);
+    expect(onCanvasClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("insertMode + locked focus: pointer-down does NOT call onCanvasAdd", () => {
+    // The focusReadOnly guard is hoisted before the insertMode branch,
+    // so insert is suppressed on a locked canvas even when insertMode=true.
+    const onCanvasAdd = vi.fn();
+    const { backdrop } = renderLockFixture("red", {
+      insertMode: true,
+      onCanvasAdd,
+    });
+    fireEvent.pointerDown(backdrop, { pointerId: 60, button: 0, clientX: 180, clientY: 90 });
+    expect(onCanvasAdd).not.toHaveBeenCalled();
+  });
+
+  it("right-click and click on a locked hit pad do NOT invoke onKeyContextMenu / onKeyClick", () => {
+    // Context-menu and click handlers bail immediately when
+    // focusReadOnly, so the callbacks are never reached.
+    const onKeyContextMenu = vi.fn();
+    const onKeyClick = vi.fn();
+    const { container } = renderLockFixture("red", {
+      onKeyContextMenu,
+      onKeyClick,
+    });
+    const pad = container.querySelector(
+      '[data-testid="curve-key"][data-channel-id="green"][data-key-time="50"]',
+    ) as SVGCircleElement;
+    expect(pad).not.toBeNull();
+    fireEvent.contextMenu(pad);
+    expect(onKeyContextMenu).not.toHaveBeenCalled();
+    fireEvent.click(pad);
+    expect(onKeyClick).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Curve morph animation tests ─────────────────────────────────────────────
+//
+// These tests stub window.matchMedia so morphs RUN (jsdom lacks it by
+// default, which is the mechanism that keeps the other ~720 tests in
+// snap mode).
+
+// Helper: build a TrackDto key point.
+function k(time: number, value: number): { time: number; value: number } {
+  return { time, value };
+}
+
+// Helper: build a full TrackDto.
+// Name must be a TrackName literal; "red" and "green" are valid in the schema.
+function trk(
+  name: "red" | "green",
+  keys: Array<{ time: number; value: number }>,
+  interpolation: InterpolationType = "linear",
+  lockedTo: "red" | "green" | null = null,
+): TrackDto {
+  return { name, keys, interpolation, lockedTo };
+}
+
+// A canonical 3-key set shared across tests.
+const KEYS3 = [k(0, 0), k(50, 0.5), k(100, 1)];
+
+// Channel definitions for morph tests.
+// Re-use the lock fixtures' pattern: `trackName` must be a valid TrackName
+// literal. "red" and "green" are valid TrackName values in the schema.
+const MORPH_RED_CHANNEL = {
+  id: "red", label: "Red", color: "#FF0000", defaultOn: true, trackName: "red",
+} satisfies ChannelDef;
+const MORPH_GREEN_CHANNEL = {
+  id: "green", label: "Green", color: "#00FF00", defaultOn: true, trackName: "green",
+} satisfies ChannelDef;
+
+/** Render the multi-channel CurveEditor with the given tracks, focusing
+ *  the given channel. Width/height are pinned to 600×300. */
+function mcCurve(
+  tracks: TrackDto[],
+  focusId: string | undefined,
+  emitterId?: number | null,
+): React.ReactElement {
+  const channelDefs = tracks.map((t) =>
+    t.name === "green" ? MORPH_GREEN_CHANNEL : MORPH_RED_CHANNEL,
+  );
+  const visibleChannels = Object.fromEntries(tracks.map((t) => [t.name, true]));
+  return (
+    <CurveEditor
+      tracks={tracks}
+      channels={channelDefs}
+      visibleChannels={visibleChannels}
+      emitterId={emitterId}
+      focusChannel={focusId}
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+    />
+  );
+}
+
+// matchMedia stub — morphs RUN (reduce=false).
+function stubMatchMediaMotionOn(): () => void {
+  const realMM = (window as Window & typeof globalThis).matchMedia;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (q: string) => ({
+      matches: false, // prefers-reduced-motion: reduce → false → motion OK
+      media: q,
+      onchange: null,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent() { return false; },
+    }),
+  });
+  return () => {
+    Object.defineProperty(window, "matchMedia", { configurable: true, value: realMM });
+  };
+}
+
+// matchMedia stub — reduced-motion ON.
+function stubMatchMediaMotionOff(): () => void {
+  const realMM = (window as Window & typeof globalThis).matchMedia;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (q: string) => ({
+      matches: q.includes("reduce"), // prefers-reduced-motion: reduce → true → NO motion
+      media: q,
+      onchange: null,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent() { return false; },
+    }),
+  });
+  return () => {
+    Object.defineProperty(window, "matchMedia", { configurable: true, value: realMM });
+  };
+}
+
+/** Variant of mcCurve that lets the caller override the channel colour.
+ *  Used for the var(...) colour branch test. */
+function mcCurveWithColor(
+  tracks: TrackDto[],
+  focusId: string,
+  color: string,
+): React.ReactElement {
+  const channelDefs: ChannelDef[] = tracks.map((t) => ({
+    id: t.name,
+    label: t.name,
+    color,
+    defaultOn: true,
+    trackName: t.name as ChannelDef["trackName"],
+  }));
+  const visibleChannels = Object.fromEntries(tracks.map((t) => [t.name, true]));
+  return (
+    <CurveEditor
+      tracks={tracks}
+      channels={channelDefs}
+      visibleChannels={visibleChannels}
+      focusChannel={focusId}
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+    />
+  );
+}
+
+describe("curve morph (structural changes)", () => {
+  let restoreMatchMedia: (() => void) | null = null;
+
+  afterEach(() => {
+    restoreMatchMedia?.();
+    restoreMatchMedia = null;
+  });
+
+  it("mounts a morph overlay on a structural change, hides the static curve, then settles", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    const t1 = [trk("red", [k(0, 0), k(50, 0.9), k(100, 1)], "linear")];
+    rerender(mcCurve(t1, "red"));
+
+    // Overlay should mount.
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // Static focus layer should be hidden while morphing.
+    const staticLayer = container.querySelector('[data-channel-id="red"][data-focus="true"]')!;
+    expect((staticLayer as SVGGElement).style.visibility).toBe("hidden");
+
+    // After the morph completes, overlay unmounts and static layer re-appears.
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+
+    expect((staticLayer as SVGGElement).style.visibility).not.toBe("hidden");
+    // Suppress unused-variable warning — overlay was captured to verify the
+    // same node is used throughout.
+    void overlay;
+  });
+
+  it("interp change morphs; locked follower morphs with stroke-dasharray '7 5' on its overlay polyline", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", KEYS3, "linear"), trk("green", KEYS3, "linear", "red")];
+    const { rerender, container } = render(mcCurve(t0, "green"));
+
+    const t1 = [trk("red", KEYS3, "smooth"), trk("green", KEYS3, "smooth", "red")];
+    rerender(mcCurve(t1, "green"));
+
+    // The green channel is the focused+locked follower — its overlay polyline
+    // should carry the READONLY_DASH ("7 5").
+    const line = await waitFor(() => {
+      const el = container.querySelector(
+        '[data-testid="curve-morph-overlay"][data-channel-id="green"] polyline',
+      );
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    expect(line.getAttribute("stroke-dasharray")).toBe("7 5");
+  });
+
+  it("no matchMedia (jsdom default) => no overlay ever mounts", async () => {
+    // Run WITHOUT any stub — jsdom has no matchMedia, so the gate blocks morphs.
+    // Ensure matchMedia is genuinely absent for this test.
+    const savedMM = (window as unknown as Record<string, unknown>).matchMedia;
+    delete (window as unknown as Record<string, unknown>).matchMedia;
+    try {
+      const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+      const { rerender, container } = render(mcCurve(t0, "red"));
+      rerender(mcCurve([trk("red", [k(0, 0), k(50, 1), k(100, 1)], "linear")], "red"));
+      // Give any rAF-backed morph time to manifest (it shouldn't).
+      await new Promise<void>((r) => setTimeout(r, 50));
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    } finally {
+      (window as unknown as Record<string, unknown>).matchMedia = savedMM;
+    }
+  });
+
+  it("reduced-motion => no overlay", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOff(); // prefers-reduced-motion: reduce = true
+
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+    rerender(mcCurve([trk("red", [k(0, 0), k(50, 1), k(100, 1)], "linear")], "red"));
+    // Give rAF time to fire if the gate erroneously passes.
+    await new Promise<void>((r) => setTimeout(r, 50));
+    expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+  });
+
+  it("interruption: a second structural change mid-morph retargets without unmounting the overlay", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    // First structural change — starts a morph.
+    rerender(mcCurve([trk("red", [k(0, 0), k(40, 0.8), k(100, 1)], "linear")], "red"));
+
+    // Wait for the overlay to appear.
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // About 30ms into the morph, issue a second structural change.
+    await new Promise<void>((r) => setTimeout(r, 30));
+    rerender(mcCurve([trk("red", [k(0, 0), k(60, 0.3), k(100, 1)], "linear")], "red"));
+
+    // The overlay element should be the SAME node (not unmounted/remounted).
+    await new Promise<void>((r) => setTimeout(r, 10));
+    const overlayAfterRetarget = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+    expect(overlayAfterRetarget).toBe(overlay);
+
+    // Eventually the morph settles.
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("sustained interruption-folding: repeated retargets past 430 ms never trigger the stale fallback", async () => {
+    // Regression test for the stale-fallback bug: before the fix, the fallback
+    // was set ONCE at ensureLoop() call time (at the first retarget). A stream
+    // of retargets extending the total duration past MORPH_MS+250 (~430ms)
+    // would hit that deadline and snap everything to done early.
+    //
+    // After the fix, each retarget resets the fallback to MORPH_MS+250 from
+    // NOW, so the overlay survives for the full sequence.
+    //
+    // Approach: retarget 4 times at ~80ms intervals (t≈0, 80, 160, 240, 320).
+    // Assert the overlay still exists at ~500ms (well past the old 430ms
+    // stale deadline, but only ~180ms after the last retarget). Then wait for
+    // natural completion.
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    // Retarget 1 — starts the morph.
+    rerender(mcCurve([trk("red", [k(0, 0), k(30, 0.7), k(100, 1)], "linear")], "red"));
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]')).not.toBeNull();
+    });
+
+    // Retarget 2 at ~80 ms.
+    await new Promise<void>((r) => setTimeout(r, 80));
+    rerender(mcCurve([trk("red", [k(0, 0), k(45, 0.4), k(100, 1)], "linear")], "red"));
+
+    // Retarget 3 at ~160 ms.
+    await new Promise<void>((r) => setTimeout(r, 80));
+    rerender(mcCurve([trk("red", [k(0, 0), k(55, 0.6), k(100, 1)], "linear")], "red"));
+
+    // Retarget 4 at ~240 ms.
+    await new Promise<void>((r) => setTimeout(r, 80));
+    rerender(mcCurve([trk("red", [k(0, 0), k(65, 0.2), k(100, 1)], "linear")], "red"));
+
+    // Retarget 5 at ~320 ms.
+    await new Promise<void>((r) => setTimeout(r, 80));
+    rerender(mcCurve([trk("red", [k(0, 0), k(70, 0.9), k(100, 1)], "linear")], "red"));
+
+    // At ~400 ms (>430 ms from the first start but only ~80 ms after last
+    // retarget), wait another 100 ms (total ~500 ms from first retarget).
+    // The stale-fallback bug would have snapped done at ~430 ms; the fixed
+    // version must NOT have snapped.
+    await new Promise<void>((r) => setTimeout(r, 100));
+    expect(
+      container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]'),
+      "overlay must still exist at ~500 ms (fallback must NOT have fired at ~430 ms)",
+    ).not.toBeNull();
+
+    // Allow the morph to settle naturally (MORPH_MS=180 from the last
+    // retarget at ~320 ms → done by ~500 ms + rAF latency). Give extra
+    // headroom for CI.
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("focus-channel markers: matched keys glide, added key pops in, removed key ghosts out", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", [k(0, 0), k(50, 0.5), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    // delete the 50-key, add a 75-key in one change (paste-like)
+    rerender(mcCurve([trk("red", [k(0, 0), k(75, 0.9), k(100, 1)], "linear")], "red"));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // mid-morph: overlay carries marker circles — 2 moved (0, 100) + 1 in (75) + 1 ghost (50) = 4
+    await waitFor(() => {
+      expect(overlay.querySelectorAll("circle").length).toBe(4);
+    });
+
+    // Structural diversity check: the 4 circles must not all share the same cx.
+    // Move markers sit at px 0 and 600 (keys at time 0 and 100 are stable).
+    // The "in" marker sits at px 450 (time 75) and the "out" at px 300 (time 50).
+    // A regression that creates 4 circles with wrong choreography (e.g. all at
+    // the same position) will fail here even if the count is still 4.
+    const circles4 = Array.from(overlay.querySelectorAll("circle"));
+    const cxValues = new Set(circles4.map((c) => c.getAttribute("cx")));
+    expect(cxValues.size, "all 4 marker circles must have distinct cx values").toBe(4);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("emitter switch: a NEW key (count mismatch) rides the line in, it does not pop", async () => {
+    // The video bug: switching from a 2-key emitter to a 3-key emitter left the
+    // extra key popping in. On a switch the morph must "ride the line" — one
+    // GLIDE marker per NEW key (no "in"/"out" pop), so every key (incl. the new
+    // interior one) emerges from the old line and slides into place.
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    // Emitter 1: red has 2 keys (a plain line, no interior key).
+    const a = [trk("red", [k(0, 1), k(100, 0)], "linear")];
+    const { rerender, container } = render(mcCurve(a, "red", 1));
+
+    // Switch to emitter 2: red now has a NEW interior key at t=50 (3 keys).
+    rerender(mcCurve([trk("red", [k(0, 1), k(50, 0.2), k(100, 0)], "linear")], "red", 2));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    // One marker per NEW key = 3, and ALL are "move" markers (full radius +
+    // opacity) — a popping key would be an "in" marker (r<5 / opacity<1).
+    await waitFor(() => {
+      const circles = Array.from(overlay.querySelectorAll("circle"));
+      expect(circles.length).toBe(3);
+      for (const c of circles) {
+        expect(c.getAttribute("r")).toBe("5");
+        expect(c.getAttribute("fill-opacity")).toBe("1");
+      }
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("emitter switch: NON-focus channel keys also glide (no border blink-in)", async () => {
+    // The reported bug: on a switch the focus (red) keys glided, but the dimmed
+    // follower keys (green/blue) vanished during the morph and blinked back at the
+    // end. Non-focus channels must ALSO get gliding markers on a switch — sized +
+    // dimmed to match their static dots (r=3, opacity 0.4).
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    // Emitter 1: green mirrors red (overlapping), 2 keys each.
+    const a = [trk("red", [k(0, 1), k(100, 0)], "linear"),
+               trk("green", [k(0, 1), k(100, 0)], "linear")];
+    const { rerender, container } = render(mcCurve(a, "red", 1));
+
+    // Switch to emitter 2: green separates to its own values.
+    rerender(mcCurve([trk("red", [k(0, 1), k(100, 0)], "linear"),
+                      trk("green", [k(0, 0.5), k(100, 0.5)], "linear")], "red", 2));
+
+    const green = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    // Green's 2 keys glide (BEFORE the fix this was 0 — they popped via the
+    // static layer at morph end). Dimmed non-focus styling, all "move".
+    await waitFor(() => {
+      const circles = Array.from(green.querySelectorAll("circle"));
+      expect(circles.length).toBe(2);
+      for (const c of circles) {
+        expect(c.getAttribute("r")).toBe("3");
+        expect(c.getAttribute("fill-opacity")).toBe("0.4");
+      }
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("emitter switch in VIEW-ONLY mode (no focus channel): markers match the r=4 stroked static dot", async () => {
+    // Guards the overlay→static handoff in view-only mode (no focusChannel): the
+    // static dots there are the full-fidelity r=4 + dark-stroke style, so the
+    // gliding markers must use the same — not the focus-mode r=3 / no-stroke.
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const a = [trk("red", [k(0, 1), k(100, 0)], "linear")];
+    const { rerender, container } = render(mcCurve(a, undefined, 1)); // no focus → view-only
+    rerender(mcCurve([trk("red", [k(0, 1), k(50, 0.2), k(100, 0)], "linear")], undefined, 2));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    await waitFor(() => {
+      const circles = Array.from(overlay.querySelectorAll("circle"));
+      expect(circles.length).toBe(3);
+      for (const c of circles) {
+        expect(c.getAttribute("r")).toBe("4");
+        expect(c.getAttribute("stroke")).toBe("var(--curve-marker-stroke)");
+        expect(c.getAttribute("fill-opacity")).toBe("1");
+      }
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="curve-morph-overlay"]')).toBeNull();
+    }, { timeout: 2000 });
+  });
+
+  it("non-focus channels morph their line but render no overlay markers", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", KEYS3, "linear"), trk("green", KEYS3, "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red")); // focus red; green is background
+
+    rerender(mcCurve([trk("red", KEYS3, "linear"),
+                      trk("green", [k(0, 0), k(40, 1), k(100, 0.5)], "linear")], "red"));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // Give at least one rAF tick so drawJob runs.
+    await new Promise<void>((r) => setTimeout(r, 30));
+
+    expect(overlay.querySelectorAll("circle").length).toBe(0);
+  });
+
+  it("a non-focus channel's morph overlay renders BELOW the focus layer (follower lines never paint over focus keys)", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const t0 = [trk("red", KEYS3, "linear"), trk("green", KEYS3, "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red")); // focus red
+    // Green (a background/follower channel) restructures — e.g. a locked
+    // follower catching up to a master edit.
+    rerender(mcCurve([trk("red", KEYS3, "linear"),
+                      trk("green", [k(0, 0), k(40, 1), k(100, 0.5)], "linear")], "red"));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    const focusG = container.querySelector('[data-channel-id="red"][data-focus="true"]')!;
+    expect(focusG).not.toBeNull();
+    // SVG paints in document order: the overlay must PRECEDE the focus
+    // layer so the focus curve + key markers draw on top of the
+    // morphing follower line.
+    expect(
+      overlay.compareDocumentPosition(focusG) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("var(...) channel colour: overlay polyline stroke is the var string; focus fill references gradient with var(...) stops", async () => {
+    // The focus overlay fill must use a self-contained linearGradient whose
+    // stop-color attributes carry the channel colour verbatim — even when the
+    // colour is a CSS variable token (e.g. var(--x-axis)) that is not parseable
+    // as hex. The gradient id is morph-fill-<channelId>. The fill path's fill
+    // attribute is url(#morph-fill-<channelId>).
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    const varColor = "var(--x-axis)";
+    const t0 = [trk("red", [k(0, 0), k(100, 1)], "linear")];
+    const { rerender, container } = render(mcCurveWithColor(t0, "red", varColor));
+
+    rerender(mcCurveWithColor([trk("red", [k(0, 0), k(50, 0.9), k(100, 1)], "linear")], "red", varColor));
+
+    // Wait for the overlay to mount and for drawJob to create the imperative children.
+    const overlayG = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // Give at least one rAF tick so drawJob creates the imperative children.
+    await new Promise<void>((r) => setTimeout(r, 30));
+
+    const polyline = overlayG.querySelector("polyline");
+    expect(polyline, "overlay polyline must exist after first rAF tick").not.toBeNull();
+    // The var(...) colour must be forwarded verbatim as the stroke — no NaN corruption.
+    expect(polyline!.getAttribute("stroke")).toBe(varColor);
+
+    // Focus fill: path fill must reference the gradient, not a flat colour.
+    const fillPath = overlayG.querySelector("path");
+    expect(fillPath, "overlay fill path must exist for focus channel").not.toBeNull();
+    expect(fillPath!.getAttribute("fill")).toBe("url(#morph-fill-red)");
+    // No flat fill-opacity attribute (gradient handles opacity).
+    expect(fillPath!.getAttribute("fill-opacity")).toBeNull();
+
+    // A <linearGradient> with the correct id and two stops must exist.
+    const grad = overlayG.querySelector("linearGradient#morph-fill-red");
+    expect(grad, "linearGradient#morph-fill-red must exist in overlay").not.toBeNull();
+    const stops = grad!.querySelectorAll("stop");
+    expect(stops).toHaveLength(2);
+    // Both stops must carry the channel colour verbatim.
+    expect(stops[0]!.getAttribute("stop-color")).toBe(varColor);
+    expect(stops[1]!.getAttribute("stop-color")).toBe(varColor);
+    // Stops must have the matching opacities.
+    expect(stops[0]!.getAttribute("stop-opacity")).toBe("0.25");
+    expect(stops[1]!.getAttribute("stop-opacity")).toBe("0");
+  });
+
+  it("non-focus channel morph overlay has no fill path", async () => {
+    // The static layer draws no fill under non-focus (background) channels.
+    // The overlay must match: only a polyline, no <path> fill element.
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    // red is focus; green is the background channel that will morph.
+    const t0 = [trk("red", KEYS3, "linear"), trk("green", KEYS3, "linear")];
+    const { rerender, container } = render(mcCurve(t0, "red"));
+
+    rerender(mcCurve([trk("red", KEYS3, "linear"),
+                      trk("green", [k(0, 0), k(40, 1), k(100, 0.5)], "linear")], "red"));
+
+    const overlay = await waitFor(() => {
+      const el = container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+
+    // Give at least one rAF tick so drawJob runs.
+    await new Promise<void>((r) => setTimeout(r, 30));
+
+    // Non-focus: no fill <path> should exist.
+    expect(overlay.querySelector("path"), "non-focus overlay must not have a fill path").toBeNull();
+    // But the line polyline must be there.
+    expect(overlay.querySelector("polyline"), "non-focus overlay must have a polyline").not.toBeNull();
+  });
+
+  it("dragging one focus key does not re-render another channel's static layer", () => {
+    const tracks = [
+      trk("red", [k(0, 0), k(50, 0.5), k(100, 1)], "linear"),
+      trk("green", [k(0, 0), k(50, 0.25), k(100, 0.75)], "linear"),
+    ];
+    const onKeyDragEnd = vi.fn();
+    const { container } = render(
+      <CurveEditor
+        tracks={tracks}
+        channels={[MORPH_RED_CHANNEL, MORPH_GREEN_CHANNEL]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        onKeyDragEnd={onKeyDragEnd}
+      />,
+    );
+    const svg = container.querySelector('[data-testid="curve-editor-svg"]') as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    const greenLayer = () => container.querySelector('[data-testid="curve-layer-green"]') as SVGGElement;
+    const before = Number(greenLayer().getAttribute("data-render-count"));
+    expect(before).toBeGreaterThan(0);
+
+    const redKey = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="50"][data-channel-id="red"]',
+    ) as SVGCircleElement;
+    fireEvent.pointerDown(redKey, { button: 0, pointerId: 42, clientX: 300, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 42, clientX: 320, clientY: 140 });
+    fireEvent.pointerMove(svg, { pointerId: 42, clientX: 340, clientY: 120 });
+    fireEvent.pointerMove(svg, { pointerId: 42, clientX: 360, clientY: 100 });
+    fireEvent.pointerUp(svg, { pointerId: 42, clientX: 360, clientY: 100 });
+
+    expect(greenLayer().getAttribute("data-render-count")).toBe(String(before));
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("a drag-committed move does not re-morph the dragged channel, but its locked follower morphs", async () => {
+    restoreMatchMedia = stubMatchMediaMotionOn();
+
+    // red is focus; green is locked-to-red — both have identical keys.
+    const t0 = [
+      trk("red",   [k(0, 0), k(50, 0.5), k(100, 1)], "linear"),
+      trk("green", [k(0, 0), k(50, 0.5), k(100, 1)], "linear", "red"),
+    ];
+    const onKeyDragEnd = vi.fn();
+
+    const { rerender, container } = render(
+      <CurveEditor
+        tracks={t0}
+        channels={[MORPH_RED_CHANNEL, MORPH_GREEN_CHANNEL]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        onKeyDragEnd={onKeyDragEnd}
+      />,
+    );
+
+    // Stub getBoundingClientRect so eventToViewBox gets a valid scale.
+    const svg = container.querySelector('[data-testid="curve-editor-svg"]') as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    // Find the hit-pad for the t=50 key on the red (focus) channel.
+    // data-key-time="50" on the focus channel's <circle>.
+    const pad = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="50"][data-channel-id="red"]',
+    )!;
+    expect(pad).not.toBeNull();
+
+    // Simulate a drag: down at key position, move past slop, up.
+    // t=50 → x=300; v=0.5 → y=150.
+    fireEvent.pointerDown(pad, { button: 0, pointerId: 99, clientX: 300, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 99, clientX: 340, clientY: 120 });
+    fireEvent.pointerUp(svg,  { pointerId: 99, clientX: 340, clientY: 120 });
+
+    // onKeyDragEnd must have fired with (oldTime=50, newTime, newValue).
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+    const [, committedTime, committedValue] = onKeyDragEnd.mock.calls[0] as [number, number, number];
+
+    // Build t1: red's 50-key is now at the committed position; green mirrors it.
+    // Both tracks get the moved key; the other keys stay in place.
+    const t1 = [
+      trk("red",   [k(0, 0), k(committedTime, committedValue), k(100, 1)], "linear"),
+      trk("green", [k(0, 0), k(committedTime, committedValue), k(100, 1)], "linear", "red"),
+    ];
+
+    rerender(
+      <CurveEditor
+        tracks={t1}
+        channels={[MORPH_RED_CHANNEL, MORPH_GREEN_CHANNEL]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        onKeyDragEnd={onKeyDragEnd}
+      />,
+    );
+
+    // The locked follower (green) MUST morph — its change wasn't the dragged channel.
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="green"]'),
+      ).not.toBeNull();
+    });
+
+    // The dragged channel (red) must NOT morph — suppression swallows it.
+    expect(
+      container.querySelector('[data-testid="curve-morph-overlay"][data-channel-id="red"]'),
+    ).toBeNull();
+  });
+});
+
+// ─── group-drag fires onGroupDragMove on every pointer-move past slop ───
+//
+// When ≥2 keys are selected and the user drags one of them, the renderer must
+// call onGroupDragMove with the accumulated (dTime, dValue) on every move event
+// that has crossed DRAG_SLOP — mirroring how the single-key branch calls
+// onKeyDragMove. This is the renderer half of the live-spinner fix.
+
+describe("CurveEditor — group-drag fires onGroupDragMove (live-spinner fix)", () => {
+  const GROUP_CHANNELS: ChannelDef[] = [
+    { id: "red", label: "Red", color: "#FF0000", defaultOn: true, trackName: "red" },
+  ];
+
+  function makeGroupTrack(): TrackDto {
+    // 4 keys: borders at 0/100, interior at 25/75. Drag the t=25 key.
+    return {
+      name: "red",
+      keys: [
+        { time: 0,   value: 0 },
+        { time: 25,  value: 0.25 },
+        { time: 75,  value: 0.75 },
+        { time: 100, value: 1 },
+      ],
+      interpolation: "linear",
+      lockedTo: null,
+    };
+  }
+
+  it("fires onGroupDragMove with non-zero (dTime,dValue) during a group drag past slop", () => {
+    const onGroupDragMove = vi.fn();
+    const onGroupDragEnd = vi.fn();
+    // Select both interior keys (t=25, t=75) to make this a group drag.
+    const selectedKeyTimes = new Set([25, 75]);
+
+    const { container } = render(
+      <CurveEditor
+        tracks={[makeGroupTrack()]}
+        channels={GROUP_CHANNELS}
+        visibleChannels={{ red: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        selectedKeyTimes={selectedKeyTimes}
+        onGroupDragMove={onGroupDragMove}
+        onGroupDragEnd={onGroupDragEnd}
+      />,
+    );
+
+    const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    // Grab the t=25 key circle on the focus channel.
+    // t=25 → x = 25/100 * 600 = 150; v=0.25 → y = 300 - (0.25 * 300) = 225.
+    const pad = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
+    )!;
+    expect(pad).not.toBeNull();
+
+    // Pointer-down on the grabbed key (part of a multi-selection → group drag).
+    fireEvent.pointerDown(pad, { button: 0, pointerId: 55, clientX: 150, clientY: 225 });
+
+    // Move past DRAG_SLOP (1.5 viewBox units; slop is in client px, svg maps 1:1 here).
+    fireEvent.pointerMove(svg, { pointerId: 55, clientX: 180, clientY: 200 });
+
+    // onGroupDragMove must have been called at least once with non-zero dTime or dValue.
+    expect(onGroupDragMove).toHaveBeenCalled();
+    const [dTime, dValue] = onGroupDragMove.mock.calls[0] as [number, number];
+    // The drag moved right (150→180 px → +30/600*100 = +5 time units) and
+    // up (225→200 px → −25 px y → +25/300 ≈ +0.083 value). Both non-zero,
+    // with the signs the cursor delta implies (guards a swapped/zeroed arg).
+    expect(dTime).toBeCloseTo(5, 1);
+    expect(dValue).toBeGreaterThan(0);
+    expect(dValue).toBeCloseTo(0.083, 2);
+  });
+
+  it("does NOT fire onGroupDragMove before pointer has moved past slop", () => {
+    const onGroupDragMove = vi.fn();
+    const selectedKeyTimes = new Set([25, 75]);
+
+    const { container } = render(
+      <CurveEditor
+        tracks={[makeGroupTrack()]}
+        channels={GROUP_CHANNELS}
+        visibleChannels={{ red: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        selectedKeyTimes={selectedKeyTimes}
+        onGroupDragMove={onGroupDragMove}
+      />,
+    );
+
+    const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+
+    const pad = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
+    )!;
+
+    fireEvent.pointerDown(pad, { button: 0, pointerId: 56, clientX: 150, clientY: 225 });
+    // Move by less than DRAG_SLOP (1.5 px) — sub-slop jitter.
+    fireEvent.pointerMove(svg, { pointerId: 56, clientX: 151, clientY: 225 });
+
+    expect(onGroupDragMove).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Selected-key inverted-core marker geometry ────────────────────────────
+//
+// Selected dot flips to canvas-bg fill + channel-colour stroke.
+// Geometry: r=6.5, fill="var(--curve-marker-core)", stroke=channel.color,
+// stroke-width=2.5. Unselected: r=5, fill=channel.color, no stroke.
+// Locked (focusReadOnly) hollow markers are unchanged: fill="none",
+// stroke=channel.color.
+
+const MARKER_CHANNEL_COLOR = "#FF4400";
+const MARKER_CHANNELS: ChannelDef[] = [
+  { id: "red", label: "Red", color: MARKER_CHANNEL_COLOR, defaultOn: true, trackName: "red" },
+];
+
+function markerTrack(): TrackDto {
+  return {
+    name: "red",
+    keys: [k(0, 0), k(50, 0.5), k(100, 1)],
+    interpolation: "linear",
+    lockedTo: null,
+  };
+}
+
+/** Render the multi-channel editor with red channel, optionally with a
+ *  selection set and optional locked green channel mirror. */
+function renderMarkerFixture(
+  selectedKeyTimes?: ReadonlySet<number>,
+  extras: Partial<React.ComponentProps<typeof CurveEditor>> = {},
+) {
+  const result = render(
+    <CurveEditor
+      tracks={[markerTrack()]}
+      channels={MARKER_CHANNELS}
+      visibleChannels={{ red: true }}
+      focusChannel="red"
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+      selectedKeyTimes={selectedKeyTimes}
+      {...extras}
+    />,
+  );
+  return result;
+}
+
+describe("selected-key inverted-core marker geometry", () => {
+  it("selected key has r=6.5, fill=var(--curve-marker-core), stroke=channel colour, stroke-width=2.5", () => {
+    const { container } = renderMarkerFixture(new Set([50]));
+    // The visible marker for time=50 (index 1 in the focus group).
+    const focusG = container.querySelector(
+      '[data-channel-id="red"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    // The hit-pad with data-selected="true" is time=50.
+    const hitPad = focusG.querySelector(
+      '[data-testid="curve-key"][data-selected="true"]',
+    ) as Element | null;
+    expect(hitPad).not.toBeNull();
+    // The visible marker is the next sibling circle inside the same <g>.
+    const markerG = hitPad!.closest("g")!;
+    const marker = markerG.querySelector(".curve-key-marker") as SVGCircleElement | null;
+    expect(marker).not.toBeNull();
+    expect(marker!.getAttribute("r")).toBe("6.5");
+    expect(marker!.getAttribute("fill")).toBe("var(--curve-marker-core)");
+    expect(marker!.getAttribute("stroke")).toBe(MARKER_CHANNEL_COLOR);
+    expect(marker!.getAttribute("stroke-width")).toBe("2.5");
+  });
+
+  it("unselected keys keep r=5, fill=channel colour, no stroke", () => {
+    const { container } = renderMarkerFixture(new Set([50]));
+    const focusG = container.querySelector(
+      '[data-channel-id="red"][data-focus="true"]',
+    ) as Element;
+    // time=0 and time=100 are NOT in the selection.
+    const unselectedPads = focusG.querySelectorAll(
+      '[data-testid="curve-key"][data-selected="false"]',
+    );
+    expect(unselectedPads.length).toBeGreaterThanOrEqual(2);
+    for (const pad of unselectedPads) {
+      const markerG = pad.closest("g")!;
+      const marker = markerG.querySelector(".curve-key-marker") as SVGCircleElement | null;
+      expect(marker).not.toBeNull();
+      expect(marker!.getAttribute("r")).toBe("5");
+      expect(marker!.getAttribute("fill")).toBe(MARKER_CHANNEL_COLOR);
+      // No stroke — attribute should be absent or "none".
+      const stroke = marker!.getAttribute("stroke");
+      expect(stroke === null || stroke === "none").toBe(true);
+    }
+  });
+
+  it("locked (focusReadOnly) channel markers remain hollow: fill=none, stroke=channel colour", () => {
+    // Green track locked to red — render with green focused so focusReadOnly=true.
+    const lockedGreenChannel: ChannelDef = {
+      id: "green", label: "Green", color: "#00FF00", defaultOn: true, trackName: "green",
+    };
+    const lockedGreenTrack: TrackDto = {
+      name: "green",
+      keys: [k(0, 0), k(50, 0.5), k(100, 1)],
+      interpolation: "linear",
+      lockedTo: "red",
+    };
+    const { container } = render(
+      <CurveEditor
+        tracks={[markerTrack(), lockedGreenTrack]}
+        channels={[MARKER_CHANNELS[0]!, lockedGreenChannel]}
+        visibleChannels={{ red: true, green: true }}
+        focusChannel="green"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+      />,
+    );
+    const focusG = container.querySelector(
+      '[data-channel-id="green"][data-focus="true"]',
+    ) as Element;
+    expect(focusG).not.toBeNull();
+    expect(focusG.getAttribute("data-readonly")).toBe("true");
+    const markers = focusG.querySelectorAll(".curve-key-marker");
+    expect(markers.length).toBeGreaterThan(0);
+    for (const m of markers) {
+      expect(m.getAttribute("fill")).toBe("none");
+      expect(m.getAttribute("stroke")).toBe(lockedGreenChannel.color);
+    }
+  });
+});
+
+// ─── Sub-grid + snap-to-grid (#618) ──────────────────────────────────────────
+//
+// Multi-channel path only (production). Canvas is 600×300, time [0,100],
+// value [0,1]. Grid: 10 major cells, 5 minor subdivisions → 50 minor cells,
+// so snap step is 2 (time) / 0.02 (value).
+
+const SNAP_CHANNELS: ChannelDef[] = [
+  { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
+];
+
+function snapTrack(): TrackDto {
+  // Interior key at 50 draggable; border keys at 0 and 100.
+  return {
+    name: "red",
+    keys: [
+      { time: 0, value: 0.5 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 0.5 },
+    ],
+    interpolation: "linear",
+    lockedTo: null,
+  };
+}
+
+function renderSnap(
+  onKeyDragEnd: ReturnType<typeof vi.fn>,
+  snapEnabled: boolean,
+) {
+  const result = render(
+    <CurveEditor
+      tracks={[snapTrack()]}
+      channels={SNAP_CHANNELS}
+      visibleChannels={{ red: true }}
+      focusChannel="red"
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+      snapEnabled={snapEnabled}
+      onKeyDragEnd={onKeyDragEnd}
+    />,
+  );
+  const svg = result.container.querySelector(
+    "[data-testid='curve-editor-svg']",
+  ) as SVGSVGElement;
+  svg.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  return { ...result, svg };
+}
+
+describe("CurveEditor — faint minor sub-grid (#618)", () => {
+  it("renders a curve-subgrid group with the expected minor-line count", () => {
+    const { container } = renderSnap(vi.fn(), false);
+    const subgrid = container.querySelector("[data-testid='curve-subgrid']");
+    expect(subgrid).not.toBeNull();
+    // 50 minor cells over each axis, indices 1..49, skipping the 9 that
+    // coincide with a major line (multiples of 5) → 40 per axis, 80 total.
+    const lines = subgrid!.querySelectorAll("line");
+    expect(lines.length).toBe(80);
+  });
+
+  it("does not draw a minor line coincident with a major line", () => {
+    const { container } = renderSnap(vi.fn(), false);
+    const subgrid = container.querySelector("[data-testid='curve-subgrid']")!;
+    const xs = [...subgrid.querySelectorAll("line")].map((l) => l.getAttribute("x1"));
+    // x=60 is major line #1 (1/10 * 600). No minor line should land there.
+    expect(xs).not.toContain("60");
+    // x=12 is minor line #1 (1/50 * 600) — present.
+    expect(xs).toContain("12");
+  });
+});
+
+describe("CurveEditor — snap-to-grid drag (#618)", () => {
+  it("snaps an interior key drag to the nearest grid stop when snap is ON", () => {
+    const onKeyDragEnd = vi.fn();
+    const { container, svg } = renderSnap(onKeyDragEnd, true);
+    const middle = container.querySelectorAll("[data-testid='curve-key']")[1]! as SVGCircleElement;
+    // Down on the interior key (time 50 → x 300, value 0.5 → y 150).
+    fireEvent.pointerDown(middle, { pointerId: 40, button: 0, clientX: 300, clientY: 150 });
+    // Move off-grid: x 307 → time 51.167 → snaps to 52; y 143 → value 0.5233 → snaps to 0.52.
+    fireEvent.pointerMove(svg, { pointerId: 40, clientX: 307, clientY: 143 });
+    fireEvent.pointerUp(svg, { pointerId: 40, clientX: 307, clientY: 143 });
+
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+    const [oldTime, newTime, newValue] = onKeyDragEnd.mock.calls[0] as [number, number, number];
+    expect(oldTime).toBe(50);
+    expect(newTime).toBeCloseTo(52, 5);
+    expect(newValue).toBeCloseTo(0.52, 5);
+  });
+
+  it("leaves the raw drop position untouched when snap is OFF (guards against always-on)", () => {
+    const onKeyDragEnd = vi.fn();
+    const { container, svg } = renderSnap(onKeyDragEnd, false);
+    const middle = container.querySelectorAll("[data-testid='curve-key']")[1]! as SVGCircleElement;
+    fireEvent.pointerDown(middle, { pointerId: 41, button: 0, clientX: 300, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 41, clientX: 307, clientY: 143 });
+    fireEvent.pointerUp(svg, { pointerId: 41, clientX: 307, clientY: 143 });
+
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+    const [, newTime, newValue] = onKeyDragEnd.mock.calls[0] as [number, number, number];
+    // Raw (unsnapped): time 307/6 ≈ 51.167, value (300-143)/300 ≈ 0.5233.
+    expect(newTime).toBeCloseTo(51.167, 2);
+    expect(newValue).toBeCloseTo(0.5233, 3);
+  });
+
+  it("keeps a border key's time fixed but still snaps its value when snap is ON", () => {
+    const onKeyDragEnd = vi.fn();
+    const { container, svg } = renderSnap(onKeyDragEnd, true);
+    // Border key at time 0 → x 0, value 0.5 → y 150.
+    const first = container.querySelectorAll("[data-testid='curve-key']")[0]! as SVGCircleElement;
+    fireEvent.pointerDown(first, { pointerId: 42, button: 0, clientX: 0, clientY: 150 });
+    // Drag right + up; border keeps time 0, value snaps (0.5233 → 0.52).
+    fireEvent.pointerMove(svg, { pointerId: 42, clientX: 20, clientY: 143 });
+    fireEvent.pointerUp(svg, { pointerId: 42, clientX: 20, clientY: 143 });
+
+    expect(onKeyDragEnd).toHaveBeenCalledTimes(1);
+    const [oldTime, newTime, newValue] = onKeyDragEnd.mock.calls[0] as [number, number, number];
+    expect(oldTime).toBe(0);
+    expect(newTime).toBe(0); // border time is fixed regardless of snap
+    expect(newValue).toBeCloseTo(0.52, 5);
+  });
+});
+
+// ─── Group-drag snap (#618) ──────────────────────────────────────────────────
+const SNAP_GROUP_CHANNELS: ChannelDef[] = [
+  { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
+];
+function snapGroupTrack(): TrackDto {
+  return {
+    name: "red",
+    keys: [
+      { time: 0, value: 0 },
+      { time: 25, value: 0.25 },
+      { time: 75, value: 0.75 },
+      { time: 100, value: 1 },
+    ],
+    interpolation: "linear",
+    lockedTo: null,
+  };
+}
+function renderGroupSnap(
+  snapEnabled: boolean,
+  onEnd: ReturnType<typeof vi.fn>,
+) {
+  const { container } = render(
+    <CurveEditor
+      tracks={[snapGroupTrack()]}
+      channels={SNAP_GROUP_CHANNELS}
+      visibleChannels={{ red: true }}
+      focusChannel="red"
+      valueRange={{ min: 0, max: 1 }}
+      width={600}
+      height={300}
+      selectedKeyTimes={new Set([25, 75])}
+      snapEnabled={snapEnabled}
+      onGroupDragEnd={onEnd}
+    />,
+  );
+  const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+  svg.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  return { container, svg };
+}
+
+describe("CurveEditor — group-drag snap (#618)", () => {
+  it("snaps the group delta so the grabbed anchor lands on a grid stop when ON", () => {
+    const onEnd = vi.fn();
+    const { container, svg } = renderGroupSnap(true, onEnd);
+    // Anchor is t=25 (x=150, v=0.25 → y=225). Drag to x=163 (raw time 27.17 →
+    // snaps to 28 ⇒ dTime 3) and y=200 (raw value 0.3333 → snaps to 0.34 ⇒
+    // dValue 0.09). Non-anchor keys shift by the same snapped delta.
+    const anchor = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
+    )!;
+    fireEvent.pointerDown(anchor, { button: 0, pointerId: 60, clientX: 150, clientY: 225 });
+    fireEvent.pointerMove(svg, { pointerId: 60, clientX: 163, clientY: 200 });
+    fireEvent.pointerUp(svg, { pointerId: 60, clientX: 163, clientY: 200 });
+
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    const [dTime, dValue] = onEnd.mock.calls[0] as [number, number];
+    expect(dTime).toBeCloseTo(3, 5);
+    expect(dValue).toBeCloseTo(0.09, 5);
+  });
+
+  it("leaves the raw group delta when snap is OFF (guards against always-on)", () => {
+    const onEnd = vi.fn();
+    const { container, svg } = renderGroupSnap(false, onEnd);
+    const anchor = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
+    )!;
+    fireEvent.pointerDown(anchor, { button: 0, pointerId: 61, clientX: 150, clientY: 225 });
+    fireEvent.pointerMove(svg, { pointerId: 61, clientX: 163, clientY: 200 });
+    fireEvent.pointerUp(svg, { pointerId: 61, clientX: 163, clientY: 200 });
+
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    const [dTime, dValue] = onEnd.mock.calls[0] as [number, number];
+    expect(dTime).toBeCloseTo(2.1667, 3);
+    expect(dValue).toBeCloseTo(0.0833, 3);
+  });
+});
+
+// ─── Insert snap (#618) — incl. the endpoint-collision + focus-clamp guards ──
+const SNAP_INSERT_CHANNELS: ChannelDef[] = [
+  { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
+];
+function snapInsertTrack(): TrackDto {
+  return {
+    name: "red",
+    keys: [
+      { time: 0, value: 0.5 },
+      { time: 50, value: 0.5 },
+      { time: 100, value: 0.5 },
+    ],
+    interpolation: "linear",
+    lockedTo: null,
+  };
+}
+function renderInsertSnap(
+  snapEnabled: boolean,
+  onCanvasAdd: ReturnType<typeof vi.fn>,
+  valueRange: { min: number; max: number } = { min: 0, max: 1 },
+) {
+  const { container } = render(
+    <CurveEditor
+      tracks={[snapInsertTrack()]}
+      channels={SNAP_INSERT_CHANNELS}
+      visibleChannels={{ red: true }}
+      focusChannel="red"
+      valueRange={valueRange}
+      width={600}
+      height={300}
+      insertMode
+      onCanvasAdd={onCanvasAdd}
+      snapEnabled={snapEnabled}
+    />,
+  );
+  const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+  svg.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+  const backdrop = container.querySelector("[data-testid='curve-canvas-backdrop']")!;
+  return { container, backdrop };
+}
+
+describe("CurveEditor — insert snap (#618)", () => {
+  it("snaps the inserted (time, value) to the grid when ON", () => {
+    const onCanvasAdd = vi.fn();
+    const { backdrop } = renderInsertSnap(true, onCanvasAdd);
+    // Click at x=163 (raw time 27.17 → 28), y=200 (raw value 0.3333 → 0.34).
+    fireEvent.pointerDown(backdrop, { button: 0, pointerId: 70, clientX: 163, clientY: 200 });
+    expect(onCanvasAdd).toHaveBeenCalledTimes(1);
+    const [time, value] = onCanvasAdd.mock.calls[0] as [number, number];
+    expect(time).toBeCloseTo(28, 5);
+    expect(value).toBeCloseTo(0.34, 5);
+  });
+
+  it("falls back to the raw time when a snapped insert would land on the occupied endpoint", () => {
+    const onCanvasAdd = vi.fn();
+    const { backdrop } = renderInsertSnap(true, onCanvasAdd);
+    // Click near the right edge: x=597 → raw time 99.5 → snaps to 100, which is
+    // the border key. Guard falls back to the raw 99.5 so the host can't nudge
+    // an insert past timeMax (100) and out of range.
+    fireEvent.pointerDown(backdrop, { button: 0, pointerId: 71, clientX: 597, clientY: 150 });
+    expect(onCanvasAdd).toHaveBeenCalledTimes(1);
+    const [time] = onCanvasAdd.mock.calls[0] as [number, number];
+    expect(time).toBeLessThan(100);
+    expect(time).toBeCloseTo(99.5, 3);
+  });
+
+  it("clamps the inserted value to the focus channel's range (not the wider canvas range)", () => {
+    const onCanvasAdd = vi.fn();
+    // Canvas spans 0..2 (as if a wide background channel were visible) while the
+    // focus channel red stays 0..1. Insert (snap OFF) at canvas value 1.5.
+    const { backdrop } = renderInsertSnap(false, onCanvasAdd, { min: 0, max: 2 });
+    // x=180 → time 30 (free slot); y=75 → canvas value (300-75)/300*2 = 1.5.
+    fireEvent.pointerDown(backdrop, { button: 0, pointerId: 72, clientX: 180, clientY: 75 });
+    expect(onCanvasAdd).toHaveBeenCalledTimes(1);
+    const [, value] = onCanvasAdd.mock.calls[0] as [number, number];
+    expect(value).toBe(1); // clamped to red's max, not left at 1.5
+  });
+});
+
+// ─── Group-drag collision bound (#619) ───────────────────────────────────────
+describe("CurveEditor — group drag bounds against unselected keys (#619)", () => {
+  const CH: ChannelDef[] = [
+    { id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red" },
+  ];
+  // Unselected key at t=40 sits between the two selected keys (25, 75).
+  function track(): TrackDto {
+    return {
+      name: "red",
+      keys: [
+        { time: 0, value: 0.5 },
+        { time: 25, value: 0.5 },
+        { time: 40, value: 0.5 },
+        { time: 75, value: 0.5 },
+        { time: 100, value: 0.5 },
+      ],
+      interpolation: "linear",
+      lockedTo: null,
+    };
+  }
+
+  it("stops the rigid shift before a selected key crosses an unselected key", () => {
+    const onEnd = vi.fn();
+    const { container } = render(
+      <CurveEditor
+        tracks={[track()]}
+        channels={CH}
+        visibleChannels={{ red: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        selectedKeyTimes={new Set([25, 75])}
+        onGroupDragEnd={onEnd}
+      />,
+    );
+    const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    const anchor = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
+    )!;
+    // Grab t=25 (x=150) and drag far right (x=540 → +65 time) — but t=25's right
+    // wall is the unselected t=40, so the rigid shift clamps to ~15 (40-25-eps).
+    fireEvent.pointerDown(anchor, { button: 0, pointerId: 90, clientX: 150, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 90, clientX: 540, clientY: 150 });
+    fireEvent.pointerUp(svg, { pointerId: 90, clientX: 540, clientY: 150 });
+
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    const [dTime] = onEnd.mock.calls[0] as [number, number];
+    // Bounded so 25 + dTime stays below the unselected 40 (eps = 100/10000 = 0.01).
+    expect(dTime).toBeCloseTo(14.99, 2);
+    expect(25 + dTime).toBeLessThan(40);
+  });
+});

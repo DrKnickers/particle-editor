@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coming from the Old GlyphX Editor? — Particle Editor guide</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and re-hiding content
+       mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#guide-main" blocking="render">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need the crossorigin attribute, even same-origin. -->
+  <link rel="preload" href="../fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../guide.css">
+</head>
+<body class="guide">
+  <header class="topbar">
+    <a class="wordmark" href="../index.html"><img class="wordmark-icon" src="../favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="./home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <!-- Invisible placeholder matching the landing page's Pause toggle: keeps the nav
+           geometry identical across pages so buttons don't shift during the cross-page
+           transition. visibility:hidden preserves layout but removes it from tab order
+           and assistive tech. -->
+      <button type="button" class="motion-toggle" style="visibility:hidden" tabindex="-1" aria-hidden="true">Pause</button>
+    </nav>
+  </header>
+  <div class="guide-layout">
+    <main class="guide-main" id="guide-main">
+      <article class="guide-article">
+<p class="guide-kicker">Start Here <span class="kicker-count">· 2 of 6</span></p>
+<h1 id="coming-from-the-old-glyphx-editor">Coming from the Old GlyphX Editor?</h1>
+<p>This page assumes you already know Mike.NL's GlyphX Particle Editor v1.5. Your existing <code>.alo</code> files still open unchanged, and the file format, parameter meanings, and 1:1 particle-shader rendering carry over. The parts you need to relearn are how you load assets, organize emitters, inspect the preview, and recover your work.</p>
+<p>Each workflow starts with what you did in v1.5, then gives the current control path. If the editor already opens your files, read the key workflow changes below first. If you have not configured the editor or your mod yet, do <a href="./setup.html">Setup</a> first and return here afterward.</p>
+<h2 id="same-particle-rebuilt-workspace">Same Particle, Rebuilt Workspace</h2>
+<p>The comparison uses the stock <code>P_FIRE_BIG01</code> with <code>smoke</code> selected in both editors. Both captures show one continuously spawning, developed fire-and-smoke plume at nearly the same on-screen position and scale. Each frame preserves the complete application interface. The file format and parameter meanings carry over; the controls now live in resizable panels with docked tools, a shared curve canvas, and light and dark themes.</p>
+<div class="ui-compare" data-ui-compare style="--compare-split: 40%;">
+  <p class="ui-compare-status">Matched capture: stock <code>P_FIRE_BIG01</code>, <code>smoke</code> selected, ground visible, one continuously spawning instance, and the developed plume aligned in both complete application frames.</p>
+  <div class="ui-compare-head">
+    <p class="ui-compare-instruction">Drag to compare</p>
+    <div class="ui-compare-labels" aria-hidden="true">
+      <span>GlyphX Particle Editor v1.5</span>
+      <span>Particle Editor — current interface</span>
+    </div>
+  </div>
+  <div class="ui-compare-stage">
+    <figure class="ui-compare-figure ui-compare-legacy">
+      <figcaption>GlyphX Particle Editor v1.5</figcaption>
+      <img class="clip-img" src="https://github.com/DrKnickers/particle-editor/releases/download/site-media/returning-ui-legacy.png" data-poster="returning-ui-legacy.png" data-compare-layer="legacy" alt="Cursor-free full-window capture of a developed stock P_FIRE_BIG01 fire-and-smoke plume in GlyphX Particle Editor v1.5, showing smoke selected, the emitter tree, property tabs, particle viewport, and graph editor.">
+    </figure>
+    <figure class="ui-compare-figure ui-compare-current">
+      <figcaption>Particle Editor — current interface</figcaption>
+      <img class="clip-img" src="https://github.com/DrKnickers/particle-editor/releases/download/site-media/returning-ui-current.png" data-poster="returning-ui-current.png" data-compare-layer="current" alt="Cursor-free full-window capture of the matched developed stock P_FIRE_BIG01 fire-and-smoke plume in the current Particle Editor, showing smoke selected, the emitter tree, properties, particle viewport, and shared curve canvas.">
+    </figure>
+    <div class="ui-compare-divider" aria-hidden="true"><span class="ui-compare-handle">↔</span></div>
+    <input class="ui-compare-range" type="range" min="0" max="100" step="1" value="40" aria-label="Reveal amount of GlyphX Particle Editor v1.5">
+  </div>
+  <div class="ui-compare-controls" aria-label="Comparison views">
+    <button type="button" data-compare-value="100" aria-label="Show GlyphX Particle Editor v1.5">GlyphX v1.5</button>
+    <button type="button" data-compare-value="40" aria-label="Restore default comparison split">Default split</button>
+    <button type="button" data-compare-value="0" aria-label="Show current interface">Current</button>
+  </div>
+</div>
+<h2 id="key-workflow-changes">Key Workflow Changes</h2>
+<p>Read these four changes before editing an old effect; skim the rest when you need a particular tool.</p>
+<ol>
+<li><strong><a href="#load-assets-from-your-mod-stack">Set the editor's asset order</a>.</strong> Add your mod to <strong>Active load order</strong>. This controls what the editor resolves; it does not launch the game with the same <code>MODPATH</code>.</li>
+<li><strong><a href="#curves-one-canvas-visibility-checkboxes">Learn the shared curve canvas</a>.</strong> Visibility and focus are separate. Scale, Index, and Rotation open alone, but you can turn color channels back on for comparison.</li>
+<li><strong><a href="#import-emitters-from-another-particle">Import instead of opening two editor windows</a>.</strong> The app clipboard stays inside one running editor; <strong>File → Import Emitters…</strong> is the cross-file path.</li>
+<li><strong><a href="#pause-and-step-the-preview">Know the safety controls</a>.</strong> Pause before stepping, and read <a href="#undo-recover-and-catch-overloads">Undo, Recover, and Catch Overloads</a> before relying on an autosave after a crash.</li>
+</ol>
+<h2 id="quick-comparison">Quick Comparison</h2>
+<p>Check these differences when a familiar action appears to be missing or behaves differently.</p>
+<table>
+<thead>
+<tr><th>In the old editor</th><th>Here</th><th>What changes in practice</th></tr>
+</thead>
+<tbody>
+<tr><td data-label="In the old editor">Seven curve tabs — you saw one channel at a time</td><td data-label="Here">One canvas: tick the channels you want and they draw together, with the focused one editable</td><td data-label="What changes in practice">Compare alpha against scale without flipping tabs. The Y axis is shared, so turning on a large-range channel rescales the view.</td></tr>
+<tr><td data-label="In the old editor">Typing in a numeric field changed the effect on every keystroke</td><td data-label="Here">The value applies when you press Enter or leave the field</td><td data-label="What changes in practice">Finish typing before the preview updates. Arrows, wheel, and drag still apply instantly.</td></tr>
+<tr><td data-label="In the old editor">Delete removed the emitter and everything under it, immediately</td><td data-label="Here">A leaf still goes straight away; deleting a parent or a multi-selection asks first</td><td data-label="What changes in practice">Deleting a parent takes its whole subtree with it, which the row you selected does not show.</td></tr>
+<tr><td data-label="In the old editor">Copy put the emitter on the Windows clipboard, so it survived into a second editor window</td><td data-label="Here">Copy and paste work within the running editor only</td><td data-label="What changes in practice">The clipboard now lives in the app rather than the OS. Cross-track and cross-emitter paste in one session are unaffected.</td></tr>
+<tr><td data-label="In the old editor">A colour swatch set the background, full stop</td><td data-label="Here">The colour is the fallback; a selected game skydome takes over, and choosing a colour clears the dome</td><td data-label="What changes in practice">Backgrounds can now be a real in-game dome, so the two settings are mutually exclusive.</td></tr>
+</tbody>
+</table>
+<h2 id="authoring">Authoring</h2>
+<p>The emitter and curve data are familiar. The difference is that you can work on more of the particle as a unit instead of rebuilding or switching views one item at a time.</p>
+<h3 id="curves-one-canvas-visibility-checkboxes">Curves: One Canvas, Visibility Checkboxes</h3>
+<p><strong>Old editor:</strong> You selected one of seven tabs and saw one curve at a time.</p>
+<p><strong>This editor:</strong> The <strong>Curve channels</strong> list and one shared canvas replace the tabs. A checkbox shows or hides a curve; clicking the rest of the row focuses the channel whose keys you can edit. RGB and Alpha can be overlaid. Scale, Index, and Rotation start in solo mode because their ranges do not match the 0-to-1 colour tracks; after opening one of them, you can tick colour channels back on for a direct comparison. The toolbar also adds multi-key selection and <strong>Snap to grid</strong>.</p>
+<p><strong>Where to find it:</strong> Use the <strong>Curve Editor</strong> at the bottom of the workspace. See <a href="./curve-editor-basics.html#the-channel-list">Curve Editor Basics</a> for focus, visibility, key selection, and interpolation.</p>
+<figure class="guide-media" aria-label="Start with Red alone, add Green, Blue, and Alpha to compare several curves on one canvas, then uncheck the added curves to return to the opening Red-only state."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-curve-visibility.mp4" data-poster="ref-curve-visibility-poster.jpg"></video></figure>
+<p class="guide-media-caption">What to watch: Red returns to a solo view after Green, Blue, and Alpha are compared.</p>
+<h3 id="organize-emitters-in-the-tree">Organize Emitters in the Tree</h3>
+<p><strong>Old editor:</strong> The emitter tree disabled drag and drop. Reordering usually meant copying an emitter, pasting it in the new position, then deleting the original.</p>
+<p><strong>This editor:</strong> In the <strong>Emitter Tree</strong>, drag roots to insertion gaps to reorder them. Drag an emitter onto another row to reparent it into an available Lifetime or Death child slot. You can Ctrl-click, Shift-click, or marquee-select roots and move the multi-selection as one block. Each selected root carries its whole subtree.</p>
+<p><strong>Where to find it:</strong> Work directly in the <strong>Emitter Tree</strong>. Its footer and context menu also provide <strong>Duplicate</strong>, <strong>Move emitter up</strong>, and <strong>Move emitter down</strong>. See <a href="./particle-authoring-primer.html#render-order">Render Order</a> before changing an effect whose smoke and additive layers overlap.</p>
+<figure class="guide-media" aria-label="Show an additive glow drawn before vs after a transparent smoke layer by dragging emitter order in the tree."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="ref-render-order.mp4" data-poster="ref-render-order-poster.jpg"></video></figure>
+<p class="guide-media-caption">What to watch: the selected emitter moves in the tree, then its layer draws in a different order in the preview.</p>
+<h3 id="duplicate-and-link-repeated-variants">Duplicate and Link Repeated Variants</h3>
+<p><strong>Old editor:</strong> You copied and pasted each variant, changed its Index values by hand, and repeated the same property edits on every copy. There was no link-group UI.</p>
+<p><strong>This editor:</strong> <strong>Increment Index…</strong> duplicates an emitter while advancing its Index, and its <strong>Repeat</strong> control can make a run of indexed copies. Multi-select related emitters, right-click, then use <strong>Set Link Group…</strong> to create or join a group. <strong>Link Group Settings…</strong> chooses which properties stay shared; unchecked properties remain per-emitter.</p>
+<p><strong>Where to find it:</strong> Both commands are in the Emitter Tree context menu. A new group needs at least two selected emitters. Joining an existing group adopts that group's shared values, so check the preview before accepting. See <a href="./stacking-emitters-and-children.html#link-groups-copies-that-stay-in-sync">Link Groups</a>.</p>
+<figure class="guide-media" aria-label="Show the Debris lesson: one design duplicated three times, the four copies multi-selected, and a link group created so they stay in sync."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-05-sparks-children.mp4" data-poster="tutorial-05-sparks-children-poster.jpg"></video></figure>
+<p class="guide-media-caption">What to watch: the clip uses Increment Index and Repeat before the copies are selected and assigned to a link group.</p>
+<h3 id="import-emitters-from-another-particle">Import Emitters from Another Particle</h3>
+<p><strong>Old editor:</strong> Cross-file transfer used the Windows clipboard, commonly with the source and destination open in two editor windows.</p>
+<p><strong>This editor:</strong> <strong>Import Emitters…</strong> previews another particle without replacing your active document. You can select whole branches or individual emitters, then import them together in one undoable operation.</p>
+<p><strong>Where to find it:</strong> Choose <strong>File → Import Emitters…</strong>, click <strong>Browse…</strong>, tick the branches or rows you want, then click <strong>Import N selected</strong>. A parent checkbox selects its branch; clear any children you do not want before importing.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="ref-returning-import-emitters.png" alt="Show the Import Emitters dialog after previewing another particle, with its emitter tree, branch checkboxes, and selected-emitter count."></figure>
+<p class="guide-media-caption">What to watch: branch checkboxes narrow the import before all selected emitters enter the active particle together.</p>
+<h2 id="assets-and-mods">Assets and Mods</h2>
+<p>The old editor could open an <code>.alo</code> from any folder. What it could not do was resolve textures, models, and shaders through an ordered mod stack or give you visual shortcuts for finding them.</p>
+<h3 id="load-assets-from-your-mod-stack">Load Assets from Your Mod Stack</h3>
+<p><strong>Old editor:</strong> The editor read assets from the detected base-game installation. Opening a particle from a mod folder did not give the editor a mod-aware asset load order.</p>
+<p><strong>This editor:</strong> Add one or more mods to <strong>Active load order</strong> and arrange them in precedence order. The top layer wins when several layers contain the same internal path, and <strong>Base game</strong> remains the last fallback.</p>
+<p><strong>Where to find it:</strong> Use <strong>Mods → Add mod…</strong>. Choose <strong>Expand to full editor</strong> for the full <strong>Mod Load Order</strong> dialog, <strong>Refresh Mod List</strong> after adding a mod on disk, or <strong>Reset</strong> to return to base-game assets. This stack controls the editor; it does not launch the game with the same <code>MODPATH</code>. See <a href="./setup.html#open-the-tutorial-mod-in-the-editor">Setup</a>.</p>
+<figure class="guide-media" aria-label="Show Active load order with three mod layers, then drag the top layer down and back to demonstrate that the top layer wins."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="f04.mp4" data-poster="f04-poster.jpg"></video></figure>
+<p class="guide-media-caption">What to watch: the list says Top wins while a mod is dragged above another layer.</p>
+<h3 id="reuse-frequently-used-textures">Reuse Frequently-used Textures</h3>
+<p><strong>Old editor:</strong> Color and bump textures were text fields with <code>…</code> browse buttons. You needed to remember the filename or find it again on disk.</p>
+<p><strong>This editor:</strong> The <strong>Frequently-used textures</strong> button opens thumbnail lists for <strong>Color</strong> and <strong>Bump</strong> textures. <strong>Pinned</strong> keeps deliberate choices handy; <strong>Recent</strong> follows the textures you have used in the active mod.</p>
+<p><strong>Where to find it:</strong> Select an emitter, open <strong>Appearance → Textures</strong>, then use the palette button beside <strong>Color:</strong> or <strong>Bump:</strong>. The palette is stored per mod and reports <strong>No mod selected</strong> until you choose an active mod.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="ref-returning-texture-palette.png" alt="Show the Frequently-used textures palette open beside the Color texture field, with Color/Bump filters and Pinned/Recent sections visible."></figure>
+<p class="guide-media-caption">What to watch: Color and Bump choices are grouped into Pinned and Recent thumbnail lists.</p>
+<h3 id="pick-atlas-frames-visually">Pick Atlas Frames Visually</h3>
+<p><strong>Old editor:</strong> You changed Index keys numerically and watched the particle preview to work out which numbered frame you had selected.</p>
+<p><strong>This editor:</strong> The <strong>Atlas Frames</strong> dock shows the current texture as numbered tiles. Select one or more Index keys, then click a tile to assign that frame. Hovering a tile previews it before you commit the change.</p>
+<p><strong>Where to find it:</strong> Focus the Index channel, select its key or keys, then choose <strong>View → Atlas Frame Picker…</strong> or use the toolbar toggle. The picker needs a color texture with more than one atlas frame. Use <strong>Step</strong> interpolation when the frames should change cleanly rather than blend.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="ref-returning-atlas-frame-picker.png" alt="Show the Atlas Frames dock beside an Index staircase, with the selected frame preview and the full texture sheet visible."></figure>
+<p class="guide-media-caption">What to watch: the selected numbered tile matches both the particle preview and the stepped Index curve.</p>
+<h2 id="scene-context">Scene Context</h2>
+<p>These controls affect the editor view, not the saved particle. Use them to judge scale, contrast, ground contact, and lighting against something closer to the effect's eventual game context.</p>
+<h3 id="choose-a-skydome-ground-and-lighting">Choose a Skydome, Ground, and Lighting</h3>
+<p><strong>Old editor:</strong> You chose a flat background colour and toggled a fixed ground plane with <strong>View → Show Ground</strong>. Lighting and the ground material were fixed.</p>
+<p><strong>This editor:</strong> <strong>Background:</strong> can use a base-game or active-mod <strong>Game dome</strong>, with <strong>Space</strong> or <strong>Land</strong> and primary/secondary model choices. <strong>Ground:</strong> adds height, grid spacing, built-in ground materials, a solid colour, or a custom texture. The <strong>Lighting</strong> panel exposes sun, fill, ambient, shadow, and bloom controls.</p>
+<p><strong>Where to find it:</strong> Use the <strong>Background:</strong> and <strong>Ground:</strong> controls above the viewport, then choose <strong>View → Lighting…</strong>. A solid background colour and a game dome are alternatives: choosing one clears the other. See <a href="./particle-authoring-primer.html#game-context">Game Context</a>.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="ref-returning-skydome-picker.png" alt="Show the Background picker set to Land / Night_Stars while the resolved game dome and textured ground render in the viewport."></figure>
+<p class="guide-media-caption">What to watch: the still shows the game-dome and ground controls; Lighting opens separately from the View menu.</p>
+<h3 id="place-and-move-a-reference-object">Place and Move a Reference Object</h3>
+<p><strong>Old editor:</strong> There was no model preview beside the particle, so scale and contact usually had to be checked in-game.</p>
+<p><strong>This editor:</strong> Pick a game or mod unit, structure, or hero and render it at game scale beside the effect. Clear <strong>Lock object</strong>, click the model in the viewport, then use the move or rotate gizmo. The Transform fields, <strong>Snap to grid</strong>, and <strong>Reset</strong> provide precise alternatives.</p>
+<p><strong>Where to find it:</strong> Open <strong>Object: None</strong> above the viewport and search the <strong>Reference object</strong> picker. <strong>Visible</strong> hides the model without clearing it. A locked object cannot be selected, dragged, or nudged; if the gizmo is missing, unlock the object and click the model. See <a href="./basic-controls.html#select-and-move-a-reference-object">Select and Move a Reference Object</a>.</p>
+<figure class="guide-media" aria-label="Show a particle against a game skydome and ground grid while the Reference object picker switches among game-scale walkers."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="faith.mp4" data-poster="faith-poster.jpg"></video></figure>
+<p class="guide-media-caption">What to watch: the picker places a game-scale reference model beside the effect.</p>
+<figure class="guide-media"><img class="clip-img" data-poster="ref-returning-reference-gizmo.png" alt="Show an unlocked AT-ST selected in the viewport, with its selection box and move/rotate gizmo visible at game scale."></figure>
+<p class="guide-media-caption">What to watch: after Lock object is cleared, the selected model exposes its move and rotate gizmo.</p>
+<h2 id="testing-and-safety">Testing and Safety</h2>
+<p>Shift-preview still works. The newer controls add repeatable launch conditions, inspection one frame at a time, and ways back from a bad edit or interrupted session.</p>
+<h3 id="launch-effects-with-the-spawner">Launch Effects with the Spawner</h3>
+<p><strong>Old editor:</strong> Holding Shift spawned an instance under the cursor, and Shift-click left a placed copy. There was no programmable launcher.</p>
+<p><strong>This editor:</strong> The <strong>Spawner</strong> can launch bursts from a fixed position with chosen velocity, lifetime, spacing, jitter, and acceleration. <strong>Manual</strong> mode uses <strong>Spawn now</strong>; <strong>Auto</strong> mode uses <strong>Enabled</strong> and <strong>Interval</strong> to repeat the test.</p>
+<p><strong>Where to find it:</strong> Choose <strong>Emitters → Spawner</strong> or press <strong>F7</strong>. Use it when an effect is brief, needs a consistent direction, or would otherwise require an in-game trigger. Shift-preview remains the faster check when you only need to place one copy.</p>
+<figure class="guide-media" aria-label="Show launching test instances with the Spawner: dial Velocity X to a positive value, then click Spawn now to fire the shot in that direction."><video class="clip-video" controls loop muted playsinline preload="none" width="1280" height="960" data-clip="tutorial-03-spawner-direction.mp4" data-poster="tutorial-03-spawner-direction-poster.jpg"></video></figure>
+<p class="guide-media-caption">What to watch: the clip demonstrates Manual mode by setting a direction and using Spawn now; Auto mode is not shown.</p>
+<h3 id="pause-and-step-the-preview">Pause and Step the Preview</h3>
+<p><strong>Old editor:</strong> The preview ran continuously. You could not hold one frame or advance the simulation in fixed steps.</p>
+<p><strong>This editor:</strong> <strong>Pause</strong> freezes the simulation. <strong>Step</strong> advances one frame and <strong>Step 10</strong> advances ten, which is useful for checking burst timing, atlas changes, and short-lived children.</p>
+<p><strong>Where to find it:</strong> Use the playback controls in the toolbar or <strong>View → Pause</strong> and <strong>Step Forward</strong>. The shortcuts are <strong>F8</strong>, <strong>F9</strong>, and <strong>F10</strong>. Pause before stepping; frame-step commands are ignored while the preview is playing.</p>
+<h3 id="undo-recover-and-catch-overloads">Undo, Recover, and Catch Overloads</h3>
+<p><strong>Old editor:</strong> There was no Undo/Redo stack or crash-recovery prompt. A particle that spawned too much could make the preview unusable without an editor-side overload guard.</p>
+<p><strong>This editor:</strong> <strong>Undo</strong> and <strong>Redo</strong> cover ordinary editor changes, including tree moves and reference transforms. Dirty documents write a recent autosave about every 30 seconds and an older stable fallback about every five minutes. The preview overload guard warns before continued spawning overwhelms the editor.</p>
+<p><strong>Where to find it:</strong> Use <strong>Edit → Undo/Redo</strong> or the toolbar buttons. After a crash or abrupt exit, the next clean launch can show <strong>Recover unsaved changes?</strong> when it finds autosaves owned by an editor that is no longer running. <strong>Restore recent</strong> loads the 30-second tier; <strong>Restore stable</strong> loads the older five-minute fallback; <strong>Discard</strong> deletes that recovery set. A successful restore opens unsaved work under the original filename, so inspect it and save it normally.</p>
+<p>Saves write a sibling temporary file before replacing the destination, so a failed save leaves the previous <code>.alo</code> intact. Load and save failures stay visible, and deleting a parent or a multi-selection asks before its descendants are removed.</p>
+<h2 id="everyday-conveniences">Everyday Conveniences</h2>
+<p>These are useful, but none should block your first edit:</p>
+<ul>
+<li><strong>Reload changed assets:</strong> use <strong>View → Reload Shaders</strong> or <strong>View → Reload Textures</strong> instead of reopening the editor.</li>
+<li><strong>Keep your panel layout:</strong> drag the panel dividers; their sizes return the next time you open the editor. Use <strong>View → Reset panel layout</strong> to start over.</li>
+<li><strong>Change theme or review shortcuts:</strong> choose <strong>Edit → Preferences…</strong> for Light, Dark, or System theme; open <strong>Help → Keyboard Shortcuts…</strong> for the current key map.</li>
+</ul>
+<h2 id="where-to-go-next">Where to Go Next</h2>
+<ul>
+<li>If the editor or your mod stack is not configured, continue to <a href="./setup.html">Setup</a>.</li>
+<li>If the editor is ready but the controls are unfamiliar, keep the <a href="./app-ui-quick-reference.html">App UI Quick Reference</a> open beside it.</li>
+<li>If you are ready to author, review <a href="./curve-editor-basics.html">Curve Editor Basics</a> and then use the tutorial path from the <a href="./home.html#tutorial-path">Guide Home</a>.</li>
+</ul>
+      </article>
+      <nav class="guide-pager" aria-label="Guide pages">
+        <a class="pager-prev" href="./home.html"><span class="pager-eyebrow">← Previous</span><span class="pager-title">Guide Home</span></a>
+        <a class="pager-next" href="./setup.html"><span class="pager-eyebrow">Next →</span><span class="pager-title">Setup</span></a>
+      </nav>
+    </main>
+    <aside class="guide-sidebar" aria-label="Guide navigation">
+      <p class="side-title">Guide</p>
+    <div class="side-group">
+      <p class="side-label">Start Here</p>
+      <ul>
+      <li><a href="./home.html">Guide Home</a></li>
+      <li><a href="./coming-from-the-old-glyphx-editor.html" class="active" aria-current="page">Coming from the Old GlyphX Editor?</a></li>
+      <li><a href="./setup.html">Setup</a></li>
+      <li><a href="./basic-controls.html">Basic Editor Controls</a></li>
+      <li><a href="./particle-authoring-primer.html">Particle Authoring Primer</a></li>
+      <li><a href="./curve-editor-basics.html">Curve Editor Basics</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Tutorials</p>
+      <ul>
+      <li><a href="./01-make-a-hardpoint-damage-effect-obvious.html">1. Make a Hardpoint Damage Effect Obvious</a></li>
+      <li><a href="./concepts-before-you-build.html">Concepts Before You Build</a></li>
+      <li><a href="./03-build-a-laser-shot-and-muzzle-flash.html">2. Build a Laser Shot and Muzzle Flash</a></li>
+      <li><a href="./05-build-an-explosion.html">3. Build an Explosion</a></li>
+      <li><a href="./build-your-own-effect.html">Build Your Own Effect</a></li>
+      </ul>
+    </div>
+    <div class="side-group">
+      <p class="side-label">Reference</p>
+      <ul>
+      <li><a href="./app-ui-quick-reference.html">App UI Quick Reference</a></li>
+      <li><a href="./generation-types.html">Particle Generation Types</a></li>
+      <li><a href="./blend-modes.html">Blend Modes</a></li>
+      <li><a href="./motion-and-physics.html">Motion and Physics</a></li>
+      <li><a href="./stacking-emitters-and-children.html">Stacking Emitters and Using Children</a></li>
+      <li><a href="./file-structure.html">File Structure</a></li>
+      <li><a href="./where-particles-are-used-in-game.html">Where Particles Are Used In-Game</a></li>
+      <li><a href="./troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="./game-concepts-glossary.html">Game Concepts Glossary</a></li>
+      </ul>
+    </div>
+    </aside>
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-label">On this page</p>
+      <ul>
+      <li class="lvl-2"><a href="#same-particle-rebuilt-workspace">Same Particle, Rebuilt Workspace</a></li>
+      <li class="lvl-2"><a href="#key-workflow-changes">Key Workflow Changes</a></li>
+      <li class="lvl-2"><a href="#quick-comparison">Quick Comparison</a></li>
+      <li class="lvl-2"><a href="#authoring">Authoring</a></li>
+      <li class="lvl-3"><a href="#curves-one-canvas-visibility-checkboxes">Curves: One Canvas, Visibility Checkboxes</a></li>
+      <li class="lvl-3"><a href="#organize-emitters-in-the-tree">Organize Emitters in the Tree</a></li>
+      <li class="lvl-3"><a href="#duplicate-and-link-repeated-variants">Duplicate and Link Repeated Variants</a></li>
+      <li class="lvl-3"><a href="#import-emitters-from-another-particle">Import Emitters from Another Particle</a></li>
+      <li class="lvl-2"><a href="#assets-and-mods">Assets and Mods</a></li>
+      <li class="lvl-3"><a href="#load-assets-from-your-mod-stack">Load Assets from Your Mod Stack</a></li>
+      <li class="lvl-3"><a href="#reuse-frequently-used-textures">Reuse Frequently-used Textures</a></li>
+      <li class="lvl-3"><a href="#pick-atlas-frames-visually">Pick Atlas Frames Visually</a></li>
+      <li class="lvl-2"><a href="#scene-context">Scene Context</a></li>
+      <li class="lvl-3"><a href="#choose-a-skydome-ground-and-lighting">Choose a Skydome, Ground, and Lighting</a></li>
+      <li class="lvl-3"><a href="#place-and-move-a-reference-object">Place and Move a Reference Object</a></li>
+      <li class="lvl-2"><a href="#testing-and-safety">Testing and Safety</a></li>
+      <li class="lvl-3"><a href="#launch-effects-with-the-spawner">Launch Effects with the Spawner</a></li>
+      <li class="lvl-3"><a href="#pause-and-step-the-preview">Pause and Step the Preview</a></li>
+      <li class="lvl-3"><a href="#undo-recover-and-catch-overloads">Undo, Recover, and Catch Overloads</a></li>
+      <li class="lvl-2"><a href="#everyday-conveniences">Everyday Conveniences</a></li>
+      <li class="lvl-2"><a href="#where-to-go-next">Where to Go Next</a></li>
+      </ul>
+    </nav>
+  </div>
+  <!-- Resolve tutorial clips/stills against the media release (data-clip/data-poster →
+       MEDIA_BASE); plays clips when scrolled into view, honoring reduced motion. Pages with
+       no media are a no-op. Mirrors the landing's main.js minus its motion toggle. -->
+  <script type="module" src="../guide-media.js"></script>
+  <footer class="guide-footer">
+    <p class="footer-legal">Particle Editor is an independent, unofficial tool — not affiliated with or endorsed by Lucasfilm, Disney, Petroglyph Games, or any third-party mod or its authors. <em>Star Wars: Empire at War</em> and <em>Forces of Corruption</em> are trademarks of their respective owners.</p>
+  </footer>
+</body>
+</html>

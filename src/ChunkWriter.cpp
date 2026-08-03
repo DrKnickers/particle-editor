@@ -5,6 +5,11 @@ using namespace std;
 
 void ChunkWriter::beginChunk(ChunkType type)
 {
+	// Guard the fixed m_chunks[MAX_CHUNK_DEPTH] array. Unlike the reader
+	// (which validates untrusted input), over-deep nesting here means the
+	// editor itself built a pathological chunk tree -- our bug, not
+	// malicious input -- so assert rather than throw.
+	assert(m_curDepth + 1 < MAX_CHUNK_DEPTH);
 	m_curDepth++;
 	m_chunks[m_curDepth].offset   = m_file->tell();
 	m_chunks[m_curDepth].hdr.type = type;

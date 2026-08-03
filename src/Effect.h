@@ -29,6 +29,7 @@ public:
 		D3DXHANDLE hViewInverse;
 		D3DXHANDLE hViewProjection;
 		D3DXHANDLE hProjection;
+		D3DXHANDLE hSkinMatrixArray;   // float4x3[24] bone palette (RSkin shaders, reg c0)
 		D3DXHANDLE hEyePosition;
 		D3DXHANDLE hEyeObjPosition;
 		D3DXHANDLE hResolutionConstants;
@@ -70,27 +71,15 @@ public:
 	};
 
 private:
-	Effect*      m_next;
-	Effect**     m_prev;
-
 	Phase	     m_phase;
-	std::string  m_vertexProc;
-	std::string  m_vertexType;
-	bool         m_tangentSpace;
 	bool         m_shadowVolume;
-	bool		 m_zSort;
 	ID3DXEffect* m_pD3DEffect;
 	Handles      m_handles;
 
 	~Effect();
 public:
-	const Effect*      getNext()        const { return m_next; }
 	Phase              getPhase()       const { return m_phase; }
-	const std::string& getVertexProc()  const { return m_vertexProc; }
-	const std::string& getVertexType()  const { return m_vertexType; }
-	bool               inTangentSpace() const { return m_tangentSpace; }
 	bool               isShadowVolume() const { return m_shadowVolume; }
-	bool               needsZSort()     const { return m_zSort; }
 	const Handles&     getHandles()     const { return m_handles; }
 
     void OnLostDevice()  { m_pD3DEffect->OnLostDevice();  }

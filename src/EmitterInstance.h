@@ -33,7 +33,8 @@ private:
 	IDirect3DTexture9*		 m_pColorTexture;
 	IDirect3DTexture9*		 m_pNormalTexture;
 	bool					 m_doneSpawning;
-    TimeF                    m_nextSpawnTime;
+    TimeF                    m_nextSpawnTime = 0.0f;
+    bool                     m_nextSpawnUsesInitialDelay = true;
 	ParticleSystem::Emitter& m_emitter;
 	Engine&					 m_engine;
 	ParticleSystemInstance&	 m_system;
@@ -51,6 +52,11 @@ private:
 	vector<Primitive>	   m_primitives;
 	vector<Particle*>      m_particleIndex;
 	Particle*			   m_particleList;
+    // Native diagnostic: the first live particle's values from its most recent
+    // real UpdateParticle pass. Never recomputed by a bridge query.
+    bool                  m_liveSampleValid = false;
+    float                 m_liveSampleRelativeTimePercent = 0.0f;
+    float                 m_liveSampleScale = 0.0f;
 
 	// Rendering
 	D3DXMATRIX			m_textureTransform;
@@ -62,7 +68,9 @@ private:
 	Particle& AllocateParticle();
 	void      FreeParticle(Particle& particle);
 
-	void  SpawnParticle(TimeF currentTime);
+	// Returns false when the per-instance uint16 index cap refused the
+	// spawn — callers must not count refused spawns (see definition).
+	bool  SpawnParticle(TimeF currentTime);
 	int   SpawnParticles(TimeF currentTime);
     void  ResetParticle(Particle& particle, TimeF currentTime);
 	void  UpdateTrackCursors(Particle& particle, float relTime) const;
@@ -81,11 +89,32 @@ public:
 
 	int   Kill();
 	void  onParticleSystemChanged(const Engine& engine, int track);
+	// Re-fetch the two D3D textures after a device Reset. Narrower than
+	// onParticleSystemChanged(-1) ON PURPOSE: that also recomputes composites and
+	// re-syncs root emitters, and spawning emitters mid-device-reset is not what
+	// a Reset should do (2026-07 audit, E-D3D9-01).
+	void  ReleaseDeviceTextures();
+	void  ReacquireDeviceTextures(const Engine& engine);
 	int   Update(TimeF currentTime);
+    bool  GetFirstLiveParticleSample(LiveParticleSample& sample) const;
 	void  Render(IDirect3DDevice9* pDevice);
 	void  StopSpawning();
 	bool  IsHeatEmitter() const   { return !m_engine.GetHeatDebug() && m_emitter.isHeatParticle; }
+	// [D3] Zero-heat skip probe: a heat emitter with live particles. Cheap
+	// (two flags + a size check) — Engine::Render polls this per frame to
+	// skip the distort RT clear + RenderHeat scan when nothing would draw.
+	bool  HasLiveHeat()   const   { return !m_primitives.empty() && IsHeatEmitter(); }
 	bool  IsRoot()        const   { return m_emitter.parent == NULL; }
+	// Authored rank = the wrapped emitter's position in the ParticleSystem's
+	// emitter list (kept in sync on add/remove/reorder — ParticleSystem.cpp).
+	// Drives the rank-ordered draw pass so lazily-spawned children honor their
+	// list position vs siblings instead of always drawing last (#574).
+	size_t GetSourceRank() const  { return m_emitter.index; }
+	// The wrapped source emitter — its stable identity (pointer) lets the draw
+	// pass map an instance to its authored-list POSITION without trusting the
+	// mutable Emitter::index mirror (#609). Never null; owned by the ParticleSystem.
+	const ParticleSystem::Emitter* GetSourceEmitter() const { return &m_emitter; }
+	ParticleSystemInstance& GetSystem() { return m_system; }
 
 	EmitterInstance(TimeF currentTime, ParticleSystemInstance& system, Engine& engine, ParticleSystem::Emitter& emitter, Object3D* parent, int* numParticles);
 	~EmitterInstance();

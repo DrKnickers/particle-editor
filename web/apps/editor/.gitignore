@@ -1,0 +1,7 @@
+# This app is a member of the pnpm workspace rooted at web/ (web/pnpm-workspace.yaml).
+# The single authoritative lockfile is web/pnpm-lock.yaml. A per-app
+# pnpm-lock.yaml here is a stray artifact (created when pnpm is run without
+# resolving the workspace) and must NOT be committed — it drifts out of sync
+# with package.json and is ignored by CI (ci.yml installs from web/ against
+# web/pnpm-lock.yaml). See the deletion in this commit's history.
+pnpm-lock.yaml

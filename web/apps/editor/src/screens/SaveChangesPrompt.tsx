@@ -1,0 +1,129 @@
+// SaveChangesPrompt — three-button modal that gates destructive ops
+// (New / Open / Recent) when the in-memory particle system is dirty.
+//
+// Mirrors the legacy `DoCheckChanges`
+// (`MessageBox MB_YESNOCANCEL`) in the legacy main.cpp:
+//   - Save (Yes) → call file/save; if it succeeds, run the pending
+//     action. If save was cancelled (ok:false), abort.
+//   - Don't Save (No) → run the pending action immediately.
+//   - Cancel → discard the pending action, close the prompt.
+//
+// The pending action is a closure stored in the file-state atom — see
+// `usePromptSaveChanges()` in `lib/file-state.ts`. The prompt's open
+// state is `pendingAction != null` so a caller anywhere in the tree
+// can pop the prompt by setting a pending action.
+
+import type { Bridge } from "@particle-editor/bridge-schema";
+import { Modal } from "@/components/Modal";
+import { useFileStateStore } from "@/lib/file-state";
+import { runFileOp } from "@/lib/file-op";
+
+type Props = {
+  bridge: Bridge;
+};
+
+/** Extract the basename from a full path. Cheap implementation: splits
+ *  on the last `/` or `\\`. Falls back to the whole string for paths
+ *  without a separator. Used in the body copy ("Save changes to
+ *  foo.alo?"). */
+function basename(path: string | null): string {
+  if (!path) return "this particle system";
+  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return idx >= 0 ? path.slice(idx + 1) : path;
+}
+
+export function SaveChangesPrompt({ bridge }: Props) {
+  const pendingAction = useFileStateStore((s) => s.pendingAction);
+  const currentFilePath = useFileStateStore((s) => s.currentFilePath);
+  const setPendingAction = useFileStateStore((s) => s.setPendingAction);
+
+  const open = pendingAction !== null;
+  const fileLabel = basename(currentFilePath);
+
+  /** Run the pending closure and clear the slot. */
+  const runPending = async () => {
+    const action = useFileStateStore.getState().pendingAction;
+    setPendingAction(null);
+    if (action) await action();
+  };
+
+  const handleSave = async () => {
+    // Attempt to save via runFileOp, which surfaces a non-cancel failure
+    // (disk full / read-only / locked) in the error modal. On success, run the
+    // pending New/Open and close. On ANY failure OR user-cancel, KEEP this prompt
+    // open (do NOT clear pendingAction) and do NOT run the destructive pending op:
+    // the unsaved work must survive, and the user can retry Save, Don't Save, or
+    // Cancel from the still-open prompt (release-audit #11 — previously a failed
+    // save silently closed the prompt and abandoned the pending op).
+    try {
+      const r = await runFileOp(bridge, { kind: "file/save", params: {} });
+      if (r.ok) {
+        await runPending();
+      }
+      // else: leave the prompt open; runFileOp already surfaced any real error.
+    } catch {
+      // Rejected save — runFileOp already populated the error store. Keep the
+      // prompt open so the pending op never runs and the user can retry.
+    }
+  };
+
+  const handleDiscard = async () => {
+    await runPending();
+  };
+
+  const handleCancel = () => {
+    setPendingAction(null);
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(o) => {
+        // Esc / overlay click → treat as Cancel (discard pending).
+        if (!o) setPendingAction(null);
+      }}
+      title="Save changes?"
+      size="sm"
+    >
+      <Modal.Body>
+        <p className="text-sm text-text-2">
+          Do you want to save changes to{" "}
+          <span className="font-medium text-text">{fileLabel}</span>?
+        </p>
+      </Modal.Body>
+      <Modal.Footer>
+        <button
+          type="button"
+          onClick={handleCancel}
+          aria-label="Cancel"
+          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            // "Don't Save" runs the parked action (Ctrl+O/Ctrl+N), which may
+            // reject; runFileOp already surfaces file failures, so swallow to
+            // avoid an unhandled promise rejection (#489).
+            void handleDiscard().catch((err) =>
+              console.warn("[save-prompt] discard action failed:", err),
+            )
+          }
+          aria-label="Don't Save"
+          className="rounded border border-border-2 bg-panel-2 px-3 py-1 text-xs text-text hover:bg-panel-3 focus-ring"
+        >
+          Don&apos;t Save
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          aria-label="Save"
+          className="rounded bg-accent-strong px-3 py-1 text-xs font-medium text-white hover:bg-accent-strong-hover focus-ring"
+        >
+          Save
+        </button>
+      </Modal.Footer>
+    </Modal>
+  );
+}

@@ -1,6 +1,42 @@
 #include "files.h"
 #include "exceptions.h"
+#include <vector>
 using namespace std;
+
+// Read every byte of `file` into a freshly-allocated buffer, Release
+// the file reference, return the bytes. Throws ReadException on a null
+// pointer, an empty file, an oversize file (size() > maxBytes, 0 = no
+// cap), or a partial read — Releasing the (non-null) file before it
+// throws. Takes ownership of the IFile* reference.
+vector<unsigned char> ReadAndReleaseCapped(IFile* file, unsigned long maxBytes)
+{
+	if (file == NULL) throw ReadException();
+	const unsigned long size = file->size();
+	// Reject empty OR oversized before allocating (maxBytes == 0 disables the cap).
+	if (size == 0 || (maxBytes != 0 && size > maxBytes)) { file->Release(); throw ReadException(); }
+	vector<unsigned char> bytes(size);
+	unsigned long got;
+	try
+	{
+		got = file->read(bytes.data(), size);
+	}
+	catch (...)
+	{
+		// PhysicalFile::read throws on a ReadFile failure (I/O error, vanished
+		// volume). Without this, the throw skipped the Release below and leaked
+		// the file's HANDLE on every failed load attempt (2026-07 audit).
+		file->Release();
+		throw;
+	}
+	file->Release();
+	if (got != size) throw ReadException();
+	return bytes;
+}
+
+vector<unsigned char> ReadAndRelease(IFile* file)
+{
+	return ReadAndReleaseCapped(file, 0);
+}
 
 //
 // PhysicalFile
@@ -19,7 +55,20 @@ unsigned long PhysicalFile::read(void* buffer, unsigned long size)
 unsigned long PhysicalFile::write(const void* buffer, unsigned long size)
 {
 	SetFilePointer(hFile, m_position, NULL, FILE_BEGIN);
+	const unsigned long requested = size;
 	if (!WriteFile(hFile, buffer, size, &size, NULL))
+	{
+		throw WriteException();
+	}
+	// A SHORT write is a failed write. WriteFile can succeed while writing
+	// fewer bytes than asked (a full disk or quota being the realistic case),
+	// and callers that discard the returned count would silently produce a
+	// truncated file: ChunkWriter checks the count on payload writes but not
+	// on the four chunk-header backpatches, and the last of those is the final
+	// write in a save. The atomic-save path then sees no exception, treats the
+	// save as successful, and renames the malformed temp over the user's
+	// document. Throwing here makes every call site safe at once.
+	if (size != requested)
 	{
 		throw WriteException();
 	}
@@ -60,6 +109,15 @@ PhysicalFile::~PhysicalFile()
 //
 unsigned long SubFile::read(void* buffer, unsigned long size)
 {
+	// Clamp the request to the bytes remaining INSIDE this sub-view. Without
+	// this, a read larger than the sub-file (e.g. XMLTree::parse's 32 KB chunks
+	// on a small packed XML) spills into the adjacent MEG entry's bytes, handing
+	// trailing garbage to the caller -- which broke MEG-packed XML parsing
+	// (skydome lists resolved but failed to parse). Exact-size reads
+	// (ReadAndRelease) are unaffected: size already equals the remaining bytes.
+	const unsigned long remaining = (m_position < m_size) ? (m_size - m_position) : 0;
+	if (size > remaining) size = remaining;
+	if (size == 0) return 0;
 	m_file->seek(m_start + m_position);
 	size = m_file->read(buffer, size);
 	m_position = min(m_position + size, m_size);
@@ -95,7 +153,12 @@ SubFile::~SubFile()
 //
 unsigned long MemoryFile::read(void* buffer, unsigned long size)
 {
-	size = min(size, m_size - m_position);
+	// `m_size - m_position` underflows (both unsigned) if m_position
+	// somehow exceeds m_size, yielding a huge clamp and an OOB memcpy. Guard
+	// the remaining-bytes computation, mirroring SubFile::read above.
+	const unsigned long remaining = (m_position < m_size) ? (m_size - m_position) : 0;
+	if (size > remaining) size = remaining;
+	if (size == 0) return 0;
     memcpy(buffer, &m_data[m_position], size);
 	m_position = m_position + size;
 	return size;

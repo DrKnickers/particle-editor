@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Particle Editor for Empire at War Effects</title>
+  <!-- Dark before any CSS: color-scheme makes the browser's default canvas dark, and the
+       inline rules cover the frames before styles.css arrives — kills the white flash on
+       navigation / view transitions. The @view-transition opt-in and the dark backstop across
+       the WHOLE view-transition pseudo chain are inlined (not just in styles.css) so a slow
+       styles.css can't skip the transition or leave its overlay unstyled (white gap). The
+       timed new-page fade-in refinement stays in styles.css. -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html{background-color:#0b0d12}
+    @view-transition{navigation:auto}
+    ::view-transition,
+    ::view-transition-group(root),
+    ::view-transition-image-pair(root),
+    ::view-transition-new(root){background-color:#0b0d12}
+    ::view-transition-old(root){display:none}
+    .topbar{view-transition-name:topbar}
+    ::view-transition-old(topbar){display:none}
+    ::view-transition-new(topbar){animation:none}
+    .motion-toggle{view-transition-name:motion-toggle}
+  </style>
+  <!-- Inline (timing-safe): when a cross-document view transition runs, mark the root so CSS
+       suppresses the entrance fade-up — the transition's new-page fade-in IS the entrance, and
+       re-hiding content mid-transition caused the appear→vanish→fade glitch + compositor churn. -->
+  <script>addEventListener("pagereveal",(e)=>{if(e.viewTransition)document.documentElement.dataset.vt="1"});</script>
+  <!-- Hold this page's first paint (and the incoming view-transition snapshot of it) until the
+       main content is parsed, so the transition never captures a partially-rendered frame. -->
+  <link rel="expect" href="#top" blocking="render">
+  <meta name="description" content="Windows editor for Empire at War .alo particle systems, with ordered mod asset loading, scene references, atlas-frame selection, and a live preview.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <!-- Open Graph / Twitter (image URL filled at rollout — site-media release) -->
+  <meta property="og:title" content="Particle Editor for Empire at War Effects">
+  <meta property="og:description" content="Windows editor for Empire at War .alo particle systems, with ordered mod asset loading, scene references, atlas-frame selection, and a live preview.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://github.com/DrKnickers/particle-editor/releases/download/site-media/og.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- Fonts: self-hosted (site/fonts/) and preloaded so text paints in the real faces —
+       no third-party render-blocking request, no fallback-font swap shifting the nav.
+       Font preloads always need `crossorigin`, even same-origin. -->
+  <link rel="preload" href="fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/ibm-plex-mono-latin-400.woff2" as="font" type="font/woff2" crossorigin>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Top bar -->
+  <header class="topbar">
+    <a class="wordmark" href="#top"><img class="wordmark-icon" src="favicon.svg" alt="" aria-hidden="true">Particle Editor</a>
+    <nav class="topnav" aria-label="Primary">
+      <a class="btn-primary nav-download" href="https://github.com/DrKnickers/particle-editor/releases/latest" aria-label="Download for Windows">
+        <span class="nav-download-icon" aria-hidden="true">↓</span><span class="nav-download-label">Download</span>
+      </a>
+      <a class="nav-source" href="guide/home.html">Guide</a>
+      <a class="nav-source" href="https://github.com/DrKnickers/particle-editor">Source</a>
+      <button type="button" id="motion-toggle" class="motion-toggle" aria-label="Pause motion" title="Pause motion">Pause</button>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- Hero -->
+    <section class="hero" aria-labelledby="hero-h">
+      <p class="kicker">Particle effects editor · Empire at War</p>
+      <h1 id="hero-h">Edit and preview Empire at War particle effects.</h1>
+      <p class="lede">Open <code>.alo</code> files, load models, textures, and shaders through an ordered mod
+        stack, and preview the result with a skydome, ground, lighting, and a movable reference object.</p>
+      <p class="actions">
+        <a class="btn-primary" href="https://github.com/DrKnickers/particle-editor/releases/latest">↓ Download for Windows</a>
+        <a class="btn-quiet" href="https://github.com/DrKnickers/particle-editor">View the source</a>
+      </p>
+      <p class="hero-note">Windows x64 · uses data from your Empire at War installation</p>
+      <figure class="clip clip-hero" aria-label="A particle effect playing in the editor viewport.">
+        <video class="clip-video" loop muted playsinline preload="none"
+               width="1280" height="960"
+               data-clip="hero.mp4" data-poster="hero-poster.jpg" data-eager="true"></video>
+      </figure>
+    </section>
+
+    <!-- 1 · Interface -->
+    <section class="feature" aria-labelledby="interface-h">
+      <p class="section-label"><span class="section-number" aria-hidden="true">1</span> Interface</p>
+      <h2 id="interface-h">A rebuilt interface</h2>
+      <p class="feature-copy">The editor now uses resizable panels, docked tools, and light and dark
+        themes. The emitter tree, properties, curves, and live preview remain visible as the
+        workspace changes around the task.</p>
+      <figure class="clip theme-compare"
+              data-theme-compare
+              style="--theme-split:50%"
+              aria-label="The same Particle Editor workspace in dark and light themes.">
+        <div class="theme-compare-stage">
+          <img class="theme-compare-image theme-compare-dark"
+               data-theme-layer="dark"
+               data-poster="interface-theme-dark.jpg"
+               loading="lazy" decoding="async" alt="">
+          <img class="theme-compare-image theme-compare-light"
+               data-theme-layer="light"
+               data-poster="interface-theme-light.jpg"
+               loading="lazy" decoding="async" alt="">
+          <span class="theme-compare-label theme-compare-label-dark">Dark</span>
+          <span class="theme-compare-label theme-compare-label-light">Light</span>
+          <span class="theme-compare-divider" aria-hidden="true">
+            <span class="theme-compare-grip"></span>
+          </span>
+          <input class="theme-compare-range"
+                 type="range" min="0" max="100" step="1" value="50"
+                 aria-label="Compare dark and light interface">
+        </div>
+        <noscript>
+          <div class="theme-compare-stage theme-compare-static">
+            <img class="theme-compare-image theme-compare-dark"
+                 src="/media-local/interface-theme-dark.jpg" alt="">
+            <img class="theme-compare-image theme-compare-light"
+                 src="/media-local/interface-theme-light.jpg" alt="">
+            <span class="theme-compare-label theme-compare-label-dark">Dark</span>
+            <span class="theme-compare-label theme-compare-label-light">Light</span>
+            <span class="theme-compare-divider" aria-hidden="true"></span>
+          </div>
+        </noscript>
+      </figure>
+    </section>
+
+    <!-- 2 · Viewport -->
+    <section class="feature" aria-labelledby="s1-h">
+      <p class="section-label"><span class="section-number" aria-hidden="true">2</span> Viewport</p>
+      <h2 id="s1-h">Scene references</h2>
+      <p class="feature-copy">Load a game unit or structure for scale, then choose a skydome, ground, and
+        lighting for the preview.</p>
+      <figure class="clip" aria-label="An explosion effect looping beside a game unit on a ground map.">
+        <video class="clip-video" loop muted playsinline preload="none"
+               width="1280" height="960"
+               data-clip="faith.mp4" data-poster="faith-poster.jpg"></video>
+      </figure>
+    </section>
+
+    <!-- 3 · Assets -->
+    <section class="feature" aria-labelledby="s2-h">
+      <p class="section-label"><span class="section-number" aria-hidden="true">3</span> Assets</p>
+      <h2 id="s2-h">Ordered mod loading</h2>
+      <p class="feature-copy">Add mod and submod folders to the active stack and drag them into order. The
+        editor checks the top layer first when loading models, textures, and shaders.</p>
+      <figure class="clip" aria-label="A cursor dragging mod layers into a new load order.">
+        <video class="clip-video" loop muted playsinline preload="none"
+               width="1280" height="960"
+               data-clip="f04.mp4" data-poster="f04-poster.jpg"></video>
+      </figure>
+    </section>
+
+    <!-- 4 · Preview -->
+    <section class="feature" aria-labelledby="s3-h">
+      <p class="section-label"><span class="section-number" aria-hidden="true">4</span> Preview</p>
+      <h2 id="s3-h">Spawner controls</h2>
+      <p class="feature-copy">Launch the effect once or at a fixed interval. Set its direction and speed to
+        inspect it in motion.</p>
+      <figure class="clip" aria-label="A hypervelocity gun slug streaking left to right across a starfield.">
+        <video class="clip-video" loop muted playsinline preload="none"
+               width="1280" height="960"
+               data-clip="spawner.mp4" data-poster="spawner-poster.jpg"></video>
+      </figure>
+    </section>
+
+    <!-- 5 · Emitter tree -->
+    <section class="feature" aria-labelledby="s4-h">
+      <p class="section-label"><span class="section-number" aria-hidden="true">5</span> Emitter tree</p>
+      <h2 id="s4-h">Emitter reordering</h2>
+      <p class="feature-copy">Drag root emitters to a new position. The viewport updates immediately so you
+        can check the resulting draw order.</p>
+      <figure class="clip" aria-label="A cursor dragging a smoke emitter to the front of a fireball.">
+        <video class="clip-video" loop muted playsinline preload="none"
+               width="1280" height="960"
+               data-clip="f02-reorder.mp4" data-poster="f02-reorder-poster.jpg"></video>
+      </figure>
+    </section>
+
+    <!-- 6 · Textures -->
+    <section class="feature" aria-labelledby="s5-h">
+      <p class="section-label"><span class="section-number" aria-hidden="true">6</span> Textures</p>
+      <h2 id="s5-h">Atlas frame picker</h2>
+      <p class="feature-copy">Open the texture as a frame grid and click a cell to assign that frame to the
+        selected Index keys.</p>
+      <figure class="clip" aria-label="A cursor clicking texture frames in the atlas grid.">
+        <video class="clip-video" loop muted playsinline preload="none"
+               width="1280" height="960"
+               data-clip="f02.mp4" data-poster="f02-poster.jpg"></video>
+      </figure>
+    </section>
+
+    <!-- 7 · Other tools -->
+    <section class="feature" aria-labelledby="s6-h">
+      <p class="section-label"><span class="section-number" aria-hidden="true">7</span> Other tools</p>
+      <h2 id="s6-h">Other editing and recovery tools</h2>
+      <p class="feature-copy">Controls that do not need a full walkthrough.</p>
+      <div class="toolset-body">
+        <div class="cluster">
+          <p class="cluster-label">Authoring</p>
+          <div class="qol-grid">
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="12" r="2.4"/><path d="M6 8.4v7.2M8.4 6H14a2 2 0 0 1 2 2v2M8.4 18H14a2 2 0 0 0 2-2v-2"/></svg></div>
+              <h3>Link groups</h3>
+              <p>Share selected parameters across a group of emitters; changing one updates the others.</p>
+            </article>
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M4 15c3 0 4-8 7-8s3 5 9 5"/></svg></div>
+              <h3>Curve visibility</h3>
+              <p>Compare multiple channels on one canvas; checkboxes control which curves are visible.</p>
+            </article>
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h9l5 5v11H5zM14 4v5h5M12 12v6m0 0 2.5-2.5M12 18l-2.5-2.5"/></svg></div>
+              <h3>Import emitters</h3>
+              <p>Select and import individual emitters or whole branches from another <code>.alo</code>.</p>
+            </article>
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></div>
+              <h3>Frequently used textures</h3>
+              <p>Choose colour and bump maps from per-mod Pinned and Recent thumbnail lists.</p>
+            </article>
+          </div>
+        </div>
+        <div class="cluster">
+          <p class="cluster-label">Preview &amp; viewport</p>
+          <div class="qol-grid">
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 4 10.5c-.7.6-1 1-1 2H9c0-1-.3-1.4-1-2A6 6 0 0 1 12 3z"/></svg></div>
+              <h3>Lighting</h3>
+              <p>Adjust the sun, fill lights, ambient light, shadows, and bloom in the preview.</p>
+            </article>
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></div>
+              <h3>Pause and frame-step</h3>
+              <p>Pause the simulation, then advance one or ten frames at a time.</p>
+            </article>
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-.9 4M20 5v6h-6"/></svg></div>
+              <h3>Reload assets</h3>
+              <p>Reload textures and shaders without restarting the editor.</p>
+            </article>
+          </div>
+        </div>
+        <div class="cluster">
+          <p class="cluster-label">Files &amp; reliability</p>
+          <div class="qol-grid">
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M9 20v-6h6v6"/></svg></div>
+              <h3>Atomic saves</h3>
+              <p>A failed save leaves your existing <code>.alo</code> intact.</p>
+            </article>
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a8 8 0 1 1 .9 4M4 5v6h6M12 8v4l3 2"/></svg></div>
+              <h3>Crash recovery</h3>
+              <p>After an interrupted session, choose a recent or stable autosave when the editor opens.</p>
+            </article>
+            <article class="qcard">
+              <div class="qcard-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10h-3"/></svg></div>
+              <h3>Undo and redo</h3>
+              <p>Editor changes, gizmo moves, and emitter reorders share one undo history.</p>
+            </article>
+          </div>
+          <p class="essentials-label">Also included</p>
+          <ul class="essentials">
+            <li><span class="essentials-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="#4a8bff" stroke="none"/></svg>Light and dark themes</span></li>
+            <li><span class="essentials-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="11" rx="1.5"/><path d="M7 11h.01M11 11h.01M15 11h.01M8 15h8"/></svg>Full keyboard navigation</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Download / credits -->
+  <footer class="site-footer" id="download">
+    <h2>Download the editor</h2>
+    <p class="actions">
+      <a class="btn-primary" href="https://github.com/DrKnickers/particle-editor/releases/latest">↓ Latest release (.zip)</a>
+    </p>
+    <p class="footer-meta">MIT-licensed · forked from GlyphXTools/particle-editor · Windows x64 · uses data from your Empire at War installation</p>
+    <p class="footer-legal">Particle Editor is an independent, unofficial tool — not affiliated with or endorsed by Lucasfilm, Disney, Petroglyph Games, or any third-party mod or its authors. <em>Star Wars: Empire at War</em> and <em>Forces of Corruption</em> are trademarks of their respective owners.</p>
+  </footer>
+
+  <script type="module" src="main.js?v=20260724-interface-overhaul"></script>
+</body>
+</html>

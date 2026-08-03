@@ -19,6 +19,12 @@
     <Filter Include="Header Files\UI">
       <UniqueIdentifier>{36a77cfe-1f80-40a0-9268-011f4c421c80}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\host">
+      <UniqueIdentifier>{7f2c5b3a-d8e1-4f5c-9a3e-1a6f8b9d2c14}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\host">
+      <UniqueIdentifier>{8e3d6c4b-e9f2-5a6d-0b4f-2b7090aece25}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ChunkFile.h">
@@ -36,16 +42,25 @@
     <ClInclude Include="engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="engine_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="exceptions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="files.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="LinkGroup.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="managers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="MegaFiles.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MouseCursor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ParticleSystem.h">
@@ -55,6 +70,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Rescale.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SpawnerDriver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SpawnerPath.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Autosave.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="UndoStack.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
@@ -69,19 +96,58 @@
     <ClInclude Include="utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="InstanceBorrow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="xml.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Resources\resource.de.h">
-      <Filter>Resource Files</Filter>
+    <ClInclude Include="host\AcceleratorBridge.h">
+      <Filter>Header Files\host</Filter>
     </ClInclude>
-    <ClInclude Include="Resources\resource.en.h">
-      <Filter>Resource Files</Filter>
+    <ClInclude Include="host\BridgeDispatcher.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\BridgeDispatchShared.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\BridgeRequestContext.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\CaptureGoldenProfile.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\CaptureRunner.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\HostRunUtil.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\HostBridgeProxy.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\HostWindow.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\WicEncode.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\WindowCapture.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\LayoutBroker.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\Run.h">
+      <Filter>Header Files\host</Filter>
+    </ClInclude>
+    <ClInclude Include="host\third_party\nlohmann\json.hpp">
+      <Filter>Header Files\host</Filter>
     </ClInclude>
     <ClInclude Include="Resources\resource.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
-    <ClInclude Include="UI\UI.h">
+    <ClInclude Include="UI\TexturePalette.h">
       <Filter>Header Files\UI</Filter>
     </ClInclude>
   </ItemGroup>
@@ -104,7 +170,19 @@
     <ClCompile Include="engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="engine_environment.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="engine_reference.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="engine_render.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="files.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LinkGroup.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
@@ -114,6 +192,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="MegaFiles.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SpawnerDriver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Autosave.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="UndoStack.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ParticleSystem.cpp">
@@ -134,74 +221,77 @@
     <ClCompile Include="xml.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="UI\ColorButton.cpp">
+    <ClCompile Include="host\AcceleratorBridge.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatcher.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\RecentFiles.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Assets.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Emitters.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Engine.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_File.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Shell.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\BridgeDispatch_Spawner.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\HostBridgeProxy.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\StartupCallbackAdapter.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\HostWindow.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\WindowCapture.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\LayoutBroker.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\CaptureRunner.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\WicEncode.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="host\PerfTrace.cpp">
+      <Filter>Source Files\host</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\PaletteStore.cpp">
       <Filter>Source Files\UI</Filter>
     </ClCompile>
-    <ClCompile Include="UI\CurveEditor.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\Emitter.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\EmitterList.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\RandomParam.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\Spinner.cpp">
-      <Filter>Source Files\UI</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\TrackEditor.cpp">
+    <ClCompile Include="UI\PaletteThumbs.cpp">
       <Filter>Source Files\UI</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="ParticleEditor.de.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
-    <ResourceCompile Include="ParticleEditor.en.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
     <ResourceCompile Include="ParticleEditor.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="Resources\curve_interpolate_linear.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_interpolate_smooth.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_interpolate_step.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_key_delete.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_mode_insert.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\curve_mode_select.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="Resources\dirt.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\emitter_list.bmp">
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="Resources\logo.ico">
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="Resources\missing.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\toolbar1.bmp">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="Resources\toolbar2.bmp">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
