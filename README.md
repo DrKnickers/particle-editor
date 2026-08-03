@@ -3,7 +3,7 @@
 A modern editor for Alamo-engine particle effects — the `.alo` particle files used by
 *Star Wars: Empire at War* and *Forces of Corruption*.
 
-A maintained fork of [Mike.NL's GlyphXTools particle editor](https://github.com/GlyphXTools/particle-editor),
+A fork of [Mike.NL's GlyphXTools particle editor](https://github.com/GlyphXTools/particle-editor),
 rebuilt around a new interface while keeping the original's file-format fidelity.
 
 ## Download

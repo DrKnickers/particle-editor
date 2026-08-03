@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for the interest. This fork is maintained as a side project, so review can take days rather than hours — patience appreciated.
+Thanks for the interest. This fork is a side project, so review can take days rather than hours — patience appreciated.
 
 ## Bug reports
 
