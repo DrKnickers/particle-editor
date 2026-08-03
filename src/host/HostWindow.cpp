@@ -2498,9 +2498,10 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // into this exe as RCDATA (src\generated\EmbeddedWebAssets.rc). Intercept
     // every app.local request and answer it from the matching embedded resource
     // with the Content-Type / Cache-Control the generator baked into the
-    // manifest. A folder mapping short-circuits WebResourceRequested (old
-    //); with no mapping the handler now fires. Dev mode never requests
-    // app.local, so the filter is gated on !useDevUi.
+    // manifest. A folder mapping short-circuits WebResourceRequested — a
+    // hard-learned WebView2 behavior — so with no mapping the handler now
+    // fires. Dev mode never requests app.local, so the filter is gated on
+    // !useDevUi.
     if (!useDevUi)
     {
         const HRESULT filtHr = webView->AddWebResourceRequestedFilter(
