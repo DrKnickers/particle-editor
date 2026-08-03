@@ -64,6 +64,20 @@ void Engine::EaseReferenceDisplay()
     const long long nowQpc = EngQpcNow();
     float dt = (m_displayLastQpc == 0) ? 0.0f : (float)(EngQpcUs(m_displayLastQpc, nowQpc) * 1.0e-6);
     m_displayLastQpc = nowQpc;
+
+    // During a live gizmo drag the committed transform already tracks the cursor
+    // 1:1 at input cadence, so easing the RENDER transform only makes the object
+    // (and the gizmo, drawn from m_displayPosition) TRAIL the cursor -- the
+    // "floaty / laggy" report. Snap display -> committed while a handle is held.
+    // The ease exists for DISCRETE jumps -- spinners, keyboard nudge, undo, file
+    // load -- all of which leave m_activeManip NONE. The QPC clock is refreshed
+    // above, so the first post-release frame eases from the true rest pose.
+    if (m_activeManip.kind != ManipHandle::NONE) {
+        m_displayPosition = m_referencePosition;
+        m_displayRotation = m_referenceRotation;
+        return;
+    }
+
     if (dt < 0.0f) dt = 0.0f;
     if (dt > 0.1f) dt = 0.1f;
 

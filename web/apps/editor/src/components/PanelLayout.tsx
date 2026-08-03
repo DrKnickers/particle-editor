@@ -156,6 +156,31 @@ export function collapseDockShare(layout: Layout): Layout {
   return { ...layout, center: (layout.center ?? 0) + spawner, spawner: 0 };
 }
 
+/** Shape an outer-layout change for persistence.
+ *
+ *  The reported "panel resize doesn't stick between sessions" bug: the old
+ *  writer skipped the save entirely while the dock was CLOSED, so a
+ *  left↔viewport resize in the default (dock-closed) layout was never
+ *  persisted. But writing the closed layout VERBATIM is also wrong — the
+ *  collapsed dock reports `spawner ≈ 0` with the centre column having absorbed
+ *  its width, which would erase the remembered open width.
+ *
+ *  So: dock OPEN → save `next` as-is (it carries the real dock share). Dock
+ *  CLOSED → keep the dock's stored share and hand the remainder to
+ *  `left`/`center`, persisting the left resize without clobbering the reopen
+ *  width. `storedShare` is the last-known open dock share (read from the same
+ *  `alo:layout:outer:3col` blob). Sum stays ~100 so `loadLayout`'s validation
+ *  accepts it. Pure + exported for the regression test. */
+export function mergeOuterLayout(next: Layout, dockVisible: boolean, storedShare: number): Layout {
+  if (dockVisible) return next;
+  const share = Number.isFinite(storedShare) && storedShare > 0 ? storedShare : 0;
+  if (share <= 0) return next; // no remembered dock width → nothing to preserve
+  const left = next.left ?? OUTER_3COL_DEFAULTS.left;
+  const center = 100 - left - share;
+  if (center <= 0) return next; // pathological (left+share ≥ 100) → don't corrupt the blob
+  return { left, center, spawner: share };
+}
+
 function usePersistedLayout(key: string, defaults: Layout) {
   // useMemo with [key] so a visibility flip (key change) re-reads.
   const defaultLayout = useMemo(() => loadLayout(key, defaults), [key, defaults]);
@@ -227,11 +252,18 @@ export function PanelLayout({ bridge }: Props) {
       storedDockSharePct: stored.spawner ?? null,
     };
   }, [dockVisibleAtMount]);
-  // Persist only while the dock is OPEN, so a closed (collapsed) layout
-  // never overwrites the remembered open widths.
+  // Persist EVERY outer resize (the fix for "panel size doesn't stick"): the
+  // dock-open case saves verbatim; the dock-closed case preserves the stored
+  // dock share via mergeOuterLayout so the left↔viewport resize sticks without
+  // erasing the remembered open width. Re-read the stored share here (not the
+  // mount-time capture) so an open→resize→close→resize sequence keeps the
+  // latest dock width.
   const onOuterLayoutChanged = useCallback(
     (l: Layout) => {
-      if (dockVisible) saveLayout("alo:layout:outer:3col", l);
+      const share = dockVisible
+        ? 0
+        : loadLayout("alo:layout:outer:3col", OUTER_3COL_DEFAULTS).spawner ?? 0;
+      saveLayout("alo:layout:outer:3col", mergeOuterLayout(l, dockVisible, share));
     },
     [dockVisible],
   );

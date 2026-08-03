@@ -71,11 +71,14 @@ type Section = {
   buckets: BucketGroup[]; // Ground/Space: bucket sub-groups
 };
 
-// Build the Heroes / Ground / Space sections from the (search-filtered) entries.
-// Heroes (role === "Hero") go to their own top-level section regardless of domain;
-// everything else groups by domain then bucket, in the fixed bucket order.
+// Build the Heroes / Ground / Space / Props / Templates sections from the
+// (search-filtered) entries. Heroes, Props, and Templates each go to their own flat
+// top-level section (no bucket sub-headers) regardless of domain; Units/Structures group
+// by domain then bucket in the fixed bucket order.
 function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => boolean): Section[] {
   const heroes: string[] = [];
+  const props: string[] = [];
+  const templates: string[] = [];
   const ground = new Map<ReferenceObjectBucket, string[]>();
   const space = new Map<ReferenceObjectBucket, string[]>();
   const push = (m: Map<ReferenceObjectBucket, string[]>, b: ReferenceObjectBucket, n: string) => {
@@ -87,6 +90,8 @@ function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => 
   for (const o of objects) {
     if (!matches(o.name)) continue;
     if (o.role === "Hero") heroes.push(o.name);
+    else if (o.role === "Prop") props.push(o.name);
+    else if (o.role === "Template") templates.push(o.name);
     else if (o.domain === "Space") push(space, o.bucket, o.name);
     else push(ground, o.bucket, o.name); // Ground + Unknown fall here
   }
@@ -94,16 +99,20 @@ function buildSections(objects: ReferenceObjectEntry[], matches: (n: string) => 
     order
       .filter((b) => (m.get(b)?.length ?? 0) > 0)
       .map((b) => ({ key: `${b}`, label: BUCKET_LABEL[b], items: m.get(b)!.slice().sort() }));
+  const flatSection = (key: string, label: string, names: string[]): Section =>
+    ({ key, label, total: names.length, flat: names.slice().sort(), buckets: [] });
 
   const sections: Section[] = [];
-  if (heroes.length)
-    sections.push({ key: "Heroes", label: "Heroes", total: heroes.length, flat: heroes.slice().sort(), buckets: [] });
+  if (heroes.length) sections.push(flatSection("Heroes", "Heroes", heroes));
   const g = bucketGroups(ground, GROUND_BUCKETS);
   if (g.length)
     sections.push({ key: "Ground", label: "Ground", total: g.reduce((a, b) => a + b.items.length, 0), flat: [], buckets: g });
   const s = bucketGroups(space, SPACE_BUCKETS);
   if (s.length)
     sections.push({ key: "Space", label: "Space", total: s.reduce((a, b) => a + b.items.length, 0), flat: [], buckets: s });
+  // Props + Templates last: scenery / base objects, less often the primary reference.
+  if (props.length) sections.push(flatSection("Props", "Props", props));
+  if (templates.length) sections.push(flatSection("Templates", "Templates", templates));
   return sections;
 }
 
@@ -117,6 +126,9 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
   const [objects, setObjects] = useState<ReferenceObjectEntry[]>([]);
   const [ready, setReady] = useState(false); // got a non-building object list for the active catalog
   const [query, setQuery] = useState("");
+  // "Props only" category chip: when on, the tree shows only prop-role objects (ANDed
+  // with the faction filter + search). Session-only (resets when the popover reopens).
+  const [propsOnly, setPropsOnly] = useState(false);
   // Faction filter (null = All); narrows the tree to objects affiliated with it.
   // Faction + collapsed groups + tree scroll persist across popover reopens so the
   // user keeps their place (the popover unmounts on close). See lib/picker-state.
@@ -218,10 +230,11 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
     for (const o of objects) for (const f of factionsOf(o)) set.add(f);
     return [...set].sort();
   }, [objects]);
-  const visibleObjects = useMemo(
-    () => (faction === null ? objects : objects.filter((o) => factionsOf(o).includes(faction))),
-    [objects, faction],
-  );
+  const hasProps = useMemo(() => objects.some((o) => o.role === "Prop"), [objects]);
+  const visibleObjects = useMemo(() => {
+    const byFaction = faction === null ? objects : objects.filter((o) => factionsOf(o).includes(faction));
+    return propsOnly ? byFaction.filter((o) => o.role === "Prop") : byFaction;
+  }, [objects, faction, propsOnly]);
 
   // Persist + validate the faction filter. Once the active content's faction
   // set is known, drop a saved faction that isn't present (e.g. after a mod switch)
@@ -298,7 +311,8 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
       const openSec = isOpen(secKey);
       out.push({ key: secKey, kind: "exp", collapseKey: secKey, expanded: openSec });
       if (!openSec) continue;
-      if (sec.key === "Heroes") {
+      if (sec.buckets.length === 0) {
+        // Flat section (Heroes / Props / Templates): leaves directly under the section.
         for (const n of sec.flat) out.push({ key: `leaf:${n}`, kind: "leaf", name: n, parentKey: secKey });
       } else {
         for (const b of sec.buckets) {
@@ -329,7 +343,11 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
     const domainKey = obj.domain === "Space" ? "Space" : "Ground";
     const keys = obj.role === "Hero"
       ? ["sec:Heroes"]
-      : [`sec:${domainKey}`, `buc:${domainKey}/${obj.bucket === "None" ? "Other" : obj.bucket}`];
+      : obj.role === "Prop"
+        ? ["sec:Props"]
+        : obj.role === "Template"
+          ? ["sec:Templates"]
+          : [`sec:${domainKey}`, `buc:${domainKey}/${obj.bucket === "None" ? "Other" : obj.bucket}`];
     setCollapsed((prev) => {
       if (!keys.some((k) => prev.has(k))) return prev;
       const next = new Set(prev);
@@ -485,6 +503,25 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
           <p role="status" className="text-xs text-text-2">Loading objects…</p>
         ) : (
           <>
+            {/* Category filter: "Props only" chip (only when the content has props).
+                Filters everything that isn't a prop; ANDs with faction + search. */}
+            {hasProps && (
+              <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by category">
+                <button
+                  type="button"
+                  aria-pressed={propsOnly}
+                  onClick={() => setPropsOnly((v) => !v)}
+                  className={
+                    "rounded-full border px-2 py-0.5 text-xs transition motion-reduce:transition-none focus-ring " +
+                    (propsOnly
+                      ? "border-accent bg-accent/20 text-text"
+                      : "border-border text-text-2 hover:bg-panel-2")
+                  }
+                >
+                  Props only
+                </button>
+              </div>
+            )}
             {/* Faction filter chips (only when the active content has affiliations). */}
             {factions.length > 0 && (
               <div
@@ -554,10 +591,10 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                     className="flex flex-col rounded focus-ring"
                   >
                     {labelRow(sec.label, sec.total, openSec, false)}
-                    {openSec && sec.key === "Heroes" && (
+                    {openSec && sec.buckets.length === 0 && (
                       <div role="group" className="flex flex-col pl-3">{sec.flat.map(itemRow)}</div>
                     )}
-                    {openSec && sec.key !== "Heroes" && (
+                    {openSec && sec.buckets.length > 0 && (
                       <div role="group" className="flex flex-col">
                         {sec.buckets.map((b) => {
                           const bk = `buc:${sec.key}/${b.key}`;
@@ -587,10 +624,13 @@ export function ReferenceObjectPickerBody({ bridge }: BodyProps) {
                 );
               })}
             </div>
-            {visibleCount === 0 && (searching || faction !== null) && (
+            {visibleCount === 0 && (searching || faction !== null || propsOnly) && (
               <p className="text-xs text-text-3">
-                {searching ? <>No objects match “{query}”{faction !== null ? <> in {faction.replace(/_/g, " ")}</> : null}.</>
-                           : <>No {faction!.replace(/_/g, " ")} objects.</>}
+                {searching
+                  ? <>No {propsOnly ? "props" : "objects"} match “{query}”{faction !== null ? <> in {faction.replace(/_/g, " ")}</> : null}.</>
+                  : propsOnly
+                    ? <>No props{faction !== null ? <> in {faction.replace(/_/g, " ")}</> : null}.</>
+                    : <>No {faction!.replace(/_/g, " ")} objects.</>}
               </p>
             )}
           </>

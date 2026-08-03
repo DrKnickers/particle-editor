@@ -4641,36 +4641,37 @@ LRESULT HostWindowImpl::ViewportWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     moved = true;
                 }
             }
-            // Throttle the (heavy) full-snapshot emit to ~30 Hz so the picker spinners
-            // track without flooding the bridge; the final exact transform emits on
-            // release (commit).
-            if (moved)
+            if (moved && dispatcher)
             {
                 const DWORD now = GetTickCount();
-                if (dispatcher && (now - m_lastManipEmitTick) >= 33)
+                // The HEAVY full-snapshot (drives the picker's numeric spinners)
+                // stays throttled to ~30 Hz so a fast drag doesn't flood the bridge;
+                // the final exact transform emits on release (commit).
+                if ((now - m_lastManipEmitTick) >= 33)
                 {
                     dispatcher->EmitEngineStateChanged();
-                    // readout pill: project the gizmo origin to normalized
-                    // viewport coords, emit the live value. Hidden when no scene
-                    // viewport yet (cold boot) or behind camera (visible:false).
-                    int vx, vy, vw, vh;
-                    manipreadout::ViewportPoint vp{0,0,false};
-                    if (engine->GetSceneViewport(vx, vy, vw, vh))
-                        vp = manipreadout::ProjectToViewport(engine->GetReferencePosition(),
-                                                             engine->GetViewProjection(), vw, vh);
-                    nlohmann::json vals = nlohmann::json::array(), labels = nlohmann::json::array();
-                    for (int i = 0; i < m_readoutN; ++i) { vals.push_back(m_readoutValues[i]); labels.push_back(m_readoutLabels[i]); }
-                    dispatcher->EmitManipulatorDrag({
-                        {"active", true}, {"kind", m_readoutKind},
-                        {"nx", vp.nx}, {"ny", vp.ny}, {"visible", vp.visible},
-                        {"labels", labels}, {"values", vals}, {"decimals", m_readoutDecimals},
-                    });
-#ifndef NDEBUG
-                    printf("[readout] kind=%s nx=%.3f ny=%.3f vis=%d v0=%.2f\n",
-                           m_readoutKind.c_str(), vp.nx, vp.ny, (int)vp.visible, m_readoutValues[0]);
-#endif
                     m_lastManipEmitTick = now;
                 }
+                // The readout pill payload is tiny (nx/ny + a few values). It looked
+                // "laggy / stuttery" because it was chained to the 30 Hz snapshot gate
+                // above, while the object + gizmo move at frame rate -- so the chip
+                // lagged and stepped. Emit it EVERY move instead: WM_MOUSEMOVE is
+                // already coalesced to input cadence by Windows, so this glides with
+                // the object without flooding the heavy path. (After the drag-time
+                // ease bypass, GetReferencePosition() == the drawn position, so the
+                // projected pill sits on the object.)
+                int vx, vy, vw, vh;
+                manipreadout::ViewportPoint vp{0,0,false};
+                if (engine->GetSceneViewport(vx, vy, vw, vh))
+                    vp = manipreadout::ProjectToViewport(engine->GetReferencePosition(),
+                                                         engine->GetViewProjection(), vw, vh);
+                nlohmann::json vals = nlohmann::json::array(), labels = nlohmann::json::array();
+                for (int i = 0; i < m_readoutN; ++i) { vals.push_back(m_readoutValues[i]); labels.push_back(m_readoutLabels[i]); }
+                dispatcher->EmitManipulatorDrag({
+                    {"active", true}, {"kind", m_readoutKind},
+                    {"nx", vp.nx}, {"ny", vp.ny}, {"visible", vp.visible},
+                    {"labels", labels}, {"values", vals}, {"decimals", m_readoutDecimals},
+                });
             }
             return 0;
         }

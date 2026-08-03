@@ -13,6 +13,7 @@ import { render, screen, fireEvent, waitFor, act, within } from "@testing-librar
 import { ReferenceObjectPicker } from "../ReferenceObjectPicker";
 import { MockBridge } from "@/bridge/mock";
 import { useMockEngineState, makeDefaultEngineState } from "@/bridge/mock-state";
+import { __resetPickerStateCacheForTests } from "@/lib/picker-state";
 import type { Bridge } from "@particle-editor/bridge-schema";
 
 // The MockBridge reads/writes the module-level Zustand engine store, which is
@@ -581,5 +582,68 @@ describe("ReferenceObjectPicker — faction filter chips", () => {
     expect(await screen.findByRole("treeitem", { name: "Nebulon_B_Frigate" })).toBeInTheDocument();
     // A Rebel-only object is hidden under the Empire filter.
     expect(screen.queryByRole("treeitem", { name: "Rebel_Barracks" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ReferenceObjectPicker — props + templates", () => {
+  const ready = async () => {
+    // The faction-filter describe above persists a faction into picker-state
+    // (localStorage + in-memory cache); clear both so these props tests start at
+    // the "All" filter, else props with no / other affiliation are filtered out.
+    localStorage.removeItem("alo:refpicker:v1");
+    __resetPickerStateCacheForTests();
+    const bridge = new MockBridge();
+    render(<ReferenceObjectPicker bridge={bridge as unknown as Bridge} onClose={() => {}} />);
+    await screen.findByRole("tree", { name: "Reference object" });
+    await waitFor(() => expect(screen.getByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument());
+    return bridge;
+  };
+
+  it("renders Props + Templates as their own flat top-level sections", async () => {
+    const bridge = await ready();
+    const tree = screen.getByRole("tree", { name: "Reference object" });
+    // Sections present.
+    expect(screen.getByRole("treeitem", { name: /Props/ })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: /Templates/ })).toBeInTheDocument();
+    // Prop + template leaves land directly under their section (no bucket sub-header),
+    // and select like any other object.
+    const prop = within(tree).getByRole("treeitem", { name: "Asteroid_Field_Prop" });
+    expect(prop).toBeInTheDocument();
+    expect(within(tree).getByRole("treeitem", { name: "Generic_Frigate_Template" })).toBeInTheDocument();
+
+    fireEvent.click(prop);
+    await waitFor(async () => {
+      const snap = await bridge.request({ kind: "engine/state/snapshot", params: {} });
+      expect(snap.referenceObjectName).toBe("Asteroid_Field_Prop");
+    });
+  });
+
+  it("the 'Props only' chip filters the tree to props (hides units, heroes, templates)", async () => {
+    await ready();
+    const chip = screen.getByRole("button", { name: "Props only" });
+    expect(chip).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(chip);
+    await waitFor(() => expect(chip).toHaveAttribute("aria-pressed", "true"));
+    // Only props remain.
+    expect(screen.getByRole("treeitem", { name: "Asteroid_Field_Prop" })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "Rebel_Crate_Prop" })).toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: "AT_AT_Walker" })).not.toBeInTheDocument();          // unit
+    expect(screen.queryByRole("treeitem", { name: "Darth_Vader" })).not.toBeInTheDocument();           // hero
+    expect(screen.queryByRole("treeitem", { name: "Generic_Frigate_Template" })).not.toBeInTheDocument(); // template
+
+    // Toggling off restores the full list.
+    fireEvent.click(chip);
+    expect(await screen.findByRole("treeitem", { name: "AT_AT_Walker" })).toBeInTheDocument();
+  });
+
+  it("ANDs 'Props only' with the faction filter", async () => {
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Props only" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rebel" }));
+    // Rebel_Crate_Prop is the only Rebel-affiliated prop; the no-affiliation
+    // Asteroid_Field_Prop drops out under a faction filter.
+    expect(await screen.findByRole("treeitem", { name: "Rebel_Crate_Prop" })).toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: "Asteroid_Field_Prop" })).not.toBeInTheDocument();
   });
 });
