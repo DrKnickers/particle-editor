@@ -25,7 +25,11 @@ const SECTION_COUNT = NAV.sections.filter((s) => s.pages.some((p) => p.publish !
 // can't pass on count alone. NOTE: this map covers what each page RENDERS, which is now a
 // deliberate SUBSET of the manifest — unpublished drafts can retain media anchors and manifest
 // records without adding a public route or an entry here.
-const RELEASE_BASE = "https://github.com/DrKnickers/particle-editor/releases/download/site-media/";
+// The shipped default resolves against the guide page's URL: ../media/ → the site-root
+// media/ dir the Pages workflow mirrors from the site-media release. (The release
+// download URL itself must never be the default — its Content-Disposition: attachment
+// responses are unplayable as <video> sources in every browser.)
+const DEFAULT_MEDIA_ATTR = "../media/";
 const GUIDE_MEDIA = new Map([
   ["coming-from-the-old-glyphx-editor", {
     clips: [
@@ -259,15 +263,19 @@ test("guide media resolver: clips and stills join MEDIA_BASE at runtime", async 
     .toContain("/media-local/tutorial-01-open-override.mp4");
 });
 
-test("guide media resolver: falls back to the site-media release URL by default", async ({ page }) => {
+test("guide media resolver: falls back to the site's media/ mirror by default", async ({ page }) => {
   // No __MEDIA_BASE__ override and no ?media= param → guide-media.js must use the SHIPPED
-  // default release URL. Guards against a typo in that literal (the override-injecting test
-  // above can't catch it because it bypasses the default branch entirely).
+  // default (../media/, the Pages-mirrored dir). Guards against a typo in that literal (the
+  // override-injecting test above can't catch it because it bypasses the default branch
+  // entirely) — and against anyone "fixing" it back to the release download URL, whose
+  // attachment disposition browsers refuse to stream.
   await page.goto(guidePath("01-make-a-hardpoint-damage-effect-obvious"));
+  // el.poster reflects the RESOLVED URL: /guide/x.html + ../media/ → /media/ at site root.
   await expect.poll(() => page.locator("video.clip-video").first().evaluate((el: HTMLVideoElement) => el.poster))
-    .toContain(RELEASE_BASE);
+    .toMatch(/\/media\/[^/]+$/);
+  // The raw attribute keeps the shipped relative literal.
   await expect.poll(() => page.locator("img.clip-img").first().evaluate((el: HTMLImageElement) => el.getAttribute("src") || ""))
-    .toContain(RELEASE_BASE);
+    .toContain(DEFAULT_MEDIA_ATTR);
 });
 
 test("guide media figures never overflow the article column", async ({ page }) => {

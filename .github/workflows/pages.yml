@@ -32,6 +32,19 @@ jobs:
           # and is not referenced at runtime. Excluding it keeps unpublished drafts
           # (publish:false in nav.json) from being reachable at their raw .md URLs.
           rsync -a --exclude deploy --exclude README.md --exclude .gitignore --exclude media-local --exclude guide-src site/ _site/
+      - name: Mirror site media from the release
+        # The site streams clips from its own media/ dir, populated here from the
+        # site-media release. Serving the release download URLs directly does NOT
+        # work: GitHub sends Content-Disposition: attachment on release assets,
+        # and browsers refuse to play attachment responses as <video> sources.
+        # NOTE: uploading new assets to the release does not redeploy Pages —
+        # re-run this workflow (workflow_dispatch) to refresh the mirror.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p _site/media
+          gh release download site-media -R "$GITHUB_REPOSITORY" --dir _site/media
+          ls _site/media | wc -l
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

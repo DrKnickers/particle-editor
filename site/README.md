@@ -72,7 +72,10 @@ http://localhost:5175/?media=/media-local/
 
 Both `main.js` (landing clips) and `guide-media.js` (guide tutorial clips) read the media base
 in the same order: `window.__MEDIA_BASE__` (set by the smoke) → the `?media=` query param → the
-release URL — so the root-relative `?media=/media-local/` preview also drives guide media (the guide references
+site's own `media/` directory (the Pages workflow mirrors the `site-media` release into it at
+deploy time — the release download URLs themselves serve `Content-Disposition: attachment`,
+which browsers refuse to play as `<video>` sources) — so the root-relative
+`?media=/media-local/` preview also drives guide media (the guide references
 each clip/still by its `tutorial-XX-…` manifest id). The repo's smoke
 (`pnpm --filter @particle-editor/editor test:site`) generates the landing placeholders with ffmpeg.
 
@@ -93,7 +96,7 @@ At rollout (user-gated, on the fork):
 1. Create the fork and the `site-media` release; upload the clips + posters.
 2. The Pages workflow lives at `.github/workflows/pages.yml` (deploys `site/` on every master push that touches it).
 3. Enable Pages (source: GitHub Actions).
-4. Confirm `MEDIA_BASE` in **both** `main.js` and `guide-media.js` points at the release, and the OG image URL resolves.
+4. Confirm `MEDIA_BASE` in **both** `main.js` and `guide-media.js` defaults to the site's `media/` mirror (never the release download URL), and the OG image URL resolves.
 5. Run the rollout-gate URL check (every `site-media` URL returns 200 — landing clips AND the guide's `tutorial-XX-…` media) before the deploy.
 6. Manual iOS Safari smoke (Chromium can't cover iOS `playsinline` / Low-Power-Mode).
 
