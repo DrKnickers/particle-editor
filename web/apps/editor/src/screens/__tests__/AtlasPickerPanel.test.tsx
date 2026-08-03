@@ -208,11 +208,14 @@ describe("AtlasPickerPanel", () => {
     publishAtlasContext({ emitterId: 2, focusedTrack: "index", interpolation: "step",
       selection: { frame: 3, keyTimes: [0.3] } });
     view.rerender(<AtlasPickerPanel bridge={new MockBridge()} onClose={() => {}} />);
-    // roving target resets to the new in-range assigned frame (3), never a stale 50
-    await waitFor(() => expect(activeDesc()).toBe("atlas-opt-3"));
-    const opt = activeOption();
-    expect(opt.getAttribute("aria-setsize")).toBe("16");
-    expect(opt.getAttribute("aria-selected")).toBe("true");
+    // roving target resets to the new in-range assigned frame (3), never a stale 50.
+    // Anchor on BOTH the cursor and the new grid size: frame 3 exists in the old
+    // 64-cell grid too, so a cursor-only wait can resolve against the stale grid.
+    await waitFor(() => {
+      expect(activeDesc()).toBe("atlas-opt-3");
+      expect(activeOption().getAttribute("aria-setsize")).toBe("16");
+    });
+    expect(activeOption().getAttribute("aria-selected")).toBe("true");
   });
 
   it("arrow keys move the roving cursor geometrically (layout columns)", async () => {
