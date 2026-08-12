@@ -1,7 +1,7 @@
 #pragma once
 #include <d3d9.h>
 
-// D3D9Ex device-state classification (2026-07 audit, an-audit-finding).
+// D3D9Ex device-state classification (2026-07 audit).
 //
 // The engine creates its device with CreateDeviceEx, so m_pDevice is an
 // IDirect3DDevice9Ex. Both recovery paths nevertheless asked

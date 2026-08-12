@@ -490,7 +490,7 @@ void ParticleSystem::Emitter::readTracks(ChunkReader& reader)
 			reader.read(&key.time, sizeof(float));
 			key.time *= 100.0f;	// Transform to percentage
 			Verify(key.value >= 0.0f && key.value <= 1.0f && key.time <= 100.0f && key.time >= trackContents[i].keys.rbegin()->time);
-			// Aggregate cap (2026-07 audit, an-audit-finding). Every key above is individually
+			// Aggregate cap (2026-07 audit). Every key above is individually
 			// validated; the TOTAL never was, and KeyMap is a multiset, so each
 			// 8-byte on-disk key becomes a tree node many times that size.
 			Verify(trackContents[i].keys.size() < kMaxAloTrackKeys);
@@ -1136,7 +1136,7 @@ ParticleSystem::ParticleSystem(IFile* file)
 	            // Per-group link-exempt flags.
 	            long remaining = reader.size();
 	            uint32_t count = (uint32_t)readPackedInteger(reader, remaining);
-	            // Aggregate cap (2026-07 audit, an-audit-finding). `remaining` bounds the BYTES,
+	            // Aggregate cap (2026-07 audit). `remaining` bounds the BYTES,
 	            // not the entries — at ~3 bytes apiece that still admits tens of
 	            // millions of map inserts from one chunk. Reject up front rather
 	            // than part-way through, so a refused file leaves no half-built
@@ -1247,7 +1247,7 @@ void ParticleSystem::ValidateEmitterGraph()
     // 2 = done. Iterative (not recursive) so a deep chain can't overflow the
     // stack HERE -- but the same graph is walked recursively downstream by
     // BuildEmitterTreeNode and deleteEmitter, which is why depth needs bounding
-    // and not merely surviving (2026-07 audit, an-audit-finding). The DFS stack size IS the
+    // and not merely surviving (2026-07 audit). The DFS stack size IS the
     // current depth, so the cap rides along for free.
     std::vector<int> color(n, 0);
     for (size_t root = 0; root < n; root++)

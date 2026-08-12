@@ -1,5 +1,5 @@
 // Regression test for the bridge-ingress size cap (src/host/WebMessageIngressPolicy.h,
-// 2026-07 audit an-audit-finding).
+// 2026-07 audit).
 //
 // OnWebMessage parses the whole inbound string, so before the cap one
 // postMessage could drive an arbitrarily large allocation on the UI thread.

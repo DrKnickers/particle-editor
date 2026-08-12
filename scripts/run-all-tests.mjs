@@ -122,7 +122,7 @@ const LIST = ARGS.list;
 // deliberately never sets CI — so on a box running two worktrees at once (the
 // normal workflow here) the second run silently attached to the FIRST
 // checkout's Vite/site server and tested the wrong tree. Breaking App.tsx in
-// this checkout could leave the lane green (2026-07 audit, an-audit-finding).
+// this checkout could leave the lane green (2026-07 audit).
 //
 // Set for the whole process rather than per-lane: only those two configs read
 // it, and a lane that spawns no server is unaffected. Devs running
@@ -182,7 +182,7 @@ export const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x
 // recorder that wrote frames and then crashed, or hit the timeout, passed.
 // Its whole oracle was "≥1 file named frame_N.png" plus "largest ≥ 20 KB",
 // so equally-large garbage under the right filename passed too
-// (2026-07 audit, an-audit-finding).
+// (2026-07 audit).
 export function recordSmokeVerdict({ error, signal, status, stderr, frames, maxBytes, biggest, header }) {
   const tail = (s) => String(s || "").split(/\r?\n/).filter(Boolean).slice(-4).join(" | ");
   if (error)  return `headless --record could not run: ${error}`;
@@ -500,13 +500,13 @@ const LANES = [
       // scan a bundle built before the change under test, so reintroducing a
       // dev-only test seam could pass against yesterday's dist. The lane
       // declares deps on web-build, but `--lane scripts` on its own bypasses
-      // that (2026-07 audit, an-audit-finding).
+      // that (2026-07 audit).
       const staleDist = staleBinaryNote(distIndex, "scripts", newestSourceMtime());
       if (staleDist) return fail(staleDist);
 
       // Tee + count: several script tests self-skip when FFmpeg is absent, and
       // the lane reported a bare PASS while their coverage never ran
-      // (audit an-audit-finding). Visibility was the first half; the budget below is the
+      // (2026-07 audit). Visibility was the first half; the budget below is the
       // second — this lane declares no skips, so on a box with FFmpeg (where
       // these tests CAN run) a skip is a real problem and fails. A box without
       // it says so with --allow-missing scripts.

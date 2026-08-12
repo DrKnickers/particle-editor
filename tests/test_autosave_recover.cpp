@@ -407,7 +407,7 @@ int main()
     CHECK(deadPid != 0);
     if (deadPid != 0)
     {
-        // an-audit-finding's exact production push: a fresh dead-session `.tmp` is
+        // the exact production push: a fresh dead-session `.tmp` is
         // deleted immediately. Removing sweepList.push_back leaves this file.
         const std::wstring deadTmp =
             dir + L"\\" + MakeName(deadPid, 1, L"-recent.alo") + L".tmp";

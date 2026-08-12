@@ -415,7 +415,7 @@ test("two same-track edits MORE than the window apart are SEPARATE undo steps", 
 
 // ── engine/action/rescale-system undo boundary ──────────────────────────────
 //
-// 2026-07 audit an-audit-finding. `rescale-system` mutated every emitter in the system
+// 2026-07 audit. `rescale-system` mutated every emitter in the system
 // without a pre-mutation captureUndo(), while its sibling `rescale-emitter`
 // forty lines below has always called one. The handler carried a comment
 // excusing the omission as "a no-op until the broader capture wiring lands" —
@@ -461,7 +461,7 @@ test("a whole-system rescale is its own undo step and does not swallow the prior
 
 // ── batched-gesture undo boundaries ─────────────────────────────────────────
 //
-// 2026-07 audit an-audit-finding + an-audit-finding. Both were the same shape: the React layer fanned
+// 2026-07 audit. Both were the same shape: the React layer fanned
 // ONE user gesture out into N bridge requests, and each native handler captured
 // its own undo entry, so a single Ctrl+Z undid a fraction of one gesture.
 // `emitters/cut` has always been the correct pattern — one captureUndo() around

@@ -193,7 +193,7 @@ int main()
     }
 
     // --- D: BREADTH. A shallow document with millions of siblings must be
-    // rejected (2026-07 audit, an-audit-finding). The depth guard above does nothing here —
+    // rejected (2026-07 audit). The depth guard above does nothing here —
     // this document is two levels deep — and kMaxXmlFileBytes is no stand-in,
     // because every element becomes an XMLNode carrying a child vector and an
     // attribute map. The heap cost is a large multiple of the bytes on disk,

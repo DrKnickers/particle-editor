@@ -14,7 +14,7 @@
 //               block-while-full would freeze the window. The queue is bounded
 //               instead by the dispatcher's in-flight dedupe set plus
 //               DropStaleQueued below — see that comment for why the dedupe set
-//               alone was not enough (2026-07 audit, an-audit-finding).
+//               alone was not enough (2026-07 audit).
 //   worker:     EncodePackedBgraToPngBytes + Base64Encode, pushes the result
 //               to the done queue, PostMessage(hwnd, doneMsg) so the UI
 //               thread drains promptly even when idle-paced.
@@ -107,7 +107,7 @@ public:
     // went. Returns 0 when nothing is stale -- an epoch bump with an idle queue
     // costs one lock.
     //
-    // Why this is needed (2026-07 audit, an-audit-finding). In steady state the queue is
+    // Why this is needed (2026-07 audit). In steady state the queue is
     // bounded not by a byte cap but by the dispatcher's in-flight dedupe set:
     // a texture already queued is never queued twice. PreviewCacheClear() drops
     // that set -- and did NOT drop the queue -- so the bound disappeared exactly

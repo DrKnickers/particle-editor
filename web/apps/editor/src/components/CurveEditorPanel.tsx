@@ -571,7 +571,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   const editEpochRef = useRef(0);
 
   // Live mirrors of the curve a request belongs to, for the SCOPE GUARD below
-  // (2026-07 audit an-audit-finding). Refs, not state: a completion handler closes over
+  // (2026-07 audit). Refs, not state: a completion handler closes over
   // the values that were live when it was ISSUED, so it needs a way to read
   // what is live NOW.
   const liveScopeRef = useRef<{ id: number | null; track: TrackName }>({
@@ -657,7 +657,7 @@ export function CurveEditorPanel({ bridge }: Props) {
     return tracks.find((t) => t.name === focusedChannel.trackName) ?? null;
   }, [tracks, focusedChannel]);
 
-  // ── Mutation-completion scope guard (2026-07 audit an-audit-finding) ────────
+  // ── Mutation-completion scope guard (2026-07 audit) ────────
   //
   // A track mutation's REQUEST is safe on its own: `id` and `track` are
   // captured in the handler's closure, so the write always lands on the
@@ -1669,7 +1669,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // One request, not one per key: the host wraps the batch in a single
   // captureUndo(), so one Ctrl+Z reverses the whole paste. The per-key
   // fan-out this replaced captured an undo entry per key, so a single Ctrl+Z
-  // removed one key of a multi-key paste (2026-07 audit an-audit-finding).
+  // removed one key of a multi-key paste (2026-07 audit).
   const handlePasteKeys = useCallback(() => {
     if (selectedId === null || focusLocked) return;
     const clip = getCurveKeysClipboard();

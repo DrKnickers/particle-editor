@@ -658,7 +658,7 @@ test("deleting one member of a 2-member link group demotes the survivor", async 
 
 // ── 5. A structural mutation reaches an already-PLACED instance ──────
 //
-// 2026-07 audit an-audit-finding. A ParticleSystemInstance spawns its root emitters ONCE,
+// 2026-07 audit. A ParticleSystemInstance spawns its root emitters ONCE,
 // in its constructor, and Engine::OnParticleSystemChanged only visited the
 // emitters that already existed — it never created or removed any. So an
 // emitter added by Add Root / Paste / Import / Duplicate / reparent-to-root
@@ -712,7 +712,7 @@ test("adding a root emitter reaches an already-placed instance", async () => {
 
 // ── 6. Reparenting a root removes its old root-level live instance ───
 //
-// an-audit-finding. SyncRootEmitters historically only added newly-authored roots.
+// SyncRootEmitters historically only added newly-authored roots.
 // Reparenting a root under another root changed the authored tree in place, so
 // the already-placed ParticleSystemInstance kept the source's old root-level
 // EmitterInstance. The same emitter could later also spawn as the target's
@@ -802,7 +802,7 @@ test("reparenting a root removes only its stale root instance from an already-pl
 
 // ── file/open must not carry the previous document's selection ───────
 //
-// 2026-07 audit an-audit-finding. m_selectedEmitterId is a POSITIONAL index, and only
+// 2026-07 audit. m_selectedEmitterId is a POSITIONAL index, and only
 // file/new ever reset it. file/open and autosave-recover swapped the bound
 // ParticleSystem and emitted tree/state events but left the selection alone,
 // so an id selected in the old document survived into the new one. When that

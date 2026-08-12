@@ -1,5 +1,5 @@
 @echo off
-REM Build the D3D9Ex device-state classification test (audit an-audit-finding).
+REM Build the D3D9Ex device-state classification test (2026-07 audit).
 REM src\DeviceState.h is a pure header — it needs d3d9.h for the HRESULT
 REM constants and nothing else, so no engine/D3D TU is compiled or linked.
 setlocal

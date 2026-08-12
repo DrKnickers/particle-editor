@@ -295,7 +295,7 @@ void ParticleSystemInstance::SyncRootEmitters(TimeF currentTime)
 	// A root EmitterInstance is parented directly to this system instance.
 	// Reparenting changes only the authored Emitter::parent, so without this
 	// reconciliation the old root-level instance survives alongside the new
-	// authored child relationship (an-audit-finding).
+	// authored child relationship.
 	//
 	// Collect first because RemoveEmitter mutates m_emitters and unregisters the
 	// instance from its source Emitter. Child instances are parented to a

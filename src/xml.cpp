@@ -91,7 +91,7 @@ static thread_local unsigned long g_xmlDepth  = 0;
 // Depth alone left a shallow-but-enormous document unbounded, and the 64 MiB
 // input cap is not a substitute: each element becomes an XMLNode with a child
 // vector and an attribute map, so the heap cost is a large multiple of the
-// bytes on disk (2026-07 audit, an-audit-finding).
+// bytes on disk (2026-07 audit).
 static thread_local unsigned long g_xmlNodes  = 0;
 // Total Expat [name,value] attribute pairs seen in THIS parse. Attribute maps
 // are owned by XMLNode, so this is document-wide for the same reason g_xmlNodes

@@ -1,7 +1,7 @@
 #pragma once
 
 // Reconciling an emitter's ALREADY-SCHEDULED next spawn against a changed spawn
-// rate (2026-07 audit, an-audit-finding).
+// rate (2026-07 audit).
 //
 // onParticleSystemChanged recomputes m_spawnDelay when the user edits the rate,
 // but the next spawn was scheduled against the OLD delay and nothing reconciles

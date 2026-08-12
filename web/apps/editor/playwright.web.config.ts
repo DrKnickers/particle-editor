@@ -12,7 +12,7 @@ import { defineConfig, devices } from "@playwright/test";
 // fixed port AND reuseExistingServer, two worktrees running this lane at once
 // would have the second silently reuse the FIRST checkout's Vite server — and
 // therefore test the first checkout's app. Concurrent sessions should set
-// distinct WEB_PORTs (2026-07 audit, an-audit-finding).
+// distinct WEB_PORTs (2026-07 audit).
 const PORT = Number(process.env.WEB_PORT ?? 5174);
 
 export default defineConfig({
@@ -32,7 +32,7 @@ export default defineConfig({
     // Reuse is a developer convenience, never acceptable for a gate run: the
     // whole point of the lane is to test THIS checkout. PE_GATE_NO_REUSE is set
     // by scripts/run-all-tests.mjs, so `pnpm test:web` by hand keeps the fast
-    // path while the gate always gets its own server (audit an-audit-finding). A port
+    // path while the gate always gets its own server (2026-07 audit). A port
     // already in use then fails the lane loudly instead of testing someone
     // else's app — set WEB_PORT to run two worktrees concurrently.
     reuseExistingServer: !process.env.CI && !process.env.PE_GATE_NO_REUSE,

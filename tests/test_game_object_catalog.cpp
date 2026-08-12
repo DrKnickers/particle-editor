@@ -114,7 +114,7 @@ static const GameObjectRef* find(const GameObjectCatalog& cat, const std::string
     return nullptr;
 }
 
-// Literal an-audit-finding accounting fixture, deliberately independent of the production
+// Literal accounting fixture, deliberately independent of the production
 // constant:
 //   32,766 inherited menu tokens * 2 entries
 //       * (temporary-token push + field-source map application) = 131,064
@@ -955,7 +955,7 @@ int main(int argc, char** argv)
         CHECK(im && im->fieldable && IsPickerListed(*im), "Company_Units member of a buildable company -> fieldable + listed");
     }
 
-    // ---- an-audit-finding: aggregate fieldable-token processing budget --------------
+    // ---- aggregate fieldable-token processing budget --------------
     //
     // The exact-work fixture combines a roster-map application, a list resolved
     // twice through inheritance, two discarded numeric spawn tokens, a
@@ -970,19 +970,19 @@ int main(int argc, char** argv)
             kFieldableBudgetRoster;
         const std::string exactXml = makeFieldableWorkDocument(false);
         CHECK(exactXml.size() < kMaxXmlFileBytes,
-              "an-audit-finding: literal 131072 fixture is below the XML byte cap");
+              "literal 131072 fixture is below the XML byte cap");
         exactFm.files["Data\\XML\\FieldableBudget.xml"] = exactXml;
 
         GameObjectCatalog exactCatalog;
         const bool exactOk = BuildGameObjectCatalog(exactFm, exactCatalog);
         CHECK(exactOk == true,
-              "an-audit-finding: exactly 131072 fieldable-token work operations build");
+              "exactly 131072 fieldable-token work operations build");
         CHECK(exactCatalog.objects.size() == 1u,
-              "an-audit-finding: exact boundary publishes the one expected model object");
+              "exact boundary publishes the one expected model object");
         const GameObjectRef* exactMember = find(exactCatalog, "Budget_Member");
         CHECK(exactMember && exactMember->fieldable
               && exactMember->fieldSource == FS_Buildable,
-              "an-audit-finding: exact-boundary member expansion publishes the exact field-source value");
+              "exact-boundary member expansion publishes the exact field-source value");
     }
 
     {
@@ -993,7 +993,7 @@ int main(int argc, char** argv)
             kFieldableBudgetRoster;
         const std::string overXml = makeFieldableWorkDocument(true);
         CHECK(overXml.size() < kMaxXmlFileBytes,
-              "an-audit-finding: literal 131073 fixture is below the XML byte cap");
+              "literal 131073 fixture is below the XML byte cap");
         overFm.files["Data\\XML\\FieldableBudget.xml"] = overXml;
         // Ensure the hardpoint collection is populated before the fieldable pass,
         // so the empty-output assertion kills a one-collection-only cleanup.
@@ -1006,11 +1006,11 @@ int main(int argc, char** argv)
         GameObjectCatalog overCatalog;
         const bool overOk = BuildGameObjectCatalog(overFm, overCatalog);
         CHECK(overOk == false,
-              "an-audit-finding: literal 131073 returns false (specific refusal value)");
+              "literal 131073 returns false (specific refusal value)");
         CHECK(overCatalog.objects.empty(),
-              "an-audit-finding: rejected 131073 build publishes no partial objects");
+              "rejected 131073 build publishes no partial objects");
         CHECK(overCatalog.hardpoints.empty(),
-              "an-audit-finding: rejected 131073 build publishes no partial hardpoints");
+              "rejected 131073 build publishes no partial hardpoints");
     }
 
     // ---- an-audit-finding: GameObjectList.lua roster fan-out is COUNT-capped, not just

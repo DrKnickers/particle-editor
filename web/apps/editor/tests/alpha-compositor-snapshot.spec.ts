@@ -61,14 +61,14 @@ test.afterAll(async () => {
 //
 // Length + magic-number + dimension assertions (which is all this file used to
 // do) are satisfied by a correctly-sized solid-black frame — exactly what a
-// broken readback produces (2026-07 audit, an-audit-finding). Counting distinct luminance
+// broken readback produces (2026-07 audit). Counting distinct luminance
 // buckets separates "the compositor read back real pixels" from "the encoder
 // produced a valid image of nothing".
 // Count DISTINCT colours in a base64 JPEG, decoded in the page.
 //
 // Length + magic-number + dimension assertions (all this file used to do) are
 // satisfied by a correctly-sized solid-black frame — exactly what a broken
-// readback produces (2026-07 audit, an-audit-finding).
+// readback produces (2026-07 audit).
 //
 // Distinct colours rather than luminance SPREAD, deliberately. The first
 // attempt bucketed by brightness and failed on a healthy snapshot: the boot
@@ -117,7 +117,7 @@ async function solidFillColors(page: Page, w: number, h: number): Promise<number
 
 // NOTE: the payload is a JPEG, not a PNG — the backdrop is shown blurred behind
 // a dialog, so lossy is invisible and far cheaper. The test NAME said PNG while
-// the assertion below required a JPEG magic number (audit an-audit-finding); renamed to match
+// the assertion below required a JPEG magic number (2026-07 audit); renamed to match
 // what it actually checks.
 test("first viewport/capture-snapshot after boot returns a valid, non-blank JPEG (cache-flag-off path)", async () => {
   // Seed a known viewport size so the snapshot crop has deterministic
@@ -156,7 +156,7 @@ test("first viewport/capture-snapshot after boot returns a valid, non-blank JPEG
   expect(result.imageBase64.length).toBeGreaterThan(100);
   expect(result.imageBase64.startsWith("/9j/")).toBe(true);
   // ...and it must contain an actual rendered scene. A solid-black frame of the
-  // right size satisfies every assertion above (audit an-audit-finding); a real viewport
+  // right size satisfies every assertion above (2026-07 audit); a real viewport
   // (ground, skydome, particles) spans many luminance levels.
   // Measured on a healthy boot snapshot: 26 distinct colours. A solid fill
   // decodes to a handful, so 8 leaves margin in both directions — and the

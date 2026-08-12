@@ -7,7 +7,7 @@
 // the lambdas capture `this` — never reached them. And WM_DESTROY does not stop
 // the pump (PostQuitMessage only posts WM_QUIT, delivered after the queue
 // drains), so a completion the runtime already queued still dispatches against
-// a torn-down owner (2026-07 audit, an-audit-finding).
+// a torn-down owner (2026-07 audit).
 //
 // The case that matters is #3: a token issued BEFORE the owner existed no more,
 // read AFTER the owner is gone. That is the exact use-after-free shape, and it
@@ -440,7 +440,7 @@ int main()
     // pins that exact call site, the existing fatal message, and the original
     // failure value. Without it, a header+test pair would stay green while the
     // production callback silently returned the HRESULT to a runtime that
-    // discards it (an-audit-finding).
+    // discards it.
     {
         const std::string source = ReadSource(
             std::filesystem::current_path() / "src" / "host" / "HostWindow.cpp");

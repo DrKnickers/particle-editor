@@ -151,7 +151,7 @@ function main() {
 
   const results = [];
   // Cases a binary self-skipped because a capability probe failed. Reported at
-  // the end so a green run states plainly what it did NOT exercise (audit an-audit-finding).
+  // the end so a green run states plainly what it did NOT exercise (2026-07 audit).
   const skippedCases = [];
   for (const name of tests) {
     const started = Date.now();
@@ -204,7 +204,7 @@ function main() {
     // test_clip_save_confinement does exactly that when `mklink /J` or 8.3
     // short-name lookup is unavailable — and then still exit 0. Reading only the
     // exit code made a self-skipped junction/short-path confinement case
-    // indistinguishable from a passing one (2026-07 audit, an-audit-finding). A self-skipped
+    // indistinguishable from a passing one (2026-07 audit). A self-skipped
     // case now FAILS the lane unless explicitly allowed — see selfSkipVerdict.
     const r = spawnSync(exe, NEEDS_EXE.has(name) ? [APP_EXE] : [], {
       cwd: repoRoot,

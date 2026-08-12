@@ -1852,7 +1852,7 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
   }
 
   // One Ctrl+V rides ONE emitters/add-track-keys carrying every clipboard key
-  // (2026-07 audit an-audit-finding). The per-key fan-out it replaced captured a separate
+  // (2026-07 audit). The per-key fan-out it replaced captured a separate
   // undo entry per key host-side, so a single Ctrl+Z undid one key of a paste.
   function addTrackKeysCalls(bridge: { request: ReturnType<typeof vi.fn> }) {
     return bridge.request.mock.calls
@@ -1899,12 +1899,12 @@ describe("CurveEditorPanel — key copy/cut/paste", () => {
     await waitFor(() => expect(panel.getAttribute("data-selected-key-count")).toBe("1"));
   });
 
-  // 2026-07 audit an-audit-finding. The discriminating case: with the old per-key fan-out
+  // 2026-07 audit. The discriminating case: with the old per-key fan-out
   // a two-key paste produced TWO emitters/add-track-key requests, and each
   // handler captured its own undo entry — so one Ctrl+Z removed one key of a
   // two-key paste. A single-key paste passes either way, which is why the
   // assertion below is on the request COUNT with a multi-key clipboard.
-  it("Ctrl+V of a multi-key clipboard issues exactly ONE batched request (an-audit-finding)", async () => {
+  it("Ctrl+V of a multi-key clipboard issues exactly ONE batched request", async () => {
     const { bridge } = makeStubBridgeMultiInterior(0);
     await focusScale(bridge);
     clickKeyByTime(25);
@@ -2712,7 +2712,7 @@ describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)",
   });
 });
 
-// 2026-07 audit an-audit-finding. Four mutation completions write SELECTION state
+// 2026-07 audit. Four mutation completions write SELECTION state
 // (selectedKeyTimes / optimisticSelected) with no check that the emitter and
 // focus channel they were issued for are still the live ones. The fetch path
 // has guarded this since #613 via `inFlightFor` + the edit epoch; the mutation
@@ -2724,7 +2724,7 @@ describe("CurveEditorPanel — time-spinner scrub tracks the moving key (#614)",
 // reads — `singleSelected` prefers `optimisticSelected` over the fetched track,
 // so a late completion makes the spinner display emitter A's value against
 // emitter B's key, and one nudge commits it onto B.
-describe("CurveEditorPanel — late mutation completions are emitter-scoped (an-audit-finding)", () => {
+describe("CurveEditorPanel — late mutation completions are emitter-scoped", () => {
   // Both emitters carry a scale key at t=50 with DIFFERENT values. That shared
   // time is what lets a stale selection survive the switch; the differing
   // values are what make a wrong spinner reading detectable.

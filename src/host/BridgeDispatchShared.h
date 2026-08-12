@@ -127,7 +127,7 @@ LinkExemptFlags MakeNewlySharedMask(const LinkExemptFlags& oldFlags,
                                     const LinkExemptFlags& proposed);
 
 // Tree / state snapshot builders.
-// `depth` is the recursion backstop (2026-07 audit, an-audit-finding) and is not part of
+// `depth` is the recursion backstop (2026-07 audit) and is not part of
 // the wire shape -- callers always start a root at 0. ValidateEmitterGraph caps
 // chain depth at load/import, but it is never called from the bridge mutation
 // path, so the serializer refuses to recurse past the same cap on its own.

@@ -96,7 +96,7 @@ int main()
     CHECK(SafeTextureCandidates("x.dds:ads").empty(),   "SafeTextureCandidates rejects ADS colon");
     CHECK(SafeTextureCandidates("ok/..\\x.tga").empty(), "SafeTextureCandidates rejects mixed-slash traversal");
 
-    // --- Operator-supplied custom slot paths (an-audit-finding) ---
+    // --- Operator-supplied custom slot paths ---
     //
     // A DIFFERENT rule from everything above: here an absolute local path is
     // the legitimate case, so the tests below are mostly about NOT rejecting.

@@ -1,4 +1,4 @@
-// D3D9Ex device-state classification (2026-07 audit, an-audit-finding).
+// D3D9Ex device-state classification (2026-07 audit).
 //
 // The defect this covers was not a wrong branch — it was an UNREACHABLE one.
 // The engine creates its device with CreateDeviceEx, but both recovery paths

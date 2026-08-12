@@ -178,7 +178,7 @@ test("engine/set/background round-trips a COLORREF", async () => {
     // a test that mutates engine state and walks away leaves every later test
     // running against it — this one left the background gray for the rest of
     // the run, and nothing downstream asserted the default, so a regression in
-    // background restoration would have gone unnoticed (2026-07 audit, an-audit-finding).
+    // background restoration would have gone unnoticed (2026-07 audit).
     const before = (await b.request({
       kind: "engine/state/snapshot",
       params: {},

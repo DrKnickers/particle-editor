@@ -87,7 +87,7 @@ expect.extend({
       // A gate run must NEVER take this branch. Update mode overwrites the
       // golden and returns pass unconditionally, so any regression reachable
       // while it is active gets blessed into the baseline and the suite goes
-      // green on the broken output (2026-07 audit, an-audit-finding). Refusing here means
+      // green on the broken output (2026-07 audit). Refusing here means
       // the blessing stays a deliberate, human-initiated act — which is what
       // it was always meant to be.
       if (process.env.PE_GATE_NO_REUSE) {

@@ -3,7 +3,7 @@
 #include <vector>
 #include <cwctype>
 
-// --record output-directory confinement (2026-07 audit, an-audit-finding).
+// --record output-directory confinement (2026-07 audit).
 //
 // ClipTimeline validates `out` as a relative, traversal-free path — which stops
 // a timeline escaping the launch directory, but NOT from destroying an

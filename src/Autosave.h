@@ -81,7 +81,7 @@ namespace Autosave
     // the whole tail EXACTLY against the three tier suffixes — so that name
     // matched nothing, the scan skipped it, and a crashed session's temp was
     // neither offered for recovery nor swept. They accumulated forever across
-    // crashes (2026-07 audit, an-audit-finding).
+    // crashes (2026-07 audit).
     static const wchar_t kNamePrefix[]    = L"autosave-";
     static const wchar_t kNameRecent[]    = L"-recent.alo";
     static const wchar_t kNameStable[]    = L"-stable.alo";

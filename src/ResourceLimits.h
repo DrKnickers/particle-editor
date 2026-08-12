@@ -10,14 +10,14 @@ static const unsigned long kMaxXmlFileBytes      = 64u * 1024u * 1024u; // 64 Mi
 // recursion risk is in teardown, but the cap stops the tree existing at all).
 static const unsigned long kMaxXmlDepth          = 512u;
 // Total ELEMENT count for one document — the breadth companion to the depth cap
-// above (2026-07 audit, an-audit-finding). Depth alone leaves a shallow-but-enormous document
+// above (2026-07 audit). Depth alone leaves a shallow-but-enormous document
 // unbounded, and kMaxXmlFileBytes does not stand in for it: every element
 // becomes an XMLNode carrying a child vector and an attribute map, so a 64 MiB
 // file of `<E/>` amplifies into something far larger than 64 MiB of heap. Real
 // game XML runs to thousands of elements; the largest stock catalogs are well
 // under 100k.
 static const unsigned long kMaxXmlNodes          = 2u * 1000u * 1000u;  // 2M elements
-// Total ATTRIBUTE PAIRS for one document (2026-07 audit, an-audit-finding). A shallow
+// Total ATTRIBUTE PAIRS for one document (2026-07 audit). A shallow
 // element can carry a large Expat [name,value,...] array while paying for only
 // one XMLNode; XMLNode then copies every pair into a std::map, amplifying each
 // short on-disk attribute into map-node and string allocations. The approved
@@ -31,7 +31,7 @@ static const unsigned long kMaxCatalogXmlTotalBytes = kMaxXmlFileBytes;
 // published prefix without rejecting an otherwise readable manifest.
 static const unsigned long kMaxSkydomeEntriesPerAxis = 1024u;
 // Total fieldable-token PROCESSING work for one game-object catalog build
-// (2026-07 audit, an-audit-finding). This counts temporary token-vector pushes, roster /
+// (2026-07 audit). This counts temporary token-vector pushes, roster /
 // build / spawn map applications, member-expansion pushes, and expansion replay.
 // Repeated or inherited lists consume work again even when their final names
 // deduplicate in the field-source map. The approved ceiling is aggregate across
@@ -54,7 +54,7 @@ static const unsigned long kMaxAloConnections    = 4096u;
 // Real systems have dozens of emitters; heavy modded ones a few hundred.
 static const unsigned long kMaxAloEmitters       = 65536u;
 // Spawn-chain DEPTH cap — the arrangement companion to the count cap above
-// (2026-07 audit, an-audit-finding). kMaxAloEmitters bounds how MANY emitters a file may
+// (2026-07 audit). kMaxAloEmitters bounds how MANY emitters a file may
 // carry and says nothing about how they are wired: 65,536 emitters are harmless
 // as a forest and fatal as a single chain, because ValidateEmitterGraph enforces
 // single-parent and breaks cycles but never bounded depth. The graph is walked
@@ -72,23 +72,23 @@ static const unsigned long kMaxEmitterTreeDepth  = 256u;
 // without bound. Same defect shape in four places; the sibling loops in the very
 // same files (bones, connections, emitters above) already had their caps.
 //
-// Top-level 0x0400 mesh containers in one .alo (audit an-audit-finding). Each is an
+// Top-level 0x0400 mesh containers in one .alo (2026-07 audit). Each is an
 // emplace_back into model.meshes regardless of payload, so empty containers cost
 // a full Mesh apiece. Real models have a handful; heavily-composed ones dozens.
 static const unsigned long kMaxAloMeshes         = 4096u;
-// Material containers across ALL meshes in one model (audit an-audit-finding). Each
+// Material containers across ALL meshes in one model (2026-07 audit). Each
 // 0x10100 owns an AloSubMesh even if no geometry follows, so the top-level mesh
 // cap does not bound this nested fan-out.
 static const unsigned long kMaxAloSubMeshesTotal = 4096u;
-// Recognized shader-parameter leaves across ALL materials in one model (audit
-// an-audit-finding). Count raw 0x10102..0x10106 leaves, including duplicate names.
+// Recognized shader-parameter leaves across ALL materials in one model
+// (2026-07 audit). Count raw 0x10102..0x10106 leaves, including duplicate names.
 static const unsigned long kMaxAloShaderParamsTotal = 32768u;
-// Keys in ONE emitter track (audit an-audit-finding). Track::KeyMap is a std::multiset, so
+// Keys in ONE emitter track (2026-07 audit). Track::KeyMap is a std::multiset, so
 // every key is a separate red-black-tree node — far more than the 8 bytes it
 // occupies on disk. Bounded previously only by the enclosing chunk, i.e. up to
 // ~32M keys under kMaxAloChunkBytes. A hand-authored curve has tens of keys.
 static const unsigned long kMaxAloTrackKeys      = 65536u;
-// Link-exempt entries in one 0x0003 chunk (audit an-audit-finding). The count was bounded
+// Link-exempt entries in one 0x0003 chunk (2026-07 audit). The count was bounded
 // only by the bytes remaining in the chunk — at ~3 bytes per entry that is still
 // tens of millions of map inserts. Groups are per-particle-system and few.
 static const unsigned long kMaxAloLinkExempts    = 65536u;
@@ -97,7 +97,7 @@ static const unsigned long kMaxAloLinkExempts    = 65536u;
 // bound total parsing work. Count records before filtering zero/default entries
 // or overwriting duplicate group IDs.
 static const unsigned long kMaxAloLinkExemptRecordsTotal = 65536u;
-// Roster names taken from one GameObjectList.lua (audit an-audit-finding). The reader already
+// Roster names taken from one GameObjectList.lua (2026-07 audit). The reader already
 // refuses a file over kMaxXmlFileBytes, but a byte cap is not a count cap: the
 // `["NAME"]` scan is ~6 bytes per entry, so 64 MiB of `["a"]["b"]...` is ~10M
 // std::set<std::string> inserts — each a red-black node plus a heap allocation.
@@ -107,7 +107,7 @@ static const unsigned long kMaxAloLinkExemptRecordsTotal = 65536u;
 // pathological. Duplicates cannot inflate the set, so the cap is on distinct
 // names — which is exactly the memory being bounded.
 static const unsigned long kMaxRosterEntries     = 65536u;
-// Inbound WebMessage cap, in UTF-16 CHARACTERS (2026-07 audit, an-audit-finding). Bridge
+// Inbound WebMessage cap, in UTF-16 CHARACTERS (2026-07 audit). Bridge
 // ingress had no size limit: every message was handed to OnWebMessage and parsed
 // whole, so one postMessage could drive an arbitrarily large allocation on the UI
 // thread. Defence-in-depth rather than a live hole -- the origin check upstream

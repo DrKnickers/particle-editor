@@ -150,7 +150,7 @@ bool BridgeDispatcher::TryDispatchAssets(BridgeRequestContext& ctx, const std::s
         // `err` distinguishes the two ways ok can be false. Both React call
         // sites render a supplied `error` verbatim and otherwise fall back to
         // "the mod shaders failed to reload" — which is an actively misleading
-        // diagnosis when the real problem was the registry write (audit an-audit-finding).
+        // diagnosis when the real problem was the registry write (2026-07 audit).
         std::string err;
         bool ok = m_modManager->SetLayerStack(paths, !(m_testHost && !m_settingsLive), &err);
         TexturePalette::ClearBridgeThumbCache();

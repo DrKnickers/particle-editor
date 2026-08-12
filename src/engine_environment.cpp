@@ -437,7 +437,7 @@ bool Engine::SetGroundSlotCustomPath(int slot, const std::wstring& path)
     // the bridge handler because the registry restore at startup calls this
     // setter too — guarding only the handler would leave a stored UNC path
     // replaying on every launch, which is the durable half of the finding
-    // (2026-07 audit, an-audit-finding).
+    // (2026-07 audit).
     if (!IsLocalCustomAssetPath(path)) return false;
     m_groundSlotCustomPaths[slot] = path;
     // If the mutated slot is currently selected, reload the engine's

@@ -108,7 +108,7 @@ test.beforeEach(async () => {
 // That is worse than having no test: `test.fixme` reports as a known-skip, so
 // the contracts LOOKED covered. Deleting the production viewport pointer
 // listener or the Shift-keydown dispatch would not have failed anything here
-// (2026-07 audit, an-audit-finding).
+// (2026-07 audit).
 //
 // The contracts themselves are real and still worth covering. The honest
 // statement is that they are covered by user-driven smoke (Shift+click spawn

@@ -234,7 +234,7 @@ static void test_byte_budget_preserves_only_immediate_pair(ParticleSystem& ps)
           "immediate-pair budget: exception does not leak into normal captures");
 }
 
-// 8. Aggregate byte budget (2026-07 audit, an-audit-finding).
+// 8. Aggregate byte budget (2026-07 audit).
 //
 // MAX_ENTRIES caps HOW MANY snapshots are resident and says nothing about how
 // large they are. Snapshot size scales with emitter and track-key count, both

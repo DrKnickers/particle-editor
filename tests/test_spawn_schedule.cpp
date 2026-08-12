@@ -1,5 +1,5 @@
 // Regression test for the spawn-rate reconcile clamp (src/SpawnSchedule.h,
-// 2026-07 audit an-audit-finding).
+// 2026-07 audit).
 //
 // onParticleSystemChanged recomputes m_spawnDelay on a rate edit but the next
 // spawn was scheduled against the OLD delay. Raise the rate on a slow emitter
@@ -130,7 +130,7 @@ int main()
         CHECK(!header.empty() && !source.empty(), "production schedule sources are readable");
         CHECK(std::regex_search(header, std::regex(
             R"(TimeF\s+m_nextSpawnTime\s*=\s*0\.0f\s*;)")),
-            "m_nextSpawnTime is initialized before the constructor callback (an-audit-finding)");
+            "m_nextSpawnTime is initialized before the constructor callback");
         CHECK(std::regex_search(header, std::regex(
             R"(bool\s+m_nextSpawnUsesInitialDelay\s*=\s*true\s*;)")),
             "new instances start with initial-delay schedule provenance");

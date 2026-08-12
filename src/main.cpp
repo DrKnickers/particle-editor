@@ -151,7 +151,7 @@ public:
 		// textures.insert() silently no-ops on the existing key (std::map does
 		// not overwrite), leaving the map holding the OLD texture while the
 		// unconditional AddRef stranded the NEW one at refcount 1, referenced by
-		// nothing (2026-07 audit, an-audit-finding).
+		// nothing (2026-07 audit).
 		//
 		// +1 to the caller matches what every other return path hands back.
 		{
@@ -342,7 +342,7 @@ public:
 		// defect: the direct "file exists as specified" path below short-circuits
 		// before load() (which owns the lookup) is ever reached, so a repeat call
 		// recompiled the effect from disk and then stranded it at refcount 1 when
-		// shaders.insert() no-oped on the existing key (audit an-audit-finding).
+		// shaders.insert() no-oped on the existing key (2026-07 audit).
 		{
 			ShaderMap::iterator cached = shaders.find(filename);
 			if (cached != shaders.end())

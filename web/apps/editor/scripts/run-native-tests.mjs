@@ -347,7 +347,7 @@ async function main() {
       // nothing ever set PE_REQUIRE_GAME_TEXTURES — so on a box with the game
       // installed they still silently self-skipped, and breaking atlas
       // assignment or ParticleSystem::reparentEmitter left the lane green
-      // (2026-07 audit, an-audit-finding).
+      // (2026-07 audit).
       //
       // Gated on the registry game path rather than forced: a machine with no
       // install genuinely cannot run them, and failing there would punish a

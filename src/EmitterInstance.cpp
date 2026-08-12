@@ -4,7 +4,7 @@
 #include <windows.h>
 #include "EmitterInstance.h"
 #include "ParticleCompaction.h"
-#include "SpawnSchedule.h"   // ReconcileNextSpawnTime (an-audit-finding rate-edit clamp)
+#include "SpawnSchedule.h"   // ReconcileNextSpawnTime (rate-edit clamp)
 #include "ParticleSystemInstance.h"
 using namespace std;
 
@@ -732,7 +732,7 @@ void EmitterInstance::onParticleSystemChanged(const Engine& engine, int track)
 		// The next spawn was scheduled against the OLD delay, and recomputing
 		// m_spawnDelay above does not move it — so raising the rate on a slow
 		// emitter changed nothing until the old delay elapsed, and the slider
-		// looked dead for up to a full second (2026-07 audit, an-audit-finding).
+		// looked dead for up to a full second (2026-07 audit).
 		// Clamp only after the authored initialDelay has elapsed: never collapse
 		// that first wait, defer a spawn, or drag an overdue one forward.
 		m_nextSpawnTime = ReconcileNextSpawnTime(m_nextSpawnTime, GetTimeF(),

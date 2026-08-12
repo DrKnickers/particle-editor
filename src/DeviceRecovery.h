@@ -53,7 +53,7 @@ public:
     {
     }
 
-    // This exact call is the an-audit-finding load-bearing production door.
+    // This exact call is the load-bearing production door.
     // TestCooperativeLevel always reports S_OK for a D3D9Ex device.
     HRESULT CheckDeviceState()
     {

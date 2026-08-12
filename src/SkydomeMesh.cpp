@@ -161,7 +161,7 @@ bool SkydomeMesh::HasResolved() const
     return false;
 }
 
-// Are there LIVE GPU buffers behind this mesh right now? (2026-07 audit, an-audit-finding.)
+// Are there LIVE GPU buffers behind this mesh right now? (2026-07 audit.)
 //
 // HasResolved above answers a different question — "did a shader bind?" — and
 // every existing skydome assertion is of that bookkeeping kind: which slot is

@@ -341,7 +341,7 @@ int main()
         }
     }
 
-    // ---- G: spawn-chain depth is capped on load (2026-07 audit, an-audit-finding) ------
+    // ---- G: spawn-chain depth is capped on load (2026-07 audit) ------
     //
     // kMaxAloEmitters (65536) bounds how MANY emitters a file may carry and
     // says nothing about their ARRANGEMENT, so a single chain of tens of

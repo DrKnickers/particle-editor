@@ -412,35 +412,35 @@ int main()
         }
     }
 
-    // --- scalar-track aggregate boundary (an-audit-finding). Load through the production
+    // --- scalar-track aggregate boundary. Load through the production
     // constructor: the first endpoint plus cap-1 intermediates is accepted, the
     // final endpoint is appended, and the cap-th intermediate is rejected.
     {
         CHECK(kMaxAloTrackKeys == kExpectedTrackKeyCap,
-              "an-audit-finding: scalar-track cap remains exactly 65,536");
+              "scalar-track cap remains exactly 65,536");
         const size_t acceptedIntermediates = kExpectedTrackKeyCap - 1u;
         const Bytes atCap = serializeWithScaleIntermediates(acceptedIntermediates);
         bool other = false;
         ParticleSystem* rp = NULL;
         bool ok = loads(atCap, &rp, other);
         CHECK(ok && !other && rp,
-              "an-audit-finding: scalar track accepts cap-1 intermediates");
+              "scalar track accepts cap-1 intermediates");
         if (rp && rp->getEmitters().size() == 1)
         {
             const Track& scale =
                 rp->getEmitters()[0]->trackContents[ParticleSystem::TRACK_SCALE];
             CHECK(scale.keys.size() == kExpectedTrackKeyCap + 1u,
-                  "an-audit-finding: accepted scalar track appends both endpoints");
+                  "accepted scalar track appends both endpoints");
         }
         delete rp;
 
         const Bytes overCap =
             serializeWithScaleIntermediates(kExpectedTrackKeyCap);
         expectBadFile(overCap,
-                      "an-audit-finding: scalar track rejects cap-th intermediate");
+                      "scalar track rejects cap-th intermediate");
     }
 
-    // --- repeated link-exempt aggregate boundary (an-audit-finding). Every raw record
+    // --- repeated link-exempt aggregate boundary. Every raw record
     // counts even if it is group 0, decodes to defaults, duplicates an ID, or
     // overwrites an earlier sibling's stored value.
     {
@@ -449,7 +449,7 @@ int main()
         Bytes atCap = serialize(ps);
 
         CHECK(kMaxAloLinkExemptRecordsTotal == kExpectedLinkExemptRecordsTotalCap,
-              "an-audit-finding: aggregate link-exempt cap remains exactly 65,536");
+              "aggregate link-exempt cap remains exactly 65,536");
         const uint32_t half = kExpectedLinkExemptRecordsTotalCap / 2u;
         appendRootSibling(atCap, makeLinkExemptChunk(half, 0u));
         appendRootSibling(atCap, makeLinkExemptChunk(
@@ -466,12 +466,12 @@ int main()
         ParticleSystem* rp = NULL;
         bool ok = loads(atCap, &rp, other);
         CHECK(ok && !other && rp,
-              "an-audit-finding: repeated raw link-exempt records totaling cap are accepted");
+              "repeated raw link-exempt records totaling cap are accepted");
         if (rp)
         {
             const LinkExemptFlags& loaded = rp->getLinkExemptFlags(99u);
             CHECK(loaded.lifetime && !loaded.colorTexture,
-                  "an-audit-finding: later duplicate record still overwrites at the boundary");
+                  "later duplicate record still overwrites at the boundary");
             delete rp;
         }
 
@@ -485,13 +485,13 @@ int main()
         other = false;
         const bool rejected = rejectsWithoutReading(
             overCap, forbiddenRecordBody, forbiddenBytesRead, other);
-        std::printf("  probe: an-audit-finding forbidden record-body bytes read = %lu "
+        std::printf("  probe: forbidden record-body bytes read = %lu "
                     "(sentinel group = 0x%08lX)\n",
                     forbiddenBytesRead, (unsigned long)forbiddenGroupId);
         CHECK(rejected && !other,
-              "an-audit-finding: next raw record across a sibling is rejected");
+              "next raw record across a sibling is rejected");
         CHECK(forbiddenBytesRead == 0,
-              "an-audit-finding: rejection reads zero bytes of the over-budget record body");
+              "rejection reads zero bytes of the over-budget record body");
     }
 
     // --- link-exempt (0x0003) hardening: a corrupt packed size/count must be

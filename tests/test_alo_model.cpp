@@ -451,11 +451,11 @@ int main(int argc, char** argv) {
         CHECK(m.meshes[0].name == "a" && m.meshes[1].name == "b", "mesh names");
     }
 
-    // ---- Model-wide nested fan-out caps (an-audit-finding / an-audit-finding) ----------------
+    // ---- Model-wide nested fan-out caps ----------------
     std::printf("[nested-fanout-caps]\n");
     {
         CHECK(kMaxAloSubMeshesTotal == kExpectedAloSubMeshesTotalCap,
-              "an-audit-finding: model-wide submesh cap remains exactly 4,096");
+              "model-wide submesh cap remains exactly 4,096");
         const size_t half = kExpectedAloSubMeshesTotalCap / 2u;
         Bytes atCap = assemble({
             meshWithEmptyMaterials("sub_a", half),
@@ -468,7 +468,7 @@ int main(int argc, char** argv) {
         size_t total = 0;
         for (const auto& me : m.meshes) total += me.subMeshes.size();
         CHECK(accepted && total == kExpectedAloSubMeshesTotalCap,
-              "an-audit-finding: exactly 4,096 materials across meshes load as submeshes");
+              "exactly 4,096 materials across meshes load as submeshes");
 
         Bytes overCap = atCap;
         const Bytes extra = meshWithEmptyMaterials("sub_over", 1u);
@@ -477,14 +477,14 @@ int main(int argc, char** argv) {
         const bool rejected = rejectsAsBadFile(overCap);
         const size_t constructed = AloSubMeshConstructionCountForTesting();
         CHECK(rejected && constructed == kExpectedAloSubMeshesTotalCap,
-              "an-audit-finding: 4,097th material rejected before AloSubMesh construction");
+              "4,097th material rejected before AloSubMesh construction");
         if (constructed != kExpectedAloSubMeshesTotalCap)
             std::printf("    observed AloSubMesh constructions: %zu (expected 4096)\n",
                         constructed);
     }
     {
         CHECK(kMaxAloShaderParamsTotal == kExpectedAloShaderParamsTotalCap,
-              "an-audit-finding: model-wide shader-param cap remains exactly 32,768");
+              "model-wide shader-param cap remains exactly 32,768");
         const size_t half = kExpectedAloShaderParamsTotalCap / 2u;
         Bytes atCap = assemble({
             meshWithMaterials("param_a", {
@@ -504,7 +504,7 @@ int main(int argc, char** argv) {
             for (const auto& sm : me.subMeshes)
                 total += sm.params.size();
         CHECK(accepted && total == kExpectedAloShaderParamsTotalCap,
-              "an-audit-finding: exactly 32,768 raw params across materials load");
+              "exactly 32,768 raw params across materials load");
         if (accepted && !m.meshes.empty() && !m.meshes[0].subMeshes.empty())
         {
             const std::vector<AloShaderParam>& params =
@@ -516,7 +516,7 @@ int main(int argc, char** argv) {
                   && params[3].kind == AloShaderParam::TEXTURE
                   && params[4].kind == AloShaderParam::FLOAT4
                   && params[0].name == "P" && params[5].name == "P",
-                  "an-audit-finding: all five recognized IDs and duplicate names count");
+                  "all five recognized IDs and duplicate names count");
         }
 
         const Bytes forbiddenParam = intParam("FORBIDDEN_32769_BODY", 0xDEC0ADDEu);
@@ -534,7 +534,7 @@ int main(int argc, char** argv) {
             std::search(forbiddenChunk + 1, overCap.end(),
                         forbiddenParam.begin(), forbiddenParam.end());
         CHECK(forbiddenChunk != overCap.end() && duplicateForbiddenChunk == overCap.end(),
-              "an-audit-finding: forbidden parameter sentinel is present exactly once in appended mesh");
+              "forbidden parameter sentinel is present exactly once in appended mesh");
         if (forbiddenChunk != overCap.end() && duplicateForbiddenChunk == overCap.end())
         {
             const size_t forbiddenBodyBegin =
@@ -550,7 +550,7 @@ int main(int argc, char** argv) {
             const size_t forbiddenBytesRead = file->forbiddenBytesRead();
             file->Release();
             CHECK(rejected && forbiddenBytesRead == 0u,
-                  "an-audit-finding: 32,769th param rejected before its body is read");
+                  "32,769th param rejected before its body is read");
             if (forbiddenBytesRead != 0u)
                 std::printf("    observed forbidden parameter-body bytes read: %zu (expected 0)\n",
                             forbiddenBytesRead);

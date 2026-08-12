@@ -69,7 +69,7 @@ test("parseSkippedCount sees skipped tests inside an otherwise-green runner", ()
 test("parseSkippedCount reads `node --test`'s reversed word order (the scripts lane was always 0)", () => {
   // The real tail of `pnpm run test:scripts`. Matching only Playwright's
   // "<n> skipped" made this lane's skips unreadable, so the surfacing added for
-  // audit an-audit-finding never fired for the one lane it was written for.
+  // the 2026-07 audit never fired for the one lane it was written for.
   const nodeSummary = ["ℹ pass 159", "ℹ fail 0", "ℹ cancelled 0", "ℹ skipped 1", "ℹ todo 0"].join("\n");
   assert.equal(parseSkippedCount(nodeSummary), 1);
   // A clean node run must still read 0 — the overreach direction, and the one
@@ -89,7 +89,7 @@ test("parseSkippedCount does not read a count off the NEXT line (\\s crosses new
   assert.equal(parseSkippedCount("Slow test file: tests\\emitter-drag.spec.ts 42\n  3 skipped\n"), 3);
 });
 
-// ── record-smoke oracle (audit an-audit-finding) ──────────────────────────────────────
+// ── record-smoke oracle (2026-07 audit) ──────────────────────────────────────
 //
 // This lane is how we claim headless recording works, and it could not fail:
 // it captured the child's spawn result and then used `status` ONLY inside
@@ -145,7 +145,7 @@ test("recordSmokeVerdict still catches the blank-frame and no-frame cases it alw
   );
 });
 
-// ── skip-as-pass: internal skips (audit an-audit-finding + an-audit-finding) ───────────────────────
+// ── skip-as-pass: internal skips (2026-07 audit) ───────────────────────
 // One mechanism at two levels. A capability probe fails, the test skips, the
 // exit code stays 0. #687 made both VISIBLE and stopped there, so the gate
 // could still go green around coverage that did not run. These verdicts are

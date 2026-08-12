@@ -100,7 +100,7 @@
 #include "../Autosave.h"  // two-tier autosave timers + clean-exit cleanup
 #include "DriveRunner.h"   // --drive: scripted non-CDP composite capture
 #include "ClipRunner.h"    // --record: deterministic clip recording (PNG sequence)
-#include "RecordOutputSafety.h"  // --record: refuse to remove_all a non-output dir (an-audit-finding)
+#include "RecordOutputSafety.h"  // --record: refuse to remove_all a non-output dir
 #include "CaptureRunner.h" // --capture/--capture-ref: one-shot render + PNG (Phase C split)
 #include "HostRunUtil.h"   // PerfQpcNow/PerfQpcFreq/QpcMs/DeriveSibling (shared with the runners)
 #include "AsyncFrameEncoder.h"   // --record Branch B: background PNG encode (tasks/todo.md §3)
@@ -290,8 +290,7 @@ static bool WebView2RuntimeInstalled()
 //
 // The grow-until-it-fits GetModuleFileNameW loop that used to live inline here
 // now lives in host::ModuleDirectory (ModulePath.h) — the fixed-MAX_PATH form
-// it replaced truncated silently under a long extraction path (2026-07 audit,
-// an-audit-finding).
+// it replaced truncated silently under a long extraction path (2026-07 audit).
 static std::wstring BundledWebView2SetupPath()
 {
     const std::wstring dir = host::ModuleDirectory();
@@ -403,7 +402,7 @@ bool ProbeDevServer()
 // runs a throwaway, per-process profile so they never contend with the editor.
 std::wstring ComputeUserDataFolder(bool isolated = false)
 {
-    // "-iso-", not "-capture-": --test-host now takes this path too (an-audit-finding),
+    // "-iso-", not "-capture-": --test-host now takes this path too,
     // and a folder named for capture would misreport which run owns it.
     wchar_t pidSuffix[32] = {};
     if (isolated) swprintf(pidSuffix, 32, L"-iso-%lu", GetCurrentProcessId());
@@ -545,7 +544,7 @@ struct HostWindowImpl
     // captures `this`. The two WebView2 CREATION callbacks have no token to
     // unsubscribe — they are one-shot completions the runtime owns — so they
     // get the liveness guard instead, retired at the top of WM_DESTROY and
-    // checked before either callback touches `this` (2026-07 audit, an-audit-finding).
+    // checked before either callback touches `this` (2026-07 audit).
     host::StartupCallbackGuard      m_startupGuard;
     // TME_LEAVE arming state. WebView2 needs a
     // COREWEBVIEW2_MOUSE_EVENT_KIND_MOUSE_LEAVE input when the pointer
@@ -1084,7 +1083,7 @@ struct HostWindowImpl
             tier == Autosave::Tier::Recent ? "recent" : "stable",
             PerfUsSince(t0) / 1000.0,
             force ? " (busy-override)" : "");
-        // Tell the UI (2026-07 audit, an-audit-finding). `wrote` previously fed nothing but
+        // Tell the UI (2026-07 audit). `wrote` previously fed nothing but
         // the format string above, so a failing autosave was invisible outside a
         // debug log: the user kept editing believing the recovery net was live
         // when the newest recoverable state was silently falling behind.
@@ -1793,7 +1792,7 @@ void HostWindowImpl::OnWebMessage(const std::wstring& json)
         // reports success), permanently short-circuiting this replay. (pre-PR review.)
         m_lastMaximizedSent = -1;
         EmitWindowStateIfChanged();
-        // Same replay for autosave health (2026-07 audit, an-audit-finding), and for the
+        // Same replay for autosave health (2026-07 audit), and for the
         // same reason: it is emitted only on a CHANGE, so a web reload would
         // otherwise drop a live "recovery net is stale" warning and not restore
         // it until the health flipped again — which, once broken, it may never
@@ -1964,8 +1963,8 @@ HRESULT HostWindowImpl::InitWebView2()
 {
     // Any session with no human at the keyboard gets a throwaway per-PID
     // profile. This used to list capture and automation but NOT --test-host,
-    // which therefore shared the daily driver's stable profile (2026-07 audit,
-    // an-audit-finding) — and the comment on ComputeUserDataFolder already explains why
+    // which therefore shared the daily driver's stable profile (2026-07
+    // audit) — and the comment on ComputeUserDataFolder already explains why
     // that hurts: the runtime LOCKS the user-data folder, so a --test-host run
     // launched beside the live editor fails env-creation outright. That makes it
     // a flake source for the playwright-native GATE lane, not just a nuisance.
@@ -2027,7 +2026,7 @@ HRESULT HostWindowImpl::InitWebView2()
             [this, startupToken](HRESULT envHr, ICoreWebView2Environment* env) -> HRESULT
             {
                 // The adapter has already proved the owner live before this
-                // continuation can log or dereference `this` (an-audit-finding).
+                // continuation can log or dereference `this`.
                 if (FAILED(envHr) || !env)
                 {
                     Log("[host] WebView2 env failed 0x%08lx\n", envHr);
@@ -2036,7 +2035,7 @@ HRESULT HostWindowImpl::InitWebView2()
                     // SYNCHRONOUS success from
                     // CreateCoreWebView2EnvironmentWithOptions. The result was a
                     // live window with no UI, no bridge, and exit code 0
-                    // (2026-07 audit, an-audit-finding). Terminal failure instead, the
+                    // (2026-07 audit). Terminal failure instead, the
                     // same treatment the Compositor::Init failure below gets.
                     FailFatalComposition(FAILED(envHr) ? envHr : E_FAIL);   // [[noreturn]]
                 }
@@ -2093,7 +2092,7 @@ HRESULT HostWindowImpl::InitWebView2()
                 {
                     // The environment completion handler's return value is
                     // discarded, so merely returning this HRESULT recreates
-                    // an-audit-finding one call deeper: a live window, no UI, exit 0.
+                    // one call deeper: a live window, no UI, exit 0.
                     // Promote the synchronous dispatch failure to the same
                     // terminal message used by async controller failures.
                     Log("[host] composition: controller create dispatch FAILED hr=0x%08lx\n",
@@ -2175,7 +2174,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 // (get_AreDevToolsEnabled: "The default value is TRUE").
                 // F12 therefore opened DevTools on the privileged editor page,
                 // where the native bridge is reachable from the console
-                // (2026-07 audit, an-audit-finding).
+                // (2026-07 audit).
                 settings->put_AreDevToolsEnabled(FALSE);
                 Log("[host] production: DevTools disabled\n");
             }
@@ -2364,7 +2363,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 // fell straight through to OnWebMessage — the comment above
                 // promised the message "must not reach the native bridge", but
                 // the control flow granted exactly that on a COM error
-                // (2026-07 audit, an-audit-finding). No confirmed origin, no dispatch.
+                // (2026-07 audit). No confirmed origin, no dispatch.
                 LPWSTR src = nullptr;
                 const HRESULT srcHr = args->get_Source(&src);
                 if (FAILED(srcHr) || !src)
@@ -2385,7 +2384,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                     }
                     CoTaskMemFree(src);
                 }
-                // Size cap on both ingress paths (2026-07 audit, an-audit-finding).
+                // Size cap on both ingress paths (2026-07 audit).
                 // OnWebMessage parses the whole string, so without this one
                 // postMessage drives an unbounded UI-thread allocation. Checked
                 // AFTER the origin gate so an untrusted sender never gets even
@@ -2446,7 +2445,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
                 // FAIL CLOSED, same as the WebMessage source check above: a
                 // failing/empty get_Uri used to skip the whole block WITHOUT
                 // put_Cancel, so a navigation we could not identify was allowed
-                // to proceed (2026-07 audit, an-audit-finding). An unidentifiable target
+                // to proceed (2026-07 audit). An unidentifiable target
                 // is exactly the one to refuse — the app's own load reports its
                 // URI fine, so cancelling here costs nothing legitimate.
                 LPWSTR uri = nullptr;
@@ -2627,7 +2626,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
         // the first navigation reproduces the blank-window / ERR_NAME_NOT_RESOLVED
         // failure this change eliminates. A failed registration must therefore be
         // terminal, not swallowed — same fail-closed treatment the removed folder
-        // mapping got (2026-07 audit, an-audit-finding).
+        // mapping got (2026-07 audit).
         if (FAILED(wrrHr))
         {
             Log("[host] add_WebResourceRequested(app.local) failed hr=0x%08lx\n", wrrHr);
@@ -2659,7 +2658,7 @@ HRESULT HostWindowImpl::FinishWebView2ControllerSetup(ICoreWebView2Controller* c
     // Navigate to the React app. Navigate returns SYNCHRONOUSLY on whether the
     // request was accepted at all, and that HRESULT was dropped — a rejected
     // URL left the window blank with nothing in the log and a zero exit code
-    // (2026-07 audit, an-audit-finding).
+    // (2026-07 audit).
     HRESULT navHr = S_OK;
     if (useDevUi)
     {
@@ -4043,7 +4042,7 @@ LRESULT HostWindowImpl::MainWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         // WM_QUIT — the pump keeps dispatching whatever is already queued — so a
         // WebView2 creation completion can still arrive after this point and
         // would otherwise build a Compositor on a destroyed HWND. The token the
-        // creation callbacks hold reads dead from here on (an-audit-finding).
+        // creation callbacks hold reads dead from here on.
         m_startupGuard.Retire();
         KillTimer(hwnd, kStatsTimerId);
         // Stop autosave + delete THIS session's autosave files on a
@@ -5978,7 +5977,7 @@ int HostWindowImpl::Run(int nCmdShow)
                     // Move the completed sequence into place on success only.
                     if (recordExitCode == 0)
                     {
-                        // an-audit-finding: `out` is validated as relative + traversal-free,
+                        // `out` is validated as relative + traversal-free,
                         // which stops an ESCAPE but not the destruction of an existing
                         // directory under the launch dir — the publish below is an
                         // unconditional remove_all. Refuse unless the target is absent,

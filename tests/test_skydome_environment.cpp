@@ -465,7 +465,7 @@ int main(int argc, char** argv)
         CHECK(env2.hasPrimary && !env2.hasSecondary, "resolve-from-lists: missing secondary unset");
     }
 
-    // ---- accepted entry cap per axis/load (2026-07 audit, an-audit-finding) -----------
+    // ---- accepted entry cap per axis/load (2026-07 audit) -----------
     std::printf("[accepted entry cap]\n");
     {
         // Exact literal boundary through LoadSkydomeList. The two files carry
@@ -514,7 +514,7 @@ int main(int argc, char** argv)
               "a capped axis does not suppress a later routed axis");
     }
 
-    // ---- manifest file-count cap (2026-07 audit, an-audit-finding) -----------------------
+    // ---- manifest file-count cap (2026-07 audit) -----------------------
     //
     // GameObjectFiles.xml has TWO readers. GameObjectCatalog's readFileList caps
     // the list at kMaxCatalogXmlFileCount; LoadAllSkydomeLists did not, so a
