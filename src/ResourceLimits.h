@@ -101,7 +101,7 @@ static const unsigned long kMaxAloLinkExemptRecordsTotal = 65536u;
 // refuses a file over kMaxXmlFileBytes, but a byte cap is not a count cap: the
 // `["NAME"]` scan is ~6 bytes per entry, so 64 MiB of `["a"]["b"]...` is ~10M
 // std::set<std::string> inserts — each a red-black node plus a heap allocation.
-// Same shape as B-1…B-4 and B-6: every ITEM is checked, the TOTAL never is.
+// Same shape as the other aggregate-cap findings: every ITEM is checked, the TOTAL never is.
 // Real rosters run a few hundred to ~900 entries (see readRosterLua), so 65536
 // is ~70x the largest observed and can only ever bite content that is already
 // pathological. Duplicates cannot inflate the set, so the cap is on distinct

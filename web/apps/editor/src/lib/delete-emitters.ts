@@ -101,8 +101,8 @@ export function collapseToRoots(ids: number[], tree: EmitterTreeDto | null): num
 // ONE batched emitters/delete-many, not one emitters/delete per root: the host
 // captures a single undo entry around its whole loop, so one Ctrl+Z reverses
 // the whole gesture. The per-root fan-out this replaced captured N undo
-// entries, and a single Ctrl+Z restored one emitter out of N (2026-07 audit
-// C-007). Batching for a single id is harmless — delete-many with one id is
+// entries, and a single Ctrl+Z restored one emitter out of N (2026-07
+// audit). Batching for a single id is harmless — delete-many with one id is
 // the same capture, sweep and events as delete — and matches duplicateEmitters,
 // which sends duplicate-many unconditionally.
 export function performDelete(bridge: Bridge, ids: number[], tree: EmitterTreeDto | null): void {

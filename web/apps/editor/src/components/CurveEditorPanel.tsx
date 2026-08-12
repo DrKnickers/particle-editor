@@ -1107,7 +1107,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         kind: "emitters/add-track-key",
         params: { id: selectedId, track: focusedChannel.trackName, time, value },
       }).then((res) => {
-        if (!stillScoped(selectedId, focusedChannel.trackName)) return; // C-005
+        if (!stillScoped(selectedId, focusedChannel.trackName)) return; // mutation-scope guard
         const insertedTime = res.time ?? time;
         const insertedValue = res.value ?? value;
         setSelectedKeyTimes(new Set([insertedTime]));
@@ -1129,7 +1129,7 @@ export function CurveEditorPanel({ bridge }: Props) {
       kind: "emitters/delete-track-keys",
       params: { id: selectedId, track: focusedChannel.trackName, times: candidates },
     }).then(() => {
-      if (!stillScoped(selectedId, focusedChannel.trackName)) return; // C-005
+      if (!stillScoped(selectedId, focusedChannel.trackName)) return; // mutation-scope guard
       setSelectedKeyTimes(new Set());
       setOptimisticSelected(null);
     }).catch(() => { /* silent */ });
@@ -1682,7 +1682,7 @@ export function CurveEditorPanel({ bridge }: Props) {
         params: { id: selectedId, track, keys: clip.map((k) => ({ time: k.time, value: k.value })) },
       })
       .then((res) => {
-        if (!stillScoped(selectedId, track)) return; // C-005
+        if (!stillScoped(selectedId, track)) return; // mutation-scope guard
         // Fall back to the requested times when the response carries none,
         // mirroring the singular handler's `res.time ?? k.time`.
         const echoed = (res as { keys?: { time: number }[] }).keys;
@@ -2183,7 +2183,7 @@ export function CurveEditorPanel({ bridge }: Props) {
                 times: [t],
               },
             }).then(() => {
-              if (!stillScoped(selectedId, focusedChannel.trackName)) return; // C-005
+              if (!stillScoped(selectedId, focusedChannel.trackName)) return; // mutation-scope guard
               setOptimisticSelected((prev) =>
                 prev !== null && prev.time === t ? null : prev,
               );
