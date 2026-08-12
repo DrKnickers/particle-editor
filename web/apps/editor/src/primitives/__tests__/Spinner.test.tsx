@@ -139,7 +139,7 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenLastCalledWith(6);
   });
 
-  // an-audit-finding: the wheel honors the field's actual step magnitude, not a flat
+  // The wheel honors the field's actual step magnitude, not a flat
   // 0.1/1. Legacy wheel stepped by the spinner's Increment (Spinner.cpp:107).
   it("scroll-wheel steps by the field's step magnitude", () => {
     const onChange = vi.fn();
@@ -148,7 +148,7 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenCalledWith(10);
   });
 
-  // an-audit-finding: wheel Ctrl = fine (×0.1) on a decimal field (Spinner.cpp:109);
+  // Wheel Ctrl = fine (×0.1) on a decimal field (Spinner.cpp:109);
   // ignored on whole-number fields so it never produces fractions.
   it("scroll-wheel with Ctrl steps fine on a decimal field", () => {
     const onChange = vi.fn();
@@ -163,7 +163,7 @@ describe("Spinner", () => {
     expect(onChange).toHaveBeenCalledWith(6);
   });
 
-  // an-audit-finding: drag Shift = coarse (×10) and Ctrl = fine, matching the wheel and
+  // Drag Shift = coarse (×10) and Ctrl = fine, matching the wheel and
   // keyboard arrows (the old drag had these inverted).
   it("drag with Shift scrubs coarse (×10)", () => {
     const onChange = vi.fn();
@@ -261,7 +261,7 @@ describe("Spinner", () => {
     expect(input.value).toBe("5"); // reconciles, not stuck at "6"
   });
 
-  // an-audit-finding: holding an arrow button auto-repeats the step (legacy
+  // Holding an arrow button auto-repeats the step (legacy
   // hold-to-repeat, Spinner.cpp:438-455).
   it("holding the increment arrow auto-repeats", () => {
     vi.useFakeTimers();
