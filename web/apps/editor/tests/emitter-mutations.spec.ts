@@ -893,7 +893,7 @@ async function liveBridgeRequest<T>(
   ) as Promise<T>;
 }
 
-// ── G-1. Spawn-schedule production call-site behavior ─────────────────────
+// ── Spawn-schedule production call-site behavior ─────────────────────
 //
 // The pure SpawnSchedule predicate is covered by its C++ unit. These cases
 // deliberately traverse the real bridge and an already-placed EmitterInstance,

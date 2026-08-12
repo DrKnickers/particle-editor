@@ -207,8 +207,8 @@ export function recordSmokeVerdict({ error, signal, status, stderr, frames, maxB
 // Playwright says "4 skipped" / "3 did not run"; `node --test` says
 // "ℹ skipped 1" — noun FIRST. Only the Playwright form was matched, so the
 // `scripts` lane (node --test) always parsed 0 and its FFmpeg-dependent skips
-// stayed invisible even after they were supposedly surfaced (2026-07 audit,
-// G-11 — the visibility half of that finding never actually worked).
+// stayed invisible even after they were supposedly surfaced (2026-07 audit —
+// the visibility half of that finding never actually worked).
 // Both patterns are newline-anchored ([ \t], not \s) because every runner puts
 // its count and its noun on ONE line, while \s crosses lines and Playwright's
 // tail happens to read "  1 skipped\n  196 passed (114.5s)" — which a \s form
@@ -254,7 +254,7 @@ export const SKIP_BUDGET = {
 };
 
 // Verdict for a lane that exited 0 while reporting `innerSkipped` skipped tests.
-// Over budget FAILS (the false-green G-11 describes for the FFmpeg-dependent
+// Over budget FAILS (the false-green the audit describes for the FFmpeg-dependent
 // script tests); under budget passes but says the budget is now loose, because a
 // budget nobody tightens is how the number drifts upward. Exceeding it is
 // overridable with the same --allow-missing <lane> hatch #706 established, for
@@ -526,7 +526,7 @@ const LANES = [
     // landing media via FFmpeg. In-gate so guide.spec can't silently go stale
     // again (#599).
     run: () => {
-      // G-4: the landing playback specs `test.skip()` themselves when that
+      // The landing playback specs `test.skip()` themselves when that
       // placeholder media is absent, and the media only exists if global-setup
       // could run FFmpeg. Outside CI that degraded to a warning, so a box with
       // no FFmpeg reported a GREEN site lane having never exercised playback at

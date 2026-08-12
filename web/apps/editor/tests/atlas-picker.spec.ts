@@ -119,7 +119,7 @@ async function seedTexturePreviewStatus(): Promise<string> {
     // the caller made it read as "game texture data unreachable" — so with
     // PE_REQUIRE_GAME_TEXTURES newly set, these specs failed on a machine whose
     // textures were perfectly reachable, just not decoded YET (2026-07 audit,
-    // found while fixing G-2).
+    // found while fixing a sibling lane).
     //
     // Poll to a terminal answer. `error` still means genuinely unavailable,
     // which is what the skip is for.

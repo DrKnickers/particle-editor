@@ -705,7 +705,7 @@ int EmitterInstance::KillParticle(TimeF currentTime, Particle& particle)
 // The cache drops its own references there, but THESE two are separate, owning
 // references — so nothing freed them and nothing re-fetched them, and the
 // emitter went on binding a handle the device had invalidated
-// (2026-07 audit, E-D3D9-01).
+// (2026-07 audit).
 void EmitterInstance::ReleaseDeviceTextures()
 {
 	SAFE_RELEASE(m_pColorTexture);

@@ -192,7 +192,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         int slot = params.value("slot", -1);
         std::string p = params.value("path", std::string{});
         // The setter's bool was dropped here, so a refused path still answered
-        // {ok:true} — the V-7 shape, telling the user it took when it did not
+        // {ok:true} — the silent-success shape, telling the user it took when it did not
         // (2026-07 audit).
         if (!m_engine->SetGroundSlotCustomPath(slot, Utf8ToWide(p)))
         {
@@ -231,7 +231,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         std::string p = params.value("path", std::string{});
         std::wstring wpath = Utf8ToWide(p);
         // Check BEFORE persisting: writing a refused path to the registry is
-        // what made this the durable half of B-9 — the startup restore would
+        // what made this the durable half of that finding — the startup restore would
         // replay it on every launch.
         if (!m_engine->SetSkydomeCustomPath(slot, wpath))
         {

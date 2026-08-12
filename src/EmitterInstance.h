@@ -92,7 +92,7 @@ public:
 	// Re-fetch the two D3D textures after a device Reset. Narrower than
 	// onParticleSystemChanged(-1) ON PURPOSE: that also recomputes composites and
 	// re-syncs root emitters, and spawning emitters mid-device-reset is not what
-	// a Reset should do (2026-07 audit, E-D3D9-01).
+	// a Reset should do (2026-07 audit).
 	void  ReleaseDeviceTextures();
 	void  ReacquireDeviceTextures(const Engine& engine);
 	int   Update(TimeF currentTime);

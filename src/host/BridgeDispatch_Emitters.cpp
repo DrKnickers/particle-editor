@@ -973,8 +973,8 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
     // cut handler below: ONE captureUndo() around the whole loop, so a
     // single Ctrl+Z reverses the whole gesture. React used to issue N
     // separate emitters/delete requests, each capturing its own undo
-    // entry, so one Ctrl+Z restored one emitter out of N (2026-07 audit
-    // C-007).
+    // entry, so one Ctrl+Z restored one emitter out of N (2026-07
+    // audit).
     //
     // An emitter id is a POSITION that shifts down as earlier siblings
     // vanish, so — exactly as in cut — sort descending and re-resolve
