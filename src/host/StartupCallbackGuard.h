@@ -8,7 +8,7 @@
 // event handlers they cannot be unsubscribed, so HostWindow's WM_DESTROY sweep,
 // which carefully removes every registered handler precisely because "the
 // lambdas capture this", has no way to reach them. They were the two the
-// teardown never accounted for (2026-07 audit, A-OWN-005).
+// teardown never accounted for (2026-07 audit).
 //
 // The window is real because WM_DESTROY does not stop the message pump.
 // PostQuitMessage only POSTS WM_QUIT, and WM_QUIT is delivered once the queue is

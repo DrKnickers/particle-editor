@@ -1,4 +1,4 @@
-// Unit test for src/host/RecordOutputSafety.h (2026-07 audit, B-REC-001).
+// Unit test for src/host/RecordOutputSafety.h (2026-07 audit).
 //
 // The audit proved with an actual Release run that a --record timeline whose
 // `out` named an existing directory deleted that directory's contents: it

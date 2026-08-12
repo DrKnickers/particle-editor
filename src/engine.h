@@ -195,7 +195,7 @@ public:
 	void OnParticleSystemChanged(int track);
 	// Two-phase device-Reset texture lifecycle for every live emitter.
 	// Release must run before TextureManager::OnLostDevice + Reset; reacquire
-	// must run only after Reset succeeds (2026-07 re-audit P-2).
+	// must run only after Reset succeeds (2026-07 re-audit).
 	void ReleaseInstanceTextures();
 	void ReacquireInstanceTextures();
 	// [D2] Force the next Update to run a full instance pass even with a
@@ -693,7 +693,7 @@ public:
 	const std::string& GetSkydomeSecondaryName() const { return m_skydomeSecondaryName; }
 	// Load outcome of each selected dome (set in RebuildSkydomeMeshes); the
 	// picker surfaces LoadFailed instead of silently falling back to solid colour.
-	// Live GPU-resource truth for the two dome slots (2026-07 audit, G-8). The
+	// Live GPU-resource truth for the two dome slots (2026-07 audit). The
 	// status accessors below report BOOKKEEPING — what was selected, what the
 	// reader thought resolved — which is exactly why removing mesh creation left
 	// every skydome assertion green and the viewport black. These two answer
@@ -1099,7 +1099,7 @@ private:
     int  m_maxPreviewParticles  = kDefaultMaxPreviewParticles;
     int  m_maxPreviewInstances  = kDefaultMaxPreviewParticles / kInstancesDivisor;
     int  m_spawnBudget       = kDefaultMaxPreviewParticles;
-    // D3D9Ex device-state tracking (audit E-DEVICE-02).
+    // D3D9Ex device-state tracking (2026-07 audit).
     // m_presentSuspect: raised when a Present reports anything but D3D_OK, and
     // read at the top of Render(). Microsoft recommends querying
     // CheckDeviceState only after a present fails rather than every frame, so

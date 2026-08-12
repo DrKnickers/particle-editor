@@ -82,7 +82,7 @@ inline std::string SanitizeAssetName(std::string n)
 // operator can be talked into pasting. It is worse than a one-shot here: both
 // slots persist their path and REPLAY it at every startup (HostWindow.cpp's
 // registry restore), so one pasted string keeps leaking on every launch
-// (2026-07 audit, B-9).
+// (2026-07 audit).
 //
 // The rule is deliberately syntactic: a two-separator path is accepted only
 // when its server component is an exact, case-insensitive match for a local

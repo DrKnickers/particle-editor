@@ -769,7 +769,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         if (n > 0)
         {
             ctx.MarkDirty();
-            // Structural change: reach already-placed instances (audit V-4).
+            // Structural change: reach already-placed instances (2026-07 audit).
             if (m_engine) m_engine->OnParticleSystemChanged(-1);
             EmitEngineStateChanged();
             EmitEmittersTreeChanged();
@@ -830,7 +830,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         const int newId = static_cast<int>(dup->index);
         ctx.SendOk(json{{"ok", true}, {"newId", newId}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (audit V-4).
+        // Structural change: reach already-placed instances (2026-07 audit).
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -919,7 +919,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
 
         ctx.SendOk(json{{"ok", true}, {"newIds", newIds}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (audit V-4).
+        // Structural change: reach already-placed instances (2026-07 audit).
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -1222,7 +1222,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         // skips its idle update unless something invalidates it — so choosing
         // Smooth / Step / Linear updated the curve panel while the placed
         // preview kept drawing the OLD interpolation until you unpaused or
-        // stepped a frame (2026-07 audit, C-003). Same broadcast every other
+        // stepped a frame (2026-07 audit). Same broadcast every other
         // track mutation already sends.
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEmittersTreeChanged();
@@ -1515,7 +1515,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
     // captureUndo(), so a single Ctrl+Z reverses the whole paste. React
     // used to issue one add-track-key per clipboard key, each capturing
     // its own undo entry, so one Ctrl+Z removed one key of a paste
-    // (2026-07 audit C-006).
+    // (2026-07 audit).
     //
     // Per-key validation, the dedupe-by-epsilon bump and the returned
     // ACTUAL (time, value) are identical to the singular handler above;
@@ -1651,7 +1651,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         const int newId = static_cast<int>(dup->index);
         ctx.SendOk(json{{"newId", newId}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (audit V-4).
+        // Structural change: reach already-placed instances (2026-07 audit).
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -1695,7 +1695,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
                     // it resyncs to the partial state (reversible in one undo via
                     // the single captureUndo above) instead of going stale.
                     ctx.MarkDirty();
-                    // Structural change: reach already-placed instances (audit V-4).
+                    // Structural change: reach already-placed instances (2026-07 audit).
                     if (m_engine) m_engine->OnParticleSystemChanged(-1);
                     EmitEngineStateChanged();
                     EmitEmittersTreeChanged();
@@ -1709,7 +1709,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
 
         ctx.SendOk(json{{"newIds", newIds}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (audit V-4).
+        // Structural change: reach already-placed instances (2026-07 audit).
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -2015,7 +2015,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         }
         ctx.SendOk(json{{"newId", static_cast<int>(child->index)}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (audit V-4).
+        // Structural change: reach already-placed instances (2026-07 audit).
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -2047,7 +2047,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         }
         ctx.SendOk(json{{"newId", static_cast<int>(child->index)}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (audit V-4).
+        // Structural change: reach already-placed instances (2026-07 audit).
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -2075,7 +2075,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         }
         ctx.SendOk(json{{"newId", static_cast<int>(child->index)}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (audit V-4).
+        // Structural change: reach already-placed instances (2026-07 audit).
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();
@@ -2497,7 +2497,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
             ctx.SendOk(json{{"ok", true}});
             ctx.MarkDirty();
             reselectMovedEmitter();
-            // Structural change: reach already-placed instances (audit V-4).
+            // Structural change: reach already-placed instances (2026-07 audit).
             if (m_engine) m_engine->OnParticleSystemChanged(-1);
             EmitEngineStateChanged();
             EmitEmittersTreeChanged();
@@ -2738,7 +2738,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         if (!newIds.empty())
         {
             ctx.MarkDirty();
-            // Structural change: reach already-placed instances (audit V-4).
+            // Structural change: reach already-placed instances (2026-07 audit).
             if (m_engine) m_engine->OnParticleSystemChanged(-1);
             EmitEngineStateChanged();
             EmitEmittersTreeChanged();
@@ -2797,7 +2797,7 @@ bool BridgeDispatcher::TryDispatchEmitters(BridgeRequestContext& ctx, const std:
         }
         ctx.SendOk(json{{"newId", static_cast<int>(child->index)}});
         ctx.MarkDirty();
-        // Structural change: reach already-placed instances (audit V-4).
+        // Structural change: reach already-placed instances (2026-07 audit).
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         EmitEmittersTreeChanged();

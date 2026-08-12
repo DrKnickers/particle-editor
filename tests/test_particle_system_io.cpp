@@ -341,7 +341,7 @@ int main()
         }
     }
 
-    // ---- G: spawn-chain depth is capped on load (2026-07 audit, P2-04) ------
+    // ---- G: spawn-chain depth is capped on load (2026-07 audit) ------
     //
     // kMaxAloEmitters (65536) bounds how MANY emitters a file may carry and
     // says nothing about their ARRANGEMENT, so a single chain of tens of
@@ -412,6 +412,39 @@ int main()
             CHECK(rootCount(*rp) == 1,
                   "at-cap: no spurious re-rooting at the boundary");
         }
+    }
+
+    // ---- H: DeriveParticleSystemName — legacy DoSaveFile name parity --------
+    // The game engine registers particle systems under the internal name
+    // (chunk 0x0000). The legacy editor re-stamped it from the destination
+    // filename on EVERY save; the host's file/save + file/save-as do the same
+    // via this helper. Pin the exact derivation: basename, extension
+    // stripped, lowercased, '_' for unrepresentable characters.
+    {
+        CHECK(DeriveParticleSystemName(L"C:\\Mods\\Art\\PP_Proton_Torpedo_R.alo")
+                  == "pp_proton_torpedo_r",
+              "derive: basename + strip .alo + lowercase (backslash path)");
+        CHECK(DeriveParticleSystemName(L"C:/Mods/Art/P_Explosion.ALO")
+                  == "p_explosion",
+              "derive: forward-slash path + uppercase extension");
+        CHECK(DeriveParticleSystemName(L"noext") == "noext",
+              "derive: no extension leaves the name whole");
+        CHECK(DeriveParticleSystemName(L"a.b\\P_Fire.v2.alo") == "p_fire.v2",
+              "derive: only the LAST dot is an extension; dotted dirs ignored");
+        CHECK(DeriveParticleSystemName(L"D:\\out\\P_Sm\x2603ke.alo") == "p_sm_ke",
+              "derive: unrepresentable wide char (U+2603) narrows to '_'");
+
+        // Integration: the derived name survives a real save->load cycle.
+        ParticleSystem ps;
+        ps.addRootEmitter();
+        const std::wstring path = tempPath(L"Derived_Name_Check.ALO");
+        ps.setName(DeriveParticleSystemName(path));
+        bool other = false;
+        CHECK(saveTo(ps, path, other) && !other, "derive: stamped save succeeds");
+        std::unique_ptr<ParticleSystem> rp = loadFrom(path, other);
+        CHECK(rp != nullptr && !other &&
+                  rp->getName() == "derived_name_check",
+              "derive: reloaded file carries the filename-derived name");
     }
 
     cleanupTempDir();

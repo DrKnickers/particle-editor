@@ -158,7 +158,7 @@ test("wheel over the viewport canvas zooms the engine camera under composition",
   // than wheel behaviour, and self-skipped on every machine because it looked
   // for an SVG that only mounts when an emitter is SELECTED while its setup
   // only tried to ADD one — via `emitters/add`, which is not a bridge kind
-  // (2026-07 audit, G-11 adjudication).
+  // (2026-07 audit adjudication).
 
   const readCamera = () =>
     page.evaluate(async () => {
@@ -188,7 +188,7 @@ test("wheel over the viewport canvas zooms the engine camera under composition",
   expect(camDistance(after)).toBeLessThan(camDistance(before));
 
   // Restore, so later cases in this file inherit the camera they expected
-  // (audit G-14 — shared engine state must not leak between cases).
+  // (2026-07 audit — shared engine state must not leak between cases).
   await page.evaluate(async (cam) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const b = (window as any).bridge;

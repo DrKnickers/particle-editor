@@ -178,6 +178,35 @@ test("File → Save (with pre-seeded path) commits the path and clears dirty", a
   expect(result.dirty).toBe(false);
 });
 
+// ── 3b. file/save stamps the internal system name from the filename ────────
+// Legacy DoSaveFile parity: the game engine registers particle systems under
+// the internal name (chunk 0x0000), so every save must re-derive it from the
+// destination filename (basename, extension stripped, lowercased). Regression
+// for the "saved in the new editor, doesn't show up in game" report.
+
+test("File → Save stamps the internal system name from the filename", async () => {
+  const savePath = "C:/Temp/File-Ops-NameStamp.ALO";
+  const saveR = await page.evaluate(async (p) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (window as any).bridge;
+    return await b.request({ kind: "file/save", params: { path: p } });
+  }, savePath);
+  expect(saveR.ok).toBe(true);
+
+  // Parse the saved bytes in Node: root 0x0900 at offset 0, first child
+  // 0x0000 (name) at offset 8, NUL-terminated string body at offset 16.
+  const fs = await import("node:fs");
+  const buf = fs.readFileSync(savePath);
+  fs.rmSync(savePath, { force: true });
+  expect(buf.readUInt32LE(0)).toBe(0x0900);
+  expect(buf.readUInt32LE(8)).toBe(0x0000);
+  const size = buf.readUInt32LE(12) & 0x7fffffff;
+  const raw = buf.subarray(16, 16 + size);
+  const z = raw.indexOf(0);
+  const name = raw.subarray(0, z < 0 ? raw.length : z).toString("latin1");
+  expect(name).toBe("file-ops-namestamp");
+});
+
 // ── 4. document.title reflects dirty + currentFilePath ─────────────────────
 
 test("Window title reflects dirty + currentFilePath", async () => {

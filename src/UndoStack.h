@@ -65,7 +65,7 @@ public:
     static const DWORD COALESCE_WINDOW_MS = 1500;
     static const size_t MAX_ENTRIES = 100;
     // Aggregate byte budget, the companion to the entry cap above (2026-07
-    // audit, P2-01). MAX_ENTRIES bounds HOW MANY snapshots are resident and
+    // audit). MAX_ENTRIES bounds HOW MANY snapshots are resident and
     // says nothing about their size: a typical snapshot is well under 100 KB
     // (~10 MB for a full stack), but snapshot size scales with emitter and
     // track-key count, both of which run to five figures under the .alo caps —

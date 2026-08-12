@@ -17,7 +17,7 @@ class ParticleSystemInstance : public Object3D
     // Root emitters this instance has already accounted for, keyed by
     // Emitter::stableId. Seeded in the constructor with every root present at
     // placement; SyncRootEmitters() then spawns ONLY roots whose id isn't here
-    // yet (2026-07 audit, V-4).
+    // yet (2026-07 audit).
     //
     // Keyed by stableId rather than Emitter* on purpose: the counter is
     // process-monotonic and never reused (ParticleSystem.cpp:145), so a stale
