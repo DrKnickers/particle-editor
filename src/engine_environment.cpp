@@ -11,7 +11,7 @@
 #include "utils.h"
 #include "resource.h"
 #include "ResourceLimits.h"   // kMaxTextureAssetBytes (asset-read caps)
-#include "AssetPathSafety.h"   // IsLocalCustomAssetPath (an-audit-finding remote-path refusal)
+#include "AssetPathSafety.h"   // IsLocalCustomAssetPath (remote-path refusal)
 #include "AloModel.h"          // AloShaderParam members (ApplyAloMaterialParams)
 
 using namespace std;
@@ -1437,7 +1437,7 @@ bool Engine::SetSkydomeCustomPath(int slot, const std::wstring& path)
 {
     if (DeviceCallsBlocked()) return false;
     if (slot < kSkydomeFirstCustomSlot || slot >= kSkydomeSlotCount) return false;
-    // Same guard as the ground slot above. The audit filed an-audit-finding against the
+    // Same guard as the ground slot above. The audit filed this against the
     // ground handler only; this sibling took its path exactly as unvalidated,
     // and unlike the ground slot the bridge PERSISTS it — so this is the one
     // that survives a restart. Capping one of a pair is not capping the pair.

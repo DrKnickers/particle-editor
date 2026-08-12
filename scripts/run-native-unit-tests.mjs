@@ -76,7 +76,7 @@ const APP_EXE = resolve(repoRoot, args.exe);
 // for one or more of its cases.
 //
 // Exported so scripts/gate-integrity.test.mjs can exercise it directly: this is
-// the decision the 2026-07 audit filed as an-audit-finding. #687 made these skips VISIBLE,
+// the decision the 2026-07 audit filed. #687 made these skips VISIBLE,
 // and stopped there on the reasoning that "the capability genuinely is absent on
 // some machines, and failing there would punish a legitimate environment". That
 // is true of the machine that never had the capability and false of the machine

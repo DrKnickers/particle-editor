@@ -15,7 +15,7 @@
 #include "GameObjectCatalog.h"
 #include "managers.h"
 #include "files.h"
-#include "ResourceLimits.h"   // kMaxRosterEntries / kMaxXmlFileBytes (an-audit-finding roster cap)
+#include "ResourceLimits.h"   // kMaxRosterEntries / kMaxXmlFileBytes (roster cap)
 #include "AloModel.h"   // --dumpalo: decode bones/connections/meshes
 #include "xml.h"        // --xmltest: does a raw XML file parse?
 
@@ -1013,7 +1013,7 @@ int main(int argc, char** argv)
               "rejected 131073 build publishes no partial hardpoints");
     }
 
-    // ---- an-audit-finding: GameObjectList.lua roster fan-out is COUNT-capped, not just
+    // ---- GameObjectList.lua roster fan-out is COUNT-capped, not just
     // byte-capped ----
     //
     // readRosterLua refuses a file over kMaxXmlFileBytes, but a byte cap is not a
@@ -1021,7 +1021,7 @@ int main(int argc, char** argv)
     // millions of std::set<std::string> inserts.
     //
     // The oracle is deliberately NOT "how many names were parsed" — that is
-    // invisible from outside, and counting distinct names would be the an-audit-finding
+    // invisible from outside, and counting distinct names would be the same dedup
     // tautology all over again (a std::set collapses duplicates whether or not
     // the cap does). Instead: name two real catalog objects, place one EARLY in
     // an oversized roster and one PAST the cap, and ask whether each came back
@@ -1049,11 +1049,11 @@ int main(int argc, char** argv)
         // Guard the premise: the fixture must be a legal-SIZED file, or this
         // would be testing the byte cap instead of the count cap.
         CHECK(lua.size() < kMaxXmlFileBytes,
-              "an-audit-finding fixture is under the byte cap (so the COUNT cap is what's under test)");
+              "fixture is under the byte cap (so the COUNT cap is what's under test)");
         rfm.files["Data\\Scripts\\Library\\GameObjectList.lua"] = lua;
 
         GameObjectCatalog rc;
-        CHECK(BuildGameObjectCatalog(rfm, rc), "an-audit-finding: oversized-roster catalog builds");
+        CHECK(BuildGameObjectCatalog(rfm, rc), "oversized-roster catalog builds");
 
         const GameObjectRef* early = find(rc, "Early_Trooper");
         const GameObjectRef* late  = find(rc, "Late_Trooper");
@@ -1061,12 +1061,12 @@ int main(int argc, char** argv)
         // THE REVERT ASSERTION. Uncapped, the scan reaches LATE_TROOPER and marks
         // it. Capped, it never gets there.
         CHECK(late && (late->fieldSource & FS_Roster) == 0,
-              "an-audit-finding: roster name PAST the cap is not applied (cap holds)");
+              "roster name PAST the cap is not applied (cap holds)");
         // THE OVERREACH GUARD. A cap that fired early — or at zero — would also
         // drop the FIRST name, silently un-fielding legitimate units. That is a
         // worse bug than the fan-out, so it gets its own assertion.
         CHECK(early && (early->fieldSource & FS_Roster) != 0,
-              "an-audit-finding: roster name BEFORE the cap is still applied (overreach guard)");
+              "roster name BEFORE the cap is still applied (overreach guard)");
     }
 
     // A normal-sized roster must be entirely unaffected — the cap is ~70x the
@@ -1090,10 +1090,10 @@ int main(int argc, char** argv)
         nfm.files["Data\\Scripts\\Library\\GameObjectList.lua"] = lua;
 
         GameObjectCatalog nc;
-        CHECK(BuildGameObjectCatalog(nfm, nc), "an-audit-finding: normal-roster catalog builds");
+        CHECK(BuildGameObjectCatalog(nfm, nc), "normal-roster catalog builds");
         const GameObjectRef* last = find(nc, "Last_Trooper");
         CHECK(last && (last->fieldSource & FS_Roster) != 0,
-              "an-audit-finding: a ~900-entry roster's LAST name still applies (real content untouched)");
+              "a ~900-entry roster's LAST name still applies (real content untouched)");
     }
 
     // ---- ResolveReferenceName: existence gate for the reference selection -----

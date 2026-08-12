@@ -103,7 +103,7 @@ test("recordSmokeVerdict passes a genuine run", () => {
   assert.equal(recordSmokeVerdict({ status: 0, ...OK_FRAME }), null);
 });
 
-test("recordSmokeVerdict FAILS a recorder that wrote frames and then crashed (the an-audit-finding false green)", () => {
+test("recordSmokeVerdict FAILS a recorder that wrote frames and then crashed (the record-smoke false green)", () => {
   // Exactly the green-preserving mutation from the audit: good-looking frames,
   // nonzero exit. The old lane passed this.
   const v = recordSmokeVerdict({ status: 1, stderr: "D3D9 device lost; aborting", ...OK_FRAME });
@@ -151,7 +151,7 @@ test("recordSmokeVerdict still catches the blank-frame and no-frame cases it alw
 // could still go green around coverage that did not run. These verdicts are
 // what turn that visibility into a gate.
 
-test("skipBudgetVerdict FAILS a lane that skipped more tests than it declared (the an-audit-finding false green)", () => {
+test("skipBudgetVerdict FAILS a lane that skipped more tests than it declared (the skip-budget false green)", () => {
   // The FFmpeg-dependent script tests self-skipping on a box that HAS FFmpeg.
   // Explicit EMPTY budget: this pins the verdict logic, and the LIVE table now
   // legitimately declares a scripts entry on the public mirror (conditional on
@@ -210,7 +210,7 @@ test("skipBudgetVerdict honours --allow-missing for the machine that genuinely c
   assert.match(v.note, /allowed via --allow-missing/);
 });
 
-test("selfSkipVerdict FAILS a binary that printed SKIP: and exited 0 (the an-audit-finding false green)", () => {
+test("selfSkipVerdict FAILS a binary that printed SKIP: and exited 0 (the self-skip false green)", () => {
   // test_clip_save_confinement's junction case going quiet, which is
   // indistinguishable in the exit code from junction rejection still working.
   const v = selfSkipVerdict(1, false);
@@ -229,7 +229,7 @@ test("selfSkipVerdict leaves a clean binary alone", () => {
 
 test("selfSkipVerdict downgrades to a VISIBLE skip under --allow-missing-capabilities", () => {
   // The over-eager fix here suppresses the note along with the failure, which
-  // restores exactly the silence an-audit-finding is about.
+  // restores exactly the silence the audit finding is about.
   const v = selfSkipVerdict(2, true);
   assert.equal(v.ok, true);
   assert.match(v.note, /2 case\(s\) SKIPPED/);

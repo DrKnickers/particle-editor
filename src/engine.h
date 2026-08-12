@@ -701,7 +701,7 @@ public:
 	// the state snapshot so a drive step can assert them.
 	// The PROCEDURAL dome — always built in the default scene, so this is the one
 	// a gate lane can assert unconditionally. It is also the exact target of
-	// an-audit-finding's own mutation ("remove skydome mesh creation"): comment out
+	// the audit finding's own mutation ("remove skydome mesh creation"): comment out
 	// CreateSkydomeMeshBuffers and this goes false while every status field stays
 	// "ok".
 	bool               SkydomeMeshHasGpuBuffers() const
