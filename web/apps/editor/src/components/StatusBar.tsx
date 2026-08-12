@@ -122,7 +122,7 @@ export function StatusBar({ bridge }: { bridge: Bridge }) {
         setCursor(null);
       }
     });
-    // Autosave health (2026-07 audit, P2-06). Durable state, deliberately NOT a
+    // Autosave health (2026-07 audit). Durable state, deliberately NOT a
     // toast: a failed autosave stays failed until a write succeeds, so a
     // warning that expired on a timer would tell the user the recovery net
     // recovered when nothing of the sort happened. The host emits only on a

@@ -235,7 +235,7 @@ export function Spinner({
       if (d.disabled) return;
       e.preventDefault();
       e.stopPropagation();
-      // F7/SPN-6: base step = the field's actual `step` (legacy Increment),
+      // base step = the field's actual `step` (legacy Increment),
       // so a step=5 field nudges by 5 and a step=0.25 field by 0.25.
       // Shift = ×10 (coarse). Ctrl = ×0.1 (fine) on decimal fields only;
       // whole-number fields ignore Ctrl so the wheel never yields a fraction

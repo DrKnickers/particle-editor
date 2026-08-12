@@ -126,7 +126,7 @@ public:
     // >=1 sub-mesh with LIVE DEFAULT-pool buffers and something to draw. Distinct
     // from HasResolved (which only says a shader bound): this is the predicate
     // that cannot be true unless the device really holds the mesh, and it is what
-    // makes "delete CreateBuffers" observable (2026-07 audit, G-8).
+    // makes "delete CreateBuffers" observable (2026-07 audit).
     bool   HasGpuBuffers() const;
     float  ScaleFactor()  const { return m_scaleFactor; }
     void   SetScaleFactor(float s) { m_scaleFactor = s; }

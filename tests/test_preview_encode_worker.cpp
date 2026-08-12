@@ -1,5 +1,5 @@
 // Unit tests for PreviewEncodeWorker's queue contract (src/host/PreviewEncodeWorker.h),
-// specifically the stale-job drop added for the 2026-07 audit finding P2-03.
+// specifically the stale-job drop added for the 2026-07 audit.
 //
 // WHAT THE BUG WAS. The encode queue has no byte cap -- deliberately, because
 // this Enqueue runs on the UI thread and AsyncFrameEncoder's block-while-full

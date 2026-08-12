@@ -512,7 +512,7 @@ json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx, size_t depth)
     if (sys == nullptr || idx >= sys->getEmitters().size()) return json::object();
     const ParticleSystem::Emitter& emit = sys->getEmitter(idx);
     json children = json::array();
-    // Recursion backstop (2026-07 audit, P2-04). ValidateEmitterGraph caps chain
+    // Recursion backstop (2026-07 audit). ValidateEmitterGraph caps chain
     // depth on load and import, but it is NOT called from any bridge mutation
     // path, so this walk cannot assume the cap holds. Emit the node without its
     // children rather than descending -- a truncated subtree is a visible,
@@ -667,7 +667,7 @@ json BuildEngineStateSnapshot(Engine* engine,
         // unloadable dome instead of silently showing the solid background.
         {"skydomePrimaryStatus",   SkyStatusToString(engine->GetSkydomePrimaryStatus())},
         {"skydomeSecondaryStatus", SkyStatusToString(engine->GetSkydomeSecondaryStatus())},
-        // GPU-resource truth, not bookkeeping (2026-07 audit, G-8). Every field
+        // GPU-resource truth, not bookkeeping (2026-07 audit). Every field
         // above reports what was SELECTED or what the reader THOUGHT resolved, so
         // deleting the mesh-creation call left them all correct and the viewport
         // black. These two are read straight off the live VB/IB handles, so they

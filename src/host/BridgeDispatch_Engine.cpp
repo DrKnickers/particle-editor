@@ -193,7 +193,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         std::string p = params.value("path", std::string{});
         // The setter's bool was dropped here, so a refused path still answered
         // {ok:true} — the V-7 shape, telling the user it took when it did not
-        // (2026-07 audit, B-9).
+        // (2026-07 audit).
         if (!m_engine->SetGroundSlotCustomPath(slot, Utf8ToWide(p)))
         {
             ctx.SendErr("ground slot path rejected: bad slot, or a network/device path");
@@ -714,7 +714,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
     // landed — rescale-emitter twenty lines below has called captureUndo()
     // since — but the stale comment read as a deliberate accepted limitation,
     // so every reader skipped past it and one Ctrl+Z after a whole-system
-    // rescale silently restored nothing (2026-07 audit, V-2).
+    // rescale silently restored nothing (2026-07 audit).
     if (kind == "engine/action/rescale-system")
     {
         float durPct  = params.value("durationScalePercent", 100.0f);
@@ -746,7 +746,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
         // key container (src/Rescale.cpp:69-75), which live EmitterInstances
         // hold cached track cursors into. Without this an already-placed
         // instance keeps its creation-time composite values, exactly as it did
-        // for set-properties before #682 (2026-07 audit, V-3).
+        // for set-properties before #682 (2026-07 audit).
         if (m_engine) m_engine->OnParticleSystemChanged(-1);
         EmitEngineStateChanged();
         // Emitter parameters changed → notify the React tree so the
@@ -810,8 +810,8 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx, const std::s
     // Added by the 2026-07 audit: the bridge could describe the AUTHORED
     // ParticleSystem in detail (emitters/list) but exposed NOTHING about the
     // live instances rendered from it, so a whole class of defects — a placed
-    // instance not seeing a structural edit (V-4), not seeing a rescale (V-3),
-    // not repainting a paused interpolation change (C-003) — had no observable
+    // instance not seeing a structural edit, not seeing a rescale,
+    // not repainting a paused interpolation change — had no observable
     // and could not be regression-tested at all.
     //
     // `emitters` counts live EmitterInstances across ALL instances, which is

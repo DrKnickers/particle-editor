@@ -262,7 +262,7 @@ public:
     // glyph. Returns false if the web isn't wired yet (m_emit null) so the host
     // can replay the state once React is ready (see HostWindowImpl).
     bool EmitWindowState(bool maximized);
-    // Autosave health (2026-07 audit, P2-06). Returns false when the web isn't
+    // Autosave health (2026-07 audit). Returns false when the web isn't
     // wired yet, so the caller can replay on app/ready — same contract as
     // EmitWindowState above.
     bool EmitAutosaveHealth(bool healthy);
@@ -535,7 +535,7 @@ private:
         // clearing the queue removed that bound at the one moment the queue was
         // about to grow: the palette re-requests everything, each key now
         // misses both the LRU and the dedupe gate, and the previous epoch's jobs
-        // stay queued at up to 4 MB of raw BGRA each (2026-07 audit, P2-03).
+        // stay queued at up to 4 MB of raw BGRA each (2026-07 audit).
         // Their results would be discarded on arrival anyway, so dropping them
         // here costs nothing and is the only thing keeping the two structures
         // in step.

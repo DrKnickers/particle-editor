@@ -1174,7 +1174,7 @@ bool Engine::Render()
 		// device has gone bad — Microsoft's guidance is to call CheckDeviceState
 		// when a present fails rather than polling it per frame — so a failure
 		// here raises the latch the top of Render() reads next frame
-		// (2026-07 audit, E-DEVICE-02).
+		// (2026-07 audit).
 		const HRESULT presentHr = m_pDevice->Present(NULL, NULL, NULL, NULL);
 		NotifyPresentResult(presentHr);
 	}

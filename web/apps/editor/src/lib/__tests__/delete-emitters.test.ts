@@ -16,7 +16,7 @@ const tree = { root: node(-1, "root", [node(0, "a", [node(1, "a1"), node(2, "a2"
 
 // Records every request so a spec can assert HOW MANY landed, not just which
 // ids — a multi-root delete is one gesture and must ride one batched request
-// (2026-07 audit C-007). `deleteCalls()` returns one entry per delete request,
+// (2026-07 audit). `deleteCalls()` returns one entry per delete request,
 // each holding that request's id list, so `[[3,1,0]]` reads as "one request
 // carrying three ids" and `[[3],[1],[0]]` as the per-item fan-out it replaced.
 function recordingBridge() {
@@ -70,11 +70,11 @@ describe("performDelete", () => {
     expect(deleteCalls()).toEqual([[3, 1, 0]]);
   });
 
-  // 2026-07 audit C-007. Three roots used to mean three emitters/delete
+  // 2026-07 audit. Three roots used to mean three emitters/delete
   // requests, each capturing its own undo entry host-side, so one Ctrl+Z
   // restored one emitter out of a three-emitter gesture. The batched request
   // is what makes ONE captureUndo() possible on the native side.
-  it("issues exactly ONE batched request for a multi-root delete (C-007)", () => {
+  it("issues exactly ONE batched request for a multi-root delete", () => {
     const { bridge, requests } = recordingBridge();
     performDelete(bridge, [1, 3, 0], null);
     expect(requests).toHaveLength(1);

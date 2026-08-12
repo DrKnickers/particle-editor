@@ -93,7 +93,7 @@ test("spawner/active-count event fires from real engine state when a burst is tr
 
     // Poll up to 2s for the count to reach the CONFIGURED burst size.
     //
-    // This used to accept `count >= 1` (2026-07 audit, G-9), which the spawner
+    // This used to accept `count >= 1` (2026-07 audit), which the spawner
     // satisfies by emitting a single instance — or by one unrelated instance
     // already existing. The whole point of the test is that a burst of three
     // produces three, so assert the number we asked for.

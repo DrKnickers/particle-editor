@@ -574,6 +574,13 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
             ctx.SendOk(json{{"ok", false}, {"error", "particle system not bound"}});
             return true;
         }
+        // Legacy DoSaveFile parity: re-stamp the internal system name
+        // (chunk 0x0000) from the destination filename on every save.
+        // The game engine registers particle systems under this name;
+        // leaving a stale name from the loaded file (or an empty one on
+        // a new document) produces a file the game won't resolve —
+        // "saved in the new editor, doesn't show up in game".
+        (*m_pParticleSystem)->setName(DeriveParticleSystemName(path));
         std::string err;
         if (!SaveParticleSystem(m_pParticleSystem->get(), path, &err))
         {
@@ -646,6 +653,10 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx, const std::str
             ctx.SendOk(json{{"ok", false}, {"error", "particle system not bound"}});
             return true;
         }
+        // Legacy DoSaveFile parity — see file/save above. Especially
+        // load-bearing here: Save As is exactly the flow that leaves a
+        // stale internal name from the originally-opened file.
+        (*m_pParticleSystem)->setName(DeriveParticleSystemName(path));
         std::string err;
         if (!SaveParticleSystem(m_pParticleSystem->get(), path, &err))
         {

@@ -41,7 +41,7 @@ wstring ReadModNickname(const wstring& modPath)
         DWORD  type;
         // A REG_SZ value is NOT required to be NUL-terminated. One that exactly
         // filled this buffer left `nickname = buf` scanning past its end
-        // (2026-07 audit, B-10). Reserve the last element for a terminator we
+        // (2026-07 audit). Reserve the last element for a terminator we
         // write ourselves, and place it at the length the API actually returned.
         DWORD  size = sizeof(buf) - sizeof(TCHAR);
         if (RegQueryValueEx(hKey, modPath.c_str(), NULL, &type, (LPBYTE)buf, &size) == ERROR_SUCCESS && type == REG_SZ)
@@ -95,8 +95,8 @@ static vector<wstring> ReadLastLayers()
 // Returns false when the stack could NOT be persisted. Both failure modes used
 // to be discarded — RegCreateKeyEx's result gated the block and RegSetValueEx's
 // was never even read — so a locked or policy-blocked registry looked exactly
-// like a successful save, and the bridge answered {ok:true} (2026-07 audit,
-// P1-02). LastLayers is authoritative, so its failure is the caller's business.
+// like a successful save, and the bridge answered {ok:true} (2026-07 audit).
+// LastLayers is authoritative, so its failure is the caller's business.
 static bool WriteLastLayers(const vector<wstring>& layers)
 {
     HKEY hKey;

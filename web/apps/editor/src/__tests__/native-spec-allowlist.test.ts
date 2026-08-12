@@ -24,7 +24,7 @@ const HARNESS_PATH = resolve(__dirname, "../../scripts/run-native-tests.mjs");
 // design: the first run of this guard surfaces every unwaived spec.
 const INTENTIONALLY_EXCLUDED: Record<string, string> = {
   // Example:
-  // "legacy-thing.spec.ts": "Pinned for manual debugging, see ROADMAP NT-X",
+  // "legacy-thing.spec.ts": "Pinned for manual debugging, see the ROADMAP entry",
 };
 
 function specsOnDisk(): string[] {

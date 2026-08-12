@@ -129,7 +129,7 @@ describe("StatusBar", () => {
     expect(screen.getByText("Cursor").nextElementSibling).toHaveTextContent("—");
   });
 
-  // Autosave health (2026-07 audit, P2-06). Before this the `wrote` bool fed
+  // Autosave health (2026-07 audit). Before this the `wrote` bool fed
   // nothing but a debug-log format string, so a failing autosave was invisible:
   // the user kept editing believing the crash-recovery net was live.
   describe("autosave health", () => {

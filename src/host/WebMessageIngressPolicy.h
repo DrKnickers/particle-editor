@@ -6,7 +6,7 @@
 // WebView2 + D3D9), and an untested boundary is exactly where an off-by-one
 // hides.
 //
-// WHY THERE IS A CAP (2026-07 audit, P2-02). OnWebMessage parses the whole
+// WHY THERE IS A CAP (2026-07 audit). OnWebMessage parses the whole
 // string, so before this, one postMessage could drive an arbitrarily large
 // allocation on the UI thread. This is defence-in-depth rather than a live
 // hole -- the origin check upstream means the only speaker is our own bundle --

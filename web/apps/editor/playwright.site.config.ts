@@ -30,7 +30,7 @@ export default defineConfig({
     // See the WEB_PORT note in playwright.web.config.ts: reuse is a developer
     // convenience, never acceptable for a gate run. The SITE_PORT advice above
     // only helps someone who remembers to follow it; PE_GATE_NO_REUSE makes the
-    // gate correct by default (audit G-1).
+    // gate correct by default (2026-07 audit).
     reuseExistingServer: !process.env.CI && !process.env.PE_GATE_NO_REUSE,
     timeout: 60_000,
   },

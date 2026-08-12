@@ -148,7 +148,7 @@ namespace
         if (root == nullptr) return false;   // broken GOF -> treat as unreadable, fall back
 
         // Manifest file-count cap + dedup, matching GameObjectCatalog's reader of
-        // this same file (2026-07 audit, B-6). This is the SECOND uncapped reader
+        // this same file (2026-07 audit). This is the SECOND uncapped reader
         // in this translation unit — LoadAllSkydomeLists below was the other, and
         // both had to be fixed: a cap on one reader of a shared manifest is not a
         // cap on the manifest.
@@ -335,7 +335,7 @@ void LoadAllSkydomeLists(IFileManager& fm, std::array<std::vector<SkydomeRef>, k
                 // has TWO readers and only one of them was bounded, so a crafted
                 // manifest was capped for the catalog and unbounded here — each
                 // entry costing a root sniff and, when that is inconclusive, a full
-                // parse (2026-07 audit, B-6). De-dup as we collect so the cap bounds
+                // parse (2026-07 audit). De-dup as we collect so the cap bounds
                 // DISTINCT names: a flood of repeats must not push a later
                 // legitimate entry past it.
                 std::set<std::string> seenRel;

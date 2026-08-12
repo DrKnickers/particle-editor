@@ -530,7 +530,7 @@ void Engine::ApplyParticleSystemChanged(int track)
 	// structural emitter handlers send. Re-sync placed instances against the
 	// authored root list there: an instance only spawns roots in its
 	// constructor, so Add Root / Paste / Import / Duplicate / reparent-to-root
-	// never reached one placed earlier (2026-07 audit, V-4). Gated on track < 0
+	// never reached one placed earlier (2026-07 audit). Gated on track < 0
 	// so a per-track curve edit doesn't pay for the scan.
 	//
 	// Safe on the system-REPLACEMENT paths (file/new, file/open, recover,
@@ -876,7 +876,7 @@ void Engine::ReleaseDeviceResourcesForReset()
 	// Each EmitterInstance owns separate +1 references to its color and normal
 	// textures. Drop those before the texture manager drops its cache refs;
 	// otherwise DEFAULT-pool textures remain live across Reset and Reset fails
-	// with D3DERR_INVALIDCALL (2026-07 re-audit P-2).
+	// with D3DERR_INVALIDCALL (2026-07 re-audit).
 	ReleaseInstanceTextures();
 	// D3DX texture helpers (D3DXCreateTextureFromFileInMemory,
 	// D3DXCreateTextureFromResource) silently substitute D3DPOOL_DEFAULT

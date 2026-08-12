@@ -471,7 +471,7 @@ namespace
         size_t i = 0;
         while ((i = text.find("[\"", i)) != std::string::npos)
         {
-            // Count cap, not just the byte cap above (2026-07 audit, B-7). The
+            // Count cap, not just the byte cap above (2026-07 audit). The
             // file-size check bounds the INPUT; it does not bound how many names
             // that input can produce, and at ~6 bytes per `["x"]` a legal-sized
             // file still yields millions of set inserts. Stop scanning rather

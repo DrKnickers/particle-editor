@@ -850,7 +850,7 @@ export type Request =
   | { kind: "emitters/add-track-key";
       params: { id: number; track: TrackName; time: number; value: number } }
   // batch: insert every key under ONE undo entry, so a multi-key curve paste
-  // is a single Ctrl+Z (2026-07 audit C-006). Each key is dedupe-bumped
+  // is a single Ctrl+Z (2026-07 audit). Each key is dedupe-bumped
   // independently, so response.keys are the ACTUAL inserted (time, value)
   // pairs, aligned to the input order.
   | { kind: "emitters/add-track-keys";
@@ -860,7 +860,7 @@ export type Request =
   | { kind: "emitters/duplicate";                       params: { id: number } }
   | { kind: "emitters/duplicate-many";                  params: { ids: number[] } }   // batch: duplicate each; response.newIds are the copies, aligned to input order
   | { kind: "emitters/delete";                          params: { id: number } }
-  | { kind: "emitters/delete-many";                     params: { ids: number[] } }   // batch: delete each subtree under ONE undo entry, so a multi-root delete is a single Ctrl+Z (2026-07 audit C-007). Ids are POSITIONS, so the host re-resolves each one inside the loop
+  | { kind: "emitters/delete-many";                     params: { ids: number[] } }   // batch: delete each subtree under ONE undo entry, so a multi-root delete is a single Ctrl+Z (2026-07 audit). Ids are POSITIONS, so the host re-resolves each one inside the loop
 
   | { kind: "emitters/rename";                          params: { id: number; name: string } }
   | { kind: "emitters/duplicate-with-index-increment";  params: { id: number; delta: number } }
@@ -1356,7 +1356,7 @@ export type Event =
   // so the TitleBar swaps the maximize↔restore glyph + applies the maximized
   // overhang padding. MockBridge never emits it (browser mode has no window).
   | { kind: "window/state";           payload: { maximized: boolean } }
-  // Autosave health (2026-07 audit, P2-06). `healthy:false` means the last
+  // Autosave health (2026-07 audit). `healthy:false` means the last
   // autosave write FAILED, so the crash-recovery net is stale — the newest
   // recoverable state is older than what is on screen. Emitted only on a
   // CHANGE, and replayed on app/ready like window/state.
