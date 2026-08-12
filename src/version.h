@@ -20,5 +20,5 @@
 
 #define PE_VERSION_MAJOR 0
 #define PE_VERSION_MINOR 4
-#define PE_VERSION_PATCH 0
-#define PE_VERSION_STR   "0.4.0"
+#define PE_VERSION_PATCH 1
+#define PE_VERSION_STR   "0.4.1"

@@ -8,6 +8,8 @@ See the [tags](https://github.com/DrKnickers/particle-editor/tags) ·
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-12
+
 ### Fixed
 
 - Effects saved under a new filename (Save As, or a new document) now show up in game — the editor stamps the file's internal system name from the filename on every save, like the original editor did, instead of leaving the name from the originally opened file

@@ -18,6 +18,7 @@ import {
   rm,
   rmdir,
   stat,
+  utimes,
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -69,6 +70,17 @@ test("autosave/recover{discard} is a safe no-op with no pending orphan", async (
   expect(result).toEqual({ status: "failed", reason: "no_pending_session" });
   expect(dirtyAfter).toBe(dirtyBefore);
 });
+
+// Plant a fixture as a fake autosave. On Windows, copyFile (CopyFileW)
+// preserves the SOURCE's last-write time, so in a checkout older than the
+// scanner's 30-day sweep threshold the planted file would be swept as stale
+// instead of offered for recovery — touch it to "now" to keep the test
+// independent of the fixture's checkout age.
+async function plantAutosave(fixture: string, destination: string) {
+  await copyFile(fixture, destination);
+  const now = new Date();
+  await utimes(destination, now, now);
+}
 
 async function pathExists(candidate: string) {
   try {
@@ -130,7 +142,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
   let blockedDestination: string | null = null;
 
   try {
-    await copyFile(FIXTURE_A, firstOld);
+    await plantAutosave(FIXTURE_A, firstOld);
     const firstCheck = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return await (window as any).bridge.request({
@@ -174,7 +186,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
       AUTOSAVE_TEST_DIR,
       `autosave-${livePid}-${reusedCreation}-recent.alo`,
     );
-    await copyFile(FIXTURE_B, secondOld);
+    await plantAutosave(FIXTURE_B, secondOld);
     const secondCheck = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return await (window as any).bridge.request({
@@ -255,7 +267,7 @@ test("real recovery establishes a verified session handoff before old-tier delet
       AUTOSAVE_TEST_DIR,
       `autosave-${livePid}-${discardCreation}-recent.alo`,
     );
-    await copyFile(FIXTURE_A, discardOld);
+    await plantAutosave(FIXTURE_A, discardOld);
     const discardCheck = await page.evaluate(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return await (window as any).bridge.request({
