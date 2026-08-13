@@ -7,9 +7,8 @@
 // selected interior key: unselected keys AND selected BORDER keys (borders are
 // pinned in time). Global endpoints are borders, so they're walls too.
 //
-// Kept pure + dependency-free so both the live-drag/preview (CurveEditor.tsx)
-// and the commit (CurveEditorPanel.computeGroupMoves) can share ONE source of
-// the bound and never diverge.
+// Kept pure + dependency-free so the live-drag preview and the curve-model
+// transform share one source of the bound.
 
 /** Epsilon gap kept between a moved key and the wall it stops at. Matches
  *  `computeGroupMoves` (range/10000, floored at 1e-4). */

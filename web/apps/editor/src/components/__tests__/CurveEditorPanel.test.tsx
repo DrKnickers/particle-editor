@@ -21,7 +21,8 @@ import type {
   TrackDto,
 } from "@particle-editor/bridge-schema";
 import { TRACK_NAMES } from "@particle-editor/bridge-schema";
-import { CurveEditorPanel, CHANNELS, computeGroupMoves } from "../CurveEditorPanel";
+import { computeGroupMoves } from "@/lib/curve-model";
+import { CurveEditorPanel, CHANNELS } from "../CurveEditorPanel";
 
 // the toolbar buttons mount Tips (Radix Tooltip.Root), which
 // require the app-level Tooltip.Provider — wrapper stands in for it

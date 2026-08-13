@@ -58,8 +58,9 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent, type Ref } from "react";
 import type { InterpolationType, TrackDto, TrackName } from "@particle-editor/bridge-schema";
 import { useCurveMorph, type SuppressedMove } from "../lib/use-curve-morph";
-import { snapToGrid, GRID_SUBDIVISIONS } from "./curve-snap";
-import { clampGroupTimeShift } from "./curve-group-shift";
+import { computeGroupMoves, valueRangeForTrack } from "@/lib/curve-model";
+import { clampGroupTimeShift } from "@/lib/curve-group-shift";
+import { snapToGrid, GRID_CELLS, GRID_SUBDIVISIONS } from "@/lib/curve-snap";
 
 /** Channel definition for the multi-channel overlay branch.
  *  `id` is the UI-facing identifier (e.g. "rotation"); `trackName` is
@@ -381,51 +382,6 @@ function eventToViewBox(
   return { x, y };
 }
 
-/** Per-channel y-axis range used by the multi-channel overlay branch.
- *  Colour channels lock to [0, 1]; Scale/Index auto-range from 0 up to
- *  the highest key value, floored at a max of 1; RotationSpeed auto-ranges
- *  symmetrically around 0 (expands to the lowest and highest keys, no caps).
- *  Each channel's curve is normalised to fill the panel height — comparing
- *  absolute values across channels isn't the goal of the overlay. */
-function valueRangeForTrack(track: TrackDto): { min: number; max: number } {
-  switch (track.name) {
-    case "red":
-    case "green":
-    case "blue":
-    case "alpha":
-      return { min: 0, max: 1 };
-    case "scale": {
-      // Lower 0, upper auto-grows to highest key, floor at 1. Kept
-      // in sync with the CurveEditorPanel copy.
-      let max = 0;
-      for (const k of track.keys) {
-        if (k.value > max) max = k.value;
-      }
-      return { min: 0, max: Math.max(max, 1) };
-    }
-    case "index": {
-      // Same shape as scale. Kept in sync with the CurveEditorPanel copy.
-      let max = 0;
-      for (const k of track.keys) {
-        if (k.value > max) max = k.value;
-      }
-      return { min: 0, max: Math.max(max, 1) };
-    }
-    case "rotationSpeed": {
-      // Default 0..1; expands in BOTH directions to include the
-      // highest and lowest keys — no caps. Kept in sync with the
-      // CurveEditorPanel copy.
-      let min = 0;
-      let max = 1;
-      for (const k of track.keys) {
-        if (k.value < min) min = k.value;
-        if (k.value > max) max = k.value;
-      }
-      return { min, max };
-    }
-  }
-}
-
 export function CurveEditor({
   track,
   valueRange,
@@ -584,18 +540,17 @@ export function CurveEditor({
   // Grid: 10 evenly-spaced cells on each axis → 11 lines including
   // the bordering ones. The outer axes (left + bottom) are stroked
   // darker for readability.
-  const gridCells = 10;
   const verticalLines: number[] = [];
-  for (let i = 0; i <= gridCells; i++) {
-    verticalLines.push((i / gridCells) * width);
+  for (let i = 0; i <= GRID_CELLS; i++) {
+    verticalLines.push((i / GRID_CELLS) * width);
   }
   const horizontalLines: number[] = [];
-  for (let i = 0; i <= gridCells; i++) {
-    horizontalLines.push((i / gridCells) * height);
+  for (let i = 0; i <= GRID_CELLS; i++) {
+    horizontalLines.push((i / GRID_CELLS) * height);
   }
   // Faint minor sub-grid (#618) — same layout as the multi-channel renderer
   // so the two paths stay visually consistent. Major-coincident lines skipped.
-  const minorCells = gridCells * GRID_SUBDIVISIONS;
+  const minorCells = GRID_CELLS * GRID_SUBDIVISIONS;
   const minorVerticalLines: number[] = [];
   const minorHorizontalLines: number[] = [];
   for (let i = 1; i < minorCells; i++) {
@@ -1506,20 +1461,19 @@ function MultiChannelCurves({
   const height = measured.height;
 
   // Grid: same layout as the single-track renderer so the visual
-  // matches the design lock. 10 evenly-spaced cells per axis.
-  const gridCells = 10;
+  // matches the design lock.
   const verticalLines: number[] = [];
-  for (let i = 0; i <= gridCells; i++) {
-    verticalLines.push((i / gridCells) * width);
+  for (let i = 0; i <= GRID_CELLS; i++) {
+    verticalLines.push((i / GRID_CELLS) * width);
   }
   const horizontalLines: number[] = [];
-  for (let i = 0; i <= gridCells; i++) {
-    horizontalLines.push((i / gridCells) * height);
+  for (let i = 0; i <= GRID_CELLS; i++) {
+    horizontalLines.push((i / GRID_CELLS) * height);
   }
   // Faint minor sub-grid (#618): GRID_SUBDIVISIONS minor cells per major
   // cell. Skip the indices that coincide with a major line (i % subdiv === 0)
   // so the majors aren't double-stroked (and read at full weight).
-  const minorCells = gridCells * GRID_SUBDIVISIONS;
+  const minorCells = GRID_CELLS * GRID_SUBDIVISIONS;
   const minorVerticalLines: number[] = [];
   const minorHorizontalLines: number[] = [];
   for (let i = 1; i < minorCells; i++) {
@@ -1931,22 +1885,14 @@ function MultiChannelCurves({
         // Record suppression BEFORE firing the callback so the hook
         // sees it when the parent re-renders with the committed tracks.
         if (focusLayer !== null && selectedKeyTimes) {
-          const eps = 1e-4;
-          const allKeys = focusLayer.track.keys;
-          const suppMoves: Array<{ oldTime: number; newTime: number; newValue: number }> = [];
-          for (const k of allKeys) {
-            if (!selectedKeyTimes.has(k.time)) continue;
-            const isBorder = focusBorderTimes.has(k.time);
-            // NOTE: newTime/newValue must match the values committed by
-            // applyGroupShift in CurveEditorPanel.tsx (~:883-884) within
-            // KEY_MATCH_EPS; movesMatch() in use-curve-morph.ts uses them
-            // to verify the incoming track change. Keep in sync.
-            const newTime = isBorder
-              ? k.time
-              : Math.max(timeMin + eps, Math.min(timeMax - eps, k.time + groupDTime));
-            const newValue = Math.max(focusVMin, Math.min(focusVMax, k.value + groupDValue));
-            suppMoves.push({ oldTime: k.time, newTime, newValue });
-          }
+          const suppMoves = computeGroupMoves(
+            focusLayer.track.keys,
+            selectedKeyTimes,
+            focusBorderTimes,
+            groupDTime,
+            groupDValue,
+            { min: focusVMin, max: focusVMax },
+          );
           if (suppMoves.length > 0) {
             morphSuppressRef.current = {
               channelId: focusLayer.channel.id,
@@ -1966,10 +1912,6 @@ function MultiChannelCurves({
       // Record suppression BEFORE firing the callback so the hook
       // sees it when the parent re-renders with the committed tracks.
       if (focusLayer !== null) {
-        // NOTE: newTime/newValue here must equal the committed key values
-        // within KEY_MATCH_EPS; movesMatch() in use-curve-morph.ts uses
-        // them to verify the incoming track change. Keep in sync with the
-        // group-clamp in CurveEditorPanel.tsx applyGroupShift (~:883-884).
         morphSuppressRef.current = {
           channelId: focusLayer.channel.id,
           moves: [{ oldTime: keyTime, newTime: currentTime, newValue: currentValue }],

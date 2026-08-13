@@ -1,6 +1,7 @@
 import { useDockAnim } from "@/lib/dock-anim";
 import { computeSceneRect } from "@/lib/scene-rect";
 import type { CursorButton, CursorMods, CursorTarget, RecordCursorKey } from "@/lib/record-cursor-track";
+import { clamp01 } from "@/lib/utils";
 
 export interface ResolvedCursorCenter {
   x: number;
@@ -165,10 +166,6 @@ function holdKey(key: RecordCursorKey): EvaluatedRecordCursor {
     button: key.button,
     resolved: resolvedElementFor(key, resolved),
   };
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
 }
 
 function smoothstep(u: number): number {

@@ -7,7 +7,7 @@
 // Kept dependency-free and side-effect-free so it unit-tests trivially and can
 // be reused by both the single-key and group-drag paths.
 
-/** Major grid divisions per axis — mirrors `gridCells` in CurveEditor.tsx. */
+/** Major grid divisions per axis. */
 export const GRID_CELLS = 10;
 
 /** Minor divisions per major cell (the faint sub-grid density). */

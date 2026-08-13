@@ -52,8 +52,9 @@ import type {
   TrackName,
 } from "@particle-editor/bridge-schema";
 import { CurveEditor, type ChannelDef, type CurveKeyboardNavAction, type CurveMarqueeHandle } from "@/screens/CurveEditor";
-import { clampGroupTimeShift } from "@/screens/curve-group-shift";
+import { computeGroupMoves, valueRangeForTrack } from "@/lib/curve-model";
 import type { SuppressedMove } from "@/lib/use-curve-morph";
+import { isTypingTarget } from "@/lib/viewport-input";
 import { Spinner } from "@/primitives/Spinner";
 import { Tip } from "@/primitives/Tip";
 import {
@@ -105,11 +106,6 @@ export const CHANNELS: readonly ChannelDef[] = [
 // the set that previously held only Scale; Rotation joined later (its
 // degrees/sec scale, like Index and Scale, doesn't share the 0..1 band).
 const EXCLUSIVE_CHANNELS: ReadonlySet<string> = new Set(["scale", "index", "rotation"]);
-
-/** DOM tag names that own their own keyboard handling. Delete events
- *  originating inside these MUST NOT be intercepted — typing Delete in
- *  a text field should delete a character, not a curve key. */
-const TYPING_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
 const INTERP_KINDS: readonly InterpolationType[] = Object.freeze([
   "linear", "smooth", "step",
@@ -169,51 +165,6 @@ function defaultVisibility(): Record<string, boolean> {
   return result;
 }
 
-/** Per-track value range — same logic as MultiChannelCurves' internal
- *  helper. Duplicated here because spinner value-range clamping needs
- *  it at the panel level and the helper isn't exported. */
-function valueRangeForTrack(track: TrackDto): { min: number; max: number } {
-  switch (track.name) {
-    case "red":
-    case "green":
-    case "blue":
-    case "alpha":
-      return { min: 0, max: 1 };
-    case "scale": {
-      // Lower bound always 0. Upper bound auto-grows to the highest
-      // key value so the curve actually reaches the top of the canvas
-      // at its max. Floor at 1 so a flat-zero curve isn't a degenerate
-      // single-point range (and renders as a flat line at the bottom).
-      let max = 0;
-      for (const k of track.keys) {
-        if (k.value > max) max = k.value;
-      }
-      return { min: 0, max: Math.max(max, 1) };
-    }
-    case "index": {
-      // Same shape as scale: lower bound 0, upper bound auto-grows
-      // to the highest key. Floor at 1.
-      let max = 0;
-      for (const k of track.keys) {
-        if (k.value > max) max = k.value;
-      }
-      return { min: 0, max: Math.max(max, 1) };
-    }
-    case "rotationSpeed": {
-      // Default display range 0..1. Expands in BOTH directions to
-      // include the highest and lowest keys — no caps. User can
-      // input any value and the grid scales accordingly.
-      let min = 0;
-      let max = 1;
-      for (const k of track.keys) {
-        if (k.value < min) min = k.value;
-        if (k.value > max) max = k.value;
-      }
-      return { min, max };
-    }
-  }
-}
-
 /** Spinner clamp bounds per track. These are the engine-allowed
  *  bounds the user can enter — different from the *display* range
  *  computed by `valueRangeForTrack` (which is derived from current
@@ -250,42 +201,6 @@ function spinnerBoundsForTrack(name: TrackName): {
       // Unbounded in both directions. Step 0.1 for fine control.
       return { min: -1e6, max: 1e6, step: 0.1 };
   }
-}
-
-/** Per-key result of shifting a multi-selection by (dTime, dValue):
- *  border keys keep their time but shift value; interior keys shift
- *  both, with time clamped strictly inside the track endpoints and
- *  value clamped to the channel's spinner bounds. SINGLE SOURCE of the
- *  group-shift transform — both `applyGroupShift` (the commit) and the
- *  live multi-select average (the spinner readout during a drag)
- *  consume it, so the displayed numbers always match what will commit.
- *  Keep in sync with the morph recorder in CurveEditor.tsx per the note
- *  in `applyGroupShift`. */
-export function computeGroupMoves(
-  trackKeys: ReadonlyArray<{ time: number; value: number }>,
-  selectedTimes: ReadonlySet<number>,
-  borderTimes: ReadonlySet<number>,
-  dTime: number,
-  dValue: number,
-  bounds: { min: number; max: number },
-): Array<{ oldTime: number; newTime: number; newValue: number }> {
-  if (trackKeys.length === 0) return [];
-  // Bound the RIGID shift so no moving key crosses a key that stays put (an
-  // unselected key or a selected border) — else a selected key lands on another
-  // key's time and the host multiset gets a duplicate (#619). The same clamp
-  // drives the live-drag preview (CurveEditor.tsx), so preview == commit.
-  const clampedDTime = clampGroupTimeShift(
-    trackKeys.map((k) => k.time), selectedTimes, borderTimes, dTime,
-  );
-  const out: Array<{ oldTime: number; newTime: number; newValue: number }> = [];
-  for (const k of trackKeys) {
-    if (!selectedTimes.has(k.time)) continue;
-    const isBorder = borderTimes.has(k.time);
-    const nt = isBorder ? k.time : k.time + clampedDTime;
-    const nv = Math.min(bounds.max, Math.max(bounds.min, k.value + dValue));
-    out.push({ oldTime: k.time, newTime: nt, newValue: nv });
-  }
-  return out;
 }
 
 /** Format an axis-label number. Integer ranges show as integers,
@@ -1240,12 +1155,8 @@ export function CurveEditorPanel({ bridge }: Props) {
       if (selectedId === null || focusedTrack === null) return;
       const keys = focusedTrack.keys;
       if (keys.length === 0) return;
-      // NOTE: the clamped nt/nv are the values the engine commits.
-      // CurveEditor.tsx (~:1499-1500) records the same clamped values
-      // into morphSuppressRef; movesMatch() in use-curve-morph.ts
-      // verifies them. `computeGroupMoves` is the single source of this
-      // clamp logic (shared with the live spinner average) — keep it in
-      // sync with the morph recorder.
+      // `computeGroupMoves` is the single source of the group's clamped
+      // time/value transform for the live spinner, recorder, and commit.
       // Canonicalize BOTH time and value to float32 — the engine stores float32
       // and echoes it on refetch. The single-key path already fround's the value
       // (#613); the GROUP path only fround'd time, so a large Scale/Index value
@@ -1572,12 +1483,11 @@ export function CurveEditorPanel({ bridge }: Props) {
     ],
   );
 
-  // ── Delete keyboard handler (window-scoped, TYPING_TAGS guard) ────
+  // ── Delete keyboard handler (window-scoped typing-target guard) ────
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Delete") return;
-      const target = e.target as HTMLElement | null;
-      if (target !== null && TYPING_TAGS.has(target.tagName)) return;
+      if (isTypingTarget(e.target)) return;
       if (selectedKeyTimes.size === 0) return;
       e.preventDefault();
       handleDelete();
@@ -1698,7 +1608,7 @@ export function CurveEditorPanel({ bridge }: Props) {
   // scoped) because clicking an SVG key never moves DOM focus into the
   // panel — same reason the Delete handler above is window-scoped. Two
   // guards keep it from colliding with the emitter tree's own clipboard:
-  // a TYPING_TAGS guard, and a tree-origin guard (the tree owns its
+  // a typing-target guard, and a tree-origin guard (the tree owns its
   // focus-scoped Ctrl+C/X/V — when the keydown comes from inside it, we
   // stand down).
   useEffect(() => {
@@ -1706,9 +1616,9 @@ export function CurveEditorPanel({ bridge }: Props) {
       if (!(e.ctrlKey || e.metaKey)) return;
       const key = e.key.toLowerCase();
       if (key !== "c" && key !== "x" && key !== "v") return;
-      const target = e.target as HTMLElement | null;
-      if (target !== null) {
-        if (TYPING_TAGS.has(target.tagName)) return;
+      const target = e.target;
+      if (isTypingTarget(target)) return;
+      if (target instanceof Element) {
         if (target.closest('[data-testid="emitter-tree"]')) return;
       }
       if (key === "c") {

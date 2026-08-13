@@ -18,6 +18,7 @@
 // Non-focus channels render a stroked line only, no fill path.
 
 import { isRecording } from "@/lib/record-mode";
+import { clamp01 } from "@/lib/utils";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TrackDto } from "@particle-editor/bridge-schema";
 import {
@@ -219,7 +220,7 @@ function projectKey(
   const x = tRange > 0 ? ((time - timeMin) / tRange) * width : 0;
   const vRange = proj.vMax - proj.vMin;
   const tnorm = vRange > 0 ? (value - proj.vMin) / vRange : 0;
-  const clamped = Math.max(0, Math.min(1, tnorm));
+  const clamped = clamp01(tnorm);
   const y = proj.height - clamped * proj.height;
   return { x, y };
 }

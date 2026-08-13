@@ -16,6 +16,8 @@ import type * as React from "react";
 import { createRef } from "react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { computeGroupMoves } from "@/lib/curve-model";
+import type { SuppressedMove } from "@/lib/use-curve-morph";
 import { CurveEditor, type ChannelDef, type CurveMarqueeHandle } from "../CurveEditor";
 
 function fixtureTrack(
@@ -1996,5 +1998,54 @@ describe("CurveEditor — group drag bounds against unselected keys (#619)", () 
     // Bounded so 25 + dTime stays below the unselected 40 (eps = 100/10000 = 0.01).
     expect(dTime).toBeCloseTo(14.99, 2);
     expect(25 + dTime).toBeLessThan(40);
+  });
+
+  it("records exactly the moves the group commit applies", () => {
+    const onEnd = vi.fn();
+    const selectedKeyTimes = new Set([25, 75]);
+    const suppressRef: React.MutableRefObject<SuppressedMove> = { current: null };
+    const subjectTrack = track();
+    const { container } = render(
+      <CurveEditor
+        tracks={[subjectTrack]}
+        channels={CH}
+        visibleChannels={{ red: true }}
+        focusChannel="red"
+        valueRange={{ min: 0, max: 1 }}
+        width={600}
+        height={300}
+        selectedKeyTimes={selectedKeyTimes}
+        suppressRef={suppressRef}
+        onGroupDragEnd={onEnd}
+      />,
+    );
+    const svg = container.querySelector("[data-testid='curve-editor-svg']") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300, x: 0, y: 0, toJSON: () => "" } as DOMRect);
+    const anchor = container.querySelector(
+      '[data-testid="curve-key"][data-key-time="25"][data-channel-id="red"]',
+    )!;
+
+    // Drag both selected keys by an exact 5 time units. These times and values
+    // are exactly representable after the commit path's float32 canonicalization.
+    fireEvent.pointerDown(anchor, { button: 0, pointerId: 91, clientX: 150, clientY: 150 });
+    fireEvent.pointerMove(svg, { pointerId: 91, clientX: 180, clientY: 150 });
+    fireEvent.pointerUp(svg, { pointerId: 91, clientX: 180, clientY: 150 });
+
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    const [dTime, dValue] = onEnd.mock.calls[0] as [number, number];
+    const committedMoves = computeGroupMoves(
+      subjectTrack.keys,
+      selectedKeyTimes,
+      new Set([0, 100]),
+      dTime,
+      dValue,
+      { min: 0, max: 1 },
+    ).map((move) => ({
+      oldTime: move.oldTime,
+      newTime: Math.fround(move.newTime),
+      newValue: Math.fround(move.newValue),
+    }));
+    expect(suppressRef.current).toEqual({ channelId: "red", moves: committedMoves });
   });
 });
