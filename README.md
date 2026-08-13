@@ -44,7 +44,7 @@ The editor is a C++ host plus a React UI, built web-first — see
 ## Credits & license
 
 Based on [GlyphXTools/particle-editor](https://github.com/GlyphXTools/particle-editor) by
-Mike.NL. Licensed under the [MIT License](LICENSE).
+Mike.NL. Licensed under the [MIT License](LICENSE). Developed with assistance from Claude.
 
 Particle Editor is an independent, unofficial tool — not affiliated with or endorsed by
 Lucasfilm, Disney, Petroglyph Games, or any third-party mod or its authors. *Star Wars:
