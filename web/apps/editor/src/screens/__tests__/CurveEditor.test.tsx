@@ -31,10 +31,20 @@ function fixtureTrack(
   return { name: "red", keys, interpolation, lockedTo: null };
 }
 
+const SINGLE_TRACK_CHANNEL = {
+  id: "red", label: "Red", color: "red", defaultOn: true, trackName: "red",
+} satisfies ChannelDef;
+const SINGLE_TRACK_VISIBLE = { red: true };
+
 describe("CurveEditor", () => {
   it("renders a <polyline> and N <circle> elements for an N-key track", () => {
     const { container } = render(
-      <CurveEditor track={fixtureTrack(5)} valueRange={{ min: 0, max: 1 }} />,
+      <CurveEditor
+        tracks={[fixtureTrack(5)]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        valueRange={{ min: 0, max: 1 }}
+      />,
     );
     const polyline = container.querySelector("polyline");
     expect(polyline).not.toBeNull();
@@ -48,7 +58,12 @@ describe("CurveEditor", () => {
 
   it("suppresses the <polyline> when the track has fewer than 2 keys", () => {
     const { container } = render(
-      <CurveEditor track={fixtureTrack(1)} valueRange={{ min: 0, max: 1 }} />,
+      <CurveEditor
+        tracks={[fixtureTrack(1)]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        valueRange={{ min: 0, max: 1 }}
+      />,
     );
     expect(container.querySelector("polyline")).toBeNull();
     // A single-key track still shows its one circle.
@@ -57,7 +72,12 @@ describe("CurveEditor", () => {
 
   it("renders the grid (≥10 vertical + ≥10 horizontal lines) + axes", () => {
     const { container } = render(
-      <CurveEditor track={fixtureTrack(3)} valueRange={{ min: 0, max: 1 }} />,
+      <CurveEditor
+        tracks={[fixtureTrack(3)]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        valueRange={{ min: 0, max: 1 }}
+      />,
     );
     // Grid + axes use <line> elements. 11 vertical + 11 horizontal +
     // 2 axes = 24.
@@ -67,12 +87,15 @@ describe("CurveEditor", () => {
 
   // ─── Key click + selection rendering ──────────────────────────────
 
-  it("clicking a key fires onKeyClick + the selected key renders with accent fill + r=5", () => {
+  it("clicking a key fires onKeyClick + the selected key renders with focus marker treatment", () => {
     const track = fixtureTrack(3); // times 0, 50, 100
     const onKeyClick = vi.fn();
     const { container, rerender } = render(
       <CurveEditor
-        track={track}
+        tracks={[track]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        focusChannel="red"
         valueRange={{ min: 0, max: 1 }}
         onKeyClick={onKeyClick}
       />,
@@ -85,24 +108,26 @@ describe("CurveEditor", () => {
     expect(onKeyClick.mock.calls[0]![0]).toBe(50);
 
     // Re-render with the click's time in the selected set; the matching
-    // circle enlarges (r 4→6) and is tagged data-selected. Its fill stays
-    // the key's OWN colour (interior grey) — selection styling is the
-    // saturate()+shadow CSS on [data-selected="true"], not a blue fill.
+    // focus marker enlarges (r 5→6.5), changes to the selected core fill,
+    // and is tagged data-selected.
     rerender(
       <CurveEditor
-        track={track}
+        tracks={[track]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        focusChannel="red"
         valueRange={{ min: 0, max: 1 }}
         selectedKeyTimes={new Set([50])}
         onKeyClick={onKeyClick}
       />,
     );
-    const middle = container.querySelectorAll("[data-testid='curve-key']")[1]!;
+    const middle = container.querySelectorAll(".curve-key-marker")[1]!;
     expect(middle.getAttribute("data-selected")).toBe("true");
-    expect(middle.getAttribute("r")).toBe("6");
-    expect(middle.getAttribute("fill")).toBe("var(--curve-marker)");
-    // Sanity: the unselected siblings stay at r=4.
-    const first = container.querySelectorAll("[data-testid='curve-key']")[0]!;
-    expect(first.getAttribute("r")).toBe("4");
+    expect(middle.getAttribute("r")).toBe("6.5");
+    expect(middle.getAttribute("fill")).toBe("var(--curve-marker-core)");
+    // Sanity: the unselected siblings stay at r=5.
+    const first = container.querySelectorAll(".curve-key-marker")[0]!;
+    expect(first.getAttribute("r")).toBe("5");
     expect(first.getAttribute("data-selected")).toBe("false");
   });
 
@@ -113,7 +138,10 @@ describe("CurveEditor", () => {
     // the second key being clicked with the ctrlKey modifier.
     const { container, rerender } = render(
       <CurveEditor
-        track={track}
+        tracks={[track]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        focusChannel="red"
         valueRange={{ min: 0, max: 1 }}
         selectedKeyTimes={new Set([0])}
         onKeyClick={onKeyClick}
@@ -132,7 +160,10 @@ describe("CurveEditor", () => {
     // point of view.)
     rerender(
       <CurveEditor
-        track={track}
+        tracks={[track]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        focusChannel="red"
         valueRange={{ min: 0, max: 1 }}
         selectedKeyTimes={new Set([0, 50])}
         onKeyClick={onKeyClick}
@@ -152,7 +183,10 @@ describe("CurveEditor", () => {
     const onKeyClick = vi.fn();
     const { container } = render(
       <CurveEditor
-        track={track}
+        tracks={[track]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        focusChannel="red"
         valueRange={{ min: 0, max: 1 }}
         width={600}
         height={300}
@@ -200,7 +234,10 @@ describe("CurveEditor", () => {
     const onKeyClick = vi.fn();
     const { container } = render(
       <CurveEditor
-        track={track}
+        tracks={[track]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        focusChannel="red"
         valueRange={{ min: 0, max: 1 }}
         width={600}
         height={300}
@@ -220,28 +257,23 @@ describe("CurveEditor", () => {
     expect(onKeyClick.mock.calls[0]![0]).toBe(50);
   });
 
-  it("border keys render with the accent stroke ring + darker fill", () => {
+  it("single-element multi-track render without focus stays view-only", () => {
     const track = fixtureTrack(3);
     const { container } = render(
-      <CurveEditor track={track} valueRange={{ min: 0, max: 1 }} />,
+      <CurveEditor
+        tracks={[track]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        valueRange={{ min: 0, max: 1 }}
+      />,
     );
-    const circles = container.querySelectorAll("[data-testid='curve-key']");
-    // First + last keys are border.
-    const first = circles[0]!;
-    const last = circles[2]!;
-    const middle = circles[1]!;
-    expect(first.getAttribute("data-border")).toBe("true");
-    expect(last.getAttribute("data-border")).toBe("true");
-    expect(middle.getAttribute("data-border")).toBe("false");
-    // Stroke + stroke-width attributes confirm the visual.
-    expect(first.getAttribute("stroke")).toBe("var(--curve-marker-border-stroke)");
-    expect(first.getAttribute("stroke-width")).toBe("1.5");
-    expect(first.getAttribute("fill")).toBe("var(--curve-marker-border)");
-    expect(last.getAttribute("stroke")).toBe("var(--curve-marker-border-stroke)");
-    expect(last.getAttribute("stroke-width")).toBe("1.5");
-    // Interior key has no outline stroke (drop-shadow via CSS) + lighter fill.
-    expect(middle.getAttribute("stroke")).toBe("none");
-    expect(middle.getAttribute("fill")).toBe("var(--curve-marker)");
+    const layer = container.querySelector('[data-channel-id="red"][data-focus="false"]');
+    expect(layer).not.toBeNull();
+    const circles = layer!.querySelectorAll("circle");
+    expect(circles).toHaveLength(3);
+    for (const circle of circles) {
+      expect(circle.getAttribute("pointer-events")).toBe("none");
+    }
   });
 
   it("pointer-down on empty canvas in Insert mode fires onCanvasAdd with the projected (time, value)", () => {
@@ -249,7 +281,10 @@ describe("CurveEditor", () => {
     const onCanvasAdd = vi.fn();
     const { container } = render(
       <CurveEditor
-        track={track}
+        tracks={[track]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        focusChannel="red"
         valueRange={{ min: 0, max: 1 }}
         width={600}
         height={300}
@@ -284,7 +319,10 @@ describe("CurveEditor", () => {
   ) {
     const result = render(
       <CurveEditor
-        track={track}
+        tracks={[track]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
+        focusChannel="red"
         valueRange={{ min: 0, max: 1 }}
         width={600}
         height={300}
@@ -417,11 +455,13 @@ describe("CurveEditor", () => {
     // Smooth.
     const { container: smoothContainer } = render(
       <CurveEditor
-        track={fixtureTrack(3, "smooth")}
+        tracks={[fixtureTrack(3, "smooth")]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
         valueRange={{ min: 0, max: 1 }}
       />,
     );
-    const path = smoothContainer.querySelector("[data-testid='curve-path']") as SVGPathElement | null;
+    const path = smoothContainer.querySelector("path") as SVGPathElement | null;
     expect(path).not.toBeNull();
     const d = path!.getAttribute("d") ?? "";
     // 2 segments → 2 cubic-Bezier C commands.
@@ -429,26 +469,28 @@ describe("CurveEditor", () => {
     expect(cCount).toBe(2);
     // No straight-line linear polyline in the smooth branch.
     expect(
-      smoothContainer.querySelector("polyline[data-interpolation='linear']"),
+      smoothContainer.querySelector("polyline"),
     ).toBeNull();
 
     // Step. The staircase polyline expands to 1 + 2*(N-1) points
     // (start key + 2 per segment).
     const { container: stepContainer } = render(
       <CurveEditor
-        track={fixtureTrack(3, "step")}
+        tracks={[fixtureTrack(3, "step")]}
+        channels={[SINGLE_TRACK_CHANNEL]}
+        visibleChannels={SINGLE_TRACK_VISIBLE}
         valueRange={{ min: 0, max: 1 }}
       />,
     );
     const stepPoly = stepContainer.querySelector(
-      "polyline[data-interpolation='step']",
+      "polyline",
     ) as SVGPolylineElement | null;
     expect(stepPoly).not.toBeNull();
     const pts = (stepPoly!.getAttribute("points") ?? "").trim().split(/\s+/);
     // For N=3 keys → 5 points in the staircase.
     expect(pts).toHaveLength(5);
     // Sanity: the linear <path> isn't drawn here.
-    expect(stepContainer.querySelector("[data-testid='curve-path']")).toBeNull();
+    expect(stepContainer.querySelector("path")).toBeNull();
   });
 });
 
