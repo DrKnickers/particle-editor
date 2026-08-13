@@ -1,0 +1,18 @@
+{
+  "_comment": "PR 12 pump-trace acceptance fixture — the TARGET-BEARING ack-carrier branch (the cursor-free branch is record-smoke.timeline.json). Same self-contained fixture .alo and spawner events as record-smoke, plus a target-bearing cursor track using POINT targets only: point targets classify the run target-bearing (so the pump posts ui/cursor-tick per frame BEFORE the at-events and reads the per-frame ackData) yet always resolve without a DOM lookup, so there is no exit-3 resolution fragility. Not a gate lane — driven manually with PE_RECORD_TRACE=1 to byte-compare the pump-trace across the RecordSession extraction. No press frames (kept out of the resolve-or-die path on purpose).",
+  "open": "web/apps/editor/tests/fixtures/singleton-emitter.alo",
+  "fps": 60,
+  "width": 1280,
+  "height": 960,
+  "durationMs": 250,
+  "out": "tests/.tmp/record-trace-target",
+  "openSettleMs": 300,
+  "tracks": [
+    { "at": 0,  "kind": "spawner/start",   "params": { "mode": "manual", "enabled": true, "burstSize": 1, "position": [0, 0, 0], "maxLifetimeSec": 40.0 } },
+    { "at": 30, "kind": "spawner/trigger", "params": {} },
+    { "cursor": [
+      { "t": 0,   "target": { "kind": "point", "x": 640, "y": 480 }, "vis": true, "press": false },
+      { "t": 250, "target": { "kind": "point", "x": 660, "y": 500 }, "vis": true, "press": false }
+    ] }
+  ]
+}

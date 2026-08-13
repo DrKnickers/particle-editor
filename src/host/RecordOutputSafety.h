@@ -27,9 +27,11 @@ namespace recordsafety {
 // A file a --record publish is allowed to have created itself:
 //   frame_00000.png … frame_99999.png
 //   cursor-sidecar.json
+//   pump-trace.txt   (PR 12: flag-gated pump-schedule trace, PE_RECORD_TRACE)
 inline bool IsRecordArtifactName(const std::wstring& name)
 {
     if (name == L"cursor-sidecar.json") return true;
+    if (name == L"pump-trace.txt") return true;
 
     // frame_<digits>.png — at least one digit, digits only.
     const std::wstring prefix = L"frame_";

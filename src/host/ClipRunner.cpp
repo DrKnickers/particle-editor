@@ -1,4 +1,5 @@
 #include "ClipRunner.h"
+#include "RecordTrace.h"
 #include "SavePathConfine.h"
 #include "StringConv.h"
 #include <algorithm>
@@ -144,7 +145,9 @@ ClipRunner::Status ClipRunner::Tick() {
     const double t = clip::FrameTimeMs(m_tl, m_frame);
 
     // 1. Advance the sim clock one frame (fps divides 60 -> integer).
-    if (m_step) m_step(60 / m_tl.fps);
+    const int simFrames60 = 60 / m_tl.fps;
+    if (m_step) m_step(simFrames60);
+    if (m_trace) m_trace->Emit("STEP:" + std::to_string(simFrames60));
 
     // 2. Continuous tracks: camera tweens -> engine/set/camera; cursor -> ui/cursor push.
     for (const auto& tw : m_tl.tweens) {
@@ -214,9 +217,13 @@ ClipRunner::Status ClipRunner::Tick() {
             if (m_uiPush)
                 m_uiPush("ui/cursor-tick",
                          nlohmann::json{{"t", t}, {"frame", m_frame}});
+            // Target-bearing tick posts BEFORE at-events (below) — the trace
+            // records that position so a reorder past the at-events is caught.
+            if (m_trace) m_trace->Emit("TICK:target");
         } else if (m_cursor) {
             const clip::CursorState cs = clip::EvalCursor(m_tl.cursor, t);
             m_cursor(cs.x, cs.y, cs.vis, cs.press);
+            if (m_trace) m_trace->Emit("CUR:literal");
         }
     }
 
@@ -226,6 +233,7 @@ ClipRunner::Status ClipRunner::Tick() {
         // ui/* events are view-only: post verbatim to the webview (panel/picker
         // open state, etc.), never the bridge dispatcher. Fire-and-forget — a
         // missing listener is a no-op, so no exit-3 gating like a bridge call.
+        if (m_trace) m_trace->Emit("AT:" + ev.kind);
         if (ev.kind.rfind("ui/", 0) == 0) {
             if (m_uiPush) m_uiPush(ev.kind, ev.params);
         } else if (!DispatchKind(ev.kind, ev.params)) {
@@ -251,15 +259,24 @@ ClipRunner::Status ClipRunner::Tick() {
         // before this frame's tick — postMessage delivery is FIFO, so the web
         // applies the at-event before it acks+captures this frame.
         m_uiPush("ui/cursor-tick", nlohmann::json{{"t", t}, {"frame", m_frame}});
+        // Cursor-FREE heartbeat posts AFTER the at-events (FIFO-ordered so the
+        // web applies a same-frame ui/* push before it acks) — the trace
+        // records that ordering, distinct from the target tick above, so
+        // hoisting the heartbeat before the at-events is caught.
+        if (m_trace) m_trace->Emit("TICK:free");
     }
 
     // 4. Commit-ack + grab. For a LITERAL track an ack timeout is best-effort
     // (log + continue). For a TARGET track the ack carries the resolve set that
     // step 4a validates — a timeout means we'd capture an UNVALIDATED frame (a
     // press miss could slip through silently), so it's fatal.
-    if (m_ack && !m_ack(m_frame, kAckDeadlineMs)) {
-        if (m_log) m_log("record: ack timeout frame " + std::to_string(m_frame));
-        if (m_targetCursor) { m_exitCode = 3; m_done = true; return Status::Done; }
+    if (m_ack) {
+        const bool acked = m_ack(m_frame, kAckDeadlineMs);
+        if (m_trace) m_trace->Emit(acked ? "ACK:ok" : "ACK:timeout");
+        if (!acked) {
+            if (m_log) m_log("record: ack timeout frame " + std::to_string(m_frame));
+            if (m_targetCursor) { m_exitCode = 3; m_done = true; return Status::Done; }
+        }
     }
 
     // 4a. Target-bearing cursor: read back what the web side resolved this frame.
@@ -298,7 +315,12 @@ ClipRunner::Status ClipRunner::Tick() {
         });
     }
 
-    if (m_capture && !m_capture(m_frame)) { m_exitCode = 4; m_done = true; return Status::Done; }
+    // Capture emits the barrier + grab tokens into the trace from inside the
+    // host lambda (their implementation site); flush the frame's full ordered
+    // line AFTER it returns so those tokens are included in emission order.
+    const bool captured = !m_capture || m_capture(m_frame);
+    if (m_trace) m_trace->EndFrame(m_frame);
+    if (!captured) { m_exitCode = 4; m_done = true; return Status::Done; }
 
     ++m_frame;
     if (m_frame >= N) { m_done = true; return Status::Done; }

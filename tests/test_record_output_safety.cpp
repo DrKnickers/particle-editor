@@ -35,7 +35,10 @@ int main()
     CHECK(IsRecordArtifactName(L"frame_99999.png"), "frame_99999.png is a record artifact");
     CHECK(IsRecordArtifactName(L"frame_7.png"),     "short digit run still counts");
     CHECK(IsRecordArtifactName(L"cursor-sidecar.json"), "cursor sidecar is a record artifact");
+    CHECK(IsRecordArtifactName(L"pump-trace.txt"),  "PR 12 pump trace is a record artifact");
 
+    CHECK(!IsRecordArtifactName(L"pump-trace.json"),   "trace with wrong extension -> not an artifact");
+    CHECK(!IsRecordArtifactName(L"trace.txt"),         "other .txt -> not an artifact");
     CHECK(!IsRecordArtifactName(L"frame_.png"),        "no digits -> not an artifact");
     CHECK(!IsRecordArtifactName(L"frame_00a01.png"),   "non-digit in the run -> not an artifact");
     CHECK(!IsRecordArtifactName(L"frame_00001.txt"),   "wrong extension -> not an artifact");
@@ -50,12 +53,14 @@ int main()
     CHECK(MayReplaceOutputDir(true, {}, why),  "existing EMPTY dir: safe to replace");
 
     {
-        // The normal re-shoot: the directory holds only the previous run's output.
+        // The normal re-shoot: the directory holds only the previous run's output
+        // (including a PR 12 pump trace when PE_RECORD_TRACE was set).
         const std::vector<std::wstring> prior = {
-            L"frame_00000.png", L"frame_00001.png", L"frame_00002.png", L"cursor-sidecar.json",
+            L"frame_00000.png", L"frame_00001.png", L"frame_00002.png",
+            L"cursor-sidecar.json", L"pump-trace.txt",
         };
         CHECK(MayReplaceOutputDir(true, prior, why),
-              "dir holding ONLY prior record output: safe to replace (re-shoot works)");
+              "dir holding ONLY prior record output (+ pump trace): safe to replace (re-shoot works)");
     }
 
     // --- the audit's repro: a foreign file must block the publish -----------

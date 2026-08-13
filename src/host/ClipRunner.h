@@ -9,6 +9,8 @@
 
 namespace host {
 
+class RecordTrace;   // flag-gated pump-schedule trace (RecordTrace.h); PR 12
+
 // Drives a parsed --record timeline forward, ONE emitted frame per Tick().
 // Unlike DriveRunner (which never blocks), each Tick performs a full frame
 // including the bounded, pumped per-frame ack wait (delegated to a hook). The
@@ -39,6 +41,14 @@ public:
 
     void SetHooks(DispatchFn d, StepFn s, CursorFn c, AckFn a, CaptureFn cap, LogFn log,
                   UiPushFn ui = {}, AckDataFn ackData = {});
+
+    // Flag-gated pump-schedule trace (PR 12). Non-null only under
+    // PE_RECORD_TRACE; the runner emits its ordered per-frame phase tokens
+    // (step / cursor-tick / at-events / ack) and calls EndFrame, while the
+    // host's capture lambda emits the barrier/grab tokens into the SAME sink —
+    // so the trace line reflects real cross-boundary execution order. Owned by
+    // the host; must outlive the runner. See RecordTrace.h.
+    void SetTrace(RecordTrace* t) { m_trace = t; }
 
     Status Tick();                       // advance exactly one emitted frame
     int    ExitCode() const { return m_exitCode; }
@@ -82,6 +92,7 @@ private:
 
     bool m_targetCursor = false;          // cursor track uses semantic targets
     nlohmann::json m_sidecar = nlohmann::json::array();  // verify sidecar (target run only)
+    RecordTrace* m_trace = nullptr;       // flag-gated pump trace (PR 12); host-owned, may be null
 
     bool m_preflighted = false;
     bool Preflight();       // track-key targets exist + save confinement; false + exit 3 on miss
