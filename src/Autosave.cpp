@@ -3,6 +3,7 @@
 #include "ParticleSystem.h"
 #include "files.h"
 
+#include <filesystem>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <psapi.h>
@@ -18,6 +19,10 @@
 
 namespace Autosave
 {
+
+#ifdef AUTOSAVE_TESTING
+static ProcessNameProbe g_processNameProbe = NULL;
+#endif
 
 // Subdirectory under %TEMP% where all autosave files live.
 static const wchar_t kDirName[]   = L"AloParticleEditor";
@@ -130,13 +135,42 @@ static std::wstring OurMetaPath()   { return PathForSession(OurSessionKey(), kMe
 
 // ----- Process-session liveness ---------------------------------
 
-static std::wstring OurExeBaseName()
+static std::wstring CurrentModuleBaseName()
 {
-    wchar_t path[MAX_PATH];
-    DWORD n = GetModuleFileNameW(NULL, path, MAX_PATH);
-    if (n == 0 || n == MAX_PATH) return L"";
-    const wchar_t* base = wcsrchr(path, L'\\');
-    return base ? std::wstring(base + 1) : std::wstring(path);
+    std::wstring path;
+#ifdef AUTOSAVE_TESTING
+    if (g_processNameProbe)
+    {
+        path = host::ModuleFilePathWith([](wchar_t* buffer, DWORD capacity)
+        {
+            return g_processNameProbe(GetCurrentProcessId(), buffer, capacity);
+        });
+    }
+    else
+#endif
+    {
+        path = host::ModuleFilePath();
+    }
+    return path.empty() ? std::wstring() : std::filesystem::path(path).filename().wstring();
+}
+
+static std::wstring ProcessImagePath(HANDLE process, DWORD pid)
+{
+    return host::ModuleFilePathWith([process, pid](wchar_t* buffer, DWORD capacity)
+    {
+#ifdef AUTOSAVE_TESTING
+        if (g_processNameProbe) return g_processNameProbe(pid, buffer, capacity);
+#endif
+        DWORD size = capacity;
+        SetLastError(ERROR_SUCCESS);
+        if (QueryFullProcessImageNameW(process, 0, buffer, &size))
+            return host::ModuleNameProbeResult{ size, ERROR_SUCCESS };
+        const DWORD error = GetLastError();
+        return host::ModuleNameProbeResult{
+            error == ERROR_INSUFFICIENT_BUFFER ? capacity : 0,
+            error,
+        };
+    });
 }
 
 // True if `pid` is a currently-running process whose image file
@@ -156,23 +190,25 @@ static bool IsLiveLegacyEditorPid(DWORD pid)
         if (err == ERROR_INVALID_PARAMETER) return false;  // unambiguously not a process
         return true;  // access denied / other — be conservative
     }
-    wchar_t imagePath[MAX_PATH];
-    DWORD   size = MAX_PATH;
-    bool    isEditor = false;
-    if (QueryFullProcessImageNameW(h, 0, imagePath, &size))
-    {
-        const wchar_t* base = wcsrchr(imagePath, L'\\');
-        const wchar_t* name = base ? base + 1 : imagePath;
-        std::wstring ours = OurExeBaseName();
-        if (!ours.empty() && _wcsicmp(name, ours.c_str()) == 0) isEditor = true;
-    }
-    else
+    const std::wstring imagePath = ProcessImagePath(h, pid);
+    if (imagePath.empty())
     {
         // Can't read the image name but the process exists. Be
         // conservative: treat as a live editor so we don't delete
         // its files.
-        isEditor = true;
+        CloseHandle(h);
+        return true;
     }
+    const std::wstring ours = CurrentModuleBaseName();
+    if (ours.empty())
+    {
+        // Our own module name is also unavailable. Treat the sibling as live
+        // rather than risk sweeping an editor autosave on an ambiguous match.
+        CloseHandle(h);
+        return true;
+    }
+    const std::wstring name = std::filesystem::path(imagePath).filename().wstring();
+    const bool isEditor = _wcsicmp(name.c_str(), ours.c_str()) == 0;
     CloseHandle(h);
     return isEditor;
 }
@@ -270,6 +306,11 @@ static RecoveryCandidateHook g_recoveryCandidateHook = NULL;
 void SetRecoveryCandidateHookForTest(RecoveryCandidateHook hook)
 {
     g_recoveryCandidateHook = hook;
+}
+
+void SetProcessNameProbeForTest(ProcessNameProbe probe)
+{
+    g_processNameProbe = probe;
 }
 #endif
 

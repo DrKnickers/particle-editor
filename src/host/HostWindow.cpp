@@ -5171,7 +5171,7 @@ int HostWindowImpl::Run(int nCmdShow)
     };
     dispatcher = std::make_unique<BridgeDispatcher>(/*engine*/nullptr, layout, accelerator, emitFn,
                                                     /*useTestHost*/useTestHost,
-                                                    /*ephemeral*/m_automationMode);
+                                                    /*driveMode*/m_automationMode);
     dispatcher->SetUndoStack(&undoStack);
     dispatcher->SetHostHwnd(hMain);
     // [#510] Throttle the panel-refresh broadcasts during a --record run only

@@ -254,6 +254,59 @@ static std::wstring Uppercase(std::wstring value)
     return value;
 }
 
+enum class LegacyProcessProbeMode
+{
+    QueryFails,
+    BasenameMatches,
+    OwnNameFails,
+};
+
+static LegacyProcessProbeMode g_legacyProcessProbeMode;
+static DWORD g_legacyProcessProbePid = 0;
+
+static host::ModuleNameProbeResult ProbeLegacyProcessName(DWORD pid,
+                                                          wchar_t* buffer,
+                                                          DWORD capacity)
+{
+    std::wstring path;
+    if (pid == g_legacyProcessProbePid)
+    {
+        if (g_legacyProcessProbeMode == LegacyProcessProbeMode::QueryFails)
+            return host::ModuleNameProbeResult{ 0, ERROR_ACCESS_DENIED };
+        path = L"C:\\Sibling\\ParticleEditor.exe";
+    }
+    else if (pid == GetCurrentProcessId())
+    {
+        if (g_legacyProcessProbeMode == LegacyProcessProbeMode::OwnNameFails)
+            return host::ModuleNameProbeResult{ 0, ERROR_ACCESS_DENIED };
+        path = L"C:\\Current\\ParticleEditor.exe";
+    }
+    else
+    {
+        return host::ModuleNameProbeResult{ 0, ERROR_INVALID_PARAMETER };
+    }
+
+    if (path.size() >= capacity)
+        return host::ModuleNameProbeResult{ capacity, ERROR_INSUFFICIENT_BUFFER };
+    std::copy(path.begin(), path.end(), buffer);
+    return host::ModuleNameProbeResult{
+        static_cast<DWORD>(path.size()),
+        ERROR_SUCCESS,
+    };
+}
+
+static PROCESS_INFORMATION StartLiveSibling()
+{
+    STARTUPINFOW startup = {};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process = {};
+    wchar_t command[] = L"cmd.exe /d /c ping -n 30 127.0.0.1 >nul";
+    if (!CreateProcessW(NULL, command, NULL, NULL, FALSE, CREATE_NO_WINDOW,
+                        NULL, NULL, &startup, &process))
+        process = {};
+    return process;
+}
+
 int main()
 {
     using Autosave::ClassifyAutosaveName;
@@ -402,6 +455,52 @@ int main()
     CHECK(IsRegularFile(currentRecent + L".tmp"));
     CHECK(DeleteFileW((currentRecent + L".tmp").c_str()) != FALSE);
     SetLastWriteTicks(currentRecent, NowTicks());
+
+    // The production scanner must preserve a legacy-PID autosave when a real
+    // live sibling has an unreadable image name, a matching basename under a
+    // different full path, or an unreadable own module name. The hook replaces
+    // only image-name reads; ScanForOrphan still opens and classifies the child
+    // process through the production liveness path.
+    PROCESS_INFORMATION liveSibling = StartLiveSibling();
+    CHECK(liveSibling.hProcess != NULL);
+    if (liveSibling.hProcess != NULL)
+    {
+        CloseHandle(liveSibling.hThread);
+        g_legacyProcessProbePid = liveSibling.dwProcessId;
+        const LegacyProcessProbeMode modes[] = {
+            LegacyProcessProbeMode::QueryFails,
+            LegacyProcessProbeMode::BasenameMatches,
+            LegacyProcessProbeMode::OwnNameFails,
+        };
+        const char* labels[] = {
+            "unreadable sibling image name is conservative-live",
+            "matching basename under another full path is live",
+            "unreadable own module name is conservative-live",
+        };
+        for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); ++i)
+        {
+            const std::wstring legacyLive =
+                dir + L"\\autosave-" + std::to_wstring(liveSibling.dwProcessId)
+                + L"-recent.alo";
+            CHECK(CopyFileW(currentRecent.c_str(), legacyLive.c_str(), FALSE) != FALSE);
+            SetLastWriteTicks(legacyLive, NowTicks());
+            g_legacyProcessProbeMode = modes[i];
+            Autosave::SetProcessNameProbeForTest(ProbeLegacyProcessName);
+            // CHECK() is 1-arg (prints #cond); print the per-mode label
+            // explicitly so a failure names which classification regressed.
+            if (Autosave::ScanForOrphan(&scanned) || !IsRegularFile(legacyLive))
+            {
+                std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, labels[i]);
+                ++g_fail;
+            }
+            CHECK(DeleteFileW(legacyLive.c_str()) != FALSE);
+            Autosave::SetProcessNameProbeForTest(NULL);
+            g_legacyProcessProbePid = liveSibling.dwProcessId;
+        }
+        TerminateProcess(liveSibling.hProcess, 0);
+        WaitForSingleObject(liveSibling.hProcess, INFINITE);
+        CloseHandle(liveSibling.hProcess);
+    }
 
     const DWORD deadPid = DefinitelyDeadPid();
     CHECK(deadPid != 0);

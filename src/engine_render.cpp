@@ -8,6 +8,7 @@
 #include <algorithm>   // sort (instance depth ordering in Update)
 #include <cstdarg>     // va_list (BloomLog)
 #include <cstdio>      // FILE/vsnprintf/fopen (bloom diagnostics)
+#include <filesystem>
 
 #include "engine.h"
 #include "engine_internal.h"
@@ -18,6 +19,7 @@
 #include "EmitterInstance.h"         // EmitterInstance::Vertex (ground/bloom/compose quads)
 #include "ParticleMipFilter.h"       // #481 ALO_PARTICLE_MIPFILTER override (MODE_*)
 #include "host/AlphaCompositor.h"    // present path
+#include "host/ModulePath.h"
 #include "SphericalHarmonics.h"      // ambient SPH floor in the scene pass
 
 using namespace std;
@@ -82,19 +84,6 @@ static void BloomLog(FILE* f, const char* line)
 	printf("%s", line);
 }
 
-// Returns the .exe's directory with trailing backslash, e.g.
-// "<install dir>\". Used to place the bloom diagnostic
-// file next to the executable where the user is most likely to look.
-static std::wstring ExeDirectory()
-{
-	wchar_t path[MAX_PATH] = {0};
-	GetModuleFileNameW(NULL, path, MAX_PATH);
-	std::wstring s(path);
-	size_t pos = s.find_last_of(L"\\/");
-	if (pos != std::wstring::npos) s.resize(pos + 1);
-	return s;
-}
-
 // Introspect the freshly-loaded SceneBloom effect. Confirms the shader
 // isn't the ShaderManager default fallback (we'd render garbage through
 // it), caches the parameter / technique handles we drive each frame,
@@ -132,8 +121,13 @@ void Engine::InitBloomEffect()
 	FILE* f = NULL;
 	if (diag)
 	{
-		std::wstring logPath = ExeDirectory() + L"bloom-diagnostic.log";
-		_wfopen_s(&f, logPath.c_str(), L"w");
+		const std::wstring root = host::ModuleDirectory();
+		if (!root.empty())
+		{
+			const std::filesystem::path logPath =
+				std::filesystem::path(root) / L"bloom-diagnostic.log";
+			_wfopen_s(&f, logPath.c_str(), L"w");
+		}
 	}
 
 	auto logf = [&](const char* fmt, ...)

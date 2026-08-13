@@ -21,23 +21,9 @@
 #include <string>
 #include <algorithm>
 
+#include "StringConv.h"
+
 namespace clip {
-
-inline std::wstring ConfineUtf8ToWide(const std::string& s) {
-    if (s.empty()) return std::wstring();
-    const int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0);
-    std::wstring w(n, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), &w[0], n);
-    return w;
-}
-
-inline std::string ConfineWideToUtf8(const std::wstring& w) {
-    if (w.empty()) return std::string();
-    const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
-    std::string s(n, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), &s[0], n, nullptr, nullptr);
-    return s;
-}
 
 // Resolve an EXISTING directory to its final, normalized path. Empty on failure.
 inline std::wstring ResolveFinalDirPath(const std::wstring& dir) {
@@ -107,8 +93,8 @@ inline bool ConfineSavePath(const std::wstring& saveRoot, const std::wstring& ta
     const bool under = (pl == rl) ||
         (pl.size() > rl.size() && pl.compare(0, rl.size(), rl) == 0 && pl[rl.size()] == L'\\');
     if (!under) {
-        err = "target resolves outside saveRoot (target parent: " + ConfineWideToUtf8(parentFinal)
-            + ", saveRoot: " + ConfineWideToUtf8(root) + ")";
+        err = "target resolves outside saveRoot (target parent: " + host::WideToUtf8(parentFinal)
+            + ", saveRoot: " + host::WideToUtf8(root) + ")";
         return false;
     }
     if (resolvedOut) *resolvedOut = parentFinal + L"\\" + leaf;

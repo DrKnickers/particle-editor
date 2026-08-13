@@ -47,11 +47,11 @@
 #include "../UndoStack.h"   // full def needed for UndoStack::EditorAux in ApplyUndoSnapshot
 #include "../ParticleSystem.h"   // full def needed for ParticleSystem::Emitter* in getEmitterById
 #include "../MouseCursor.h"       // by-value record-preview anchor (preview/* record kinds)
+#include "../SpawnerDriver.h"     // dispatcher-owned clamped SpawnerConfig
 #include "PreviewEncodeWorker.h"   // [C3] async texture-preview encode
 
 class Engine;
 class ParticleSystemInstance;
-class SpawnerDriver;
 class IFileManager;
 class ModManager;
 
@@ -73,13 +73,13 @@ public:
     // (e.g. dialog-lighting's Force Align checkbox) see ctor defaults
     // regardless of the dev box's saved registry — the same determinism
     // gate the HostWindow registry-restore block uses.
-    // `ephemeral` (true in --drive mode): suppress ALL registry writes the same
+    // `driveMode` (true in --drive / --record automation): suppress ALL registry writes the same
     // way `useTestHost` does, WITHOUT enabling the test-host-only behaviors
     // (CDP port, a11y determinism). It ORs into every persist gate; the three
     // WriteRecentFile (MRU) sites gate on PersistsUserState(), which folds this
     // flag together with the test-host settings gate.
     BridgeDispatcher(Engine* engine, LayoutBroker& layout, AcceleratorBridge& accel,
-                     EmitFn emit, bool useTestHost = false, bool ephemeral = false);
+                     EmitFn emit, bool useTestHost = false, bool driveMode = false);
 
     // Sets / replaces the live Engine pointer. The host can install this
     // before or after the Engine is constructed; null is treated as
@@ -158,6 +158,7 @@ public:
         m_pParticleSystem = ppSystem;
         m_spawnerDriver   = spawner;
         m_fileManager     = fileManager;
+        if (m_spawnerDriver) m_spawnerDriver->SetConfig(m_spawnerConfig);
     }
 
     // Seed the initial emitter selection (editor state, an index into
@@ -318,6 +319,83 @@ private:
     }
     friend struct PreviewQueueWiringTestAccess;
 
+    // Deterministic construction seam for the spawner-config production-call
+    // oracle. Its members stay header-visible so the standalone harness can
+    // compose the real mutations and resolver without linking this host TU.
+    struct SpawnerConfigTestTag {};
+    BridgeDispatcher(LayoutBroker& layout, AcceleratorBridge& accel,
+                     SpawnerConfigTestTag, Engine* engine = nullptr)
+        : m_engine(engine), m_layout(layout), m_accel(accel), m_emit()
+    {
+    }
+    friend struct SpawnerConfigWiringTestAccess;
+
+    static D3DXVECTOR3 SpawnerJsonToVec3(const nlohmann::json& value)
+    {
+        if (value.is_array() && value.size() >= 3)
+            return D3DXVECTOR3(value[0].get<float>(), value[1].get<float>(), value[2].get<float>());
+        return D3DXVECTOR3(0, 0, 0);
+    }
+
+    static SpawnerConfig SpawnerConfigFromJson(const nlohmann::json& params)
+    {
+        SpawnerConfig cfg;
+        if (!params.is_object()) return cfg;
+
+        const std::string mode = params.value("mode", std::string("auto"));
+        cfg.mode = mode == "manual" ? SpawnerConfig::Mode::Manual : SpawnerConfig::Mode::Auto;
+        cfg.enabled        = params.value("enabled", false);
+        cfg.burstSize      = params.value("burstSize", 1);
+        cfg.spacingSec     = params.value("spacingSec", 0.0f);
+        cfg.intervalSec    = params.value("intervalSec", 10.0f);
+        cfg.position       = SpawnerJsonToVec3(params.value("position", nlohmann::json::array()));
+        cfg.velocity       = SpawnerJsonToVec3(params.value("velocity", nlohmann::json::array()));
+        cfg.maxLifetimeSec = params.value("maxLifetimeSec", 5.0f);
+        cfg.jitterPosition = SpawnerJsonToVec3(params.value("jitterPosition", nlohmann::json::array()));
+        cfg.acceleration = SpawnerJsonToVec3(params.value("acceleration", nlohmann::json::array()));
+        cfg.squiggleAmplitude = SpawnerJsonToVec3(params.value("squiggleAmplitude", nlohmann::json::array()));
+        cfg.squiggleFrequency = params.value("squiggleFrequency", 1.0f);
+        return cfg;
+    }
+
+    // One resolver for engine/state/snapshot, state-change events, and the
+    // driverless Vitest / partial-wiring echo.
+    nlohmann::json BuildSpawnerStateJson() const
+    {
+        const auto vec3 = [](const D3DXVECTOR3& value)
+        {
+            return nlohmann::json::array({ value.x, value.y, value.z });
+        };
+        return nlohmann::json{
+            {"mode",              m_spawnerConfig.mode == SpawnerConfig::Mode::Manual ? "manual" : "auto"},
+            {"enabled",           m_spawnerConfig.enabled},
+            {"burstSize",         m_spawnerConfig.burstSize},
+            {"spacingSec",        m_spawnerConfig.spacingSec},
+            {"intervalSec",       m_spawnerConfig.intervalSec},
+            {"position",          vec3(m_spawnerConfig.position)},
+            {"velocity",          vec3(m_spawnerConfig.velocity)},
+            {"maxLifetimeSec",    m_spawnerConfig.maxLifetimeSec},
+            {"jitterPosition",    vec3(m_spawnerConfig.jitterPosition)},
+            {"acceleration",      vec3(m_spawnerConfig.acceleration)},
+            {"squiggleAmplitude", vec3(m_spawnerConfig.squiggleAmplitude)},
+            {"squiggleFrequency", m_spawnerConfig.squiggleFrequency},
+        };
+    }
+
+    void ApplySpawnerStart(const nlohmann::json& params)
+    {
+        m_spawnerConfig = SpawnerConfigFromJson(params);
+        ClampSpawnerConfig(m_spawnerConfig);
+        if (m_spawnerDriver) m_spawnerDriver->SetConfig(m_spawnerConfig);
+    }
+
+    void ApplySpawnerStop()
+    {
+        if (m_spawnerDriver) m_spawnerDriver->CancelPending();
+        m_spawnerConfig.enabled = false;
+        if (m_spawnerDriver) m_spawnerDriver->SetConfig(m_spawnerConfig);
+    }
+
     // Builds the response envelope for one parsed `req` envelope. Single
     // source of truth for the kind-string ladder — both the async
     // `Dispatch` (which emits the response via m_emit) and the sync
@@ -436,19 +514,19 @@ private:
     // settings handlers to deterministic defaults (see ctor comment).
     bool               m_testHost = false;
 
-    // --drive ephemeral mode: ORs into every persist gate + guards the MRU
-    // writes so a --drive run performs NO registry writes (without enabling the
+    // Automation mode: ORs into every persist gate + guards the MRU writes so a
+    // --drive or --record run performs NO registry writes (without enabling the
     // test-host-only CDP/a11y behaviors). Set once at construction.
-    bool               m_ephemeral = false;
+    bool               m_driveMode = false;
 
     // True when this run may write user-visible persistent state (the
-    // recent-files MRU): not drive/record-ephemeral, and not a --test-host run
+    // recent-files MRU): not automation mode, and not a --test-host run
     // unless ALO_SETTINGS_LIVE lifted the gate — the SAME predicate every
     // settings/* write uses (cf. BridgeDispatch_Assets.cpp mods/set-layers).
-    // Before this existed the MRU sites checked only m_ephemeral, so every
+    // Before this existed the MRU sites checked only m_driveMode, so every
     // playwright-native (--test-host) file open/save wrote its test path into
     // the daily driver's real Recent Files menu (2026-07 audit follow-up).
-    bool PersistsUserState() const { return !m_ephemeral && !(m_testHost && !m_settingsLive); }
+    bool PersistsUserState() const { return !m_driveMode && !(m_testHost && !m_settingsLive); }
 
     // --record throttle (issue #510): during a clip record the driver scrubs
     // curves host-side, firing emitters/tree/changed + engine/state/changed far
@@ -473,7 +551,7 @@ private:
     // Worst-case staleness is one display frame (idle-branch flush), or one
     // stats tick (250 ms) inside a modal dialog's own pump. NOT active in
     // --record (#510's leading-edge throttle owns that mode — its clip gates
-    // assert the ~30 Hz cadence) and NOT in --drive (m_ephemeral: a
+    // assert the ~30 Hz cadence) and NOT in --drive (m_driveMode: a
     // drive-assert must see every change, per the #510 note above).
     bool               m_stateEmitPending = false;
     bool               m_treeEmitPending  = false;
@@ -601,13 +679,10 @@ private:
     Autosave::OrphanSession   m_pendingOrphan{};
     bool                      m_hasPendingOrphan = false;
 
-    // Spawner config cache for snapshot
-    // parity. The host doesn't yet own a SpawnerDriver* (matches the
-    // ParticleSystem* situation); spawner/start handlers cache the incoming
-    // params here so a subsequent engine/state/snapshot returns the
-    // user's last-committed config. JSON-shaped to avoid pulling
-    // SpawnerDriver.h into the dispatcher header.
-    nlohmann::json m_spawnerConfig;
+    // Single parsed-and-clamped spawner config for every snapshot/event and
+    // for the driverless Vitest / partial-wiring path. A bound driver is always
+    // set from this same structure.
+    SpawnerConfig m_spawnerConfig;
 
     // Selected-emitter id (editor state, not
     // engine state). -1 means "no selection"; the snapshot serialises

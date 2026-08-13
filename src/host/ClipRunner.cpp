@@ -1,5 +1,6 @@
 #include "ClipRunner.h"
 #include "SavePathConfine.h"
+#include "StringConv.h"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -82,8 +83,8 @@ bool ClipRunner::PreflightSaves() {
             m_exitCode = 3; return false;
         }
         std::string err;
-        if (!clip::ConfineSavePath(clip::ConfineUtf8ToWide(m_tl.saveRoot),
-                                   clip::ConfineUtf8ToWide(pathUtf8), nullptr, err)) {
+        if (!clip::ConfineSavePath(host::Utf8ToWide(m_tl.saveRoot),
+                                   host::Utf8ToWide(pathUtf8), nullptr, err)) {
             if (m_log) m_log("record: preflight: file/save at " + std::to_string(ev.t)
                              + "ms rejected: " + err);
             m_exitCode = 3; return false;

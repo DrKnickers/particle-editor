@@ -40,7 +40,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
         float f2I = 0.50f, f2Z = 210.0f, f2T = -10.0f; DWORD f2Diff = RGB(60, 80, 160);
         bool  forceAlign = true;  // kLightForceAlignDefault
 
-        const bool gated = m_ephemeral || (m_testHost && !m_settingsLive);
+        const bool gated = !PersistsUserState();
         if (!gated)
         {
             HKEY hKey = nullptr;
@@ -113,7 +113,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     if (kind == "settings/lighting-force-align/set")
     {
         const bool enabled = params.value("enabled", true);
-        const bool gated = m_ephemeral || (m_testHost && !m_settingsLive);
+        const bool gated = !PersistsUserState();
         if (!gated)
             WriteRegDword(L"LightingForceFillAlignment", enabled ? 1u : 0u);
         ctx.SendOk(json::object());
@@ -135,7 +135,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     // so the dialog-lighting golden never mutates the dev box's registry.
     if (kind == "settings/lighting/set")
     {
-        const bool gated = m_ephemeral || (m_testHost && !m_settingsLive);
+        const bool gated = !PersistsUserState();
         if (!gated)
         {
             HKEY hKey = nullptr;
@@ -188,41 +188,23 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
 
     // -------- spawner/* -------------------
     //
-    // The new-UI host doesn't yet own a SpawnerDriver* (matches the
-    // ParticleSystem* situation). The handlers do the *editor-level* side of
-    // the work: cache the incoming config in m_spawnerConfig so a
-    // subsequent engine/state/snapshot returns it, log the request for
-    // diagnostics, and broadcast engine/state/changed so React sees the
-    // updated config land. When SpawnerDriver wiring happens later,
-    // the cached config can be passed directly into
-    // `m_spawnerDriver->SetConfig(...)` from these same handlers.
+    // BridgeDispatcher owns one parsed-and-clamped SpawnerConfig for all
+    // snapshots/events, and applies that same struct to a bound driver.
     //
     // Note: spawner config is session state (matches legacy: "never
     // written into the .alo" per SpawnerDriver.h:16). It deliberately
     // does NOT set dirty=true.
     if (kind == "spawner/start")
     {
-        // cache + commit to the real driver. The cache is kept
-        // updated so snapshot reads still work when no driver is bound
-        // (Vitest / partial-wiring paths).
-        m_spawnerConfig = params;
-        if (m_spawnerDriver)
-        {
-            SpawnerConfig cfg = JsonToSpawnerConfig(params);
-            ClampSpawnerConfig(cfg);
-            m_spawnerDriver->SetConfig(cfg);
-        }
+        ApplySpawnerStart(params);
         ctx.SendOk(json::object());
         EmitEngineStateChanged();
         return true;
     }
     if (kind == "spawner/trigger")
     {
-        // real trigger. Note that without per-frame Tick wiring
-        // the burst-state machine doesn't advance — Trigger schedules
-        // a burst that won't actually fire instances until later
-        // work wires SpawnerDriver::Tick into the render loop. That's
-        // a documented out-of-scope item for now.
+        // The host's render loop advances the driver's burst state; only
+        // forward a trigger while all production borrows are bound.
         if (m_spawnerDriver
             && m_pParticleSystem
             && *m_pParticleSystem
@@ -235,25 +217,7 @@ bool BridgeDispatcher::TryDispatchSpawner(BridgeRequestContext& ctx)
     }
     if (kind == "spawner/stop")
     {
-        // flip enabled=false on the live driver. Auto-mode
-        // bursts stop scheduling; manual triggers still work — but any
-        // armed-yet-unbegun burst and queued triggers are cancelled
-        // (SetConfig can't do it: in Manual mode enabled is already
-        // false, so there's no transition for it to see). A burst that
-        // has begun emitting finishes, as it always has.
-        if (m_spawnerDriver)
-        {
-            m_spawnerDriver->CancelPending();
-            SpawnerConfig cfg = m_spawnerDriver->GetConfig();
-            cfg.enabled = false;
-            m_spawnerDriver->SetConfig(cfg);
-        }
-        // Keep the JSON cache in sync so snapshots without a bound
-        // driver also reflect the stop.
-        if (m_spawnerConfig.is_object())
-        {
-            m_spawnerConfig["enabled"] = false;
-        }
+        ApplySpawnerStop();
         ctx.SendOk(json::object());
         EmitEngineStateChanged();
         return true;

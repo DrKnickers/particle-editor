@@ -34,6 +34,7 @@ import type {
   ReferenceObjectStatus,
   SkydomeSlotStatus,
   SpawnParamsDto,
+  SpawnerParamsDto,
 } from "@particle-editor/bridge-schema";
 import {
   addDeathChildEmitter,
@@ -72,6 +73,33 @@ import {
   useMockTrackOverlay,
   snapshotEngineState,
 } from "./mock-state";
+
+// Mirrors native ClampSpawnerConfig (src/SpawnerDriver.cpp): burstSize
+// 1..MAX_BURST_SIZE (10), spacingSec 0..MAX_SPACING_SEC (10), intervalSec
+// 0..MAX_INTERVAL_SEC (60), maxLifetimeSec 0..MAX_LIFETIME_SEC (600), every
+// position / velocity / jitterPosition / acceleration / squiggleAmplitude axis
+// +/-JITTER_MAX (10000), and squiggleFrequency 0..SQUIGGLE_FREQ_MAX (20).
+// Native code remains the source of truth.
+function clampSpawnerConfig(params: SpawnerParamsDto): SpawnerParamsDto {
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value));
+  const vec3 = (value: SpawnerParamsDto["position"]): SpawnerParamsDto["position"] =>
+    [clamp(value[0], -10_000, 10_000), clamp(value[1], -10_000, 10_000), clamp(value[2], -10_000, 10_000)];
+  return {
+    ...params,
+    mode: params.mode === "manual" ? "manual" : "auto",
+    burstSize: clamp(params.burstSize, 1, 10),
+    spacingSec: clamp(params.spacingSec, 0, 10),
+    intervalSec: clamp(params.intervalSec, 0, 60),
+    maxLifetimeSec: clamp(params.maxLifetimeSec, 0, 600),
+    position: vec3(params.position),
+    velocity: vec3(params.velocity),
+    jitterPosition: vec3(params.jitterPosition),
+    acceleration: vec3(params.acceleration),
+    squiggleAmplitude: vec3(params.squiggleAmplitude),
+    squiggleFrequency: clamp(params.squiggleFrequency, 0, 20),
+  };
+}
 
 /** Returns true for request kinds that should mark the in-memory file
  *  state dirty. Every engine/set/* is mutating. Engine actions are
@@ -292,7 +320,7 @@ export class MockBridge implements Bridge {
   private listeners = new Map<EventKind, Set<(e: Event) => void>>();
 
   /** In-mock "active spawner instance count". Bumped
-   *  by spawner/trigger (by burstSize), zeroed by spawner/stop. The
+   *  by Manual spawner/trigger (by burstSize), zeroed by spawner/stop. The
    *  native SpawnerDriver tracks real ParticleSystemInstance lifecycles;
    *  the mock counter is just a hook for UI badge testing. */
   private spawnerActiveCount = 0;
@@ -1010,21 +1038,21 @@ export class MockBridge implements Bridge {
       //
       // The native host treats spawner/start as a full-config replace
       // (mirrors `SpawnerDriver::SetConfig`). The mock matches: every
-      // incoming params overwrites the cached spawner block in
+      // clamped incoming params overwrite the cached spawner block in
       // EngineStateDto, then emits engine/state/changed so any panel
       // subscribed to snapshots picks up the new config.
       //
-      // spawner/trigger + spawner/stop are no-ops aside from the
-      // active-count event. The mock doesn't simulate physics: trigger
-      // bumps the count by burstSize, stop zeroes it. Real instance
-      // tracking lives in the native SpawnerDriver.
+      // The mock doesn't simulate physics: Manual trigger bumps the count by
+      // burstSize, and stop disables the config plus zeroes the count. Real
+      // instance tracking lives in the native SpawnerDriver.
 
       case "spawner/start":
-        this.patchAndBroadcast({ spawner: { ...req.params } });
+        this.patchAndBroadcast({ spawner: clampSpawnerConfig(req.params) });
         return {};
 
       case "spawner/trigger": {
         const params = snapshotEngineState().spawner;
+        if (params.mode !== "manual") return {};
         const next = this.spawnerActiveCount + params.burstSize;
         this.spawnerActiveCount = next;
         this.emit({
@@ -1034,13 +1062,16 @@ export class MockBridge implements Bridge {
         return {};
       }
 
-      case "spawner/stop":
+      case "spawner/stop": {
+        const spawner = snapshotEngineState().spawner;
+        this.patchAndBroadcast({ spawner: { ...spawner, enabled: false } });
         this.spawnerActiveCount = 0;
         this.emit({
           kind: "spawner/active-count",
           payload: { count: 0 },
         });
         return {};
+      }
 
       // ---------------- emitters/preview-from-file
       //

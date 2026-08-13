@@ -117,13 +117,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
     if (kind == "engine/state/snapshot")
     {
         if (!ctx.RequireEngine("snapshot")) return true;
-        // Spawner field: prefer the live driver config (host-state
-        // plumbing), fall back to the JSON cache
-        // when no driver is bound (e.g. unit tests, partial
-        // wiring during construction).
-        json spawnerJson = m_spawnerDriver
-            ? SpawnerConfigToJson(m_spawnerDriver->GetConfig())
-            : m_spawnerConfig;
+        json spawnerJson = BuildSpawnerStateJson();
         const std::wstring activeModPath = m_modManager ? m_modManager->GetPrimaryLayerPath() : std::wstring();
         const bool leaveParticles = (m_pParticleSystem != nullptr && *m_pParticleSystem)
             ? (*m_pParticleSystem)->getLeaveParticles()
@@ -147,7 +141,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         const bool enabled = params.value("enabled", false);
         m_engine->SetGround(enabled);
         ctx.SendOk(json::object());
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistShowGround(enabled);
         EmitEngineStateChanged();
         return true;
@@ -214,7 +208,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         // Preserve the handler's registry-sync behavior, but persist only the
         // state the engine actually reached. A failed custom load reaches Off;
         // an invalid request keeps (and re-persists) the prior valid slot.
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistSkydomeIndex(actualSlot);
         ctx.SendOk({ {"slot", actualSlot}, {"applied", applied} });
         if (actualSlot != previousSlot)
@@ -239,7 +233,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
             return true;
         }
         // Persist the custom slot path (round-trips with legacy).
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistSkydomeCustomPath(slot, wpath);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -256,7 +250,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         // BridgeRequestContext parameter.
         SkydomeContext skyCtx = (ctxStr == "land") ? SkydomeContext::Land : SkydomeContext::Space;
         m_engine->SetSkydomeEnvironment(skyCtx, prim, sec);
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistSkydomeEnvironment(skyCtx == SkydomeContext::Land ? 0 : 1,
                                       Utf8ToWide(prim), Utf8ToWide(sec));
         ctx.SendOk(json::object());
@@ -270,7 +264,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         std::string name = params.value("name", std::string{});
         m_engine->SetReferenceObject(name);
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
         {
             PersistReferenceObjectName(Utf8ToWide(name));
             // The swap may have changed the live transform (per-object memory:
@@ -292,7 +286,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         bool visible = params.value("visible", true);
         m_engine->SetReferenceObjectVisible(visible);
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistReferenceObjectVisible(visible);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -304,7 +298,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         bool locked = params.value("locked", false);
         m_engine->SetReferenceLocked(locked);
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistReferenceObjectLock(locked);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -339,7 +333,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
             if (refKey != 0) CaptureUndoPoint(refKey);
         }
         m_engine->SetReferenceObjectTransform(pos, rot);
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistReferenceObjectTransform(pos, rot);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -352,7 +346,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         bool visible = params.value("visible", false);
         m_engine->SetGridVisible(visible);
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistGrid(visible, m_engine->GetGridSpacing());
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -364,7 +358,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         float spacing = params.value("spacing", 20.0f);
         m_engine->SetGridSpacing(spacing);
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistGrid(m_engine->GetGridVisible(), m_engine->GetGridSpacing());
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -378,7 +372,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         if (!ctx.RequireEngine(kind.c_str())) return true;
         bool enabled = params.value("enabled", false);
         m_engine->SetSnapEnabled(enabled);
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistSnap(enabled);
         ctx.SendOk(json::object());
         ctx.MarkDirty();
@@ -392,7 +386,7 @@ bool BridgeDispatcher::TryDispatchEngine(BridgeRequestContext& ctx)
         m_engine->SetBackground(static_cast<COLORREF>(rgb));
         // Persist the solid-colour background (same Background picker as
         // the skydome; previously only markDirty'd, so it was lost on restart).
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistBackgroundColor(static_cast<COLORREF>(rgb));
         ctx.SendOk(json::object());
         ctx.MarkDirty();

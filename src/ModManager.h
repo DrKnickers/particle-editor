@@ -61,8 +61,8 @@ public:
     // ephemeral (true in --drive mode): suppress ALL registry writes
     // (LastLayers/LastMod) so a --drive run never rewrites the
     // daily driver's persisted mod stack — notably the startup write-back via
-    // RestoreLastLayerStack -> SetLayerStack. Same concept as HostWindow's and
-    // BridgeDispatcher's m_ephemeral (one name across all three modules).
+    // RestoreLastLayerStack -> SetLayerStack. HostWindow and BridgeDispatcher
+    // carry related automation/persistence state under their own ownership.
     ModManager(IFileManager* fileManager,
                const std::vector<std::wstring>& gameRoots,
                bool ephemeral = false);

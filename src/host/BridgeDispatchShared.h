@@ -115,11 +115,6 @@ void PersistReferenceObjectTransform(const D3DXVECTOR3& pos, const D3DXVECTOR3& 
 void PersistGrid(bool visible, float spacing);
 void PersistSnap(bool enabled);
 
-// Spawner config plumbing.
-SpawnerConfig JsonToSpawnerConfig(const nlohmann::json& j);
-nlohmann::json SpawnerConfigToJson(const SpawnerConfig& cfg);
-nlohmann::json DefaultSpawnerConfigJson();
-
 // Link-group DTO plumbing.
 nlohmann::json LinkExemptFlagsToJsonArray(const LinkExemptFlags& flags);
 LinkExemptFlags LinkExemptFlagsFromJsonArray(const nlohmann::json& arr);

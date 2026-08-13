@@ -306,54 +306,6 @@ const char* SkyStatusToString(SkydomeSlotStatus s)
     }
 }
 
-// host-state plumbing — JSON ↔ SpawnerConfig converters. The
-// schema's SpawnerParamsDto (web/packages/bridge-schema/src/index.ts:60)
-// is value-for-value compatible with the native SpawnerConfig (lines in
-// src/SpawnerDriver.h:18) except for the `mode` field which is a
-// string in JSON but an enum on the native side.
-
-SpawnerConfig JsonToSpawnerConfig(const json& j)
-{
-    SpawnerConfig cfg;
-    if (!j.is_object()) return cfg;
-
-    std::string mode = j.value("mode", std::string("auto"));
-    cfg.mode = (mode == "manual")
-        ? SpawnerConfig::Mode::Manual
-        : SpawnerConfig::Mode::Auto;
-
-    cfg.enabled        = j.value("enabled", false);
-    cfg.burstSize      = j.value("burstSize", 1);
-    cfg.spacingSec     = j.value("spacingSec", 0.0f);
-    cfg.intervalSec    = j.value("intervalSec", 10.0f);
-    cfg.position       = JsonToVec3(j.value("position", json::array()));
-    cfg.velocity       = JsonToVec3(j.value("velocity", json::array()));
-    cfg.maxLifetimeSec = j.value("maxLifetimeSec", 5.0f);
-    cfg.jitterPosition    = JsonToVec3(j.value("jitterPosition", json::array()));
-    cfg.acceleration      = JsonToVec3(j.value("acceleration", json::array()));
-    cfg.squiggleAmplitude = JsonToVec3(j.value("squiggleAmplitude", json::array()));
-    cfg.squiggleFrequency = j.value("squiggleFrequency", 1.0f);
-    return cfg;
-}
-
-json SpawnerConfigToJson(const SpawnerConfig& cfg)
-{
-    return json{
-        {"mode",           cfg.mode == SpawnerConfig::Mode::Manual ? "manual" : "auto"},
-        {"enabled",        cfg.enabled},
-        {"burstSize",      cfg.burstSize},
-        {"spacingSec",     cfg.spacingSec},
-        {"intervalSec",    cfg.intervalSec},
-        {"position",       Vec3ToJson(cfg.position)},
-        {"velocity",       Vec3ToJson(cfg.velocity)},
-        {"maxLifetimeSec", cfg.maxLifetimeSec},
-        {"jitterPosition",    Vec3ToJson(cfg.jitterPosition)},
-        {"acceleration",      Vec3ToJson(cfg.acceleration)},
-        {"squiggleAmplitude", Vec3ToJson(cfg.squiggleAmplitude)},
-        {"squiggleFrequency", cfg.squiggleFrequency},
-    };
-}
-
 // Wire-name ↔ LinkExemptFlags::member mapping.
 // Mirrors the legacy field table at [src/UI/EmitterList.cpp:2381]
 // (kLinkSettingsFields), but uses camelCase field names that match the
@@ -567,29 +519,6 @@ json BuildEmitterTreeNode(const ParticleSystem* sys, size_t idx, size_t depth)
     };
 }
 
-// Default spawner-config JSON. Mirrors the
-// `SpawnerConfig()` initialiser at [src/SpawnerDriver.h:18]. Used to
-// seed the dispatcher's cached config on construction so the first
-// snapshot returns a populated `spawner` field even before any
-// `spawner/start` has been dispatched.
-json DefaultSpawnerConfigJson()
-{
-    return json{
-        {"mode",            "auto"},
-        {"enabled",         false},
-        {"burstSize",       1},
-        {"spacingSec",      0.0},
-        {"intervalSec",     10.0},
-        {"position",        json::array({0.0, 0.0, 0.0})},
-        {"velocity",        json::array({0.0, 0.0, 0.0})},
-        {"maxLifetimeSec",  5.0},
-        {"jitterPosition",    json::array({0.0, 0.0, 0.0})},
-        {"acceleration",      json::array({0.0, 0.0, 0.0})},
-        {"squiggleAmplitude", json::array({0.0, 0.0, 0.0})},
-        {"squiggleFrequency", 1.0},
-    };
-}
-
 // Forward declaration so BuildEngineStateSnapshot can read editor-level
 // state from the dispatcher when serialising the snapshot.
 
@@ -725,14 +654,8 @@ json BuildEngineStateSnapshot(Engine* engine,
         {"wind",                  Vec3ToJson(engine->GetWind())},
         {"gravity",               Vec3ToJson(engine->GetGravity())},
 
-        // Spawner — cached on the dispatcher.
-        // Host doesn't yet own a SpawnerDriver*; the cache is what
-        // spawner/start writes into and what subsequent snapshots read
-        // back. Empty object when never set (shouldn't happen because
-        // the constructor seeds it from DefaultSpawnerConfigJson()).
-        {"spawner",               spawnerConfig.is_null() || spawnerConfig.empty()
-                                      ? DefaultSpawnerConfigJson()
-                                      : spawnerConfig},
+        // Spawner — always supplied by the dispatcher's parsed, clamped config.
+        {"spawner",               spawnerConfig},
 
         // Selected emitter (editor state). Serialise
         // -1 as JSON null so the schema's `number | null` discriminator
@@ -763,10 +686,10 @@ json BuildEngineStateSnapshot(Engine* engine,
 
 BridgeDispatcher::BridgeDispatcher(Engine* engine, LayoutBroker& layout,
                                     AcceleratorBridge& accel, EmitFn emit,
-                                    bool useTestHost, bool ephemeral)
+                                    bool useTestHost, bool driveMode)
     : m_engine(engine), m_layout(layout), m_accel(accel), m_emit(std::move(emit))
     , m_testHost(useTestHost)
-    , m_ephemeral(ephemeral)
+    , m_driveMode(driveMode)
 {
     // Test seam (ALO_SETTINGS_LIVE=1): lift the --test-host settings gate so
     // a CDP test can exercise the real registry round-trip. The a11y harness
@@ -783,11 +706,6 @@ BridgeDispatcher::BridgeDispatcher(Engine* engine, LayoutBroker& layout,
     // mount even when the user has prior history).
     m_recentFiles = ReadRecentFiles();
 
-    // Seed the spawner-config cache from the
-    // shared default JSON so the first snapshot returns the same struct
-    // a freshly-constructed `SpawnerConfig()` would. Subsequent
-    // spawner/start requests overwrite this in DispatchInternal.
-    m_spawnerConfig = DefaultSpawnerConfigJson();
 }
 
 // Defensive envelope for any json::exception that escapes
@@ -1163,8 +1081,8 @@ void BridgeDispatcher::EmitEmittersTreeChanged()
         if (now - m_lastTreeEmitTick < kRecordEmitThrottleMs) return;
     }
     // [B1] Live trailing coalesce (see the header field block). Drive
-    // (m_ephemeral) is exempt: asserts must see every change.
-    else if (!m_ephemeral && now - m_lastTreeEmitTick < kEmitCoalesceMs) {
+    // (m_driveMode) is exempt: asserts must see every change.
+    else if (!m_driveMode && now - m_lastTreeEmitTick < kEmitCoalesceMs) {
         m_treeEmitPending = true;
         return;
     }
@@ -1251,7 +1169,7 @@ void BridgeDispatcher::CommitReferenceObjectTransform()
     if (!m_engine) return;
     const D3DXVECTOR3 pos = m_engine->GetReferencePosition();
     const D3DXVECTOR3 rot = m_engine->GetReferenceRotation();
-    if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+    if (PersistsUserState())
         PersistReferenceObjectTransform(pos, rot);
     SetDirty(true);   // markDirty() in DispatchSync is a local lambda over this
     EmitEngineStateChanged();
@@ -1303,8 +1221,8 @@ void BridgeDispatcher::EmitEngineStateChanged()
         if (now - m_lastStateEmitTick < kRecordEmitThrottleMs) return;
     }
     // [B1] Live trailing coalesce (see the header field block). Drive
-    // (m_ephemeral) is exempt: asserts must see every change.
-    else if (!m_ephemeral && now - m_lastStateEmitTick < kEmitCoalesceMs) {
+    // (m_driveMode) is exempt: asserts must see every change.
+    else if (!m_driveMode && now - m_lastStateEmitTick < kEmitCoalesceMs) {
         m_stateEmitPending = true;
         return;
     }
@@ -1315,9 +1233,7 @@ void BridgeDispatcher::EmitEngineStateChanged()
 
 void BridgeDispatcher::EmitEngineStateChangedNow()
 {
-    json spawnerJson = m_spawnerDriver
-        ? SpawnerConfigToJson(m_spawnerDriver->GetConfig())
-        : m_spawnerConfig;
+    json spawnerJson = BuildSpawnerStateJson();
     const std::wstring activeModPath = m_modManager ? m_modManager->GetPrimaryLayerPath() : std::wstring();
     const bool leaveParticles = (m_pParticleSystem != nullptr && *m_pParticleSystem)
         ? (*m_pParticleSystem)->getLeaveParticles()
@@ -1565,7 +1481,7 @@ void BridgeDispatcher::ApplyUndoSnapshot(const std::vector<char>& buf,
         const D3DXVECTOR3 p(aux.refPos[0], aux.refPos[1], aux.refPos[2]);
         const D3DXVECTOR3 r(aux.refRot[0], aux.refRot[1], aux.refRot[2]);
         m_engine->SetReferenceObjectTransform(p, r);
-        if (!m_ephemeral && !(m_testHost && !m_settingsLive))
+        if (PersistsUserState())
             PersistReferenceObjectTransform(p, r);
     }
 
@@ -1651,11 +1567,10 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
             };
             m_emit(env.dump());
             // The engine's SpawnerDriver self-disabled on the refusal
-            // (enabled=false), but the cached spawner config + the web's
-            // panel toggle don't know. Mirror spawner/stop: update the
-            // live driver first (EmitEngineStateChanged reads it), then
-            // sync the JSON cache, then broadcast so the panel toggle
-            // reflects the disabled state. CancelPending also covers
+            // (enabled=false), but the dispatcher-owned config + the web's
+            // panel toggle do not yet know. Mirror spawner/stop through the
+            // shared mutation, then broadcast so the panel reflects disabled.
+            // CancelPending also covers
             // refusals recorded OUTSIDE SpawnerDriver::Tick (the
             // edit-time SetEstimatedLoad clear), whose armed/queued
             // manual bursts the Tick refusal branch never sees. Residual
@@ -1663,17 +1578,7 @@ void BridgeDispatcher::EmitStatsTick(float fps, int emitters,
             // poll runs — safe, since the spawn-time gate re-checks the
             // cap; worst case is a duplicate banner, never an over-cap
             // placement.
-            if (m_spawnerDriver)
-            {
-                m_spawnerDriver->CancelPending();
-                SpawnerConfig cfg = m_spawnerDriver->GetConfig();
-                cfg.enabled = false;
-                m_spawnerDriver->SetConfig(cfg);
-            }
-            if (m_spawnerConfig.is_object())
-            {
-                m_spawnerConfig["enabled"] = false;
-            }
+            ApplySpawnerStop();
             EmitEngineStateChanged();
         }
     }

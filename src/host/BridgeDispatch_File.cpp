@@ -704,7 +704,7 @@ bool BridgeDispatcher::TryDispatchFile(BridgeRequestContext& ctx)
             AllowTestHostAutosaveRecovery(m_testHost, params);
         const bool suppressForTestHost = m_testHost && !allowTestRecovery;
         if (Autosave::ShouldSuppressRecoveryPrompt(
-                suppressForTestHost, m_ephemeral, !m_currentFilePath.empty()))
+                suppressForTestHost, m_driveMode, !m_currentFilePath.empty()))
         {
             ctx.SendOk(json{{"orphan", nullptr}});
             return true;

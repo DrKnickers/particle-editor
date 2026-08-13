@@ -3,6 +3,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include "host/ModulePath.h"
 #include <string>
 #include <cwchar>   // wcslen / _wcsicmp / _wcsnicmp (ClassifyAutosaveName)
 
@@ -231,6 +232,14 @@ namespace Autosave
     // verification happens before replacement without shipping a runtime seam.
     typedef void (*RecoveryCandidateHook)(const std::wstring& candidatePath);
     void SetRecoveryCandidateHookForTest(RecoveryCandidateHook hook);
+
+    // Test-only image-name probe for legacy-PID liveness. The production path
+    // still opens the real process; this replaces only the image-name read so
+    // tests can cover query failure and path-shape classifications.
+    typedef host::ModuleNameProbeResult (*ProcessNameProbe)(DWORD pid,
+                                                            wchar_t* buffer,
+                                                            DWORD capacity);
+    void SetProcessNameProbeForTest(ProcessNameProbe probe);
 #endif
 }
 
