@@ -1,9 +1,7 @@
 import { type ReactElement } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
-import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   rectFromPoints,
   rectsIntersect,
@@ -13,6 +11,7 @@ import {
 } from "../marquee";
 import { EmitterTree } from "../../screens/EmitterTree";
 import { useEmitterSelectionStore } from "../emitter-selection";
+import { makeStubBridge, marqueeFlatRootsTree, stubRect } from "../../screens/__tests__/emitter-tree-fixtures";
 
 const renderWithTooltips = (ui: ReactElement) =>
   render(
@@ -20,57 +19,6 @@ const renderWithTooltips = (ui: ReactElement) =>
       {ui}
     </Tooltip.Provider>,
   );
-
-function fixtureTree(): EmitterTreeDto {
-  return {
-    root: {
-      id: -1,
-      stableId: 0,
-      name: "",
-      role: "root",
-      linkGroup: 0,
-      visible: true,
-      spawn: ZERO_SPAWN,
-      children: [
-        { id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-        { id: 1, stableId: 101, name: "Sparks", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-        { id: 2, stableId: 102, name: "Flash", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-      ],
-    },
-  };
-}
-
-function makeStubBridge(tree: EmitterTreeDto = fixtureTree()) {
-  return {
-    request: vi.fn().mockImplementation((req: { kind: string }) => {
-      if (req.kind === "emitters/list") return Promise.resolve(tree);
-      if (req.kind === "engine/state/snapshot") return Promise.resolve({ selectedEmitterId: null });
-      if (req.kind === "emitters/select") return Promise.resolve({});
-      return Promise.resolve({});
-    }),
-    on: vi.fn().mockReturnValue(() => {}),
-  } as unknown as Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> };
-}
-
-function stubRect(el: HTMLElement, rect: Rect) {
-  const spy = vi.fn(() => ({
-    left: rect.left,
-    top: rect.top,
-    right: rect.right,
-    bottom: rect.bottom,
-    width: rect.right - rect.left,
-    height: rect.bottom - rect.top,
-    x: rect.left,
-    y: rect.top,
-    toJSON: () => "{}",
-  }));
-  Object.defineProperty(el, "getBoundingClientRect", {
-    configurable: true,
-    writable: true,
-    value: spy,
-  });
-  return spy;
-}
 
 beforeEach(() => {
   useEmitterSelectionStore.getState().clear();
@@ -117,7 +65,7 @@ describe("marquee geometry", () => {
   });
 
   it("marquee snapshots row rects once for many pointer moves", async () => {
-    const bridge = makeStubBridge();
+    const bridge = makeStubBridge(marqueeFlatRootsTree());
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
@@ -137,10 +85,42 @@ describe("marquee geometry", () => {
       fireEvent.pointerMove(document, { button: 0, clientX: 4, clientY: 60 + i });
     }
 
-    expect(useEmitterSelectionStore.getState().ids).toEqual([0, 1, 2]);
+    expect(screen.getByTestId("emitter-row:0")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTestId("emitter-row:1")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTestId("emitter-row:2")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-selected-count", "3");
     expect(rowRects.reduce((sum, spy) => sum + spy.mock.calls.length, 0)).toBeLessThanOrEqual(3);
     expect(scrollRect.mock.calls.length).toBeGreaterThan(0);
 
     fireEvent.pointerUp(document, { button: 0, clientX: 4, clientY: 72 });
+  });
+
+  it("additive marquee unions swept rows with the prior component selection", async () => {
+    const bridge = makeStubBridge(marqueeFlatRootsTree());
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+
+    // Flash is the pre-existing base selection. The Ctrl-drag sweeps Smoke
+    // only, so the component contract is the union { Flash, Smoke }.
+    fireEvent.click(screen.getByText("Flash"));
+
+    const scroll = document.querySelector(".emitter-tree-scroll") as HTMLElement;
+    const smoke = screen.getByText("Smoke").closest("[data-emitter-id]") as HTMLElement;
+    const sparks = screen.getByText("Sparks").closest("[data-emitter-id]") as HTMLElement;
+    const flash = screen.getByText("Flash").closest("[data-emitter-id]") as HTMLElement;
+    stubRect(scroll, { left: 0, top: 0, right: 200, bottom: 120 });
+    stubRect(smoke, { left: 0, top: 0, right: 180, bottom: 24 });
+    stubRect(sparks, { left: 0, top: 24, right: 180, bottom: 48 });
+    stubRect(flash, { left: 0, top: 48, right: 180, bottom: 72 });
+
+    fireEvent.pointerDown(scroll, { button: 0, ctrlKey: true, clientX: 190, clientY: 4 });
+    fireEvent.pointerMove(document, { button: 0, ctrlKey: true, clientX: 4, clientY: 23 });
+
+    expect(screen.getByTestId("emitter-row:0")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTestId("emitter-row:1")).toHaveAttribute("data-selected", "false");
+    expect(screen.getByTestId("emitter-row:2")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-selected-count", "2");
+
+    fireEvent.pointerUp(document, { button: 0, ctrlKey: true, clientX: 4, clientY: 23 });
   });
 });

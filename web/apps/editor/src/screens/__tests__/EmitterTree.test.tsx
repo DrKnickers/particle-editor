@@ -16,6 +16,7 @@ import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 import { useEmitterTreeStore } from "@/lib/emitter-tree";
 import { useDeleteConfirmStore, requestDeleteEmitters } from "@/lib/delete-emitters";
 import { writeOverloadGuard } from "@/lib/overload-guard";
+import { makeStubBridge, stubRect } from "./emitter-tree-fixtures";
 
 // EmitterTree mounts Tips (Radix Tooltip.Root) on the per-row eye
 // toggles and the footer toolbar, which requires the Tooltip.Provider that
@@ -23,50 +24,25 @@ import { writeOverloadGuard } from "@/lib/overload-guard";
 const renderWithTooltips = (ui: ReactElement) =>
   render(<Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>);
 
-function fixtureTree(): EmitterTreeDto {
-  return {
-    root: {
-      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
-      children: [
-        {
-          id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 1, visible: true, spawn: ZERO_SPAWN,
-          children: [
-            { id: 1, stableId: 101, name: "Smoke embers", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-            { id: 2, stableId: 102, name: "Smoke puff",   role: "death",    linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-          ],
-        },
-        {
-          id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 1, visible: true, spawn: ZERO_SPAWN,
-          children: [
-            { id: 4, stableId: 104, name: "Spark trail", role: "lifetime", linkGroup: 0, visible: true, spawn: ZERO_SPAWN, children: [] },
-          ],
-        },
-        {
-          id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
-          children: [],
-        },
-      ],
-    },
-  };
-}
-
-function makeStubBridge() {
-  const tree = fixtureTree();
-  const snapshot = { selectedEmitterId: null };
-  return {
-    request: vi.fn().mockImplementation((req: { kind: string; params?: unknown }) => {
-      if (req.kind === "emitters/list") return Promise.resolve(tree);
-      if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
-      if (req.kind === "emitters/select") return Promise.resolve({});
-      if (req.kind === "emitters/drop") return Promise.resolve({ ok: true });
-      if (req.kind === "emitters/reorder-many") {
-        const ids = (req.params as { ids: number[] }).ids;
-        return Promise.resolve({ ok: true, newIds: ids });
-      }
-      return Promise.resolve({});
-    }),
-    on: vi.fn().mockReturnValue(() => {}),
-  } as unknown as Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> };
+function expectSelection(ids: number[], primary: number | null | undefined = undefined) {
+  const selected = new Set(ids);
+  for (const id of [0, 1, 2, 3, 4, 5]) {
+    expect(screen.getByTestId(`emitter-row:${id}`)).toHaveAttribute(
+      "data-selected",
+      selected.has(id) ? "true" : "false",
+    );
+  }
+  const tree = screen.getByTestId("emitter-tree");
+  expect(tree).toHaveAttribute("data-selected-count", String(ids.length));
+  if (primary !== undefined) {
+    expect(tree).toHaveAttribute("data-primary-id", primary === null ? "" : String(primary));
+    for (const id of [0, 1, 2, 3, 4, 5]) {
+      expect(screen.getByTestId(`emitter-row:${id}`)).toHaveAttribute(
+        "data-primary",
+        id === primary ? "true" : "false",
+      );
+    }
+  }
 }
 
 beforeEach(() => {
@@ -212,14 +188,7 @@ describe("EmitterTree", () => {
     // Ctrl+click Sparks (id=3) — should add it without dropping Smoke.
     fireEvent.click(screen.getByText("Sparks"), { ctrlKey: true });
 
-    const sel = useEmitterSelectionStore.getState();
-    expect(sel.ids).toEqual([0, 3]);
-    expect(sel.primary).toBe(3);
-
-    // data-selected-count is visible on the container.
-    const tree = screen.getByTestId("emitter-tree");
-    expect(tree.getAttribute("data-selected-count")).toBe("2");
-    expect(tree.getAttribute("data-primary-id")).toBe("3");
+    expectSelection([0, 3], 3);
   });
 
   it("right-click → Delete on a multi-selection deletes the WHOLE selection (regression)", async () => {
@@ -232,7 +201,7 @@ describe("EmitterTree", () => {
     // Multi-select Smoke(0) + the childless leaf Flash(5).
     fireEvent.click(screen.getByText("Smoke"));
     fireEvent.click(screen.getByText("Flash"), { ctrlKey: true });
-    expect(useEmitterSelectionStore.getState().ids).toEqual([0, 5]);
+    expectSelection([0, 5]);
 
     // Right-click the SELECTED leaf and choose Delete. Pre-fix this deleted
     // only Flash (a leaf → immediate, no confirm); post-fix it confirms the
@@ -255,7 +224,7 @@ describe("EmitterTree", () => {
     // Multi-select Smoke(0) + the childless leaf Flash(5).
     fireEvent.click(screen.getByText("Smoke"));
     fireEvent.click(screen.getByText("Flash"), { ctrlKey: true });
-    expect(useEmitterSelectionStore.getState().ids).toEqual([0, 5]);
+    expectSelection([0, 5]);
 
     // Toolbar trash deletes the whole selection (pre-fix: only the primary
     // Flash, a leaf → immediate, no confirm).
@@ -267,27 +236,6 @@ describe("EmitterTree", () => {
   });
 
   // ─── drag/drop reorder + reparent ────────────────────────────────
-
-  /** Stub the row's getBoundingClientRect so the drop-zone math has a
-   *  predictable rectangle. The component reads clientY relative to
-   *  the rect; pass an explicit clientY in the event payload. */
-  function stubRect(el: HTMLElement, top: number, height: number) {
-    Object.defineProperty(el, "getBoundingClientRect", {
-      configurable: true,
-      writable: true,
-      value: () => ({
-        top,
-        bottom: top + height,
-        left: 0,
-        right: 200,
-        width: 200,
-        height,
-        x: 0,
-        y: top,
-        toJSON: () => "{}",
-      }),
-    });
-  }
 
   /** Stub all six fixture rows as a contiguous 24px-tall stack, in DOM order.
    *  The drag controller snapshots row + root-block geometry at activation
@@ -499,9 +447,24 @@ describe("EmitterTree", () => {
     //   Smoke(0), Smoke embers(1), Smoke puff(2), Sparks(3), Spark trail(4), Flash(5).
     fireEvent.click(screen.getByText("Spark trail"), { shiftKey: true });
 
-    const sel = useEmitterSelectionStore.getState();
-    expect(sel.ids).toEqual([0, 1, 2, 3, 4]);
-    expect(sel.primary).toBe(4);
+    expectSelection([0, 1, 2, 3, 4], 4);
+  });
+
+  it("consecutive Shift+clicks keep the original range pivot", async () => {
+    const bridge = makeStubBridge();
+    renderWithTooltips(<EmitterTree bridge={bridge} />);
+    await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
+
+    // Plain-click Smoke (0) sets the range pivot. The first Shift+click moves
+    // primary to Spark trail (4), but must not replace the pivot.
+    fireEvent.click(screen.getByText("Smoke"));
+    fireEvent.click(screen.getByText("Spark trail"), { shiftKey: true });
+    expectSelection([0, 1, 2, 3, 4], 4);
+
+    // A second range to Smoke puff (2) must still start at Smoke (0), not the
+    // previous endpoint (4). This distinguishes 0..2 from the broken 2..4.
+    fireEvent.click(screen.getByText("Smoke puff"), { shiftKey: true });
+    expectSelection([0, 1, 2], 2);
   });
 
   // ─── inline rename ───────────────────────────────────────────────
@@ -578,7 +541,8 @@ describe("EmitterTree", () => {
     // Stub the row button focus, since we don't actually need DOM
     // focus to change — the handler updates the React-side primary.
     fireEvent.keyDown(tree, { key: "ArrowDown" });
-    expect(useEmitterSelectionStore.getState().primary).toBe(1);
+    expect(tree).toHaveAttribute("data-primary-id", "1");
+    expect(screen.getByTestId("emitter-row:1")).toHaveAttribute("data-primary", "true");
   });
 
   // ─── Ctrl+C clipboard dispatch ───────────────────────────────────
@@ -641,12 +605,12 @@ describe("EmitterTree", () => {
     });
 
     // Before click: selection is empty (beforeEach clears the store).
-    expect(useEmitterSelectionStore.getState().primary).toBeNull();
+    expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-primary-id", "");
 
     fireEvent.click(screen.getByTestId("emitter-vis-1"));  // Smoke embers
 
     // Selection still empty — no emitters/select dispatched as a side effect.
-    expect(useEmitterSelectionStore.getState().primary).toBeNull();
+    expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-primary-id", "");
     const calls = (bridge.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
     expect(calls.find((c) => c.kind === "emitters/select")).toBeUndefined();
   });
@@ -759,7 +723,8 @@ describe("EmitterTree", () => {
     // Select Smoke (id=0) first.
     fireEvent.click(screen.getByText("Smoke"));
     await waitFor(() => {
-      expect(useEmitterSelectionStore.getState().primary).toBe(0);
+      expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-primary-id", "0");
+      expect(screen.getByTestId("emitter-row:0")).toHaveAttribute("data-primary", "true");
     });
 
     fireEvent.click(screen.getByLabelText("Duplicate emitter"));
@@ -894,13 +859,11 @@ describe("EmitterTree", () => {
 
     // Pre-select Flash (id=5, ungrouped).
     fireEvent.click(screen.getByText("Flash"));
-    expect(useEmitterSelectionStore.getState().ids).toEqual([5]);
+    expectSelection([5]);
 
     // Click the badge on Smoke (id=0, group 1) → selection = all group-1 members.
     fireEvent.click(screen.getByTestId("emitter-link-badge-0"));
-    const sel = useEmitterSelectionStore.getState();
-    expect([...sel.ids].sort((a, b) => a - b)).toEqual([0, 3]);
-    expect(sel.primary).toBe(0);
+    expectSelection([0, 3], 0);
     // Primary synced to the host.
     expect(
       bridge.request.mock.calls.some((c) => {
@@ -919,13 +882,11 @@ describe("EmitterTree", () => {
 
     // Pre-select Flash (id=5, ungrouped).
     fireEvent.click(screen.getByText("Flash"));
-    expect(useEmitterSelectionStore.getState().ids).toEqual([5]);
+    expectSelection([5]);
 
     // Click the spine on Smoke (id=0, group 1) → selection = all group-1 members.
     fireEvent.click(screen.getByTestId("emitter-link-spine-0"));
-    const sel = useEmitterSelectionStore.getState();
-    expect([...sel.ids].sort((a, b) => a - b)).toEqual([0, 3]);
-    expect(sel.primary).toBe(0);
+    expectSelection([0, 3], 0);
     // Primary synced to the host.
     expect(
       bridge.request.mock.calls.some((c) => {

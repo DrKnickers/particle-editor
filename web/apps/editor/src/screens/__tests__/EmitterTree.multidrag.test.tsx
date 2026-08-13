@@ -16,6 +16,7 @@ import { ZERO_SPAWN } from "@particle-editor/bridge-schema";
 import type { Bridge, EmitterTreeDto } from "@particle-editor/bridge-schema";
 import { EmitterTree } from "../EmitterTree";
 import { useEmitterSelectionStore } from "@/lib/emitter-selection";
+import { flatRootsTree, makeStubBridge as makeEmitterTreeStubBridge, stubRect } from "./emitter-tree-fixtures";
 
 // EmitterTree mounts Tips (Radix Tooltip.Root), which require the
 // Tooltip.Provider that App.tsx supplies in production — this helper stands
@@ -23,58 +24,7 @@ import { useEmitterSelectionStore } from "@/lib/emitter-selection";
 const renderWithTooltips = (ui: ReactElement) =>
   render(<Tooltip.Provider delayDuration={0} skipDelayDuration={0}>{ui}</Tooltip.Provider>);
 
-function fixtureTree(): EmitterTreeDto {
-  return {
-    root: {
-      id: -1, stableId: 0, name: "", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
-      children: [
-        {
-          id: 0, stableId: 100, name: "Smoke", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
-          children: [],
-        },
-        {
-          id: 3, stableId: 103, name: "Sparks", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
-          children: [],
-        },
-        {
-          id: 5, stableId: 105, name: "Flash", role: "root", linkGroup: 0, visible: true, spawn: ZERO_SPAWN,
-          children: [],
-        },
-      ],
-    },
-  };
-}
-
-function makeStubBridge(tree: EmitterTreeDto = fixtureTree()) {
-  const snapshot = { selectedEmitterId: null };
-  return {
-    request: vi.fn().mockImplementation((req: { kind: string; params?: unknown }) => {
-      if (req.kind === "emitters/list") return Promise.resolve(tree);
-      if (req.kind === "engine/state/snapshot") return Promise.resolve(snapshot);
-      if (req.kind === "emitters/select") return Promise.resolve({});
-      // reorder-many resolves with the block's new contiguous indices so
-      // applyNewSelection (in reorderManyEmitters) doesn't throw.
-      if (req.kind === "emitters/reorder-many") {
-        const ids = (req.params as { ids: number[] }).ids;
-        return Promise.resolve({ ok: true, newIds: ids });
-      }
-      return Promise.resolve({});
-    }),
-    on: vi.fn().mockReturnValue(() => {}),
-  } as unknown as Bridge & { request: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> };
-}
-
-/** Stub a row button's rect so the drop-zone third math is deterministic. */
-function stubRect(el: HTMLElement, top: number, height: number) {
-  Object.defineProperty(el, "getBoundingClientRect", {
-    configurable: true,
-    writable: true,
-    value: () => ({
-      top, bottom: top + height, left: 0, right: 200, width: 200, height,
-      x: 0, y: top, toJSON: () => "{}",
-    }),
-  });
-}
+const makeStubBridge = (tree: EmitterTreeDto = flatRootsTree()) => makeEmitterTreeStubBridge(tree);
 
 beforeEach(() => {
   useEmitterSelectionStore.getState().clear();
@@ -82,14 +32,17 @@ beforeEach(() => {
 
 describe("EmitterTree multi-drag preview", () => {
   it("dragging a multi-root selection renders the destination band + cursor chip and commits reorder-many", async () => {
-    const bridge = makeStubBridge();
+    const bridge = makeStubBridge(flatRootsTree());
     renderWithTooltips(<EmitterTree bridge={bridge} />);
     await waitFor(() => expect(screen.getByText("Smoke")).toBeInTheDocument());
 
     // Multi-root selection: Smoke(0) + Flash(5) — two roots, non-contiguous.
     fireEvent.click(screen.getByText("Smoke"));
     fireEvent.click(screen.getByText("Flash"), { ctrlKey: true });
-    expect(useEmitterSelectionStore.getState().ids).toEqual([0, 5]);
+    expect(screen.getByTestId("emitter-row:0")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTestId("emitter-row:3")).toHaveAttribute("data-selected", "false");
+    expect(screen.getByTestId("emitter-row:5")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTestId("emitter-tree")).toHaveAttribute("data-selected-count", "2");
 
     // Stub the full row geometry — the multi-drag resolver snapshots every
     // root block's rect at activation and works in content space (the jsdom
@@ -296,7 +249,7 @@ describe("EmitterTree multi-drag preview", () => {
     // gesture must abort on emitters/tree/changed rather than commit stale ids
     // or paint a stale gap/dim. This bridge records the
     // tree/changed subscriber so the test can fire it mid-gesture.
-    const tree = fixtureTree();
+    const tree = flatRootsTree();
     const handlers = new Map<string, (e: unknown) => void>();
     const bridge = {
       request: vi.fn().mockImplementation((req: { kind: string; params?: unknown }) => {

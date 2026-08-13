@@ -81,7 +81,6 @@ import {
   useEmitterSelectionStore,
 } from "@/lib/emitter-selection";
 import { markEmittersCopied, useEmitterClipboardHasContent } from "@/lib/emitter-clipboard";
-import { rectFromPoints, emittersInMarquee, mergeMarqueeSelection, type Rect } from "@/lib/marquee";
 import { computeAutoscrollDelta } from "@/lib/drag-autoscroll";
 import { computeFlipDeltas, DRAG_FEEL, pickFlipDuration, type FlipPositions } from "@/lib/flip";
 import { useRecording } from "@/lib/record-mode";
@@ -115,6 +114,11 @@ import {
   type RowGeometry,
 } from "@/lib/multi-drag";
 import { canMoveSelection } from "@/lib/move-enabled";
+import { useEmitterMarquee } from "./emitter-tree/useEmitterMarquee";
+import { useEmitterRename, type RenameEditingState } from "./emitter-tree/useEmitterRename";
+import { useEmitterTreeKeyboard } from "./emitter-tree/useEmitterTreeKeyboard";
+
+export type { RenameEditingState } from "./emitter-tree/useEmitterRename";
 
 type Props = {
   bridge: Bridge;
@@ -201,61 +205,6 @@ const CHIP_EXIT_MS = 160;
 type DropParams =
   | { mode: "reparent"; id: number; targetId: number; slot: "lifetime" | "death" }
   | { mode: "reorder"; id: number; rootIndex: number };
-
-type MarqueeRowsSnapshot = {
-  rows: { id: number; rect: Rect }[];
-  rowKey: string;
-};
-
-function sortedIds(ids: number[]): number[] {
-  return [...ids].sort((a, b) => a - b);
-}
-
-function sameSortedIds(a: number[], b: number[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
-  return true;
-}
-
-function rowIdentityKey(ids: number[]): string {
-  return ids.join("|");
-}
-
-function scrollContentOrigin(sc: HTMLElement): { left: number; top: number } {
-  const rect = sc.getBoundingClientRect();
-  return { left: rect.left - sc.scrollLeft, top: rect.top - sc.scrollTop };
-}
-
-function toScrollContentRect(sc: HTMLElement, rect: Rect): Rect {
-  const origin = scrollContentOrigin(sc);
-  return {
-    left: rect.left - origin.left,
-    top: rect.top - origin.top,
-    right: rect.right - origin.left,
-    bottom: rect.bottom - origin.top,
-  };
-}
-
-function captureMarqueeRows(sc: HTMLElement | null): MarqueeRowsSnapshot {
-  if (sc === null) return { rows: [], rowKey: "" };
-  const origin = scrollContentOrigin(sc);
-  const rows = [...sc.querySelectorAll<HTMLElement>("[data-emitter-id]")]
-    .map((el) => {
-      const id = Number(el.dataset.emitterId);
-      const r = el.getBoundingClientRect();
-      return {
-        id,
-        rect: {
-          left: r.left - origin.left,
-          top: r.top - origin.top,
-          right: r.right - origin.left,
-          bottom: r.bottom - origin.top,
-        },
-      };
-    })
-    .filter((row) => Number.isFinite(row.id));
-  return { rows, rowKey: rowIdentityKey(rows.map((row) => row.id)) };
-}
 
 /** [multi-drag] Measure every root block's extent (root row + whole subtree)
  *  in scroll-CONTENT space at drag activation. Measured, never assumed — row
@@ -360,16 +309,6 @@ function resolveDropIntent(
   };
 }
 
-// Inline-rename state. `editing.id` is the row currently in
-// rename mode; `editing.value` is the live input value. The original
-// name is captured at edit-start (`original`) so an empty-commit can
-// revert without a tree re-fetch round-trip.
-export type RenameEditingState = {
-  id: number;
-  value: string;
-  original: string;
-} | null;
-
 type RowProps = {
   row: FlatRow;
   primaryId: number | null;
@@ -392,8 +331,8 @@ type RowProps = {
   editing: RenameEditingState;
   beginEdit: (id: number, currentName: string) => void;
   setEditValue: (value: string) => void;
-  commitEdit: () => void;
-  cancelEdit: () => void;
+  handleRenameInputKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  handleRenameInputBlur: () => void;
   // True when this row's link group is the one currently hovered —
   // the row paints a subtle tint so the user sees the whole group light up
   // together. `onHoverLinkGroup` reports this row's group on pointer enter
@@ -440,7 +379,7 @@ function StyledContextSubContent({ children, ...rest }: ComponentProps<typeof Co
 function EmitterRow({
   row, primaryId, selectedIds, orderedIds, onRowClick, bridge,
   draggingId, draggingIds, indicator, startDrag,
-  editing, beginEdit, setEditValue, commitEdit, cancelEdit,
+  editing, beginEdit, setEditValue, handleRenameInputKeyDown, handleRenameInputBlur,
   linkHover, onHoverLinkGroup, onDissolveLinkGroup, onSelectLinkGroup, chainWarning,
   entering,
 }: RowProps) {
@@ -868,26 +807,8 @@ function EmitterRow({
                   data-testid={`emitter-rename-input-${node.id}`}
                   value={editing!.value}
                   onChange={(e) => setEditValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Stop the tree-level keyboard handler from snatching
-                    // Backspace / Enter / Esc / arrows from the input.
-                    e.stopPropagation();
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commitEdit();
-                    } else if (e.key === "Escape") {
-                      e.preventDefault();
-                      cancelEdit();
-                    }
-                  }}
-                  onBlur={() => {
-                    // Blur happens AFTER Enter / Esc handlers fire and
-                    // toggle `editing` off; the conditional in the parent
-                    // makes a second commit a no-op. Safer to always
-                    // route through commitEdit on blur so click-outside
-                    // works without an explicit click handler.
-                    commitEdit();
-                  }}
+                  onKeyDown={handleRenameInputKeyDown}
+                  onBlur={handleRenameInputBlur}
                   onClick={(e) => e.stopPropagation()}
                   onPointerDown={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
@@ -1473,57 +1394,21 @@ export function EmitterTree({ bridge }: Props) {
   // tree owns both the focus target (each row's button) and the input
   // (mounted inside the row). One row at a time; null = no edit in
   // progress.
-  const [editing, setEditing] = useState<RenameEditingState>(null);
-  const editingRef = useRef<RenameEditingState>(null);
-  useEffect(() => { editingRef.current = editing; }, [editing]);
-
-  // [design pass B2, pre-PR fix] Rename commit/cancel unmounts the inline
-  // input, which drops focus to <body> — return it to the edited row so
-  // keyboard flow (F2 → Enter/Escape) continues where it was. Only when
-  // focus actually fell to body: if the user clicked elsewhere mid-edit,
-  // their focus target wins. Declared BEFORE the remount-restore effect
-  // below, so on a commit-driven rebuild this targeted restore runs first
-  // and that effect's body-check then no-ops.
-  const lastEditIdRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (editing !== null) {
-      lastEditIdRef.current = editing.id;
-      return;
-    }
-    const id = lastEditIdRef.current;
-    if (id === null) return;
-    lastEditIdRef.current = null;
-    if (document.activeElement !== document.body) return;
-    treeContainerRef.current
-      ?.querySelector<HTMLElement>(`[data-emitter-id="${id}"]`)
-      ?.focus();
-  }, [editing]);
-
-  const beginEdit = useCallback((id: number, currentName: string) => {
-    setEditing({ id, value: currentName, original: currentName });
-  }, []);
-  const setEditValue = useCallback((value: string) => {
-    setEditing((cur) => (cur === null ? null : { ...cur, value }));
-  }, []);
-  const cancelEdit = useCallback(() => { setEditing(null); }, []);
-  const commitEdit = useCallback(() => {
-    const cur = editingRef.current;
-    if (cur === null) return;
-    const trimmed = cur.value.trim();
-    // Empty name → silent revert (no bridge call). Matches legacy: an
-    // empty rename was rejected at the TreeView level.
-    // Unchanged name → still revert without firing the bridge call;
-    // saves a wire round-trip on a no-op commit (e.g. F2 → Enter).
-    if (trimmed.length === 0 || trimmed === cur.original) {
-      setEditing(null);
-      return;
-    }
-    void bridge.request({
-      kind: "emitters/rename",
-      params: { id: cur.id, name: trimmed },
-    });
-    setEditing(null);
-  }, [bridge]);
+  const {
+    editing,
+    editingRef,
+    beginEdit,
+    setEditValue,
+    handleRenameInputKeyDown,
+    handleRenameInputBlur,
+  } = useEmitterRename({
+    bridge,
+    restoreFocus: (id) => {
+      treeContainerRef.current
+        ?.querySelector<HTMLElement>(`[data-emitter-id="${id}"]`)
+        ?.focus();
+    },
+  });
 
   // Fetch the full tree from the host. Pulled into a callback so the
   // tree-changed subscription can re-trigger it.
@@ -2193,115 +2078,7 @@ export function EmitterTree({ bridge }: Props) {
     [flatRows, bridge],
   );
 
-  const treeScrollRef = useRef<HTMLDivElement | null>(null);
-
-  // ── Marquee (rubber-band) selection ──────────────────────
-  // A primary-button drag starting on EMPTY space inside the scroll
-  // viewport (not on a row) sweeps a rectangle; every emitter row it
-  // intersects becomes the selection. Ctrl/Cmd makes it additive (union
-  // with the prior selection); Esc cancels and restores. Mirrors the
-  // legacy EmitterList marquee; uses live intersection rather than
-  // the legacy sticky-hit accumulation (the more predictable behaviour).
-  // Document-level move/up listeners (no pointer capture needed) so a drag
-  // that leaves the viewport still tracks.
-  const [marqueeBox, setMarqueeBox] = useState<
-    { left: number; top: number; width: number; height: number } | null
-  >(null);
-  // `mergeBase` is what swept rows union with (the prior selection only when
-  // additive); `prior` is always the pre-marquee selection, restored on Esc.
-  const marqueeRef = useRef<
-    | {
-        mergeBase: number[];
-        prior: number[];
-        startX: number;
-        startY: number;
-        rows: { id: number; rect: Rect }[];
-        rowKey: string;
-        lastSelectionSorted: number[];
-      }
-    | null
-  >(null);
-
-  useLayoutEffect(() => {
-    const m = marqueeRef.current;
-    if (m === null) return;
-    const latestRowKey = rowIdentityKey(orderedIds);
-    if (m.rowKey === latestRowKey) return;
-    const snapshot = captureMarqueeRows(treeScrollRef.current);
-    m.rows = snapshot.rows;
-    m.rowKey = snapshot.rowKey;
-  }, [orderedIds]);
-
-  const handleScrollPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.button !== 0) return;
-      const target = e.target as HTMLElement;
-      // A press on a row (or any interactive control) belongs to that row's
-      // click-select / drag-reorder, not the marquee.
-      if (target.closest("[data-emitter-id]") !== null) return;
-      if (target.closest("input,button,[role='button']") !== null) return;
-      e.preventDefault();
-      const prior = [...useEmitterSelectionStore.getState().ids];
-      const additive = e.ctrlKey || e.metaKey;
-      const mergeBase = additive ? prior : [];
-      const snapshot = captureMarqueeRows(treeScrollRef.current);
-      marqueeRef.current = {
-        mergeBase,
-        prior,
-        startX: e.clientX,
-        startY: e.clientY,
-        rows: snapshot.rows,
-        rowKey: snapshot.rowKey,
-        lastSelectionSorted: sortedIds(prior),
-      };
-
-      const onMove = (ev: PointerEvent) => {
-        const m = marqueeRef.current;
-        if (m === null) return;
-        const mqViewport = rectFromPoints(m.startX, m.startY, ev.clientX, ev.clientY);
-        const sc = treeScrollRef.current;
-        const mq = sc !== null ? toScrollContentRect(sc, mqViewport) : mqViewport;
-        const swept = emittersInMarquee(m.rows, mq);
-        const { ids, primary } = mergeMarqueeSelection(m.mergeBase, swept);
-        const nextSorted = sortedIds(ids);
-        if (!sameSortedIds(m.lastSelectionSorted, nextSorted)) {
-          m.lastSelectionSorted = nextSorted;
-          useEmitterSelectionStore.getState().setIds(ids, primary);
-        }
-        if (sc !== null) {
-          setMarqueeBox({
-            left: mq.left,
-            top: mq.top,
-            width: mq.right - mq.left,
-            height: mq.bottom - mq.top,
-          });
-        }
-      };
-      const cleanup = () => {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-        document.removeEventListener("keydown", onKey, true);
-        marqueeRef.current = null;
-        setMarqueeBox(null);
-      };
-      const onUp = () => cleanup();
-      const onKey = (ev: KeyboardEvent) => {
-        if (ev.key !== "Escape") return;
-        const m = marqueeRef.current;
-        if (m !== null) {
-          const primary = m.prior.length > 0 ? m.prior[m.prior.length - 1]! : null;
-          useEmitterSelectionStore.getState().setIds(m.prior, primary);
-        }
-        ev.preventDefault();
-        ev.stopPropagation();
-        cleanup();
-      };
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-      document.addEventListener("keydown", onKey, true);
-    },
-    [],
-  );
+  const { treeScrollRef, marqueeBox, handleScrollPointerDown } = useEmitterMarquee({ orderedIds });
 
   // ── keyboard handler ─────────────────────────────────
   //
@@ -2318,106 +2095,15 @@ export function EmitterTree({ bridge }: Props) {
   // the tree); arrow nav within the tree always lands on a row button.
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const focusRowById = useCallback((id: number) => {
-    if (treeContainerRef.current === null) return;
-    const btn = treeContainerRef.current.querySelector(
-      `[data-emitter-id="${id}"]`,
-    ) as HTMLElement | null;
-    btn?.focus();
-  }, []);
-
-  const handleTreeKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      // Never steal keystrokes when the focus is in a text input
-      // (inline-rename, spinners, modal text fields that might bubble).
-      const target = e.target as HTMLElement | null;
-      if (target !== null && target.tagName === "INPUT") return;
-      // Editing mode disables the global keyboard nav so the input
-      // owns all keys. (The input's onKeyDown stops propagation too;
-      // belt + braces.)
-      if (editingRef.current !== null) return;
-
-      // Resolve the focused row id from the active element's
-      // `data-emitter-id`, falling back to the React-side primary so
-      // the first keypress lands somewhere sensible.
-      const active = document.activeElement as HTMLElement | null;
-      const activeIdStr = active?.getAttribute("data-emitter-id") ?? null;
-      const focusedId = activeIdStr !== null ? Number.parseInt(activeIdStr, 10) : primaryId;
-      const focusedIdx = focusedId !== null ? orderedIds.indexOf(focusedId) : -1;
-
-      // Helpers — used by multiple branches below.
-      const moveFocus = (nextIdx: number) => {
-        if (nextIdx < 0 || nextIdx >= orderedIds.length) return;
-        const nextId = orderedIds[nextIdx]!;
-        e.preventDefault();
-        useEmitterSelectionStore.getState().setSingle(nextId);
-        void bridge.request({
-          kind: "emitters/select",
-          params: { id: nextId },
-        });
-        focusRowById(nextId);
-      };
-
-      if (e.key === "ArrowDown") {
-        moveFocus(focusedIdx + 1);
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        moveFocus(focusedIdx - 1);
-        return;
-      }
-      if (e.key === "Home") {
-        moveFocus(0);
-        return;
-      }
-      if (e.key === "End") {
-        moveFocus(orderedIds.length - 1);
-        return;
-      }
-      if (e.key === "F2") {
-        if (focusedId === null) return;
-        const node = flatRows.find((r) => r.node.id === focusedId)?.node ?? null;
-        if (node === null) return;
-        e.preventDefault();
-        beginEdit(focusedId, node.name);
-        return;
-      }
-      if (e.key === "Delete") {
-        const cur = useEmitterSelectionStore.getState().ids;
-        if (cur.length === 0) return;
-        e.preventDefault();
-        // Descending-order delete + the destructive-confirm gate both live in
-        // requestDeleteEmitters → performDelete now.
-        requestDeleteEmitters(bridge, [...cur]);
-        return;
-      }
-      // Ctrl+C / Ctrl+X / Ctrl+V on the focused tree. Cmd+* on macOS
-      // routes through metaKey, same handler.
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && (e.key === "c" || e.key === "C")) {
-        const cur = useEmitterSelectionStore.getState().ids;
-        if (cur.length === 0) return;
-        e.preventDefault();
-        void bridge.request({ kind: "emitters/copy", params: { ids: cur } });
-        markEmittersCopied();
-        return;
-      }
-      if (mod && (e.key === "x" || e.key === "X")) {
-        const cur = useEmitterSelectionStore.getState().ids;
-        if (cur.length === 0) return;
-        e.preventDefault();
-        announceWhenOk(bridge.request({ kind: "emitters/cut", params: { ids: cur } }), `Cut ${cur.length === 1 ? "emitter" : `${cur.length} emitters`} — Ctrl+Z to undo`);
-        markEmittersCopied();
-        return;
-      }
-      if (mod && (e.key === "v" || e.key === "V")) {
-        e.preventDefault();
-        announceWhenOk(bridge.request({ kind: "emitters/paste", params: {} }), "Pasted — Ctrl+Z to undo");
-        return;
-      }
-    },
-    [bridge, beginEdit, flatRows, focusRowById, orderedIds, primaryId],
-  );
+  const { handleTreeKeyDown } = useEmitterTreeKeyboard({
+    bridge,
+    flatRows,
+    orderedIds,
+    primaryId,
+    editingRef,
+    beginEdit,
+    treeContainerRef,
+  });
 
   // [F7] Ghost nodes, rendered by whichever branch owns the tree area right
   // now: the relative scroll container (normal case) or the emptied-tree
@@ -2553,8 +2239,8 @@ export function EmitterTree({ bridge }: Props) {
                   editing={editing}
                   beginEdit={beginEdit}
                   setEditValue={setEditValue}
-                  commitEdit={commitEdit}
-                  cancelEdit={cancelEdit}
+                  handleRenameInputKeyDown={handleRenameInputKeyDown}
+                  handleRenameInputBlur={handleRenameInputBlur}
                   linkHover={
                     hoveredLinkGroup !== null &&
                     row.node.linkGroup === hoveredLinkGroup
